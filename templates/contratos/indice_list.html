@@ -62,49 +62,20 @@
             </div>
             <div class="card-body">
                 <!-- Cards de Estatisticas -->
-                <div class="row mb-4">
-                    <div class="col-md-4">
-                        <div class="card stat-card border-primary">
-                            <div class="card-body text-center">
-                                <h3 class="text-primary mb-1">{{ total_ipca }}</h3>
-                                <small class="text-muted">IPCA cadastrados</small>
-                                {% if ultimo_ipca %}
-                                <p class="mb-0 mt-2">
-                                    <span class="badge bg-primary">Ultimo: {{ ultimo_ipca.periodo }}</span>
-                                    <span class="badge bg-light text-dark">{{ ultimo_ipca.valor }}%</span>
-                                </p>
+                <div class="row mb-4 g-2">
+                    {% for stat in estatisticas_indices %}
+                    <div class="col-6 col-md-3 col-lg">
+                        <div class="card stat-card h-100 {% if stat.tipo == 'IPCA' %}border-primary{% elif stat.tipo == 'IGPM' %}border-success{% elif stat.tipo == 'INCC' %}border-info{% elif stat.tipo == 'IGPDI' %}border-secondary{% elif stat.tipo == 'INPC' %}border-danger{% elif stat.tipo == 'TR' %}border-dark{% else %}border-warning{% endif %}">
+                            <div class="card-body text-center py-2">
+                                <h5 class="{% if stat.tipo == 'IPCA' %}text-primary{% elif stat.tipo == 'IGPM' %}text-success{% elif stat.tipo == 'INCC' %}text-info{% elif stat.tipo == 'IGPDI' %}text-secondary{% elif stat.tipo == 'INPC' %}text-danger{% elif stat.tipo == 'TR' %}text-dark{% else %}text-warning{% endif %} mb-0">{{ stat.total }}</h5>
+                                <small class="text-muted d-block">{{ stat.tipo }}</small>
+                                {% if stat.ultimo %}
+                                <small class="badge bg-light text-dark mt-1">{{ stat.ultimo.periodo }}: {{ stat.ultimo.valor }}%</small>
                                 {% endif %}
                             </div>
                         </div>
                     </div>
-                    <div class="col-md-4">
-                        <div class="card stat-card border-success">
-                            <div class="card-body text-center">
-                                <h3 class="text-success mb-1">{{ total_igpm }}</h3>
-                                <small class="text-muted">IGP-M cadastrados</small>
-                                {% if ultimo_igpm %}
-                                <p class="mb-0 mt-2">
-                                    <span class="badge bg-success">Ultimo: {{ ultimo_igpm.periodo }}</span>
-                                    <span class="badge bg-light text-dark">{{ ultimo_igpm.valor }}%</span>
-                                </p>
-                                {% endif %}
-                            </div>
-                        </div>
-                    </div>
-                    <div class="col-md-4">
-                        <div class="card stat-card border-warning">
-                            <div class="card-body text-center">
-                                <h3 class="text-warning mb-1">{{ total_selic }}</h3>
-                                <small class="text-muted">SELIC cadastrados</small>
-                                {% if ultimo_selic %}
-                                <p class="mb-0 mt-2">
-                                    <span class="badge bg-warning text-dark">Ultimo: {{ ultimo_selic.periodo }}</span>
-                                    <span class="badge bg-light text-dark">{{ ultimo_selic.valor }}%</span>
-                                </p>
-                                {% endif %}
-                            </div>
-                        </div>
-                    </div>
+                    {% endfor %}
                 </div>
 
                 <!-- Filtros -->
@@ -269,8 +240,17 @@
                     <select class="form-select" id="tipoIndiceImportar">
                         <option value="IPCA">IPCA - Indice de Precos ao Consumidor Amplo (IBGE)</option>
                         <option value="IGPM">IGP-M - Indice Geral de Precos do Mercado (FGV/BCB)</option>
+                        <option value="INCC">INCC - Indice Nacional de Custo da Construcao (FGV/BCB)</option>
+                        <option value="IGPDI">IGP-DI - Indice Geral de Precos - Disponibilidade Interna (FGV/BCB)</option>
+                        <option value="INPC">INPC - Indice Nacional de Precos ao Consumidor (IBGE)</option>
+                        <option value="TR">TR - Taxa Referencial (BCB)</option>
                         <option value="SELIC">SELIC - Taxa Basica de Juros (BCB)</option>
                     </select>
+                </div>
+                <div class="alert alert-secondary small">
+                    <strong>Fontes:</strong><br>
+                    IPCA, INPC: API SIDRA/IBGE<br>
+                    IGP-M, INCC, IGP-DI, TR, SELIC: API Banco Central
                 </div>
 
                 <div id="resultadoImportacao" class="alert d-none"></div>

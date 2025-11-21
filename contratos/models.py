@@ -17,7 +17,11 @@ class TipoCorrecao(models.TextChoices):
     """Tipos de correção monetária disponíveis"""
     IPCA = 'IPCA', 'IPCA - Índice de Preços ao Consumidor Amplo'
     IGPM = 'IGPM', 'IGP-M - Índice Geral de Preços do Mercado'
-    SELIC = 'SELIC', 'SELIC - Sistema Especial de Liquidação e Custódia'
+    INCC = 'INCC', 'INCC - Índice Nacional de Custo da Construção'
+    IGPDI = 'IGPDI', 'IGP-DI - Índice Geral de Preços - Disponibilidade Interna'
+    INPC = 'INPC', 'INPC - Índice Nacional de Preços ao Consumidor'
+    TR = 'TR', 'TR - Taxa Referencial'
+    SELIC = 'SELIC', 'SELIC - Taxa Básica de Juros'
     FIXO = 'FIXO', 'Valor Fixo (sem correção)'
 
 
@@ -29,6 +33,10 @@ class IndiceReajuste(TimeStampedModel):
         choices=[
             ('IPCA', 'IPCA - Índice de Preços ao Consumidor Amplo'),
             ('IGPM', 'IGP-M - Índice Geral de Preços do Mercado'),
+            ('INCC', 'INCC - Índice Nacional de Custo da Construção'),
+            ('IGPDI', 'IGP-DI - Índice Geral de Preços - Disponibilidade Interna'),
+            ('INPC', 'INPC - Índice Nacional de Preços ao Consumidor'),
+            ('TR', 'TR - Taxa Referencial'),
             ('SELIC', 'SELIC - Taxa Básica de Juros'),
         ],
         verbose_name='Tipo de Índice'
