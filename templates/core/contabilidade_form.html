@@ -67,6 +67,19 @@
             <form method="post" novalidate class="contabilidade-form">
                 {% csrf_token %}
 
+                <!-- Erros Gerais do Formulario -->
+                {% if form.non_field_errors %}
+                <div class="alert alert-danger mb-3">
+                    <i class="fas fa-exclamation-triangle me-2"></i>
+                    <strong>Erros encontrados:</strong>
+                    <ul class="mb-0 mt-2">
+                        {% for error in form.non_field_errors %}
+                        <li>{{ error }}</li>
+                        {% endfor %}
+                    </ul>
+                </div>
+                {% endif %}
+
                 <!-- Card: Informacoes da Contabilidade -->
                 <div class="card mb-3">
                     <div class="card-header py-2">
@@ -75,17 +88,26 @@
                     <div class="card-body py-3">
                         <div class="row">
                             <div class="col-md-6 mb-2">
-                                <label class="form-label">Nome da Contabilidade</label>
+                                <label class="form-label">Nome da Contabilidade <span class="text-danger">*</span></label>
                                 {{ form.nome }}
+                                {% if form.nome.errors %}
+                                <div class="text-danger small mt-1">{% for e in form.nome.errors %}{{ e }}{% endfor %}</div>
+                                {% endif %}
                             </div>
                             <div class="col-md-6 mb-2">
-                                <label class="form-label">CNPJ</label>
+                                <label class="form-label">CNPJ <small class="text-muted">(opcional)</small></label>
                                 {{ form.cnpj }}
+                                {% if form.cnpj.errors %}
+                                <div class="text-danger small mt-1">{% for e in form.cnpj.errors %}{{ e }}{% endfor %}</div>
+                                {% endif %}
                             </div>
                         </div>
                         <div class="mb-2">
-                            <label class="form-label">Razao Social</label>
+                            <label class="form-label">Razao Social <span class="text-danger">*</span></label>
                             {{ form.razao_social }}
+                            {% if form.razao_social.errors %}
+                            <div class="text-danger small mt-1">{% for e in form.razao_social.errors %}{{ e }}{% endfor %}</div>
+                            {% endif %}
                         </div>
                     </div>
                 </div>
@@ -97,21 +119,33 @@
                     </div>
                     <div class="card-body py-3">
                         <div class="mb-2">
-                            <label class="form-label">Endereco Completo</label>
+                            <label class="form-label">Endereco Completo <span class="text-danger">*</span></label>
                             {{ form.endereco }}
+                            {% if form.endereco.errors %}
+                            <div class="text-danger small mt-1">{% for e in form.endereco.errors %}{{ e }}{% endfor %}</div>
+                            {% endif %}
                         </div>
                         <div class="row">
                             <div class="col-md-4 mb-2">
-                                <label class="form-label">Telefone</label>
+                                <label class="form-label">Telefone <span class="text-danger">*</span></label>
                                 {{ form.telefone }}
+                                {% if form.telefone.errors %}
+                                <div class="text-danger small mt-1">{% for e in form.telefone.errors %}{{ e }}{% endfor %}</div>
+                                {% endif %}
                             </div>
                             <div class="col-md-4 mb-2">
-                                <label class="form-label">E-mail</label>
+                                <label class="form-label">E-mail <span class="text-danger">*</span></label>
                                 {{ form.email }}
+                                {% if form.email.errors %}
+                                <div class="text-danger small mt-1">{% for e in form.email.errors %}{{ e }}{% endfor %}</div>
+                                {% endif %}
                             </div>
                             <div class="col-md-4 mb-2">
-                                <label class="form-label">Responsavel</label>
+                                <label class="form-label">Responsavel <span class="text-danger">*</span></label>
                                 {{ form.responsavel }}
+                                {% if form.responsavel.errors %}
+                                <div class="text-danger small mt-1">{% for e in form.responsavel.errors %}{{ e }}{% endfor %}</div>
+                                {% endif %}
                             </div>
                         </div>
                     </div>
