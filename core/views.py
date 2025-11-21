@@ -20,72 +20,44 @@ from django.contrib import messages
 from datetime import datetime, timedelta
 from .models import (
     Contabilidade, Imobiliaria, Imovel, Comprador, TipoImovel,
-    ContaBancaria, BancoBrasil, LayoutCNAB, PerfilUsuario, TipoUsuario
+    ContaBancaria, BancoBrasil, LayoutCNAB, AcessoUsuario,
+    get_contabilidades_usuario, get_imobiliarias_usuario,
+    usuario_tem_acesso_imobiliaria, usuario_tem_acesso_contabilidade
 )
-from .forms import ContabilidadeForm, CompradorForm, ImovelForm, ImobiliariaForm, ContaBancariaForm
+from .forms import ContabilidadeForm, CompradorForm, ImovelForm, ImobiliariaForm, ContaBancariaForm, AcessoUsuarioForm
 import io
 import json
 
 
 # =============================================================================
-# CONTROLE DE ACESSO - HELPERS
+# CONTROLE DE ACESSO - MIXIN
 # =============================================================================
-
-def get_perfil_usuario(user):
-    """Retorna o perfil do usuário ou None se não existir"""
-    if not user.is_authenticated:
-        return None
-    try:
-        return user.perfil
-    except PerfilUsuario.DoesNotExist:
-        return None
-
-
-def is_admin_ou_superuser(user):
-    """Verifica se o usuário é admin ou superuser"""
-    if user.is_superuser:
-        return True
-    perfil = get_perfil_usuario(user)
-    return perfil and perfil.is_admin
-
 
 class AcessoMixin:
     """
-    Mixin para controle de acesso baseado no perfil do usuário.
+    Mixin para controle de acesso baseado nos registros de AcessoUsuario.
 
-    Adiciona métodos para filtrar contabilidades e imobiliárias
-    baseado nas permissões do usuário logado.
+    Cada usuário pode ter múltiplos acessos:
+    - Usuário A → Contabilidade A → Imobiliária A
+    - Usuário A → Contabilidade A → Imobiliária B
+    - Usuário A → Contabilidade B → Imobiliária E
     """
 
     def get_contabilidades_permitidas(self):
         """Retorna as contabilidades que o usuário pode acessar"""
-        user = self.request.user
-        if is_admin_ou_superuser(user):
-            return Contabilidade.objects.filter(ativo=True)
+        return get_contabilidades_usuario(self.request.user)
 
-        perfil = get_perfil_usuario(user)
-        if perfil:
-            return perfil.get_contabilidades_permitidas()
-        return Contabilidade.objects.none()
-
-    def get_imobiliarias_permitidas(self):
+    def get_imobiliarias_permitidas(self, contabilidade=None):
         """Retorna as imobiliárias que o usuário pode acessar"""
-        user = self.request.user
-        if is_admin_ou_superuser(user):
-            return Imobiliaria.objects.filter(ativo=True)
-
-        perfil = get_perfil_usuario(user)
-        if perfil:
-            return perfil.get_imobiliarias_permitidas()
-        return Imobiliaria.objects.none()
+        return get_imobiliarias_usuario(self.request.user, contabilidade)
 
     def pode_acessar_contabilidade(self, contabilidade):
         """Verifica se o usuário pode acessar uma contabilidade específica"""
-        return self.get_contabilidades_permitidas().filter(pk=contabilidade.pk).exists()
+        return usuario_tem_acesso_contabilidade(self.request.user, contabilidade)
 
     def pode_acessar_imobiliaria(self, imobiliaria):
         """Verifica se o usuário pode acessar uma imobiliária específica"""
-        return self.get_imobiliarias_permitidas().filter(pk=imobiliaria.pk).exists()
+        return usuario_tem_acesso_imobiliaria(self.request.user, imobiliaria)
 
 
 def index(request):
@@ -806,3 +778,156 @@ def api_listar_bancos(request):
         'bancos': bancos,
         'layouts_cnab': layouts
     })
+
+
+# =============================================================================
+# CRUD VIEWS - ACESSO USUÁRIO
+# =============================================================================
+
+class AcessoUsuarioListView(LoginRequiredMixin, ListView):
+    """Lista todos os acessos de usuários"""
+    model = AcessoUsuario
+    template_name = 'core/acesso_list.html'
+    context_object_name = 'acessos'
+    paginate_by = 20
+
+    def get_queryset(self):
+        queryset = AcessoUsuario.objects.filter(ativo=True).select_related(
+            'usuario', 'contabilidade', 'imobiliaria'
+        ).order_by('usuario__username', 'contabilidade__nome', 'imobiliaria__nome')
+
+        # Filtros
+        search = self.request.GET.get('search')
+        if search:
+            queryset = queryset.filter(
+                Q(usuario__username__icontains=search) |
+                Q(usuario__first_name__icontains=search) |
+                Q(contabilidade__nome__icontains=search) |
+                Q(imobiliaria__nome__icontains=search)
+            )
+
+        usuario_id = self.request.GET.get('usuario')
+        if usuario_id:
+            queryset = queryset.filter(usuario_id=usuario_id)
+
+        contabilidade_id = self.request.GET.get('contabilidade')
+        if contabilidade_id:
+            queryset = queryset.filter(contabilidade_id=contabilidade_id)
+
+        return queryset
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['total_acessos'] = AcessoUsuario.objects.filter(ativo=True).count()
+        context['search'] = self.request.GET.get('search', '')
+        context['usuarios'] = get_user_model().objects.filter(is_active=True).order_by('username')
+        context['contabilidades'] = Contabilidade.objects.filter(ativo=True).order_by('nome')
+        return context
+
+
+class AcessoUsuarioCreateView(LoginRequiredMixin, CreateView):
+    """Cria um novo acesso de usuário"""
+    model = AcessoUsuario
+    form_class = AcessoUsuarioForm
+    template_name = 'core/acesso_form.html'
+    success_url = reverse_lazy('core:listar_acessos')
+
+    def form_valid(self, form):
+        messages.success(
+            self.request,
+            f'Acesso de {form.instance.usuario.username} a {form.instance.imobiliaria.nome} criado com sucesso!'
+        )
+        return super().form_valid(form)
+
+    def form_invalid(self, form):
+        messages.error(self.request, 'Erro ao criar acesso. Verifique os dados.')
+        return super().form_invalid(form)
+
+
+class AcessoUsuarioUpdateView(LoginRequiredMixin, UpdateView):
+    """Atualiza um acesso de usuário existente"""
+    model = AcessoUsuario
+    form_class = AcessoUsuarioForm
+    template_name = 'core/acesso_form.html'
+    success_url = reverse_lazy('core:listar_acessos')
+
+    def get_queryset(self):
+        return AcessoUsuario.objects.filter(ativo=True)
+
+    def form_valid(self, form):
+        messages.success(self.request, 'Acesso atualizado com sucesso!')
+        return super().form_valid(form)
+
+    def form_invalid(self, form):
+        messages.error(self.request, 'Erro ao atualizar acesso. Verifique os dados.')
+        return super().form_invalid(form)
+
+
+class AcessoUsuarioDeleteView(LoginRequiredMixin, DeleteView):
+    """Desativa um acesso de usuário (soft delete)"""
+    model = AcessoUsuario
+    success_url = reverse_lazy('core:listar_acessos')
+
+    def get_queryset(self):
+        return AcessoUsuario.objects.filter(ativo=True)
+
+    def delete(self, request, *args, **kwargs):
+        self.object = self.get_object()
+        self.object.ativo = False
+        self.object.save()
+        messages.success(
+            request,
+            f'Acesso de {self.object.usuario.username} a {self.object.imobiliaria.nome} removido!'
+        )
+        return redirect(self.success_url)
+
+
+# =============================================================================
+# API VIEWS - ACESSO USUÁRIO (para AJAX)
+# =============================================================================
+
+@login_required
+@require_http_methods(["GET"])
+def api_listar_imobiliarias_por_contabilidade(request, contabilidade_id):
+    """Lista imobiliárias de uma contabilidade específica (para dropdown dinâmico)"""
+    try:
+        contabilidade = get_object_or_404(Contabilidade, pk=contabilidade_id, ativo=True)
+        imobiliarias = contabilidade.imobiliarias.filter(ativo=True).order_by('nome')
+
+        data = [{'id': i.id, 'nome': i.nome} for i in imobiliarias]
+
+        return JsonResponse({'status': 'success', 'imobiliarias': data})
+    except Exception as e:
+        return JsonResponse({'status': 'error', 'message': str(e)}, status=500)
+
+
+@login_required
+@require_http_methods(["GET"])
+def api_listar_acessos_usuario(request, usuario_id):
+    """Lista todos os acessos de um usuário específico"""
+    try:
+        User = get_user_model()
+        usuario = get_object_or_404(User, pk=usuario_id)
+        acessos = AcessoUsuario.objects.filter(
+            usuario=usuario, ativo=True
+        ).select_related('contabilidade', 'imobiliaria')
+
+        data = []
+        for acesso in acessos:
+            data.append({
+                'id': acesso.id,
+                'contabilidade': {
+                    'id': acesso.contabilidade.id,
+                    'nome': acesso.contabilidade.nome
+                },
+                'imobiliaria': {
+                    'id': acesso.imobiliaria.id,
+                    'nome': acesso.imobiliaria.nome
+                },
+                'pode_editar': acesso.pode_editar,
+                'pode_excluir': acesso.pode_excluir
+            })
+
+        return JsonResponse({'status': 'success', 'acessos': data})
+    except Exception as e:
+        return JsonResponse({'status': 'error', 'message': str(e)}, status=500)
