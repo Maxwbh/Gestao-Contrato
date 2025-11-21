@@ -166,7 +166,10 @@ python manage.py runserver
 
 Acesse: `http://localhost:8000`
 
-### 9. Execute o Celery (em outro terminal)
+### 9. Execute o Celery (em outro terminal) - Opcional
+
+**Nota:** O Celery é opcional para desenvolvimento. Você pode executar as tarefas manualmente.
+
 ```bash
 # Worker
 celery -A gestao_contrato worker --loglevel=info
@@ -175,9 +178,46 @@ celery -A gestao_contrato worker --loglevel=info
 celery -A gestao_contrato beat --loglevel=info
 ```
 
+### 10. Ou Execute Tarefas Manualmente (Alternativa ao Celery)
+
+```bash
+# Processar reajustes
+python manage.py processar_reajustes
+
+# Criar notificações de vencimento
+python manage.py enviar_notificacoes
+
+# Processar notificações pendentes
+python manage.py processar_notificacoes_pendentes
+```
+
 ## 🚀 Deploy no Render
 
-### Configuração Automática
+### ⚠️ IMPORTANTE: Plano Gratuito vs Plano Pago
+
+Este projeto está configurado para funcionar no **Plano Gratuito** do Render.
+
+#### Plano Gratuito (Free Tier)
+- ✅ Web Service (Django)
+- ✅ PostgreSQL Database
+- ✅ Redis Instance
+- ❌ **Background Workers NÃO suportados** (Celery)
+
+**Funcionalidades automáticas afetadas:**
+- Reajustes automáticos de parcelas
+- Envio automático de notificações
+
+**Solução:** Execute manualmente via Django Admin ou Management Commands.
+
+👉 **[Leia o guia completo: DEPLOY_RENDER.md](./DEPLOY_RENDER.md)**
+
+#### Plano Pago (Starter $7/mês+)
+- ✅ Todas as funcionalidades do Free
+- ✅ Background Workers (Celery)
+- ✅ Tarefas automáticas funcionam
+- ✅ Sem sleep após inatividade
+
+### Configuração Automática (Plano Gratuito)
 
 O projeto está configurado para deploy automático no Render usando o arquivo `render.yaml`.
 
@@ -185,12 +225,11 @@ O projeto está configurado para deploy automático no Render usando o arquivo `
 2. Acesse [render.com](https://render.com)
 3. Crie uma nova aplicação "Blueprint"
 4. Conecte seu repositório GitHub
-5. O Render criará automaticamente:
-   - Web Service (Django + Gunicorn)
-   - PostgreSQL Database
-   - Redis Instance
-   - Celery Worker
-   - Celery Beat
+5. Selecione o branch: `claude/update-developer-docs-01TGF4Y9D8H9JukuLRBxgQct`
+6. O Render criará automaticamente:
+   - ✅ Web Service (Django + Gunicorn)
+   - ✅ PostgreSQL Database
+   - ✅ Redis Instance
 
 ### Variáveis de Ambiente no Render
 
