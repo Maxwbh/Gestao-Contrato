@@ -299,7 +299,13 @@ class Command(BaseCommand):
             comprador = Comprador.objects.create(
                 tipo_pessoa='PJ',
                 nome=razao_social[:200],
-                cpf='',  # CPF vazio para PJ (campo obrigatório no banco)
+                # Campos PF com valores vazios/default para PJ (constraints do banco)
+                cpf='',
+                rg='',
+                data_nascimento=None,  # Será ignorado se banco permitir NULL
+                estado_civil='',
+                profissao='',
+                # Campos PJ
                 cnpj=cnpj,
                 nome_fantasia=nome_fantasia[:200],
                 inscricao_estadual=f'{random.randint(100, 999)}.{random.randint(100, 999)}.{random.randint(100, 999)}',
