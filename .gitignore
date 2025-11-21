@@ -25,9 +25,11 @@ wheels/
 local_settings.py
 db.sqlite3
 db.sqlite3-journal
-/static/
+/static/*
+!/static/.keep
 /staticfiles/
-/media/
+/media/*
+!/media/.keep
 
 # Environment
 .env
