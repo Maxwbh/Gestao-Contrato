@@ -1,0 +1,74 @@
+# Render Blueprint para deployment automático
+# Desenvolvedor: Maxwell da Silva Oliveira
+# M&S do Brasil LTDA
+#
+# VERSÃO FREE TIER
+# Esta configuração é otimizada para o plano gratuito do Render
+# Limitações: Não inclui Celery Workers (disponível apenas em planos pagos)
+# Solução: Tarefas automáticas podem ser executadas manualmente via Django Admin
+
+databases:
+  # PostgreSQL Database
+  - name: gestao-contrato-db
+    databaseName: gestao_contrato
+    user: gestao_contrato_user
+    plan: free
+
+services:
+  # Web Service (Django)
+  - type: web
+    name: gestao-contrato-web
+    runtime: python
+    plan: free
+    buildCommand: chmod +x build.sh && ./build.sh
+    startCommand: gunicorn gestao_contrato.wsgi:application --bind 0.0.0.0:$PORT
+    healthCheckPath: /admin/
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.11.0"
+      - key: SECRET_KEY
+        generateValue: true
+      - key: DEBUG
+        value: "False"
+      - key: ALLOWED_HOSTS
+        sync: false
+      - key: DATABASE_URL
+        fromDatabase:
+          name: gestao-contrato-db
+          property: connectionString
+      - key: REDIS_URL
+        fromService:
+          name: gestao-contrato-redis
+          type: redis
+          property: connectionString
+
+  # Redis (para cache e sessões)
+  - type: redis
+    name: gestao-contrato-redis
+    plan: free
+    maxmemoryPolicy: allkeys-lru
+    ipAllowList: []
+
+# NOTA IMPORTANTE:
+# ================
+# O plano gratuito do Render não suporta Background Workers (Celery).
+#
+# FUNCIONALIDADES AFETADAS:
+# - Reajustes automáticos de parcelas (IPCA/IGPM/SELIC)
+# - Envio automático de notificações
+#
+# SOLUÇÕES ALTERNATIVAS:
+# 1. Execute manualmente via Django Admin:
+#    - Acesse /admin/financeiro/reajuste/
+#    - Crie e aplique reajustes manualmente
+#    - Acesse /admin/notificacoes/notificacao/
+#    - Envie notificações manualmente
+#
+# 2. Use Django Management Commands via Render Shell:
+#    - Conecte ao shell do Render
+#    - Execute: python manage.py processar_reajustes
+#    - Execute: python manage.py enviar_notificacoes
+#
+# 3. Upgrade para plano pago (recomendado para produção):
+#    - Adicione os workers de volta ao render.yaml
+#    - Tarefas serão executadas automaticamente
