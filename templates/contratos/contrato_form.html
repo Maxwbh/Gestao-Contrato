@@ -5,17 +5,6 @@
 
 {% block extra_css %}
 <style>
-    .card-section {
-        margin-bottom: 1.5rem;
-    }
-    .card-section .card-header {
-        padding: 0.75rem 1rem;
-        font-weight: 600;
-    }
-    .field-help {
-        font-size: 0.8rem;
-        color: #6c757d;
-    }
     .valor-calculado {
         background-color: #e9ecef;
         padding: 0.5rem 1rem;
@@ -52,229 +41,7 @@
 
                 <form method="post" novalidate>
                     {% csrf_token %}
-
-                    <!-- Secao: Partes do Contrato -->
-                    <div class="card card-section border-primary">
-                        <div class="card-header bg-primary text-white">
-                            <i class="fas fa-users"></i> Partes do Contrato
-                        </div>
-                        <div class="card-body">
-                            <div class="row">
-                                <div class="col-md-4 mb-3">
-                                    <label for="id_imobiliaria" class="form-label">Imobiliaria / Beneficiario *</label>
-                                    {{ form.imobiliaria }}
-                                    {% if form.imobiliaria.errors %}
-                                        <div class="text-danger small">{{ form.imobiliaria.errors.0 }}</div>
-                                    {% endif %}
-                                </div>
-                                <div class="col-md-4 mb-3">
-                                    <label for="id_comprador" class="form-label">Comprador *</label>
-                                    {{ form.comprador }}
-                                    {% if form.comprador.errors %}
-                                        <div class="text-danger small">{{ form.comprador.errors.0 }}</div>
-                                    {% endif %}
-                                </div>
-                                <div class="col-md-4 mb-3">
-                                    <label for="id_imovel" class="form-label">Imovel *</label>
-                                    {{ form.imovel }}
-                                    {% if form.imovel.errors %}
-                                        <div class="text-danger small">{{ form.imovel.errors.0 }}</div>
-                                    {% endif %}
-                                    <small class="field-help">Apenas imoveis disponiveis</small>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- Secao: Dados do Contrato -->
-                    <div class="card card-section border-info">
-                        <div class="card-header bg-info text-white">
-                            <i class="fas fa-file-alt"></i> Dados do Contrato
-                        </div>
-                        <div class="card-body">
-                            <div class="row">
-                                <div class="col-md-4 mb-3">
-                                    <label for="id_numero_contrato" class="form-label">Numero do Contrato *</label>
-                                    {{ form.numero_contrato }}
-                                    {% if form.numero_contrato.errors %}
-                                        <div class="text-danger small">{{ form.numero_contrato.errors.0 }}</div>
-                                    {% endif %}
-                                </div>
-                                <div class="col-md-4 mb-3">
-                                    <label for="id_data_contrato" class="form-label">Data do Contrato *</label>
-                                    {{ form.data_contrato }}
-                                    {% if form.data_contrato.errors %}
-                                        <div class="text-danger small">{{ form.data_contrato.errors.0 }}</div>
-                                    {% endif %}
-                                </div>
-                                <div class="col-md-4 mb-3">
-                                    <label for="id_status" class="form-label">Status</label>
-                                    {{ form.status }}
-                                    {% if form.status.errors %}
-                                        <div class="text-danger small">{{ form.status.errors.0 }}</div>
-                                    {% endif %}
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- Secao: Valores -->
-                    <div class="card card-section border-success">
-                        <div class="card-header bg-success text-white">
-                            <i class="fas fa-dollar-sign"></i> Valores
-                        </div>
-                        <div class="card-body">
-                            <div class="row">
-                                <div class="col-md-4 mb-3">
-                                    <label for="id_valor_total" class="form-label">Valor Total *</label>
-                                    {{ form.valor_total }}
-                                    {% if form.valor_total.errors %}
-                                        <div class="text-danger small">{{ form.valor_total.errors.0 }}</div>
-                                    {% endif %}
-                                    {% if form.valor_total.help_text %}
-                                        <small class="field-help">{{ form.valor_total.help_text }}</small>
-                                    {% endif %}
-                                </div>
-                                <div class="col-md-4 mb-3">
-                                    <label for="id_valor_entrada" class="form-label">Valor de Entrada</label>
-                                    {{ form.valor_entrada }}
-                                    {% if form.valor_entrada.errors %}
-                                        <div class="text-danger small">{{ form.valor_entrada.errors.0 }}</div>
-                                    {% endif %}
-                                    {% if form.valor_entrada.help_text %}
-                                        <small class="field-help">{{ form.valor_entrada.help_text }}</small>
-                                    {% endif %}
-                                </div>
-                                <div class="col-md-4 mb-3">
-                                    <label class="form-label">Valor Financiado</label>
-                                    <div class="valor-calculado" id="valor-financiado">
-                                        R$ 0,00
-                                    </div>
-                                    <small class="field-help">Calculado automaticamente</small>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- Secao: Parcelas -->
-                    <div class="card card-section border-warning">
-                        <div class="card-header bg-warning text-dark">
-                            <i class="fas fa-calendar-alt"></i> Configuracao de Parcelas
-                        </div>
-                        <div class="card-body">
-                            <div class="row">
-                                <div class="col-md-3 mb-3">
-                                    <label for="id_numero_parcelas" class="form-label">Numero de Parcelas *</label>
-                                    {{ form.numero_parcelas }}
-                                    {% if form.numero_parcelas.errors %}
-                                        <div class="text-danger small">{{ form.numero_parcelas.errors.0 }}</div>
-                                    {% endif %}
-                                    {% if form.numero_parcelas.help_text %}
-                                        <small class="field-help">{{ form.numero_parcelas.help_text }}</small>
-                                    {% endif %}
-                                </div>
-                                <div class="col-md-3 mb-3">
-                                    <label for="id_dia_vencimento" class="form-label">Dia de Vencimento *</label>
-                                    {{ form.dia_vencimento }}
-                                    {% if form.dia_vencimento.errors %}
-                                        <div class="text-danger small">{{ form.dia_vencimento.errors.0 }}</div>
-                                    {% endif %}
-                                </div>
-                                <div class="col-md-3 mb-3">
-                                    <label for="id_data_primeiro_vencimento" class="form-label">1o Vencimento *</label>
-                                    {{ form.data_primeiro_vencimento }}
-                                    {% if form.data_primeiro_vencimento.errors %}
-                                        <div class="text-danger small">{{ form.data_primeiro_vencimento.errors.0 }}</div>
-                                    {% endif %}
-                                </div>
-                                <div class="col-md-3 mb-3">
-                                    <label class="form-label">Valor da Parcela</label>
-                                    <div class="valor-calculado" id="valor-parcela">
-                                        R$ 0,00
-                                    </div>
-                                    <small class="field-help">Calculado automaticamente</small>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- Secao: Juros e Multa -->
-                    <div class="card card-section border-danger">
-                        <div class="card-header bg-danger text-white">
-                            <i class="fas fa-percentage"></i> Juros e Multa por Atraso
-                        </div>
-                        <div class="card-body">
-                            <div class="row">
-                                <div class="col-md-6 mb-3">
-                                    <label for="id_percentual_juros_mora" class="form-label">Juros de Mora (% a.m.)</label>
-                                    {{ form.percentual_juros_mora }}
-                                    {% if form.percentual_juros_mora.errors %}
-                                        <div class="text-danger small">{{ form.percentual_juros_mora.errors.0 }}</div>
-                                    {% endif %}
-                                </div>
-                                <div class="col-md-6 mb-3">
-                                    <label for="id_percentual_multa" class="form-label">Multa (%)</label>
-                                    {{ form.percentual_multa }}
-                                    {% if form.percentual_multa.errors %}
-                                        <div class="text-danger small">{{ form.percentual_multa.errors.0 }}</div>
-                                    {% endif %}
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- Secao: Correcao Monetaria -->
-                    <div class="card card-section border-secondary">
-                        <div class="card-header bg-secondary text-white">
-                            <i class="fas fa-chart-line"></i> Correcao Monetaria
-                        </div>
-                        <div class="card-body">
-                            <div class="row">
-                                <div class="col-md-6 mb-3">
-                                    <label for="id_tipo_correcao" class="form-label">Tipo de Correcao</label>
-                                    {{ form.tipo_correcao }}
-                                    {% if form.tipo_correcao.errors %}
-                                        <div class="text-danger small">{{ form.tipo_correcao.errors.0 }}</div>
-                                    {% endif %}
-                                </div>
-                                <div class="col-md-6 mb-3">
-                                    <label for="id_prazo_reajuste_meses" class="form-label">Prazo para Reajuste (meses)</label>
-                                    {{ form.prazo_reajuste_meses }}
-                                    {% if form.prazo_reajuste_meses.errors %}
-                                        <div class="text-danger small">{{ form.prazo_reajuste_meses.errors.0 }}</div>
-                                    {% endif %}
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- Secao: Observacoes -->
-                    <div class="card card-section">
-                        <div class="card-header bg-light">
-                            <i class="fas fa-sticky-note"></i> Observacoes
-                        </div>
-                        <div class="card-body">
-                            {{ form.observacoes }}
-                            {% if form.observacoes.errors %}
-                                <div class="text-danger small">{{ form.observacoes.errors.0 }}</div>
-                            {% endif %}
-                        </div>
-                    </div>
-
-                    <!-- Botoes -->
-                    <div class="d-flex justify-content-between">
-                        <a href="{% url 'contratos:listar' %}" class="btn btn-secondary">
-                            <i class="fas fa-arrow-left"></i> Voltar
-                        </a>
-                        <button type="submit" class="btn btn-primary btn-lg">
-                            <i class="fas fa-save"></i>
-                            {% if form.instance.pk %}
-                                Atualizar Contrato
-                            {% else %}
-                                Criar Contrato e Gerar Parcelas
-                            {% endif %}
-                        </button>
-                    </div>
+                    {% crispy form %}
                 </form>
             </div>
         </div>
@@ -288,41 +55,39 @@ document.addEventListener('DOMContentLoaded', function() {
     const valorTotalInput = document.getElementById('id_valor_total');
     const valorEntradaInput = document.getElementById('id_valor_entrada');
     const numeroParcelasInput = document.getElementById('id_numero_parcelas');
-    const valorFinanciadoDiv = document.getElementById('valor-financiado');
-    const valorParcelaDiv = document.getElementById('valor-parcela');
 
     function calcularValores() {
-        const valorTotal = parseFloat(valorTotalInput.value) || 0;
-        const valorEntrada = parseFloat(valorEntradaInput.value) || 0;
-        const numeroParcelas = parseInt(numeroParcelasInput.value) || 1;
+        const valorTotal = parseFloat(valorTotalInput?.value) || 0;
+        const valorEntrada = parseFloat(valorEntradaInput?.value) || 0;
+        const numeroParcelas = parseInt(numeroParcelasInput?.value) || 1;
 
         const valorFinanciado = valorTotal - valorEntrada;
-        const valorParcela = valorFinanciado / numeroParcelas;
+        const valorParcela = numeroParcelas > 0 ? valorFinanciado / numeroParcelas : 0;
 
-        valorFinanciadoDiv.textContent = 'R$ ' + valorFinanciado.toLocaleString('pt-BR', {
-            minimumFractionDigits: 2,
-            maximumFractionDigits: 2
-        });
+        // Atualizar displays se existirem
+        const divFinanciado = document.getElementById('valor-financiado');
+        const divParcela = document.getElementById('valor-parcela');
 
-        valorParcelaDiv.textContent = 'R$ ' + valorParcela.toLocaleString('pt-BR', {
-            minimumFractionDigits: 2,
-            maximumFractionDigits: 2
-        });
+        if (divFinanciado) {
+            divFinanciado.textContent = 'R$ ' + valorFinanciado.toLocaleString('pt-BR', {
+                minimumFractionDigits: 2,
+                maximumFractionDigits: 2
+            });
+        }
 
-        // Destacar se valores sao invalidos
-        if (valorEntrada >= valorTotal && valorTotal > 0) {
-            valorFinanciadoDiv.classList.add('text-danger');
-            valorFinanciadoDiv.textContent = 'Entrada deve ser menor que o total';
-        } else {
-            valorFinanciadoDiv.classList.remove('text-danger');
+        if (divParcela) {
+            divParcela.textContent = 'R$ ' + valorParcela.toLocaleString('pt-BR', {
+                minimumFractionDigits: 2,
+                maximumFractionDigits: 2
+            });
         }
     }
 
     // Calcular ao carregar e ao alterar campos
+    if (valorTotalInput) valorTotalInput.addEventListener('input', calcularValores);
+    if (valorEntradaInput) valorEntradaInput.addEventListener('input', calcularValores);
+    if (numeroParcelasInput) numeroParcelasInput.addEventListener('input', calcularValores);
     calcularValores();
-    valorTotalInput.addEventListener('input', calcularValores);
-    valorEntradaInput.addEventListener('input', calcularValores);
-    numeroParcelasInput.addEventListener('input', calcularValores);
 });
 </script>
 {% endblock %}

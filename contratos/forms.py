@@ -106,14 +106,138 @@ class ContratoForm(forms.ModelForm):
         self.fields['comprador'].queryset = Comprador.objects.filter(ativo=True)
         self.fields['imobiliaria'].queryset = Imobiliaria.objects.filter(ativo=True)
 
-        # Se for edição, desabilitar campos que não devem ser alterados
+        # Se for edicao, desabilitar campos que nao devem ser alterados
         if self.instance and self.instance.pk:
             self.fields['numero_parcelas'].disabled = True
-            self.fields['numero_parcelas'].help_text = 'Não é possível alterar após criação'
+            self.fields['numero_parcelas'].help_text = 'Nao e possivel alterar apos criacao'
             self.fields['valor_total'].disabled = True
-            self.fields['valor_total'].help_text = 'Não é possível alterar após criação'
+            self.fields['valor_total'].help_text = 'Nao e possivel alterar apos criacao'
             self.fields['valor_entrada'].disabled = True
-            self.fields['valor_entrada'].help_text = 'Não é possível alterar após criação'
+            self.fields['valor_entrada'].help_text = 'Nao e possivel alterar apos criacao'
+
+        # Layout crispy forms
+        self.helper = FormHelper()
+        self.helper.form_method = 'post'
+        self.helper.layout = Layout(
+            # Legenda
+            HTML('''
+                <div class="legenda-campos">
+                    <i class="fas fa-info-circle me-1"></i>
+                    <span class="obrigatorio">* Campos obrigatorios</span>
+                    <span class="ms-3 opcional">Demais campos sao opcionais</span>
+                </div>
+            '''),
+
+            # Card: Partes do Contrato (Obrigatorio)
+            HTML('''
+                <div class="card mb-3 card-obrigatorio">
+                    <div class="card-header py-2">
+                        <i class="fas fa-users me-2"></i><strong>Partes do Contrato</strong>
+                    </div>
+                    <div class="card-body py-3">
+            '''),
+            Row(
+                Column(Field('imobiliaria', wrapper_class='mb-2 campo-obrigatorio'), css_class='col-md-4'),
+                Column(Field('comprador', wrapper_class='mb-2 campo-obrigatorio'), css_class='col-md-4'),
+                Column(Field('imovel', wrapper_class='mb-2 campo-obrigatorio'), css_class='col-md-4'),
+            ),
+            HTML('</div></div>'),
+
+            # Card: Dados do Contrato (Obrigatorio)
+            HTML('''
+                <div class="card mb-3 card-obrigatorio">
+                    <div class="card-header py-2">
+                        <i class="fas fa-file-alt me-2"></i><strong>Dados do Contrato</strong>
+                    </div>
+                    <div class="card-body py-3">
+            '''),
+            Row(
+                Column(Field('numero_contrato', wrapper_class='mb-2 campo-obrigatorio'), css_class='col-md-4'),
+                Column(Field('data_contrato', wrapper_class='mb-2 campo-obrigatorio'), css_class='col-md-4'),
+                Column(Field('status', wrapper_class='mb-2'), css_class='col-md-4'),
+            ),
+            HTML('</div></div>'),
+
+            # Card: Valores (Obrigatorio)
+            HTML('''
+                <div class="card mb-3 card-obrigatorio">
+                    <div class="card-header py-2">
+                        <i class="fas fa-dollar-sign me-2"></i><strong>Valores</strong>
+                    </div>
+                    <div class="card-body py-3">
+            '''),
+            Row(
+                Column(Field('valor_total', wrapper_class='mb-2 campo-obrigatorio'), css_class='col-md-6'),
+                Column(Field('valor_entrada', wrapper_class='mb-2'), css_class='col-md-6'),
+            ),
+            HTML('</div></div>'),
+
+            # Card: Parcelas (Obrigatorio)
+            HTML('''
+                <div class="card mb-3 card-obrigatorio">
+                    <div class="card-header py-2">
+                        <i class="fas fa-calendar-alt me-2"></i><strong>Configuracao de Parcelas</strong>
+                    </div>
+                    <div class="card-body py-3">
+            '''),
+            Row(
+                Column(Field('numero_parcelas', wrapper_class='mb-2 campo-obrigatorio'), css_class='col-md-3'),
+                Column(Field('dia_vencimento', wrapper_class='mb-2 campo-obrigatorio'), css_class='col-md-3'),
+                Column(Field('data_primeiro_vencimento', wrapper_class='mb-2 campo-obrigatorio'), css_class='col-md-6'),
+            ),
+            HTML('</div></div>'),
+
+            # Card: Juros e Multa (Opcional)
+            HTML('''
+                <div class="card mb-3 card-opcional">
+                    <div class="card-header py-2">
+                        <i class="fas fa-percentage me-2"></i><strong>Juros e Multa por Atraso</strong>
+                    </div>
+                    <div class="card-body py-3">
+            '''),
+            Row(
+                Column(Field('percentual_juros_mora', wrapper_class='mb-2'), css_class='col-md-6'),
+                Column(Field('percentual_multa', wrapper_class='mb-2'), css_class='col-md-6'),
+            ),
+            HTML('</div></div>'),
+
+            # Card: Correcao Monetaria (Opcional)
+            HTML('''
+                <div class="card mb-3 card-opcional">
+                    <div class="card-header py-2">
+                        <i class="fas fa-chart-line me-2"></i><strong>Correcao Monetaria</strong>
+                    </div>
+                    <div class="card-body py-3">
+            '''),
+            Row(
+                Column(Field('tipo_correcao', wrapper_class='mb-2'), css_class='col-md-6'),
+                Column(Field('prazo_reajuste_meses', wrapper_class='mb-2'), css_class='col-md-6'),
+            ),
+            HTML('</div></div>'),
+
+            # Card: Observacoes (Opcional)
+            HTML('''
+                <div class="card mb-3 card-opcional">
+                    <div class="card-header py-2">
+                        <i class="fas fa-sticky-note me-2"></i><strong>Observacoes</strong>
+                    </div>
+                    <div class="card-body py-3">
+            '''),
+            Field('observacoes', wrapper_class='mb-0'),
+            HTML('</div></div>'),
+
+            # Botoes
+            HTML('''
+                <div class="d-flex justify-content-between align-items-center mt-4 pt-3 border-top">
+                    <a href="{% url 'contratos:listar' %}" class="btn btn-outline-secondary">
+                        <i class="fas fa-arrow-left me-2"></i>Voltar
+                    </a>
+                    <button type="submit" class="btn btn-primary btn-lg px-5">
+                        <i class="fas fa-save me-2"></i>Salvar Contrato
+                    </button>
+                </div>
+            ''')
+        )
 
     def clean(self):
         cleaned_data = super().clean()
