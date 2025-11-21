@@ -299,10 +299,10 @@ class Command(BaseCommand):
             comprador = Comprador.objects.create(
                 tipo_pessoa='PJ',
                 nome=razao_social[:200],
-                # Campos PF com valores vazios/default para PJ (constraints do banco)
-                cpf='',
+                # Campos PF com valores para PJ (constraints do banco)
+                cpf=self.gerar_cpf(),  # CPF fictício único (constraint UNIQUE no banco)
                 rg='',
-                data_nascimento=None,  # Será ignorado se banco permitir NULL
+                data_nascimento=None,
                 estado_civil='',
                 profissao='',
                 # Campos PJ
