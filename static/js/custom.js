@@ -116,6 +116,84 @@
     }
 
     /**
+     * Buscar endereço via ViaCEP
+     */
+    async function buscarCEP(cep) {
+        // Remove caracteres não numéricos
+        const cepLimpo = cep.replace(/\D/g, '');
+
+        // Valida CEP
+        if (cepLimpo.length !== 8) {
+            return { erro: true, mensagem: 'CEP deve ter 8 dígitos' };
+        }
+
+        try {
+            const response = await fetch(`https://viacep.com.br/ws/${cepLimpo}/json/`);
+            const data = await response.json();
+
+            if (data.erro) {
+                return { erro: true, mensagem: 'CEP não encontrado' };
+            }
+
+            return {
+                erro: false,
+                cep: data.cep,
+                logradouro: data.logradouro,
+                complemento: data.complemento,
+                bairro: data.bairro,
+                localidade: data.localidade,
+                uf: data.uf
+            };
+        } catch (error) {
+            console.error('Erro ao buscar CEP:', error);
+            return { erro: true, mensagem: 'Erro ao buscar CEP. Tente novamente.' };
+        }
+    }
+
+    /**
+     * Preencher campos de endereço com dados do ViaCEP
+     */
+    function preencherEndereco(dados) {
+        // Mapeia os campos do formulário
+        const campos = {
+            logradouro: ['logradouro', 'id_logradouro'],
+            bairro: ['bairro', 'id_bairro'],
+            cidade: ['cidade', 'id_cidade', 'localidade'],
+            estado: ['estado', 'id_estado', 'uf']
+        };
+
+        // Preenche cada campo
+        Object.keys(campos).forEach(campo => {
+            campos[campo].forEach(possibilidade => {
+                const elemento = document.querySelector(`[name="${possibilidade}"]`) ||
+                                document.getElementById(possibilidade);
+
+                if (elemento) {
+                    if (campo === 'cidade') {
+                        elemento.value = dados.localidade || '';
+                    } else if (campo === 'estado') {
+                        elemento.value = dados.uf || '';
+                    } else {
+                        elemento.value = dados[campo] || '';
+                    }
+
+                    // Remove readonly temporariamente para permitir edição
+                    elemento.removeAttribute('readonly');
+
+                    // Trigger change event
+                    elemento.dispatchEvent(new Event('change'));
+                }
+            });
+        });
+
+        // Foca no campo número (geralmente o próximo a ser preenchido)
+        const campoNumero = document.querySelector('[name="numero"]');
+        if (campoNumero) {
+            setTimeout(() => campoNumero.focus(), 100);
+        }
+    }
+
+    /**
      * Apply currency mask
      */
     function mascaraMoeda(value) {
@@ -274,10 +352,39 @@
         });
 
         // CEP inputs
-        const cepInputs = document.querySelectorAll('input[name="cep"]');
+        const cepInputs = document.querySelectorAll('input[name="cep"], .cep-input');
         cepInputs.forEach(input => {
+            // Aplica máscara
             input.addEventListener('input', function(e) {
                 e.target.value = mascaraCEP(e.target.value);
+            });
+
+            // Busca endereço via ViaCEP quando CEP está completo
+            input.addEventListener('blur', async function(e) {
+                const cep = e.target.value.replace(/\D/g, '');
+
+                if (cep.length === 8) {
+                    // Mostra loading
+                    const originalValue = e.target.value;
+                    e.target.value = 'Buscando...';
+                    e.target.disabled = true;
+
+                    const resultado = await buscarCEP(cep);
+
+                    // Restaura campo
+                    e.target.value = originalValue;
+                    e.target.disabled = false;
+
+                    if (resultado.erro) {
+                        showToast(resultado.mensagem, 'warning');
+                        e.target.classList.add('is-invalid');
+                    } else {
+                        e.target.classList.remove('is-invalid');
+                        e.target.classList.add('is-valid');
+                        preencherEndereco(resultado);
+                        showToast('Endereço encontrado! Verifique e complete os dados.', 'success');
+                    }
+                }
             });
         });
 
@@ -413,6 +520,8 @@
         validarCPF,
         validarCNPJ,
         validarEmail,
+        buscarCEP,
+        preencherEndereco,
         showToast,
         debounce
     };

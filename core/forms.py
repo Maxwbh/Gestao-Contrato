@@ -20,14 +20,19 @@ class CompradorForm(forms.ModelForm):
         model = Comprador
         fields = [
             'nome', 'cpf', 'rg', 'data_nascimento', 'estado_civil', 'profissao',
-            'endereco', 'telefone', 'celular', 'email',
+            'cep', 'logradouro', 'numero', 'complemento', 'bairro', 'cidade', 'estado',
+            'telefone', 'celular', 'email',
             'notificar_email', 'notificar_sms', 'notificar_whatsapp',
             'conjuge_nome', 'conjuge_cpf', 'conjuge_rg', 'observacoes'
         ]
         widgets = {
             'data_nascimento': forms.DateInput(attrs={'type': 'date'}),
             'observacoes': forms.Textarea(attrs={'rows': 3}),
-            'endereco': forms.Textarea(attrs={'rows': 3}),
+            'cep': forms.TextInput(attrs={
+                'placeholder': '99999-999',
+                'data-viacep': 'true',
+                'class': 'cep-input'
+            }),
         }
 
     def __init__(self, *args, **kwargs):
@@ -47,8 +52,21 @@ class CompradorForm(forms.ModelForm):
             ),
             'profissao',
 
-            HTML('<h4 class="mt-4 mb-3"><i class="fas fa-map-marker-alt"></i> Endereço e Contato</h4>'),
-            'endereco',
+            HTML('<h4 class="mt-4 mb-3"><i class="fas fa-map-marker-alt"></i> Endereço</h4>'),
+            HTML('<p class="text-muted"><i class="fas fa-info-circle"></i> Digite o CEP e o endereço será preenchido automaticamente via ViaCEP</p>'),
+            Row(
+                Column('cep', css_class='form-group col-md-3'),
+                Column('logradouro', css_class='form-group col-md-7'),
+                Column('numero', css_class='form-group col-md-2'),
+            ),
+            Row(
+                Column('complemento', css_class='form-group col-md-4'),
+                Column('bairro', css_class='form-group col-md-4'),
+                Column('cidade', css_class='form-group col-md-3'),
+                Column('estado', css_class='form-group col-md-1'),
+            ),
+
+            HTML('<h4 class="mt-4 mb-3"><i class="fas fa-phone"></i> Contato</h4>'),
             Row(
                 Column('telefone', css_class='form-group col-md-4'),
                 Column('celular', css_class='form-group col-md-4'),
@@ -151,11 +169,16 @@ class ImobiliariaForm(forms.ModelForm):
         model = Imobiliaria
         fields = [
             'contabilidade', 'nome', 'razao_social', 'cnpj',
-            'endereco', 'telefone', 'email', 'responsavel_financeiro',
+            'cep', 'logradouro', 'numero', 'complemento', 'bairro', 'cidade', 'estado',
+            'telefone', 'email', 'responsavel_financeiro',
             'banco', 'agencia', 'conta', 'pix'
         ]
         widgets = {
-            'endereco': forms.Textarea(attrs={'rows': 3}),
+            'cep': forms.TextInput(attrs={
+                'placeholder': '99999-999',
+                'data-viacep': 'true',
+                'class': 'cep-input'
+            }),
         }
 
     def __init__(self, *args, **kwargs):
@@ -171,8 +194,21 @@ class ImobiliariaForm(forms.ModelForm):
             ),
             'razao_social',
 
-            HTML('<h4 class="mt-4 mb-3"><i class="fas fa-map-marker-alt"></i> Endereço e Contato</h4>'),
-            'endereco',
+            HTML('<h4 class="mt-4 mb-3"><i class="fas fa-map-marker-alt"></i> Endereço</h4>'),
+            HTML('<p class="text-muted"><i class="fas fa-info-circle"></i> Digite o CEP e o endereço será preenchido automaticamente via ViaCEP</p>'),
+            Row(
+                Column('cep', css_class='form-group col-md-3'),
+                Column('logradouro', css_class='form-group col-md-7'),
+                Column('numero', css_class='form-group col-md-2'),
+            ),
+            Row(
+                Column('complemento', css_class='form-group col-md-4'),
+                Column('bairro', css_class='form-group col-md-4'),
+                Column('cidade', css_class='form-group col-md-3'),
+                Column('estado', css_class='form-group col-md-1'),
+            ),
+
+            HTML('<h4 class="mt-4 mb-3"><i class="fas fa-phone"></i> Contato</h4>'),
             Row(
                 Column('telefone', css_class='form-group col-md-6'),
                 Column('email', css_class='form-group col-md-6'),
