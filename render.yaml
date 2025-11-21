@@ -1,6 +1,11 @@
 # Render Blueprint para deployment automático
 # Desenvolvedor: Maxwell da Silva Oliveira
 # M&S do Brasil LTDA
+#
+# VERSÃO FREE TIER
+# Esta configuração é otimizada para o plano gratuito do Render
+# Limitações: Não inclui Celery Workers (disponível apenas em planos pagos)
+# Solução: Tarefas automáticas podem ser executadas manualmente via Django Admin
 
 databases:
   # PostgreSQL Database
@@ -16,7 +21,7 @@ services:
     runtime: python
     plan: free
     buildCommand: chmod +x build.sh && ./build.sh
-    startCommand: gunicorn gestao_contrato.wsgi:application
+    startCommand: gunicorn gestao_contrato.wsgi:application --bind 0.0.0.0:$PORT
     healthCheckPath: /admin/
     envVars:
       - key: PYTHON_VERSION
@@ -37,53 +42,33 @@ services:
           type: redis
           property: connectionString
 
-  # Redis (para Celery)
+  # Redis (para cache e sessões)
   - type: redis
     name: gestao-contrato-redis
     plan: free
     maxmemoryPolicy: allkeys-lru
     ipAllowList: []
 
-  # Celery Worker
-  - type: worker
-    name: gestao-contrato-worker
-    runtime: python
-    plan: free
-    buildCommand: pip install -r requirements.txt
-    startCommand: celery -A gestao_contrato worker --loglevel=info
-    envVars:
-      - key: PYTHON_VERSION
-        value: "3.11.0"
-      - key: SECRET_KEY
-        sync: false
-      - key: DATABASE_URL
-        fromDatabase:
-          name: gestao-contrato-db
-          property: connectionString
-      - key: REDIS_URL
-        fromService:
-          name: gestao-contrato-redis
-          type: redis
-          property: connectionString
-
-  # Celery Beat (agendamento de tarefas)
-  - type: worker
-    name: gestao-contrato-beat
-    runtime: python
-    plan: free
-    buildCommand: pip install -r requirements.txt
-    startCommand: celery -A gestao_contrato beat --loglevel=info --scheduler django_celery_beat.schedulers:DatabaseScheduler
-    envVars:
-      - key: PYTHON_VERSION
-        value: "3.11.0"
-      - key: SECRET_KEY
-        sync: false
-      - key: DATABASE_URL
-        fromDatabase:
-          name: gestao-contrato-db
-          property: connectionString
-      - key: REDIS_URL
-        fromService:
-          name: gestao-contrato-redis
-          type: redis
-          property: connectionString
+# NOTA IMPORTANTE:
+# ================
+# O plano gratuito do Render não suporta Background Workers (Celery).
+#
+# FUNCIONALIDADES AFETADAS:
+# - Reajustes automáticos de parcelas (IPCA/IGPM/SELIC)
+# - Envio automático de notificações
+#
+# SOLUÇÕES ALTERNATIVAS:
+# 1. Execute manualmente via Django Admin:
+#    - Acesse /admin/financeiro/reajuste/
+#    - Crie e aplique reajustes manualmente
+#    - Acesse /admin/notificacoes/notificacao/
+#    - Envie notificações manualmente
+#
+# 2. Use Django Management Commands via Render Shell:
+#    - Conecte ao shell do Render
+#    - Execute: python manage.py processar_reajustes
+#    - Execute: python manage.py enviar_notificacoes
+#
+# 3. Upgrade para plano pago (recomendado para produção):
+#    - Adicione os workers de volta ao render.yaml
+#    - Tarefas serão executadas automaticamente
