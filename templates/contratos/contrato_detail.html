@@ -1,0 +1,416 @@
+{% extends 'base.html' %}
+
+{% block title %}Contrato {{ contrato.numero_contrato }} - Gestao de Contratos{% endblock %}
+
+{% block extra_css %}
+<style>
+    .info-card {
+        border-left: 4px solid;
+    }
+    .info-card.primary { border-left-color: #0d6efd; }
+    .info-card.success { border-left-color: #198754; }
+    .info-card.warning { border-left-color: #ffc107; }
+    .info-card.danger { border-left-color: #dc3545; }
+    .info-card.info { border-left-color: #0dcaf0; }
+
+    .info-item {
+        padding: 0.5rem 0;
+        border-bottom: 1px solid #eee;
+    }
+    .info-item:last-child {
+        border-bottom: none;
+    }
+    .info-label {
+        font-weight: 500;
+        color: #6c757d;
+        font-size: 0.85rem;
+    }
+    .info-value {
+        font-weight: 600;
+        color: #2c3e50;
+    }
+
+    .progress-lg {
+        height: 25px;
+        border-radius: 12px;
+    }
+    .progress-lg .progress-bar {
+        font-size: 0.9rem;
+        font-weight: 600;
+    }
+
+    .parcela-row.paga {
+        background-color: #d1e7dd;
+    }
+    .parcela-row.atrasada {
+        background-color: #f8d7da;
+    }
+    .parcela-row.proxima {
+        background-color: #fff3cd;
+    }
+
+    .stat-card {
+        text-align: center;
+        padding: 1rem;
+    }
+    .stat-value {
+        font-size: 1.5rem;
+        font-weight: 700;
+    }
+    .stat-label {
+        font-size: 0.8rem;
+        color: #6c757d;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <!-- Cabecalho -->
+        <div class="card mb-4">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <h3 class="mb-1">
+                            <i class="fas fa-file-contract text-primary"></i>
+                            Contrato {{ contrato.numero_contrato }}
+                        </h3>
+                        <p class="text-muted mb-0">
+                            {{ contrato.comprador.nome }} | {{ contrato.imovel.identificacao }}
+                        </p>
+                    </div>
+                    <div>
+                        <span class="badge fs-5 {% if contrato.status == 'ATIVO' %}bg-success{% elif contrato.status == 'QUITADO' %}bg-primary{% elif contrato.status == 'CANCELADO' %}bg-danger{% else %}bg-warning text-dark{% endif %}">
+                            {{ contrato.get_status_display }}
+                        </span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Estatisticas Rapidas -->
+        <div class="row mb-4">
+            <div class="col-md-3">
+                <div class="card stat-card border-primary">
+                    <div class="stat-value text-primary">R$ {{ contrato.valor_total|floatformat:2 }}</div>
+                    <div class="stat-label">Valor Total</div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card stat-card border-success">
+                    <div class="stat-value text-success">R$ {{ valor_pago|floatformat:2 }}</div>
+                    <div class="stat-label">Valor Pago</div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card stat-card border-warning">
+                    <div class="stat-value text-warning">R$ {{ saldo_devedor|floatformat:2 }}</div>
+                    <div class="stat-label">Saldo Devedor</div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card stat-card border-info">
+                    <div class="stat-value text-info">{{ parcelas_pagas }}/{{ contrato.numero_parcelas }}</div>
+                    <div class="stat-label">Parcelas Pagas</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Barra de Progresso -->
+        <div class="card mb-4">
+            <div class="card-body">
+                <h6 class="mb-3">Progresso do Pagamento</h6>
+                <div class="progress progress-lg">
+                    <div class="progress-bar {% if progresso >= 100 %}bg-success{% elif progresso >= 50 %}bg-info{% else %}bg-warning{% endif %}"
+                         role="progressbar"
+                         style="width: {{ progresso }}%"
+                         aria-valuenow="{{ progresso }}"
+                         aria-valuemin="0"
+                         aria-valuemax="100">
+                        {{ progresso|floatformat:1 }}%
+                    </div>
+                </div>
+                <div class="d-flex justify-content-between mt-2 small text-muted">
+                    <span>{{ parcelas_pagas }} parcelas pagas</span>
+                    <span>{{ parcelas_pendentes }} parcelas pendentes</span>
+                    {% if parcelas_atrasadas > 0 %}
+                    <span class="text-danger fw-bold">{{ parcelas_atrasadas }} em atraso!</span>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <div class="row">
+            <!-- Coluna Esquerda: Informacoes -->
+            <div class="col-lg-5">
+                <!-- Comprador -->
+                <div class="card info-card primary mb-3">
+                    <div class="card-header bg-primary text-white">
+                        <i class="fas fa-user"></i> Comprador
+                    </div>
+                    <div class="card-body">
+                        <div class="info-item">
+                            <div class="info-label">Nome</div>
+                            <div class="info-value">{{ contrato.comprador.nome }}</div>
+                        </div>
+                        <div class="info-item">
+                            <div class="info-label">CPF/CNPJ</div>
+                            <div class="info-value">{{ contrato.comprador.cpf_cnpj }}</div>
+                        </div>
+                        {% if contrato.comprador.telefone %}
+                        <div class="info-item">
+                            <div class="info-label">Telefone</div>
+                            <div class="info-value">{{ contrato.comprador.telefone }}</div>
+                        </div>
+                        {% endif %}
+                        {% if contrato.comprador.email %}
+                        <div class="info-item">
+                            <div class="info-label">E-mail</div>
+                            <div class="info-value">{{ contrato.comprador.email }}</div>
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>
+
+                <!-- Imovel -->
+                <div class="card info-card success mb-3">
+                    <div class="card-header bg-success text-white">
+                        <i class="fas fa-home"></i> Imovel
+                    </div>
+                    <div class="card-body">
+                        <div class="info-item">
+                            <div class="info-label">Identificacao</div>
+                            <div class="info-value">{{ contrato.imovel.identificacao }}</div>
+                        </div>
+                        {% if contrato.imovel.loteamento %}
+                        <div class="info-item">
+                            <div class="info-label">Loteamento</div>
+                            <div class="info-value">{{ contrato.imovel.loteamento }}</div>
+                        </div>
+                        {% endif %}
+                        <div class="info-item">
+                            <div class="info-label">Tipo</div>
+                            <div class="info-value">{{ contrato.imovel.get_tipo_display }}</div>
+                        </div>
+                        {% if contrato.imovel.area %}
+                        <div class="info-item">
+                            <div class="info-label">Area</div>
+                            <div class="info-value">{{ contrato.imovel.area }} m2</div>
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>
+
+                <!-- Valores -->
+                <div class="card info-card warning mb-3">
+                    <div class="card-header bg-warning text-dark">
+                        <i class="fas fa-dollar-sign"></i> Valores
+                    </div>
+                    <div class="card-body">
+                        <div class="info-item">
+                            <div class="info-label">Valor Total</div>
+                            <div class="info-value">R$ {{ contrato.valor_total|floatformat:2 }}</div>
+                        </div>
+                        <div class="info-item">
+                            <div class="info-label">Entrada</div>
+                            <div class="info-value">R$ {{ contrato.valor_entrada|floatformat:2 }}</div>
+                        </div>
+                        <div class="info-item">
+                            <div class="info-label">Valor Financiado</div>
+                            <div class="info-value">R$ {{ contrato.valor_financiado|floatformat:2 }}</div>
+                        </div>
+                        <div class="info-item">
+                            <div class="info-label">Valor Original Parcela</div>
+                            <div class="info-value">R$ {{ contrato.valor_parcela_original|floatformat:2 }}</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Configuracoes -->
+                <div class="card info-card info mb-3">
+                    <div class="card-header bg-info text-white">
+                        <i class="fas fa-cog"></i> Configuracoes
+                    </div>
+                    <div class="card-body">
+                        <div class="info-item">
+                            <div class="info-label">Juros de Mora</div>
+                            <div class="info-value">{{ contrato.percentual_juros_mora }}% a.m.</div>
+                        </div>
+                        <div class="info-item">
+                            <div class="info-label">Multa</div>
+                            <div class="info-value">{{ contrato.percentual_multa }}%</div>
+                        </div>
+                        <div class="info-item">
+                            <div class="info-label">Correcao Monetaria</div>
+                            <div class="info-value">{{ contrato.get_tipo_correcao_display }}</div>
+                        </div>
+                        <div class="info-item">
+                            <div class="info-label">Prazo Reajuste</div>
+                            <div class="info-value">{{ contrato.prazo_reajuste_meses }} meses</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Coluna Direita: Parcelas -->
+            <div class="col-lg-7">
+                <div class="card">
+                    <div class="card-header bg-dark text-white d-flex justify-content-between align-items-center">
+                        <span><i class="fas fa-list"></i> Parcelas</span>
+                        {% if proxima_parcela %}
+                        <span class="badge bg-warning text-dark">
+                            Proxima: {{ proxima_parcela.data_vencimento|date:"d/m/Y" }}
+                        </span>
+                        {% endif %}
+                    </div>
+                    <div class="card-body p-0">
+                        <div class="table-responsive" style="max-height: 600px; overflow-y: auto;">
+                            <table class="table table-sm table-hover mb-0">
+                                <thead class="table-light sticky-top">
+                                    <tr>
+                                        <th class="text-center">#</th>
+                                        <th>Vencimento</th>
+                                        <th class="text-end">Valor</th>
+                                        <th class="text-center">Status</th>
+                                        <th>Pagamento</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for parcela in parcelas %}
+                                    <tr class="parcela-row {% if parcela.pago %}paga{% elif parcela.esta_atrasada %}atrasada{% elif parcela == proxima_parcela %}proxima{% endif %}">
+                                        <td class="text-center">
+                                            <strong>{{ parcela.numero_parcela }}</strong>
+                                        </td>
+                                        <td>{{ parcela.data_vencimento|date:"d/m/Y" }}</td>
+                                        <td class="text-end">
+                                            R$ {{ parcela.valor_atual|floatformat:2 }}
+                                        </td>
+                                        <td class="text-center">
+                                            {% if parcela.pago %}
+                                                <span class="badge bg-success">
+                                                    <i class="fas fa-check"></i> Pago
+                                                </span>
+                                            {% elif parcela.esta_atrasada %}
+                                                <span class="badge bg-danger">
+                                                    <i class="fas fa-exclamation-triangle"></i> Atrasada
+                                                </span>
+                                            {% else %}
+                                                <span class="badge bg-secondary">
+                                                    <i class="fas fa-clock"></i> Pendente
+                                                </span>
+                                            {% endif %}
+                                        </td>
+                                        <td>
+                                            {% if parcela.pago %}
+                                                <small>
+                                                    {{ parcela.data_pagamento|date:"d/m/Y" }}
+                                                    <br>
+                                                    R$ {{ parcela.valor_pago|floatformat:2 }}
+                                                </small>
+                                            {% elif parcela.esta_atrasada %}
+                                                <small class="text-danger">
+                                                    {{ parcela.dias_atraso }} dias
+                                                </small>
+                                            {% else %}
+                                                -
+                                            {% endif %}
+                                        </td>
+                                    </tr>
+                                    {% empty %}
+                                    <tr>
+                                        <td colspan="5" class="text-center text-muted py-4">
+                                            <i class="fas fa-info-circle"></i> Nenhuma parcela gerada
+                                        </td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Observacoes -->
+                {% if contrato.observacoes %}
+                <div class="card mt-3">
+                    <div class="card-header bg-light">
+                        <i class="fas fa-sticky-note"></i> Observacoes
+                    </div>
+                    <div class="card-body">
+                        <p class="mb-0">{{ contrato.observacoes|linebreaks }}</p>
+                    </div>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Botoes de Acao -->
+        <div class="card mt-4">
+            <div class="card-body d-flex justify-content-between">
+                <a href="{% url 'contratos:listar' %}" class="btn btn-secondary">
+                    <i class="fas fa-arrow-left"></i> Voltar para Lista
+                </a>
+                <div>
+                    <a href="{% url 'contratos:editar' contrato.pk %}" class="btn btn-primary">
+                        <i class="fas fa-edit"></i> Editar Contrato
+                    </a>
+                    {% if contrato.status != 'CANCELADO' %}
+                    <button type="button" class="btn btn-danger" onclick="confirmarCancelamento()">
+                        <i class="fas fa-ban"></i> Cancelar Contrato
+                    </button>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal de Cancelamento -->
+<div class="modal fade" id="modalCancelamento" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-danger text-white">
+                <h5 class="modal-title">
+                    <i class="fas fa-exclamation-triangle"></i> Confirmar Cancelamento
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p>Tem certeza que deseja cancelar o contrato <strong>{{ contrato.numero_contrato }}</strong>?</p>
+                {% if parcelas_pagas > 0 %}
+                <div class="alert alert-danger">
+                    <i class="fas fa-exclamation-circle"></i>
+                    <strong>Atencao:</strong> Este contrato possui {{ parcelas_pagas }} parcela(s) paga(s).
+                    O cancelamento NAO sera permitido.
+                </div>
+                {% else %}
+                <p class="text-warning">
+                    <i class="fas fa-info-circle"></i> O imovel sera liberado para novas vendas.
+                </p>
+                {% endif %}
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                    Voltar
+                </button>
+                {% if parcelas_pagas == 0 %}
+                <form action="{% url 'contratos:excluir' contrato.pk %}" method="post" style="display: inline;">
+                    {% csrf_token %}
+                    <button type="submit" class="btn btn-danger">
+                        <i class="fas fa-ban"></i> Confirmar Cancelamento
+                    </button>
+                </form>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+function confirmarCancelamento() {
+    new bootstrap.Modal(document.getElementById('modalCancelamento')).show();
+}
+</script>
+{% endblock %}

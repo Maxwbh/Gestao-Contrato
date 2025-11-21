@@ -1,0 +1,279 @@
+{% extends 'base.html' %}
+{% load crispy_forms_tags %}
+
+{% block title %}Contratos - Gestao de Contratos{% endblock %}
+
+{% block extra_css %}
+<style>
+    .progress {
+        height: 8px;
+        border-radius: 4px;
+    }
+    .status-badge {
+        font-size: 0.75rem;
+        padding: 0.35em 0.65em;
+    }
+    .contrato-card {
+        transition: transform 0.2s, box-shadow 0.2s;
+    }
+    .contrato-card:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h4 class="mb-0">
+                    <i class="fas fa-file-contract"></i> Gerenciar Contratos
+                </h4>
+                <a href="{% url 'contratos:criar' %}" class="btn btn-light">
+                    <i class="fas fa-plus"></i> Novo Contrato
+                </a>
+            </div>
+            <div class="card-body">
+                <!-- Barra de Busca e Filtros -->
+                <div class="row mb-4">
+                    <div class="col-md-4">
+                        <form method="get" class="d-flex">
+                            <input type="text" name="search" class="form-control me-2"
+                                   placeholder="Buscar por numero, comprador, imovel..."
+                                   value="{{ search }}">
+                            <button type="submit" class="btn btn-primary">
+                                <i class="fas fa-search"></i>
+                            </button>
+                            {% if search %}
+                                <a href="{% url 'contratos:listar' %}" class="btn btn-secondary ms-2">
+                                    <i class="fas fa-times"></i>
+                                </a>
+                            {% endif %}
+                        </form>
+                    </div>
+                    <div class="col-md-2">
+                        <select class="form-select" onchange="window.location.href='?status=' + this.value + '{% if search %}&search={{ search }}{% endif %}{% if imobiliaria_filter %}&imobiliaria={{ imobiliaria_filter }}{% endif %}'">
+                            <option value="">Todos os Status</option>
+                            {% for status_val, status_label in status_choices %}
+                                <option value="{{ status_val }}" {% if status_filter == status_val %}selected{% endif %}>
+                                    {{ status_label }}
+                                </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-md-3">
+                        <select class="form-select" onchange="window.location.href='?imobiliaria=' + this.value + '{% if search %}&search={{ search }}{% endif %}{% if status_filter %}&status={{ status_filter }}{% endif %}'">
+                            <option value="">Todas as Imobiliarias</option>
+                            {% for imob in imobiliarias %}
+                                <option value="{{ imob.id }}" {% if imobiliaria_filter == imob.id|stringformat:"s" %}selected{% endif %}>
+                                    {{ imob.nome }}
+                                </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-md-3 text-end">
+                        <div class="badge bg-info text-dark fs-6 me-1">
+                            <i class="fas fa-file-contract"></i> Total: {{ total_contratos }}
+                        </div>
+                        <div class="badge bg-success fs-6 me-1">
+                            <i class="fas fa-check-circle"></i> Ativos: {{ contratos_ativos }}
+                        </div>
+                        <div class="badge bg-primary fs-6">
+                            <i class="fas fa-flag-checkered"></i> Quitados: {{ contratos_quitados }}
+                        </div>
+                    </div>
+                </div>
+
+                {% if contratos %}
+                    <div class="table-responsive">
+                        <table class="table table-hover align-middle">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Contrato</th>
+                                    <th>Comprador</th>
+                                    <th>Imovel</th>
+                                    <th>Valor Total</th>
+                                    <th>Parcelas</th>
+                                    <th>Progresso</th>
+                                    <th>Status</th>
+                                    <th class="text-center">Acoes</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for contrato in contratos %}
+                                <tr>
+                                    <td>
+                                        <strong>{{ contrato.numero_contrato }}</strong>
+                                        <br>
+                                        <small class="text-muted">
+                                            {{ contrato.data_contrato|date:"d/m/Y" }}
+                                        </small>
+                                    </td>
+                                    <td>
+                                        <i class="fas fa-user text-primary"></i>
+                                        {{ contrato.comprador.nome }}
+                                    </td>
+                                    <td>
+                                        <i class="fas fa-home text-success"></i>
+                                        {{ contrato.imovel.identificacao }}
+                                        <br>
+                                        <small class="text-muted">{{ contrato.imovel.loteamento }}</small>
+                                    </td>
+                                    <td>
+                                        <strong>R$ {{ contrato.valor_total|floatformat:2 }}</strong>
+                                        {% if contrato.valor_entrada > 0 %}
+                                        <br>
+                                        <small class="text-muted">Entrada: R$ {{ contrato.valor_entrada|floatformat:2 }}</small>
+                                        {% endif %}
+                                    </td>
+                                    <td class="text-center">
+                                        <span class="badge bg-secondary">
+                                            {{ contrato.numero_parcelas }}x
+                                        </span>
+                                        <br>
+                                        <small class="text-muted">
+                                            R$ {{ contrato.valor_parcela_original|floatformat:2 }}
+                                        </small>
+                                    </td>
+                                    <td style="min-width: 120px;">
+                                        {% with progresso=contrato.calcular_progresso %}
+                                        <div class="progress mb-1">
+                                            <div class="progress-bar {% if progresso >= 100 %}bg-success{% elif progresso >= 50 %}bg-info{% else %}bg-warning{% endif %}"
+                                                 role="progressbar"
+                                                 style="width: {{ progresso }}%"
+                                                 aria-valuenow="{{ progresso }}"
+                                                 aria-valuemin="0"
+                                                 aria-valuemax="100">
+                                            </div>
+                                        </div>
+                                        <small class="text-muted">{{ progresso|floatformat:1 }}% pago</small>
+                                        {% endwith %}
+                                    </td>
+                                    <td>
+                                        <span class="badge status-badge {% if contrato.status == 'ATIVO' %}bg-success{% elif contrato.status == 'QUITADO' %}bg-primary{% elif contrato.status == 'CANCELADO' %}bg-danger{% else %}bg-warning text-dark{% endif %}">
+                                            {{ contrato.get_status_display }}
+                                        </span>
+                                    </td>
+                                    <td class="text-center">
+                                        <div class="btn-group btn-group-sm" role="group">
+                                            <a href="{% url 'contratos:detalhe' contrato.pk %}"
+                                               class="btn btn-outline-info"
+                                               title="Ver Detalhes">
+                                                <i class="fas fa-eye"></i>
+                                            </a>
+                                            <a href="{% url 'contratos:editar' contrato.pk %}"
+                                               class="btn btn-outline-primary"
+                                               title="Editar">
+                                                <i class="fas fa-edit"></i>
+                                            </a>
+                                            {% if contrato.status != 'CANCELADO' %}
+                                            <button type="button"
+                                                    class="btn btn-outline-danger"
+                                                    title="Cancelar Contrato"
+                                                    onclick="confirmarCancelamento('{{ contrato.numero_contrato }}', '{% url 'contratos:excluir' contrato.pk %}')">
+                                                <i class="fas fa-ban"></i>
+                                            </button>
+                                            {% endif %}
+                                        </div>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <!-- Paginacao -->
+                    {% if is_paginated %}
+                        <nav aria-label="Navegacao de paginas">
+                            <ul class="pagination justify-content-center">
+                                {% if page_obj.has_previous %}
+                                    <li class="page-item">
+                                        <a class="page-link" href="?page={{ page_obj.previous_page_number }}{% if search %}&search={{ search }}{% endif %}{% if status_filter %}&status={{ status_filter }}{% endif %}">
+                                            <i class="fas fa-chevron-left"></i>
+                                        </a>
+                                    </li>
+                                {% endif %}
+
+                                <li class="page-item active">
+                                    <span class="page-link">
+                                        {{ page_obj.number }} / {{ page_obj.paginator.num_pages }}
+                                    </span>
+                                </li>
+
+                                {% if page_obj.has_next %}
+                                    <li class="page-item">
+                                        <a class="page-link" href="?page={{ page_obj.next_page_number }}{% if search %}&search={{ search }}{% endif %}{% if status_filter %}&status={{ status_filter }}{% endif %}">
+                                            <i class="fas fa-chevron-right"></i>
+                                        </a>
+                                    </li>
+                                {% endif %}
+                            </ul>
+                        </nav>
+                    {% endif %}
+                {% else %}
+                    <div class="alert alert-info text-center">
+                        <i class="fas fa-info-circle fa-3x mb-3"></i>
+                        <h5>Nenhum contrato encontrado</h5>
+                        <p>
+                            {% if search %}
+                                Sua busca por "{{ search }}" nao retornou resultados.
+                            {% else %}
+                                Comece cadastrando um novo contrato.
+                            {% endif %}
+                        </p>
+                        <a href="{% url 'contratos:criar' %}" class="btn btn-primary">
+                            <i class="fas fa-plus"></i> Cadastrar Primeiro Contrato
+                        </a>
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal de Confirmacao de Cancelamento -->
+<div class="modal fade" id="modalCancelamento" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-danger text-white">
+                <h5 class="modal-title">
+                    <i class="fas fa-exclamation-triangle"></i> Confirmar Cancelamento
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p>Tem certeza que deseja cancelar o contrato <strong id="nomeContrato"></strong>?</p>
+                <p class="text-warning">
+                    <i class="fas fa-info-circle"></i> O cancelamento nao pode ser desfeito e o imovel sera liberado para novas vendas.
+                </p>
+                <p class="text-danger">
+                    <i class="fas fa-exclamation-circle"></i> Se houver parcelas pagas, o cancelamento nao sera permitido.
+                </p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                    Voltar
+                </button>
+                <form id="formCancelamento" method="post" style="display: inline;">
+                    {% csrf_token %}
+                    <button type="submit" class="btn btn-danger">
+                        <i class="fas fa-ban"></i> Cancelar Contrato
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    function confirmarCancelamento(numero, url) {
+        document.getElementById('nomeContrato').textContent = numero;
+        document.getElementById('formCancelamento').action = url;
+        new bootstrap.Modal(document.getElementById('modalCancelamento')).show();
+    }
+</script>
+{% endblock %}
