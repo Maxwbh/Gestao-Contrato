@@ -156,6 +156,9 @@ document.addEventListener('DOMContentLoaded', function() {
     const buscaInput = document.getElementById('busca-endereco');
     const btnBuscar = document.getElementById('btn-buscar-endereco');
     const btnUsarEndereco = document.getElementById('btn-usar-endereco');
+    const btnMinhaLocalizacao = document.getElementById('btn-minha-localizacao');
+    const btnAbrirGoogleMaps = document.getElementById('btn-abrir-google-maps');
+    const colarCoordenadasInput = document.getElementById('colar-coordenadas');
 
     // Coordenadas iniciais (Brasil central ou valor existente)
     let initialLat = latInput && latInput.value ? parseFloat(latInput.value) : -15.7801;
@@ -294,6 +297,152 @@ document.addEventListener('DOMContentLoaded', function() {
                 marker = L.marker([lat, lng], {draggable: true}).addTo(map);
                 marker.on('dragend', atualizarCoordenadasDoMarcador);
             }
+        }
+    }
+
+    // =====================================================
+    // FUNCIONALIDADES PARA ZONA RURAL
+    // =====================================================
+
+    // Função auxiliar para definir coordenadas no mapa
+    function definirCoordenadas(lat, lng) {
+        if (map) {
+            map.setView([lat, lng], 17);
+            if (marker) {
+                marker.setLatLng([lat, lng]);
+            } else {
+                marker = L.marker([lat, lng], {draggable: true}).addTo(map);
+                marker.on('dragend', atualizarCoordenadasDoMarcador);
+            }
+        }
+        latInput.value = lat.toFixed(7);
+        lngInput.value = lng.toFixed(7);
+    }
+
+    // Botão "GPS" - Usar localização atual do dispositivo
+    if (btnMinhaLocalizacao) {
+        btnMinhaLocalizacao.addEventListener('click', function() {
+            if (!navigator.geolocation) {
+                alert('Geolocalização não é suportada pelo seu navegador.');
+                return;
+            }
+
+            this.disabled = true;
+            this.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+
+            navigator.geolocation.getCurrentPosition(
+                function(position) {
+                    const lat = position.coords.latitude;
+                    const lng = position.coords.longitude;
+                    definirCoordenadas(lat, lng);
+                    btnMinhaLocalizacao.disabled = false;
+                    btnMinhaLocalizacao.innerHTML = '<i class="fas fa-crosshairs"></i> GPS';
+                    alert('Localização obtida com sucesso!');
+                },
+                function(error) {
+                    btnMinhaLocalizacao.disabled = false;
+                    btnMinhaLocalizacao.innerHTML = '<i class="fas fa-crosshairs"></i> GPS';
+                    let mensagem = 'Erro ao obter localização: ';
+                    switch(error.code) {
+                        case error.PERMISSION_DENIED:
+                            mensagem += 'Permissão negada. Habilite a localização no navegador.';
+                            break;
+                        case error.POSITION_UNAVAILABLE:
+                            mensagem += 'Localização indisponível.';
+                            break;
+                        case error.TIMEOUT:
+                            mensagem += 'Tempo esgotado.';
+                            break;
+                        default:
+                            mensagem += 'Erro desconhecido.';
+                    }
+                    alert(mensagem);
+                },
+                {
+                    enableHighAccuracy: true,
+                    timeout: 10000,
+                    maximumAge: 0
+                }
+            );
+        });
+    }
+
+    // Botão "Maps" - Abrir Google Maps para buscar local
+    if (btnAbrirGoogleMaps) {
+        btnAbrirGoogleMaps.addEventListener('click', function() {
+            // Se já tem coordenadas, abrir nessa localização
+            let url = 'https://www.google.com/maps';
+            const lat = parseFloat(latInput.value);
+            const lng = parseFloat(lngInput.value);
+
+            if (!isNaN(lat) && !isNaN(lng)) {
+                url = `https://www.google.com/maps?q=${lat},${lng}`;
+            } else {
+                // Tentar usar endereço preenchido
+                const cidade = document.querySelector('input[name="cidade"]')?.value || '';
+                const estado = document.querySelector('select[name="estado"]')?.value || '';
+                if (cidade || estado) {
+                    const local = [cidade, estado].filter(p => p).join(', ');
+                    url = `https://www.google.com/maps/search/${encodeURIComponent(local)}`;
+                }
+            }
+
+            window.open(url, '_blank');
+        });
+    }
+
+    // Campo "Colar coordenadas" - Aceita formato do Google Maps
+    if (colarCoordenadasInput) {
+        colarCoordenadasInput.addEventListener('paste', function(e) {
+            setTimeout(() => {
+                processarCoordenadas(this.value);
+            }, 100);
+        });
+
+        colarCoordenadasInput.addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                processarCoordenadas(this.value);
+            }
+        });
+
+        colarCoordenadasInput.addEventListener('blur', function() {
+            if (this.value.trim()) {
+                processarCoordenadas(this.value);
+            }
+        });
+    }
+
+    function processarCoordenadas(texto) {
+        if (!texto) return;
+
+        // Limpar o texto
+        texto = texto.trim();
+
+        // Tentar extrair coordenadas de diferentes formatos
+        // Formato 1: "-15.7801, -47.9292" (Google Maps)
+        // Formato 2: "-15.7801 -47.9292"
+        // Formato 3: "lat: -15.7801, lng: -47.9292"
+
+        let lat, lng;
+
+        // Tentar formato com vírgula
+        const partes = texto.split(/[,\s]+/).filter(p => p && !isNaN(parseFloat(p)));
+
+        if (partes.length >= 2) {
+            lat = parseFloat(partes[0]);
+            lng = parseFloat(partes[1]);
+        }
+
+        if (!isNaN(lat) && !isNaN(lng) && lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180) {
+            definirCoordenadas(lat, lng);
+            colarCoordenadasInput.value = '';
+            colarCoordenadasInput.placeholder = 'Coordenadas aplicadas!';
+            setTimeout(() => {
+                colarCoordenadasInput.placeholder = 'Cole as coordenadas aqui (ex: -15.7801, -47.9292)';
+            }, 2000);
+        } else {
+            alert('Formato inválido. Use: -15.7801, -47.9292');
         }
     }
 
