@@ -244,7 +244,7 @@ class CompradorListView(LoginRequiredMixin, ListView):
     paginate_by = 20
 
     def get_queryset(self):
-        queryset = Comprador.objects.filter(ativo=True).order_by('-created_at')
+        queryset = Comprador.objects.filter(ativo=True).order_by('-criado_em')
 
         # Filtro de busca
         search = self.request.GET.get('search')
@@ -324,7 +324,7 @@ class ImovelListView(LoginRequiredMixin, ListView):
     paginate_by = 20
 
     def get_queryset(self):
-        queryset = Imovel.objects.filter(ativo=True).select_related('imobiliaria', 'tipo').order_by('-created_at')
+        queryset = Imovel.objects.filter(ativo=True).select_related('imobiliaria', 'tipo').order_by('-criado_em')
 
         # Filtros
         search = self.request.GET.get('search')
@@ -414,7 +414,7 @@ class ImobiliariaListView(LoginRequiredMixin, ListView):
     paginate_by = 20
 
     def get_queryset(self):
-        queryset = Imobiliaria.objects.filter(ativo=True).select_related('contabilidade').order_by('-created_at')
+        queryset = Imobiliaria.objects.filter(ativo=True).select_related('contabilidade').order_by('-criado_em')
 
         # Filtro de busca
         search = self.request.GET.get('search')
