@@ -18,9 +18,10 @@ from django.views.generic import ListView, CreateView, UpdateView, DeleteView
 from django.urls import reverse_lazy
 from django.contrib import messages
 from datetime import datetime, timedelta
-from .models import Contabilidade, Imobiliaria, Imovel, Comprador, TipoImovel
-from .forms import CompradorForm, ImovelForm, ImobiliariaForm
+from .models import Contabilidade, Imobiliaria, Imovel, Comprador, TipoImovel, ContaBancaria, BancoBrasil
+from .forms import CompradorForm, ImovelForm, ImobiliariaForm, ContaBancariaForm
 import io
+import json
 
 
 def index(request):
@@ -480,3 +481,170 @@ class ImobiliariaDeleteView(LoginRequiredMixin, DeleteView):
         self.object.save()
         messages.success(request, f'Imobiliária {self.object.nome} removida com sucesso!')
         return redirect(self.success_url)
+
+
+# =============================================================================
+# API VIEWS - CONTA BANCÁRIA (para AJAX)
+# =============================================================================
+
+@login_required
+@require_http_methods(["GET"])
+def api_listar_contas_bancarias(request, imobiliaria_id):
+    """Lista todas as contas bancárias de uma imobiliária"""
+    try:
+        imobiliaria = get_object_or_404(Imobiliaria, pk=imobiliaria_id, ativo=True)
+        contas = imobiliaria.contas_bancarias.filter(ativo=True).order_by('-principal', 'banco')
+
+        data = []
+        for conta in contas:
+            data.append({
+                'id': conta.id,
+                'banco': conta.banco,
+                'banco_nome': conta.get_banco_display(),
+                'descricao': conta.descricao,
+                'agencia': conta.agencia,
+                'conta': conta.conta,
+                'convenio': conta.convenio,
+                'carteira': conta.carteira,
+                'tipo_pix': conta.tipo_pix,
+                'chave_pix': conta.chave_pix,
+                'principal': conta.principal,
+                'cobranca_registrada': conta.cobranca_registrada,
+            })
+
+        return JsonResponse({'status': 'success', 'contas': data})
+
+    except Exception as e:
+        return JsonResponse({'status': 'error', 'message': str(e)}, status=500)
+
+
+@login_required
+@require_http_methods(["GET"])
+def api_obter_conta_bancaria(request, conta_id):
+    """Obtém os dados de uma conta bancária específica"""
+    try:
+        conta = get_object_or_404(ContaBancaria, pk=conta_id, ativo=True)
+
+        data = {
+            'id': conta.id,
+            'imobiliaria_id': conta.imobiliaria_id,
+            'banco': conta.banco,
+            'banco_nome': conta.get_banco_display(),
+            'descricao': conta.descricao,
+            'agencia': conta.agencia,
+            'conta': conta.conta,
+            'convenio': conta.convenio,
+            'carteira': conta.carteira,
+            'nosso_numero_atual': conta.nosso_numero_atual,
+            'modalidade': conta.modalidade,
+            'tipo_pix': conta.tipo_pix,
+            'chave_pix': conta.chave_pix,
+            'principal': conta.principal,
+            'cobranca_registrada': conta.cobranca_registrada,
+            'prazo_baixa': conta.prazo_baixa,
+            'prazo_protesto': conta.prazo_protesto,
+        }
+
+        return JsonResponse({'status': 'success', 'conta': data})
+
+    except Exception as e:
+        return JsonResponse({'status': 'error', 'message': str(e)}, status=500)
+
+
+@login_required
+@csrf_exempt
+@require_http_methods(["POST"])
+def api_criar_conta_bancaria(request):
+    """Cria uma nova conta bancária"""
+    try:
+        data = json.loads(request.body)
+
+        imobiliaria = get_object_or_404(Imobiliaria, pk=data.get('imobiliaria_id'), ativo=True)
+
+        conta = ContaBancaria.objects.create(
+            imobiliaria=imobiliaria,
+            banco=data.get('banco', ''),
+            descricao=data.get('descricao', ''),
+            agencia=data.get('agencia', ''),
+            conta=data.get('conta', ''),
+            convenio=data.get('convenio', ''),
+            carteira=data.get('carteira', ''),
+            nosso_numero_atual=data.get('nosso_numero_atual', 0),
+            modalidade=data.get('modalidade', ''),
+            tipo_pix=data.get('tipo_pix', ''),
+            chave_pix=data.get('chave_pix', ''),
+            principal=data.get('principal', False),
+            cobranca_registrada=data.get('cobranca_registrada', True),
+            prazo_baixa=data.get('prazo_baixa', 0),
+            prazo_protesto=data.get('prazo_protesto', 0),
+        )
+
+        return JsonResponse({
+            'status': 'success',
+            'message': 'Conta bancária criada com sucesso!',
+            'conta_id': conta.id
+        })
+
+    except Exception as e:
+        return JsonResponse({'status': 'error', 'message': str(e)}, status=500)
+
+
+@login_required
+@csrf_exempt
+@require_http_methods(["PUT", "POST"])
+def api_atualizar_conta_bancaria(request, conta_id):
+    """Atualiza uma conta bancária existente"""
+    try:
+        conta = get_object_or_404(ContaBancaria, pk=conta_id, ativo=True)
+        data = json.loads(request.body)
+
+        conta.banco = data.get('banco', conta.banco)
+        conta.descricao = data.get('descricao', conta.descricao)
+        conta.agencia = data.get('agencia', conta.agencia)
+        conta.conta = data.get('conta', conta.conta)
+        conta.convenio = data.get('convenio', conta.convenio)
+        conta.carteira = data.get('carteira', conta.carteira)
+        conta.nosso_numero_atual = data.get('nosso_numero_atual', conta.nosso_numero_atual)
+        conta.modalidade = data.get('modalidade', conta.modalidade)
+        conta.tipo_pix = data.get('tipo_pix', conta.tipo_pix)
+        conta.chave_pix = data.get('chave_pix', conta.chave_pix)
+        conta.principal = data.get('principal', conta.principal)
+        conta.cobranca_registrada = data.get('cobranca_registrada', conta.cobranca_registrada)
+        conta.prazo_baixa = data.get('prazo_baixa', conta.prazo_baixa)
+        conta.prazo_protesto = data.get('prazo_protesto', conta.prazo_protesto)
+        conta.save()
+
+        return JsonResponse({
+            'status': 'success',
+            'message': 'Conta bancária atualizada com sucesso!'
+        })
+
+    except Exception as e:
+        return JsonResponse({'status': 'error', 'message': str(e)}, status=500)
+
+
+@login_required
+@csrf_exempt
+@require_http_methods(["DELETE", "POST"])
+def api_excluir_conta_bancaria(request, conta_id):
+    """Exclui (soft delete) uma conta bancária"""
+    try:
+        conta = get_object_or_404(ContaBancaria, pk=conta_id, ativo=True)
+        conta.ativo = False
+        conta.save()
+
+        return JsonResponse({
+            'status': 'success',
+            'message': 'Conta bancária removida com sucesso!'
+        })
+
+    except Exception as e:
+        return JsonResponse({'status': 'error', 'message': str(e)}, status=500)
+
+
+@login_required
+@require_http_methods(["GET"])
+def api_listar_bancos(request):
+    """Lista todos os bancos disponíveis"""
+    bancos = [{'codigo': choice[0], 'nome': choice[1]} for choice in BancoBrasil.choices]
+    return JsonResponse({'status': 'success', 'bancos': bancos})
