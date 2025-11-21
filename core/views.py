@@ -18,7 +18,10 @@ from django.views.generic import ListView, CreateView, UpdateView, DeleteView
 from django.urls import reverse_lazy
 from django.contrib import messages
 from datetime import datetime, timedelta
-from .models import Contabilidade, Imobiliaria, Imovel, Comprador, TipoImovel, ContaBancaria, BancoBrasil
+from .models import (
+    Contabilidade, Imobiliaria, Imovel, Comprador, TipoImovel,
+    ContaBancaria, BancoBrasil, LayoutCNAB
+)
 from .forms import CompradorForm, ImovelForm, ImobiliariaForm, ContaBancariaForm
 import io
 import json
@@ -543,6 +546,8 @@ def api_obter_conta_bancaria(request, conta_id):
             'cobranca_registrada': conta.cobranca_registrada,
             'prazo_baixa': conta.prazo_baixa,
             'prazo_protesto': conta.prazo_protesto,
+            'layout_cnab': conta.layout_cnab,
+            'numero_remessa_cnab_atual': conta.numero_remessa_cnab_atual,
         }
 
         return JsonResponse({'status': 'success', 'conta': data})
@@ -577,6 +582,8 @@ def api_criar_conta_bancaria(request):
             cobranca_registrada=data.get('cobranca_registrada', True),
             prazo_baixa=data.get('prazo_baixa', 0),
             prazo_protesto=data.get('prazo_protesto', 0),
+            layout_cnab=data.get('layout_cnab', 'CNAB_240'),
+            numero_remessa_cnab_atual=data.get('numero_remessa_cnab_atual', 0),
         )
 
         return JsonResponse({
@@ -612,6 +619,8 @@ def api_atualizar_conta_bancaria(request, conta_id):
         conta.cobranca_registrada = data.get('cobranca_registrada', conta.cobranca_registrada)
         conta.prazo_baixa = data.get('prazo_baixa', conta.prazo_baixa)
         conta.prazo_protesto = data.get('prazo_protesto', conta.prazo_protesto)
+        conta.layout_cnab = data.get('layout_cnab', conta.layout_cnab)
+        conta.numero_remessa_cnab_atual = data.get('numero_remessa_cnab_atual', conta.numero_remessa_cnab_atual)
         conta.save()
 
         return JsonResponse({
@@ -645,6 +654,11 @@ def api_excluir_conta_bancaria(request, conta_id):
 @login_required
 @require_http_methods(["GET"])
 def api_listar_bancos(request):
-    """Lista todos os bancos disponíveis"""
+    """Lista todos os bancos disponíveis e layouts CNAB"""
     bancos = [{'codigo': choice[0], 'nome': choice[1]} for choice in BancoBrasil.choices]
-    return JsonResponse({'status': 'success', 'bancos': bancos})
+    layouts = [{'codigo': choice[0], 'nome': choice[1]} for choice in LayoutCNAB.choices]
+    return JsonResponse({
+        'status': 'success',
+        'bancos': bancos,
+        'layouts_cnab': layouts
+    })
