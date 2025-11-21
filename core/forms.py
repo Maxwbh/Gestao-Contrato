@@ -577,6 +577,8 @@ class ImobiliariaForm(forms.ModelForm):
             'instrucao_padrao', 'tipo_titulo', 'aceite'
         ]
         widgets = {
+            'nome': forms.TextInput(attrs={'placeholder': 'Nome fantasia da imobiliária'}),
+            'razao_social': forms.TextInput(attrs={'placeholder': 'Razão social completa'}),
             'cep': forms.TextInput(attrs={
                 'placeholder': '00000-000',
                 'data-viacep': 'true',
