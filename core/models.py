@@ -44,6 +44,60 @@ class Contabilidade(TimeStampedModel):
         return self.nome
 
 
+# ============================================================
+# Choices para Configurações de Boleto
+# ============================================================
+
+class TipoValor(models.TextChoices):
+    """Tipos de valor para multa, juros e desconto"""
+    PERCENTUAL = 'PERCENTUAL', 'Percentual (%)'
+    REAL = 'REAL', 'Valor em Reais (R$)'
+
+
+class TipoTitulo(models.TextChoices):
+    """Tipos de título para boleto bancário"""
+    AP = 'AP', 'AP - Apólice de Seguro'
+    BDP = 'BDP', 'BDP - Boleto de Proposta'
+    CC = 'CC', 'CC - Cartão de Crédito'
+    CH = 'CH', 'CH - Cheque'
+    CPR = 'CPR', 'CPR - Cédula de Produto Rural'
+    DAE = 'DAE', 'DAE - Dívida Ativa de Estado'
+    DAM = 'DAM', 'DAM - Dívida Ativa de Município'
+    DAU = 'DAU', 'DAU - Dívida Ativa da União'
+    DD = 'DD', 'DD - Documento de Dívida'
+    DM = 'DM', 'DM - Duplicata Mercantil'
+    DMI = 'DMI', 'DMI - Duplicata Mercantil para Indicação'
+    DR = 'DR', 'DR - Duplicata Rural'
+    DS = 'DS', 'DS - Duplicata de Serviço'
+    DSI = 'DSI', 'DSI - Duplicata de Serviço para Indicação'
+    EC = 'EC', 'EC - Encargos Condominiais'
+    FAT = 'FAT', 'FAT - Fatura'
+    LC = 'LC', 'LC - Letra de Câmbio'
+    ME = 'ME', 'ME - Mensalidade Escolar'
+    NCC = 'NCC', 'NCC - Nota de Crédito Comercial'
+    NCE = 'NCE', 'NCE - Nota de Crédito à Exportação'
+    NCI = 'NCI', 'NCI - Nota de Crédito Industrial'
+    NCR = 'NCR', 'NCR - Nota de Crédito Rural'
+    ND = 'ND', 'ND - Nota de Débito'
+    NF = 'NF', 'NF - Nota Fiscal'
+    NP = 'NP', 'NP - Nota Promissória'
+    NPR = 'NPR', 'NPR - Nota Promissória Rural'
+    NS = 'NS', 'NS - Nota de Seguro'
+    OUTROS = 'O', 'O - Outros'
+    PC = 'PC', 'PC - Parcela de Consórcio'
+    RC = 'RC', 'RC - Recibo'
+    TM = 'TM', 'TM - Triplicata Mercantil'
+    TS = 'TS', 'TS - Triplicata de Serviço'
+    W = 'W', 'W - Warrant'
+
+
+class LayoutCNAB(models.TextChoices):
+    """Layouts de arquivo CNAB"""
+    CNAB_240 = 'CNAB_240', 'Layout 240'
+    CNAB_400 = 'CNAB_400', 'Layout 400'
+    CNAB_444 = 'CNAB_444', 'Layout 444 (CNAB 400 + Chave NFE)'
+
+
 class Imobiliaria(TimeStampedModel):
     """Modelo para representar a Imobiliária/Beneficiário do contrato"""
     contabilidade = models.ForeignKey(
@@ -124,6 +178,139 @@ class Imobiliaria(TimeStampedModel):
     agencia = models.CharField(max_length=20, blank=True, verbose_name='Agência')
     conta = models.CharField(max_length=20, blank=True, verbose_name='Conta')
     pix = models.CharField(max_length=100, blank=True, verbose_name='Chave PIX')
+
+    # ============================================================
+    # Configurações Padrão para Geração de Boletos
+    # ============================================================
+
+    # Multa
+    tipo_valor_multa = models.CharField(
+        max_length=10,
+        choices=TipoValor.choices,
+        default=TipoValor.PERCENTUAL,
+        verbose_name='Tipo de Multa'
+    )
+    percentual_multa_padrao = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        default=0,
+        verbose_name='Multa Padrão',
+        help_text='Valor em percentual ou reais conforme tipo'
+    )
+
+    # Juros
+    tipo_valor_juros = models.CharField(
+        max_length=10,
+        choices=TipoValor.choices,
+        default=TipoValor.PERCENTUAL,
+        verbose_name='Tipo de Juros'
+    )
+    percentual_juros_padrao = models.DecimalField(
+        max_digits=10,
+        decimal_places=4,
+        default=0,
+        verbose_name='Juros ao Dia Padrão',
+        help_text='Valor em percentual (0,0333 = 1% ao mês) ou reais'
+    )
+
+    # Dias sem encargos
+    dias_para_encargos_padrao = models.IntegerField(
+        default=0,
+        verbose_name='Dias sem Encargos',
+        help_text='Dias sem cobrar multa/juros após vencimento'
+    )
+
+    # Opções de Boleto
+    boleto_sem_valor = models.BooleanField(
+        default=False,
+        verbose_name='Permite Boleto sem Valor'
+    )
+    parcela_no_documento = models.BooleanField(
+        default=False,
+        verbose_name='Parcela no Documento',
+        help_text='Incluir número da parcela no campo Documento'
+    )
+    campo_desconto_abatimento_pdf = models.BooleanField(
+        default=False,
+        verbose_name='Desconto no PDF',
+        help_text='Mostrar desconto no campo "Desconto/Abatimento" do boleto'
+    )
+
+    # Desconto 1
+    tipo_valor_desconto = models.CharField(
+        max_length=10,
+        choices=TipoValor.choices,
+        default=TipoValor.PERCENTUAL,
+        verbose_name='Tipo de Desconto'
+    )
+    percentual_desconto_padrao = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        default=0,
+        verbose_name='Desconto Padrão',
+        help_text='Valor em percentual ou reais conforme tipo'
+    )
+    dias_para_desconto_padrao = models.IntegerField(
+        default=0,
+        verbose_name='Dias para Desconto',
+        help_text='Dias para conceder desconto até vencimento'
+    )
+
+    # Desconto 2
+    tipo_valor_desconto2 = models.CharField(
+        max_length=10,
+        choices=TipoValor.choices,
+        default=TipoValor.PERCENTUAL,
+        verbose_name='Tipo de 2º Desconto'
+    )
+    desconto2_padrao = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        default=0,
+        verbose_name='2º Desconto Padrão'
+    )
+    dias_para_desconto2_padrao = models.IntegerField(
+        default=0,
+        verbose_name='Dias para 2º Desconto'
+    )
+
+    # Desconto 3
+    tipo_valor_desconto3 = models.CharField(
+        max_length=10,
+        choices=TipoValor.choices,
+        default=TipoValor.PERCENTUAL,
+        verbose_name='Tipo de 3º Desconto'
+    )
+    desconto3_padrao = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        default=0,
+        verbose_name='3º Desconto Padrão'
+    )
+    dias_para_desconto3_padrao = models.IntegerField(
+        default=0,
+        verbose_name='Dias para 3º Desconto'
+    )
+
+    # Instrução e Tipo de Título
+    instrucao_padrao = models.CharField(
+        max_length=255,
+        blank=True,
+        verbose_name='Instrução Padrão',
+        help_text='Uma linha no espaço instrução ao caixa'
+    )
+    tipo_titulo = models.CharField(
+        max_length=5,
+        choices=TipoTitulo.choices,
+        default=TipoTitulo.RC,
+        verbose_name='Tipo do Título',
+        help_text='Tipo de título para emissão de boletos'
+    )
+    aceite = models.BooleanField(
+        default=False,
+        verbose_name='Aceite'
+    )
+
     ativo = models.BooleanField(default=True, verbose_name='Ativo')
 
     class Meta:
@@ -267,6 +454,20 @@ class ContaBancaria(TimeStampedModel):
         default=0,
         verbose_name='Prazo para Protesto (dias)',
         help_text='Prazo em dias para protesto. 0 = não protestar'
+    )
+
+    # Configurações CNAB
+    layout_cnab = models.CharField(
+        max_length=10,
+        choices=LayoutCNAB.choices,
+        default=LayoutCNAB.CNAB_240,
+        verbose_name='Layout CNAB',
+        help_text='Layout dos arquivos CNAB'
+    )
+    numero_remessa_cnab_atual = models.IntegerField(
+        default=0,
+        verbose_name='Sequencial Remessa',
+        help_text='Número sequencial da remessa CNAB'
     )
 
     ativo = models.BooleanField(default=True, verbose_name='Ativo')

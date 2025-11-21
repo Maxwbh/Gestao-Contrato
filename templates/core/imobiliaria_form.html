@@ -175,6 +175,140 @@
                     </div>
                 </div>
 
+                <!-- Card: Configurações Padrão de Boleto -->
+                <div class="card mb-3" style="border-color: #17a2b8;">
+                    <div class="card-header py-2" style="background: linear-gradient(135deg, #17a2b8, #138496); color: white;">
+                        <i class="fas fa-barcode me-2"></i><strong>Configurações Padrão de Boleto</strong>
+                    </div>
+                    <div class="card-body py-3">
+                        <!-- Multa -->
+                        <h6 class="text-muted mb-3"><i class="fas fa-exclamation-circle me-1"></i>Multa</h6>
+                        <div class="row">
+                            <div class="col-md-3 mb-2">
+                                <label class="form-label">Tipo de Multa</label>
+                                {{ form.tipo_valor_multa }}
+                            </div>
+                            <div class="col-md-9 mb-2">
+                                <label class="form-label">Valor da Multa</label>
+                                {{ form.percentual_multa_padrao }}
+                            </div>
+                        </div>
+
+                        <hr>
+                        <!-- Juros -->
+                        <h6 class="text-muted mb-3"><i class="fas fa-percentage me-1"></i>Juros</h6>
+                        <div class="row">
+                            <div class="col-md-3 mb-2">
+                                <label class="form-label">Tipo de Juros</label>
+                                {{ form.tipo_valor_juros }}
+                            </div>
+                            <div class="col-md-6 mb-2">
+                                <label class="form-label">Juros ao Dia</label>
+                                {{ form.percentual_juros_padrao }}
+                                <small class="text-muted">0,0333% = 1% ao mês</small>
+                            </div>
+                            <div class="col-md-3 mb-2">
+                                <label class="form-label">Dias sem Encargos</label>
+                                {{ form.dias_para_encargos_padrao }}
+                            </div>
+                        </div>
+
+                        <hr>
+                        <!-- Desconto 1 -->
+                        <h6 class="text-muted mb-3"><i class="fas fa-tags me-1"></i>Desconto</h6>
+                        <div class="row">
+                            <div class="col-md-3 mb-2">
+                                <label class="form-label">Tipo</label>
+                                {{ form.tipo_valor_desconto }}
+                            </div>
+                            <div class="col-md-6 mb-2">
+                                <label class="form-label">Valor</label>
+                                {{ form.percentual_desconto_padrao }}
+                            </div>
+                            <div class="col-md-3 mb-2">
+                                <label class="form-label">Dias até Venc.</label>
+                                {{ form.dias_para_desconto_padrao }}
+                            </div>
+                        </div>
+
+                        <!-- Desconto 2 -->
+                        <div class="row">
+                            <div class="col-md-3 mb-2">
+                                <label class="form-label">2º Tipo</label>
+                                {{ form.tipo_valor_desconto2 }}
+                            </div>
+                            <div class="col-md-6 mb-2">
+                                <label class="form-label">2º Valor</label>
+                                {{ form.desconto2_padrao }}
+                            </div>
+                            <div class="col-md-3 mb-2">
+                                <label class="form-label">Dias</label>
+                                {{ form.dias_para_desconto2_padrao }}
+                            </div>
+                        </div>
+
+                        <!-- Desconto 3 -->
+                        <div class="row">
+                            <div class="col-md-3 mb-2">
+                                <label class="form-label">3º Tipo</label>
+                                {{ form.tipo_valor_desconto3 }}
+                            </div>
+                            <div class="col-md-6 mb-2">
+                                <label class="form-label">3º Valor</label>
+                                {{ form.desconto3_padrao }}
+                            </div>
+                            <div class="col-md-3 mb-2">
+                                <label class="form-label">Dias</label>
+                                {{ form.dias_para_desconto3_padrao }}
+                            </div>
+                        </div>
+
+                        <hr>
+                        <!-- Título e Instrução -->
+                        <h6 class="text-muted mb-3"><i class="fas fa-file-invoice me-1"></i>Título e Instrução</h6>
+                        <div class="row">
+                            <div class="col-md-4 mb-2">
+                                <label class="form-label">Tipo do Título</label>
+                                {{ form.tipo_titulo }}
+                            </div>
+                            <div class="col-md-8 mb-2">
+                                <label class="form-label">Instrução Padrão</label>
+                                {{ form.instrucao_padrao }}
+                            </div>
+                        </div>
+
+                        <hr>
+                        <!-- Opções -->
+                        <h6 class="text-muted mb-3"><i class="fas fa-cog me-1"></i>Opções do Boleto</h6>
+                        <div class="row">
+                            <div class="col-md-3">
+                                <div class="form-check">
+                                    {{ form.boleto_sem_valor }}
+                                    <label class="form-check-label" for="id_boleto_sem_valor">Boleto sem Valor</label>
+                                </div>
+                            </div>
+                            <div class="col-md-3">
+                                <div class="form-check">
+                                    {{ form.parcela_no_documento }}
+                                    <label class="form-check-label" for="id_parcela_no_documento">Parcela no Doc.</label>
+                                </div>
+                            </div>
+                            <div class="col-md-3">
+                                <div class="form-check">
+                                    {{ form.campo_desconto_abatimento_pdf }}
+                                    <label class="form-check-label" for="id_campo_desconto_abatimento_pdf">Desconto no PDF</label>
+                                </div>
+                            </div>
+                            <div class="col-md-3">
+                                <div class="form-check">
+                                    {{ form.aceite }}
+                                    <label class="form-check-label" for="id_aceite">Aceite</label>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
                 <!-- Botões do Formulário Principal -->
                 <div class="d-flex justify-content-between align-items-center mt-4 pt-3 border-top">
                     <a href="{% url 'core:listar_imobiliarias' %}" class="btn btn-outline-secondary">
@@ -340,9 +474,29 @@
                         </div>
                     </div>
 
-                    <div class="form-check">
+                    <div class="form-check mb-3">
                         <input type="checkbox" class="form-check-input" id="cobranca_registrada" name="cobranca_registrada" checked>
                         <label class="form-check-label" for="cobranca_registrada">Cobrança Registrada</label>
+                    </div>
+
+                    <hr class="my-3">
+                    <h6 class="text-muted mb-3"><i class="fas fa-file-archive me-2"></i>Configurações CNAB</h6>
+
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Layout CNAB</label>
+                            <select id="layout_cnab" name="layout_cnab" class="form-select">
+                                <option value="CNAB_240">Layout 240</option>
+                                <option value="CNAB_400">Layout 400</option>
+                                <option value="CNAB_444">Layout 444 (CNAB 400 + Chave NFE)</option>
+                            </select>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Sequencial Remessa</label>
+                            <input type="number" class="form-control" id="numero_remessa_cnab_atual" name="numero_remessa_cnab_atual"
+                                   value="0" min="0" max="9999999">
+                            <small class="text-muted">Número sequencial da remessa CNAB</small>
+                        </div>
                     </div>
                 </form>
             </div>
@@ -471,6 +625,8 @@ async function editarConta(contaId) {
             document.getElementById('cobranca_registrada').checked = conta.cobranca_registrada;
             document.getElementById('prazo_baixa').value = conta.prazo_baixa || 0;
             document.getElementById('prazo_protesto').value = conta.prazo_protesto || 0;
+            document.getElementById('layout_cnab').value = conta.layout_cnab || 'CNAB_240';
+            document.getElementById('numero_remessa_cnab_atual').value = conta.numero_remessa_cnab_atual || 0;
 
             document.getElementById('modalContaTitle').innerHTML = '<i class="fas fa-edit me-2"></i>Editar Conta Bancária';
             modalContaBancaria.show();
@@ -498,6 +654,8 @@ async function salvarConta() {
         cobranca_registrada: document.getElementById('cobranca_registrada').checked,
         prazo_baixa: parseInt(document.getElementById('prazo_baixa').value) || 0,
         prazo_protesto: parseInt(document.getElementById('prazo_protesto').value) || 0,
+        layout_cnab: document.getElementById('layout_cnab').value,
+        numero_remessa_cnab_atual: parseInt(document.getElementById('numero_remessa_cnab_atual').value) || 0,
     };
 
     // Validação básica

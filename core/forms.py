@@ -9,7 +9,10 @@ from django.core.exceptions import ValidationError
 from crispy_forms.helper import FormHelper
 from crispy_forms.layout import Layout, Submit, Row, Column, Div, HTML, Field
 from crispy_forms.bootstrap import PrependedText, AppendedText
-from .models import Contabilidade, Imobiliaria, Imovel, Comprador, TipoImovel, ContaBancaria, BancoBrasil
+from .models import (
+    Contabilidade, Imobiliaria, Imovel, Comprador, TipoImovel,
+    ContaBancaria, BancoBrasil, TipoValor, TipoTitulo, LayoutCNAB
+)
 import re
 
 
@@ -386,7 +389,16 @@ class ImobiliariaForm(forms.ModelForm):
             'contabilidade', 'nome', 'razao_social', 'cnpj',
             'cep', 'logradouro', 'numero', 'complemento', 'bairro', 'cidade', 'estado',
             'telefone', 'email', 'responsavel_financeiro',
-            'banco', 'agencia', 'conta', 'pix'
+            'banco', 'agencia', 'conta', 'pix',
+            # Configurações de Boleto
+            'tipo_valor_multa', 'percentual_multa_padrao',
+            'tipo_valor_juros', 'percentual_juros_padrao',
+            'dias_para_encargos_padrao',
+            'boleto_sem_valor', 'parcela_no_documento', 'campo_desconto_abatimento_pdf',
+            'tipo_valor_desconto', 'percentual_desconto_padrao', 'dias_para_desconto_padrao',
+            'tipo_valor_desconto2', 'desconto2_padrao', 'dias_para_desconto2_padrao',
+            'tipo_valor_desconto3', 'desconto3_padrao', 'dias_para_desconto3_padrao',
+            'instrucao_padrao', 'tipo_titulo', 'aceite'
         ]
         widgets = {
             'cep': forms.TextInput(attrs={
@@ -396,6 +408,12 @@ class ImobiliariaForm(forms.ModelForm):
                 'maxlength': '9'
             }),
             'cnpj': forms.TextInput(attrs={'placeholder': '00.000.000/0000-00', 'maxlength': '20'}),
+            'percentual_multa_padrao': forms.NumberInput(attrs={'step': '0.01', 'min': '0'}),
+            'percentual_juros_padrao': forms.NumberInput(attrs={'step': '0.0001', 'min': '0'}),
+            'percentual_desconto_padrao': forms.NumberInput(attrs={'step': '0.01', 'min': '0'}),
+            'desconto2_padrao': forms.NumberInput(attrs={'step': '0.01', 'min': '0'}),
+            'desconto3_padrao': forms.NumberInput(attrs={'step': '0.01', 'min': '0'}),
+            'instrucao_padrao': forms.TextInput(attrs={'placeholder': 'Uma linha no espaço instrução ao caixa'}),
         }
 
     def __init__(self, *args, **kwargs):
@@ -405,6 +423,8 @@ class ImobiliariaForm(forms.ModelForm):
             if 'class' not in field.widget.attrs:
                 if isinstance(field.widget, forms.Select):
                     field.widget.attrs['class'] = 'form-select'
+                elif isinstance(field.widget, forms.CheckboxInput):
+                    field.widget.attrs['class'] = 'form-check-input'
                 else:
                     field.widget.attrs['class'] = 'form-control'
 
@@ -464,11 +484,12 @@ class ImobiliariaForm(forms.ModelForm):
             ),
             HTML('</div></div>'),
 
-            # Card: Dados Bancários
+            # Card: Dados Bancários (Legacy - para referência)
             HTML('''
                 <div class="card mb-3">
                     <div class="card-header py-2">
-                        <i class="fas fa-university me-2"></i><strong>Dados Bancários</strong>
+                        <i class="fas fa-university me-2"></i><strong>Dados Bancários (Referência)</strong>
+                        <small class="text-muted ms-2">(Use "Contas Bancárias" abaixo para gerenciar)</small>
                     </div>
                     <div class="card-body py-3">
             '''),
@@ -477,6 +498,71 @@ class ImobiliariaForm(forms.ModelForm):
                 Column(Field('agencia', wrapper_class='mb-2'), css_class='col-md-2'),
                 Column(Field('conta', wrapper_class='mb-2'), css_class='col-md-3'),
                 Column(Field('pix', wrapper_class='mb-2'), css_class='col-md-3'),
+            ),
+            HTML('</div></div>'),
+
+            # Card: Configurações Padrão de Boleto
+            HTML('''
+                <div class="card mb-3 border-info">
+                    <div class="card-header py-2 bg-info text-white">
+                        <i class="fas fa-barcode me-2"></i><strong>Configurações Padrão de Boleto</strong>
+                    </div>
+                    <div class="card-body py-3">
+                        <h6 class="text-muted mb-3"><i class="fas fa-exclamation-circle me-1"></i>Multa</h6>
+            '''),
+            Row(
+                Column(Field('tipo_valor_multa', wrapper_class='mb-2'), css_class='col-md-3'),
+                Column(Field('percentual_multa_padrao', wrapper_class='mb-2'), css_class='col-md-9'),
+            ),
+            HTML('<hr><h6 class="text-muted mb-3"><i class="fas fa-percentage me-1"></i>Juros</h6>'),
+            Row(
+                Column(Field('tipo_valor_juros', wrapper_class='mb-2'), css_class='col-md-3'),
+                Column(Field('percentual_juros_padrao', wrapper_class='mb-2'), css_class='col-md-6'),
+                Column(Field('dias_para_encargos_padrao', wrapper_class='mb-2'), css_class='col-md-3'),
+            ),
+            HTML('<hr><h6 class="text-muted mb-3"><i class="fas fa-tags me-1"></i>Desconto 1</h6>'),
+            Row(
+                Column(Field('tipo_valor_desconto', wrapper_class='mb-2'), css_class='col-md-3'),
+                Column(Field('percentual_desconto_padrao', wrapper_class='mb-2'), css_class='col-md-6'),
+                Column(Field('dias_para_desconto_padrao', wrapper_class='mb-2'), css_class='col-md-3'),
+            ),
+            HTML('<h6 class="text-muted mb-3 mt-2"><i class="fas fa-tags me-1"></i>Desconto 2</h6>'),
+            Row(
+                Column(Field('tipo_valor_desconto2', wrapper_class='mb-2'), css_class='col-md-3'),
+                Column(Field('desconto2_padrao', wrapper_class='mb-2'), css_class='col-md-6'),
+                Column(Field('dias_para_desconto2_padrao', wrapper_class='mb-2'), css_class='col-md-3'),
+            ),
+            HTML('<h6 class="text-muted mb-3 mt-2"><i class="fas fa-tags me-1"></i>Desconto 3</h6>'),
+            Row(
+                Column(Field('tipo_valor_desconto3', wrapper_class='mb-2'), css_class='col-md-3'),
+                Column(Field('desconto3_padrao', wrapper_class='mb-2'), css_class='col-md-6'),
+                Column(Field('dias_para_desconto3_padrao', wrapper_class='mb-2'), css_class='col-md-3'),
+            ),
+            HTML('<hr><h6 class="text-muted mb-3"><i class="fas fa-file-invoice me-1"></i>Título e Instrução</h6>'),
+            Row(
+                Column(Field('tipo_titulo', wrapper_class='mb-2'), css_class='col-md-4'),
+                Column(Field('instrucao_padrao', wrapper_class='mb-2'), css_class='col-md-8'),
+            ),
+            HTML('<hr><h6 class="text-muted mb-3"><i class="fas fa-cog me-1"></i>Opções do Boleto</h6>'),
+            Row(
+                Column(
+                    Div(Field('boleto_sem_valor'), css_class='form-check'),
+                    css_class='col-md-4'
+                ),
+                Column(
+                    Div(Field('parcela_no_documento'), css_class='form-check'),
+                    css_class='col-md-4'
+                ),
+                Column(
+                    Div(Field('campo_desconto_abatimento_pdf'), css_class='form-check'),
+                    css_class='col-md-4'
+                ),
+            ),
+            Row(
+                Column(
+                    Div(Field('aceite'), css_class='form-check'),
+                    css_class='col-md-4'
+                ),
             ),
             HTML('</div></div>'),
 
@@ -504,12 +590,14 @@ class ContaBancariaForm(forms.ModelForm):
             'agencia', 'conta',
             'convenio', 'carteira', 'nosso_numero_atual', 'modalidade',
             'tipo_pix', 'chave_pix',
-            'cobranca_registrada', 'prazo_baixa', 'prazo_protesto'
+            'cobranca_registrada', 'prazo_baixa', 'prazo_protesto',
+            'layout_cnab', 'numero_remessa_cnab_atual'
         ]
         widgets = {
             'banco': forms.Select(attrs={'class': 'form-select'}),
             'descricao': forms.TextInput(attrs={'placeholder': 'Ex: Conta Principal'}),
             'tipo_pix': forms.Select(attrs={'class': 'form-select'}),
+            'layout_cnab': forms.Select(attrs={'class': 'form-select'}),
         }
 
     def __init__(self, *args, **kwargs):
