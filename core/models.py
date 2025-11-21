@@ -66,7 +66,60 @@ class Imobiliaria(TimeStampedModel):
         )],
         verbose_name='CNPJ'
     )
-    endereco = models.TextField(verbose_name='Endereço')
+
+    # Dados de Endereço (estruturado)
+    cep = models.CharField(
+        max_length=9,
+        blank=True,
+        verbose_name='CEP',
+        help_text='Formato: 99999-999'
+    )
+    logradouro = models.CharField(
+        max_length=200,
+        blank=True,
+        verbose_name='Logradouro'
+    )
+    numero = models.CharField(
+        max_length=10,
+        blank=True,
+        verbose_name='Número'
+    )
+    complemento = models.CharField(
+        max_length=100,
+        blank=True,
+        verbose_name='Complemento'
+    )
+    bairro = models.CharField(
+        max_length=100,
+        blank=True,
+        verbose_name='Bairro'
+    )
+    cidade = models.CharField(
+        max_length=100,
+        blank=True,
+        verbose_name='Cidade'
+    )
+    estado = models.CharField(
+        max_length=2,
+        blank=True,
+        verbose_name='UF',
+        choices=[
+            ('AC', 'Acre'), ('AL', 'Alagoas'), ('AP', 'Amapá'), ('AM', 'Amazonas'),
+            ('BA', 'Bahia'), ('CE', 'Ceará'), ('DF', 'Distrito Federal'), ('ES', 'Espírito Santo'),
+            ('GO', 'Goiás'), ('MA', 'Maranhão'), ('MT', 'Mato Grosso'), ('MS', 'Mato Grosso do Sul'),
+            ('MG', 'Minas Gerais'), ('PA', 'Pará'), ('PB', 'Paraíba'), ('PR', 'Paraná'),
+            ('PE', 'Pernambuco'), ('PI', 'Piauí'), ('RJ', 'Rio de Janeiro'), ('RN', 'Rio Grande do Norte'),
+            ('RS', 'Rio Grande do Sul'), ('RO', 'Rondônia'), ('RR', 'Roraima'), ('SC', 'Santa Catarina'),
+            ('SP', 'São Paulo'), ('SE', 'Sergipe'), ('TO', 'Tocantins'),
+        ]
+    )
+
+    # Dados de Contato (mantido para compatibilidade)
+    endereco = models.TextField(
+        blank=True,
+        verbose_name='Endereço Completo (legacy)',
+        help_text='Campo legado - use os campos separados acima'
+    )
     telefone = models.CharField(max_length=20, verbose_name='Telefone')
     email = models.EmailField(validators=[EmailValidator()], verbose_name='E-mail')
     responsavel_financeiro = models.CharField(
@@ -179,8 +232,59 @@ class Comprador(TimeStampedModel):
     )
     profissao = models.CharField(max_length=100, verbose_name='Profissão')
 
-    # Dados de Contato
-    endereco = models.TextField(verbose_name='Endereço')
+    # Dados de Endereço (estruturado)
+    cep = models.CharField(
+        max_length=9,
+        blank=True,
+        verbose_name='CEP',
+        help_text='Formato: 99999-999'
+    )
+    logradouro = models.CharField(
+        max_length=200,
+        blank=True,
+        verbose_name='Logradouro'
+    )
+    numero = models.CharField(
+        max_length=10,
+        blank=True,
+        verbose_name='Número'
+    )
+    complemento = models.CharField(
+        max_length=100,
+        blank=True,
+        verbose_name='Complemento'
+    )
+    bairro = models.CharField(
+        max_length=100,
+        blank=True,
+        verbose_name='Bairro'
+    )
+    cidade = models.CharField(
+        max_length=100,
+        blank=True,
+        verbose_name='Cidade'
+    )
+    estado = models.CharField(
+        max_length=2,
+        blank=True,
+        verbose_name='UF',
+        choices=[
+            ('AC', 'Acre'), ('AL', 'Alagoas'), ('AP', 'Amapá'), ('AM', 'Amazonas'),
+            ('BA', 'Bahia'), ('CE', 'Ceará'), ('DF', 'Distrito Federal'), ('ES', 'Espírito Santo'),
+            ('GO', 'Goiás'), ('MA', 'Maranhão'), ('MT', 'Mato Grosso'), ('MS', 'Mato Grosso do Sul'),
+            ('MG', 'Minas Gerais'), ('PA', 'Pará'), ('PB', 'Paraíba'), ('PR', 'Paraná'),
+            ('PE', 'Pernambuco'), ('PI', 'Piauí'), ('RJ', 'Rio de Janeiro'), ('RN', 'Rio Grande do Norte'),
+            ('RS', 'Rio Grande do Sul'), ('RO', 'Rondônia'), ('RR', 'Roraima'), ('SC', 'Santa Catarina'),
+            ('SP', 'São Paulo'), ('SE', 'Sergipe'), ('TO', 'Tocantins'),
+        ]
+    )
+
+    # Dados de Contato (mantido para compatibilidade)
+    endereco = models.TextField(
+        blank=True,
+        verbose_name='Endereço Completo (legacy)',
+        help_text='Campo legado - use os campos separados acima'
+    )
     telefone = models.CharField(max_length=20, verbose_name='Telefone')
     celular = models.CharField(max_length=20, verbose_name='Celular')
     email = models.EmailField(
