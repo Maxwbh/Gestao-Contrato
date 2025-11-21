@@ -74,16 +74,32 @@
     }
 
     /**
-     * Apply CNPJ mask (99.999.999/9999-99)
+     * Apply CNPJ mask - Suporta formato numérico e alfanumérico (preparado para 2026)
+     * Formato atual: 99.999.999/9999-99
+     * Formato 2026: 99.ABC.345/0001-67 (alfanumérico)
      */
     function mascaraCNPJ(value) {
-        return value
-            .replace(/\D/g, '')
-            .replace(/^(\d{2})(\d)/, '$1.$2')
-            .replace(/^(\d{2})\.(\d{3})(\d)/, '$1.$2.$3')
-            .replace(/\.(\d{3})(\d)/, '.$1/$2')
-            .replace(/(\d{4})(\d)/, '$1-$2')
-            .slice(0, 18);
+        // Remove caracteres especiais mas mantém letras e números
+        value = value.toUpperCase().replace(/[^A-Z0-9]/g, '');
+
+        // Limita a 14 caracteres
+        value = value.slice(0, 14);
+
+        // Aplica máscara: XX.XXX.XXX/XXXX-XX
+        if (value.length > 2) {
+            value = value.substring(0, 2) + '.' + value.substring(2);
+        }
+        if (value.length > 6) {
+            value = value.substring(0, 6) + '.' + value.substring(6);
+        }
+        if (value.length > 10) {
+            value = value.substring(0, 10) + '/' + value.substring(10);
+        }
+        if (value.length > 15) {
+            value = value.substring(0, 15) + '-' + value.substring(15);
+        }
+
+        return value.slice(0, 20); // Formato completo: XX.XXX.XXX/XXXX-XX
     }
 
     /**
@@ -242,43 +258,71 @@
     }
 
     /**
-     * Validate CNPJ
+     * Validate CNPJ - Suporta formato numérico (atual) e alfanumérico (2026+)
+     * IMPORTANTE: Algoritmo de validação do formato alfanumérico será divulgado pela Receita em 2026
      */
     function validarCNPJ(cnpj) {
-        cnpj = cnpj.replace(/\D/g, '');
+        // Remove formatação
+        const cnpjLimpo = cnpj.replace(/[.\-\/]/g, '');
 
-        if (cnpj.length !== 14 || /^(\d)\1{13}$/.test(cnpj)) {
+        // Verifica tamanho (14 caracteres)
+        if (cnpjLimpo.length !== 14) {
             return false;
         }
 
-        let tamanho = cnpj.length - 2;
-        let numeros = cnpj.substring(0, tamanho);
-        let digitos = cnpj.substring(tamanho);
-        let soma = 0;
-        let pos = tamanho - 7;
+        // Verifica se é apenas numérico (formato antigo)
+        const isNumerico = /^\d{14}$/.test(cnpjLimpo);
 
-        for (let i = tamanho; i >= 1; i--) {
-            soma += numeros.charAt(tamanho - i) * pos--;
-            if (pos < 2) pos = 9;
+        if (isNumerico) {
+            // CNPJ numérico - valida com dígitos verificadores (algoritmo atual)
+            const numeros = cnpjLimpo.replace(/\D/g, '');
+
+            // Verifica sequências inválidas
+            if (/^(\d)\1{13}$/.test(numeros)) {
+                return false;
+            }
+
+            let tamanho = numeros.length - 2;
+            let digitosOriginais = numeros.substring(tamanho);
+            let soma = 0;
+            let pos = tamanho - 7;
+
+            // Calcula primeiro dígito
+            for (let i = tamanho; i >= 1; i--) {
+                soma += numeros.charAt(tamanho - i) * pos--;
+                if (pos < 2) pos = 9;
+            }
+
+            let resultado = soma % 11 < 2 ? 0 : 11 - soma % 11;
+            if (resultado != digitosOriginais.charAt(0)) return false;
+
+            // Calcula segundo dígito
+            tamanho = tamanho + 1;
+            soma = 0;
+            pos = tamanho - 7;
+
+            for (let i = tamanho; i >= 1; i--) {
+                soma += numeros.charAt(tamanho - i) * pos--;
+                if (pos < 2) pos = 9;
+            }
+
+            resultado = soma % 11 < 2 ? 0 : 11 - soma % 11;
+            if (resultado != digitosOriginais.charAt(1)) return false;
+
+            return true;
+        } else {
+            // CNPJ alfanumérico (formato 2026+)
+            // Valida apenas o formato (algoritmo de dígitos será divulgado pela Receita)
+            const formatoAlfanumerico = /^[A-Z0-9]{14}$/;
+
+            if (!formatoAlfanumerico.test(cnpjLimpo)) {
+                return false;
+            }
+
+            // Aceita como válido (aguardando algoritmo oficial da Receita)
+            console.info('CNPJ alfanumérico detectado. Validação completa disponível após divulgação do algoritmo pela Receita Federal (2026).');
+            return true;
         }
-
-        let resultado = soma % 11 < 2 ? 0 : 11 - soma % 11;
-        if (resultado != digitos.charAt(0)) return false;
-
-        tamanho = tamanho + 1;
-        numeros = cnpj.substring(0, tamanho);
-        soma = 0;
-        pos = tamanho - 7;
-
-        for (let i = tamanho; i >= 1; i--) {
-            soma += numeros.charAt(tamanho - i) * pos--;
-            if (pos < 2) pos = 9;
-        }
-
-        resultado = soma % 11 < 2 ? 0 : 11 - soma % 11;
-        if (resultado != digitos.charAt(1)) return false;
-
-        return true;
     }
 
     /**
@@ -407,6 +451,88 @@
                 }
             });
         });
+
+        // ====================================================================
+        // TIPO DE PESSOA (PF/PJ) - TOGGLE CAMPOS
+        // ====================================================================
+        const tipoPessoaSelect = document.querySelector('select[name="tipo_pessoa"]');
+
+        if (tipoPessoaSelect) {
+            function toggleCamposTipoPessoa() {
+                const tipoPessoa = tipoPessoaSelect.value;
+                const isPF = tipoPessoa === 'PF';
+                const isPJ = tipoPessoa === 'PJ';
+
+                // Seções e campos PF
+                const secaoPF = document.getElementById('secao-pf');
+                const camposPF = document.querySelectorAll('.campos-pf');
+                const secaoConjuge = document.getElementById('secao-conjuge');
+                const camposConjuge = document.querySelectorAll('.campos-conjuge');
+
+                // Seções e campos PJ
+                const secaoPJ = document.getElementById('secao-pj');
+                const camposPJ = document.querySelectorAll('.campos-pj');
+
+                // Toggle seções
+                if (secaoPF) secaoPF.style.display = isPF ? 'block' : 'none';
+                if (secaoPJ) secaoPJ.style.display = isPJ ? 'block' : 'none';
+                if (secaoConjuge) secaoConjuge.style.display = isPF ? 'block' : 'none';
+
+                // Toggle campos
+                camposPF.forEach(campo => campo.style.display = isPF ? 'block' : 'none');
+                camposPJ.forEach(campo => campo.style.display = isPJ ? 'block' : 'none');
+                camposConjuge.forEach(campo => campo.style.display = isPF ? 'block' : 'none');
+
+                // Atualiza label do campo nome
+                const labelNome = document.querySelector('label[for="id_nome"]');
+                if (labelNome) {
+                    labelNome.textContent = isPF ? 'Nome Completo' : 'Razão Social';
+                }
+
+                // Limpa campos não utilizados
+                if (isPF) {
+                    // Limpa campos PJ
+                    const cnpjInput = document.querySelector('input[name="cnpj"]');
+                    const nomeFantasiaInput = document.querySelector('input[name="nome_fantasia"]');
+                    const inscricaoEstadualInput = document.querySelector('input[name="inscricao_estadual"]');
+                    const inscricaoMunicipalInput = document.querySelector('input[name="inscricao_municipal"]');
+                    const responsavelLegalInput = document.querySelector('input[name="responsavel_legal"]');
+                    const responsavelCpfInput = document.querySelector('input[name="responsavel_cpf"]');
+
+                    if (cnpjInput) cnpjInput.value = '';
+                    if (nomeFantasiaInput) nomeFantasiaInput.value = '';
+                    if (inscricaoEstadualInput) inscricaoEstadualInput.value = '';
+                    if (inscricaoMunicipalInput) inscricaoMunicipalInput.value = '';
+                    if (responsavelLegalInput) responsavelLegalInput.value = '';
+                    if (responsavelCpfInput) responsavelCpfInput.value = '';
+                } else if (isPJ) {
+                    // Limpa campos PF
+                    const cpfInput = document.querySelector('input[name="cpf"]');
+                    const rgInput = document.querySelector('input[name="rg"]');
+                    const dataNascimentoInput = document.querySelector('input[name="data_nascimento"]');
+                    const estadoCivilSelect = document.querySelector('select[name="estado_civil"]');
+                    const profissaoInput = document.querySelector('input[name="profissao"]');
+                    const conjugeNomeInput = document.querySelector('input[name="conjuge_nome"]');
+                    const conjugeCpfInput = document.querySelector('input[name="conjuge_cpf"]');
+                    const conjugeRgInput = document.querySelector('input[name="conjuge_rg"]');
+
+                    if (cpfInput) cpfInput.value = '';
+                    if (rgInput) rgInput.value = '';
+                    if (dataNascimentoInput) dataNascimentoInput.value = '';
+                    if (estadoCivilSelect) estadoCivilSelect.value = '';
+                    if (profissaoInput) profissaoInput.value = '';
+                    if (conjugeNomeInput) conjugeNomeInput.value = '';
+                    if (conjugeCpfInput) conjugeCpfInput.value = '';
+                    if (conjugeRgInput) conjugeRgInput.value = '';
+                }
+            }
+
+            // Executa na carga da página
+            toggleCamposTipoPessoa();
+
+            // Executa ao mudar seleção
+            tipoPessoaSelect.addEventListener('change', toggleCamposTipoPessoa);
+        }
 
         // ====================================================================
         // FORM SUBMIT ANIMATION
