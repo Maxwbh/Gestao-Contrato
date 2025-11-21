@@ -19,4 +19,13 @@ urlpatterns = [
 
     # Parcelas
     path('<int:pk>/parcelas/', views.parcelas_contrato, name='parcelas'),
+
+    # CRUD de Índices de Reajuste
+    path('indices/', views.IndiceReajusteListView.as_view(), name='indices_listar'),
+    path('indices/novo/', views.IndiceReajusteCreateView.as_view(), name='indices_criar'),
+    path('indices/<int:pk>/editar/', views.IndiceReajusteUpdateView.as_view(), name='indices_editar'),
+    path('indices/<int:pk>/excluir/', views.IndiceReajusteDeleteView.as_view(), name='indices_excluir'),
+
+    # API para importar índices
+    path('indices/importar/', views.importar_indices_ibge, name='indices_importar'),
 ]

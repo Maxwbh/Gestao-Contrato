@@ -21,6 +21,121 @@ class TipoCorrecao(models.TextChoices):
     FIXO = 'FIXO', 'Valor Fixo (sem correção)'
 
 
+class IndiceReajuste(TimeStampedModel):
+    """Modelo para armazenar os índices de reajuste mensais"""
+
+    tipo_indice = models.CharField(
+        max_length=10,
+        choices=[
+            ('IPCA', 'IPCA - Índice de Preços ao Consumidor Amplo'),
+            ('IGPM', 'IGP-M - Índice Geral de Preços do Mercado'),
+            ('SELIC', 'SELIC - Taxa Básica de Juros'),
+        ],
+        verbose_name='Tipo de Índice'
+    )
+    ano = models.PositiveIntegerField(
+        verbose_name='Ano',
+        validators=[MinValueValidator(1990), MaxValueValidator(2100)]
+    )
+    mes = models.PositiveIntegerField(
+        verbose_name='Mês',
+        validators=[MinValueValidator(1), MaxValueValidator(12)]
+    )
+    valor = models.DecimalField(
+        max_digits=8,
+        decimal_places=4,
+        verbose_name='Valor (%)',
+        help_text='Valor percentual do índice no mês'
+    )
+    valor_acumulado_ano = models.DecimalField(
+        max_digits=10,
+        decimal_places=4,
+        null=True,
+        blank=True,
+        verbose_name='Acumulado no Ano (%)',
+        help_text='Valor acumulado desde janeiro do ano corrente'
+    )
+    valor_acumulado_12m = models.DecimalField(
+        max_digits=10,
+        decimal_places=4,
+        null=True,
+        blank=True,
+        verbose_name='Acumulado 12 meses (%)',
+        help_text='Valor acumulado nos últimos 12 meses'
+    )
+    fonte = models.CharField(
+        max_length=100,
+        blank=True,
+        default='',
+        verbose_name='Fonte',
+        help_text='Fonte dos dados (ex: IBGE, BCB, FGV)'
+    )
+    data_importacao = models.DateTimeField(
+        null=True,
+        blank=True,
+        verbose_name='Data de Importação',
+        help_text='Data em que o dado foi importado automaticamente'
+    )
+
+    class Meta:
+        verbose_name = 'Índice de Reajuste'
+        verbose_name_plural = 'Índices de Reajuste'
+        ordering = ['-ano', '-mes', 'tipo_indice']
+        unique_together = ['tipo_indice', 'ano', 'mes']
+        indexes = [
+            models.Index(fields=['tipo_indice', 'ano', 'mes']),
+            models.Index(fields=['ano', 'mes']),
+        ]
+
+    def __str__(self):
+        meses = ['', 'Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun',
+                 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez']
+        return f"{self.tipo_indice} - {meses[self.mes]}/{self.ano}: {self.valor}%"
+
+    @property
+    def mes_nome(self):
+        """Retorna o nome do mês"""
+        meses = ['', 'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
+                 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro']
+        return meses[self.mes]
+
+    @property
+    def periodo(self):
+        """Retorna o período formatado (MM/AAAA)"""
+        return f"{self.mes:02d}/{self.ano}"
+
+    @classmethod
+    def get_indice(cls, tipo_indice, ano, mes):
+        """Busca um índice específico"""
+        try:
+            return cls.objects.get(tipo_indice=tipo_indice, ano=ano, mes=mes)
+        except cls.DoesNotExist:
+            return None
+
+    @classmethod
+    def get_acumulado_periodo(cls, tipo_indice, ano_inicio, mes_inicio, ano_fim, mes_fim):
+        """Calcula o índice acumulado em um período"""
+        indices = cls.objects.filter(
+            tipo_indice=tipo_indice
+        ).filter(
+            models.Q(ano__gt=ano_inicio) |
+            models.Q(ano=ano_inicio, mes__gte=mes_inicio)
+        ).filter(
+            models.Q(ano__lt=ano_fim) |
+            models.Q(ano=ano_fim, mes__lte=mes_fim)
+        ).order_by('ano', 'mes')
+
+        if not indices.exists():
+            return None
+
+        # Calcula acumulado: (1 + i1/100) * (1 + i2/100) * ... - 1
+        acumulado = Decimal('1')
+        for indice in indices:
+            acumulado *= (1 + indice.valor / 100)
+
+        return (acumulado - 1) * 100
+
+
 class StatusContrato(models.TextChoices):
     """Status possíveis do contrato"""
     ATIVO = 'ATIVO', 'Ativo'

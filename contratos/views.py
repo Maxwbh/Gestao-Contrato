@@ -11,8 +11,13 @@ from django.views.generic import ListView, CreateView, UpdateView, DeleteView, D
 from django.urls import reverse_lazy
 from django.contrib import messages
 from django.db.models import Q, Sum, Count
-from .models import Contrato, StatusContrato
-from .forms import ContratoForm
+from .models import Contrato, StatusContrato, IndiceReajuste
+from .forms import ContratoForm, IndiceReajusteForm
+import requests
+from django.http import JsonResponse
+from django.views.decorators.http import require_http_methods
+import json
+from datetime import datetime
 
 
 class ContratoListView(LoginRequiredMixin, ListView):
@@ -65,7 +70,58 @@ class ContratoListView(LoginRequiredMixin, ListView):
         from core.models import Imobiliaria
         context['imobiliarias'] = Imobiliaria.objects.filter(ativo=True)
 
+        # Contratos que precisam de reajuste no mês corrente
+        context['contratos_reajuste'] = self._get_contratos_reajuste_pendente()
+
         return context
+
+    def _get_contratos_reajuste_pendente(self):
+        """
+        Retorna contratos que precisam de reajuste no mês corrente.
+        Um contrato precisa de reajuste quando:
+        1. Está ativo
+        2. Tipo de correção não é FIXO
+        3. Passou o prazo de reajuste desde a última atualização
+        """
+        from django.utils import timezone
+        from .models import TipoCorrecao
+        from dateutil.relativedelta import relativedelta
+
+        hoje = timezone.now().date()
+        contratos_pendentes = []
+
+        contratos_ativos = Contrato.objects.filter(
+            status=StatusContrato.ATIVO
+        ).exclude(
+            tipo_correcao=TipoCorrecao.FIXO
+        ).select_related('comprador', 'imovel', 'imobiliaria')
+
+        for contrato in contratos_ativos:
+            # Data base para reajuste
+            data_base = contrato.data_ultimo_reajuste or contrato.data_contrato
+
+            # Calcular próxima data de reajuste
+            proxima_data_reajuste = data_base + relativedelta(months=contrato.prazo_reajuste_meses)
+
+            # Se a próxima data de reajuste é no mês corrente ou já passou
+            if (proxima_data_reajuste.year < hoje.year or
+                (proxima_data_reajuste.year == hoje.year and proxima_data_reajuste.month <= hoje.month)):
+
+                # Calcular meses em atraso
+                meses_atraso = (hoje.year - proxima_data_reajuste.year) * 12 + (hoje.month - proxima_data_reajuste.month)
+
+                contratos_pendentes.append({
+                    'contrato': contrato,
+                    'data_ultimo_reajuste': contrato.data_ultimo_reajuste,
+                    'proxima_data_reajuste': proxima_data_reajuste,
+                    'meses_atraso': meses_atraso,
+                    'tipo_correcao': contrato.get_tipo_correcao_display(),
+                })
+
+        # Ordenar por meses em atraso (mais atrasados primeiro)
+        contratos_pendentes.sort(key=lambda x: x['meses_atraso'], reverse=True)
+
+        return contratos_pendentes
 
 
 class ContratoCreateView(LoginRequiredMixin, CreateView):
@@ -213,3 +269,323 @@ def parcelas_contrato(request, pk):
         'parcelas': parcelas,
     }
     return render(request, 'contratos/parcelas.html', context)
+
+
+# ==============================================================
+# CRUD de Índices de Reajuste
+# ==============================================================
+
+class IndiceReajusteListView(LoginRequiredMixin, ListView):
+    """Lista todos os índices de reajuste"""
+    model = IndiceReajuste
+    template_name = 'contratos/indice_list.html'
+    context_object_name = 'indices'
+    paginate_by = 50
+
+    def get_queryset(self):
+        queryset = IndiceReajuste.objects.all().order_by('-ano', '-mes', 'tipo_indice')
+
+        # Filtro por tipo
+        tipo = self.request.GET.get('tipo')
+        if tipo:
+            queryset = queryset.filter(tipo_indice=tipo)
+
+        # Filtro por ano
+        ano = self.request.GET.get('ano')
+        if ano:
+            queryset = queryset.filter(ano=ano)
+
+        return queryset
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['tipo_filter'] = self.request.GET.get('tipo', '')
+        context['ano_filter'] = self.request.GET.get('ano', '')
+
+        # Anos disponíveis para filtro
+        context['anos_disponiveis'] = IndiceReajuste.objects.values_list(
+            'ano', flat=True
+        ).distinct().order_by('-ano')
+
+        # Tipos de índice
+        context['tipos_indice'] = [
+            ('IPCA', 'IPCA'),
+            ('IGPM', 'IGP-M'),
+            ('SELIC', 'SELIC'),
+        ]
+
+        # Estatísticas
+        context['total_ipca'] = IndiceReajuste.objects.filter(tipo_indice='IPCA').count()
+        context['total_igpm'] = IndiceReajuste.objects.filter(tipo_indice='IGPM').count()
+        context['total_selic'] = IndiceReajuste.objects.filter(tipo_indice='SELIC').count()
+
+        # Último índice de cada tipo
+        context['ultimo_ipca'] = IndiceReajuste.objects.filter(
+            tipo_indice='IPCA'
+        ).order_by('-ano', '-mes').first()
+        context['ultimo_igpm'] = IndiceReajuste.objects.filter(
+            tipo_indice='IGPM'
+        ).order_by('-ano', '-mes').first()
+        context['ultimo_selic'] = IndiceReajuste.objects.filter(
+            tipo_indice='SELIC'
+        ).order_by('-ano', '-mes').first()
+
+        # Data do contrato mais antigo (para limite de importação)
+        contrato_mais_antigo = Contrato.objects.order_by('data_contrato').first()
+        if contrato_mais_antigo:
+            context['data_contrato_mais_antigo'] = contrato_mais_antigo.data_contrato
+        else:
+            context['data_contrato_mais_antigo'] = None
+
+        return context
+
+
+class IndiceReajusteCreateView(LoginRequiredMixin, CreateView):
+    """Cria um novo índice de reajuste"""
+    model = IndiceReajuste
+    form_class = IndiceReajusteForm
+    template_name = 'contratos/indice_form.html'
+    success_url = reverse_lazy('contratos:indices_listar')
+
+    def form_valid(self, form):
+        messages.success(self.request, f'Índice {form.instance} cadastrado com sucesso!')
+        return super().form_valid(form)
+
+
+class IndiceReajusteUpdateView(LoginRequiredMixin, UpdateView):
+    """Atualiza um índice de reajuste"""
+    model = IndiceReajuste
+    form_class = IndiceReajusteForm
+    template_name = 'contratos/indice_form.html'
+    success_url = reverse_lazy('contratos:indices_listar')
+
+    def form_valid(self, form):
+        messages.success(self.request, f'Índice {form.instance} atualizado com sucesso!')
+        return super().form_valid(form)
+
+
+class IndiceReajusteDeleteView(LoginRequiredMixin, DeleteView):
+    """Exclui um índice de reajuste"""
+    model = IndiceReajuste
+    success_url = reverse_lazy('contratos:indices_listar')
+
+    def delete(self, request, *args, **kwargs):
+        self.object = self.get_object()
+        messages.success(request, f'Índice {self.object} excluído com sucesso!')
+        return super().delete(request, *args, **kwargs)
+
+
+# ==============================================================
+# APIs para buscar índices do IBGE/BCB
+# ==============================================================
+
+@login_required
+@require_http_methods(["POST"])
+def importar_indices_ibge(request):
+    """
+    Importa índices do IBGE (IPCA) e BCB (IGP-M, SELIC)
+    API IBGE (SIDRA): https://servicodados.ibge.gov.br/api/docs/agregados
+    API BCB: https://api.bcb.gov.br/dados/serie/bcdata.sgs.{codigo}/dados
+    """
+    try:
+        data = json.loads(request.body)
+        tipo_indice = data.get('tipo_indice', 'IPCA')
+        ano_inicio = data.get('ano_inicio')
+        mes_inicio = data.get('mes_inicio', 1)
+
+        # Determinar data de início
+        if not ano_inicio:
+            # Buscar último índice cadastrado ou data do contrato mais antigo
+            ultimo_indice = IndiceReajuste.objects.filter(
+                tipo_indice=tipo_indice
+            ).order_by('-ano', '-mes').first()
+
+            if ultimo_indice:
+                # Começar do mês seguinte ao último cadastrado
+                ano_inicio = ultimo_indice.ano
+                mes_inicio = ultimo_indice.mes + 1
+                if mes_inicio > 12:
+                    mes_inicio = 1
+                    ano_inicio += 1
+            else:
+                # Buscar contrato mais antigo
+                contrato_mais_antigo = Contrato.objects.order_by('data_contrato').first()
+                if contrato_mais_antigo:
+                    ano_inicio = contrato_mais_antigo.data_contrato.year
+                    mes_inicio = contrato_mais_antigo.data_contrato.month
+                else:
+                    ano_inicio = datetime.now().year - 1
+                    mes_inicio = 1
+
+        # Buscar dados da API
+        if tipo_indice == 'IPCA':
+            indices = _buscar_ipca_ibge(ano_inicio, mes_inicio)
+        elif tipo_indice == 'IGPM':
+            indices = _buscar_igpm_bcb(ano_inicio, mes_inicio)
+        elif tipo_indice == 'SELIC':
+            indices = _buscar_selic_bcb(ano_inicio, mes_inicio)
+        else:
+            return JsonResponse({'success': False, 'error': 'Tipo de índice inválido'})
+
+        # Salvar índices no banco
+        count_created = 0
+        count_updated = 0
+        for indice_data in indices:
+            obj, created = IndiceReajuste.objects.update_or_create(
+                tipo_indice=tipo_indice,
+                ano=indice_data['ano'],
+                mes=indice_data['mes'],
+                defaults={
+                    'valor': indice_data['valor'],
+                    'valor_acumulado_ano': indice_data.get('acumulado_ano'),
+                    'valor_acumulado_12m': indice_data.get('acumulado_12m'),
+                    'fonte': indice_data.get('fonte', 'API'),
+                    'data_importacao': datetime.now(),
+                }
+            )
+            if created:
+                count_created += 1
+            else:
+                count_updated += 1
+
+        return JsonResponse({
+            'success': True,
+            'message': f'Importação concluída! {count_created} novos, {count_updated} atualizados.',
+            'created': count_created,
+            'updated': count_updated
+        })
+
+    except Exception as e:
+        return JsonResponse({'success': False, 'error': str(e)})
+
+
+def _buscar_ipca_ibge(ano_inicio, mes_inicio):
+    """
+    Busca IPCA da API SIDRA do IBGE
+    Tabela 1737 - IPCA - Variação mensal, acumulada no ano e acumulada em 12 meses
+    """
+    indices = []
+
+    try:
+        # API SIDRA - Tabela 1737 (IPCA)
+        # Código da variável: 63 (variação mensal)
+        url = "https://servicodados.ibge.gov.br/api/v3/agregados/1737/periodos/all/variaveis/63|69|2265?localidades=N1[all]"
+
+        response = requests.get(url, timeout=30)
+        response.raise_for_status()
+        data = response.json()
+
+        if not data or len(data) == 0:
+            return indices
+
+        # Processar dados
+        # Estrutura: data[0] = var mensal, data[1] = acum ano, data[2] = acum 12m
+        var_mensal = data[0]['resultados'][0]['series'][0]['serie'] if len(data) > 0 else {}
+        var_acum_ano = data[1]['resultados'][0]['series'][0]['serie'] if len(data) > 1 else {}
+        var_acum_12m = data[2]['resultados'][0]['series'][0]['serie'] if len(data) > 2 else {}
+
+        for periodo, valor in var_mensal.items():
+            if valor == '-' or valor == '...' or valor is None:
+                continue
+
+            # Período formato: 202401 (AAAAMM)
+            ano = int(periodo[:4])
+            mes = int(periodo[4:6])
+
+            # Filtrar por data de início
+            if ano < ano_inicio or (ano == ano_inicio and mes < mes_inicio):
+                continue
+
+            indices.append({
+                'ano': ano,
+                'mes': mes,
+                'valor': float(valor.replace(',', '.')),
+                'acumulado_ano': float(var_acum_ano.get(periodo, '0').replace(',', '.')) if var_acum_ano.get(periodo) not in ['-', '...', None] else None,
+                'acumulado_12m': float(var_acum_12m.get(periodo, '0').replace(',', '.')) if var_acum_12m.get(periodo) not in ['-', '...', None] else None,
+                'fonte': 'IBGE/SIDRA'
+            })
+
+    except Exception as e:
+        print(f"Erro ao buscar IPCA: {e}")
+
+    return indices
+
+
+def _buscar_igpm_bcb(ano_inicio, mes_inicio):
+    """
+    Busca IGP-M da API do Banco Central
+    Série 189 - IGP-M - Variação mensal
+    """
+    indices = []
+
+    try:
+        # Formatar data de início
+        data_inicio = f"01/{mes_inicio:02d}/{ano_inicio}"
+
+        # API BCB - Série 189 (IGP-M mensal)
+        url = f"https://api.bcb.gov.br/dados/serie/bcdata.sgs.189/dados?formato=json&dataInicial={data_inicio}"
+
+        response = requests.get(url, timeout=30)
+        response.raise_for_status()
+        data = response.json()
+
+        for item in data:
+            # Data formato: dd/mm/yyyy
+            partes = item['data'].split('/')
+            dia = int(partes[0])
+            mes = int(partes[1])
+            ano = int(partes[2])
+
+            indices.append({
+                'ano': ano,
+                'mes': mes,
+                'valor': float(item['valor']),
+                'acumulado_ano': None,
+                'acumulado_12m': None,
+                'fonte': 'BCB'
+            })
+
+    except Exception as e:
+        print(f"Erro ao buscar IGP-M: {e}")
+
+    return indices
+
+
+def _buscar_selic_bcb(ano_inicio, mes_inicio):
+    """
+    Busca SELIC da API do Banco Central
+    Série 4390 - Taxa Selic acumulada no mês
+    """
+    indices = []
+
+    try:
+        # Formatar data de início
+        data_inicio = f"01/{mes_inicio:02d}/{ano_inicio}"
+
+        # API BCB - Série 4390 (SELIC mensal)
+        url = f"https://api.bcb.gov.br/dados/serie/bcdata.sgs.4390/dados?formato=json&dataInicial={data_inicio}"
+
+        response = requests.get(url, timeout=30)
+        response.raise_for_status()
+        data = response.json()
+
+        for item in data:
+            # Data formato: dd/mm/yyyy
+            partes = item['data'].split('/')
+            dia = int(partes[0])
+            mes = int(partes[1])
+            ano = int(partes[2])
+
+            indices.append({
+                'ano': ano,
+                'mes': mes,
+                'valor': float(item['valor']),
+                'acumulado_ano': None,
+                'acumulado_12m': None,
+                'fonte': 'BCB'
+            })
+
+    except Exception as e:
+        print(f"Erro ao buscar SELIC: {e}")
+
+    return indices
