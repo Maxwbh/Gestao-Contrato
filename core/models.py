@@ -528,7 +528,9 @@ class Imovel(TimeStampedModel):
     )
     loteamento = models.CharField(
         max_length=200,
-        verbose_name='Loteamento/Empreendimento'
+        blank=True,
+        verbose_name='Loteamento/Empreendimento',
+        help_text='Opcional. Nome do loteamento ou empreendimento'
     )
 
     # Endereço estruturado
@@ -640,14 +642,15 @@ class Imovel(TimeStampedModel):
         verbose_name = 'Imóvel'
         verbose_name_plural = 'Imóveis'
         ordering = ['loteamento', 'identificacao']
-        unique_together = [['imobiliaria', 'identificacao', 'loteamento']]
         indexes = [
             models.Index(fields=['disponivel', 'ativo']),
             models.Index(fields=['loteamento']),
         ]
 
     def __str__(self):
-        return f"{self.loteamento} - {self.identificacao}"
+        if self.loteamento:
+            return f"{self.loteamento} - {self.identificacao}"
+        return self.identificacao
 
     @property
     def tem_coordenadas(self):
