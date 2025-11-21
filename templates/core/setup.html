@@ -331,18 +331,23 @@
             pre.textContent = JSON.stringify(data, null, 2);
         }
 
-        function consultarDados() {
-            fetch('/api/gerar-dados-teste/')
-                .then(response => response.json())
-                .then(data => {
-                    mostrarApiOutput(data);
-                })
-                .catch(error => {
-                    mostrarApiOutput({ error: error.toString() });
-                });
+        async function consultarDados() {
+            try {
+                const response = await fetch('/api/gerar-dados-teste/');
+                const text = await response.text();
+                let data;
+                try {
+                    data = JSON.parse(text);
+                } catch (e) {
+                    data = { status: 'error', message: 'Resposta inválida do servidor', response_text: text.substring(0, 500), http_status: response.status };
+                }
+                mostrarApiOutput(data);
+            } catch (error) {
+                mostrarApiOutput({ error: error.toString() });
+            }
         }
 
-        function gerarDadosAPI() {
+        async function gerarDadosAPI() {
             const limpar = document.getElementById('limparDados').checked;
 
             if (!confirm(limpar
@@ -353,32 +358,40 @@
 
             mostrarSpinner(true);
 
-            fetch('/api/gerar-dados-teste/', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({ limpar: limpar })
-            })
-            .then(response => response.json())
-            .then(data => {
+            try {
+                const response = await fetch('/api/gerar-dados-teste/', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ limpar: limpar })
+                });
+
+                const text = await response.text();
+                let data;
+                try {
+                    data = JSON.parse(text);
+                } catch (e) {
+                    data = { status: 'error', message: 'Resposta inválida do servidor', response_text: text.substring(0, 500), http_status: response.status };
+                }
+
                 mostrarSpinner(false);
                 mostrarApiOutput(data);
+
                 if (data.status === 'success') {
                     alert('✅ Dados gerados com sucesso!');
                     setTimeout(() => location.reload(), 2000);
                 } else {
-                    alert('❌ Erro: ' + (data.message || data.error));
+                    alert('❌ Erro: ' + (data.message || data.error || 'Erro desconhecido'));
                 }
-            })
-            .catch(error => {
+            } catch (error) {
                 mostrarSpinner(false);
                 mostrarApiOutput({ error: error.toString() });
                 alert('❌ Erro na requisição: ' + error);
-            });
+            }
         }
 
-        function limparDadosAPI() {
+        async function limparDadosAPI() {
             if (!confirm('⚠️ ATENÇÃO: Isso irá EXCLUIR PERMANENTEMENTE todos os dados!\n\nContabilidades, Imobiliárias, Imóveis, Compradores, Contratos, Parcelas e Índices serão removidos.\n\nTem certeza que deseja continuar?')) {
                 return;
             }
@@ -389,29 +402,37 @@
 
             mostrarSpinner(true);
 
-            fetch('/api/limpar-dados-teste/', {
-                method: 'DELETE',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({ confirmar: true })
-            })
-            .then(response => response.json())
-            .then(data => {
+            try {
+                const response = await fetch('/api/limpar-dados-teste/', {
+                    method: 'DELETE',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ confirmar: true })
+                });
+
+                const text = await response.text();
+                let data;
+                try {
+                    data = JSON.parse(text);
+                } catch (e) {
+                    data = { status: 'error', message: 'Resposta inválida do servidor', response_text: text.substring(0, 500), http_status: response.status };
+                }
+
                 mostrarSpinner(false);
                 mostrarApiOutput(data);
+
                 if (data.status === 'success') {
                     alert('✅ Dados excluídos com sucesso!');
                     setTimeout(() => location.reload(), 2000);
                 } else {
-                    alert('❌ Erro: ' + (data.message || data.error));
+                    alert('❌ Erro: ' + (data.message || data.error || 'Erro desconhecido'));
                 }
-            })
-            .catch(error => {
+            } catch (error) {
                 mostrarSpinner(false);
                 mostrarApiOutput({ error: error.toString() });
                 alert('❌ Erro na requisição: ' + error);
-            });
+            }
         }
     </script>
 </body>
