@@ -126,14 +126,18 @@
                             <i class="fas fa-folder"></i> Cadastros
                         </a>
                         <ul class="dropdown-menu">
-                            <li><a class="dropdown-item" href="{% url 'core:listar_compradores' %}">
-                                <i class="fas fa-users"></i> Compradores
+                            <li><a class="dropdown-item" href="{% url 'core:listar_contabilidades' %}">
+                                <i class="fas fa-calculator"></i> Contabilidades
+                            </a></li>
+                            <li><a class="dropdown-item" href="{% url 'core:listar_imobiliarias' %}">
+                                <i class="fas fa-building"></i> Imobiliárias
                             </a></li>
                             <li><a class="dropdown-item" href="{% url 'core:listar_imoveis' %}">
                                 <i class="fas fa-home"></i> Imóveis
                             </a></li>
-                            <li><a class="dropdown-item" href="{% url 'core:listar_imobiliarias' %}">
-                                <i class="fas fa-building"></i> Imobiliárias
+                            <li><hr class="dropdown-divider"></li>
+                            <li><a class="dropdown-item" href="{% url 'core:listar_compradores' %}">
+                                <i class="fas fa-users"></i> Compradores
                             </a></li>
                         </ul>
                     </li>
@@ -152,11 +156,22 @@
                             <i class="fas fa-bell"></i> Notificações
                         </a>
                     </li>
-                    <li class="nav-item">
-                        <a class="nav-link" href="/admin/">
-                            <i class="fas fa-cog"></i> Admin
+                    {% if user.is_staff or user.is_superuser %}
+                    <li class="nav-item dropdown">
+                        <a class="nav-link dropdown-toggle" href="#" id="adminDropdown" role="button" data-bs-toggle="dropdown">
+                            <i class="fas fa-cog"></i> Administração
                         </a>
+                        <ul class="dropdown-menu dropdown-menu-end">
+                            <li><a class="dropdown-item" href="{% url 'core:listar_acessos' %}">
+                                <i class="fas fa-key"></i> Acessos de Usuários
+                            </a></li>
+                            <li><hr class="dropdown-divider"></li>
+                            <li><a class="dropdown-item" href="/admin/">
+                                <i class="fas fa-tools"></i> Django Admin
+                            </a></li>
+                        </ul>
                     </li>
+                    {% endif %}
                 </ul>
             </div>
         </div>
