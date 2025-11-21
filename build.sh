@@ -86,6 +86,21 @@ with connection.cursor() as cursor:
     add_column_if_not_exists(cursor, 'core_imobiliaria', 'aceite', "BOOLEAN DEFAULT FALSE")
 
     print("Checking core_imovel...")
+    # Loteamento opcional
+    cursor.execute("""
+        DO $$
+        BEGIN
+            IF EXISTS (
+                SELECT 1 FROM information_schema.columns
+                WHERE table_name = 'core_imovel'
+                AND column_name = 'loteamento'
+                AND is_nullable = 'NO'
+            ) THEN
+                ALTER TABLE core_imovel ALTER COLUMN loteamento DROP NOT NULL;
+                RAISE NOTICE 'loteamento constraint removed';
+            END IF;
+        END $$;
+    """)
     # Endereço estruturado
     add_column_if_not_exists(cursor, 'core_imovel', 'cep', "VARCHAR(9) DEFAULT ''")
     add_column_if_not_exists(cursor, 'core_imovel', 'logradouro', "VARCHAR(200) DEFAULT ''")

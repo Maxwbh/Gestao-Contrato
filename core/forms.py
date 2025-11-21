@@ -413,29 +413,38 @@ class ImovelForm(forms.ModelForm):
         self.helper.form_method = 'post'
         self.helper.form_id = 'imovel-form'
         self.helper.layout = Layout(
-            # Card: Informações Básicas
+            # Legenda
             HTML('''
-                <div class="card mb-3">
+                <div class="legenda-campos">
+                    <i class="fas fa-info-circle me-1"></i>
+                    <span class="obrigatorio">* Campos obrigatorios</span>
+                    <span class="ms-3 opcional">Demais campos sao opcionais</span>
+                </div>
+            '''),
+
+            # Card: Informacoes Basicas (Obrigatorio)
+            HTML('''
+                <div class="card mb-3 card-obrigatorio">
                     <div class="card-header py-2">
-                        <i class="fas fa-home me-2"></i><strong>Informações Básicas</strong>
+                        <i class="fas fa-home me-2"></i><strong>Informacoes Basicas</strong>
                     </div>
                     <div class="card-body py-3">
             '''),
             Row(
-                Column(Field('imobiliaria', wrapper_class='mb-2'), css_class='col-md-6'),
-                Column(Field('tipo', wrapper_class='mb-2'), css_class='col-md-6'),
+                Column(Field('imobiliaria', wrapper_class='mb-2 campo-obrigatorio'), css_class='col-md-6'),
+                Column(Field('tipo', wrapper_class='mb-2 campo-obrigatorio'), css_class='col-md-6'),
             ),
             Row(
-                Column(Field('identificacao', wrapper_class='mb-2'), css_class='col-md-6'),
+                Column(Field('identificacao', wrapper_class='mb-2 campo-obrigatorio'), css_class='col-md-6'),
                 Column(Field('loteamento', wrapper_class='mb-2'), css_class='col-md-6'),
             ),
             HTML('</div></div>'),
 
-            # Card: Endereço
+            # Card: Endereco (Opcional)
             HTML('''
-                <div class="card mb-3">
+                <div class="card mb-3 card-opcional">
                     <div class="card-header py-2">
-                        <i class="fas fa-map-marker-alt me-2"></i><strong>Endereço</strong>
+                        <i class="fas fa-map-marker-alt me-2"></i><strong>Endereco</strong>
                         <small class="text-muted ms-2">(CEP preenche automaticamente)</small>
                     </div>
                     <div class="card-body py-3">
@@ -453,44 +462,65 @@ class ImovelForm(forms.ModelForm):
             ),
             HTML('</div></div>'),
 
-            # Card: Geolocalização (Mapa)
+            # Card: Geolocalizacao (Opcional)
             HTML('''
-                <div class="card mb-3 border-success">
+                <div class="card mb-3 card-opcional border-success">
                     <div class="card-header py-2 bg-success text-white">
-                        <i class="fas fa-map-marked-alt me-2"></i><strong>Geolocalização</strong>
+                        <i class="fas fa-map-marked-alt me-2"></i><strong>Geolocalizacao</strong>
                         <small class="ms-2">(Ideal para zonas rurais sem CEP)</small>
                     </div>
                     <div class="card-body py-3">
-                        <div class="row mb-3">
-                            <div class="col-md-8">
+                        <!-- Linha 1: Endereco -> Coordenadas -->
+                        <div class="row mb-2">
+                            <div class="col-12">
+                                <div class="alert alert-light border py-2 mb-2">
+                                    <strong><i class="fas fa-arrow-right text-primary me-1"></i> Endereco para Coordenadas:</strong>
+                                    <small class="text-muted">Preencha o endereco acima e clique para localizar no mapa</small>
+                                </div>
                                 <div class="input-group">
-                                    <input type="text" id="busca-endereco" class="form-control" placeholder="Buscar endereço no mapa...">
+                                    <input type="text" id="busca-endereco" class="form-control" placeholder="Buscar endereco no mapa...">
                                     <button type="button" id="btn-buscar-endereco" class="btn btn-outline-success">
                                         <i class="fas fa-search"></i> Buscar
                                     </button>
+                                    <button type="button" id="btn-usar-endereco" class="btn btn-primary" title="Usar campos de endereco preenchidos acima">
+                                        <i class="fas fa-map-pin"></i> Usar Endereco do Formulario
+                                    </button>
                                 </div>
                             </div>
-                            <div class="col-md-4">
+                        </div>
+
+                        <!-- Mapa -->
+                        <div id="map" style="height: 350px; border-radius: 8px; border: 2px solid #27ae60;"></div>
+
+                        <!-- Linha 2: Coordenadas -> Endereco -->
+                        <div class="row mt-3">
+                            <div class="col-12">
+                                <div class="alert alert-light border py-2 mb-2">
+                                    <strong><i class="fas fa-arrow-left text-success me-1"></i> Coordenadas para Endereco:</strong>
+                                    <small class="text-muted">Clique no mapa ou use GPS, depois preencha o endereco automaticamente</small>
+                                </div>
                                 <div class="btn-group w-100" role="group">
-                                    <button type="button" id="btn-usar-endereco" class="btn btn-outline-primary" title="Usar campos de endereço preenchidos">
-                                        <i class="fas fa-map-pin"></i> Usar Endereço
-                                    </button>
                                     <button type="button" id="btn-minha-localizacao" class="btn btn-outline-info" title="Usar GPS do dispositivo">
-                                        <i class="fas fa-crosshairs"></i> GPS
+                                        <i class="fas fa-crosshairs"></i> Usar Meu GPS
                                     </button>
-                                    <button type="button" id="btn-abrir-google-maps" class="btn btn-outline-danger" title="Abrir Google Maps para buscar coordenadas">
-                                        <i class="fab fa-google"></i> Maps
+                                    <button type="button" id="btn-abrir-google-maps" class="btn btn-outline-secondary" title="Abrir Google Maps para buscar coordenadas">
+                                        <i class="fab fa-google"></i> Abrir Google Maps
+                                    </button>
+                                    <button type="button" id="btn-preencher-endereco" class="btn btn-success" title="Preencher endereco a partir das coordenadas">
+                                        <i class="fas fa-map-signs"></i> Preencher Endereco
                                     </button>
                                 </div>
                             </div>
                         </div>
-                        <div id="map" style="height: 400px; border-radius: 8px; border: 1px solid #ddd;"></div>
-                        <div class="alert alert-info mt-3 mb-0 py-2 small">
-                            <i class="fas fa-info-circle me-1"></i>
-                            <strong>Dica para zonas rurais:</strong> Clique em "Maps" para abrir o Google Maps, encontre o local,
-                            clique com botão direito e copie as coordenadas. Cole no campo abaixo separado por vírgula (ex: -15.7801, -47.9292).
-                            <input type="text" id="colar-coordenadas" class="form-control form-control-sm mt-2" placeholder="Cole as coordenadas aqui (ex: -15.7801, -47.9292)">
+
+                        <!-- Campo para colar coordenadas -->
+                        <div class="alert alert-secondary mt-3 mb-0 py-2 small">
+                            <i class="fas fa-paste me-1"></i>
+                            <strong>Colar coordenadas:</strong> Copie do Google Maps (botao direito > copiar coordenadas)
+                            <input type="text" id="colar-coordenadas" class="form-control form-control-sm mt-2" placeholder="Cole aqui: -15.7801, -47.9292">
                         </div>
+
+                        <!-- Campos de coordenadas -->
                         <div class="row mt-3">
             '''),
             Row(
@@ -499,16 +529,16 @@ class ImovelForm(forms.ModelForm):
             ),
             HTML('</div></div></div>'),
 
-            # Card: Dados do Imóvel
+            # Card: Dados do Imovel (Area obrigatoria)
             HTML('''
-                <div class="card mb-3">
+                <div class="card mb-3 card-obrigatorio">
                     <div class="card-header py-2">
-                        <i class="fas fa-ruler-combined me-2"></i><strong>Dados do Imóvel</strong>
+                        <i class="fas fa-ruler-combined me-2"></i><strong>Dados do Imovel</strong>
                     </div>
                     <div class="card-body py-3">
             '''),
             Row(
-                Column(AppendedText('area', 'm²', wrapper_class='mb-2'), css_class='col-md-4'),
+                Column(AppendedText('area', 'm2', wrapper_class='mb-2 campo-obrigatorio'), css_class='col-md-4'),
                 Column(PrependedText('valor', 'R$', wrapper_class='mb-2'), css_class='col-md-4'),
                 Column(
                     Div(Field('disponivel'), css_class='form-check mt-4'),
@@ -517,11 +547,11 @@ class ImovelForm(forms.ModelForm):
             ),
             HTML('</div></div>'),
 
-            # Card: Documentação
+            # Card: Documentacao (Opcional)
             HTML('''
-                <div class="card mb-3">
+                <div class="card mb-3 card-opcional">
                     <div class="card-header py-2">
-                        <i class="fas fa-file-alt me-2"></i><strong>Documentação</strong>
+                        <i class="fas fa-file-alt me-2"></i><strong>Documentacao</strong>
                     </div>
                     <div class="card-body py-3">
             '''),
@@ -531,11 +561,11 @@ class ImovelForm(forms.ModelForm):
             ),
             HTML('</div></div>'),
 
-            # Card: Observações
+            # Card: Observacoes (Opcional)
             HTML('''
-                <div class="card mb-3">
-                    <div class="card-header py-2 bg-light">
-                        <i class="fas fa-sticky-note me-2"></i><strong>Observações</strong>
+                <div class="card mb-3 card-opcional">
+                    <div class="card-header py-2">
+                        <i class="fas fa-sticky-note me-2"></i><strong>Observacoes</strong>
                     </div>
                     <div class="card-body py-2">
             '''),

@@ -36,16 +36,18 @@
         color: #bdc3c7;
     }
 
-    /* Header claro para seções secundárias */
-    .imovel-form .card-header.bg-light {
+    /* Header claro para secoes secundarias (opcionais) */
+    .imovel-form .card-header.bg-light,
+    .imovel-form .card.card-opcional .card-header {
         background: linear-gradient(135deg, #7f8c8d, #95a5a6) !important;
         color: #ffffff !important;
     }
-    .imovel-form .card-header.bg-light strong {
+    .imovel-form .card-header.bg-light strong,
+    .imovel-form .card.card-opcional .card-header strong {
         color: #ffffff !important;
     }
 
-    /* Campos de formulário */
+    /* Campos de formulario */
     .imovel-form .form-control,
     .imovel-form .form-select {
         font-size: 0.9rem;
@@ -59,19 +61,53 @@
         margin-bottom: 0.25rem;
     }
 
+    /* === CAMPOS OBRIGATORIOS === */
+    /* Indicador de campo obrigatorio */
+    .campo-obrigatorio .form-label::after {
+        content: " *";
+        color: #e74c3c;
+        font-weight: bold;
+    }
+
+    /* Borda dos campos obrigatorios */
+    .campo-obrigatorio .form-control,
+    .campo-obrigatorio .form-select {
+        border-left: 3px solid #e74c3c;
+    }
+
+    /* Card de campos obrigatorios */
+    .card-obrigatorio {
+        border-left: 4px solid #e74c3c !important;
+    }
+    .card-obrigatorio .card-header::after {
+        content: " (Obrigatorio)";
+        font-size: 0.75rem;
+        opacity: 0.8;
+    }
+
+    /* Card de campos opcionais */
+    .card-opcional {
+        border-left: 4px solid #95a5a6 !important;
+    }
+    .card-opcional .card-header::after {
+        content: " (Opcional)";
+        font-size: 0.75rem;
+        opacity: 0.8;
+    }
+
     /* Card de ajuda */
     .help-card .card-header {
         background: linear-gradient(135deg, #17a2b8, #138496) !important;
     }
 
-    /* Validação */
+    /* Validacao */
     .is-valid { border-color: #27ae60 !important; }
     .is-invalid { border-color: #e74c3c !important; }
 
     /* Mapa */
     #map {
         width: 100%;
-        height: 400px;
+        height: 350px;
         border-radius: 8px;
         border: 2px solid #27ae60;
     }
@@ -79,7 +115,23 @@
     /* Responsivo */
     @media (max-width: 768px) {
         .imovel-form .card-body { padding: 1rem; }
-        #map { height: 300px; }
+        #map { height: 250px; }
+    }
+
+    /* Legenda de campos */
+    .legenda-campos {
+        background: #f8f9fa;
+        border-radius: 6px;
+        padding: 0.5rem 1rem;
+        margin-bottom: 1rem;
+        font-size: 0.85rem;
+    }
+    .legenda-campos .obrigatorio {
+        color: #e74c3c;
+        font-weight: bold;
+    }
+    .legenda-campos .opcional {
+        color: #95a5a6;
     }
 </style>
 <!-- Leaflet CSS (alternativa gratuita ao Google Maps) -->
@@ -156,6 +208,7 @@ document.addEventListener('DOMContentLoaded', function() {
     const buscaInput = document.getElementById('busca-endereco');
     const btnBuscar = document.getElementById('btn-buscar-endereco');
     const btnUsarEndereco = document.getElementById('btn-usar-endereco');
+    const btnPreencherEndereco = document.getElementById('btn-preencher-endereco');
     const btnMinhaLocalizacao = document.getElementById('btn-minha-localizacao');
     const btnAbrirGoogleMaps = document.getElementById('btn-abrir-google-maps');
     const colarCoordenadasInput = document.getElementById('colar-coordenadas');
@@ -364,6 +417,97 @@ document.addEventListener('DOMContentLoaded', function() {
                     maximumAge: 0
                 }
             );
+        });
+    }
+
+    // Botão "Preencher Endereço" - Geocodificação reversa
+    if (btnPreencherEndereco) {
+        btnPreencherEndereco.addEventListener('click', function() {
+            const lat = parseFloat(latInput.value);
+            const lng = parseFloat(lngInput.value);
+
+            if (isNaN(lat) || isNaN(lng)) {
+                alert('Primeiro defina as coordenadas no mapa ou preencha latitude/longitude.');
+                return;
+            }
+
+            this.disabled = true;
+            this.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+
+            // Usar Nominatim para geocodificação reversa
+            fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&addressdetails=1`)
+                .then(response => response.json())
+                .then(data => {
+                    btnPreencherEndereco.disabled = false;
+                    btnPreencherEndereco.innerHTML = '<i class="fas fa-map-signs"></i> Preencher Endereco';
+
+                    if (data && data.address) {
+                        const addr = data.address;
+
+                        // Preencher campos do formulário
+                        const logradouro = document.querySelector('input[name="logradouro"]');
+                        const numero = document.querySelector('input[name="numero"]');
+                        const bairro = document.querySelector('input[name="bairro"]');
+                        const cidade = document.querySelector('input[name="cidade"]');
+                        const estado = document.querySelector('select[name="estado"]');
+                        const cep = document.querySelector('input[name="cep"]');
+
+                        // Logradouro pode vir de diferentes campos
+                        if (logradouro) {
+                            logradouro.value = addr.road || addr.street || addr.pedestrian || '';
+                        }
+
+                        // Número da casa (se disponível)
+                        if (numero && addr.house_number) {
+                            numero.value = addr.house_number;
+                        }
+
+                        // Bairro
+                        if (bairro) {
+                            bairro.value = addr.suburb || addr.neighbourhood || addr.quarter || '';
+                        }
+
+                        // Cidade
+                        if (cidade) {
+                            cidade.value = addr.city || addr.town || addr.village || addr.municipality || '';
+                        }
+
+                        // Estado (sigla)
+                        if (estado && addr.state) {
+                            // Mapear nome do estado para sigla
+                            const estadoMap = {
+                                'Acre': 'AC', 'Alagoas': 'AL', 'Amapá': 'AP', 'Amazonas': 'AM',
+                                'Bahia': 'BA', 'Ceará': 'CE', 'Distrito Federal': 'DF', 'Espírito Santo': 'ES',
+                                'Goiás': 'GO', 'Maranhão': 'MA', 'Mato Grosso': 'MT', 'Mato Grosso do Sul': 'MS',
+                                'Minas Gerais': 'MG', 'Pará': 'PA', 'Paraíba': 'PB', 'Paraná': 'PR',
+                                'Pernambuco': 'PE', 'Piauí': 'PI', 'Rio de Janeiro': 'RJ', 'Rio Grande do Norte': 'RN',
+                                'Rio Grande do Sul': 'RS', 'Rondônia': 'RO', 'Roraima': 'RR', 'Santa Catarina': 'SC',
+                                'São Paulo': 'SP', 'Sergipe': 'SE', 'Tocantins': 'TO'
+                            };
+                            const sigla = estadoMap[addr.state] || addr['ISO3166-2-lvl4']?.replace('BR-', '') || '';
+                            if (sigla) estado.value = sigla;
+                        }
+
+                        // CEP
+                        if (cep && addr.postcode) {
+                            let cepVal = addr.postcode.replace(/\D/g, '');
+                            if (cepVal.length === 8) {
+                                cepVal = cepVal.substring(0,5) + '-' + cepVal.substring(5);
+                            }
+                            cep.value = cepVal;
+                        }
+
+                        alert('Endereço preenchido com base nas coordenadas. Verifique e ajuste se necessário.');
+                    } else {
+                        alert('Não foi possível obter o endereço para estas coordenadas.');
+                    }
+                })
+                .catch(error => {
+                    btnPreencherEndereco.disabled = false;
+                    btnPreencherEndereco.innerHTML = '<i class="fas fa-map-signs"></i> Preencher Endereco';
+                    console.error('Erro na geocodificação reversa:', error);
+                    alert('Erro ao buscar endereço. Tente novamente.');
+                });
         });
     }
 
