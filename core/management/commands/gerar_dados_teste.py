@@ -10,6 +10,8 @@ Uso:
     python manage.py gerar_dados_teste --limpar  # Limpa dados antes
 """
 import random
+import unicodedata
+import re
 from decimal import Decimal
 from datetime import datetime, timedelta
 from django.core.management.base import BaseCommand
@@ -31,6 +33,16 @@ class Command(BaseCommand):
             action='store_true',
             help='Limpa todos os dados antes de gerar novos',
         )
+
+    def normalizar_email(self, texto):
+        """Remove acentos e caracteres especiais para criar um email válido"""
+        # Remove acentos
+        texto = unicodedata.normalize('NFD', texto)
+        texto = texto.encode('ascii', 'ignore').decode('utf-8')
+        # Substitui espaços por pontos e remove caracteres inválidos
+        texto = texto.lower().replace(' ', '.')
+        texto = re.sub(r'[^a-z0-9.@]', '', texto)
+        return texto
 
     def handle(self, *args, **options):
         self.fake = Faker('pt_BR')
@@ -257,7 +269,7 @@ class Command(BaseCommand):
                 # Contato
                 telefone=f'(31) {random.randint(3000, 3999)}-{random.randint(1000, 9999)}',
                 celular=f'(31) 9{random.randint(8000, 9999)}-{random.randint(1000, 9999)}',
-                email=f'{nome.lower().replace(" ", ".")}@email.com'[:100],
+                email=self.normalizar_email(f'{nome}@email.com')[:100],
                 notificar_email=True,
                 notificar_sms=random.choice([True, False]),
                 notificar_whatsapp=random.choice([True, False]),
@@ -296,7 +308,7 @@ class Command(BaseCommand):
                 # Contato
                 telefone=f'(31) {random.randint(3000, 3999)}-{random.randint(1000, 9999)}',
                 celular=f'(31) 9{random.randint(8000, 9999)}-{random.randint(1000, 9999)}',
-                email=f'contato@{nome_fantasia.lower().replace(" ", "")}.com.br'[:100],
+                email=self.normalizar_email(f'contato@{nome_fantasia}.com.br')[:100],
                 notificar_email=True,
                 notificar_sms=False,
                 notificar_whatsapp=True,
