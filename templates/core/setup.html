@@ -153,34 +153,47 @@
                     <p>Use o endpoint abaixo para gerar ou consultar dados de teste via API:</p>
 
                     <div class="row">
-                        <div class="col-md-6">
+                        <div class="col-md-4">
                             <div class="card mb-3">
                                 <div class="card-header bg-info text-white">
                                     <strong>GET</strong> /api/gerar-dados-teste/
                                 </div>
                                 <div class="card-body">
-                                    <p class="card-text">Retorna estatísticas dos dados existentes no sistema.</p>
+                                    <p class="card-text">Retorna estatísticas dos dados existentes.</p>
                                     <button class="btn btn-sm btn-outline-info" onclick="consultarDados()">
                                         Consultar Dados
                                     </button>
                                 </div>
                             </div>
                         </div>
-                        <div class="col-md-6">
+                        <div class="col-md-4">
                             <div class="card mb-3">
                                 <div class="card-header bg-success text-white">
                                     <strong>POST</strong> /api/gerar-dados-teste/
                                 </div>
                                 <div class="card-body">
-                                    <p class="card-text">Gera dados de teste incluindo contratos, parcelas e índices.</p>
+                                    <p class="card-text">Gera dados de teste (contratos, parcelas, índices).</p>
                                     <div class="form-check mb-2">
                                         <input class="form-check-input" type="checkbox" id="limparDados">
                                         <label class="form-check-label" for="limparDados">
-                                            Limpar dados existentes antes
+                                            Limpar antes
                                         </label>
                                     </div>
                                     <button class="btn btn-sm btn-success" onclick="gerarDadosAPI()">
                                         Gerar via API
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="card mb-3">
+                                <div class="card-header bg-danger text-white">
+                                    <strong>DELETE</strong> /api/limpar-dados-teste/
+                                </div>
+                                <div class="card-body">
+                                    <p class="card-text">Exclui TODOS os dados do sistema.</p>
+                                    <button class="btn btn-sm btn-danger" onclick="limparDadosAPI()">
+                                        Limpar Dados
                                     </button>
                                 </div>
                             </div>
@@ -353,6 +366,42 @@
                 mostrarApiOutput(data);
                 if (data.status === 'success') {
                     alert('✅ Dados gerados com sucesso!');
+                    setTimeout(() => location.reload(), 2000);
+                } else {
+                    alert('❌ Erro: ' + (data.message || data.error));
+                }
+            })
+            .catch(error => {
+                mostrarSpinner(false);
+                mostrarApiOutput({ error: error.toString() });
+                alert('❌ Erro na requisição: ' + error);
+            });
+        }
+
+        function limparDadosAPI() {
+            if (!confirm('⚠️ ATENÇÃO: Isso irá EXCLUIR PERMANENTEMENTE todos os dados!\n\nContabilidades, Imobiliárias, Imóveis, Compradores, Contratos, Parcelas e Índices serão removidos.\n\nTem certeza que deseja continuar?')) {
+                return;
+            }
+
+            if (!confirm('🔴 ÚLTIMA CONFIRMAÇÃO: Todos os dados serão perdidos. Confirma a exclusão?')) {
+                return;
+            }
+
+            mostrarSpinner(true);
+
+            fetch('/api/limpar-dados-teste/', {
+                method: 'DELETE',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ confirmar: true })
+            })
+            .then(response => response.json())
+            .then(data => {
+                mostrarSpinner(false);
+                mostrarApiOutput(data);
+                if (data.status === 'success') {
+                    alert('✅ Dados excluídos com sucesso!');
                     setTimeout(() => location.reload(), 2000);
                 } else {
                     alert('❌ Erro: ' + (data.message || data.error));
