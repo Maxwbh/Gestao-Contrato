@@ -356,33 +356,59 @@ class CompradorForm(forms.ModelForm):
 
 
 class ImovelForm(forms.ModelForm):
-    """Formulário para cadastro de Imóvel"""
+    """Formulário para cadastro de Imóvel com georreferenciamento"""
 
     class Meta:
         model = Imovel
         fields = [
             'imobiliaria', 'tipo', 'identificacao', 'loteamento',
-            'endereco', 'area', 'matricula', 'inscricao_municipal',
+            # Endereço estruturado
+            'cep', 'logradouro', 'numero', 'complemento', 'bairro', 'cidade', 'estado',
+            # Georreferenciamento
+            'latitude', 'longitude',
+            # Dados do imóvel
+            'area', 'valor',
+            # Documentação
+            'matricula', 'inscricao_municipal',
+            # Outros
             'observacoes', 'disponivel'
         ]
         widgets = {
             'observacoes': forms.Textarea(attrs={'rows': 2}),
-            'endereco': forms.Textarea(attrs={'rows': 2}),
+            'cep': forms.TextInput(attrs={
+                'placeholder': '00000-000',
+                'data-viacep': 'true',
+                'class': 'form-control cep-input',
+                'maxlength': '9'
+            }),
+            'latitude': forms.NumberInput(attrs={
+                'step': '0.0000001',
+                'placeholder': '-23.5505199',
+                'id': 'id_latitude'
+            }),
+            'longitude': forms.NumberInput(attrs={
+                'step': '0.0000001',
+                'placeholder': '-46.6333094',
+                'id': 'id_longitude'
+            }),
+            'valor': forms.NumberInput(attrs={'step': '0.01', 'min': '0'}),
         }
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
         for field_name, field in self.fields.items():
-            if isinstance(field.widget, forms.Select):
-                field.widget.attrs['class'] = 'form-select'
-            elif isinstance(field.widget, forms.CheckboxInput):
-                field.widget.attrs['class'] = 'form-check-input'
-            else:
-                field.widget.attrs['class'] = 'form-control'
+            if 'class' not in field.widget.attrs:
+                if isinstance(field.widget, forms.Select):
+                    field.widget.attrs['class'] = 'form-select'
+                elif isinstance(field.widget, forms.CheckboxInput):
+                    field.widget.attrs['class'] = 'form-check-input'
+                else:
+                    field.widget.attrs['class'] = 'form-control'
 
         self.helper = FormHelper()
         self.helper.form_method = 'post'
+        self.helper.form_id = 'imovel-form'
         self.helper.layout = Layout(
             # Card: Informações Básicas
             HTML('''
@@ -402,18 +428,73 @@ class ImovelForm(forms.ModelForm):
             ),
             HTML('</div></div>'),
 
-            # Card: Localização
+            # Card: Endereço
             HTML('''
                 <div class="card mb-3">
                     <div class="card-header py-2">
-                        <i class="fas fa-map-marked-alt me-2"></i><strong>Localização</strong>
+                        <i class="fas fa-map-marker-alt me-2"></i><strong>Endereço</strong>
+                        <small class="text-muted ms-2">(CEP preenche automaticamente)</small>
                     </div>
                     <div class="card-body py-3">
             '''),
-            Field('endereco', wrapper_class='mb-2'),
             Row(
-                Column(AppendedText('area', 'm²', wrapper_class='mb-2'), css_class='col-md-6'),
-                Column(Field('disponivel', wrapper_class='mb-2 pt-4'), css_class='col-md-6'),
+                Column(Field('cep', wrapper_class='mb-2'), css_class='col-md-2'),
+                Column(Field('logradouro', wrapper_class='mb-2'), css_class='col-md-6'),
+                Column(Field('numero', wrapper_class='mb-2'), css_class='col-md-2'),
+                Column(Field('complemento', wrapper_class='mb-2'), css_class='col-md-2'),
+            ),
+            Row(
+                Column(Field('bairro', wrapper_class='mb-2'), css_class='col-md-4'),
+                Column(Field('cidade', wrapper_class='mb-2'), css_class='col-md-5'),
+                Column(Field('estado', wrapper_class='mb-2'), css_class='col-md-3'),
+            ),
+            HTML('</div></div>'),
+
+            # Card: Geolocalização (Mapa)
+            HTML('''
+                <div class="card mb-3 border-success">
+                    <div class="card-header py-2 bg-success text-white">
+                        <i class="fas fa-map-marked-alt me-2"></i><strong>Geolocalização</strong>
+                        <small class="ms-2">(Clique no mapa ou busque o endereço)</small>
+                    </div>
+                    <div class="card-body py-3">
+                        <div class="row mb-3">
+                            <div class="col-12">
+                                <div class="input-group">
+                                    <input type="text" id="busca-endereco" class="form-control" placeholder="Buscar endereço no mapa...">
+                                    <button type="button" id="btn-buscar-endereco" class="btn btn-outline-success">
+                                        <i class="fas fa-search"></i> Buscar
+                                    </button>
+                                    <button type="button" id="btn-usar-endereco" class="btn btn-outline-primary">
+                                        <i class="fas fa-map-pin"></i> Usar Endereço do Formulário
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                        <div id="map" style="height: 400px; border-radius: 8px; border: 1px solid #ddd;"></div>
+                        <div class="row mt-3">
+            '''),
+            Row(
+                Column(Field('latitude', wrapper_class='mb-2'), css_class='col-md-6'),
+                Column(Field('longitude', wrapper_class='mb-2'), css_class='col-md-6'),
+            ),
+            HTML('</div></div></div>'),
+
+            # Card: Dados do Imóvel
+            HTML('''
+                <div class="card mb-3">
+                    <div class="card-header py-2">
+                        <i class="fas fa-ruler-combined me-2"></i><strong>Dados do Imóvel</strong>
+                    </div>
+                    <div class="card-body py-3">
+            '''),
+            Row(
+                Column(AppendedText('area', 'm²', wrapper_class='mb-2'), css_class='col-md-4'),
+                Column(PrependedText('valor', 'R$', wrapper_class='mb-2'), css_class='col-md-4'),
+                Column(
+                    Div(Field('disponivel'), css_class='form-check mt-4'),
+                    css_class='col-md-4'
+                ),
             ),
             HTML('</div></div>'),
 

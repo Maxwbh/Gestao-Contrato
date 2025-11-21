@@ -528,13 +528,96 @@ class Imovel(TimeStampedModel):
         max_length=200,
         verbose_name='Loteamento/Empreendimento'
     )
-    endereco = models.TextField(verbose_name='Endereço Completo')
+
+    # Endereço estruturado
+    cep = models.CharField(
+        max_length=9,
+        blank=True,
+        verbose_name='CEP',
+        help_text='Formato: 99999-999'
+    )
+    logradouro = models.CharField(
+        max_length=200,
+        blank=True,
+        verbose_name='Logradouro'
+    )
+    numero = models.CharField(
+        max_length=10,
+        blank=True,
+        verbose_name='Número'
+    )
+    complemento = models.CharField(
+        max_length=100,
+        blank=True,
+        verbose_name='Complemento'
+    )
+    bairro = models.CharField(
+        max_length=100,
+        blank=True,
+        verbose_name='Bairro'
+    )
+    cidade = models.CharField(
+        max_length=100,
+        blank=True,
+        verbose_name='Cidade'
+    )
+    estado = models.CharField(
+        max_length=2,
+        blank=True,
+        verbose_name='UF',
+        choices=[
+            ('AC', 'Acre'), ('AL', 'Alagoas'), ('AP', 'Amapá'), ('AM', 'Amazonas'),
+            ('BA', 'Bahia'), ('CE', 'Ceará'), ('DF', 'Distrito Federal'), ('ES', 'Espírito Santo'),
+            ('GO', 'Goiás'), ('MA', 'Maranhão'), ('MT', 'Mato Grosso'), ('MS', 'Mato Grosso do Sul'),
+            ('MG', 'Minas Gerais'), ('PA', 'Pará'), ('PB', 'Paraíba'), ('PR', 'Paraná'),
+            ('PE', 'Pernambuco'), ('PI', 'Piauí'), ('RJ', 'Rio de Janeiro'), ('RN', 'Rio Grande do Norte'),
+            ('RS', 'Rio Grande do Sul'), ('RO', 'Rondônia'), ('RR', 'Roraima'), ('SC', 'Santa Catarina'),
+            ('SP', 'São Paulo'), ('SE', 'Sergipe'), ('TO', 'Tocantins'),
+        ]
+    )
+
+    # Endereço completo (legacy/compatibilidade)
+    endereco = models.TextField(
+        blank=True,
+        verbose_name='Endereço Completo',
+        help_text='Campo legado - use os campos estruturados acima'
+    )
+
+    # Georreferenciamento
+    latitude = models.DecimalField(
+        max_digits=10,
+        decimal_places=7,
+        null=True,
+        blank=True,
+        verbose_name='Latitude',
+        help_text='Coordenada de latitude (ex: -23.5505199)'
+    )
+    longitude = models.DecimalField(
+        max_digits=10,
+        decimal_places=7,
+        null=True,
+        blank=True,
+        verbose_name='Longitude',
+        help_text='Coordenada de longitude (ex: -46.6333094)'
+    )
+
+    # Dados do imóvel
     area = models.DecimalField(
         max_digits=10,
         decimal_places=2,
         verbose_name='Área (m²)',
         help_text='Área em metros quadrados'
     )
+    valor = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        verbose_name='Valor (R$)',
+        help_text='Valor do imóvel'
+    )
+
+    # Documentação
     matricula = models.CharField(
         max_length=100,
         blank=True,
@@ -546,6 +629,7 @@ class Imovel(TimeStampedModel):
         blank=True,
         verbose_name='Inscrição Municipal'
     )
+
     observacoes = models.TextField(blank=True, verbose_name='Observações')
     disponivel = models.BooleanField(default=True, verbose_name='Disponível para Venda')
     ativo = models.BooleanField(default=True, verbose_name='Ativo')
@@ -555,9 +639,38 @@ class Imovel(TimeStampedModel):
         verbose_name_plural = 'Imóveis'
         ordering = ['loteamento', 'identificacao']
         unique_together = [['imobiliaria', 'identificacao', 'loteamento']]
+        indexes = [
+            models.Index(fields=['disponivel', 'ativo']),
+            models.Index(fields=['loteamento']),
+        ]
 
     def __str__(self):
         return f"{self.loteamento} - {self.identificacao}"
+
+    @property
+    def tem_coordenadas(self):
+        """Verifica se o imóvel tem coordenadas de geolocalização"""
+        return self.latitude is not None and self.longitude is not None
+
+    @property
+    def endereco_formatado(self):
+        """Retorna o endereço formatado"""
+        partes = []
+        if self.logradouro:
+            partes.append(self.logradouro)
+        if self.numero:
+            partes.append(self.numero)
+        if self.complemento:
+            partes.append(f"- {self.complemento}")
+        if self.bairro:
+            partes.append(f", {self.bairro}")
+        if self.cidade:
+            partes.append(f", {self.cidade}")
+        if self.estado:
+            partes.append(f"/{self.estado}")
+        if self.cep:
+            partes.append(f" - CEP: {self.cep}")
+        return ' '.join(partes) if partes else self.endereco
 
 
 class Comprador(TimeStampedModel):
