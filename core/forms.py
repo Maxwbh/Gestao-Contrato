@@ -50,24 +50,33 @@ class ContabilidadeForm(forms.ModelForm):
         self.helper = FormHelper()
         self.helper.form_method = 'post'
         self.helper.layout = Layout(
-            # Card: Informações da Contabilidade
+            # Legenda
             HTML('''
-                <div class="card mb-3">
+                <div class="legenda-campos">
+                    <i class="fas fa-info-circle me-1"></i>
+                    <span class="obrigatorio">* Campos obrigatorios</span>
+                    <span class="ms-3 opcional">Demais campos sao opcionais</span>
+                </div>
+            '''),
+
+            # Card: Informacoes da Contabilidade (Obrigatorio)
+            HTML('''
+                <div class="card mb-3 card-obrigatorio">
                     <div class="card-header py-2">
-                        <i class="fas fa-calculator me-2"></i><strong>Informações da Contabilidade</strong>
+                        <i class="fas fa-calculator me-2"></i><strong>Informacoes da Contabilidade</strong>
                     </div>
                     <div class="card-body py-3">
             '''),
             Row(
-                Column(Field('nome', wrapper_class='mb-2'), css_class='col-md-6'),
+                Column(Field('nome', wrapper_class='mb-2 campo-obrigatorio'), css_class='col-md-6'),
                 Column(Field('cnpj', wrapper_class='mb-2'), css_class='col-md-6'),
             ),
             Field('razao_social', wrapper_class='mb-2'),
             HTML('</div></div>'),
 
-            # Card: Contato
+            # Card: Contato (Opcional)
             HTML('''
-                <div class="card mb-3">
+                <div class="card mb-3 card-opcional">
                     <div class="card-header py-2">
                         <i class="fas fa-phone me-2"></i><strong>Contato</strong>
                     </div>
@@ -81,7 +90,7 @@ class ContabilidadeForm(forms.ModelForm):
             ),
             HTML('</div></div>'),
 
-            # Botões
+            # Botoes
             HTML('''
                 <div class="d-flex justify-content-between align-items-center mt-4 pt-3 border-top">
                     <a href="{% url 'core:listar_contabilidades' %}" class="btn btn-outline-secondary">
@@ -167,9 +176,18 @@ class CompradorForm(forms.ModelForm):
         self.helper.form_method = 'post'
         self.helper.form_class = 'comprador-form'
         self.helper.layout = Layout(
-            # Card: Tipo de Pessoa
+            # Legenda
             HTML('''
-                <div class="card mb-3 border-primary">
+                <div class="legenda-campos">
+                    <i class="fas fa-info-circle me-1"></i>
+                    <span class="obrigatorio">* Campos obrigatorios</span>
+                    <span class="ms-3 opcional">Demais campos sao opcionais</span>
+                </div>
+            '''),
+
+            # Card: Tipo de Pessoa (Obrigatorio)
+            HTML('''
+                <div class="card mb-3 card-obrigatorio border-primary">
                     <div class="card-header bg-primary text-white py-2">
                         <i class="fas fa-user-tag me-2"></i><strong>Tipo de Cadastro</strong>
                     </div>
@@ -183,24 +201,24 @@ class CompradorForm(forms.ModelForm):
                 </div>
             '''),
 
-            # Card: Identificação (campos dinâmicos PF/PJ)
+            # Card: Identificacao (Obrigatorio - campos dinamicos PF/PJ)
             HTML('''
-                <div class="card mb-3">
+                <div class="card mb-3 card-obrigatorio">
                     <div class="card-header py-2">
-                        <i class="fas fa-id-card me-2"></i><strong id="titulo-identificacao">Identificação</strong>
+                        <i class="fas fa-id-card me-2"></i><strong id="titulo-identificacao">Identificacao</strong>
                     </div>
                     <div class="card-body py-3">
             '''),
 
-            # Nome/Razão Social (sempre visível, label muda)
+            # Nome/Razao Social (sempre visivel, label muda)
             Row(
-                Column(Field('nome', wrapper_class='mb-2'), css_class='col-12'),
+                Column(Field('nome', wrapper_class='mb-2 campo-obrigatorio'), css_class='col-12'),
             ),
 
-            # Campos específicos PF
+            # Campos especificos PF
             Div(
                 Row(
-                    Column(Field('cpf', wrapper_class='mb-2'), css_class='col-md-4'),
+                    Column(Field('cpf', wrapper_class='mb-2 campo-obrigatorio'), css_class='col-md-4'),
                     Column(Field('rg', wrapper_class='mb-2'), css_class='col-md-4'),
                     Column(Field('data_nascimento', wrapper_class='mb-2'), css_class='col-md-4'),
                 ),
@@ -211,17 +229,17 @@ class CompradorForm(forms.ModelForm):
                 css_id='campos-pf'
             ),
 
-            # Campos específicos PJ
+            # Campos especificos PJ
             Div(
                 Row(
-                    Column(Field('cnpj', wrapper_class='mb-2'), css_class='col-md-6'),
+                    Column(Field('cnpj', wrapper_class='mb-2 campo-obrigatorio'), css_class='col-md-6'),
                     Column(Field('nome_fantasia', wrapper_class='mb-2'), css_class='col-md-6'),
                 ),
                 Row(
                     Column(Field('inscricao_estadual', wrapper_class='mb-2'), css_class='col-md-6'),
                     Column(Field('inscricao_municipal', wrapper_class='mb-2'), css_class='col-md-6'),
                 ),
-                HTML('<hr class="my-2"><small class="text-muted mb-2 d-block"><i class="fas fa-user-tie me-1"></i>Responsável Legal</small>'),
+                HTML('<hr class="my-2"><small class="text-muted mb-2 d-block"><i class="fas fa-user-tie me-1"></i>Responsavel Legal</small>'),
                 Row(
                     Column(Field('responsavel_legal', wrapper_class='mb-2'), css_class='col-md-8'),
                     Column(Field('responsavel_cpf', wrapper_class='mb-2'), css_class='col-md-4'),
@@ -232,11 +250,11 @@ class CompradorForm(forms.ModelForm):
 
             HTML('</div></div>'),
 
-            # Card: Endereço
+            # Card: Endereco (Opcional)
             HTML('''
-                <div class="card mb-3">
+                <div class="card mb-3 card-opcional">
                     <div class="card-header py-2">
-                        <i class="fas fa-map-marker-alt me-2"></i><strong>Endereço</strong>
+                        <i class="fas fa-map-marker-alt me-2"></i><strong>Endereco</strong>
                         <small class="text-muted ms-2">(CEP preenche automaticamente)</small>
                     </div>
                     <div class="card-body py-3">
@@ -254,13 +272,13 @@ class CompradorForm(forms.ModelForm):
             ),
             HTML('</div></div>'),
 
-            # Card: Contato + Notificações (lado a lado)
+            # Card: Contato + Notificacoes (lado a lado) - Opcionais
             HTML('<div class="row">'),
 
             # Contato
             HTML('''
                 <div class="col-md-7">
-                    <div class="card mb-3 h-100">
+                    <div class="card mb-3 h-100 card-opcional">
                         <div class="card-header py-2">
                             <i class="fas fa-phone me-2"></i><strong>Contato</strong>
                         </div>
@@ -273,12 +291,12 @@ class CompradorForm(forms.ModelForm):
             Field('email', wrapper_class='mb-2'),
             HTML('</div></div></div>'),
 
-            # Notificações
+            # Notificacoes
             HTML('''
                 <div class="col-md-5">
-                    <div class="card mb-3 h-100">
+                    <div class="card mb-3 h-100 card-opcional">
                         <div class="card-header py-2">
-                            <i class="fas fa-bell me-2"></i><strong>Notificações</strong>
+                            <i class="fas fa-bell me-2"></i><strong>Notificacoes</strong>
                         </div>
                         <div class="card-body py-3 d-flex flex-column justify-content-center">
                             <div class="d-flex justify-content-around">
@@ -299,12 +317,12 @@ class CompradorForm(forms.ModelForm):
 
             HTML('</div>'),  # Fecha row
 
-            # Card: Cônjuge (apenas PF)
+            # Card: Conjuge (apenas PF) - Opcional
             Div(
                 HTML('''
-                    <div class="card mb-3">
-                        <div class="card-header py-2 bg-light">
-                            <i class="fas fa-ring me-2"></i><strong>Cônjuge</strong>
+                    <div class="card mb-3 card-opcional">
+                        <div class="card-header py-2">
+                            <i class="fas fa-ring me-2"></i><strong>Conjuge</strong>
                             <small class="text-muted ms-2">(se casado)</small>
                         </div>
                         <div class="card-body py-3">
@@ -318,11 +336,11 @@ class CompradorForm(forms.ModelForm):
                 css_id='card-conjuge'
             ),
 
-            # Card: Observações
+            # Card: Observacoes (Opcional)
             HTML('''
-                <div class="card mb-3">
-                    <div class="card-header py-2 bg-light">
-                        <i class="fas fa-sticky-note me-2"></i><strong>Observações</strong>
+                <div class="card mb-3 card-opcional">
+                    <div class="card-header py-2">
+                        <i class="fas fa-sticky-note me-2"></i><strong>Observacoes</strong>
                     </div>
                     <div class="card-body py-2">
             '''),
@@ -639,27 +657,36 @@ class ImobiliariaForm(forms.ModelForm):
         self.helper = FormHelper()
         self.helper.form_method = 'post'
         self.helper.layout = Layout(
-            # Card: Informações da Empresa
+            # Legenda
             HTML('''
-                <div class="card mb-3">
+                <div class="legenda-campos">
+                    <i class="fas fa-info-circle me-1"></i>
+                    <span class="obrigatorio">* Campos obrigatorios</span>
+                    <span class="ms-3 opcional">Demais campos sao opcionais</span>
+                </div>
+            '''),
+
+            # Card: Informacoes da Empresa (Obrigatorio)
+            HTML('''
+                <div class="card mb-3 card-obrigatorio">
                     <div class="card-header py-2">
-                        <i class="fas fa-building me-2"></i><strong>Informações da Empresa</strong>
+                        <i class="fas fa-building me-2"></i><strong>Informacoes da Empresa</strong>
                     </div>
                     <div class="card-body py-3">
             '''),
-            Field('contabilidade', wrapper_class='mb-2'),
+            Field('contabilidade', wrapper_class='mb-2 campo-obrigatorio'),
             Row(
-                Column(Field('nome', wrapper_class='mb-2'), css_class='col-md-6'),
-                Column(Field('cnpj', wrapper_class='mb-2'), css_class='col-md-6'),
+                Column(Field('nome', wrapper_class='mb-2 campo-obrigatorio'), css_class='col-md-6'),
+                Column(Field('cnpj', wrapper_class='mb-2 campo-obrigatorio'), css_class='col-md-6'),
             ),
             Field('razao_social', wrapper_class='mb-2'),
             HTML('</div></div>'),
 
-            # Card: Endereço
+            # Card: Endereco (Opcional)
             HTML('''
-                <div class="card mb-3">
+                <div class="card mb-3 card-opcional">
                     <div class="card-header py-2">
-                        <i class="fas fa-map-marker-alt me-2"></i><strong>Endereço</strong>
+                        <i class="fas fa-map-marker-alt me-2"></i><strong>Endereco</strong>
                         <small class="text-muted ms-2">(CEP preenche automaticamente)</small>
                     </div>
                     <div class="card-body py-3">
@@ -677,9 +704,9 @@ class ImobiliariaForm(forms.ModelForm):
             ),
             HTML('</div></div>'),
 
-            # Card: Contato
+            # Card: Contato (Opcional)
             HTML('''
-                <div class="card mb-3">
+                <div class="card mb-3 card-opcional">
                     <div class="card-header py-2">
                         <i class="fas fa-phone me-2"></i><strong>Contato</strong>
                     </div>
@@ -692,12 +719,12 @@ class ImobiliariaForm(forms.ModelForm):
             ),
             HTML('</div></div>'),
 
-            # Card: Dados Bancários (Legacy - para referência)
+            # Card: Dados Bancarios (Legacy - para referencia) - Opcional
             HTML('''
-                <div class="card mb-3">
+                <div class="card mb-3 card-opcional">
                     <div class="card-header py-2">
-                        <i class="fas fa-university me-2"></i><strong>Dados Bancários (Referência)</strong>
-                        <small class="text-muted ms-2">(Use "Contas Bancárias" abaixo para gerenciar)</small>
+                        <i class="fas fa-university me-2"></i><strong>Dados Bancarios (Referencia)</strong>
+                        <small class="text-muted ms-2">(Use "Contas Bancarias" abaixo para gerenciar)</small>
                     </div>
                     <div class="card-body py-3">
             '''),
@@ -709,11 +736,11 @@ class ImobiliariaForm(forms.ModelForm):
             ),
             HTML('</div></div>'),
 
-            # Card: Configurações Padrão de Boleto
+            # Card: Configuracoes Padrao de Boleto (Opcional)
             HTML('''
-                <div class="card mb-3 border-info">
+                <div class="card mb-3 card-opcional border-info">
                     <div class="card-header py-2 bg-info text-white">
-                        <i class="fas fa-barcode me-2"></i><strong>Configurações Padrão de Boleto</strong>
+                        <i class="fas fa-barcode me-2"></i><strong>Configuracoes Padrao de Boleto</strong>
                     </div>
                     <div class="card-body py-3">
                         <h6 class="text-muted mb-3"><i class="fas fa-exclamation-circle me-1"></i>Multa</h6>
