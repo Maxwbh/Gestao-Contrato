@@ -8,7 +8,7 @@ from django import forms
 from django.db.models import Q
 from crispy_forms.helper import FormHelper
 from crispy_forms.layout import Layout, Field, Row, Column, HTML, Div
-from .models import Contrato, TipoCorrecao, StatusContrato
+from .models import Contrato, TipoCorrecao, StatusContrato, IndiceReajuste
 from core.models import Imovel, Comprador, Imobiliaria
 
 
@@ -249,5 +249,124 @@ class ContratoForm(forms.ModelForm):
                 raise forms.ValidationError({
                     'valor_entrada': 'O valor de entrada deve ser menor que o valor total.'
                 })
+
+        return cleaned_data
+
+
+class IndiceReajusteForm(forms.ModelForm):
+    """Formulário para cadastro de Índice de Reajuste"""
+
+    class Meta:
+        model = IndiceReajuste
+        fields = ['tipo_indice', 'ano', 'mes', 'valor', 'valor_acumulado_ano',
+                  'valor_acumulado_12m', 'fonte']
+        widgets = {
+            'ano': forms.NumberInput(attrs={
+                'min': '1990',
+                'max': '2100',
+                'placeholder': 'Ex: 2024'
+            }),
+            'mes': forms.Select(choices=[
+                (1, 'Janeiro'), (2, 'Fevereiro'), (3, 'Março'),
+                (4, 'Abril'), (5, 'Maio'), (6, 'Junho'),
+                (7, 'Julho'), (8, 'Agosto'), (9, 'Setembro'),
+                (10, 'Outubro'), (11, 'Novembro'), (12, 'Dezembro'),
+            ]),
+            'valor': forms.NumberInput(attrs={
+                'step': '0.0001',
+                'placeholder': 'Ex: 0.5200'
+            }),
+            'valor_acumulado_ano': forms.NumberInput(attrs={
+                'step': '0.0001',
+                'placeholder': 'Ex: 3.2100'
+            }),
+            'valor_acumulado_12m': forms.NumberInput(attrs={
+                'step': '0.0001',
+                'placeholder': 'Ex: 4.6200'
+            }),
+            'fonte': forms.TextInput(attrs={
+                'placeholder': 'Ex: IBGE, BCB, FGV'
+            }),
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        # Adicionar classes Bootstrap
+        for field_name, field in self.fields.items():
+            if 'class' not in field.widget.attrs:
+                if isinstance(field.widget, forms.Select):
+                    field.widget.attrs['class'] = 'form-select'
+                else:
+                    field.widget.attrs['class'] = 'form-control'
+
+        # Layout crispy forms
+        self.helper = FormHelper()
+        self.helper.form_method = 'post'
+        self.helper.layout = Layout(
+            # Card: Dados do Índice (Obrigatório)
+            HTML('''
+                <div class="card mb-3 card-obrigatorio">
+                    <div class="card-header py-2">
+                        <i class="fas fa-chart-line me-2"></i><strong>Dados do Indice</strong>
+                    </div>
+                    <div class="card-body py-3">
+            '''),
+            Row(
+                Column(Field('tipo_indice', wrapper_class='mb-2 campo-obrigatorio'), css_class='col-md-4'),
+                Column(Field('ano', wrapper_class='mb-2 campo-obrigatorio'), css_class='col-md-4'),
+                Column(Field('mes', wrapper_class='mb-2 campo-obrigatorio'), css_class='col-md-4'),
+            ),
+            Row(
+                Column(Field('valor', wrapper_class='mb-2 campo-obrigatorio'), css_class='col-md-4'),
+                Column(Field('valor_acumulado_ano', wrapper_class='mb-2'), css_class='col-md-4'),
+                Column(Field('valor_acumulado_12m', wrapper_class='mb-2'), css_class='col-md-4'),
+            ),
+            HTML('</div></div>'),
+
+            # Card: Fonte (Opcional)
+            HTML('''
+                <div class="card mb-3 card-opcional">
+                    <div class="card-header py-2">
+                        <i class="fas fa-info-circle me-2"></i><strong>Informacoes Adicionais</strong>
+                    </div>
+                    <div class="card-body py-3">
+            '''),
+            Field('fonte', wrapper_class='mb-0'),
+            HTML('</div></div>'),
+
+            # Botoes
+            HTML('''
+                <div class="d-flex justify-content-between align-items-center mt-4 pt-3 border-top">
+                    <a href="{% url 'contratos:indices_listar' %}" class="btn btn-outline-secondary">
+                        <i class="fas fa-arrow-left me-2"></i>Voltar
+                    </a>
+                    <button type="submit" class="btn btn-primary btn-lg px-5">
+                        <i class="fas fa-save me-2"></i>Salvar Indice
+                    </button>
+                </div>
+            ''')
+        )
+
+    def clean(self):
+        cleaned_data = super().clean()
+        tipo_indice = cleaned_data.get('tipo_indice')
+        ano = cleaned_data.get('ano')
+        mes = cleaned_data.get('mes')
+
+        # Verificar duplicidade (exceto na edição)
+        if tipo_indice and ano and mes:
+            qs = IndiceReajuste.objects.filter(
+                tipo_indice=tipo_indice,
+                ano=ano,
+                mes=mes
+            )
+            if self.instance and self.instance.pk:
+                qs = qs.exclude(pk=self.instance.pk)
+
+            if qs.exists():
+                raise forms.ValidationError(
+                    f'Já existe um índice {tipo_indice} cadastrado para {mes:02d}/{ano}.'
+                )
 
         return cleaned_data

@@ -1,0 +1,378 @@
+{% extends 'base.html' %}
+{% load crispy_forms_tags %}
+
+{% block title %}Indices de Reajuste - Gestao de Contratos{% endblock %}
+
+{% block extra_css %}
+<style>
+    .stat-card {
+        transition: transform 0.2s;
+    }
+    .stat-card:hover {
+        transform: translateY(-2px);
+    }
+    .indice-badge {
+        font-size: 0.85rem;
+        padding: 0.4em 0.8em;
+    }
+    .valor-positivo {
+        color: #dc3545;
+    }
+    .valor-negativo {
+        color: #198754;
+    }
+    .btn-importar {
+        position: relative;
+    }
+    .btn-importar.loading::after {
+        content: '';
+        position: absolute;
+        right: 10px;
+        top: 50%;
+        transform: translateY(-50%);
+        width: 16px;
+        height: 16px;
+        border: 2px solid transparent;
+        border-top-color: currentColor;
+        border-radius: 50%;
+        animation: spin 0.8s linear infinite;
+    }
+    @keyframes spin {
+        to { transform: translateY(-50%) rotate(360deg); }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h4 class="mb-0">
+                    <i class="fas fa-chart-line"></i> Indices de Reajuste
+                </h4>
+                <div>
+                    <button type="button" class="btn btn-success me-2" data-bs-toggle="modal" data-bs-target="#modalImportar">
+                        <i class="fas fa-download"></i> Importar do IBGE/BCB
+                    </button>
+                    <a href="{% url 'contratos:indices_criar' %}" class="btn btn-light">
+                        <i class="fas fa-plus"></i> Novo Indice
+                    </a>
+                </div>
+            </div>
+            <div class="card-body">
+                <!-- Cards de Estatisticas -->
+                <div class="row mb-4">
+                    <div class="col-md-4">
+                        <div class="card stat-card border-primary">
+                            <div class="card-body text-center">
+                                <h3 class="text-primary mb-1">{{ total_ipca }}</h3>
+                                <small class="text-muted">IPCA cadastrados</small>
+                                {% if ultimo_ipca %}
+                                <p class="mb-0 mt-2">
+                                    <span class="badge bg-primary">Ultimo: {{ ultimo_ipca.periodo }}</span>
+                                    <span class="badge bg-light text-dark">{{ ultimo_ipca.valor }}%</span>
+                                </p>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="card stat-card border-success">
+                            <div class="card-body text-center">
+                                <h3 class="text-success mb-1">{{ total_igpm }}</h3>
+                                <small class="text-muted">IGP-M cadastrados</small>
+                                {% if ultimo_igpm %}
+                                <p class="mb-0 mt-2">
+                                    <span class="badge bg-success">Ultimo: {{ ultimo_igpm.periodo }}</span>
+                                    <span class="badge bg-light text-dark">{{ ultimo_igpm.valor }}%</span>
+                                </p>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="card stat-card border-warning">
+                            <div class="card-body text-center">
+                                <h3 class="text-warning mb-1">{{ total_selic }}</h3>
+                                <small class="text-muted">SELIC cadastrados</small>
+                                {% if ultimo_selic %}
+                                <p class="mb-0 mt-2">
+                                    <span class="badge bg-warning text-dark">Ultimo: {{ ultimo_selic.periodo }}</span>
+                                    <span class="badge bg-light text-dark">{{ ultimo_selic.valor }}%</span>
+                                </p>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Filtros -->
+                <div class="row mb-4">
+                    <div class="col-md-3">
+                        <select class="form-select" id="filtroTipo" onchange="aplicarFiltros()">
+                            <option value="">Todos os Tipos</option>
+                            {% for codigo, nome in tipos_indice %}
+                            <option value="{{ codigo }}" {% if tipo_filter == codigo %}selected{% endif %}>{{ nome }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-md-3">
+                        <select class="form-select" id="filtroAno" onchange="aplicarFiltros()">
+                            <option value="">Todos os Anos</option>
+                            {% for ano in anos_disponiveis %}
+                            <option value="{{ ano }}" {% if ano_filter == ano|stringformat:"s" %}selected{% endif %}>{{ ano }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-md-6 text-end">
+                        {% if tipo_filter or ano_filter %}
+                        <a href="{% url 'contratos:indices_listar' %}" class="btn btn-outline-secondary">
+                            <i class="fas fa-times"></i> Limpar Filtros
+                        </a>
+                        {% endif %}
+                    </div>
+                </div>
+
+                {% if indices %}
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Tipo</th>
+                                <th>Periodo</th>
+                                <th class="text-end">Valor (%)</th>
+                                <th class="text-end">Acum. Ano (%)</th>
+                                <th class="text-end">Acum. 12m (%)</th>
+                                <th>Fonte</th>
+                                <th class="text-center">Acoes</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for indice in indices %}
+                            <tr>
+                                <td>
+                                    <span class="badge indice-badge {% if indice.tipo_indice == 'IPCA' %}bg-primary{% elif indice.tipo_indice == 'IGPM' %}bg-success{% else %}bg-warning text-dark{% endif %}">
+                                        {{ indice.tipo_indice }}
+                                    </span>
+                                </td>
+                                <td>
+                                    <strong>{{ indice.mes_nome }}/{{ indice.ano }}</strong>
+                                </td>
+                                <td class="text-end">
+                                    <span class="{% if indice.valor > 0 %}valor-positivo{% elif indice.valor < 0 %}valor-negativo{% endif %}">
+                                        {{ indice.valor|floatformat:4 }}%
+                                    </span>
+                                </td>
+                                <td class="text-end">
+                                    {% if indice.valor_acumulado_ano %}
+                                        {{ indice.valor_acumulado_ano|floatformat:4 }}%
+                                    {% else %}
+                                        <span class="text-muted">-</span>
+                                    {% endif %}
+                                </td>
+                                <td class="text-end">
+                                    {% if indice.valor_acumulado_12m %}
+                                        {{ indice.valor_acumulado_12m|floatformat:4 }}%
+                                    {% else %}
+                                        <span class="text-muted">-</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    <small class="text-muted">{{ indice.fonte|default:"-" }}</small>
+                                </td>
+                                <td class="text-center">
+                                    <div class="btn-group btn-group-sm">
+                                        <a href="{% url 'contratos:indices_editar' indice.pk %}" class="btn btn-outline-primary" title="Editar">
+                                            <i class="fas fa-edit"></i>
+                                        </a>
+                                        <button type="button" class="btn btn-outline-danger" title="Excluir" onclick="confirmarExclusao('{{ indice }}', '{% url 'contratos:indices_excluir' indice.pk %}')">
+                                            <i class="fas fa-trash"></i>
+                                        </button>
+                                    </div>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+
+                <!-- Paginacao -->
+                {% if is_paginated %}
+                <nav>
+                    <ul class="pagination justify-content-center">
+                        {% if page_obj.has_previous %}
+                        <li class="page-item">
+                            <a class="page-link" href="?page={{ page_obj.previous_page_number }}{% if tipo_filter %}&tipo={{ tipo_filter }}{% endif %}{% if ano_filter %}&ano={{ ano_filter }}{% endif %}">
+                                <i class="fas fa-chevron-left"></i>
+                            </a>
+                        </li>
+                        {% endif %}
+                        <li class="page-item active">
+                            <span class="page-link">{{ page_obj.number }} / {{ page_obj.paginator.num_pages }}</span>
+                        </li>
+                        {% if page_obj.has_next %}
+                        <li class="page-item">
+                            <a class="page-link" href="?page={{ page_obj.next_page_number }}{% if tipo_filter %}&tipo={{ tipo_filter }}{% endif %}{% if ano_filter %}&ano={{ ano_filter }}{% endif %}">
+                                <i class="fas fa-chevron-right"></i>
+                            </a>
+                        </li>
+                        {% endif %}
+                    </ul>
+                </nav>
+                {% endif %}
+
+                {% else %}
+                <div class="alert alert-info text-center">
+                    <i class="fas fa-info-circle fa-3x mb-3"></i>
+                    <h5>Nenhum indice cadastrado</h5>
+                    <p>Importe os indices do IBGE/BCB ou cadastre manualmente.</p>
+                    <button type="button" class="btn btn-success me-2" data-bs-toggle="modal" data-bs-target="#modalImportar">
+                        <i class="fas fa-download"></i> Importar do IBGE/BCB
+                    </button>
+                    <a href="{% url 'contratos:indices_criar' %}" class="btn btn-primary">
+                        <i class="fas fa-plus"></i> Cadastrar Manualmente
+                    </a>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal de Importacao -->
+<div class="modal fade" id="modalImportar" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-success text-white">
+                <h5 class="modal-title">
+                    <i class="fas fa-download"></i> Importar Indices
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p class="text-muted">
+                    Selecione o tipo de indice para importar. Os dados serao buscados automaticamente das APIs oficiais (IBGE e Banco Central).
+                </p>
+
+                {% if data_contrato_mais_antigo %}
+                <div class="alert alert-info">
+                    <i class="fas fa-info-circle"></i>
+                    Contrato mais antigo: <strong>{{ data_contrato_mais_antigo|date:"d/m/Y" }}</strong>
+                    <br>
+                    <small>Os indices serao importados a partir desta data ou do ultimo indice cadastrado.</small>
+                </div>
+                {% endif %}
+
+                <div class="mb-3">
+                    <label class="form-label">Tipo de Indice</label>
+                    <select class="form-select" id="tipoIndiceImportar">
+                        <option value="IPCA">IPCA - Indice de Precos ao Consumidor Amplo (IBGE)</option>
+                        <option value="IGPM">IGP-M - Indice Geral de Precos do Mercado (FGV/BCB)</option>
+                        <option value="SELIC">SELIC - Taxa Basica de Juros (BCB)</option>
+                    </select>
+                </div>
+
+                <div id="resultadoImportacao" class="alert d-none"></div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-success btn-importar" id="btnImportar" onclick="importarIndices()">
+                    <i class="fas fa-download me-1"></i> Importar
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal de Exclusao -->
+<div class="modal fade" id="modalExclusao" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-danger text-white">
+                <h5 class="modal-title">
+                    <i class="fas fa-exclamation-triangle"></i> Confirmar Exclusao
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p>Tem certeza que deseja excluir o indice <strong id="nomeIndice"></strong>?</p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                <form id="formExclusao" method="post" style="display: inline;">
+                    {% csrf_token %}
+                    <button type="submit" class="btn btn-danger">
+                        <i class="fas fa-trash"></i> Excluir
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    function aplicarFiltros() {
+        const tipo = document.getElementById('filtroTipo').value;
+        const ano = document.getElementById('filtroAno').value;
+        let url = '{% url "contratos:indices_listar" %}';
+        const params = [];
+        if (tipo) params.push('tipo=' + tipo);
+        if (ano) params.push('ano=' + ano);
+        if (params.length > 0) url += '?' + params.join('&');
+        window.location.href = url;
+    }
+
+    function confirmarExclusao(nome, url) {
+        document.getElementById('nomeIndice').textContent = nome;
+        document.getElementById('formExclusao').action = url;
+        new bootstrap.Modal(document.getElementById('modalExclusao')).show();
+    }
+
+    function importarIndices() {
+        const btn = document.getElementById('btnImportar');
+        const tipo = document.getElementById('tipoIndiceImportar').value;
+        const resultado = document.getElementById('resultadoImportacao');
+
+        // Desabilitar botao e mostrar loading
+        btn.disabled = true;
+        btn.classList.add('loading');
+        resultado.className = 'alert alert-info';
+        resultado.classList.remove('d-none');
+        resultado.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Importando indices, aguarde...';
+
+        // Chamar API
+        fetch('{% url "contratos:indices_importar" %}', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': '{{ csrf_token }}'
+            },
+            body: JSON.stringify({ tipo_indice: tipo })
+        })
+        .then(response => response.json())
+        .then(data => {
+            btn.disabled = false;
+            btn.classList.remove('loading');
+
+            if (data.success) {
+                resultado.className = 'alert alert-success';
+                resultado.innerHTML = '<i class="fas fa-check-circle"></i> ' + data.message;
+                // Recarregar pagina apos 2 segundos
+                setTimeout(() => { window.location.reload(); }, 2000);
+            } else {
+                resultado.className = 'alert alert-danger';
+                resultado.innerHTML = '<i class="fas fa-times-circle"></i> Erro: ' + data.error;
+            }
+        })
+        .catch(error => {
+            btn.disabled = false;
+            btn.classList.remove('loading');
+            resultado.className = 'alert alert-danger';
+            resultado.innerHTML = '<i class="fas fa-times-circle"></i> Erro de conexao: ' + error;
+        });
+    }
+</script>
+{% endblock %}

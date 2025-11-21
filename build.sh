@@ -220,6 +220,39 @@ with connection.cursor() as cursor:
     else:
         print("  - core_acessousuario already exists")
 
+    # Criar tabela contratos_indicereajuste se não existir
+    print("Checking contratos_indicereajuste...")
+    cursor.execute("""
+        SELECT 1 FROM information_schema.tables
+        WHERE table_name = 'contratos_indicereajuste'
+    """)
+    if not cursor.fetchone():
+        cursor.execute("""
+            CREATE TABLE contratos_indicereajuste (
+                id SERIAL PRIMARY KEY,
+                criado_em TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+                atualizado_em TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+                tipo_indice VARCHAR(10) NOT NULL,
+                ano INTEGER NOT NULL,
+                mes INTEGER NOT NULL,
+                valor DECIMAL(8,4) NOT NULL,
+                valor_acumulado_ano DECIMAL(10,4) NULL,
+                valor_acumulado_12m DECIMAL(10,4) NULL,
+                fonte VARCHAR(100) DEFAULT '',
+                data_importacao TIMESTAMP WITH TIME ZONE NULL,
+                UNIQUE(tipo_indice, ano, mes)
+            )
+        """)
+        cursor.execute("""
+            CREATE INDEX idx_indicereajuste_tipo_ano_mes ON contratos_indicereajuste(tipo_indice, ano, mes)
+        """)
+        cursor.execute("""
+            CREATE INDEX idx_indicereajuste_ano_mes ON contratos_indicereajuste(ano, mes)
+        """)
+        print("  + Created table contratos_indicereajuste")
+    else:
+        print("  - contratos_indicereajuste already exists")
+
     print("Schema changes applied successfully!")
 SQLEOF
 
