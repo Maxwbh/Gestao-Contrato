@@ -83,6 +83,19 @@
             <form method="post" novalidate class="imobiliaria-form">
                 {% csrf_token %}
 
+                <!-- Erros Gerais do Formulário -->
+                {% if form.non_field_errors %}
+                <div class="alert alert-danger mb-3">
+                    <i class="fas fa-exclamation-triangle me-2"></i>
+                    <strong>Erros encontrados:</strong>
+                    <ul class="mb-0 mt-2">
+                        {% for error in form.non_field_errors %}
+                        <li>{{ error }}</li>
+                        {% endfor %}
+                    </ul>
+                </div>
+                {% endif %}
+
                 <!-- Card: Informações da Empresa -->
                 <div class="card mb-3">
                     <div class="card-header py-2">
@@ -90,22 +103,26 @@
                     </div>
                     <div class="card-body py-3">
                         <div class="mb-2">
-                            <label class="form-label">Contabilidade</label>
+                            <label class="form-label">Contabilidade <span class="text-danger">*</span></label>
                             {{ form.contabilidade }}
+                            {% if form.contabilidade.errors %}<div class="text-danger small mt-1">{% for e in form.contabilidade.errors %}{{ e }}{% endfor %}</div>{% endif %}
                         </div>
                         <div class="row">
                             <div class="col-md-6 mb-2">
-                                <label class="form-label">Nome Fantasia</label>
+                                <label class="form-label">Nome Fantasia <span class="text-danger">*</span></label>
                                 {{ form.nome }}
+                                {% if form.nome.errors %}<div class="text-danger small mt-1">{% for e in form.nome.errors %}{{ e }}{% endfor %}</div>{% endif %}
                             </div>
                             <div class="col-md-6 mb-2">
-                                <label class="form-label">CNPJ</label>
+                                <label class="form-label">CNPJ <span class="text-danger">*</span></label>
                                 {{ form.cnpj }}
+                                {% if form.cnpj.errors %}<div class="text-danger small mt-1">{% for e in form.cnpj.errors %}{{ e }}{% endfor %}</div>{% endif %}
                             </div>
                         </div>
                         <div class="mb-2">
-                            <label class="form-label">Razão Social</label>
+                            <label class="form-label">Razão Social <span class="text-danger">*</span></label>
                             {{ form.razao_social }}
+                            {% if form.razao_social.errors %}<div class="text-danger small mt-1">{% for e in form.razao_social.errors %}{{ e }}{% endfor %}</div>{% endif %}
                         </div>
                     </div>
                 </div>

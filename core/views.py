@@ -609,7 +609,17 @@ class ImobiliariaCreateView(LoginRequiredMixin, CreateView):
         return response
 
     def form_invalid(self, form):
-        messages.error(self.request, 'Erro ao cadastrar imobiliária. Verifique os dados.')
+        # Monta mensagem de erro detalhada
+        erros = []
+        for campo, lista_erros in form.errors.items():
+            nome_campo = form.fields[campo].label if campo in form.fields else campo
+            for erro in lista_erros:
+                erros.append(f'{nome_campo}: {erro}')
+
+        if erros:
+            messages.error(self.request, f'Erro ao cadastrar: {"; ".join(erros[:3])}')
+        else:
+            messages.error(self.request, 'Erro ao cadastrar imobiliária. Verifique os dados.')
         return super().form_invalid(form)
 
 
@@ -628,7 +638,17 @@ class ImobiliariaUpdateView(LoginRequiredMixin, UpdateView):
         return super().form_valid(form)
 
     def form_invalid(self, form):
-        messages.error(self.request, 'Erro ao atualizar imobiliária. Verifique os dados.')
+        # Monta mensagem de erro detalhada
+        erros = []
+        for campo, lista_erros in form.errors.items():
+            nome_campo = form.fields[campo].label if campo in form.fields else campo
+            for erro in lista_erros:
+                erros.append(f'{nome_campo}: {erro}')
+
+        if erros:
+            messages.error(self.request, f'Erro ao atualizar: {"; ".join(erros[:3])}')
+        else:
+            messages.error(self.request, 'Erro ao atualizar imobiliária. Verifique os dados.')
         return super().form_invalid(form)
 
 
