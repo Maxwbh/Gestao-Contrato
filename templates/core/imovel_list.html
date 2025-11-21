@@ -3,6 +3,35 @@
 
 {% block title %}Imóveis - Gestão de Contratos{% endblock %}
 
+{% block extra_css %}
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<style>
+    #mapa-imoveis {
+        height: 500px;
+        border-radius: 8px;
+        border: 2px solid #27ae60;
+    }
+    .nav-tabs .nav-link.active {
+        background-color: #27ae60;
+        color: white;
+        border-color: #27ae60;
+    }
+    .nav-tabs .nav-link {
+        color: #2c3e50;
+    }
+    .imovel-popup {
+        min-width: 200px;
+    }
+    .imovel-popup h6 {
+        margin-bottom: 8px;
+        color: #2c3e50;
+    }
+    .imovel-popup .badge {
+        font-size: 0.7rem;
+    }
+</style>
+{% endblock %}
+
 {% block content %}
 <div class="row">
     <div class="col-12">
@@ -18,10 +47,10 @@
             <div class="card-body">
                 <!-- Barra de Busca e Filtros -->
                 <div class="row mb-4">
-                    <div class="col-md-6">
+                    <div class="col-md-5">
                         <form method="get" class="d-flex">
                             <input type="text" name="search" class="form-control me-2"
-                                   placeholder="Buscar por identificação, loteamento ou endereço..."
+                                   placeholder="Buscar por identificação, loteamento..."
                                    value="{{ search }}">
                             <button type="submit" class="btn btn-primary">
                                 <i class="fas fa-search"></i>
@@ -43,156 +72,182 @@
                             {% endfor %}
                         </select>
                     </div>
-                    <div class="col-md-3 text-end">
+                    <div class="col-md-4 text-end">
                         <div class="badge bg-info text-dark fs-6 me-2">
                             <i class="fas fa-home"></i> Total: {{ total_imoveis }}
                         </div>
-                        <div class="badge bg-success fs-6">
+                        <div class="badge bg-success fs-6 me-2">
                             <i class="fas fa-check-circle"></i> Disponíveis: {{ imoveis_disponiveis }}
+                        </div>
+                        <div class="badge bg-primary fs-6">
+                            <i class="fas fa-map-marker-alt"></i> No Mapa: {{ imoveis_com_coordenadas }}
                         </div>
                     </div>
                 </div>
 
-                <!-- Grid de Imóveis -->
-                {% if imoveis %}
-                    <div class="row">
-                        {% for imovel in imoveis %}
-                            <div class="col-md-6 col-lg-4 mb-4">
-                                <div class="card h-100 {% if not imovel.disponivel %}border-secondary{% else %}border-success{% endif %}">
-                                    <div class="card-header {% if not imovel.disponivel %}bg-secondary{% else %}bg-success{% endif %} text-white">
-                                        <div class="d-flex justify-content-between align-items-center">
-                                            <h6 class="mb-0">
-                                                <i class="fas fa-{% if imovel.tipo.nome == 'Lote' %}map-marked-alt{% elif imovel.tipo.nome == 'Casa' %}house-user{% else %}building{% endif %}"></i>
-                                                {{ imovel.tipo.nome }}
-                                            </h6>
-                                            <span class="badge {% if imovel.disponivel %}bg-light text-success{% else %}bg-dark{% endif %}">
-                                                {% if imovel.disponivel %}
-                                                    <i class="fas fa-check"></i> Disponível
-                                                {% else %}
-                                                    <i class="fas fa-times"></i> Vendido
+                <!-- Tabs: Lista / Mapa -->
+                <ul class="nav nav-tabs mb-3" id="viewTabs" role="tablist">
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link active" id="lista-tab" data-bs-toggle="tab" data-bs-target="#lista" type="button">
+                            <i class="fas fa-th-large me-1"></i> Lista
+                        </button>
+                    </li>
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link" id="mapa-tab" data-bs-toggle="tab" data-bs-target="#mapa" type="button" onclick="setTimeout(function(){map.invalidateSize();}, 100);">
+                            <i class="fas fa-map me-1"></i> Mapa
+                        </button>
+                    </li>
+                </ul>
+
+                <div class="tab-content" id="viewTabsContent">
+                    <!-- Tab: Lista -->
+                    <div class="tab-pane fade show active" id="lista" role="tabpanel">
+                        {% if imoveis %}
+                            <div class="row">
+                                {% for imovel in imoveis %}
+                                    <div class="col-md-6 col-lg-4 mb-4">
+                                        <div class="card h-100 {% if not imovel.disponivel %}border-secondary{% else %}border-success{% endif %}">
+                                            <div class="card-header {% if not imovel.disponivel %}bg-secondary{% else %}bg-success{% endif %} text-white">
+                                                <div class="d-flex justify-content-between align-items-center">
+                                                    <h6 class="mb-0">
+                                                        <i class="fas fa-{% if imovel.tipo == 'LOTE' %}map-marked-alt{% elif imovel.tipo == 'CASA' %}house-user{% elif imovel.tipo == 'APARTAMENTO' %}building{% else %}store{% endif %}"></i>
+                                                        {{ imovel.get_tipo_display }}
+                                                    </h6>
+                                                    <span class="badge {% if imovel.disponivel %}bg-light text-success{% else %}bg-dark{% endif %}">
+                                                        {% if imovel.disponivel %}
+                                                            <i class="fas fa-check"></i> Disponível
+                                                        {% else %}
+                                                            <i class="fas fa-times"></i> Vendido
+                                                        {% endif %}
+                                                    </span>
+                                                </div>
+                                            </div>
+                                            <div class="card-body">
+                                                <h5 class="card-title">{{ imovel.identificacao }}</h5>
+
+                                                <p class="card-text">
+                                                    <i class="fas fa-building text-primary"></i>
+                                                    <strong>Imobiliária:</strong>
+                                                    {{ imovel.imobiliaria.nome }}<br>
+
+                                                    {% if imovel.loteamento %}
+                                                        <i class="fas fa-map text-success"></i>
+                                                        <strong>Loteamento:</strong>
+                                                        {{ imovel.loteamento }}<br>
+                                                    {% endif %}
+
+                                                    {% if imovel.area %}
+                                                        <i class="fas fa-ruler-combined text-warning"></i>
+                                                        <strong>Área:</strong>
+                                                        {{ imovel.area }} m²<br>
+                                                    {% endif %}
+
+                                                    {% if imovel.valor %}
+                                                        <i class="fas fa-dollar-sign text-success"></i>
+                                                        <strong>Valor:</strong>
+                                                        R$ {{ imovel.valor|floatformat:2 }}<br>
+                                                    {% endif %}
+
+                                                    {% if imovel.cidade %}
+                                                        <i class="fas fa-map-marker-alt text-danger"></i>
+                                                        <strong>Local:</strong>
+                                                        {{ imovel.cidade }}/{{ imovel.estado }}
+                                                    {% endif %}
+                                                </p>
+
+                                                {% if imovel.tem_coordenadas %}
+                                                    <span class="badge bg-success">
+                                                        <i class="fas fa-map-marker-alt"></i> Geolocalizado
+                                                    </span>
                                                 {% endif %}
-                                            </span>
-                                        </div>
-                                    </div>
-                                    <div class="card-body">
-                                        <h5 class="card-title">{{ imovel.identificacao }}</h5>
-
-                                        <p class="card-text">
-                                            <i class="fas fa-building text-primary"></i>
-                                            <strong>Imobiliária:</strong>
-                                            {{ imovel.imobiliaria.nome }}<br>
-
-                                            {% if imovel.loteamento %}
-                                                <i class="fas fa-map text-success"></i>
-                                                <strong>Loteamento:</strong>
-                                                {{ imovel.loteamento }}<br>
-                                            {% endif %}
-
-                                            {% if imovel.area %}
-                                                <i class="fas fa-ruler-combined text-warning"></i>
-                                                <strong>Área:</strong>
-                                                {{ imovel.area }} m²<br>
-                                            {% endif %}
-
-                                            {% if imovel.endereco %}
-                                                <i class="fas fa-map-marker-alt text-danger"></i>
-                                                <strong>Endereço:</strong>
-                                                <small>{{ imovel.endereco|truncatewords:10 }}</small>
-                                            {% endif %}
-                                        </p>
-
-                                        {% if imovel.matricula or imovel.inscricao_municipal %}
-                                            <hr>
-                                            <small class="text-muted">
-                                                {% if imovel.matricula %}
-                                                    <i class="fas fa-file-alt"></i> Matrícula: {{ imovel.matricula }}<br>
-                                                {% endif %}
-                                                {% if imovel.inscricao_municipal %}
-                                                    <i class="fas fa-id-card"></i> Inscrição: {{ imovel.inscricao_municipal }}
-                                                {% endif %}
-                                            </small>
-                                        {% endif %}
-                                    </div>
-                                    <div class="card-footer bg-transparent">
-                                        <div class="d-flex justify-content-between align-items-center">
-                                            <small class="text-muted">
-                                                <i class="fas fa-calendar"></i>
-                                                {{ imovel.criado_em|date:"d/m/Y" }}
-                                            </small>
-                                            <div class="btn-group btn-group-sm" role="group">
-                                                <a href="{% url 'core:editar_imovel' imovel.pk %}"
-                                                   class="btn btn-outline-primary"
-                                                   title="Editar">
-                                                    <i class="fas fa-edit"></i>
-                                                </a>
-                                                <button type="button"
-                                                        class="btn btn-outline-danger"
-                                                        title="Excluir"
-                                                        onclick="confirmarExclusao('{{ imovel.identificacao }}', '{% url 'core:excluir_imovel' imovel.pk %}')">
-                                                    <i class="fas fa-trash"></i>
-                                                </button>
+                                            </div>
+                                            <div class="card-footer bg-transparent">
+                                                <div class="d-flex justify-content-between align-items-center">
+                                                    <small class="text-muted">
+                                                        <i class="fas fa-calendar"></i>
+                                                        {{ imovel.criado_em|date:"d/m/Y" }}
+                                                    </small>
+                                                    <div class="btn-group btn-group-sm" role="group">
+                                                        {% if imovel.tem_coordenadas %}
+                                                        <button type="button" class="btn btn-outline-success" title="Ver no Mapa"
+                                                                onclick="verNoMapa({{ imovel.latitude }}, {{ imovel.longitude }}, '{{ imovel.identificacao }}')">
+                                                            <i class="fas fa-map-marker-alt"></i>
+                                                        </button>
+                                                        {% endif %}
+                                                        <a href="{% url 'core:editar_imovel' imovel.pk %}"
+                                                           class="btn btn-outline-primary"
+                                                           title="Editar">
+                                                            <i class="fas fa-edit"></i>
+                                                        </a>
+                                                        <button type="button"
+                                                                class="btn btn-outline-danger"
+                                                                title="Excluir"
+                                                                onclick="confirmarExclusao('{{ imovel.identificacao }}', '{% url 'core:excluir_imovel' imovel.pk %}')">
+                                                            <i class="fas fa-trash"></i>
+                                                        </button>
+                                                    </div>
+                                                </div>
                                             </div>
                                         </div>
                                     </div>
-                                </div>
+                                {% endfor %}
                             </div>
-                        {% endfor %}
-                    </div>
 
-                    <!-- Paginação -->
-                    {% if is_paginated %}
-                        <nav aria-label="Navegação de páginas">
-                            <ul class="pagination justify-content-center">
-                                {% if page_obj.has_previous %}
-                                    <li class="page-item">
-                                        <a class="page-link" href="?page=1{% if search %}&search={{ search }}{% endif %}">
-                                            Primeira
-                                        </a>
-                                    </li>
-                                    <li class="page-item">
-                                        <a class="page-link" href="?page={{ page_obj.previous_page_number }}{% if search %}&search={{ search }}{% endif %}">
-                                            Anterior
-                                        </a>
-                                    </li>
-                                {% endif %}
+                            <!-- Paginação -->
+                            {% if is_paginated %}
+                                <nav aria-label="Navegação de páginas">
+                                    <ul class="pagination justify-content-center">
+                                        {% if page_obj.has_previous %}
+                                            <li class="page-item">
+                                                <a class="page-link" href="?page={{ page_obj.previous_page_number }}{% if search %}&search={{ search }}{% endif %}">
+                                                    <i class="fas fa-chevron-left"></i>
+                                                </a>
+                                            </li>
+                                        {% endif %}
 
-                                <li class="page-item active">
-                                    <span class="page-link">
-                                        Página {{ page_obj.number }} de {{ page_obj.paginator.num_pages }}
-                                    </span>
-                                </li>
+                                        <li class="page-item active">
+                                            <span class="page-link">
+                                                {{ page_obj.number }} / {{ page_obj.paginator.num_pages }}
+                                            </span>
+                                        </li>
 
-                                {% if page_obj.has_next %}
-                                    <li class="page-item">
-                                        <a class="page-link" href="?page={{ page_obj.next_page_number }}{% if search %}&search={{ search }}{% endif %}">
-                                            Próxima
-                                        </a>
-                                    </li>
-                                    <li class="page-item">
-                                        <a class="page-link" href="?page={{ page_obj.paginator.num_pages }}{% if search %}&search={{ search }}{% endif %}">
-                                            Última
-                                        </a>
-                                    </li>
-                                {% endif %}
-                            </ul>
-                        </nav>
-                    {% endif %}
-                {% else %}
-                    <div class="alert alert-info text-center">
-                        <i class="fas fa-info-circle fa-3x mb-3"></i>
-                        <h5>Nenhum imóvel encontrado</h5>
-                        <p>
-                            {% if search %}
-                                Sua busca por "{{ search }}" não retornou resultados.
-                            {% else %}
-                                Comece cadastrando um novo imóvel.
+                                        {% if page_obj.has_next %}
+                                            <li class="page-item">
+                                                <a class="page-link" href="?page={{ page_obj.next_page_number }}{% if search %}&search={{ search }}{% endif %}">
+                                                    <i class="fas fa-chevron-right"></i>
+                                                </a>
+                                            </li>
+                                        {% endif %}
+                                    </ul>
+                                </nav>
                             {% endif %}
-                        </p>
-                        <a href="{% url 'core:criar_imovel' %}" class="btn btn-primary">
-                            <i class="fas fa-plus"></i> Cadastrar Primeiro Imóvel
-                        </a>
+                        {% else %}
+                            <div class="alert alert-info text-center">
+                                <i class="fas fa-info-circle fa-3x mb-3"></i>
+                                <h5>Nenhum imóvel encontrado</h5>
+                                <p>
+                                    {% if search %}
+                                        Sua busca por "{{ search }}" não retornou resultados.
+                                    {% else %}
+                                        Comece cadastrando um novo imóvel.
+                                    {% endif %}
+                                </p>
+                                <a href="{% url 'core:criar_imovel' %}" class="btn btn-primary">
+                                    <i class="fas fa-plus"></i> Cadastrar Primeiro Imóvel
+                                </a>
+                            </div>
+                        {% endif %}
                     </div>
-                {% endif %}
+
+                    <!-- Tab: Mapa -->
+                    <div class="tab-pane fade" id="mapa" role="tabpanel">
+                        <div id="mapa-imoveis"></div>
+                        <div class="mt-2 text-muted small">
+                            <i class="fas fa-info-circle"></i>
+                            Clique em um marcador para ver detalhes. Verde = Disponível, Vermelho = Vendido.
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
@@ -231,11 +286,110 @@
 {% endblock %}
 
 {% block extra_js %}
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script>
+    // Modal de exclusão
     function confirmarExclusao(nome, url) {
         document.getElementById('nomeImovel').textContent = nome;
         document.getElementById('formExclusao').action = url;
         new bootstrap.Modal(document.getElementById('modalExclusao')).show();
+    }
+
+    // Mapa
+    let map;
+    const imoveisData = [
+        {% for imovel in imoveis %}
+        {% if imovel.latitude and imovel.longitude %}
+        {
+            id: {{ imovel.pk }},
+            lat: {{ imovel.latitude }},
+            lng: {{ imovel.longitude }},
+            nome: "{{ imovel.identificacao|escapejs }}",
+            loteamento: "{{ imovel.loteamento|escapejs }}",
+            tipo: "{{ imovel.get_tipo_display|escapejs }}",
+            area: "{{ imovel.area }}",
+            valor: "{{ imovel.valor|default:'0' }}",
+            disponivel: {{ imovel.disponivel|yesno:"true,false" }},
+            editUrl: "{% url 'core:editar_imovel' imovel.pk %}"
+        },
+        {% endif %}
+        {% endfor %}
+    ];
+
+    document.addEventListener('DOMContentLoaded', function() {
+        // Inicializar mapa
+        map = L.map('mapa-imoveis').setView([-15.7801, -47.9292], 4);
+
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '&copy; OpenStreetMap'
+        }).addTo(map);
+
+        // Ícones customizados
+        const iconeVerde = L.icon({
+            iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-green.png',
+            shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-shadow.png',
+            iconSize: [25, 41],
+            iconAnchor: [12, 41],
+            popupAnchor: [1, -34],
+            shadowSize: [41, 41]
+        });
+
+        const iconeVermelho = L.icon({
+            iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-red.png',
+            shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-shadow.png',
+            iconSize: [25, 41],
+            iconAnchor: [12, 41],
+            popupAnchor: [1, -34],
+            shadowSize: [41, 41]
+        });
+
+        // Adicionar marcadores
+        const bounds = [];
+        imoveisData.forEach(function(imovel) {
+            const icone = imovel.disponivel ? iconeVerde : iconeVermelho;
+            const marker = L.marker([imovel.lat, imovel.lng], {icon: icone}).addTo(map);
+
+            const valorFormatado = imovel.valor && imovel.valor !== '0' ?
+                'R$ ' + parseFloat(imovel.valor).toLocaleString('pt-BR', {minimumFractionDigits: 2}) : '-';
+
+            marker.bindPopup(`
+                <div class="imovel-popup">
+                    <h6><i class="fas fa-home"></i> ${imovel.nome}</h6>
+                    <p class="mb-1"><strong>Loteamento:</strong> ${imovel.loteamento}</p>
+                    <p class="mb-1"><strong>Tipo:</strong> ${imovel.tipo}</p>
+                    <p class="mb-1"><strong>Área:</strong> ${imovel.area} m²</p>
+                    <p class="mb-1"><strong>Valor:</strong> ${valorFormatado}</p>
+                    <span class="badge ${imovel.disponivel ? 'bg-success' : 'bg-secondary'}">
+                        ${imovel.disponivel ? 'Disponível' : 'Vendido'}
+                    </span>
+                    <hr>
+                    <a href="${imovel.editUrl}" class="btn btn-sm btn-primary">
+                        <i class="fas fa-edit"></i> Editar
+                    </a>
+                </div>
+            `);
+
+            bounds.push([imovel.lat, imovel.lng]);
+        });
+
+        // Ajustar zoom para mostrar todos os marcadores
+        if (bounds.length > 0) {
+            map.fitBounds(bounds, {padding: [20, 20]});
+        }
+    });
+
+    // Função para ver imóvel no mapa
+    function verNoMapa(lat, lng, nome) {
+        // Mudar para aba do mapa
+        const mapaTab = document.getElementById('mapa-tab');
+        const tab = new bootstrap.Tab(mapaTab);
+        tab.show();
+
+        // Aguardar um pouco e centralizar no imóvel
+        setTimeout(function() {
+            map.invalidateSize();
+            map.setView([lat, lng], 17);
+        }, 200);
     }
 </script>
 {% endblock %}

@@ -445,7 +445,7 @@ class ImovelListView(LoginRequiredMixin, ListView):
     paginate_by = 20
 
     def get_queryset(self):
-        queryset = Imovel.objects.filter(ativo=True).select_related('imobiliaria', 'tipo').order_by('-criado_em')
+        queryset = Imovel.objects.filter(ativo=True).select_related('imobiliaria').order_by('-criado_em')
 
         # Filtros
         search = self.request.GET.get('search')
@@ -453,7 +453,8 @@ class ImovelListView(LoginRequiredMixin, ListView):
             queryset = queryset.filter(
                 Q(identificacao__icontains=search) |
                 Q(loteamento__icontains=search) |
-                Q(endereco__icontains=search)
+                Q(cidade__icontains=search) |
+                Q(bairro__icontains=search)
             )
 
         disponivel = self.request.GET.get('disponivel')
@@ -470,6 +471,11 @@ class ImovelListView(LoginRequiredMixin, ListView):
         context = super().get_context_data(**kwargs)
         context['total_imoveis'] = Imovel.objects.filter(ativo=True).count()
         context['imoveis_disponiveis'] = Imovel.objects.filter(ativo=True, disponivel=True).count()
+        context['imoveis_com_coordenadas'] = Imovel.objects.filter(
+            ativo=True,
+            latitude__isnull=False,
+            longitude__isnull=False
+        ).count()
         context['imobiliarias'] = Imobiliaria.objects.filter(ativo=True)
         context['search'] = self.request.GET.get('search', '')
         return context
