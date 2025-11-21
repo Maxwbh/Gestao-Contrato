@@ -42,6 +42,14 @@ class Command(BaseCommand):
         # Substitui espaços por pontos e remove caracteres inválidos
         texto = texto.lower().replace(' ', '.')
         texto = re.sub(r'[^a-z0-9.@]', '', texto)
+        # Remove pontos consecutivos
+        texto = re.sub(r'\.+', '.', texto)
+        # Remove ponto no início ou fim do local part (antes do @)
+        partes = texto.split('@')
+        if len(partes) == 2:
+            local = partes[0].strip('.')
+            dominio = partes[1].strip('.')
+            texto = f'{local}@{dominio}'
         return texto
 
     def handle(self, *args, **options):
