@@ -60,8 +60,8 @@ class Command(BaseCommand):
             self.stdout.write('Criando Terrenos...')
             terrenos = self.criar_terrenos(imobiliarias, 5)
 
-            # 5. Criar 60 Compradores
-            self.stdout.write('Criando Compradores...')
+            # 5. Criar 60 Compradores (80% PF, 20% PJ)
+            self.stdout.write('Criando Compradores (PF e PJ)...')
             compradores = self.criar_compradores(60)
 
             # 6. Criar Contratos
@@ -73,12 +73,16 @@ class Command(BaseCommand):
             self.stdout.write('Marcando parcelas como pagas...')
             self.marcar_parcelas_pagas(contratos, 0.90)
 
+        # Contagem final
+        pf_count = len([c for c in compradores if c.tipo_pessoa == 'PF'])
+        pj_count = len([c for c in compradores if c.tipo_pessoa == 'PJ'])
+
         self.stdout.write(self.style.SUCCESS('\n✅ Dados gerados com sucesso!'))
         self.stdout.write(self.style.SUCCESS(f'   • 1 Contabilidade'))
         self.stdout.write(self.style.SUCCESS(f'   • 2 Imobiliárias'))
         self.stdout.write(self.style.SUCCESS(f'   • {len(lotes)} Lotes'))
         self.stdout.write(self.style.SUCCESS(f'   • {len(terrenos)} Terrenos'))
-        self.stdout.write(self.style.SUCCESS(f'   • {len(compradores)} Compradores'))
+        self.stdout.write(self.style.SUCCESS(f'   • {len(compradores)} Compradores ({pf_count} PF + {pj_count} PJ)'))
         self.stdout.write(self.style.SUCCESS(f'   • {len(contratos)} Contratos'))
 
     def limpar_dados(self):
@@ -104,27 +108,48 @@ class Command(BaseCommand):
         )
 
     def criar_imobiliarias(self, contabilidade, quantidade):
-        """Cria Imobiliárias"""
+        """Cria Imobiliárias com endereço estruturado"""
         imobiliarias = []
-        nomes = [
-            'Imobiliária Lagoa Real',
-            'Imobiliária Sete Colinas'
+        dados = [
+            {
+                'nome': 'Imobiliária Lagoa Real',
+                'cep': '35700-000',
+                'logradouro': 'Av. Prefeito Alberto Moura',
+                'numero': '100',
+                'bairro': 'Centro',
+                'cidade': 'Sete Lagoas',
+                'estado': 'MG'
+            },
+            {
+                'nome': 'Imobiliária Sete Colinas',
+                'cep': '35701-000',
+                'logradouro': 'Rua Monsenhor Messias',
+                'numero': '250',
+                'bairro': 'Progresso',
+                'cidade': 'Sete Lagoas',
+                'estado': 'MG'
+            }
         ]
 
-        for i in range(quantidade):
+        for i, d in enumerate(dados[:quantidade]):
             imobiliaria = Imobiliaria.objects.create(
                 contabilidade=contabilidade,
-                nome=nomes[i],
-                razao_social=f'{nomes[i]} Negócios Imobiliários LTDA',
+                nome=d['nome'],
+                razao_social=f'{d["nome"]} Negócios Imobiliários LTDA',
                 cnpj=f'23.456.78{i}/0001-{10+i}',
-                endereco=f'Av. Prefeito Alberto Moura, {100+i*50} - Centro - Sete Lagoas/MG',
+                cep=d['cep'],
+                logradouro=d['logradouro'],
+                numero=d['numero'],
+                bairro=d['bairro'],
+                cidade=d['cidade'],
+                estado=d['estado'],
                 telefone=f'(31) 3773-{2000+i*100}',
-                email=f'contato@{nomes[i].lower().replace(" ", "")}.com.br',
+                email=f'contato@{d["nome"].lower().replace(" ", "")}.com.br',
                 responsavel_financeiro=self.fake.name(),
                 banco='Banco do Brasil',
                 agencia=f'{3000+i}',
                 conta=f'{50000+i*1000}-{i}',
-                pix=f'pix@{nomes[i].lower().replace(" ", "")}.com.br',
+                pix=f'pix@{d["nome"].lower().replace(" ", "")}.com.br',
                 ativo=True
             )
             imobiliarias.append(imobiliaria)
@@ -158,7 +183,7 @@ class Command(BaseCommand):
                     area=area,
                     matricula=f'{20000+i*1000+lote_num}',
                     inscricao_municipal=f'{10000+i*1000+lote_num}',
-                    disponivel=False,  # Será vendido
+                    disponivel=False,
                     ativo=True
                 )
                 lotes.append(lote)
@@ -192,31 +217,88 @@ class Command(BaseCommand):
         return terrenos
 
     def criar_compradores(self, quantidade):
-        """Cria Compradores"""
+        """Cria Compradores - 80% Pessoa Física, 20% Pessoa Jurídica"""
         compradores = []
+        bairros = ['Centro', 'Progresso', 'Santa Luzia', 'Várzea', 'Canaan', 'Cidade Nova']
+        ceps = ['35700-000', '35701-000', '35702-000', '35703-000']
 
-        for i in range(quantidade):
+        # 80% PF, 20% PJ
+        qtd_pf = int(quantidade * 0.8)
+        qtd_pj = quantidade - qtd_pf
+
+        # Criar Pessoas Físicas
+        for i in range(qtd_pf):
             nome = self.fake.name()
             cpf = self.gerar_cpf()
+            bairro = random.choice(bairros)
+            estado_civil = random.choice(['SOLTEIRO', 'CASADO', 'DIVORCIADO', 'VIUVO'])
 
             comprador = Comprador.objects.create(
+                tipo_pessoa='PF',
                 nome=nome,
                 cpf=cpf,
                 rg=f'{random.randint(10000000, 99999999)}',
                 data_nascimento=self.fake.date_of_birth(minimum_age=25, maximum_age=65),
-                estado_civil=random.choice(['SOLTEIRO', 'CASADO', 'DIVORCIADO', 'VIUVO']),
-                profissao=self.fake.job(),
-                endereco=f'{self.fake.street_address()} - {random.choice(["Centro", "Progresso", "Canaan"])} - Sete Lagoas/MG',
+                estado_civil=estado_civil,
+                profissao=self.fake.job()[:100],
+                # Endereço estruturado
+                cep=random.choice(ceps),
+                logradouro=self.fake.street_name(),
+                numero=str(random.randint(1, 999)),
+                bairro=bairro,
+                cidade='Sete Lagoas',
+                estado='MG',
+                # Contato
                 telefone=f'(31) {random.randint(3000, 3999)}-{random.randint(1000, 9999)}',
-                celular=f'(31) {random.randint(90000, 99999)}-{random.randint(1000, 9999)}',
-                email=f'{nome.lower().replace(" ", ".")}@email.com',
+                celular=f'(31) 9{random.randint(8000, 9999)}-{random.randint(1000, 9999)}',
+                email=f'{nome.lower().replace(" ", ".")}@email.com'[:100],
                 notificar_email=True,
                 notificar_sms=random.choice([True, False]),
                 notificar_whatsapp=random.choice([True, False]),
+                # Cônjuge (se casado)
+                conjuge_nome=self.fake.name() if estado_civil == 'CASADO' else '',
+                conjuge_cpf=self.gerar_cpf() if estado_civil == 'CASADO' else '',
                 ativo=True
             )
             compradores.append(comprador)
 
+        # Criar Pessoas Jurídicas
+        tipos_empresa = ['Construtora', 'Incorporadora', 'Investimentos', 'Participações', 'Holdings']
+        for i in range(qtd_pj):
+            razao_social = f'{self.fake.company()} {random.choice(tipos_empresa)} LTDA'
+            nome_fantasia = razao_social.split()[0] + ' ' + razao_social.split()[1]
+            cnpj = self.gerar_cnpj()
+            bairro = random.choice(bairros)
+
+            comprador = Comprador.objects.create(
+                tipo_pessoa='PJ',
+                nome=razao_social[:200],
+                cnpj=cnpj,
+                nome_fantasia=nome_fantasia[:200],
+                inscricao_estadual=f'{random.randint(100, 999)}.{random.randint(100, 999)}.{random.randint(100, 999)}',
+                inscricao_municipal=f'{random.randint(10000, 99999)}',
+                responsavel_legal=self.fake.name(),
+                responsavel_cpf=self.gerar_cpf(),
+                # Endereço estruturado
+                cep=random.choice(ceps),
+                logradouro=self.fake.street_name(),
+                numero=str(random.randint(1, 999)),
+                complemento=random.choice(['Sala 01', 'Sala 02', 'Loja', '', '']),
+                bairro=bairro,
+                cidade='Sete Lagoas',
+                estado='MG',
+                # Contato
+                telefone=f'(31) {random.randint(3000, 3999)}-{random.randint(1000, 9999)}',
+                celular=f'(31) 9{random.randint(8000, 9999)}-{random.randint(1000, 9999)}',
+                email=f'contato@{nome_fantasia.lower().replace(" ", "")}.com.br'[:100],
+                notificar_email=True,
+                notificar_sms=False,
+                notificar_whatsapp=True,
+                ativo=True
+            )
+            compradores.append(comprador)
+
+        random.shuffle(compradores)
         return compradores
 
     def criar_contratos(self, imoveis, compradores, imobiliarias):
@@ -232,7 +314,7 @@ class Command(BaseCommand):
             comprador = compradores_disponiveis.pop()
 
             # Contratos nos últimos 24 meses
-            dias_atras = random.randint(0, 730)  # 0 a 24 meses
+            dias_atras = random.randint(0, 730)
             data_contrato = timezone.now().date() - timedelta(days=dias_atras)
 
             # 180 a 300 meses
@@ -277,15 +359,12 @@ class Command(BaseCommand):
             total_parcelas = len(parcelas)
             parcelas_a_pagar = int(total_parcelas * percentual)
 
-            # Pagar as primeiras X parcelas
             for i in range(parcelas_a_pagar):
                 parcela = parcelas[i]
 
-                # Data de pagamento entre vencimento e 10 dias depois
                 dias_apos_vencimento = random.randint(0, 10)
                 data_pagamento = parcela.data_vencimento + timedelta(days=dias_apos_vencimento)
 
-                # Calcular juros e multa se pago com atraso
                 if data_pagamento > parcela.data_vencimento:
                     juros, multa = parcela.calcular_juros_multa(data_pagamento)
                     parcela.valor_juros = juros
@@ -303,14 +382,32 @@ class Command(BaseCommand):
         """Gera um CPF fictício formatado"""
         cpf = [random.randint(0, 9) for _ in range(9)]
 
-        # Calcular primeiro dígito verificador
         soma = sum((10 - i) * cpf[i] for i in range(9))
         digito1 = (soma * 10 % 11) % 10
         cpf.append(digito1)
 
-        # Calcular segundo dígito verificador
         soma = sum((11 - i) * cpf[i] for i in range(10))
         digito2 = (soma * 10 % 11) % 10
         cpf.append(digito2)
 
         return f'{cpf[0]}{cpf[1]}{cpf[2]}.{cpf[3]}{cpf[4]}{cpf[5]}.{cpf[6]}{cpf[7]}{cpf[8]}-{cpf[9]}{cpf[10]}'
+
+    def gerar_cnpj(self):
+        """Gera um CNPJ fictício formatado"""
+        cnpj = [random.randint(0, 9) for _ in range(8)] + [0, 0, 0, 1]
+
+        # Primeiro dígito verificador
+        pesos1 = [5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2]
+        soma = sum(cnpj[i] * pesos1[i] for i in range(12))
+        resto = soma % 11
+        digito1 = 0 if resto < 2 else 11 - resto
+        cnpj.append(digito1)
+
+        # Segundo dígito verificador
+        pesos2 = [6, 5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2]
+        soma = sum(cnpj[i] * pesos2[i] for i in range(13))
+        resto = soma % 11
+        digito2 = 0 if resto < 2 else 11 - resto
+        cnpj.append(digito2)
+
+        return f'{cnpj[0]}{cnpj[1]}.{cnpj[2]}{cnpj[3]}{cnpj[4]}.{cnpj[5]}{cnpj[6]}{cnpj[7]}/{cnpj[8]}{cnpj[9]}{cnpj[10]}{cnpj[11]}-{cnpj[12]}{cnpj[13]}'

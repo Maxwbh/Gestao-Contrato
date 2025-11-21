@@ -7,73 +7,123 @@
 
 {% block extra_css %}
 <style>
-    .form-section {
-        background: white;
-        padding: 2rem;
+    /* Cards com bom contraste */
+    .imovel-form .card {
+        border: 1px solid #dee2e6;
         border-radius: 8px;
-        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-        margin-bottom: 2rem;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.06);
+        margin-bottom: 1rem;
+    }
+    .imovel-form .card:hover {
+        box-shadow: 0 4px 8px rgba(0,0,0,0.1);
     }
 
-    .form-section h4 {
-        color: #2c3e50;
-        border-bottom: 2px solid #3498db;
-        padding-bottom: 0.5rem;
-        margin-bottom: 1.5rem;
+    /* Card headers com bom contraste */
+    .imovel-form .card-header {
+        background: linear-gradient(135deg, #2c3e50, #34495e);
+        color: #ffffff;
+        font-weight: 600;
+        padding: 0.75rem 1rem;
+        border-radius: 7px 7px 0 0 !important;
+    }
+    .imovel-form .card-header i {
+        color: #27ae60;
+    }
+    .imovel-form .card-header strong {
+        color: #ffffff;
+    }
+    .imovel-form .card-header small {
+        color: #bdc3c7;
     }
 
-    .form-section h4 i {
-        color: #3498db;
+    /* Header claro para seções secundárias */
+    .imovel-form .card-header.bg-light {
+        background: linear-gradient(135deg, #7f8c8d, #95a5a6) !important;
+        color: #ffffff !important;
+    }
+    .imovel-form .card-header.bg-light strong {
+        color: #ffffff !important;
     }
 
-    .property-type-badge {
-        padding: 0.5rem 1rem;
-        border-radius: 20px;
+    /* Campos de formulário */
+    .imovel-form .form-control,
+    .imovel-form .form-select {
         font-size: 0.9rem;
-        margin-right: 0.5rem;
+        padding: 0.5rem 0.75rem;
+        border-radius: 6px;
+    }
+    .imovel-form .form-label {
+        font-size: 0.85rem;
+        font-weight: 600;
+        color: #2c3e50;
+        margin-bottom: 0.25rem;
+    }
+
+    /* Card de ajuda */
+    .help-card .card-header {
+        background: linear-gradient(135deg, #17a2b8, #138496) !important;
+    }
+
+    /* Validação */
+    .is-valid { border-color: #27ae60 !important; }
+    .is-invalid { border-color: #e74c3c !important; }
+
+    /* Responsivo */
+    @media (max-width: 768px) {
+        .imovel-form .card-body { padding: 1rem; }
     }
 </style>
 {% endblock %}
 
 {% block content %}
-<div class="row justify-content-center">
-    <div class="col-lg-10">
-        <div class="card">
-            <div class="card-header">
-                <h3 class="mb-0">
-                    <i class="fas fa-home"></i>
-                    {% if object %}
-                        Editar Imóvel: {{ object.identificacao }}
-                    {% else %}
-                        Cadastrar Novo Imóvel
-                    {% endif %}
-                </h3>
+<div class="container-fluid px-lg-4">
+    <div class="row justify-content-center">
+        <div class="col-xl-10">
+            <!-- Header -->
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <div>
+                    <h4 class="mb-0 text-dark">
+                        <i class="fas fa-home text-success me-2"></i>
+                        {% if object %}Editar: {{ object.identificacao }}{% else %}Novo Imóvel{% endif %}
+                    </h4>
+                    <small class="text-muted">
+                        {% if object %}Atualize os dados do imóvel{% else %}Preencha os dados para cadastrar{% endif %}
+                    </small>
+                </div>
+                <a href="{% url 'core:listar_imoveis' %}" class="btn btn-outline-secondary btn-sm">
+                    <i class="fas fa-list me-1"></i>Ver Lista
+                </a>
             </div>
-            <div class="card-body">
-                <form method="post" novalidate>
-                    {% csrf_token %}
-                    {{ form|crispy }}
-                </form>
-            </div>
-        </div>
 
-        <!-- Card de Ajuda -->
-        <div class="card mt-3">
-            <div class="card-header bg-info text-white">
-                <h5 class="mb-0">
-                    <i class="fas fa-info-circle"></i> Dicas de Preenchimento
-                </h5>
-            </div>
-            <div class="card-body">
-                <ul class="mb-0">
-                    <li><strong>Identificação:</strong> Use um código único para identificar o imóvel (Ex: Lote 25, Casa 10, etc.)</li>
-                    <li><strong>Loteamento:</strong> Nome do loteamento ou condomínio (se aplicável)</li>
-                    <li><strong>Tipo:</strong> Selecione entre Lote, Casa, Apartamento, Terreno, etc.</li>
-                    <li><strong>Área:</strong> Informe a área em metros quadrados (m²)</li>
-                    <li><strong>Matrícula:</strong> Número da matrícula do imóvel no Cartório de Registro</li>
-                    <li><strong>Inscrição Municipal:</strong> Número de inscrição no cadastro da prefeitura</li>
-                    <li><strong>Disponível:</strong> Marque se o imóvel está disponível para venda</li>
-                </ul>
+            <!-- Formulário -->
+            <form method="post" novalidate class="imovel-form">
+                {% csrf_token %}
+                {% crispy form %}
+            </form>
+
+            <!-- Card de Ajuda -->
+            <div class="card help-card mt-3">
+                <div class="card-header">
+                    <i class="fas fa-info-circle me-2"></i><strong>Dicas de Preenchimento</strong>
+                </div>
+                <div class="card-body py-3">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <ul class="mb-0 small">
+                                <li><strong>Identificação:</strong> Código único (Ex: Lote 25, Casa 10)</li>
+                                <li><strong>Loteamento:</strong> Nome do loteamento ou condomínio</li>
+                                <li><strong>Área:</strong> Informe em metros quadrados (m²)</li>
+                            </ul>
+                        </div>
+                        <div class="col-md-6">
+                            <ul class="mb-0 small">
+                                <li><strong>Matrícula:</strong> Número no Cartório de Registro</li>
+                                <li><strong>Inscrição Municipal:</strong> Cadastro da prefeitura</li>
+                                <li><strong>Disponível:</strong> Marque se está à venda</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
@@ -82,42 +132,29 @@
 
 {% block extra_js %}
 <script>
-    document.addEventListener('DOMContentLoaded', function() {
-        // Validação de área (apenas números e decimais)
-        const areaInput = document.querySelector('input[name="area"]');
-        if (areaInput) {
-            areaInput.addEventListener('input', function() {
-                // Remove caracteres não numéricos exceto ponto e vírgula
-                let valor = this.value.replace(/[^\d.,]/g, '');
-                // Substitui vírgula por ponto
-                valor = valor.replace(',', '.');
-                this.value = valor;
-            });
-        }
+document.addEventListener('DOMContentLoaded', function() {
+    // Validação de área
+    const areaInput = document.querySelector('input[name="area"]');
+    if (areaInput) {
+        areaInput.addEventListener('input', function() {
+            let valor = this.value.replace(/[^\d.,]/g, '').replace(',', '.');
+            this.value = valor;
+        });
+    }
 
-        // Auto-formatação do campo de identificação
-        const identificacaoInput = document.querySelector('input[name="identificacao"]');
-        if (identificacaoInput) {
-            identificacaoInput.addEventListener('blur', function() {
-                // Capitaliza a primeira letra de cada palavra
-                this.value = this.value.replace(/\b\w/g, l => l.toUpperCase());
-            });
-        }
+    // Auto-capitalização
+    const identificacaoInput = document.querySelector('input[name="identificacao"]');
+    if (identificacaoInput) {
+        identificacaoInput.addEventListener('blur', function() {
+            this.value = this.value.replace(/\b\w/g, l => l.toUpperCase());
+        });
+    }
 
-        // Mostrar preview do tipo de imóvel selecionado
-        const tipoSelect = document.querySelector('select[name="tipo"]');
-        if (tipoSelect) {
-            tipoSelect.addEventListener('change', function() {
-                const selectedText = this.options[this.selectedIndex].text;
-                console.log('Tipo selecionado:', selectedText);
-            });
-        }
-
-        // Marcar automaticamente como disponível para novos cadastros
-        const disponivelCheckbox = document.querySelector('input[name="disponivel"]');
-        if (disponivelCheckbox && !disponivelCheckbox.checked && window.location.pathname.includes('/novo/')) {
-            disponivelCheckbox.checked = true;
-        }
-    });
+    // Marcar disponível para novos
+    const disponivelCheckbox = document.querySelector('input[name="disponivel"]');
+    if (disponivelCheckbox && !disponivelCheckbox.checked && window.location.pathname.includes('/novo/')) {
+        disponivelCheckbox.checked = true;
+    }
+});
 </script>
 {% endblock %}

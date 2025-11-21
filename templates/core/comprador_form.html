@@ -7,84 +7,107 @@
 
 {% block extra_css %}
 <style>
-    .card {
+    /* Cards com bom contraste */
+    .comprador-form .card {
+        border: 1px solid #dee2e6;
         border-radius: 8px;
-        box-shadow: 0 1px 3px rgba(0,0,0,0.08);
-        transition: box-shadow 0.2s ease;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.06);
+        margin-bottom: 1rem;
     }
-    .card:hover {
-        box-shadow: 0 2px 8px rgba(0,0,0,0.12);
+    .comprador-form .card:hover {
+        box-shadow: 0 4px 8px rgba(0,0,0,0.1);
     }
-    .card-header {
-        background: #f8f9fa;
-        border-bottom: 1px solid #e9ecef;
-        font-size: 0.95rem;
+
+    /* Card headers com bom contraste */
+    .comprador-form .card-header {
+        background: linear-gradient(135deg, #2c3e50, #34495e);
+        color: #ffffff;
+        font-weight: 600;
+        padding: 0.75rem 1rem;
+        border-radius: 7px 7px 0 0 !important;
     }
-    .card-header.bg-primary {
-        background: linear-gradient(135deg, #0d6efd, #0b5ed7) !important;
+    .comprador-form .card-header i {
+        color: #3498db;
     }
-    .form-control, .form-select {
+    .comprador-form .card-header strong {
+        color: #ffffff;
+    }
+    .comprador-form .card-header small {
+        color: #bdc3c7;
+    }
+
+    /* Header primário (tipo de pessoa) */
+    .comprador-form .card-header.bg-primary {
+        background: linear-gradient(135deg, #3498db, #2980b9) !important;
+    }
+
+    /* Header claro para seções secundárias */
+    .comprador-form .card-header.bg-light {
+        background: linear-gradient(135deg, #7f8c8d, #95a5a6) !important;
+        color: #ffffff !important;
+    }
+    .comprador-form .card-header.bg-light strong {
+        color: #ffffff !important;
+    }
+    .comprador-form .card-header.bg-light small {
+        color: #ecf0f1 !important;
+    }
+
+    /* Campos de formulário */
+    .comprador-form .form-control,
+    .comprador-form .form-select {
         font-size: 0.9rem;
         padding: 0.5rem 0.75rem;
+        border-radius: 6px;
     }
-    .form-label {
+    .comprador-form .form-label {
         font-size: 0.85rem;
-        font-weight: 500;
-        color: #495057;
+        font-weight: 600;
+        color: #2c3e50;
         margin-bottom: 0.25rem;
     }
+
+    /* Toggle PF/PJ */
     .btn-check:checked + .btn-outline-primary {
-        background: linear-gradient(135deg, #0d6efd, #0b5ed7);
-        border-color: #0d6efd;
-        box-shadow: 0 2px 8px rgba(13, 110, 253, 0.4);
+        background: linear-gradient(135deg, #3498db, #2980b9);
+        border-color: #3498db;
+        box-shadow: 0 2px 8px rgba(52, 152, 219, 0.4);
+        color: #ffffff;
     }
     .btn-outline-primary {
-        transition: all 0.2s ease;
+        border-width: 2px;
+        font-weight: 600;
     }
-    .btn-outline-primary:hover {
-        transform: translateY(-1px);
-    }
-    .form-check-input:checked {
-        background-color: #0d6efd;
-        border-color: #0d6efd;
-    }
+
+    /* Transições suaves */
     #campos-pf, #campos-pj, #card-conjuge {
         transition: all 0.3s ease;
     }
-    .is-valid {
-        border-color: #198754 !important;
-    }
-    .is-invalid {
-        border-color: #dc3545 !important;
-    }
-    /* Compactar mais os campos */
-    .mb-2 {
-        margin-bottom: 0.5rem !important;
-    }
-    .py-2 {
-        padding-top: 0.5rem !important;
-        padding-bottom: 0.5rem !important;
-    }
-    .py-3 {
-        padding-top: 0.75rem !important;
-        padding-bottom: 0.75rem !important;
+
+    /* Validação */
+    .is-valid { border-color: #27ae60 !important; }
+    .is-invalid { border-color: #e74c3c !important; }
+
+    /* Responsivo */
+    @media (max-width: 768px) {
+        .comprador-form .card-body { padding: 1rem; }
     }
 </style>
 {% endblock %}
 
 {% block content %}
-<div class="container-fluid px-lg-5">
+<div class="container-fluid px-lg-4">
     <div class="row justify-content-center">
         <div class="col-xl-10">
             <!-- Header -->
             <div class="d-flex justify-content-between align-items-center mb-3">
                 <div>
-                    <h4 class="mb-0">
+                    <h4 class="mb-0 text-dark">
                         <i class="fas fa-user-plus text-primary me-2"></i>
                         {% if object %}Editar: {{ object.nome }}{% else %}Novo Comprador{% endif %}
                     </h4>
                     <small class="text-muted">
-                        {% if object %}Atualize os dados do comprador{% else %}Preencha os dados para cadastrar um novo comprador{% endif %}
+                        {% if object %}Atualize os dados do comprador{% else %}Preencha os dados para cadastrar{% endif %}
                     </small>
                 </div>
                 <a href="{% url 'core:listar_compradores' %}" class="btn btn-outline-secondary btn-sm">
@@ -104,24 +127,17 @@
 
 {% block extra_js %}
 <script>
-// O toggle PF/PJ é inicializado automaticamente pelo custom.js
-// Aqui apenas garantimos que funciona no carregamento da página
 document.addEventListener('DOMContentLoaded', function() {
-    // Feedback visual ao selecionar tipo
+    // Animação suave ao trocar tipo
     const tipoPessoaRadios = document.querySelectorAll('input[name="tipo_pessoa"]');
     tipoPessoaRadios.forEach(radio => {
         radio.addEventListener('change', function() {
-            // Adiciona animação suave
-            const camposPF = document.getElementById('campos-pf');
-            const camposPJ = document.getElementById('campos-pj');
-            const cardConjuge = document.getElementById('card-conjuge');
-
-            [camposPF, camposPJ, cardConjuge].forEach(el => {
+            const elementos = ['campos-pf', 'campos-pj', 'card-conjuge'];
+            elementos.forEach(id => {
+                const el = document.getElementById(id);
                 if (el) {
                     el.style.opacity = '0';
-                    setTimeout(() => {
-                        el.style.opacity = '1';
-                    }, 50);
+                    setTimeout(() => { el.style.opacity = '1'; }, 50);
                 }
             });
         });
