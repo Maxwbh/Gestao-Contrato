@@ -123,6 +123,21 @@ with connection.cursor() as cursor:
     add_column_if_not_exists(cursor, 'core_comprador', 'cpf', "VARCHAR(14) NULL")
     add_column_if_not_exists(cursor, 'core_comprador', 'rg', "VARCHAR(20) DEFAULT ''")
     add_column_if_not_exists(cursor, 'core_comprador', 'data_nascimento', "DATE NULL")
+    # Garantir que data_nascimento aceite NULL (pode ter sido criada antes com NOT NULL)
+    cursor.execute("""
+        DO $$
+        BEGIN
+            IF EXISTS (
+                SELECT 1 FROM information_schema.columns
+                WHERE table_name = 'core_comprador'
+                AND column_name = 'data_nascimento'
+                AND is_nullable = 'NO'
+            ) THEN
+                ALTER TABLE core_comprador ALTER COLUMN data_nascimento DROP NOT NULL;
+                RAISE NOTICE 'data_nascimento constraint removed';
+            END IF;
+        END $$;
+    """)
     add_column_if_not_exists(cursor, 'core_comprador', 'estado_civil', "VARCHAR(50) DEFAULT ''")
     add_column_if_not_exists(cursor, 'core_comprador', 'profissao', "VARCHAR(100) DEFAULT ''")
     # Dados PJ
