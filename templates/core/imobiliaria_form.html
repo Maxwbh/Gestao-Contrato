@@ -326,6 +326,42 @@
                     </div>
                 </div>
 
+                <!-- Card: Contas Bancárias (dentro do form) -->
+                <div class="card mb-3" style="border-color: #6c757d;">
+                    <div class="card-header py-2 d-flex justify-content-between align-items-center" style="background: linear-gradient(135deg, #6c757d, #495057); color: white;">
+                        <span>
+                            <i class="fas fa-university me-2"></i><strong>Contas Bancárias</strong>
+                        </span>
+                        <button type="button" class="btn btn-light btn-sm" onclick="abrirModalConta()">
+                            <i class="fas fa-plus me-1"></i>Nova Conta
+                        </button>
+                    </div>
+                    <div class="card-body p-0">
+                        <input type="hidden" name="contas_bancarias_json" id="contas_bancarias_json" value="">
+                        <div id="contas-container">
+                            <table class="table table-hover contas-table mb-0">
+                                <thead>
+                                    <tr>
+                                        <th>Banco</th>
+                                        <th>Descrição</th>
+                                        <th>Agência</th>
+                                        <th>Conta</th>
+                                        <th class="text-center" style="width: 100px;">Ações</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="contas-lista">
+                                    <tr id="sem-contas">
+                                        <td colspan="5" class="text-center text-muted py-3">
+                                            <i class="fas fa-university fa-2x mb-2 d-block opacity-50"></i>
+                                            Nenhuma conta bancária cadastrada
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
                 <!-- Botões do Formulário Principal -->
                 <div class="d-flex justify-content-between align-items-center mt-4 pt-3 border-top">
                     <a href="{% url 'core:listar_imobiliarias' %}" class="btn btn-outline-secondary">
@@ -336,54 +372,6 @@
                     </button>
                 </div>
             </form>
-
-            {% if object %}
-            <!-- Card: Contas Bancárias (apenas para edição) -->
-            <div class="card mt-4">
-                <div class="card-header py-2 d-flex justify-content-between align-items-center">
-                    <span>
-                        <i class="fas fa-university me-2"></i><strong>Contas Bancárias</strong>
-                    </span>
-                    <button type="button" class="btn btn-success btn-sm" onclick="abrirModalConta()">
-                        <i class="fas fa-plus me-1"></i>Nova Conta
-                    </button>
-                </div>
-                <div class="card-body p-0">
-                    <div id="contas-container">
-                        <table class="table table-hover contas-table mb-0">
-                            <thead>
-                                <tr>
-                                    <th>Banco</th>
-                                    <th>Descrição</th>
-                                    <th>Agência</th>
-                                    <th>Conta</th>
-                                    <th>PIX</th>
-                                    <th class="text-center" style="width: 120px;">Ações</th>
-                                </tr>
-                            </thead>
-                            <tbody id="contas-lista">
-                                <tr>
-                                    <td colspan="6" class="text-center text-muted py-4">
-                                        <i class="fas fa-spinner fa-spin me-2"></i>Carregando contas...
-                                    </td>
-                                </tr>
-                            </tbody>
-                        </table>
-                    </div>
-                    <div class="p-3 bg-light border-top">
-                        <button type="button" class="btn btn-outline-primary btn-add-conta w-100" onclick="abrirModalConta()">
-                            <i class="fas fa-plus-circle me-2"></i>Adicionar Conta Bancária
-                        </button>
-                    </div>
-                </div>
-            </div>
-            {% else %}
-            <!-- Aviso para nova imobiliária -->
-            <div class="alert alert-info mt-4">
-                <i class="fas fa-info-circle me-2"></i>
-                <strong>Contas Bancárias:</strong> Salve a imobiliária primeiro para poder adicionar contas bancárias.
-            </div>
-            {% endif %}
         </div>
     </div>
 </div>
@@ -534,6 +522,8 @@
 <script>
 const IMOBILIARIA_ID = {{ object.pk|default:'null' }};
 let modalContaBancaria;
+let contasLocais = []; // Para armazenar contas no modo criação
+let bancosLista = {}; // Cache dos bancos para exibir nome
 
 document.addEventListener('DOMContentLoaded', function() {
     modalContaBancaria = new bootstrap.Modal(document.getElementById('modalContaBancaria'));
@@ -541,9 +531,11 @@ document.addEventListener('DOMContentLoaded', function() {
     // Carregar lista de bancos
     carregarBancos();
 
-    // Carregar contas se editando
+    // Carregar contas se editando, ou mostrar mensagem vazia
     if (IMOBILIARIA_ID) {
         carregarContas();
+    } else {
+        atualizarTabelaLocal();
     }
 });
 
@@ -559,11 +551,50 @@ async function carregarBancos() {
                 option.value = banco.codigo;
                 option.textContent = banco.nome;
                 select.appendChild(option);
+                bancosLista[banco.codigo] = banco.nome;
             });
         }
     } catch (error) {
         console.error('Erro ao carregar bancos:', error);
     }
+}
+
+function atualizarTabelaLocal() {
+    const tbody = document.getElementById('contas-lista');
+
+    if (contasLocais.length > 0) {
+        tbody.innerHTML = contasLocais.map((conta, index) => `
+            <tr>
+                <td>
+                    <strong>${bancosLista[conta.banco] || conta.banco}</strong>
+                    ${conta.principal ? '<span class="badge bg-success ms-2">Principal</span>' : ''}
+                </td>
+                <td>${conta.descricao}</td>
+                <td>${conta.agencia}</td>
+                <td>${conta.conta}</td>
+                <td class="text-center">
+                    <button type="button" class="btn btn-sm btn-outline-primary me-1" onclick="editarContaLocal(${index})" title="Editar">
+                        <i class="fas fa-edit"></i>
+                    </button>
+                    <button type="button" class="btn btn-sm btn-outline-danger" onclick="excluirContaLocal(${index})" title="Excluir">
+                        <i class="fas fa-trash"></i>
+                    </button>
+                </td>
+            </tr>
+        `).join('');
+    } else {
+        tbody.innerHTML = `
+            <tr id="sem-contas">
+                <td colspan="5" class="text-center text-muted py-3">
+                    <i class="fas fa-university fa-2x mb-2 d-block opacity-50"></i>
+                    Nenhuma conta bancária cadastrada
+                </td>
+            </tr>
+        `;
+    }
+
+    // Atualizar campo hidden com JSON
+    document.getElementById('contas_bancarias_json').value = JSON.stringify(contasLocais);
 }
 
 async function carregarContas() {
@@ -612,13 +643,69 @@ async function carregarContas() {
     }
 }
 
+let editandoIndex = -1; // Para modo local: índice da conta sendo editada
+
 function abrirModalConta() {
     document.getElementById('formContaBancaria').reset();
     document.getElementById('conta_id').value = '';
-    document.getElementById('imobiliaria_id').value = IMOBILIARIA_ID;
+    document.getElementById('imobiliaria_id').value = IMOBILIARIA_ID || '';
     document.getElementById('modalContaTitle').innerHTML = '<i class="fas fa-university me-2"></i>Nova Conta Bancária';
     document.getElementById('cobranca_registrada').checked = true;
+    editandoIndex = -1;
     modalContaBancaria.show();
+}
+
+function editarContaLocal(index) {
+    const conta = contasLocais[index];
+    editandoIndex = index;
+
+    document.getElementById('conta_id').value = '';
+    document.getElementById('banco').value = conta.banco;
+    document.getElementById('descricao').value = conta.descricao;
+    document.getElementById('agencia').value = conta.agencia;
+    document.getElementById('conta').value = conta.conta;
+    document.getElementById('convenio').value = conta.convenio || '';
+    document.getElementById('carteira').value = conta.carteira || '';
+    document.getElementById('principal').checked = conta.principal;
+
+    document.getElementById('modalContaTitle').innerHTML = '<i class="fas fa-edit me-2"></i>Editar Conta Bancária';
+    modalContaBancaria.show();
+}
+
+function excluirContaLocal(index) {
+    if (confirm('Tem certeza que deseja remover esta conta?')) {
+        contasLocais.splice(index, 1);
+        atualizarTabelaLocal();
+    }
+}
+
+function salvarContaLocal() {
+    const contaData = {
+        banco: document.getElementById('banco').value,
+        descricao: document.getElementById('descricao').value,
+        agencia: document.getElementById('agencia').value,
+        conta: document.getElementById('conta').value,
+        convenio: document.getElementById('convenio').value,
+        carteira: document.getElementById('carteira').value,
+        principal: document.getElementById('principal').checked,
+    };
+
+    // Validação
+    if (!contaData.banco || !contaData.descricao || !contaData.agencia || !contaData.conta) {
+        alert('Preencha os campos obrigatórios: Banco, Descrição, Agência e Conta');
+        return;
+    }
+
+    if (editandoIndex >= 0) {
+        // Editando
+        contasLocais[editandoIndex] = contaData;
+    } else {
+        // Nova conta
+        contasLocais.push(contaData);
+    }
+
+    modalContaBancaria.hide();
+    atualizarTabelaLocal();
 }
 
 async function editarConta(contaId) {
@@ -655,6 +742,12 @@ async function editarConta(contaId) {
 }
 
 async function salvarConta() {
+    // Se não tem IMOBILIARIA_ID, usar modo local
+    if (!IMOBILIARIA_ID) {
+        salvarContaLocal();
+        return;
+    }
+
     const contaId = document.getElementById('conta_id').value;
     const formData = {
         imobiliaria_id: IMOBILIARIA_ID,

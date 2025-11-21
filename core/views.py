@@ -606,7 +606,31 @@ class ImobiliariaCreateView(LoginRequiredMixin, CreateView):
             )
 
         messages.success(self.request, f'Imobiliária {form.instance.nome} cadastrada com sucesso!')
-        return response
+
+        # Processar contas bancárias do JSON (se houver)
+        contas_json = self.request.POST.get('contas_bancarias_json', '')
+        if contas_json:
+            import json
+            try:
+                contas = json.loads(contas_json)
+                for conta_data in contas:
+                    ContaBancaria.objects.create(
+                        imobiliaria=self.object,
+                        banco=conta_data.get('banco', ''),
+                        descricao=conta_data.get('descricao', ''),
+                        agencia=conta_data.get('agencia', ''),
+                        agencia_dv=conta_data.get('agencia_dv', ''),
+                        conta=conta_data.get('conta', ''),
+                        conta_dv=conta_data.get('conta_dv', ''),
+                        tipo_conta=conta_data.get('tipo_conta', 'corrente'),
+                        convenio=conta_data.get('convenio', ''),
+                        carteira=conta_data.get('carteira', ''),
+                        conta_padrao=conta_data.get('principal', False),
+                    )
+            except (json.JSONDecodeError, Exception) as e:
+                messages.warning(self.request, f'Imobiliária criada, mas houve erro ao salvar contas bancárias: {e}')
+
+        return redirect(self.success_url)
 
     def form_invalid(self, form):
         # Monta mensagem de erro detalhada
