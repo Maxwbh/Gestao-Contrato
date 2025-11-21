@@ -891,12 +891,23 @@ class AcessoUsuario(TimeStampedModel):
 # FUNÇÕES DE ACESSO (helpers)
 # =============================================================================
 
+def usuario_tem_permissao_total(user):
+    """
+    Verifica se o usuário tem permissão total no sistema.
+    Usuários com permissão total: superuser ou staff (admin)
+    """
+    if not user.is_authenticated:
+        return False
+    return user.is_superuser or user.is_staff
+
+
 def get_contabilidades_usuario(user):
     """Retorna as contabilidades que o usuário pode acessar"""
     if not user.is_authenticated:
         return Contabilidade.objects.none()
 
-    if user.is_superuser:
+    # Superuser ou admin tem acesso total
+    if usuario_tem_permissao_total(user):
         return Contabilidade.objects.filter(ativo=True)
 
     return Contabilidade.objects.filter(
@@ -914,7 +925,8 @@ def get_imobiliarias_usuario(user, contabilidade=None):
     if not user.is_authenticated:
         return Imobiliaria.objects.none()
 
-    if user.is_superuser:
+    # Superuser ou admin tem acesso total
+    if usuario_tem_permissao_total(user):
         qs = Imobiliaria.objects.filter(ativo=True)
         if contabilidade:
             qs = qs.filter(contabilidade=contabilidade)
@@ -936,7 +948,8 @@ def usuario_tem_acesso_imobiliaria(user, imobiliaria):
     if not user.is_authenticated:
         return False
 
-    if user.is_superuser:
+    # Superuser ou admin tem acesso total
+    if usuario_tem_permissao_total(user):
         return True
 
     return AcessoUsuario.objects.filter(
@@ -951,7 +964,8 @@ def usuario_tem_acesso_contabilidade(user, contabilidade):
     if not user.is_authenticated:
         return False
 
-    if user.is_superuser:
+    # Superuser ou admin tem acesso total
+    if usuario_tem_permissao_total(user):
         return True
 
     return AcessoUsuario.objects.filter(
