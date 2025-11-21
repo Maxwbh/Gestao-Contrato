@@ -7,79 +7,96 @@
 
 {% block extra_css %}
 <style>
-    .form-section {
-        background: white;
-        padding: 2rem;
+    .card {
         border-radius: 8px;
-        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-        margin-bottom: 2rem;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+        transition: box-shadow 0.2s ease;
     }
-
-    .form-section h4 {
-        color: #2c3e50;
-        border-bottom: 2px solid #3498db;
-        padding-bottom: 0.5rem;
-        margin-bottom: 1.5rem;
+    .card:hover {
+        box-shadow: 0 2px 8px rgba(0,0,0,0.12);
     }
-
-    .form-section h4 i {
-        color: #3498db;
+    .card-header {
+        background: #f8f9fa;
+        border-bottom: 1px solid #e9ecef;
+        font-size: 0.95rem;
     }
-
-    .help-text {
-        font-size: 0.875rem;
-        color: #6c757d;
-        margin-top: 0.25rem;
+    .card-header.bg-primary {
+        background: linear-gradient(135deg, #0d6efd, #0b5ed7) !important;
     }
-
-    .required-field::after {
-        content: " *";
-        color: #e74c3c;
+    .form-control, .form-select {
+        font-size: 0.9rem;
+        padding: 0.5rem 0.75rem;
     }
-
-    .btn-save {
-        min-width: 150px;
+    .form-label {
+        font-size: 0.85rem;
+        font-weight: 500;
+        color: #495057;
+        margin-bottom: 0.25rem;
+    }
+    .btn-check:checked + .btn-outline-primary {
+        background: linear-gradient(135deg, #0d6efd, #0b5ed7);
+        border-color: #0d6efd;
+        box-shadow: 0 2px 8px rgba(13, 110, 253, 0.4);
+    }
+    .btn-outline-primary {
+        transition: all 0.2s ease;
+    }
+    .btn-outline-primary:hover {
+        transform: translateY(-1px);
+    }
+    .form-check-input:checked {
+        background-color: #0d6efd;
+        border-color: #0d6efd;
+    }
+    #campos-pf, #campos-pj, #card-conjuge {
+        transition: all 0.3s ease;
+    }
+    .is-valid {
+        border-color: #198754 !important;
+    }
+    .is-invalid {
+        border-color: #dc3545 !important;
+    }
+    /* Compactar mais os campos */
+    .mb-2 {
+        margin-bottom: 0.5rem !important;
+    }
+    .py-2 {
+        padding-top: 0.5rem !important;
+        padding-bottom: 0.5rem !important;
+    }
+    .py-3 {
+        padding-top: 0.75rem !important;
+        padding-bottom: 0.75rem !important;
     }
 </style>
 {% endblock %}
 
 {% block content %}
-<div class="row justify-content-center">
-    <div class="col-lg-10">
-        <div class="card">
-            <div class="card-header">
-                <h3 class="mb-0">
-                    <i class="fas fa-user-plus"></i>
-                    {% if object %}
-                        Editar Comprador: {{ object.nome }}
-                    {% else %}
-                        Cadastrar Novo Comprador
-                    {% endif %}
-                </h3>
+<div class="container-fluid px-lg-5">
+    <div class="row justify-content-center">
+        <div class="col-xl-10">
+            <!-- Header -->
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <div>
+                    <h4 class="mb-0">
+                        <i class="fas fa-user-plus text-primary me-2"></i>
+                        {% if object %}Editar: {{ object.nome }}{% else %}Novo Comprador{% endif %}
+                    </h4>
+                    <small class="text-muted">
+                        {% if object %}Atualize os dados do comprador{% else %}Preencha os dados para cadastrar um novo comprador{% endif %}
+                    </small>
+                </div>
+                <a href="{% url 'core:listar_compradores' %}" class="btn btn-outline-secondary btn-sm">
+                    <i class="fas fa-list me-1"></i>Ver Lista
+                </a>
             </div>
-            <div class="card-body">
-                <form method="post" novalidate>
-                    {% csrf_token %}
-                    {{ form|crispy }}
-                </form>
-            </div>
-        </div>
 
-        <!-- Card de Ajuda -->
-        <div class="card mt-3">
-            <div class="card-header bg-info text-white">
-                <h5 class="mb-0">
-                    <i class="fas fa-info-circle"></i> Dicas de Preenchimento
-                </h5>
-            </div>
-            <div class="card-body">
-                <ul class="mb-0">
-                    <li><strong>CPF:</strong> Informe apenas números (será formatado automaticamente)</li>
-                    <li><strong>Notificações:</strong> Marque as formas de contato que o comprador prefere</li>
-                    <li><strong>Cônjuge:</strong> Preencha apenas se o comprador for casado</li>
-                    <li><strong>Observações:</strong> Use este campo para informações adicionais importantes</li>
-                </ul>
-            </div>
+            <!-- Formulário -->
+            <form method="post" novalidate class="comprador-form">
+                {% csrf_token %}
+                {% crispy form %}
+            </form>
         </div>
     </div>
 </div>
@@ -87,108 +104,28 @@
 
 {% block extra_js %}
 <script>
-    // Máscara para CPF
-    function mascaraCPF(input) {
-        let valor = input.value.replace(/\D/g, '');
-        if (valor.length <= 11) {
-            valor = valor.replace(/(\d{3})(\d)/, '$1.$2');
-            valor = valor.replace(/(\d{3})(\d)/, '$1.$2');
-            valor = valor.replace(/(\d{3})(\d{1,2})$/, '$1-$2');
-        }
-        input.value = valor;
-    }
+// O toggle PF/PJ é inicializado automaticamente pelo custom.js
+// Aqui apenas garantimos que funciona no carregamento da página
+document.addEventListener('DOMContentLoaded', function() {
+    // Feedback visual ao selecionar tipo
+    const tipoPessoaRadios = document.querySelectorAll('input[name="tipo_pessoa"]');
+    tipoPessoaRadios.forEach(radio => {
+        radio.addEventListener('change', function() {
+            // Adiciona animação suave
+            const camposPF = document.getElementById('campos-pf');
+            const camposPJ = document.getElementById('campos-pj');
+            const cardConjuge = document.getElementById('card-conjuge');
 
-    // Máscara para Telefone
-    function mascaraTelefone(input) {
-        let valor = input.value.replace(/\D/g, '');
-        if (valor.length <= 11) {
-            if (valor.length <= 10) {
-                // Telefone fixo: (99) 9999-9999
-                valor = valor.replace(/(\d{2})(\d)/, '($1) $2');
-                valor = valor.replace(/(\d{4})(\d)/, '$1-$2');
-            } else {
-                // Celular: (99) 99999-9999
-                valor = valor.replace(/(\d{2})(\d)/, '($1) $2');
-                valor = valor.replace(/(\d{5})(\d)/, '$1-$2');
-            }
-        }
-        input.value = valor;
-    }
-
-    // Aplicar máscaras quando o documento carregar
-    document.addEventListener('DOMContentLoaded', function() {
-        // CPF
-        const cpfInput = document.querySelector('input[name="cpf"]');
-        if (cpfInput) {
-            cpfInput.addEventListener('input', function() {
-                mascaraCPF(this);
-            });
-        }
-
-        // CPF do Cônjuge
-        const conjugeCpfInput = document.querySelector('input[name="conjuge_cpf"]');
-        if (conjugeCpfInput) {
-            conjugeCpfInput.addEventListener('input', function() {
-                mascaraCPF(this);
-            });
-        }
-
-        // Telefone
-        const telefoneInput = document.querySelector('input[name="telefone"]');
-        if (telefoneInput) {
-            telefoneInput.addEventListener('input', function() {
-                mascaraTelefone(this);
-            });
-        }
-
-        // Celular
-        const celularInput = document.querySelector('input[name="celular"]');
-        if (celularInput) {
-            celularInput.addEventListener('input', function() {
-                mascaraTelefone(this);
-            });
-        }
-
-        // Validação de email em tempo real
-        const emailInput = document.querySelector('input[name="email"]');
-        if (emailInput) {
-            emailInput.addEventListener('blur', function() {
-                if (this.value && !this.value.match(/^[^\s@]+@[^\s@]+\.[^\s@]+$/)) {
-                    this.classList.add('is-invalid');
-                    let feedback = this.parentElement.querySelector('.invalid-feedback');
-                    if (!feedback) {
-                        feedback = document.createElement('div');
-                        feedback.className = 'invalid-feedback';
-                        feedback.textContent = 'Email inválido';
-                        this.parentElement.appendChild(feedback);
-                    }
-                } else {
-                    this.classList.remove('is-invalid');
+            [camposPF, camposPJ, cardConjuge].forEach(el => {
+                if (el) {
+                    el.style.opacity = '0';
+                    setTimeout(() => {
+                        el.style.opacity = '1';
+                    }, 50);
                 }
             });
-        }
-
-        // Mostrar/ocultar campos do cônjuge baseado no estado civil
-        const estadoCivilSelect = document.querySelector('select[name="estado_civil"]');
-        const conjugeFields = ['conjuge_nome', 'conjuge_cpf', 'conjuge_rg'];
-
-        if (estadoCivilSelect) {
-            function toggleConjugeFields() {
-                const isCasado = estadoCivilSelect.value === 'CASADO';
-                conjugeFields.forEach(fieldName => {
-                    const field = document.querySelector(`[name="${fieldName}"]`);
-                    if (field) {
-                        const formGroup = field.closest('.form-group');
-                        if (formGroup) {
-                            formGroup.style.display = isCasado ? 'block' : 'none';
-                        }
-                    }
-                });
-            }
-
-            estadoCivilSelect.addEventListener('change', toggleConjugeFields);
-            toggleConjugeFields(); // Executar na carga da página
-        }
+        });
     });
+});
 </script>
 {% endblock %}

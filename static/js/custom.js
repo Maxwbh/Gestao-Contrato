@@ -30,15 +30,12 @@
      * Show toast notification
      */
     function showToast(message, type = 'info') {
-        const toastContainer = document.getElementById('toastContainer');
+        let toastContainer = document.getElementById('toastContainer');
         if (!toastContainer) {
-            const container = document.createElement('div');
-            container.id = 'toastContainer';
-            container.style.position = 'fixed';
-            container.style.top = '20px';
-            container.style.right = '20px';
-            container.style.zIndex = '9999';
-            document.body.appendChild(container);
+            toastContainer = document.createElement('div');
+            toastContainer.id = 'toastContainer';
+            toastContainer.style.cssText = 'position:fixed;top:20px;right:20px;z-index:9999;';
+            document.body.appendChild(toastContainer);
         }
 
         const toast = document.createElement('div');
@@ -49,7 +46,7 @@
             <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
         `;
 
-        document.getElementById('toastContainer').appendChild(toast);
+        toastContainer.appendChild(toast);
 
         setTimeout(() => {
             toast.classList.remove('show');
@@ -75,14 +72,10 @@
 
     /**
      * Apply CNPJ mask - Suporta formato numérico e alfanumérico (preparado para 2026)
-     * Formato atual: 99.999.999/9999-99
-     * Formato 2026: 99.ABC.345/0001-67 (alfanumérico)
      */
     function mascaraCNPJ(value) {
         // Remove caracteres especiais mas mantém letras e números
         value = value.toUpperCase().replace(/[^A-Z0-9]/g, '');
-
-        // Limita a 14 caracteres
         value = value.slice(0, 14);
 
         // Aplica máscara: XX.XXX.XXX/XXXX-XX
@@ -99,7 +92,7 @@
             value = value.substring(0, 15) + '-' + value.substring(15);
         }
 
-        return value.slice(0, 20); // Formato completo: XX.XXX.XXX/XXXX-XX
+        return value.slice(0, 20);
     }
 
     /**
@@ -108,12 +101,10 @@
     function mascaraTelefone(value) {
         value = value.replace(/\D/g, '');
         if (value.length <= 10) {
-            // Telefone fixo: (99) 9999-9999
             return value
                 .replace(/(\d{2})(\d)/, '($1) $2')
                 .replace(/(\d{4})(\d)/, '$1-$2');
         } else {
-            // Celular: (99) 99999-9999
             return value
                 .replace(/(\d{2})(\d)/, '($1) $2')
                 .replace(/(\d{5})(\d)/, '$1-$2')
@@ -135,10 +126,8 @@
      * Buscar endereço via ViaCEP
      */
     async function buscarCEP(cep) {
-        // Remove caracteres não numéricos
         const cepLimpo = cep.replace(/\D/g, '');
 
-        // Valida CEP
         if (cepLimpo.length !== 8) {
             return { erro: true, mensagem: 'CEP deve ter 8 dígitos' };
         }
@@ -170,7 +159,6 @@
      * Preencher campos de endereço com dados do ViaCEP
      */
     function preencherEndereco(dados) {
-        // Mapeia os campos do formulário
         const campos = {
             logradouro: ['logradouro', 'id_logradouro'],
             bairro: ['bairro', 'id_bairro'],
@@ -178,7 +166,6 @@
             estado: ['estado', 'id_estado', 'uf']
         };
 
-        // Preenche cada campo
         Object.keys(campos).forEach(campo => {
             campos[campo].forEach(possibilidade => {
                 const elemento = document.querySelector(`[name="${possibilidade}"]`) ||
@@ -192,17 +179,13 @@
                     } else {
                         elemento.value = dados[campo] || '';
                     }
-
-                    // Remove readonly temporariamente para permitir edição
                     elemento.removeAttribute('readonly');
-
-                    // Trigger change event
                     elemento.dispatchEvent(new Event('change'));
                 }
             });
         });
 
-        // Foca no campo número (geralmente o próximo a ser preenchido)
+        // Foca no campo número
         const campoNumero = document.querySelector('[name="numero"]');
         if (campoNumero) {
             setTimeout(() => campoNumero.focus(), 100);
@@ -258,26 +241,20 @@
     }
 
     /**
-     * Validate CNPJ - Suporta formato numérico (atual) e alfanumérico (2026+)
-     * IMPORTANTE: Algoritmo de validação do formato alfanumérico será divulgado pela Receita em 2026
+     * Validate CNPJ - Suporta formato numérico e alfanumérico (2026+)
      */
     function validarCNPJ(cnpj) {
-        // Remove formatação
         const cnpjLimpo = cnpj.replace(/[.\-\/]/g, '');
 
-        // Verifica tamanho (14 caracteres)
         if (cnpjLimpo.length !== 14) {
             return false;
         }
 
-        // Verifica se é apenas numérico (formato antigo)
         const isNumerico = /^\d{14}$/.test(cnpjLimpo);
 
         if (isNumerico) {
-            // CNPJ numérico - valida com dígitos verificadores (algoritmo atual)
             const numeros = cnpjLimpo.replace(/\D/g, '');
 
-            // Verifica sequências inválidas
             if (/^(\d)\1{13}$/.test(numeros)) {
                 return false;
             }
@@ -287,7 +264,6 @@
             let soma = 0;
             let pos = tamanho - 7;
 
-            // Calcula primeiro dígito
             for (let i = tamanho; i >= 1; i--) {
                 soma += numeros.charAt(tamanho - i) * pos--;
                 if (pos < 2) pos = 9;
@@ -296,7 +272,6 @@
             let resultado = soma % 11 < 2 ? 0 : 11 - soma % 11;
             if (resultado != digitosOriginais.charAt(0)) return false;
 
-            // Calcula segundo dígito
             tamanho = tamanho + 1;
             soma = 0;
             pos = tamanho - 7;
@@ -312,15 +287,11 @@
             return true;
         } else {
             // CNPJ alfanumérico (formato 2026+)
-            // Valida apenas o formato (algoritmo de dígitos será divulgado pela Receita)
             const formatoAlfanumerico = /^[A-Z0-9]{14}$/;
-
             if (!formatoAlfanumerico.test(cnpjLimpo)) {
                 return false;
             }
-
-            // Aceita como válido (aguardando algoritmo oficial da Receita)
-            console.info('CNPJ alfanumérico detectado. Validação completa disponível após divulgação do algoritmo pela Receita Federal (2026).');
+            console.info('CNPJ alfanumérico detectado. Validação completa disponível após 2026.');
             return true;
         }
     }
@@ -334,13 +305,120 @@
     }
 
     // ========================================================================
+    // TIPO PESSOA (PF/PJ) TOGGLE
+    // ========================================================================
+
+    function initTipoPessoaToggle() {
+        // Buscar tanto select quanto radio buttons
+        const tipoPessoaSelect = document.querySelector('select[name="tipo_pessoa"]');
+        const tipoPessoaRadios = document.querySelectorAll('input[name="tipo_pessoa"]');
+
+        // Elementos do formulário
+        const camposPF = document.getElementById('campos-pf');
+        const camposPJ = document.getElementById('campos-pj');
+        const cardConjuge = document.getElementById('card-conjuge');
+        const labelNome = document.querySelector('label[for="id_nome"]');
+        const tituloIdentificacao = document.getElementById('titulo-identificacao');
+
+        function getTipoPessoa() {
+            // Se for select
+            if (tipoPessoaSelect) {
+                return tipoPessoaSelect.value;
+            }
+            // Se for radio buttons
+            const checkedRadio = document.querySelector('input[name="tipo_pessoa"]:checked');
+            return checkedRadio ? checkedRadio.value : 'PF';
+        }
+
+        function toggleCampos() {
+            const tipo = getTipoPessoa();
+            const isPF = tipo === 'PF';
+            const isPJ = tipo === 'PJ';
+
+            console.log('Toggle tipo pessoa:', tipo);
+
+            // Toggle seções PF/PJ
+            if (camposPF) {
+                camposPF.style.display = isPF ? 'block' : 'none';
+            }
+            if (camposPJ) {
+                camposPJ.style.display = isPJ ? 'block' : 'none';
+            }
+            if (cardConjuge) {
+                cardConjuge.style.display = isPF ? 'block' : 'none';
+            }
+
+            // Atualizar labels
+            if (labelNome) {
+                labelNome.innerHTML = isPF
+                    ? 'Nome Completo <span class="text-danger">*</span>'
+                    : 'Razão Social <span class="text-danger">*</span>';
+            }
+            if (tituloIdentificacao) {
+                tituloIdentificacao.innerHTML = isPF
+                    ? '<i class="fas fa-user me-2"></i>Dados Pessoais'
+                    : '<i class="fas fa-building me-2"></i>Dados da Empresa';
+            }
+
+            // Atualizar placeholder do campo nome
+            const campoNome = document.querySelector('input[name="nome"]');
+            if (campoNome) {
+                campoNome.placeholder = isPF ? 'Nome completo do comprador' : 'Razão social da empresa';
+            }
+
+            // Limpar campos não utilizados ao trocar tipo
+            if (isPF) {
+                // Limpar campos PJ
+                const camposClear = ['cnpj', 'nome_fantasia', 'inscricao_estadual',
+                                     'inscricao_municipal', 'responsavel_legal', 'responsavel_cpf'];
+                camposClear.forEach(nome => {
+                    const campo = document.querySelector(`[name="${nome}"]`);
+                    if (campo) campo.value = '';
+                });
+            } else if (isPJ) {
+                // Limpar campos PF
+                const camposClear = ['cpf', 'rg', 'data_nascimento', 'profissao',
+                                     'conjuge_nome', 'conjuge_cpf', 'conjuge_rg'];
+                camposClear.forEach(nome => {
+                    const campo = document.querySelector(`[name="${nome}"]`);
+                    if (campo) campo.value = '';
+                });
+                // Resetar estado civil
+                const estadoCivil = document.querySelector('select[name="estado_civil"]');
+                if (estadoCivil) estadoCivil.value = '';
+            }
+        }
+
+        // Adicionar event listeners
+        if (tipoPessoaSelect) {
+            tipoPessoaSelect.addEventListener('change', toggleCampos);
+        }
+
+        if (tipoPessoaRadios.length > 0) {
+            tipoPessoaRadios.forEach(radio => {
+                radio.addEventListener('change', toggleCampos);
+            });
+        }
+
+        // Executar na carga da página
+        toggleCampos();
+    }
+
+    // ========================================================================
     // AUTO-APPLY MASKS
     // ========================================================================
 
     document.addEventListener('DOMContentLoaded', function() {
 
+        // ====================================================================
+        // INICIALIZAR TOGGLE PF/PJ
+        // ====================================================================
+        initTipoPessoaToggle();
+
+        // ====================================================================
         // CPF inputs
-        const cpfInputs = document.querySelectorAll('input[name="cpf"], input[name="conjuge_cpf"]');
+        // ====================================================================
+        const cpfInputs = document.querySelectorAll('input[name="cpf"], input[name="conjuge_cpf"], input[name="responsavel_cpf"]');
         cpfInputs.forEach(input => {
             input.addEventListener('input', function(e) {
                 e.target.value = mascaraCPF(e.target.value);
@@ -348,8 +426,9 @@
 
             input.addEventListener('blur', function(e) {
                 const cpf = e.target.value;
-                if (cpf && !validarCPF(cpf)) {
+                if (cpf && cpf.length >= 14 && !validarCPF(cpf)) {
                     e.target.classList.add('is-invalid');
+                    e.target.classList.remove('is-valid');
                     let feedback = e.target.parentElement.querySelector('.invalid-feedback');
                     if (!feedback) {
                         feedback = document.createElement('div');
@@ -357,13 +436,18 @@
                         feedback.textContent = 'CPF inválido';
                         e.target.parentElement.appendChild(feedback);
                     }
-                } else {
+                } else if (cpf && validarCPF(cpf)) {
                     e.target.classList.remove('is-invalid');
+                    e.target.classList.add('is-valid');
+                } else {
+                    e.target.classList.remove('is-invalid', 'is-valid');
                 }
             });
         });
 
+        // ====================================================================
         // CNPJ inputs
+        // ====================================================================
         const cnpjInputs = document.querySelectorAll('input[name="cnpj"]');
         cnpjInputs.forEach(input => {
             input.addEventListener('input', function(e) {
@@ -372,8 +456,9 @@
 
             input.addEventListener('blur', function(e) {
                 const cnpj = e.target.value;
-                if (cnpj && !validarCNPJ(cnpj)) {
+                if (cnpj && cnpj.length >= 18 && !validarCNPJ(cnpj)) {
                     e.target.classList.add('is-invalid');
+                    e.target.classList.remove('is-valid');
                     let feedback = e.target.parentElement.querySelector('.invalid-feedback');
                     if (!feedback) {
                         feedback = document.createElement('div');
@@ -381,13 +466,18 @@
                         feedback.textContent = 'CNPJ inválido';
                         e.target.parentElement.appendChild(feedback);
                     }
-                } else {
+                } else if (cnpj && validarCNPJ(cnpj)) {
                     e.target.classList.remove('is-invalid');
+                    e.target.classList.add('is-valid');
+                } else {
+                    e.target.classList.remove('is-invalid', 'is-valid');
                 }
             });
         });
 
+        // ====================================================================
         // Phone inputs
+        // ====================================================================
         const phoneInputs = document.querySelectorAll('input[name="telefone"], input[name="celular"]');
         phoneInputs.forEach(input => {
             input.addEventListener('input', function(e) {
@@ -395,44 +485,45 @@
             });
         });
 
-        // CEP inputs
+        // ====================================================================
+        // CEP inputs with ViaCEP integration
+        // ====================================================================
         const cepInputs = document.querySelectorAll('input[name="cep"], .cep-input');
         cepInputs.forEach(input => {
-            // Aplica máscara
             input.addEventListener('input', function(e) {
                 e.target.value = mascaraCEP(e.target.value);
             });
 
-            // Busca endereço via ViaCEP quando CEP está completo
             input.addEventListener('blur', async function(e) {
                 const cep = e.target.value.replace(/\D/g, '');
 
                 if (cep.length === 8) {
-                    // Mostra loading
                     const originalValue = e.target.value;
                     e.target.value = 'Buscando...';
                     e.target.disabled = true;
 
                     const resultado = await buscarCEP(cep);
 
-                    // Restaura campo
                     e.target.value = originalValue;
                     e.target.disabled = false;
 
                     if (resultado.erro) {
                         showToast(resultado.mensagem, 'warning');
                         e.target.classList.add('is-invalid');
+                        e.target.classList.remove('is-valid');
                     } else {
                         e.target.classList.remove('is-invalid');
                         e.target.classList.add('is-valid');
                         preencherEndereco(resultado);
-                        showToast('Endereço encontrado! Verifique e complete os dados.', 'success');
+                        showToast('Endereço encontrado!', 'success');
                     }
                 }
             });
         });
 
+        // ====================================================================
         // Email inputs
+        // ====================================================================
         const emailInputs = document.querySelectorAll('input[type="email"]');
         emailInputs.forEach(input => {
             input.addEventListener('blur', function(e) {
@@ -448,91 +539,10 @@
                     }
                 } else {
                     e.target.classList.remove('is-invalid');
+                    if (email) e.target.classList.add('is-valid');
                 }
             });
         });
-
-        // ====================================================================
-        // TIPO DE PESSOA (PF/PJ) - TOGGLE CAMPOS
-        // ====================================================================
-        const tipoPessoaSelect = document.querySelector('select[name="tipo_pessoa"]');
-
-        if (tipoPessoaSelect) {
-            function toggleCamposTipoPessoa() {
-                const tipoPessoa = tipoPessoaSelect.value;
-                const isPF = tipoPessoa === 'PF';
-                const isPJ = tipoPessoa === 'PJ';
-
-                // Seções e campos PF
-                const secaoPF = document.getElementById('secao-pf');
-                const camposPF = document.querySelectorAll('.campos-pf');
-                const secaoConjuge = document.getElementById('secao-conjuge');
-                const camposConjuge = document.querySelectorAll('.campos-conjuge');
-
-                // Seções e campos PJ
-                const secaoPJ = document.getElementById('secao-pj');
-                const camposPJ = document.querySelectorAll('.campos-pj');
-
-                // Toggle seções
-                if (secaoPF) secaoPF.style.display = isPF ? 'block' : 'none';
-                if (secaoPJ) secaoPJ.style.display = isPJ ? 'block' : 'none';
-                if (secaoConjuge) secaoConjuge.style.display = isPF ? 'block' : 'none';
-
-                // Toggle campos
-                camposPF.forEach(campo => campo.style.display = isPF ? 'block' : 'none');
-                camposPJ.forEach(campo => campo.style.display = isPJ ? 'block' : 'none');
-                camposConjuge.forEach(campo => campo.style.display = isPF ? 'block' : 'none');
-
-                // Atualiza label do campo nome
-                const labelNome = document.querySelector('label[for="id_nome"]');
-                if (labelNome) {
-                    labelNome.textContent = isPF ? 'Nome Completo' : 'Razão Social';
-                }
-
-                // Limpa campos não utilizados
-                if (isPF) {
-                    // Limpa campos PJ
-                    const cnpjInput = document.querySelector('input[name="cnpj"]');
-                    const nomeFantasiaInput = document.querySelector('input[name="nome_fantasia"]');
-                    const inscricaoEstadualInput = document.querySelector('input[name="inscricao_estadual"]');
-                    const inscricaoMunicipalInput = document.querySelector('input[name="inscricao_municipal"]');
-                    const responsavelLegalInput = document.querySelector('input[name="responsavel_legal"]');
-                    const responsavelCpfInput = document.querySelector('input[name="responsavel_cpf"]');
-
-                    if (cnpjInput) cnpjInput.value = '';
-                    if (nomeFantasiaInput) nomeFantasiaInput.value = '';
-                    if (inscricaoEstadualInput) inscricaoEstadualInput.value = '';
-                    if (inscricaoMunicipalInput) inscricaoMunicipalInput.value = '';
-                    if (responsavelLegalInput) responsavelLegalInput.value = '';
-                    if (responsavelCpfInput) responsavelCpfInput.value = '';
-                } else if (isPJ) {
-                    // Limpa campos PF
-                    const cpfInput = document.querySelector('input[name="cpf"]');
-                    const rgInput = document.querySelector('input[name="rg"]');
-                    const dataNascimentoInput = document.querySelector('input[name="data_nascimento"]');
-                    const estadoCivilSelect = document.querySelector('select[name="estado_civil"]');
-                    const profissaoInput = document.querySelector('input[name="profissao"]');
-                    const conjugeNomeInput = document.querySelector('input[name="conjuge_nome"]');
-                    const conjugeCpfInput = document.querySelector('input[name="conjuge_cpf"]');
-                    const conjugeRgInput = document.querySelector('input[name="conjuge_rg"]');
-
-                    if (cpfInput) cpfInput.value = '';
-                    if (rgInput) rgInput.value = '';
-                    if (dataNascimentoInput) dataNascimentoInput.value = '';
-                    if (estadoCivilSelect) estadoCivilSelect.value = '';
-                    if (profissaoInput) profissaoInput.value = '';
-                    if (conjugeNomeInput) conjugeNomeInput.value = '';
-                    if (conjugeCpfInput) conjugeCpfInput.value = '';
-                    if (conjugeRgInput) conjugeRgInput.value = '';
-                }
-            }
-
-            // Executa na carga da página
-            toggleCamposTipoPessoa();
-
-            // Executa ao mudar seleção
-            tipoPessoaSelect.addEventListener('change', toggleCamposTipoPessoa);
-        }
 
         // ====================================================================
         // FORM SUBMIT ANIMATION
@@ -555,7 +565,6 @@
         searchInputs.forEach(input => {
             input.addEventListener('input', debounce(function(e) {
                 console.log('Searching for:', e.target.value);
-                // Auto-submit could be implemented here
             }, 500));
         });
 
@@ -585,13 +594,15 @@
         const alerts = document.querySelectorAll('.alert:not(.alert-permanent)');
         alerts.forEach(alert => {
             setTimeout(() => {
-                const bsAlert = new bootstrap.Alert(alert);
-                bsAlert.close();
+                if (typeof bootstrap !== 'undefined') {
+                    const bsAlert = new bootstrap.Alert(alert);
+                    bsAlert.close();
+                }
             }, 5000);
         });
 
         // ====================================================================
-        // CONFIRM FORM SUBMISSION FOR DELETIONS
+        // CONFIRM DELETIONS
         // ====================================================================
         const deleteButtons = document.querySelectorAll('.btn-danger[type="submit"]');
         deleteButtons.forEach(button => {
@@ -603,7 +614,7 @@
         });
 
         // ====================================================================
-        // TABLE ROW CLICK TO VIEW DETAILS (if data-href exists)
+        // TABLE ROW CLICK
         // ====================================================================
         const tableRows = document.querySelectorAll('tr[data-href]');
         tableRows.forEach(row => {
