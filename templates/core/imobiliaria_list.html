@@ -1,0 +1,235 @@
+{% extends 'base.html' %}
+{% load crispy_forms_tags %}
+
+{% block title %}Imobiliárias - Gestão de Contratos{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h4 class="mb-0">
+                    <i class="fas fa-building"></i> Gerenciar Imobiliárias
+                </h4>
+                <a href="{% url 'core:criar_imobiliaria' %}" class="btn btn-light">
+                    <i class="fas fa-plus"></i> Nova Imobiliária
+                </a>
+            </div>
+            <div class="card-body">
+                <!-- Barra de Busca -->
+                <div class="row mb-4">
+                    <div class="col-md-8">
+                        <form method="get" class="d-flex">
+                            <input type="text" name="search" class="form-control me-2"
+                                   placeholder="Buscar por nome, razão social ou CNPJ..."
+                                   value="{{ search }}">
+                            <button type="submit" class="btn btn-primary">
+                                <i class="fas fa-search"></i> Buscar
+                            </button>
+                            {% if search %}
+                                <a href="{% url 'core:listar_imobiliarias' %}" class="btn btn-secondary ms-2">
+                                    <i class="fas fa-times"></i> Limpar
+                                </a>
+                            {% endif %}
+                        </form>
+                    </div>
+                    <div class="col-md-4 text-end">
+                        <div class="badge bg-info text-dark fs-6">
+                            <i class="fas fa-building"></i> Total: {{ total_imobiliarias }}
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Cards de Imobiliárias -->
+                {% if imobiliarias %}
+                    <div class="row">
+                        {% for imobiliaria in imobiliarias %}
+                            <div class="col-md-6 col-lg-4 mb-4">
+                                <div class="card h-100 border-primary">
+                                    <div class="card-header bg-primary text-white">
+                                        <h5 class="mb-0">
+                                            <i class="fas fa-building"></i>
+                                            {{ imobiliaria.nome }}
+                                        </h5>
+                                    </div>
+                                    <div class="card-body">
+                                        <h6 class="card-subtitle mb-3 text-muted">
+                                            {{ imobiliaria.razao_social }}
+                                        </h6>
+
+                                        <p class="card-text">
+                                            <i class="fas fa-id-card text-primary"></i>
+                                            <strong>CNPJ:</strong> {{ imobiliaria.cnpj }}<br>
+
+                                            {% if imobiliaria.contabilidade %}
+                                                <i class="fas fa-calculator text-success"></i>
+                                                <strong>Contabilidade:</strong>
+                                                {{ imobiliaria.contabilidade.nome }}<br>
+                                            {% endif %}
+                                        </p>
+
+                                        <hr>
+
+                                        <p class="card-text">
+                                            {% if imobiliaria.telefone %}
+                                                <i class="fas fa-phone text-info"></i>
+                                                {{ imobiliaria.telefone }}<br>
+                                            {% endif %}
+
+                                            {% if imobiliaria.email %}
+                                                <i class="fas fa-envelope text-warning"></i>
+                                                {{ imobiliaria.email }}<br>
+                                            {% endif %}
+
+                                            {% if imobiliaria.responsavel_financeiro %}
+                                                <i class="fas fa-user-tie text-secondary"></i>
+                                                <strong>Resp. Financeiro:</strong>
+                                                {{ imobiliaria.responsavel_financeiro }}<br>
+                                            {% endif %}
+                                        </p>
+
+                                        {% if imobiliaria.banco or imobiliaria.pix %}
+                                            <hr>
+                                            <p class="card-text">
+                                                <strong><i class="fas fa-university"></i> Dados Bancários:</strong><br>
+                                                {% if imobiliaria.banco %}
+                                                    <small>
+                                                        {{ imobiliaria.banco }}
+                                                        {% if imobiliaria.agencia %}- Ag: {{ imobiliaria.agencia }}{% endif %}
+                                                        {% if imobiliaria.conta %}- Conta: {{ imobiliaria.conta }}{% endif %}
+                                                    </small><br>
+                                                {% endif %}
+                                                {% if imobiliaria.pix %}
+                                                    <small>
+                                                        <i class="fas fa-qrcode"></i> PIX: {{ imobiliaria.pix }}
+                                                    </small>
+                                                {% endif %}
+                                            </p>
+                                        {% endif %}
+                                    </div>
+                                    <div class="card-footer bg-transparent">
+                                        <div class="d-flex justify-content-between align-items-center">
+                                            <small class="text-muted">
+                                                <i class="fas fa-calendar"></i>
+                                                Desde {{ imobiliaria.created_at|date:"m/Y" }}
+                                            </small>
+                                            <div class="btn-group btn-group-sm" role="group">
+                                                <a href="{% url 'core:editar_imobiliaria' imobiliaria.pk %}"
+                                                   class="btn btn-outline-primary"
+                                                   title="Editar">
+                                                    <i class="fas fa-edit"></i>
+                                                </a>
+                                                <button type="button"
+                                                        class="btn btn-outline-danger"
+                                                        title="Excluir"
+                                                        onclick="confirmarExclusao('{{ imobiliaria.nome }}', '{% url 'core:excluir_imobiliaria' imobiliaria.pk %}')">
+                                                    <i class="fas fa-trash"></i>
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        {% endfor %}
+                    </div>
+
+                    <!-- Paginação -->
+                    {% if is_paginated %}
+                        <nav aria-label="Navegação de páginas">
+                            <ul class="pagination justify-content-center">
+                                {% if page_obj.has_previous %}
+                                    <li class="page-item">
+                                        <a class="page-link" href="?page=1{% if search %}&search={{ search }}{% endif %}">
+                                            Primeira
+                                        </a>
+                                    </li>
+                                    <li class="page-item">
+                                        <a class="page-link" href="?page={{ page_obj.previous_page_number }}{% if search %}&search={{ search }}{% endif %}">
+                                            Anterior
+                                        </a>
+                                    </li>
+                                {% endif %}
+
+                                <li class="page-item active">
+                                    <span class="page-link">
+                                        Página {{ page_obj.number }} de {{ page_obj.paginator.num_pages }}
+                                    </span>
+                                </li>
+
+                                {% if page_obj.has_next %}
+                                    <li class="page-item">
+                                        <a class="page-link" href="?page={{ page_obj.next_page_number }}{% if search %}&search={{ search }}{% endif %}">
+                                            Próxima
+                                        </a>
+                                    </li>
+                                    <li class="page-item">
+                                        <a class="page-link" href="?page={{ page_obj.paginator.num_pages }}{% if search %}&search={{ search }}{% endif %}">
+                                            Última
+                                        </a>
+                                    </li>
+                                {% endif %}
+                            </ul>
+                        </nav>
+                    {% endif %}
+                {% else %}
+                    <div class="alert alert-info text-center">
+                        <i class="fas fa-info-circle fa-3x mb-3"></i>
+                        <h5>Nenhuma imobiliária encontrada</h5>
+                        <p>
+                            {% if search %}
+                                Sua busca por "{{ search }}" não retornou resultados.
+                            {% else %}
+                                Comece cadastrando uma nova imobiliária.
+                            {% endif %}
+                        </p>
+                        <a href="{% url 'core:criar_imobiliaria' %}" class="btn btn-primary">
+                            <i class="fas fa-plus"></i> Cadastrar Primeira Imobiliária
+                        </a>
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal de Confirmação de Exclusão -->
+<div class="modal fade" id="modalExclusao" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-danger text-white">
+                <h5 class="modal-title">
+                    <i class="fas fa-exclamation-triangle"></i> Confirmar Exclusão
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p>Tem certeza que deseja excluir a imobiliária <strong id="nomeImobiliaria"></strong>?</p>
+                <p class="text-danger">
+                    <i class="fas fa-info-circle"></i> Esta ação não pode ser desfeita.
+                </p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                    Cancelar
+                </button>
+                <form id="formExclusao" method="post" style="display: inline;">
+                    {% csrf_token %}
+                    <button type="submit" class="btn btn-danger">
+                        <i class="fas fa-trash"></i> Excluir
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    function confirmarExclusao(nome, url) {
+        document.getElementById('nomeImobiliaria').textContent = nome;
+        document.getElementById('formExclusao').action = url;
+        new bootstrap.Modal(document.getElementById('modalExclusao')).show();
+    }
+</script>
+{% endblock %}

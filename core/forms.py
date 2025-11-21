@@ -1,0 +1,195 @@
+"""
+Formulários do app Core
+
+Desenvolvedor: Maxwell da Silva Oliveira
+Email: maxwbh@gmail.com
+"""
+from django import forms
+from django.core.exceptions import ValidationError
+from crispy_forms.helper import FormHelper
+from crispy_forms.layout import Layout, Submit, Row, Column, Div, HTML
+from crispy_forms.bootstrap import PrependedText, AppendedText
+from .models import Contabilidade, Imobiliaria, Imovel, Comprador, TipoImovel
+import re
+
+
+class CompradorForm(forms.ModelForm):
+    """Formulário para cadastro de Comprador"""
+
+    class Meta:
+        model = Comprador
+        fields = [
+            'nome', 'cpf', 'rg', 'data_nascimento', 'estado_civil', 'profissao',
+            'endereco', 'telefone', 'celular', 'email',
+            'notificar_email', 'notificar_sms', 'notificar_whatsapp',
+            'conjuge_nome', 'conjuge_cpf', 'conjuge_rg', 'observacoes'
+        ]
+        widgets = {
+            'data_nascimento': forms.DateInput(attrs={'type': 'date'}),
+            'observacoes': forms.Textarea(attrs={'rows': 3}),
+            'endereco': forms.Textarea(attrs={'rows': 3}),
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.helper = FormHelper()
+        self.helper.form_method = 'post'
+        self.helper.layout = Layout(
+            HTML('<h4 class="mb-3"><i class="fas fa-user"></i> Dados Pessoais</h4>'),
+            Row(
+                Column('nome', css_class='form-group col-md-8'),
+                Column('cpf', css_class='form-group col-md-4'),
+            ),
+            Row(
+                Column('rg', css_class='form-group col-md-4'),
+                Column('data_nascimento', css_class='form-group col-md-4'),
+                Column('estado_civil', css_class='form-group col-md-4'),
+            ),
+            'profissao',
+
+            HTML('<h4 class="mt-4 mb-3"><i class="fas fa-map-marker-alt"></i> Endereço e Contato</h4>'),
+            'endereco',
+            Row(
+                Column('telefone', css_class='form-group col-md-4'),
+                Column('celular', css_class='form-group col-md-4'),
+                Column('email', css_class='form-group col-md-4'),
+            ),
+
+            HTML('<h4 class="mt-4 mb-3"><i class="fas fa-bell"></i> Preferências de Notificação</h4>'),
+            Row(
+                Column('notificar_email', css_class='form-group col-md-4'),
+                Column('notificar_sms', css_class='form-group col-md-4'),
+                Column('notificar_whatsapp', css_class='form-group col-md-4'),
+            ),
+
+            HTML('<h4 class="mt-4 mb-3"><i class="fas fa-ring"></i> Dados do Cônjuge (se casado)</h4>'),
+            Row(
+                Column('conjuge_nome', css_class='form-group col-md-6'),
+                Column('conjuge_cpf', css_class='form-group col-md-3'),
+                Column('conjuge_rg', css_class='form-group col-md-3'),
+            ),
+
+            HTML('<h4 class="mt-4 mb-3"><i class="fas fa-sticky-note"></i> Observações</h4>'),
+            'observacoes',
+
+            Div(
+                Submit('submit', 'Salvar Comprador', css_class='btn btn-primary btn-lg'),
+                HTML('<a href="{% url \'core:listar_compradores\' %}" class="btn btn-secondary btn-lg ms-2">Cancelar</a>'),
+                css_class='text-center mt-4'
+            )
+        )
+
+    def clean_cpf(self):
+        cpf = self.cleaned_data.get('cpf')
+        # Remove caracteres não numéricos
+        cpf_numeros = re.sub(r'\D', '', cpf)
+
+        if len(cpf_numeros) != 11:
+            raise ValidationError('CPF deve ter 11 dígitos')
+
+        return cpf
+
+
+class ImovelForm(forms.ModelForm):
+    """Formulário para cadastro de Imóvel"""
+
+    class Meta:
+        model = Imovel
+        fields = [
+            'imobiliaria', 'tipo', 'identificacao', 'loteamento',
+            'endereco', 'area', 'matricula', 'inscricao_municipal',
+            'observacoes', 'disponivel'
+        ]
+        widgets = {
+            'observacoes': forms.Textarea(attrs={'rows': 3}),
+            'endereco': forms.Textarea(attrs={'rows': 3}),
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.helper = FormHelper()
+        self.helper.form_method = 'post'
+        self.helper.layout = Layout(
+            HTML('<h4 class="mb-3"><i class="fas fa-home"></i> Informações Básicas</h4>'),
+            Row(
+                Column('imobiliaria', css_class='form-group col-md-6'),
+                Column('tipo', css_class='form-group col-md-6'),
+            ),
+            Row(
+                Column('identificacao', css_class='form-group col-md-6'),
+                Column('loteamento', css_class='form-group col-md-6'),
+            ),
+
+            HTML('<h4 class="mt-4 mb-3"><i class="fas fa-map-marked-alt"></i> Localização</h4>'),
+            'endereco',
+            AppendedText('area', 'm²'),
+
+            HTML('<h4 class="mt-4 mb-3"><i class="fas fa-file-alt"></i> Documentação</h4>'),
+            Row(
+                Column('matricula', css_class='form-group col-md-6'),
+                Column('inscricao_municipal', css_class='form-group col-md-6'),
+            ),
+
+            HTML('<h4 class="mt-4 mb-3"><i class="fas fa-sticky-note"></i> Observações</h4>'),
+            'observacoes',
+
+            HTML('<h4 class="mt-4 mb-3"><i class="fas fa-check-circle"></i> Status</h4>'),
+            'disponivel',
+
+            Div(
+                Submit('submit', 'Salvar Imóvel', css_class='btn btn-primary btn-lg'),
+                HTML('<a href="{% url \'core:listar_imoveis\' %}" class="btn btn-secondary btn-lg ms-2">Cancelar</a>'),
+                css_class='text-center mt-4'
+            )
+        )
+
+
+class ImobiliariaForm(forms.ModelForm):
+    """Formulário para cadastro de Imobiliária"""
+
+    class Meta:
+        model = Imobiliaria
+        fields = [
+            'contabilidade', 'nome', 'razao_social', 'cnpj',
+            'endereco', 'telefone', 'email', 'responsavel_financeiro',
+            'banco', 'agencia', 'conta', 'pix'
+        ]
+        widgets = {
+            'endereco': forms.Textarea(attrs={'rows': 3}),
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.helper = FormHelper()
+        self.helper.form_method = 'post'
+        self.helper.layout = Layout(
+            HTML('<h4 class="mb-3"><i class="fas fa-building"></i> Informações da Empresa</h4>'),
+            'contabilidade',
+            Row(
+                Column('nome', css_class='form-group col-md-8'),
+                Column('cnpj', css_class='form-group col-md-4'),
+            ),
+            'razao_social',
+
+            HTML('<h4 class="mt-4 mb-3"><i class="fas fa-map-marker-alt"></i> Endereço e Contato</h4>'),
+            'endereco',
+            Row(
+                Column('telefone', css_class='form-group col-md-6'),
+                Column('email', css_class='form-group col-md-6'),
+            ),
+            'responsavel_financeiro',
+
+            HTML('<h4 class="mt-4 mb-3"><i class="fas fa-university"></i> Dados Bancários</h4>'),
+            Row(
+                Column('banco', css_class='form-group col-md-6'),
+                Column('agencia', css_class='form-group col-md-3'),
+                Column('conta', css_class='form-group col-md-3'),
+            ),
+            'pix',
+
+            Div(
+                Submit('submit', 'Salvar Imobiliária', css_class='btn btn-primary btn-lg'),
+                HTML('<a href="{% url \'core:listar_imobiliarias\' %}" class="btn btn-secondary btn-lg ms-2">Cancelar</a>'),
+                css_class='text-center mt-4'
+            )
+        )
