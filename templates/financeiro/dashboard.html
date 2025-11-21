@@ -1,0 +1,513 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Dashboard Financeiro{% endblock %}
+
+{% block extra_css %}
+<style>
+    .card-stats {
+        border-left: 4px solid;
+        transition: transform 0.2s;
+    }
+    .card-stats:hover {
+        transform: translateY(-3px);
+    }
+    .card-stats.primary { border-color: #007bff; }
+    .card-stats.success { border-color: #28a745; }
+    .card-stats.warning { border-color: #ffc107; }
+    .card-stats.danger { border-color: #dc3545; }
+    .card-stats.info { border-color: #17a2b8; }
+
+    .stat-value {
+        font-size: 1.8rem;
+        font-weight: bold;
+    }
+    .stat-label {
+        color: #6c757d;
+        font-size: 0.9rem;
+    }
+
+    .chart-container {
+        position: relative;
+        height: 300px;
+    }
+
+    .periodo-card {
+        background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+    }
+
+    .table-atraso tr:hover {
+        background-color: #fff3cd;
+    }
+
+    .badge-atraso {
+        font-size: 0.85rem;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <!-- Header -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h2><i class="bi bi-graph-up-arrow"></i> Dashboard Financeiro</h2>
+            <p class="text-muted mb-0">
+                {% if imobiliaria_selecionada %}
+                    {{ imobiliaria_selecionada.nome }}
+                {% else %}
+                    Todas as Imobiliarias
+                {% endif %}
+            </p>
+        </div>
+        <div>
+            <form method="get" class="d-flex gap-2">
+                <select name="imobiliaria" class="form-select" onchange="this.form.submit()">
+                    <option value="">Todas as Imobiliarias</option>
+                    {% for imob in imobiliarias %}
+                    <option value="{{ imob.id }}" {% if imobiliaria_selecionada.id == imob.id %}selected{% endif %}>
+                        {{ imob.nome }}
+                    </option>
+                    {% endfor %}
+                </select>
+            </form>
+        </div>
+    </div>
+
+    <!-- Cards de Resumo Principal -->
+    <div class="row mb-4">
+        <div class="col-md-3">
+            <div class="card card-stats primary">
+                <div class="card-body">
+                    <div class="stat-value text-primary">{{ total_contratos }}</div>
+                    <div class="stat-label">Total de Contratos</div>
+                    <hr class="my-2">
+                    <small class="text-muted">
+                        <span class="text-success">{{ contratos_ativos }} ativos</span> |
+                        <span class="text-secondary">{{ contratos_quitados }} quitados</span>
+                    </small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card card-stats success">
+                <div class="card-body">
+                    <div class="stat-value text-success">R$ {{ valor_recebido|floatformat:2 }}</div>
+                    <div class="stat-label">Total Recebido</div>
+                    <hr class="my-2">
+                    <small class="text-muted">{{ parcelas_pagas }} parcelas pagas</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card card-stats warning">
+                <div class="card-body">
+                    <div class="stat-value text-warning">R$ {{ valor_a_receber|floatformat:2 }}</div>
+                    <div class="stat-label">A Receber</div>
+                    <hr class="my-2">
+                    <small class="text-muted">{{ parcelas_pendentes }} parcelas pendentes</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card card-stats danger">
+                <div class="card-body">
+                    <div class="stat-value text-danger">R$ {{ valor_em_atraso|floatformat:2 }}</div>
+                    <div class="stat-label">Em Atraso</div>
+                    <hr class="my-2">
+                    <small class="text-muted">{{ parcelas_vencidas }} parcelas vencidas</small>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Cards por Periodo -->
+    <div class="row mb-4">
+        <div class="col-md-3">
+            <div class="card periodo-card h-100">
+                <div class="card-header bg-primary text-white">
+                    <i class="bi bi-calendar-date"></i> Mes Atual
+                </div>
+                <div class="card-body">
+                    <div class="d-flex justify-content-between mb-2">
+                        <span>Parcelas:</span>
+                        <strong>{{ parcelas_mes_atual.total }}</strong>
+                    </div>
+                    <div class="d-flex justify-content-between mb-2">
+                        <span class="text-success">Pagas:</span>
+                        <strong class="text-success">{{ parcelas_mes_atual.pagas }}</strong>
+                    </div>
+                    <div class="d-flex justify-content-between mb-2">
+                        <span class="text-danger">Vencidas:</span>
+                        <strong class="text-danger">{{ parcelas_mes_atual.vencidas }}</strong>
+                    </div>
+                    <hr>
+                    <div class="d-flex justify-content-between">
+                        <span>Recebido:</span>
+                        <strong class="text-success">R$ {{ parcelas_mes_atual.valor_recebido|floatformat:2 }}</strong>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card periodo-card h-100">
+                <div class="card-header bg-secondary text-white">
+                    <i class="bi bi-calendar-minus"></i> Mes Passado
+                </div>
+                <div class="card-body">
+                    <div class="d-flex justify-content-between mb-2">
+                        <span>Parcelas:</span>
+                        <strong>{{ parcelas_mes_passado.total }}</strong>
+                    </div>
+                    <div class="d-flex justify-content-between mb-2">
+                        <span class="text-success">Pagas:</span>
+                        <strong class="text-success">{{ parcelas_mes_passado.pagas }}</strong>
+                    </div>
+                    <div class="d-flex justify-content-between mb-2">
+                        <span class="text-danger">Vencidas:</span>
+                        <strong class="text-danger">{{ parcelas_mes_passado.vencidas }}</strong>
+                    </div>
+                    <hr>
+                    <div class="d-flex justify-content-between">
+                        <span>Recebido:</span>
+                        <strong class="text-success">R$ {{ parcelas_mes_passado.valor_recebido|floatformat:2 }}</strong>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card periodo-card h-100">
+                <div class="card-header bg-info text-white">
+                    <i class="bi bi-calendar-range"></i> Ultimos 6 Meses
+                </div>
+                <div class="card-body">
+                    <div class="d-flex justify-content-between mb-2">
+                        <span>Parcelas:</span>
+                        <strong>{{ parcelas_6_meses.total }}</strong>
+                    </div>
+                    <div class="d-flex justify-content-between mb-2">
+                        <span class="text-success">Pagas:</span>
+                        <strong class="text-success">{{ parcelas_6_meses.pagas }}</strong>
+                    </div>
+                    <div class="d-flex justify-content-between mb-2">
+                        <span class="text-danger">Vencidas:</span>
+                        <strong class="text-danger">{{ parcelas_6_meses.vencidas }}</strong>
+                    </div>
+                    <hr>
+                    <div class="d-flex justify-content-between">
+                        <span>Recebido:</span>
+                        <strong class="text-success">R$ {{ parcelas_6_meses.valor_recebido|floatformat:2 }}</strong>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card periodo-card h-100">
+                <div class="card-header bg-dark text-white">
+                    <i class="bi bi-calendar-check"></i> Ano Atual
+                </div>
+                <div class="card-body">
+                    <div class="d-flex justify-content-between mb-2">
+                        <span>Parcelas:</span>
+                        <strong>{{ parcelas_ano.total }}</strong>
+                    </div>
+                    <div class="d-flex justify-content-between mb-2">
+                        <span class="text-success">Pagas:</span>
+                        <strong class="text-success">{{ parcelas_ano.pagas }}</strong>
+                    </div>
+                    <div class="d-flex justify-content-between mb-2">
+                        <span class="text-danger">Vencidas:</span>
+                        <strong class="text-danger">{{ parcelas_ano.vencidas }}</strong>
+                    </div>
+                    <hr>
+                    <div class="d-flex justify-content-between">
+                        <span>Recebido:</span>
+                        <strong class="text-success">R$ {{ parcelas_ano.valor_recebido|floatformat:2 }}</strong>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Graficos -->
+    <div class="row mb-4">
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-header">
+                    <i class="bi bi-pie-chart"></i> Status das Parcelas
+                </div>
+                <div class="card-body">
+                    <div class="chart-container">
+                        <canvas id="chartStatusParcelas"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-header">
+                    <i class="bi bi-pie-chart-fill"></i> Status dos Contratos
+                </div>
+                <div class="card-body">
+                    <div class="chart-container">
+                        <canvas id="chartStatusContratos"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row mb-4">
+        <div class="col-md-12">
+            <div class="card">
+                <div class="card-header">
+                    <i class="bi bi-bar-chart"></i> Recebimentos Mensais (Ultimos 12 meses)
+                </div>
+                <div class="card-body">
+                    <div class="chart-container" style="height: 350px;">
+                        <canvas id="chartRecebimentos"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row mb-4">
+        <div class="col-md-12">
+            <div class="card">
+                <div class="card-header">
+                    <i class="bi bi-graph-down-arrow"></i> Inadimplencia Mensal
+                </div>
+                <div class="card-body">
+                    <div class="chart-container" style="height: 350px;">
+                        <canvas id="chartInadimplencia"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Tabela de Contratos em Atraso -->
+    <div class="row">
+        <div class="col-md-12">
+            <div class="card">
+                <div class="card-header bg-danger text-white">
+                    <i class="bi bi-exclamation-triangle"></i> Top 10 Contratos com Maior Atraso
+                </div>
+                <div class="card-body">
+                    {% if contratos_mais_atraso %}
+                    <div class="table-responsive">
+                        <table class="table table-hover table-atraso">
+                            <thead>
+                                <tr>
+                                    <th>Contrato</th>
+                                    <th>Comprador</th>
+                                    <th>Imovel</th>
+                                    <th class="text-center">Parcelas em Atraso</th>
+                                    <th class="text-center">Dias em Atraso</th>
+                                    <th class="text-end">Valor em Atraso</th>
+                                    <th class="text-center">Acoes</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for item in contratos_mais_atraso %}
+                                <tr>
+                                    <td>
+                                        <strong>{{ item.contrato.numero_contrato }}</strong>
+                                    </td>
+                                    <td>{{ item.contrato.comprador.nome }}</td>
+                                    <td>{{ item.contrato.imovel.identificacao }}</td>
+                                    <td class="text-center">
+                                        <span class="badge bg-warning text-dark badge-atraso">
+                                            {{ item.parcelas_atraso }} parcela(s)
+                                        </span>
+                                    </td>
+                                    <td class="text-center">
+                                        <span class="badge bg-danger badge-atraso">
+                                            {{ item.dias_atraso }} dias
+                                        </span>
+                                    </td>
+                                    <td class="text-end text-danger fw-bold">
+                                        R$ {{ item.valor_atraso|floatformat:2 }}
+                                    </td>
+                                    <td class="text-center">
+                                        <a href="{% url 'contratos:detalhe' item.contrato.pk %}"
+                                           class="btn btn-sm btn-outline-primary"
+                                           title="Ver Contrato">
+                                            <i class="bi bi-eye"></i>
+                                        </a>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    {% else %}
+                    <div class="alert alert-success mb-0">
+                        <i class="bi bi-check-circle"></i> Nenhum contrato em atraso!
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Obter parametro de imobiliaria
+    const urlParams = new URLSearchParams(window.location.search);
+    const imobiliariaId = urlParams.get('imobiliaria') || '';
+
+    // Carregar dados da API
+    fetch(`{% url 'financeiro:api_dashboard_dados' %}?imobiliaria=${imobiliariaId}`)
+        .then(response => response.json())
+        .then(data => {
+            // Grafico de Status das Parcelas (Pizza)
+            new Chart(document.getElementById('chartStatusParcelas'), {
+                type: 'doughnut',
+                data: {
+                    labels: data.status_parcelas.labels,
+                    datasets: [{
+                        data: data.status_parcelas.data,
+                        backgroundColor: data.status_parcelas.colors,
+                        borderWidth: 2,
+                        borderColor: '#fff'
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            position: 'bottom'
+                        }
+                    }
+                }
+            });
+
+            // Grafico de Status dos Contratos (Pizza)
+            new Chart(document.getElementById('chartStatusContratos'), {
+                type: 'doughnut',
+                data: {
+                    labels: data.status_contratos.labels,
+                    datasets: [{
+                        data: data.status_contratos.data,
+                        backgroundColor: data.status_contratos.colors,
+                        borderWidth: 2,
+                        borderColor: '#fff'
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            position: 'bottom'
+                        }
+                    }
+                }
+            });
+
+            // Grafico de Recebimentos Mensais (Barras)
+            new Chart(document.getElementById('chartRecebimentos'), {
+                type: 'bar',
+                data: {
+                    labels: data.recebimentos_mensais.labels,
+                    datasets: [
+                        {
+                            label: 'Recebido',
+                            data: data.recebimentos_mensais.recebido,
+                            backgroundColor: 'rgba(40, 167, 69, 0.7)',
+                            borderColor: '#28a745',
+                            borderWidth: 1
+                        },
+                        {
+                            label: 'Esperado',
+                            data: data.recebimentos_mensais.esperado,
+                            backgroundColor: 'rgba(0, 123, 255, 0.3)',
+                            borderColor: '#007bff',
+                            borderWidth: 1
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            ticks: {
+                                callback: function(value) {
+                                    return 'R$ ' + value.toLocaleString('pt-BR');
+                                }
+                            }
+                        }
+                    },
+                    plugins: {
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    return context.dataset.label + ': R$ ' + context.raw.toLocaleString('pt-BR', {minimumFractionDigits: 2});
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+
+            // Grafico de Inadimplencia (Linha)
+            new Chart(document.getElementById('chartInadimplencia'), {
+                type: 'line',
+                data: {
+                    labels: data.inadimplencia_mensal.labels,
+                    datasets: [
+                        {
+                            label: 'Valor Inadimplente',
+                            data: data.inadimplencia_mensal.valores,
+                            borderColor: '#dc3545',
+                            backgroundColor: 'rgba(220, 53, 69, 0.1)',
+                            fill: true,
+                            tension: 0.3
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            ticks: {
+                                callback: function(value) {
+                                    return 'R$ ' + value.toLocaleString('pt-BR');
+                                }
+                            }
+                        }
+                    },
+                    plugins: {
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    const idx = context.dataIndex;
+                                    const qtd = data.inadimplencia_mensal.quantidades[idx];
+                                    return [
+                                        'Valor: R$ ' + context.raw.toLocaleString('pt-BR', {minimumFractionDigits: 2}),
+                                        'Quantidade: ' + qtd + ' parcela(s)'
+                                    ];
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        })
+        .catch(error => {
+            console.error('Erro ao carregar dados do dashboard:', error);
+        });
+});
+</script>
+{% endblock %}
