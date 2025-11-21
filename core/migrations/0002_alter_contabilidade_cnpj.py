@@ -1,25 +1,17 @@
-# Generated manually
+# Generated manually - SQL direto para compatibilidade
 
-from django.db import migrations, models
+from django.db import migrations
 
 
 class Migration(migrations.Migration):
 
-    dependencies = [
-        ('core', '0001_initial'),
-    ]
+    initial = True  # Permite rodar sem dependências específicas
+
+    dependencies = []
 
     operations = [
-        migrations.AlterField(
-            model_name='contabilidade',
-            name='cnpj',
-            field=models.CharField(
-                blank=True,
-                help_text='Opcional. Suporta formato numérico atual e alfanumérico (preparado para 2026)',
-                max_length=20,
-                null=True,
-                unique=True,
-                verbose_name='CNPJ'
-            ),
+        migrations.RunSQL(
+            sql="ALTER TABLE core_contabilidade ALTER COLUMN cnpj DROP NOT NULL;",
+            reverse_sql="ALTER TABLE core_contabilidade ALTER COLUMN cnpj SET NOT NULL;",
         ),
     ]
