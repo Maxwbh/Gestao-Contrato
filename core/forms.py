@@ -16,6 +16,80 @@ from .models import (
 import re
 
 
+class ContabilidadeForm(forms.ModelForm):
+    """Formulário para cadastro de Contabilidade"""
+
+    class Meta:
+        model = Contabilidade
+        fields = [
+            'nome', 'razao_social', 'cnpj',
+            'endereco', 'telefone', 'email', 'responsavel'
+        ]
+        widgets = {
+            'cnpj': forms.TextInput(attrs={'placeholder': '00.000.000/0000-00', 'maxlength': '20'}),
+            'endereco': forms.Textarea(attrs={'rows': 2}),
+            'telefone': forms.TextInput(attrs={'placeholder': '(00) 0000-0000'}),
+            'email': forms.EmailInput(attrs={'placeholder': 'contato@contabilidade.com'}),
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        for field_name, field in self.fields.items():
+            if 'class' not in field.widget.attrs:
+                if isinstance(field.widget, forms.Select):
+                    field.widget.attrs['class'] = 'form-select'
+                else:
+                    field.widget.attrs['class'] = 'form-control'
+
+        self.helper = FormHelper()
+        self.helper.form_method = 'post'
+        self.helper.layout = Layout(
+            # Card: Informações da Contabilidade
+            HTML('''
+                <div class="card mb-3">
+                    <div class="card-header py-2">
+                        <i class="fas fa-calculator me-2"></i><strong>Informações da Contabilidade</strong>
+                    </div>
+                    <div class="card-body py-3">
+            '''),
+            Row(
+                Column(Field('nome', wrapper_class='mb-2'), css_class='col-md-6'),
+                Column(Field('cnpj', wrapper_class='mb-2'), css_class='col-md-6'),
+            ),
+            Field('razao_social', wrapper_class='mb-2'),
+            HTML('</div></div>'),
+
+            # Card: Contato
+            HTML('''
+                <div class="card mb-3">
+                    <div class="card-header py-2">
+                        <i class="fas fa-phone me-2"></i><strong>Contato</strong>
+                    </div>
+                    <div class="card-body py-3">
+            '''),
+            Field('endereco', wrapper_class='mb-2'),
+            Row(
+                Column(Field('telefone', wrapper_class='mb-2'), css_class='col-md-4'),
+                Column(Field('email', wrapper_class='mb-2'), css_class='col-md-4'),
+                Column(Field('responsavel', wrapper_class='mb-2'), css_class='col-md-4'),
+            ),
+            HTML('</div></div>'),
+
+            # Botões
+            HTML('''
+                <div class="d-flex justify-content-between align-items-center mt-4 pt-3 border-top">
+                    <a href="{% url 'core:listar_contabilidades' %}" class="btn btn-outline-secondary">
+                        <i class="fas fa-arrow-left me-2"></i>Voltar
+                    </a>
+                    <button type="submit" class="btn btn-primary btn-lg px-5">
+                        <i class="fas fa-save me-2"></i>Salvar Contabilidade
+                    </button>
+                </div>
+            ''')
+        )
+
+
 class CompradorForm(forms.ModelForm):
     """Formulário para cadastro de Comprador (PF ou PJ)"""
 

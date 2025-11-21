@@ -15,6 +15,12 @@ urlpatterns = [
     path('dashboard/', views.dashboard, name='dashboard'),
     path('api/gerar-dados-teste/', views.gerar_dados_teste, name='gerar_dados_teste'),
 
+    # CRUD Contabilidade
+    path('contabilidades/', views.ContabilidadeListView.as_view(), name='listar_contabilidades'),
+    path('contabilidades/novo/', views.ContabilidadeCreateView.as_view(), name='criar_contabilidade'),
+    path('contabilidades/<int:pk>/editar/', views.ContabilidadeUpdateView.as_view(), name='editar_contabilidade'),
+    path('contabilidades/<int:pk>/excluir/', views.ContabilidadeDeleteView.as_view(), name='excluir_contabilidade'),
+
     # CRUD Comprador
     path('compradores/', views.CompradorListView.as_view(), name='listar_compradores'),
     path('compradores/novo/', views.CompradorCreateView.as_view(), name='criar_comprador'),

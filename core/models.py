@@ -806,3 +806,130 @@ class Comprador(TimeStampedModel):
             return self.nome
         else:
             return self.nome_fantasia if self.nome_fantasia else self.nome
+
+
+# =============================================================================
+# CONTROLE DE ACESSO
+# =============================================================================
+
+class TipoUsuario(models.TextChoices):
+    """Tipos de usuário no sistema"""
+    ADMIN = 'ADMIN', 'Administrador'
+    CONTABILIDADE = 'CONTABILIDADE', 'Contabilidade'
+    IMOBILIARIA = 'IMOBILIARIA', 'Imobiliária'
+    OPERADOR = 'OPERADOR', 'Operador'
+
+
+class PerfilUsuario(TimeStampedModel):
+    """
+    Perfil do usuário com controle de acesso por Contabilidade/Imobiliária.
+
+    - ADMIN: Acesso total ao sistema
+    - CONTABILIDADE: Acesso a todas as imobiliárias de uma contabilidade
+    - IMOBILIARIA: Acesso apenas à imobiliária específica
+    - OPERADOR: Acesso limitado de leitura
+    """
+    from django.contrib.auth import get_user_model
+    User = get_user_model()
+
+    usuario = models.OneToOneField(
+        'auth.User',
+        on_delete=models.CASCADE,
+        related_name='perfil',
+        verbose_name='Usuário'
+    )
+    tipo = models.CharField(
+        max_length=20,
+        choices=TipoUsuario.choices,
+        default=TipoUsuario.OPERADOR,
+        verbose_name='Tipo de Usuário'
+    )
+
+    # Vínculo com Contabilidade (para CONTABILIDADE e IMOBILIARIA)
+    contabilidade = models.ForeignKey(
+        'Contabilidade',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='usuarios',
+        verbose_name='Contabilidade',
+        help_text='Obrigatório para usuários do tipo Contabilidade ou Imobiliária'
+    )
+
+    # Vínculo com Imobiliária (apenas para IMOBILIARIA)
+    imobiliaria = models.ForeignKey(
+        'Imobiliaria',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='usuarios',
+        verbose_name='Imobiliária',
+        help_text='Obrigatório apenas para usuários do tipo Imobiliária'
+    )
+
+    ativo = models.BooleanField(default=True, verbose_name='Ativo')
+
+    class Meta:
+        verbose_name = 'Perfil de Usuário'
+        verbose_name_plural = 'Perfis de Usuários'
+        ordering = ['usuario__username']
+
+    def __str__(self):
+        return f"{self.usuario.username} ({self.get_tipo_display()})"
+
+    def clean(self):
+        """Validação para garantir vínculos corretos por tipo"""
+        from django.core.exceptions import ValidationError
+
+        if self.tipo == TipoUsuario.CONTABILIDADE:
+            if not self.contabilidade:
+                raise ValidationError({
+                    'contabilidade': 'Contabilidade é obrigatória para usuários do tipo Contabilidade'
+                })
+
+        if self.tipo == TipoUsuario.IMOBILIARIA:
+            if not self.contabilidade:
+                raise ValidationError({
+                    'contabilidade': 'Contabilidade é obrigatória para usuários do tipo Imobiliária'
+                })
+            if not self.imobiliaria:
+                raise ValidationError({
+                    'imobiliaria': 'Imobiliária é obrigatória para usuários do tipo Imobiliária'
+                })
+
+    def save(self, *args, **kwargs):
+        self.full_clean()
+        super().save(*args, **kwargs)
+
+    @property
+    def is_admin(self):
+        """Verifica se o usuário é administrador"""
+        return self.tipo == TipoUsuario.ADMIN
+
+    @property
+    def is_contabilidade(self):
+        """Verifica se o usuário é do tipo contabilidade"""
+        return self.tipo == TipoUsuario.CONTABILIDADE
+
+    @property
+    def is_imobiliaria(self):
+        """Verifica se o usuário é do tipo imobiliária"""
+        return self.tipo == TipoUsuario.IMOBILIARIA
+
+    def get_contabilidades_permitidas(self):
+        """Retorna as contabilidades que o usuário pode acessar"""
+        if self.is_admin:
+            return Contabilidade.objects.filter(ativo=True)
+        elif self.contabilidade:
+            return Contabilidade.objects.filter(pk=self.contabilidade.pk, ativo=True)
+        return Contabilidade.objects.none()
+
+    def get_imobiliarias_permitidas(self):
+        """Retorna as imobiliárias que o usuário pode acessar"""
+        if self.is_admin:
+            return Imobiliaria.objects.filter(ativo=True)
+        elif self.is_imobiliaria and self.imobiliaria:
+            return Imobiliaria.objects.filter(pk=self.imobiliaria.pk, ativo=True)
+        elif self.is_contabilidade and self.contabilidade:
+            return Imobiliaria.objects.filter(contabilidade=self.contabilidade, ativo=True)
+        return Imobiliaria.objects.none()
