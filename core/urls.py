@@ -46,4 +46,14 @@ urlpatterns = [
     path('api/contas/<int:conta_id>/', views.api_obter_conta_bancaria, name='api_obter_conta'),
     path('api/contas/<int:conta_id>/atualizar/', views.api_atualizar_conta_bancaria, name='api_atualizar_conta'),
     path('api/contas/<int:conta_id>/excluir/', views.api_excluir_conta_bancaria, name='api_excluir_conta'),
+
+    # CRUD Acesso de Usuários
+    path('acessos/', views.AcessoUsuarioListView.as_view(), name='listar_acessos'),
+    path('acessos/novo/', views.AcessoUsuarioCreateView.as_view(), name='criar_acesso'),
+    path('acessos/<int:pk>/editar/', views.AcessoUsuarioUpdateView.as_view(), name='editar_acesso'),
+    path('acessos/<int:pk>/excluir/', views.AcessoUsuarioDeleteView.as_view(), name='excluir_acesso'),
+
+    # API Acesso de Usuários
+    path('api/contabilidades/<int:contabilidade_id>/imobiliarias/', views.api_listar_imobiliarias_por_contabilidade, name='api_imobiliarias_contabilidade'),
+    path('api/usuarios/<int:usuario_id>/acessos/', views.api_listar_acessos_usuario, name='api_acessos_usuario'),
 ]

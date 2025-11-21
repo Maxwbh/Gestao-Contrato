@@ -11,8 +11,10 @@ from crispy_forms.layout import Layout, Submit, Row, Column, Div, HTML, Field
 from crispy_forms.bootstrap import PrependedText, AppendedText
 from .models import (
     Contabilidade, Imobiliaria, Imovel, Comprador, TipoImovel,
-    ContaBancaria, BancoBrasil, TipoValor, TipoTitulo, LayoutCNAB
+    ContaBancaria, BancoBrasil, TipoValor, TipoTitulo, LayoutCNAB,
+    AcessoUsuario
 )
+from django.contrib.auth import get_user_model
 import re
 
 
@@ -684,3 +686,74 @@ class ContaBancariaForm(forms.ModelForm):
                     field.widget.attrs['class'] = 'form-check-input'
                 else:
                     field.widget.attrs['class'] = 'form-control'
+
+
+class AcessoUsuarioForm(forms.ModelForm):
+    """Formulário para gerenciar Acessos de Usuários"""
+
+    class Meta:
+        model = AcessoUsuario
+        fields = ['usuario', 'contabilidade', 'imobiliaria', 'pode_editar', 'pode_excluir']
+        widgets = {
+            'usuario': forms.Select(attrs={'class': 'form-select'}),
+            'contabilidade': forms.Select(attrs={'class': 'form-select'}),
+            'imobiliaria': forms.Select(attrs={'class': 'form-select'}),
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        User = get_user_model()
+        self.fields['usuario'].queryset = User.objects.filter(is_active=True).order_by('username')
+        self.fields['contabilidade'].queryset = Contabilidade.objects.filter(ativo=True).order_by('nome')
+        self.fields['imobiliaria'].queryset = Imobiliaria.objects.filter(ativo=True).order_by('nome')
+
+        for field_name, field in self.fields.items():
+            if 'class' not in field.widget.attrs:
+                if isinstance(field.widget, forms.Select):
+                    field.widget.attrs['class'] = 'form-select'
+                elif isinstance(field.widget, forms.CheckboxInput):
+                    field.widget.attrs['class'] = 'form-check-input'
+                else:
+                    field.widget.attrs['class'] = 'form-control'
+
+        self.helper = FormHelper()
+        self.helper.form_method = 'post'
+        self.helper.layout = Layout(
+            # Card: Acesso
+            HTML('''
+                <div class="card mb-3">
+                    <div class="card-header py-2">
+                        <i class="fas fa-key me-2"></i><strong>Configurar Acesso</strong>
+                    </div>
+                    <div class="card-body py-3">
+            '''),
+            Field('usuario', wrapper_class='mb-3'),
+            Row(
+                Column(Field('contabilidade', wrapper_class='mb-2'), css_class='col-md-6'),
+                Column(Field('imobiliaria', wrapper_class='mb-2'), css_class='col-md-6'),
+            ),
+            HTML('<hr><h6 class="text-muted mb-3"><i class="fas fa-shield-alt me-1"></i>Permissões</h6>'),
+            Row(
+                Column(
+                    Div(Field('pode_editar'), css_class='form-check'),
+                    css_class='col-md-6'
+                ),
+                Column(
+                    Div(Field('pode_excluir'), css_class='form-check'),
+                    css_class='col-md-6'
+                ),
+            ),
+            HTML('</div></div>'),
+
+            # Botões
+            HTML('''
+                <div class="d-flex justify-content-between align-items-center mt-4 pt-3 border-top">
+                    <a href="{% url 'core:listar_acessos' %}" class="btn btn-outline-secondary">
+                        <i class="fas fa-arrow-left me-2"></i>Voltar
+                    </a>
+                    <button type="submit" class="btn btn-primary btn-lg px-5">
+                        <i class="fas fa-save me-2"></i>Salvar Acesso
+                    </button>
+                </div>
+            ''')
+        )
