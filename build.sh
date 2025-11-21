@@ -116,6 +116,46 @@ with connection.cursor() as cursor:
     # Valor
     add_column_if_not_exists(cursor, 'core_imovel', 'valor', "DECIMAL(12,2) NULL")
 
+    print("Checking core_comprador...")
+    # Tipo de pessoa
+    add_column_if_not_exists(cursor, 'core_comprador', 'tipo_pessoa', "VARCHAR(2) DEFAULT 'PF'")
+    # Dados PF
+    add_column_if_not_exists(cursor, 'core_comprador', 'cpf', "VARCHAR(14) NULL")
+    add_column_if_not_exists(cursor, 'core_comprador', 'rg', "VARCHAR(20) DEFAULT ''")
+    add_column_if_not_exists(cursor, 'core_comprador', 'data_nascimento', "DATE NULL")
+    add_column_if_not_exists(cursor, 'core_comprador', 'estado_civil', "VARCHAR(50) DEFAULT ''")
+    add_column_if_not_exists(cursor, 'core_comprador', 'profissao', "VARCHAR(100) DEFAULT ''")
+    # Dados PJ
+    add_column_if_not_exists(cursor, 'core_comprador', 'cnpj', "VARCHAR(20) NULL")
+    add_column_if_not_exists(cursor, 'core_comprador', 'nome_fantasia', "VARCHAR(200) DEFAULT ''")
+    add_column_if_not_exists(cursor, 'core_comprador', 'inscricao_estadual', "VARCHAR(20) DEFAULT ''")
+    add_column_if_not_exists(cursor, 'core_comprador', 'inscricao_municipal', "VARCHAR(20) DEFAULT ''")
+    add_column_if_not_exists(cursor, 'core_comprador', 'responsavel_legal', "VARCHAR(200) DEFAULT ''")
+    add_column_if_not_exists(cursor, 'core_comprador', 'responsavel_cpf', "VARCHAR(14) DEFAULT ''")
+    # Endereco
+    add_column_if_not_exists(cursor, 'core_comprador', 'cep', "VARCHAR(9) DEFAULT ''")
+    add_column_if_not_exists(cursor, 'core_comprador', 'logradouro', "VARCHAR(200) DEFAULT ''")
+    add_column_if_not_exists(cursor, 'core_comprador', 'numero', "VARCHAR(10) DEFAULT ''")
+    add_column_if_not_exists(cursor, 'core_comprador', 'complemento', "VARCHAR(100) DEFAULT ''")
+    add_column_if_not_exists(cursor, 'core_comprador', 'bairro', "VARCHAR(100) DEFAULT ''")
+    add_column_if_not_exists(cursor, 'core_comprador', 'cidade', "VARCHAR(100) DEFAULT ''")
+    add_column_if_not_exists(cursor, 'core_comprador', 'estado', "VARCHAR(2) DEFAULT ''")
+    # Contato
+    add_column_if_not_exists(cursor, 'core_comprador', 'telefone', "VARCHAR(20) DEFAULT ''")
+    add_column_if_not_exists(cursor, 'core_comprador', 'celular', "VARCHAR(20) DEFAULT ''")
+    add_column_if_not_exists(cursor, 'core_comprador', 'email', "VARCHAR(254) DEFAULT ''")
+    # Notificacoes
+    add_column_if_not_exists(cursor, 'core_comprador', 'notificar_email', "BOOLEAN DEFAULT TRUE")
+    add_column_if_not_exists(cursor, 'core_comprador', 'notificar_sms', "BOOLEAN DEFAULT FALSE")
+    add_column_if_not_exists(cursor, 'core_comprador', 'notificar_whatsapp', "BOOLEAN DEFAULT TRUE")
+    # Conjuge
+    add_column_if_not_exists(cursor, 'core_comprador', 'conjuge_nome', "VARCHAR(200) DEFAULT ''")
+    add_column_if_not_exists(cursor, 'core_comprador', 'conjuge_cpf', "VARCHAR(14) DEFAULT ''")
+    add_column_if_not_exists(cursor, 'core_comprador', 'conjuge_rg', "VARCHAR(20) DEFAULT ''")
+    # Observacoes e status
+    add_column_if_not_exists(cursor, 'core_comprador', 'observacoes', "TEXT DEFAULT ''")
+    add_column_if_not_exists(cursor, 'core_comprador', 'ativo', "BOOLEAN DEFAULT TRUE")
+
     # Criar tabela core_contabancaria se não existir
     print("Checking core_contabancaria...")
     cursor.execute("""
