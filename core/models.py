@@ -26,8 +26,10 @@ class Contabilidade(TimeStampedModel):
     cnpj = models.CharField(
         max_length=20,
         unique=True,
+        blank=True,
+        null=True,
         verbose_name='CNPJ',
-        help_text='Suporta formato numérico atual e alfanumérico (preparado para 2026)'
+        help_text='Opcional. Suporta formato numérico atual e alfanumérico (preparado para 2026)'
     )
     endereco = models.TextField(verbose_name='Endereço')
     telefone = models.CharField(max_length=20, verbose_name='Telefone')

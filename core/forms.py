@@ -28,7 +28,7 @@ class ContabilidadeForm(forms.ModelForm):
             'endereco', 'telefone', 'email', 'responsavel'
         ]
         widgets = {
-            'cnpj': forms.TextInput(attrs={'placeholder': '00.000.000/0000-00', 'maxlength': '20'}),
+            'cnpj': forms.TextInput(attrs={'placeholder': '00.000.000/0000-00 (opcional)', 'maxlength': '20'}),
             'endereco': forms.Textarea(attrs={'rows': 2}),
             'telefone': forms.TextInput(attrs={'placeholder': '(00) 0000-0000'}),
             'email': forms.EmailInput(attrs={'placeholder': 'contato@contabilidade.com'}),
@@ -36,6 +36,9 @@ class ContabilidadeForm(forms.ModelForm):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+
+        # CNPJ é opcional
+        self.fields['cnpj'].required = False
 
         for field_name, field in self.fields.items():
             if 'class' not in field.widget.attrs:
