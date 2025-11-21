@@ -7,66 +7,123 @@
 
 {% block extra_css %}
 <style>
-    .form-section {
-        background: white;
-        padding: 2rem;
+    /* Cards com bom contraste */
+    .imobiliaria-form .card {
+        border: 1px solid #dee2e6;
         border-radius: 8px;
-        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-        margin-bottom: 2rem;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.06);
+        margin-bottom: 1rem;
+    }
+    .imobiliaria-form .card:hover {
+        box-shadow: 0 4px 8px rgba(0,0,0,0.1);
     }
 
-    .form-section h4 {
+    /* Card headers com bom contraste */
+    .imobiliaria-form .card-header {
+        background: linear-gradient(135deg, #2c3e50, #34495e);
+        color: #ffffff;
+        font-weight: 600;
+        padding: 0.75rem 1rem;
+        border-radius: 7px 7px 0 0 !important;
+    }
+    .imobiliaria-form .card-header i {
+        color: #9b59b6;
+    }
+    .imobiliaria-form .card-header strong {
+        color: #ffffff;
+    }
+    .imobiliaria-form .card-header small {
+        color: #bdc3c7;
+    }
+
+    /* Header claro para seções secundárias */
+    .imobiliaria-form .card-header.bg-light {
+        background: linear-gradient(135deg, #7f8c8d, #95a5a6) !important;
+        color: #ffffff !important;
+    }
+    .imobiliaria-form .card-header.bg-light strong {
+        color: #ffffff !important;
+    }
+
+    /* Campos de formulário */
+    .imobiliaria-form .form-control,
+    .imobiliaria-form .form-select {
+        font-size: 0.9rem;
+        padding: 0.5rem 0.75rem;
+        border-radius: 6px;
+    }
+    .imobiliaria-form .form-label {
+        font-size: 0.85rem;
+        font-weight: 600;
         color: #2c3e50;
-        border-bottom: 2px solid #3498db;
-        padding-bottom: 0.5rem;
-        margin-bottom: 1.5rem;
+        margin-bottom: 0.25rem;
     }
 
-    .form-section h4 i {
-        color: #3498db;
+    /* Card de ajuda */
+    .help-card .card-header {
+        background: linear-gradient(135deg, #17a2b8, #138496) !important;
+    }
+
+    /* Validação */
+    .is-valid { border-color: #27ae60 !important; }
+    .is-invalid { border-color: #e74c3c !important; }
+
+    /* Responsivo */
+    @media (max-width: 768px) {
+        .imobiliaria-form .card-body { padding: 1rem; }
     }
 </style>
 {% endblock %}
 
 {% block content %}
-<div class="row justify-content-center">
-    <div class="col-lg-10">
-        <div class="card">
-            <div class="card-header">
-                <h3 class="mb-0">
-                    <i class="fas fa-building"></i>
-                    {% if object %}
-                        Editar Imobiliária: {{ object.nome }}
-                    {% else %}
-                        Cadastrar Nova Imobiliária
-                    {% endif %}
-                </h3>
+<div class="container-fluid px-lg-4">
+    <div class="row justify-content-center">
+        <div class="col-xl-10">
+            <!-- Header -->
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <div>
+                    <h4 class="mb-0 text-dark">
+                        <i class="fas fa-building text-purple me-2" style="color: #9b59b6;"></i>
+                        {% if object %}Editar: {{ object.nome }}{% else %}Nova Imobiliária{% endif %}
+                    </h4>
+                    <small class="text-muted">
+                        {% if object %}Atualize os dados da imobiliária{% else %}Preencha os dados para cadastrar{% endif %}
+                    </small>
+                </div>
+                <a href="{% url 'core:listar_imobiliarias' %}" class="btn btn-outline-secondary btn-sm">
+                    <i class="fas fa-list me-1"></i>Ver Lista
+                </a>
             </div>
-            <div class="card-body">
-                <form method="post" novalidate>
-                    {% csrf_token %}
-                    {{ form|crispy }}
-                </form>
-            </div>
-        </div>
 
-        <!-- Card de Ajuda -->
-        <div class="card mt-3">
-            <div class="card-header bg-info text-white">
-                <h5 class="mb-0">
-                    <i class="fas fa-info-circle"></i> Dicas de Preenchimento
-                </h5>
-            </div>
-            <div class="card-body">
-                <ul class="mb-0">
-                    <li><strong>Nome:</strong> Nome fantasia da imobiliária (como é conhecida)</li>
-                    <li><strong>Razão Social:</strong> Nome jurídico registrado na Receita Federal</li>
-                    <li><strong>CNPJ:</strong> Informe apenas números (será formatado automaticamente)</li>
-                    <li><strong>Contabilidade:</strong> Selecione a contabilidade responsável</li>
-                    <li><strong>Responsável Financeiro:</strong> Nome da pessoa responsável pelas finanças</li>
-                    <li><strong>Dados Bancários:</strong> Informações para recebimento de valores</li>
-                    <li><strong>PIX:</strong> Chave PIX para recebimentos (CPF, CNPJ, email, telefone ou aleatória)</li>
-                </ul>
+            <!-- Formulário -->
+            <form method="post" novalidate class="imobiliaria-form">
+                {% csrf_token %}
+                {% crispy form %}
+            </form>
+
+            <!-- Card de Ajuda -->
+            <div class="card help-card mt-3">
+                <div class="card-header">
+                    <i class="fas fa-info-circle me-2"></i><strong>Dicas de Preenchimento</strong>
+                </div>
+                <div class="card-body py-3">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <ul class="mb-0 small">
+                                <li><strong>Nome:</strong> Nome fantasia (como é conhecida)</li>
+                                <li><strong>Razão Social:</strong> Nome jurídico na Receita Federal</li>
+                                <li><strong>CNPJ:</strong> Formatado automaticamente</li>
+                            </ul>
+                        </div>
+                        <div class="col-md-6">
+                            <ul class="mb-0 small">
+                                <li><strong>Responsável:</strong> Pessoa responsável pelas finanças</li>
+                                <li><strong>Dados Bancários:</strong> Para recebimento de valores</li>
+                                <li><strong>PIX:</strong> CPF, CNPJ, email, telefone ou aleatória</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
@@ -75,109 +132,24 @@
 
 {% block extra_js %}
 <script>
-    document.addEventListener('DOMContentLoaded', function() {
-        // Máscara para CNPJ
-        const cnpjInput = document.querySelector('input[name="cnpj"]');
-        if (cnpjInput) {
-            cnpjInput.addEventListener('input', function() {
-                let valor = this.value.replace(/\D/g, '');
-                if (valor.length <= 14) {
-                    // Formato: 99.999.999/9999-99
-                    valor = valor.replace(/^(\d{2})(\d)/, '$1.$2');
-                    valor = valor.replace(/^(\d{2})\.(\d{3})(\d)/, '$1.$2.$3');
-                    valor = valor.replace(/\.(\d{3})(\d)/, '.$1/$2');
-                    valor = valor.replace(/(\d{4})(\d)/, '$1-$2');
-                }
-                this.value = valor;
-            });
-        }
-
-        // Validação de email em tempo real
-        const emailInput = document.querySelector('input[name="email"]');
-        if (emailInput) {
-            emailInput.addEventListener('blur', function() {
-                if (this.value && !this.value.match(/^[^\s@]+@[^\s@]+\.[^\s@]+$/)) {
-                    this.classList.add('is-invalid');
-                    let feedback = this.parentElement.querySelector('.invalid-feedback');
-                    if (!feedback) {
-                        feedback = document.createElement('div');
-                        feedback.className = 'invalid-feedback';
-                        feedback.textContent = 'Email inválido';
-                        this.parentElement.appendChild(feedback);
-                    }
-                } else {
-                    this.classList.remove('is-invalid');
-                }
-            });
-        }
-
-        // Máscara para telefone
-        const telefoneInput = document.querySelector('input[name="telefone"]');
-        if (telefoneInput) {
-            telefoneInput.addEventListener('input', function() {
-                let valor = this.value.replace(/\D/g, '');
-                if (valor.length <= 11) {
-                    if (valor.length <= 10) {
-                        // Telefone fixo: (99) 9999-9999
-                        valor = valor.replace(/(\d{2})(\d)/, '($1) $2');
-                        valor = valor.replace(/(\d{4})(\d)/, '$1-$2');
-                    } else {
-                        // Celular: (99) 99999-9999
-                        valor = valor.replace(/(\d{2})(\d)/, '($1) $2');
-                        valor = valor.replace(/(\d{5})(\d)/, '$1-$2');
-                    }
-                }
-                this.value = valor;
-            });
-        }
-
-        // Auto-completar nome com base na razão social (se estiver vazio)
-        const razaoSocialInput = document.querySelector('input[name="razao_social"]');
-        const nomeInput = document.querySelector('input[name="nome"]');
-        if (razaoSocialInput && nomeInput) {
-            razaoSocialInput.addEventListener('blur', function() {
-                if (!nomeInput.value && this.value) {
-                    // Remove sufixos comuns de razão social
-                    let nome = this.value
-                        .replace(/LTDA\.?$/i, '')
-                        .replace(/S\.?A\.?$/i, '')
-                        .replace(/EIRELI$/i, '')
-                        .replace(/ME$/i, '')
-                        .replace(/EPP$/i, '')
-                        .trim();
-                    nomeInput.value = nome;
-                }
-            });
-        }
-
-        // Validação do PIX (formato básico)
-        const pixInput = document.querySelector('input[name="pix"]');
-        if (pixInput) {
-            pixInput.addEventListener('blur', function() {
-                if (this.value) {
-                    const valor = this.value.replace(/\D/g, '');
-                    // Verifica se parece com CPF (11 dígitos), CNPJ (14 dígitos) ou telefone (10-11 dígitos)
-                    const valido = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(this.value) || // Email
-                                   valor.length === 11 || // CPF ou Celular
-                                   valor.length === 14 || // CNPJ
-                                   valor.length === 10 || // Telefone fixo
-                                   this.value.length >= 32; // Chave aleatória
-
-                    if (!valido) {
-                        this.classList.add('is-invalid');
-                        let feedback = this.parentElement.querySelector('.invalid-feedback');
-                        if (!feedback) {
-                            feedback = document.createElement('div');
-                            feedback.className = 'invalid-feedback';
-                            feedback.textContent = 'Chave PIX inválida';
-                            this.parentElement.appendChild(feedback);
-                        }
-                    } else {
-                        this.classList.remove('is-invalid');
-                    }
-                }
-            });
-        }
-    });
+document.addEventListener('DOMContentLoaded', function() {
+    // Auto-completar nome com base na razão social
+    const razaoSocialInput = document.querySelector('input[name="razao_social"]');
+    const nomeInput = document.querySelector('input[name="nome"]');
+    if (razaoSocialInput && nomeInput) {
+        razaoSocialInput.addEventListener('blur', function() {
+            if (!nomeInput.value && this.value) {
+                let nome = this.value
+                    .replace(/LTDA\.?$/i, '')
+                    .replace(/S\.?A\.?$/i, '')
+                    .replace(/EIRELI$/i, '')
+                    .replace(/ME$/i, '')
+                    .replace(/EPP$/i, '')
+                    .trim();
+                nomeInput.value = nome;
+            }
+        });
+    }
+});
 </script>
 {% endblock %}
