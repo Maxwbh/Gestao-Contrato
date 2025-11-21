@@ -147,6 +147,51 @@
                     <div id="output" class="mt-4"></div>
                 </div>
 
+                <div class="setup-card">
+                    <h3>📡 API de Dados de Teste</h3>
+                    <hr>
+                    <p>Use o endpoint abaixo para gerar ou consultar dados de teste via API:</p>
+
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="card mb-3">
+                                <div class="card-header bg-info text-white">
+                                    <strong>GET</strong> /api/gerar-dados-teste/
+                                </div>
+                                <div class="card-body">
+                                    <p class="card-text">Retorna estatísticas dos dados existentes no sistema.</p>
+                                    <button class="btn btn-sm btn-outline-info" onclick="consultarDados()">
+                                        Consultar Dados
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="card mb-3">
+                                <div class="card-header bg-success text-white">
+                                    <strong>POST</strong> /api/gerar-dados-teste/
+                                </div>
+                                <div class="card-body">
+                                    <p class="card-text">Gera dados de teste incluindo contratos, parcelas e índices.</p>
+                                    <div class="form-check mb-2">
+                                        <input class="form-check-input" type="checkbox" id="limparDados">
+                                        <label class="form-check-label" for="limparDados">
+                                            Limpar dados existentes antes
+                                        </label>
+                                    </div>
+                                    <button class="btn btn-sm btn-success" onclick="gerarDadosAPI()">
+                                        Gerar via API
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div id="apiOutput" class="mt-3" style="display: none;">
+                        <pre style="background: #2d3748; color: #48bb78; padding: 1rem; border-radius: 8px; max-height: 300px; overflow-y: auto;"></pre>
+                    </div>
+                </div>
+
                 <div class="setup-card text-center">
                     <h5>📚 Próximos Passos</h5>
                     <div class="d-grid gap-2 d-md-flex justify-content-md-center">
@@ -261,6 +306,61 @@
             })
             .catch(error => {
                 mostrarSpinner(false);
+                alert('❌ Erro na requisição: ' + error);
+            });
+        }
+
+        // Funções para API de dados de teste
+        function mostrarApiOutput(data) {
+            const container = document.getElementById('apiOutput');
+            const pre = container.querySelector('pre');
+            container.style.display = 'block';
+            pre.textContent = JSON.stringify(data, null, 2);
+        }
+
+        function consultarDados() {
+            fetch('/api/gerar-dados-teste/')
+                .then(response => response.json())
+                .then(data => {
+                    mostrarApiOutput(data);
+                })
+                .catch(error => {
+                    mostrarApiOutput({ error: error.toString() });
+                });
+        }
+
+        function gerarDadosAPI() {
+            const limpar = document.getElementById('limparDados').checked;
+
+            if (!confirm(limpar
+                ? '⚠️ Isso irá LIMPAR todos os dados existentes e gerar novos. Continuar?'
+                : 'Gerar dados de teste? (dados existentes serão mantidos)')) {
+                return;
+            }
+
+            mostrarSpinner(true);
+
+            fetch('/api/gerar-dados-teste/', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ limpar: limpar })
+            })
+            .then(response => response.json())
+            .then(data => {
+                mostrarSpinner(false);
+                mostrarApiOutput(data);
+                if (data.status === 'success') {
+                    alert('✅ Dados gerados com sucesso!');
+                    setTimeout(() => location.reload(), 2000);
+                } else {
+                    alert('❌ Erro: ' + (data.message || data.error));
+                }
+            })
+            .catch(error => {
+                mostrarSpinner(false);
+                mostrarApiOutput({ error: error.toString() });
                 alert('❌ Erro na requisição: ' + error);
             });
         }

@@ -215,19 +215,35 @@ def gerar_dados_teste(request):
     GET: Retorna status do sistema
     POST: Gera dados de teste
 
-    Parâmetros POST:
+    Parâmetros POST (form-data ou JSON):
         limpar (bool): Se deve limpar dados antes (default: False)
+
+    Exemplo de uso:
+        curl -X POST http://localhost:8000/api/gerar-dados-teste/ -d "limpar=true"
+        curl -X POST http://localhost:8000/api/gerar-dados-teste/ -H "Content-Type: application/json" -d '{"limpar": true}'
     """
+    # Importar modelos adicionais
+    from contratos.models import Contrato, IndiceReajuste
+    from financeiro.models import Parcela
+
     if request.method == 'GET':
         # Retornar estatísticas atuais
         try:
             return JsonResponse({
                 'status': 'ok',
+                'endpoint': '/api/gerar-dados-teste/',
+                'metodos': ['GET', 'POST'],
+                'parametros': {
+                    'limpar': 'bool - Se true, limpa todos os dados antes de gerar novos'
+                },
                 'dados_existentes': {
                     'contabilidades': Contabilidade.objects.count(),
                     'imobiliarias': Imobiliaria.objects.count(),
                     'imoveis': Imovel.objects.count(),
                     'compradores': Comprador.objects.count(),
+                    'contratos': Contrato.objects.count(),
+                    'parcelas': Parcela.objects.count(),
+                    'indices_reajuste': IndiceReajuste.objects.count(),
                 }
             })
         except Exception as e:
@@ -239,7 +255,15 @@ def gerar_dados_teste(request):
 
     # POST - Gerar dados
     try:
-        limpar = request.POST.get('limpar', 'false').lower() == 'true'
+        # Aceitar tanto form-data quanto JSON
+        if request.content_type == 'application/json':
+            try:
+                data = json.loads(request.body)
+                limpar = data.get('limpar', False)
+            except:
+                limpar = False
+        else:
+            limpar = request.POST.get('limpar', 'false').lower() == 'true'
 
         # Capturar output do comando
         out = io.StringIO()
@@ -259,14 +283,19 @@ def gerar_dados_teste(request):
                 'imobiliarias': Imobiliaria.objects.count(),
                 'imoveis': Imovel.objects.count(),
                 'compradores': Comprador.objects.count(),
+                'contratos': Contrato.objects.count(),
+                'parcelas': Parcela.objects.count(),
+                'indices_reajuste': IndiceReajuste.objects.count(),
             }
         })
 
     except Exception as e:
+        import traceback
         return JsonResponse({
             'status': 'error',
             'message': 'Erro ao gerar dados',
-            'error': str(e)
+            'error': str(e),
+            'traceback': traceback.format_exc()
         }, status=500)
 
 
