@@ -24,13 +24,10 @@ class Contabilidade(TimeStampedModel):
     nome = models.CharField(max_length=200, verbose_name='Nome da Contabilidade')
     razao_social = models.CharField(max_length=200, verbose_name='Razão Social')
     cnpj = models.CharField(
-        max_length=18,
+        max_length=20,
         unique=True,
-        validators=[RegexValidator(
-            regex=r'^\d{2}\.\d{3}\.\d{3}/\d{4}-\d{2}$',
-            message='CNPJ deve estar no formato XX.XXX.XXX/XXXX-XX'
-        )],
-        verbose_name='CNPJ'
+        verbose_name='CNPJ',
+        help_text='Suporta formato numérico atual e alfanumérico (preparado para 2026)'
     )
     endereco = models.TextField(verbose_name='Endereço')
     telefone = models.CharField(max_length=20, verbose_name='Telefone')
@@ -58,13 +55,10 @@ class Imobiliaria(TimeStampedModel):
     nome = models.CharField(max_length=200, verbose_name='Nome da Imobiliária')
     razao_social = models.CharField(max_length=200, verbose_name='Razão Social')
     cnpj = models.CharField(
-        max_length=18,
+        max_length=20,
         unique=True,
-        validators=[RegexValidator(
-            regex=r'^\d{2}\.\d{3}\.\d{3}/\d{4}-\d{2}$',
-            message='CNPJ deve estar no formato XX.XXX.XXX/XXXX-XX'
-        )],
-        verbose_name='CNPJ'
+        verbose_name='CNPJ',
+        help_text='Suporta formato numérico atual e alfanumérico (preparado para 2026)'
     )
 
     # Dados de Endereço (estruturado)
@@ -206,21 +200,55 @@ class Imovel(TimeStampedModel):
 
 
 class Comprador(TimeStampedModel):
-    """Modelo para representar o Comprador do imóvel"""
-    nome = models.CharField(max_length=200, verbose_name='Nome Completo')
+    """Modelo para representar o Comprador do imóvel (Pessoa Física ou Jurídica)"""
+
+    # Tipo de Pessoa
+    TIPO_PESSOA_CHOICES = [
+        ('PF', 'Pessoa Física'),
+        ('PJ', 'Pessoa Jurídica'),
+    ]
+    tipo_pessoa = models.CharField(
+        max_length=2,
+        choices=TIPO_PESSOA_CHOICES,
+        default='PF',
+        verbose_name='Tipo de Pessoa',
+        help_text='Pessoa Física ou Pessoa Jurídica'
+    )
+
+    # Dados Gerais (para ambos PF e PJ)
+    nome = models.CharField(
+        max_length=200,
+        verbose_name='Nome Completo / Razão Social',
+        help_text='Nome completo para PF ou Razão Social para PJ'
+    )
+
+    # Dados Pessoa Física
     cpf = models.CharField(
         max_length=14,
-        unique=True,
+        blank=True,
+        null=True,
         validators=[RegexValidator(
             regex=r'^\d{3}\.\d{3}\.\d{3}-\d{2}$',
             message='CPF deve estar no formato XXX.XXX.XXX-XX'
         )],
-        verbose_name='CPF'
+        verbose_name='CPF',
+        help_text='Obrigatório para Pessoa Física'
     )
-    rg = models.CharField(max_length=20, blank=True, verbose_name='RG')
-    data_nascimento = models.DateField(verbose_name='Data de Nascimento')
+    rg = models.CharField(
+        max_length=20,
+        blank=True,
+        verbose_name='RG',
+        help_text='Apenas para Pessoa Física'
+    )
+    data_nascimento = models.DateField(
+        blank=True,
+        null=True,
+        verbose_name='Data de Nascimento',
+        help_text='Apenas para Pessoa Física'
+    )
     estado_civil = models.CharField(
         max_length=50,
+        blank=True,
         choices=[
             ('SOLTEIRO', 'Solteiro(a)'),
             ('CASADO', 'Casado(a)'),
@@ -228,9 +256,54 @@ class Comprador(TimeStampedModel):
             ('VIUVO', 'Viúvo(a)'),
             ('UNIAO_ESTAVEL', 'União Estável'),
         ],
-        verbose_name='Estado Civil'
+        verbose_name='Estado Civil',
+        help_text='Apenas para Pessoa Física'
     )
-    profissao = models.CharField(max_length=100, verbose_name='Profissão')
+    profissao = models.CharField(
+        max_length=100,
+        blank=True,
+        verbose_name='Profissão',
+        help_text='Apenas para Pessoa Física'
+    )
+
+    # Dados Pessoa Jurídica
+    cnpj = models.CharField(
+        max_length=20,
+        blank=True,
+        null=True,
+        verbose_name='CNPJ',
+        help_text='Obrigatório para PJ. Suporta formato alfanumérico (preparado para 2026)'
+    )
+    nome_fantasia = models.CharField(
+        max_length=200,
+        blank=True,
+        verbose_name='Nome Fantasia',
+        help_text='Apenas para Pessoa Jurídica'
+    )
+    inscricao_estadual = models.CharField(
+        max_length=20,
+        blank=True,
+        verbose_name='Inscrição Estadual',
+        help_text='Apenas para Pessoa Jurídica'
+    )
+    inscricao_municipal = models.CharField(
+        max_length=20,
+        blank=True,
+        verbose_name='Inscrição Municipal',
+        help_text='Apenas para Pessoa Jurídica'
+    )
+    responsavel_legal = models.CharField(
+        max_length=200,
+        blank=True,
+        verbose_name='Responsável Legal',
+        help_text='Nome do representante legal da empresa (apenas PJ)'
+    )
+    responsavel_cpf = models.CharField(
+        max_length=14,
+        blank=True,
+        verbose_name='CPF do Responsável',
+        help_text='CPF do representante legal (apenas PJ)'
+    )
 
     # Dados de Endereço (estruturado)
     cep = models.CharField(
@@ -331,6 +404,44 @@ class Comprador(TimeStampedModel):
         verbose_name = 'Comprador'
         verbose_name_plural = 'Compradores'
         ordering = ['nome']
+        indexes = [
+            models.Index(fields=['tipo_pessoa']),
+            models.Index(fields=['cpf']),
+            models.Index(fields=['cnpj']),
+        ]
 
     def __str__(self):
-        return f"{self.nome} - {self.cpf}"
+        if self.tipo_pessoa == 'PF':
+            return f"{self.nome} - CPF: {self.cpf}" if self.cpf else self.nome
+        else:
+            return f"{self.nome} - CNPJ: {self.cnpj}" if self.cnpj else self.nome
+
+    def clean(self):
+        """Validação customizada para garantir dados obrigatórios por tipo"""
+        from django.core.exceptions import ValidationError
+
+        if self.tipo_pessoa == 'PF':
+            # Para Pessoa Física, CPF é obrigatório
+            if not self.cpf:
+                raise ValidationError({'cpf': 'CPF é obrigatório para Pessoa Física'})
+        elif self.tipo_pessoa == 'PJ':
+            # Para Pessoa Jurídica, CNPJ é obrigatório
+            if not self.cnpj:
+                raise ValidationError({'cnpj': 'CNPJ é obrigatório para Pessoa Jurídica'})
+
+    def save(self, *args, **kwargs):
+        self.full_clean()
+        super().save(*args, **kwargs)
+
+    @property
+    def documento(self):
+        """Retorna o documento principal (CPF ou CNPJ)"""
+        return self.cpf if self.tipo_pessoa == 'PF' else self.cnpj
+
+    @property
+    def nome_exibicao(self):
+        """Retorna o nome de exibição apropriado"""
+        if self.tipo_pessoa == 'PF':
+            return self.nome
+        else:
+            return self.nome_fantasia if self.nome_fantasia else self.nome

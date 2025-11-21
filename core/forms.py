@@ -19,11 +19,21 @@ class CompradorForm(forms.ModelForm):
     class Meta:
         model = Comprador
         fields = [
+            'tipo_pessoa',
+            # Campos PF
             'nome', 'cpf', 'rg', 'data_nascimento', 'estado_civil', 'profissao',
+            # Campos PJ
+            'cnpj', 'nome_fantasia', 'inscricao_estadual', 'inscricao_municipal',
+            'responsavel_legal', 'responsavel_cpf',
+            # Endereço (ambos)
             'cep', 'logradouro', 'numero', 'complemento', 'bairro', 'cidade', 'estado',
+            # Contato (ambos)
             'telefone', 'celular', 'email',
             'notificar_email', 'notificar_sms', 'notificar_whatsapp',
-            'conjuge_nome', 'conjuge_cpf', 'conjuge_rg', 'observacoes'
+            # Cônjuge (apenas PF)
+            'conjuge_nome', 'conjuge_cpf', 'conjuge_rg',
+            # Observações
+            'observacoes'
         ]
         widgets = {
             'data_nascimento': forms.DateInput(attrs={'type': 'date'}),
@@ -40,17 +50,53 @@ class CompradorForm(forms.ModelForm):
         self.helper = FormHelper()
         self.helper.form_method = 'post'
         self.helper.layout = Layout(
-            HTML('<h4 class="mb-3"><i class="fas fa-user"></i> Dados Pessoais</h4>'),
-            Row(
-                Column('nome', css_class='form-group col-md-8'),
-                Column('cpf', css_class='form-group col-md-4'),
+            HTML('<h4 class="mb-3"><i class="fas fa-id-card"></i> Tipo de Cadastro</h4>'),
+            HTML('<p class="alert alert-info"><i class="fas fa-info-circle"></i> Selecione se o comprador é Pessoa Física ou Pessoa Jurídica</p>'),
+            'tipo_pessoa',
+
+            # Seção Pessoa Física
+            HTML('''
+                <div id="secao-pf" class="secao-tipo-pessoa">
+                    <h4 class="mt-4 mb-3"><i class="fas fa-user"></i> Dados Pessoais (Pessoa Física)</h4>
+                </div>
+            '''),
+            Div(
+                Row(
+                    Column('nome', css_class='form-group col-md-8'),
+                    Column('cpf', css_class='form-group col-md-4'),
+                ),
+                Row(
+                    Column('rg', css_class='form-group col-md-4'),
+                    Column('data_nascimento', css_class='form-group col-md-4'),
+                    Column('estado_civil', css_class='form-group col-md-4'),
+                ),
+                'profissao',
+                css_class='campos-pf'
             ),
-            Row(
-                Column('rg', css_class='form-group col-md-4'),
-                Column('data_nascimento', css_class='form-group col-md-4'),
-                Column('estado_civil', css_class='form-group col-md-4'),
+
+            # Seção Pessoa Jurídica
+            HTML('''
+                <div id="secao-pj" class="secao-tipo-pessoa" style="display:none;">
+                    <h4 class="mt-4 mb-3"><i class="fas fa-building"></i> Dados da Empresa (Pessoa Jurídica)</h4>
+                </div>
+            '''),
+            Div(
+                Row(
+                    Column('nome', css_class='form-group col-md-8 label-razao-social'),
+                    Column('cnpj', css_class='form-group col-md-4'),
+                ),
+                Row(
+                    Column('nome_fantasia', css_class='form-group col-md-6'),
+                    Column('inscricao_estadual', css_class='form-group col-md-3'),
+                    Column('inscricao_municipal', css_class='form-group col-md-3'),
+                ),
+                Row(
+                    Column('responsavel_legal', css_class='form-group col-md-8'),
+                    Column('responsavel_cpf', css_class='form-group col-md-4'),
+                ),
+                css_class='campos-pj',
+                style='display:none;'
             ),
-            'profissao',
 
             HTML('<h4 class="mt-4 mb-3"><i class="fas fa-map-marker-alt"></i> Endereço</h4>'),
             HTML('<p class="text-muted"><i class="fas fa-info-circle"></i> Digite o CEP e o endereço será preenchido automaticamente via ViaCEP</p>'),
@@ -80,11 +126,19 @@ class CompradorForm(forms.ModelForm):
                 Column('notificar_whatsapp', css_class='form-group col-md-4'),
             ),
 
-            HTML('<h4 class="mt-4 mb-3"><i class="fas fa-ring"></i> Dados do Cônjuge (se casado)</h4>'),
-            Row(
-                Column('conjuge_nome', css_class='form-group col-md-6'),
-                Column('conjuge_cpf', css_class='form-group col-md-3'),
-                Column('conjuge_rg', css_class='form-group col-md-3'),
+            # Seção Cônjuge (apenas PF)
+            HTML('''
+                <div id="secao-conjuge" class="secao-tipo-pessoa">
+                    <h4 class="mt-4 mb-3"><i class="fas fa-ring"></i> Dados do Cônjuge (se casado)</h4>
+                </div>
+            '''),
+            Div(
+                Row(
+                    Column('conjuge_nome', css_class='form-group col-md-6'),
+                    Column('conjuge_cpf', css_class='form-group col-md-3'),
+                    Column('conjuge_rg', css_class='form-group col-md-3'),
+                ),
+                css_class='campos-conjuge'
             ),
 
             HTML('<h4 class="mt-4 mb-3"><i class="fas fa-sticky-note"></i> Observações</h4>'),
@@ -97,15 +151,20 @@ class CompradorForm(forms.ModelForm):
             )
         )
 
-    def clean_cpf(self):
-        cpf = self.cleaned_data.get('cpf')
-        # Remove caracteres não numéricos
-        cpf_numeros = re.sub(r'\D', '', cpf)
+    def clean(self):
+        cleaned_data = super().clean()
+        tipo_pessoa = cleaned_data.get('tipo_pessoa')
+        cpf = cleaned_data.get('cpf')
+        cnpj = cleaned_data.get('cnpj')
 
-        if len(cpf_numeros) != 11:
-            raise ValidationError('CPF deve ter 11 dígitos')
+        if tipo_pessoa == 'PF':
+            if not cpf:
+                raise ValidationError({'cpf': 'CPF é obrigatório para Pessoa Física'})
+        elif tipo_pessoa == 'PJ':
+            if not cnpj:
+                raise ValidationError({'cnpj': 'CNPJ é obrigatório para Pessoa Jurídica'})
 
-        return cpf
+        return cleaned_data
 
 
 class ImovelForm(forms.ModelForm):
