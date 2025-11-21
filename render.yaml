@@ -1,0 +1,77 @@
+# Render Blueprint para deployment automático
+# Desenvolvedor: Maxwell da Silva Oliveira
+# M&S do Brasil LTDA
+
+services:
+  # Web Service (Django)
+  - type: web
+    name: gestao-contrato-web
+    env: python
+    buildCommand: "./build.sh"
+    startCommand: "gunicorn gestao_contrato.wsgi:application"
+    plan: free
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.0
+      - key: SECRET_KEY
+        generateValue: true
+      - key: DEBUG
+        value: False
+      - key: ALLOWED_HOSTS
+        sync: false
+      - key: DATABASE_URL
+        fromDatabase:
+          name: gestao-contrato-db
+          property: connectionString
+      - key: REDIS_URL
+        fromService:
+          name: gestao-contrato-redis
+          type: redis
+          property: connectionString
+
+  # PostgreSQL Database
+  - type: postgres
+    name: gestao-contrato-db
+    plan: free
+    databaseName: gestao_contrato
+    user: gestao_contrato_user
+
+  # Redis (para Celery)
+  - type: redis
+    name: gestao-contrato-redis
+    plan: free
+    maxmemoryPolicy: allkeys-lru
+
+  # Celery Worker
+  - type: worker
+    name: gestao-contrato-worker
+    env: python
+    buildCommand: "pip install -r requirements.txt"
+    startCommand: "celery -A gestao_contrato worker --loglevel=info"
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: gestao-contrato-db
+          property: connectionString
+      - key: REDIS_URL
+        fromService:
+          name: gestao-contrato-redis
+          type: redis
+          property: connectionString
+
+  # Celery Beat (agendamento de tarefas)
+  - type: worker
+    name: gestao-contrato-beat
+    env: python
+    buildCommand: "pip install -r requirements.txt"
+    startCommand: "celery -A gestao_contrato beat --loglevel=info"
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: gestao-contrato-db
+          property: connectionString
+      - key: REDIS_URL
+        fromService:
+          name: gestao-contrato-redis
+          type: redis
+          property: connectionString
