@@ -311,24 +311,24 @@ class IndiceReajusteListView(LoginRequiredMixin, ListView):
         context['tipos_indice'] = [
             ('IPCA', 'IPCA'),
             ('IGPM', 'IGP-M'),
+            ('INCC', 'INCC'),
+            ('IGPDI', 'IGP-DI'),
+            ('INPC', 'INPC'),
+            ('TR', 'TR'),
             ('SELIC', 'SELIC'),
         ]
 
-        # Estatísticas
-        context['total_ipca'] = IndiceReajuste.objects.filter(tipo_indice='IPCA').count()
-        context['total_igpm'] = IndiceReajuste.objects.filter(tipo_indice='IGPM').count()
-        context['total_selic'] = IndiceReajuste.objects.filter(tipo_indice='SELIC').count()
-
-        # Último índice de cada tipo
-        context['ultimo_ipca'] = IndiceReajuste.objects.filter(
-            tipo_indice='IPCA'
-        ).order_by('-ano', '-mes').first()
-        context['ultimo_igpm'] = IndiceReajuste.objects.filter(
-            tipo_indice='IGPM'
-        ).order_by('-ano', '-mes').first()
-        context['ultimo_selic'] = IndiceReajuste.objects.filter(
-            tipo_indice='SELIC'
-        ).order_by('-ano', '-mes').first()
+        # Estatísticas por tipo
+        tipos = ['IPCA', 'IGPM', 'INCC', 'IGPDI', 'INPC', 'TR', 'SELIC']
+        context['estatisticas_indices'] = []
+        for tipo in tipos:
+            total = IndiceReajuste.objects.filter(tipo_indice=tipo).count()
+            ultimo = IndiceReajuste.objects.filter(tipo_indice=tipo).order_by('-ano', '-mes').first()
+            context['estatisticas_indices'].append({
+                'tipo': tipo,
+                'total': total,
+                'ultimo': ultimo,
+            })
 
         # Data do contrato mais antigo (para limite de importação)
         contrato_mais_antigo = Contrato.objects.order_by('data_contrato').first()
@@ -422,6 +422,14 @@ def importar_indices_ibge(request):
             indices = _buscar_ipca_ibge(ano_inicio, mes_inicio)
         elif tipo_indice == 'IGPM':
             indices = _buscar_igpm_bcb(ano_inicio, mes_inicio)
+        elif tipo_indice == 'INCC':
+            indices = _buscar_incc_bcb(ano_inicio, mes_inicio)
+        elif tipo_indice == 'IGPDI':
+            indices = _buscar_igpdi_bcb(ano_inicio, mes_inicio)
+        elif tipo_indice == 'INPC':
+            indices = _buscar_inpc_ibge(ano_inicio, mes_inicio)
+        elif tipo_indice == 'TR':
+            indices = _buscar_tr_bcb(ano_inicio, mes_inicio)
         elif tipo_indice == 'SELIC':
             indices = _buscar_selic_bcb(ano_inicio, mes_inicio)
         else:
@@ -587,5 +595,155 @@ def _buscar_selic_bcb(ano_inicio, mes_inicio):
 
     except Exception as e:
         print(f"Erro ao buscar SELIC: {e}")
+
+    return indices
+
+
+def _buscar_incc_bcb(ano_inicio, mes_inicio):
+    """
+    Busca INCC da API do Banco Central
+    Série 192 - INCC-DI - Variação mensal
+    """
+    indices = []
+
+    try:
+        data_inicio = f"01/{mes_inicio:02d}/{ano_inicio}"
+        url = f"https://api.bcb.gov.br/dados/serie/bcdata.sgs.192/dados?formato=json&dataInicial={data_inicio}"
+
+        response = requests.get(url, timeout=30)
+        response.raise_for_status()
+        data = response.json()
+
+        for item in data:
+            partes = item['data'].split('/')
+            mes = int(partes[1])
+            ano = int(partes[2])
+
+            indices.append({
+                'ano': ano,
+                'mes': mes,
+                'valor': float(item['valor']),
+                'acumulado_ano': None,
+                'acumulado_12m': None,
+                'fonte': 'BCB/FGV'
+            })
+
+    except Exception as e:
+        print(f"Erro ao buscar INCC: {e}")
+
+    return indices
+
+
+def _buscar_igpdi_bcb(ano_inicio, mes_inicio):
+    """
+    Busca IGP-DI da API do Banco Central
+    Série 190 - IGP-DI - Variação mensal
+    """
+    indices = []
+
+    try:
+        data_inicio = f"01/{mes_inicio:02d}/{ano_inicio}"
+        url = f"https://api.bcb.gov.br/dados/serie/bcdata.sgs.190/dados?formato=json&dataInicial={data_inicio}"
+
+        response = requests.get(url, timeout=30)
+        response.raise_for_status()
+        data = response.json()
+
+        for item in data:
+            partes = item['data'].split('/')
+            mes = int(partes[1])
+            ano = int(partes[2])
+
+            indices.append({
+                'ano': ano,
+                'mes': mes,
+                'valor': float(item['valor']),
+                'acumulado_ano': None,
+                'acumulado_12m': None,
+                'fonte': 'BCB/FGV'
+            })
+
+    except Exception as e:
+        print(f"Erro ao buscar IGP-DI: {e}")
+
+    return indices
+
+
+def _buscar_inpc_ibge(ano_inicio, mes_inicio):
+    """
+    Busca INPC da API SIDRA do IBGE
+    Tabela 1100 - INPC - Variação mensal
+    """
+    indices = []
+
+    try:
+        # API SIDRA - Tabela 1100 (INPC)
+        url = "https://servicodados.ibge.gov.br/api/v3/agregados/1100/periodos/all/variaveis/44?localidades=N1[all]"
+
+        response = requests.get(url, timeout=30)
+        response.raise_for_status()
+        data = response.json()
+
+        if not data or len(data) == 0:
+            return indices
+
+        var_mensal = data[0]['resultados'][0]['series'][0]['serie'] if len(data) > 0 else {}
+
+        for periodo, valor in var_mensal.items():
+            if valor == '-' or valor == '...' or valor is None:
+                continue
+
+            ano = int(periodo[:4])
+            mes = int(periodo[4:6])
+
+            if ano < ano_inicio or (ano == ano_inicio and mes < mes_inicio):
+                continue
+
+            indices.append({
+                'ano': ano,
+                'mes': mes,
+                'valor': float(valor.replace(',', '.')),
+                'acumulado_ano': None,
+                'acumulado_12m': None,
+                'fonte': 'IBGE/SIDRA'
+            })
+
+    except Exception as e:
+        print(f"Erro ao buscar INPC: {e}")
+
+    return indices
+
+
+def _buscar_tr_bcb(ano_inicio, mes_inicio):
+    """
+    Busca TR (Taxa Referencial) da API do Banco Central
+    Série 226 - Taxa referencial - acumulada no mês
+    """
+    indices = []
+
+    try:
+        data_inicio = f"01/{mes_inicio:02d}/{ano_inicio}"
+        url = f"https://api.bcb.gov.br/dados/serie/bcdata.sgs.226/dados?formato=json&dataInicial={data_inicio}"
+
+        response = requests.get(url, timeout=30)
+        response.raise_for_status()
+        data = response.json()
+
+        for item in data:
+            partes = item['data'].split('/')
+            mes = int(partes[1])
+            ano = int(partes[2])
+
+            indices.append({
+                'ano': ano,
+                'mes': mes,
+                'valor': float(item['valor']),
+                'acumulado_ano': None,
+                'acumulado_12m': None,
+                'fonte': 'BCB'
+            })
+
+    except Exception as e:
+        print(f"Erro ao buscar TR: {e}")
 
     return indices

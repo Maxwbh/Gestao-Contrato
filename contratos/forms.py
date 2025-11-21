@@ -266,6 +266,15 @@ class IndiceReajusteForm(forms.ModelForm):
                 'max': '2100',
                 'placeholder': 'Ex: 2024'
             }),
+            'tipo_indice': forms.Select(choices=[
+                ('IPCA', 'IPCA - Índice de Preços ao Consumidor Amplo'),
+                ('IGPM', 'IGP-M - Índice Geral de Preços do Mercado'),
+                ('INCC', 'INCC - Índice Nacional de Custo da Construção'),
+                ('IGPDI', 'IGP-DI - Índice Geral de Preços - Disponibilidade Interna'),
+                ('INPC', 'INPC - Índice Nacional de Preços ao Consumidor'),
+                ('TR', 'TR - Taxa Referencial'),
+                ('SELIC', 'SELIC - Taxa Básica de Juros'),
+            ]),
             'mes': forms.Select(choices=[
                 (1, 'Janeiro'), (2, 'Fevereiro'), (3, 'Março'),
                 (4, 'Abril'), (5, 'Maio'), (6, 'Junho'),
