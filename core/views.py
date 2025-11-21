@@ -299,6 +299,116 @@ def gerar_dados_teste(request):
         }, status=500)
 
 
+@csrf_exempt
+@require_http_methods(["GET", "POST", "DELETE"])
+def limpar_dados_teste(request):
+    """
+    Endpoint para limpar dados de teste
+
+    GET: Retorna estatísticas dos dados que serão excluídos
+    POST/DELETE: Exclui todos os dados de teste
+
+    Parâmetros POST (form-data ou JSON):
+        confirmar (bool): Confirmação de exclusão (default: False)
+
+    Exemplo de uso:
+        curl -X DELETE http://localhost:8000/api/limpar-dados-teste/ -H "Content-Type: application/json" -d '{"confirmar": true}'
+    """
+    # Importar modelos adicionais
+    from contratos.models import Contrato, IndiceReajuste
+    from financeiro.models import Parcela
+
+    if request.method == 'GET':
+        # Retornar estatísticas dos dados que serão excluídos
+        try:
+            return JsonResponse({
+                'status': 'ok',
+                'endpoint': '/api/limpar-dados-teste/',
+                'metodos': ['GET', 'POST', 'DELETE'],
+                'aviso': 'Esta ação irá EXCLUIR PERMANENTEMENTE todos os dados!',
+                'parametros': {
+                    'confirmar': 'bool - Deve ser true para confirmar a exclusão'
+                },
+                'dados_a_excluir': {
+                    'parcelas': Parcela.objects.count(),
+                    'contratos': Contrato.objects.count(),
+                    'indices_reajuste': IndiceReajuste.objects.count(),
+                    'imoveis': Imovel.objects.count(),
+                    'compradores': Comprador.objects.count(),
+                    'imobiliarias': Imobiliaria.objects.count(),
+                    'contabilidades': Contabilidade.objects.count(),
+                }
+            })
+        except Exception as e:
+            return JsonResponse({
+                'status': 'error',
+                'message': 'Banco de dados não configurado.',
+                'error': str(e)
+            }, status=500)
+
+    # POST/DELETE - Limpar dados
+    try:
+        # Aceitar tanto form-data quanto JSON
+        if request.content_type == 'application/json':
+            try:
+                data = json.loads(request.body)
+                confirmar = data.get('confirmar', False)
+            except:
+                confirmar = False
+        else:
+            confirmar = request.POST.get('confirmar', 'false').lower() == 'true'
+
+        if not confirmar:
+            return JsonResponse({
+                'status': 'error',
+                'message': 'Confirmação necessária. Envie {"confirmar": true} para excluir os dados.',
+            }, status=400)
+
+        # Contar dados antes de excluir
+        dados_excluidos = {
+            'parcelas': Parcela.objects.count(),
+            'contratos': Contrato.objects.count(),
+            'indices_reajuste': IndiceReajuste.objects.count(),
+            'imoveis': Imovel.objects.count(),
+            'compradores': Comprador.objects.count(),
+            'imobiliarias': Imobiliaria.objects.count(),
+            'contabilidades': Contabilidade.objects.count(),
+        }
+
+        # Excluir na ordem correta (respeitar FKs)
+        Parcela.objects.all().delete()
+        Contrato.objects.all().delete()
+        IndiceReajuste.objects.all().delete()
+        Imovel.objects.all().delete()
+        Comprador.objects.all().delete()
+        Imobiliaria.objects.all().delete()
+        Contabilidade.objects.all().delete()
+
+        return JsonResponse({
+            'status': 'success',
+            'message': 'Dados excluídos com sucesso!',
+            'dados_excluidos': dados_excluidos,
+            'dados_restantes': {
+                'parcelas': Parcela.objects.count(),
+                'contratos': Contrato.objects.count(),
+                'indices_reajuste': IndiceReajuste.objects.count(),
+                'imoveis': Imovel.objects.count(),
+                'compradores': Comprador.objects.count(),
+                'imobiliarias': Imobiliaria.objects.count(),
+                'contabilidades': Contabilidade.objects.count(),
+            }
+        })
+
+    except Exception as e:
+        import traceback
+        return JsonResponse({
+            'status': 'error',
+            'message': 'Erro ao limpar dados',
+            'error': str(e),
+            'traceback': traceback.format_exc()
+        }, status=500)
+
+
 # =============================================================================
 # CRUD VIEWS - CONTABILIDADE
 # =============================================================================
