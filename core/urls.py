@@ -11,4 +11,5 @@ app_name = 'core'
 urlpatterns = [
     path('', views.index, name='index'),
     path('dashboard/', views.dashboard, name='dashboard'),
+    path('api/gerar-dados-teste/', views.gerar_dados_teste, name='gerar_dados_teste'),
 ]
