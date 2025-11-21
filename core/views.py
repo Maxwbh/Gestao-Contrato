@@ -303,7 +303,7 @@ def gerar_dados_teste(request):
 @require_http_methods(["GET", "POST", "DELETE"])
 def limpar_dados_teste(request):
     """
-    Endpoint para limpar dados de teste
+    Endpoint para limpar dados de teste (APENAS ADMIN/SUPERUSUÁRIO)
 
     GET: Retorna estatísticas dos dados que serão excluídos
     POST/DELETE: Exclui todos os dados de teste
@@ -314,6 +314,20 @@ def limpar_dados_teste(request):
     Exemplo de uso:
         curl -X DELETE http://localhost:8000/api/limpar-dados-teste/ -H "Content-Type: application/json" -d '{"confirmar": true}'
     """
+    # Verificar se usuário é admin/superusuário para operações de exclusão
+    if request.method in ['POST', 'DELETE']:
+        if not request.user.is_authenticated:
+            return JsonResponse({
+                'status': 'error',
+                'message': 'Autenticação necessária. Faça login como admin.',
+            }, status=401)
+
+        if not (request.user.is_superuser or request.user.is_staff):
+            return JsonResponse({
+                'status': 'error',
+                'message': 'Acesso negado. Apenas administradores podem excluir dados.',
+            }, status=403)
+
     # Importar modelos adicionais
     from contratos.models import Contrato, IndiceReajuste
     from financeiro.models import Parcela
