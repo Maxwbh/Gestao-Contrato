@@ -20,11 +20,72 @@ from django.contrib import messages
 from datetime import datetime, timedelta
 from .models import (
     Contabilidade, Imobiliaria, Imovel, Comprador, TipoImovel,
-    ContaBancaria, BancoBrasil, LayoutCNAB
+    ContaBancaria, BancoBrasil, LayoutCNAB, PerfilUsuario, TipoUsuario
 )
-from .forms import CompradorForm, ImovelForm, ImobiliariaForm, ContaBancariaForm
+from .forms import ContabilidadeForm, CompradorForm, ImovelForm, ImobiliariaForm, ContaBancariaForm
 import io
 import json
+
+
+# =============================================================================
+# CONTROLE DE ACESSO - HELPERS
+# =============================================================================
+
+def get_perfil_usuario(user):
+    """Retorna o perfil do usuário ou None se não existir"""
+    if not user.is_authenticated:
+        return None
+    try:
+        return user.perfil
+    except PerfilUsuario.DoesNotExist:
+        return None
+
+
+def is_admin_ou_superuser(user):
+    """Verifica se o usuário é admin ou superuser"""
+    if user.is_superuser:
+        return True
+    perfil = get_perfil_usuario(user)
+    return perfil and perfil.is_admin
+
+
+class AcessoMixin:
+    """
+    Mixin para controle de acesso baseado no perfil do usuário.
+
+    Adiciona métodos para filtrar contabilidades e imobiliárias
+    baseado nas permissões do usuário logado.
+    """
+
+    def get_contabilidades_permitidas(self):
+        """Retorna as contabilidades que o usuário pode acessar"""
+        user = self.request.user
+        if is_admin_ou_superuser(user):
+            return Contabilidade.objects.filter(ativo=True)
+
+        perfil = get_perfil_usuario(user)
+        if perfil:
+            return perfil.get_contabilidades_permitidas()
+        return Contabilidade.objects.none()
+
+    def get_imobiliarias_permitidas(self):
+        """Retorna as imobiliárias que o usuário pode acessar"""
+        user = self.request.user
+        if is_admin_ou_superuser(user):
+            return Imobiliaria.objects.filter(ativo=True)
+
+        perfil = get_perfil_usuario(user)
+        if perfil:
+            return perfil.get_imobiliarias_permitidas()
+        return Imobiliaria.objects.none()
+
+    def pode_acessar_contabilidade(self, contabilidade):
+        """Verifica se o usuário pode acessar uma contabilidade específica"""
+        return self.get_contabilidades_permitidas().filter(pk=contabilidade.pk).exists()
+
+    def pode_acessar_imobiliaria(self, imobiliaria):
+        """Verifica se o usuário pode acessar uma imobiliária específica"""
+        return self.get_imobiliarias_permitidas().filter(pk=imobiliaria.pk).exists()
 
 
 def index(request):
@@ -234,6 +295,89 @@ def gerar_dados_teste(request):
             'message': 'Erro ao gerar dados',
             'error': str(e)
         }, status=500)
+
+
+# =============================================================================
+# CRUD VIEWS - CONTABILIDADE
+# =============================================================================
+
+class ContabilidadeListView(LoginRequiredMixin, ListView):
+    """Lista todas as contabilidades ativas"""
+    model = Contabilidade
+    template_name = 'core/contabilidade_list.html'
+    context_object_name = 'contabilidades'
+    paginate_by = 20
+
+    def get_queryset(self):
+        queryset = Contabilidade.objects.filter(ativo=True).order_by('nome')
+
+        # Filtro de busca
+        search = self.request.GET.get('search')
+        if search:
+            queryset = queryset.filter(
+                Q(nome__icontains=search) |
+                Q(cnpj__icontains=search) |
+                Q(responsavel__icontains=search)
+            )
+
+        return queryset
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['total_contabilidades'] = Contabilidade.objects.filter(ativo=True).count()
+        context['search'] = self.request.GET.get('search', '')
+        return context
+
+
+class ContabilidadeCreateView(LoginRequiredMixin, CreateView):
+    """Cria uma nova contabilidade"""
+    model = Contabilidade
+    form_class = ContabilidadeForm
+    template_name = 'core/contabilidade_form.html'
+    success_url = reverse_lazy('core:listar_contabilidades')
+
+    def form_valid(self, form):
+        messages.success(self.request, f'Contabilidade {form.instance.nome} cadastrada com sucesso!')
+        return super().form_valid(form)
+
+    def form_invalid(self, form):
+        messages.error(self.request, 'Erro ao cadastrar contabilidade. Verifique os dados.')
+        return super().form_invalid(form)
+
+
+class ContabilidadeUpdateView(LoginRequiredMixin, UpdateView):
+    """Atualiza uma contabilidade existente"""
+    model = Contabilidade
+    form_class = ContabilidadeForm
+    template_name = 'core/contabilidade_form.html'
+    success_url = reverse_lazy('core:listar_contabilidades')
+
+    def get_queryset(self):
+        return Contabilidade.objects.filter(ativo=True)
+
+    def form_valid(self, form):
+        messages.success(self.request, f'Contabilidade {form.instance.nome} atualizada com sucesso!')
+        return super().form_valid(form)
+
+    def form_invalid(self, form):
+        messages.error(self.request, 'Erro ao atualizar contabilidade. Verifique os dados.')
+        return super().form_invalid(form)
+
+
+class ContabilidadeDeleteView(LoginRequiredMixin, DeleteView):
+    """Desativa uma contabilidade (soft delete)"""
+    model = Contabilidade
+    success_url = reverse_lazy('core:listar_contabilidades')
+
+    def get_queryset(self):
+        return Contabilidade.objects.filter(ativo=True)
+
+    def delete(self, request, *args, **kwargs):
+        self.object = self.get_object()
+        self.object.ativo = False
+        self.object.save()
+        messages.success(request, f'Contabilidade {self.object.nome} removida com sucesso!')
+        return redirect(self.success_url)
 
 
 # =============================================================================
