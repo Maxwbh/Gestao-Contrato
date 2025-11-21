@@ -22,7 +22,8 @@ from .models import (
     Contabilidade, Imobiliaria, Imovel, Comprador, TipoImovel,
     ContaBancaria, BancoBrasil, LayoutCNAB, AcessoUsuario,
     get_contabilidades_usuario, get_imobiliarias_usuario,
-    usuario_tem_acesso_imobiliaria, usuario_tem_acesso_contabilidade
+    usuario_tem_acesso_imobiliaria, usuario_tem_acesso_contabilidade,
+    usuario_tem_permissao_total
 )
 from .forms import ContabilidadeForm, CompradorForm, ImovelForm, ImobiliariaForm, ContaBancariaForm, AcessoUsuarioForm
 import io
@@ -562,8 +563,24 @@ class ImobiliariaCreateView(LoginRequiredMixin, CreateView):
     success_url = reverse_lazy('core:listar_imobiliarias')
 
     def form_valid(self, form):
+        # Salvar a imobiliária primeiro
+        response = super().form_valid(form)
+
+        # Criar acesso automático para o usuário que criou (se não for admin/superuser)
+        user = self.request.user
+        if not usuario_tem_permissao_total(user):
+            AcessoUsuario.objects.get_or_create(
+                usuario=user,
+                contabilidade=self.object.contabilidade,
+                imobiliaria=self.object,
+                defaults={
+                    'pode_editar': True,
+                    'pode_excluir': False
+                }
+            )
+
         messages.success(self.request, f'Imobiliária {form.instance.nome} cadastrada com sucesso!')
-        return super().form_valid(form)
+        return response
 
     def form_invalid(self, form):
         messages.error(self.request, 'Erro ao cadastrar imobiliária. Verifique os dados.')
