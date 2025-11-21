@@ -455,23 +455,39 @@ class ImovelForm(forms.ModelForm):
                 <div class="card mb-3 border-success">
                     <div class="card-header py-2 bg-success text-white">
                         <i class="fas fa-map-marked-alt me-2"></i><strong>Geolocalização</strong>
-                        <small class="ms-2">(Clique no mapa ou busque o endereço)</small>
+                        <small class="ms-2">(Ideal para zonas rurais sem CEP)</small>
                     </div>
                     <div class="card-body py-3">
                         <div class="row mb-3">
-                            <div class="col-12">
+                            <div class="col-md-8">
                                 <div class="input-group">
                                     <input type="text" id="busca-endereco" class="form-control" placeholder="Buscar endereço no mapa...">
                                     <button type="button" id="btn-buscar-endereco" class="btn btn-outline-success">
                                         <i class="fas fa-search"></i> Buscar
                                     </button>
-                                    <button type="button" id="btn-usar-endereco" class="btn btn-outline-primary">
-                                        <i class="fas fa-map-pin"></i> Usar Endereço do Formulário
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="btn-group w-100" role="group">
+                                    <button type="button" id="btn-usar-endereco" class="btn btn-outline-primary" title="Usar campos de endereço preenchidos">
+                                        <i class="fas fa-map-pin"></i> Usar Endereço
+                                    </button>
+                                    <button type="button" id="btn-minha-localizacao" class="btn btn-outline-info" title="Usar GPS do dispositivo">
+                                        <i class="fas fa-crosshairs"></i> GPS
+                                    </button>
+                                    <button type="button" id="btn-abrir-google-maps" class="btn btn-outline-danger" title="Abrir Google Maps para buscar coordenadas">
+                                        <i class="fab fa-google"></i> Maps
                                     </button>
                                 </div>
                             </div>
                         </div>
                         <div id="map" style="height: 400px; border-radius: 8px; border: 1px solid #ddd;"></div>
+                        <div class="alert alert-info mt-3 mb-0 py-2 small">
+                            <i class="fas fa-info-circle me-1"></i>
+                            <strong>Dica para zonas rurais:</strong> Clique em "Maps" para abrir o Google Maps, encontre o local,
+                            clique com botão direito e copie as coordenadas. Cole no campo abaixo separado por vírgula (ex: -15.7801, -47.9292).
+                            <input type="text" id="colar-coordenadas" class="form-control form-control-sm mt-2" placeholder="Cole as coordenadas aqui (ex: -15.7801, -47.9292)">
+                        </div>
                         <div class="row mt-3">
             '''),
             Row(
