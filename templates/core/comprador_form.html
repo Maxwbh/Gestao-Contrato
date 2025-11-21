@@ -1,0 +1,194 @@
+{% extends 'base.html' %}
+{% load crispy_forms_tags %}
+
+{% block title %}
+    {% if object %}Editar Comprador{% else %}Novo Comprador{% endif %} - Gestão de Contratos
+{% endblock %}
+
+{% block extra_css %}
+<style>
+    .form-section {
+        background: white;
+        padding: 2rem;
+        border-radius: 8px;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        margin-bottom: 2rem;
+    }
+
+    .form-section h4 {
+        color: #2c3e50;
+        border-bottom: 2px solid #3498db;
+        padding-bottom: 0.5rem;
+        margin-bottom: 1.5rem;
+    }
+
+    .form-section h4 i {
+        color: #3498db;
+    }
+
+    .help-text {
+        font-size: 0.875rem;
+        color: #6c757d;
+        margin-top: 0.25rem;
+    }
+
+    .required-field::after {
+        content: " *";
+        color: #e74c3c;
+    }
+
+    .btn-save {
+        min-width: 150px;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-lg-10">
+        <div class="card">
+            <div class="card-header">
+                <h3 class="mb-0">
+                    <i class="fas fa-user-plus"></i>
+                    {% if object %}
+                        Editar Comprador: {{ object.nome }}
+                    {% else %}
+                        Cadastrar Novo Comprador
+                    {% endif %}
+                </h3>
+            </div>
+            <div class="card-body">
+                <form method="post" novalidate>
+                    {% csrf_token %}
+                    {{ form|crispy }}
+                </form>
+            </div>
+        </div>
+
+        <!-- Card de Ajuda -->
+        <div class="card mt-3">
+            <div class="card-header bg-info text-white">
+                <h5 class="mb-0">
+                    <i class="fas fa-info-circle"></i> Dicas de Preenchimento
+                </h5>
+            </div>
+            <div class="card-body">
+                <ul class="mb-0">
+                    <li><strong>CPF:</strong> Informe apenas números (será formatado automaticamente)</li>
+                    <li><strong>Notificações:</strong> Marque as formas de contato que o comprador prefere</li>
+                    <li><strong>Cônjuge:</strong> Preencha apenas se o comprador for casado</li>
+                    <li><strong>Observações:</strong> Use este campo para informações adicionais importantes</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    // Máscara para CPF
+    function mascaraCPF(input) {
+        let valor = input.value.replace(/\D/g, '');
+        if (valor.length <= 11) {
+            valor = valor.replace(/(\d{3})(\d)/, '$1.$2');
+            valor = valor.replace(/(\d{3})(\d)/, '$1.$2');
+            valor = valor.replace(/(\d{3})(\d{1,2})$/, '$1-$2');
+        }
+        input.value = valor;
+    }
+
+    // Máscara para Telefone
+    function mascaraTelefone(input) {
+        let valor = input.value.replace(/\D/g, '');
+        if (valor.length <= 11) {
+            if (valor.length <= 10) {
+                // Telefone fixo: (99) 9999-9999
+                valor = valor.replace(/(\d{2})(\d)/, '($1) $2');
+                valor = valor.replace(/(\d{4})(\d)/, '$1-$2');
+            } else {
+                // Celular: (99) 99999-9999
+                valor = valor.replace(/(\d{2})(\d)/, '($1) $2');
+                valor = valor.replace(/(\d{5})(\d)/, '$1-$2');
+            }
+        }
+        input.value = valor;
+    }
+
+    // Aplicar máscaras quando o documento carregar
+    document.addEventListener('DOMContentLoaded', function() {
+        // CPF
+        const cpfInput = document.querySelector('input[name="cpf"]');
+        if (cpfInput) {
+            cpfInput.addEventListener('input', function() {
+                mascaraCPF(this);
+            });
+        }
+
+        // CPF do Cônjuge
+        const conjugeCpfInput = document.querySelector('input[name="conjuge_cpf"]');
+        if (conjugeCpfInput) {
+            conjugeCpfInput.addEventListener('input', function() {
+                mascaraCPF(this);
+            });
+        }
+
+        // Telefone
+        const telefoneInput = document.querySelector('input[name="telefone"]');
+        if (telefoneInput) {
+            telefoneInput.addEventListener('input', function() {
+                mascaraTelefone(this);
+            });
+        }
+
+        // Celular
+        const celularInput = document.querySelector('input[name="celular"]');
+        if (celularInput) {
+            celularInput.addEventListener('input', function() {
+                mascaraTelefone(this);
+            });
+        }
+
+        // Validação de email em tempo real
+        const emailInput = document.querySelector('input[name="email"]');
+        if (emailInput) {
+            emailInput.addEventListener('blur', function() {
+                if (this.value && !this.value.match(/^[^\s@]+@[^\s@]+\.[^\s@]+$/)) {
+                    this.classList.add('is-invalid');
+                    let feedback = this.parentElement.querySelector('.invalid-feedback');
+                    if (!feedback) {
+                        feedback = document.createElement('div');
+                        feedback.className = 'invalid-feedback';
+                        feedback.textContent = 'Email inválido';
+                        this.parentElement.appendChild(feedback);
+                    }
+                } else {
+                    this.classList.remove('is-invalid');
+                }
+            });
+        }
+
+        // Mostrar/ocultar campos do cônjuge baseado no estado civil
+        const estadoCivilSelect = document.querySelector('select[name="estado_civil"]');
+        const conjugeFields = ['conjuge_nome', 'conjuge_cpf', 'conjuge_rg'];
+
+        if (estadoCivilSelect) {
+            function toggleConjugeFields() {
+                const isCasado = estadoCivilSelect.value === 'CASADO';
+                conjugeFields.forEach(fieldName => {
+                    const field = document.querySelector(`[name="${fieldName}"]`);
+                    if (field) {
+                        const formGroup = field.closest('.form-group');
+                        if (formGroup) {
+                            formGroup.style.display = isCasado ? 'block' : 'none';
+                        }
+                    }
+                });
+            }
+
+            estadoCivilSelect.addEventListener('change', toggleConjugeFields);
+            toggleConjugeFields(); // Executar na carga da página
+        }
+    });
+</script>
+{% endblock %}

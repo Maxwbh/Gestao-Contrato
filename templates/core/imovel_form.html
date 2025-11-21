@@ -1,0 +1,123 @@
+{% extends 'base.html' %}
+{% load crispy_forms_tags %}
+
+{% block title %}
+    {% if object %}Editar Imóvel{% else %}Novo Imóvel{% endif %} - Gestão de Contratos
+{% endblock %}
+
+{% block extra_css %}
+<style>
+    .form-section {
+        background: white;
+        padding: 2rem;
+        border-radius: 8px;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        margin-bottom: 2rem;
+    }
+
+    .form-section h4 {
+        color: #2c3e50;
+        border-bottom: 2px solid #3498db;
+        padding-bottom: 0.5rem;
+        margin-bottom: 1.5rem;
+    }
+
+    .form-section h4 i {
+        color: #3498db;
+    }
+
+    .property-type-badge {
+        padding: 0.5rem 1rem;
+        border-radius: 20px;
+        font-size: 0.9rem;
+        margin-right: 0.5rem;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-lg-10">
+        <div class="card">
+            <div class="card-header">
+                <h3 class="mb-0">
+                    <i class="fas fa-home"></i>
+                    {% if object %}
+                        Editar Imóvel: {{ object.identificacao }}
+                    {% else %}
+                        Cadastrar Novo Imóvel
+                    {% endif %}
+                </h3>
+            </div>
+            <div class="card-body">
+                <form method="post" novalidate>
+                    {% csrf_token %}
+                    {{ form|crispy }}
+                </form>
+            </div>
+        </div>
+
+        <!-- Card de Ajuda -->
+        <div class="card mt-3">
+            <div class="card-header bg-info text-white">
+                <h5 class="mb-0">
+                    <i class="fas fa-info-circle"></i> Dicas de Preenchimento
+                </h5>
+            </div>
+            <div class="card-body">
+                <ul class="mb-0">
+                    <li><strong>Identificação:</strong> Use um código único para identificar o imóvel (Ex: Lote 25, Casa 10, etc.)</li>
+                    <li><strong>Loteamento:</strong> Nome do loteamento ou condomínio (se aplicável)</li>
+                    <li><strong>Tipo:</strong> Selecione entre Lote, Casa, Apartamento, Terreno, etc.</li>
+                    <li><strong>Área:</strong> Informe a área em metros quadrados (m²)</li>
+                    <li><strong>Matrícula:</strong> Número da matrícula do imóvel no Cartório de Registro</li>
+                    <li><strong>Inscrição Municipal:</strong> Número de inscrição no cadastro da prefeitura</li>
+                    <li><strong>Disponível:</strong> Marque se o imóvel está disponível para venda</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // Validação de área (apenas números e decimais)
+        const areaInput = document.querySelector('input[name="area"]');
+        if (areaInput) {
+            areaInput.addEventListener('input', function() {
+                // Remove caracteres não numéricos exceto ponto e vírgula
+                let valor = this.value.replace(/[^\d.,]/g, '');
+                // Substitui vírgula por ponto
+                valor = valor.replace(',', '.');
+                this.value = valor;
+            });
+        }
+
+        // Auto-formatação do campo de identificação
+        const identificacaoInput = document.querySelector('input[name="identificacao"]');
+        if (identificacaoInput) {
+            identificacaoInput.addEventListener('blur', function() {
+                // Capitaliza a primeira letra de cada palavra
+                this.value = this.value.replace(/\b\w/g, l => l.toUpperCase());
+            });
+        }
+
+        // Mostrar preview do tipo de imóvel selecionado
+        const tipoSelect = document.querySelector('select[name="tipo"]');
+        if (tipoSelect) {
+            tipoSelect.addEventListener('change', function() {
+                const selectedText = this.options[this.selectedIndex].text;
+                console.log('Tipo selecionado:', selectedText);
+            });
+        }
+
+        // Marcar automaticamente como disponível para novos cadastros
+        const disponivelCheckbox = document.querySelector('input[name="disponivel"]');
+        if (disponivelCheckbox && !disponivelCheckbox.checked && window.location.pathname.includes('/novo/')) {
+            disponivelCheckbox.checked = true;
+        }
+    });
+</script>
+{% endblock %}

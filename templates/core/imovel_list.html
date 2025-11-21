@@ -1,0 +1,241 @@
+{% extends 'base.html' %}
+{% load crispy_forms_tags %}
+
+{% block title %}Imóveis - Gestão de Contratos{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h4 class="mb-0">
+                    <i class="fas fa-home"></i> Gerenciar Imóveis
+                </h4>
+                <a href="{% url 'core:criar_imovel' %}" class="btn btn-light">
+                    <i class="fas fa-plus"></i> Novo Imóvel
+                </a>
+            </div>
+            <div class="card-body">
+                <!-- Barra de Busca e Filtros -->
+                <div class="row mb-4">
+                    <div class="col-md-6">
+                        <form method="get" class="d-flex">
+                            <input type="text" name="search" class="form-control me-2"
+                                   placeholder="Buscar por identificação, loteamento ou endereço..."
+                                   value="{{ search }}">
+                            <button type="submit" class="btn btn-primary">
+                                <i class="fas fa-search"></i>
+                            </button>
+                            {% if search %}
+                                <a href="{% url 'core:listar_imoveis' %}" class="btn btn-secondary ms-2">
+                                    <i class="fas fa-times"></i>
+                                </a>
+                            {% endif %}
+                        </form>
+                    </div>
+                    <div class="col-md-3">
+                        <select class="form-select" onchange="window.location.href='?imobiliaria=' + this.value">
+                            <option value="">Todas as Imobiliárias</option>
+                            {% for imob in imobiliarias %}
+                                <option value="{{ imob.id }}" {% if request.GET.imobiliaria == imob.id|stringformat:"s" %}selected{% endif %}>
+                                    {{ imob.nome }}
+                                </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-md-3 text-end">
+                        <div class="badge bg-info text-dark fs-6 me-2">
+                            <i class="fas fa-home"></i> Total: {{ total_imoveis }}
+                        </div>
+                        <div class="badge bg-success fs-6">
+                            <i class="fas fa-check-circle"></i> Disponíveis: {{ imoveis_disponiveis }}
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Grid de Imóveis -->
+                {% if imoveis %}
+                    <div class="row">
+                        {% for imovel in imoveis %}
+                            <div class="col-md-6 col-lg-4 mb-4">
+                                <div class="card h-100 {% if not imovel.disponivel %}border-secondary{% else %}border-success{% endif %}">
+                                    <div class="card-header {% if not imovel.disponivel %}bg-secondary{% else %}bg-success{% endif %} text-white">
+                                        <div class="d-flex justify-content-between align-items-center">
+                                            <h6 class="mb-0">
+                                                <i class="fas fa-{% if imovel.tipo.nome == 'Lote' %}map-marked-alt{% elif imovel.tipo.nome == 'Casa' %}house-user{% else %}building{% endif %}"></i>
+                                                {{ imovel.tipo.nome }}
+                                            </h6>
+                                            <span class="badge {% if imovel.disponivel %}bg-light text-success{% else %}bg-dark{% endif %}">
+                                                {% if imovel.disponivel %}
+                                                    <i class="fas fa-check"></i> Disponível
+                                                {% else %}
+                                                    <i class="fas fa-times"></i> Vendido
+                                                {% endif %}
+                                            </span>
+                                        </div>
+                                    </div>
+                                    <div class="card-body">
+                                        <h5 class="card-title">{{ imovel.identificacao }}</h5>
+
+                                        <p class="card-text">
+                                            <i class="fas fa-building text-primary"></i>
+                                            <strong>Imobiliária:</strong>
+                                            {{ imovel.imobiliaria.nome }}<br>
+
+                                            {% if imovel.loteamento %}
+                                                <i class="fas fa-map text-success"></i>
+                                                <strong>Loteamento:</strong>
+                                                {{ imovel.loteamento }}<br>
+                                            {% endif %}
+
+                                            {% if imovel.area %}
+                                                <i class="fas fa-ruler-combined text-warning"></i>
+                                                <strong>Área:</strong>
+                                                {{ imovel.area }} m²<br>
+                                            {% endif %}
+
+                                            {% if imovel.endereco %}
+                                                <i class="fas fa-map-marker-alt text-danger"></i>
+                                                <strong>Endereço:</strong>
+                                                <small>{{ imovel.endereco|truncatewords:10 }}</small>
+                                            {% endif %}
+                                        </p>
+
+                                        {% if imovel.matricula or imovel.inscricao_municipal %}
+                                            <hr>
+                                            <small class="text-muted">
+                                                {% if imovel.matricula %}
+                                                    <i class="fas fa-file-alt"></i> Matrícula: {{ imovel.matricula }}<br>
+                                                {% endif %}
+                                                {% if imovel.inscricao_municipal %}
+                                                    <i class="fas fa-id-card"></i> Inscrição: {{ imovel.inscricao_municipal }}
+                                                {% endif %}
+                                            </small>
+                                        {% endif %}
+                                    </div>
+                                    <div class="card-footer bg-transparent">
+                                        <div class="d-flex justify-content-between align-items-center">
+                                            <small class="text-muted">
+                                                <i class="fas fa-calendar"></i>
+                                                {{ imovel.created_at|date:"d/m/Y" }}
+                                            </small>
+                                            <div class="btn-group btn-group-sm" role="group">
+                                                <a href="{% url 'core:editar_imovel' imovel.pk %}"
+                                                   class="btn btn-outline-primary"
+                                                   title="Editar">
+                                                    <i class="fas fa-edit"></i>
+                                                </a>
+                                                <button type="button"
+                                                        class="btn btn-outline-danger"
+                                                        title="Excluir"
+                                                        onclick="confirmarExclusao('{{ imovel.identificacao }}', '{% url 'core:excluir_imovel' imovel.pk %}')">
+                                                    <i class="fas fa-trash"></i>
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        {% endfor %}
+                    </div>
+
+                    <!-- Paginação -->
+                    {% if is_paginated %}
+                        <nav aria-label="Navegação de páginas">
+                            <ul class="pagination justify-content-center">
+                                {% if page_obj.has_previous %}
+                                    <li class="page-item">
+                                        <a class="page-link" href="?page=1{% if search %}&search={{ search }}{% endif %}">
+                                            Primeira
+                                        </a>
+                                    </li>
+                                    <li class="page-item">
+                                        <a class="page-link" href="?page={{ page_obj.previous_page_number }}{% if search %}&search={{ search }}{% endif %}">
+                                            Anterior
+                                        </a>
+                                    </li>
+                                {% endif %}
+
+                                <li class="page-item active">
+                                    <span class="page-link">
+                                        Página {{ page_obj.number }} de {{ page_obj.paginator.num_pages }}
+                                    </span>
+                                </li>
+
+                                {% if page_obj.has_next %}
+                                    <li class="page-item">
+                                        <a class="page-link" href="?page={{ page_obj.next_page_number }}{% if search %}&search={{ search }}{% endif %}">
+                                            Próxima
+                                        </a>
+                                    </li>
+                                    <li class="page-item">
+                                        <a class="page-link" href="?page={{ page_obj.paginator.num_pages }}{% if search %}&search={{ search }}{% endif %}">
+                                            Última
+                                        </a>
+                                    </li>
+                                {% endif %}
+                            </ul>
+                        </nav>
+                    {% endif %}
+                {% else %}
+                    <div class="alert alert-info text-center">
+                        <i class="fas fa-info-circle fa-3x mb-3"></i>
+                        <h5>Nenhum imóvel encontrado</h5>
+                        <p>
+                            {% if search %}
+                                Sua busca por "{{ search }}" não retornou resultados.
+                            {% else %}
+                                Comece cadastrando um novo imóvel.
+                            {% endif %}
+                        </p>
+                        <a href="{% url 'core:criar_imovel' %}" class="btn btn-primary">
+                            <i class="fas fa-plus"></i> Cadastrar Primeiro Imóvel
+                        </a>
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal de Confirmação de Exclusão -->
+<div class="modal fade" id="modalExclusao" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-danger text-white">
+                <h5 class="modal-title">
+                    <i class="fas fa-exclamation-triangle"></i> Confirmar Exclusão
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p>Tem certeza que deseja excluir o imóvel <strong id="nomeImovel"></strong>?</p>
+                <p class="text-danger">
+                    <i class="fas fa-info-circle"></i> Esta ação não pode ser desfeita.
+                </p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                    Cancelar
+                </button>
+                <form id="formExclusao" method="post" style="display: inline;">
+                    {% csrf_token %}
+                    <button type="submit" class="btn btn-danger">
+                        <i class="fas fa-trash"></i> Excluir
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    function confirmarExclusao(nome, url) {
+        document.getElementById('nomeImovel').textContent = nome;
+        document.getElementById('formExclusao').action = url;
+        new bootstrap.Modal(document.getElementById('modalExclusao')).show();
+    }
+</script>
+{% endblock %}
