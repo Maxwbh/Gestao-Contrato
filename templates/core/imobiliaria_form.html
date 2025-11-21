@@ -17,8 +17,6 @@
     .imobiliaria-form .card:hover {
         box-shadow: 0 4px 8px rgba(0,0,0,0.1);
     }
-
-    /* Card headers com bom contraste */
     .imobiliaria-form .card-header {
         background: linear-gradient(135deg, #2c3e50, #34495e);
         color: #ffffff;
@@ -26,28 +24,13 @@
         padding: 0.75rem 1rem;
         border-radius: 7px 7px 0 0 !important;
     }
-    .imobiliaria-form .card-header i {
-        color: #9b59b6;
-    }
-    .imobiliaria-form .card-header strong {
-        color: #ffffff;
-    }
-    .imobiliaria-form .card-header small {
-        color: #bdc3c7;
-    }
-
-    /* Header claro para seções secundárias */
+    .imobiliaria-form .card-header i { color: #9b59b6; }
+    .imobiliaria-form .card-header strong { color: #ffffff; }
+    .imobiliaria-form .card-header small { color: #bdc3c7; }
     .imobiliaria-form .card-header.bg-light {
         background: linear-gradient(135deg, #7f8c8d, #95a5a6) !important;
-        color: #ffffff !important;
     }
-    .imobiliaria-form .card-header.bg-light strong {
-        color: #ffffff !important;
-    }
-
-    /* Campos de formulário */
-    .imobiliaria-form .form-control,
-    .imobiliaria-form .form-select {
+    .imobiliaria-form .form-control, .imobiliaria-form .form-select {
         font-size: 0.9rem;
         padding: 0.5rem 0.75rem;
         border-radius: 6px;
@@ -58,20 +41,21 @@
         color: #2c3e50;
         margin-bottom: 0.25rem;
     }
-
-    /* Card de ajuda */
     .help-card .card-header {
         background: linear-gradient(135deg, #17a2b8, #138496) !important;
     }
-
-    /* Validação */
     .is-valid { border-color: #27ae60 !important; }
     .is-invalid { border-color: #e74c3c !important; }
 
-    /* Responsivo */
-    @media (max-width: 768px) {
-        .imobiliaria-form .card-body { padding: 1rem; }
-    }
+    /* Tabela de contas */
+    .contas-table { font-size: 0.875rem; }
+    .contas-table th { background: #f8f9fa; font-weight: 600; }
+    .badge-principal { background: #27ae60; }
+    .btn-add-conta { border-style: dashed; }
+
+    /* Modal */
+    .modal-header { background: linear-gradient(135deg, #2c3e50, #34495e); color: white; }
+    .modal-header .btn-close { filter: invert(1); }
 </style>
 {% endblock %}
 
@@ -83,7 +67,7 @@
             <div class="d-flex justify-content-between align-items-center mb-3">
                 <div>
                     <h4 class="mb-0 text-dark">
-                        <i class="fas fa-building text-purple me-2" style="color: #9b59b6;"></i>
+                        <i class="fas fa-building me-2" style="color: #9b59b6;"></i>
                         {% if object %}Editar: {{ object.nome }}{% else %}Nova Imobiliária{% endif %}
                     </h4>
                     <small class="text-muted">
@@ -95,35 +79,280 @@
                 </a>
             </div>
 
-            <!-- Formulário -->
+            <!-- Formulário Principal -->
             <form method="post" novalidate class="imobiliaria-form">
                 {% csrf_token %}
-                {% crispy form %}
-            </form>
 
-            <!-- Card de Ajuda -->
-            <div class="card help-card mt-3">
-                <div class="card-header">
-                    <i class="fas fa-info-circle me-2"></i><strong>Dicas de Preenchimento</strong>
-                </div>
-                <div class="card-body py-3">
-                    <div class="row">
-                        <div class="col-md-6">
-                            <ul class="mb-0 small">
-                                <li><strong>Nome:</strong> Nome fantasia (como é conhecida)</li>
-                                <li><strong>Razão Social:</strong> Nome jurídico na Receita Federal</li>
-                                <li><strong>CNPJ:</strong> Formatado automaticamente</li>
-                            </ul>
+                <!-- Card: Informações da Empresa -->
+                <div class="card mb-3">
+                    <div class="card-header py-2">
+                        <i class="fas fa-building me-2"></i><strong>Informações da Empresa</strong>
+                    </div>
+                    <div class="card-body py-3">
+                        <div class="mb-2">
+                            <label class="form-label">Contabilidade</label>
+                            {{ form.contabilidade }}
                         </div>
-                        <div class="col-md-6">
-                            <ul class="mb-0 small">
-                                <li><strong>Responsável:</strong> Pessoa responsável pelas finanças</li>
-                                <li><strong>Dados Bancários:</strong> Para recebimento de valores</li>
-                                <li><strong>PIX:</strong> CPF, CNPJ, email, telefone ou aleatória</li>
-                            </ul>
+                        <div class="row">
+                            <div class="col-md-6 mb-2">
+                                <label class="form-label">Nome Fantasia</label>
+                                {{ form.nome }}
+                            </div>
+                            <div class="col-md-6 mb-2">
+                                <label class="form-label">CNPJ</label>
+                                {{ form.cnpj }}
+                            </div>
+                        </div>
+                        <div class="mb-2">
+                            <label class="form-label">Razão Social</label>
+                            {{ form.razao_social }}
                         </div>
                     </div>
                 </div>
+
+                <!-- Card: Endereço -->
+                <div class="card mb-3">
+                    <div class="card-header py-2">
+                        <i class="fas fa-map-marker-alt me-2"></i><strong>Endereço</strong>
+                        <small class="ms-2">(CEP preenche automaticamente)</small>
+                    </div>
+                    <div class="card-body py-3">
+                        <div class="row">
+                            <div class="col-md-2 mb-2">
+                                <label class="form-label">CEP</label>
+                                {{ form.cep }}
+                            </div>
+                            <div class="col-md-6 mb-2">
+                                <label class="form-label">Logradouro</label>
+                                {{ form.logradouro }}
+                            </div>
+                            <div class="col-md-2 mb-2">
+                                <label class="form-label">Número</label>
+                                {{ form.numero }}
+                            </div>
+                            <div class="col-md-2 mb-2">
+                                <label class="form-label">Complemento</label>
+                                {{ form.complemento }}
+                            </div>
+                        </div>
+                        <div class="row">
+                            <div class="col-md-4 mb-2">
+                                <label class="form-label">Bairro</label>
+                                {{ form.bairro }}
+                            </div>
+                            <div class="col-md-5 mb-2">
+                                <label class="form-label">Cidade</label>
+                                {{ form.cidade }}
+                            </div>
+                            <div class="col-md-3 mb-2">
+                                <label class="form-label">UF</label>
+                                {{ form.estado }}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Card: Contato -->
+                <div class="card mb-3">
+                    <div class="card-header py-2">
+                        <i class="fas fa-phone me-2"></i><strong>Contato</strong>
+                    </div>
+                    <div class="card-body py-3">
+                        <div class="row">
+                            <div class="col-md-4 mb-2">
+                                <label class="form-label">Telefone</label>
+                                {{ form.telefone }}
+                            </div>
+                            <div class="col-md-4 mb-2">
+                                <label class="form-label">E-mail</label>
+                                {{ form.email }}
+                            </div>
+                            <div class="col-md-4 mb-2">
+                                <label class="form-label">Responsável Financeiro</label>
+                                {{ form.responsavel_financeiro }}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Botões do Formulário Principal -->
+                <div class="d-flex justify-content-between align-items-center mt-4 pt-3 border-top">
+                    <a href="{% url 'core:listar_imobiliarias' %}" class="btn btn-outline-secondary">
+                        <i class="fas fa-arrow-left me-2"></i>Voltar
+                    </a>
+                    <button type="submit" class="btn btn-primary btn-lg px-5">
+                        <i class="fas fa-save me-2"></i>Salvar Imobiliária
+                    </button>
+                </div>
+            </form>
+
+            {% if object %}
+            <!-- Card: Contas Bancárias (apenas para edição) -->
+            <div class="card mt-4">
+                <div class="card-header py-2 d-flex justify-content-between align-items-center">
+                    <span>
+                        <i class="fas fa-university me-2"></i><strong>Contas Bancárias</strong>
+                    </span>
+                    <button type="button" class="btn btn-success btn-sm" onclick="abrirModalConta()">
+                        <i class="fas fa-plus me-1"></i>Nova Conta
+                    </button>
+                </div>
+                <div class="card-body p-0">
+                    <div id="contas-container">
+                        <table class="table table-hover contas-table mb-0">
+                            <thead>
+                                <tr>
+                                    <th>Banco</th>
+                                    <th>Descrição</th>
+                                    <th>Agência</th>
+                                    <th>Conta</th>
+                                    <th>PIX</th>
+                                    <th class="text-center" style="width: 120px;">Ações</th>
+                                </tr>
+                            </thead>
+                            <tbody id="contas-lista">
+                                <tr>
+                                    <td colspan="6" class="text-center text-muted py-4">
+                                        <i class="fas fa-spinner fa-spin me-2"></i>Carregando contas...
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                    <div class="p-3 bg-light border-top">
+                        <button type="button" class="btn btn-outline-primary btn-add-conta w-100" onclick="abrirModalConta()">
+                            <i class="fas fa-plus-circle me-2"></i>Adicionar Conta Bancária
+                        </button>
+                    </div>
+                </div>
+            </div>
+            {% else %}
+            <!-- Aviso para nova imobiliária -->
+            <div class="alert alert-info mt-4">
+                <i class="fas fa-info-circle me-2"></i>
+                <strong>Contas Bancárias:</strong> Salve a imobiliária primeiro para poder adicionar contas bancárias.
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<!-- Modal para Conta Bancária -->
+<div class="modal fade" id="modalContaBancaria" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="modalContaTitle">
+                    <i class="fas fa-university me-2"></i>Nova Conta Bancária
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="formContaBancaria">
+                    <input type="hidden" id="conta_id" name="conta_id">
+                    <input type="hidden" id="imobiliaria_id" name="imobiliaria_id" value="{{ object.pk|default:'' }}">
+
+                    <div class="row">
+                        <div class="col-md-8 mb-3">
+                            <label class="form-label">Banco *</label>
+                            <select id="banco" name="banco" class="form-select" required>
+                                <option value="">Selecione o banco...</option>
+                            </select>
+                        </div>
+                        <div class="col-md-4 mb-3">
+                            <label class="form-label">&nbsp;</label>
+                            <div class="form-check mt-2">
+                                <input type="checkbox" class="form-check-input" id="principal" name="principal">
+                                <label class="form-check-label" for="principal">Conta Principal</label>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label">Descrição *</label>
+                        <input type="text" class="form-control" id="descricao" name="descricao"
+                               placeholder="Ex: Conta Principal, Conta Boletos" required maxlength="150">
+                    </div>
+
+                    <div class="row">
+                        <div class="col-md-4 mb-3">
+                            <label class="form-label">Agência *</label>
+                            <input type="text" class="form-control" id="agencia" name="agencia"
+                                   placeholder="0000-0" required maxlength="10">
+                        </div>
+                        <div class="col-md-4 mb-3">
+                            <label class="form-label">Conta *</label>
+                            <input type="text" class="form-control" id="conta" name="conta"
+                                   placeholder="00000-0" required maxlength="20">
+                        </div>
+                        <div class="col-md-4 mb-3">
+                            <label class="form-label">Convênio</label>
+                            <input type="text" class="form-control" id="convenio" name="convenio"
+                                   placeholder="Código do cliente" maxlength="20">
+                        </div>
+                    </div>
+
+                    <hr class="my-3">
+                    <h6 class="text-muted mb-3"><i class="fas fa-qrcode me-2"></i>Dados PIX</h6>
+
+                    <div class="row">
+                        <div class="col-md-4 mb-3">
+                            <label class="form-label">Tipo de Chave</label>
+                            <select id="tipo_pix" name="tipo_pix" class="form-select">
+                                <option value="">Nenhum</option>
+                                <option value="CPF">CPF</option>
+                                <option value="CNPJ">CNPJ</option>
+                                <option value="EMAIL">E-mail</option>
+                                <option value="TELEFONE">Telefone</option>
+                                <option value="ALEATORIA">Chave Aleatória</option>
+                            </select>
+                        </div>
+                        <div class="col-md-8 mb-3">
+                            <label class="form-label">Chave PIX</label>
+                            <input type="text" class="form-control" id="chave_pix" name="chave_pix"
+                                   placeholder="Digite a chave PIX" maxlength="100">
+                        </div>
+                    </div>
+
+                    <hr class="my-3">
+                    <h6 class="text-muted mb-3"><i class="fas fa-barcode me-2"></i>Configurações de Boleto (opcional)</h6>
+
+                    <div class="row">
+                        <div class="col-md-3 mb-3">
+                            <label class="form-label">Carteira</label>
+                            <input type="text" class="form-control" id="carteira" name="carteira"
+                                   placeholder="Ex: 17" maxlength="5">
+                        </div>
+                        <div class="col-md-3 mb-3">
+                            <label class="form-label">Modalidade</label>
+                            <input type="text" class="form-control" id="modalidade" name="modalidade"
+                                   placeholder="Ex: 1" maxlength="5">
+                        </div>
+                        <div class="col-md-3 mb-3">
+                            <label class="form-label">Prazo Baixa (dias)</label>
+                            <input type="number" class="form-control" id="prazo_baixa" name="prazo_baixa"
+                                   value="0" min="0" max="999">
+                        </div>
+                        <div class="col-md-3 mb-3">
+                            <label class="form-label">Prazo Protesto</label>
+                            <input type="number" class="form-control" id="prazo_protesto" name="prazo_protesto"
+                                   value="0" min="0" max="99">
+                        </div>
+                    </div>
+
+                    <div class="form-check">
+                        <input type="checkbox" class="form-check-input" id="cobranca_registrada" name="cobranca_registrada" checked>
+                        <label class="form-check-label" for="cobranca_registrada">Cobrança Registrada</label>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                    <i class="fas fa-times me-1"></i>Cancelar
+                </button>
+                <button type="button" class="btn btn-primary" onclick="salvarConta()">
+                    <i class="fas fa-save me-1"></i>Salvar Conta
+                </button>
             </div>
         </div>
     </div>
@@ -132,24 +361,211 @@
 
 {% block extra_js %}
 <script>
+const IMOBILIARIA_ID = {{ object.pk|default:'null' }};
+let modalContaBancaria;
+
 document.addEventListener('DOMContentLoaded', function() {
-    // Auto-completar nome com base na razão social
-    const razaoSocialInput = document.querySelector('input[name="razao_social"]');
-    const nomeInput = document.querySelector('input[name="nome"]');
-    if (razaoSocialInput && nomeInput) {
-        razaoSocialInput.addEventListener('blur', function() {
-            if (!nomeInput.value && this.value) {
-                let nome = this.value
-                    .replace(/LTDA\.?$/i, '')
-                    .replace(/S\.?A\.?$/i, '')
-                    .replace(/EIRELI$/i, '')
-                    .replace(/ME$/i, '')
-                    .replace(/EPP$/i, '')
-                    .trim();
-                nomeInput.value = nome;
-            }
-        });
+    modalContaBancaria = new bootstrap.Modal(document.getElementById('modalContaBancaria'));
+
+    // Carregar lista de bancos
+    carregarBancos();
+
+    // Carregar contas se editando
+    if (IMOBILIARIA_ID) {
+        carregarContas();
     }
 });
+
+async function carregarBancos() {
+    try {
+        const response = await fetch('/api/bancos/');
+        const data = await response.json();
+
+        if (data.status === 'success') {
+            const select = document.getElementById('banco');
+            data.bancos.forEach(banco => {
+                const option = document.createElement('option');
+                option.value = banco.codigo;
+                option.textContent = banco.nome;
+                select.appendChild(option);
+            });
+        }
+    } catch (error) {
+        console.error('Erro ao carregar bancos:', error);
+    }
+}
+
+async function carregarContas() {
+    try {
+        const response = await fetch(`/api/imobiliarias/${IMOBILIARIA_ID}/contas/`);
+        const data = await response.json();
+
+        const tbody = document.getElementById('contas-lista');
+
+        if (data.status === 'success' && data.contas.length > 0) {
+            tbody.innerHTML = data.contas.map(conta => `
+                <tr>
+                    <td>
+                        <strong>${conta.banco_nome}</strong>
+                        ${conta.principal ? '<span class="badge badge-principal ms-2">Principal</span>' : ''}
+                    </td>
+                    <td>${conta.descricao}</td>
+                    <td>${conta.agencia}</td>
+                    <td>${conta.conta}</td>
+                    <td>${conta.chave_pix || '-'}</td>
+                    <td class="text-center">
+                        <button type="button" class="btn btn-sm btn-outline-primary me-1" onclick="editarConta(${conta.id})" title="Editar">
+                            <i class="fas fa-edit"></i>
+                        </button>
+                        <button type="button" class="btn btn-sm btn-outline-danger" onclick="excluirConta(${conta.id})" title="Excluir">
+                            <i class="fas fa-trash"></i>
+                        </button>
+                    </td>
+                </tr>
+            `).join('');
+        } else {
+            tbody.innerHTML = `
+                <tr>
+                    <td colspan="6" class="text-center text-muted py-4">
+                        <i class="fas fa-university fa-2x mb-2 d-block opacity-50"></i>
+                        Nenhuma conta bancária cadastrada
+                    </td>
+                </tr>
+            `;
+        }
+    } catch (error) {
+        console.error('Erro ao carregar contas:', error);
+        document.getElementById('contas-lista').innerHTML = `
+            <tr><td colspan="6" class="text-center text-danger py-3">Erro ao carregar contas</td></tr>
+        `;
+    }
+}
+
+function abrirModalConta() {
+    document.getElementById('formContaBancaria').reset();
+    document.getElementById('conta_id').value = '';
+    document.getElementById('imobiliaria_id').value = IMOBILIARIA_ID;
+    document.getElementById('modalContaTitle').innerHTML = '<i class="fas fa-university me-2"></i>Nova Conta Bancária';
+    document.getElementById('cobranca_registrada').checked = true;
+    modalContaBancaria.show();
+}
+
+async function editarConta(contaId) {
+    try {
+        const response = await fetch(`/api/contas/${contaId}/`);
+        const data = await response.json();
+
+        if (data.status === 'success') {
+            const conta = data.conta;
+            document.getElementById('conta_id').value = conta.id;
+            document.getElementById('banco').value = conta.banco;
+            document.getElementById('descricao').value = conta.descricao;
+            document.getElementById('agencia').value = conta.agencia;
+            document.getElementById('conta').value = conta.conta;
+            document.getElementById('convenio').value = conta.convenio || '';
+            document.getElementById('carteira').value = conta.carteira || '';
+            document.getElementById('modalidade').value = conta.modalidade || '';
+            document.getElementById('tipo_pix').value = conta.tipo_pix || '';
+            document.getElementById('chave_pix').value = conta.chave_pix || '';
+            document.getElementById('principal').checked = conta.principal;
+            document.getElementById('cobranca_registrada').checked = conta.cobranca_registrada;
+            document.getElementById('prazo_baixa').value = conta.prazo_baixa || 0;
+            document.getElementById('prazo_protesto').value = conta.prazo_protesto || 0;
+
+            document.getElementById('modalContaTitle').innerHTML = '<i class="fas fa-edit me-2"></i>Editar Conta Bancária';
+            modalContaBancaria.show();
+        }
+    } catch (error) {
+        alert('Erro ao carregar dados da conta');
+        console.error(error);
+    }
+}
+
+async function salvarConta() {
+    const contaId = document.getElementById('conta_id').value;
+    const formData = {
+        imobiliaria_id: IMOBILIARIA_ID,
+        banco: document.getElementById('banco').value,
+        descricao: document.getElementById('descricao').value,
+        agencia: document.getElementById('agencia').value,
+        conta: document.getElementById('conta').value,
+        convenio: document.getElementById('convenio').value,
+        carteira: document.getElementById('carteira').value,
+        modalidade: document.getElementById('modalidade').value,
+        tipo_pix: document.getElementById('tipo_pix').value,
+        chave_pix: document.getElementById('chave_pix').value,
+        principal: document.getElementById('principal').checked,
+        cobranca_registrada: document.getElementById('cobranca_registrada').checked,
+        prazo_baixa: parseInt(document.getElementById('prazo_baixa').value) || 0,
+        prazo_protesto: parseInt(document.getElementById('prazo_protesto').value) || 0,
+    };
+
+    // Validação básica
+    if (!formData.banco || !formData.descricao || !formData.agencia || !formData.conta) {
+        alert('Preencha os campos obrigatórios: Banco, Descrição, Agência e Conta');
+        return;
+    }
+
+    try {
+        const url = contaId ? `/api/contas/${contaId}/atualizar/` : '/api/contas/';
+        const response = await fetch(url, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': '{{ csrf_token }}'
+            },
+            body: JSON.stringify(formData)
+        });
+
+        const data = await response.json();
+
+        if (data.status === 'success') {
+            modalContaBancaria.hide();
+            carregarContas();
+
+            // Toast de sucesso
+            if (window.GestaoContratos && window.GestaoContratos.showToast) {
+                window.GestaoContratos.showToast(data.message, 'success');
+            } else {
+                alert(data.message);
+            }
+        } else {
+            alert('Erro: ' + data.message);
+        }
+    } catch (error) {
+        alert('Erro ao salvar conta bancária');
+        console.error(error);
+    }
+}
+
+async function excluirConta(contaId) {
+    if (!confirm('Tem certeza que deseja excluir esta conta bancária?')) {
+        return;
+    }
+
+    try {
+        const response = await fetch(`/api/contas/${contaId}/excluir/`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': '{{ csrf_token }}'
+            }
+        });
+
+        const data = await response.json();
+
+        if (data.status === 'success') {
+            carregarContas();
+            if (window.GestaoContratos && window.GestaoContratos.showToast) {
+                window.GestaoContratos.showToast(data.message, 'success');
+            }
+        } else {
+            alert('Erro: ' + data.message);
+        }
+    } catch (error) {
+        alert('Erro ao excluir conta bancária');
+        console.error(error);
+    }
+}
 </script>
 {% endblock %}

@@ -135,6 +135,166 @@ class Imobiliaria(TimeStampedModel):
         return self.nome
 
 
+class BancoBrasil(models.TextChoices):
+    """Lista de bancos brasileiros para contas bancárias"""
+    BANCO_DO_BRASIL = '001', '001 - Banco do Brasil'
+    BANCO_DO_NORDESTE = '004', '004 - Banco do Nordeste - BNB'
+    BANESTES = '021', '021 - Banestes'
+    SANTANDER = '033', '033 - Santander'
+    BANRISUL = '041', '041 - Banrisul'
+    BRB = '070', '070 - BRB - Banco de Brasília'
+    BANCO_INTER = '077', '077 - Banco Inter'
+    SISPRIME = '084', '084 - Sisprime'
+    CECRED = '085', '085 - Cecred / Ailos'
+    CREDISAN = '089', '089 - Credisan'
+    CAIXA = '104', '104 - Caixa Econômica Federal'
+    CRESOL = '133', '133 - Cresol'
+    UNICRED = '136', '136 - Unicred'
+    BTG_PACTUAL = '208', '208 - BTG Pactual'
+    BANCO_ARBI = '213', '213 - Banco Arbi'
+    BRADESCO = '237', '237 - Bradesco'
+    ABC_BRASIL = '246', '246 - ABC Brasil'
+    BMP = '274', '274 - BMP'
+    C6_BANK = '336', '336 - C6 Bank'
+    ITAU = '341', '341 - Itaú'
+    MERCANTIL = '389', '389 - Mercantil do Brasil'
+    HSBC = '399', '399 - HSBC'
+    SAFRA = '422', '422 - Safra'
+    BANCOOB = '756', '756 - Sicoob / Bancoob'
+    SICREDI = '748', '748 - Sicredi'
+    SOFISA = '637', '637 - Sofisa'
+    DAYCOVAL = '707', '707 - Daycoval'
+    NUBANK = '260', '260 - Nubank'
+    PAGBANK = '290', '290 - PagBank / PagSeguro'
+    MERCADO_PAGO = '323', '323 - Mercado Pago'
+    STONE = '197', '197 - Stone'
+    ASAAS = '461', '461 - Asaas'
+    OUTROS = '000', '000 - Outros'
+
+
+class ContaBancaria(TimeStampedModel):
+    """Modelo para representar Contas Bancárias das Imobiliárias"""
+    imobiliaria = models.ForeignKey(
+        'Imobiliaria',
+        on_delete=models.CASCADE,
+        related_name='contas_bancarias',
+        verbose_name='Imobiliária'
+    )
+
+    # Dados do Banco
+    banco = models.CharField(
+        max_length=3,
+        choices=BancoBrasil.choices,
+        verbose_name='Banco'
+    )
+    descricao = models.CharField(
+        max_length=150,
+        verbose_name='Descrição',
+        help_text='Identificação da conta (ex: Conta Principal, Conta Boletos)'
+    )
+    principal = models.BooleanField(
+        default=False,
+        verbose_name='Conta Principal',
+        help_text='Marque se esta é a conta principal'
+    )
+
+    # Dados da Conta
+    agencia = models.CharField(
+        max_length=10,
+        verbose_name='Agência',
+        help_text='Número da agência com dígito'
+    )
+    conta = models.CharField(
+        max_length=20,
+        verbose_name='Conta',
+        help_text='Número da conta com dígito'
+    )
+
+    # Dados para Boleto (opcionais)
+    convenio = models.CharField(
+        max_length=20,
+        blank=True,
+        verbose_name='Convênio / Código do Cliente',
+        help_text='Código do convênio para emissão de boletos'
+    )
+    carteira = models.CharField(
+        max_length=5,
+        blank=True,
+        verbose_name='Carteira',
+        help_text='Número da carteira de cobrança'
+    )
+    nosso_numero_atual = models.IntegerField(
+        default=0,
+        verbose_name='Nosso Número Atual',
+        help_text='Sequencial atual do nosso número'
+    )
+    modalidade = models.CharField(
+        max_length=5,
+        blank=True,
+        verbose_name='Modalidade'
+    )
+
+    # PIX
+    tipo_pix = models.CharField(
+        max_length=20,
+        blank=True,
+        choices=[
+            ('CPF', 'CPF'),
+            ('CNPJ', 'CNPJ'),
+            ('EMAIL', 'E-mail'),
+            ('TELEFONE', 'Telefone'),
+            ('ALEATORIA', 'Chave Aleatória'),
+        ],
+        verbose_name='Tipo de Chave PIX'
+    )
+    chave_pix = models.CharField(
+        max_length=100,
+        blank=True,
+        verbose_name='Chave PIX'
+    )
+
+    # Configurações de Cobrança
+    cobranca_registrada = models.BooleanField(
+        default=True,
+        verbose_name='Cobrança Registrada'
+    )
+    prazo_baixa = models.IntegerField(
+        default=0,
+        verbose_name='Prazo para Baixa (dias)',
+        help_text='Prazo em dias para baixa/devolução do título após vencimento'
+    )
+    prazo_protesto = models.IntegerField(
+        default=0,
+        verbose_name='Prazo para Protesto (dias)',
+        help_text='Prazo em dias para protesto. 0 = não protestar'
+    )
+
+    ativo = models.BooleanField(default=True, verbose_name='Ativo')
+
+    class Meta:
+        verbose_name = 'Conta Bancária'
+        verbose_name_plural = 'Contas Bancárias'
+        ordering = ['-principal', 'banco', 'descricao']
+
+    def __str__(self):
+        banco_nome = self.get_banco_display() if self.banco else 'Sem banco'
+        return f"{banco_nome} - Ag: {self.agencia} Cc: {self.conta}"
+
+    def save(self, *args, **kwargs):
+        # Se marcada como principal, desmarcar outras
+        if self.principal:
+            ContaBancaria.objects.filter(
+                imobiliaria=self.imobiliaria,
+                principal=True
+            ).exclude(pk=self.pk).update(principal=False)
+        super().save(*args, **kwargs)
+
+    @property
+    def banco_nome(self):
+        """Retorna o nome completo do banco"""
+        return self.get_banco_display() if self.banco else ''
+
+
 class TipoImovel(models.TextChoices):
     """Tipos de imóveis disponíveis"""
     LOTE = 'LOTE', 'Lote'

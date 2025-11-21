@@ -9,7 +9,7 @@ from django.core.exceptions import ValidationError
 from crispy_forms.helper import FormHelper
 from crispy_forms.layout import Layout, Submit, Row, Column, Div, HTML, Field
 from crispy_forms.bootstrap import PrependedText, AppendedText
-from .models import Contabilidade, Imobiliaria, Imovel, Comprador, TipoImovel
+from .models import Contabilidade, Imobiliaria, Imovel, Comprador, TipoImovel, ContaBancaria, BancoBrasil
 import re
 
 
@@ -492,3 +492,33 @@ class ImobiliariaForm(forms.ModelForm):
                 </div>
             ''')
         )
+
+
+class ContaBancariaForm(forms.ModelForm):
+    """Formulário para cadastro de Conta Bancária"""
+
+    class Meta:
+        model = ContaBancaria
+        fields = [
+            'banco', 'descricao', 'principal',
+            'agencia', 'conta',
+            'convenio', 'carteira', 'nosso_numero_atual', 'modalidade',
+            'tipo_pix', 'chave_pix',
+            'cobranca_registrada', 'prazo_baixa', 'prazo_protesto'
+        ]
+        widgets = {
+            'banco': forms.Select(attrs={'class': 'form-select'}),
+            'descricao': forms.TextInput(attrs={'placeholder': 'Ex: Conta Principal'}),
+            'tipo_pix': forms.Select(attrs={'class': 'form-select'}),
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        for field_name, field in self.fields.items():
+            if 'class' not in field.widget.attrs:
+                if isinstance(field.widget, forms.Select):
+                    field.widget.attrs['class'] = 'form-select'
+                elif isinstance(field.widget, forms.CheckboxInput):
+                    field.widget.attrs['class'] = 'form-check-input'
+                else:
+                    field.widget.attrs['class'] = 'form-control'

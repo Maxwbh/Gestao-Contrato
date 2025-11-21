@@ -32,4 +32,12 @@ urlpatterns = [
     path('imobiliarias/novo/', views.ImobiliariaCreateView.as_view(), name='criar_imobiliaria'),
     path('imobiliarias/<int:pk>/editar/', views.ImobiliariaUpdateView.as_view(), name='editar_imobiliaria'),
     path('imobiliarias/<int:pk>/excluir/', views.ImobiliariaDeleteView.as_view(), name='excluir_imobiliaria'),
+
+    # API Conta Bancária
+    path('api/bancos/', views.api_listar_bancos, name='api_listar_bancos'),
+    path('api/imobiliarias/<int:imobiliaria_id>/contas/', views.api_listar_contas_bancarias, name='api_listar_contas'),
+    path('api/contas/', views.api_criar_conta_bancaria, name='api_criar_conta'),
+    path('api/contas/<int:conta_id>/', views.api_obter_conta_bancaria, name='api_obter_conta'),
+    path('api/contas/<int:conta_id>/atualizar/', views.api_atualizar_conta_bancaria, name='api_atualizar_conta'),
+    path('api/contas/<int:conta_id>/excluir/', views.api_excluir_conta_bancaria, name='api_excluir_conta'),
 ]
