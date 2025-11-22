@@ -8,16 +8,21 @@ from django.shortcuts import render, get_object_or_404, redirect
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.contrib import messages
-from django.http import JsonResponse
+from django.http import JsonResponse, HttpResponse, FileResponse
 from django.utils import timezone
 from django.db.models import Sum, Count, Q, F
 from django.views.generic import TemplateView
+from django.views.decorators.http import require_POST, require_GET
 from datetime import timedelta
 from dateutil.relativedelta import relativedelta
 from decimal import Decimal
-from .models import Parcela, Reajuste
-from core.models import Imobiliaria
+import logging
+
+from .models import Parcela, Reajuste, StatusBoleto
+from core.models import Imobiliaria, ContaBancaria
 from contratos.models import Contrato, StatusContrato
+
+logger = logging.getLogger(__name__)
 
 
 class DashboardFinanceiroView(LoginRequiredMixin, TemplateView):
@@ -612,3 +617,224 @@ def dashboard_imobiliaria(request, imobiliaria_id):
         'mes_atual': hoje.strftime('%B/%Y'),
     }
     return render(request, 'financeiro/dashboard_imobiliaria.html', context)
+
+
+# =============================================================================
+# VIEWS DE BOLETO BANCÁRIO
+# =============================================================================
+
+@login_required
+@require_POST
+def gerar_boleto_parcela(request, pk):
+    """
+    Gera boleto para uma parcela específica.
+    """
+    parcela = get_object_or_404(Parcela, pk=pk)
+
+    if parcela.pago:
+        return JsonResponse({
+            'sucesso': False,
+            'erro': 'Parcela já está paga'
+        }, status=400)
+
+    # Obter conta bancária (pode vir do request ou usar a padrão)
+    conta_id = request.POST.get('conta_bancaria_id')
+    conta_bancaria = None
+
+    if conta_id:
+        conta_bancaria = get_object_or_404(ContaBancaria, pk=conta_id, ativo=True)
+    else:
+        # Usar conta principal da imobiliária
+        imobiliaria = parcela.contrato.imovel.imobiliaria
+        conta_bancaria = imobiliaria.contas_bancarias.filter(
+            principal=True, ativo=True
+        ).first()
+
+    if not conta_bancaria:
+        return JsonResponse({
+            'sucesso': False,
+            'erro': 'Nenhuma conta bancária configurada'
+        }, status=400)
+
+    try:
+        force = request.POST.get('force', 'false').lower() == 'true'
+        resultado = parcela.gerar_boleto(conta_bancaria, force=force)
+
+        if resultado and resultado.get('sucesso'):
+            return JsonResponse({
+                'sucesso': True,
+                'parcela_id': parcela.id,
+                'nosso_numero': resultado.get('nosso_numero', ''),
+                'linha_digitavel': resultado.get('linha_digitavel', ''),
+                'codigo_barras': resultado.get('codigo_barras', ''),
+                'tem_pdf': parcela.boleto_pdf.name if parcela.boleto_pdf else False,
+                'mensagem': 'Boleto gerado com sucesso'
+            })
+        else:
+            return JsonResponse({
+                'sucesso': False,
+                'erro': resultado.get('erro', 'Erro ao gerar boleto') if resultado else 'Erro desconhecido'
+            }, status=500)
+
+    except Exception as e:
+        logger.exception(f"Erro ao gerar boleto: {e}")
+        return JsonResponse({
+            'sucesso': False,
+            'erro': str(e)
+        }, status=500)
+
+
+@login_required
+@require_POST
+def gerar_boletos_contrato(request, contrato_id):
+    """
+    Gera boletos para todas as parcelas pendentes de um contrato.
+    """
+    contrato = get_object_or_404(Contrato, pk=contrato_id)
+
+    # Obter conta bancária
+    conta_id = request.POST.get('conta_bancaria_id')
+    conta_bancaria = None
+
+    if conta_id:
+        conta_bancaria = get_object_or_404(ContaBancaria, pk=conta_id, ativo=True)
+
+    try:
+        resultados = contrato.gerar_boletos_parcelas(conta_bancaria=conta_bancaria)
+
+        if isinstance(resultados, dict) and resultados.get('erro'):
+            return JsonResponse({
+                'sucesso': False,
+                'erro': resultados['erro']
+            }, status=400)
+
+        total = len(resultados)
+        sucesso = sum(1 for r in resultados if r.get('sucesso'))
+        falhas = total - sucesso
+
+        return JsonResponse({
+            'sucesso': True,
+            'total': total,
+            'gerados': sucesso,
+            'falhas': falhas,
+            'resultados': resultados,
+            'mensagem': f'{sucesso} de {total} boletos gerados com sucesso'
+        })
+
+    except Exception as e:
+        logger.exception(f"Erro ao gerar boletos do contrato: {e}")
+        return JsonResponse({
+            'sucesso': False,
+            'erro': str(e)
+        }, status=500)
+
+
+@login_required
+@require_GET
+def download_boleto(request, pk):
+    """
+    Download do PDF do boleto.
+    """
+    parcela = get_object_or_404(Parcela, pk=pk)
+
+    if not parcela.boleto_pdf:
+        messages.error(request, 'Boleto não disponível para download.')
+        return redirect('financeiro:detalhe_parcela', pk=pk)
+
+    try:
+        response = FileResponse(
+            parcela.boleto_pdf.open('rb'),
+            as_attachment=True,
+            filename=f'boleto_{parcela.contrato.numero_contrato}_{parcela.numero_parcela}.pdf'
+        )
+        response['Content-Type'] = 'application/pdf'
+        return response
+    except Exception as e:
+        logger.exception(f"Erro ao fazer download do boleto: {e}")
+        messages.error(request, 'Erro ao baixar o boleto.')
+        return redirect('financeiro:detalhe_parcela', pk=pk)
+
+
+@login_required
+@require_GET
+def visualizar_boleto(request, pk):
+    """
+    Visualiza dados do boleto de uma parcela.
+    """
+    parcela = get_object_or_404(
+        Parcela.objects.select_related(
+            'contrato',
+            'contrato__comprador',
+            'contrato__imovel',
+            'contrato__imovel__imobiliaria',
+            'conta_bancaria'
+        ),
+        pk=pk
+    )
+
+    if not parcela.tem_boleto:
+        messages.warning(request, 'Boleto ainda não foi gerado para esta parcela.')
+        return redirect('financeiro:detalhe_parcela', pk=pk)
+
+    context = {
+        'parcela': parcela,
+        'contrato': parcela.contrato,
+        'comprador': parcela.contrato.comprador,
+        'imobiliaria': parcela.contrato.imovel.imobiliaria,
+    }
+    return render(request, 'financeiro/visualizar_boleto.html', context)
+
+
+@login_required
+@require_POST
+def cancelar_boleto(request, pk):
+    """
+    Cancela um boleto.
+    """
+    parcela = get_object_or_404(Parcela, pk=pk)
+
+    if parcela.status_boleto in [StatusBoleto.NAO_GERADO, StatusBoleto.CANCELADO]:
+        return JsonResponse({
+            'sucesso': False,
+            'erro': 'Boleto não pode ser cancelado'
+        }, status=400)
+
+    if parcela.pago:
+        return JsonResponse({
+            'sucesso': False,
+            'erro': 'Não é possível cancelar boleto de parcela paga'
+        }, status=400)
+
+    motivo = request.POST.get('motivo', '')
+
+    try:
+        parcela.cancelar_boleto(motivo)
+        return JsonResponse({
+            'sucesso': True,
+            'mensagem': 'Boleto cancelado com sucesso'
+        })
+    except Exception as e:
+        logger.exception(f"Erro ao cancelar boleto: {e}")
+        return JsonResponse({
+            'sucesso': False,
+            'erro': str(e)
+        }, status=500)
+
+
+@login_required
+def api_status_boleto(request, pk):
+    """
+    Retorna o status do boleto de uma parcela (para atualização via AJAX).
+    """
+    parcela = get_object_or_404(Parcela, pk=pk)
+
+    return JsonResponse({
+        'parcela_id': parcela.id,
+        'status': parcela.status_boleto,
+        'status_display': parcela.get_status_boleto_display(),
+        'tem_boleto': parcela.tem_boleto,
+        'nosso_numero': parcela.nosso_numero,
+        'linha_digitavel': parcela.linha_digitavel,
+        'tem_pdf': bool(parcela.boleto_pdf),
+        'data_geracao': parcela.data_geracao_boleto.isoformat() if parcela.data_geracao_boleto else None,
+    })

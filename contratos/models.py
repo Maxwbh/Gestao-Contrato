@@ -315,21 +315,29 @@ class Contrato(TimeStampedModel):
         if not self.parcelas.exists():
             self.gerar_parcelas()
 
-    def gerar_parcelas(self):
-        """Gera todas as parcelas do contrato"""
+    def gerar_parcelas(self, gerar_boletos=False, conta_bancaria=None):
+        """
+        Gera todas as parcelas do contrato.
+
+        Args:
+            gerar_boletos: Se True, gera boletos para cada parcela
+            conta_bancaria: Conta bancária para geração de boletos (opcional)
+        """
         from financeiro.models import Parcela
 
         data_vencimento = self.data_primeiro_vencimento
         valor_parcela = self.valor_parcela_original
+        parcelas_criadas = []
 
         for numero in range(1, self.numero_parcelas + 1):
-            Parcela.objects.create(
+            parcela = Parcela.objects.create(
                 contrato=self,
                 numero_parcela=numero,
                 data_vencimento=data_vencimento,
                 valor_original=valor_parcela,
                 valor_atual=valor_parcela,
             )
+            parcelas_criadas.append(parcela)
 
             # Avançar para o próximo mês, mantendo o dia de vencimento
             data_vencimento = data_vencimento + relativedelta(months=1)
@@ -340,6 +348,54 @@ class Contrato(TimeStampedModel):
                 ultimo_dia = (data_vencimento.replace(day=1) + relativedelta(months=1) - relativedelta(days=1)).day
                 dia = min(self.dia_vencimento, ultimo_dia)
                 data_vencimento = data_vencimento.replace(day=dia)
+
+        # Gerar boletos se solicitado
+        if gerar_boletos:
+            self.gerar_boletos_parcelas(parcelas_criadas, conta_bancaria)
+
+        return parcelas_criadas
+
+    def gerar_boletos_parcelas(self, parcelas=None, conta_bancaria=None):
+        """
+        Gera boletos para as parcelas do contrato.
+
+        Args:
+            parcelas: Lista de parcelas (opcional, usa todas não pagas se não informado)
+            conta_bancaria: Conta bancária para geração (opcional)
+
+        Returns:
+            list: Resultados da geração de boletos
+        """
+        if parcelas is None:
+            parcelas = self.parcelas.filter(pago=False)
+
+        # Obter conta bancária se não informada
+        if not conta_bancaria:
+            imobiliaria = self.imovel.imobiliaria
+            conta_bancaria = imobiliaria.contas_bancarias.filter(
+                principal=True, ativo=True
+            ).first()
+
+        if not conta_bancaria:
+            return {'erro': 'Nenhuma conta bancária disponível'}
+
+        resultados = []
+        for parcela in parcelas:
+            try:
+                resultado = parcela.gerar_boleto(conta_bancaria)
+                resultados.append({
+                    'parcela': parcela.numero_parcela,
+                    'sucesso': resultado.get('sucesso', False) if resultado else False,
+                    'nosso_numero': resultado.get('nosso_numero', '') if resultado else '',
+                })
+            except Exception as e:
+                resultados.append({
+                    'parcela': parcela.numero_parcela,
+                    'sucesso': False,
+                    'erro': str(e),
+                })
+
+        return resultados
 
     def calcular_progresso(self):
         """Calcula o progresso de pagamento do contrato"""

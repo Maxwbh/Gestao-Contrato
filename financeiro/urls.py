@@ -24,6 +24,14 @@ urlpatterns = [
     path('parcelas/<int:pk>/', views.detalhe_parcela, name='detalhe_parcela'),
     path('parcelas/<int:pk>/pagar/', views.registrar_pagamento, name='registrar_pagamento'),
 
+    # Boletos
+    path('parcelas/<int:pk>/boleto/gerar/', views.gerar_boleto_parcela, name='gerar_boleto'),
+    path('parcelas/<int:pk>/boleto/download/', views.download_boleto, name='download_boleto'),
+    path('parcelas/<int:pk>/boleto/visualizar/', views.visualizar_boleto, name='visualizar_boleto'),
+    path('parcelas/<int:pk>/boleto/cancelar/', views.cancelar_boleto, name='cancelar_boleto'),
+    path('parcelas/<int:pk>/boleto/status/', views.api_status_boleto, name='api_status_boleto'),
+    path('contrato/<int:contrato_id>/boletos/gerar/', views.gerar_boletos_contrato, name='gerar_boletos_contrato'),
+
     # Reajustes
     path('reajustes/', views.listar_reajustes, name='listar_reajustes'),
 ]

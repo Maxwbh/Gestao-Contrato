@@ -196,6 +196,15 @@ NOTIFICACAO_DIAS_ANTECEDENCIA = config('NOTIFICACAO_DIAS_ANTECEDENCIA', default=
 # POST /api/tasks/run-all/ com o header X-Task-Token
 TASK_TOKEN = config('TASK_TOKEN', default=None)
 
+# =============================================================================
+# BRCOBRANÇA - Configuração para Geração de Boletos
+# =============================================================================
+# BRCobrança é uma API Ruby para geração de boletos bancários.
+# Rode o container Docker: docker run -p 9292:9292 kivanio/brcobranca
+# Documentação: https://github.com/kivanio/brcobranca
+BRCOBRANCA_URL = config('BRCOBRANCA_URL', default='http://localhost:9292')
+BRCOBRANCA_TIMEOUT = config('BRCOBRANCA_TIMEOUT', default=30, cast=int)
+
 # Configurações de Índices Econômicos (APIs)
 BCBAPI_URL = 'https://api.bcb.gov.br/dados/serie/bcdata.sgs.{}/dados'
 IPCA_SERIE_ID = '433'  # Código do IPCA no BCB

@@ -10,7 +10,19 @@ from django.core.validators import MinValueValidator
 from django.utils import timezone
 from decimal import Decimal
 from datetime import timedelta
-from core.models import TimeStampedModel
+from core.models import TimeStampedModel, ContaBancaria
+
+
+class StatusBoleto(models.TextChoices):
+    """Status do boleto bancário"""
+    NAO_GERADO = 'NAO_GERADO', 'Não Gerado'
+    GERADO = 'GERADO', 'Gerado'
+    REGISTRADO = 'REGISTRADO', 'Registrado no Banco'
+    PAGO = 'PAGO', 'Pago'
+    VENCIDO = 'VENCIDO', 'Vencido'
+    CANCELADO = 'CANCELADO', 'Cancelado'
+    PROTESTADO = 'PROTESTADO', 'Protestado'
+    BAIXADO = 'BAIXADO', 'Baixado'
 
 
 class Parcela(TimeStampedModel):
@@ -90,6 +102,138 @@ class Parcela(TimeStampedModel):
         verbose_name='Observações'
     )
 
+    # =========================================================================
+    # DADOS DO BOLETO BANCÁRIO
+    # =========================================================================
+
+    conta_bancaria = models.ForeignKey(
+        ContaBancaria,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='parcelas',
+        verbose_name='Conta Bancária',
+        help_text='Conta bancária usada para gerar o boleto'
+    )
+
+    # Identificação do Boleto
+    nosso_numero = models.CharField(
+        max_length=30,
+        blank=True,
+        verbose_name='Nosso Número',
+        help_text='Número de identificação do boleto no banco'
+    )
+    numero_documento = models.CharField(
+        max_length=25,
+        blank=True,
+        verbose_name='Número do Documento',
+        help_text='Número do documento para o cliente'
+    )
+
+    # Código de Barras e Linha Digitável
+    codigo_barras = models.CharField(
+        max_length=50,
+        blank=True,
+        verbose_name='Código de Barras',
+        help_text='Código de barras numérico do boleto'
+    )
+    linha_digitavel = models.CharField(
+        max_length=60,
+        blank=True,
+        verbose_name='Linha Digitável',
+        help_text='Linha digitável para pagamento'
+    )
+
+    # Arquivo PDF do Boleto
+    boleto_pdf = models.FileField(
+        upload_to='boletos/%Y/%m/',
+        null=True,
+        blank=True,
+        verbose_name='Boleto PDF',
+        help_text='Arquivo PDF do boleto gerado'
+    )
+    boleto_url = models.URLField(
+        max_length=500,
+        blank=True,
+        verbose_name='URL do Boleto',
+        help_text='URL externa do boleto (se houver)'
+    )
+
+    # Status e Controle do Boleto
+    status_boleto = models.CharField(
+        max_length=15,
+        choices=StatusBoleto.choices,
+        default=StatusBoleto.NAO_GERADO,
+        verbose_name='Status do Boleto'
+    )
+    data_geracao_boleto = models.DateTimeField(
+        null=True,
+        blank=True,
+        verbose_name='Data de Geração',
+        help_text='Data/hora em que o boleto foi gerado'
+    )
+    data_registro_boleto = models.DateTimeField(
+        null=True,
+        blank=True,
+        verbose_name='Data de Registro',
+        help_text='Data/hora em que o boleto foi registrado no banco'
+    )
+    data_pagamento_boleto = models.DateTimeField(
+        null=True,
+        blank=True,
+        verbose_name='Data Pagamento Boleto',
+        help_text='Data/hora do pagamento confirmado pelo banco'
+    )
+
+    # Valores do Boleto (podem diferir do valor da parcela)
+    valor_boleto = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        verbose_name='Valor do Boleto',
+        help_text='Valor nominal do boleto gerado'
+    )
+    valor_pago_boleto = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        verbose_name='Valor Pago via Boleto',
+        help_text='Valor efetivamente pago via boleto'
+    )
+
+    # Dados de Retorno Bancário
+    banco_pagador = models.CharField(
+        max_length=10,
+        blank=True,
+        verbose_name='Banco Pagador',
+        help_text='Código do banco onde foi pago'
+    )
+    agencia_pagadora = models.CharField(
+        max_length=10,
+        blank=True,
+        verbose_name='Agência Pagadora'
+    )
+    motivo_rejeicao = models.CharField(
+        max_length=255,
+        blank=True,
+        verbose_name='Motivo Rejeição/Baixa',
+        help_text='Motivo de rejeição ou baixa do boleto'
+    )
+
+    # PIX do Boleto (Boleto Híbrido)
+    pix_copia_cola = models.TextField(
+        blank=True,
+        verbose_name='PIX Copia e Cola',
+        help_text='Código PIX para pagamento alternativo'
+    )
+    pix_qrcode = models.TextField(
+        blank=True,
+        verbose_name='PIX QR Code',
+        help_text='Dados do QR Code PIX em base64'
+    )
+
     class Meta:
         verbose_name = 'Parcela'
         verbose_name_plural = 'Parcelas'
@@ -99,6 +243,8 @@ class Parcela(TimeStampedModel):
             models.Index(fields=['contrato', 'numero_parcela']),
             models.Index(fields=['data_vencimento']),
             models.Index(fields=['pago']),
+            models.Index(fields=['status_boleto']),
+            models.Index(fields=['nosso_numero']),
         ]
 
     def __str__(self):
@@ -184,6 +330,135 @@ class Parcela(TimeStampedModel):
         self.valor_juros = Decimal('0.00')
         self.valor_multa = Decimal('0.00')
         self.save()
+
+    # =========================================================================
+    # MÉTODOS RELACIONADOS AO BOLETO
+    # =========================================================================
+
+    @property
+    def tem_boleto(self):
+        """Verifica se a parcela tem boleto gerado"""
+        return self.status_boleto != StatusBoleto.NAO_GERADO and bool(self.nosso_numero)
+
+    @property
+    def boleto_pode_ser_pago(self):
+        """Verifica se o boleto ainda pode ser pago"""
+        return self.status_boleto in [
+            StatusBoleto.GERADO,
+            StatusBoleto.REGISTRADO,
+            StatusBoleto.VENCIDO
+        ]
+
+    def gerar_numero_documento(self):
+        """Gera o número do documento para o boleto"""
+        # Formato: CONTRATO-PARCELA (ex: 001-005)
+        return f"{self.contrato.numero_contrato}-{self.numero_parcela:03d}"
+
+    def obter_proximos_nosso_numero(self, conta_bancaria):
+        """
+        Obtém o próximo nosso número disponível para a conta bancária.
+        Incrementa o contador na conta bancária.
+        """
+        conta_bancaria.nosso_numero_atual += 1
+        conta_bancaria.save(update_fields=['nosso_numero_atual'])
+        return conta_bancaria.nosso_numero_atual
+
+    def gerar_boleto(self, conta_bancaria=None, force=False):
+        """
+        Gera o boleto para esta parcela.
+
+        Args:
+            conta_bancaria: Conta bancária a ser usada (opcional, usa a principal)
+            force: Se True, regenera mesmo que já exista boleto
+
+        Returns:
+            dict: Dados do boleto gerado ou None se falhar
+        """
+        from financeiro.services.boleto_service import BoletoService
+
+        # Não gerar boleto para parcelas já pagas
+        if self.pago:
+            return None
+
+        # Verificar se já tem boleto e não é para forçar
+        if self.tem_boleto and not force:
+            return {
+                'nosso_numero': self.nosso_numero,
+                'linha_digitavel': self.linha_digitavel,
+                'codigo_barras': self.codigo_barras,
+            }
+
+        # Obter conta bancária
+        if not conta_bancaria:
+            conta_bancaria = self.conta_bancaria
+            if not conta_bancaria:
+                # Buscar conta principal da imobiliária
+                imobiliaria = self.contrato.imovel.imobiliaria
+                conta_bancaria = imobiliaria.contas_bancarias.filter(
+                    principal=True, ativo=True
+                ).first()
+
+        if not conta_bancaria:
+            raise ValueError("Nenhuma conta bancária disponível para gerar boleto")
+
+        # Usar o serviço de boleto
+        service = BoletoService()
+        resultado = service.gerar_boleto(self, conta_bancaria)
+
+        if resultado.get('sucesso'):
+            self.conta_bancaria = conta_bancaria
+            self.nosso_numero = resultado.get('nosso_numero', '')
+            self.numero_documento = self.gerar_numero_documento()
+            self.codigo_barras = resultado.get('codigo_barras', '')
+            self.linha_digitavel = resultado.get('linha_digitavel', '')
+            self.valor_boleto = resultado.get('valor', self.valor_atual)
+            self.status_boleto = StatusBoleto.GERADO
+            self.data_geracao_boleto = timezone.now()
+
+            # Salvar PDF se disponível
+            if resultado.get('pdf_content'):
+                from django.core.files.base import ContentFile
+                nome_arquivo = f"boleto_{self.contrato.numero_contrato}_{self.numero_parcela}.pdf"
+                self.boleto_pdf.save(nome_arquivo, ContentFile(resultado['pdf_content']), save=False)
+
+            # PIX se disponível
+            if resultado.get('pix_copia_cola'):
+                self.pix_copia_cola = resultado['pix_copia_cola']
+            if resultado.get('pix_qrcode'):
+                self.pix_qrcode = resultado['pix_qrcode']
+
+            self.save()
+
+        return resultado
+
+    def cancelar_boleto(self, motivo=''):
+        """Cancela o boleto da parcela"""
+        if self.status_boleto in [StatusBoleto.NAO_GERADO, StatusBoleto.CANCELADO]:
+            return False
+
+        self.status_boleto = StatusBoleto.CANCELADO
+        self.motivo_rejeicao = motivo
+        self.save()
+        return True
+
+    def registrar_pagamento_boleto(self, valor_pago, data_pagamento=None,
+                                    banco_pagador='', agencia_pagadora=''):
+        """Registra o pagamento do boleto com dados bancários"""
+        if data_pagamento is None:
+            data_pagamento = timezone.now()
+
+        self.status_boleto = StatusBoleto.PAGO
+        self.data_pagamento_boleto = data_pagamento
+        self.valor_pago_boleto = valor_pago
+        self.banco_pagador = banco_pagador
+        self.agencia_pagadora = agencia_pagadora
+
+        # Também registrar o pagamento da parcela
+        self.registrar_pagamento(
+            valor_pago=valor_pago,
+            data_pagamento=data_pagamento.date() if hasattr(data_pagamento, 'date') else data_pagamento,
+            observacoes=f'Pago via boleto. Banco: {banco_pagador} Ag: {agencia_pagadora}'
+        )
 
 
 class Reajuste(TimeStampedModel):
