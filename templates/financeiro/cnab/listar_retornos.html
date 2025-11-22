@@ -1,0 +1,122 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Arquivos de Retorno - CNAB{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2><i class="fas fa-file-import"></i> Arquivos de Retorno</h2>
+        <a href="{% url 'financeiro:upload_retorno' %}" class="btn btn-primary">
+            <i class="fas fa-upload"></i> Upload de Retorno
+        </a>
+    </div>
+
+    <!-- Filtros -->
+    <div class="card mb-4">
+        <div class="card-body">
+            <form method="get" class="row g-3">
+                <div class="col-md-4">
+                    <label class="form-label">Conta Bancaria</label>
+                    <select name="conta" class="form-select" onchange="this.form.submit()">
+                        <option value="">Todas as Contas</option>
+                        {% for conta in contas_bancarias %}
+                        <option value="{{ conta.pk }}" {% if filtro_conta == conta.pk|stringformat:"s" %}selected{% endif %}>
+                            {{ conta.descricao }} - {{ conta.imobiliaria.nome }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label">Status</label>
+                    <select name="status" class="form-select" onchange="this.form.submit()">
+                        <option value="">Todos</option>
+                        <option value="PENDENTE" {% if filtro_status == 'PENDENTE' %}selected{% endif %}>Pendente</option>
+                        <option value="PROCESSADO" {% if filtro_status == 'PROCESSADO' %}selected{% endif %}>Processado</option>
+                        <option value="PROCESSADO_PARCIAL" {% if filtro_status == 'PROCESSADO_PARCIAL' %}selected{% endif %}>Processado Parcialmente</option>
+                        <option value="ERRO" {% if filtro_status == 'ERRO' %}selected{% endif %}>Erro</option>
+                    </select>
+                </div>
+                <div class="col-md-2 d-flex align-items-end">
+                    <a href="{% url 'financeiro:listar_retornos' %}" class="btn btn-secondary">
+                        <i class="fas fa-times"></i> Limpar
+                    </a>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Lista de Arquivos -->
+    <div class="card">
+        <div class="card-body">
+            {% if arquivos %}
+            <div class="table-responsive">
+                <table class="table table-hover">
+                    <thead>
+                        <tr>
+                            <th>Arquivo</th>
+                            <th>Conta Bancaria</th>
+                            <th>Layout</th>
+                            <th>Registros</th>
+                            <th>Valor Pago</th>
+                            <th>Data Upload</th>
+                            <th>Status</th>
+                            <th>Acoes</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for arquivo in arquivos %}
+                        <tr>
+                            <td>
+                                <a href="{% url 'financeiro:detalhe_retorno' arquivo.pk %}">
+                                    <strong>{{ arquivo.nome_arquivo }}</strong>
+                                </a>
+                            </td>
+                            <td>
+                                {{ arquivo.conta_bancaria.descricao }}
+                                <br><small class="text-muted">{{ arquivo.conta_bancaria.imobiliaria.nome }}</small>
+                            </td>
+                            <td>{{ arquivo.layout }}</td>
+                            <td>
+                                {{ arquivo.registros_processados }}/{{ arquivo.total_registros }}
+                                {% if arquivo.registros_erro > 0 %}
+                                <br><small class="text-danger">{{ arquivo.registros_erro }} erros</small>
+                                {% endif %}
+                            </td>
+                            <td>R$ {{ arquivo.valor_total_pago|floatformat:2 }}</td>
+                            <td>{{ arquivo.data_upload|date:"d/m/Y H:i" }}</td>
+                            <td>
+                                {% if arquivo.status == 'PENDENTE' %}
+                                <span class="badge bg-warning">Pendente</span>
+                                {% elif arquivo.status == 'PROCESSADO' %}
+                                <span class="badge bg-success">Processado</span>
+                                {% elif arquivo.status == 'PROCESSADO_PARCIAL' %}
+                                <span class="badge bg-info">Parcial</span>
+                                {% elif arquivo.status == 'ERRO' %}
+                                <span class="badge bg-danger">Erro</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <div class="btn-group btn-group-sm">
+                                    <a href="{% url 'financeiro:detalhe_retorno' arquivo.pk %}" class="btn btn-outline-primary" title="Detalhes">
+                                        <i class="fas fa-eye"></i>
+                                    </a>
+                                    <a href="{% url 'financeiro:download_retorno' arquivo.pk %}" class="btn btn-outline-success" title="Download">
+                                        <i class="fas fa-download"></i>
+                                    </a>
+                                </div>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <div class="alert alert-info">
+                <i class="fas fa-info-circle"></i> Nenhum arquivo de retorno encontrado.
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -34,4 +34,21 @@ urlpatterns = [
 
     # Reajustes
     path('reajustes/', views.listar_reajustes, name='listar_reajustes'),
+
+    # ==========================================================================
+    # CNAB - Arquivos de Remessa
+    # ==========================================================================
+    path('cnab/remessa/', views.listar_arquivos_remessa, name='listar_remessas'),
+    path('cnab/remessa/gerar/', views.gerar_arquivo_remessa, name='gerar_remessa'),
+    path('cnab/remessa/<int:pk>/', views.detalhe_arquivo_remessa, name='detalhe_remessa'),
+    path('cnab/remessa/<int:pk>/regenerar/', views.regenerar_arquivo_remessa, name='regenerar_remessa'),
+    path('cnab/remessa/<int:pk>/marcar-enviada/', views.marcar_remessa_enviada, name='marcar_remessa_enviada'),
+    path('cnab/remessa/<int:pk>/download/', views.download_arquivo_remessa, name='download_remessa'),
+
+    # CNAB - Arquivos de Retorno
+    path('cnab/retorno/', views.listar_arquivos_retorno, name='listar_retornos'),
+    path('cnab/retorno/upload/', views.upload_arquivo_retorno, name='upload_retorno'),
+    path('cnab/retorno/<int:pk>/', views.detalhe_arquivo_retorno, name='detalhe_retorno'),
+    path('cnab/retorno/<int:pk>/processar/', views.processar_arquivo_retorno, name='processar_retorno'),
+    path('cnab/retorno/<int:pk>/download/', views.download_arquivo_retorno, name='download_retorno'),
 ]

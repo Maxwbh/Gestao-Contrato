@@ -215,6 +215,16 @@
                             <li><a class="dropdown-item" href="{% url 'financeiro:listar_parcelas' %}?status_boleto=GERADO">
                                 <i class="fas fa-check-circle text-success"></i> Boletos Gerados
                             </a></li>
+                            <li><hr class="dropdown-divider"></li>
+                            <li class="dropdown-header">
+                                <i class="fas fa-file-alt"></i> CNAB
+                            </li>
+                            <li><a class="dropdown-item" href="{% url 'financeiro:listar_remessas' %}">
+                                <i class="fas fa-file-export"></i> Arquivos de Remessa
+                            </a></li>
+                            <li><a class="dropdown-item" href="{% url 'financeiro:listar_retornos' %}">
+                                <i class="fas fa-file-import"></i> Arquivos de Retorno
+                            </a></li>
                         </ul>
                     </li>
 
@@ -231,7 +241,7 @@
                                 <i class="fas fa-plus-circle"></i> Novo Contrato
                             </a></li>
                             <li><hr class="dropdown-divider"></li>
-                            <li><a class="dropdown-item" href="{% url 'contratos:listar_indices' %}">
+                            <li><a class="dropdown-item" href="{% url 'contratos:indices_listar' %}">
                                 <i class="fas fa-chart-bar"></i> Índices de Reajuste
                             </a></li>
                         </ul>
