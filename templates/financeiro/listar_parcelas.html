@@ -226,7 +226,7 @@
                                 <strong>{{ parcela.numero_parcela }}</strong>/{{ parcela.contrato.numero_parcelas }}
                             </td>
                             <td>
-                                <a href="{% url 'contratos:detalhe_contrato' parcela.contrato.pk %}">
+                                <a href="{% url 'contratos:detalhe' parcela.contrato.pk %}">
                                     {{ parcela.contrato.numero }}
                                 </a>
                             </td>
