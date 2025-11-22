@@ -1,0 +1,839 @@
+{% extends 'base.html' %}
+{% load crispy_forms_tags %}
+
+{% block title %}
+    {% if object %}Editar Imobiliária{% else %}Nova Imobiliária{% endif %} - Gestão de Contratos
+{% endblock %}
+
+{% block extra_css %}
+<style>
+    /* Cards com bom contraste */
+    .imobiliaria-form .card {
+        border: 1px solid #dee2e6;
+        border-radius: 8px;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.06);
+        margin-bottom: 1rem;
+    }
+    .imobiliaria-form .card:hover {
+        box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+    }
+    .imobiliaria-form .card-header {
+        background: linear-gradient(135deg, #2c3e50, #34495e);
+        color: #ffffff;
+        font-weight: 600;
+        padding: 0.75rem 1rem;
+        border-radius: 7px 7px 0 0 !important;
+    }
+    .imobiliaria-form .card-header i { color: #9b59b6; }
+    .imobiliaria-form .card-header strong { color: #ffffff; }
+    .imobiliaria-form .card-header small { color: #bdc3c7; }
+    .imobiliaria-form .card-header.bg-light {
+        background: linear-gradient(135deg, #7f8c8d, #95a5a6) !important;
+    }
+    .imobiliaria-form .form-control, .imobiliaria-form .form-select {
+        font-size: 0.9rem;
+        padding: 0.5rem 0.75rem;
+        border-radius: 6px;
+    }
+    .imobiliaria-form .form-label {
+        font-size: 0.85rem;
+        font-weight: 600;
+        color: #2c3e50;
+        margin-bottom: 0.25rem;
+    }
+    .help-card .card-header {
+        background: linear-gradient(135deg, #17a2b8, #138496) !important;
+    }
+    .is-valid { border-color: #27ae60 !important; }
+    .is-invalid { border-color: #e74c3c !important; }
+
+    /* Tabela de contas */
+    .contas-table { font-size: 0.875rem; }
+    .contas-table th { background: #f8f9fa; font-weight: 600; }
+    .badge-principal { background: #27ae60; }
+    .btn-add-conta { border-style: dashed; }
+
+    /* Modal */
+    .modal-header { background: linear-gradient(135deg, #2c3e50, #34495e); color: white; }
+    .modal-header .btn-close { filter: invert(1); }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid px-lg-4">
+    <div class="row justify-content-center">
+        <div class="col-xl-10">
+            <!-- Header -->
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <div>
+                    <h4 class="mb-0 text-dark">
+                        <i class="fas fa-building me-2" style="color: #9b59b6;"></i>
+                        {% if object %}Editar: {{ object.nome }}{% else %}Nova Imobiliária{% endif %}
+                    </h4>
+                    <small class="text-muted">
+                        {% if object %}Atualize os dados da imobiliária{% else %}Preencha os dados para cadastrar{% endif %}
+                    </small>
+                </div>
+                <a href="{% url 'core:listar_imobiliarias' %}" class="btn btn-outline-secondary btn-sm">
+                    <i class="fas fa-list me-1"></i>Ver Lista
+                </a>
+            </div>
+
+            <!-- Formulário Principal -->
+            <form method="post" novalidate class="imobiliaria-form">
+                {% csrf_token %}
+
+                <!-- Erros Gerais do Formulário -->
+                {% if form.non_field_errors %}
+                <div class="alert alert-danger mb-3">
+                    <i class="fas fa-exclamation-triangle me-2"></i>
+                    <strong>Erros encontrados:</strong>
+                    <ul class="mb-0 mt-2">
+                        {% for error in form.non_field_errors %}
+                        <li>{{ error }}</li>
+                        {% endfor %}
+                    </ul>
+                </div>
+                {% endif %}
+
+                <!-- Card: Informações da Empresa -->
+                <div class="card mb-3">
+                    <div class="card-header py-2">
+                        <i class="fas fa-building me-2"></i><strong>Informações da Empresa</strong>
+                    </div>
+                    <div class="card-body py-3">
+                        <div class="mb-2">
+                            <label class="form-label">Contabilidade <span class="text-danger">*</span></label>
+                            {{ form.contabilidade }}
+                            {% if form.contabilidade.errors %}<div class="text-danger small mt-1">{% for e in form.contabilidade.errors %}{{ e }}{% endfor %}</div>{% endif %}
+                        </div>
+                        <div class="row">
+                            <div class="col-md-6 mb-2">
+                                <label class="form-label">Nome Fantasia <span class="text-danger">*</span></label>
+                                {{ form.nome }}
+                                {% if form.nome.errors %}<div class="text-danger small mt-1">{% for e in form.nome.errors %}{{ e }}{% endfor %}</div>{% endif %}
+                            </div>
+                            <div class="col-md-6 mb-2">
+                                <label class="form-label">CNPJ <span class="text-danger">*</span></label>
+                                {{ form.cnpj }}
+                                {% if form.cnpj.errors %}<div class="text-danger small mt-1">{% for e in form.cnpj.errors %}{{ e }}{% endfor %}</div>{% endif %}
+                            </div>
+                        </div>
+                        <div class="mb-2">
+                            <label class="form-label">Razão Social <span class="text-danger">*</span></label>
+                            {{ form.razao_social }}
+                            {% if form.razao_social.errors %}<div class="text-danger small mt-1">{% for e in form.razao_social.errors %}{{ e }}{% endfor %}</div>{% endif %}
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Card: Endereço -->
+                <div class="card mb-3">
+                    <div class="card-header py-2">
+                        <i class="fas fa-map-marker-alt me-2"></i><strong>Endereço</strong>
+                        <small class="ms-2">(CEP preenche automaticamente)</small>
+                    </div>
+                    <div class="card-body py-3">
+                        <div class="row">
+                            <div class="col-md-2 mb-2">
+                                <label class="form-label">CEP</label>
+                                {{ form.cep }}
+                            </div>
+                            <div class="col-md-6 mb-2">
+                                <label class="form-label">Logradouro</label>
+                                {{ form.logradouro }}
+                            </div>
+                            <div class="col-md-2 mb-2">
+                                <label class="form-label">Número</label>
+                                {{ form.numero }}
+                            </div>
+                            <div class="col-md-2 mb-2">
+                                <label class="form-label">Complemento</label>
+                                {{ form.complemento }}
+                            </div>
+                        </div>
+                        <div class="row">
+                            <div class="col-md-4 mb-2">
+                                <label class="form-label">Bairro</label>
+                                {{ form.bairro }}
+                            </div>
+                            <div class="col-md-5 mb-2">
+                                <label class="form-label">Cidade</label>
+                                {{ form.cidade }}
+                            </div>
+                            <div class="col-md-3 mb-2">
+                                <label class="form-label">UF</label>
+                                {{ form.estado }}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Card: Contato -->
+                <div class="card mb-3">
+                    <div class="card-header py-2">
+                        <i class="fas fa-phone me-2"></i><strong>Contato</strong>
+                    </div>
+                    <div class="card-body py-3">
+                        <div class="row">
+                            <div class="col-md-4 mb-2">
+                                <label class="form-label">Telefone</label>
+                                {{ form.telefone }}
+                            </div>
+                            <div class="col-md-4 mb-2">
+                                <label class="form-label">E-mail</label>
+                                {{ form.email }}
+                            </div>
+                            <div class="col-md-4 mb-2">
+                                <label class="form-label">Responsável Financeiro</label>
+                                {{ form.responsavel_financeiro }}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Card: Configurações Padrão de Boleto -->
+                <div class="card mb-3" style="border-color: #17a2b8;">
+                    <div class="card-header py-2" style="background: linear-gradient(135deg, #17a2b8, #138496); color: white;">
+                        <i class="fas fa-barcode me-2"></i><strong>Configurações Padrão de Boleto</strong>
+                    </div>
+                    <div class="card-body py-3">
+                        <!-- Multa -->
+                        <h6 class="text-muted mb-3"><i class="fas fa-exclamation-circle me-1"></i>Multa</h6>
+                        <div class="row">
+                            <div class="col-md-3 mb-2">
+                                <label class="form-label">Tipo de Multa</label>
+                                {{ form.tipo_valor_multa }}
+                            </div>
+                            <div class="col-md-9 mb-2">
+                                <label class="form-label">Valor da Multa</label>
+                                {{ form.percentual_multa_padrao }}
+                            </div>
+                        </div>
+
+                        <hr>
+                        <!-- Juros -->
+                        <h6 class="text-muted mb-3"><i class="fas fa-percentage me-1"></i>Juros</h6>
+                        <div class="row">
+                            <div class="col-md-3 mb-2">
+                                <label class="form-label">Tipo de Juros</label>
+                                {{ form.tipo_valor_juros }}
+                            </div>
+                            <div class="col-md-6 mb-2">
+                                <label class="form-label">Juros ao Dia</label>
+                                {{ form.percentual_juros_padrao }}
+                                <small class="text-muted">0,0333% = 1% ao mês</small>
+                            </div>
+                            <div class="col-md-3 mb-2">
+                                <label class="form-label">Dias sem Encargos</label>
+                                {{ form.dias_para_encargos_padrao }}
+                            </div>
+                        </div>
+
+                        <hr>
+                        <!-- Desconto 1 -->
+                        <h6 class="text-muted mb-3"><i class="fas fa-tags me-1"></i>Desconto</h6>
+                        <div class="row">
+                            <div class="col-md-3 mb-2">
+                                <label class="form-label">Tipo</label>
+                                {{ form.tipo_valor_desconto }}
+                            </div>
+                            <div class="col-md-6 mb-2">
+                                <label class="form-label">Valor</label>
+                                {{ form.percentual_desconto_padrao }}
+                            </div>
+                            <div class="col-md-3 mb-2">
+                                <label class="form-label">Dias até Venc.</label>
+                                {{ form.dias_para_desconto_padrao }}
+                            </div>
+                        </div>
+
+                        <!-- Desconto 2 -->
+                        <div class="row">
+                            <div class="col-md-3 mb-2">
+                                <label class="form-label">2º Tipo</label>
+                                {{ form.tipo_valor_desconto2 }}
+                            </div>
+                            <div class="col-md-6 mb-2">
+                                <label class="form-label">2º Valor</label>
+                                {{ form.desconto2_padrao }}
+                            </div>
+                            <div class="col-md-3 mb-2">
+                                <label class="form-label">Dias</label>
+                                {{ form.dias_para_desconto2_padrao }}
+                            </div>
+                        </div>
+
+                        <!-- Desconto 3 -->
+                        <div class="row">
+                            <div class="col-md-3 mb-2">
+                                <label class="form-label">3º Tipo</label>
+                                {{ form.tipo_valor_desconto3 }}
+                            </div>
+                            <div class="col-md-6 mb-2">
+                                <label class="form-label">3º Valor</label>
+                                {{ form.desconto3_padrao }}
+                            </div>
+                            <div class="col-md-3 mb-2">
+                                <label class="form-label">Dias</label>
+                                {{ form.dias_para_desconto3_padrao }}
+                            </div>
+                        </div>
+
+                        <hr>
+                        <!-- Título e Instrução -->
+                        <h6 class="text-muted mb-3"><i class="fas fa-file-invoice me-1"></i>Título e Instrução</h6>
+                        <div class="row">
+                            <div class="col-md-4 mb-2">
+                                <label class="form-label">Tipo do Título</label>
+                                {{ form.tipo_titulo }}
+                            </div>
+                            <div class="col-md-8 mb-2">
+                                <label class="form-label">Instrução Padrão</label>
+                                {{ form.instrucao_padrao }}
+                            </div>
+                        </div>
+
+                        <hr>
+                        <!-- Opções -->
+                        <h6 class="text-muted mb-3"><i class="fas fa-cog me-1"></i>Opções do Boleto</h6>
+                        <div class="row">
+                            <div class="col-md-3">
+                                <div class="form-check">
+                                    {{ form.boleto_sem_valor }}
+                                    <label class="form-check-label" for="id_boleto_sem_valor">Boleto sem Valor</label>
+                                </div>
+                            </div>
+                            <div class="col-md-3">
+                                <div class="form-check">
+                                    {{ form.parcela_no_documento }}
+                                    <label class="form-check-label" for="id_parcela_no_documento">Parcela no Doc.</label>
+                                </div>
+                            </div>
+                            <div class="col-md-3">
+                                <div class="form-check">
+                                    {{ form.campo_desconto_abatimento_pdf }}
+                                    <label class="form-check-label" for="id_campo_desconto_abatimento_pdf">Desconto no PDF</label>
+                                </div>
+                            </div>
+                            <div class="col-md-3">
+                                <div class="form-check">
+                                    {{ form.aceite }}
+                                    <label class="form-check-label" for="id_aceite">Aceite</label>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Card: Contas Bancárias (dentro do form) -->
+                <div class="card mb-3" style="border-color: #6c757d;">
+                    <div class="card-header py-2 d-flex justify-content-between align-items-center" style="background: linear-gradient(135deg, #6c757d, #495057); color: white;">
+                        <span>
+                            <i class="fas fa-university me-2"></i><strong>Contas Bancárias</strong>
+                        </span>
+                        <button type="button" class="btn btn-light btn-sm" onclick="abrirModalConta()">
+                            <i class="fas fa-plus me-1"></i>Nova Conta
+                        </button>
+                    </div>
+                    <div class="card-body p-0">
+                        <input type="hidden" name="contas_bancarias_json" id="contas_bancarias_json" value="">
+                        <div id="contas-container">
+                            <table class="table table-hover contas-table mb-0">
+                                <thead>
+                                    <tr>
+                                        <th>Banco</th>
+                                        <th>Descrição</th>
+                                        <th>Agência</th>
+                                        <th>Conta</th>
+                                        <th class="text-center" style="width: 100px;">Ações</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="contas-lista">
+                                    <tr id="sem-contas">
+                                        <td colspan="5" class="text-center text-muted py-3">
+                                            <i class="fas fa-university fa-2x mb-2 d-block opacity-50"></i>
+                                            Nenhuma conta bancária cadastrada
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Botões do Formulário Principal -->
+                <div class="d-flex justify-content-between align-items-center mt-4 pt-3 border-top">
+                    <a href="{% url 'core:listar_imobiliarias' %}" class="btn btn-outline-secondary">
+                        <i class="fas fa-arrow-left me-2"></i>Voltar
+                    </a>
+                    <button type="submit" class="btn btn-primary btn-lg px-5">
+                        <i class="fas fa-save me-2"></i>Salvar Imobiliária
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Modal para Conta Bancária -->
+<div class="modal fade" id="modalContaBancaria" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="modalContaTitle">
+                    <i class="fas fa-university me-2"></i>Nova Conta Bancária
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="formContaBancaria">
+                    <input type="hidden" id="conta_id" name="conta_id">
+                    <input type="hidden" id="imobiliaria_id" name="imobiliaria_id" value="{{ object.pk|default:'' }}">
+
+                    <div class="row">
+                        <div class="col-md-8 mb-3">
+                            <label class="form-label">Banco *</label>
+                            <select id="banco" name="banco" class="form-select" required>
+                                <option value="">Selecione o banco...</option>
+                            </select>
+                        </div>
+                        <div class="col-md-4 mb-3">
+                            <label class="form-label">&nbsp;</label>
+                            <div class="form-check mt-2">
+                                <input type="checkbox" class="form-check-input" id="principal" name="principal">
+                                <label class="form-check-label" for="principal">Conta Principal</label>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label">Descrição *</label>
+                        <input type="text" class="form-control" id="descricao" name="descricao"
+                               placeholder="Ex: Conta Principal, Conta Boletos" required maxlength="150">
+                    </div>
+
+                    <div class="row">
+                        <div class="col-md-4 mb-3">
+                            <label class="form-label">Agência *</label>
+                            <input type="text" class="form-control" id="agencia" name="agencia"
+                                   placeholder="0000-0" required maxlength="10">
+                        </div>
+                        <div class="col-md-4 mb-3">
+                            <label class="form-label">Conta *</label>
+                            <input type="text" class="form-control" id="conta" name="conta"
+                                   placeholder="00000-0" required maxlength="20">
+                        </div>
+                        <div class="col-md-4 mb-3">
+                            <label class="form-label">Convênio</label>
+                            <input type="text" class="form-control" id="convenio" name="convenio"
+                                   placeholder="Código do cliente" maxlength="20">
+                        </div>
+                    </div>
+
+                    <hr class="my-3">
+                    <h6 class="text-muted mb-3"><i class="fas fa-qrcode me-2"></i>Dados PIX</h6>
+
+                    <div class="row">
+                        <div class="col-md-4 mb-3">
+                            <label class="form-label">Tipo de Chave</label>
+                            <select id="tipo_pix" name="tipo_pix" class="form-select">
+                                <option value="">Nenhum</option>
+                                <option value="CPF">CPF</option>
+                                <option value="CNPJ">CNPJ</option>
+                                <option value="EMAIL">E-mail</option>
+                                <option value="TELEFONE">Telefone</option>
+                                <option value="ALEATORIA">Chave Aleatória</option>
+                            </select>
+                        </div>
+                        <div class="col-md-8 mb-3">
+                            <label class="form-label">Chave PIX</label>
+                            <input type="text" class="form-control" id="chave_pix" name="chave_pix"
+                                   placeholder="Digite a chave PIX" maxlength="100">
+                        </div>
+                    </div>
+
+                    <hr class="my-3">
+                    <h6 class="text-muted mb-3"><i class="fas fa-barcode me-2"></i>Configurações de Boleto (opcional)</h6>
+
+                    <div class="row">
+                        <div class="col-md-3 mb-3">
+                            <label class="form-label">Carteira</label>
+                            <input type="text" class="form-control" id="carteira" name="carteira"
+                                   placeholder="Ex: 17" maxlength="5">
+                        </div>
+                        <div class="col-md-3 mb-3">
+                            <label class="form-label">Modalidade</label>
+                            <input type="text" class="form-control" id="modalidade" name="modalidade"
+                                   placeholder="Ex: 1" maxlength="5">
+                        </div>
+                        <div class="col-md-3 mb-3">
+                            <label class="form-label">Prazo Baixa (dias)</label>
+                            <input type="number" class="form-control" id="prazo_baixa" name="prazo_baixa"
+                                   value="0" min="0" max="999">
+                        </div>
+                        <div class="col-md-3 mb-3">
+                            <label class="form-label">Prazo Protesto</label>
+                            <input type="number" class="form-control" id="prazo_protesto" name="prazo_protesto"
+                                   value="0" min="0" max="99">
+                        </div>
+                    </div>
+
+                    <div class="form-check mb-3">
+                        <input type="checkbox" class="form-check-input" id="cobranca_registrada" name="cobranca_registrada" checked>
+                        <label class="form-check-label" for="cobranca_registrada">Cobrança Registrada</label>
+                    </div>
+
+                    <hr class="my-3">
+                    <h6 class="text-muted mb-3"><i class="fas fa-file-archive me-2"></i>Configurações CNAB</h6>
+
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Layout CNAB</label>
+                            <select id="layout_cnab" name="layout_cnab" class="form-select">
+                                <option value="CNAB_240">Layout 240</option>
+                                <option value="CNAB_400">Layout 400</option>
+                                <option value="CNAB_444">Layout 444 (CNAB 400 + Chave NFE)</option>
+                            </select>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Sequencial Remessa</label>
+                            <input type="number" class="form-control" id="numero_remessa_cnab_atual" name="numero_remessa_cnab_atual"
+                                   value="0" min="0" max="9999999">
+                            <small class="text-muted">Número sequencial da remessa CNAB</small>
+                        </div>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                    <i class="fas fa-times me-1"></i>Cancelar
+                </button>
+                <button type="button" class="btn btn-primary" onclick="salvarConta()">
+                    <i class="fas fa-save me-1"></i>Salvar Conta
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+const IMOBILIARIA_ID = {{ object.pk|default:'null' }};
+let modalContaBancaria;
+let contasLocais = []; // Para armazenar contas no modo criação
+let bancosLista = {}; // Cache dos bancos para exibir nome
+
+document.addEventListener('DOMContentLoaded', function() {
+    modalContaBancaria = new bootstrap.Modal(document.getElementById('modalContaBancaria'));
+
+    // Carregar lista de bancos
+    carregarBancos();
+
+    // Carregar contas se editando, ou mostrar mensagem vazia
+    if (IMOBILIARIA_ID) {
+        carregarContas();
+    } else {
+        atualizarTabelaLocal();
+    }
+});
+
+async function carregarBancos() {
+    try {
+        const response = await fetch('/api/bancos/');
+        const data = await response.json();
+
+        if (data.status === 'success') {
+            const select = document.getElementById('banco');
+            data.bancos.forEach(banco => {
+                const option = document.createElement('option');
+                option.value = banco.codigo;
+                option.textContent = banco.nome;
+                select.appendChild(option);
+                bancosLista[banco.codigo] = banco.nome;
+            });
+        }
+    } catch (error) {
+        console.error('Erro ao carregar bancos:', error);
+    }
+}
+
+function atualizarTabelaLocal() {
+    const tbody = document.getElementById('contas-lista');
+
+    if (contasLocais.length > 0) {
+        tbody.innerHTML = contasLocais.map((conta, index) => `
+            <tr>
+                <td>
+                    <strong>${bancosLista[conta.banco] || conta.banco}</strong>
+                    ${conta.principal ? '<span class="badge bg-success ms-2">Principal</span>' : ''}
+                </td>
+                <td>${conta.descricao}</td>
+                <td>${conta.agencia}</td>
+                <td>${conta.conta}</td>
+                <td class="text-center">
+                    <button type="button" class="btn btn-sm btn-outline-primary me-1" onclick="editarContaLocal(${index})" title="Editar">
+                        <i class="fas fa-edit"></i>
+                    </button>
+                    <button type="button" class="btn btn-sm btn-outline-danger" onclick="excluirContaLocal(${index})" title="Excluir">
+                        <i class="fas fa-trash"></i>
+                    </button>
+                </td>
+            </tr>
+        `).join('');
+    } else {
+        tbody.innerHTML = `
+            <tr id="sem-contas">
+                <td colspan="5" class="text-center text-muted py-3">
+                    <i class="fas fa-university fa-2x mb-2 d-block opacity-50"></i>
+                    Nenhuma conta bancária cadastrada
+                </td>
+            </tr>
+        `;
+    }
+
+    // Atualizar campo hidden com JSON
+    document.getElementById('contas_bancarias_json').value = JSON.stringify(contasLocais);
+}
+
+async function carregarContas() {
+    try {
+        const response = await fetch(`/api/imobiliarias/${IMOBILIARIA_ID}/contas/`);
+        const data = await response.json();
+
+        const tbody = document.getElementById('contas-lista');
+
+        if (data.status === 'success' && data.contas.length > 0) {
+            tbody.innerHTML = data.contas.map(conta => `
+                <tr>
+                    <td>
+                        <strong>${conta.banco_nome}</strong>
+                        ${conta.principal ? '<span class="badge badge-principal ms-2">Principal</span>' : ''}
+                    </td>
+                    <td>${conta.descricao}</td>
+                    <td>${conta.agencia}</td>
+                    <td>${conta.conta}</td>
+                    <td>${conta.chave_pix || '-'}</td>
+                    <td class="text-center">
+                        <button type="button" class="btn btn-sm btn-outline-primary me-1" onclick="editarConta(${conta.id})" title="Editar">
+                            <i class="fas fa-edit"></i>
+                        </button>
+                        <button type="button" class="btn btn-sm btn-outline-danger" onclick="excluirConta(${conta.id})" title="Excluir">
+                            <i class="fas fa-trash"></i>
+                        </button>
+                    </td>
+                </tr>
+            `).join('');
+        } else {
+            tbody.innerHTML = `
+                <tr>
+                    <td colspan="6" class="text-center text-muted py-4">
+                        <i class="fas fa-university fa-2x mb-2 d-block opacity-50"></i>
+                        Nenhuma conta bancária cadastrada
+                    </td>
+                </tr>
+            `;
+        }
+    } catch (error) {
+        console.error('Erro ao carregar contas:', error);
+        document.getElementById('contas-lista').innerHTML = `
+            <tr><td colspan="6" class="text-center text-danger py-3">Erro ao carregar contas</td></tr>
+        `;
+    }
+}
+
+let editandoIndex = -1; // Para modo local: índice da conta sendo editada
+
+function abrirModalConta() {
+    document.getElementById('formContaBancaria').reset();
+    document.getElementById('conta_id').value = '';
+    document.getElementById('imobiliaria_id').value = IMOBILIARIA_ID || '';
+    document.getElementById('modalContaTitle').innerHTML = '<i class="fas fa-university me-2"></i>Nova Conta Bancária';
+    document.getElementById('cobranca_registrada').checked = true;
+    editandoIndex = -1;
+    modalContaBancaria.show();
+}
+
+function editarContaLocal(index) {
+    const conta = contasLocais[index];
+    editandoIndex = index;
+
+    document.getElementById('conta_id').value = '';
+    document.getElementById('banco').value = conta.banco;
+    document.getElementById('descricao').value = conta.descricao;
+    document.getElementById('agencia').value = conta.agencia;
+    document.getElementById('conta').value = conta.conta;
+    document.getElementById('convenio').value = conta.convenio || '';
+    document.getElementById('carteira').value = conta.carteira || '';
+    document.getElementById('principal').checked = conta.principal;
+
+    document.getElementById('modalContaTitle').innerHTML = '<i class="fas fa-edit me-2"></i>Editar Conta Bancária';
+    modalContaBancaria.show();
+}
+
+function excluirContaLocal(index) {
+    if (confirm('Tem certeza que deseja remover esta conta?')) {
+        contasLocais.splice(index, 1);
+        atualizarTabelaLocal();
+    }
+}
+
+function salvarContaLocal() {
+    const contaData = {
+        banco: document.getElementById('banco').value,
+        descricao: document.getElementById('descricao').value,
+        agencia: document.getElementById('agencia').value,
+        conta: document.getElementById('conta').value,
+        convenio: document.getElementById('convenio').value,
+        carteira: document.getElementById('carteira').value,
+        principal: document.getElementById('principal').checked,
+    };
+
+    // Validação
+    if (!contaData.banco || !contaData.descricao || !contaData.agencia || !contaData.conta) {
+        alert('Preencha os campos obrigatórios: Banco, Descrição, Agência e Conta');
+        return;
+    }
+
+    if (editandoIndex >= 0) {
+        // Editando
+        contasLocais[editandoIndex] = contaData;
+    } else {
+        // Nova conta
+        contasLocais.push(contaData);
+    }
+
+    modalContaBancaria.hide();
+    atualizarTabelaLocal();
+}
+
+async function editarConta(contaId) {
+    try {
+        const response = await fetch(`/api/contas/${contaId}/`);
+        const data = await response.json();
+
+        if (data.status === 'success') {
+            const conta = data.conta;
+            document.getElementById('conta_id').value = conta.id;
+            document.getElementById('banco').value = conta.banco;
+            document.getElementById('descricao').value = conta.descricao;
+            document.getElementById('agencia').value = conta.agencia;
+            document.getElementById('conta').value = conta.conta;
+            document.getElementById('convenio').value = conta.convenio || '';
+            document.getElementById('carteira').value = conta.carteira || '';
+            document.getElementById('modalidade').value = conta.modalidade || '';
+            document.getElementById('tipo_pix').value = conta.tipo_pix || '';
+            document.getElementById('chave_pix').value = conta.chave_pix || '';
+            document.getElementById('principal').checked = conta.principal;
+            document.getElementById('cobranca_registrada').checked = conta.cobranca_registrada;
+            document.getElementById('prazo_baixa').value = conta.prazo_baixa || 0;
+            document.getElementById('prazo_protesto').value = conta.prazo_protesto || 0;
+            document.getElementById('layout_cnab').value = conta.layout_cnab || 'CNAB_240';
+            document.getElementById('numero_remessa_cnab_atual').value = conta.numero_remessa_cnab_atual || 0;
+
+            document.getElementById('modalContaTitle').innerHTML = '<i class="fas fa-edit me-2"></i>Editar Conta Bancária';
+            modalContaBancaria.show();
+        }
+    } catch (error) {
+        alert('Erro ao carregar dados da conta');
+        console.error(error);
+    }
+}
+
+async function salvarConta() {
+    // Se não tem IMOBILIARIA_ID, usar modo local
+    if (!IMOBILIARIA_ID) {
+        salvarContaLocal();
+        return;
+    }
+
+    const contaId = document.getElementById('conta_id').value;
+    const formData = {
+        imobiliaria_id: IMOBILIARIA_ID,
+        banco: document.getElementById('banco').value,
+        descricao: document.getElementById('descricao').value,
+        agencia: document.getElementById('agencia').value,
+        conta: document.getElementById('conta').value,
+        convenio: document.getElementById('convenio').value,
+        carteira: document.getElementById('carteira').value,
+        modalidade: document.getElementById('modalidade').value,
+        tipo_pix: document.getElementById('tipo_pix').value,
+        chave_pix: document.getElementById('chave_pix').value,
+        principal: document.getElementById('principal').checked,
+        cobranca_registrada: document.getElementById('cobranca_registrada').checked,
+        prazo_baixa: parseInt(document.getElementById('prazo_baixa').value) || 0,
+        prazo_protesto: parseInt(document.getElementById('prazo_protesto').value) || 0,
+        layout_cnab: document.getElementById('layout_cnab').value,
+        numero_remessa_cnab_atual: parseInt(document.getElementById('numero_remessa_cnab_atual').value) || 0,
+    };
+
+    // Validação básica
+    if (!formData.banco || !formData.descricao || !formData.agencia || !formData.conta) {
+        alert('Preencha os campos obrigatórios: Banco, Descrição, Agência e Conta');
+        return;
+    }
+
+    try {
+        const url = contaId ? `/api/contas/${contaId}/atualizar/` : '/api/contas/';
+        const response = await fetch(url, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': '{{ csrf_token }}'
+            },
+            body: JSON.stringify(formData)
+        });
+
+        const data = await response.json();
+
+        if (data.status === 'success') {
+            modalContaBancaria.hide();
+            carregarContas();
+
+            // Toast de sucesso
+            if (window.GestaoContratos && window.GestaoContratos.showToast) {
+                window.GestaoContratos.showToast(data.message, 'success');
+            } else {
+                alert(data.message);
+            }
+        } else {
+            alert('Erro: ' + data.message);
+        }
+    } catch (error) {
+        alert('Erro ao salvar conta bancária');
+        console.error(error);
+    }
+}
+
+async function excluirConta(contaId) {
+    if (!confirm('Tem certeza que deseja excluir esta conta bancária?')) {
+        return;
+    }
+
+    try {
+        const response = await fetch(`/api/contas/${contaId}/excluir/`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': '{{ csrf_token }}'
+            }
+        });
+
+        const data = await response.json();
+
+        if (data.status === 'success') {
+            carregarContas();
+            if (window.GestaoContratos && window.GestaoContratos.showToast) {
+                window.GestaoContratos.showToast(data.message, 'success');
+            }
+        } else {
+            alert('Erro: ' + data.message);
+        }
+    } catch (error) {
+        alert('Erro ao excluir conta bancária');
+        console.error(error);
+    }
+}
+</script>
+{% endblock %}

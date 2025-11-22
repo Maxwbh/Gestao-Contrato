@@ -1,0 +1,93 @@
+{% extends 'base.html' %}
+{% load crispy_forms_tags %}
+
+{% block title %}{% if form.instance.pk %}Editar{% else %}Novo{% endif %} Contrato - Gestao de Contratos{% endblock %}
+
+{% block extra_css %}
+<style>
+    .valor-calculado {
+        background-color: #e9ecef;
+        padding: 0.5rem 1rem;
+        border-radius: 0.25rem;
+        font-weight: 600;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12 col-lg-10 mx-auto">
+        <div class="card">
+            <div class="card-header">
+                <h4 class="mb-0">
+                    <i class="fas fa-file-contract"></i>
+                    {% if form.instance.pk %}
+                        Editar Contrato: {{ form.instance.numero_contrato }}
+                    {% else %}
+                        Novo Contrato
+                    {% endif %}
+                </h4>
+            </div>
+            <div class="card-body">
+                <!-- Exibir erros gerais do formulario -->
+                {% if form.non_field_errors %}
+                <div class="alert alert-danger">
+                    <i class="fas fa-exclamation-circle"></i>
+                    {% for error in form.non_field_errors %}
+                        {{ error }}{% if not forloop.last %}<br>{% endif %}
+                    {% endfor %}
+                </div>
+                {% endif %}
+
+                <form method="post" novalidate>
+                    {% csrf_token %}
+                    {% crispy form %}
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const valorTotalInput = document.getElementById('id_valor_total');
+    const valorEntradaInput = document.getElementById('id_valor_entrada');
+    const numeroParcelasInput = document.getElementById('id_numero_parcelas');
+
+    function calcularValores() {
+        const valorTotal = parseFloat(valorTotalInput?.value) || 0;
+        const valorEntrada = parseFloat(valorEntradaInput?.value) || 0;
+        const numeroParcelas = parseInt(numeroParcelasInput?.value) || 1;
+
+        const valorFinanciado = valorTotal - valorEntrada;
+        const valorParcela = numeroParcelas > 0 ? valorFinanciado / numeroParcelas : 0;
+
+        // Atualizar displays se existirem
+        const divFinanciado = document.getElementById('valor-financiado');
+        const divParcela = document.getElementById('valor-parcela');
+
+        if (divFinanciado) {
+            divFinanciado.textContent = 'R$ ' + valorFinanciado.toLocaleString('pt-BR', {
+                minimumFractionDigits: 2,
+                maximumFractionDigits: 2
+            });
+        }
+
+        if (divParcela) {
+            divParcela.textContent = 'R$ ' + valorParcela.toLocaleString('pt-BR', {
+                minimumFractionDigits: 2,
+                maximumFractionDigits: 2
+            });
+        }
+    }
+
+    // Calcular ao carregar e ao alterar campos
+    if (valorTotalInput) valorTotalInput.addEventListener('input', calcularValores);
+    if (valorEntradaInput) valorEntradaInput.addEventListener('input', calcularValores);
+    if (numeroParcelasInput) numeroParcelasInput.addEventListener('input', calcularValores);
+    calcularValores();
+});
+</script>
+{% endblock %}
