@@ -1,0 +1,492 @@
+/**
+ * Custom CSS for Gestão de Contratos
+ * Desenvolvedor: Maxwell da Silva Oliveira
+ * Email: maxwbh@gmail.com
+ */
+
+/* ========================================================================
+   VARIABLES
+   ======================================================================== */
+:root {
+    --primary-color: #2c3e50;
+    --secondary-color: #3498db;
+    --success-color: #27ae60;
+    --danger-color: #e74c3c;
+    --warning-color: #f39c12;
+    --info-color: #17a2b8;
+    --light-bg: #ecf0f1;
+    --dark-text: #2c3e50;
+    --transition-speed: 0.3s;
+}
+
+/* ========================================================================
+   GENERAL IMPROVEMENTS
+   ======================================================================== */
+body {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    background-color: var(--light-bg);
+    color: var(--dark-text);
+}
+
+/* Smooth transitions for interactive elements */
+a, button, .btn, .card, .form-control, .form-select {
+    transition: all var(--transition-speed) ease;
+}
+
+/* Improve link hover */
+a:not(.btn):hover {
+    text-decoration: none;
+    opacity: 0.8;
+}
+
+/* ========================================================================
+   CARDS & CONTAINERS
+   ======================================================================== */
+.card {
+    border: none;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    border-radius: 12px;
+    margin-bottom: 1.5rem;
+    overflow: hidden;
+}
+
+.card:hover {
+    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    transform: translateY(-2px);
+}
+
+.card-header {
+    background: linear-gradient(135deg, var(--primary-color), #34495e);
+    color: white;
+    font-weight: 600;
+    border-radius: 12px 12px 0 0 !important;
+    padding: 1.25rem;
+}
+
+.card-body {
+    padding: 1.5rem;
+}
+
+/* ========================================================================
+   FORMS
+   ======================================================================== */
+.form-control, .form-select {
+    border-radius: 8px;
+    border: 1px solid #ddd;
+    padding: 0.75rem;
+    font-size: 0.95rem;
+}
+
+.form-control:focus, .form-select:focus {
+    border-color: var(--secondary-color);
+    box-shadow: 0 0 0 0.2rem rgba(52, 152, 219, 0.25);
+}
+
+.form-label {
+    font-weight: 600;
+    color: var(--dark-text);
+    margin-bottom: 0.5rem;
+}
+
+.form-text {
+    font-size: 0.85rem;
+    color: #6c757d;
+}
+
+/* Form sections with icons */
+.form-section {
+    background: white;
+    padding: 2rem;
+    border-radius: 12px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+    margin-bottom: 2rem;
+}
+
+.form-section h4 {
+    color: var(--primary-color);
+    border-bottom: 3px solid var(--secondary-color);
+    padding-bottom: 0.75rem;
+    margin-bottom: 1.5rem;
+    font-weight: 600;
+}
+
+.form-section h4 i {
+    color: var(--secondary-color);
+    margin-right: 0.5rem;
+}
+
+/* Required fields indicator */
+.required-field label::after {
+    content: " *";
+    color: var(--danger-color);
+    font-weight: bold;
+}
+
+/* ========================================================================
+   BUTTONS
+   ======================================================================== */
+.btn {
+    border-radius: 8px;
+    padding: 0.625rem 1.25rem;
+    font-weight: 600;
+    text-transform: none;
+    letter-spacing: 0.3px;
+}
+
+.btn i {
+    margin-right: 0.4rem;
+}
+
+.btn-primary {
+    background: linear-gradient(135deg, var(--secondary-color), #2980b9);
+    border: none;
+}
+
+.btn-primary:hover {
+    background: linear-gradient(135deg, #2980b9, #21618c);
+    transform: translateY(-1px);
+    box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+}
+
+.btn-success {
+    background: linear-gradient(135deg, var(--success-color), #229954);
+    border: none;
+}
+
+.btn-success:hover {
+    background: linear-gradient(135deg, #229954, #1e8449);
+}
+
+.btn-danger {
+    background: linear-gradient(135deg, var(--danger-color), #c0392b);
+    border: none;
+}
+
+.btn-danger:hover {
+    background: linear-gradient(135deg, #c0392b, #a93226);
+}
+
+.btn-outline-primary:hover,
+.btn-outline-success:hover,
+.btn-outline-danger:hover {
+    transform: scale(1.05);
+}
+
+/* ========================================================================
+   TABLES
+   ======================================================================== */
+.table {
+    border-radius: 8px;
+    overflow: hidden;
+}
+
+.table thead th {
+    background-color: var(--primary-color);
+    color: white;
+    font-weight: 600;
+    border: none;
+    padding: 1rem;
+    text-transform: uppercase;
+    font-size: 0.85rem;
+    letter-spacing: 0.5px;
+}
+
+.table-hover tbody tr {
+    cursor: pointer;
+}
+
+.table-hover tbody tr:hover {
+    background-color: #f8f9fa;
+    transform: scale(1.01);
+    box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+}
+
+.table td {
+    vertical-align: middle;
+    padding: 1rem;
+}
+
+/* ========================================================================
+   BADGES
+   ======================================================================== */
+.badge {
+    padding: 0.5rem 1rem;
+    border-radius: 20px;
+    font-weight: 600;
+    font-size: 0.85rem;
+}
+
+.badge i {
+    margin-right: 0.3rem;
+}
+
+/* ========================================================================
+   SEARCH & FILTERS
+   ======================================================================== */
+.search-bar {
+    background: white;
+    padding: 1.5rem;
+    border-radius: 12px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+    margin-bottom: 2rem;
+}
+
+.search-bar input {
+    border-radius: 25px;
+    padding: 0.75rem 1.5rem;
+}
+
+.search-bar button {
+    border-radius: 25px;
+}
+
+/* ========================================================================
+   PAGINATION
+   ======================================================================== */
+.pagination {
+    margin-top: 2rem;
+}
+
+.page-link {
+    border-radius: 8px;
+    margin: 0 0.25rem;
+    color: var(--secondary-color);
+    border: 1px solid #dee2e6;
+}
+
+.page-link:hover {
+    background-color: var(--secondary-color);
+    color: white;
+    transform: translateY(-1px);
+}
+
+.page-item.active .page-link {
+    background-color: var(--primary-color);
+    border-color: var(--primary-color);
+}
+
+/* ========================================================================
+   ALERTS & MESSAGES
+   ======================================================================== */
+.alert {
+    border-radius: 12px;
+    border: none;
+    padding: 1.25rem;
+    margin-bottom: 1.5rem;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+}
+
+.alert i {
+    margin-right: 0.5rem;
+}
+
+/* ========================================================================
+   MODALS
+   ======================================================================== */
+.modal-content {
+    border-radius: 12px;
+    border: none;
+    box-shadow: 0 10px 40px rgba(0,0,0,0.3);
+}
+
+.modal-header {
+    border-radius: 12px 12px 0 0;
+    padding: 1.5rem;
+}
+
+.modal-body {
+    padding: 2rem;
+}
+
+.modal-footer {
+    border-top: 1px solid #dee2e6;
+    padding: 1.5rem;
+}
+
+/* ========================================================================
+   NAVBAR ENHANCEMENTS
+   ======================================================================== */
+.navbar {
+    box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+    padding: 1rem 0;
+}
+
+.navbar-brand {
+    font-weight: 700;
+    font-size: 1.5rem;
+    letter-spacing: 0.5px;
+}
+
+.navbar-nav .nav-link {
+    font-weight: 500;
+    padding: 0.5rem 1rem;
+    margin: 0 0.25rem;
+    border-radius: 8px;
+    transition: all 0.3s ease;
+}
+
+.navbar-nav .nav-link:hover {
+    background-color: rgba(255,255,255,0.1);
+    transform: translateY(-2px);
+}
+
+.dropdown-menu {
+    border-radius: 8px;
+    border: none;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    padding: 0.5rem 0;
+}
+
+.dropdown-item {
+    padding: 0.75rem 1.5rem;
+    font-weight: 500;
+}
+
+.dropdown-item:hover {
+    background-color: var(--light-bg);
+    color: var(--secondary-color);
+}
+
+/* ========================================================================
+   STATS CARDS
+   ======================================================================== */
+.stats-card {
+    background: linear-gradient(135deg, var(--secondary-color), #2980b9);
+    color: white;
+    padding: 2rem;
+    border-radius: 12px;
+    margin-bottom: 1.5rem;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    transition: all 0.3s ease;
+}
+
+.stats-card:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 8px 20px rgba(0,0,0,0.2);
+}
+
+.stats-card h3 {
+    font-size: 3rem;
+    font-weight: 700;
+    margin-bottom: 0.5rem;
+}
+
+.stats-card p {
+    margin: 0;
+    opacity: 0.95;
+    font-size: 1.1rem;
+}
+
+/* ========================================================================
+   LOADING & ANIMATIONS
+   ======================================================================== */
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.fade-in {
+    animation: fadeIn 0.5s ease;
+}
+
+/* Loading spinner */
+.spinner-border {
+    width: 3rem;
+    height: 3rem;
+    border-width: 0.3rem;
+}
+
+/* ========================================================================
+   RESPONSIVE IMPROVEMENTS
+   ======================================================================== */
+@media (max-width: 768px) {
+    .card-body {
+        padding: 1rem;
+    }
+
+    .form-section {
+        padding: 1.5rem;
+    }
+
+    .table {
+        font-size: 0.875rem;
+    }
+
+    .stats-card h3 {
+        font-size: 2rem;
+    }
+
+    .btn {
+        padding: 0.5rem 1rem;
+        font-size: 0.9rem;
+    }
+}
+
+/* ========================================================================
+   CRISPY FORMS CUSTOMIZATION
+   ======================================================================== */
+.crispy-form .asteriskField {
+    display: none;
+}
+
+.crispy-form .form-group {
+    margin-bottom: 1.5rem;
+}
+
+/* ========================================================================
+   FOOTER
+   ======================================================================== */
+.footer {
+    background: linear-gradient(135deg, var(--primary-color), #34495e);
+    color: white;
+    padding: 2.5rem 0;
+    margin-top: 4rem;
+    box-shadow: 0 -4px 12px rgba(0,0,0,0.1);
+}
+
+.footer a {
+    color: white;
+    text-decoration: none;
+    transition: opacity 0.3s ease;
+}
+
+.footer a:hover {
+    opacity: 0.8;
+}
+
+/* ========================================================================
+   UTILITY CLASSES
+   ======================================================================== */
+.text-shadow {
+    text-shadow: 2px 2px 4px rgba(0,0,0,0.2);
+}
+
+.box-shadow-sm {
+    box-shadow: 0 2px 4px rgba(0,0,0,0.08);
+}
+
+.box-shadow-md {
+    box-shadow: 0 4px 8px rgba(0,0,0,0.12);
+}
+
+.box-shadow-lg {
+    box-shadow: 0 8px 16px rgba(0,0,0,0.15);
+}
+
+.border-radius-sm {
+    border-radius: 8px;
+}
+
+.border-radius-md {
+    border-radius: 12px;
+}
+
+.border-radius-lg {
+    border-radius: 16px;
+}
