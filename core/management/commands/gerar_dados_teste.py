@@ -350,8 +350,8 @@ class Command(BaseCommand):
             dias_atras = random.randint(0, 730)
             data_contrato = timezone.now().date() - timedelta(days=dias_atras)
 
-            # 180 a 300 meses
-            numero_parcelas = random.randint(180, 300)
+            # 24 a 60 meses (2-5 anos) - otimizado para evitar timeout
+            numero_parcelas = random.randint(24, 60)
 
             # Valor do imóvel baseado na área
             valor_m2 = Decimal(random.randint(150, 350))
