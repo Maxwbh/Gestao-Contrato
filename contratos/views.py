@@ -215,6 +215,25 @@ class ContratoDetailView(LoginRequiredMixin, DetailView):
             data_vencimento__lt=timezone.now().date()
         ).count()
 
+        # Reajustes do contrato
+        from financeiro.models import Reajuste
+        context['reajustes'] = contrato.reajustes.all().order_by('-data_reajuste')
+
+        # Índices disponíveis para reajuste manual
+        context['indices_reajuste'] = IndiceReajuste.objects.filter(
+            ano=timezone.now().year
+        ).order_by('-mes').values('tipo_indice').distinct()
+
+        # Tipos de índice únicos para o dropdown
+        context['tipos_indice'] = [
+            ('IPCA', 'IPCA - IBGE'),
+            ('IGPM', 'IGP-M - FGV'),
+            ('INCC', 'INCC - FGV'),
+            ('INPC', 'INPC - IBGE'),
+            ('SELIC', 'SELIC'),
+            ('MANUAL', 'Percentual Manual'),
+        ]
+
         return context
 
 
