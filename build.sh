@@ -333,8 +333,32 @@ with connection.cursor() as cursor:
     else:
         print("  - financeiro_parcela table not found (will be created by migrations)")
 
+    # Atualizar tabela notificacoes_templatenotificacao com novos campos
+    print("Checking notificacoes_templatenotificacao...")
+    cursor.execute("""
+        SELECT 1 FROM information_schema.tables
+        WHERE table_name = 'notificacoes_templatenotificacao'
+    """)
+    if cursor.fetchone():
+        add_column_if_not_exists(cursor, 'notificacoes_templatenotificacao', 'codigo', "VARCHAR(30) DEFAULT 'CUSTOM'")
+        add_column_if_not_exists(cursor, 'notificacoes_templatenotificacao', 'corpo_html', "TEXT DEFAULT ''")
+        add_column_if_not_exists(cursor, 'notificacoes_templatenotificacao', 'imobiliaria_id', "INTEGER NULL REFERENCES core_imobiliaria(id) ON DELETE CASCADE")
+        print("  + Template fields added/verified")
+    else:
+        print("  - notificacoes_templatenotificacao table not found (will be created by migrations)")
+
     print("Schema changes applied successfully!")
 SQLEOF
+
+echo "==> Creating default email templates..."
+python manage.py shell << 'TEMPLATEEOF'
+try:
+    from notificacoes.boleto_notificacao import criar_templates_padrao
+    count = criar_templates_padrao()
+    print(f"Templates criados: {count}")
+except Exception as e:
+    print(f"Aviso: Nao foi possivel criar templates padrao: {e}")
+TEMPLATEEOF
 
 echo "==> Collecting static files..."
 python manage.py collectstatic --no-input

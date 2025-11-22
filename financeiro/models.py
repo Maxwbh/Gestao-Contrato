@@ -363,13 +363,14 @@ class Parcela(TimeStampedModel):
         conta_bancaria.save(update_fields=['nosso_numero_atual'])
         return conta_bancaria.nosso_numero_atual
 
-    def gerar_boleto(self, conta_bancaria=None, force=False):
+    def gerar_boleto(self, conta_bancaria=None, force=False, enviar_email=True):
         """
         Gera o boleto para esta parcela.
 
         Args:
             conta_bancaria: Conta bancária a ser usada (opcional, usa a principal)
             force: Se True, regenera mesmo que já exista boleto
+            enviar_email: Se True, envia email para o comprador com o boleto
 
         Returns:
             dict: Dados do boleto gerado ou None se falhar
@@ -383,6 +384,7 @@ class Parcela(TimeStampedModel):
         # Verificar se já tem boleto e não é para forçar
         if self.tem_boleto and not force:
             return {
+                'sucesso': True,
                 'nosso_numero': self.nosso_numero,
                 'linha_digitavel': self.linha_digitavel,
                 'codigo_barras': self.codigo_barras,
@@ -428,6 +430,19 @@ class Parcela(TimeStampedModel):
                 self.pix_qrcode = resultado['pix_qrcode']
 
             self.save()
+
+            # Enviar email para o comprador
+            if enviar_email:
+                try:
+                    from notificacoes.boleto_notificacao import BoletoNotificacaoService
+                    notificacao_service = BoletoNotificacaoService()
+                    email_result = notificacao_service.notificar_boleto_criado(self)
+                    resultado['email_enviado'] = email_result.get('sucesso', False)
+                    resultado['email_erro'] = email_result.get('erro', '')
+                except Exception as e:
+                    # Não falhar a geração do boleto por erro de email
+                    resultado['email_enviado'] = False
+                    resultado['email_erro'] = str(e)
 
         return resultado
 
