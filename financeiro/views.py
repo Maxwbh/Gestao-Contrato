@@ -262,24 +262,96 @@ def api_dashboard_dados(request):
 
 @login_required
 def listar_parcelas(request):
-    """Lista todas as parcelas"""
+    """
+    Lista todas as parcelas com filtros avançados.
+
+    Filtros disponíveis:
+    - status: pagas, pendentes, vencidas, a_vencer
+    - imobiliaria: ID da imobiliária
+    - comprador: ID do comprador
+    - contrato: número do contrato
+    - data_inicio: data de vencimento inicial
+    - data_fim: data de vencimento final
+    - q: busca textual
+    """
+    from core.models import Comprador
+
     parcelas = Parcela.objects.select_related(
         'contrato',
         'contrato__comprador',
-        'contrato__imovel'
-    ).all()
+        'contrato__imovel',
+        'contrato__imovel__imobiliaria'
+    ).order_by('-data_vencimento')
 
-    # Filtros
-    status = request.GET.get('status')
+    # Dados para os filtros
+    imobiliarias = Imobiliaria.objects.filter(ativo=True).order_by('nome')
+    compradores = Comprador.objects.filter(ativo=True).order_by('nome')
+
+    # Filtro por Status
+    status = request.GET.get('status', '')
     if status == 'pagas':
         parcelas = parcelas.filter(pago=True)
     elif status == 'pendentes':
         parcelas = parcelas.filter(pago=False)
     elif status == 'vencidas':
         parcelas = parcelas.filter(pago=False, data_vencimento__lt=timezone.now().date())
+    elif status == 'a_vencer':
+        parcelas = parcelas.filter(pago=False, data_vencimento__gte=timezone.now().date())
+
+    # Filtro por Imobiliária
+    imobiliaria_id = request.GET.get('imobiliaria', '')
+    if imobiliaria_id:
+        parcelas = parcelas.filter(contrato__imovel__imobiliaria_id=imobiliaria_id)
+
+    # Filtro por Comprador
+    comprador_id = request.GET.get('comprador', '')
+    if comprador_id:
+        parcelas = parcelas.filter(contrato__comprador_id=comprador_id)
+
+    # Filtro por Número do Contrato
+    contrato_numero = request.GET.get('contrato', '').strip()
+    if contrato_numero:
+        parcelas = parcelas.filter(contrato__numero__icontains=contrato_numero)
+
+    # Filtro por Período de Vencimento
+    data_inicio = request.GET.get('data_inicio', '')
+    data_fim = request.GET.get('data_fim', '')
+    if data_inicio:
+        parcelas = parcelas.filter(data_vencimento__gte=data_inicio)
+    if data_fim:
+        parcelas = parcelas.filter(data_vencimento__lte=data_fim)
+
+    # Busca textual (nome do comprador ou identificação do imóvel)
+    busca = request.GET.get('q', '').strip()
+    if busca:
+        parcelas = parcelas.filter(
+            Q(contrato__comprador__nome__icontains=busca) |
+            Q(contrato__imovel__identificacao__icontains=busca) |
+            Q(contrato__numero__icontains=busca)
+        )
+
+    # Estatísticas
+    hoje = timezone.now().date()
+    total_parcelas = parcelas.count()
+    valor_total = parcelas.aggregate(total=Sum('valor_atual'))['total'] or Decimal('0.00')
+    parcelas_vencidas_count = parcelas.filter(pago=False, data_vencimento__lt=hoje).count()
 
     context = {
-        'parcelas': parcelas,
+        'parcelas': parcelas[:500],  # Limitar para performance
+        'imobiliarias': imobiliarias,
+        'compradores': compradores,
+        # Valores atuais dos filtros
+        'filtro_status': status,
+        'filtro_imobiliaria': imobiliaria_id,
+        'filtro_comprador': comprador_id,
+        'filtro_contrato': contrato_numero,
+        'filtro_data_inicio': data_inicio,
+        'filtro_data_fim': data_fim,
+        'filtro_busca': busca,
+        # Estatísticas
+        'total_parcelas': total_parcelas,
+        'valor_total': valor_total,
+        'parcelas_vencidas_count': parcelas_vencidas_count,
     }
     return render(request, 'financeiro/listar_parcelas.html', context)
 
