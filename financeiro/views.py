@@ -414,3 +414,201 @@ def listar_reajustes(request):
         'reajustes': reajustes,
     }
     return render(request, 'financeiro/listar_reajustes.html', context)
+
+
+# =============================================================================
+# GESTÃO DE PARCELAS POR IMOBILIÁRIA
+# =============================================================================
+
+@login_required
+def parcelas_mes_atual(request):
+    """
+    Lista parcelas que vencem no mês atual, agrupadas por imobiliária.
+    """
+    hoje = timezone.now().date()
+    primeiro_dia_mes = hoje.replace(day=1)
+
+    # Último dia do mês
+    if hoje.month == 12:
+        ultimo_dia_mes = hoje.replace(day=31)
+    else:
+        ultimo_dia_mes = hoje.replace(month=hoje.month + 1, day=1) - timedelta(days=1)
+
+    # Filtro por imobiliária
+    imobiliaria_id = request.GET.get('imobiliaria', '')
+    imobiliarias = Imobiliaria.objects.filter(ativo=True).order_by('nome')
+
+    # Base queryset
+    parcelas = Parcela.objects.select_related(
+        'contrato',
+        'contrato__comprador',
+        'contrato__imovel',
+        'contrato__imovel__imobiliaria'
+    ).filter(
+        data_vencimento__gte=primeiro_dia_mes,
+        data_vencimento__lte=ultimo_dia_mes
+    ).order_by('data_vencimento', 'contrato__imovel__imobiliaria__nome')
+
+    if imobiliaria_id:
+        parcelas = parcelas.filter(contrato__imovel__imobiliaria_id=imobiliaria_id)
+
+    # Filtro por status
+    status = request.GET.get('status', '')
+    if status == 'pagas':
+        parcelas = parcelas.filter(pago=True)
+    elif status == 'pendentes':
+        parcelas = parcelas.filter(pago=False)
+    elif status == 'vencidas':
+        parcelas = parcelas.filter(pago=False, data_vencimento__lt=hoje)
+
+    # Estatísticas do mês
+    stats = parcelas.aggregate(
+        total=Count('id'),
+        valor_total=Sum('valor_atual'),
+        pagas=Count('id', filter=Q(pago=True)),
+        valor_pago=Sum('valor_pago', filter=Q(pago=True)),
+        pendentes=Count('id', filter=Q(pago=False)),
+        valor_pendente=Sum('valor_atual', filter=Q(pago=False)),
+        vencidas=Count('id', filter=Q(pago=False, data_vencimento__lt=hoje)),
+        valor_vencido=Sum('valor_atual', filter=Q(pago=False, data_vencimento__lt=hoje)),
+    )
+
+    # Agrupar por imobiliária para resumo
+    parcelas_por_imobiliaria = {}
+    for parcela in parcelas:
+        imob_nome = parcela.contrato.imovel.imobiliaria.nome if parcela.contrato.imovel.imobiliaria else 'Sem Imobiliária'
+        if imob_nome not in parcelas_por_imobiliaria:
+            parcelas_por_imobiliaria[imob_nome] = {
+                'total': 0,
+                'pagas': 0,
+                'pendentes': 0,
+                'valor_total': Decimal('0.00'),
+                'valor_pago': Decimal('0.00'),
+                'valor_pendente': Decimal('0.00'),
+            }
+        parcelas_por_imobiliaria[imob_nome]['total'] += 1
+        parcelas_por_imobiliaria[imob_nome]['valor_total'] += parcela.valor_atual
+        if parcela.pago:
+            parcelas_por_imobiliaria[imob_nome]['pagas'] += 1
+            parcelas_por_imobiliaria[imob_nome]['valor_pago'] += parcela.valor_pago or Decimal('0.00')
+        else:
+            parcelas_por_imobiliaria[imob_nome]['pendentes'] += 1
+            parcelas_por_imobiliaria[imob_nome]['valor_pendente'] += parcela.valor_atual
+
+    context = {
+        'parcelas': parcelas,
+        'imobiliarias': imobiliarias,
+        'filtro_imobiliaria': imobiliaria_id,
+        'filtro_status': status,
+        'mes_atual': hoje.strftime('%B/%Y'),
+        'primeiro_dia': primeiro_dia_mes,
+        'ultimo_dia': ultimo_dia_mes,
+        'stats': stats,
+        'parcelas_por_imobiliaria': parcelas_por_imobiliaria,
+    }
+    return render(request, 'financeiro/parcelas_mes.html', context)
+
+
+@login_required
+def dashboard_imobiliaria(request, imobiliaria_id):
+    """
+    Dashboard financeiro detalhado para uma imobiliária específica.
+    """
+    imobiliaria = get_object_or_404(Imobiliaria, pk=imobiliaria_id, ativo=True)
+    hoje = timezone.now().date()
+
+    # Período do mês atual
+    primeiro_dia_mes = hoje.replace(day=1)
+    if hoje.month == 12:
+        ultimo_dia_mes = hoje.replace(day=31)
+    else:
+        ultimo_dia_mes = hoje.replace(month=hoje.month + 1, day=1) - timedelta(days=1)
+
+    # Todas as parcelas da imobiliária
+    parcelas_imob = Parcela.objects.select_related(
+        'contrato',
+        'contrato__comprador',
+        'contrato__imovel'
+    ).filter(
+        contrato__imovel__imobiliaria=imobiliaria
+    )
+
+    # Estatísticas gerais
+    stats_geral = parcelas_imob.aggregate(
+        total=Count('id'),
+        pagas=Count('id', filter=Q(pago=True)),
+        pendentes=Count('id', filter=Q(pago=False)),
+        vencidas=Count('id', filter=Q(pago=False, data_vencimento__lt=hoje)),
+        valor_total=Sum('valor_atual'),
+        valor_recebido=Sum('valor_pago', filter=Q(pago=True)),
+        valor_pendente=Sum('valor_atual', filter=Q(pago=False)),
+        valor_vencido=Sum('valor_atual', filter=Q(pago=False, data_vencimento__lt=hoje)),
+    )
+
+    # Parcelas do mês atual
+    parcelas_mes = parcelas_imob.filter(
+        data_vencimento__gte=primeiro_dia_mes,
+        data_vencimento__lte=ultimo_dia_mes
+    )
+
+    stats_mes = parcelas_mes.aggregate(
+        total=Count('id'),
+        pagas=Count('id', filter=Q(pago=True)),
+        pendentes=Count('id', filter=Q(pago=False)),
+        vencidas=Count('id', filter=Q(pago=False, data_vencimento__lt=hoje)),
+        valor_total=Sum('valor_atual'),
+        valor_recebido=Sum('valor_pago', filter=Q(pago=True)),
+        valor_pendente=Sum('valor_atual', filter=Q(pago=False)),
+    )
+
+    # Parcelas vencidas (não pagas e data < hoje)
+    parcelas_vencidas = parcelas_imob.filter(
+        pago=False,
+        data_vencimento__lt=hoje
+    ).order_by('data_vencimento')[:20]
+
+    # Próximas parcelas a vencer (próximos 30 dias)
+    proximas_parcelas = parcelas_imob.filter(
+        pago=False,
+        data_vencimento__gte=hoje,
+        data_vencimento__lte=hoje + timedelta(days=30)
+    ).order_by('data_vencimento')[:20]
+
+    # Contratos da imobiliária
+    contratos = Contrato.objects.filter(
+        imovel__imobiliaria=imobiliaria
+    ).select_related('comprador', 'imovel')
+
+    stats_contratos = contratos.aggregate(
+        total=Count('id'),
+        ativos=Count('id', filter=Q(status=StatusContrato.ATIVO)),
+        quitados=Count('id', filter=Q(status=StatusContrato.QUITADO)),
+        valor_total=Sum('valor_total'),
+    )
+
+    # Top 10 compradores com mais atraso
+    compradores_atraso = []
+    for contrato in contratos.filter(status=StatusContrato.ATIVO):
+        parcelas_atraso = contrato.parcelas.filter(pago=False, data_vencimento__lt=hoje)
+        if parcelas_atraso.exists():
+            valor_atraso = parcelas_atraso.aggregate(total=Sum('valor_atual'))['total'] or Decimal('0.00')
+            compradores_atraso.append({
+                'comprador': contrato.comprador,
+                'contrato': contrato,
+                'qtd_parcelas': parcelas_atraso.count(),
+                'valor_atraso': valor_atraso,
+                'dias_atraso': (hoje - parcelas_atraso.first().data_vencimento).days,
+            })
+    compradores_atraso.sort(key=lambda x: x['valor_atraso'], reverse=True)
+
+    context = {
+        'imobiliaria': imobiliaria,
+        'stats_geral': stats_geral,
+        'stats_mes': stats_mes,
+        'stats_contratos': stats_contratos,
+        'parcelas_vencidas': parcelas_vencidas,
+        'proximas_parcelas': proximas_parcelas,
+        'compradores_atraso': compradores_atraso[:10],
+        'mes_atual': hoje.strftime('%B/%Y'),
+    }
+    return render(request, 'financeiro/dashboard_imobiliaria.html', context)
