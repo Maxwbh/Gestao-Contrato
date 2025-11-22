@@ -1,0 +1,318 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Parcelas{% endblock %}
+
+{% block extra_css %}
+<style>
+    .card-stats {
+        border-left: 4px solid;
+        transition: transform 0.2s;
+    }
+    .card-stats:hover {
+        transform: translateY(-2px);
+    }
+    .card-stats.primary { border-color: #007bff; }
+    .card-stats.success { border-color: #28a745; }
+    .card-stats.warning { border-color: #ffc107; }
+    .card-stats.danger { border-color: #dc3545; }
+
+    .stat-value {
+        font-size: 1.5rem;
+        font-weight: bold;
+    }
+    .stat-label {
+        color: #6c757d;
+        font-size: 0.85rem;
+    }
+
+    .filter-card {
+        background: #f8f9fa;
+        border: 1px solid #e9ecef;
+    }
+
+    .table-parcelas th {
+        background-color: #f8f9fa;
+        position: sticky;
+        top: 0;
+        z-index: 10;
+    }
+
+    .badge-status {
+        font-size: 0.8rem;
+        padding: 0.4em 0.6em;
+    }
+
+    .btn-filter {
+        min-width: 100px;
+    }
+
+    .parcela-vencida {
+        background-color: #fff3cd !important;
+    }
+
+    .parcela-paga {
+        background-color: #d4edda !important;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <!-- Header -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h2 class="mb-0"><i class="fas fa-file-invoice-dollar me-2"></i>Parcelas</h2>
+            <small class="text-muted">Gerenciamento de parcelas de contratos</small>
+        </div>
+        <div>
+            <a href="{% url 'financeiro:dashboard' %}" class="btn btn-outline-primary">
+                <i class="fas fa-chart-line me-1"></i> Dashboard
+            </a>
+        </div>
+    </div>
+
+    <!-- Estatísticas Rápidas -->
+    <div class="row mb-4">
+        <div class="col-md-4">
+            <div class="card card-stats primary">
+                <div class="card-body">
+                    <div class="stat-value text-primary">{{ total_parcelas }}</div>
+                    <div class="stat-label">Total de Parcelas</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card card-stats success">
+                <div class="card-body">
+                    <div class="stat-value text-success">R$ {{ valor_total|floatformat:2 }}</div>
+                    <div class="stat-label">Valor Total</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card card-stats danger">
+                <div class="card-body">
+                    <div class="stat-value text-danger">{{ parcelas_vencidas_count }}</div>
+                    <div class="stat-label">Parcelas Vencidas</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Filtros -->
+    <div class="card filter-card mb-4">
+        <div class="card-header bg-white">
+            <h5 class="mb-0">
+                <i class="fas fa-filter me-2"></i>Filtros
+                <button class="btn btn-sm btn-link float-end" type="button" data-bs-toggle="collapse" data-bs-target="#filtrosCollapse">
+                    <i class="fas fa-chevron-down"></i>
+                </button>
+            </h5>
+        </div>
+        <div class="collapse show" id="filtrosCollapse">
+            <div class="card-body">
+                <form method="get" id="filtroForm">
+                    <div class="row g-3">
+                        <!-- Busca Textual -->
+                        <div class="col-md-4">
+                            <label class="form-label fw-bold">Busca</label>
+                            <input type="text" class="form-control" name="q"
+                                   value="{{ filtro_busca }}"
+                                   placeholder="Nome, contrato ou imóvel...">
+                        </div>
+
+                        <!-- Imobiliária -->
+                        <div class="col-md-4">
+                            <label class="form-label fw-bold">
+                                <i class="fas fa-building me-1"></i>Imobiliária
+                            </label>
+                            <select class="form-select" name="imobiliaria" id="filtroImobiliaria">
+                                <option value="">Todas as Imobiliárias</option>
+                                {% for imob in imobiliarias %}
+                                <option value="{{ imob.id }}" {% if filtro_imobiliaria == imob.id|stringformat:"s" %}selected{% endif %}>
+                                    {{ imob.nome }}
+                                </option>
+                                {% endfor %}
+                            </select>
+                        </div>
+
+                        <!-- Comprador -->
+                        <div class="col-md-4">
+                            <label class="form-label fw-bold">
+                                <i class="fas fa-user me-1"></i>Comprador
+                            </label>
+                            <select class="form-select" name="comprador" id="filtroComprador">
+                                <option value="">Todos os Compradores</option>
+                                {% for comp in compradores %}
+                                <option value="{{ comp.id }}" {% if filtro_comprador == comp.id|stringformat:"s" %}selected{% endif %}>
+                                    {{ comp.nome }}
+                                </option>
+                                {% endfor %}
+                            </select>
+                        </div>
+
+                        <!-- Status -->
+                        <div class="col-md-3">
+                            <label class="form-label fw-bold">Status</label>
+                            <select class="form-select" name="status">
+                                <option value="">Todos</option>
+                                <option value="pendentes" {% if filtro_status == 'pendentes' %}selected{% endif %}>Pendentes</option>
+                                <option value="pagas" {% if filtro_status == 'pagas' %}selected{% endif %}>Pagas</option>
+                                <option value="vencidas" {% if filtro_status == 'vencidas' %}selected{% endif %}>Vencidas</option>
+                                <option value="a_vencer" {% if filtro_status == 'a_vencer' %}selected{% endif %}>A Vencer</option>
+                            </select>
+                        </div>
+
+                        <!-- Contrato -->
+                        <div class="col-md-3">
+                            <label class="form-label fw-bold">Contrato</label>
+                            <input type="text" class="form-control" name="contrato"
+                                   value="{{ filtro_contrato }}"
+                                   placeholder="Número do contrato">
+                        </div>
+
+                        <!-- Data Início -->
+                        <div class="col-md-3">
+                            <label class="form-label fw-bold">Vencimento De</label>
+                            <input type="date" class="form-control" name="data_inicio"
+                                   value="{{ filtro_data_inicio }}">
+                        </div>
+
+                        <!-- Data Fim -->
+                        <div class="col-md-3">
+                            <label class="form-label fw-bold">Vencimento Até</label>
+                            <input type="date" class="form-control" name="data_fim"
+                                   value="{{ filtro_data_fim }}">
+                        </div>
+                    </div>
+
+                    <div class="row mt-3">
+                        <div class="col-12">
+                            <button type="submit" class="btn btn-primary btn-filter">
+                                <i class="fas fa-search me-1"></i> Filtrar
+                            </button>
+                            <a href="{% url 'financeiro:listar_parcelas' %}" class="btn btn-outline-secondary btn-filter">
+                                <i class="fas fa-times me-1"></i> Limpar
+                            </a>
+                        </div>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Tabela de Parcelas -->
+    <div class="card">
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-hover table-parcelas mb-0">
+                    <thead>
+                        <tr>
+                            <th>Parcela</th>
+                            <th>Contrato</th>
+                            <th>Imobiliária</th>
+                            <th>Comprador</th>
+                            <th>Vencimento</th>
+                            <th class="text-end">Valor</th>
+                            <th class="text-center">Status</th>
+                            <th class="text-center">Ações</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for parcela in parcelas %}
+                        <tr class="{% if parcela.pago %}parcela-paga{% elif parcela.esta_vencida %}parcela-vencida{% endif %}">
+                            <td>
+                                <strong>{{ parcela.numero_parcela }}</strong>/{{ parcela.contrato.numero_parcelas }}
+                            </td>
+                            <td>
+                                <a href="{% url 'contratos:detalhe_contrato' parcela.contrato.pk %}">
+                                    {{ parcela.contrato.numero }}
+                                </a>
+                            </td>
+                            <td>
+                                {% if parcela.contrato.imovel.imobiliaria %}
+                                    {{ parcela.contrato.imovel.imobiliaria.nome }}
+                                {% else %}
+                                    <span class="text-muted">-</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <a href="{% url 'core:editar_comprador' parcela.contrato.comprador.pk %}">
+                                    {{ parcela.contrato.comprador.nome|truncatechars:30 }}
+                                </a>
+                            </td>
+                            <td>
+                                {{ parcela.data_vencimento|date:"d/m/Y" }}
+                                {% if parcela.esta_vencida and not parcela.pago %}
+                                    <br><small class="text-danger">{{ parcela.dias_atraso }} dias</small>
+                                {% endif %}
+                            </td>
+                            <td class="text-end">
+                                <strong>R$ {{ parcela.valor_atual|floatformat:2 }}</strong>
+                                {% if parcela.valor_juros or parcela.valor_multa %}
+                                    <br><small class="text-danger">+J/M</small>
+                                {% endif %}
+                            </td>
+                            <td class="text-center">
+                                {% if parcela.pago %}
+                                    <span class="badge bg-success badge-status">
+                                        <i class="fas fa-check me-1"></i>Pago
+                                    </span>
+                                {% elif parcela.esta_vencida %}
+                                    <span class="badge bg-danger badge-status">
+                                        <i class="fas fa-exclamation-triangle me-1"></i>Vencida
+                                    </span>
+                                {% else %}
+                                    <span class="badge bg-warning text-dark badge-status">
+                                        <i class="fas fa-clock me-1"></i>Pendente
+                                    </span>
+                                {% endif %}
+                            </td>
+                            <td class="text-center">
+                                <div class="btn-group btn-group-sm">
+                                    <a href="{% url 'financeiro:detalhe_parcela' parcela.pk %}"
+                                       class="btn btn-outline-primary" title="Ver detalhes">
+                                        <i class="fas fa-eye"></i>
+                                    </a>
+                                    {% if not parcela.pago %}
+                                    <a href="{% url 'financeiro:registrar_pagamento' parcela.pk %}"
+                                       class="btn btn-outline-success" title="Registrar pagamento">
+                                        <i class="fas fa-dollar-sign"></i>
+                                    </a>
+                                    {% endif %}
+                                </div>
+                            </td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="8" class="text-center py-4 text-muted">
+                                <i class="fas fa-inbox fa-3x mb-3 d-block"></i>
+                                Nenhuma parcela encontrada com os filtros selecionados.
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        {% if total_parcelas > 500 %}
+        <div class="card-footer text-muted">
+            <i class="fas fa-info-circle me-1"></i>
+            Exibindo 500 de {{ total_parcelas }} parcelas. Use os filtros para refinar a busca.
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+// Submit form ao mudar filtros de select
+document.querySelectorAll('#filtroForm select').forEach(function(select) {
+    select.addEventListener('change', function() {
+        document.getElementById('filtroForm').submit();
+    });
+});
+</script>
+{% endblock %}
