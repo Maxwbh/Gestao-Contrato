@@ -438,3 +438,21 @@ class Contrato(TimeStampedModel):
         meses_desde_reajuste = (timezone.now().date().year - self.data_ultimo_reajuste.year) * 12 + \
                               (timezone.now().date().month - self.data_ultimo_reajuste.month)
         return meses_desde_reajuste >= self.prazo_reajuste_meses
+
+    @property
+    def data_proximo_reajuste(self):
+        """
+        Calcula a data do proximo reajuste.
+        Retorna None se o contrato usa valor fixo (sem reajuste).
+        """
+        if self.tipo_correcao == TipoCorrecao.FIXO:
+            return None
+
+        # Data base para calculo
+        if self.data_ultimo_reajuste:
+            data_base = self.data_ultimo_reajuste
+        else:
+            data_base = self.data_contrato
+
+        # Adicionar o prazo de reajuste
+        return data_base + relativedelta(months=self.prazo_reajuste_meses)

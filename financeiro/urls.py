@@ -23,6 +23,10 @@ urlpatterns = [
     path('parcelas/', views.listar_parcelas, name='listar_parcelas'),
     path('parcelas/<int:pk>/', views.detalhe_parcela, name='detalhe_parcela'),
     path('parcelas/<int:pk>/pagar/', views.registrar_pagamento, name='registrar_pagamento'),
+    path('parcelas/<int:pk>/pagar-ajax/', views.pagar_parcela_ajax, name='pagar_parcela_ajax'),
+
+    # Carne (multiplos boletos)
+    path('contrato/<int:contrato_id>/gerar-carne/', views.gerar_carne, name='gerar_carne'),
 
     # Boletos
     path('parcelas/<int:pk>/boleto/gerar/', views.gerar_boleto_parcela, name='gerar_boleto'),

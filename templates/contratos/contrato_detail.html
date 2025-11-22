@@ -258,11 +258,16 @@
                 <div class="card">
                     <div class="card-header bg-dark text-white d-flex justify-content-between align-items-center">
                         <span><i class="fas fa-list"></i> Parcelas</span>
-                        {% if proxima_parcela %}
-                        <span class="badge bg-warning text-dark">
-                            Proxima: {{ proxima_parcela.data_vencimento|date:"d/m/Y" }}
-                        </span>
-                        {% endif %}
+                        <div>
+                            {% if proxima_parcela %}
+                            <span class="badge bg-warning text-dark me-2">
+                                Proxima: {{ proxima_parcela.data_vencimento|date:"d/m/Y" }}
+                            </span>
+                            {% endif %}
+                            <button type="button" class="btn btn-sm btn-success" onclick="abrirModalCarne()">
+                                <i class="fas fa-file-invoice-dollar"></i> Gerar Carne
+                            </button>
+                        </div>
                     </div>
                     <div class="card-body p-0">
                         <div class="table-responsive" style="max-height: 600px; overflow-y: auto;">
@@ -272,8 +277,9 @@
                                         <th class="text-center">#</th>
                                         <th>Vencimento</th>
                                         <th class="text-end">Valor</th>
+                                        <th class="text-center">Boleto</th>
                                         <th class="text-center">Status</th>
-                                        <th>Pagamento</th>
+                                        <th class="text-center">Acoes</th>
                                     </tr>
                                 </thead>
                                 <tbody>
@@ -285,15 +291,30 @@
                                         <td>{{ parcela.data_vencimento|date:"d/m/Y" }}</td>
                                         <td class="text-end">
                                             R$ {{ parcela.valor_atual|floatformat:2 }}
+                                            {% if parcela.pago %}
+                                            <br><small class="text-muted">Pago: R$ {{ parcela.valor_pago|floatformat:2 }}</small>
+                                            {% endif %}
+                                        </td>
+                                        <td class="text-center">
+                                            {% if parcela.tem_boleto %}
+                                                <span class="badge bg-success" title="Boleto gerado">
+                                                    <i class="fas fa-barcode"></i>
+                                                </span>
+                                            {% else %}
+                                                <span class="badge bg-secondary" title="Sem boleto">
+                                                    <i class="fas fa-minus"></i>
+                                                </span>
+                                            {% endif %}
                                         </td>
                                         <td class="text-center">
                                             {% if parcela.pago %}
                                                 <span class="badge bg-success">
                                                     <i class="fas fa-check"></i> Pago
                                                 </span>
+                                                <br><small>{{ parcela.data_pagamento|date:"d/m/Y" }}</small>
                                             {% elif parcela.esta_atrasada %}
                                                 <span class="badge bg-danger">
-                                                    <i class="fas fa-exclamation-triangle"></i> Atrasada
+                                                    <i class="fas fa-exclamation-triangle"></i> {{ parcela.dias_atraso }}d
                                                 </span>
                                             {% else %}
                                                 <span class="badge bg-secondary">
@@ -301,25 +322,40 @@
                                                 </span>
                                             {% endif %}
                                         </td>
-                                        <td>
-                                            {% if parcela.pago %}
-                                                <small>
-                                                    {{ parcela.data_pagamento|date:"d/m/Y" }}
-                                                    <br>
-                                                    R$ {{ parcela.valor_pago|floatformat:2 }}
-                                                </small>
-                                            {% elif parcela.esta_atrasada %}
-                                                <small class="text-danger">
-                                                    {{ parcela.dias_atraso }} dias
-                                                </small>
-                                            {% else %}
-                                                -
-                                            {% endif %}
+                                        <td class="text-center">
+                                            <div class="btn-group btn-group-sm">
+                                                {% if not parcela.pago %}
+                                                    {% if parcela.tem_boleto %}
+                                                        <a href="{% url 'financeiro:visualizar_boleto' parcela.pk %}"
+                                                           class="btn btn-outline-primary" title="Ver Boleto">
+                                                            <i class="fas fa-eye"></i>
+                                                        </a>
+                                                        <button type="button" class="btn btn-outline-warning"
+                                                                onclick="regenerarBoleto({{ parcela.pk }})" title="Atualizar Boleto">
+                                                            <i class="fas fa-sync"></i>
+                                                        </button>
+                                                    {% else %}
+                                                        <button type="button" class="btn btn-outline-success"
+                                                                onclick="gerarBoleto({{ parcela.pk }})" title="Gerar Boleto">
+                                                            <i class="fas fa-barcode"></i>
+                                                        </button>
+                                                    {% endif %}
+                                                    <button type="button" class="btn btn-outline-success"
+                                                            onclick="abrirModalPagamento({{ parcela.pk }}, '{{ parcela.data_vencimento|date:"Y-m-d" }}', {{ parcela.valor_atual }}, {{ contrato.percentual_juros_mora }}, {{ contrato.percentual_multa }})"
+                                                            title="Registrar Pagamento">
+                                                        <i class="fas fa-dollar-sign"></i>
+                                                    </button>
+                                                {% else %}
+                                                    <span class="text-success" title="Parcela quitada">
+                                                        <i class="fas fa-check-circle"></i>
+                                                    </span>
+                                                {% endif %}
+                                            </div>
                                         </td>
                                     </tr>
                                     {% empty %}
                                     <tr>
-                                        <td colspan="5" class="text-center text-muted py-4">
+                                        <td colspan="6" class="text-center text-muted py-4">
                                             <i class="fas fa-info-circle"></i> Nenhuma parcela gerada
                                         </td>
                                     </tr>
@@ -405,12 +441,446 @@
         </div>
     </div>
 </div>
+
+<!-- Modal de Pagamento -->
+<div class="modal fade" id="modalPagamento" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header bg-success text-white">
+                <h5 class="modal-title">
+                    <i class="fas fa-dollar-sign"></i> Registrar Pagamento
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <form id="formPagamento" method="post">
+                {% csrf_token %}
+                <input type="hidden" id="pagamento_parcela_id" name="parcela_id">
+                <div class="modal-body">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label class="form-label">Data de Vencimento</label>
+                                <input type="date" class="form-control" id="pagamento_vencimento" readonly>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label class="form-label">Data de Pagamento <span class="text-danger">*</span></label>
+                                <input type="date" class="form-control" id="pagamento_data" name="data_pagamento" required onchange="calcularEncargos()">
+                            </div>
+                        </div>
+                    </div>
+                    <div class="row">
+                        <div class="col-md-4">
+                            <div class="mb-3">
+                                <label class="form-label">Valor Original</label>
+                                <div class="input-group">
+                                    <span class="input-group-text">R$</span>
+                                    <input type="text" class="form-control" id="pagamento_valor_original" readonly>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="mb-3">
+                                <label class="form-label">Juros (editavel)</label>
+                                <div class="input-group">
+                                    <span class="input-group-text">R$</span>
+                                    <input type="number" step="0.01" class="form-control" id="pagamento_juros" name="valor_juros" value="0" onchange="calcularTotal()">
+                                </div>
+                                <small class="text-muted" id="juros_info"></small>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="mb-3">
+                                <label class="form-label">Multa (editavel)</label>
+                                <div class="input-group">
+                                    <span class="input-group-text">R$</span>
+                                    <input type="number" step="0.01" class="form-control" id="pagamento_multa" name="valor_multa" value="0" onchange="calcularTotal()">
+                                </div>
+                                <small class="text-muted" id="multa_info"></small>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label class="form-label">Desconto (editavel)</label>
+                                <div class="input-group">
+                                    <span class="input-group-text">R$</span>
+                                    <input type="number" step="0.01" class="form-control" id="pagamento_desconto" name="valor_desconto" value="0" onchange="calcularTotal()">
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label class="form-label fw-bold">Valor a Pagar</label>
+                                <div class="input-group">
+                                    <span class="input-group-text">R$</span>
+                                    <input type="number" step="0.01" class="form-control fw-bold fs-5" id="pagamento_valor_pagar" name="valor_pago" required>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Observacoes</label>
+                        <textarea class="form-control" name="observacoes" rows="2"></textarea>
+                    </div>
+                    <div id="alertaAtraso" class="alert alert-warning d-none">
+                        <i class="fas fa-exclamation-triangle"></i>
+                        <span id="alertaAtrasoTexto"></span>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-success">
+                        <i class="fas fa-check"></i> Confirmar Pagamento
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Modal de Gerar Carne -->
+<div class="modal fade" id="modalCarne" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-primary text-white">
+                <h5 class="modal-title">
+                    <i class="fas fa-file-invoice-dollar"></i> Gerar Carne de Boletos
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <form id="formCarne" method="post">
+                {% csrf_token %}
+                <div class="modal-body">
+                    <div class="alert alert-info">
+                        <i class="fas fa-info-circle"></i>
+                        Gere boletos para as proximas parcelas pendentes.
+                        {% if contrato.data_proximo_reajuste %}
+                        <br><strong>Atencao:</strong> Proximo reajuste em {{ contrato.data_proximo_reajuste|date:"d/m/Y" }}.
+                        Parcelas apos esta data nao poderao ter boleto gerado agora.
+                        {% endif %}
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label">Quantidade de Boletos <span class="text-danger">*</span></label>
+                        <input type="number" class="form-control" id="carne_quantidade" name="quantidade" min="1" max="{{ parcelas_pendentes }}" value="1" required>
+                        <small class="text-muted">{{ parcelas_pendentes }} parcela(s) pendente(s) disponivel(eis)</small>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label">Parcelas que serao geradas:</label>
+                        <div id="preview_parcelas" class="border rounded p-2" style="max-height: 200px; overflow-y: auto;">
+                            <small class="text-muted">Selecione a quantidade...</small>
+                        </div>
+                    </div>
+
+                    <div id="alertaReajuste" class="alert alert-warning d-none">
+                        <i class="fas fa-exclamation-triangle"></i>
+                        <span id="alertaReajusteTexto"></span>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-primary" id="btnGerarCarne">
+                        <i class="fas fa-barcode"></i> Gerar Boletos
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
 {% endblock %}
 
 {% block extra_js %}
 <script>
+// Dados das parcelas para o modal de carne
+var parcelasPendentes = [
+    {% for parcela in parcelas %}{% if not parcela.pago and not parcela.tem_boleto %}
+    {id: {{ parcela.pk }}, numero: {{ parcela.numero_parcela }}, vencimento: '{{ parcela.data_vencimento|date:"d/m/Y" }}', valor: {{ parcela.valor_atual }}},
+    {% endif %}{% endfor %}
+];
+
+var dataReajuste = '{{ contrato.data_proximo_reajuste|date:"Y-m-d"|default:"" }}';
+
+// Variaveis para calculo de pagamento
+var pagamentoValorOriginal = 0;
+var pagamentoTaxaJuros = 0;
+var pagamentoTaxaMulta = 0;
+var pagamentoVencimento = null;
+
 function confirmarCancelamento() {
     new bootstrap.Modal(document.getElementById('modalCancelamento')).show();
 }
+
+// ============ FUNCOES DE BOLETO ============
+
+function gerarBoleto(parcelaId) {
+    if (!confirm('Deseja gerar o boleto para esta parcela?')) return;
+
+    fetch('/financeiro/parcelas/' + parcelaId + '/boleto/gerar/', {
+        method: 'POST',
+        headers: {
+            'X-CSRFToken': '{{ csrf_token }}',
+            'Content-Type': 'application/json'
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.sucesso) {
+            alert('Boleto gerado com sucesso!\nNosso Numero: ' + data.nosso_numero);
+            location.reload();
+        } else {
+            alert('Erro ao gerar boleto: ' + data.erro);
+        }
+    })
+    .catch(error => alert('Erro de conexao: ' + error));
+}
+
+function regenerarBoleto(parcelaId) {
+    if (!confirm('Deseja regenerar/atualizar o boleto desta parcela?')) return;
+
+    fetch('/financeiro/parcelas/' + parcelaId + '/boleto/gerar/', {
+        method: 'POST',
+        headers: {
+            'X-CSRFToken': '{{ csrf_token }}',
+            'Content-Type': 'application/x-www-form-urlencoded'
+        },
+        body: 'force=true'
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.sucesso) {
+            alert('Boleto atualizado com sucesso!');
+            location.reload();
+        } else {
+            alert('Erro ao atualizar boleto: ' + data.erro);
+        }
+    })
+    .catch(error => alert('Erro de conexao: ' + error));
+}
+
+// ============ FUNCOES DE PAGAMENTO ============
+
+function abrirModalPagamento(parcelaId, vencimento, valorOriginal, taxaJuros, taxaMulta) {
+    pagamentoValorOriginal = parseFloat(valorOriginal);
+    pagamentoTaxaJuros = parseFloat(taxaJuros);
+    pagamentoTaxaMulta = parseFloat(taxaMulta);
+    pagamentoVencimento = new Date(vencimento + 'T00:00:00');
+
+    document.getElementById('pagamento_parcela_id').value = parcelaId;
+    document.getElementById('pagamento_vencimento').value = vencimento;
+    document.getElementById('pagamento_valor_original').value = valorOriginal.toFixed(2);
+    document.getElementById('pagamento_data').value = new Date().toISOString().split('T')[0];
+    document.getElementById('pagamento_juros').value = '0';
+    document.getElementById('pagamento_multa').value = '0';
+    document.getElementById('pagamento_desconto').value = '0';
+
+    document.getElementById('juros_info').textContent = pagamentoTaxaJuros + '% a.m.';
+    document.getElementById('multa_info').textContent = pagamentoTaxaMulta + '%';
+
+    calcularEncargos();
+    new bootstrap.Modal(document.getElementById('modalPagamento')).show();
+}
+
+function calcularEncargos() {
+    var dataPagamento = new Date(document.getElementById('pagamento_data').value + 'T00:00:00');
+    var diasAtraso = Math.floor((dataPagamento - pagamentoVencimento) / (1000 * 60 * 60 * 24));
+
+    var alertaDiv = document.getElementById('alertaAtraso');
+    var alertaTexto = document.getElementById('alertaAtrasoTexto');
+
+    if (diasAtraso > 0) {
+        // Calcular juros (proporcional aos dias)
+        var juros = pagamentoValorOriginal * (pagamentoTaxaJuros / 100) * (diasAtraso / 30);
+        // Calcular multa (valor fixo)
+        var multa = pagamentoValorOriginal * (pagamentoTaxaMulta / 100);
+
+        document.getElementById('pagamento_juros').value = juros.toFixed(2);
+        document.getElementById('pagamento_multa').value = multa.toFixed(2);
+
+        alertaDiv.classList.remove('d-none');
+        alertaTexto.textContent = 'Parcela em atraso ha ' + diasAtraso + ' dia(s). Juros e multa calculados automaticamente.';
+    } else {
+        document.getElementById('pagamento_juros').value = '0';
+        document.getElementById('pagamento_multa').value = '0';
+        alertaDiv.classList.add('d-none');
+    }
+
+    calcularTotal();
+}
+
+function calcularTotal() {
+    var valorOriginal = parseFloat(document.getElementById('pagamento_valor_original').value) || 0;
+    var juros = parseFloat(document.getElementById('pagamento_juros').value) || 0;
+    var multa = parseFloat(document.getElementById('pagamento_multa').value) || 0;
+    var desconto = parseFloat(document.getElementById('pagamento_desconto').value) || 0;
+
+    var total = valorOriginal + juros + multa - desconto;
+    document.getElementById('pagamento_valor_pagar').value = total.toFixed(2);
+}
+
+document.getElementById('formPagamento').addEventListener('submit', function(e) {
+    e.preventDefault();
+
+    var parcelaId = document.getElementById('pagamento_parcela_id').value;
+    var formData = new FormData(this);
+
+    fetch('/financeiro/parcelas/' + parcelaId + '/pagar-ajax/', {
+        method: 'POST',
+        headers: {
+            'X-CSRFToken': '{{ csrf_token }}'
+        },
+        body: formData
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.sucesso) {
+            alert('Pagamento registrado com sucesso!');
+            location.reload();
+        } else {
+            alert('Erro ao registrar pagamento: ' + data.erro);
+        }
+    })
+    .catch(error => alert('Erro de conexao: ' + error));
+});
+
+// ============ FUNCOES DE CARNE ============
+
+function abrirModalCarne() {
+    document.getElementById('carne_quantidade').value = 1;
+    atualizarPreviewCarne();
+    new bootstrap.Modal(document.getElementById('modalCarne')).show();
+}
+
+document.getElementById('carne_quantidade').addEventListener('change', atualizarPreviewCarne);
+document.getElementById('carne_quantidade').addEventListener('input', atualizarPreviewCarne);
+
+function atualizarPreviewCarne() {
+    var qtd = parseInt(document.getElementById('carne_quantidade').value) || 0;
+    var previewDiv = document.getElementById('preview_parcelas');
+    var alertaDiv = document.getElementById('alertaReajuste');
+    var alertaTexto = document.getElementById('alertaReajusteTexto');
+    var btnGerar = document.getElementById('btnGerarCarne');
+
+    if (qtd < 1 || parcelasPendentes.length === 0) {
+        previewDiv.innerHTML = '<small class="text-muted">Nenhuma parcela selecionada</small>';
+        alertaDiv.classList.add('d-none');
+        return;
+    }
+
+    var html = '<ul class="list-unstyled mb-0">';
+    var parcelasAposReajuste = 0;
+    var parcelasValidas = 0;
+
+    for (var i = 0; i < Math.min(qtd, parcelasPendentes.length); i++) {
+        var p = parcelasPendentes[i];
+        var podeGerar = true;
+
+        // Verificar se a parcela esta apos data de reajuste
+        if (dataReajuste) {
+            var vencParts = p.vencimento.split('/');
+            var vencDate = new Date(vencParts[2], vencParts[1] - 1, vencParts[0]);
+            var reajDate = new Date(dataReajuste);
+
+            if (vencDate >= reajDate) {
+                podeGerar = false;
+                parcelasAposReajuste++;
+            }
+        }
+
+        if (podeGerar) {
+            parcelasValidas++;
+            html += '<li class="py-1 border-bottom">';
+            html += '<i class="fas fa-check text-success me-2"></i>';
+        } else {
+            html += '<li class="py-1 border-bottom text-muted">';
+            html += '<i class="fas fa-times text-danger me-2"></i>';
+        }
+
+        html += '<strong>Parcela ' + p.numero + '</strong> - ' + p.vencimento + ' - R$ ' + p.valor.toFixed(2);
+        if (!podeGerar) {
+            html += ' <small class="text-danger">(apos reajuste)</small>';
+        }
+        html += '</li>';
+    }
+    html += '</ul>';
+
+    previewDiv.innerHTML = html;
+
+    if (parcelasAposReajuste > 0) {
+        alertaDiv.classList.remove('d-none');
+        alertaTexto.textContent = parcelasAposReajuste + ' parcela(s) estao apos a data de reajuste e nao serao geradas.';
+        document.getElementById('carne_quantidade').max = parcelasValidas;
+    } else {
+        alertaDiv.classList.add('d-none');
+    }
+
+    btnGerar.disabled = parcelasValidas === 0;
+}
+
+document.getElementById('formCarne').addEventListener('submit', function(e) {
+    e.preventDefault();
+
+    var qtd = parseInt(document.getElementById('carne_quantidade').value) || 0;
+    if (qtd < 1) {
+        alert('Selecione pelo menos 1 parcela');
+        return;
+    }
+
+    // Coletar IDs das parcelas validas
+    var parcelaIds = [];
+    for (var i = 0; i < Math.min(qtd, parcelasPendentes.length); i++) {
+        var p = parcelasPendentes[i];
+        var podeGerar = true;
+
+        if (dataReajuste) {
+            var vencParts = p.vencimento.split('/');
+            var vencDate = new Date(vencParts[2], vencParts[1] - 1, vencParts[0]);
+            var reajDate = new Date(dataReajuste);
+            if (vencDate >= reajDate) {
+                podeGerar = false;
+            }
+        }
+
+        if (podeGerar) {
+            parcelaIds.push(p.id);
+        }
+    }
+
+    if (parcelaIds.length === 0) {
+        alert('Nenhuma parcela valida para gerar boleto');
+        return;
+    }
+
+    document.getElementById('btnGerarCarne').disabled = true;
+    document.getElementById('btnGerarCarne').innerHTML = '<i class="fas fa-spinner fa-spin"></i> Gerando...';
+
+    fetch('/financeiro/contrato/{{ contrato.pk }}/gerar-carne/', {
+        method: 'POST',
+        headers: {
+            'X-CSRFToken': '{{ csrf_token }}',
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({parcelas: parcelaIds})
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.sucesso) {
+            alert('Carne gerado com sucesso!\n' + data.gerados + ' boleto(s) gerado(s).');
+            location.reload();
+        } else {
+            alert('Erro ao gerar carne: ' + data.erro);
+            document.getElementById('btnGerarCarne').disabled = false;
+            document.getElementById('btnGerarCarne').innerHTML = '<i class="fas fa-barcode"></i> Gerar Boletos';
+        }
+    })
+    .catch(error => {
+        alert('Erro de conexao: ' + error);
+        document.getElementById('btnGerarCarne').disabled = false;
+        document.getElementById('btnGerarCarne').innerHTML = '<i class="fas fa-barcode"></i> Gerar Boletos';
+    });
+});
 </script>
 {% endblock %}
