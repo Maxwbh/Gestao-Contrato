@@ -9,7 +9,7 @@ from django.contrib.auth.decorators import login_required
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.http import JsonResponse, HttpResponse
 from django.views.decorators.http import require_http_methods
-from django.views.decorators.csrf import csrf_exempt
+# csrf_exempt removido por questões de segurança - endpoints agora verificam permissões
 from django.core.management import call_command
 from django.db import connection
 from django.contrib.auth import get_user_model
@@ -61,6 +61,84 @@ class AcessoMixin:
         return usuario_tem_acesso_imobiliaria(self.request.user, imobiliaria)
 
 
+# =============================================================================
+# HEALTH CHECK - MONITORAMENTO
+# =============================================================================
+
+def health_check(request):
+    """
+    Endpoint para verificação de saúde da aplicação.
+
+    Retorna JSON com status dos serviços:
+    - database: Conexão com o banco de dados
+    - cache: Conexão com Redis (se configurado)
+
+    Códigos HTTP:
+    - 200: Sistema saudável
+    - 503: Sistema com problemas
+    """
+    import time
+    start_time = time.time()
+
+    status = {
+        'status': 'healthy',
+        'timestamp': datetime.now().isoformat(),
+        'checks': {
+            'database': {'status': 'unknown', 'latency_ms': None},
+            'cache': {'status': 'unknown', 'latency_ms': None},
+        }
+    }
+
+    # Verificar banco de dados
+    try:
+        db_start = time.time()
+        with connection.cursor() as cursor:
+            cursor.execute("SELECT 1")
+            cursor.fetchone()
+        db_latency = (time.time() - db_start) * 1000
+        status['checks']['database'] = {
+            'status': 'healthy',
+            'latency_ms': round(db_latency, 2)
+        }
+    except Exception as e:
+        status['status'] = 'unhealthy'
+        status['checks']['database'] = {
+            'status': 'unhealthy',
+            'error': str(e)
+        }
+
+    # Verificar cache/Redis
+    try:
+        from django.core.cache import cache
+        cache_start = time.time()
+        cache.set('health_check_test', 'ok', 10)
+        result = cache.get('health_check_test')
+        cache_latency = (time.time() - cache_start) * 1000
+
+        if result == 'ok':
+            status['checks']['cache'] = {
+                'status': 'healthy',
+                'latency_ms': round(cache_latency, 2)
+            }
+        else:
+            status['checks']['cache'] = {
+                'status': 'degraded',
+                'message': 'Cache read/write mismatch'
+            }
+    except Exception as e:
+        # Cache não é crítico, então não marca como unhealthy
+        status['checks']['cache'] = {
+            'status': 'unavailable',
+            'message': str(e)
+        }
+
+    # Tempo total de verificação
+    status['total_latency_ms'] = round((time.time() - start_time) * 1000, 2)
+
+    http_status = 200 if status['status'] == 'healthy' else 503
+    return JsonResponse(status, status=http_status)
+
+
 def index(request):
     """Página inicial do sistema"""
     try:
@@ -89,13 +167,13 @@ def dashboard(request):
     return render(request, 'core/dashboard.html', context)
 
 
-@csrf_exempt
 def setup(request):
     """
     Página de setup inicial do sistema
     Executa migrations, cria superuser e opcionalmente gera dados de teste
 
     Acessível via: /setup/
+    NOTA: Endpoint protegido - requer superusuário para ações POST
     """
     if request.method == 'GET':
         # Verificar status do banco
@@ -134,7 +212,23 @@ def setup(request):
         }
         return render(request, 'core/setup.html', context)
 
-    # POST - Executar setup
+    # POST - Executar setup (requer autenticação para ações sensíveis)
+    # Verificar se é primeira configuração (sem usuários) ou se usuário é superuser
+    User = get_user_model()
+    is_first_setup = User.objects.count() == 0
+
+    if not is_first_setup:
+        if not request.user.is_authenticated:
+            return JsonResponse({
+                'status': 'error',
+                'message': 'Autenticação necessária. Faça login como admin.'
+            }, status=401)
+        if not request.user.is_superuser:
+            return JsonResponse({
+                'status': 'error',
+                'message': 'Acesso negado. Apenas superusuários podem executar o setup.'
+            }, status=403)
+
     try:
         action = request.POST.get('action', 'setup')
         out = io.StringIO()
@@ -206,14 +300,13 @@ def setup(request):
         }, status=500)
 
 
-@csrf_exempt
 @require_http_methods(["GET", "POST"])
 def gerar_dados_teste(request):
     """
-    Endpoint para gerar dados de teste
+    Endpoint para gerar dados de teste (APENAS SUPERUSUÁRIO para POST)
 
     GET: Retorna status do sistema
-    POST: Gera dados de teste
+    POST: Gera dados de teste (requer autenticação de superusuário)
 
     Parâmetros POST (form-data ou JSON):
         limpar (bool): Se deve limpar dados antes (default: False)
@@ -222,6 +315,18 @@ def gerar_dados_teste(request):
         curl -X POST http://localhost:8000/api/gerar-dados-teste/ -d "limpar=true"
         curl -X POST http://localhost:8000/api/gerar-dados-teste/ -H "Content-Type: application/json" -d '{"limpar": true}'
     """
+    # Verificar permissões para POST
+    if request.method == 'POST':
+        if not request.user.is_authenticated:
+            return JsonResponse({
+                'status': 'error',
+                'message': 'Autenticação necessária. Faça login como admin.'
+            }, status=401)
+        if not request.user.is_superuser:
+            return JsonResponse({
+                'status': 'error',
+                'message': 'Acesso negado. Apenas superusuários podem gerar dados de teste.'
+            }, status=403)
     # Importar modelos adicionais
     from contratos.models import Contrato, IndiceReajuste
     from financeiro.models import Parcela
@@ -299,7 +404,6 @@ def gerar_dados_teste(request):
         }, status=500)
 
 
-@csrf_exempt
 @require_http_methods(["GET", "POST", "DELETE"])
 def limpar_dados_teste(request):
     """

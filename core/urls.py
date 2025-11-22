@@ -9,6 +9,9 @@ from . import views
 app_name = 'core'
 
 urlpatterns = [
+    # Health Check (monitoramento)
+    path('health/', views.health_check, name='health_check'),
+
     # Páginas principais
     path('', views.index, name='index'),
     path('setup/', views.setup, name='setup'),
