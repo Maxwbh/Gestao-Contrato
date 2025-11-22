@@ -1,0 +1,194 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Parcela {{ parcela.numero_parcela }} - {{ parcela.contrato.numero_contrato }}{% endblock %}
+
+{% block extra_css %}
+<style>
+    .badge-pago { background-color: #28a745; }
+    .badge-pendente { background-color: #ffc107; color: #212529; }
+    .badge-vencida { background-color: #dc3545; }
+    .info-label { font-weight: 600; color: #6c757d; }
+    .info-value { font-size: 1.1rem; }
+    .valor-total { font-size: 1.5rem; font-weight: bold; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <!-- Header -->
+    <div class="row mb-4">
+        <div class="col">
+            <nav aria-label="breadcrumb">
+                <ol class="breadcrumb">
+                    <li class="breadcrumb-item"><a href="{% url 'financeiro:listar_parcelas' %}">Parcelas</a></li>
+                    <li class="breadcrumb-item active">Parcela {{ parcela.numero_parcela }}</li>
+                </ol>
+            </nav>
+            <h2>
+                <i class="fas fa-file-invoice-dollar me-2"></i>
+                Parcela {{ parcela.numero_parcela }}/{{ parcela.contrato.numero_parcelas }}
+                {% if parcela.pago %}
+                    <span class="badge badge-pago">Pago</span>
+                {% elif parcela.esta_vencida %}
+                    <span class="badge badge-vencida">Vencida</span>
+                {% else %}
+                    <span class="badge badge-pendente">Pendente</span>
+                {% endif %}
+            </h2>
+        </div>
+    </div>
+
+    <div class="row">
+        <!-- Informações da Parcela -->
+        <div class="col-md-6 mb-4">
+            <div class="card h-100">
+                <div class="card-header">
+                    <strong><i class="fas fa-info-circle me-2"></i>Informações da Parcela</strong>
+                </div>
+                <div class="card-body">
+                    <div class="row mb-3">
+                        <div class="col-6">
+                            <span class="info-label">Contrato:</span><br>
+                            <span class="info-value">{{ parcela.contrato.numero_contrato }}</span>
+                        </div>
+                        <div class="col-6">
+                            <span class="info-label">Parcela:</span><br>
+                            <span class="info-value">{{ parcela.numero_parcela }} de {{ parcela.contrato.numero_parcelas }}</span>
+                        </div>
+                    </div>
+                    <div class="row mb-3">
+                        <div class="col-6">
+                            <span class="info-label">Data Vencimento:</span><br>
+                            <span class="info-value">{{ parcela.data_vencimento|date:"d/m/Y" }}</span>
+                        </div>
+                        <div class="col-6">
+                            <span class="info-label">Data Pagamento:</span><br>
+                            <span class="info-value">
+                                {% if parcela.data_pagamento %}
+                                    {{ parcela.data_pagamento|date:"d/m/Y" }}
+                                {% else %}
+                                    -
+                                {% endif %}
+                            </span>
+                        </div>
+                    </div>
+                    <hr>
+                    <div class="row mb-3">
+                        <div class="col-6">
+                            <span class="info-label">Valor Original:</span><br>
+                            <span class="info-value">R$ {{ parcela.valor_original|floatformat:2 }}</span>
+                        </div>
+                        <div class="col-6">
+                            <span class="info-label">Valor Atual:</span><br>
+                            <span class="info-value">R$ {{ parcela.valor_atual|floatformat:2 }}</span>
+                        </div>
+                    </div>
+                    <div class="row mb-3">
+                        <div class="col-6">
+                            <span class="info-label">Juros:</span><br>
+                            <span class="info-value text-warning">R$ {{ parcela.valor_juros|floatformat:2|default:"0.00" }}</span>
+                        </div>
+                        <div class="col-6">
+                            <span class="info-label">Multa:</span><br>
+                            <span class="info-value text-danger">R$ {{ parcela.valor_multa|floatformat:2|default:"0.00" }}</span>
+                        </div>
+                    </div>
+                    <hr>
+                    <div class="row">
+                        <div class="col-12 text-center">
+                            <span class="info-label">Valor Total a Pagar:</span><br>
+                            <span class="valor-total text-primary">R$ {{ parcela.valor_total|floatformat:2 }}</span>
+                        </div>
+                    </div>
+                    {% if parcela.pago %}
+                    <hr>
+                    <div class="row">
+                        <div class="col-12 text-center">
+                            <span class="info-label">Valor Pago:</span><br>
+                            <span class="valor-total text-success">R$ {{ parcela.valor_pago|floatformat:2 }}</span>
+                        </div>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <!-- Informações do Contrato/Comprador -->
+        <div class="col-md-6 mb-4">
+            <div class="card h-100">
+                <div class="card-header">
+                    <strong><i class="fas fa-user me-2"></i>Comprador / Contrato</strong>
+                </div>
+                <div class="card-body">
+                    <div class="row mb-3">
+                        <div class="col-12">
+                            <span class="info-label">Comprador:</span><br>
+                            <span class="info-value">{{ parcela.contrato.comprador.nome }}</span>
+                        </div>
+                    </div>
+                    <div class="row mb-3">
+                        <div class="col-6">
+                            <span class="info-label">CPF/CNPJ:</span><br>
+                            <span class="info-value">
+                                {% if parcela.contrato.comprador.tipo_pessoa == 'PF' %}
+                                    {{ parcela.contrato.comprador.cpf }}
+                                {% else %}
+                                    {{ parcela.contrato.comprador.cnpj }}
+                                {% endif %}
+                            </span>
+                        </div>
+                        <div class="col-6">
+                            <span class="info-label">Telefone:</span><br>
+                            <span class="info-value">{{ parcela.contrato.comprador.celular|default:parcela.contrato.comprador.telefone|default:"-" }}</span>
+                        </div>
+                    </div>
+                    <hr>
+                    <div class="row mb-3">
+                        <div class="col-12">
+                            <span class="info-label">Imóvel:</span><br>
+                            <span class="info-value">{{ parcela.contrato.imovel.identificacao }}</span>
+                        </div>
+                    </div>
+                    <div class="row mb-3">
+                        <div class="col-12">
+                            <span class="info-label">Loteamento:</span><br>
+                            <span class="info-value">{{ parcela.contrato.imovel.loteamento|default:"-" }}</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Observações -->
+    {% if parcela.observacoes %}
+    <div class="row">
+        <div class="col-12 mb-4">
+            <div class="card">
+                <div class="card-header">
+                    <strong><i class="fas fa-sticky-note me-2"></i>Observações</strong>
+                </div>
+                <div class="card-body">
+                    {{ parcela.observacoes }}
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Ações -->
+    <div class="row">
+        <div class="col-12">
+            <a href="{% url 'financeiro:listar_parcelas' %}" class="btn btn-secondary">
+                <i class="fas fa-arrow-left me-2"></i>Voltar
+            </a>
+            {% if not parcela.pago %}
+            <button class="btn btn-success" disabled title="Em desenvolvimento">
+                <i class="fas fa-dollar-sign me-2"></i>Registrar Pagamento
+            </button>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}
