@@ -2,13 +2,22 @@
 # Desenvolvedor: Maxwell da Silva Oliveira
 # M&S do Brasil LTDA
 #
-# VERSÃO FREE TIER
+# VERSÃO FREE TIER (Otimizada)
 # Esta configuração é otimizada para o plano gratuito do Render
-# Limitações: Não inclui Celery Workers (disponível apenas em planos pagos)
-# Solução: Tarefas automáticas podem ser executadas manualmente via Django Admin
+#
+# LIMITAÇÕES DO FREE TIER:
+# - Sem Background Workers (Celery não disponível)
+# - Serviço pode "adormecer" após 15 min de inatividade
+# - PostgreSQL: 1GB storage, 1 conexão
+# - Redis: 25MB memória
+#
+# SOLUÇÕES IMPLEMENTADAS:
+# - API de tarefas via HTTP (/api/tasks/run-all/)
+# - Health check otimizado (/health/)
+# - Cron externo via cron-job.org (gratuito)
 
 databases:
-  # PostgreSQL Database
+  # PostgreSQL Database (Free: 1GB, expira em 90 dias se inativo)
   - name: gestao-contrato-db
     databaseName: gestao_contrato
     user: gestao_contrato_user
@@ -21,8 +30,9 @@ services:
     runtime: python
     plan: free
     buildCommand: chmod +x build.sh && ./build.sh
-    startCommand: gunicorn gestao_contrato.wsgi:application --bind 0.0.0.0:$PORT --timeout 120 --workers 2
-    healthCheckPath: /admin/
+    startCommand: gunicorn gestao_contrato.wsgi:application --bind 0.0.0.0:$PORT --timeout 120 --workers 2 --threads 2 --worker-class gthread
+    # Health check no endpoint dedicado (mais rápido que /admin/)
+    healthCheckPath: /health/
     envVars:
       - key: PYTHON_VERSION
         value: "3.11.0"
@@ -41,34 +51,69 @@ services:
           name: gestao-contrato-redis
           type: redis
           property: connectionString
+      # Token para API de tarefas (gerar um valor seguro)
+      - key: TASK_TOKEN
+        generateValue: true
 
-  # Redis (para cache e sessões)
+  # Redis (para cache e sessões - Free: 25MB)
   - type: redis
     name: gestao-contrato-redis
     plan: free
     maxmemoryPolicy: allkeys-lru
     ipAllowList: []
 
-# NOTA IMPORTANTE:
-# ================
+# =============================================================================
+# CONFIGURAÇÃO DE TAREFAS AGENDADAS (Alternativa ao Celery)
+# =============================================================================
+#
 # O plano gratuito do Render não suporta Background Workers (Celery).
+# Implementamos uma API de tarefas que pode ser chamada por cron externos.
 #
-# FUNCIONALIDADES AFETADAS:
-# - Reajustes automáticos de parcelas (IPCA/IGPM/SELIC)
-# - Envio automático de notificações
+# OPÇÃO 1: CRON EXTERNO (Recomendado - Gratuito)
+# ----------------------------------------------
+# 1. Acesse https://cron-job.org e crie uma conta gratuita
+# 2. Após o deploy, acesse seu app no Render e copie o valor de TASK_TOKEN
+# 3. Crie um novo cron job com:
+#    - URL: https://seu-app.onrender.com/api/tasks/run-all/
+#    - Método: POST
+#    - Header: X-Task-Token: <seu-token>
+#    - Agenda: Diariamente às 08:00
 #
-# SOLUÇÕES ALTERNATIVAS:
-# 1. Execute manualmente via Django Admin:
-#    - Acesse /admin/financeiro/reajuste/
-#    - Crie e aplique reajustes manualmente
-#    - Acesse /admin/notificacoes/notificacao/
-#    - Envie notificações manualmente
+# Tarefas executadas:
+#   - Atualizar status de parcelas vencidas
+#   - Processar reajustes pendentes (IPCA/IGP-M/SELIC)
+#   - Enviar notificações de vencimento
 #
-# 2. Use Django Management Commands via Render Shell:
-#    - Conecte ao shell do Render
-#    - Execute: python manage.py processar_reajustes
-#    - Execute: python manage.py enviar_notificacoes
+# OPÇÃO 2: EXECUÇÃO MANUAL
+# ------------------------
+# Via Django Admin:
+#   - /admin/financeiro/reajuste/
+#   - /admin/notificacoes/notificacao/
 #
-# 3. Upgrade para plano pago (recomendado para produção):
-#    - Adicione os workers de volta ao render.yaml
-#    - Tarefas serão executadas automaticamente
+# Via API (com token):
+#   curl -X POST https://seu-app.onrender.com/api/tasks/run-all/ \
+#        -H "X-Task-Token: seu-token"
+#
+# Via Render Shell:
+#   python manage.py processar_reajustes
+#   python manage.py enviar_notificacoes
+#
+# OPÇÃO 3: UPGRADE PARA PLANO PAGO
+# --------------------------------
+# Com o plano pago, você pode adicionar workers Celery:
+#   - type: worker
+#     name: gestao-contrato-worker
+#     runtime: python
+#     startCommand: celery -A gestao_contrato worker -l info
+#
+# =============================================================================
+# KEEP-ALIVE (Evitar que o serviço adormeça)
+# =============================================================================
+# O Free tier "adormece" após 15 min de inatividade. Para manter ativo:
+#
+# 1. Configure um cron job adicional em cron-job.org:
+#    - URL: https://seu-app.onrender.com/health/
+#    - Método: GET
+#    - Agenda: A cada 10 minutos
+#
+# 2. Ou use https://uptimerobot.com (gratuito, 5 min interval)
