@@ -181,17 +181,71 @@
                 <span class="navbar-toggler-icon"></span>
             </button>
             <div class="collapse navbar-collapse" id="navbarNav">
-                <ul class="navbar-nav ms-auto">
+                <ul class="navbar-nav me-auto">
+                    <!-- Dashboard Principal -->
                     <li class="nav-item">
                         <a class="nav-link" href="{% url 'core:dashboard' %}">
                             <i class="fas fa-tachometer-alt"></i> Dashboard
                         </a>
                     </li>
+
+                    <!-- Financeiro -->
                     <li class="nav-item dropdown">
-                        <a class="nav-link dropdown-toggle" href="#" id="cadastrosDropdown" role="button" data-bs-toggle="dropdown">
-                            <i class="fas fa-folder"></i> Cadastros
+                        <a class="nav-link dropdown-toggle" href="#" id="financeiroDropdown" role="button" data-bs-toggle="dropdown">
+                            <i class="fas fa-dollar-sign"></i> Financeiro
                         </a>
                         <ul class="dropdown-menu">
+                            <li><a class="dropdown-item" href="{% url 'financeiro:dashboard' %}">
+                                <i class="fas fa-chart-line"></i> Dashboard Financeiro
+                            </a></li>
+                            <li><hr class="dropdown-divider"></li>
+                            <li><a class="dropdown-item" href="{% url 'financeiro:listar_parcelas' %}">
+                                <i class="fas fa-list"></i> Todas as Parcelas
+                            </a></li>
+                            <li><a class="dropdown-item" href="{% url 'financeiro:parcelas_mes' %}">
+                                <i class="fas fa-calendar-alt"></i> Parcelas do Mês
+                            </a></li>
+                            <li><hr class="dropdown-divider"></li>
+                            <li class="dropdown-header">
+                                <i class="fas fa-barcode"></i> Boletos
+                            </li>
+                            <li><a class="dropdown-item" href="{% url 'financeiro:listar_parcelas' %}?status_boleto=NAO_GERADO">
+                                <i class="fas fa-exclamation-circle text-warning"></i> Pendentes de Geração
+                            </a></li>
+                            <li><a class="dropdown-item" href="{% url 'financeiro:listar_parcelas' %}?status_boleto=GERADO">
+                                <i class="fas fa-check-circle text-success"></i> Boletos Gerados
+                            </a></li>
+                        </ul>
+                    </li>
+
+                    <!-- Contratos -->
+                    <li class="nav-item dropdown">
+                        <a class="nav-link dropdown-toggle" href="#" id="contratosDropdown" role="button" data-bs-toggle="dropdown">
+                            <i class="fas fa-file-contract"></i> Contratos
+                        </a>
+                        <ul class="dropdown-menu">
+                            <li><a class="dropdown-item" href="{% url 'contratos:listar' %}">
+                                <i class="fas fa-list"></i> Todos os Contratos
+                            </a></li>
+                            <li><a class="dropdown-item" href="{% url 'contratos:criar' %}">
+                                <i class="fas fa-plus-circle"></i> Novo Contrato
+                            </a></li>
+                            <li><hr class="dropdown-divider"></li>
+                            <li><a class="dropdown-item" href="{% url 'contratos:listar_indices' %}">
+                                <i class="fas fa-chart-bar"></i> Índices de Reajuste
+                            </a></li>
+                        </ul>
+                    </li>
+
+                    <!-- Cadastros -->
+                    <li class="nav-item dropdown">
+                        <a class="nav-link dropdown-toggle" href="#" id="cadastrosDropdown" role="button" data-bs-toggle="dropdown">
+                            <i class="fas fa-database"></i> Cadastros
+                        </a>
+                        <ul class="dropdown-menu">
+                            <li class="dropdown-header">
+                                <i class="fas fa-building"></i> Estrutura
+                            </li>
                             <li><a class="dropdown-item" href="{% url 'core:listar_contabilidades' %}">
                                 <i class="fas fa-calculator"></i> Contabilidades
                             </a></li>
@@ -202,30 +256,29 @@
                                 <i class="fas fa-home"></i> Imóveis
                             </a></li>
                             <li><hr class="dropdown-divider"></li>
+                            <li class="dropdown-header">
+                                <i class="fas fa-users"></i> Pessoas
+                            </li>
                             <li><a class="dropdown-item" href="{% url 'core:listar_compradores' %}">
-                                <i class="fas fa-users"></i> Compradores
+                                <i class="fas fa-user-tie"></i> Compradores
                             </a></li>
                         </ul>
                     </li>
-                    <li class="nav-item">
-                        <a class="nav-link" href="{% url 'contratos:listar' %}">
-                            <i class="fas fa-file-alt"></i> Contratos
-                        </a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link" href="{% url 'financeiro:listar_parcelas' %}">
-                            <i class="fas fa-money-bill-wave"></i> Parcelas
-                        </a>
-                    </li>
+
+                    <!-- Notificações -->
                     <li class="nav-item">
                         <a class="nav-link" href="{% url 'notificacoes:listar' %}">
                             <i class="fas fa-bell"></i> Notificações
                         </a>
                     </li>
+                </ul>
+
+                <!-- Menu à direita -->
+                <ul class="navbar-nav ms-auto">
                     {% if user.is_staff or user.is_superuser %}
                     <li class="nav-item dropdown">
                         <a class="nav-link dropdown-toggle" href="#" id="adminDropdown" role="button" data-bs-toggle="dropdown">
-                            <i class="fas fa-cog"></i> Administração
+                            <i class="fas fa-cog"></i> Admin
                         </a>
                         <ul class="dropdown-menu dropdown-menu-end">
                             <li><a class="dropdown-item" href="{% url 'core:listar_acessos' %}">
@@ -234,6 +287,22 @@
                             <li><hr class="dropdown-divider"></li>
                             <li><a class="dropdown-item" href="/admin/">
                                 <i class="fas fa-tools"></i> Django Admin
+                            </a></li>
+                        </ul>
+                    </li>
+                    {% endif %}
+                    {% if user.is_authenticated %}
+                    <li class="nav-item dropdown">
+                        <a class="nav-link dropdown-toggle" href="#" id="userDropdown" role="button" data-bs-toggle="dropdown">
+                            <i class="fas fa-user-circle"></i> {{ user.username }}
+                        </a>
+                        <ul class="dropdown-menu dropdown-menu-end">
+                            <li><a class="dropdown-item" href="#">
+                                <i class="fas fa-user"></i> Meu Perfil
+                            </a></li>
+                            <li><hr class="dropdown-divider"></li>
+                            <li><a class="dropdown-item" href="{% url 'admin:logout' %}">
+                                <i class="fas fa-sign-out-alt"></i> Sair
                             </a></li>
                         </ul>
                     </li>
