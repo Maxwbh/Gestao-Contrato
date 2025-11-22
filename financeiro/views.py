@@ -1231,3 +1231,185 @@ def download_arquivo_retorno(request, pk):
         logger.exception(f"Erro ao fazer download do retorno: {e}")
         messages.error(request, 'Erro ao baixar o arquivo.')
         return redirect('financeiro:detalhe_retorno', pk=pk)
+
+
+# =============================================================================
+# VIEWS DE PAGAMENTO E CARNE
+# =============================================================================
+
+@login_required
+@require_POST
+def pagar_parcela_ajax(request, pk):
+    """
+    Registra o pagamento de uma parcela via AJAX.
+    Permite editar juros, multa e desconto manualmente.
+    """
+    from .models import HistoricoPagamento
+
+    parcela = get_object_or_404(Parcela, pk=pk)
+
+    if parcela.pago:
+        return JsonResponse({
+            'sucesso': False,
+            'erro': 'Esta parcela ja esta paga'
+        }, status=400)
+
+    try:
+        data_pagamento = request.POST.get('data_pagamento')
+        valor_pago = Decimal(request.POST.get('valor_pago', 0))
+        valor_juros = Decimal(request.POST.get('valor_juros', 0))
+        valor_multa = Decimal(request.POST.get('valor_multa', 0))
+        valor_desconto = Decimal(request.POST.get('valor_desconto', 0))
+        observacoes = request.POST.get('observacoes', '')
+
+        if not data_pagamento:
+            data_pagamento = timezone.now().date()
+
+        # Atualizar parcela
+        parcela.valor_juros = valor_juros
+        parcela.valor_multa = valor_multa
+        parcela.valor_desconto = valor_desconto
+        parcela.pago = True
+        parcela.data_pagamento = data_pagamento
+        parcela.valor_pago = valor_pago
+
+        if observacoes:
+            parcela.observacoes = observacoes
+
+        # Atualizar status do boleto se houver
+        if parcela.tem_boleto:
+            parcela.status_boleto = StatusBoleto.PAGO
+            parcela.data_pagamento_boleto = timezone.now()
+            parcela.valor_pago_boleto = valor_pago
+
+        parcela.save()
+
+        # Registrar historico
+        HistoricoPagamento.objects.create(
+            parcela=parcela,
+            data_pagamento=data_pagamento,
+            valor_pago=valor_pago,
+            valor_parcela=parcela.valor_atual,
+            valor_juros=valor_juros,
+            valor_multa=valor_multa,
+            valor_desconto=valor_desconto,
+            forma_pagamento='DINHEIRO',
+            observacoes=observacoes
+        )
+
+        return JsonResponse({
+            'sucesso': True,
+            'mensagem': 'Pagamento registrado com sucesso',
+            'parcela_id': parcela.id
+        })
+
+    except Exception as e:
+        logger.exception(f"Erro ao registrar pagamento: {e}")
+        return JsonResponse({
+            'sucesso': False,
+            'erro': str(e)
+        }, status=500)
+
+
+@login_required
+@require_POST
+def gerar_carne(request, contrato_id):
+    """
+    Gera boletos para multiplas parcelas de um contrato (carne).
+    Valida data de reajuste - nao gera boletos para parcelas apos reajuste.
+    """
+    import json
+
+    contrato = get_object_or_404(Contrato, pk=contrato_id)
+
+    try:
+        data = json.loads(request.body)
+        parcela_ids = data.get('parcelas', [])
+
+        if not parcela_ids:
+            return JsonResponse({
+                'sucesso': False,
+                'erro': 'Nenhuma parcela selecionada'
+            }, status=400)
+
+        # Buscar parcelas
+        parcelas = Parcela.objects.filter(
+            pk__in=parcela_ids,
+            contrato=contrato,
+            pago=False
+        ).order_by('data_vencimento')
+
+        if not parcelas.exists():
+            return JsonResponse({
+                'sucesso': False,
+                'erro': 'Nenhuma parcela valida encontrada'
+            }, status=400)
+
+        # Verificar data de reajuste
+        data_reajuste = contrato.data_proximo_reajuste
+        resultados = []
+        gerados = 0
+        bloqueados = 0
+
+        for parcela in parcelas:
+            # Verificar se parcela esta antes do reajuste
+            if data_reajuste and parcela.data_vencimento >= data_reajuste:
+                resultados.append({
+                    'parcela_id': parcela.id,
+                    'sucesso': False,
+                    'erro': 'Parcela apos data de reajuste'
+                })
+                bloqueados += 1
+                continue
+
+            # Verificar se ja tem boleto
+            if parcela.tem_boleto:
+                resultados.append({
+                    'parcela_id': parcela.id,
+                    'sucesso': True,
+                    'mensagem': 'Boleto ja existente'
+                })
+                continue
+
+            # Gerar boleto
+            try:
+                resultado = parcela.gerar_boleto(enviar_email=False)
+                if resultado and resultado.get('sucesso'):
+                    gerados += 1
+                    resultados.append({
+                        'parcela_id': parcela.id,
+                        'sucesso': True,
+                        'nosso_numero': resultado.get('nosso_numero')
+                    })
+                else:
+                    resultados.append({
+                        'parcela_id': parcela.id,
+                        'sucesso': False,
+                        'erro': resultado.get('erro') if resultado else 'Erro desconhecido'
+                    })
+            except Exception as e:
+                resultados.append({
+                    'parcela_id': parcela.id,
+                    'sucesso': False,
+                    'erro': str(e)
+                })
+
+        return JsonResponse({
+            'sucesso': True,
+            'gerados': gerados,
+            'bloqueados': bloqueados,
+            'total': len(parcela_ids),
+            'resultados': resultados
+        })
+
+    except json.JSONDecodeError:
+        return JsonResponse({
+            'sucesso': False,
+            'erro': 'Dados invalidos'
+        }, status=400)
+    except Exception as e:
+        logger.exception(f"Erro ao gerar carne: {e}")
+        return JsonResponse({
+            'sucesso': False,
+            'erro': str(e)
+        }, status=500)
