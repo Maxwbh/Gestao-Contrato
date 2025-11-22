@@ -19,7 +19,7 @@ from django.utils import timezone
 from django.db import transaction
 from faker import Faker
 
-from core.models import Contabilidade, Imobiliaria, Imovel, Comprador, TipoImovel
+from core.models import Contabilidade, Imobiliaria, Imovel, Comprador, TipoImovel, ContaBancaria
 from contratos.models import Contrato, TipoCorrecao, StatusContrato, IndiceReajuste
 from financeiro.models import Parcela
 
@@ -72,6 +72,10 @@ class Command(BaseCommand):
             self.stdout.write('Criando Imobiliárias...')
             imobiliarias = self.criar_imobiliarias(contabilidade, 2)
 
+            # 2.1 Criar Contas Bancárias para cada imobiliária
+            self.stdout.write('Criando Contas Bancárias...')
+            contas_bancarias = self.criar_contas_bancarias(imobiliarias)
+
             # 3. Criar 2 Loteamentos com 30 Lotes cada
             self.stdout.write('Criando Loteamentos...')
             lotes = self.criar_loteamentos(imobiliarias, 2, 30)
@@ -104,6 +108,7 @@ class Command(BaseCommand):
         self.stdout.write(self.style.SUCCESS('\n✅ Dados gerados com sucesso!'))
         self.stdout.write(self.style.SUCCESS(f'   • 1 Contabilidade'))
         self.stdout.write(self.style.SUCCESS(f'   • 2 Imobiliárias'))
+        self.stdout.write(self.style.SUCCESS(f'   • {len(contas_bancarias)} Contas Bancárias'))
         self.stdout.write(self.style.SUCCESS(f'   • {len(lotes)} Lotes'))
         self.stdout.write(self.style.SUCCESS(f'   • {len(terrenos)} Terrenos'))
         self.stdout.write(self.style.SUCCESS(f'   • {len(compradores)} Compradores ({pf_count} PF + {pj_count} PJ)'))
@@ -117,6 +122,7 @@ class Command(BaseCommand):
         IndiceReajuste.objects.all().delete()
         Imovel.objects.all().delete()
         Comprador.objects.all().delete()
+        ContaBancaria.objects.all().delete()
         Imobiliaria.objects.all().delete()
         Contabilidade.objects.all().delete()
 
@@ -181,6 +187,63 @@ class Command(BaseCommand):
             imobiliarias.append(imobiliaria)
 
         return imobiliarias
+
+    def criar_contas_bancarias(self, imobiliarias):
+        """Cria Contas Bancárias para cada imobiliária"""
+        contas = []
+
+        bancos_config = [
+            {
+                'banco': '001',  # Banco do Brasil
+                'descricao': 'Conta Principal BB',
+                'agencia': '3073-2',
+                'conta': '12345-6',
+                'convenio': '1234567',
+                'carteira': '17',
+                'nosso_numero_atual': 1,
+            },
+            {
+                'banco': '104',  # Caixa
+                'descricao': 'Conta Boletos Caixa',
+                'agencia': '0123',
+                'conta': '00012345-6',
+                'convenio': '123456',
+                'carteira': 'SR',
+                'nosso_numero_atual': 1,
+            },
+            {
+                'banco': '237',  # Bradesco
+                'descricao': 'Conta Bradesco',
+                'agencia': '1234-5',
+                'conta': '123456-7',
+                'convenio': '',
+                'carteira': '09',
+                'nosso_numero_atual': 1,
+            },
+        ]
+
+        for imobiliaria in imobiliarias:
+            for i, config in enumerate(bancos_config[:2]):  # 2 contas por imobiliária
+                conta = ContaBancaria.objects.create(
+                    imobiliaria=imobiliaria,
+                    banco=config['banco'],
+                    descricao=f"{config['descricao']} - {imobiliaria.nome}",
+                    principal=(i == 0),
+                    agencia=config['agencia'],
+                    conta=config['conta'],
+                    convenio=config['convenio'],
+                    carteira=config['carteira'],
+                    nosso_numero_atual=config['nosso_numero_atual'],
+                    cobranca_registrada=True,
+                    prazo_baixa=30,
+                    prazo_protesto=0,
+                    layout_cnab='CNAB_240',
+                    numero_remessa_cnab_atual=1,
+                    ativo=True
+                )
+                contas.append(conta)
+
+        return contas
 
     def criar_loteamentos(self, imobiliarias, num_loteamentos, lotes_por_loteamento):
         """Cria Loteamentos com Lotes"""
