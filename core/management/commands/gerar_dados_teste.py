@@ -89,11 +89,16 @@ class Command(BaseCommand):
             imoveis = lotes + terrenos
             contratos = self.criar_contratos(imoveis, compradores, imobiliarias)
 
-            # 7. Marcar 90% das parcelas como pagas
+            # 7. Remover parcelas futuras (manter apenas até o mês atual)
+            self.stdout.write('Removendo parcelas futuras...')
+            parcelas_removidas = self.remover_parcelas_futuras()
+            self.stdout.write(f'   {parcelas_removidas} parcelas futuras removidas')
+
+            # 8. Marcar 90% das parcelas como pagas
             self.stdout.write('Marcando parcelas como pagas...')
             self.marcar_parcelas_pagas(contratos, 0.90)
 
-            # 8. Gerar índices de reajuste
+            # 9. Gerar índices de reajuste
             self.stdout.write('Gerando índices de reajuste...')
             indices = self.gerar_indices_reajuste()
 
@@ -387,6 +392,21 @@ class Command(BaseCommand):
             contratos.append(contrato)
 
         return contratos
+
+    def remover_parcelas_futuras(self):
+        """Remove parcelas com vencimento após o mês atual"""
+        from dateutil.relativedelta import relativedelta
+
+        # Último dia do mês atual
+        hoje = timezone.now().date()
+        ultimo_dia_mes = hoje.replace(day=1) + relativedelta(months=1) - relativedelta(days=1)
+
+        # Deletar parcelas com vencimento futuro
+        parcelas_futuras = Parcela.objects.filter(data_vencimento__gt=ultimo_dia_mes)
+        count = parcelas_futuras.count()
+        parcelas_futuras.delete()
+
+        return count
 
     def marcar_parcelas_pagas(self, contratos, percentual=0.90):
         """Marca 90% das parcelas como pagas"""
