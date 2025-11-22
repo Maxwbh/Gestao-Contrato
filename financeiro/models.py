@@ -142,11 +142,11 @@ class Parcela(TimeStampedModel):
         dias_atraso = (data_referencia - self.data_vencimento).days
 
         # Calcular multa (aplicada uma vez)
-        multa = self.valor_atual * (self.contrato.percentual_multa / 100)
+        multa = self.valor_atual * (self.contrato.percentual_multa / Decimal('100'))
 
         # Calcular juros (proporcional aos dias de atraso)
         # Juros = valor * (taxa_mensal / 30) * dias_atraso
-        juros = self.valor_atual * (self.contrato.percentual_juros_mora / 100) * (dias_atraso / 30)
+        juros = self.valor_atual * (self.contrato.percentual_juros_mora / Decimal('100')) * (Decimal(dias_atraso) / Decimal('30'))
 
         return juros, multa
 
