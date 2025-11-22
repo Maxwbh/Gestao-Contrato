@@ -1413,3 +1413,304 @@ def gerar_carne(request, contrato_id):
             'sucesso': False,
             'erro': str(e)
         }, status=500)
+
+
+# =============================================================================
+# REAJUSTES DE CONTRATO
+# =============================================================================
+
+@login_required
+@require_POST
+def aplicar_reajuste_contrato(request, contrato_id):
+    """
+    Aplica um reajuste manual nas parcelas de um contrato.
+    Recebe: indice_tipo, percentual, parcela_inicial, parcela_final, observacoes
+    """
+    contrato = get_object_or_404(Contrato, pk=contrato_id)
+
+    try:
+        import json
+        data = json.loads(request.body) if request.content_type == 'application/json' else request.POST
+
+        indice_tipo = data.get('indice_tipo', 'MANUAL')
+        percentual = Decimal(str(data.get('percentual', 0)))
+        parcela_inicial = int(data.get('parcela_inicial', 1))
+        parcela_final = int(data.get('parcela_final', contrato.numero_parcelas))
+        observacoes = data.get('observacoes', '')
+
+        if percentual == 0:
+            return JsonResponse({
+                'sucesso': False,
+                'erro': 'O percentual de reajuste nao pode ser zero'
+            }, status=400)
+
+        # Validar parcelas
+        if parcela_inicial < 1 or parcela_final > contrato.numero_parcelas:
+            return JsonResponse({
+                'sucesso': False,
+                'erro': 'Numeros de parcela invalidos'
+            }, status=400)
+
+        if parcela_inicial > parcela_final:
+            return JsonResponse({
+                'sucesso': False,
+                'erro': 'Parcela inicial deve ser menor ou igual a parcela final'
+            }, status=400)
+
+        # Verificar se há parcelas não pagas no intervalo
+        parcelas_pendentes = contrato.parcelas.filter(
+            numero_parcela__gte=parcela_inicial,
+            numero_parcela__lte=parcela_final,
+            pago=False
+        )
+
+        if not parcelas_pendentes.exists():
+            return JsonResponse({
+                'sucesso': False,
+                'erro': 'Nenhuma parcela pendente no intervalo selecionado'
+            }, status=400)
+
+        # Criar o registro de reajuste
+        reajuste = Reajuste.objects.create(
+            contrato=contrato,
+            data_reajuste=timezone.now().date(),
+            indice_tipo=indice_tipo,
+            percentual=percentual,
+            parcela_inicial=parcela_inicial,
+            parcela_final=parcela_final,
+            aplicado_manual=True,
+            observacoes=observacoes
+        )
+
+        # Aplicar o reajuste nas parcelas
+        reajuste.aplicar_reajuste()
+
+        # Contar parcelas afetadas
+        parcelas_afetadas = parcelas_pendentes.count()
+
+        return JsonResponse({
+            'sucesso': True,
+            'mensagem': f'Reajuste de {percentual}% aplicado com sucesso em {parcelas_afetadas} parcela(s)',
+            'reajuste_id': reajuste.id,
+            'parcelas_afetadas': parcelas_afetadas
+        })
+
+    except ValueError as e:
+        return JsonResponse({
+            'sucesso': False,
+            'erro': f'Valor invalido: {str(e)}'
+        }, status=400)
+    except Exception as e:
+        logger.exception(f"Erro ao aplicar reajuste: {e}")
+        return JsonResponse({
+            'sucesso': False,
+            'erro': str(e)
+        }, status=500)
+
+
+@login_required
+@require_POST
+def excluir_reajuste(request, pk):
+    """
+    Exclui um reajuste e reverte os valores das parcelas.
+    Apenas reajustes manuais podem ser excluidos.
+    """
+    reajuste = get_object_or_404(Reajuste, pk=pk)
+
+    if not reajuste.aplicado_manual:
+        return JsonResponse({
+            'sucesso': False,
+            'erro': 'Apenas reajustes manuais podem ser excluidos'
+        }, status=400)
+
+    try:
+        contrato = reajuste.contrato
+
+        # Reverter o reajuste nas parcelas
+        fator_reajuste = 1 + (reajuste.percentual / 100)
+
+        parcelas = contrato.parcelas.filter(
+            numero_parcela__gte=reajuste.parcela_inicial,
+            numero_parcela__lte=reajuste.parcela_final,
+            pago=False
+        )
+
+        for parcela in parcelas:
+            # Reverter o valor (dividir pelo fator aplicado)
+            parcela.valor_atual = parcela.valor_atual / fator_reajuste
+            parcela.save()
+
+        # Excluir o registro de reajuste
+        reajuste.delete()
+
+        return JsonResponse({
+            'sucesso': True,
+            'mensagem': 'Reajuste excluido e valores revertidos com sucesso'
+        })
+
+    except Exception as e:
+        logger.exception(f"Erro ao excluir reajuste: {e}")
+        return JsonResponse({
+            'sucesso': False,
+            'erro': str(e)
+        }, status=500)
+
+
+@login_required
+def obter_indice_reajuste(request):
+    """
+    Retorna o percentual do indice de reajuste para um tipo e periodo.
+    Parametros GET: tipo_indice, ano, mes
+    """
+    from contratos.models import IndiceReajuste
+
+    tipo_indice = request.GET.get('tipo_indice', '')
+    ano = request.GET.get('ano', timezone.now().year)
+    mes = request.GET.get('mes', timezone.now().month)
+
+    try:
+        ano = int(ano)
+        mes = int(mes)
+
+        indice = IndiceReajuste.objects.filter(
+            tipo_indice=tipo_indice,
+            ano=ano,
+            mes=mes
+        ).first()
+
+        if indice:
+            return JsonResponse({
+                'sucesso': True,
+                'percentual': float(indice.percentual),
+                'tipo_indice': indice.tipo_indice,
+                'ano': indice.ano,
+                'mes': indice.mes
+            })
+        else:
+            return JsonResponse({
+                'sucesso': False,
+                'erro': f'Indice {tipo_indice} nao encontrado para {mes}/{ano}'
+            })
+
+    except Exception as e:
+        return JsonResponse({
+            'sucesso': False,
+            'erro': str(e)
+        }, status=500)
+
+
+@login_required
+def calcular_reajuste_proporcional(request, contrato_id):
+    """
+    Calcula o percentual de reajuste acumulado proporcional para um contrato.
+
+    O calculo considera:
+    - Primeiro mes: proporcional aos dias restantes do mes
+    - Meses intermediarios: indice completo
+    - Ultimo mes: proporcional aos dias do mes ate a data final
+
+    Parametros GET: tipo_indice (opcional, usa o indice do contrato se nao informado)
+    """
+    from contratos.models import IndiceReajuste
+    from calendar import monthrange
+    from datetime import date
+
+    contrato = get_object_or_404(Contrato, pk=contrato_id)
+
+    try:
+        tipo_indice = request.GET.get('tipo_indice', contrato.get_tipo_correcao_display())
+
+        # Determinar periodo do reajuste
+        if contrato.data_ultimo_reajuste:
+            data_inicio = contrato.data_ultimo_reajuste
+        else:
+            data_inicio = contrato.data_contrato
+
+        data_fim = timezone.now().date()
+
+        # Se nao passou prazo minimo, retornar 0
+        meses_desde = (data_fim.year - data_inicio.year) * 12 + (data_fim.month - data_inicio.month)
+        if meses_desde < contrato.prazo_reajuste_meses:
+            return JsonResponse({
+                'sucesso': False,
+                'erro': f'Reajuste ainda nao e necessario. Proximo reajuste em {contrato.prazo_reajuste_meses - meses_desde} mese(s).'
+            })
+
+        # Calcular reajuste proporcional
+        fator_acumulado = Decimal('1.0')
+        detalhes_meses = []
+
+        # Iterar pelos meses do periodo
+        mes_atual = data_inicio.month
+        ano_atual = data_inicio.year
+
+        while (ano_atual < data_fim.year) or (ano_atual == data_fim.year and mes_atual <= data_fim.month):
+            # Buscar indice do mes
+            indice = IndiceReajuste.objects.filter(
+                tipo_indice=tipo_indice,
+                ano=ano_atual,
+                mes=mes_atual
+            ).first()
+
+            if indice:
+                percentual_mes = indice.percentual
+            else:
+                percentual_mes = Decimal('0')
+
+            # Calcular dias do mes
+            dias_no_mes = monthrange(ano_atual, mes_atual)[1]
+
+            # Primeiro mes - proporcional
+            if ano_atual == data_inicio.year and mes_atual == data_inicio.month:
+                dias_considerados = dias_no_mes - data_inicio.day + 1
+                proporcao = Decimal(dias_considerados) / Decimal(dias_no_mes)
+            # Ultimo mes - proporcional
+            elif ano_atual == data_fim.year and mes_atual == data_fim.month:
+                dias_considerados = data_fim.day
+                proporcao = Decimal(dias_considerados) / Decimal(dias_no_mes)
+            # Meses intermediarios - completo
+            else:
+                dias_considerados = dias_no_mes
+                proporcao = Decimal('1.0')
+
+            # Aplicar proporcao ao indice
+            percentual_proporcional = percentual_mes * proporcao
+            fator_mes = 1 + (percentual_proporcional / 100)
+            fator_acumulado *= fator_mes
+
+            detalhes_meses.append({
+                'mes': mes_atual,
+                'ano': ano_atual,
+                'indice_original': float(percentual_mes),
+                'dias_considerados': dias_considerados,
+                'dias_mes': dias_no_mes,
+                'proporcao': float(proporcao),
+                'indice_proporcional': float(percentual_proporcional)
+            })
+
+            # Avancar para proximo mes
+            mes_atual += 1
+            if mes_atual > 12:
+                mes_atual = 1
+                ano_atual += 1
+
+        # Calcular percentual total
+        percentual_total = (fator_acumulado - 1) * 100
+
+        return JsonResponse({
+            'sucesso': True,
+            'percentual_acumulado': float(percentual_total),
+            'fator_acumulado': float(fator_acumulado),
+            'data_inicio': data_inicio.strftime('%d/%m/%Y'),
+            'data_fim': data_fim.strftime('%d/%m/%Y'),
+            'tipo_indice': tipo_indice,
+            'meses_detalhes': detalhes_meses,
+            'total_meses': len(detalhes_meses)
+        })
+
+    except Exception as e:
+        logger.exception(f"Erro ao calcular reajuste proporcional: {e}")
+        return JsonResponse({
+            'sucesso': False,
+            'erro': str(e)
+        }, status=500)
