@@ -249,6 +249,72 @@
                             <div class="info-label">Prazo Reajuste</div>
                             <div class="info-value">{{ contrato.prazo_reajuste_meses }} meses</div>
                         </div>
+                        {% if contrato.data_proximo_reajuste %}
+                        <div class="info-item">
+                            <div class="info-label">Proximo Reajuste</div>
+                            <div class="info-value text-warning">{{ contrato.data_proximo_reajuste|date:"d/m/Y" }}</div>
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>
+
+                <!-- Historico de Reajustes -->
+                <div class="card mb-3">
+                    <div class="card-header bg-secondary text-white d-flex justify-content-between align-items-center">
+                        <span><i class="fas fa-chart-line"></i> Reajustes</span>
+                        <button type="button" class="btn btn-sm btn-light" onclick="abrirModalReajuste()">
+                            <i class="fas fa-plus"></i> Novo
+                        </button>
+                    </div>
+                    <div class="card-body p-0">
+                        {% if reajustes %}
+                        <div class="table-responsive" style="max-height: 300px; overflow-y: auto;">
+                            <table class="table table-sm table-hover mb-0">
+                                <thead class="table-light sticky-top">
+                                    <tr>
+                                        <th>Data</th>
+                                        <th>Indice</th>
+                                        <th class="text-end">%</th>
+                                        <th>Parcelas</th>
+                                        <th></th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for reajuste in reajustes %}
+                                    <tr>
+                                        <td>{{ reajuste.data_reajuste|date:"d/m/Y" }}</td>
+                                        <td>
+                                            <span class="badge {% if reajuste.aplicado_manual %}bg-warning{% else %}bg-info{% endif %}">
+                                                {{ reajuste.indice_tipo }}
+                                            </span>
+                                        </td>
+                                        <td class="text-end">
+                                            {% if reajuste.percentual >= 0 %}
+                                            <span class="text-success">+{{ reajuste.percentual|floatformat:2 }}%</span>
+                                            {% else %}
+                                            <span class="text-danger">{{ reajuste.percentual|floatformat:2 }}%</span>
+                                            {% endif %}
+                                        </td>
+                                        <td>{{ reajuste.parcela_inicial }}-{{ reajuste.parcela_final }}</td>
+                                        <td>
+                                            {% if reajuste.aplicado_manual %}
+                                            <button type="button" class="btn btn-sm btn-outline-danger"
+                                                    onclick="excluirReajuste({{ reajuste.pk }})"
+                                                    title="Excluir e reverter">
+                                                <i class="fas fa-trash"></i>
+                                            </button>
+                                            {% endif %}
+                                        </td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                        {% else %}
+                        <div class="p-3 text-center text-muted">
+                            <i class="fas fa-info-circle"></i> Nenhum reajuste aplicado
+                        </div>
+                        {% endif %}
                     </div>
                 </div>
             </div>
@@ -591,6 +657,88 @@
         </div>
     </div>
 </div>
+
+<!-- Modal de Reajuste Manual -->
+<div class="modal fade" id="modalReajuste" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-secondary text-white">
+                <h5 class="modal-title">
+                    <i class="fas fa-chart-line"></i> Aplicar Reajuste Manual
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <form id="formReajuste" method="post">
+                {% csrf_token %}
+                <div class="modal-body">
+                    <div class="alert alert-info">
+                        <i class="fas fa-info-circle"></i>
+                        O reajuste sera aplicado apenas nas parcelas <strong>nao pagas</strong> dentro do intervalo selecionado.
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label">Tipo de Indice <span class="text-danger">*</span></label>
+                        <select name="indice_tipo" id="reajuste_indice" class="form-select" required onchange="buscarPercentualIndice()">
+                            <option value="">Selecione...</option>
+                            {% for codigo, nome in tipos_indice %}
+                            <option value="{{ codigo }}">{{ nome }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label">Percentual de Reajuste (%) <span class="text-danger">*</span></label>
+                        <div class="input-group">
+                            <input type="number" step="0.0001" class="form-control" id="reajuste_percentual" name="percentual" required placeholder="Ex: 5.25">
+                            <span class="input-group-text">%</span>
+                            <button type="button" class="btn btn-outline-secondary" onclick="calcularReajusteProporcional()" title="Calcular reajuste acumulado proporcional">
+                                <i class="fas fa-calculator"></i> Calcular
+                            </button>
+                        </div>
+                        <small class="text-muted" id="reajuste_info"></small>
+                    </div>
+
+                    <div id="detalhesCalculo" class="alert alert-secondary d-none" style="max-height: 150px; overflow-y: auto;">
+                        <h6><i class="fas fa-info-circle"></i> Detalhes do Calculo</h6>
+                        <div id="detalhesCalculoConteudo"></div>
+                    </div>
+
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label class="form-label">Parcela Inicial <span class="text-danger">*</span></label>
+                                <input type="number" class="form-control" id="reajuste_parcela_inicial" name="parcela_inicial" min="1" max="{{ contrato.numero_parcelas }}" value="1" required>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label class="form-label">Parcela Final <span class="text-danger">*</span></label>
+                                <input type="number" class="form-control" id="reajuste_parcela_final" name="parcela_final" min="1" max="{{ contrato.numero_parcelas }}" value="{{ contrato.numero_parcelas }}" required>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label">Observacoes</label>
+                        <textarea class="form-control" name="observacoes" rows="2" placeholder="Motivo do reajuste manual..."></textarea>
+                    </div>
+
+                    <div id="previewReajuste" class="border rounded p-3 bg-light d-none">
+                        <h6><i class="fas fa-calculator"></i> Previa do Reajuste</h6>
+                        <p class="mb-1">Parcelas afetadas: <strong id="preview_qtd">0</strong></p>
+                        <p class="mb-0">Novo valor aproximado: <strong id="preview_novo_valor">R$ 0,00</strong></p>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-primary" id="btnAplicarReajuste">
+                        <i class="fas fa-check"></i> Aplicar Reajuste
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
 {% endblock %}
 
 {% block extra_js %}
@@ -882,5 +1030,209 @@ document.getElementById('formCarne').addEventListener('submit', function(e) {
         document.getElementById('btnGerarCarne').innerHTML = '<i class="fas fa-barcode"></i> Gerar Boletos';
     });
 });
+
+// ============ FUNCOES DE REAJUSTE ============
+
+// Dados das parcelas para calculo de reajuste
+var todasParcelas = [
+    {% for parcela in parcelas %}
+    {id: {{ parcela.pk }}, numero: {{ parcela.numero_parcela }}, valor: {{ parcela.valor_atual }}, pago: {% if parcela.pago %}true{% else %}false{% endif %}},
+    {% endfor %}
+];
+
+function abrirModalReajuste() {
+    document.getElementById('reajuste_indice').value = '';
+    document.getElementById('reajuste_percentual').value = '';
+    document.getElementById('reajuste_parcela_inicial').value = 1;
+    document.getElementById('reajuste_parcela_final').value = {{ contrato.numero_parcelas }};
+    document.getElementById('reajuste_info').textContent = '';
+    document.getElementById('previewReajuste').classList.add('d-none');
+    document.getElementById('detalhesCalculo').classList.add('d-none');
+    new bootstrap.Modal(document.getElementById('modalReajuste')).show();
+}
+
+function buscarPercentualIndice() {
+    var tipoIndice = document.getElementById('reajuste_indice').value;
+    var infoSpan = document.getElementById('reajuste_info');
+
+    if (!tipoIndice || tipoIndice === 'MANUAL') {
+        infoSpan.textContent = tipoIndice === 'MANUAL' ? 'Informe o percentual manualmente ou clique em Calcular' : '';
+        document.getElementById('detalhesCalculo').classList.add('d-none');
+        return;
+    }
+
+    infoSpan.textContent = 'Selecione e clique em Calcular para obter o reajuste acumulado proporcional';
+}
+
+function calcularReajusteProporcional() {
+    var tipoIndice = document.getElementById('reajuste_indice').value;
+    var infoSpan = document.getElementById('reajuste_info');
+    var detalhesDiv = document.getElementById('detalhesCalculo');
+    var detalhesConteudo = document.getElementById('detalhesCalculoConteudo');
+
+    if (!tipoIndice) {
+        alert('Selecione um tipo de indice primeiro');
+        return;
+    }
+
+    if (tipoIndice === 'MANUAL') {
+        alert('Para indice manual, informe o percentual diretamente');
+        return;
+    }
+
+    infoSpan.textContent = 'Calculando reajuste proporcional...';
+
+    fetch('/financeiro/contrato/{{ contrato.pk }}/reajuste/calcular/?tipo_indice=' + tipoIndice)
+    .then(response => response.json())
+    .then(data => {
+        if (data.sucesso) {
+            document.getElementById('reajuste_percentual').value = data.percentual_acumulado.toFixed(4);
+            infoSpan.textContent = 'Reajuste acumulado ' + tipoIndice + ' de ' + data.data_inicio + ' a ' + data.data_fim + ': ' + data.percentual_acumulado.toFixed(4) + '%';
+
+            // Mostrar detalhes do calculo
+            var html = '<small>';
+            html += '<p class="mb-1"><strong>Periodo:</strong> ' + data.data_inicio + ' a ' + data.data_fim + '</p>';
+            html += '<p class="mb-1"><strong>Meses:</strong> ' + data.total_meses + '</p>';
+            html += '<table class="table table-sm table-bordered mb-0" style="font-size: 0.75rem;">';
+            html += '<thead><tr><th>Mes/Ano</th><th>Indice</th><th>Dias</th><th>Prop.</th></tr></thead><tbody>';
+
+            for (var i = 0; i < data.meses_detalhes.length; i++) {
+                var m = data.meses_detalhes[i];
+                html += '<tr>';
+                html += '<td>' + m.mes + '/' + m.ano + '</td>';
+                html += '<td>' + m.indice_original.toFixed(2) + '%</td>';
+                html += '<td>' + m.dias_considerados + '/' + m.dias_mes + '</td>';
+                html += '<td>' + m.indice_proporcional.toFixed(4) + '%</td>';
+                html += '</tr>';
+            }
+
+            html += '</tbody></table>';
+            html += '</small>';
+
+            detalhesConteudo.innerHTML = html;
+            detalhesDiv.classList.remove('d-none');
+
+            atualizarPreviewReajuste();
+        } else {
+            infoSpan.textContent = data.erro;
+            detalhesDiv.classList.add('d-none');
+        }
+    })
+    .catch(error => {
+        infoSpan.textContent = 'Erro ao calcular reajuste: ' + error;
+        detalhesDiv.classList.add('d-none');
+    });
+}
+
+function atualizarPreviewReajuste() {
+    var percentual = parseFloat(document.getElementById('reajuste_percentual').value) || 0;
+    var parcelaInicial = parseInt(document.getElementById('reajuste_parcela_inicial').value) || 1;
+    var parcelaFinal = parseInt(document.getElementById('reajuste_parcela_final').value) || {{ contrato.numero_parcelas }};
+
+    var previewDiv = document.getElementById('previewReajuste');
+    var qtdAfetadas = 0;
+    var valorTotalNovo = 0;
+
+    for (var i = 0; i < todasParcelas.length; i++) {
+        var p = todasParcelas[i];
+        if (!p.pago && p.numero >= parcelaInicial && p.numero <= parcelaFinal) {
+            qtdAfetadas++;
+            valorTotalNovo += p.valor * (1 + percentual / 100);
+        }
+    }
+
+    if (percentual !== 0 && qtdAfetadas > 0) {
+        document.getElementById('preview_qtd').textContent = qtdAfetadas;
+        document.getElementById('preview_novo_valor').textContent = 'R$ ' + valorTotalNovo.toFixed(2);
+        previewDiv.classList.remove('d-none');
+    } else {
+        previewDiv.classList.add('d-none');
+    }
+}
+
+// Event listeners para preview de reajuste
+document.getElementById('reajuste_percentual').addEventListener('input', atualizarPreviewReajuste);
+document.getElementById('reajuste_parcela_inicial').addEventListener('change', atualizarPreviewReajuste);
+document.getElementById('reajuste_parcela_final').addEventListener('change', atualizarPreviewReajuste);
+
+document.getElementById('formReajuste').addEventListener('submit', function(e) {
+    e.preventDefault();
+
+    var percentual = parseFloat(document.getElementById('reajuste_percentual').value) || 0;
+    if (percentual === 0) {
+        alert('Informe um percentual de reajuste valido');
+        return;
+    }
+
+    var tipoIndice = document.getElementById('reajuste_indice').value;
+    var parcelaInicial = parseInt(document.getElementById('reajuste_parcela_inicial').value);
+    var parcelaFinal = parseInt(document.getElementById('reajuste_parcela_final').value);
+    var observacoes = document.querySelector('#formReajuste textarea[name="observacoes"]').value;
+
+    if (!confirm('Confirma a aplicacao do reajuste de ' + percentual + '% nas parcelas ' + parcelaInicial + ' a ' + parcelaFinal + '?\n\nEsta acao alterara os valores das parcelas pendentes.')) {
+        return;
+    }
+
+    var btn = document.getElementById('btnAplicarReajuste');
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Aplicando...';
+
+    fetch('/financeiro/contrato/{{ contrato.pk }}/reajuste/aplicar/', {
+        method: 'POST',
+        headers: {
+            'X-CSRFToken': '{{ csrf_token }}',
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+            indice_tipo: tipoIndice,
+            percentual: percentual,
+            parcela_inicial: parcelaInicial,
+            parcela_final: parcelaFinal,
+            observacoes: observacoes
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.sucesso) {
+            alert(data.mensagem);
+            location.reload();
+        } else {
+            alert('Erro ao aplicar reajuste: ' + data.erro);
+            btn.disabled = false;
+            btn.innerHTML = '<i class="fas fa-check"></i> Aplicar Reajuste';
+        }
+    })
+    .catch(error => {
+        alert('Erro de conexao: ' + error);
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fas fa-check"></i> Aplicar Reajuste';
+    });
+});
+
+function excluirReajuste(reajusteId) {
+    if (!confirm('Deseja excluir este reajuste?\n\nOs valores das parcelas serao revertidos para os valores anteriores.')) {
+        return;
+    }
+
+    fetch('/financeiro/reajuste/' + reajusteId + '/excluir/', {
+        method: 'POST',
+        headers: {
+            'X-CSRFToken': '{{ csrf_token }}',
+            'Content-Type': 'application/json'
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.sucesso) {
+            alert(data.mensagem);
+            location.reload();
+        } else {
+            alert('Erro ao excluir reajuste: ' + data.erro);
+        }
+    })
+    .catch(error => {
+        alert('Erro de conexao: ' + error);
+    });
+}
 </script>
 {% endblock %}
