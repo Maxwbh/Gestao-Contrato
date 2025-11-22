@@ -838,3 +838,396 @@ def api_status_boleto(request, pk):
         'tem_pdf': bool(parcela.boleto_pdf),
         'data_geracao': parcela.data_geracao_boleto.isoformat() if parcela.data_geracao_boleto else None,
     })
+
+
+# =============================================================================
+# VIEWS CNAB - ARQUIVOS DE REMESSA E RETORNO
+# =============================================================================
+
+@login_required
+def listar_arquivos_remessa(request):
+    """Lista todos os arquivos de remessa"""
+    from .models import ArquivoRemessa
+
+    arquivos = ArquivoRemessa.objects.select_related(
+        'conta_bancaria', 'conta_bancaria__imobiliaria'
+    ).order_by('-data_geracao')
+
+    # Filtros
+    conta_id = request.GET.get('conta')
+    status = request.GET.get('status')
+
+    if conta_id:
+        arquivos = arquivos.filter(conta_bancaria_id=conta_id)
+    if status:
+        arquivos = arquivos.filter(status=status)
+
+    contas = ContaBancaria.objects.filter(ativo=True).select_related('imobiliaria')
+
+    context = {
+        'arquivos': arquivos[:100],
+        'contas_bancarias': contas,
+        'filtro_conta': conta_id,
+        'filtro_status': status,
+    }
+    return render(request, 'financeiro/cnab/listar_remessas.html', context)
+
+
+@login_required
+def detalhe_arquivo_remessa(request, pk):
+    """Exibe detalhes de um arquivo de remessa"""
+    from .models import ArquivoRemessa
+
+    arquivo = get_object_or_404(
+        ArquivoRemessa.objects.select_related(
+            'conta_bancaria', 'conta_bancaria__imobiliaria'
+        ).prefetch_related(
+            'itens', 'itens__parcela', 'itens__parcela__contrato',
+            'itens__parcela__contrato__comprador'
+        ),
+        pk=pk
+    )
+
+    context = {
+        'arquivo': arquivo,
+        'itens': arquivo.itens.all(),
+    }
+    return render(request, 'financeiro/cnab/detalhe_remessa.html', context)
+
+
+@login_required
+def gerar_arquivo_remessa(request):
+    """
+    View para gerar novo arquivo de remessa.
+    GET: Exibe formulario com boletos disponiveis
+    POST: Gera o arquivo com os boletos selecionados
+    """
+    from .models import ArquivoRemessa, Parcela, StatusBoleto
+    from .services.cnab_service import CNABService
+
+    contas = ContaBancaria.objects.filter(ativo=True).select_related('imobiliaria')
+
+    if request.method == 'POST':
+        conta_id = request.POST.get('conta_bancaria')
+        layout = request.POST.get('layout', 'CNAB_240')
+        parcela_ids = request.POST.getlist('parcelas')
+
+        if not conta_id:
+            messages.error(request, 'Selecione uma conta bancaria.')
+            return redirect('financeiro:gerar_remessa')
+
+        if not parcela_ids:
+            messages.error(request, 'Selecione pelo menos uma parcela.')
+            return redirect('financeiro:gerar_remessa')
+
+        conta = get_object_or_404(ContaBancaria, pk=conta_id, ativo=True)
+        parcelas = Parcela.objects.filter(
+            pk__in=parcela_ids,
+            status_boleto=StatusBoleto.GERADO,
+            pago=False
+        )
+
+        if not parcelas.exists():
+            messages.error(request, 'Nenhuma parcela valida selecionada.')
+            return redirect('financeiro:gerar_remessa')
+
+        try:
+            service = CNABService()
+            resultado = service.gerar_remessa(list(parcelas), conta, layout)
+
+            if resultado.get('sucesso'):
+                arquivo = resultado.get('arquivo_remessa')
+                messages.success(
+                    request,
+                    f"Remessa {arquivo.numero_remessa} gerada com sucesso! "
+                    f"{resultado.get('quantidade_boletos')} boletos, "
+                    f"R$ {resultado.get('valor_total'):,.2f}"
+                )
+                return redirect('financeiro:detalhe_remessa', pk=arquivo.pk)
+            else:
+                messages.error(request, f"Erro ao gerar remessa: {resultado.get('erro')}")
+
+        except Exception as e:
+            logger.exception(f"Erro ao gerar remessa: {e}")
+            messages.error(request, f"Erro ao gerar remessa: {str(e)}")
+
+        return redirect('financeiro:gerar_remessa')
+
+    # GET - Exibir boletos disponiveis
+    conta_id = request.GET.get('conta')
+    boletos_disponiveis = []
+
+    if conta_id:
+        conta = get_object_or_404(ContaBancaria, pk=conta_id, ativo=True)
+        service = CNABService()
+        boletos_disponiveis = service.obter_boletos_sem_remessa(conta)
+
+    context = {
+        'contas_bancarias': contas,
+        'filtro_conta': conta_id,
+        'boletos_disponiveis': boletos_disponiveis,
+    }
+    return render(request, 'financeiro/cnab/gerar_remessa.html', context)
+
+
+@login_required
+@require_POST
+def regenerar_arquivo_remessa(request, pk):
+    """Regenera um arquivo de remessa existente"""
+    from .models import ArquivoRemessa
+    from .services.cnab_service import CNABService
+
+    arquivo = get_object_or_404(ArquivoRemessa, pk=pk)
+
+    if not arquivo.pode_reenviar:
+        return JsonResponse({
+            'sucesso': False,
+            'erro': 'Este arquivo nao pode ser regenerado'
+        }, status=400)
+
+    try:
+        service = CNABService()
+        resultado = service.regenerar_remessa(arquivo)
+
+        if resultado.get('sucesso'):
+            return JsonResponse({
+                'sucesso': True,
+                'mensagem': 'Remessa regenerada com sucesso',
+                'redirect': f"/financeiro/cnab/remessa/{resultado.get('arquivo_remessa').pk}/"
+            })
+        else:
+            return JsonResponse({
+                'sucesso': False,
+                'erro': resultado.get('erro')
+            }, status=500)
+
+    except Exception as e:
+        logger.exception(f"Erro ao regenerar remessa: {e}")
+        return JsonResponse({
+            'sucesso': False,
+            'erro': str(e)
+        }, status=500)
+
+
+@login_required
+@require_POST
+def marcar_remessa_enviada(request, pk):
+    """Marca um arquivo de remessa como enviado ao banco"""
+    from .models import ArquivoRemessa
+
+    arquivo = get_object_or_404(ArquivoRemessa, pk=pk)
+
+    if arquivo.status != 'GERADO':
+        return JsonResponse({
+            'sucesso': False,
+            'erro': 'Apenas arquivos com status GERADO podem ser marcados como enviados'
+        }, status=400)
+
+    arquivo.marcar_enviado()
+    return JsonResponse({
+        'sucesso': True,
+        'mensagem': 'Remessa marcada como enviada'
+    })
+
+
+@login_required
+def download_arquivo_remessa(request, pk):
+    """Download do arquivo de remessa"""
+    from .models import ArquivoRemessa
+
+    arquivo = get_object_or_404(ArquivoRemessa, pk=pk)
+
+    if not arquivo.arquivo:
+        messages.error(request, 'Arquivo nao disponivel para download.')
+        return redirect('financeiro:detalhe_remessa', pk=pk)
+
+    try:
+        response = FileResponse(
+            arquivo.arquivo.open('rb'),
+            as_attachment=True,
+            filename=arquivo.nome_arquivo
+        )
+        response['Content-Type'] = 'text/plain'
+        return response
+    except Exception as e:
+        logger.exception(f"Erro ao fazer download da remessa: {e}")
+        messages.error(request, 'Erro ao baixar o arquivo.')
+        return redirect('financeiro:detalhe_remessa', pk=pk)
+
+
+# =============================================================================
+# VIEWS DE ARQUIVO DE RETORNO
+# =============================================================================
+
+@login_required
+def listar_arquivos_retorno(request):
+    """Lista todos os arquivos de retorno"""
+    from .models import ArquivoRetorno
+
+    arquivos = ArquivoRetorno.objects.select_related(
+        'conta_bancaria', 'conta_bancaria__imobiliaria', 'processado_por'
+    ).order_by('-data_upload')
+
+    # Filtros
+    conta_id = request.GET.get('conta')
+    status = request.GET.get('status')
+
+    if conta_id:
+        arquivos = arquivos.filter(conta_bancaria_id=conta_id)
+    if status:
+        arquivos = arquivos.filter(status=status)
+
+    contas = ContaBancaria.objects.filter(ativo=True).select_related('imobiliaria')
+
+    context = {
+        'arquivos': arquivos[:100],
+        'contas_bancarias': contas,
+        'filtro_conta': conta_id,
+        'filtro_status': status,
+    }
+    return render(request, 'financeiro/cnab/listar_retornos.html', context)
+
+
+@login_required
+def detalhe_arquivo_retorno(request, pk):
+    """Exibe detalhes de um arquivo de retorno"""
+    from .models import ArquivoRetorno
+
+    arquivo = get_object_or_404(
+        ArquivoRetorno.objects.select_related(
+            'conta_bancaria', 'conta_bancaria__imobiliaria', 'processado_por'
+        ).prefetch_related(
+            'itens', 'itens__parcela', 'itens__parcela__contrato',
+            'itens__parcela__contrato__comprador'
+        ),
+        pk=pk
+    )
+
+    # Agrupar itens por tipo de ocorrencia
+    itens_por_tipo = {}
+    for item in arquivo.itens.all():
+        tipo = item.tipo_ocorrencia
+        if tipo not in itens_por_tipo:
+            itens_por_tipo[tipo] = []
+        itens_por_tipo[tipo].append(item)
+
+    context = {
+        'arquivo': arquivo,
+        'itens': arquivo.itens.all(),
+        'itens_por_tipo': itens_por_tipo,
+    }
+    return render(request, 'financeiro/cnab/detalhe_retorno.html', context)
+
+
+@login_required
+def upload_arquivo_retorno(request):
+    """Upload de arquivo de retorno para processamento"""
+    from .models import ArquivoRetorno
+
+    contas = ContaBancaria.objects.filter(ativo=True).select_related('imobiliaria')
+
+    if request.method == 'POST':
+        conta_id = request.POST.get('conta_bancaria')
+        arquivo_upload = request.FILES.get('arquivo')
+
+        if not conta_id:
+            messages.error(request, 'Selecione uma conta bancaria.')
+            return redirect('financeiro:upload_retorno')
+
+        if not arquivo_upload:
+            messages.error(request, 'Selecione um arquivo para upload.')
+            return redirect('financeiro:upload_retorno')
+
+        conta = get_object_or_404(ContaBancaria, pk=conta_id, ativo=True)
+
+        try:
+            arquivo_retorno = ArquivoRetorno.objects.create(
+                conta_bancaria=conta,
+                nome_arquivo=arquivo_upload.name,
+            )
+            arquivo_retorno.arquivo.save(arquivo_upload.name, arquivo_upload)
+
+            messages.success(
+                request,
+                f"Arquivo '{arquivo_upload.name}' carregado com sucesso! "
+                f"Clique em 'Processar' para realizar a baixa dos boletos."
+            )
+            return redirect('financeiro:detalhe_retorno', pk=arquivo_retorno.pk)
+
+        except Exception as e:
+            logger.exception(f"Erro ao fazer upload do retorno: {e}")
+            messages.error(request, f"Erro ao fazer upload: {str(e)}")
+
+        return redirect('financeiro:upload_retorno')
+
+    context = {
+        'contas_bancarias': contas,
+    }
+    return render(request, 'financeiro/cnab/upload_retorno.html', context)
+
+
+@login_required
+@require_POST
+def processar_arquivo_retorno(request, pk):
+    """Processa um arquivo de retorno (realiza as baixas)"""
+    from .models import ArquivoRetorno
+    from .services.cnab_service import CNABService
+
+    arquivo = get_object_or_404(ArquivoRetorno, pk=pk)
+
+    if not arquivo.pode_reprocessar:
+        return JsonResponse({
+            'sucesso': False,
+            'erro': 'Este arquivo ja foi processado e nao pode ser reprocessado'
+        }, status=400)
+
+    try:
+        service = CNABService()
+        resultado = service.processar_retorno(arquivo, request.user)
+
+        if resultado.get('sucesso'):
+            return JsonResponse({
+                'sucesso': True,
+                'mensagem': 'Arquivo processado com sucesso',
+                'total_registros': resultado.get('total_registros'),
+                'registros_processados': resultado.get('registros_processados'),
+                'registros_erro': resultado.get('registros_erro'),
+                'valor_total_pago': str(resultado.get('valor_total_pago')),
+            })
+        else:
+            return JsonResponse({
+                'sucesso': False,
+                'erro': resultado.get('erro')
+            }, status=500)
+
+    except Exception as e:
+        logger.exception(f"Erro ao processar retorno: {e}")
+        return JsonResponse({
+            'sucesso': False,
+            'erro': str(e)
+        }, status=500)
+
+
+@login_required
+def download_arquivo_retorno(request, pk):
+    """Download do arquivo de retorno"""
+    from .models import ArquivoRetorno
+
+    arquivo = get_object_or_404(ArquivoRetorno, pk=pk)
+
+    if not arquivo.arquivo:
+        messages.error(request, 'Arquivo nao disponivel para download.')
+        return redirect('financeiro:detalhe_retorno', pk=pk)
+
+    try:
+        response = FileResponse(
+            arquivo.arquivo.open('rb'),
+            as_attachment=True,
+            filename=arquivo.nome_arquivo
+        )
+        response['Content-Type'] = 'text/plain'
+        return response
+    except Exception as e:
+        logger.exception(f"Erro ao fazer download do retorno: {e}")
+        messages.error(request, 'Erro ao baixar o arquivo.')
+        return redirect('financeiro:detalhe_retorno', pk=pk)

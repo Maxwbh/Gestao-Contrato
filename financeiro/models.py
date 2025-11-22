@@ -626,3 +626,492 @@ class HistoricoPagamento(TimeStampedModel):
 
     def __str__(self):
         return f"Pagamento - {self.parcela} - {self.data_pagamento}"
+
+
+# =============================================================================
+# MODELOS CNAB - ARQUIVOS REMESSA E RETORNO
+# =============================================================================
+
+class StatusArquivoRemessa(models.TextChoices):
+    """Status do arquivo de remessa"""
+    GERADO = 'GERADO', 'Gerado'
+    ENVIADO = 'ENVIADO', 'Enviado ao Banco'
+    PROCESSADO = 'PROCESSADO', 'Processado'
+    ERRO = 'ERRO', 'Erro'
+
+
+class ArquivoRemessa(TimeStampedModel):
+    """
+    Modelo para gerenciar arquivos de remessa CNAB.
+    Cada arquivo contém uma lista de boletos a serem registrados no banco.
+    """
+
+    conta_bancaria = models.ForeignKey(
+        ContaBancaria,
+        on_delete=models.PROTECT,
+        related_name='arquivos_remessa',
+        verbose_name='Conta Bancária'
+    )
+    numero_remessa = models.PositiveIntegerField(
+        verbose_name='Número da Remessa',
+        help_text='Número sequencial da remessa para esta conta'
+    )
+    layout = models.CharField(
+        max_length=10,
+        choices=[
+            ('CNAB_240', 'CNAB 240'),
+            ('CNAB_400', 'CNAB 400'),
+        ],
+        default='CNAB_240',
+        verbose_name='Layout'
+    )
+
+    # Arquivo
+    arquivo = models.FileField(
+        upload_to='cnab/remessa/%Y/%m/',
+        verbose_name='Arquivo',
+        help_text='Arquivo CNAB gerado'
+    )
+    nome_arquivo = models.CharField(
+        max_length=100,
+        verbose_name='Nome do Arquivo'
+    )
+
+    # Status e controle
+    status = models.CharField(
+        max_length=15,
+        choices=StatusArquivoRemessa.choices,
+        default=StatusArquivoRemessa.GERADO,
+        verbose_name='Status'
+    )
+    data_geracao = models.DateTimeField(
+        auto_now_add=True,
+        verbose_name='Data de Geração'
+    )
+    data_envio = models.DateTimeField(
+        null=True,
+        blank=True,
+        verbose_name='Data de Envio ao Banco'
+    )
+
+    # Estatísticas
+    quantidade_boletos = models.PositiveIntegerField(
+        default=0,
+        verbose_name='Quantidade de Boletos'
+    )
+    valor_total = models.DecimalField(
+        max_digits=14,
+        decimal_places=2,
+        default=Decimal('0.00'),
+        verbose_name='Valor Total'
+    )
+
+    # Observações e erros
+    observacoes = models.TextField(
+        blank=True,
+        verbose_name='Observações'
+    )
+    erro_mensagem = models.TextField(
+        blank=True,
+        verbose_name='Mensagem de Erro'
+    )
+
+    class Meta:
+        verbose_name = 'Arquivo de Remessa'
+        verbose_name_plural = 'Arquivos de Remessa'
+        ordering = ['-data_geracao']
+        unique_together = [['conta_bancaria', 'numero_remessa']]
+        indexes = [
+            models.Index(fields=['conta_bancaria', 'numero_remessa']),
+            models.Index(fields=['status']),
+            models.Index(fields=['data_geracao']),
+        ]
+
+    def __str__(self):
+        return f"Remessa {self.numero_remessa} - {self.conta_bancaria.descricao} ({self.get_status_display()})"
+
+    @property
+    def pode_reenviar(self):
+        """Verifica se a remessa pode ser reenviada"""
+        return self.status in [StatusArquivoRemessa.GERADO, StatusArquivoRemessa.ERRO]
+
+    def marcar_enviado(self):
+        """Marca a remessa como enviada"""
+        self.status = StatusArquivoRemessa.ENVIADO
+        self.data_envio = timezone.now()
+        self.save()
+
+    def marcar_processado(self):
+        """Marca a remessa como processada"""
+        self.status = StatusArquivoRemessa.PROCESSADO
+        self.save()
+        # Atualizar status dos boletos
+        self.itens.update(processado=True)
+
+    def marcar_erro(self, mensagem):
+        """Marca a remessa com erro"""
+        self.status = StatusArquivoRemessa.ERRO
+        self.erro_mensagem = mensagem
+        self.save()
+
+
+class ItemRemessa(TimeStampedModel):
+    """
+    Itens (boletos) incluídos em um arquivo de remessa.
+    Relaciona parcelas com arquivos de remessa.
+    """
+
+    arquivo_remessa = models.ForeignKey(
+        ArquivoRemessa,
+        on_delete=models.CASCADE,
+        related_name='itens',
+        verbose_name='Arquivo de Remessa'
+    )
+    parcela = models.ForeignKey(
+        'Parcela',
+        on_delete=models.PROTECT,
+        related_name='itens_remessa',
+        verbose_name='Parcela'
+    )
+
+    # Dados do momento da inclusão
+    nosso_numero = models.CharField(
+        max_length=30,
+        verbose_name='Nosso Número'
+    )
+    valor = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        verbose_name='Valor'
+    )
+    data_vencimento = models.DateField(
+        verbose_name='Data de Vencimento'
+    )
+
+    # Status de processamento
+    processado = models.BooleanField(
+        default=False,
+        verbose_name='Processado',
+        help_text='Indica se o retorno já foi processado'
+    )
+    codigo_ocorrencia = models.CharField(
+        max_length=10,
+        blank=True,
+        verbose_name='Código de Ocorrência',
+        help_text='Código retornado pelo banco'
+    )
+    descricao_ocorrencia = models.CharField(
+        max_length=255,
+        blank=True,
+        verbose_name='Descrição da Ocorrência'
+    )
+
+    class Meta:
+        verbose_name = 'Item de Remessa'
+        verbose_name_plural = 'Itens de Remessa'
+        ordering = ['arquivo_remessa', 'id']
+        unique_together = [['arquivo_remessa', 'parcela']]
+
+    def __str__(self):
+        return f"Item {self.nosso_numero} - Remessa {self.arquivo_remessa.numero_remessa}"
+
+
+class StatusArquivoRetorno(models.TextChoices):
+    """Status do arquivo de retorno"""
+    PENDENTE = 'PENDENTE', 'Pendente de Processamento'
+    PROCESSADO = 'PROCESSADO', 'Processado'
+    PROCESSADO_PARCIAL = 'PROCESSADO_PARCIAL', 'Processado Parcialmente'
+    ERRO = 'ERRO', 'Erro'
+
+
+class ArquivoRetorno(TimeStampedModel):
+    """
+    Modelo para gerenciar arquivos de retorno CNAB.
+    Arquivos enviados pelo banco com informações de pagamentos e ocorrências.
+    """
+
+    conta_bancaria = models.ForeignKey(
+        ContaBancaria,
+        on_delete=models.PROTECT,
+        related_name='arquivos_retorno',
+        verbose_name='Conta Bancária'
+    )
+
+    # Arquivo
+    arquivo = models.FileField(
+        upload_to='cnab/retorno/%Y/%m/',
+        verbose_name='Arquivo',
+        help_text='Arquivo CNAB de retorno'
+    )
+    nome_arquivo = models.CharField(
+        max_length=100,
+        verbose_name='Nome do Arquivo'
+    )
+    layout = models.CharField(
+        max_length=10,
+        choices=[
+            ('CNAB_240', 'CNAB 240'),
+            ('CNAB_400', 'CNAB 400'),
+        ],
+        default='CNAB_240',
+        verbose_name='Layout'
+    )
+
+    # Status e controle
+    status = models.CharField(
+        max_length=20,
+        choices=StatusArquivoRetorno.choices,
+        default=StatusArquivoRetorno.PENDENTE,
+        verbose_name='Status'
+    )
+    data_upload = models.DateTimeField(
+        auto_now_add=True,
+        verbose_name='Data de Upload'
+    )
+    data_processamento = models.DateTimeField(
+        null=True,
+        blank=True,
+        verbose_name='Data de Processamento'
+    )
+    processado_por = models.ForeignKey(
+        'auth.User',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        verbose_name='Processado por'
+    )
+
+    # Estatísticas
+    total_registros = models.PositiveIntegerField(
+        default=0,
+        verbose_name='Total de Registros'
+    )
+    registros_processados = models.PositiveIntegerField(
+        default=0,
+        verbose_name='Registros Processados'
+    )
+    registros_erro = models.PositiveIntegerField(
+        default=0,
+        verbose_name='Registros com Erro'
+    )
+    valor_total_pago = models.DecimalField(
+        max_digits=14,
+        decimal_places=2,
+        default=Decimal('0.00'),
+        verbose_name='Valor Total Pago'
+    )
+
+    # Observações e erros
+    observacoes = models.TextField(
+        blank=True,
+        verbose_name='Observações'
+    )
+    erro_mensagem = models.TextField(
+        blank=True,
+        verbose_name='Mensagem de Erro'
+    )
+
+    class Meta:
+        verbose_name = 'Arquivo de Retorno'
+        verbose_name_plural = 'Arquivos de Retorno'
+        ordering = ['-data_upload']
+        indexes = [
+            models.Index(fields=['conta_bancaria']),
+            models.Index(fields=['status']),
+            models.Index(fields=['data_upload']),
+        ]
+
+    def __str__(self):
+        return f"Retorno {self.nome_arquivo} - {self.conta_bancaria.descricao} ({self.get_status_display()})"
+
+    @property
+    def pode_reprocessar(self):
+        """Verifica se o arquivo pode ser reprocessado"""
+        return self.status in [StatusArquivoRetorno.PENDENTE, StatusArquivoRetorno.ERRO]
+
+
+class ItemRetorno(TimeStampedModel):
+    """
+    Itens processados de um arquivo de retorno CNAB.
+    Cada item representa uma ocorrência (pagamento, rejeição, etc.)
+    """
+
+    arquivo_retorno = models.ForeignKey(
+        ArquivoRetorno,
+        on_delete=models.CASCADE,
+        related_name='itens',
+        verbose_name='Arquivo de Retorno'
+    )
+    parcela = models.ForeignKey(
+        'Parcela',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='itens_retorno',
+        verbose_name='Parcela',
+        help_text='Parcela identificada (pode ser nulo se não encontrada)'
+    )
+
+    # Dados do registro
+    nosso_numero = models.CharField(
+        max_length=30,
+        verbose_name='Nosso Número'
+    )
+    numero_documento = models.CharField(
+        max_length=25,
+        blank=True,
+        verbose_name='Número do Documento'
+    )
+
+    # Ocorrência
+    codigo_ocorrencia = models.CharField(
+        max_length=10,
+        verbose_name='Código de Ocorrência'
+    )
+    descricao_ocorrencia = models.CharField(
+        max_length=255,
+        blank=True,
+        verbose_name='Descrição da Ocorrência'
+    )
+    tipo_ocorrencia = models.CharField(
+        max_length=20,
+        choices=[
+            ('ENTRADA', 'Entrada Confirmada'),
+            ('LIQUIDACAO', 'Liquidação/Pagamento'),
+            ('BAIXA', 'Baixa'),
+            ('REJEICAO', 'Rejeição'),
+            ('PROTESTO', 'Protesto'),
+            ('TARIFA', 'Tarifa/Taxa'),
+            ('OUTROS', 'Outros'),
+        ],
+        default='OUTROS',
+        verbose_name='Tipo de Ocorrência'
+    )
+
+    # Valores
+    valor_titulo = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        verbose_name='Valor do Título'
+    )
+    valor_pago = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        verbose_name='Valor Pago'
+    )
+    valor_juros = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        verbose_name='Valor de Juros'
+    )
+    valor_multa = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        verbose_name='Valor de Multa'
+    )
+    valor_desconto = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        verbose_name='Valor de Desconto'
+    )
+    valor_tarifa = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        verbose_name='Valor de Tarifa'
+    )
+
+    # Datas
+    data_ocorrencia = models.DateField(
+        null=True,
+        blank=True,
+        verbose_name='Data da Ocorrência'
+    )
+    data_credito = models.DateField(
+        null=True,
+        blank=True,
+        verbose_name='Data de Crédito'
+    )
+
+    # Controle
+    processado = models.BooleanField(
+        default=False,
+        verbose_name='Processado',
+        help_text='Indica se a baixa foi realizada no sistema'
+    )
+    erro_processamento = models.TextField(
+        blank=True,
+        verbose_name='Erro de Processamento'
+    )
+
+    class Meta:
+        verbose_name = 'Item de Retorno'
+        verbose_name_plural = 'Itens de Retorno'
+        ordering = ['arquivo_retorno', 'id']
+        indexes = [
+            models.Index(fields=['nosso_numero']),
+            models.Index(fields=['codigo_ocorrencia']),
+            models.Index(fields=['tipo_ocorrencia']),
+        ]
+
+    def __str__(self):
+        return f"Retorno {self.nosso_numero} - {self.get_tipo_ocorrencia_display()}"
+
+    def processar_baixa(self):
+        """
+        Processa a baixa do item no sistema.
+        Atualiza o status do boleto e registra o pagamento se for liquidação.
+        """
+        if self.processado:
+            return False
+
+        if not self.parcela:
+            self.erro_processamento = "Parcela não encontrada"
+            self.save()
+            return False
+
+        try:
+            if self.tipo_ocorrencia == 'LIQUIDACAO':
+                # Registrar pagamento
+                self.parcela.registrar_pagamento_boleto(
+                    valor_pago=self.valor_pago or self.valor_titulo,
+                    data_pagamento=self.data_ocorrencia or timezone.now(),
+                    banco_pagador='',
+                    agencia_pagadora=''
+                )
+            elif self.tipo_ocorrencia == 'ENTRADA':
+                # Confirmar registro no banco
+                self.parcela.status_boleto = StatusBoleto.REGISTRADO
+                self.parcela.data_registro_boleto = timezone.now()
+                self.parcela.save()
+            elif self.tipo_ocorrencia == 'BAIXA':
+                self.parcela.status_boleto = StatusBoleto.BAIXADO
+                self.parcela.motivo_rejeicao = self.descricao_ocorrencia
+                self.parcela.save()
+            elif self.tipo_ocorrencia == 'REJEICAO':
+                self.parcela.status_boleto = StatusBoleto.CANCELADO
+                self.parcela.motivo_rejeicao = self.descricao_ocorrencia
+                self.parcela.save()
+            elif self.tipo_ocorrencia == 'PROTESTO':
+                self.parcela.status_boleto = StatusBoleto.PROTESTADO
+                self.parcela.save()
+
+            self.processado = True
+            self.save()
+            return True
+
+        except Exception as e:
+            self.erro_processamento = str(e)
+            self.save()
+            return False
