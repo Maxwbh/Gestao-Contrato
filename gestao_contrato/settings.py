@@ -187,6 +187,15 @@ TWILIO_WHATSAPP_NUMBER = config('TWILIO_WHATSAPP_NUMBER', default='')
 # Configurações de Notificação
 NOTIFICACAO_DIAS_ANTECEDENCIA = config('NOTIFICACAO_DIAS_ANTECEDENCIA', default=5, cast=int)
 
+# =============================================================================
+# RENDER FREE TIER - Configuração de Tarefas Agendadas
+# =============================================================================
+# Como o Celery não está disponível no Free tier, usamos endpoints HTTP
+# protegidos por token que podem ser chamados por cron jobs externos.
+# Configure um cron job em https://cron-job.org (gratuito) para chamar
+# POST /api/tasks/run-all/ com o header X-Task-Token
+TASK_TOKEN = config('TASK_TOKEN', default=None)
+
 # Configurações de Índices Econômicos (APIs)
 BCBAPI_URL = 'https://api.bcb.gov.br/dados/serie/bcdata.sgs.{}/dados'
 IPCA_SERIE_ID = '433'  # Código do IPCA no BCB
