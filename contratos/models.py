@@ -315,14 +315,31 @@ class Contrato(TimeStampedModel):
         if not self.parcelas.exists():
             self.gerar_parcelas()
 
-    def gerar_parcelas(self):
-        """Gera todas as parcelas do contrato"""
+    def gerar_parcelas(self, ate_mes_atual=False):
+        """
+        Gera as parcelas do contrato
+
+        Args:
+            ate_mes_atual: Se True, gera parcelas apenas até o mês atual (útil para dados de teste)
+        """
         from financeiro.models import Parcela
+        from django.utils import timezone
 
         data_vencimento = self.data_primeiro_vencimento
         valor_parcela = self.valor_parcela_original
 
+        # Data limite: último dia do mês atual
+        if ate_mes_atual:
+            hoje = timezone.now().date()
+            data_limite = hoje.replace(day=1) + relativedelta(months=1) - relativedelta(days=1)
+        else:
+            data_limite = None
+
         for numero in range(1, self.numero_parcelas + 1):
+            # Se ate_mes_atual=True, parar quando vencimento ultrapassar o mês atual
+            if data_limite and data_vencimento > data_limite:
+                break
+
             Parcela.objects.create(
                 contrato=self,
                 numero_parcela=numero,
