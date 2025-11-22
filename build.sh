@@ -268,6 +268,71 @@ with connection.cursor() as cursor:
     else:
         print("  - contratos_indicereajuste already exists")
 
+    # Atualizar core_contabancaria com campos adicionais
+    print("Updating core_contabancaria...")
+    add_column_if_not_exists(cursor, 'core_contabancaria', 'principal', "BOOLEAN DEFAULT FALSE")
+    add_column_if_not_exists(cursor, 'core_contabancaria', 'modalidade', "VARCHAR(5) DEFAULT ''")
+    add_column_if_not_exists(cursor, 'core_contabancaria', 'tipo_pix', "VARCHAR(20) DEFAULT ''")
+    add_column_if_not_exists(cursor, 'core_contabancaria', 'chave_pix', "VARCHAR(100) DEFAULT ''")
+    add_column_if_not_exists(cursor, 'core_contabancaria', 'cobranca_registrada', "BOOLEAN DEFAULT TRUE")
+    add_column_if_not_exists(cursor, 'core_contabancaria', 'prazo_baixa', "INTEGER DEFAULT 0")
+    add_column_if_not_exists(cursor, 'core_contabancaria', 'prazo_protesto', "INTEGER DEFAULT 0")
+    add_column_if_not_exists(cursor, 'core_contabancaria', 'layout_cnab', "VARCHAR(10) DEFAULT 'CNAB_240'")
+    add_column_if_not_exists(cursor, 'core_contabancaria', 'numero_remessa_cnab_atual', "INTEGER DEFAULT 0")
+
+    # Adicionar campos de boleto na tabela financeiro_parcela
+    print("Checking financeiro_parcela for boleto fields...")
+    cursor.execute("""
+        SELECT 1 FROM information_schema.tables
+        WHERE table_name = 'financeiro_parcela'
+    """)
+    if cursor.fetchone():
+        # Campos de identificação do boleto
+        add_column_if_not_exists(cursor, 'financeiro_parcela', 'conta_bancaria_id', "INTEGER NULL REFERENCES core_contabancaria(id) ON DELETE SET NULL")
+        add_column_if_not_exists(cursor, 'financeiro_parcela', 'nosso_numero', "VARCHAR(30) DEFAULT ''")
+        add_column_if_not_exists(cursor, 'financeiro_parcela', 'numero_documento', "VARCHAR(25) DEFAULT ''")
+        add_column_if_not_exists(cursor, 'financeiro_parcela', 'codigo_barras', "VARCHAR(50) DEFAULT ''")
+        add_column_if_not_exists(cursor, 'financeiro_parcela', 'linha_digitavel', "VARCHAR(60) DEFAULT ''")
+
+        # Arquivo PDF e URL
+        add_column_if_not_exists(cursor, 'financeiro_parcela', 'boleto_pdf', "VARCHAR(200) DEFAULT ''")
+        add_column_if_not_exists(cursor, 'financeiro_parcela', 'boleto_url', "VARCHAR(500) DEFAULT ''")
+
+        # Status e controle
+        add_column_if_not_exists(cursor, 'financeiro_parcela', 'status_boleto', "VARCHAR(15) DEFAULT 'NAO_GERADO'")
+        add_column_if_not_exists(cursor, 'financeiro_parcela', 'data_geracao_boleto', "TIMESTAMP WITH TIME ZONE NULL")
+        add_column_if_not_exists(cursor, 'financeiro_parcela', 'data_registro_boleto', "TIMESTAMP WITH TIME ZONE NULL")
+        add_column_if_not_exists(cursor, 'financeiro_parcela', 'data_pagamento_boleto', "TIMESTAMP WITH TIME ZONE NULL")
+
+        # Valores
+        add_column_if_not_exists(cursor, 'financeiro_parcela', 'valor_boleto', "DECIMAL(12,2) NULL")
+        add_column_if_not_exists(cursor, 'financeiro_parcela', 'valor_pago_boleto', "DECIMAL(12,2) NULL")
+
+        # Dados de retorno bancário
+        add_column_if_not_exists(cursor, 'financeiro_parcela', 'banco_pagador', "VARCHAR(10) DEFAULT ''")
+        add_column_if_not_exists(cursor, 'financeiro_parcela', 'agencia_pagadora', "VARCHAR(10) DEFAULT ''")
+        add_column_if_not_exists(cursor, 'financeiro_parcela', 'motivo_rejeicao', "VARCHAR(255) DEFAULT ''")
+
+        # PIX (boleto híbrido)
+        add_column_if_not_exists(cursor, 'financeiro_parcela', 'pix_copia_cola', "TEXT DEFAULT ''")
+        add_column_if_not_exists(cursor, 'financeiro_parcela', 'pix_qrcode', "TEXT DEFAULT ''")
+
+        # Criar índices para boleto
+        cursor.execute("""
+            DO $$
+            BEGIN
+                IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'idx_parcela_status_boleto') THEN
+                    CREATE INDEX idx_parcela_status_boleto ON financeiro_parcela(status_boleto);
+                END IF;
+                IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'idx_parcela_nosso_numero') THEN
+                    CREATE INDEX idx_parcela_nosso_numero ON financeiro_parcela(nosso_numero);
+                END IF;
+            END $$;
+        """)
+        print("  + Boleto fields added/verified")
+    else:
+        print("  - financeiro_parcela table not found (will be created by migrations)")
+
     print("Schema changes applied successfully!")
 SQLEOF
 
