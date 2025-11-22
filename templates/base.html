@@ -304,17 +304,26 @@
                     {% if user.is_authenticated %}
                     <li class="nav-item dropdown">
                         <a class="nav-link dropdown-toggle" href="#" id="userDropdown" role="button" data-bs-toggle="dropdown">
-                            <i class="fas fa-user-circle"></i> {{ user.username }}
+                            <i class="fas fa-user-circle"></i> {{ user.first_name|default:user.username }}
                         </a>
                         <ul class="dropdown-menu dropdown-menu-end">
-                            <li><a class="dropdown-item" href="#">
+                            <li><a class="dropdown-item" href="{% url 'accounts:perfil' %}">
                                 <i class="fas fa-user"></i> Meu Perfil
                             </a></li>
+                            <li><a class="dropdown-item" href="{% url 'accounts:alterar_senha' %}">
+                                <i class="fas fa-key"></i> Alterar Senha
+                            </a></li>
                             <li><hr class="dropdown-divider"></li>
-                            <li><a class="dropdown-item" href="{% url 'admin:logout' %}">
+                            <li><a class="dropdown-item" href="{% url 'accounts:logout' %}">
                                 <i class="fas fa-sign-out-alt"></i> Sair
                             </a></li>
                         </ul>
+                    </li>
+                    {% else %}
+                    <li class="nav-item">
+                        <a class="nav-link" href="{% url 'accounts:login' %}">
+                            <i class="fas fa-sign-in-alt"></i> Entrar
+                        </a>
                     </li>
                     {% endif %}
                 </ul>
