@@ -49,6 +49,7 @@ INSTALLED_APPS = [
     'django_celery_beat',
 
     # Local apps
+    'accounts',
     'core',
     'contratos',
     'financeiro',
@@ -122,6 +123,11 @@ AUTH_PASSWORD_VALIDATORS = [
         'NAME': 'django.contrib.auth.password_validation.NumericPasswordValidator',
     },
 ]
+
+# Login/Logout URLs
+LOGIN_URL = 'accounts:login'
+LOGIN_REDIRECT_URL = 'core:dashboard'
+LOGOUT_REDIRECT_URL = 'accounts:login'
 
 # Internationalization
 # https://docs.djangoproject.com/en/4.2/topics/i18n/
