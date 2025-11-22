@@ -1017,7 +1017,6 @@ def api_obter_conta_bancaria(request, conta_id):
 
 
 @login_required
-@csrf_exempt
 @require_http_methods(["POST"])
 def api_criar_conta_bancaria(request):
     """Cria uma nova conta bancária"""
@@ -1057,7 +1056,6 @@ def api_criar_conta_bancaria(request):
 
 
 @login_required
-@csrf_exempt
 @require_http_methods(["PUT", "POST"])
 def api_atualizar_conta_bancaria(request, conta_id):
     """Atualiza uma conta bancária existente"""
@@ -1093,7 +1091,6 @@ def api_atualizar_conta_bancaria(request, conta_id):
 
 
 @login_required
-@csrf_exempt
 @require_http_methods(["DELETE", "POST"])
 def api_excluir_conta_bancaria(request, conta_id):
     """Exclui (soft delete) uma conta bancária"""
