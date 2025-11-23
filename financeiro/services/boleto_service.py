@@ -232,6 +232,9 @@ class BoletoService:
             # Formatar convenio com zeros a esquerda se necessario
             if dados.get('convenio'):
                 dados['convenio'] = str(dados['convenio']).zfill(7)
+            # Remover campos nao suportados pelo BB
+            for campo in ['bairro', 'cep', 'cidade', 'uf', 'documento_numero', 'especie_documento', 'aceite']:
+                dados.pop(campo, None)
 
         # Santander (033)
         elif codigo_banco == '033':
