@@ -150,7 +150,7 @@
                         </div>
                         <div class="col-md-4">
                             <label class="form-label text-muted small mb-0">Valor Boleto</label>
-                            <div class="fw-bold text-success">R$ {{ parcela.valor_boleto|floatformat:2|default:parcela.valor_atual|floatformat:2 }}</div>
+                            <div class="fw-bold text-success">R$ {% if parcela.valor_boleto %}{{ parcela.valor_boleto|floatformat:2 }}{% else %}{{ parcela.valor_atual|floatformat:2 }}{% endif %}</div>
                         </div>
                     </div>
 

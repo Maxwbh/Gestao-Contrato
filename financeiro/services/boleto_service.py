@@ -475,10 +475,19 @@ class BoletoService:
         moeda = '9'
 
         # Fator de vencimento (dias desde 07/10/1997)
-        data_base = date(1997, 10, 7)
+        # FEBRABAN: após 21/02/2025 (fator 10000), reinicia em 22/02/2025 com fator 1000
+        data_base_original = date(1997, 10, 7)
+        data_base_nova = date(2025, 2, 22)  # Nova data base após overflow
         data_venc = date.fromisoformat(dados['data_vencimento'])
-        fator_vencimento = (data_venc - data_base).days
-        fator_vencimento = str(fator_vencimento).zfill(4)
+
+        if data_venc >= data_base_nova:
+            # Usar nova data base (reinicia em 1000)
+            fator_vencimento = 1000 + (data_venc - data_base_nova).days
+        else:
+            fator_vencimento = (data_venc - data_base_original).days
+
+        # Garantir 4 dígitos
+        fator_vencimento = str(fator_vencimento % 10000).zfill(4)
 
         # Valor (10 dígitos, sem decimais)
         valor = int(float(dados['valor']) * 100)
