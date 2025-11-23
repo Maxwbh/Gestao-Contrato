@@ -29,6 +29,9 @@ python-dateutil==2.8.2
 pytz==2023.3.post1
 Pillow==10.1.0
 
+# PDF Generation
+reportlab==4.0.7
+
 # Geração de dados fake
 Faker==22.0.0
 
