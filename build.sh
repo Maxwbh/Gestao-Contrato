@@ -492,6 +492,57 @@ with connection.cursor() as cursor:
         print("  - financeiro_itemretorno already exists")
 
     print("Schema changes applied successfully!")
+
+    # =========================================================================
+    # CAMPOS DE CONFIGURACAO DE BOLETO NO CONTRATO
+    # =========================================================================
+    print("Checking contratos_contrato for boleto config fields...")
+    cursor.execute("""
+        SELECT 1 FROM information_schema.tables
+        WHERE table_name = 'contratos_contrato'
+    """)
+    if cursor.fetchone():
+        # Usar configurações da imobiliária ou personalizadas
+        add_column_if_not_exists(cursor, 'contratos_contrato', 'usar_config_boleto_imobiliaria', "BOOLEAN DEFAULT TRUE")
+
+        # Conta bancária padrão para este contrato
+        add_column_if_not_exists(cursor, 'contratos_contrato', 'conta_bancaria_padrao_id', "INTEGER NULL REFERENCES core_contabancaria(id) ON DELETE SET NULL")
+
+        # Configurações de Multa
+        add_column_if_not_exists(cursor, 'contratos_contrato', 'tipo_valor_multa', "VARCHAR(10) DEFAULT 'PERCENTUAL'")
+        add_column_if_not_exists(cursor, 'contratos_contrato', 'valor_multa_boleto', "DECIMAL(10,2) DEFAULT 0")
+
+        # Configurações de Juros
+        add_column_if_not_exists(cursor, 'contratos_contrato', 'tipo_valor_juros', "VARCHAR(10) DEFAULT 'PERCENTUAL'")
+        add_column_if_not_exists(cursor, 'contratos_contrato', 'valor_juros_boleto', "DECIMAL(10,4) DEFAULT 0")
+
+        # Dias sem encargos
+        add_column_if_not_exists(cursor, 'contratos_contrato', 'dias_carencia_boleto', "INTEGER DEFAULT 0")
+
+        # Desconto
+        add_column_if_not_exists(cursor, 'contratos_contrato', 'tipo_valor_desconto', "VARCHAR(10) DEFAULT 'PERCENTUAL'")
+        add_column_if_not_exists(cursor, 'contratos_contrato', 'valor_desconto_boleto', "DECIMAL(10,2) DEFAULT 0")
+        add_column_if_not_exists(cursor, 'contratos_contrato', 'dias_desconto_boleto', "INTEGER DEFAULT 0")
+
+        # Instruções personalizadas
+        add_column_if_not_exists(cursor, 'contratos_contrato', 'instrucao_boleto_1', "VARCHAR(255) DEFAULT ''")
+        add_column_if_not_exists(cursor, 'contratos_contrato', 'instrucao_boleto_2', "VARCHAR(255) DEFAULT ''")
+        add_column_if_not_exists(cursor, 'contratos_contrato', 'instrucao_boleto_3', "VARCHAR(255) DEFAULT ''")
+
+        # Criar índice para conta bancária
+        cursor.execute("""
+            DO $$
+            BEGIN
+                IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'idx_contrato_conta_bancaria') THEN
+                    CREATE INDEX idx_contrato_conta_bancaria ON contratos_contrato(conta_bancaria_padrao_id);
+                END IF;
+            END $$;
+        """)
+        print("  + Contrato boleto config fields added/verified")
+    else:
+        print("  - contratos_contrato table not found (will be created by migrations)")
+
+    print("All schema changes applied successfully!")
 SQLEOF
 
 echo "==> Creating default email templates..."
