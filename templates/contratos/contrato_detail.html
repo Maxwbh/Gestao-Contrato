@@ -936,7 +936,7 @@ function gerarBoleto(parcelaId, btn) {
                 var acoesCol = row.querySelector('td:last-child .btn-group');
                 if (acoesCol) {
                     acoesCol.innerHTML =
-                        '<a href="/financeiro/parcelas/' + parcelaId + '/boleto/" class="btn btn-outline-primary" title="Ver Boleto" target="_blank"><i class="fas fa-eye"></i></a>' +
+                        '<a href="/financeiro/parcelas/' + parcelaId + '/boleto/visualizar/" class="btn btn-outline-primary" title="Ver Boleto" target="_blank"><i class="fas fa-eye"></i></a>' +
                         '<button type="button" class="btn btn-outline-warning" onclick="regenerarBoleto(' + parcelaId + ', this)" title="Atualizar Boleto"><i class="fas fa-sync"></i></button>' +
                         '<button type="button" class="btn btn-outline-success" onclick="abrirModalPagamento(' + parcelaId + ')" title="Registrar Pagamento"><i class="fas fa-dollar-sign"></i></button>';
                 }
@@ -944,7 +944,7 @@ function gerarBoleto(parcelaId, btn) {
 
             // Abrir boleto em nova aba apos um pequeno delay
             setTimeout(function() {
-                window.open('/financeiro/parcelas/' + parcelaId + '/boleto/', '_blank');
+                window.open('/financeiro/parcelas/' + parcelaId + '/boleto/visualizar/', '_blank');
             }, 500);
 
         } else {
@@ -1001,7 +1001,7 @@ function regenerarBoleto(parcelaId, btn) {
 
             // Abrir boleto em nova aba
             setTimeout(function() {
-                window.open('/financeiro/parcelas/' + parcelaId + '/boleto/', '_blank');
+                window.open('/financeiro/parcelas/' + parcelaId + '/boleto/visualizar/', '_blank');
             }, 500);
 
         } else {
