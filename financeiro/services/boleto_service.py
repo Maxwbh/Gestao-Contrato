@@ -207,6 +207,13 @@ class BoletoService:
         if conta_bancaria.banco == '104':  # Caixa
             dados['codigo_beneficiario'] = conta_bancaria.convenio or ''
 
+        # Remover campos nao suportados por banco
+        # Banco do Brasil (001) nao suporta numero_documento
+        if conta_bancaria.banco == '001':
+            dados.pop('numero_documento', None)
+            dados.pop('especie_documento', None)
+            dados.pop('aceite', None)
+
         # Adicionar multa se configurada
         if imobiliaria.percentual_multa_padrao and imobiliaria.percentual_multa_padrao > 0:
             dias_carencia = imobiliaria.dias_para_encargos_padrao or 0
