@@ -189,41 +189,86 @@ class Command(BaseCommand):
         return imobiliarias
 
     def criar_contas_bancarias(self, imobiliarias):
-        """Cria Contas Bancárias para cada imobiliária"""
+        """
+        Cria Contas Bancárias para cada imobiliária.
+        Configura os campos obrigatórios conforme documentação BRCobranca.
+        """
         contas = []
 
+        # Configuração completa para cada banco suportado pelo BRCobranca
         bancos_config = [
             {
                 'banco': '001',  # Banco do Brasil
                 'descricao': 'Conta Principal BB',
-                'agencia': '3073-2',
-                'conta': '12345-6',
-                'convenio': '1234567',
-                'carteira': '17',
+                'agencia': '3073',
+                'conta': '12345678',
+                'convenio': '1234567',  # 7 dígitos obrigatório
+                'carteira': '18',
+                'nosso_numero_atual': 1,
+            },
+            {
+                'banco': '033',  # Santander
+                'descricao': 'Conta Santander',
+                'agencia': '0123',
+                'conta': '123456789',  # 9 dígitos
+                'convenio': '1234567',  # 7 dígitos obrigatório
+                'carteira': '102',
                 'nosso_numero_atual': 1,
             },
             {
                 'banco': '104',  # Caixa
                 'descricao': 'Conta Boletos Caixa',
                 'agencia': '0123',
-                'conta': '00012345-6',
-                'convenio': '123456',
-                'carteira': 'SR',
+                'conta': '12345678901234',
+                'convenio': '123456',  # 6 dígitos obrigatório
+                'carteira': '1',  # 1=com registro
                 'nosso_numero_atual': 1,
             },
             {
                 'banco': '237',  # Bradesco
                 'descricao': 'Conta Bradesco',
-                'agencia': '1234-5',
-                'conta': '123456-7',
+                'agencia': '1234',
+                'conta': '1234567',  # max 7 dígitos
                 'convenio': '',
-                'carteira': '09',
+                'carteira': '06',
+                'nosso_numero_atual': 1,
+            },
+            {
+                'banco': '341',  # Itaú
+                'descricao': 'Conta Itaú',
+                'agencia': '1234',
+                'conta': '12345',  # max 5 dígitos
+                'convenio': '12345',  # max 5 dígitos
+                'carteira': '175',
+                'nosso_numero_atual': 1,
+            },
+            {
+                'banco': '748',  # Sicredi
+                'descricao': 'Conta Sicredi',
+                'agencia': '1234',
+                'conta': '12345',  # max 5 dígitos
+                'convenio': '12345',  # max 5 dígitos (código beneficiário)
+                'carteira': '3',  # 3=sem registro
+                'nosso_numero_atual': 1,
+                'posto': '01',  # obrigatório para Sicredi
+            },
+            {
+                'banco': '756',  # Sicoob
+                'descricao': 'Conta Sicoob',
+                'agencia': '1234',
+                'conta': '12345678',  # max 8 dígitos
+                'convenio': '1234567',  # max 7 dígitos
+                'carteira': '1',
                 'nosso_numero_atual': 1,
             },
         ]
 
         for imobiliaria in imobiliarias:
-            for i, config in enumerate(bancos_config[:2]):  # 2 contas por imobiliária
+            # Criar todas as contas para a primeira imobiliária (para teste)
+            # e apenas 2 contas para as demais
+            configs_imob = bancos_config if imobiliaria == imobiliarias[0] else bancos_config[:2]
+
+            for i, config in enumerate(configs_imob):
                 conta = ContaBancaria.objects.create(
                     imobiliaria=imobiliaria,
                     banco=config['banco'],
