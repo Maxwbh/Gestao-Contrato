@@ -74,12 +74,19 @@ class BoletoService:
 
     # Campos especificos obrigatorios por banco
     CAMPOS_BANCO = {
-        '001': {'convenio_obrigatorio': True},
-        '033': {'convenio_obrigatorio': True},
+        '001': {'convenio_obrigatorio': True, 'convenio_len': 7},
+        '033': {'convenio_obrigatorio': True, 'convenio_len': 7},
         '104': {'emissao': '4', 'convenio_len': 6},
-        '341': {'seu_numero': True},
-        '748': {'posto_obrigatorio': True, 'byte_idt': '2'},
-        '756': {'variacao': '01'},
+        '237': {'nosso_numero_len': 11},
+        '341': {'seu_numero': True, 'nosso_numero_len': 8},
+        '748': {'posto_obrigatorio': True, 'byte_idt': '2', 'nosso_numero_len': 5},
+        '756': {
+            'variacao': '01',
+            'convenio_len': 7,
+            'agencia_len': 4,
+            'conta_len': 8,
+            'nosso_numero_len': 7
+        },
     }
 
     def __init__(self, brcobranca_url=None):
@@ -151,14 +158,28 @@ class BoletoService:
         # Documento do cedente (CNPJ da imobiliaria)
         documento_cedente = self._formatar_cpf_cnpj(imobiliaria.cnpj)
 
-        # Endereco do pagador
-        endereco_pagador = ''
-        if hasattr(comprador, 'endereco_formatado') and comprador.endereco_formatado:
-            endereco_pagador = comprador.endereco_formatado
+        # Endereco do pagador - concatenar todos os campos
+        partes_endereco = []
+        if comprador.logradouro:
+            partes_endereco.append(comprador.logradouro)
+        if comprador.numero:
+            partes_endereco.append(comprador.numero)
         elif comprador.logradouro:
-            endereco_pagador = f"{comprador.logradouro}, {comprador.numero or 'S/N'}"
-            if comprador.complemento:
-                endereco_pagador += f" {comprador.complemento}"
+            partes_endereco.append('S/N')
+        if comprador.complemento:
+            partes_endereco.append(comprador.complemento)
+        if comprador.bairro:
+            partes_endereco.append(comprador.bairro)
+        if comprador.cidade:
+            partes_endereco.append(comprador.cidade)
+        if comprador.estado:
+            partes_endereco.append(comprador.estado)
+        if comprador.cep:
+            cep_formatado = self._formatar_cep(comprador.cep)
+            if cep_formatado:
+                partes_endereco.append(f"CEP {cep_formatado}")
+
+        endereco_pagador = ', '.join(partes_endereco) if partes_endereco else ''
 
         # Carteira
         carteira = conta_bancaria.carteira or self.CARTEIRAS_PADRAO.get(conta_bancaria.banco, '1')
@@ -203,13 +224,10 @@ class BoletoService:
             'especie': 'R$',
 
             # Dados do Sacado (pagador - quem paga)
+            # Endereco completo concatenado: Rua, Nro, Complemento, Bairro, Cidade, UF, CEP
             'sacado': comprador.nome,
             'sacado_documento': documento_pagador,
-            'sacado_endereco': endereco_pagador[:40] if endereco_pagador else '',
-            'bairro': comprador.bairro or '',
-            'cep': self._formatar_cep(comprador.cep),
-            'cidade': comprador.cidade or '',
-            'uf': comprador.estado or '',
+            'sacado_endereco': endereco_pagador[:80] if endereco_pagador else '',
 
             # Instrucoes
             'instrucao1': instrucoes[0] if len(instrucoes) > 0 else '',
@@ -233,7 +251,7 @@ class BoletoService:
             if dados.get('convenio'):
                 dados['convenio'] = str(dados['convenio']).zfill(7)
             # Remover campos nao suportados pelo BB
-            for campo in ['bairro', 'cep', 'cidade', 'uf', 'documento_numero', 'especie_documento', 'aceite']:
+            for campo in ['documento_numero', 'especie_documento', 'aceite']:
                 dados.pop(campo, None)
 
         # Santander (033)
@@ -276,33 +294,69 @@ class BoletoService:
                 dados['nosso_numero'] = str(dados['nosso_numero']).zfill(5)[:5]
 
         # Sicoob (756)
+        # Campos: agencia (4), conta_corrente (8), nosso_numero (7), convenio (7), variacao (2)
         elif codigo_banco == '756':
-            dados['variacao'] = '01'
+            # Variacao padrao 01
+            dados['variacao'] = getattr(conta_bancaria, 'variacao', None) or '01'
+            # Quantidade (obrigatorio, padrao 001)
+            dados['quantidade'] = '001'
+            # Convenio max 7 digitos
+            if dados.get('convenio'):
+                dados['convenio'] = str(dados['convenio']).zfill(7)[:7]
+            # Agencia max 4 digitos
+            if dados.get('agencia'):
+                dados['agencia'] = str(dados['agencia']).zfill(4)[:4]
+            # Conta corrente max 8 digitos
+            if dados.get('conta_corrente'):
+                dados['conta_corrente'] = str(dados['conta_corrente']).zfill(8)[:8]
             # Nosso numero max 7 digitos
             if dados.get('nosso_numero'):
                 dados['nosso_numero'] = str(dados['nosso_numero']).zfill(7)[:7]
+            # Modalidade (codigo_beneficiario quando aplicavel)
+            if hasattr(conta_bancaria, 'codigo_beneficiario') and conta_bancaria.codigo_beneficiario:
+                dados['codigo_beneficiario'] = conta_bancaria.codigo_beneficiario
 
-        # Adicionar multa se configurada (usando config do contrato)
+        # =====================================================
+        # MULTA (apos vencimento)
+        # =====================================================
         valor_multa = config_boleto.get('valor_multa', 0) or 0
         if valor_multa > 0:
             dias_carencia = config_boleto.get('dias_carencia', 0) or 0
+            # Data de inicio da multa (dia seguinte ao vencimento + carencia)
             data_multa = parcela.data_vencimento + timedelta(days=dias_carencia + 1)
-            dados['data_mora'] = self._formatar_data(data_multa)
+            dados['data_multa'] = self._formatar_data(data_multa)
 
             if config_boleto.get('tipo_valor_multa') == 'PERCENTUAL':
+                # codigo_multa: 2 = percentual
+                dados['codigo_multa'] = '2'
                 dados['percentual_multa'] = float(valor_multa)
             else:
+                # codigo_multa: 1 = valor fixo
+                dados['codigo_multa'] = '1'
                 dados['valor_multa'] = float(valor_multa)
 
-        # Adicionar juros se configurado (usando config do contrato)
+        # =====================================================
+        # JUROS/MORA (por dia de atraso)
+        # =====================================================
         valor_juros = config_boleto.get('valor_juros', 0) or 0
         if valor_juros > 0:
+            dias_carencia = config_boleto.get('dias_carencia', 0) or 0
+            # Data de inicio da mora (dia seguinte ao vencimento + carencia)
+            data_mora = parcela.data_vencimento + timedelta(days=dias_carencia + 1)
+            dados['data_mora'] = self._formatar_data(data_mora)
+
             if config_boleto.get('tipo_valor_juros') == 'PERCENTUAL':
+                # codigo_mora: 1 = valor diario, 2 = taxa mensal
+                dados['codigo_mora'] = '2'  # percentual ao mes
                 dados['percentual_mora'] = float(valor_juros)
             else:
+                # codigo_mora: 1 = valor por dia
+                dados['codigo_mora'] = '1'
                 dados['valor_mora'] = float(valor_juros)
 
-        # Adicionar desconto se configurado (usando config do contrato)
+        # =====================================================
+        # DESCONTO (antes do vencimento)
+        # =====================================================
         valor_desconto = config_boleto.get('valor_desconto', 0) or 0
         if valor_desconto > 0:
             dias_desconto = config_boleto.get('dias_desconto', 0) or 0
@@ -313,10 +367,11 @@ class BoletoService:
             if data_limite and data_limite >= date.today():
                 dados['data_desconto'] = self._formatar_data(data_limite)
                 if config_boleto.get('tipo_valor_desconto') == 'PERCENTUAL':
+                    # Calcular valor do desconto baseado no percentual
                     valor_desc = float(parcela.valor_atual) * float(valor_desconto) / 100
-                    dados['valor_desconto'] = valor_desc
+                    dados['desconto'] = round(valor_desc, 2)
                 else:
-                    dados['valor_desconto'] = float(valor_desconto)
+                    dados['desconto'] = float(valor_desconto)
 
         return dados, nosso_numero
 
