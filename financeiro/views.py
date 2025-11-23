@@ -13,6 +13,7 @@ from django.utils import timezone
 from django.db.models import Sum, Count, Q, F
 from django.views.generic import TemplateView
 from django.views.decorators.http import require_POST, require_GET
+from django.views.decorators.clickjacking import xframe_options_sameorigin
 from datetime import timedelta
 from dateutil.relativedelta import relativedelta
 from decimal import Decimal
@@ -773,9 +774,11 @@ def download_boleto(request, pk):
 
 @login_required
 @require_GET
+@xframe_options_sameorigin
 def visualizar_boleto(request, pk):
     """
     Exibe página com dados do boleto de uma parcela.
+    Permite carregamento em iframe do mesmo domínio.
     """
     parcela = get_object_or_404(Parcela, pk=pk)
 
