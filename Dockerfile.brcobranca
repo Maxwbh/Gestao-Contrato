@@ -13,11 +13,8 @@ FROM akretion/boleto_cnab_api:latest
 ENV RACK_ENV=production
 
 # Copiar entrypoint customizado
-COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
-RUN chmod +x /usr/local/bin/docker-entrypoint.sh
-
-# Expor porta (Render usa PORT dinamicamente)
-EXPOSE 10000
+COPY docker-entrypoint.sh /docker-entrypoint.sh
+RUN chmod +x /docker-entrypoint.sh
 
 # Usar entrypoint customizado que le a variavel PORT
-ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
+CMD ["/docker-entrypoint.sh"]
