@@ -1,20 +1,21 @@
-# Render Blueprint para deployment automático
+# Render Blueprint para deployment automatico
 # Desenvolvedor: Maxwell da Silva Oliveira
 # M&S do Brasil LTDA
 #
-# VERSÃO FREE TIER (Otimizada)
-# Esta configuração é otimizada para o plano gratuito do Render
+# VERSAO FREE TIER (Otimizada)
+# Esta configuracao e otimizada para o plano gratuito do Render
 #
-# LIMITAÇÕES DO FREE TIER:
-# - Sem Background Workers (Celery não disponível)
-# - Serviço pode "adormecer" após 15 min de inatividade
-# - PostgreSQL: 1GB storage, 1 conexão
-# - Redis: 25MB memória
+# LIMITACOES DO FREE TIER:
+# - Sem Background Workers (Celery nao disponivel)
+# - Servico pode "adormecer" apos 15 min de inatividade
+# - PostgreSQL: 1GB storage, 1 conexao
+# - Redis: 25MB memoria
 #
-# SOLUÇÕES IMPLEMENTADAS:
+# SOLUCOES IMPLEMENTADAS:
 # - API de tarefas via HTTP (/api/tasks/run-all/)
 # - Health check otimizado (/health/)
 # - Cron externo via cron-job.org (gratuito)
+# - BRCobranca API para geracao de boletos
 
 databases:
   # PostgreSQL Database (Free: 1GB, expira em 90 dias se inativo)
@@ -24,14 +25,15 @@ databases:
     plan: free
 
 services:
+  # =============================================================================
   # Web Service (Django)
+  # =============================================================================
   - type: web
     name: gestao-contrato-web
     runtime: python
     plan: free
     buildCommand: chmod +x build.sh && ./build.sh
     startCommand: gunicorn gestao_contrato.wsgi:application --bind 0.0.0.0:$PORT --timeout 120 --workers 2 --threads 2 --worker-class gthread
-    # Health check no endpoint dedicado (mais rápido que /admin/)
     healthCheckPath: /health/
     envVars:
       - key: PYTHON_VERSION
@@ -51,11 +53,35 @@ services:
           name: gestao-contrato-redis
           type: redis
           property: connectionString
-      # Token para API de tarefas (gerar um valor seguro)
+      # Token para API de tarefas
       - key: TASK_TOKEN
         generateValue: true
+      # URL do servico BRCobranca (usar URL publica do Render)
+      # Nota: Configurar manualmente apos o deploy com a URL do servico brcobranca-api
+      # Exemplo: https://brcobranca-api.onrender.com
+      - key: BRCOBRANCA_URL
+        sync: false
 
-  # Redis (para cache e sessões - Free: 25MB)
+  # =============================================================================
+  # BRCobranca API (Geracao de Boletos)
+  # =============================================================================
+  # Servico Docker para geracao de boletos bancarios
+  # Documentacao: https://github.com/akretion/boleto_cnab_api
+  - type: web
+    name: brcobranca-api
+    runtime: docker
+    plan: free
+    dockerfilePath: ./Dockerfile.brcobranca
+    healthCheckPath: /
+    envVars:
+      - key: RACK_ENV
+        value: "production"
+      - key: PORT
+        value: "9292"
+
+  # =============================================================================
+  # Redis (para cache e sessoes - Free: 25MB)
+  # =============================================================================
   - type: redis
     name: gestao-contrato-redis
     plan: free
@@ -63,57 +89,40 @@ services:
     ipAllowList: []
 
 # =============================================================================
-# CONFIGURAÇÃO DE TAREFAS AGENDADAS (Alternativa ao Celery)
+# CONFIGURACAO DE TAREFAS AGENDADAS (Alternativa ao Celery)
 # =============================================================================
 #
-# O plano gratuito do Render não suporta Background Workers (Celery).
+# O plano gratuito do Render nao suporta Background Workers (Celery).
 # Implementamos uma API de tarefas que pode ser chamada por cron externos.
 #
-# OPÇÃO 1: CRON EXTERNO (Recomendado - Gratuito)
+# OPCAO 1: CRON EXTERNO (Recomendado - Gratuito)
 # ----------------------------------------------
 # 1. Acesse https://cron-job.org e crie uma conta gratuita
-# 2. Após o deploy, acesse seu app no Render e copie o valor de TASK_TOKEN
+# 2. Apos o deploy, acesse seu app no Render e copie o valor de TASK_TOKEN
 # 3. Crie um novo cron job com:
 #    - URL: https://seu-app.onrender.com/api/tasks/run-all/
-#    - Método: POST
+#    - Metodo: POST
 #    - Header: X-Task-Token: <seu-token>
-#    - Agenda: Diariamente às 08:00
+#    - Agenda: Diariamente as 08:00
 #
 # Tarefas executadas:
 #   - Atualizar status de parcelas vencidas
 #   - Processar reajustes pendentes (IPCA/IGP-M/SELIC)
-#   - Enviar notificações de vencimento
-#
-# OPÇÃO 2: EXECUÇÃO MANUAL
-# ------------------------
-# Via Django Admin:
-#   - /admin/financeiro/reajuste/
-#   - /admin/notificacoes/notificacao/
-#
-# Via API (com token):
-#   curl -X POST https://seu-app.onrender.com/api/tasks/run-all/ \
-#        -H "X-Task-Token: seu-token"
-#
-# Via Render Shell:
-#   python manage.py processar_reajustes
-#   python manage.py enviar_notificacoes
-#
-# OPÇÃO 3: UPGRADE PARA PLANO PAGO
-# --------------------------------
-# Com o plano pago, você pode adicionar workers Celery:
-#   - type: worker
-#     name: gestao-contrato-worker
-#     runtime: python
-#     startCommand: celery -A gestao_contrato worker -l info
+#   - Enviar notificacoes de vencimento
 #
 # =============================================================================
-# KEEP-ALIVE (Evitar que o serviço adormeça)
+# KEEP-ALIVE (Evitar que o servico adormeca)
 # =============================================================================
-# O Free tier "adormece" após 15 min de inatividade. Para manter ativo:
+# O Free tier "adormece" apos 15 min de inatividade. Para manter ativo:
 #
 # 1. Configure um cron job adicional em cron-job.org:
 #    - URL: https://seu-app.onrender.com/health/
-#    - Método: GET
+#    - Metodo: GET
 #    - Agenda: A cada 10 minutos
 #
-# 2. Ou use https://uptimerobot.com (gratuito, 5 min interval)
+# 2. Para o BRCobranca tambem:
+#    - URL: https://brcobranca-api.onrender.com/
+#    - Metodo: GET
+#    - Agenda: A cada 10 minutos
+#
+# 3. Ou use https://uptimerobot.com (gratuito, 5 min interval)
