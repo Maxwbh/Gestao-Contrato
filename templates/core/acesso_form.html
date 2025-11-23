@@ -1,0 +1,79 @@
+{% extends 'core/base.html' %}
+{% load crispy_forms_tags %}
+{% load static %}
+
+{% block title %}{% if object %}Editar{% else %}Novo{% endif %} Acesso - Gestão de Contratos{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+    <!-- Header -->
+    <div class="mb-4">
+        <nav aria-label="breadcrumb">
+            <ol class="breadcrumb">
+                <li class="breadcrumb-item"><a href="{% url 'core:dashboard' %}">Dashboard</a></li>
+                <li class="breadcrumb-item"><a href="{% url 'core:listar_acessos' %}">Acessos</a></li>
+                <li class="breadcrumb-item active">{% if object %}Editar{% else %}Novo{% endif %}</li>
+            </ol>
+        </nav>
+        <h2 class="mb-1">
+            <i class="fas fa-key me-2 text-primary"></i>
+            {% if object %}Editar Acesso{% else %}Novo Acesso{% endif %}
+        </h2>
+        <p class="text-muted mb-0">
+            {% if object %}
+            Editando acesso de {{ object.usuario.username }} a {{ object.imobiliaria.nome }}
+            {% else %}
+            Configure o acesso de um usuário a uma contabilidade/imobiliária
+            {% endif %}
+        </p>
+    </div>
+
+    <!-- Formulário -->
+    <form method="post" novalidate>
+        {% csrf_token %}
+        {% crispy form %}
+    </form>
+</div>
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const contabilidadeSelect = document.getElementById('id_contabilidade');
+    const imobiliariaSelect = document.getElementById('id_imobiliaria');
+
+    if (contabilidadeSelect && imobiliariaSelect) {
+        // Salvar valor atual da imobiliária
+        const currentImobiliaria = imobiliariaSelect.value;
+
+        contabilidadeSelect.addEventListener('change', function() {
+            const contabilidadeId = this.value;
+
+            if (!contabilidadeId) {
+                // Limpar imobiliárias
+                imobiliariaSelect.innerHTML = '<option value="">---------</option>';
+                return;
+            }
+
+            // Buscar imobiliárias da contabilidade
+            fetch(`/api/contabilidades/${contabilidadeId}/imobiliarias/`)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.status === 'success') {
+                        imobiliariaSelect.innerHTML = '<option value="">---------</option>';
+                        data.imobiliarias.forEach(imob => {
+                            const option = document.createElement('option');
+                            option.value = imob.id;
+                            option.textContent = imob.nome;
+                            imobiliariaSelect.appendChild(option);
+                        });
+                    }
+                })
+                .catch(error => {
+                    console.error('Erro ao buscar imobiliárias:', error);
+                });
+        });
+    }
+});
+</script>
+{% endblock %}
+{% endblock %}
