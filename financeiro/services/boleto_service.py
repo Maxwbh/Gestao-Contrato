@@ -442,28 +442,46 @@ class BoletoService:
             dict: Resultado com PDF e dados do boleto
         """
         try:
-            # Primeiro, obter linha digitavel e codigo de barras
             linha_digitavel = ''
             codigo_barras = ''
 
-            # Obter nosso numero formatado
+            # =====================================================
+            # PASSO 1: Obter linha digitavel e codigo de barras
+            # Chamar API com type=string para obter os dados
+            # =====================================================
             try:
-                params_nn = {
+                params_string = {
                     'bank': banco_nome,
+                    'type': 'string',
                     'data': json.dumps(dados_boleto)
                 }
-                response_nn = requests.get(
-                    f"{self.brcobranca_url}/api/boleto/nosso_numero",
-                    params=params_nn,
+                response_string = requests.get(
+                    f"{self.brcobranca_url}/api/boleto",
+                    params=params_string,
                     timeout=self.timeout
                 )
-                if response_nn.status_code == 200:
-                    nosso_numero_formatado = response_nn.text.strip().strip('"')
-                    logger.info(f"Nosso numero formatado: {nosso_numero_formatado}")
+                if response_string.status_code == 200:
+                    content_type = response_string.headers.get('content-type', '')
+                    if 'application/json' in content_type:
+                        result_string = response_string.json()
+                        if isinstance(result_string, dict):
+                            linha_digitavel = result_string.get('linha_digitavel', '')
+                            codigo_barras = result_string.get('codigo_barras', '')
+                    else:
+                        # Resposta texto - tentar parsear
+                        texto = response_string.text.strip()
+                        logger.info(f"Resposta string da API: {texto[:200]}")
+                        # Alguns bancos retornam a linha digitavel diretamente
+                        if len(texto) >= 47 and texto.replace('.', '').replace(' ', '').isdigit():
+                            linha_digitavel = texto
+                logger.info(f"Linha digitavel obtida: {linha_digitavel}")
+                logger.info(f"Codigo de barras obtido: {codigo_barras}")
             except Exception as e:
-                logger.warning(f"Erro ao obter nosso numero formatado: {e}")
+                logger.warning(f"Erro ao obter linha digitavel via string: {e}")
 
-            # Gerar PDF do boleto
+            # =====================================================
+            # PASSO 2: Gerar PDF do boleto
+            # =====================================================
             params = {
                 'bank': banco_nome,
                 'type': 'pdf',
@@ -486,15 +504,6 @@ class BoletoService:
                     # Resposta e o PDF diretamente
                     pdf_content = response.content
 
-                    # Tentar obter linha digitavel separadamente
-                    try:
-                        linha_resp = self._obter_linha_digitavel(banco_nome, dados_boleto)
-                        if linha_resp:
-                            linha_digitavel = linha_resp.get('linha_digitavel', '')
-                            codigo_barras = linha_resp.get('codigo_barras', '')
-                    except Exception as e:
-                        logger.warning(f"Erro ao obter linha digitavel: {e}")
-
                     return {
                         'sucesso': True,
                         'pdf_content': pdf_content,
@@ -510,11 +519,16 @@ class BoletoService:
                             'sucesso': False,
                             'erro': result.get('error', 'Erro desconhecido')
                         }
+                    # JSON pode conter os dados
+                    if not linha_digitavel:
+                        linha_digitavel = result.get('linha_digitavel', '')
+                    if not codigo_barras:
+                        codigo_barras = result.get('codigo_barras', '')
                     return {
                         'sucesso': True,
                         'pdf_content': result.get('pdf'),
-                        'linha_digitavel': result.get('linha_digitavel', ''),
-                        'codigo_barras': result.get('codigo_barras', ''),
+                        'linha_digitavel': linha_digitavel,
+                        'codigo_barras': codigo_barras,
                     }
                 else:
                     # Assumir que e PDF
