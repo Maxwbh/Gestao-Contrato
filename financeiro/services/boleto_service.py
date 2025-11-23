@@ -105,6 +105,20 @@ class BoletoService:
         """Retorna o nome do banco para a API BRCobranca"""
         return self.BANCOS_BRCOBRANCA.get(codigo_banco)
 
+    def _extrair_numero_dv(self, valor):
+        """
+        Extrai numero e digito verificador de um campo como '12345-6' ou '12345678-9'.
+        Retorna tupla (numero, dv)
+        """
+        if not valor:
+            return '', ''
+        valor_limpo = valor.replace('.', '').replace(' ', '')
+        if '-' in valor_limpo:
+            partes = valor_limpo.split('-')
+            return partes[0], partes[1] if len(partes) > 1 else ''
+        # Se nao tem hifen, assumir ultimo digito como DV para contas
+        return valor_limpo, ''
+
     def _formatar_cpf_cnpj(self, documento):
         """Remove formatacao do CPF/CNPJ"""
         if documento:
@@ -200,6 +214,10 @@ class BoletoService:
         instrucoes.append(f"Contrato: {contrato.numero_contrato}")
         instrucoes.append(f"Imovel: {contrato.imovel.identificacao}")
 
+        # Extrair agencia e conta (separando DV se houver)
+        agencia_num, agencia_dv = self._extrair_numero_dv(conta_bancaria.agencia)
+        conta_num, conta_dv = self._extrair_numero_dv(conta_bancaria.conta)
+
         # Dados do boleto no formato BRCobranca
         dados = {
             # Dados do Cedente (beneficiario - quem recebe)
@@ -207,9 +225,9 @@ class BoletoService:
             'documento_cedente': documento_cedente,
             'cedente_endereco': f"{imobiliaria.logradouro}, {imobiliaria.numero}" if imobiliaria.logradouro else '',
 
-            # Dados Bancarios
-            'agencia': conta_bancaria.agencia.replace('-', '').replace('.', ''),
-            'conta_corrente': conta_bancaria.conta.replace('-', '').replace('.', ''),
+            # Dados Bancarios (apenas numeros, sem DV)
+            'agencia': agencia_num,
+            'conta_corrente': conta_num,
             'convenio': str(conta_bancaria.convenio) if conta_bancaria.convenio else '',
             'carteira': str(carteira),
 
@@ -239,6 +257,9 @@ class BoletoService:
             'local_pagamento': 'Pagavel em qualquer banco ate o vencimento',
         }
 
+        # Log dos dados bancarios para debug
+        logger.info(f"Dados bancarios: agencia={agencia_num} (dv={agencia_dv}), conta={conta_num} (dv={conta_dv})")
+
         # Adicionar campos especificos por banco
         codigo_banco = conta_bancaria.banco
 
@@ -246,10 +267,15 @@ class BoletoService:
         if codigo_banco == '001':
             # Convenio obrigatorio (4-8 digitos)
             if not dados.get('convenio'):
-                dados['convenio'] = conta_bancaria.convenio or conta_bancaria.conta
+                dados['convenio'] = conta_bancaria.convenio or conta_num
             # Formatar convenio com zeros a esquerda se necessario
             if dados.get('convenio'):
                 dados['convenio'] = str(dados['convenio']).zfill(7)
+            # Adicionar DVs se disponiveis
+            if conta_dv:
+                dados['digito_conta'] = conta_dv
+            if agencia_dv:
+                dados['digito_agencia'] = agencia_dv
             # Remover campos nao suportados pelo BB
             for campo in ['documento_numero', 'especie_documento', 'aceite']:
                 dados.pop(campo, None)
