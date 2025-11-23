@@ -1,4 +1,5 @@
 {% extends 'base.html' %}
+{% load format_filters %}
 
 {% block title %}Contrato {{ contrato.numero_contrato }} - Gestao de Contratos{% endblock %}
 
@@ -93,19 +94,19 @@
         <div class="row mb-4">
             <div class="col-md-3">
                 <div class="card stat-card border-primary">
-                    <div class="stat-value text-primary">R$ {{ contrato.valor_total|floatformat:2 }}</div>
+                    <div class="stat-value text-primary">{{ contrato.valor_total|moeda }}</div>
                     <div class="stat-label">Valor Total</div>
                 </div>
             </div>
             <div class="col-md-3">
                 <div class="card stat-card border-success">
-                    <div class="stat-value text-success">R$ {{ valor_pago|floatformat:2 }}</div>
+                    <div class="stat-value text-success">{{ valor_pago|moeda }}</div>
                     <div class="stat-label">Valor Pago</div>
                 </div>
             </div>
             <div class="col-md-3">
                 <div class="card stat-card border-warning">
-                    <div class="stat-value text-warning">R$ {{ saldo_devedor|floatformat:2 }}</div>
+                    <div class="stat-value text-warning">{{ saldo_devedor|moeda }}</div>
                     <div class="stat-label">Saldo Devedor</div>
                 </div>
             </div>
@@ -210,19 +211,19 @@
                     <div class="card-body">
                         <div class="info-item">
                             <div class="info-label">Valor Total</div>
-                            <div class="info-value">R$ {{ contrato.valor_total|floatformat:2 }}</div>
+                            <div class="info-value">{{ contrato.valor_total|moeda }}</div>
                         </div>
                         <div class="info-item">
                             <div class="info-label">Entrada</div>
-                            <div class="info-value">R$ {{ contrato.valor_entrada|floatformat:2 }}</div>
+                            <div class="info-value">{{ contrato.valor_entrada|moeda }}</div>
                         </div>
                         <div class="info-item">
                             <div class="info-label">Valor Financiado</div>
-                            <div class="info-value">R$ {{ contrato.valor_financiado|floatformat:2 }}</div>
+                            <div class="info-value">{{ contrato.valor_financiado|moeda }}</div>
                         </div>
                         <div class="info-item">
                             <div class="info-label">Valor Original Parcela</div>
-                            <div class="info-value">R$ {{ contrato.valor_parcela_original|floatformat:2 }}</div>
+                            <div class="info-value">{{ contrato.valor_parcela_original|moeda }}</div>
                         </div>
                     </div>
                 </div>
@@ -253,6 +254,43 @@
                         <div class="info-item">
                             <div class="info-label">Proximo Reajuste</div>
                             <div class="info-value text-warning">{{ contrato.data_proximo_reajuste|date:"d/m/Y" }}</div>
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>
+
+                <!-- Conta Bancaria da Imobiliaria -->
+                <div class="card info-card success mb-3">
+                    <div class="card-header bg-success text-white">
+                        <i class="fas fa-university"></i> Conta Bancaria
+                    </div>
+                    <div class="card-body">
+                        {% if conta_bancaria %}
+                        <div class="info-item">
+                            <div class="info-label">Banco</div>
+                            <div class="info-value">{{ conta_bancaria.get_banco_display }}</div>
+                        </div>
+                        <div class="info-item">
+                            <div class="info-label">Agencia</div>
+                            <div class="info-value">{{ conta_bancaria.agencia }}{% if conta_bancaria.agencia_dv %}-{{ conta_bancaria.agencia_dv }}{% endif %}</div>
+                        </div>
+                        <div class="info-item">
+                            <div class="info-label">Conta</div>
+                            <div class="info-value">{{ conta_bancaria.conta }}{% if conta_bancaria.conta_dv %}-{{ conta_bancaria.conta_dv }}{% endif %}</div>
+                        </div>
+                        {% if conta_bancaria.convenio %}
+                        <div class="info-item">
+                            <div class="info-label">Convenio</div>
+                            <div class="info-value">{{ conta_bancaria.convenio }}</div>
+                        </div>
+                        {% endif %}
+                        <div class="info-item">
+                            <div class="info-label">Carteira</div>
+                            <div class="info-value">{{ conta_bancaria.carteira }}</div>
+                        </div>
+                        {% else %}
+                        <div class="text-muted text-center py-2">
+                            <i class="fas fa-exclamation-circle"></i> Nenhuma conta bancaria configurada
                         </div>
                         {% endif %}
                     </div>
@@ -356,9 +394,9 @@
                                         </td>
                                         <td>{{ parcela.data_vencimento|date:"d/m/Y" }}</td>
                                         <td class="text-end">
-                                            R$ {{ parcela.valor_atual|floatformat:2 }}
+                                            {{ parcela.valor_atual|moeda }}
                                             {% if parcela.pago %}
-                                            <br><small class="text-muted">Pago: R$ {{ parcela.valor_pago|floatformat:2 }}</small>
+                                            <br><small class="text-muted">Pago: {{ parcela.valor_pago|moeda }}</small>
                                             {% endif %}
                                         </td>
                                         <td class="text-center">
@@ -393,7 +431,7 @@
                                                 {% if not parcela.pago %}
                                                     {% if parcela.tem_boleto %}
                                                         <a href="{% url 'financeiro:visualizar_boleto' parcela.pk %}"
-                                                           class="btn btn-outline-primary" title="Ver Boleto">
+                                                           class="btn btn-outline-primary" title="Ver Boleto" target="_blank">
                                                             <i class="fas fa-eye"></i>
                                                         </a>
                                                         <button type="button" class="btn btn-outline-warning"
@@ -777,7 +815,8 @@ function gerarBoleto(parcelaId) {
     .then(response => response.json())
     .then(data => {
         if (data.sucesso) {
-            alert('Boleto gerado com sucesso!\nNosso Numero: ' + data.nosso_numero);
+            // Abrir boleto em nova aba
+            window.open('/financeiro/parcelas/' + parcelaId + '/boleto/', '_blank');
             location.reload();
         } else {
             alert('Erro ao gerar boleto: ' + data.erro);
@@ -800,7 +839,8 @@ function regenerarBoleto(parcelaId) {
     .then(response => response.json())
     .then(data => {
         if (data.sucesso) {
-            alert('Boleto atualizado com sucesso!');
+            // Abrir boleto em nova aba
+            window.open('/financeiro/parcelas/' + parcelaId + '/boleto/', '_blank');
             location.reload();
         } else {
             alert('Erro ao atualizar boleto: ' + data.erro);
