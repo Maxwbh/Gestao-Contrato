@@ -1,0 +1,116 @@
+{% extends 'base.html' %}
+{% load crispy_forms_tags %}
+
+{% block title %}
+    {% if object %}Editar Configuracao de E-mail{% else %}Nova Configuracao de E-mail{% endif %} - Gestao de Contratos
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <div class="row justify-content-center">
+        <div class="col-xl-8">
+            <!-- Header -->
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <div>
+                    <h4 class="mb-0 text-dark">
+                        <i class="fas fa-envelope me-2 text-primary"></i>
+                        {% if object %}Editar: {{ object.nome }}{% else %}Nova Configuracao de E-mail{% endif %}
+                    </h4>
+                    <small class="text-muted">
+                        {% if object %}Atualize os dados do servidor SMTP{% else %}Configure um novo servidor SMTP{% endif %}
+                    </small>
+                </div>
+                <a href="{% url 'notificacoes:listar_config_email' %}" class="btn btn-outline-secondary btn-sm">
+                    <i class="fas fa-list me-1"></i>Ver Lista
+                </a>
+            </div>
+
+            <!-- Formulario -->
+            <form method="post" novalidate>
+                {% csrf_token %}
+                {% crispy form %}
+            </form>
+
+            {% if object %}
+            <!-- Dicas de Configuracao -->
+            <div class="card mt-4 border-info">
+                <div class="card-header bg-info text-white py-2">
+                    <i class="fas fa-lightbulb me-2"></i>Dicas de Configuracao
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-4">
+                            <h6><i class="fab fa-google text-danger me-1"></i>Gmail</h6>
+                            <ul class="small">
+                                <li>Host: smtp.gmail.com</li>
+                                <li>Porta: 587 (TLS) ou 465 (SSL)</li>
+                                <li>Ative "Senhas de App"</li>
+                            </ul>
+                        </div>
+                        <div class="col-md-4">
+                            <h6><i class="fab fa-microsoft text-primary me-1"></i>Outlook/Office365</h6>
+                            <ul class="small">
+                                <li>Host: smtp.office365.com</li>
+                                <li>Porta: 587 (TLS)</li>
+                                <li>Usar autenticacao moderna</li>
+                            </ul>
+                        </div>
+                        <div class="col-md-4">
+                            <h6><i class="fas fa-server text-success me-1"></i>Servidor Proprio</h6>
+                            <ul class="small">
+                                <li>Verifique firewall</li>
+                                <li>Confirme SPF/DKIM</li>
+                                <li>Teste com Telnet</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Botao Testar Conexao
+    const btnTestar = document.getElementById('btn-testar-conexao');
+    if (btnTestar) {
+        btnTestar.addEventListener('click', function() {
+            {% if object %}
+            const url = '{% url "notificacoes:testar_config_email" object.pk %}';
+            btnTestar.disabled = true;
+            btnTestar.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Testando...';
+
+            fetch(url, {
+                method: 'GET',
+                headers: {
+                    'X-Requested-With': 'XMLHttpRequest'
+                }
+            })
+            .then(response => response.json())
+            .then(data => {
+                btnTestar.disabled = false;
+                btnTestar.innerHTML = '<i class="fas fa-vial me-1"></i>Testar Conexao';
+
+                if (data.status === 'success') {
+                    alert('Sucesso: ' + data.message);
+                } else {
+                    alert('Erro: ' + data.message);
+                }
+            })
+            .catch(error => {
+                btnTestar.disabled = false;
+                btnTestar.innerHTML = '<i class="fas fa-vial me-1"></i>Testar Conexao';
+                alert('Erro: ' + error.message);
+            });
+            {% else %}
+            alert('Salve a configuracao primeiro para poder testar.');
+            {% endif %}
+        });
+    }
+});
+</script>
+{% endblock %}
