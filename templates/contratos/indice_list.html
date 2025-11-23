@@ -40,6 +40,16 @@
     @keyframes spin {
         to { transform: translateY(-50%) rotate(360deg); }
     }
+    .nav-tabs .nav-link {
+        font-weight: 500;
+    }
+    .nav-tabs .nav-link.active {
+        font-weight: 600;
+    }
+    .tab-badge {
+        font-size: 0.7rem;
+        margin-left: 5px;
+    }
 </style>
 {% endblock %}
 
@@ -61,34 +71,10 @@
                 </div>
             </div>
             <div class="card-body">
-                <!-- Cards de Estatisticas -->
-                <div class="row mb-4 g-2">
-                    {% for stat in estatisticas_indices %}
-                    <div class="col-6 col-md-3 col-lg">
-                        <div class="card stat-card h-100 {% if stat.tipo == 'IPCA' %}border-primary{% elif stat.tipo == 'IGPM' %}border-success{% elif stat.tipo == 'INCC' %}border-info{% elif stat.tipo == 'IGPDI' %}border-secondary{% elif stat.tipo == 'INPC' %}border-danger{% elif stat.tipo == 'TR' %}border-dark{% else %}border-warning{% endif %}">
-                            <div class="card-body text-center py-2">
-                                <h5 class="{% if stat.tipo == 'IPCA' %}text-primary{% elif stat.tipo == 'IGPM' %}text-success{% elif stat.tipo == 'INCC' %}text-info{% elif stat.tipo == 'IGPDI' %}text-secondary{% elif stat.tipo == 'INPC' %}text-danger{% elif stat.tipo == 'TR' %}text-dark{% else %}text-warning{% endif %} mb-0">{{ stat.total }}</h5>
-                                <small class="text-muted d-block">{{ stat.tipo }}</small>
-                                {% if stat.ultimo %}
-                                <small class="badge bg-light text-dark mt-1">{{ stat.ultimo.periodo }}: {{ stat.ultimo.valor }}%</small>
-                                {% endif %}
-                            </div>
-                        </div>
-                    </div>
-                    {% endfor %}
-                </div>
-
-                <!-- Filtros -->
+                <!-- Filtro de Ano -->
                 <div class="row mb-4">
                     <div class="col-md-3">
-                        <select class="form-select" id="filtroTipo" onchange="aplicarFiltros()">
-                            <option value="">Todos os Tipos</option>
-                            {% for codigo, nome in tipos_indice %}
-                            <option value="{{ codigo }}" {% if tipo_filter == codigo %}selected{% endif %}>{{ nome }}</option>
-                            {% endfor %}
-                        </select>
-                    </div>
-                    <div class="col-md-3">
+                        <label class="form-label fw-bold">Ano</label>
                         <select class="form-select" id="filtroAno" onchange="aplicarFiltros()">
                             <option value="">Todos os Anos</option>
                             {% for ano in anos_disponiveis %}
@@ -96,13 +82,59 @@
                             {% endfor %}
                         </select>
                     </div>
-                    <div class="col-md-6 text-end">
+                    <div class="col-md-9 text-end d-flex align-items-end justify-content-end">
                         {% if tipo_filter or ano_filter %}
                         <a href="{% url 'contratos:indices_listar' %}" class="btn btn-outline-secondary">
                             <i class="fas fa-times"></i> Limpar Filtros
                         </a>
                         {% endif %}
                     </div>
+                </div>
+
+                <!-- Abas por Tipo de Indice -->
+                <ul class="nav nav-tabs mb-3" id="indicesTabs" role="tablist">
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link {% if not tipo_filter %}active{% endif %}" id="todos-tab"
+                                onclick="aplicarFiltroTipo('')" type="button">
+                            <i class="fas fa-list"></i> Todos
+                            <span class="badge bg-secondary tab-badge">{{ total_indices }}</span>
+                        </button>
+                    </li>
+                    {% for stat in estatisticas_indices %}
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link {% if tipo_filter == stat.tipo %}active{% endif %}"
+                                id="{{ stat.tipo|lower }}-tab"
+                                onclick="aplicarFiltroTipo('{{ stat.tipo }}')" type="button">
+                            <span class="{% if stat.tipo == 'IPCA' %}text-primary{% elif stat.tipo == 'IGPM' %}text-success{% elif stat.tipo == 'INCC' %}text-info{% elif stat.tipo == 'INPC' %}text-danger{% elif stat.tipo == 'TR' %}text-dark{% else %}text-warning{% endif %}">
+                                {{ stat.tipo }}
+                            </span>
+                            <span class="badge {% if stat.tipo == 'IPCA' %}bg-primary{% elif stat.tipo == 'IGPM' %}bg-success{% elif stat.tipo == 'INCC' %}bg-info{% elif stat.tipo == 'INPC' %}bg-danger{% elif stat.tipo == 'TR' %}bg-dark{% else %}bg-warning{% endif %} tab-badge">
+                                {{ stat.total }}
+                            </span>
+                        </button>
+                    </li>
+                    {% endfor %}
+                </ul>
+
+                <!-- Cards de Ultimo Valor por Tipo -->
+                <div class="row mb-4 g-2">
+                    {% for stat in estatisticas_indices %}
+                    <div class="col-6 col-md-3 col-lg-2">
+                        <div class="card stat-card h-100 {% if stat.tipo == 'IPCA' %}border-primary{% elif stat.tipo == 'IGPM' %}border-success{% elif stat.tipo == 'INCC' %}border-info{% elif stat.tipo == 'IGPDI' %}border-secondary{% elif stat.tipo == 'INPC' %}border-danger{% elif stat.tipo == 'TR' %}border-dark{% else %}border-warning{% endif %}">
+                            <div class="card-body text-center py-2">
+                                <small class="text-muted d-block">{{ stat.tipo }}</small>
+                                {% if stat.ultimo %}
+                                <h6 class="{% if stat.tipo == 'IPCA' %}text-primary{% elif stat.tipo == 'IGPM' %}text-success{% elif stat.tipo == 'INCC' %}text-info{% elif stat.tipo == 'IGPDI' %}text-secondary{% elif stat.tipo == 'INPC' %}text-danger{% elif stat.tipo == 'TR' %}text-dark{% else %}text-warning{% endif %} mb-0">
+                                    {{ stat.ultimo.valor|floatformat:2 }}%
+                                </h6>
+                                <small class="text-muted">{{ stat.ultimo.periodo }}</small>
+                                {% else %}
+                                <small class="text-muted">-</small>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+                    {% endfor %}
                 </div>
 
                 {% if indices %}
@@ -123,7 +155,7 @@
                             {% for indice in indices %}
                             <tr>
                                 <td>
-                                    <span class="badge indice-badge {% if indice.tipo_indice == 'IPCA' %}bg-primary{% elif indice.tipo_indice == 'IGPM' %}bg-success{% else %}bg-warning text-dark{% endif %}">
+                                    <span class="badge indice-badge {% if indice.tipo_indice == 'IPCA' %}bg-primary{% elif indice.tipo_indice == 'IGPM' %}bg-success{% elif indice.tipo_indice == 'INCC' %}bg-info{% elif indice.tipo_indice == 'INPC' %}bg-danger{% elif indice.tipo_indice == 'TR' %}bg-dark{% else %}bg-warning text-dark{% endif %}">
                                         {{ indice.tipo_indice }}
                                     </span>
                                 </td>
@@ -294,9 +326,21 @@
 
 {% block extra_js %}
 <script>
-    function aplicarFiltros() {
-        const tipo = document.getElementById('filtroTipo').value;
+    function aplicarFiltroTipo(tipo) {
         const ano = document.getElementById('filtroAno').value;
+        let url = '{% url "contratos:indices_listar" %}';
+        const params = [];
+        if (tipo) params.push('tipo=' + tipo);
+        if (ano) params.push('ano=' + ano);
+        if (params.length > 0) url += '?' + params.join('&');
+        window.location.href = url;
+    }
+
+    function aplicarFiltros() {
+        const ano = document.getElementById('filtroAno').value;
+        // Manter o tipo atual se houver
+        const urlParams = new URLSearchParams(window.location.search);
+        const tipo = urlParams.get('tipo') || '';
         let url = '{% url "contratos:indices_listar" %}';
         const params = [];
         if (tipo) params.push('tipo=' + tipo);
