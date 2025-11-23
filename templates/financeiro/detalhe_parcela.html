@@ -159,6 +159,17 @@
                             <a href="{% url 'financeiro:download_boleto' parcela.pk %}" class="btn btn-outline-primary">
                                 <i class="fas fa-download me-1"></i> Download
                             </a>
+                            {% else %}
+                            <div class="alert alert-warning py-2 mb-0">
+                                <i class="fas fa-exclamation-triangle me-1"></i>
+                                <small>PDF nao disponivel</small>
+                            </div>
+                            <form method="post" action="{% url 'financeiro:gerar_boleto' parcela.pk %}" class="mt-2">
+                                {% csrf_token %}
+                                <button type="submit" class="btn btn-sm btn-outline-primary">
+                                    <i class="fas fa-sync me-1"></i> Regerar Boleto
+                                </button>
+                            </form>
                             {% endif %}
                         </div>
                     </div>
