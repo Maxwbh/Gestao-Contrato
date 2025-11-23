@@ -306,18 +306,17 @@ class BoletoService:
     def _gerar_boleto_local(self, dados_boleto, nosso_numero, conta_bancaria):
         """
         Gera dados básicos do boleto localmente (fallback).
-        Não gera o PDF, apenas os dados essenciais.
-
-        Para geração completa, é necessário a API BRCobrança.
+        Gera também um PDF simples com os dados do boleto.
         """
         try:
             # Gerar código de barras e linha digitável básicos
-            # Esta é uma implementação simplificada
-
             codigo_barras = self._gerar_codigo_barras_simplificado(
                 dados_boleto, conta_bancaria
             )
             linha_digitavel = self._gerar_linha_digitavel(codigo_barras)
+
+            # Gerar PDF
+            pdf_content = self._gerar_pdf_boleto(dados_boleto, codigo_barras, linha_digitavel)
 
             return {
                 'sucesso': True,
@@ -326,8 +325,7 @@ class BoletoService:
                 'linha_digitavel': linha_digitavel,
                 'codigo_barras': codigo_barras,
                 'valor': Decimal(str(dados_boleto['valor'])),
-                'pdf_content': None,  # Não disponível no fallback
-                'aviso': 'Boleto gerado em modo offline. PDF não disponível.',
+                'pdf_content': pdf_content,
             }
         except Exception as e:
             logger.exception(f"Erro no fallback local: {e}")
@@ -335,6 +333,126 @@ class BoletoService:
                 'sucesso': False,
                 'erro': f'Falha na geração local: {str(e)}'
             }
+
+    def _gerar_pdf_boleto(self, dados, codigo_barras, linha_digitavel):
+        """
+        Gera um PDF simples do boleto usando reportlab.
+        """
+        from io import BytesIO
+        from reportlab.lib.pagesizes import A4
+        from reportlab.lib.units import mm
+        from reportlab.pdfgen import canvas
+        from reportlab.lib import colors
+        from reportlab.graphics.barcode import code128
+
+        buffer = BytesIO()
+        c = canvas.Canvas(buffer, pagesize=A4)
+        width, height = A4
+
+        # Margens
+        margin = 20 * mm
+        y = height - margin
+
+        # Cabeçalho
+        c.setFont("Helvetica-Bold", 14)
+        c.drawString(margin, y, "BOLETO BANCÁRIO")
+        y -= 10 * mm
+
+        # Dados do cedente
+        c.setFont("Helvetica-Bold", 10)
+        c.drawString(margin, y, "CEDENTE")
+        y -= 5 * mm
+        c.setFont("Helvetica", 10)
+        c.drawString(margin, y, dados.get('cedente', ''))
+        y -= 5 * mm
+        c.drawString(margin, y, f"CNPJ: {dados.get('documento_cedente', '')}")
+        y -= 8 * mm
+
+        # Dados do sacado
+        c.setFont("Helvetica-Bold", 10)
+        c.drawString(margin, y, "PAGADOR")
+        y -= 5 * mm
+        c.setFont("Helvetica", 10)
+        c.drawString(margin, y, dados.get('sacado', ''))
+        y -= 5 * mm
+        c.drawString(margin, y, f"CPF/CNPJ: {dados.get('documento_sacado', '')}")
+        y -= 5 * mm
+        c.drawString(margin, y, dados.get('sacado_endereco', ''))
+        y -= 8 * mm
+
+        # Linha divisória
+        c.setStrokeColor(colors.black)
+        c.line(margin, y, width - margin, y)
+        y -= 10 * mm
+
+        # Dados do boleto
+        c.setFont("Helvetica-Bold", 10)
+        c.drawString(margin, y, f"Banco: {dados.get('banco', '')}")
+        c.drawString(margin + 80 * mm, y, f"Agência: {dados.get('agencia', '')}")
+        y -= 6 * mm
+
+        c.drawString(margin, y, f"Nosso Número: {dados.get('nosso_numero', '')}")
+        c.drawString(margin + 80 * mm, y, f"Carteira: {dados.get('carteira', '')}")
+        y -= 6 * mm
+
+        c.drawString(margin, y, f"Número Documento: {dados.get('numero_documento', '')}")
+        y -= 6 * mm
+
+        c.drawString(margin, y, f"Vencimento: {dados.get('data_vencimento', '')}")
+        y -= 10 * mm
+
+        # Valor
+        c.setFont("Helvetica-Bold", 14)
+        c.drawString(margin, y, f"VALOR: R$ {dados.get('valor', 0):.2f}")
+        y -= 15 * mm
+
+        # Linha divisória
+        c.line(margin, y, width - margin, y)
+        y -= 10 * mm
+
+        # Instruções
+        c.setFont("Helvetica-Bold", 10)
+        c.drawString(margin, y, "INSTRUÇÕES")
+        y -= 5 * mm
+        c.setFont("Helvetica", 9)
+        for i in range(1, 4):
+            instrucao = dados.get(f'instrucao{i}', '')
+            if instrucao:
+                c.drawString(margin, y, f"- {instrucao}")
+                y -= 4 * mm
+        y -= 6 * mm
+
+        # Linha digitável
+        c.setFont("Helvetica-Bold", 10)
+        c.drawString(margin, y, "LINHA DIGITÁVEL")
+        y -= 6 * mm
+        c.setFont("Courier-Bold", 12)
+        c.drawString(margin, y, linha_digitavel)
+        y -= 15 * mm
+
+        # Código de barras
+        c.setFont("Helvetica-Bold", 10)
+        c.drawString(margin, y, "CÓDIGO DE BARRAS")
+        y -= 8 * mm
+
+        try:
+            barcode = code128.Code128(codigo_barras, barWidth=0.4 * mm, barHeight=15 * mm)
+            barcode.drawOn(c, margin, y - 15 * mm)
+        except Exception as e:
+            c.setFont("Helvetica", 9)
+            c.drawString(margin, y, f"[Código: {codigo_barras}]")
+
+        y -= 25 * mm
+
+        # Rodapé
+        c.setFont("Helvetica", 8)
+        c.drawString(margin, 15 * mm, "Autenticação mecânica - Ficha de compensação")
+
+        c.showPage()
+        c.save()
+
+        buffer.seek(0)
+        return buffer.read()
 
     def _gerar_codigo_barras_simplificado(self, dados, conta_bancaria):
         """
