@@ -56,11 +56,9 @@ services:
       # Token para API de tarefas
       - key: TASK_TOKEN
         generateValue: true
-      # URL do servico BRCobranca (usar URL publica do Render)
-      # Nota: Configurar manualmente apos o deploy com a URL do servico brcobranca-api
-      # Exemplo: https://brcobranca-api.onrender.com
+      # URL do servico BRCobranca
       - key: BRCOBRANCA_URL
-        sync: false
+        value: "https://brcobranca-api.onrender.com"
 
   # =============================================================================
   # BRCobranca API (Geracao de Boletos)
