@@ -199,22 +199,22 @@ class CNABService:
         numero_remessa = (ultimo.numero_remessa + 1) if ultimo else 1
 
         # Montar dados para BRCobranca
-        banco = self._get_banco_brcobranca(conta_bancaria.codigo_banco)
+        banco = self._get_banco_brcobranca(conta_bancaria.banco)
         imobiliaria = conta_bancaria.imobiliaria
 
         dados_remessa = {
             'banco': banco,
             'tipo': 'cnab240' if layout == 'CNAB_240' else 'cnab400',
             'dados': {
-                'empresa_mae': imobiliaria.razao_social or imobiliaria.nome_fantasia,
+                'empresa_mae': imobiliaria.razao_social or imobiliaria.nome,
                 'documento_cedente': self._formatar_cpf_cnpj(imobiliaria.cnpj),
-                'agencia': conta_bancaria.agencia,
-                'conta_corrente': conta_bancaria.conta_corrente,
-                'digito_conta': conta_bancaria.digito_conta or '',
+                'agencia': conta_bancaria.agencia.replace('-', '').split('-')[0] if conta_bancaria.agencia else '',
+                'conta_corrente': conta_bancaria.conta.replace('-', '').split('-')[0] if conta_bancaria.conta else '',
+                'digito_conta': conta_bancaria.conta.split('-')[1] if '-' in (conta_bancaria.conta or '') else '',
                 'convenio': conta_bancaria.convenio or '',
                 'carteira': conta_bancaria.carteira or '',
                 'sequencial_remessa': numero_remessa,
-                'codigo_cedente': conta_bancaria.codigo_cedente or '',
+                'codigo_cedente': conta_bancaria.convenio or '',
             },
             'pagamentos': []
         }
@@ -334,14 +334,17 @@ class CNABService:
         header += 'REMESSA'.ljust(7)
         header += '01'  # Tipo servico (cobranca)
         header += 'COBRANCA'.ljust(15)
-        header += conta_bancaria.agencia.zfill(4)
+        agencia_num = conta_bancaria.agencia.replace('-', '').split('-')[0] if conta_bancaria.agencia else ''
+        conta_num = conta_bancaria.conta.replace('-', '').split('-')[0] if conta_bancaria.conta else ''
+        conta_dv = conta_bancaria.conta.split('-')[1] if '-' in (conta_bancaria.conta or '') else ''
+        header += agencia_num.zfill(4)
         header += '00'  # Digito agencia
-        header += conta_bancaria.conta_corrente.zfill(8)
-        header += (conta_bancaria.digito_conta or '').ljust(1)
+        header += conta_num.zfill(8)
+        header += conta_dv.ljust(1)
         header += ''.ljust(6)  # Brancos
-        header += (imobiliaria.razao_social or imobiliaria.nome_fantasia)[:30].ljust(30)
-        header += conta_bancaria.codigo_banco.zfill(3)
-        header += conta_bancaria.get_codigo_banco_display()[:15].ljust(15)
+        header += (imobiliaria.razao_social or imobiliaria.nome)[:30].ljust(30)
+        header += conta_bancaria.banco.zfill(3)
+        header += conta_bancaria.get_banco_display()[:15].ljust(15)
         header += timezone.now().strftime('%d%m%y')
         header += ''.ljust(8)  # Brancos
         header += ''.ljust(2)  # Identificacao sistema
@@ -360,22 +363,22 @@ class CNABService:
             # Tipo inscricao cedente
             detalhe += '02' if len(self._formatar_cpf_cnpj(imobiliaria.cnpj)) > 11 else '01'
             detalhe += self._formatar_cpf_cnpj(imobiliaria.cnpj).zfill(14)
-            detalhe += conta_bancaria.agencia.zfill(4)
+            detalhe += agencia_num.zfill(4)
             detalhe += '00'  # Digito agencia
-            detalhe += conta_bancaria.conta_corrente.zfill(8)
-            detalhe += (conta_bancaria.digito_conta or '').ljust(1)
+            detalhe += conta_num.zfill(8)
+            detalhe += conta_dv.ljust(1)
             detalhe += ''.ljust(6)  # Brancos
-            detalhe += parcela.numero_documento[:25].ljust(25)
-            detalhe += parcela.nosso_numero.zfill(20)
+            detalhe += (parcela.numero_documento or '')[:25].ljust(25)
+            detalhe += (parcela.nosso_numero or '').zfill(20)
             detalhe += ''.ljust(25)  # Brancos
             detalhe += '0'  # Codigo mora
             detalhe += '01'  # Codigo carteira
             detalhe += '01'  # Comando (entrada)
-            detalhe += parcela.numero_documento[:10].ljust(10)
+            detalhe += (parcela.numero_documento or '')[:10].ljust(10)
             detalhe += parcela.data_vencimento.strftime('%d%m%y')
             valor_str = str(int((parcela.valor_boleto or parcela.valor_atual) * 100)).zfill(13)
             detalhe += valor_str
-            detalhe += conta_bancaria.codigo_banco.zfill(3)
+            detalhe += conta_bancaria.banco.zfill(3)
             detalhe += '00000'  # Agencia cobradora
             detalhe += '01'  # Especie titulo
             detalhe += 'N'  # Aceite
