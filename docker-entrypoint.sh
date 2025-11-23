@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/bin/sh
 # Entrypoint para BRCobranca API no Render
 # Desenvolvedor: Maxwell da Silva Oliveira
 # Empresa: M&S do Brasil LTDA
