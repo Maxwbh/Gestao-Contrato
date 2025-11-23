@@ -337,17 +337,21 @@ class IndiceReajusteListView(LoginRequiredMixin, ListView):
             ('SELIC', 'SELIC'),
         ]
 
+        # Total de índices
+        context['total_indices'] = IndiceReajuste.objects.count()
+
         # Estatísticas por tipo
         tipos = ['IPCA', 'IGPM', 'INCC', 'IGPDI', 'INPC', 'TR', 'SELIC']
         context['estatisticas_indices'] = []
         for tipo in tipos:
             total = IndiceReajuste.objects.filter(tipo_indice=tipo).count()
-            ultimo = IndiceReajuste.objects.filter(tipo_indice=tipo).order_by('-ano', '-mes').first()
-            context['estatisticas_indices'].append({
-                'tipo': tipo,
-                'total': total,
-                'ultimo': ultimo,
-            })
+            if total > 0:  # Só mostrar tipos que têm registros
+                ultimo = IndiceReajuste.objects.filter(tipo_indice=tipo).order_by('-ano', '-mes').first()
+                context['estatisticas_indices'].append({
+                    'tipo': tipo,
+                    'total': total,
+                    'ultimo': ultimo,
+                })
 
         # Data do contrato mais antigo (para limite de importação)
         contrato_mais_antigo = Contrato.objects.order_by('data_contrato').first()

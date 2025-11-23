@@ -407,7 +407,7 @@
                                                         </button>
                                                     {% endif %}
                                                     <button type="button" class="btn btn-outline-success"
-                                                            onclick="abrirModalPagamento({{ parcela.pk }}, '{{ parcela.data_vencimento|date:"Y-m-d" }}', {{ parcela.valor_atual }}, {{ contrato.percentual_juros_mora }}, {{ contrato.percentual_multa }})"
+                                                            onclick="abrirModalPagamento({{ parcela.pk }}, '{{ parcela.data_vencimento|date:"Y-m-d" }}', '{{ parcela.valor_atual|stringformat:"f" }}', '{{ contrato.percentual_juros_mora|stringformat:"f" }}', '{{ contrato.percentual_multa|stringformat:"f" }}')"
                                                             title="Registrar Pagamento">
                                                         <i class="fas fa-dollar-sign"></i>
                                                     </button>
@@ -746,7 +746,7 @@
 // Dados das parcelas para o modal de carne
 var parcelasPendentes = [
     {% for parcela in parcelas %}{% if not parcela.pago and not parcela.tem_boleto %}
-    {id: {{ parcela.pk }}, numero: {{ parcela.numero_parcela }}, vencimento: '{{ parcela.data_vencimento|date:"d/m/Y" }}', valor: {{ parcela.valor_atual }}},
+    {id: {{ parcela.pk }}, numero: {{ parcela.numero_parcela }}, vencimento: '{{ parcela.data_vencimento|date:"d/m/Y" }}', valor: parseFloat('{{ parcela.valor_atual|stringformat:"f" }}'.replace(',', '.')) || 0},
     {% endif %}{% endfor %}
 ];
 
@@ -812,14 +812,19 @@ function regenerarBoleto(parcelaId) {
 // ============ FUNCOES DE PAGAMENTO ============
 
 function abrirModalPagamento(parcelaId, vencimento, valorOriginal, taxaJuros, taxaMulta) {
-    pagamentoValorOriginal = parseFloat(valorOriginal);
-    pagamentoTaxaJuros = parseFloat(taxaJuros);
-    pagamentoTaxaMulta = parseFloat(taxaMulta);
+    // Converter strings para números (tratando possíveis vírgulas)
+    var valorOriginalStr = String(valorOriginal).replace(',', '.');
+    var taxaJurosStr = String(taxaJuros).replace(',', '.');
+    var taxaMultaStr = String(taxaMulta).replace(',', '.');
+
+    pagamentoValorOriginal = parseFloat(valorOriginalStr) || 0;
+    pagamentoTaxaJuros = parseFloat(taxaJurosStr) || 0;
+    pagamentoTaxaMulta = parseFloat(taxaMultaStr) || 0;
     pagamentoVencimento = new Date(vencimento + 'T00:00:00');
 
     document.getElementById('pagamento_parcela_id').value = parcelaId;
     document.getElementById('pagamento_vencimento').value = vencimento;
-    document.getElementById('pagamento_valor_original').value = valorOriginal.toFixed(2);
+    document.getElementById('pagamento_valor_original').value = pagamentoValorOriginal.toFixed(2);
     document.getElementById('pagamento_data').value = new Date().toISOString().split('T')[0];
     document.getElementById('pagamento_juros').value = '0';
     document.getElementById('pagamento_multa').value = '0';
@@ -1036,7 +1041,7 @@ document.getElementById('formCarne').addEventListener('submit', function(e) {
 // Dados das parcelas para calculo de reajuste
 var todasParcelas = [
     {% for parcela in parcelas %}
-    {id: {{ parcela.pk }}, numero: {{ parcela.numero_parcela }}, valor: {{ parcela.valor_atual }}, pago: {% if parcela.pago %}true{% else %}false{% endif %}},
+    {id: {{ parcela.pk }}, numero: {{ parcela.numero_parcela }}, valor: parseFloat('{{ parcela.valor_atual|stringformat:"f" }}'.replace(',', '.')) || 0, pago: {% if parcela.pago %}true{% else %}false{% endif %}},
     {% endfor %}
 ];
 
