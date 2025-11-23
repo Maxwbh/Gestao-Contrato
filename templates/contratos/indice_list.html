@@ -244,52 +244,81 @@
 </div>
 
 <!-- Modal de Importacao -->
-<div class="modal fade" id="modalImportar" tabindex="-1">
+<div class="modal fade" id="modalImportar" tabindex="-1" data-bs-backdrop="static" data-bs-keyboard="false">
     <div class="modal-dialog">
         <div class="modal-content">
             <div class="modal-header bg-success text-white">
                 <h5 class="modal-title">
                     <i class="fas fa-download"></i> Importar Indices
                 </h5>
-                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" id="btnFecharModal"></button>
             </div>
             <div class="modal-body">
-                <p class="text-muted">
-                    Selecione o tipo de indice para importar. Os dados serao buscados automaticamente das APIs oficiais (IBGE e Banco Central).
-                </p>
+                <!-- Formulario de selecao -->
+                <div id="formImportacao">
+                    <p class="text-muted">
+                        Selecione o tipo de indice para importar. Os dados serao buscados automaticamente das APIs oficiais (IBGE e Banco Central).
+                    </p>
 
-                {% if data_contrato_mais_antigo %}
-                <div class="alert alert-info">
-                    <i class="fas fa-info-circle"></i>
-                    Contrato mais antigo: <strong>{{ data_contrato_mais_antigo|date:"d/m/Y" }}</strong>
-                    <br>
-                    <small>Os indices serao importados a partir desta data ou do ultimo indice cadastrado.</small>
-                </div>
-                {% endif %}
+                    {% if data_contrato_mais_antigo %}
+                    <div class="alert alert-info">
+                        <i class="fas fa-info-circle"></i>
+                        Contrato mais antigo: <strong>{{ data_contrato_mais_antigo|date:"d/m/Y" }}</strong>
+                        <br>
+                        <small>Os indices serao importados a partir desta data ou do ultimo indice cadastrado.</small>
+                    </div>
+                    {% endif %}
 
-                <div class="mb-3">
-                    <label class="form-label">Tipo de Indice</label>
-                    <select class="form-select" id="tipoIndiceImportar">
-                        <option value="IPCA">IPCA - Indice de Precos ao Consumidor Amplo (IBGE)</option>
-                        <option value="IGPM">IGP-M - Indice Geral de Precos do Mercado (FGV/BCB)</option>
-                        <option value="INCC">INCC - Indice Nacional de Custo da Construcao (FGV/BCB)</option>
-                        <option value="IGPDI">IGP-DI - Indice Geral de Precos - Disponibilidade Interna (FGV/BCB)</option>
-                        <option value="INPC">INPC - Indice Nacional de Precos ao Consumidor (IBGE)</option>
-                        <option value="TR">TR - Taxa Referencial (BCB)</option>
-                        <option value="SELIC">SELIC - Taxa Basica de Juros (BCB)</option>
-                    </select>
-                </div>
-                <div class="alert alert-secondary small">
-                    <strong>Fontes:</strong><br>
-                    IPCA, INPC: API SIDRA/IBGE<br>
-                    IGP-M, INCC, IGP-DI, TR, SELIC: API Banco Central
+                    <div class="mb-3">
+                        <label class="form-label">Tipo de Indice</label>
+                        <select class="form-select" id="tipoIndiceImportar">
+                            <option value="IPCA">IPCA - Indice de Precos ao Consumidor Amplo (IBGE)</option>
+                            <option value="IGPM">IGP-M - Indice Geral de Precos do Mercado (FGV/BCB)</option>
+                            <option value="INCC">INCC - Indice Nacional de Custo da Construcao (FGV/BCB)</option>
+                            <option value="IGPDI">IGP-DI - Indice Geral de Precos - Disponibilidade Interna (FGV/BCB)</option>
+                            <option value="INPC">INPC - Indice Nacional de Precos ao Consumidor (IBGE)</option>
+                            <option value="TR">TR - Taxa Referencial (BCB)</option>
+                            <option value="SELIC">SELIC - Taxa Basica de Juros (BCB)</option>
+                        </select>
+                    </div>
+                    <div class="alert alert-secondary small">
+                        <strong>Fontes:</strong><br>
+                        IPCA, INPC: API SIDRA/IBGE<br>
+                        IGP-M, INCC, IGP-DI, TR, SELIC: API Banco Central
+                    </div>
                 </div>
 
-                <div id="resultadoImportacao" class="alert d-none"></div>
+                <!-- Progresso da importacao -->
+                <div id="progressoImportacao" class="d-none">
+                    <div class="text-center mb-4">
+                        <div class="spinner-border text-success mb-3" style="width: 3rem; height: 3rem;" role="status">
+                            <span class="visually-hidden">Importando...</span>
+                        </div>
+                        <h5 id="statusTitulo" class="text-success">Importando indices...</h5>
+                        <p id="statusDescricao" class="text-muted mb-0">Buscando dados da API oficial</p>
+                    </div>
+
+                    <div class="progress mb-3" style="height: 25px;">
+                        <div id="barraProgresso" class="progress-bar progress-bar-striped progress-bar-animated bg-success"
+                             role="progressbar" style="width: 0%;" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100">
+                            <span id="progressoTexto">0%</span>
+                        </div>
+                    </div>
+
+                    <div class="alert alert-light border">
+                        <div class="d-flex align-items-center">
+                            <i class="fas fa-clock text-muted me-2"></i>
+                            <small id="tempoEstimado" class="text-muted">Tempo estimado: calculando...</small>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Resultado da importacao -->
+                <div id="resultadoImportacao" class="d-none"></div>
             </div>
             <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
-                <button type="button" class="btn btn-success btn-importar" id="btnImportar" onclick="importarIndices()">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal" id="btnCancelar">Cancelar</button>
+                <button type="button" class="btn btn-success" id="btnImportar" onclick="importarIndices()">
                     <i class="fas fa-download me-1"></i> Importar
                 </button>
             </div>
@@ -357,15 +386,61 @@
 
     function importarIndices() {
         const btn = document.getElementById('btnImportar');
+        const btnCancelar = document.getElementById('btnCancelar');
+        const btnFecharModal = document.getElementById('btnFecharModal');
         const tipo = document.getElementById('tipoIndiceImportar').value;
-        const resultado = document.getElementById('resultadoImportacao');
+        const tipoNome = document.getElementById('tipoIndiceImportar').options[document.getElementById('tipoIndiceImportar').selectedIndex].text.split(' - ')[0];
 
-        // Desabilitar botao e mostrar loading
+        const formImportacao = document.getElementById('formImportacao');
+        const progressoImportacao = document.getElementById('progressoImportacao');
+        const resultado = document.getElementById('resultadoImportacao');
+        const barraProgresso = document.getElementById('barraProgresso');
+        const progressoTexto = document.getElementById('progressoTexto');
+        const statusTitulo = document.getElementById('statusTitulo');
+        const statusDescricao = document.getElementById('statusDescricao');
+        const tempoEstimado = document.getElementById('tempoEstimado');
+
+        // Esconder formulario e mostrar progresso
+        formImportacao.classList.add('d-none');
+        progressoImportacao.classList.remove('d-none');
+        resultado.classList.add('d-none');
+
+        // Desabilitar botoes
         btn.disabled = true;
-        btn.classList.add('loading');
-        resultado.className = 'alert alert-info';
-        resultado.classList.remove('d-none');
-        resultado.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Importando indices, aguarde...';
+        btnCancelar.disabled = true;
+        btnFecharModal.disabled = true;
+
+        // Atualizar status inicial
+        statusTitulo.textContent = 'Importando ' + tipoNome + '...';
+        statusDescricao.textContent = 'Conectando a API oficial...';
+
+        // Simular progresso inicial
+        let progresso = 0;
+        const inicioImportacao = Date.now();
+
+        const intervaloProgresso = setInterval(() => {
+            if (progresso < 30) {
+                progresso += 5;
+                statusDescricao.textContent = 'Buscando dados da API...';
+            } else if (progresso < 60) {
+                progresso += 2;
+                statusDescricao.textContent = 'Processando indices...';
+            } else if (progresso < 85) {
+                progresso += 1;
+                statusDescricao.textContent = 'Salvando no banco de dados...';
+            }
+
+            barraProgresso.style.width = progresso + '%';
+            barraProgresso.setAttribute('aria-valuenow', progresso);
+            progressoTexto.textContent = progresso + '%';
+
+            // Atualizar tempo estimado
+            const tempoDecorrido = Math.round((Date.now() - inicioImportacao) / 1000);
+            if (tempoDecorrido > 2) {
+                const tempoRestante = Math.max(1, Math.round((tempoDecorrido / progresso) * (100 - progresso)));
+                tempoEstimado.textContent = 'Tempo restante: ~' + tempoRestante + ' segundos';
+            }
+        }, 300);
 
         // Chamar API
         fetch('{% url "contratos:indices_importar" %}', {
@@ -378,25 +453,112 @@
         })
         .then(response => response.json())
         .then(data => {
-            btn.disabled = false;
-            btn.classList.remove('loading');
+            clearInterval(intervaloProgresso);
 
-            if (data.success) {
-                resultado.className = 'alert alert-success';
-                resultado.innerHTML = '<i class="fas fa-check-circle"></i> ' + data.message;
-                // Recarregar pagina apos 2 segundos
-                setTimeout(() => { window.location.reload(); }, 2000);
-            } else {
-                resultado.className = 'alert alert-danger';
-                resultado.innerHTML = '<i class="fas fa-times-circle"></i> Erro: ' + data.error;
-            }
+            // Completar progresso
+            barraProgresso.style.width = '100%';
+            barraProgresso.setAttribute('aria-valuenow', 100);
+            progressoTexto.textContent = '100%';
+
+            setTimeout(() => {
+                progressoImportacao.classList.add('d-none');
+                resultado.classList.remove('d-none');
+
+                if (data.success) {
+                    barraProgresso.classList.remove('progress-bar-animated');
+                    resultado.className = 'alert alert-success';
+                    resultado.innerHTML = `
+                        <div class="text-center">
+                            <i class="fas fa-check-circle fa-3x text-success mb-3"></i>
+                            <h5 class="text-success">Importacao Concluida!</h5>
+                            <p class="mb-2">${data.message}</p>
+                            <div class="row text-center mt-3">
+                                <div class="col-4">
+                                    <div class="border rounded p-2">
+                                        <h4 class="mb-0 text-primary">${data.created || 0}</h4>
+                                        <small class="text-muted">Novos</small>
+                                    </div>
+                                </div>
+                                <div class="col-4">
+                                    <div class="border rounded p-2">
+                                        <h4 class="mb-0 text-warning">${data.updated || 0}</h4>
+                                        <small class="text-muted">Atualizados</small>
+                                    </div>
+                                </div>
+                                <div class="col-4">
+                                    <div class="border rounded p-2">
+                                        <h4 class="mb-0 text-success">${data.total || (data.created + data.updated) || 0}</h4>
+                                        <small class="text-muted">Total</small>
+                                    </div>
+                                </div>
+                            </div>
+                            <p class="text-muted mt-3 mb-0"><small>Recarregando pagina em 3 segundos...</small></p>
+                        </div>
+                    `;
+
+                    // Recarregar pagina apos 3 segundos
+                    setTimeout(() => { window.location.reload(); }, 3000);
+                } else {
+                    resultado.className = 'alert alert-danger';
+                    resultado.innerHTML = `
+                        <div class="text-center">
+                            <i class="fas fa-times-circle fa-3x text-danger mb-3"></i>
+                            <h5 class="text-danger">Erro na Importacao</h5>
+                            <p class="mb-0">${data.error}</p>
+                        </div>
+                    `;
+
+                    // Reabilitar botoes
+                    btn.disabled = false;
+                    btnCancelar.disabled = false;
+                    btnFecharModal.disabled = false;
+
+                    // Mostrar botao de tentar novamente
+                    btn.innerHTML = '<i class="fas fa-redo me-1"></i> Tentar Novamente';
+                    btn.onclick = function() {
+                        resetarModal();
+                        importarIndices();
+                    };
+                }
+            }, 500);
         })
         .catch(error => {
-            btn.disabled = false;
-            btn.classList.remove('loading');
+            clearInterval(intervaloProgresso);
+            progressoImportacao.classList.add('d-none');
+            resultado.classList.remove('d-none');
             resultado.className = 'alert alert-danger';
-            resultado.innerHTML = '<i class="fas fa-times-circle"></i> Erro de conexao: ' + error;
+            resultado.innerHTML = `
+                <div class="text-center">
+                    <i class="fas fa-wifi fa-3x text-danger mb-3"></i>
+                    <h5 class="text-danger">Erro de Conexao</h5>
+                    <p class="mb-0">${error}</p>
+                </div>
+            `;
+
+            // Reabilitar botoes
+            btn.disabled = false;
+            btnCancelar.disabled = false;
+            btnFecharModal.disabled = false;
+
+            btn.innerHTML = '<i class="fas fa-redo me-1"></i> Tentar Novamente';
         });
     }
+
+    function resetarModal() {
+        document.getElementById('formImportacao').classList.remove('d-none');
+        document.getElementById('progressoImportacao').classList.add('d-none');
+        document.getElementById('resultadoImportacao').classList.add('d-none');
+        document.getElementById('barraProgresso').style.width = '0%';
+        document.getElementById('btnImportar').innerHTML = '<i class="fas fa-download me-1"></i> Importar';
+        document.getElementById('btnImportar').onclick = importarIndices;
+    }
+
+    // Resetar modal quando fechar
+    document.getElementById('modalImportar').addEventListener('hidden.bs.modal', function () {
+        resetarModal();
+        document.getElementById('btnImportar').disabled = false;
+        document.getElementById('btnCancelar').disabled = false;
+        document.getElementById('btnFecharModal').disabled = false;
+    });
 </script>
 {% endblock %}

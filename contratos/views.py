@@ -458,32 +458,65 @@ def importar_indices_ibge(request):
         else:
             return JsonResponse({'success': False, 'error': 'Tipo de índice inválido'})
 
-        # Salvar índices no banco
+        # Salvar índices no banco usando bulk operations para melhor performance
         count_created = 0
         count_updated = 0
+
+        # Buscar índices existentes para este tipo
+        existing_indices = {
+            (idx.ano, idx.mes): idx
+            for idx in IndiceReajuste.objects.filter(tipo_indice=tipo_indice)
+        }
+
+        to_create = []
+        to_update = []
+        now = datetime.now()
+
         for indice_data in indices:
-            obj, created = IndiceReajuste.objects.update_or_create(
-                tipo_indice=tipo_indice,
-                ano=indice_data['ano'],
-                mes=indice_data['mes'],
-                defaults={
-                    'valor': indice_data['valor'],
-                    'valor_acumulado_ano': indice_data.get('acumulado_ano'),
-                    'valor_acumulado_12m': indice_data.get('acumulado_12m'),
-                    'fonte': indice_data.get('fonte', 'API'),
-                    'data_importacao': datetime.now(),
-                }
-            )
-            if created:
-                count_created += 1
-            else:
+            key = (indice_data['ano'], indice_data['mes'])
+
+            if key in existing_indices:
+                # Atualizar existente
+                obj = existing_indices[key]
+                obj.valor = indice_data['valor']
+                obj.valor_acumulado_ano = indice_data.get('acumulado_ano')
+                obj.valor_acumulado_12m = indice_data.get('acumulado_12m')
+                obj.fonte = indice_data.get('fonte', 'API')
+                obj.data_importacao = now
+                to_update.append(obj)
                 count_updated += 1
+            else:
+                # Criar novo
+                to_create.append(IndiceReajuste(
+                    tipo_indice=tipo_indice,
+                    ano=indice_data['ano'],
+                    mes=indice_data['mes'],
+                    valor=indice_data['valor'],
+                    valor_acumulado_ano=indice_data.get('acumulado_ano'),
+                    valor_acumulado_12m=indice_data.get('acumulado_12m'),
+                    fonte=indice_data.get('fonte', 'API'),
+                    data_importacao=now,
+                ))
+                count_created += 1
+
+        # Bulk create novos registros
+        if to_create:
+            IndiceReajuste.objects.bulk_create(to_create, batch_size=100)
+
+        # Bulk update registros existentes
+        if to_update:
+            IndiceReajuste.objects.bulk_update(
+                to_update,
+                ['valor', 'valor_acumulado_ano', 'valor_acumulado_12m', 'fonte', 'data_importacao'],
+                batch_size=100
+            )
 
         return JsonResponse({
             'success': True,
             'message': f'Importação concluída! {count_created} novos, {count_updated} atualizados.',
             'created': count_created,
-            'updated': count_updated
+            'updated': count_updated,
+            'total': len(indices)
         })
 
     except Exception as e:
