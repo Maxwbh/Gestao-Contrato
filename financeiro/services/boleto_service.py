@@ -61,15 +61,25 @@ class BoletoService:
         '756': 'sicoob',
     }
 
-    # Carteiras padrao por banco
+    # Carteiras padrao por banco (conforme documentacao BRCobranca)
     CARTEIRAS_PADRAO = {
-        '001': '17',       # Banco do Brasil
-        '033': '101',      # Santander
-        '104': '14',       # Caixa
-        '237': '09',       # Bradesco
-        '341': '109',      # Itau
-        '748': '1',        # Sicredi
+        '001': '18',       # Banco do Brasil
+        '033': '102',      # Santander
+        '104': '1',        # Caixa (1=com registro)
+        '237': '06',       # Bradesco
+        '341': '175',      # Itau
+        '748': '3',        # Sicredi (3=sem registro)
         '756': '1',        # Sicoob
+    }
+
+    # Campos especificos obrigatorios por banco
+    CAMPOS_BANCO = {
+        '001': {'convenio_obrigatorio': True},
+        '033': {'convenio_obrigatorio': True},
+        '104': {'emissao': '4', 'convenio_len': 6},
+        '341': {'seu_numero': True},
+        '748': {'posto_obrigatorio': True, 'byte_idt': '2'},
+        '756': {'variacao': '01'},
     }
 
     def __init__(self, brcobranca_url=None):
@@ -204,19 +214,62 @@ class BoletoService:
         }
 
         # Adicionar campos especificos por banco
-        if conta_bancaria.banco == '104':  # Caixa
-            dados['codigo_beneficiario'] = conta_bancaria.convenio or ''
+        codigo_banco = conta_bancaria.banco
 
-        # Campos especificos por banco
-        # Banco do Brasil (001) - usa convenio para identificacao
-        if conta_bancaria.banco == '001':
-            # Garantir que convenio esteja preenchido (obrigatorio para BB)
+        # Banco do Brasil (001)
+        if codigo_banco == '001':
+            # Convenio obrigatorio (4-8 digitos)
             if not dados.get('convenio'):
                 dados['convenio'] = conta_bancaria.convenio or conta_bancaria.conta
+            # Formatar convenio com zeros a esquerda se necessario
+            if dados.get('convenio'):
+                dados['convenio'] = str(dados['convenio']).zfill(7)
 
-        # Itau (341) - campo seu_numero para carteiras especiais
-        if conta_bancaria.banco == '341':
-            dados['seu_numero'] = numero_documento[:7] if numero_documento else ''
+        # Santander (033)
+        elif codigo_banco == '033':
+            # Convenio obrigatorio (7 digitos)
+            if not dados.get('convenio'):
+                dados['convenio'] = conta_bancaria.convenio or ''
+            if dados.get('convenio'):
+                dados['convenio'] = str(dados['convenio']).zfill(7)
+
+        # Caixa (104)
+        elif codigo_banco == '104':
+            dados['codigo_beneficiario'] = conta_bancaria.convenio or ''
+            dados['emissao'] = '4'  # Emissao pelo beneficiario
+            # Convenio deve ter 6 digitos
+            if dados.get('convenio'):
+                dados['convenio'] = str(dados['convenio']).zfill(6)
+
+        # Bradesco (237)
+        elif codigo_banco == '237':
+            # Nosso numero max 11 digitos
+            if dados.get('nosso_numero'):
+                dados['nosso_numero'] = str(dados['nosso_numero']).zfill(11)[:11]
+
+        # Itau (341)
+        elif codigo_banco == '341':
+            # Campo seu_numero para carteiras especiais (max 7 digitos)
+            dados['seu_numero'] = (numero_documento[:7] if numero_documento else '').zfill(7)
+            # Nosso numero max 8 digitos
+            if dados.get('nosso_numero'):
+                dados['nosso_numero'] = str(dados['nosso_numero']).zfill(8)[:8]
+
+        # Sicredi (748)
+        elif codigo_banco == '748':
+            # Campos obrigatorios
+            dados['posto'] = getattr(conta_bancaria, 'posto', '01') or '01'
+            dados['byte_idt'] = '2'  # Geracao pelo beneficiario
+            # Nosso numero max 5 digitos
+            if dados.get('nosso_numero'):
+                dados['nosso_numero'] = str(dados['nosso_numero']).zfill(5)[:5]
+
+        # Sicoob (756)
+        elif codigo_banco == '756':
+            dados['variacao'] = '01'
+            # Nosso numero max 7 digitos
+            if dados.get('nosso_numero'):
+                dados['nosso_numero'] = str(dados['nosso_numero']).zfill(7)[:7]
 
         # Adicionar multa se configurada
         if imobiliaria.percentual_multa_padrao and imobiliaria.percentual_multa_padrao > 0:
