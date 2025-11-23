@@ -452,17 +452,28 @@ class Command(BaseCommand):
         return contratos
 
     def marcar_parcelas_pagas(self, contratos, percentual=0.90):
-        """Marca 90% das parcelas como pagas"""
+        """Marca parcelas como pagas (somente parcelas vencidas até a data atual)"""
+        hoje = timezone.now().date()
+
         for contrato in contratos:
-            parcelas = list(contrato.parcelas.all().order_by('numero_parcela'))
+            # Filtrar apenas parcelas com vencimento até hoje
+            parcelas = list(contrato.parcelas.filter(
+                data_vencimento__lte=hoje
+            ).order_by('numero_parcela'))
+
             total_parcelas = len(parcelas)
             parcelas_a_pagar = int(total_parcelas * percentual)
 
             for i in range(parcelas_a_pagar):
                 parcela = parcelas[i]
 
+                # Data de pagamento entre vencimento e no máximo hoje
                 dias_apos_vencimento = random.randint(0, 10)
                 data_pagamento = parcela.data_vencimento + timedelta(days=dias_apos_vencimento)
+
+                # Garantir que data de pagamento não ultrapasse hoje
+                if data_pagamento > hoje:
+                    data_pagamento = hoje
 
                 if data_pagamento > parcela.data_vencimento:
                     juros, multa = parcela.calcular_juros_multa(data_pagamento)
