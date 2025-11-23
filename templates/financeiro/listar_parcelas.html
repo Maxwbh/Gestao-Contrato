@@ -226,8 +226,17 @@
                                 <strong>{{ parcela.numero_parcela }}</strong>/{{ parcela.contrato.numero_parcelas }}
                             </td>
                             <td>
-                                <a href="{% url 'contratos:detalhe' parcela.contrato.pk %}">
-                                    {{ parcela.contrato.numero }}
+                                <a href="#" class="link-contrato" data-bs-toggle="modal" data-bs-target="#modalContrato"
+                                   data-contrato-id="{{ parcela.contrato.pk }}"
+                                   data-contrato-numero="{{ parcela.contrato.numero_contrato }}"
+                                   data-comprador="{{ parcela.contrato.comprador.nome }}"
+                                   data-imovel="{{ parcela.contrato.imovel.identificacao }}"
+                                   data-valor-total="{{ parcela.contrato.valor_total }}"
+                                   data-valor-entrada="{{ parcela.contrato.valor_entrada }}"
+                                   data-num-parcelas="{{ parcela.contrato.numero_parcelas }}"
+                                   data-status="{{ parcela.contrato.get_status_display }}"
+                                   data-data-contrato="{{ parcela.contrato.data_contrato|date:'d/m/Y' }}">
+                                    {{ parcela.contrato.numero_contrato }}
                                 </a>
                             </td>
                             <td>
@@ -304,6 +313,78 @@
         {% endif %}
     </div>
 </div>
+
+
+<!-- Modal de Contrato -->
+<div class="modal fade" id="modalContrato" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header bg-primary text-white">
+                <h5 class="modal-title">
+                    <i class="fas fa-file-contract me-2"></i>
+                    <span id="modal-contrato-titulo">Contrato</span>
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="row">
+                    <div class="col-md-6">
+                        <div class="card mb-3">
+                            <div class="card-header bg-light">
+                                <i class="fas fa-info-circle me-1"></i> Informações do Contrato
+                            </div>
+                            <div class="card-body">
+                                <p class="mb-2"><strong>Número:</strong> <span id="modal-contrato-numero"></span></p>
+                                <p class="mb-2"><strong>Data:</strong> <span id="modal-contrato-data"></span></p>
+                                <p class="mb-2"><strong>Status:</strong> <span id="modal-contrato-status" class="badge"></span></p>
+                                <p class="mb-0"><strong>Parcelas:</strong> <span id="modal-contrato-parcelas"></span></p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="card mb-3">
+                            <div class="card-header bg-light">
+                                <i class="fas fa-dollar-sign me-1"></i> Valores
+                            </div>
+                            <div class="card-body">
+                                <p class="mb-2"><strong>Valor Total:</strong> <span id="modal-contrato-valor-total" class="text-primary fw-bold"></span></p>
+                                <p class="mb-0"><strong>Entrada:</strong> <span id="modal-contrato-entrada"></span></p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="row">
+                    <div class="col-md-6">
+                        <div class="card mb-3">
+                            <div class="card-header bg-light">
+                                <i class="fas fa-user me-1"></i> Comprador
+                            </div>
+                            <div class="card-body">
+                                <p class="mb-0" id="modal-contrato-comprador"></p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="card mb-3">
+                            <div class="card-header bg-light">
+                                <i class="fas fa-home me-1"></i> Imóvel
+                            </div>
+                            <div class="card-body">
+                                <p class="mb-0" id="modal-contrato-imovel"></p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Fechar</button>
+                <a href="#" id="modal-contrato-link" class="btn btn-primary">
+                    <i class="fas fa-external-link-alt me-1"></i> Ver Detalhes Completos
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
 {% endblock %}
 
 {% block extra_js %}
@@ -312,6 +393,45 @@
 document.querySelectorAll('#filtroForm select').forEach(function(select) {
     select.addEventListener('change', function() {
         document.getElementById('filtroForm').submit();
+    });
+});
+
+// Modal de Contrato
+document.querySelectorAll('.link-contrato').forEach(function(link) {
+    link.addEventListener('click', function(e) {
+        e.preventDefault();
+        var contratoId = this.dataset.contratoId;
+        var numero = this.dataset.contratoNumero;
+        var comprador = this.dataset.comprador;
+        var imovel = this.dataset.imovel;
+        var valorTotal = parseFloat(this.dataset.valorTotal);
+        var valorEntrada = parseFloat(this.dataset.valorEntrada);
+        var numParcelas = this.dataset.numParcelas;
+        var status = this.dataset.status;
+        var dataContrato = this.dataset.dataContrato;
+
+        document.getElementById('modal-contrato-titulo').textContent = 'Contrato ' + numero;
+        document.getElementById('modal-contrato-numero').textContent = numero;
+        document.getElementById('modal-contrato-data').textContent = dataContrato;
+        document.getElementById('modal-contrato-parcelas').textContent = numParcelas;
+        document.getElementById('modal-contrato-comprador').textContent = comprador;
+        document.getElementById('modal-contrato-imovel').textContent = imovel;
+        document.getElementById('modal-contrato-valor-total').textContent = 'R$ ' + valorTotal.toLocaleString('pt-BR', {minimumFractionDigits: 2});
+        document.getElementById('modal-contrato-entrada').textContent = 'R$ ' + valorEntrada.toLocaleString('pt-BR', {minimumFractionDigits: 2});
+        document.getElementById('modal-contrato-link').href = '/contratos/' + contratoId + '/';
+
+        var statusBadge = document.getElementById('modal-contrato-status');
+        statusBadge.textContent = status;
+        statusBadge.className = 'badge';
+        if (status === 'Ativo') {
+            statusBadge.classList.add('bg-success');
+        } else if (status === 'Quitado') {
+            statusBadge.classList.add('bg-primary');
+        } else if (status === 'Cancelado') {
+            statusBadge.classList.add('bg-danger');
+        } else {
+            statusBadge.classList.add('bg-warning', 'text-dark');
+        }
     });
 });
 </script>
