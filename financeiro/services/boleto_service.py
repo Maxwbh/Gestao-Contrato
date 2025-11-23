@@ -137,6 +137,9 @@ class BoletoService:
         comprador = contrato.comprador
         imobiliaria = contrato.imovel.imobiliaria
 
+        # Obter configuracoes de boleto do contrato (personalizadas ou da imobiliaria)
+        config_boleto = contrato.get_config_boleto()
+
         # Obter proximo nosso numero
         nosso_numero = parcela.obter_proximos_nosso_numero(conta_bancaria)
 
@@ -163,10 +166,15 @@ class BoletoService:
         # Numero do documento
         numero_documento = parcela.gerar_numero_documento()
 
-        # Instrucoes
+        # Instrucoes (usando configuracoes do contrato)
         instrucoes = []
-        if imobiliaria.instrucao_padrao:
-            instrucoes.append(imobiliaria.instrucao_padrao)
+        if config_boleto.get('instrucao_1'):
+            instrucoes.append(config_boleto['instrucao_1'])
+        if config_boleto.get('instrucao_2'):
+            instrucoes.append(config_boleto['instrucao_2'])
+        if config_boleto.get('instrucao_3'):
+            instrucoes.append(config_boleto['instrucao_3'])
+        # Adicionar informacoes padrao
         instrucoes.append(f"Parcela {parcela.numero_parcela} de {contrato.numero_parcelas}")
         instrucoes.append(f"Contrato: {contrato.numero_contrato}")
         instrucoes.append(f"Imovel: {contrato.imovel.identificacao}")
@@ -190,8 +198,8 @@ class BoletoService:
             'data_documento': self._formatar_data(date.today()),
             'data_vencimento': self._formatar_data(parcela.data_vencimento),
             'valor': float(parcela.valor_atual),
-            'aceite': 'S' if imobiliaria.aceite else 'N',
-            'especie_documento': imobiliaria.tipo_titulo or 'DM',
+            'aceite': 'S' if config_boleto.get('aceite') else 'N',
+            'especie_documento': config_boleto.get('tipo_titulo') or 'DM',
             'especie': 'R$',
 
             # Dados do Sacado (pagador - quem paga)
@@ -271,37 +279,41 @@ class BoletoService:
             if dados.get('nosso_numero'):
                 dados['nosso_numero'] = str(dados['nosso_numero']).zfill(7)[:7]
 
-        # Adicionar multa se configurada
-        if imobiliaria.percentual_multa_padrao and imobiliaria.percentual_multa_padrao > 0:
-            dias_carencia = imobiliaria.dias_para_encargos_padrao or 0
+        # Adicionar multa se configurada (usando config do contrato)
+        valor_multa = config_boleto.get('valor_multa', 0) or 0
+        if valor_multa > 0:
+            dias_carencia = config_boleto.get('dias_carencia', 0) or 0
             data_multa = parcela.data_vencimento + timedelta(days=dias_carencia + 1)
             dados['data_mora'] = self._formatar_data(data_multa)
 
-            if imobiliaria.tipo_valor_multa == 'PERCENTUAL':
-                dados['percentual_multa'] = float(imobiliaria.percentual_multa_padrao)
+            if config_boleto.get('tipo_valor_multa') == 'PERCENTUAL':
+                dados['percentual_multa'] = float(valor_multa)
             else:
-                dados['valor_multa'] = float(imobiliaria.percentual_multa_padrao)
+                dados['valor_multa'] = float(valor_multa)
 
-        # Adicionar juros se configurado
-        if imobiliaria.percentual_juros_padrao and imobiliaria.percentual_juros_padrao > 0:
-            if imobiliaria.tipo_valor_juros == 'PERCENTUAL':
-                dados['percentual_mora'] = float(imobiliaria.percentual_juros_padrao)
+        # Adicionar juros se configurado (usando config do contrato)
+        valor_juros = config_boleto.get('valor_juros', 0) or 0
+        if valor_juros > 0:
+            if config_boleto.get('tipo_valor_juros') == 'PERCENTUAL':
+                dados['percentual_mora'] = float(valor_juros)
             else:
-                dados['valor_mora'] = float(imobiliaria.percentual_juros_padrao)
+                dados['valor_mora'] = float(valor_juros)
 
-        # Adicionar desconto se configurado
-        if imobiliaria.percentual_desconto_padrao and imobiliaria.percentual_desconto_padrao > 0:
+        # Adicionar desconto se configurado (usando config do contrato)
+        valor_desconto = config_boleto.get('valor_desconto', 0) or 0
+        if valor_desconto > 0:
+            dias_desconto = config_boleto.get('dias_desconto', 0) or 0
             data_limite = self._calcular_data_limite_desconto(
                 parcela.data_vencimento,
-                imobiliaria.dias_para_desconto_padrao
+                dias_desconto
             )
             if data_limite and data_limite >= date.today():
                 dados['data_desconto'] = self._formatar_data(data_limite)
-                if imobiliaria.tipo_valor_desconto == 'PERCENTUAL':
-                    valor_desconto = float(parcela.valor_atual) * float(imobiliaria.percentual_desconto_padrao) / 100
-                    dados['valor_desconto'] = valor_desconto
+                if config_boleto.get('tipo_valor_desconto') == 'PERCENTUAL':
+                    valor_desc = float(parcela.valor_atual) * float(valor_desconto) / 100
+                    dados['valor_desconto'] = valor_desc
                 else:
-                    dados['valor_desconto'] = float(imobiliaria.percentual_desconto_padrao)
+                    dados['valor_desconto'] = float(valor_desconto)
 
         return dados, nosso_numero
 
