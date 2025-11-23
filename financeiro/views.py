@@ -313,10 +313,15 @@ def listar_parcelas(request):
     if comprador_id:
         parcelas = parcelas.filter(contrato__comprador_id=comprador_id)
 
-    # Filtro por Número do Contrato
-    contrato_numero = request.GET.get('contrato', '').strip()
-    if contrato_numero:
-        parcelas = parcelas.filter(contrato__numero__icontains=contrato_numero)
+    # Filtro por Número do Contrato ou ID
+    contrato_param = request.GET.get('contrato', '').strip()
+    if contrato_param:
+        # Se for número, filtra por ID do contrato
+        if contrato_param.isdigit():
+            parcelas = parcelas.filter(contrato_id=contrato_param)
+        else:
+            # Senão, filtra por número do contrato
+            parcelas = parcelas.filter(contrato__numero_contrato__icontains=contrato_param)
 
     # Filtro por Período de Vencimento
     data_inicio = request.GET.get('data_inicio', '')
@@ -332,7 +337,7 @@ def listar_parcelas(request):
         parcelas = parcelas.filter(
             Q(contrato__comprador__nome__icontains=busca) |
             Q(contrato__imovel__identificacao__icontains=busca) |
-            Q(contrato__numero__icontains=busca)
+            Q(contrato__numero_contrato__icontains=busca)
         )
 
     # Estatísticas
@@ -349,7 +354,7 @@ def listar_parcelas(request):
         'filtro_status': status,
         'filtro_imobiliaria': imobiliaria_id,
         'filtro_comprador': comprador_id,
-        'filtro_contrato': contrato_numero,
+        'filtro_contrato': contrato_param,
         'filtro_data_inicio': data_inicio,
         'filtro_data_fim': data_fim,
         'filtro_busca': busca,
@@ -386,14 +391,25 @@ def detalhe_parcela(request, pk):
 @login_required
 def registrar_pagamento(request, pk):
     """Registra o pagamento de uma parcela"""
+    from datetime import datetime
+
     parcela = get_object_or_404(Parcela, pk=pk)
 
     if request.method == 'POST':
-        valor_pago = request.POST.get('valor_pago')
-        data_pagamento = request.POST.get('data_pagamento', timezone.now().date())
+        valor_pago_str = request.POST.get('valor_pago', '0')
+        data_pagamento_str = request.POST.get('data_pagamento', '')
         observacoes = request.POST.get('observacoes', '')
 
         try:
+            # Converter valor para Decimal
+            valor_pago = Decimal(valor_pago_str.replace(',', '.'))
+
+            # Converter data
+            if data_pagamento_str:
+                data_pagamento = datetime.strptime(data_pagamento_str, '%Y-%m-%d').date()
+            else:
+                data_pagamento = timezone.now().date()
+
             parcela.registrar_pagamento(
                 valor_pago=valor_pago,
                 data_pagamento=data_pagamento,
