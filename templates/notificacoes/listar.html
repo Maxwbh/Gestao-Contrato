@@ -1,0 +1,133 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Notificacoes - Gestao de Contratos{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <!-- Header -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h2 class="mb-1">
+                <i class="fas fa-bell text-warning me-2"></i>
+                Notificacoes
+            </h2>
+            <p class="text-muted mb-0">Historico de notificacoes enviadas</p>
+        </div>
+        <div>
+            <a href="{% url 'notificacoes:listar_config_email' %}" class="btn btn-outline-primary me-2">
+                <i class="fas fa-cog me-1"></i> Config. Email
+            </a>
+            <a href="{% url 'notificacoes:listar_templates' %}" class="btn btn-outline-success">
+                <i class="fas fa-file-alt me-1"></i> Templates
+            </a>
+        </div>
+    </div>
+
+    <!-- Filtros -->
+    <div class="card shadow-sm mb-4">
+        <div class="card-body py-2">
+            <form method="get" class="row g-2 align-items-center">
+                <div class="col-md-3">
+                    <select name="status" class="form-select">
+                        <option value="">Todos os Status</option>
+                        <option value="PENDENTE" {% if request.GET.status == 'PENDENTE' %}selected{% endif %}>Pendente</option>
+                        <option value="ENVIADA" {% if request.GET.status == 'ENVIADA' %}selected{% endif %}>Enviada</option>
+                        <option value="ERRO" {% if request.GET.status == 'ERRO' %}selected{% endif %}>Erro</option>
+                        <option value="CANCELADA" {% if request.GET.status == 'CANCELADA' %}selected{% endif %}>Cancelada</option>
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <select name="tipo" class="form-select">
+                        <option value="">Todos os Tipos</option>
+                        <option value="EMAIL" {% if request.GET.tipo == 'EMAIL' %}selected{% endif %}>E-mail</option>
+                        <option value="SMS" {% if request.GET.tipo == 'SMS' %}selected{% endif %}>SMS</option>
+                        <option value="WHATSAPP" {% if request.GET.tipo == 'WHATSAPP' %}selected{% endif %}>WhatsApp</option>
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <button type="submit" class="btn btn-outline-primary w-100">Filtrar</button>
+                </div>
+                {% if request.GET.status or request.GET.tipo %}
+                <div class="col-md-2">
+                    <a href="{% url 'notificacoes:listar' %}" class="btn btn-outline-secondary w-100">Limpar</a>
+                </div>
+                {% endif %}
+            </form>
+        </div>
+    </div>
+
+    <!-- Lista -->
+    <div class="card shadow-sm">
+        <div class="card-header bg-white">
+            <i class="fas fa-list me-1"></i>
+            {{ notificacoes.count }} notificacao(oes)
+        </div>
+        <div class="card-body p-0">
+            {% if notificacoes %}
+            <div class="table-responsive">
+                <table class="table table-hover mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Data</th>
+                            <th>Tipo</th>
+                            <th>Destinatario</th>
+                            <th>Assunto</th>
+                            <th>Parcela</th>
+                            <th class="text-center">Status</th>
+                            <th class="text-center">Tentativas</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for notif in notificacoes %}
+                        <tr>
+                            <td>
+                                <small>{{ notif.data_agendamento|date:"d/m/Y H:i" }}</small>
+                            </td>
+                            <td>
+                                {% if notif.tipo == 'EMAIL' %}
+                                    <i class="fas fa-envelope text-primary me-1"></i>E-mail
+                                {% elif notif.tipo == 'SMS' %}
+                                    <i class="fas fa-sms text-info me-1"></i>SMS
+                                {% elif notif.tipo == 'WHATSAPP' %}
+                                    <i class="fab fa-whatsapp text-success me-1"></i>WhatsApp
+                                {% endif %}
+                            </td>
+                            <td>{{ notif.destinatario|truncatechars:30 }}</td>
+                            <td>{{ notif.assunto|truncatechars:40 }}</td>
+                            <td>
+                                {% if notif.parcela %}
+                                    <a href="{% url 'financeiro:detalhe_parcela' notif.parcela.pk %}">
+                                        {{ notif.parcela }}
+                                    </a>
+                                {% else %}
+                                    <span class="text-muted">-</span>
+                                {% endif %}
+                            </td>
+                            <td class="text-center">
+                                {% if notif.status == 'PENDENTE' %}
+                                    <span class="badge bg-warning">Pendente</span>
+                                {% elif notif.status == 'ENVIADA' %}
+                                    <span class="badge bg-success">Enviada</span>
+                                {% elif notif.status == 'ERRO' %}
+                                    <span class="badge bg-danger" title="{{ notif.erro_mensagem }}">Erro</span>
+                                {% elif notif.status == 'CANCELADA' %}
+                                    <span class="badge bg-secondary">Cancelada</span>
+                                {% endif %}
+                            </td>
+                            <td class="text-center">{{ notif.tentativas }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <div class="text-center py-5">
+                <i class="fas fa-bell-slash fa-3x text-muted mb-3"></i>
+                <p class="text-muted mb-0">Nenhuma notificacao encontrada</p>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}
