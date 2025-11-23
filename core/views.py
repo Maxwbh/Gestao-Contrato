@@ -272,24 +272,34 @@ def setup(request):
                 try:
                     total_contabilidades = Contabilidade.objects.count()
                     total_users = get_user_model().objects.count()
+                    total_contas_bancarias = ContaBancaria.objects.count()
+                    total_imobiliarias = Imobiliaria.objects.count()
                 except:
                     total_contabilidades = 0
                     total_users = 0
+                    total_contas_bancarias = 0
+                    total_imobiliarias = 0
             else:
                 total_contabilidades = 0
                 total_users = 0
+                total_contas_bancarias = 0
+                total_imobiliarias = 0
 
         except Exception as e:
             db_ok = False
             has_tables = False
             total_contabilidades = 0
             total_users = 0
+            total_contas_bancarias = 0
+            total_imobiliarias = 0
 
         context = {
             'db_ok': db_ok,
             'has_tables': has_tables,
             'total_contabilidades': total_contabilidades,
             'total_users': total_users,
+            'total_contas_bancarias': total_contas_bancarias,
+            'total_imobiliarias': total_imobiliarias,
         }
         return render(request, 'core/setup.html', context)
 
@@ -425,6 +435,7 @@ def gerar_dados_teste(request):
                 'dados_existentes': {
                     'contabilidades': Contabilidade.objects.count(),
                     'imobiliarias': Imobiliaria.objects.count(),
+                    'contas_bancarias': ContaBancaria.objects.count(),
                     'imoveis': Imovel.objects.count(),
                     'compradores': Comprador.objects.count(),
                     'contratos': Contrato.objects.count(),
@@ -467,6 +478,7 @@ def gerar_dados_teste(request):
             'dados_gerados': {
                 'contabilidades': Contabilidade.objects.count(),
                 'imobiliarias': Imobiliaria.objects.count(),
+                'contas_bancarias': ContaBancaria.objects.count(),
                 'imoveis': Imovel.objects.count(),
                 'compradores': Comprador.objects.count(),
                 'contratos': Contrato.objects.count(),
