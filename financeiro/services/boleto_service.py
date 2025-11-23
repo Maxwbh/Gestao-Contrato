@@ -404,6 +404,9 @@ class BoletoService:
             # Montar dados do boleto
             dados_boleto, nosso_numero = self._montar_dados_boleto(parcela, conta_bancaria)
 
+            # Salvar numero_documento antes de enviar (pode ser removido por alguns bancos)
+            numero_documento = parcela.gerar_numero_documento()
+
             # Chamar API BRCobranca
             resultado = self._chamar_api_boleto(banco_nome, dados_boleto)
 
@@ -411,7 +414,7 @@ class BoletoService:
                 return {
                     'sucesso': True,
                     'nosso_numero': str(nosso_numero),
-                    'numero_documento': dados_boleto['numero_documento'],
+                    'numero_documento': numero_documento,
                     'linha_digitavel': resultado.get('linha_digitavel', ''),
                     'codigo_barras': resultado.get('codigo_barras', ''),
                     'valor': Decimal(str(dados_boleto['valor'])),
