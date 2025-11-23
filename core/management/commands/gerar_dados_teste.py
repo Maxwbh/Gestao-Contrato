@@ -195,87 +195,55 @@ class Command(BaseCommand):
         """
         contas = []
 
-        # Configuração completa para cada banco suportado pelo BRCobranca
+        # Configuração apenas para BB, Sicoob e Bradesco
         bancos_config = [
             {
                 'banco': '001',  # Banco do Brasil
                 'descricao': 'Conta Principal BB',
                 'agencia': '3073',
+                'agencia_dv': '0',
                 'conta': '12345678',
+                'conta_dv': '9',
                 'convenio': '1234567',  # 7 dígitos obrigatório
                 'carteira': '18',
                 'nosso_numero_atual': 1,
             },
             {
-                'banco': '033',  # Santander
-                'descricao': 'Conta Santander',
-                'agencia': '0123',
-                'conta': '123456789',  # 9 dígitos
-                'convenio': '1234567',  # 7 dígitos obrigatório
-                'carteira': '102',
-                'nosso_numero_atual': 1,
-            },
-            {
-                'banco': '104',  # Caixa
-                'descricao': 'Conta Boletos Caixa',
-                'agencia': '0123',
-                'conta': '12345678901234',
-                'convenio': '123456',  # 6 dígitos obrigatório
-                'carteira': '1',  # 1=com registro
+                'banco': '756',  # Sicoob
+                'descricao': 'Conta Sicoob',
+                'agencia': '3073',
+                'agencia_dv': '0',
+                'conta': '12345678',  # max 8 dígitos
+                'conta_dv': '5',
+                'convenio': '1234567',  # max 7 dígitos
+                'carteira': '1',
                 'nosso_numero_atual': 1,
             },
             {
                 'banco': '237',  # Bradesco
                 'descricao': 'Conta Bradesco',
                 'agencia': '1234',
+                'agencia_dv': '5',
                 'conta': '1234567',  # max 7 dígitos
+                'conta_dv': '0',
                 'convenio': '',
                 'carteira': '06',
-                'nosso_numero_atual': 1,
-            },
-            {
-                'banco': '341',  # Itaú
-                'descricao': 'Conta Itaú',
-                'agencia': '1234',
-                'conta': '12345',  # max 5 dígitos
-                'convenio': '12345',  # max 5 dígitos
-                'carteira': '175',
-                'nosso_numero_atual': 1,
-            },
-            {
-                'banco': '748',  # Sicredi
-                'descricao': 'Conta Sicredi',
-                'agencia': '1234',
-                'conta': '12345',  # max 5 dígitos
-                'convenio': '12345',  # max 5 dígitos (código beneficiário)
-                'carteira': '3',  # 3=sem registro
-                'nosso_numero_atual': 1,
-                'posto': '01',  # obrigatório para Sicredi
-            },
-            {
-                'banco': '756',  # Sicoob
-                'descricao': 'Conta Sicoob',
-                'agencia': '1234',
-                'conta': '12345678',  # max 8 dígitos
-                'convenio': '1234567',  # max 7 dígitos
-                'carteira': '1',
                 'nosso_numero_atual': 1,
             },
         ]
 
         for imobiliaria in imobiliarias:
-            # Criar todas as contas para a primeira imobiliária (para teste)
-            # e apenas 2 contas para as demais
-            configs_imob = bancos_config if imobiliaria == imobiliarias[0] else bancos_config[:2]
-
-            for i, config in enumerate(configs_imob):
+            # Criar todas as 3 contas (BB, Sicoob, Bradesco) para cada imobiliária
+            for i, config in enumerate(bancos_config):
                 conta = ContaBancaria.objects.create(
                     imobiliaria=imobiliaria,
                     banco=config['banco'],
                     descricao=f"{config['descricao']} - {imobiliaria.nome}",
-                    principal=(i == 0),
+                    principal=(i == 0),  # BB é a principal
                     agencia=config['agencia'],
+                    agencia_dv=config.get('agencia_dv', ''),
                     conta=config['conta'],
+                    conta_dv=config.get('conta_dv', ''),
                     convenio=config['convenio'],
                     carteira=config['carteira'],
                     nosso_numero_atual=config['nosso_numero_atual'],
@@ -291,12 +259,19 @@ class Command(BaseCommand):
         return contas
 
     def criar_loteamentos(self, imobiliarias, num_loteamentos, lotes_por_loteamento):
-        """Cria Loteamentos com Lotes"""
+        """
+        Cria Loteamentos com Lotes.
+        Últimos 20% dos lotes de cada loteamento ficam disponíveis (não vendidos).
+        """
         lotes = []
+        lotes_disponiveis = []
         nomes_loteamentos = [
             'Residencial Lagoa Dourada',
             'Condomínio Parque das Águas'
         ]
+
+        # Quantidade de lotes que ficarão disponíveis (não vendidos) - 20%
+        lotes_nao_vendidos = int(lotes_por_loteamento * 0.20)
 
         for i in range(num_loteamentos):
             imobiliaria = imobiliarias[i % len(imobiliarias)]
@@ -307,48 +282,92 @@ class Command(BaseCommand):
                 lote_na_quadra = (lote_num - 1) % 10 + 1
 
                 area = Decimal(random.randint(250, 500))
+                valor_m2 = Decimal(random.randint(150, 350))
+                valor_lote = area * valor_m2
+
+                # Últimos lotes ficam disponíveis (não vendidos)
+                disponivel = lote_num > (lotes_por_loteamento - lotes_nao_vendidos)
 
                 lote = Imovel.objects.create(
                     imobiliaria=imobiliaria,
                     tipo=TipoImovel.LOTE,
                     identificacao=f'Quadra {quadra}, Lote {lote_na_quadra:02d}',
                     loteamento=nome_loteamento,
+                    cep='35700-000',
+                    logradouro=f'Rua {quadra}',
+                    numero=str(lote_na_quadra),
+                    bairro=nome_loteamento,
+                    cidade='Sete Lagoas',
+                    estado='MG',
                     endereco=f'Quadra {quadra}, Lote {lote_na_quadra:02d} - {nome_loteamento} - Sete Lagoas/MG',
                     area=area,
+                    valor=valor_lote,
                     matricula=f'{20000+i*1000+lote_num}',
                     inscricao_municipal=f'{10000+i*1000+lote_num}',
-                    disponivel=False,
+                    disponivel=disponivel,
                     ativo=True
                 )
-                lotes.append(lote)
 
-        return lotes
+                if disponivel:
+                    lotes_disponiveis.append(lote)
+                else:
+                    lotes.append(lote)
+
+        self.stdout.write(f'   → {len(lotes_disponiveis)} lotes disponíveis (não vendidos)')
+        return lotes  # Retorna apenas os lotes vendidos para criar contratos
 
     def criar_terrenos(self, imobiliarias, quantidade):
-        """Cria Terrenos"""
+        """
+        Cria Terrenos com endereço estruturado.
+        20% dos terrenos ficam disponíveis (não vendidos).
+        """
         terrenos = []
+        terrenos_disponiveis = []
         bairros = ['Centro', 'Progresso', 'Santa Luzia', 'Várzea', 'Canaan']
+        ceps = ['35700-000', '35701-000', '35702-000', '35703-000']
+
+        # 20% dos terrenos ficam disponíveis
+        terrenos_nao_vendidos = int(quantidade * 0.20)
 
         for i in range(quantidade):
             imobiliaria = random.choice(imobiliarias)
             bairro = random.choice(bairros)
             area = Decimal(random.randint(400, 1000))
+            valor_m2 = Decimal(random.randint(200, 450))
+            valor_terreno = area * valor_m2
+            rua = self.fake.street_name()
+            numero = str(random.randint(100, 999))
+
+            # Últimos terrenos ficam disponíveis
+            disponivel = i >= (quantidade - terrenos_nao_vendidos)
 
             terreno = Imovel.objects.create(
                 imobiliaria=imobiliaria,
                 tipo=TipoImovel.TERRENO,
                 identificacao=f'Terreno {i+1}',
                 loteamento=f'Bairro {bairro}',
-                endereco=f'Rua {self.fake.street_name()}, {random.randint(100, 999)} - {bairro} - Sete Lagoas/MG',
+                cep=random.choice(ceps),
+                logradouro=rua,
+                numero=numero,
+                bairro=bairro,
+                cidade='Sete Lagoas',
+                estado='MG',
+                endereco=f'Rua {rua}, {numero} - {bairro} - Sete Lagoas/MG',
                 area=area,
+                valor=valor_terreno,
                 matricula=f'{30000+i}',
                 inscricao_municipal=f'{15000+i}',
-                disponivel=False,
+                disponivel=disponivel,
                 ativo=True
             )
-            terrenos.append(terreno)
 
-        return terrenos
+            if disponivel:
+                terrenos_disponiveis.append(terreno)
+            else:
+                terrenos.append(terreno)
+
+        self.stdout.write(f'   → {len(terrenos_disponiveis)} terrenos disponíveis (não vendidos)')
+        return terrenos  # Retorna apenas os terrenos vendidos para criar contratos
 
     def criar_compradores(self, quantidade):
         """Cria Compradores - 80% Pessoa Física, 20% Pessoa Jurídica"""
