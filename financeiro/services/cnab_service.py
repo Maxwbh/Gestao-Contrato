@@ -202,32 +202,43 @@ class CNABService:
         banco = self._get_banco_brcobranca(conta_bancaria.banco)
         imobiliaria = conta_bancaria.imobiliaria
 
-        dados_remessa = {
-            'banco': banco,
-            'tipo': 'cnab240' if layout == 'CNAB_240' else 'cnab400',
-            'dados': {
-                'empresa_mae': imobiliaria.razao_social or imobiliaria.nome,
-                'documento_cedente': self._formatar_cpf_cnpj(imobiliaria.cnpj),
-                'agencia': conta_bancaria.agencia.replace('-', '').split('-')[0] if conta_bancaria.agencia else '',
-                'conta_corrente': conta_bancaria.conta.replace('-', '').split('-')[0] if conta_bancaria.conta else '',
-                'digito_conta': conta_bancaria.conta.split('-')[1] if '-' in (conta_bancaria.conta or '') else '',
-                'convenio': conta_bancaria.convenio or '',
-                'carteira': conta_bancaria.carteira or '',
-                'sequencial_remessa': numero_remessa,
-                'codigo_cedente': conta_bancaria.convenio or '',
-            },
-            'pagamentos': []
+        # Estrutura de dados do cedente/empresa
+        dados_empresa = {
+            'empresa_mae': imobiliaria.razao_social or imobiliaria.nome,
+            'documento_cedente': self._formatar_cpf_cnpj(imobiliaria.cnpj),
+            'agencia': conta_bancaria.agencia.replace('-', '').split('-')[0] if conta_bancaria.agencia else '',
+            'conta_corrente': conta_bancaria.conta.replace('-', '').split('-')[0] if conta_bancaria.conta else '',
+            'digito_conta': conta_bancaria.conta.split('-')[1] if '-' in (conta_bancaria.conta or '') else '',
+            'convenio': conta_bancaria.convenio or '',
+            'carteira': conta_bancaria.carteira or '',
+            'sequencial_remessa': numero_remessa,
+            'codigo_cedente': conta_bancaria.convenio or '',
         }
+
+        # Lista de boletos
+        pagamentos = []
 
         # Adicionar boletos
         valor_total = Decimal('0.00')
         for parcela in parcelas_validas:
             dados_boleto = self._montar_dados_boleto(parcela, conta_bancaria)
-            dados_remessa['pagamentos'].append(dados_boleto)
+            # Mesclar dados da empresa com dados do boleto
+            boleto_completo = {**dados_empresa, **dados_boleto}
+            pagamentos.append(boleto_completo)
             valor_total += parcela.valor_boleto or parcela.valor_atual
 
         try:
-            # Chamar API BRCobranca
+            # Chamar API BRCobranca com parâmetros corretos
+            # A API espera: bank, type, data (array de boletos)
+            import json
+            dados_remessa = {
+                'bank': banco,
+                'type': 'cnab240' if layout == 'CNAB_240' else 'cnab400',
+                'data': pagamentos
+            }
+
+            logger.info(f"Gerando remessa CNAB: banco={banco}, layout={layout}, boletos={len(pagamentos)}")
+
             response = requests.post(
                 f'{self.brcobranca_url}/api/remessa',
                 json=dados_remessa,
