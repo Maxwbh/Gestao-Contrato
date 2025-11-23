@@ -176,7 +176,7 @@ class BoletoService:
 
             # Dados do Boleto
             'nosso_numero': str(nosso_numero),
-            'numero_documento': numero_documento,
+            'documento_numero': numero_documento,  # Campo correto do BRCobranca
             'data_documento': self._formatar_data(date.today()),
             'data_vencimento': self._formatar_data(parcela.data_vencimento),
             'valor': float(parcela.valor_atual),
@@ -207,12 +207,16 @@ class BoletoService:
         if conta_bancaria.banco == '104':  # Caixa
             dados['codigo_beneficiario'] = conta_bancaria.convenio or ''
 
-        # Remover campos nao suportados por banco
-        # Banco do Brasil (001) nao suporta numero_documento
+        # Campos especificos por banco
+        # Banco do Brasil (001) - usa convenio para identificacao
         if conta_bancaria.banco == '001':
-            dados.pop('numero_documento', None)
-            dados.pop('especie_documento', None)
-            dados.pop('aceite', None)
+            # Garantir que convenio esteja preenchido (obrigatorio para BB)
+            if not dados.get('convenio'):
+                dados['convenio'] = conta_bancaria.convenio or conta_bancaria.conta
+
+        # Itau (341) - campo seu_numero para carteiras especiais
+        if conta_bancaria.banco == '341':
+            dados['seu_numero'] = numero_documento[:7] if numero_documento else ''
 
         # Adicionar multa se configurada
         if imobiliaria.percentual_multa_padrao and imobiliaria.percentual_multa_padrao > 0:
