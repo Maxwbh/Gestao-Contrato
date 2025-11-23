@@ -264,6 +264,105 @@ class Contrato(TimeStampedModel):
         verbose_name='Status'
     )
 
+    # ============================================================
+    # Configurações de Boleto do Contrato
+    # Se usar_config_boleto_imobiliaria=True, usa valores da Imobiliária
+    # Caso contrário, usa os valores definidos abaixo
+    # ============================================================
+    usar_config_boleto_imobiliaria = models.BooleanField(
+        default=True,
+        verbose_name='Usar Configurações da Imobiliária',
+        help_text='Se marcado, usa as configurações de boleto da imobiliária'
+    )
+
+    # Conta Bancária padrão para este contrato
+    conta_bancaria_padrao = models.ForeignKey(
+        'core.ContaBancaria',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='contratos',
+        verbose_name='Conta Bancária Padrão',
+        help_text='Conta bancária para geração de boletos deste contrato'
+    )
+
+    # Configurações de Multa (personalizadas)
+    tipo_valor_multa = models.CharField(
+        max_length=10,
+        choices=[('PERCENTUAL', 'Percentual'), ('VALOR', 'Valor Fixo')],
+        default='PERCENTUAL',
+        verbose_name='Tipo de Multa'
+    )
+    valor_multa_boleto = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        default=0,
+        verbose_name='Multa do Boleto',
+        help_text='Valor em percentual ou reais conforme tipo'
+    )
+
+    # Configurações de Juros (personalizadas)
+    tipo_valor_juros = models.CharField(
+        max_length=10,
+        choices=[('PERCENTUAL', 'Percentual'), ('VALOR', 'Valor Fixo')],
+        default='PERCENTUAL',
+        verbose_name='Tipo de Juros'
+    )
+    valor_juros_boleto = models.DecimalField(
+        max_digits=10,
+        decimal_places=4,
+        default=0,
+        verbose_name='Juros ao Dia do Boleto',
+        help_text='Valor em percentual (0,0333 = 1% ao mês) ou reais'
+    )
+
+    # Dias sem encargos
+    dias_carencia_boleto = models.IntegerField(
+        default=0,
+        verbose_name='Dias sem Encargos',
+        help_text='Dias sem cobrar multa/juros após vencimento'
+    )
+
+    # Desconto
+    tipo_valor_desconto = models.CharField(
+        max_length=10,
+        choices=[('PERCENTUAL', 'Percentual'), ('VALOR', 'Valor Fixo')],
+        default='PERCENTUAL',
+        verbose_name='Tipo de Desconto'
+    )
+    valor_desconto_boleto = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        default=0,
+        verbose_name='Desconto do Boleto',
+        help_text='Valor em percentual ou reais conforme tipo'
+    )
+    dias_desconto_boleto = models.IntegerField(
+        default=0,
+        verbose_name='Dias para Desconto',
+        help_text='Dias antes do vencimento para conceder desconto'
+    )
+
+    # Instruções personalizadas
+    instrucao_boleto_1 = models.CharField(
+        max_length=255,
+        blank=True,
+        verbose_name='Instrução 1',
+        help_text='Primeira linha de instrução do boleto'
+    )
+    instrucao_boleto_2 = models.CharField(
+        max_length=255,
+        blank=True,
+        verbose_name='Instrução 2',
+        help_text='Segunda linha de instrução do boleto'
+    )
+    instrucao_boleto_3 = models.CharField(
+        max_length=255,
+        blank=True,
+        verbose_name='Instrução 3',
+        help_text='Terceira linha de instrução do boleto'
+    )
+
     # Observações
     observacoes = models.TextField(
         blank=True,
@@ -299,6 +398,60 @@ class Contrato(TimeStampedModel):
 
     def __str__(self):
         return f"Contrato {self.numero_contrato} - {self.comprador.nome}"
+
+    def get_config_boleto(self):
+        """
+        Retorna as configurações de boleto do contrato.
+        Se usar_config_boleto_imobiliaria=True, retorna valores da imobiliária.
+        Caso contrário, retorna valores personalizados do contrato.
+
+        Returns:
+            dict: Configurações de boleto
+        """
+        if self.usar_config_boleto_imobiliaria:
+            imob = self.imobiliaria
+            return {
+                'tipo_valor_multa': imob.tipo_valor_multa,
+                'valor_multa': imob.percentual_multa_padrao,
+                'tipo_valor_juros': imob.tipo_valor_juros,
+                'valor_juros': imob.percentual_juros_padrao,
+                'dias_carencia': imob.dias_para_encargos_padrao,
+                'tipo_valor_desconto': imob.tipo_valor_desconto,
+                'valor_desconto': imob.percentual_desconto_padrao,
+                'dias_desconto': imob.dias_para_desconto_padrao,
+                'instrucao_1': imob.instrucao_padrao,
+                'instrucao_2': '',
+                'instrucao_3': '',
+                'tipo_titulo': imob.tipo_titulo,
+                'aceite': imob.aceite,
+            }
+        else:
+            return {
+                'tipo_valor_multa': self.tipo_valor_multa,
+                'valor_multa': self.valor_multa_boleto,
+                'tipo_valor_juros': self.tipo_valor_juros,
+                'valor_juros': self.valor_juros_boleto,
+                'dias_carencia': self.dias_carencia_boleto,
+                'tipo_valor_desconto': self.tipo_valor_desconto,
+                'valor_desconto': self.valor_desconto_boleto,
+                'dias_desconto': self.dias_desconto_boleto,
+                'instrucao_1': self.instrucao_boleto_1,
+                'instrucao_2': self.instrucao_boleto_2,
+                'instrucao_3': self.instrucao_boleto_3,
+                'tipo_titulo': self.imobiliaria.tipo_titulo,
+                'aceite': self.imobiliaria.aceite,
+            }
+
+    def get_conta_bancaria(self):
+        """
+        Retorna a conta bancária para geração de boletos.
+        Prioridade: 1) Conta do contrato, 2) Conta principal da imobiliária
+        """
+        if self.conta_bancaria_padrao:
+            return self.conta_bancaria_padrao
+        return self.imobiliaria.contas_bancarias.filter(
+            principal=True, ativo=True
+        ).first()
 
     def save(self, *args, **kwargs):
         """Override do save para calcular campos automáticos"""
