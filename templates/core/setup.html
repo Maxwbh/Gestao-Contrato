@@ -98,7 +98,28 @@
                                 </span>
                             </p>
                         </div>
+                        <div class="col-md-6">
+                            <p><strong>Imobiliárias:</strong>
+                                <span class="status-badge {% if total_imobiliarias > 0 %}status-ok{% else %}status-error{% endif %}">
+                                    {% if total_imobiliarias > 0 %}✅ {{ total_imobiliarias }} imobiliária(s){% else %}❌ Nenhuma{% endif %}
+                                </span>
+                            </p>
+                        </div>
+                        <div class="col-md-6">
+                            <p><strong>Contas Bancárias:</strong>
+                                <span class="status-badge {% if total_contas_bancarias > 0 %}status-ok{% else %}status-error{% endif %}">
+                                    {% if total_contas_bancarias > 0 %}✅ {{ total_contas_bancarias }} conta(s){% else %}❌ Nenhuma (necessário para boletos){% endif %}
+                                </span>
+                            </p>
+                        </div>
                     </div>
+                    {% if total_imobiliarias > 0 and total_contas_bancarias == 0 %}
+                    <div class="alert alert-warning mt-3">
+                        <strong>⚠️ Atenção:</strong> Existem imobiliárias sem contas bancárias configuradas.
+                        Para gerar boletos, é necessário ter pelo menos uma conta bancária principal.
+                        <br><strong>Execute "Gerar Dados" com a opção "Limpar antes" marcada para recriar os dados com contas bancárias.</strong>
+                    </div>
+                    {% endif %}
                 </div>
 
                 <div class="setup-card">

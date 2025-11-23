@@ -71,6 +71,27 @@
                 </div>
             </div>
             <div class="card-body">
+                <!-- Cards de Ultimo Valor por Tipo (FORA das abas) -->
+                <div class="row mb-4 g-2">
+                    {% for stat in estatisticas_indices %}
+                    <div class="col-6 col-md-3 col-lg-2">
+                        <div class="card stat-card h-100 {% if stat.tipo == 'IPCA' %}border-primary{% elif stat.tipo == 'IGPM' %}border-success{% elif stat.tipo == 'INCC' %}border-info{% elif stat.tipo == 'IGPDI' %}border-secondary{% elif stat.tipo == 'INPC' %}border-danger{% elif stat.tipo == 'TR' %}border-dark{% else %}border-warning{% endif %}">
+                            <div class="card-body text-center py-2">
+                                <small class="text-muted d-block">{{ stat.tipo }}</small>
+                                {% if stat.ultimo %}
+                                <h6 class="{% if stat.tipo == 'IPCA' %}text-primary{% elif stat.tipo == 'IGPM' %}text-success{% elif stat.tipo == 'INCC' %}text-info{% elif stat.tipo == 'IGPDI' %}text-secondary{% elif stat.tipo == 'INPC' %}text-danger{% elif stat.tipo == 'TR' %}text-dark{% else %}text-warning{% endif %} mb-0">
+                                    {{ stat.ultimo.valor|floatformat:2 }}%
+                                </h6>
+                                <small class="text-muted">{{ stat.ultimo.periodo }}</small>
+                                {% else %}
+                                <small class="text-muted">-</small>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+
                 <!-- Filtro de Ano -->
                 <div class="row mb-4">
                     <div class="col-md-3">
@@ -115,27 +136,6 @@
                     </li>
                     {% endfor %}
                 </ul>
-
-                <!-- Cards de Ultimo Valor por Tipo -->
-                <div class="row mb-4 g-2">
-                    {% for stat in estatisticas_indices %}
-                    <div class="col-6 col-md-3 col-lg-2">
-                        <div class="card stat-card h-100 {% if stat.tipo == 'IPCA' %}border-primary{% elif stat.tipo == 'IGPM' %}border-success{% elif stat.tipo == 'INCC' %}border-info{% elif stat.tipo == 'IGPDI' %}border-secondary{% elif stat.tipo == 'INPC' %}border-danger{% elif stat.tipo == 'TR' %}border-dark{% else %}border-warning{% endif %}">
-                            <div class="card-body text-center py-2">
-                                <small class="text-muted d-block">{{ stat.tipo }}</small>
-                                {% if stat.ultimo %}
-                                <h6 class="{% if stat.tipo == 'IPCA' %}text-primary{% elif stat.tipo == 'IGPM' %}text-success{% elif stat.tipo == 'INCC' %}text-info{% elif stat.tipo == 'IGPDI' %}text-secondary{% elif stat.tipo == 'INPC' %}text-danger{% elif stat.tipo == 'TR' %}text-dark{% else %}text-warning{% endif %} mb-0">
-                                    {{ stat.ultimo.valor|floatformat:2 }}%
-                                </h6>
-                                <small class="text-muted">{{ stat.ultimo.periodo }}</small>
-                                {% else %}
-                                <small class="text-muted">-</small>
-                                {% endif %}
-                            </div>
-                        </div>
-                    </div>
-                    {% endfor %}
-                </div>
 
                 {% if indices %}
                 <div class="table-responsive">
