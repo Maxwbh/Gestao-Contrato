@@ -1,3 +1,4 @@
+# syntax=docker/dockerfile:1
 # Dockerfile para BRCobranca API
 # Este Dockerfile usa a imagem oficial do boleto_cnab_api
 #
@@ -12,9 +13,8 @@ FROM akretion/boleto_cnab_api:latest
 # Definir variaveis de ambiente
 ENV RACK_ENV=production
 
-# Copiar entrypoint customizado
-COPY docker-entrypoint.sh /docker-entrypoint.sh
-RUN chmod +x /docker-entrypoint.sh
+# Copiar entrypoint customizado com permissao de execucao
+COPY --chmod=755 docker-entrypoint.sh /docker-entrypoint.sh
 
 # Usar entrypoint customizado que le a variavel PORT
 CMD ["/docker-entrypoint.sh"]
