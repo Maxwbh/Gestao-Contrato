@@ -129,26 +129,26 @@ class CNABService:
             'data_documento': self._formatar_data(parcela.data_geracao_boleto.date() if parcela.data_geracao_boleto else timezone.now().date()),
 
             # Dados do sacado (pagador)
-            'sacado': comprador.nome_completo[:60],
+            'sacado': comprador.nome[:60],
             'documento_sacado': cpf_cnpj,
             'endereco_sacado': endereco_sacado[:80],
             'bairro_sacado': (comprador.bairro or '')[:40],
             'cidade_sacado': (comprador.cidade or '')[:30],
-            'uf_sacado': (comprador.uf or '')[:2],
+            'uf_sacado': (comprador.estado or '')[:2],
             'cep_sacado': self._formatar_cpf_cnpj(comprador.cep or ''),
 
             # Dados do cedente (recebedor)
-            'cedente': imobiliaria.razao_social[:60] if imobiliaria.razao_social else imobiliaria.nome_fantasia[:60],
+            'cedente': (imobiliaria.razao_social or imobiliaria.nome)[:60],
             'documento_cedente': self._formatar_cpf_cnpj(imobiliaria.cnpj),
 
             # Dados bancarios
-            'agencia': conta_bancaria.agencia,
-            'conta_corrente': conta_bancaria.conta_corrente,
-            'digito_conta_corrente': conta_bancaria.digito_conta or '',
+            'agencia': conta_bancaria.agencia.replace('-', '').split('-')[0] if conta_bancaria.agencia else '',
+            'conta_corrente': conta_bancaria.conta.replace('-', '').split('-')[0] if conta_bancaria.conta else '',
+            'digito_conta_corrente': conta_bancaria.conta.split('-')[1] if '-' in (conta_bancaria.conta or '') else '',
             'convenio': conta_bancaria.convenio or '',
             'carteira': conta_bancaria.carteira or '',
-            'variacao': conta_bancaria.variacao or '',
-            'codigo_cedente': conta_bancaria.codigo_cedente or '',
+            'variacao': '',
+            'codigo_cedente': conta_bancaria.convenio or '',
 
             # Instrucoes
             'instrucao1': f'Parcela {parcela.numero_parcela}/{contrato.numero_parcelas} - Contrato {contrato.numero_contrato}',
@@ -395,13 +395,13 @@ class CNABService:
             cpf_cnpj_sacado = self._formatar_cpf_cnpj(comprador.cnpj or comprador.cpf)
             detalhe += '02' if len(cpf_cnpj_sacado) > 11 else '01'
             detalhe += cpf_cnpj_sacado.zfill(14)
-            detalhe += comprador.nome_completo[:40].ljust(40)
-            endereco = f"{comprador.endereco or ''} {comprador.numero or ''}"
+            detalhe += comprador.nome[:40].ljust(40)
+            endereco = f"{comprador.logradouro or ''} {comprador.numero or ''}"
             detalhe += endereco[:40].ljust(40)
             detalhe += ''.ljust(12)  # Mensagem
             detalhe += self._formatar_cpf_cnpj(comprador.cep or '').zfill(8)
             detalhe += (comprador.cidade or '')[:15].ljust(15)
-            detalhe += (comprador.uf or '')[:2].ljust(2)
+            detalhe += (comprador.estado or '')[:2].ljust(2)
             detalhe += ''.ljust(40)  # Sacador avalista
             detalhe += str(sequencial).zfill(6)
             linhas.append(detalhe[:400])
