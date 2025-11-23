@@ -1,0 +1,20 @@
+# Dockerfile para BRCobranca API
+# Este Dockerfile usa a imagem oficial do boleto_cnab_api
+#
+# Desenvolvedor: Maxwell da Silva Oliveira
+# Empresa: M&S do Brasil LTDA
+#
+# Documentacao: https://github.com/akretion/boleto_cnab_api
+# Docker Hub: https://hub.docker.com/r/akretion/boleto_cnab_api
+
+FROM akretion/boleto_cnab_api:latest
+
+# Definir variaveis de ambiente
+ENV RACK_ENV=production
+ENV PORT=9292
+
+# Expor a porta 9292 (porta padrao do BRCobranca)
+EXPOSE 9292
+
+# Usar o comando padrao da imagem base
+# A imagem ja inicia o Puma na porta 9292
