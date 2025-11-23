@@ -15,13 +15,13 @@
             <nav aria-label="breadcrumb">
                 <ol class="breadcrumb mb-0">
                     <li class="breadcrumb-item"><a href="{% url 'financeiro:listar_parcelas' %}">Parcelas</a></li>
-                    <li class="breadcrumb-item"><a href="{% url 'contratos:contrato_detail' parcela.contrato.pk %}">{{ parcela.contrato.numero_contrato }}</a></li>
+                    <li class="breadcrumb-item"><a href="{% url 'contratos:detalhe' parcela.contrato.pk %}">{{ parcela.contrato.numero_contrato }}</a></li>
                     <li class="breadcrumb-item active">Parcela {{ parcela.numero_parcela }}</li>
                 </ol>
             </nav>
         </div>
         <div>
-            <a href="{% url 'contratos:contrato_detail' parcela.contrato.pk %}" class="btn btn-outline-secondary">
+            <a href="{% url 'contratos:detalhe' parcela.contrato.pk %}" class="btn btn-outline-secondary">
                 <i class="fas fa-arrow-left me-1"></i> Voltar ao Contrato
             </a>
         </div>
@@ -44,7 +44,7 @@
                                 <tr>
                                     <th class="text-muted" style="width: 40%;">Contrato:</th>
                                     <td>
-                                        <a href="{% url 'contratos:contrato_detail' parcela.contrato.pk %}">
+                                        <a href="{% url 'contratos:detalhe' parcela.contrato.pk %}">
                                             {{ parcela.contrato.numero_contrato }}
                                         </a>
                                     </td>
@@ -200,7 +200,7 @@
                             </button>
                         {% endif %}
 
-                        <a href="{% url 'contratos:contrato_detail' parcela.contrato.pk %}" class="btn btn-outline-secondary">
+                        <a href="{% url 'contratos:detalhe' parcela.contrato.pk %}" class="btn btn-outline-secondary">
                             <i class="fas fa-file-contract me-2"></i>
                             Ver Contrato
                         </a>
