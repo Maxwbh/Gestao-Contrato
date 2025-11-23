@@ -268,8 +268,292 @@ with connection.cursor() as cursor:
     else:
         print("  - contratos_indicereajuste already exists")
 
+    # Atualizar core_contabancaria com campos adicionais
+    print("Updating core_contabancaria...")
+    add_column_if_not_exists(cursor, 'core_contabancaria', 'principal', "BOOLEAN DEFAULT FALSE")
+    add_column_if_not_exists(cursor, 'core_contabancaria', 'modalidade', "VARCHAR(5) DEFAULT ''")
+    add_column_if_not_exists(cursor, 'core_contabancaria', 'tipo_pix', "VARCHAR(20) DEFAULT ''")
+    add_column_if_not_exists(cursor, 'core_contabancaria', 'chave_pix', "VARCHAR(100) DEFAULT ''")
+    add_column_if_not_exists(cursor, 'core_contabancaria', 'cobranca_registrada', "BOOLEAN DEFAULT TRUE")
+    add_column_if_not_exists(cursor, 'core_contabancaria', 'prazo_baixa', "INTEGER DEFAULT 0")
+    add_column_if_not_exists(cursor, 'core_contabancaria', 'prazo_protesto', "INTEGER DEFAULT 0")
+    add_column_if_not_exists(cursor, 'core_contabancaria', 'layout_cnab', "VARCHAR(10) DEFAULT 'CNAB_240'")
+    add_column_if_not_exists(cursor, 'core_contabancaria', 'numero_remessa_cnab_atual', "INTEGER DEFAULT 0")
+
+    # Adicionar campos de boleto na tabela financeiro_parcela
+    print("Checking financeiro_parcela for boleto fields...")
+    cursor.execute("""
+        SELECT 1 FROM information_schema.tables
+        WHERE table_name = 'financeiro_parcela'
+    """)
+    if cursor.fetchone():
+        # Campos de identificação do boleto
+        add_column_if_not_exists(cursor, 'financeiro_parcela', 'conta_bancaria_id', "INTEGER NULL REFERENCES core_contabancaria(id) ON DELETE SET NULL")
+        add_column_if_not_exists(cursor, 'financeiro_parcela', 'nosso_numero', "VARCHAR(30) DEFAULT ''")
+        add_column_if_not_exists(cursor, 'financeiro_parcela', 'numero_documento', "VARCHAR(25) DEFAULT ''")
+        add_column_if_not_exists(cursor, 'financeiro_parcela', 'codigo_barras', "VARCHAR(50) DEFAULT ''")
+        add_column_if_not_exists(cursor, 'financeiro_parcela', 'linha_digitavel', "VARCHAR(60) DEFAULT ''")
+
+        # Arquivo PDF e URL
+        add_column_if_not_exists(cursor, 'financeiro_parcela', 'boleto_pdf', "VARCHAR(200) DEFAULT ''")
+        add_column_if_not_exists(cursor, 'financeiro_parcela', 'boleto_url', "VARCHAR(500) DEFAULT ''")
+
+        # Status e controle
+        add_column_if_not_exists(cursor, 'financeiro_parcela', 'status_boleto', "VARCHAR(15) DEFAULT 'NAO_GERADO'")
+        add_column_if_not_exists(cursor, 'financeiro_parcela', 'data_geracao_boleto', "TIMESTAMP WITH TIME ZONE NULL")
+        add_column_if_not_exists(cursor, 'financeiro_parcela', 'data_registro_boleto', "TIMESTAMP WITH TIME ZONE NULL")
+        add_column_if_not_exists(cursor, 'financeiro_parcela', 'data_pagamento_boleto', "TIMESTAMP WITH TIME ZONE NULL")
+
+        # Valores
+        add_column_if_not_exists(cursor, 'financeiro_parcela', 'valor_boleto', "DECIMAL(12,2) NULL")
+        add_column_if_not_exists(cursor, 'financeiro_parcela', 'valor_pago_boleto', "DECIMAL(12,2) NULL")
+
+        # Dados de retorno bancário
+        add_column_if_not_exists(cursor, 'financeiro_parcela', 'banco_pagador', "VARCHAR(10) DEFAULT ''")
+        add_column_if_not_exists(cursor, 'financeiro_parcela', 'agencia_pagadora', "VARCHAR(10) DEFAULT ''")
+        add_column_if_not_exists(cursor, 'financeiro_parcela', 'motivo_rejeicao', "VARCHAR(255) DEFAULT ''")
+
+        # PIX (boleto híbrido)
+        add_column_if_not_exists(cursor, 'financeiro_parcela', 'pix_copia_cola', "TEXT DEFAULT ''")
+        add_column_if_not_exists(cursor, 'financeiro_parcela', 'pix_qrcode', "TEXT DEFAULT ''")
+
+        # Criar índices para boleto
+        cursor.execute("""
+            DO $$
+            BEGIN
+                IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'idx_parcela_status_boleto') THEN
+                    CREATE INDEX idx_parcela_status_boleto ON financeiro_parcela(status_boleto);
+                END IF;
+                IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'idx_parcela_nosso_numero') THEN
+                    CREATE INDEX idx_parcela_nosso_numero ON financeiro_parcela(nosso_numero);
+                END IF;
+            END $$;
+        """)
+        print("  + Boleto fields added/verified")
+    else:
+        print("  - financeiro_parcela table not found (will be created by migrations)")
+
+    # Atualizar tabela notificacoes_templatenotificacao com novos campos
+    print("Checking notificacoes_templatenotificacao...")
+    cursor.execute("""
+        SELECT 1 FROM information_schema.tables
+        WHERE table_name = 'notificacoes_templatenotificacao'
+    """)
+    if cursor.fetchone():
+        add_column_if_not_exists(cursor, 'notificacoes_templatenotificacao', 'codigo', "VARCHAR(30) DEFAULT 'CUSTOM'")
+        add_column_if_not_exists(cursor, 'notificacoes_templatenotificacao', 'corpo_html', "TEXT DEFAULT ''")
+        add_column_if_not_exists(cursor, 'notificacoes_templatenotificacao', 'imobiliaria_id', "INTEGER NULL REFERENCES core_imobiliaria(id) ON DELETE CASCADE")
+        print("  + Template fields added/verified")
+    else:
+        print("  - notificacoes_templatenotificacao table not found (will be created by migrations)")
+
+    # =========================================================================
+    # CNAB - TABELAS DE REMESSA E RETORNO
+    # =========================================================================
+
+    # Criar tabela financeiro_arquivoremessa
+    print("Checking financeiro_arquivoremessa...")
+    cursor.execute("""
+        SELECT 1 FROM information_schema.tables
+        WHERE table_name = 'financeiro_arquivoremessa'
+    """)
+    if not cursor.fetchone():
+        cursor.execute("""
+            CREATE TABLE financeiro_arquivoremessa (
+                id SERIAL PRIMARY KEY,
+                criado_em TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+                atualizado_em TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+                conta_bancaria_id INTEGER NOT NULL REFERENCES core_contabancaria(id) ON DELETE RESTRICT,
+                numero_remessa INTEGER NOT NULL,
+                layout VARCHAR(10) DEFAULT 'CNAB_240',
+                arquivo VARCHAR(200) DEFAULT '',
+                nome_arquivo VARCHAR(100) NOT NULL,
+                status VARCHAR(15) DEFAULT 'GERADO',
+                data_geracao TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+                data_envio TIMESTAMP WITH TIME ZONE NULL,
+                quantidade_boletos INTEGER DEFAULT 0,
+                valor_total DECIMAL(14,2) DEFAULT 0,
+                observacoes TEXT DEFAULT '',
+                erro_mensagem TEXT DEFAULT '',
+                UNIQUE(conta_bancaria_id, numero_remessa)
+            )
+        """)
+        cursor.execute("""
+            CREATE INDEX idx_remessa_conta_numero ON financeiro_arquivoremessa(conta_bancaria_id, numero_remessa);
+            CREATE INDEX idx_remessa_status ON financeiro_arquivoremessa(status);
+            CREATE INDEX idx_remessa_data_geracao ON financeiro_arquivoremessa(data_geracao);
+        """)
+        print("  + Created table financeiro_arquivoremessa")
+    else:
+        print("  - financeiro_arquivoremessa already exists")
+
+    # Criar tabela financeiro_itemremessa
+    print("Checking financeiro_itemremessa...")
+    cursor.execute("""
+        SELECT 1 FROM information_schema.tables
+        WHERE table_name = 'financeiro_itemremessa'
+    """)
+    if not cursor.fetchone():
+        cursor.execute("""
+            CREATE TABLE financeiro_itemremessa (
+                id SERIAL PRIMARY KEY,
+                criado_em TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+                atualizado_em TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+                arquivo_remessa_id INTEGER NOT NULL REFERENCES financeiro_arquivoremessa(id) ON DELETE CASCADE,
+                parcela_id INTEGER NOT NULL REFERENCES financeiro_parcela(id) ON DELETE RESTRICT,
+                nosso_numero VARCHAR(30) NOT NULL,
+                valor DECIMAL(12,2) NOT NULL,
+                data_vencimento DATE NOT NULL,
+                processado BOOLEAN DEFAULT FALSE,
+                codigo_ocorrencia VARCHAR(10) DEFAULT '',
+                descricao_ocorrencia VARCHAR(255) DEFAULT '',
+                UNIQUE(arquivo_remessa_id, parcela_id)
+            )
+        """)
+        print("  + Created table financeiro_itemremessa")
+    else:
+        print("  - financeiro_itemremessa already exists")
+
+    # Criar tabela financeiro_arquivoretorno
+    print("Checking financeiro_arquivoretorno...")
+    cursor.execute("""
+        SELECT 1 FROM information_schema.tables
+        WHERE table_name = 'financeiro_arquivoretorno'
+    """)
+    if not cursor.fetchone():
+        cursor.execute("""
+            CREATE TABLE financeiro_arquivoretorno (
+                id SERIAL PRIMARY KEY,
+                criado_em TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+                atualizado_em TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+                conta_bancaria_id INTEGER NOT NULL REFERENCES core_contabancaria(id) ON DELETE RESTRICT,
+                arquivo VARCHAR(200) DEFAULT '',
+                nome_arquivo VARCHAR(100) NOT NULL,
+                layout VARCHAR(10) DEFAULT 'CNAB_240',
+                status VARCHAR(20) DEFAULT 'PENDENTE',
+                data_upload TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+                data_processamento TIMESTAMP WITH TIME ZONE NULL,
+                processado_por_id INTEGER NULL REFERENCES auth_user(id) ON DELETE SET NULL,
+                total_registros INTEGER DEFAULT 0,
+                registros_processados INTEGER DEFAULT 0,
+                registros_erro INTEGER DEFAULT 0,
+                valor_total_pago DECIMAL(14,2) DEFAULT 0,
+                observacoes TEXT DEFAULT '',
+                erro_mensagem TEXT DEFAULT ''
+            )
+        """)
+        cursor.execute("""
+            CREATE INDEX idx_retorno_conta ON financeiro_arquivoretorno(conta_bancaria_id);
+            CREATE INDEX idx_retorno_status ON financeiro_arquivoretorno(status);
+            CREATE INDEX idx_retorno_data_upload ON financeiro_arquivoretorno(data_upload);
+        """)
+        print("  + Created table financeiro_arquivoretorno")
+    else:
+        print("  - financeiro_arquivoretorno already exists")
+
+    # Criar tabela financeiro_itemretorno
+    print("Checking financeiro_itemretorno...")
+    cursor.execute("""
+        SELECT 1 FROM information_schema.tables
+        WHERE table_name = 'financeiro_itemretorno'
+    """)
+    if not cursor.fetchone():
+        cursor.execute("""
+            CREATE TABLE financeiro_itemretorno (
+                id SERIAL PRIMARY KEY,
+                criado_em TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+                atualizado_em TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+                arquivo_retorno_id INTEGER NOT NULL REFERENCES financeiro_arquivoretorno(id) ON DELETE CASCADE,
+                parcela_id INTEGER NULL REFERENCES financeiro_parcela(id) ON DELETE SET NULL,
+                nosso_numero VARCHAR(30) NOT NULL,
+                numero_documento VARCHAR(25) DEFAULT '',
+                codigo_ocorrencia VARCHAR(10) NOT NULL,
+                descricao_ocorrencia VARCHAR(255) DEFAULT '',
+                tipo_ocorrencia VARCHAR(20) DEFAULT 'OUTROS',
+                valor_titulo DECIMAL(12,2) NULL,
+                valor_pago DECIMAL(12,2) NULL,
+                valor_juros DECIMAL(12,2) NULL,
+                valor_multa DECIMAL(12,2) NULL,
+                valor_desconto DECIMAL(12,2) NULL,
+                valor_tarifa DECIMAL(12,2) NULL,
+                data_ocorrencia DATE NULL,
+                data_credito DATE NULL,
+                processado BOOLEAN DEFAULT FALSE,
+                erro_processamento TEXT DEFAULT ''
+            )
+        """)
+        cursor.execute("""
+            CREATE INDEX idx_itemretorno_nosso_numero ON financeiro_itemretorno(nosso_numero);
+            CREATE INDEX idx_itemretorno_codigo ON financeiro_itemretorno(codigo_ocorrencia);
+            CREATE INDEX idx_itemretorno_tipo ON financeiro_itemretorno(tipo_ocorrencia);
+        """)
+        print("  + Created table financeiro_itemretorno")
+    else:
+        print("  - financeiro_itemretorno already exists")
+
     print("Schema changes applied successfully!")
+
+    # =========================================================================
+    # CAMPOS DE CONFIGURACAO DE BOLETO NO CONTRATO
+    # =========================================================================
+    print("Checking contratos_contrato for boleto config fields...")
+    cursor.execute("""
+        SELECT 1 FROM information_schema.tables
+        WHERE table_name = 'contratos_contrato'
+    """)
+    if cursor.fetchone():
+        # Usar configurações da imobiliária ou personalizadas
+        add_column_if_not_exists(cursor, 'contratos_contrato', 'usar_config_boleto_imobiliaria', "BOOLEAN DEFAULT TRUE")
+
+        # Conta bancária padrão para este contrato
+        add_column_if_not_exists(cursor, 'contratos_contrato', 'conta_bancaria_padrao_id', "INTEGER NULL REFERENCES core_contabancaria(id) ON DELETE SET NULL")
+
+        # Configurações de Multa
+        add_column_if_not_exists(cursor, 'contratos_contrato', 'tipo_valor_multa', "VARCHAR(10) DEFAULT 'PERCENTUAL'")
+        add_column_if_not_exists(cursor, 'contratos_contrato', 'valor_multa_boleto', "DECIMAL(10,2) DEFAULT 0")
+
+        # Configurações de Juros
+        add_column_if_not_exists(cursor, 'contratos_contrato', 'tipo_valor_juros', "VARCHAR(10) DEFAULT 'PERCENTUAL'")
+        add_column_if_not_exists(cursor, 'contratos_contrato', 'valor_juros_boleto', "DECIMAL(10,4) DEFAULT 0")
+
+        # Dias sem encargos
+        add_column_if_not_exists(cursor, 'contratos_contrato', 'dias_carencia_boleto', "INTEGER DEFAULT 0")
+
+        # Desconto
+        add_column_if_not_exists(cursor, 'contratos_contrato', 'tipo_valor_desconto', "VARCHAR(10) DEFAULT 'PERCENTUAL'")
+        add_column_if_not_exists(cursor, 'contratos_contrato', 'valor_desconto_boleto', "DECIMAL(10,2) DEFAULT 0")
+        add_column_if_not_exists(cursor, 'contratos_contrato', 'dias_desconto_boleto', "INTEGER DEFAULT 0")
+
+        # Instruções personalizadas
+        add_column_if_not_exists(cursor, 'contratos_contrato', 'instrucao_boleto_1', "VARCHAR(255) DEFAULT ''")
+        add_column_if_not_exists(cursor, 'contratos_contrato', 'instrucao_boleto_2', "VARCHAR(255) DEFAULT ''")
+        add_column_if_not_exists(cursor, 'contratos_contrato', 'instrucao_boleto_3', "VARCHAR(255) DEFAULT ''")
+
+        # Criar índice para conta bancária
+        cursor.execute("""
+            DO $$
+            BEGIN
+                IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'idx_contrato_conta_bancaria') THEN
+                    CREATE INDEX idx_contrato_conta_bancaria ON contratos_contrato(conta_bancaria_padrao_id);
+                END IF;
+            END $$;
+        """)
+        print("  + Contrato boleto config fields added/verified")
+    else:
+        print("  - contratos_contrato table not found (will be created by migrations)")
+
+    print("All schema changes applied successfully!")
 SQLEOF
+
+echo "==> Creating default email templates..."
+python manage.py shell << 'TEMPLATEEOF'
+try:
+    from notificacoes.boleto_notificacao import criar_templates_padrao
+    count = criar_templates_padrao()
+    print(f"Templates criados: {count}")
+except Exception as e:
+    print(f"Aviso: Nao foi possivel criar templates padrao: {e}")
+TEMPLATEEOF
 
 echo "==> Collecting static files..."
 python manage.py collectstatic --no-input
