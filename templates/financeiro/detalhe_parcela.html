@@ -128,46 +128,106 @@
             <!-- Status do Boleto -->
             {% if parcela.tem_boleto %}
             <div class="card shadow-sm mb-4">
-                <div class="card-header bg-white">
+                <div class="card-header bg-white d-flex justify-content-between align-items-center">
                     <h5 class="mb-0">
                         <i class="fas fa-barcode text-primary me-2"></i>
-                        Boleto
+                        Dados do Boleto
                     </h5>
+                    <span class="badge bg-{% if parcela.status_boleto == 'GERADO' %}info{% elif parcela.status_boleto == 'REGISTRADO' %}success{% elif parcela.status_boleto == 'PAGO' %}success{% else %}secondary{% endif %}">
+                        {{ parcela.get_status_boleto_display }}
+                    </span>
                 </div>
                 <div class="card-body">
-                    <div class="row align-items-center">
-                        <div class="col-md-8">
-                            <p class="mb-1"><strong>Nosso Numero:</strong> {{ parcela.nosso_numero }}</p>
-                            {% if parcela.linha_digitavel %}
-                            <p class="mb-1"><strong>Linha Digitavel:</strong>
-                                <code>{{ parcela.linha_digitavel }}</code>
-                            </p>
-                            {% endif %}
-                            <p class="mb-0">
-                                <strong>Status:</strong>
-                                <span class="badge bg-{% if parcela.status_boleto == 'GERADO' %}info{% elif parcela.status_boleto == 'REGISTRADO' %}success{% elif parcela.status_boleto == 'PAGO' %}success{% else %}secondary{% endif %}">
-                                    {{ parcela.get_status_boleto_display }}
-                                </span>
-                            </p>
+                    <!-- Dados principais -->
+                    <div class="row mb-3">
+                        <div class="col-md-4">
+                            <label class="form-label text-muted small mb-0">Nosso Numero</label>
+                            <div class="fw-bold">{{ parcela.nosso_numero|default:"-" }}</div>
                         </div>
-                        <div class="col-md-4 text-end">
+                        <div class="col-md-4">
+                            <label class="form-label text-muted small mb-0">Numero Documento</label>
+                            <div class="fw-bold">{{ parcela.numero_documento|default:"-" }}</div>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label text-muted small mb-0">Valor Boleto</label>
+                            <div class="fw-bold text-success">R$ {{ parcela.valor_boleto|floatformat:2|default:parcela.valor_atual|floatformat:2 }}</div>
+                        </div>
+                    </div>
+
+                    <!-- Linha Digitavel -->
+                    {% if parcela.linha_digitavel %}
+                    <div class="mb-3">
+                        <label class="form-label text-muted small mb-0">Linha Digitavel</label>
+                        <div class="input-group">
+                            <input type="text" class="form-control font-monospace" value="{{ parcela.linha_digitavel }}" id="linhaDigitavel" readonly>
+                            <button class="btn btn-outline-secondary" type="button" onclick="copiarTexto('linhaDigitavel')" title="Copiar">
+                                <i class="fas fa-copy"></i>
+                            </button>
+                        </div>
+                    </div>
+                    {% endif %}
+
+                    <!-- Codigo de Barras -->
+                    {% if parcela.codigo_barras %}
+                    <div class="mb-3">
+                        <label class="form-label text-muted small mb-0">Codigo de Barras</label>
+                        <div class="input-group">
+                            <input type="text" class="form-control font-monospace small" value="{{ parcela.codigo_barras }}" id="codigoBarras" readonly>
+                            <button class="btn btn-outline-secondary" type="button" onclick="copiarTexto('codigoBarras')" title="Copiar">
+                                <i class="fas fa-copy"></i>
+                            </button>
+                        </div>
+                    </div>
+                    {% endif %}
+
+                    <!-- PIX -->
+                    {% if parcela.pix_copia_cola %}
+                    <div class="mb-3">
+                        <label class="form-label text-muted small mb-0">
+                            <i class="fas fa-qrcode text-success me-1"></i>PIX Copia e Cola
+                        </label>
+                        <div class="input-group">
+                            <input type="text" class="form-control font-monospace small" value="{{ parcela.pix_copia_cola }}" id="pixCopiaCola" readonly>
+                            <button class="btn btn-outline-success" type="button" onclick="copiarTexto('pixCopiaCola')" title="Copiar PIX">
+                                <i class="fas fa-copy"></i>
+                            </button>
+                        </div>
+                    </div>
+                    {% endif %}
+
+                    {% if parcela.pix_qrcode %}
+                    <div class="mb-3 text-center">
+                        <label class="form-label text-muted small mb-2">QR Code PIX</label>
+                        <div>
+                            <img src="{{ parcela.pix_qrcode }}" alt="QR Code PIX" class="img-fluid" style="max-width: 150px;">
+                        </div>
+                    </div>
+                    {% endif %}
+
+                    <hr>
+
+                    <!-- Acoes do boleto -->
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            {% if parcela.data_geracao_boleto %}
+                            <small class="text-muted">
+                                Gerado em: {{ parcela.data_geracao_boleto|date:"d/m/Y H:i" }}
+                            </small>
+                            {% endif %}
+                        </div>
+                        <div>
                             {% if parcela.boleto_pdf %}
-                            <a href="{% url 'financeiro:visualizar_boleto' parcela.pk %}" class="btn btn-primary mb-2" target="_blank">
+                            <a href="{% url 'financeiro:visualizar_boleto' parcela.pk %}" class="btn btn-primary btn-sm" target="_blank">
                                 <i class="fas fa-eye me-1"></i> Visualizar PDF
                             </a>
-                            <br>
-                            <a href="{% url 'financeiro:download_boleto' parcela.pk %}" class="btn btn-outline-primary">
+                            <a href="{% url 'financeiro:download_boleto' parcela.pk %}" class="btn btn-outline-primary btn-sm">
                                 <i class="fas fa-download me-1"></i> Download
                             </a>
                             {% else %}
-                            <div class="alert alert-warning py-2 mb-0">
-                                <i class="fas fa-exclamation-triangle me-1"></i>
-                                <small>PDF nao disponivel</small>
-                            </div>
-                            <form method="post" action="{% url 'financeiro:gerar_boleto' parcela.pk %}" class="mt-2">
+                            <form method="post" action="{% url 'financeiro:gerar_boleto' parcela.pk %}" class="d-inline">
                                 {% csrf_token %}
-                                <button type="submit" class="btn btn-sm btn-outline-primary">
-                                    <i class="fas fa-sync me-1"></i> Regerar Boleto
+                                <button type="submit" class="btn btn-warning btn-sm">
+                                    <i class="fas fa-sync me-1"></i> Gerar PDF
                                 </button>
                             </form>
                             {% endif %}
@@ -242,4 +302,36 @@
         </div>
     </div>
 </div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+function copiarTexto(elementId) {
+    const elemento = document.getElementById(elementId);
+    elemento.select();
+    elemento.setSelectionRange(0, 99999);
+
+    navigator.clipboard.writeText(elemento.value).then(function() {
+        // Feedback visual
+        const btn = elemento.nextElementSibling;
+        const iconOriginal = btn.innerHTML;
+        btn.innerHTML = '<i class="fas fa-check text-success"></i>';
+        btn.classList.add('btn-success');
+        btn.classList.remove('btn-outline-secondary', 'btn-outline-success');
+
+        setTimeout(function() {
+            btn.innerHTML = iconOriginal;
+            btn.classList.remove('btn-success');
+            if (elementId === 'pixCopiaCola') {
+                btn.classList.add('btn-outline-success');
+            } else {
+                btn.classList.add('btn-outline-secondary');
+            }
+        }, 2000);
+    }).catch(function(err) {
+        console.error('Erro ao copiar: ', err);
+        alert('Erro ao copiar. Selecione o texto manualmente.');
+    });
+}
+</script>
 {% endblock %}
