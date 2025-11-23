@@ -200,10 +200,8 @@ class Command(BaseCommand):
             {
                 'banco': '001',  # Banco do Brasil
                 'descricao': 'Conta Principal BB',
-                'agencia': '3073',
-                'agencia_dv': '0',
-                'conta': '12345678',
-                'conta_dv': '9',
+                'agencia': '3073-0',
+                'conta': '12345678-9',
                 'convenio': '1234567',  # 7 dígitos obrigatório
                 'carteira': '18',
                 'nosso_numero_atual': 1,
@@ -212,9 +210,7 @@ class Command(BaseCommand):
                 'banco': '756',  # Sicoob
                 'descricao': 'Conta Sicoob',
                 'agencia': '3073',
-                'agencia_dv': '0',
-                'conta': '12345678',  # max 8 dígitos
-                'conta_dv': '5',
+                'conta': '12345678-5',  # max 8 dígitos
                 'convenio': '1234567',  # max 7 dígitos
                 'carteira': '1',
                 'nosso_numero_atual': 1,
@@ -222,10 +218,8 @@ class Command(BaseCommand):
             {
                 'banco': '237',  # Bradesco
                 'descricao': 'Conta Bradesco',
-                'agencia': '1234',
-                'agencia_dv': '5',
-                'conta': '1234567',  # max 7 dígitos
-                'conta_dv': '0',
+                'agencia': '1234-5',
+                'conta': '1234567-0',  # max 7 dígitos
                 'convenio': '',
                 'carteira': '06',
                 'nosso_numero_atual': 1,
@@ -241,9 +235,7 @@ class Command(BaseCommand):
                     descricao=f"{config['descricao']} - {imobiliaria.nome}",
                     principal=(i == 0),  # BB é a principal
                     agencia=config['agencia'],
-                    agencia_dv=config.get('agencia_dv', ''),
                     conta=config['conta'],
-                    conta_dv=config.get('conta_dv', ''),
                     convenio=config['convenio'],
                     carteira=config['carteira'],
                     nosso_numero_atual=config['nosso_numero_atual'],
