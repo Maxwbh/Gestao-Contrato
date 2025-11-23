@@ -458,20 +458,22 @@ class BoletoService:
         """
         Gera um código de barras simplificado.
 
-        Formato padrão FEBRABAN:
-        BBBMC.CCCCD DDDDD.DDDDD DDDDD.DDDDD D FFFFVVVVVVVVVV
-
-        Onde:
-        - BBB = Código do banco (3 dígitos)
-        - M = Código da moeda (9 = Real)
-        - CCCC = Código do beneficiário / agência
-        - DDDDD... = Nosso número e outros dados
-        - FFFF = Fator de vencimento
-        - VVVVVVVVVV = Valor (10 dígitos)
+        Formato padrão FEBRABAN (44 dígitos):
+        - Posições 1-3: Código do banco (3 dígitos)
+        - Posição 4: Código da moeda (9 = Real)
+        - Posição 5: DV geral (módulo 11)
+        - Posições 6-9: Fator de vencimento (4 dígitos)
+        - Posições 10-19: Valor (10 dígitos)
+        - Posições 20-44: Campo livre (25 dígitos)
         """
         from datetime import date
 
-        banco = conta_bancaria.banco.zfill(3)
+        # Funcao auxiliar para extrair apenas digitos
+        def apenas_digitos(s):
+            return ''.join(filter(str.isdigit, str(s)))
+
+        # Codigo do banco (3 digitos)
+        banco = apenas_digitos(conta_bancaria.banco).zfill(3)[:3]
         moeda = '9'
 
         # Fator de vencimento (dias desde 07/10/1997)
@@ -486,29 +488,41 @@ class BoletoService:
         else:
             fator_vencimento = (data_venc - data_base_original).days
 
-        # Garantir 4 dígitos
-        fator_vencimento = str(fator_vencimento % 10000).zfill(4)
+        # Garantir 4 dígitos (mod 10000 + zfill + truncate)
+        fator_str = str(fator_vencimento % 10000).zfill(4)[:4]
 
         # Valor (10 dígitos, sem decimais)
         valor = int(float(dados['valor']) * 100)
-        valor_str = str(valor).zfill(10)
+        valor_str = str(valor).zfill(10)[:10]
 
-        # Campo livre (varia por banco) - simplificado
-        agencia = dados['agencia'].zfill(4)[:4]
-        conta = dados['conta_corrente'].zfill(8)[:8]
-        nosso_num = dados['nosso_numero'].zfill(11)[:11]
-        carteira = dados['carteira'].zfill(2)[:2]
+        # Campo livre (25 digitos) - varia por banco, formato simplificado
+        agencia = apenas_digitos(dados['agencia']).zfill(4)[:4]
+        conta = apenas_digitos(dados['conta_corrente']).zfill(8)[:8]
+        nosso_num = apenas_digitos(dados['nosso_numero']).zfill(11)[:11]
+        carteira = apenas_digitos(dados['carteira']).zfill(2)[:2]
 
-        campo_livre = f"{agencia}{conta}{nosso_num}{carteira}"[:25].ljust(25, '0')
+        # Montar campo livre e garantir exatamente 25 digitos
+        campo_livre = f"{agencia}{conta}{nosso_num}{carteira}"
+        campo_livre = apenas_digitos(campo_livre).ljust(25, '0')[:25]
 
-        # Montar código de barras sem DV
-        codigo_sem_dv = f"{banco}{moeda}{fator_vencimento}{valor_str}{campo_livre}"
+        # Montar código de barras sem DV (43 digitos)
+        codigo_sem_dv = f"{banco}{moeda}{fator_str}{valor_str}{campo_livre}"
+
+        # Validar tamanho antes de calcular DV
+        if len(codigo_sem_dv) != 43:
+            logger.warning(f"Codigo sem DV com tamanho incorreto: {len(codigo_sem_dv)} (esperado 43)")
+            # Truncar ou preencher para garantir 43 digitos
+            codigo_sem_dv = codigo_sem_dv[:43].ljust(43, '0')
 
         # Calcular DV (módulo 11)
         dv = self._calcular_dv_mod11(codigo_sem_dv)
 
-        # Inserir DV na posição 5
+        # Inserir DV na posição 5 (índice 4)
         codigo_barras = f"{codigo_sem_dv[:4]}{dv}{codigo_sem_dv[4:]}"
+
+        # Validacao final
+        if len(codigo_barras) != 44:
+            logger.error(f"Codigo de barras com tamanho incorreto: {len(codigo_barras)}")
 
         return codigo_barras
 
