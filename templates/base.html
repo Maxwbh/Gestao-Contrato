@@ -276,10 +276,25 @@
                     </li>
 
                     <!-- Notificações -->
-                    <li class="nav-item">
-                        <a class="nav-link" href="{% url 'notificacoes:listar' %}">
-                            <i class="fas fa-bell"></i> Notificações
+                    <li class="nav-item dropdown">
+                        <a class="nav-link dropdown-toggle" href="#" id="notificacoesDropdown" role="button" data-bs-toggle="dropdown">
+                            <i class="fas fa-bell"></i> Notificacoes
                         </a>
+                        <ul class="dropdown-menu">
+                            <li><a class="dropdown-item" href="{% url 'notificacoes:listar' %}">
+                                <i class="fas fa-history"></i> Historico de Envios
+                            </a></li>
+                            <li><hr class="dropdown-divider"></li>
+                            <li class="dropdown-header">
+                                <i class="fas fa-cogs"></i> Configuracoes
+                            </li>
+                            <li><a class="dropdown-item" href="{% url 'notificacoes:listar_config_email' %}">
+                                <i class="fas fa-envelope"></i> Servidores de E-mail
+                            </a></li>
+                            <li><a class="dropdown-item" href="{% url 'notificacoes:listar_templates' %}">
+                                <i class="fas fa-file-alt"></i> Templates de Mensagens
+                            </a></li>
+                        </ul>
                     </li>
                 </ul>
 
