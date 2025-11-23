@@ -264,6 +264,105 @@ class Contrato(TimeStampedModel):
         verbose_name='Status'
     )
 
+    # ============================================================
+    # Configurações de Boleto do Contrato
+    # Se usar_config_boleto_imobiliaria=True, usa valores da Imobiliária
+    # Caso contrário, usa os valores definidos abaixo
+    # ============================================================
+    usar_config_boleto_imobiliaria = models.BooleanField(
+        default=True,
+        verbose_name='Usar Configurações da Imobiliária',
+        help_text='Se marcado, usa as configurações de boleto da imobiliária'
+    )
+
+    # Conta Bancária padrão para este contrato
+    conta_bancaria_padrao = models.ForeignKey(
+        'core.ContaBancaria',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='contratos',
+        verbose_name='Conta Bancária Padrão',
+        help_text='Conta bancária para geração de boletos deste contrato'
+    )
+
+    # Configurações de Multa (personalizadas)
+    tipo_valor_multa = models.CharField(
+        max_length=10,
+        choices=[('PERCENTUAL', 'Percentual'), ('VALOR', 'Valor Fixo')],
+        default='PERCENTUAL',
+        verbose_name='Tipo de Multa'
+    )
+    valor_multa_boleto = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        default=0,
+        verbose_name='Multa do Boleto',
+        help_text='Valor em percentual ou reais conforme tipo'
+    )
+
+    # Configurações de Juros (personalizadas)
+    tipo_valor_juros = models.CharField(
+        max_length=10,
+        choices=[('PERCENTUAL', 'Percentual'), ('VALOR', 'Valor Fixo')],
+        default='PERCENTUAL',
+        verbose_name='Tipo de Juros'
+    )
+    valor_juros_boleto = models.DecimalField(
+        max_digits=10,
+        decimal_places=4,
+        default=0,
+        verbose_name='Juros ao Dia do Boleto',
+        help_text='Valor em percentual (0,0333 = 1% ao mês) ou reais'
+    )
+
+    # Dias sem encargos
+    dias_carencia_boleto = models.IntegerField(
+        default=0,
+        verbose_name='Dias sem Encargos',
+        help_text='Dias sem cobrar multa/juros após vencimento'
+    )
+
+    # Desconto
+    tipo_valor_desconto = models.CharField(
+        max_length=10,
+        choices=[('PERCENTUAL', 'Percentual'), ('VALOR', 'Valor Fixo')],
+        default='PERCENTUAL',
+        verbose_name='Tipo de Desconto'
+    )
+    valor_desconto_boleto = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        default=0,
+        verbose_name='Desconto do Boleto',
+        help_text='Valor em percentual ou reais conforme tipo'
+    )
+    dias_desconto_boleto = models.IntegerField(
+        default=0,
+        verbose_name='Dias para Desconto',
+        help_text='Dias antes do vencimento para conceder desconto'
+    )
+
+    # Instruções personalizadas
+    instrucao_boleto_1 = models.CharField(
+        max_length=255,
+        blank=True,
+        verbose_name='Instrução 1',
+        help_text='Primeira linha de instrução do boleto'
+    )
+    instrucao_boleto_2 = models.CharField(
+        max_length=255,
+        blank=True,
+        verbose_name='Instrução 2',
+        help_text='Segunda linha de instrução do boleto'
+    )
+    instrucao_boleto_3 = models.CharField(
+        max_length=255,
+        blank=True,
+        verbose_name='Instrução 3',
+        help_text='Terceira linha de instrução do boleto'
+    )
+
     # Observações
     observacoes = models.TextField(
         blank=True,
@@ -300,6 +399,60 @@ class Contrato(TimeStampedModel):
     def __str__(self):
         return f"Contrato {self.numero_contrato} - {self.comprador.nome}"
 
+    def get_config_boleto(self):
+        """
+        Retorna as configurações de boleto do contrato.
+        Se usar_config_boleto_imobiliaria=True, retorna valores da imobiliária.
+        Caso contrário, retorna valores personalizados do contrato.
+
+        Returns:
+            dict: Configurações de boleto
+        """
+        if self.usar_config_boleto_imobiliaria:
+            imob = self.imobiliaria
+            return {
+                'tipo_valor_multa': imob.tipo_valor_multa,
+                'valor_multa': imob.percentual_multa_padrao,
+                'tipo_valor_juros': imob.tipo_valor_juros,
+                'valor_juros': imob.percentual_juros_padrao,
+                'dias_carencia': imob.dias_para_encargos_padrao,
+                'tipo_valor_desconto': imob.tipo_valor_desconto,
+                'valor_desconto': imob.percentual_desconto_padrao,
+                'dias_desconto': imob.dias_para_desconto_padrao,
+                'instrucao_1': imob.instrucao_padrao,
+                'instrucao_2': '',
+                'instrucao_3': '',
+                'tipo_titulo': imob.tipo_titulo,
+                'aceite': imob.aceite,
+            }
+        else:
+            return {
+                'tipo_valor_multa': self.tipo_valor_multa,
+                'valor_multa': self.valor_multa_boleto,
+                'tipo_valor_juros': self.tipo_valor_juros,
+                'valor_juros': self.valor_juros_boleto,
+                'dias_carencia': self.dias_carencia_boleto,
+                'tipo_valor_desconto': self.tipo_valor_desconto,
+                'valor_desconto': self.valor_desconto_boleto,
+                'dias_desconto': self.dias_desconto_boleto,
+                'instrucao_1': self.instrucao_boleto_1,
+                'instrucao_2': self.instrucao_boleto_2,
+                'instrucao_3': self.instrucao_boleto_3,
+                'tipo_titulo': self.imobiliaria.tipo_titulo,
+                'aceite': self.imobiliaria.aceite,
+            }
+
+    def get_conta_bancaria(self):
+        """
+        Retorna a conta bancária para geração de boletos.
+        Prioridade: 1) Conta do contrato, 2) Conta principal da imobiliária
+        """
+        if self.conta_bancaria_padrao:
+            return self.conta_bancaria_padrao
+        return self.imobiliaria.contas_bancarias.filter(
+            principal=True, ativo=True
+        ).first()
+
     def save(self, *args, **kwargs):
         """Override do save para calcular campos automáticos"""
         # Calcular valor financiado
@@ -315,21 +468,29 @@ class Contrato(TimeStampedModel):
         if not self.parcelas.exists():
             self.gerar_parcelas()
 
-    def gerar_parcelas(self):
-        """Gera todas as parcelas do contrato"""
+    def gerar_parcelas(self, gerar_boletos=False, conta_bancaria=None):
+        """
+        Gera todas as parcelas do contrato.
+
+        Args:
+            gerar_boletos: Se True, gera boletos para cada parcela
+            conta_bancaria: Conta bancária para geração de boletos (opcional)
+        """
         from financeiro.models import Parcela
 
         data_vencimento = self.data_primeiro_vencimento
         valor_parcela = self.valor_parcela_original
+        parcelas_criadas = []
 
         for numero in range(1, self.numero_parcelas + 1):
-            Parcela.objects.create(
+            parcela = Parcela.objects.create(
                 contrato=self,
                 numero_parcela=numero,
                 data_vencimento=data_vencimento,
                 valor_original=valor_parcela,
                 valor_atual=valor_parcela,
             )
+            parcelas_criadas.append(parcela)
 
             # Avançar para o próximo mês, mantendo o dia de vencimento
             data_vencimento = data_vencimento + relativedelta(months=1)
@@ -340,6 +501,54 @@ class Contrato(TimeStampedModel):
                 ultimo_dia = (data_vencimento.replace(day=1) + relativedelta(months=1) - relativedelta(days=1)).day
                 dia = min(self.dia_vencimento, ultimo_dia)
                 data_vencimento = data_vencimento.replace(day=dia)
+
+        # Gerar boletos se solicitado
+        if gerar_boletos:
+            self.gerar_boletos_parcelas(parcelas_criadas, conta_bancaria)
+
+        return parcelas_criadas
+
+    def gerar_boletos_parcelas(self, parcelas=None, conta_bancaria=None):
+        """
+        Gera boletos para as parcelas do contrato.
+
+        Args:
+            parcelas: Lista de parcelas (opcional, usa todas não pagas se não informado)
+            conta_bancaria: Conta bancária para geração (opcional)
+
+        Returns:
+            list: Resultados da geração de boletos
+        """
+        if parcelas is None:
+            parcelas = self.parcelas.filter(pago=False)
+
+        # Obter conta bancária se não informada
+        if not conta_bancaria:
+            imobiliaria = self.imovel.imobiliaria
+            conta_bancaria = imobiliaria.contas_bancarias.filter(
+                principal=True, ativo=True
+            ).first()
+
+        if not conta_bancaria:
+            return {'erro': 'Nenhuma conta bancária disponível'}
+
+        resultados = []
+        for parcela in parcelas:
+            try:
+                resultado = parcela.gerar_boleto(conta_bancaria)
+                resultados.append({
+                    'parcela': parcela.numero_parcela,
+                    'sucesso': resultado.get('sucesso', False) if resultado else False,
+                    'nosso_numero': resultado.get('nosso_numero', '') if resultado else '',
+                })
+            except Exception as e:
+                resultados.append({
+                    'parcela': parcela.numero_parcela,
+                    'sucesso': False,
+                    'erro': str(e),
+                })
+
+        return resultados
 
     def calcular_progresso(self):
         """Calcula o progresso de pagamento do contrato"""
@@ -382,3 +591,21 @@ class Contrato(TimeStampedModel):
         meses_desde_reajuste = (timezone.now().date().year - self.data_ultimo_reajuste.year) * 12 + \
                               (timezone.now().date().month - self.data_ultimo_reajuste.month)
         return meses_desde_reajuste >= self.prazo_reajuste_meses
+
+    @property
+    def data_proximo_reajuste(self):
+        """
+        Calcula a data do proximo reajuste.
+        Retorna None se o contrato usa valor fixo (sem reajuste).
+        """
+        if self.tipo_correcao == TipoCorrecao.FIXO:
+            return None
+
+        # Data base para calculo
+        if self.data_ultimo_reajuste:
+            data_base = self.data_ultimo_reajuste
+        else:
+            data_base = self.data_contrato
+
+        # Adicionar o prazo de reajuste
+        return data_base + relativedelta(months=self.prazo_reajuste_meses)

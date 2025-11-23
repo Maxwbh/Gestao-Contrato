@@ -5,10 +5,24 @@ Desenvolvedor: Maxwell da Silva Oliveira
 """
 from django.urls import path
 from . import views
+from . import tasks
 
 app_name = 'core'
 
 urlpatterns = [
+    # Health Check (monitoramento)
+    path('health/', views.health_check, name='health_check'),
+
+    # ==========================================================================
+    # API de Tarefas (alternativa ao Celery para Render Free tier)
+    # Configure TASK_TOKEN nas variáveis de ambiente e use cron-job.org
+    # ==========================================================================
+    path('api/tasks/status/', tasks.task_status, name='task_status'),
+    path('api/tasks/processar-reajustes/', tasks.task_processar_reajustes, name='task_reajustes'),
+    path('api/tasks/enviar-notificacoes/', tasks.task_enviar_notificacoes, name='task_notificacoes'),
+    path('api/tasks/atualizar-parcelas/', tasks.task_atualizar_parcelas, name='task_parcelas'),
+    path('api/tasks/run-all/', tasks.task_run_all, name='task_run_all'),
+
     # Páginas principais
     path('', views.index, name='index'),
     path('setup/', views.setup, name='setup'),

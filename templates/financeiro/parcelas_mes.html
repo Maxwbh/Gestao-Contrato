@@ -1,0 +1,226 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Parcelas do Mes - {{ mes_atual }}{% endblock %}
+
+{% block extra_css %}
+<style>
+    .card-stats { border-left: 4px solid; }
+    .card-stats.primary { border-color: #007bff; }
+    .card-stats.success { border-color: #28a745; }
+    .card-stats.warning { border-color: #ffc107; }
+    .card-stats.danger { border-color: #dc3545; }
+    .stat-value { font-size: 1.4rem; font-weight: bold; }
+    .stat-label { color: #6c757d; font-size: 0.85rem; }
+    .imob-card { transition: transform 0.2s; cursor: pointer; }
+    .imob-card:hover { transform: translateY(-3px); box-shadow: 0 4px 12px rgba(0,0,0,0.15); }
+    .parcela-vencida { background-color: #fff3cd !important; }
+    .parcela-paga { background-color: #d4edda !important; }
+    .progress { height: 8px; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <!-- Header -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h2 class="mb-0"><i class="fas fa-calendar-alt me-2"></i>Parcelas do Mes</h2>
+            <small class="text-muted">{{ primeiro_dia|date:"d/m/Y" }} a {{ ultimo_dia|date:"d/m/Y" }}</small>
+        </div>
+        <div>
+            <a href="{% url 'financeiro:listar_parcelas' %}" class="btn btn-outline-secondary">
+                <i class="fas fa-list me-1"></i> Todas Parcelas
+            </a>
+            <a href="{% url 'financeiro:dashboard' %}" class="btn btn-outline-primary">
+                <i class="fas fa-chart-line me-1"></i> Dashboard
+            </a>
+        </div>
+    </div>
+
+    <!-- Estatisticas do Mes -->
+    <div class="row mb-4">
+        <div class="col-md-3">
+            <div class="card card-stats primary">
+                <div class="card-body text-center">
+                    <div class="stat-value text-primary">{{ stats.total|default:0 }}</div>
+                    <div class="stat-label">Total Parcelas</div>
+                    <small class="text-muted">R$ {{ stats.valor_total|floatformat:2|default:"0,00" }}</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card card-stats success">
+                <div class="card-body text-center">
+                    <div class="stat-value text-success">{{ stats.pagas|default:0 }}</div>
+                    <div class="stat-label">Pagas</div>
+                    <small class="text-muted">R$ {{ stats.valor_pago|floatformat:2|default:"0,00" }}</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card card-stats warning">
+                <div class="card-body text-center">
+                    <div class="stat-value text-warning">{{ stats.pendentes|default:0 }}</div>
+                    <div class="stat-label">Pendentes</div>
+                    <small class="text-muted">R$ {{ stats.valor_pendente|floatformat:2|default:"0,00" }}</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card card-stats danger">
+                <div class="card-body text-center">
+                    <div class="stat-value text-danger">{{ stats.vencidas|default:0 }}</div>
+                    <div class="stat-label">Vencidas</div>
+                    <small class="text-muted">R$ {{ stats.valor_vencido|floatformat:2|default:"0,00" }}</small>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Filtros -->
+    <div class="card mb-4">
+        <div class="card-body">
+            <form method="get" class="row g-3">
+                <div class="col-md-4">
+                    <label class="form-label">Imobiliaria</label>
+                    <select name="imobiliaria" class="form-select" onchange="this.form.submit()">
+                        <option value="">Todas</option>
+                        {% for imob in imobiliarias %}
+                        <option value="{{ imob.id }}" {% if filtro_imobiliaria == imob.id|stringformat:"s" %}selected{% endif %}>
+                            {{ imob.nome }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label">Status</label>
+                    <select name="status" class="form-select" onchange="this.form.submit()">
+                        <option value="">Todos</option>
+                        <option value="pendentes" {% if filtro_status == 'pendentes' %}selected{% endif %}>Pendentes</option>
+                        <option value="pagas" {% if filtro_status == 'pagas' %}selected{% endif %}>Pagas</option>
+                        <option value="vencidas" {% if filtro_status == 'vencidas' %}selected{% endif %}>Vencidas</option>
+                    </select>
+                </div>
+                <div class="col-md-4 d-flex align-items-end">
+                    <a href="{% url 'financeiro:parcelas_mes' %}" class="btn btn-outline-secondary">
+                        <i class="fas fa-times me-1"></i> Limpar Filtros
+                    </a>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Resumo por Imobiliaria -->
+    {% if parcelas_por_imobiliaria %}
+    <div class="card mb-4">
+        <div class="card-header">
+            <h5 class="mb-0"><i class="fas fa-building me-2"></i>Resumo por Imobiliaria</h5>
+        </div>
+        <div class="card-body">
+            <div class="row">
+                {% for nome, dados in parcelas_por_imobiliaria.items %}
+                <div class="col-md-4 mb-3">
+                    <div class="card imob-card h-100">
+                        <div class="card-body">
+                            <h6 class="card-title">{{ nome }}</h6>
+                            <div class="d-flex justify-content-between mb-2">
+                                <span class="text-muted">Total:</span>
+                                <strong>{{ dados.total }} parcelas</strong>
+                            </div>
+                            <div class="progress mb-2">
+                                {% widthratio dados.pagas dados.total 100 as pct_pagas %}
+                                <div class="progress-bar bg-success" style="width: {{ pct_pagas }}%"></div>
+                            </div>
+                            <div class="d-flex justify-content-between small">
+                                <span class="text-success">{{ dados.pagas }} pagas</span>
+                                <span class="text-warning">{{ dados.pendentes }} pendentes</span>
+                            </div>
+                            <hr>
+                            <div class="d-flex justify-content-between small">
+                                <span>A Receber:</span>
+                                <strong class="text-primary">R$ {{ dados.valor_pendente|floatformat:2 }}</strong>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Tabela de Parcelas -->
+    <div class="card">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <h5 class="mb-0"><i class="fas fa-list me-2"></i>Parcelas do Mes</h5>
+            <span class="badge bg-primary">{{ parcelas|length }} parcelas</span>
+        </div>
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-hover mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Vencimento</th>
+                            <th>Parcela</th>
+                            <th>Imobiliaria</th>
+                            <th>Comprador</th>
+                            <th class="text-end">Valor</th>
+                            <th class="text-center">Status</th>
+                            <th class="text-center">Acoes</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for parcela in parcelas %}
+                        <tr class="{% if parcela.pago %}parcela-paga{% elif parcela.esta_vencida %}parcela-vencida{% endif %}">
+                            <td>
+                                <strong>{{ parcela.data_vencimento|date:"d/m" }}</strong>
+                                {% if parcela.esta_vencida and not parcela.pago %}
+                                <br><small class="text-danger">{{ parcela.dias_atraso }}d atraso</small>
+                                {% endif %}
+                            </td>
+                            <td>{{ parcela.numero_parcela }}/{{ parcela.contrato.numero_parcelas }}</td>
+                            <td>{{ parcela.contrato.imovel.imobiliaria.nome|default:"-"|truncatechars:20 }}</td>
+                            <td>
+                                <a href="{% url 'core:editar_comprador' parcela.contrato.comprador.pk %}">
+                                    {{ parcela.contrato.comprador.nome|truncatechars:25 }}
+                                </a>
+                            </td>
+                            <td class="text-end"><strong>R$ {{ parcela.valor_atual|floatformat:2 }}</strong></td>
+                            <td class="text-center">
+                                {% if parcela.pago %}
+                                <span class="badge bg-success">Pago</span>
+                                {% elif parcela.esta_vencida %}
+                                <span class="badge bg-danger">Vencida</span>
+                                {% else %}
+                                <span class="badge bg-warning text-dark">Pendente</span>
+                                {% endif %}
+                            </td>
+                            <td class="text-center">
+                                <div class="btn-group btn-group-sm">
+                                    <a href="{% url 'financeiro:detalhe_parcela' parcela.pk %}" class="btn btn-outline-primary" title="Detalhes">
+                                        <i class="fas fa-eye"></i>
+                                    </a>
+                                    {% if not parcela.pago %}
+                                    <a href="{% url 'financeiro:registrar_pagamento' parcela.pk %}" class="btn btn-outline-success" title="Pagar">
+                                        <i class="fas fa-dollar-sign"></i>
+                                    </a>
+                                    {% endif %}
+                                </div>
+                            </td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="7" class="text-center py-4 text-muted">
+                                <i class="fas fa-inbox fa-2x mb-2 d-block"></i>
+                                Nenhuma parcela encontrada para este mes.
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
