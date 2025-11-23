@@ -12,12 +12,12 @@ FROM akretion/boleto_cnab_api:latest
 # Definir variaveis de ambiente
 ENV RACK_ENV=production
 
-# O Render usa a variavel PORT dinamicamente (geralmente 10000)
-# Precisamos fazer o Puma escutar nessa porta
+# Copiar entrypoint customizado
+COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
+RUN chmod +x /usr/local/bin/docker-entrypoint.sh
 
-# Expor a porta (Render usa 10000 por padrao)
+# Expor porta (Render usa PORT dinamicamente)
 EXPOSE 10000
 
-# Sobrescrever o comando para usar a porta do Render
-# O Render define PORT=10000, entao usamos essa variavel
-CMD bundle exec puma -p ${PORT:-10000} -e production
+# Usar entrypoint customizado que le a variavel PORT
+ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
