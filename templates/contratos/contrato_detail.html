@@ -62,10 +62,83 @@
         font-size: 0.8rem;
         color: #6c757d;
     }
+
+    /* Toast Notifications */
+    .toast-container {
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        z-index: 9999;
+    }
+    .toast-notification {
+        min-width: 300px;
+        padding: 15px 20px;
+        margin-bottom: 10px;
+        border-radius: 8px;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+        display: flex;
+        align-items: center;
+        animation: slideIn 0.3s ease-out;
+    }
+    .toast-notification.success {
+        background: linear-gradient(135deg, #28a745, #20c997);
+        color: white;
+    }
+    .toast-notification.error {
+        background: linear-gradient(135deg, #dc3545, #e74c3c);
+        color: white;
+    }
+    .toast-notification.info {
+        background: linear-gradient(135deg, #17a2b8, #0dcaf0);
+        color: white;
+    }
+    .toast-notification i {
+        font-size: 1.2rem;
+        margin-right: 12px;
+    }
+    .toast-notification .toast-close {
+        margin-left: auto;
+        cursor: pointer;
+        opacity: 0.7;
+    }
+    .toast-notification .toast-close:hover {
+        opacity: 1;
+    }
+    @keyframes slideIn {
+        from { transform: translateX(100%); opacity: 0; }
+        to { transform: translateX(0); opacity: 1; }
+    }
+    @keyframes slideOut {
+        from { transform: translateX(0); opacity: 1; }
+        to { transform: translateX(100%); opacity: 0; }
+    }
+
+    /* Botao Loading */
+    .btn-loading {
+        position: relative;
+        pointer-events: none;
+    }
+    .btn-loading .spinner-border {
+        width: 1rem;
+        height: 1rem;
+        border-width: 2px;
+    }
+
+    /* Efeito de sucesso na linha */
+    .parcela-row.boleto-gerado {
+        animation: highlightSuccess 2s ease-out;
+    }
+    @keyframes highlightSuccess {
+        0% { background-color: #d4edda; }
+        100% { background-color: transparent; }
+    }
 </style>
 {% endblock %}
 
 {% block content %}
+<!-- Toast Container -->
+<div id="toastContainer" class="toast-container"></div>
+
 <div class="row">
     <div class="col-12">
         <!-- Cabecalho -->
@@ -435,12 +508,12 @@
                                                             <i class="fas fa-eye"></i>
                                                         </a>
                                                         <button type="button" class="btn btn-outline-warning"
-                                                                onclick="regenerarBoleto({{ parcela.pk }})" title="Atualizar Boleto">
+                                                                onclick="regenerarBoleto({{ parcela.pk }}, this)" title="Atualizar Boleto">
                                                             <i class="fas fa-sync"></i>
                                                         </button>
                                                     {% else %}
                                                         <button type="button" class="btn btn-outline-success"
-                                                                onclick="gerarBoleto({{ parcela.pk }})" title="Gerar Boleto">
+                                                                onclick="gerarBoleto({{ parcela.pk }}, this)" title="Gerar Boleto">
                                                             <i class="fas fa-barcode"></i>
                                                         </button>
                                                     {% endif %}
@@ -800,10 +873,41 @@ function confirmarCancelamento() {
     new bootstrap.Modal(document.getElementById('modalCancelamento')).show();
 }
 
+// ============ FUNCOES DE TOAST ============
+
+function showToast(message, type = 'success', duration = 4000) {
+    var container = document.getElementById('toastContainer');
+    var toast = document.createElement('div');
+    toast.className = 'toast-notification ' + type;
+
+    var icon = type === 'success' ? 'fa-check-circle' :
+               type === 'error' ? 'fa-exclamation-circle' : 'fa-info-circle';
+
+    toast.innerHTML = '<i class="fas ' + icon + '"></i>' +
+                      '<span>' + message + '</span>' +
+                      '<span class="toast-close" onclick="this.parentElement.remove()"><i class="fas fa-times"></i></span>';
+
+    container.appendChild(toast);
+
+    setTimeout(function() {
+        toast.style.animation = 'slideOut 0.3s ease-out forwards';
+        setTimeout(function() { toast.remove(); }, 300);
+    }, duration);
+}
+
 // ============ FUNCOES DE BOLETO ============
 
-function gerarBoleto(parcelaId) {
-    if (!confirm('Deseja gerar o boleto para esta parcela?')) return;
+function gerarBoleto(parcelaId, btn) {
+    // Encontrar o botao se nao foi passado
+    if (!btn) {
+        btn = document.querySelector('button[onclick*="gerarBoleto(' + parcelaId + ')"]');
+    }
+
+    // Mostrar loading no botao
+    var originalHtml = btn.innerHTML;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
+    btn.classList.add('btn-loading');
+    btn.disabled = true;
 
     fetch('/financeiro/parcelas/' + parcelaId + '/boleto/gerar/', {
         method: 'POST',
@@ -815,18 +919,61 @@ function gerarBoleto(parcelaId) {
     .then(response => response.json())
     .then(data => {
         if (data.sucesso) {
-            // Abrir boleto em nova aba
-            window.open('/financeiro/parcelas/' + parcelaId + '/boleto/', '_blank');
-            location.reload();
+            showToast('Boleto gerado com sucesso! Nosso Numero: ' + data.nosso_numero, 'success');
+
+            // Atualizar a linha da parcela
+            var row = btn.closest('tr');
+            if (row) {
+                row.classList.add('boleto-gerado');
+
+                // Atualizar coluna de boleto
+                var boletoCol = row.querySelector('td:nth-child(4)');
+                if (boletoCol) {
+                    boletoCol.innerHTML = '<span class="badge bg-success" title="Boleto gerado"><i class="fas fa-barcode"></i></span>';
+                }
+
+                // Atualizar botoes de acao
+                var acoesCol = row.querySelector('td:last-child .btn-group');
+                if (acoesCol) {
+                    acoesCol.innerHTML =
+                        '<a href="/financeiro/parcelas/' + parcelaId + '/boleto/" class="btn btn-outline-primary" title="Ver Boleto" target="_blank"><i class="fas fa-eye"></i></a>' +
+                        '<button type="button" class="btn btn-outline-warning" onclick="regenerarBoleto(' + parcelaId + ', this)" title="Atualizar Boleto"><i class="fas fa-sync"></i></button>' +
+                        '<button type="button" class="btn btn-outline-success" onclick="abrirModalPagamento(' + parcelaId + ')" title="Registrar Pagamento"><i class="fas fa-dollar-sign"></i></button>';
+                }
+            }
+
+            // Abrir boleto em nova aba apos um pequeno delay
+            setTimeout(function() {
+                window.open('/financeiro/parcelas/' + parcelaId + '/boleto/', '_blank');
+            }, 500);
+
         } else {
-            alert('Erro ao gerar boleto: ' + data.erro);
+            showToast('Erro ao gerar boleto: ' + data.erro, 'error', 6000);
+            // Restaurar botao
+            btn.innerHTML = originalHtml;
+            btn.classList.remove('btn-loading');
+            btn.disabled = false;
         }
     })
-    .catch(error => alert('Erro de conexao: ' + error));
+    .catch(error => {
+        showToast('Erro de conexao: ' + error, 'error', 6000);
+        btn.innerHTML = originalHtml;
+        btn.classList.remove('btn-loading');
+        btn.disabled = false;
+    });
 }
 
-function regenerarBoleto(parcelaId) {
-    if (!confirm('Deseja regenerar/atualizar o boleto desta parcela?')) return;
+function regenerarBoleto(parcelaId, btn) {
+    // Encontrar o botao se nao foi passado
+    if (!btn) {
+        btn = document.querySelector('button[onclick*="regenerarBoleto(' + parcelaId + ')"]');
+    }
+
+    // Mostrar loading no botao
+    var originalHtml = btn.innerHTML;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
+    btn.classList.add('btn-loading');
+    btn.disabled = true;
 
     fetch('/financeiro/parcelas/' + parcelaId + '/boleto/gerar/', {
         method: 'POST',
@@ -839,14 +986,37 @@ function regenerarBoleto(parcelaId) {
     .then(response => response.json())
     .then(data => {
         if (data.sucesso) {
+            showToast('Boleto atualizado com sucesso!', 'success');
+
+            // Efeito visual na linha
+            var row = btn.closest('tr');
+            if (row) {
+                row.classList.add('boleto-gerado');
+            }
+
+            // Restaurar botao
+            btn.innerHTML = originalHtml;
+            btn.classList.remove('btn-loading');
+            btn.disabled = false;
+
             // Abrir boleto em nova aba
-            window.open('/financeiro/parcelas/' + parcelaId + '/boleto/', '_blank');
-            location.reload();
+            setTimeout(function() {
+                window.open('/financeiro/parcelas/' + parcelaId + '/boleto/', '_blank');
+            }, 500);
+
         } else {
-            alert('Erro ao atualizar boleto: ' + data.erro);
+            showToast('Erro ao atualizar boleto: ' + data.erro, 'error', 6000);
+            btn.innerHTML = originalHtml;
+            btn.classList.remove('btn-loading');
+            btn.disabled = false;
         }
     })
-    .catch(error => alert('Erro de conexao: ' + error));
+    .catch(error => {
+        showToast('Erro de conexao: ' + error, 'error', 6000);
+        btn.innerHTML = originalHtml;
+        btn.classList.remove('btn-loading');
+        btn.disabled = false;
+    });
 }
 
 // ============ FUNCOES DE PAGAMENTO ============
