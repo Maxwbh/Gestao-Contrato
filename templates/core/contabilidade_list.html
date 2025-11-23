@@ -1,0 +1,224 @@
+{% extends 'base.html' %}
+{% load crispy_forms_tags %}
+
+{% block title %}Contabilidades - Gestao de Contratos{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h4 class="mb-0">
+                    <i class="fas fa-calculator"></i> Gerenciar Contabilidades
+                </h4>
+                <a href="{% url 'core:criar_contabilidade' %}" class="btn btn-light">
+                    <i class="fas fa-plus"></i> Nova Contabilidade
+                </a>
+            </div>
+            <div class="card-body">
+                <!-- Barra de Busca -->
+                <div class="row mb-4">
+                    <div class="col-md-8">
+                        <form method="get" class="d-flex">
+                            <input type="text" name="search" class="form-control me-2"
+                                   placeholder="Buscar por nome, CNPJ ou responsavel..."
+                                   value="{{ search }}">
+                            <button type="submit" class="btn btn-primary">
+                                <i class="fas fa-search"></i> Buscar
+                            </button>
+                            {% if search %}
+                                <a href="{% url 'core:listar_contabilidades' %}" class="btn btn-secondary ms-2">
+                                    <i class="fas fa-times"></i> Limpar
+                                </a>
+                            {% endif %}
+                        </form>
+                    </div>
+                    <div class="col-md-4 text-end">
+                        <div class="badge bg-success text-dark fs-6">
+                            <i class="fas fa-calculator"></i> Total: {{ total_contabilidades }}
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Cards de Contabilidades -->
+                {% if contabilidades %}
+                    <div class="row">
+                        {% for contabilidade in contabilidades %}
+                            <div class="col-md-6 col-lg-4 mb-4">
+                                <div class="card h-100 border-success">
+                                    <div class="card-header bg-success text-white">
+                                        <h5 class="mb-0">
+                                            <i class="fas fa-calculator"></i>
+                                            {{ contabilidade.nome }}
+                                        </h5>
+                                    </div>
+                                    <div class="card-body">
+                                        <h6 class="card-subtitle mb-3 text-muted">
+                                            {{ contabilidade.razao_social }}
+                                        </h6>
+
+                                        <p class="card-text">
+                                            <i class="fas fa-id-card text-primary"></i>
+                                            <strong>CNPJ:</strong> {{ contabilidade.cnpj }}<br>
+
+                                            <i class="fas fa-user-tie text-secondary"></i>
+                                            <strong>Responsavel:</strong>
+                                            {{ contabilidade.responsavel }}<br>
+                                        </p>
+
+                                        <hr>
+
+                                        <p class="card-text">
+                                            {% if contabilidade.telefone %}
+                                                <i class="fas fa-phone text-info"></i>
+                                                {{ contabilidade.telefone }}<br>
+                                            {% endif %}
+
+                                            {% if contabilidade.email %}
+                                                <i class="fas fa-envelope text-warning"></i>
+                                                {{ contabilidade.email }}<br>
+                                            {% endif %}
+                                        </p>
+
+                                        {% if contabilidade.endereco %}
+                                            <hr>
+                                            <p class="card-text">
+                                                <i class="fas fa-map-marker-alt text-danger"></i>
+                                                <small>{{ contabilidade.endereco }}</small>
+                                            </p>
+                                        {% endif %}
+
+                                        <!-- Contagem de Imobiliarias -->
+                                        <hr>
+                                        <p class="card-text">
+                                            <i class="fas fa-building text-primary"></i>
+                                            <strong>Imobiliarias:</strong>
+                                            {{ contabilidade.imobiliarias.count }}
+                                        </p>
+                                    </div>
+                                    <div class="card-footer bg-transparent">
+                                        <div class="d-flex justify-content-between align-items-center">
+                                            <small class="text-muted">
+                                                <i class="fas fa-calendar"></i>
+                                                Desde {{ contabilidade.criado_em|date:"m/Y" }}
+                                            </small>
+                                            <div class="btn-group btn-group-sm" role="group">
+                                                <a href="{% url 'core:editar_contabilidade' contabilidade.pk %}"
+                                                   class="btn btn-outline-success"
+                                                   title="Editar">
+                                                    <i class="fas fa-edit"></i>
+                                                </a>
+                                                <button type="button"
+                                                        class="btn btn-outline-danger"
+                                                        title="Excluir"
+                                                        onclick="confirmarExclusao('{{ contabilidade.nome }}', '{% url 'core:excluir_contabilidade' contabilidade.pk %}')">
+                                                    <i class="fas fa-trash"></i>
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        {% endfor %}
+                    </div>
+
+                    <!-- Paginacao -->
+                    {% if is_paginated %}
+                        <nav aria-label="Navegacao de paginas">
+                            <ul class="pagination justify-content-center">
+                                {% if page_obj.has_previous %}
+                                    <li class="page-item">
+                                        <a class="page-link" href="?page=1{% if search %}&search={{ search }}{% endif %}">
+                                            Primeira
+                                        </a>
+                                    </li>
+                                    <li class="page-item">
+                                        <a class="page-link" href="?page={{ page_obj.previous_page_number }}{% if search %}&search={{ search }}{% endif %}">
+                                            Anterior
+                                        </a>
+                                    </li>
+                                {% endif %}
+
+                                <li class="page-item active">
+                                    <span class="page-link">
+                                        Pagina {{ page_obj.number }} de {{ page_obj.paginator.num_pages }}
+                                    </span>
+                                </li>
+
+                                {% if page_obj.has_next %}
+                                    <li class="page-item">
+                                        <a class="page-link" href="?page={{ page_obj.next_page_number }}{% if search %}&search={{ search }}{% endif %}">
+                                            Proxima
+                                        </a>
+                                    </li>
+                                    <li class="page-item">
+                                        <a class="page-link" href="?page={{ page_obj.paginator.num_pages }}{% if search %}&search={{ search }}{% endif %}">
+                                            Ultima
+                                        </a>
+                                    </li>
+                                {% endif %}
+                            </ul>
+                        </nav>
+                    {% endif %}
+                {% else %}
+                    <div class="alert alert-info text-center">
+                        <i class="fas fa-info-circle fa-3x mb-3"></i>
+                        <h5>Nenhuma contabilidade encontrada</h5>
+                        <p>
+                            {% if search %}
+                                Sua busca por "{{ search }}" nao retornou resultados.
+                            {% else %}
+                                Comece cadastrando uma nova contabilidade.
+                            {% endif %}
+                        </p>
+                        <a href="{% url 'core:criar_contabilidade' %}" class="btn btn-success">
+                            <i class="fas fa-plus"></i> Cadastrar Primeira Contabilidade
+                        </a>
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal de Confirmacao de Exclusao -->
+<div class="modal fade" id="modalExclusao" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-danger text-white">
+                <h5 class="modal-title">
+                    <i class="fas fa-exclamation-triangle"></i> Confirmar Exclusao
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p>Tem certeza que deseja excluir a contabilidade <strong id="nomeContabilidade"></strong>?</p>
+                <p class="text-danger">
+                    <i class="fas fa-info-circle"></i> Esta acao nao pode ser desfeita.
+                </p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                    Cancelar
+                </button>
+                <form id="formExclusao" method="post" style="display: inline;">
+                    {% csrf_token %}
+                    <button type="submit" class="btn btn-danger">
+                        <i class="fas fa-trash"></i> Excluir
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    function confirmarExclusao(nome, url) {
+        document.getElementById('nomeContabilidade').textContent = nome;
+        document.getElementById('formExclusao').action = url;
+        new bootstrap.Modal(document.getElementById('modalExclusao')).show();
+    }
+</script>
+{% endblock %}
