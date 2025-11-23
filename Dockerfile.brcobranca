@@ -11,10 +11,13 @@ FROM akretion/boleto_cnab_api:latest
 
 # Definir variaveis de ambiente
 ENV RACK_ENV=production
-ENV PORT=9292
 
-# Expor a porta
-EXPOSE 9292
+# O Render usa a variavel PORT dinamicamente (geralmente 10000)
+# Precisamos fazer o Puma escutar nessa porta
 
-# O container ja tem o comando padrao configurado
-# CMD ["puma", "-C", "config/puma.rb"]
+# Expor a porta (Render usa 10000 por padrao)
+EXPOSE 10000
+
+# Sobrescrever o comando para usar a porta do Render
+# O Render define PORT=10000, entao usamos essa variavel
+CMD bundle exec puma -p ${PORT:-10000} -e production

@@ -72,12 +72,11 @@ services:
     runtime: docker
     plan: free
     dockerfilePath: ./Dockerfile.brcobranca
-    healthCheckPath: /
+    # Nao definir healthCheckPath - deixar o Render usar o padrao
     envVars:
       - key: RACK_ENV
         value: "production"
-      - key: PORT
-        value: "9292"
+      # Nao definir PORT - o Render define automaticamente
 
   # =============================================================================
   # Redis (para cache e sessoes - Free: 25MB)
