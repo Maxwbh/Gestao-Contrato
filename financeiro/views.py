@@ -775,7 +775,7 @@ def download_boleto(request, pk):
 @require_GET
 def visualizar_boleto(request, pk):
     """
-    Visualiza o PDF do boleto de uma parcela no navegador.
+    Exibe página com dados do boleto de uma parcela.
     """
     parcela = get_object_or_404(Parcela, pk=pk)
 
@@ -783,22 +783,18 @@ def visualizar_boleto(request, pk):
         messages.warning(request, 'Boleto ainda não foi gerado para esta parcela.')
         return redirect('financeiro:detalhe_parcela', pk=pk)
 
-    if not parcela.boleto_pdf:
-        messages.error(request, 'PDF do boleto não disponível.')
-        return redirect('financeiro:detalhe_parcela', pk=pk)
+    contrato = parcela.contrato
+    comprador = contrato.comprador
+    imobiliaria = contrato.imobiliaria
 
-    try:
-        response = FileResponse(
-            parcela.boleto_pdf.open('rb'),
-            as_attachment=False,
-            filename=f'boleto_{parcela.contrato.numero_contrato}_{parcela.numero_parcela}.pdf'
-        )
-        response['Content-Type'] = 'application/pdf'
-        return response
-    except Exception as e:
-        logger.exception(f"Erro ao visualizar boleto: {e}")
-        messages.error(request, 'Erro ao visualizar o boleto.')
-        return redirect('financeiro:detalhe_parcela', pk=pk)
+    context = {
+        'parcela': parcela,
+        'contrato': contrato,
+        'comprador': comprador,
+        'imobiliaria': imobiliaria,
+    }
+
+    return render(request, 'financeiro/visualizar_boleto.html', context)
 
 
 @login_required
