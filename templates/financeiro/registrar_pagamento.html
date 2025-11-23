@@ -1,0 +1,164 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Registrar Pagamento - Parcela {{ parcela.numero_parcela }}{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <!-- Header -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h2 class="mb-1">
+                <i class="fas fa-dollar-sign text-success me-2"></i>
+                Registrar Pagamento
+            </h2>
+            <nav aria-label="breadcrumb">
+                <ol class="breadcrumb mb-0">
+                    <li class="breadcrumb-item"><a href="{% url 'financeiro:listar_parcelas' %}">Parcelas</a></li>
+                    <li class="breadcrumb-item"><a href="{% url 'financeiro:detalhe_parcela' parcela.pk %}">Parcela {{ parcela.numero_parcela }}</a></li>
+                    <li class="breadcrumb-item active">Registrar Pagamento</li>
+                </ol>
+            </nav>
+        </div>
+        <div>
+            <a href="{% url 'financeiro:detalhe_parcela' parcela.pk %}" class="btn btn-outline-secondary">
+                <i class="fas fa-arrow-left me-1"></i> Voltar
+            </a>
+        </div>
+    </div>
+
+    <div class="row justify-content-center">
+        <div class="col-lg-8">
+            <!-- Informacoes da Parcela -->
+            <div class="card shadow-sm mb-4">
+                <div class="card-header bg-primary text-white">
+                    <h5 class="mb-0">
+                        <i class="fas fa-info-circle me-2"></i>
+                        Informacoes da Parcela
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <p><strong>Contrato:</strong> {{ parcela.contrato.numero_contrato }}</p>
+                            <p><strong>Comprador:</strong> {{ parcela.contrato.comprador.nome }}</p>
+                            <p><strong>Parcela:</strong> {{ parcela.numero_parcela }}/{{ parcela.contrato.numero_parcelas }}</p>
+                        </div>
+                        <div class="col-md-6">
+                            <p><strong>Vencimento:</strong> {{ parcela.data_vencimento|date:"d/m/Y" }}
+                                {% if parcela.esta_vencida %}
+                                    <span class="badge bg-danger">Vencida</span>
+                                {% endif %}
+                            </p>
+                            <p><strong>Valor Original:</strong> R$ {{ parcela.valor_original|floatformat:2 }}</p>
+                            <p><strong>Valor Atual:</strong> R$ {{ parcela.valor_atual|floatformat:2 }}</p>
+                        </div>
+                    </div>
+
+                    {% if parcela.esta_vencida %}
+                    <hr>
+                    <div class="row">
+                        <div class="col-md-4">
+                            <p class="mb-1"><strong>Juros:</strong></p>
+                            <p class="text-danger fs-5">R$ {{ parcela.valor_juros|floatformat:2 }}</p>
+                        </div>
+                        <div class="col-md-4">
+                            <p class="mb-1"><strong>Multa:</strong></p>
+                            <p class="text-danger fs-5">R$ {{ parcela.valor_multa|floatformat:2 }}</p>
+                        </div>
+                        <div class="col-md-4">
+                            <p class="mb-1"><strong>Total a Pagar:</strong></p>
+                            <p class="text-primary fs-4 fw-bold">R$ {{ parcela.valor_total|floatformat:2 }}</p>
+                        </div>
+                    </div>
+                    {% else %}
+                    <hr>
+                    <div class="text-center">
+                        <p class="mb-1"><strong>Total a Pagar:</strong></p>
+                        <p class="text-primary fs-3 fw-bold">R$ {{ parcela.valor_total|floatformat:2 }}</p>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- Formulario de Pagamento -->
+            <div class="card shadow-sm">
+                <div class="card-header bg-success text-white">
+                    <h5 class="mb-0">
+                        <i class="fas fa-credit-card me-2"></i>
+                        Dados do Pagamento
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <form method="post">
+                        {% csrf_token %}
+
+                        <div class="mb-3">
+                            <label for="data_pagamento" class="form-label">Data do Pagamento *</label>
+                            <input type="date" class="form-control" id="data_pagamento" name="data_pagamento"
+                                   value="{{ parcela.data_vencimento|date:'Y-m-d' }}" required>
+                            <div class="form-text">Data em que o pagamento foi realizado.</div>
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="valor_pago" class="form-label">Valor Pago *</label>
+                            <div class="input-group">
+                                <span class="input-group-text">R$</span>
+                                <input type="number" step="0.01" class="form-control" id="valor_pago" name="valor_pago"
+                                       value="{{ parcela.valor_total|floatformat:2 }}" required>
+                            </div>
+                            <div class="form-text">Valor efetivamente pago pelo cliente.</div>
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="observacoes" class="form-label">Observacoes</label>
+                            <textarea class="form-control" id="observacoes" name="observacoes" rows="3"
+                                      placeholder="Informacoes adicionais sobre o pagamento..."></textarea>
+                        </div>
+
+                        <hr>
+
+                        <div class="d-flex justify-content-between">
+                            <a href="{% url 'financeiro:detalhe_parcela' parcela.pk %}" class="btn btn-secondary">
+                                <i class="fas fa-times me-1"></i> Cancelar
+                            </a>
+                            <button type="submit" class="btn btn-success btn-lg">
+                                <i class="fas fa-check me-2"></i>
+                                Confirmar Pagamento
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Atualizar valor com juros/multa quando data muda
+    const dataInput = document.getElementById('data_pagamento');
+    const valorInput = document.getElementById('valor_pago');
+    const vencimento = new Date('{{ parcela.data_vencimento|date:"Y-m-d" }}');
+    const valorOriginal = parseFloat('{{ parcela.valor_atual|floatformat:2 }}'.replace(',', '.'));
+    const taxaJuros = parseFloat('{{ parcela.contrato.percentual_juros_mora|floatformat:2 }}'.replace(',', '.')) / 100;
+    const taxaMulta = parseFloat('{{ parcela.contrato.percentual_multa|floatformat:2 }}'.replace(',', '.')) / 100;
+
+    dataInput.addEventListener('change', function() {
+        const dataPagamento = new Date(this.value);
+        if (dataPagamento > vencimento) {
+            const diffTime = Math.abs(dataPagamento - vencimento);
+            const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+            const juros = valorOriginal * taxaJuros * (diffDays / 30);
+            const multa = valorOriginal * taxaMulta;
+            const total = valorOriginal + juros + multa;
+
+            valorInput.value = total.toFixed(2);
+        } else {
+            valorInput.value = valorOriginal.toFixed(2);
+        }
+    });
+});
+</script>
+{% endblock %}
