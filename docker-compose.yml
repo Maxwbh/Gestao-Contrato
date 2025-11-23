@@ -1,0 +1,91 @@
+# Docker Compose para desenvolvimento local
+# Desenvolvedor: Maxwell da Silva Oliveira
+# Empresa: M&S do Brasil LTDA
+#
+# Uso:
+#   docker-compose up -d
+#
+# Isso ira iniciar:
+#   - PostgreSQL (porta 5432)
+#   - Redis (porta 6379)
+#   - BRCobranca API (porta 9292)
+#
+# O Django roda localmente com:
+#   python manage.py runserver
+
+version: '3.8'
+
+services:
+  # =============================================================================
+  # PostgreSQL Database
+  # =============================================================================
+  db:
+    image: postgres:15-alpine
+    container_name: gestao-contrato-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: gestao_contrato
+      POSTGRES_USER: gestao_contrato_user
+      POSTGRES_PASSWORD: gestao_contrato_pass
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U gestao_contrato_user -d gestao_contrato"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # =============================================================================
+  # Redis (Cache e Sessoes)
+  # =============================================================================
+  redis:
+    image: redis:7-alpine
+    container_name: gestao-contrato-redis
+    restart: unless-stopped
+    command: redis-server --maxmemory 25mb --maxmemory-policy allkeys-lru
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # =============================================================================
+  # BRCobranca API (Geracao de Boletos)
+  # =============================================================================
+  brcobranca:
+    image: akretion/boleto_cnab_api:latest
+    container_name: brcobranca-api
+    restart: unless-stopped
+    environment:
+      RACK_ENV: development
+      PORT: "9292"
+    ports:
+      - "9292:9292"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9292/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+volumes:
+  postgres_data:
+
+# =============================================================================
+# Configuracao do Django para desenvolvimento local
+# =============================================================================
+# Adicione ao seu .env ou exporte as variaveis:
+#
+#   export DATABASE_URL=postgres://gestao_contrato_user:gestao_contrato_pass@localhost:5432/gestao_contrato
+#   export REDIS_URL=redis://localhost:6379/0
+#   export BRCOBRANCA_URL=http://localhost:9292
+#   export DEBUG=True
+#   export SECRET_KEY=dev-secret-key-change-in-production
+#
+# Depois execute:
+#   python manage.py migrate
+#   python manage.py runserver
