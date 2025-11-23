@@ -246,9 +246,10 @@ class BoletoService:
         Gera um boleto para a parcela usando a API BRCobranca.
 
         API Endpoints:
-        - GET /boleto/get - Gera boleto individual
-        - GET /boleto/nosso_numero - Obtem nosso numero formatado
-        - POST /boleto/multi - Gera multiplos boletos
+        - GET /api/boleto - Gera boleto individual
+        - GET /api/boleto/nosso_numero - Obtem nosso numero formatado
+        - GET /api/boleto/validate - Valida dados do boleto
+        - POST /api/boleto/multi - Gera multiplos boletos
 
         Args:
             parcela: Instancia de Parcela
@@ -315,7 +316,7 @@ class BoletoService:
                     'data': json.dumps(dados_boleto)
                 }
                 response_nn = requests.get(
-                    f"{self.brcobranca_url}/boleto/nosso_numero",
+                    f"{self.brcobranca_url}/api/boleto/nosso_numero",
                     params=params_nn,
                     timeout=self.timeout
                 )
@@ -332,11 +333,11 @@ class BoletoService:
                 'data': json.dumps(dados_boleto)
             }
 
-            logger.info(f"Chamando BRCobranca: {self.brcobranca_url}/boleto/get")
+            logger.info(f"Chamando BRCobranca: {self.brcobranca_url}/api/boleto")
             logger.debug(f"Parametros: bank={banco_nome}, data={json.dumps(dados_boleto, indent=2)}")
 
             response = requests.get(
-                f"{self.brcobranca_url}/boleto/get",
+                f"{self.brcobranca_url}/api/boleto",
                 params=params,
                 timeout=self.timeout
             )
@@ -432,7 +433,7 @@ class BoletoService:
                 'data': json.dumps(dados_boleto)
             }
             response = requests.get(
-                f"{self.brcobranca_url}/boleto/validate",
+                f"{self.brcobranca_url}/api/boleto/validate",
                 params=params,
                 timeout=self.timeout
             )
@@ -482,7 +483,7 @@ class BoletoService:
             }
 
             response = requests.post(
-                f"{self.brcobranca_url}/boleto/multi",
+                f"{self.brcobranca_url}/api/boleto/multi",
                 json=payload,
                 timeout=self.timeout * len(parcelas)
             )
