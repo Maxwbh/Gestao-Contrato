@@ -1,43 +1,45 @@
 """
-Serviço de Integração com BRCobrança para Geração de Boletos
+Servico de Integracao com BRCobranca para Geracao de Boletos
 
-Este serviço integra com a API BRCobrança (via Docker) para geração
-de boletos bancários. Suporta os principais bancos brasileiros.
+Este servico integra com a API BRCobranca (boleto_cnab_api) para geracao
+de boletos bancarios. Suporta os principais bancos brasileiros.
 
-BRCobrança API: https://github.com/kivanio/brcobranca
+API BRCobranca: https://github.com/akretion/boleto_cnab_api
+Docker: docker run -p 9292:9292 akretion/boleto_cnab_api
 
 Desenvolvedor: Maxwell da Silva Oliveira
 Email: maxwbh@gmail.com
 Empresa: M&S do Brasil LTDA
 """
 import requests
-import base64
+import json
 import logging
 from decimal import Decimal
 from datetime import date, timedelta
 from django.conf import settings
 from django.utils import timezone
+from urllib.parse import urlencode
 
 logger = logging.getLogger(__name__)
 
 
 class BRCobrancaError(Exception):
-    """Exceção para erros do BRCobrança"""
+    """Excecao para erros do BRCobranca"""
     pass
 
 
 class BoletoService:
     """
-    Serviço para geração de boletos bancários via BRCobrança.
+    Servico para geracao de boletos bancarios via BRCobranca.
 
-    O BRCobrança deve estar rodando como container Docker:
-    docker run -p 9292:9292 kivanio/brcobranca
+    O BRCobranca (boleto_cnab_api) deve estar rodando como container Docker:
+    docker run -p 9292:9292 akretion/boleto_cnab_api
 
     Configurar no settings.py:
     BRCOBRANCA_URL = 'http://localhost:9292'
     """
 
-    # Mapeamento de códigos de banco para nomes no BRCobrança
+    # Mapeamento de codigos de banco para nomes no BRCobranca
     BANCOS_BRCOBRANCA = {
         '001': 'banco_brasil',
         '004': 'banco_nordeste',
@@ -59,23 +61,23 @@ class BoletoService:
         '756': 'sicoob',
     }
 
-    # Carteiras padrão por banco
+    # Carteiras padrao por banco
     CARTEIRAS_PADRAO = {
         '001': '17',       # Banco do Brasil
         '033': '101',      # Santander
         '104': '14',       # Caixa
         '237': '09',       # Bradesco
-        '341': '109',      # Itaú
+        '341': '109',      # Itau
         '748': '1',        # Sicredi
         '756': '1',        # Sicoob
     }
 
     def __init__(self, brcobranca_url=None):
         """
-        Inicializa o serviço de boleto.
+        Inicializa o servico de boleto.
 
         Args:
-            brcobranca_url: URL da API BRCobrança (opcional)
+            brcobranca_url: URL da API BRCobranca (opcional)
         """
         self.brcobranca_url = brcobranca_url or getattr(
             settings, 'BRCOBRANCA_URL', 'http://localhost:9292'
@@ -83,20 +85,26 @@ class BoletoService:
         self.timeout = getattr(settings, 'BRCOBRANCA_TIMEOUT', 30)
 
     def _get_banco_brcobranca(self, codigo_banco):
-        """Retorna o nome do banco para a API BRCobrança"""
+        """Retorna o nome do banco para a API BRCobranca"""
         return self.BANCOS_BRCOBRANCA.get(codigo_banco)
 
     def _formatar_cpf_cnpj(self, documento):
-        """Remove formatação do CPF/CNPJ"""
+        """Remove formatacao do CPF/CNPJ"""
         if documento:
             return ''.join(filter(str.isdigit, documento))
         return ''
 
     def _formatar_cep(self, cep):
-        """Remove formatação do CEP"""
+        """Remove formatacao do CEP"""
         if cep:
             return ''.join(filter(str.isdigit, cep))
         return ''
+
+    def _formatar_data(self, data):
+        """Formata data no padrao YYYY/MM/DD exigido pelo BRCobranca"""
+        if isinstance(data, date):
+            return data.strftime('%Y/%m/%d')
+        return str(data).replace('-', '/')
 
     def _calcular_data_limite_desconto(self, data_vencimento, dias_desconto):
         """Calcula a data limite para desconto"""
@@ -106,20 +114,20 @@ class BoletoService:
 
     def _montar_dados_boleto(self, parcela, conta_bancaria):
         """
-        Monta os dados do boleto no formato esperado pelo BRCobrança.
+        Monta os dados do boleto no formato esperado pelo BRCobranca.
 
         Args:
-            parcela: Instância de Parcela
-            conta_bancaria: Instância de ContaBancaria
+            parcela: Instancia de Parcela
+            conta_bancaria: Instancia de ContaBancaria
 
         Returns:
-            dict: Dados formatados para a API
+            tuple: (dict com dados formatados para a API, nosso_numero)
         """
         contrato = parcela.contrato
         comprador = contrato.comprador
         imobiliaria = contrato.imovel.imobiliaria
 
-        # Obter próximo nosso número
+        # Obter proximo nosso numero
         nosso_numero = parcela.obter_proximos_nosso_numero(conta_bancaria)
 
         # Documento do pagador (CPF ou CNPJ)
@@ -127,174 +135,155 @@ class BoletoService:
             comprador.cpf if comprador.tipo_pessoa == 'PF' else comprador.cnpj
         )
 
-        # Documento do cedente (CNPJ da imobiliária)
+        # Documento do cedente (CNPJ da imobiliaria)
         documento_cedente = self._formatar_cpf_cnpj(imobiliaria.cnpj)
 
-        # Endereço do pagador
-        endereco_pagador = comprador.endereco_formatado if hasattr(comprador, 'endereco_formatado') else (
-            f"{comprador.logradouro}, {comprador.numero} {comprador.complemento}".strip()
-        )
+        # Endereco do pagador
+        endereco_pagador = ''
+        if hasattr(comprador, 'endereco_formatado') and comprador.endereco_formatado:
+            endereco_pagador = comprador.endereco_formatado
+        elif comprador.logradouro:
+            endereco_pagador = f"{comprador.logradouro}, {comprador.numero or 'S/N'}"
+            if comprador.complemento:
+                endereco_pagador += f" {comprador.complemento}"
 
         # Carteira
         carteira = conta_bancaria.carteira or self.CARTEIRAS_PADRAO.get(conta_bancaria.banco, '1')
 
-        # Número do documento
+        # Numero do documento
         numero_documento = parcela.gerar_numero_documento()
 
-        # Instruções
-        instrucoes = [
-            imobiliaria.instrucao_padrao or f"Parcela {parcela.numero_parcela} de {contrato.numero_parcelas}",
-            f"Contrato: {contrato.numero_contrato}",
-            f"Imóvel: {contrato.imovel.identificacao}",
-        ]
+        # Instrucoes
+        instrucoes = []
+        if imobiliaria.instrucao_padrao:
+            instrucoes.append(imobiliaria.instrucao_padrao)
+        instrucoes.append(f"Parcela {parcela.numero_parcela} de {contrato.numero_parcelas}")
+        instrucoes.append(f"Contrato: {contrato.numero_contrato}")
+        instrucoes.append(f"Imovel: {contrato.imovel.identificacao}")
 
-        # Dados básicos do boleto
+        # Dados do boleto no formato BRCobranca
         dados = {
-            # Dados do Cedente (quem recebe)
-            'cedente': imobiliaria.razao_social,
+            # Dados do Cedente (beneficiario - quem recebe)
+            'cedente': imobiliaria.razao_social or imobiliaria.nome,
             'documento_cedente': documento_cedente,
-            'cedente_endereco': f"{imobiliaria.logradouro}, {imobiliaria.numero}",
+            'cedente_endereco': f"{imobiliaria.logradouro}, {imobiliaria.numero}" if imobiliaria.logradouro else '',
 
-            # Dados Bancários
-            'banco': conta_bancaria.banco,
+            # Dados Bancarios
             'agencia': conta_bancaria.agencia.replace('-', '').replace('.', ''),
             'conta_corrente': conta_bancaria.conta.replace('-', '').replace('.', ''),
-            'convenio': conta_bancaria.convenio or '',
-            'carteira': carteira,
-            'modalidade': conta_bancaria.modalidade or '',
+            'convenio': str(conta_bancaria.convenio) if conta_bancaria.convenio else '',
+            'carteira': str(carteira),
 
             # Dados do Boleto
             'nosso_numero': str(nosso_numero),
             'numero_documento': numero_documento,
-            'data_documento': date.today().strftime('%Y-%m-%d'),
-            'data_vencimento': parcela.data_vencimento.strftime('%Y-%m-%d'),
+            'data_documento': self._formatar_data(date.today()),
+            'data_vencimento': self._formatar_data(parcela.data_vencimento),
             'valor': float(parcela.valor_atual),
-            'especie': 'R$',
             'aceite': 'S' if imobiliaria.aceite else 'N',
             'especie_documento': imobiliaria.tipo_titulo or 'DM',
+            'especie': 'R$',
 
-            # Dados do Sacado (quem paga)
+            # Dados do Sacado (pagador - quem paga)
             'sacado': comprador.nome,
-            'documento_sacado': documento_pagador,
+            'sacado_documento': documento_pagador,
             'sacado_endereco': endereco_pagador[:40] if endereco_pagador else '',
-            'sacado_cidade': comprador.cidade or '',
-            'sacado_uf': comprador.estado or '',
-            'sacado_cep': self._formatar_cep(comprador.cep),
+            'bairro': comprador.bairro or '',
+            'cep': self._formatar_cep(comprador.cep),
+            'cidade': comprador.cidade or '',
+            'uf': comprador.estado or '',
 
-            # Instruções
+            # Instrucoes
             'instrucao1': instrucoes[0] if len(instrucoes) > 0 else '',
             'instrucao2': instrucoes[1] if len(instrucoes) > 1 else '',
             'instrucao3': instrucoes[2] if len(instrucoes) > 2 else '',
+            'instrucao4': instrucoes[3] if len(instrucoes) > 3 else '',
 
             # Local de Pagamento
-            'local_pagamento': 'Pagável em qualquer banco até o vencimento',
+            'local_pagamento': 'Pagavel em qualquer banco ate o vencimento',
         }
 
-        # Adicionar multa se configurada
-        if imobiliaria.percentual_multa_padrao > 0:
-            if imobiliaria.tipo_valor_multa == 'PERCENTUAL':
-                dados['codigo_multa'] = '2'  # Percentual
-                dados['percentual_multa'] = float(imobiliaria.percentual_multa_padrao)
-            else:
-                dados['codigo_multa'] = '1'  # Valor fixo
-                dados['valor_multa'] = float(imobiliaria.percentual_multa_padrao)
+        # Adicionar campos especificos por banco
+        if conta_bancaria.banco == '104':  # Caixa
+            dados['codigo_beneficiario'] = conta_bancaria.convenio or ''
 
-            # Data início da multa (dia seguinte ao vencimento + dias sem encargos)
+        # Adicionar multa se configurada
+        if imobiliaria.percentual_multa_padrao and imobiliaria.percentual_multa_padrao > 0:
             dias_carencia = imobiliaria.dias_para_encargos_padrao or 0
             data_multa = parcela.data_vencimento + timedelta(days=dias_carencia + 1)
-            dados['data_multa'] = data_multa.strftime('%Y-%m-%d')
+            dados['data_mora'] = self._formatar_data(data_multa)
+
+            if imobiliaria.tipo_valor_multa == 'PERCENTUAL':
+                dados['percentual_multa'] = float(imobiliaria.percentual_multa_padrao)
+            else:
+                dados['valor_multa'] = float(imobiliaria.percentual_multa_padrao)
 
         # Adicionar juros se configurado
-        if imobiliaria.percentual_juros_padrao > 0:
+        if imobiliaria.percentual_juros_padrao and imobiliaria.percentual_juros_padrao > 0:
             if imobiliaria.tipo_valor_juros == 'PERCENTUAL':
-                dados['codigo_juros'] = '2'  # Percentual ao dia
-                dados['percentual_juros'] = float(imobiliaria.percentual_juros_padrao)
+                dados['percentual_mora'] = float(imobiliaria.percentual_juros_padrao)
             else:
-                dados['codigo_juros'] = '1'  # Valor fixo por dia
-                dados['valor_juros'] = float(imobiliaria.percentual_juros_padrao)
-
-            dias_carencia = imobiliaria.dias_para_encargos_padrao or 0
-            data_juros = parcela.data_vencimento + timedelta(days=dias_carencia + 1)
-            dados['data_juros'] = data_juros.strftime('%Y-%m-%d')
+                dados['valor_mora'] = float(imobiliaria.percentual_juros_padrao)
 
         # Adicionar desconto se configurado
-        if imobiliaria.percentual_desconto_padrao > 0:
+        if imobiliaria.percentual_desconto_padrao and imobiliaria.percentual_desconto_padrao > 0:
             data_limite = self._calcular_data_limite_desconto(
                 parcela.data_vencimento,
                 imobiliaria.dias_para_desconto_padrao
             )
             if data_limite and data_limite >= date.today():
+                dados['data_desconto'] = self._formatar_data(data_limite)
                 if imobiliaria.tipo_valor_desconto == 'PERCENTUAL':
-                    dados['codigo_desconto'] = '2'
-                    dados['percentual_desconto'] = float(imobiliaria.percentual_desconto_padrao)
+                    valor_desconto = float(parcela.valor_atual) * float(imobiliaria.percentual_desconto_padrao) / 100
+                    dados['valor_desconto'] = valor_desconto
                 else:
-                    dados['codigo_desconto'] = '1'
                     dados['valor_desconto'] = float(imobiliaria.percentual_desconto_padrao)
-                dados['data_desconto'] = data_limite.strftime('%Y-%m-%d')
 
         return dados, nosso_numero
 
     def gerar_boleto(self, parcela, conta_bancaria):
         """
-        Gera um boleto para a parcela usando a API BRCobrança.
+        Gera um boleto para a parcela usando a API BRCobranca.
+
+        API Endpoints:
+        - GET /boleto/get - Gera boleto individual
+        - GET /boleto/nosso_numero - Obtem nosso numero formatado
+        - POST /boleto/multi - Gera multiplos boletos
 
         Args:
-            parcela: Instância de Parcela
-            conta_bancaria: Instância de ContaBancaria
+            parcela: Instancia de Parcela
+            conta_bancaria: Instancia de ContaBancaria
 
         Returns:
-            dict: Resultado da geração com dados do boleto
+            dict: Resultado da geracao com dados do boleto
         """
         try:
-            # Verificar se o banco é suportado
+            # Verificar se o banco e suportado
             banco_nome = self._get_banco_brcobranca(conta_bancaria.banco)
             if not banco_nome:
                 return {
                     'sucesso': False,
-                    'erro': f'Banco {conta_bancaria.banco} não suportado pelo BRCobrança'
+                    'erro': f'Banco {conta_bancaria.banco} nao suportado pelo BRCobranca'
                 }
 
             # Montar dados do boleto
             dados_boleto, nosso_numero = self._montar_dados_boleto(parcela, conta_bancaria)
 
-            # Preparar payload para a API
-            payload = {
-                'banco': banco_nome,
-                'tipo': 'pdf',  # ou 'base64', 'linha_digitavel', 'codigo_barras'
-                'boletos': [dados_boleto]
-            }
+            # Chamar API BRCobranca
+            resultado = self._chamar_api_boleto(banco_nome, dados_boleto)
 
-            # Tentar chamar a API BRCobrança
-            try:
-                response = requests.post(
-                    f"{self.brcobranca_url}/api/boleto",
-                    json=payload,
-                    timeout=self.timeout,
-                    headers={'Content-Type': 'application/json'}
-                )
-
-                if response.status_code == 200:
-                    result = response.json() if response.headers.get('content-type', '').startswith('application/json') else {}
-
-                    return {
-                        'sucesso': True,
-                        'nosso_numero': str(nosso_numero),
-                        'numero_documento': dados_boleto['numero_documento'],
-                        'linha_digitavel': result.get('linha_digitavel', ''),
-                        'codigo_barras': result.get('codigo_barras', ''),
-                        'valor': Decimal(str(dados_boleto['valor'])),
-                        'pdf_content': response.content if not result else base64.b64decode(result.get('pdf', '')),
-                        'pix_copia_cola': result.get('pix_copia_cola', ''),
-                        'pix_qrcode': result.get('pix_qrcode', ''),
-                    }
-                else:
-                    logger.error(f"Erro na API BRCobrança: {response.status_code} - {response.text}")
-                    # Fallback para geração local
-                    return self._gerar_boleto_local(dados_boleto, nosso_numero, conta_bancaria)
-
-            except requests.exceptions.RequestException as e:
-                logger.warning(f"API BRCobrança não disponível: {e}. Usando fallback local.")
-                return self._gerar_boleto_local(dados_boleto, nosso_numero, conta_bancaria)
+            if resultado.get('sucesso'):
+                return {
+                    'sucesso': True,
+                    'nosso_numero': str(nosso_numero),
+                    'numero_documento': dados_boleto['numero_documento'],
+                    'linha_digitavel': resultado.get('linha_digitavel', ''),
+                    'codigo_barras': resultado.get('codigo_barras', ''),
+                    'valor': Decimal(str(dados_boleto['valor'])),
+                    'pdf_content': resultado.get('pdf_content'),
+                }
+            else:
+                return resultado
 
         except Exception as e:
             logger.exception(f"Erro ao gerar boleto: {e}")
@@ -303,336 +292,258 @@ class BoletoService:
                 'erro': str(e)
             }
 
-    def _gerar_boleto_local(self, dados_boleto, nosso_numero, conta_bancaria):
+    def _chamar_api_boleto(self, banco_nome, dados_boleto):
         """
-        Gera dados básicos do boleto localmente (fallback).
-        Gera também um PDF simples com os dados do boleto.
+        Chama a API BRCobranca para gerar o boleto.
+
+        Args:
+            banco_nome: Nome do banco no formato BRCobranca
+            dados_boleto: Dados do boleto
+
+        Returns:
+            dict: Resultado com PDF e dados do boleto
         """
         try:
-            # Gerar código de barras e linha digitável básicos
-            codigo_barras = self._gerar_codigo_barras_simplificado(
-                dados_boleto, conta_bancaria
-            )
-            linha_digitavel = self._gerar_linha_digitavel(codigo_barras)
+            # Primeiro, obter linha digitavel e codigo de barras
+            linha_digitavel = ''
+            codigo_barras = ''
 
-            # Gerar PDF
-            pdf_content = self._gerar_pdf_boleto(dados_boleto, codigo_barras, linha_digitavel)
+            # Obter nosso numero formatado
+            try:
+                params_nn = {
+                    'bank': banco_nome,
+                    'data': json.dumps(dados_boleto)
+                }
+                response_nn = requests.get(
+                    f"{self.brcobranca_url}/boleto/nosso_numero",
+                    params=params_nn,
+                    timeout=self.timeout
+                )
+                if response_nn.status_code == 200:
+                    nosso_numero_formatado = response_nn.text.strip().strip('"')
+                    logger.info(f"Nosso numero formatado: {nosso_numero_formatado}")
+            except Exception as e:
+                logger.warning(f"Erro ao obter nosso numero formatado: {e}")
 
-            return {
-                'sucesso': True,
-                'nosso_numero': str(nosso_numero),
-                'numero_documento': dados_boleto['numero_documento'],
-                'linha_digitavel': linha_digitavel,
-                'codigo_barras': codigo_barras,
-                'valor': Decimal(str(dados_boleto['valor'])),
-                'pdf_content': pdf_content,
+            # Gerar PDF do boleto
+            params = {
+                'bank': banco_nome,
+                'type': 'pdf',
+                'data': json.dumps(dados_boleto)
             }
-        except Exception as e:
-            logger.exception(f"Erro no fallback local: {e}")
+
+            logger.info(f"Chamando BRCobranca: {self.brcobranca_url}/boleto/get")
+            logger.debug(f"Parametros: bank={banco_nome}, data={json.dumps(dados_boleto, indent=2)}")
+
+            response = requests.get(
+                f"{self.brcobranca_url}/boleto/get",
+                params=params,
+                timeout=self.timeout
+            )
+
+            if response.status_code == 200:
+                content_type = response.headers.get('content-type', '')
+
+                if 'application/pdf' in content_type:
+                    # Resposta e o PDF diretamente
+                    pdf_content = response.content
+
+                    # Tentar obter linha digitavel separadamente
+                    try:
+                        linha_resp = self._obter_linha_digitavel(banco_nome, dados_boleto)
+                        if linha_resp:
+                            linha_digitavel = linha_resp.get('linha_digitavel', '')
+                            codigo_barras = linha_resp.get('codigo_barras', '')
+                    except Exception as e:
+                        logger.warning(f"Erro ao obter linha digitavel: {e}")
+
+                    return {
+                        'sucesso': True,
+                        'pdf_content': pdf_content,
+                        'linha_digitavel': linha_digitavel,
+                        'codigo_barras': codigo_barras,
+                    }
+
+                elif 'application/json' in content_type:
+                    result = response.json()
+                    if isinstance(result, dict) and 'error' in result:
+                        logger.error(f"Erro da API BRCobranca: {result['error']}")
+                        return {
+                            'sucesso': False,
+                            'erro': result.get('error', 'Erro desconhecido')
+                        }
+                    return {
+                        'sucesso': True,
+                        'pdf_content': result.get('pdf'),
+                        'linha_digitavel': result.get('linha_digitavel', ''),
+                        'codigo_barras': result.get('codigo_barras', ''),
+                    }
+                else:
+                    # Assumir que e PDF
+                    return {
+                        'sucesso': True,
+                        'pdf_content': response.content,
+                        'linha_digitavel': linha_digitavel,
+                        'codigo_barras': codigo_barras,
+                    }
+
+            else:
+                error_msg = f"Erro HTTP {response.status_code}"
+                try:
+                    error_data = response.json()
+                    error_msg = error_data.get('error', error_msg)
+                except:
+                    error_msg = response.text or error_msg
+
+                logger.error(f"Erro na API BRCobranca: {error_msg}")
+                return {
+                    'sucesso': False,
+                    'erro': error_msg
+                }
+
+        except requests.exceptions.ConnectionError as e:
+            logger.error(f"Erro de conexao com BRCobranca: {e}")
             return {
                 'sucesso': False,
-                'erro': f'Falha na geração local: {str(e)}'
+                'erro': f'Nao foi possivel conectar ao servidor BRCobranca em {self.brcobranca_url}. Verifique se o container Docker esta rodando.'
+            }
+        except requests.exceptions.Timeout as e:
+            logger.error(f"Timeout na API BRCobranca: {e}")
+            return {
+                'sucesso': False,
+                'erro': 'Timeout ao gerar boleto. Tente novamente.'
+            }
+        except Exception as e:
+            logger.exception(f"Erro ao chamar API BRCobranca: {e}")
+            return {
+                'sucesso': False,
+                'erro': str(e)
             }
 
-    def _gerar_pdf_boleto(self, dados, codigo_barras, linha_digitavel):
+    def _obter_linha_digitavel(self, banco_nome, dados_boleto):
         """
-        Gera um PDF simples do boleto usando reportlab.
+        Obtem a linha digitavel e codigo de barras do boleto.
         """
-        from io import BytesIO
-        from reportlab.lib.pagesizes import A4
-        from reportlab.lib.units import mm
-        from reportlab.pdfgen import canvas
-        from reportlab.lib import colors
-        from reportlab.graphics.barcode import code128
-
-        buffer = BytesIO()
-        c = canvas.Canvas(buffer, pagesize=A4)
-        width, height = A4
-
-        # Margens
-        margin = 20 * mm
-        y = height - margin
-
-        # Cabeçalho
-        c.setFont("Helvetica-Bold", 14)
-        c.drawString(margin, y, "BOLETO BANCÁRIO")
-        y -= 10 * mm
-
-        # Dados do cedente
-        c.setFont("Helvetica-Bold", 10)
-        c.drawString(margin, y, "CEDENTE")
-        y -= 5 * mm
-        c.setFont("Helvetica", 10)
-        c.drawString(margin, y, dados.get('cedente', ''))
-        y -= 5 * mm
-        c.drawString(margin, y, f"CNPJ: {dados.get('documento_cedente', '')}")
-        y -= 8 * mm
-
-        # Dados do sacado
-        c.setFont("Helvetica-Bold", 10)
-        c.drawString(margin, y, "PAGADOR")
-        y -= 5 * mm
-        c.setFont("Helvetica", 10)
-        c.drawString(margin, y, dados.get('sacado', ''))
-        y -= 5 * mm
-        c.drawString(margin, y, f"CPF/CNPJ: {dados.get('documento_sacado', '')}")
-        y -= 5 * mm
-        c.drawString(margin, y, dados.get('sacado_endereco', ''))
-        y -= 8 * mm
-
-        # Linha divisória
-        c.setStrokeColor(colors.black)
-        c.line(margin, y, width - margin, y)
-        y -= 10 * mm
-
-        # Dados do boleto
-        c.setFont("Helvetica-Bold", 10)
-        c.drawString(margin, y, f"Banco: {dados.get('banco', '')}")
-        c.drawString(margin + 80 * mm, y, f"Agência: {dados.get('agencia', '')}")
-        y -= 6 * mm
-
-        c.drawString(margin, y, f"Nosso Número: {dados.get('nosso_numero', '')}")
-        c.drawString(margin + 80 * mm, y, f"Carteira: {dados.get('carteira', '')}")
-        y -= 6 * mm
-
-        c.drawString(margin, y, f"Número Documento: {dados.get('numero_documento', '')}")
-        y -= 6 * mm
-
-        c.drawString(margin, y, f"Vencimento: {dados.get('data_vencimento', '')}")
-        y -= 10 * mm
-
-        # Valor
-        c.setFont("Helvetica-Bold", 14)
-        c.drawString(margin, y, f"VALOR: R$ {dados.get('valor', 0):.2f}")
-        y -= 15 * mm
-
-        # Linha divisória
-        c.line(margin, y, width - margin, y)
-        y -= 10 * mm
-
-        # Instruções
-        c.setFont("Helvetica-Bold", 10)
-        c.drawString(margin, y, "INSTRUÇÕES")
-        y -= 5 * mm
-        c.setFont("Helvetica", 9)
-        for i in range(1, 4):
-            instrucao = dados.get(f'instrucao{i}', '')
-            if instrucao:
-                c.drawString(margin, y, f"- {instrucao}")
-                y -= 4 * mm
-        y -= 6 * mm
-
-        # Linha digitável
-        c.setFont("Helvetica-Bold", 10)
-        c.drawString(margin, y, "LINHA DIGITÁVEL")
-        y -= 6 * mm
-        c.setFont("Courier-Bold", 12)
-        c.drawString(margin, y, linha_digitavel)
-        y -= 15 * mm
-
-        # Código de barras
-        c.setFont("Helvetica-Bold", 10)
-        c.drawString(margin, y, "CÓDIGO DE BARRAS")
-        y -= 8 * mm
-
         try:
-            barcode = code128.Code128(codigo_barras, barWidth=0.4 * mm, barHeight=15 * mm)
-            barcode.drawOn(c, margin, y - 15 * mm)
+            # Alguns endpoints podem retornar isso diretamente
+            # Tentar validar o boleto para obter os dados
+            params = {
+                'bank': banco_nome,
+                'data': json.dumps(dados_boleto)
+            }
+            response = requests.get(
+                f"{self.brcobranca_url}/boleto/validate",
+                params=params,
+                timeout=self.timeout
+            )
+            if response.status_code == 200:
+                result = response.json() if response.headers.get('content-type', '').startswith('application/json') else {}
+                return {
+                    'linha_digitavel': result.get('linha_digitavel', ''),
+                    'codigo_barras': result.get('codigo_barras', ''),
+                }
         except Exception as e:
-            c.setFont("Helvetica", 9)
-            c.drawString(margin, y, f"[Código: {codigo_barras}]")
-
-        y -= 25 * mm
-
-        # Rodapé
-        c.setFont("Helvetica", 8)
-        c.drawString(margin, 15 * mm, "Autenticação mecânica - Ficha de compensação")
-
-        c.showPage()
-        c.save()
-
-        buffer.seek(0)
-        return buffer.read()
-
-    def _gerar_codigo_barras_simplificado(self, dados, conta_bancaria):
-        """
-        Gera um código de barras simplificado.
-
-        Formato padrão FEBRABAN (44 dígitos):
-        - Posições 1-3: Código do banco (3 dígitos)
-        - Posição 4: Código da moeda (9 = Real)
-        - Posição 5: DV geral (módulo 11)
-        - Posições 6-9: Fator de vencimento (4 dígitos)
-        - Posições 10-19: Valor (10 dígitos)
-        - Posições 20-44: Campo livre (25 dígitos)
-        """
-        from datetime import date
-
-        # Funcao auxiliar para extrair apenas digitos
-        def apenas_digitos(s):
-            return ''.join(filter(str.isdigit, str(s)))
-
-        # Codigo do banco (3 digitos)
-        banco = apenas_digitos(conta_bancaria.banco).zfill(3)[:3]
-        moeda = '9'
-
-        # Fator de vencimento (dias desde 07/10/1997)
-        # FEBRABAN: após 21/02/2025 (fator 10000), reinicia em 22/02/2025 com fator 1000
-        data_base_original = date(1997, 10, 7)
-        data_base_nova = date(2025, 2, 22)  # Nova data base após overflow
-        data_venc = date.fromisoformat(dados['data_vencimento'])
-
-        if data_venc >= data_base_nova:
-            # Usar nova data base (reinicia em 1000)
-            fator_vencimento = 1000 + (data_venc - data_base_nova).days
-        else:
-            fator_vencimento = (data_venc - data_base_original).days
-
-        # Garantir 4 dígitos (mod 10000 + zfill + truncate)
-        fator_str = str(fator_vencimento % 10000).zfill(4)[:4]
-
-        # Valor (10 dígitos, sem decimais)
-        valor = int(float(dados['valor']) * 100)
-        valor_str = str(valor).zfill(10)[:10]
-
-        # Campo livre (25 digitos) - varia por banco, formato simplificado
-        agencia = apenas_digitos(dados['agencia']).zfill(4)[:4]
-        conta = apenas_digitos(dados['conta_corrente']).zfill(8)[:8]
-        nosso_num = apenas_digitos(dados['nosso_numero']).zfill(11)[:11]
-        carteira = apenas_digitos(dados['carteira']).zfill(2)[:2]
-
-        # Montar campo livre e garantir exatamente 25 digitos
-        campo_livre = f"{agencia}{conta}{nosso_num}{carteira}"
-        campo_livre = apenas_digitos(campo_livre).ljust(25, '0')[:25]
-
-        # Montar código de barras sem DV (43 digitos)
-        codigo_sem_dv = f"{banco}{moeda}{fator_str}{valor_str}{campo_livre}"
-
-        # Validar tamanho antes de calcular DV
-        if len(codigo_sem_dv) != 43:
-            logger.warning(f"Codigo sem DV com tamanho incorreto: {len(codigo_sem_dv)} (esperado 43)")
-            # Truncar ou preencher para garantir 43 digitos
-            codigo_sem_dv = codigo_sem_dv[:43].ljust(43, '0')
-
-        # Calcular DV (módulo 11)
-        dv = self._calcular_dv_mod11(codigo_sem_dv)
-
-        # Inserir DV na posição 5 (índice 4)
-        codigo_barras = f"{codigo_sem_dv[:4]}{dv}{codigo_sem_dv[4:]}"
-
-        # Validacao final
-        if len(codigo_barras) != 44:
-            logger.error(f"Codigo de barras com tamanho incorreto: {len(codigo_barras)}")
-
-        return codigo_barras
-
-    def _gerar_linha_digitavel(self, codigo_barras):
-        """
-        Converte código de barras em linha digitável.
-
-        Formato: AAABC.CCCCX DDDDD.DDDDDY EEEEE.EEEEEZ K UUUUVVVVVVVVVV
-        """
-        if len(codigo_barras) != 44:
-            return ''
-
-        # Campo 1: posições 1-4 do código de barras + 20-24
-        campo1 = codigo_barras[0:4] + codigo_barras[19:24]
-        dv1 = self._calcular_dv_mod10(campo1)
-        campo1_formatado = f"{campo1[:5]}.{campo1[5:]}{dv1}"
-
-        # Campo 2: posições 25-34 do código de barras
-        campo2 = codigo_barras[24:34]
-        dv2 = self._calcular_dv_mod10(campo2)
-        campo2_formatado = f"{campo2[:5]}.{campo2[5:]}{dv2}"
-
-        # Campo 3: posições 35-44 do código de barras
-        campo3 = codigo_barras[34:44]
-        dv3 = self._calcular_dv_mod10(campo3)
-        campo3_formatado = f"{campo3[:5]}.{campo3[5:]}{dv3}"
-
-        # Campo 4: DV geral (posição 5 do código de barras)
-        campo4 = codigo_barras[4]
-
-        # Campo 5: Fator vencimento + Valor (posições 6-19)
-        campo5 = codigo_barras[5:19]
-
-        return f"{campo1_formatado} {campo2_formatado} {campo3_formatado} {campo4} {campo5}"
-
-    def _calcular_dv_mod11(self, numero):
-        """Calcula DV usando módulo 11 (peso 2 a 9)"""
-        soma = 0
-        peso = 2
-        for digito in reversed(numero):
-            soma += int(digito) * peso
-            peso = peso + 1 if peso < 9 else 2
-
-        resto = soma % 11
-        dv = 11 - resto
-
-        if dv in [0, 10, 11]:
-            return '1'
-        return str(dv)
-
-    def _calcular_dv_mod10(self, numero):
-        """Calcula DV usando módulo 10 (peso 2 e 1 alternados)"""
-        soma = 0
-        peso = 2
-        for digito in reversed(numero):
-            resultado = int(digito) * peso
-            if resultado > 9:
-                resultado = resultado - 9
-            soma += resultado
-            peso = 1 if peso == 2 else 2
-
-        resto = soma % 10
-        if resto == 0:
-            return '0'
-        return str(10 - resto)
+            logger.debug(f"Erro ao obter linha digitavel: {e}")
+        return None
 
     def gerar_boletos_lote(self, parcelas, conta_bancaria):
         """
-        Gera boletos para múltiplas parcelas.
+        Gera boletos para multiplas parcelas usando POST /boleto/multi.
 
         Args:
             parcelas: QuerySet ou lista de Parcelas
-            conta_bancaria: Conta bancária a ser usada
+            conta_bancaria: Conta bancaria a ser usada
 
         Returns:
             list: Lista de resultados
         """
-        resultados = []
-        for parcela in parcelas:
-            resultado = self.gerar_boleto(parcela, conta_bancaria)
-            resultados.append({
-                'parcela_id': parcela.id,
-                'parcela': str(parcela),
-                **resultado
-            })
-        return resultados
+        try:
+            banco_nome = self._get_banco_brcobranca(conta_bancaria.banco)
+            if not banco_nome:
+                return [{
+                    'sucesso': False,
+                    'erro': f'Banco {conta_bancaria.banco} nao suportado'
+                }]
+
+            # Preparar dados de todos os boletos
+            boletos_data = []
+            nossos_numeros = {}
+
+            for parcela in parcelas:
+                dados, nosso_numero = self._montar_dados_boleto(parcela, conta_bancaria)
+                dados['bank'] = banco_nome  # Adicionar banco em cada boleto
+                boletos_data.append(dados)
+                nossos_numeros[parcela.id] = nosso_numero
+
+            # Chamar API para multiplos boletos
+            payload = {
+                'type': 'pdf',
+                'data': boletos_data
+            }
+
+            response = requests.post(
+                f"{self.brcobranca_url}/boleto/multi",
+                json=payload,
+                timeout=self.timeout * len(parcelas)
+            )
+
+            resultados = []
+            if response.status_code == 200:
+                # O PDF vem como conteudo unico para todos os boletos
+                pdf_content = response.content
+
+                for parcela in parcelas:
+                    resultados.append({
+                        'parcela_id': parcela.id,
+                        'parcela': str(parcela),
+                        'sucesso': True,
+                        'nosso_numero': str(nossos_numeros.get(parcela.id)),
+                        'pdf_content': pdf_content,  # PDF combinado
+                    })
+            else:
+                error_msg = response.text
+                for parcela in parcelas:
+                    resultados.append({
+                        'parcela_id': parcela.id,
+                        'parcela': str(parcela),
+                        'sucesso': False,
+                        'erro': error_msg
+                    })
+
+            return resultados
+
+        except Exception as e:
+            logger.exception(f"Erro ao gerar boletos em lote: {e}")
+            return [{
+                'sucesso': False,
+                'erro': str(e)
+            }]
 
     def verificar_api_disponivel(self):
-        """Verifica se a API BRCobrança está disponível"""
+        """Verifica se a API BRCobranca esta disponivel"""
         try:
+            # A API nao tem endpoint de health, tentar uma chamada basica
             response = requests.get(
-                f"{self.brcobranca_url}/api/health",
+                f"{self.brcobranca_url}/",
                 timeout=5
             )
-            return response.status_code == 200
+            return response.status_code in [200, 404]  # 404 e ok, significa que o servidor esta rodando
         except:
             return False
 
 
 class CNABService:
     """
-    Serviço para geração de arquivos CNAB (remessa/retorno).
+    Servico para geracao de arquivos CNAB (remessa/retorno).
 
-    Suporta layouts 240 e 400.
+    Usa a API BRCobranca para gerar arquivos CNAB240 e CNAB400.
     """
 
     def __init__(self, brcobranca_url=None):
         self.brcobranca_url = brcobranca_url or getattr(
             settings, 'BRCOBRANCA_URL', 'http://localhost:9292'
         )
+        self.timeout = getattr(settings, 'BRCOBRANCA_TIMEOUT', 60)
 
     def gerar_remessa(self, parcelas, conta_bancaria, layout='240'):
         """
@@ -640,14 +551,14 @@ class CNABService:
 
         Args:
             parcelas: Lista de parcelas com boletos gerados
-            conta_bancaria: Conta bancária
+            conta_bancaria: Conta bancaria
             layout: '240' ou '400'
 
         Returns:
-            bytes: Conteúdo do arquivo CNAB
+            bytes: Conteudo do arquivo CNAB
         """
-        # TODO: Implementar geração de remessa CNAB
-        raise NotImplementedError("Geração de CNAB será implementada em versão futura")
+        # TODO: Implementar geracao de remessa CNAB via API
+        raise NotImplementedError("Geracao de CNAB sera implementada em versao futura")
 
     def processar_retorno(self, arquivo_cnab, conta_bancaria):
         """
@@ -655,10 +566,10 @@ class CNABService:
 
         Args:
             arquivo_cnab: Arquivo CNAB de retorno
-            conta_bancaria: Conta bancária
+            conta_bancaria: Conta bancaria
 
         Returns:
-            list: Lista de movimentações processadas
+            list: Lista de movimentacoes processadas
         """
         # TODO: Implementar processamento de retorno CNAB
-        raise NotImplementedError("Processamento de retorno CNAB será implementado em versão futura")
+        raise NotImplementedError("Processamento de retorno CNAB sera implementado em versao futura")
