@@ -503,10 +503,10 @@
                                             <div class="btn-group btn-group-sm">
                                                 {% if not parcela.pago %}
                                                     {% if parcela.tem_boleto %}
-                                                        <a href="{% url 'financeiro:visualizar_boleto' parcela.pk %}"
-                                                           class="btn btn-outline-primary" title="Ver Boleto" target="_blank">
+                                                        <button type="button" class="btn btn-outline-primary"
+                                                                onclick="abrirModalBoleto({{ parcela.pk }})" title="Ver Boleto">
                                                             <i class="fas fa-eye"></i>
-                                                        </a>
+                                                        </button>
                                                         <button type="button" class="btn btn-outline-warning"
                                                                 onclick="regenerarBoleto({{ parcela.pk }}, this)" title="Atualizar Boleto">
                                                             <i class="fas fa-sync"></i>
@@ -769,6 +769,29 @@
     </div>
 </div>
 
+<!-- Modal de Visualizacao do Boleto -->
+<div class="modal fade" id="modalBoleto" tabindex="-1">
+    <div class="modal-dialog modal-xl">
+        <div class="modal-content">
+            <div class="modal-header bg-primary text-white">
+                <h5 class="modal-title">
+                    <i class="fas fa-barcode"></i> Dados do Boleto
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body p-0">
+                <iframe id="iframeBoleto" style="width: 100%; height: 70vh; border: none;"></iframe>
+            </div>
+            <div class="modal-footer">
+                <a id="btnDownloadBoleto" href="#" class="btn btn-primary" target="_blank">
+                    <i class="fas fa-download"></i> Download PDF
+                </a>
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Fechar</button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <!-- Modal de Reajuste Manual -->
 <div class="modal fade" id="modalReajuste" tabindex="-1">
     <div class="modal-dialog">
@@ -873,6 +896,24 @@ function confirmarCancelamento() {
     new bootstrap.Modal(document.getElementById('modalCancelamento')).show();
 }
 
+// ============ FUNCOES DE BOLETO ============
+
+function abrirModalBoleto(parcelaId) {
+    var iframe = document.getElementById('iframeBoleto');
+    var btnDownload = document.getElementById('btnDownloadBoleto');
+
+    // Configurar URLs
+    var urlVisualizar = '/financeiro/parcelas/' + parcelaId + '/boleto/visualizar/';
+    var urlDownload = '/financeiro/parcelas/' + parcelaId + '/boleto/download/';
+
+    // Carregar no iframe
+    iframe.src = urlVisualizar;
+    btnDownload.href = urlDownload;
+
+    // Abrir modal
+    new bootstrap.Modal(document.getElementById('modalBoleto')).show();
+}
+
 // ============ FUNCOES DE TOAST ============
 
 function showToast(message, type = 'success', duration = 4000) {
@@ -936,15 +977,15 @@ function gerarBoleto(parcelaId, btn) {
                 var acoesCol = row.querySelector('td:last-child .btn-group');
                 if (acoesCol) {
                     acoesCol.innerHTML =
-                        '<a href="/financeiro/parcelas/' + parcelaId + '/boleto/visualizar/" class="btn btn-outline-primary" title="Ver Boleto" target="_blank"><i class="fas fa-eye"></i></a>' +
+                        '<button type="button" class="btn btn-outline-primary" onclick="abrirModalBoleto(' + parcelaId + ')" title="Ver Boleto"><i class="fas fa-eye"></i></button>' +
                         '<button type="button" class="btn btn-outline-warning" onclick="regenerarBoleto(' + parcelaId + ', this)" title="Atualizar Boleto"><i class="fas fa-sync"></i></button>' +
                         '<button type="button" class="btn btn-outline-success" onclick="abrirModalPagamento(' + parcelaId + ')" title="Registrar Pagamento"><i class="fas fa-dollar-sign"></i></button>';
                 }
             }
 
-            // Abrir boleto em nova aba apos um pequeno delay
+            // Abrir boleto em popup modal apos um pequeno delay
             setTimeout(function() {
-                window.open('/financeiro/parcelas/' + parcelaId + '/boleto/visualizar/', '_blank');
+                abrirModalBoleto(parcelaId);
             }, 500);
 
         } else {
@@ -999,9 +1040,9 @@ function regenerarBoleto(parcelaId, btn) {
             btn.classList.remove('btn-loading');
             btn.disabled = false;
 
-            // Abrir boleto em nova aba
+            // Abrir boleto em popup modal
             setTimeout(function() {
-                window.open('/financeiro/parcelas/' + parcelaId + '/boleto/visualizar/', '_blank');
+                abrirModalBoleto(parcelaId);
             }, 500);
 
         } else {
