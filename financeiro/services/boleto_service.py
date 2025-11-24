@@ -15,6 +15,7 @@ import requests
 import json
 import logging
 import time
+import re
 from decimal import Decimal
 from datetime import date, timedelta
 from django.conf import settings 
@@ -188,64 +189,69 @@ class BoletoService:
         # Carteira
         carteira = conta_bancaria.carteira or self.CARTEIRAS_PADRAO.get(conta_bancaria.banco, '1')
 
-        # Numero do documento
-        numero_documento = parcela.gerar_numero_documento()
+        # Codigo do banco (necessario antes de montar 'dados')
+        codigo_banco = conta_bancaria.banco
 
-        # Instrucoes (usando configuracoes do contrato)
-        instrucoes = []
-        if config_boleto.get('instrucao_1'):
-            instrucoes.append(config_boleto['instrucao_1'])
-        if config_boleto.get('instrucao_2'):
-            instrucoes.append(config_boleto['instrucao_2'])
-        if config_boleto.get('instrucao_3'):
-            instrucoes.append(config_boleto['instrucao_3'])
-        # Adicionar informacoes padrao
-        instrucoes.append(f"Parcela {parcela.numero_parcela} de {contrato.numero_parcelas}")
-        instrucoes.append(f"Contrato: {contrato.numero_contrato}")
-        instrucoes.append(f"Imovel: {contrato.imovel.identificacao}")
+         # Numero do documento
+         numero_documento = parcela.gerar_numero_documento()
+ 
+         # Instrucoes (usando configuracoes do contrato)
+         instrucoes = []
+         if config_boleto.get('instrucao_1'):
+             instrucoes.append(config_boleto['instrucao_1'])
+         if config_boleto.get('instrucao_2'):
+             instrucoes.append(config_boleto['instrucao_2'])
+         if config_boleto.get('instrucao_3'):
+             instrucoes.append(config_boleto['instrucao_3'])
+         # Adicionar informacoes padrao
+         instrucoes.append(f"Parcela {parcela.numero_parcela} de {contrato.numero_parcelas}")
+         instrucoes.append(f"Contrato: {contrato.numero_contrato}")
+         instrucoes.append(f"Imovel: {contrato.imovel.identificacao}")
 
         # Dados do boleto no formato BRCobranca
         dados = {
-            # Dados do Cedente (beneficiario - quem recebe)
-            'cedente': imobiliaria.razao_social or imobiliaria.nome,
-            'documento_cedente': documento_cedente,
-            'cedente_endereco': f"{imobiliaria.logradouro}, {imobiliaria.numero}" if imobiliaria.logradouro else '',
+             # Dados do Cedente (beneficiario - quem recebe)
+             'cedente': imobiliaria.razao_social or imobiliaria.nome,
+             'documento_cedente': documento_cedente,
+             'cedente_endereco': f"{imobiliaria.logradouro}, {imobiliaria.numero}" if imobiliaria.logradouro else '',
+ 
+             # Dados Bancarios
+             'agencia': conta_bancaria.agencia.replace('-', '').replace('.', ''),
+             'conta_corrente': conta_bancaria.conta.replace('-', '').replace('.', ''),
+             'convenio': str(conta_bancaria.convenio) if conta_bancaria.convenio else '',
+             'carteira': str(carteira),
+ 
+             # Dados do Boleto
+             'nosso_numero': str(nosso_numero),
+             # manter ambas chaves para compatibilidade com diferentes versões/expectativas
+             'numero_documento': numero_documento,
+             'documento_numero': numero_documento,  # Alias usado por alguns bancos/implementações
+             'data_documento': self._formatar_data(date.today()),
+             'data_vencimento': self._formatar_data(parcela.data_vencimento),
+             'valor': float(parcela.valor_atual),
+             'aceite': 'S' if config_boleto.get('aceite') else 'N',
+             'especie_documento': config_boleto.get('tipo_titulo') or 'DM',
+             'especie': 'R$',
 
-            # Dados Bancarios
-            'agencia': conta_bancaria.agencia.replace('-', '').replace('.', ''),
-            'conta_corrente': conta_bancaria.conta.replace('-', '').replace('.', ''),
-            'convenio': str(conta_bancaria.convenio) if conta_bancaria.convenio else '',
-            'carteira': str(carteira),
+             # Dados do Sacado (pagador - quem paga)
+             # Endereco completo concatenado: Rua, Nro, Complemento, Bairro, Cidade, UF, CEP
+             'sacado': comprador.nome,
+             'sacado_documento': documento_pagador,
+             'sacado_endereco': endereco_pagador[:80] if endereco_pagador else '',
 
-            # Dados do Boleto
-            'nosso_numero': str(nosso_numero),
-            'documento_numero': numero_documento,  # Campo correto do BRCobranca
-            'data_documento': self._formatar_data(date.today()),
-            'data_vencimento': self._formatar_data(parcela.data_vencimento),
-            'valor': float(parcela.valor_atual),
-            'aceite': 'S' if config_boleto.get('aceite') else 'N',
-            'especie_documento': config_boleto.get('tipo_titulo') or 'DM',
-            'especie': 'R$',
+             # Instrucoes
+             'instrucao1': instrucoes[0] if len(instrucoes) > 0 else '',
+             'instrucao2': instrucoes[1] if len(instrucoes) > 1 else '',
+             'instrucao3': instrucoes[2] if len(instrucoes) > 2 else '',
+             'instrucao4': instrucoes[3] if len(instrucoes) > 3 else '',
 
-            # Dados do Sacado (pagador - quem paga)
-            # Endereco completo concatenado: Rua, Nro, Complemento, Bairro, Cidade, UF, CEP
-            'sacado': comprador.nome,
-            'sacado_documento': documento_pagador,
-            'sacado_endereco': endereco_pagador[:80] if endereco_pagador else '',
-
-            # Instrucoes
-            'instrucao1': instrucoes[0] if len(instrucoes) > 0 else '',
-            'instrucao2': instrucoes[1] if len(instrucoes) > 1 else '',
-            'instrucao3': instrucoes[2] if len(instrucoes) > 2 else '',
-            'instrucao4': instrucoes[3] if len(instrucoes) > 3 else '',
-
-            # Local de Pagamento
-            'local_pagamento': 'Pagavel em qualquer banco ate o vencimento',
-        }
-
-        # Adicionar campos especificos por banco
-        codigo_banco = conta_bancaria.banco
-
+             # Local de Pagamento
+             'local_pagamento': 'Pagavel em qualquer banco ate o vencimento',
+             # Codigo do banco para validacoes posteriores
+             'codigo_banco': codigo_banco,
+         }
+ 
+        # Adicionar campos especificos por banco (usa codigo_banco ja existente)
         # Banco do Brasil (001)
         if codigo_banco == '001':
             # Convenio obrigatorio (4-8 digitos)
@@ -381,55 +387,53 @@ class BoletoService:
 
     def gerar_boleto(self, parcela, conta_bancaria):
         """
-        Gera um boleto para a parcela usando a API BRCobranca.
-
-        API Endpoints:
-        - GET /api/boleto - Gera boleto individual
-        - GET /api/boleto/nosso_numero - Obtem nosso numero formatado
-        - GET /api/boleto/validate - Valida dados do boleto
-        - POST /api/boleto/multi - Gera multiplos boletos
-
-        Args:
-            parcela: Instancia de Parcela
-            conta_bancaria: Instancia de ContaBancaria
-
-        Returns:
-            dict: Resultado da geracao com dados do boleto
+        Gera boleto para a parcela usando BRCobranca.
+        Retorna dict padronizado: {'sucesso': bool, 'erro': str, ...}
         """
         try:
-            # Verificar se o banco e suportado
-            banco_nome = self._get_banco_brcobranca(conta_bancaria.banco)
-            if not banco_nome:
-                return {
-                    'sucesso': False,
-                    'erro': f'Banco {conta_bancaria.banco} nao suportado pelo BRCobranca'
-                }
-
-            # Montar dados do boleto
             dados_boleto, nosso_numero = self._montar_dados_boleto(parcela, conta_bancaria)
 
-            # Chamar API BRCobranca
+            # Garantir numero_documento presente para evitar KeyError
+            numero_documento = dados_boleto.get('numero_documento')
+            if not numero_documento:
+                contrato = getattr(parcela, 'contrato', None)
+                numero_contrato = str(getattr(contrato, 'numero_contrato', getattr(contrato, 'id', '')))
+                nro_parcela = str(getattr(parcela, 'numero_parcela', '1'))
+                total_parcelas = str(getattr(contrato, 'numero_parcelas', '')).strip()
+                if total_parcelas:
+                    numero_documento = f"{numero_contrato}_{nro_parcela}/{total_parcelas}"
+                else:
+                    numero_documento = f"{numero_contrato}_{nro_parcela}"
+                dados_boleto['numero_documento'] = numero_documento
+                # manter alias esperado pela API quando aplicavel
+                if 'documento_numero' not in dados_boleto:
+                    dados_boleto['documento_numero'] = numero_documento
+
+            banco_nome = self._get_banco_brcobranca(getattr(conta_bancaria, 'banco', ''))
+            if not banco_nome:
+                msg = f"Banco '{getattr(conta_bancaria, 'banco', '')}' nao suportado pelo BRCobranca"
+                logger.error(msg)
+                return {'sucesso': False, 'erro': msg}
+
             resultado = self._chamar_api_boleto(banco_nome, dados_boleto)
 
+            # Em caso de sucesso, incluir identificadores locais para UI
             if resultado.get('sucesso'):
-                return {
-                    'sucesso': True,
-                    'nosso_numero': str(nosso_numero),
-                    'numero_documento': dados_boleto['numero_documento'],
-                    'linha_digitavel': resultado.get('linha_digitavel', ''),
-                    'codigo_barras': resultado.get('codigo_barras', ''),
-                    'valor': Decimal(str(dados_boleto['valor'])),
-                    'pdf_content': resultado.get('pdf_content'),
-                }
-            else:
-                return resultado
+                resultado.setdefault('dados_local', {})
+                resultado['dados_local'].update({
+                    'nosso_numero': nosso_numero,
+                    'numero_documento': numero_documento
+                })
+
+            return resultado
+
+        except KeyError as e:
+            logger.exception("Campo ausente ao gerar boleto: %s", e)
+            return {'sucesso': False, 'erro': f"Campo ausente: {str(e)}. Verifique os dados da parcela/conta."}
 
         except Exception as e:
-            logger.exception(f"Erro ao gerar boleto: {e}")
-            return {
-                'sucesso': False,
-                'erro': str(e)
-            }
+            logger.exception("Erro ao gerar boleto: %s", e)
+            return {'sucesso': False, 'erro': 'Erro interno ao gerar boleto. Tente novamente em alguns minutos.'}
 
     def _chamar_api_boleto(self, banco_nome, dados_boleto):
         """
@@ -569,7 +573,7 @@ class BoletoService:
             valor = float(dados.get('valor', 0))
             if valor <= 0:
                 erros.append("Valor do boleto deve ser maior que zero")
-        except ValueError:
+        except (ValueError, TypeError):
             erros.append("Valor do boleto invalido")
 
         # Validar data vencimento
@@ -582,6 +586,32 @@ class BoletoService:
                     erros.append("Data de vencimento em formato invalido")
         except Exception as e:
             erros.append(f"Erro ao validar data: {e}")
+
+        # Validar numero_documento conforme regras por banco (configuravel)
+        numero_documento = dados.get('numero_documento') or dados.get('documento_numero') or ''
+        codigo_banco = str(dados.get('codigo_banco') or '')
+        if numero_documento:
+            # obter padroes do settings (permitir override)
+            patterns = getattr(settings, 'BRCOBRANCA_NUMERO_DOCUMENTO_PATTERNS', {})
+            maxlens = getattr(settings, 'BRCOBRANCA_NUMERO_DOCUMENTO_MAXLEN', {})
+
+            default_pattern = patterns.get('default', r'^[0-9A-Za-z_\/\-\s]+$')
+            pattern = patterns.get(codigo_banco, default_pattern)
+            try:
+                if not re.match(pattern + r'\Z', numero_documento):
+                    erros.append(f"Numero do documento invalido para o banco {codigo_banco}: caracteres nao permitidos")
+            except re.error:
+                # padrao invalido na configuracao -> usar default seguro
+                if not re.match(default_pattern + r'\Z', numero_documento):
+                    erros.append(f"Numero do documento invalido: caracteres nao permitidos")
+
+            maxlen = maxlens.get(codigo_banco) or maxlens.get('default')
+            if maxlen:
+                try:
+                    if len(numero_documento) > int(maxlen):
+                        erros.append(f"Numero do documento excede comprimento maximo ({maxlen}) para o banco {codigo_banco}")
+                except Exception:
+                    pass
 
         return {
             'valido': len(erros) == 0,
