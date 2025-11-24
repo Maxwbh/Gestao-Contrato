@@ -90,6 +90,195 @@ class BoletoService:
         },
     }
 
+    # =========================================================================
+    # CAMPOS NAO SUPORTADOS POR BANCO (BRCobranca)
+    # Baseado na documentacao oficial: https://github.com/kivanio/brcobranca
+    # Estes campos serao removidos antes de enviar para a API
+    # =========================================================================
+    CAMPOS_NAO_SUPORTADOS = {
+        # Banco do Brasil (001) - Nao suporta documento_numero, especie_documento, aceite
+        '001': [
+            'documento_numero',
+            'especie_documento',
+            'aceite',
+        ],
+        # Banco Nordeste (004) - Usa campos padrao
+        '004': [],
+        # Banestes (021) - Campos padrao
+        '021': [],
+        # Santander (033) - Campos padrao
+        '033': [],
+        # Banrisul (041) - Campos padrao
+        '041': [],
+        # BRB (070) - Campos padrao
+        '070': [],
+        # Banco Inter (077) - Campos padrao
+        '077': [],
+        # Unicred (084/136) - Campos padrao
+        '084': [],
+        # Ailos (085) - Campos padrao
+        '085': [],
+        # Caixa (104) - Campos padrao (usa emissao e codigo_beneficiario)
+        '104': [],
+        # Cresol (133) - Campos padrao
+        '133': [],
+        # Unicred (136) - Campos padrao
+        '136': [],
+        # Bradesco (237) - Campos padrao
+        '237': [],
+        # Itau (341) - Campos padrao (usa seu_numero para carteiras especiais)
+        '341': [],
+        # Banco Mercantil (389) - Campos padrao
+        '389': [],
+        # Safra (422) - Campos padrao
+        '422': [],
+        # Sicredi (748) - Nao suporta documento_numero
+        '748': [
+            'documento_numero',
+        ],
+        # Sicoob (756) - Nao suporta documento_numero, especie_documento, aceite
+        '756': [
+            'documento_numero',
+            'especie_documento',
+            'aceite',
+        ],
+    }
+
+    # =========================================================================
+    # CAMPOS ESPECIFICOS POR BANCO (devem ser adicionados)
+    # =========================================================================
+    CAMPOS_ESPECIFICOS = {
+        # Banco do Brasil (001) - convenio obrigatorio
+        '001': {
+            'obrigatorios': ['convenio'],
+            'opcionais': ['codigo_servico'],
+        },
+        # Banco Nordeste (004)
+        '004': {
+            'obrigatorios': [],
+            'opcionais': ['digito_conta_corrente'],
+        },
+        # Banrisul (041)
+        '041': {
+            'obrigatorios': [],
+            'opcionais': ['digito_convenio'],
+        },
+        # Caixa (104) - emissao obrigatorio
+        '104': {
+            'obrigatorios': ['emissao'],
+            'opcionais': ['codigo_beneficiario'],
+        },
+        # Itau (341) - seu_numero para carteiras especiais
+        '341': {
+            'obrigatorios': [],
+            'opcionais': ['seu_numero'],
+        },
+        # Sicredi (748) - posto e byte_idt obrigatorios
+        '748': {
+            'obrigatorios': ['posto', 'byte_idt'],
+            'opcionais': [],
+        },
+        # Sicoob (756) - variacao e quantidade
+        '756': {
+            'obrigatorios': ['variacao'],
+            'opcionais': ['quantidade', 'codigo_beneficiario'],
+        },
+        # Unicred (084/136)
+        '084': {
+            'obrigatorios': [],
+            'opcionais': ['conta_corrente_dv'],
+        },
+        '136': {
+            'obrigatorios': [],
+            'opcionais': ['conta_corrente_dv'],
+        },
+        # Safra (422)
+        '422': {
+            'obrigatorios': [],
+            'opcionais': ['agencia_dv', 'conta_corrente_dv'],
+        },
+    }
+
+    # =========================================================================
+    # TAMANHOS MAXIMOS DE CAMPOS POR BANCO
+    # =========================================================================
+    TAMANHOS_CAMPOS = {
+        '001': {  # Banco do Brasil
+            'agencia': 4,
+            'conta_corrente': 8,
+            'convenio': 8,  # 4-8 digitos
+            'carteira': 2,
+        },
+        '004': {  # Banco Nordeste
+            'agencia': 4,
+            'conta_corrente': 7,
+            'nosso_numero': 7,
+            'carteira': 2,
+        },
+        '033': {  # Santander
+            'agencia': 4,
+            'convenio': 7,
+            'nosso_numero': 7,
+            'conta_corrente': 9,
+        },
+        '041': {  # Banrisul
+            'agencia': 4,
+            'conta_corrente': 8,
+            'nosso_numero': 8,
+            'convenio': 7,
+            'carteira': 1,
+        },
+        '104': {  # Caixa
+            'agencia': 4,
+            'convenio': 6,
+            'nosso_numero': 17,
+        },
+        '237': {  # Bradesco
+            'agencia': 4,
+            'conta_corrente': 7,
+            'nosso_numero': 11,
+            'carteira': 2,
+        },
+        '341': {  # Itau
+            'agencia': 4,
+            'conta_corrente': 5,
+            'convenio': 5,
+            'nosso_numero': 8,
+            'seu_numero': 7,
+        },
+        '422': {  # Safra
+            'agencia': 4,
+            'conta_corrente': 8,
+            'nosso_numero': 9,
+        },
+        '748': {  # Sicredi
+            'agencia': 4,
+            'conta_corrente': 5,
+            'convenio': 5,
+            'nosso_numero': 5,
+            'carteira': 1,
+            'posto': 2,
+        },
+        '756': {  # Sicoob
+            'agencia': 4,
+            'conta_corrente': 8,
+            'convenio': 7,
+            'nosso_numero': 7,
+        },
+        '084': {  # Unicred
+            'agencia': 4,
+            'conta_corrente': 9,
+            'nosso_numero': 10,
+            'carteira': 2,
+        },
+        '136': {  # Unicred
+            'agencia': 4,
+            'conta_corrente': 9,
+            'nosso_numero': 10,
+            'carteira': 2,
+        },
+    }
+
     def __init__(self, brcobranca_url=None):
         """
         Inicializa o servico de boleto.
@@ -132,6 +321,50 @@ class BoletoService:
         if dias_desconto and dias_desconto > 0:
             return data_vencimento - timedelta(days=dias_desconto)
         return None
+
+    def _filtrar_campos_banco(self, dados, codigo_banco):
+        """
+        Filtra e valida campos do boleto conforme suporte do banco no BRCobranca.
+
+        Remove campos nao suportados e aplica tamanhos maximos.
+
+        Args:
+            dados: Dicionario com dados do boleto
+            codigo_banco: Codigo do banco (ex: '001', '756')
+
+        Returns:
+            dict: Dados filtrados e validados
+        """
+        dados_filtrados = dados.copy()
+
+        # Remover campos nao suportados pelo banco
+        campos_remover = self.CAMPOS_NAO_SUPORTADOS.get(codigo_banco, [])
+        for campo in campos_remover:
+            if campo in dados_filtrados:
+                logger.debug(f"Removendo campo '{campo}' nao suportado pelo banco {codigo_banco}")
+                dados_filtrados.pop(campo)
+
+        # Aplicar tamanhos maximos de campos
+        tamanhos = self.TAMANHOS_CAMPOS.get(codigo_banco, {})
+        for campo, tamanho_max in tamanhos.items():
+            if campo in dados_filtrados and dados_filtrados[campo]:
+                valor = str(dados_filtrados[campo])
+                # Remover caracteres nao numericos para campos numericos
+                if campo in ['agencia', 'conta_corrente', 'convenio', 'nosso_numero', 'carteira', 'posto', 'seu_numero']:
+                    valor = ''.join(filter(str.isdigit, valor))
+                # Aplicar padding com zeros e truncar
+                dados_filtrados[campo] = valor.zfill(tamanho_max)[:tamanho_max]
+
+        # Validar campos obrigatorios especificos do banco
+        campos_especificos = self.CAMPOS_ESPECIFICOS.get(codigo_banco, {})
+        campos_obrigatorios = campos_especificos.get('obrigatorios', [])
+        for campo in campos_obrigatorios:
+            if not dados_filtrados.get(campo):
+                logger.warning(f"Campo obrigatorio '{campo}' ausente para banco {codigo_banco}")
+
+        logger.info(f"Campos filtrados para banco {codigo_banco}: removidos={campos_remover}")
+
+        return dados_filtrados
 
     def _montar_dados_boleto(self, parcela, conta_bancaria):
         """
@@ -254,9 +487,7 @@ class BoletoService:
             # Formatar convenio com zeros a esquerda se necessario
             if dados.get('convenio'):
                 dados['convenio'] = str(dados['convenio']).zfill(7)
-            # Remover campos nao suportados pelo BB
-            for campo in ['documento_numero', 'especie_documento', 'aceite']:
-                dados.pop(campo, None)
+            # Campos nao suportados sao removidos pelo _filtrar_campos_banco
 
         # Santander (033)
         elif codigo_banco == '033':
@@ -319,10 +550,7 @@ class BoletoService:
             # Modalidade (codigo_beneficiario quando aplicavel)
             if hasattr(conta_bancaria, 'codigo_beneficiario') and conta_bancaria.codigo_beneficiario:
                 dados['codigo_beneficiario'] = conta_bancaria.codigo_beneficiario
-            # Remover campos nao suportados pelo Sicoob
-            # BRCobranca Sicoob nao aceita: documento_numero, especie_documento, aceite
-            for campo in ['documento_numero', 'especie_documento', 'aceite']:
-                dados.pop(campo, None)
+            # Campos nao suportados sao removidos pelo _filtrar_campos_banco
 
         # =====================================================
         # MULTA (apos vencimento)
@@ -380,6 +608,12 @@ class BoletoService:
                     dados['desconto'] = round(valor_desc, 2)
                 else:
                     dados['desconto'] = float(valor_desconto)
+
+        # =====================================================
+        # FILTRAGEM E VALIDACAO FINAL POR BANCO
+        # Remove campos nao suportados e aplica tamanhos maximos
+        # =====================================================
+        dados = self._filtrar_campos_banco(dados, codigo_banco)
 
         return dados, nosso_numero
 
