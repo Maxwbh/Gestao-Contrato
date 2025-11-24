@@ -4,7 +4,7 @@
 # Desenvolvedor: Maxwell da Silva Oliveira
 # Empresa: M&S do Brasil LTDA
 #
-# Repositorio: https://github.com/Maxwbh/boleto_cnab_api
+# Repositorio: https://github.com/maxwbh/brcobranca
 
 FROM ruby:3.1-slim
 
@@ -17,7 +17,7 @@ RUN apt-get update -qq && \
 WORKDIR /app
 
 # Clonar repositorio customizado
-RUN git clone https://github.com/Maxwbh/boleto_cnab_api.git . && \
+RUN git clone https://github.com/maxwbh/brcobranca.git . && \
     bundle install
 
 # Definir variaveis de ambiente
