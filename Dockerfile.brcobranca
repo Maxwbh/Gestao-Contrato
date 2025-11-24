@@ -29,9 +29,10 @@ WORKDIR /app
 # Clonar repositorio da API
 RUN git clone --depth 1 https://github.com/Maxwbh/boleto_cnab_api.git .
 
-# Criar Gemfile.local com override da gem brcobranca
+# Criar Gemfile.local com override das gems customizadas
 # Bundler carrega automaticamente Gemfile.local se existir
-RUN echo "gem 'brcobranca', git: 'https://github.com/maxwbh/brcobranca.git', branch: 'master'" > Gemfile.local
+RUN echo "gem 'brcobranca', git: 'https://github.com/maxwbh/brcobranca.git', branch: 'master'" > Gemfile.local && \
+    echo "gem 'rghost', git: 'https://github.com/shairontoledo/rghost.git', branch: 'master'" >> Gemfile.local
 
 # Instalar dependencias (sem gems de dev/test para reduzir tamanho)
 RUN bundle config set --local without 'development test' && \
