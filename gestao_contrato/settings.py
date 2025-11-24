@@ -210,7 +210,8 @@ TASK_TOKEN = config('TASK_TOKEN', default=None)
 # Documentação: https://github.com/kivanio/brcobranca
 BRCOBRANCA_URL = config('BRCOBRANCA_URL', default='http://localhost:9292')
 BRCOBRANCA_TIMEOUT = config('BRCOBRANCA_TIMEOUT', default=30, cast=int)
-
+BRCOBRANCA_MAX_TENTATIVAS = 3
+BRCOBRANCA_DELAY_INICIAL = 2  # segundos
 # Configurações de Índices Econômicos (APIs)
 BCBAPI_URL = 'https://api.bcb.gov.br/dados/serie/bcdata.sgs.{}/dados'
 IPCA_SERIE_ID = '433'  # Código do IPCA no BCB
