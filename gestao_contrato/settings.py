@@ -49,6 +49,7 @@ INSTALLED_APPS = [
     'django_celery_beat',
 
     # Local apps
+    'accounts',
     'core',
     'contratos',
     'financeiro',
@@ -123,6 +124,11 @@ AUTH_PASSWORD_VALIDATORS = [
     },
 ]
 
+# Login/Logout URLs
+LOGIN_URL = 'accounts:login'
+LOGIN_REDIRECT_URL = 'core:dashboard'
+LOGOUT_REDIRECT_URL = 'accounts:login'
+
 # Internationalization
 # https://docs.djangoproject.com/en/4.2/topics/i18n/
 
@@ -186,6 +192,24 @@ TWILIO_WHATSAPP_NUMBER = config('TWILIO_WHATSAPP_NUMBER', default='')
 
 # Configurações de Notificação
 NOTIFICACAO_DIAS_ANTECEDENCIA = config('NOTIFICACAO_DIAS_ANTECEDENCIA', default=5, cast=int)
+
+# =============================================================================
+# RENDER FREE TIER - Configuração de Tarefas Agendadas
+# =============================================================================
+# Como o Celery não está disponível no Free tier, usamos endpoints HTTP
+# protegidos por token que podem ser chamados por cron jobs externos.
+# Configure um cron job em https://cron-job.org (gratuito) para chamar
+# POST /api/tasks/run-all/ com o header X-Task-Token
+TASK_TOKEN = config('TASK_TOKEN', default=None)
+
+# =============================================================================
+# BRCOBRANÇA - Configuração para Geração de Boletos
+# =============================================================================
+# BRCobrança é uma API Ruby para geração de boletos bancários.
+# Rode o container Docker: docker run -p 9292:9292 kivanio/brcobranca
+# Documentação: https://github.com/kivanio/brcobranca
+BRCOBRANCA_URL = config('BRCOBRANCA_URL', default='http://localhost:9292')
+BRCOBRANCA_TIMEOUT = config('BRCOBRANCA_TIMEOUT', default=30, cast=int)
 
 # Configurações de Índices Econômicos (APIs)
 BCBAPI_URL = 'https://api.bcb.gov.br/dados/serie/bcdata.sgs.{}/dados'
