@@ -3,335 +3,192 @@
 
 {% block title %}Parcela {{ parcela.numero_parcela }} - {{ parcela.contrato.numero_contrato }}{% endblock %}
 
+{% block extra_css %}
+<style>
+    .badge-pago { background-color: #28a745; }
+    .badge-pendente { background-color: #ffc107; color: #212529; }
+    .badge-vencida { background-color: #dc3545; }
+    .info-label { font-weight: 600; color: #6c757d; }
+    .info-value { font-size: 1.1rem; }
+    .valor-total { font-size: 1.5rem; font-weight: bold; }
+</style>
+{% endblock %}
+
 {% block content %}
 <div class="container-fluid py-4">
     <!-- Header -->
-    <div class="d-flex justify-content-between align-items-center mb-4">
-        <div>
-            <h2 class="mb-1">
-                <i class="fas fa-file-invoice-dollar text-primary me-2"></i>
-                Parcela {{ parcela.numero_parcela }}/{{ parcela.contrato.numero_parcelas }}
-            </h2>
+    <div class="row mb-4">
+        <div class="col">
             <nav aria-label="breadcrumb">
-                <ol class="breadcrumb mb-0">
+                <ol class="breadcrumb">
                     <li class="breadcrumb-item"><a href="{% url 'financeiro:listar_parcelas' %}">Parcelas</a></li>
-                    <li class="breadcrumb-item"><a href="{% url 'contratos:detalhe' parcela.contrato.pk %}">{{ parcela.contrato.numero_contrato }}</a></li>
                     <li class="breadcrumb-item active">Parcela {{ parcela.numero_parcela }}</li>
                 </ol>
             </nav>
-        </div>
-        <div>
-            <a href="{% url 'contratos:detalhe' parcela.contrato.pk %}" class="btn btn-outline-secondary">
-                <i class="fas fa-arrow-left me-1"></i> Voltar ao Contrato
-            </a>
+            <h2>
+                <i class="fas fa-file-invoice-dollar me-2"></i>
+                Parcela {{ parcela.numero_parcela }}/{{ parcela.contrato.numero_parcelas }}
+                {% if parcela.pago %}
+                    <span class="badge badge-pago">Pago</span>
+                {% elif parcela.esta_vencida %}
+                    <span class="badge badge-vencida">Vencida</span>
+                {% else %}
+                    <span class="badge badge-pendente">Pendente</span>
+                {% endif %}
+            </h2>
         </div>
     </div>
 
     <div class="row">
-        <!-- Informacoes da Parcela -->
-        <div class="col-lg-8">
-            <div class="card shadow-sm mb-4">
-                <div class="card-header bg-white">
-                    <h5 class="mb-0">
-                        <i class="fas fa-info-circle text-primary me-2"></i>
-                        Informacoes da Parcela
-                    </h5>
+        <!-- Informações da Parcela -->
+        <div class="col-md-6 mb-4">
+            <div class="card h-100">
+                <div class="card-header">
+                    <strong><i class="fas fa-info-circle me-2"></i>Informações da Parcela</strong>
                 </div>
                 <div class="card-body">
-                    <div class="row">
-                        <div class="col-md-6">
-                            <table class="table table-borderless">
-                                <tr>
-                                    <th class="text-muted" style="width: 40%;">Contrato:</th>
-                                    <td>
-                                        <a href="{% url 'contratos:detalhe' parcela.contrato.pk %}">
-                                            {{ parcela.contrato.numero_contrato }}
-                                        </a>
-                                    </td>
-                                </tr>
-                                <tr>
-                                    <th class="text-muted">Comprador:</th>
-                                    <td>{{ parcela.contrato.comprador.nome }}</td>
-                                </tr>
-                                <tr>
-                                    <th class="text-muted">Imovel:</th>
-                                    <td>{{ parcela.contrato.imovel.identificacao }}</td>
-                                </tr>
-                                <tr>
-                                    <th class="text-muted">Vencimento:</th>
-                                    <td>
-                                        {{ parcela.data_vencimento|date:"d/m/Y" }}
-                                        {% if parcela.esta_vencida and not parcela.pago %}
-                                            <span class="badge bg-danger ms-2">Vencida</span>
-                                        {% endif %}
-                                    </td>
-                                </tr>
-                            </table>
-                        </div>
-                        <div class="col-md-6">
-                            <table class="table table-borderless">
-                                <tr>
-                                    <th class="text-muted" style="width: 40%;">Valor Original:</th>
-                                    <td>R$ {{ parcela.valor_original|floatformat:2 }}</td>
-                                </tr>
-                                <tr>
-                                    <th class="text-muted">Valor Atual:</th>
-                                    <td><strong>R$ {{ parcela.valor_atual|floatformat:2 }}</strong></td>
-                                </tr>
-                                {% if parcela.valor_juros %}
-                                <tr>
-                                    <th class="text-muted">Juros:</th>
-                                    <td class="text-danger">R$ {{ parcela.valor_juros|floatformat:2 }}</td>
-                                </tr>
-                                {% endif %}
-                                {% if parcela.valor_multa %}
-                                <tr>
-                                    <th class="text-muted">Multa:</th>
-                                    <td class="text-danger">R$ {{ parcela.valor_multa|floatformat:2 }}</td>
-                                </tr>
-                                {% endif %}
-                                <tr>
-                                    <th class="text-muted">Total a Pagar:</th>
-                                    <td><strong class="text-primary fs-5">R$ {{ parcela.valor_total|floatformat:2 }}</strong></td>
-                                </tr>
-                            </table>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Status do Pagamento -->
-            {% if parcela.pago %}
-            <div class="card shadow-sm mb-4 border-success">
-                <div class="card-header bg-success text-white">
-                    <h5 class="mb-0">
-                        <i class="fas fa-check-circle me-2"></i>
-                        Pagamento Realizado
-                    </h5>
-                </div>
-                <div class="card-body">
-                    <div class="row">
-                        <div class="col-md-6">
-                            <p><strong>Data do Pagamento:</strong> {{ parcela.data_pagamento|date:"d/m/Y" }}</p>
-                            <p><strong>Valor Pago:</strong> R$ {{ parcela.valor_pago|floatformat:2 }}</p>
-                        </div>
-                        <div class="col-md-6">
-                            {% if parcela.observacoes_pagamento %}
-                            <p><strong>Observacoes:</strong> {{ parcela.observacoes_pagamento }}</p>
-                            {% endif %}
-                        </div>
-                    </div>
-                </div>
-            </div>
-            {% endif %}
-
-            <!-- Status do Boleto -->
-            {% if parcela.tem_boleto %}
-            <div class="card shadow-sm mb-4">
-                <div class="card-header bg-white d-flex justify-content-between align-items-center">
-                    <h5 class="mb-0">
-                        <i class="fas fa-barcode text-primary me-2"></i>
-                        Dados do Boleto
-                    </h5>
-                    <span class="badge bg-{% if parcela.status_boleto == 'GERADO' %}info{% elif parcela.status_boleto == 'REGISTRADO' %}success{% elif parcela.status_boleto == 'PAGO' %}success{% else %}secondary{% endif %}">
-                        {{ parcela.get_status_boleto_display }}
-                    </span>
-                </div>
-                <div class="card-body">
-                    <!-- Dados principais -->
                     <div class="row mb-3">
-                        <div class="col-md-4">
-                            <label class="form-label text-muted small mb-0">Nosso Numero</label>
-                            <div class="fw-bold">{{ parcela.nosso_numero|default:"-" }}</div>
+                        <div class="col-6">
+                            <span class="info-label">Contrato:</span><br>
+                            <span class="info-value">{{ parcela.contrato.numero_contrato }}</span>
                         </div>
-                        <div class="col-md-4">
-                            <label class="form-label text-muted small mb-0">Numero Documento</label>
-                            <div class="fw-bold">{{ parcela.numero_documento|default:"-" }}</div>
-                        </div>
-                        <div class="col-md-4">
-                            <label class="form-label text-muted small mb-0">Valor Boleto</label>
-                            <div class="fw-bold text-success">R$ {% if parcela.valor_boleto %}{{ parcela.valor_boleto|floatformat:2 }}{% else %}{{ parcela.valor_atual|floatformat:2 }}{% endif %}</div>
+                        <div class="col-6">
+                            <span class="info-label">Parcela:</span><br>
+                            <span class="info-value">{{ parcela.numero_parcela }} de {{ parcela.contrato.numero_parcelas }}</span>
                         </div>
                     </div>
-
-                    <!-- Linha Digitavel -->
-                    {% if parcela.linha_digitavel %}
-                    <div class="mb-3">
-                        <label class="form-label text-muted small mb-0">Linha Digitavel</label>
-                        <div class="input-group">
-                            <input type="text" class="form-control font-monospace" value="{{ parcela.linha_digitavel }}" id="linhaDigitavel" readonly>
-                            <button class="btn btn-outline-secondary" type="button" onclick="copiarTexto('linhaDigitavel')" title="Copiar">
-                                <i class="fas fa-copy"></i>
-                            </button>
+                    <div class="row mb-3">
+                        <div class="col-6">
+                            <span class="info-label">Data Vencimento:</span><br>
+                            <span class="info-value">{{ parcela.data_vencimento|date:"d/m/Y" }}</span>
+                        </div>
+                        <div class="col-6">
+                            <span class="info-label">Data Pagamento:</span><br>
+                            <span class="info-value">
+                                {% if parcela.data_pagamento %}
+                                    {{ parcela.data_pagamento|date:"d/m/Y" }}
+                                {% else %}
+                                    -
+                                {% endif %}
+                            </span>
                         </div>
                     </div>
-                    {% endif %}
-
-                    <!-- Codigo de Barras -->
-                    {% if parcela.codigo_barras %}
-                    <div class="mb-3">
-                        <label class="form-label text-muted small mb-0">Codigo de Barras</label>
-                        <div class="input-group">
-                            <input type="text" class="form-control font-monospace small" value="{{ parcela.codigo_barras }}" id="codigoBarras" readonly>
-                            <button class="btn btn-outline-secondary" type="button" onclick="copiarTexto('codigoBarras')" title="Copiar">
-                                <i class="fas fa-copy"></i>
-                            </button>
-                        </div>
-                    </div>
-                    {% endif %}
-
-                    <!-- PIX -->
-                    {% if parcela.pix_copia_cola %}
-                    <div class="mb-3">
-                        <label class="form-label text-muted small mb-0">
-                            <i class="fas fa-qrcode text-success me-1"></i>PIX Copia e Cola
-                        </label>
-                        <div class="input-group">
-                            <input type="text" class="form-control font-monospace small" value="{{ parcela.pix_copia_cola }}" id="pixCopiaCola" readonly>
-                            <button class="btn btn-outline-success" type="button" onclick="copiarTexto('pixCopiaCola')" title="Copiar PIX">
-                                <i class="fas fa-copy"></i>
-                            </button>
-                        </div>
-                    </div>
-                    {% endif %}
-
-                    {% if parcela.pix_qrcode %}
-                    <div class="mb-3 text-center">
-                        <label class="form-label text-muted small mb-2">QR Code PIX</label>
-                        <div>
-                            <img src="{{ parcela.pix_qrcode }}" alt="QR Code PIX" class="img-fluid" style="max-width: 150px;">
-                        </div>
-                    </div>
-                    {% endif %}
-
                     <hr>
-
-                    <!-- Acoes do boleto -->
-                    <div class="d-flex justify-content-between align-items-center">
-                        <div>
-                            {% if parcela.data_geracao_boleto %}
-                            <small class="text-muted">
-                                Gerado em: {{ parcela.data_geracao_boleto|date:"d/m/Y H:i" }}
-                            </small>
-                            {% endif %}
+                    <div class="row mb-3">
+                        <div class="col-6">
+                            <span class="info-label">Valor Original:</span><br>
+                            <span class="info-value">R$ {{ parcela.valor_original|floatformat:2 }}</span>
                         </div>
-                        <div>
-                            {% if parcela.boleto_pdf %}
-                            <a href="{% url 'financeiro:visualizar_boleto' parcela.pk %}" class="btn btn-primary btn-sm" target="_blank">
-                                <i class="fas fa-eye me-1"></i> Visualizar PDF
-                            </a>
-                            <a href="{% url 'financeiro:download_boleto' parcela.pk %}" class="btn btn-outline-primary btn-sm">
-                                <i class="fas fa-download me-1"></i> Download
-                            </a>
-                            {% else %}
-                            <form method="post" action="{% url 'financeiro:gerar_boleto' parcela.pk %}" class="d-inline">
-                                {% csrf_token %}
-                                <button type="submit" class="btn btn-warning btn-sm">
-                                    <i class="fas fa-sync me-1"></i> Gerar PDF
-                                </button>
-                            </form>
-                            {% endif %}
+                        <div class="col-6">
+                            <span class="info-label">Valor Atual:</span><br>
+                            <span class="info-value">R$ {{ parcela.valor_atual|floatformat:2 }}</span>
                         </div>
                     </div>
+                    <div class="row mb-3">
+                        <div class="col-6">
+                            <span class="info-label">Juros:</span><br>
+                            <span class="info-value text-warning">R$ {{ parcela.valor_juros|floatformat:2|default:"0.00" }}</span>
+                        </div>
+                        <div class="col-6">
+                            <span class="info-label">Multa:</span><br>
+                            <span class="info-value text-danger">R$ {{ parcela.valor_multa|floatformat:2|default:"0.00" }}</span>
+                        </div>
+                    </div>
+                    <hr>
+                    <div class="row">
+                        <div class="col-12 text-center">
+                            <span class="info-label">Valor Total a Pagar:</span><br>
+                            <span class="valor-total text-primary">R$ {{ parcela.valor_total|floatformat:2 }}</span>
+                        </div>
+                    </div>
+                    {% if parcela.pago %}
+                    <hr>
+                    <div class="row">
+                        <div class="col-12 text-center">
+                            <span class="info-label">Valor Pago:</span><br>
+                            <span class="valor-total text-success">R$ {{ parcela.valor_pago|floatformat:2 }}</span>
+                        </div>
+                    </div>
+                    {% endif %}
                 </div>
             </div>
-            {% endif %}
         </div>
 
-        <!-- Acoes -->
-        <div class="col-lg-4">
-            <div class="card shadow-sm mb-4">
-                <div class="card-header bg-white">
-                    <h5 class="mb-0">
-                        <i class="fas fa-cogs text-primary me-2"></i>
-                        Acoes
-                    </h5>
+        <!-- Informações do Contrato/Comprador -->
+        <div class="col-md-6 mb-4">
+            <div class="card h-100">
+                <div class="card-header">
+                    <strong><i class="fas fa-user me-2"></i>Comprador / Contrato</strong>
                 </div>
                 <div class="card-body">
-                    <div class="d-grid gap-2">
-                        {% if not parcela.pago %}
-                            <a href="{% url 'financeiro:registrar_pagamento' parcela.pk %}" class="btn btn-success">
-                                <i class="fas fa-dollar-sign me-2"></i>
-                                Registrar Pagamento
-                            </a>
-
-                            {% if not parcela.tem_boleto %}
-                            <form method="post" action="{% url 'financeiro:gerar_boleto' parcela.pk %}" class="d-grid">
-                                {% csrf_token %}
-                                <button type="submit" class="btn btn-primary">
-                                    <i class="fas fa-barcode me-2"></i>
-                                    Gerar Boleto
-                                </button>
-                            </form>
-                            {% endif %}
-                        {% else %}
-                            <button class="btn btn-secondary" disabled>
-                                <i class="fas fa-check me-2"></i>
-                                Parcela Paga
-                            </button>
-                        {% endif %}
-
-                        <a href="{% url 'contratos:detalhe' parcela.contrato.pk %}" class="btn btn-outline-secondary">
-                            <i class="fas fa-file-contract me-2"></i>
-                            Ver Contrato
-                        </a>
-
-                        <a href="{% url 'financeiro:listar_parcelas' %}?contrato={{ parcela.contrato.pk }}" class="btn btn-outline-info">
-                            <i class="fas fa-list me-2"></i>
-                            Todas Parcelas do Contrato
-                        </a>
+                    <div class="row mb-3">
+                        <div class="col-12">
+                            <span class="info-label">Comprador:</span><br>
+                            <span class="info-value">{{ parcela.contrato.comprador.nome }}</span>
+                        </div>
                     </div>
-                </div>
-            </div>
-
-            <!-- Resumo do Contrato -->
-            <div class="card shadow-sm">
-                <div class="card-header bg-white">
-                    <h5 class="mb-0">
-                        <i class="fas fa-file-contract text-primary me-2"></i>
-                        Resumo do Contrato
-                    </h5>
-                </div>
-                <div class="card-body">
-                    <p class="mb-2"><strong>Valor Total:</strong> R$ {{ parcela.contrato.valor_total|floatformat:2 }}</p>
-                    <p class="mb-2"><strong>Parcelas:</strong> {{ parcela.contrato.numero_parcelas }}x</p>
-                    <p class="mb-2"><strong>Entrada:</strong> R$ {{ parcela.contrato.valor_entrada|floatformat:2 }}</p>
-                    <p class="mb-0"><strong>Dia Vencimento:</strong> {{ parcela.contrato.dia_vencimento }}</p>
+                    <div class="row mb-3">
+                        <div class="col-6">
+                            <span class="info-label">CPF/CNPJ:</span><br>
+                            <span class="info-value">
+                                {% if parcela.contrato.comprador.tipo_pessoa == 'PF' %}
+                                    {{ parcela.contrato.comprador.cpf }}
+                                {% else %}
+                                    {{ parcela.contrato.comprador.cnpj }}
+                                {% endif %}
+                            </span>
+                        </div>
+                        <div class="col-6">
+                            <span class="info-label">Telefone:</span><br>
+                            <span class="info-value">{{ parcela.contrato.comprador.celular|default:parcela.contrato.comprador.telefone|default:"-" }}</span>
+                        </div>
+                    </div>
+                    <hr>
+                    <div class="row mb-3">
+                        <div class="col-12">
+                            <span class="info-label">Imóvel:</span><br>
+                            <span class="info-value">{{ parcela.contrato.imovel.identificacao }}</span>
+                        </div>
+                    </div>
+                    <div class="row mb-3">
+                        <div class="col-12">
+                            <span class="info-label">Loteamento:</span><br>
+                            <span class="info-value">{{ parcela.contrato.imovel.loteamento|default:"-" }}</span>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
     </div>
+
+    <!-- Observações -->
+    {% if parcela.observacoes %}
+    <div class="row">
+        <div class="col-12 mb-4">
+            <div class="card">
+                <div class="card-header">
+                    <strong><i class="fas fa-sticky-note me-2"></i>Observações</strong>
+                </div>
+                <div class="card-body">
+                    {{ parcela.observacoes }}
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Ações -->
+    <div class="row">
+        <div class="col-12">
+            <a href="{% url 'financeiro:listar_parcelas' %}" class="btn btn-secondary">
+                <i class="fas fa-arrow-left me-2"></i>Voltar
+            </a>
+            {% if not parcela.pago %}
+            <button class="btn btn-success" disabled title="Em desenvolvimento">
+                <i class="fas fa-dollar-sign me-2"></i>Registrar Pagamento
+            </button>
+            {% endif %}
+        </div>
+    </div>
 </div>
-{% endblock %}
-
-{% block extra_js %}
-<script>
-function copiarTexto(elementId) {
-    const elemento = document.getElementById(elementId);
-    elemento.select();
-    elemento.setSelectionRange(0, 99999);
-
-    navigator.clipboard.writeText(elemento.value).then(function() {
-        // Feedback visual
-        const btn = elemento.nextElementSibling;
-        const iconOriginal = btn.innerHTML;
-        btn.innerHTML = '<i class="fas fa-check text-success"></i>';
-        btn.classList.add('btn-success');
-        btn.classList.remove('btn-outline-secondary', 'btn-outline-success');
-
-        setTimeout(function() {
-            btn.innerHTML = iconOriginal;
-            btn.classList.remove('btn-success');
-            if (elementId === 'pixCopiaCola') {
-                btn.classList.add('btn-outline-success');
-            } else {
-                btn.classList.add('btn-outline-secondary');
-            }
-        }, 2000);
-    }).catch(function(err) {
-        console.error('Erro ao copiar: ', err);
-        alert('Erro ao copiar. Selecione o texto manualmente.');
-    });
-}
-</script>
 {% endblock %}
