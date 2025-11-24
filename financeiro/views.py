@@ -790,11 +790,15 @@ def visualizar_boleto(request, pk):
     comprador = contrato.comprador
     imobiliaria = contrato.imobiliaria
 
+    # Calcular valores para hoje
+    valores_hoje = parcela.calcular_valores_hoje()
+
     context = {
         'parcela': parcela,
         'contrato': contrato,
         'comprador': comprador,
         'imobiliaria': imobiliaria,
+        'valores_hoje': valores_hoje,
     }
 
     return render(request, 'financeiro/visualizar_boleto.html', context)
