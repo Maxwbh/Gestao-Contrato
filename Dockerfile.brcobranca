@@ -1,13 +1,24 @@
 # Dockerfile para BRCobranca API
-# Este Dockerfile usa a imagem oficial do boleto_cnab_api
+# Este Dockerfile faz build a partir do repositorio customizado
 #
 # Desenvolvedor: Maxwell da Silva Oliveira
 # Empresa: M&S do Brasil LTDA
 #
-# Documentacao: https://github.com/akretion/boleto_cnab_api
-# Docker Hub: https://hub.docker.com/r/akretion/boleto_cnab_api
+# Repositorio: https://github.com/Maxwbh/boleto_cnab_api
 
-FROM akretion/boleto_cnab_api:latest
+FROM ruby:3.1-slim
+
+# Instalar dependencias do sistema
+RUN apt-get update -qq && \
+    apt-get install -y build-essential git libpq-dev ghostscript && \
+    rm -rf /var/lib/apt/lists/*
+
+# Criar diretorio da aplicacao
+WORKDIR /app
+
+# Clonar repositorio customizado
+RUN git clone https://github.com/Maxwbh/boleto_cnab_api.git . && \
+    bundle install
 
 # Definir variaveis de ambiente
 ENV RACK_ENV=production
@@ -16,5 +27,5 @@ ENV PORT=9292
 # Expor a porta 9292 (porta padrao do BRCobranca)
 EXPOSE 9292
 
-# Usar o comando padrao da imagem base
-# A imagem ja inicia o Puma na porta 9292
+# Comando para iniciar o servidor
+CMD ["bundle", "exec", "puma", "-p", "9292", "-e", "production"]
