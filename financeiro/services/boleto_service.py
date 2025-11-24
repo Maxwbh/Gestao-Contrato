@@ -17,7 +17,7 @@ import logging
 import time
 from decimal import Decimal
 from datetime import date, timedelta
-from django.conf import settings
+from django.conf import settings 
 from django.utils import timezone
 from urllib.parse import urlencode
 
