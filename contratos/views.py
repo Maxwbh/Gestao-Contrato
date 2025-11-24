@@ -234,6 +234,20 @@ class ContratoDetailView(LoginRequiredMixin, DetailView):
             ('MANUAL', 'Percentual Manual'),
         ]
 
+        # Conta bancária da imobiliária (usa a do contrato ou a principal da imobiliária)
+        conta_bancaria = None
+        if hasattr(contrato, 'get_conta_bancaria'):
+            conta_bancaria = contrato.get_conta_bancaria()
+        if not conta_bancaria:
+            conta_bancaria = contrato.imobiliaria.contas_bancarias.filter(
+                principal=True, ativo=True
+            ).first()
+        if not conta_bancaria:
+            conta_bancaria = contrato.imobiliaria.contas_bancarias.filter(
+                ativo=True
+            ).first()
+        context['conta_bancaria'] = conta_bancaria
+
         return context
 
 

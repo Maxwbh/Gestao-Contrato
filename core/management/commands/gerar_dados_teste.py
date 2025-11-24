@@ -467,10 +467,14 @@ class Command(BaseCommand):
         return compradores
 
     def criar_contratos(self, imoveis, compradores, imobiliarias):
-        """Cria Contratos de 180 a 300 meses"""
+        """
+        Cria Contratos com parcelas até a data de hoje.
+        O número de parcelas é limitado para não ultrapassar a data atual.
+        """
         contratos = []
         compradores_disponiveis = compradores.copy()
         random.shuffle(compradores_disponiveis)
+        hoje = timezone.now().date()
 
         for i, imovel in enumerate(imoveis):
             if not compradores_disponiveis:
@@ -479,11 +483,19 @@ class Command(BaseCommand):
             comprador = compradores_disponiveis.pop()
 
             # Contratos nos últimos 24 meses
-            dias_atras = random.randint(0, 730)
-            data_contrato = timezone.now().date() - timedelta(days=dias_atras)
+            dias_atras = random.randint(60, 730)  # Mínimo 2 meses atrás
+            data_contrato = hoje - timedelta(days=dias_atras)
 
-            # 24 a 60 meses (2-5 anos) - otimizado para evitar timeout
-            numero_parcelas = random.randint(24, 60)
+            # Primeiro vencimento 30 dias após a compra
+            data_primeiro_vencimento = data_contrato + timedelta(days=30)
+
+            # Calcular quantas parcelas cabem até hoje
+            meses_desde_contrato = (hoje.year - data_primeiro_vencimento.year) * 12 + \
+                                   (hoje.month - data_primeiro_vencimento.month)
+
+            # Limitar parcelas entre 6 e o máximo que cabe até hoje
+            max_parcelas = max(6, min(meses_desde_contrato + 1, 48))
+            numero_parcelas = random.randint(min(6, max_parcelas), max_parcelas)
 
             # Valor do imóvel baseado na área
             valor_m2 = Decimal(random.randint(150, 350))
@@ -491,9 +503,6 @@ class Command(BaseCommand):
 
             # Entrada de 10% a 30%
             valor_entrada = valor_total * Decimal(random.randint(10, 30) / 100)
-
-            # Primeiro vencimento 30 dias após a compra
-            data_primeiro_vencimento = data_contrato + timedelta(days=30)
 
             contrato = Contrato.objects.create(
                 imovel=imovel,
