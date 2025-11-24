@@ -1,4 +1,5 @@
 {% extends 'base.html' %}
+{% load format_filters %}
 
 {% block title %}Contrato {{ contrato.numero_contrato }} - Gestao de Contratos{% endblock %}
 
@@ -61,10 +62,83 @@
         font-size: 0.8rem;
         color: #6c757d;
     }
+
+    /* Toast Notifications */
+    .toast-container {
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        z-index: 9999;
+    }
+    .toast-notification {
+        min-width: 300px;
+        padding: 15px 20px;
+        margin-bottom: 10px;
+        border-radius: 8px;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+        display: flex;
+        align-items: center;
+        animation: slideIn 0.3s ease-out;
+    }
+    .toast-notification.success {
+        background: linear-gradient(135deg, #28a745, #20c997);
+        color: white;
+    }
+    .toast-notification.error {
+        background: linear-gradient(135deg, #dc3545, #e74c3c);
+        color: white;
+    }
+    .toast-notification.info {
+        background: linear-gradient(135deg, #17a2b8, #0dcaf0);
+        color: white;
+    }
+    .toast-notification i {
+        font-size: 1.2rem;
+        margin-right: 12px;
+    }
+    .toast-notification .toast-close {
+        margin-left: auto;
+        cursor: pointer;
+        opacity: 0.7;
+    }
+    .toast-notification .toast-close:hover {
+        opacity: 1;
+    }
+    @keyframes slideIn {
+        from { transform: translateX(100%); opacity: 0; }
+        to { transform: translateX(0); opacity: 1; }
+    }
+    @keyframes slideOut {
+        from { transform: translateX(0); opacity: 1; }
+        to { transform: translateX(100%); opacity: 0; }
+    }
+
+    /* Botao Loading */
+    .btn-loading {
+        position: relative;
+        pointer-events: none;
+    }
+    .btn-loading .spinner-border {
+        width: 1rem;
+        height: 1rem;
+        border-width: 2px;
+    }
+
+    /* Efeito de sucesso na linha */
+    .parcela-row.boleto-gerado {
+        animation: highlightSuccess 2s ease-out;
+    }
+    @keyframes highlightSuccess {
+        0% { background-color: #d4edda; }
+        100% { background-color: transparent; }
+    }
 </style>
 {% endblock %}
 
 {% block content %}
+<!-- Toast Container -->
+<div id="toastContainer" class="toast-container"></div>
+
 <div class="row">
     <div class="col-12">
         <!-- Cabecalho -->
@@ -93,19 +167,19 @@
         <div class="row mb-4">
             <div class="col-md-3">
                 <div class="card stat-card border-primary">
-                    <div class="stat-value text-primary">R$ {{ contrato.valor_total|floatformat:2 }}</div>
+                    <div class="stat-value text-primary">{{ contrato.valor_total|moeda }}</div>
                     <div class="stat-label">Valor Total</div>
                 </div>
             </div>
             <div class="col-md-3">
                 <div class="card stat-card border-success">
-                    <div class="stat-value text-success">R$ {{ valor_pago|floatformat:2 }}</div>
+                    <div class="stat-value text-success">{{ valor_pago|moeda }}</div>
                     <div class="stat-label">Valor Pago</div>
                 </div>
             </div>
             <div class="col-md-3">
                 <div class="card stat-card border-warning">
-                    <div class="stat-value text-warning">R$ {{ saldo_devedor|floatformat:2 }}</div>
+                    <div class="stat-value text-warning">{{ saldo_devedor|moeda }}</div>
                     <div class="stat-label">Saldo Devedor</div>
                 </div>
             </div>
@@ -210,19 +284,19 @@
                     <div class="card-body">
                         <div class="info-item">
                             <div class="info-label">Valor Total</div>
-                            <div class="info-value">R$ {{ contrato.valor_total|floatformat:2 }}</div>
+                            <div class="info-value">{{ contrato.valor_total|moeda }}</div>
                         </div>
                         <div class="info-item">
                             <div class="info-label">Entrada</div>
-                            <div class="info-value">R$ {{ contrato.valor_entrada|floatformat:2 }}</div>
+                            <div class="info-value">{{ contrato.valor_entrada|moeda }}</div>
                         </div>
                         <div class="info-item">
                             <div class="info-label">Valor Financiado</div>
-                            <div class="info-value">R$ {{ contrato.valor_financiado|floatformat:2 }}</div>
+                            <div class="info-value">{{ contrato.valor_financiado|moeda }}</div>
                         </div>
                         <div class="info-item">
                             <div class="info-label">Valor Original Parcela</div>
-                            <div class="info-value">R$ {{ contrato.valor_parcela_original|floatformat:2 }}</div>
+                            <div class="info-value">{{ contrato.valor_parcela_original|moeda }}</div>
                         </div>
                     </div>
                 </div>
@@ -253,6 +327,43 @@
                         <div class="info-item">
                             <div class="info-label">Proximo Reajuste</div>
                             <div class="info-value text-warning">{{ contrato.data_proximo_reajuste|date:"d/m/Y" }}</div>
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>
+
+                <!-- Conta Bancaria da Imobiliaria -->
+                <div class="card info-card success mb-3">
+                    <div class="card-header bg-success text-white">
+                        <i class="fas fa-university"></i> Conta Bancaria
+                    </div>
+                    <div class="card-body">
+                        {% if conta_bancaria %}
+                        <div class="info-item">
+                            <div class="info-label">Banco</div>
+                            <div class="info-value">{{ conta_bancaria.get_banco_display }}</div>
+                        </div>
+                        <div class="info-item">
+                            <div class="info-label">Agencia</div>
+                            <div class="info-value">{{ conta_bancaria.agencia }}{% if conta_bancaria.agencia_dv %}-{{ conta_bancaria.agencia_dv }}{% endif %}</div>
+                        </div>
+                        <div class="info-item">
+                            <div class="info-label">Conta</div>
+                            <div class="info-value">{{ conta_bancaria.conta }}{% if conta_bancaria.conta_dv %}-{{ conta_bancaria.conta_dv }}{% endif %}</div>
+                        </div>
+                        {% if conta_bancaria.convenio %}
+                        <div class="info-item">
+                            <div class="info-label">Convenio</div>
+                            <div class="info-value">{{ conta_bancaria.convenio }}</div>
+                        </div>
+                        {% endif %}
+                        <div class="info-item">
+                            <div class="info-label">Carteira</div>
+                            <div class="info-value">{{ conta_bancaria.carteira }}</div>
+                        </div>
+                        {% else %}
+                        <div class="text-muted text-center py-2">
+                            <i class="fas fa-exclamation-circle"></i> Nenhuma conta bancaria configurada
                         </div>
                         {% endif %}
                     </div>
@@ -356,9 +467,9 @@
                                         </td>
                                         <td>{{ parcela.data_vencimento|date:"d/m/Y" }}</td>
                                         <td class="text-end">
-                                            R$ {{ parcela.valor_atual|floatformat:2 }}
+                                            {{ parcela.valor_atual|moeda }}
                                             {% if parcela.pago %}
-                                            <br><small class="text-muted">Pago: R$ {{ parcela.valor_pago|floatformat:2 }}</small>
+                                            <br><small class="text-muted">Pago: {{ parcela.valor_pago|moeda }}</small>
                                             {% endif %}
                                         </td>
                                         <td class="text-center">
@@ -392,17 +503,17 @@
                                             <div class="btn-group btn-group-sm">
                                                 {% if not parcela.pago %}
                                                     {% if parcela.tem_boleto %}
-                                                        <a href="{% url 'financeiro:visualizar_boleto' parcela.pk %}"
-                                                           class="btn btn-outline-primary" title="Ver Boleto">
+                                                        <button type="button" class="btn btn-outline-primary"
+                                                                onclick="abrirModalBoleto({{ parcela.pk }})" title="Ver Boleto">
                                                             <i class="fas fa-eye"></i>
-                                                        </a>
+                                                        </button>
                                                         <button type="button" class="btn btn-outline-warning"
-                                                                onclick="regenerarBoleto({{ parcela.pk }})" title="Atualizar Boleto">
+                                                                onclick="regenerarBoleto({{ parcela.pk }}, this)" title="Atualizar Boleto">
                                                             <i class="fas fa-sync"></i>
                                                         </button>
                                                     {% else %}
                                                         <button type="button" class="btn btn-outline-success"
-                                                                onclick="gerarBoleto({{ parcela.pk }})" title="Gerar Boleto">
+                                                                onclick="gerarBoleto({{ parcela.pk }}, this)" title="Gerar Boleto">
                                                             <i class="fas fa-barcode"></i>
                                                         </button>
                                                     {% endif %}
@@ -658,6 +769,29 @@
     </div>
 </div>
 
+<!-- Modal de Visualizacao do Boleto -->
+<div class="modal fade" id="modalBoleto" tabindex="-1">
+    <div class="modal-dialog modal-xl">
+        <div class="modal-content">
+            <div class="modal-header bg-primary text-white">
+                <h5 class="modal-title">
+                    <i class="fas fa-barcode"></i> Dados do Boleto
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body p-0">
+                <iframe id="iframeBoleto" style="width: 100%; height: 70vh; border: none;"></iframe>
+            </div>
+            <div class="modal-footer">
+                <a id="btnDownloadBoleto" href="#" class="btn btn-primary" target="_blank">
+                    <i class="fas fa-download"></i> Download PDF
+                </a>
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Fechar</button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <!-- Modal de Reajuste Manual -->
 <div class="modal fade" id="modalReajuste" tabindex="-1">
     <div class="modal-dialog">
@@ -764,8 +898,57 @@ function confirmarCancelamento() {
 
 // ============ FUNCOES DE BOLETO ============
 
-function gerarBoleto(parcelaId) {
-    if (!confirm('Deseja gerar o boleto para esta parcela?')) return;
+function abrirModalBoleto(parcelaId) {
+    var iframe = document.getElementById('iframeBoleto');
+    var btnDownload = document.getElementById('btnDownloadBoleto');
+
+    // Configurar URLs
+    var urlVisualizar = '/financeiro/parcelas/' + parcelaId + '/boleto/visualizar/';
+    var urlDownload = '/financeiro/parcelas/' + parcelaId + '/boleto/download/';
+
+    // Carregar no iframe
+    iframe.src = urlVisualizar;
+    btnDownload.href = urlDownload;
+
+    // Abrir modal
+    new bootstrap.Modal(document.getElementById('modalBoleto')).show();
+}
+
+// ============ FUNCOES DE TOAST ============
+
+function showToast(message, type = 'success', duration = 4000) {
+    var container = document.getElementById('toastContainer');
+    var toast = document.createElement('div');
+    toast.className = 'toast-notification ' + type;
+
+    var icon = type === 'success' ? 'fa-check-circle' :
+               type === 'error' ? 'fa-exclamation-circle' : 'fa-info-circle';
+
+    toast.innerHTML = '<i class="fas ' + icon + '"></i>' +
+                      '<span>' + message + '</span>' +
+                      '<span class="toast-close" onclick="this.parentElement.remove()"><i class="fas fa-times"></i></span>';
+
+    container.appendChild(toast);
+
+    setTimeout(function() {
+        toast.style.animation = 'slideOut 0.3s ease-out forwards';
+        setTimeout(function() { toast.remove(); }, 300);
+    }, duration);
+}
+
+// ============ FUNCOES DE BOLETO ============
+
+function gerarBoleto(parcelaId, btn) {
+    // Encontrar o botao se nao foi passado
+    if (!btn) {
+        btn = document.querySelector('button[onclick*="gerarBoleto(' + parcelaId + ')"]');
+    }
+
+    // Mostrar loading no botao
+    var originalHtml = btn.innerHTML;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
+    btn.classList.add('btn-loading');
+    btn.disabled = true;
 
     fetch('/financeiro/parcelas/' + parcelaId + '/boleto/gerar/', {
         method: 'POST',
@@ -777,17 +960,61 @@ function gerarBoleto(parcelaId) {
     .then(response => response.json())
     .then(data => {
         if (data.sucesso) {
-            alert('Boleto gerado com sucesso!\nNosso Numero: ' + data.nosso_numero);
-            location.reload();
+            showToast('Boleto gerado com sucesso! Nosso Numero: ' + data.nosso_numero, 'success');
+
+            // Atualizar a linha da parcela
+            var row = btn.closest('tr');
+            if (row) {
+                row.classList.add('boleto-gerado');
+
+                // Atualizar coluna de boleto
+                var boletoCol = row.querySelector('td:nth-child(4)');
+                if (boletoCol) {
+                    boletoCol.innerHTML = '<span class="badge bg-success" title="Boleto gerado"><i class="fas fa-barcode"></i></span>';
+                }
+
+                // Atualizar botoes de acao
+                var acoesCol = row.querySelector('td:last-child .btn-group');
+                if (acoesCol) {
+                    acoesCol.innerHTML =
+                        '<button type="button" class="btn btn-outline-primary" onclick="abrirModalBoleto(' + parcelaId + ')" title="Ver Boleto"><i class="fas fa-eye"></i></button>' +
+                        '<button type="button" class="btn btn-outline-warning" onclick="regenerarBoleto(' + parcelaId + ', this)" title="Atualizar Boleto"><i class="fas fa-sync"></i></button>' +
+                        '<button type="button" class="btn btn-outline-success" onclick="abrirModalPagamento(' + parcelaId + ')" title="Registrar Pagamento"><i class="fas fa-dollar-sign"></i></button>';
+                }
+            }
+
+            // Abrir boleto em popup modal apos um pequeno delay
+            setTimeout(function() {
+                abrirModalBoleto(parcelaId);
+            }, 500);
+
         } else {
-            alert('Erro ao gerar boleto: ' + data.erro);
+            showToast('Erro ao gerar boleto: ' + data.erro, 'error', 6000);
+            // Restaurar botao
+            btn.innerHTML = originalHtml;
+            btn.classList.remove('btn-loading');
+            btn.disabled = false;
         }
     })
-    .catch(error => alert('Erro de conexao: ' + error));
+    .catch(error => {
+        showToast('Erro de conexao: ' + error, 'error', 6000);
+        btn.innerHTML = originalHtml;
+        btn.classList.remove('btn-loading');
+        btn.disabled = false;
+    });
 }
 
-function regenerarBoleto(parcelaId) {
-    if (!confirm('Deseja regenerar/atualizar o boleto desta parcela?')) return;
+function regenerarBoleto(parcelaId, btn) {
+    // Encontrar o botao se nao foi passado
+    if (!btn) {
+        btn = document.querySelector('button[onclick*="regenerarBoleto(' + parcelaId + ')"]');
+    }
+
+    // Mostrar loading no botao
+    var originalHtml = btn.innerHTML;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
+    btn.classList.add('btn-loading');
+    btn.disabled = true;
 
     fetch('/financeiro/parcelas/' + parcelaId + '/boleto/gerar/', {
         method: 'POST',
@@ -800,13 +1027,37 @@ function regenerarBoleto(parcelaId) {
     .then(response => response.json())
     .then(data => {
         if (data.sucesso) {
-            alert('Boleto atualizado com sucesso!');
-            location.reload();
+            showToast('Boleto atualizado com sucesso!', 'success');
+
+            // Efeito visual na linha
+            var row = btn.closest('tr');
+            if (row) {
+                row.classList.add('boleto-gerado');
+            }
+
+            // Restaurar botao
+            btn.innerHTML = originalHtml;
+            btn.classList.remove('btn-loading');
+            btn.disabled = false;
+
+            // Abrir boleto em popup modal
+            setTimeout(function() {
+                abrirModalBoleto(parcelaId);
+            }, 500);
+
         } else {
-            alert('Erro ao atualizar boleto: ' + data.erro);
+            showToast('Erro ao atualizar boleto: ' + data.erro, 'error', 6000);
+            btn.innerHTML = originalHtml;
+            btn.classList.remove('btn-loading');
+            btn.disabled = false;
         }
     })
-    .catch(error => alert('Erro de conexao: ' + error));
+    .catch(error => {
+        showToast('Erro de conexao: ' + error, 'error', 6000);
+        btn.innerHTML = originalHtml;
+        btn.classList.remove('btn-loading');
+        btn.disabled = false;
+    });
 }
 
 // ============ FUNCOES DE PAGAMENTO ============
