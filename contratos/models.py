@@ -468,22 +468,33 @@ class Contrato(TimeStampedModel):
         if not self.parcelas.exists():
             self.gerar_parcelas()
 
-    def gerar_parcelas(self, gerar_boletos=False, conta_bancaria=None):
+    def gerar_parcelas(self, ate_mes_atual=False):
         """
-        Gera todas as parcelas do contrato.
+        Gera as parcelas do contrato
 
         Args:
-            gerar_boletos: Se True, gera boletos para cada parcela
-            conta_bancaria: Conta bancária para geração de boletos (opcional)
+            ate_mes_atual: Se True, gera parcelas apenas até o mês atual (útil para dados de teste)
         """
         from financeiro.models import Parcela
+        from django.utils import timezone
 
         data_vencimento = self.data_primeiro_vencimento
         valor_parcela = self.valor_parcela_original
         parcelas_criadas = []
 
+        # Data limite: último dia do mês atual
+        if ate_mes_atual:
+            hoje = timezone.now().date()
+            data_limite = hoje.replace(day=1) + relativedelta(months=1) - relativedelta(days=1)
+        else:
+            data_limite = None
+
         for numero in range(1, self.numero_parcelas + 1):
-            parcela = Parcela.objects.create(
+            # Se ate_mes_atual=True, parar quando vencimento ultrapassar o mês atual
+            if data_limite and data_vencimento > data_limite:
+                break
+
+            Parcela.objects.create(
                 contrato=self,
                 numero_parcela=numero,
                 data_vencimento=data_vencimento,
