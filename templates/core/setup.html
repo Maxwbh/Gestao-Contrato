@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Setup - Gestão de Contratos</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
         body {
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
@@ -23,211 +24,331 @@
             border-radius: 20px;
             font-weight: bold;
         }
-        .status-ok {
-            background-color: #28a745;
-            color: white;
-        }
-        .status-error {
-            background-color: #dc3545;
-            color: white;
-        }
+        .status-ok { background-color: #28a745; color: white; }
+        .status-error { background-color: #dc3545; color: white; }
         .btn-setup {
             padding: 1rem 2rem;
             font-size: 1.1rem;
             border-radius: 10px;
             margin: 0.5rem;
         }
-        #output {
-            background-color: #2d3748;
-            color: #48bb78;
-            padding: 1rem;
-            border-radius: 8px;
-            font-family: 'Courier New', monospace;
+        h1 { color: #667eea; }
+
+        /* Progress Modal Styles */
+        .progress-modal .modal-content {
+            border-radius: 20px;
+            border: none;
+            overflow: hidden;
+        }
+        .progress-header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 1.5rem;
+        }
+        .step-list {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+        }
+        .step-item {
+            padding: 0.75rem 1rem;
+            border-bottom: 1px solid #eee;
+            display: flex;
+            align-items: center;
+            transition: all 0.3s ease;
+        }
+        .step-item:last-child { border-bottom: none; }
+        .step-item.pending { color: #6c757d; }
+        .step-item.active {
+            background: #f8f9fa;
+            color: #667eea;
+            font-weight: 600;
+        }
+        .step-item.completed { color: #28a745; }
+        .step-item.error { color: #dc3545; }
+        .step-icon {
+            width: 30px;
+            height: 30px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-right: 1rem;
             font-size: 0.9rem;
-            max-height: 400px;
-            overflow-y: auto;
-            display: none;
         }
-        .spinner {
-            display: none;
+        .step-item.pending .step-icon { background: #e9ecef; color: #6c757d; }
+        .step-item.active .step-icon { background: #667eea; color: white; }
+        .step-item.completed .step-icon { background: #28a745; color: white; }
+        .step-item.error .step-icon { background: #dc3545; color: white; }
+
+        /* Result Cards */
+        .result-card {
+            text-align: center;
+            padding: 1rem;
+            border-radius: 10px;
+            background: #f8f9fa;
+            transition: transform 0.2s;
         }
-        h1 {
+        .result-card:hover { transform: translateY(-3px); }
+        .result-card .number {
+            font-size: 2rem;
+            font-weight: bold;
             color: #667eea;
         }
+        .result-card .label {
+            font-size: 0.85rem;
+            color: #6c757d;
+        }
+        .result-card.success { border-left: 4px solid #28a745; }
+        .result-card.info { border-left: 4px solid #17a2b8; }
+        .result-card.warning { border-left: 4px solid #ffc107; }
+
+        /* Pulse Animation */
+        @keyframes pulse {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.05); }
+            100% { transform: scale(1); }
+        }
+        .pulse { animation: pulse 1s infinite; }
+
+        /* Spinner */
+        .spinner-grow-sm { width: 0.75rem; height: 0.75rem; }
     </style>
 </head>
 <body>
+    {% csrf_token %}
     <div class="container">
         <div class="row justify-content-center">
             <div class="col-md-10">
                 <div class="setup-card text-center">
-                    <h1>🚀 Setup do Sistema</h1>
+                    <h1><i class="fas fa-rocket me-2"></i>Setup do Sistema</h1>
                     <p class="lead">Configuração Inicial do Sistema de Gestão de Contratos</p>
                     <p class="text-muted">Desenvolvido por Maxwell da Silva Oliveira</p>
                 </div>
 
                 <div class="setup-card">
-                    <h3>📊 Status do Sistema</h3>
+                    <h3><i class="fas fa-chart-bar me-2 text-primary"></i>Status do Sistema</h3>
                     <hr>
                     <div class="row">
                         <div class="col-md-6">
                             <p><strong>Banco de Dados:</strong>
                                 <span class="status-badge {% if db_ok %}status-ok{% else %}status-error{% endif %}">
-                                    {% if db_ok %}✅ Conectado{% else %}❌ Erro{% endif %}
+                                    {% if db_ok %}<i class="fas fa-check me-1"></i>Conectado{% else %}<i class="fas fa-times me-1"></i>Erro{% endif %}
                                 </span>
                             </p>
                         </div>
                         <div class="col-md-6">
                             <p><strong>Tabelas:</strong>
                                 <span class="status-badge {% if has_tables %}status-ok{% else %}status-error{% endif %}">
-                                    {% if has_tables %}✅ Criadas{% else %}❌ Não criadas{% endif %}
+                                    {% if has_tables %}<i class="fas fa-check me-1"></i>Criadas{% else %}<i class="fas fa-times me-1"></i>Não criadas{% endif %}
                                 </span>
                             </p>
                         </div>
                         <div class="col-md-6">
                             <p><strong>Superusuário:</strong>
                                 <span class="status-badge {% if total_users > 0 %}status-ok{% else %}status-error{% endif %}">
-                                    {% if total_users > 0 %}✅ {{ total_users }} usuário(s){% else %}❌ Nenhum{% endif %}
+                                    {% if total_users > 0 %}<i class="fas fa-check me-1"></i>{{ total_users }} usuário(s){% else %}<i class="fas fa-times me-1"></i>Nenhum{% endif %}
                                 </span>
                             </p>
                         </div>
                         <div class="col-md-6">
                             <p><strong>Dados de Teste:</strong>
                                 <span class="status-badge {% if total_contabilidades > 0 %}status-ok{% else %}status-error{% endif %}">
-                                    {% if total_contabilidades > 0 %}✅ {{ total_contabilidades }} contabilidade(s){% else %}❌ Vazio{% endif %}
+                                    {% if total_contabilidades > 0 %}<i class="fas fa-check me-1"></i>{{ total_contabilidades }} contabilidade(s){% else %}<i class="fas fa-times me-1"></i>Vazio{% endif %}
+                                </span>
+                            </p>
+                        </div>
+                        <div class="col-md-6">
+                            <p><strong>Imobiliárias:</strong>
+                                <span class="status-badge {% if total_imobiliarias > 0 %}status-ok{% else %}status-error{% endif %}">
+                                    {% if total_imobiliarias > 0 %}<i class="fas fa-check me-1"></i>{{ total_imobiliarias }} imobiliária(s){% else %}<i class="fas fa-times me-1"></i>Nenhuma{% endif %}
+                                </span>
+                            </p>
+                        </div>
+                        <div class="col-md-6">
+                            <p><strong>Contas Bancárias:</strong>
+                                <span class="status-badge {% if total_contas_bancarias > 0 %}status-ok{% else %}status-error{% endif %}">
+                                    {% if total_contas_bancarias > 0 %}<i class="fas fa-check me-1"></i>{{ total_contas_bancarias }} conta(s){% else %}<i class="fas fa-times me-1"></i>Nenhuma{% endif %}
                                 </span>
                             </p>
                         </div>
                     </div>
+                    {% if total_imobiliarias > 0 and total_contas_bancarias == 0 %}
+                    <div class="alert alert-warning mt-3">
+                        <i class="fas fa-exclamation-triangle me-2"></i>
+                        <strong>Atenção:</strong> Existem imobiliárias sem contas bancárias configuradas.
+                        Para gerar boletos, é necessário ter pelo menos uma conta bancária principal.
+                        <br><strong>Execute "Gerar Dados" com a opção "Limpar antes" marcada.</strong>
+                    </div>
+                    {% endif %}
                 </div>
 
                 <div class="setup-card">
-                    <h3>⚙️ Ações de Setup</h3>
+                    <h3><i class="fas fa-database me-2 text-success"></i>Geração de Dados de Teste</h3>
                     <hr>
 
-                    <div class="row">
-                        <div class="col-md-12 text-center mb-4">
-                            <h5>Setup Completo (Recomendado)</h5>
-                            <p>Executa migrations, cria superuser e gera dados de teste</p>
-                            <button class="btn btn-primary btn-setup btn-lg" onclick="executarSetupCompleto()">
-                                🎯 Setup Completo
-                            </button>
-                        </div>
-                    </div>
+                    <div class="row justify-content-center">
+                        <div class="col-md-8">
+                            <div class="card border-0 shadow-sm">
+                                <div class="card-body text-center p-4">
+                                    <i class="fas fa-magic fa-3x text-primary mb-3"></i>
+                                    <h5>Gerar Massa de Dados</h5>
+                                    <p class="text-muted">
+                                        Cria automaticamente: Contabilidade, Imobiliárias, Contas Bancárias,
+                                        Imóveis, Compradores, Contratos, Parcelas e Índices de Reajuste.
+                                    </p>
 
-                    <hr>
-
-                    <div class="row">
-                        <div class="col-md-4 text-center">
-                            <h6>Migrations</h6>
-                            <button class="btn btn-info btn-setup" onclick="executarAcao('migrations')">
-                                📊 Executar Migrations
-                            </button>
-                        </div>
-                        <div class="col-md-4 text-center">
-                            <h6>Superusuário</h6>
-                            <button class="btn btn-success btn-setup" onclick="executarAcao('superuser')">
-                                👤 Criar Admin
-                            </button>
-                        </div>
-                        <div class="col-md-4 text-center">
-                            <h6>Dados de Teste</h6>
-                            <button class="btn btn-warning btn-setup" onclick="executarAcao('dados')">
-                                📋 Gerar Dados
-                            </button>
-                        </div>
-                    </div>
-
-                    <div class="text-center mt-4">
-                        <div class="spinner spinner-border text-primary" role="status">
-                            <span class="visually-hidden">Processando...</span>
-                        </div>
-                    </div>
-
-                    <div id="output" class="mt-4"></div>
-                </div>
-
-                <div class="setup-card">
-                    <h3>📡 API de Dados de Teste</h3>
-                    <hr>
-                    <p>Use o endpoint abaixo para gerar ou consultar dados de teste via API:</p>
-
-                    <div class="row">
-                        <div class="col-md-4">
-                            <div class="card mb-3">
-                                <div class="card-header bg-info text-white">
-                                    <strong>GET</strong> /api/gerar-dados-teste/
-                                </div>
-                                <div class="card-body">
-                                    <p class="card-text">Retorna estatísticas dos dados existentes.</p>
-                                    <button class="btn btn-sm btn-outline-info" onclick="consultarDados()">
-                                        Consultar Dados
-                                    </button>
-                                </div>
-                            </div>
-                        </div>
-                        <div class="col-md-4">
-                            <div class="card mb-3">
-                                <div class="card-header bg-success text-white">
-                                    <strong>POST</strong> /api/gerar-dados-teste/
-                                </div>
-                                <div class="card-body">
-                                    <p class="card-text">Gera dados de teste (contratos, parcelas, índices).</p>
-                                    <div class="form-check mb-2">
-                                        <input class="form-check-input" type="checkbox" id="limparDados">
-                                        <label class="form-check-label" for="limparDados">
-                                            Limpar antes
+                                    <div class="form-check form-switch d-flex justify-content-center mb-3">
+                                        <input class="form-check-input me-2" type="checkbox" id="limparAntes" checked>
+                                        <label class="form-check-label" for="limparAntes">
+                                            <i class="fas fa-trash-alt me-1 text-danger"></i>
+                                            Limpar dados existentes antes
                                         </label>
                                     </div>
-                                    <button class="btn btn-sm btn-success" onclick="gerarDadosAPI()">
-                                        Gerar via API
-                                    </button>
-                                </div>
-                            </div>
-                        </div>
-                        <div class="col-md-4">
-                            <div class="card mb-3">
-                                <div class="card-header bg-danger text-white">
-                                    <strong>DELETE</strong> /api/limpar-dados-teste/
-                                </div>
-                                <div class="card-body">
-                                    <p class="card-text">Excluir Dados de Teste do sistema.</p>
-                                    <button class="btn btn-sm btn-danger" onclick="limparDadosAPI()">
-                                        Excluir Dados
+
+                                    <button class="btn btn-primary btn-lg px-5" onclick="iniciarGeracaoDados()">
+                                        <i class="fas fa-play me-2"></i>
+                                        Iniciar Geração
                                     </button>
                                 </div>
                             </div>
                         </div>
                     </div>
+                </div>
 
-                    <div id="apiOutput" class="mt-3" style="display: none;">
-                        <pre style="background: #2d3748; color: #48bb78; padding: 1rem; border-radius: 8px; max-height: 300px; overflow-y: auto;"></pre>
+                <div class="setup-card">
+                    <h3><i class="fas fa-cogs me-2 text-info"></i>Outras Ações</h3>
+                    <hr>
+                    <div class="row">
+                        <div class="col-md-4 text-center mb-3">
+                            <button class="btn btn-outline-info btn-setup w-100" onclick="executarAcao('migrations')">
+                                <i class="fas fa-database me-2"></i>Migrations
+                            </button>
+                        </div>
+                        <div class="col-md-4 text-center mb-3">
+                            <button class="btn btn-outline-success btn-setup w-100" onclick="executarAcao('superuser')">
+                                <i class="fas fa-user-shield me-2"></i>Criar Admin
+                            </button>
+                        </div>
+                        <div class="col-md-4 text-center mb-3">
+                            <button class="btn btn-outline-danger btn-setup w-100" onclick="limparDadosAPI()">
+                                <i class="fas fa-trash me-2"></i>Limpar Dados
+                            </button>
+                        </div>
                     </div>
                 </div>
 
                 <div class="setup-card text-center">
-                    <h5>📚 Próximos Passos</h5>
+                    <h5><i class="fas fa-arrow-right me-2"></i>Próximos Passos</h5>
                     <div class="d-grid gap-2 d-md-flex justify-content-md-center">
                         <a href="/admin/" class="btn btn-primary">
-                            🔐 Acessar Admin
+                            <i class="fas fa-lock me-1"></i> Acessar Admin
                         </a>
                         <a href="/" class="btn btn-success">
-                            🏠 Ir para Home
+                            <i class="fas fa-home me-1"></i> Ir para Home
                         </a>
                         <button class="btn btn-secondary" onclick="location.reload()">
-                            🔄 Atualizar Status
+                            <i class="fas fa-sync me-1"></i> Atualizar
                         </button>
                     </div>
                     <p class="mt-3 text-muted small">
-                        <strong>Credenciais padrão:</strong> admin / admin123<br>
-                        <strong>IMPORTANTE:</strong> Altere a senha após o primeiro login!
+                        <strong>Credenciais:</strong> admin / admin123
                     </p>
                 </div>
 
                 <div class="text-center text-white mt-4">
                     <p>Sistema de Gestão de Contratos de Venda de Imóveis</p>
-                    <p>Desenvolvido por <strong>Maxwell da Silva Oliveira</strong></p>
                     <p>M&S do Brasil LTDA | <a href="https://msbrasil.inf.br" class="text-white">msbrasil.inf.br</a></p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal de Progresso -->
+    <div class="modal fade progress-modal" id="progressModal" tabindex="-1" data-bs-backdrop="static" data-bs-keyboard="false">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="progress-header text-center">
+                    <div id="progressIcon">
+                        <i class="fas fa-cog fa-spin fa-3x mb-3"></i>
+                    </div>
+                    <h4 id="progressTitle" class="mb-0">Gerando Dados de Teste</h4>
+                    <p id="progressSubtitle" class="mb-0 opacity-75 small">Aguarde...</p>
+                </div>
+
+                <div class="modal-body p-0">
+                    <!-- Progress Bar -->
+                    <div class="px-4 pt-3">
+                        <div class="progress" style="height: 8px;">
+                            <div id="progressBar" class="progress-bar progress-bar-striped progress-bar-animated bg-primary" style="width: 0%"></div>
+                        </div>
+                        <div class="d-flex justify-content-between mt-1">
+                            <small id="progressPercent" class="text-muted">0%</small>
+                            <small id="progressTime" class="text-muted">Calculando...</small>
+                        </div>
+                    </div>
+
+                    <!-- Steps List -->
+                    <ul class="step-list mt-3" id="stepsList">
+                        <li class="step-item pending" data-step="limpar">
+                            <span class="step-icon"><i class="fas fa-trash"></i></span>
+                            <span>Limpando dados existentes...</span>
+                        </li>
+                        <li class="step-item pending" data-step="contabilidade">
+                            <span class="step-icon"><i class="fas fa-building"></i></span>
+                            <span>Criando Contabilidade...</span>
+                        </li>
+                        <li class="step-item pending" data-step="imobiliarias">
+                            <span class="step-icon"><i class="fas fa-home"></i></span>
+                            <span>Criando Imobiliárias...</span>
+                        </li>
+                        <li class="step-item pending" data-step="contas">
+                            <span class="step-icon"><i class="fas fa-university"></i></span>
+                            <span>Criando Contas Bancárias...</span>
+                        </li>
+                        <li class="step-item pending" data-step="imoveis">
+                            <span class="step-icon"><i class="fas fa-map-marked-alt"></i></span>
+                            <span>Criando Imóveis (Lotes e Terrenos)...</span>
+                        </li>
+                        <li class="step-item pending" data-step="compradores">
+                            <span class="step-icon"><i class="fas fa-users"></i></span>
+                            <span>Criando Compradores...</span>
+                        </li>
+                        <li class="step-item pending" data-step="contratos">
+                            <span class="step-icon"><i class="fas fa-file-contract"></i></span>
+                            <span>Criando Contratos e Parcelas...</span>
+                        </li>
+                        <li class="step-item pending" data-step="pagamentos">
+                            <span class="step-icon"><i class="fas fa-dollar-sign"></i></span>
+                            <span>Registrando Pagamentos...</span>
+                        </li>
+                        <li class="step-item pending" data-step="indices">
+                            <span class="step-icon"><i class="fas fa-chart-line"></i></span>
+                            <span>Gerando Índices de Reajuste...</span>
+                        </li>
+                    </ul>
+                </div>
+
+                <!-- Result Section (hidden initially) -->
+                <div id="resultSection" class="modal-body d-none">
+                    <div class="text-center mb-4">
+                        <i id="resultIcon" class="fas fa-check-circle fa-4x text-success mb-3"></i>
+                        <h4 id="resultTitle">Dados Gerados com Sucesso!</h4>
+                        <p id="resultMessage" class="text-muted">Todos os dados foram criados corretamente.</p>
+                    </div>
+
+                    <div class="row g-2" id="resultCards">
+                        <!-- Cards will be inserted here -->
+                    </div>
+                </div>
+
+                <div class="modal-footer border-0" id="progressFooter">
+                    <button type="button" class="btn btn-secondary d-none" id="btnCancelar" data-bs-dismiss="modal">
+                        <i class="fas fa-times me-1"></i> Fechar
+                    </button>
+                    <button type="button" class="btn btn-primary d-none" id="btnConcluir" onclick="location.reload()">
+                        <i class="fas fa-check me-1"></i> Concluir
+                    </button>
                 </div>
             </div>
         </div>
@@ -235,204 +356,257 @@
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script>
-        function mostrarSpinner(mostrar) {
-            const spinner = document.querySelector('.spinner');
-            if (mostrar) {
-                spinner.style.display = 'block';
+        // CSRF Token
+        function getCookie(name) {
+            let cookieValue = null;
+            if (document.cookie && document.cookie !== '') {
+                const cookies = document.cookie.split(';');
+                for (let i = 0; i < cookies.length; i++) {
+                    const cookie = cookies[i].trim();
+                    if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                        cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                        break;
+                    }
+                }
+            }
+            return cookieValue;
+        }
+        const csrftoken = getCookie('csrftoken');
+
+        let progressModal;
+        let startTime;
+
+        document.addEventListener('DOMContentLoaded', function() {
+            progressModal = new bootstrap.Modal(document.getElementById('progressModal'));
+        });
+
+        function resetModal() {
+            document.getElementById('progressBar').style.width = '0%';
+            document.getElementById('progressPercent').textContent = '0%';
+            document.getElementById('progressTime').textContent = 'Calculando...';
+            document.getElementById('progressIcon').innerHTML = '<i class="fas fa-cog fa-spin fa-3x mb-3"></i>';
+            document.getElementById('progressTitle').textContent = 'Gerando Dados de Teste';
+            document.getElementById('progressSubtitle').textContent = 'Aguarde...';
+            document.getElementById('resultSection').classList.add('d-none');
+            document.getElementById('stepsList').parentElement.classList.remove('d-none');
+            document.getElementById('btnCancelar').classList.add('d-none');
+            document.getElementById('btnConcluir').classList.add('d-none');
+
+            document.querySelectorAll('.step-item').forEach(item => {
+                item.classList.remove('active', 'completed', 'error');
+                item.classList.add('pending');
+            });
+        }
+
+        function updateStep(stepName, status) {
+            const step = document.querySelector(`[data-step="${stepName}"]`);
+            if (step) {
+                step.classList.remove('pending', 'active', 'completed', 'error');
+                step.classList.add(status);
+
+                const icon = step.querySelector('.step-icon i');
+                if (status === 'active') {
+                    icon.className = 'fas fa-spinner fa-spin';
+                } else if (status === 'completed') {
+                    icon.className = 'fas fa-check';
+                } else if (status === 'error') {
+                    icon.className = 'fas fa-times';
+                }
+            }
+        }
+
+        function updateProgress(percent) {
+            document.getElementById('progressBar').style.width = percent + '%';
+            document.getElementById('progressPercent').textContent = percent + '%';
+
+            if (startTime && percent > 0) {
+                const elapsed = (Date.now() - startTime) / 1000;
+                const estimated = (elapsed / percent) * (100 - percent);
+                if (estimated > 0 && percent < 100) {
+                    document.getElementById('progressTime').textContent = `~${Math.ceil(estimated)}s restantes`;
+                } else {
+                    document.getElementById('progressTime').textContent = '';
+                }
+            }
+        }
+
+        function showResult(success, data) {
+            document.getElementById('stepsList').parentElement.classList.add('d-none');
+            document.getElementById('resultSection').classList.remove('d-none');
+
+            const resultIcon = document.getElementById('resultIcon');
+            const resultTitle = document.getElementById('resultTitle');
+            const resultMessage = document.getElementById('resultMessage');
+            const resultCards = document.getElementById('resultCards');
+
+            if (success) {
+                resultIcon.className = 'fas fa-check-circle fa-4x text-success mb-3';
+                resultTitle.textContent = 'Dados Gerados com Sucesso!';
+                resultMessage.textContent = 'Todos os dados de teste foram criados.';
+                document.getElementById('progressIcon').innerHTML = '<i class="fas fa-check-circle fa-3x mb-3"></i>';
+                document.getElementById('progressTitle').textContent = 'Concluído!';
+                document.getElementById('progressSubtitle').textContent = 'Geração finalizada com sucesso';
+
+                // Build result cards
+                const stats = data.estatisticas || data;
+                resultCards.innerHTML = `
+                    <div class="col-4"><div class="result-card success"><div class="number">${stats.contabilidades || 1}</div><div class="label">Contabilidade</div></div></div>
+                    <div class="col-4"><div class="result-card info"><div class="number">${stats.imobiliarias || 2}</div><div class="label">Imobiliárias</div></div></div>
+                    <div class="col-4"><div class="result-card info"><div class="number">${stats.contas_bancarias || 4}</div><div class="label">Contas</div></div></div>
+                    <div class="col-4"><div class="result-card info"><div class="number">${stats.imoveis || 65}</div><div class="label">Imóveis</div></div></div>
+                    <div class="col-4"><div class="result-card info"><div class="number">${stats.compradores || 60}</div><div class="label">Compradores</div></div></div>
+                    <div class="col-4"><div class="result-card success"><div class="number">${stats.contratos || 60}</div><div class="label">Contratos</div></div></div>
+                    <div class="col-6"><div class="result-card warning"><div class="number">${stats.parcelas || 0}</div><div class="label">Parcelas</div></div></div>
+                    <div class="col-6"><div class="result-card info"><div class="number">${stats.indices || 252}</div><div class="label">Índices</div></div></div>
+                `;
             } else {
-                spinner.style.display = 'none';
-            }
-        }
-
-        function mostrarOutput(mensagens) {
-            const output = document.getElementById('output');
-            output.style.display = 'block';
-            output.innerHTML = mensagens.map(m => `<div>${m}</div>`).join('');
-            output.scrollTop = output.scrollHeight;
-        }
-
-        function executarSetupCompleto() {
-            if (!confirm('Isso executará migrations, criará superuser e gerará dados de teste. Continuar?')) {
-                return;
+                resultIcon.className = 'fas fa-times-circle fa-4x text-danger mb-3';
+                resultTitle.textContent = 'Erro na Geração';
+                resultMessage.textContent = data.message || data.error || 'Ocorreu um erro inesperado.';
+                document.getElementById('progressIcon').innerHTML = '<i class="fas fa-times-circle fa-3x mb-3"></i>';
+                document.getElementById('progressTitle').textContent = 'Erro!';
+                document.getElementById('progressSubtitle').textContent = 'A geração falhou';
+                resultCards.innerHTML = `<div class="col-12"><div class="alert alert-danger">${data.error || data.message}</div></div>`;
             }
 
-            mostrarSpinner(true);
+            document.getElementById('btnCancelar').classList.remove('d-none');
+            document.getElementById('btnConcluir').classList.remove('d-none');
+        }
 
-            const formData = new FormData();
-            formData.append('action', 'setup_completo');
-            formData.append('gerar_dados', 'true');
+        async function iniciarGeracaoDados() {
+            const limpar = document.getElementById('limparAntes').checked;
 
-            fetch('/setup/', {
-                method: 'POST',
-                body: formData
-            })
-            .then(response => response.json())
-            .then(data => {
-                mostrarSpinner(false);
-                if (data.status === 'success') {
-                    mostrarOutput(data.messages);
-                    setTimeout(() => {
-                        alert('✅ Setup completo! Recarregando página...');
-                        location.reload();
-                    }, 2000);
-                } else {
-                    alert('❌ Erro: ' + data.message);
+            if (limpar) {
+                if (!confirm('⚠️ Isso irá LIMPAR todos os dados existentes e gerar novos.\n\nDeseja continuar?')) {
+                    return;
                 }
-            })
-            .catch(error => {
-                mostrarSpinner(false);
-                alert('❌ Erro na requisição: ' + error);
-            });
-        }
-
-        function executarAcao(action) {
-            const actions = {
-                'migrations': 'Executar Migrations?',
-                'superuser': 'Criar Superusuário admin/admin123?',
-                'dados': 'Gerar Dados de Teste?'
-            };
-
-            if (!confirm(actions[action])) {
-                return;
             }
 
-            mostrarSpinner(true);
+            resetModal();
+            progressModal.show();
+            startTime = Date.now();
 
-            const formData = new FormData();
-            formData.append('action', action);
+            // Simular progresso visual enquanto aguarda a API
+            const steps = ['limpar', 'contabilidade', 'imobiliarias', 'contas', 'imoveis', 'compradores', 'contratos', 'pagamentos', 'indices'];
+            let currentStep = 0;
 
-            fetch('/setup/', {
-                method: 'POST',
-                body: formData
-            })
-            .then(response => response.json())
-            .then(data => {
-                mostrarSpinner(false);
-                if (data.status === 'success') {
-                    mostrarOutput(data.messages);
-                    setTimeout(() => {
-                        location.reload();
-                    }, 2000);
-                } else {
-                    alert('❌ Erro: ' + data.message);
+            // Hide limpar step if not cleaning
+            if (!limpar) {
+                document.querySelector('[data-step="limpar"]').style.display = 'none';
+                currentStep = 1;
+            }
+
+            // Start visual progress
+            const progressInterval = setInterval(() => {
+                if (currentStep < steps.length) {
+                    // Mark current as active
+                    if (currentStep > 0 || limpar) {
+                        const prevStep = limpar ? currentStep - 1 : currentStep;
+                        if (prevStep >= 0 && steps[prevStep]) {
+                            updateStep(steps[prevStep], 'completed');
+                        }
+                    }
+                    updateStep(steps[currentStep], 'active');
+                    updateProgress(Math.min(95, ((currentStep + 1) / steps.length) * 100));
+                    currentStep++;
                 }
-            })
-            .catch(error => {
-                mostrarSpinner(false);
-                alert('❌ Erro na requisição: ' + error);
-            });
-        }
-
-        // Funções para API de dados de teste
-        function mostrarApiOutput(data) {
-            const container = document.getElementById('apiOutput');
-            const pre = container.querySelector('pre');
-            container.style.display = 'block';
-            pre.textContent = JSON.stringify(data, null, 2);
-        }
-
-        async function consultarDados() {
-            try {
-                const response = await fetch('/api/gerar-dados-teste/');
-                const text = await response.text();
-                let data;
-                try {
-                    data = JSON.parse(text);
-                } catch (e) {
-                    data = { status: 'error', message: 'Resposta inválida do servidor', response_text: text.substring(0, 500), http_status: response.status };
-                }
-                mostrarApiOutput(data);
-            } catch (error) {
-                mostrarApiOutput({ error: error.toString() });
-            }
-        }
-
-        async function gerarDadosAPI() {
-            const limpar = document.getElementById('limparDados').checked;
-
-            if (!confirm(limpar
-                ? '⚠️ Isso irá LIMPAR todos os dados existentes e gerar novos. Continuar?'
-                : 'Gerar dados de teste? (dados existentes serão mantidos)')) {
-                return;
-            }
-
-            mostrarSpinner(true);
+            }, 800);
 
             try {
                 const response = await fetch('/api/gerar-dados-teste/', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
+                        'X-CSRFToken': csrftoken,
                     },
                     body: JSON.stringify({ limpar: limpar })
                 });
 
-                const text = await response.text();
-                let data;
-                try {
-                    data = JSON.parse(text);
-                } catch (e) {
-                    data = { status: 'error', message: 'Resposta inválida do servidor', response_text: text.substring(0, 500), http_status: response.status };
-                }
+                clearInterval(progressInterval);
 
-                mostrarSpinner(false);
-                mostrarApiOutput(data);
+                const data = await response.json();
 
-                if (data.status === 'success') {
-                    alert('✅ Dados gerados com sucesso!');
-                    setTimeout(() => location.reload(), 2000);
-                } else {
-                    alert('❌ Erro: ' + (data.message || data.error || 'Erro desconhecido'));
-                }
+                // Complete all steps
+                steps.forEach(step => {
+                    if (document.querySelector(`[data-step="${step}"]`).style.display !== 'none') {
+                        updateStep(step, data.status === 'success' ? 'completed' : 'error');
+                    }
+                });
+                updateProgress(100);
+
+                setTimeout(() => {
+                    showResult(data.status === 'success', data);
+                }, 500);
+
             } catch (error) {
-                mostrarSpinner(false);
-                mostrarApiOutput({ error: error.toString() });
-                alert('❌ Erro na requisição: ' + error);
+                clearInterval(progressInterval);
+                showResult(false, { error: error.toString() });
             }
         }
 
+        function executarAcao(action) {
+            const actions = {
+                'migrations': 'Executar Migrations?',
+                'superuser': 'Criar Superusuário admin/admin123?',
+            };
+
+            if (!confirm(actions[action])) return;
+
+            const btn = event.target;
+            const originalText = btn.innerHTML;
+            btn.disabled = true;
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Processando...';
+
+            const formData = new FormData();
+            formData.append('action', action);
+
+            fetch('/setup/', { method: 'POST', body: formData })
+                .then(response => response.json())
+                .then(data => {
+                    btn.disabled = false;
+                    btn.innerHTML = originalText;
+                    if (data.status === 'success') {
+                        alert('✅ ' + (data.messages ? data.messages.join('\n') : 'Ação executada com sucesso!'));
+                        location.reload();
+                    } else {
+                        alert('❌ Erro: ' + data.message);
+                    }
+                })
+                .catch(error => {
+                    btn.disabled = false;
+                    btn.innerHTML = originalText;
+                    alert('❌ Erro: ' + error);
+                });
+        }
+
         async function limparDadosAPI() {
-            if (!confirm('⚠️ ATENÇÃO: Isso irá EXCLUIR PERMANENTEMENTE todos os dados!\n\nContabilidades, Imobiliárias, Imóveis, Compradores, Contratos, Parcelas e Índices serão removidos.\n\nTem certeza que deseja continuar?')) {
-                return;
-            }
+            if (!confirm('⚠️ ATENÇÃO: Isso irá EXCLUIR PERMANENTEMENTE todos os dados!\n\nTem certeza?')) return;
+            if (!confirm('🔴 ÚLTIMA CONFIRMAÇÃO: Todos os dados serão perdidos!')) return;
 
-            if (!confirm('🔴 ÚLTIMA CONFIRMAÇÃO: Todos os dados serão perdidos. Confirma a exclusão?')) {
-                return;
-            }
-
-            mostrarSpinner(true);
+            const btn = event.target;
+            btn.disabled = true;
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Excluindo...';
 
             try {
                 const response = await fetch('/api/limpar-dados-teste/', {
                     method: 'DELETE',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
+                    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrftoken },
                     body: JSON.stringify({ confirmar: true })
                 });
-
-                const text = await response.text();
-                let data;
-                try {
-                    data = JSON.parse(text);
-                } catch (e) {
-                    data = { status: 'error', message: 'Resposta inválida do servidor', response_text: text.substring(0, 500), http_status: response.status };
-                }
-
-                mostrarSpinner(false);
-                mostrarApiOutput(data);
+                const data = await response.json();
 
                 if (data.status === 'success') {
                     alert('✅ Dados excluídos com sucesso!');
-                    setTimeout(() => location.reload(), 2000);
+                    location.reload();
                 } else {
-                    alert('❌ Erro: ' + (data.message || data.error || 'Erro desconhecido'));
+                    alert('❌ Erro: ' + (data.message || data.error));
                 }
             } catch (error) {
-                mostrarSpinner(false);
-                mostrarApiOutput({ error: error.toString() });
-                alert('❌ Erro na requisição: ' + error);
+                alert('❌ Erro: ' + error);
             }
+
+            btn.disabled = false;
+            btn.innerHTML = '<i class="fas fa-trash me-2"></i>Limpar Dados';
         }
     </script>
 </body>

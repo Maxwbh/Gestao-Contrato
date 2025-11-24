@@ -1,0 +1,275 @@
+{% extends 'base.html' %}
+{% load crispy_forms_tags %}
+
+{% block title %}Boleto - Parcela {{ parcela.numero_parcela }}{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <div class="row mb-4">
+        <div class="col-12">
+            <nav aria-label="breadcrumb">
+                <ol class="breadcrumb">
+                    <li class="breadcrumb-item"><a href="{% url 'financeiro:listar_parcelas' %}">Parcelas</a></li>
+                    <li class="breadcrumb-item"><a href="{% url 'financeiro:detalhe_parcela' parcela.pk %}">Parcela {{ parcela.numero_parcela }}</a></li>
+                    <li class="breadcrumb-item active">Boleto</li>
+                </ol>
+            </nav>
+        </div>
+    </div>
+
+    <div class="row">
+        <!-- Dados do Boleto -->
+        <div class="col-lg-8">
+            <div class="card mb-4">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0">
+                        <i class="bi bi-upc-scan me-2"></i>Dados do Boleto
+                    </h5>
+                    <span class="badge bg-{{ parcela.status_boleto|lower }}">
+                        {{ parcela.get_status_boleto_display }}
+                    </span>
+                </div>
+                <div class="card-body">
+                    <!-- Linha Digitável -->
+                    <div class="mb-4">
+                        <label class="form-label fw-bold">Linha Digitável</label>
+                        <div class="input-group">
+                            <input type="text" class="form-control font-monospace"
+                                   value="{{ parcela.linha_digitavel }}"
+                                   id="linhaDigitavel" readonly>
+                            <button class="btn btn-outline-primary" type="button"
+                                    onclick="copiarTexto('linhaDigitavel')">
+                                <i class="bi bi-clipboard"></i> Copiar
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Código de Barras -->
+                    <div class="mb-4">
+                        <label class="form-label fw-bold">Código de Barras</label>
+                        <div class="input-group">
+                            <input type="text" class="form-control font-monospace"
+                                   value="{{ parcela.codigo_barras }}"
+                                   id="codigoBarras" readonly>
+                            <button class="btn btn-outline-primary" type="button"
+                                    onclick="copiarTexto('codigoBarras')">
+                                <i class="bi bi-clipboard"></i> Copiar
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="row">
+                        <div class="col-md-4">
+                            <label class="form-label fw-bold">Nosso Número</label>
+                            <p class="font-monospace">{{ parcela.nosso_numero }}</p>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label fw-bold">Número do Documento</label>
+                            <p class="font-monospace">{{ parcela.numero_documento }}</p>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label fw-bold">Data de Geração</label>
+                            <p>{{ parcela.data_geracao_boleto|date:"d/m/Y H:i" }}</p>
+                        </div>
+                    </div>
+
+                    <hr>
+
+                    <div class="row">
+                        <div class="col-md-6">
+                            <label class="form-label fw-bold">Valor do Boleto</label>
+                            <p class="h4 text-primary">R$ {{ parcela.valor_boleto|default:parcela.valor_atual }}</p>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label fw-bold">Vencimento</label>
+                            <p class="h4">{{ parcela.data_vencimento|date:"d/m/Y" }}</p>
+                        </div>
+                    </div>
+
+                    {% if parcela.pix_copia_cola %}
+                    <hr>
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">
+                            <i class="bi bi-qr-code me-1"></i>PIX Copia e Cola
+                        </label>
+                        <div class="input-group">
+                            <textarea class="form-control font-monospace" id="pixCopiaECola"
+                                      rows="2" readonly>{{ parcela.pix_copia_cola }}</textarea>
+                            <button class="btn btn-outline-success" type="button"
+                                    onclick="copiarTexto('pixCopiaECola')">
+                                <i class="bi bi-clipboard"></i> Copiar
+                            </button>
+                        </div>
+                    </div>
+                    {% endif %}
+                </div>
+                <div class="card-footer">
+                    <div class="d-flex gap-2">
+                        {% if parcela.boleto_pdf %}
+                        <a href="{% url 'financeiro:download_boleto' parcela.pk %}"
+                           class="btn btn-primary">
+                            <i class="bi bi-download me-1"></i>Download PDF
+                        </a>
+                        {% endif %}
+                        <button type="button" class="btn btn-outline-secondary"
+                                onclick="window.print()">
+                            <i class="bi bi-printer me-1"></i>Imprimir
+                        </button>
+                        {% if not parcela.pago and parcela.status_boleto != 'CANCELADO' %}
+                        <button type="button" class="btn btn-outline-danger"
+                                data-bs-toggle="modal" data-bs-target="#modalCancelar">
+                            <i class="bi bi-x-circle me-1"></i>Cancelar Boleto
+                        </button>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Informações da Parcela -->
+        <div class="col-lg-4">
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h5 class="mb-0"><i class="bi bi-info-circle me-2"></i>Informações</h5>
+                </div>
+                <div class="card-body">
+                    <dl class="row mb-0">
+                        <dt class="col-sm-5">Contrato:</dt>
+                        <dd class="col-sm-7">
+                            <a href="{% url 'contratos:detalhe' contrato.pk %}">
+                                {{ contrato.numero_contrato }}
+                            </a>
+                        </dd>
+
+                        <dt class="col-sm-5">Parcela:</dt>
+                        <dd class="col-sm-7">{{ parcela.numero_parcela }} de {{ contrato.numero_parcelas }}</dd>
+
+                        <dt class="col-sm-5">Comprador:</dt>
+                        <dd class="col-sm-7">{{ comprador.nome }}</dd>
+
+                        <dt class="col-sm-5">CPF/CNPJ:</dt>
+                        <dd class="col-sm-7">{{ comprador.documento }}</dd>
+
+                        <dt class="col-sm-5">Imobiliária:</dt>
+                        <dd class="col-sm-7">{{ imobiliaria.nome }}</dd>
+
+                        {% if parcela.conta_bancaria %}
+                        <dt class="col-sm-5">Banco:</dt>
+                        <dd class="col-sm-7">{{ parcela.conta_bancaria.banco_nome }}</dd>
+
+                        <dt class="col-sm-5">Agência:</dt>
+                        <dd class="col-sm-7">{{ parcela.conta_bancaria.agencia }}</dd>
+
+                        <dt class="col-sm-5">Conta:</dt>
+                        <dd class="col-sm-7">{{ parcela.conta_bancaria.conta }}</dd>
+                        {% endif %}
+                    </dl>
+                </div>
+            </div>
+
+            {% if parcela.status_boleto == 'PAGO' %}
+            <div class="card border-success">
+                <div class="card-header bg-success text-white">
+                    <h5 class="mb-0"><i class="bi bi-check-circle me-2"></i>Pagamento Confirmado</h5>
+                </div>
+                <div class="card-body">
+                    <dl class="row mb-0">
+                        <dt class="col-sm-6">Data:</dt>
+                        <dd class="col-sm-6">{{ parcela.data_pagamento_boleto|date:"d/m/Y" }}</dd>
+
+                        <dt class="col-sm-6">Valor Pago:</dt>
+                        <dd class="col-sm-6">R$ {{ parcela.valor_pago_boleto }}</dd>
+
+                        {% if parcela.banco_pagador %}
+                        <dt class="col-sm-6">Banco:</dt>
+                        <dd class="col-sm-6">{{ parcela.banco_pagador }}</dd>
+                        {% endif %}
+                    </dl>
+                </div>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<!-- Modal Cancelar -->
+<div class="modal fade" id="modalCancelar" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Cancelar Boleto</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form id="formCancelar" method="post"
+                  action="{% url 'financeiro:cancelar_boleto' parcela.pk %}">
+                {% csrf_token %}
+                <div class="modal-body">
+                    <p>Tem certeza que deseja cancelar este boleto?</p>
+                    <div class="mb-3">
+                        <label class="form-label">Motivo (opcional)</label>
+                        <textarea name="motivo" class="form-control" rows="3"></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Não</button>
+                    <button type="submit" class="btn btn-danger">Sim, cancelar</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<style>
+@media print {
+    .breadcrumb, .btn, .modal, nav { display: none !important; }
+    .card { border: 1px solid #000 !important; }
+}
+</style>
+
+<script>
+function copiarTexto(elementId) {
+    const elemento = document.getElementById(elementId);
+    elemento.select();
+    elemento.setSelectionRange(0, 99999);
+    navigator.clipboard.writeText(elemento.value);
+
+    // Feedback visual
+    const btn = elemento.nextElementSibling;
+    const textoOriginal = btn.innerHTML;
+    btn.innerHTML = '<i class="bi bi-check"></i> Copiado!';
+    btn.classList.remove('btn-outline-primary', 'btn-outline-success');
+    btn.classList.add('btn-success');
+
+    setTimeout(() => {
+        btn.innerHTML = textoOriginal;
+        btn.classList.remove('btn-success');
+        btn.classList.add('btn-outline-primary');
+    }, 2000);
+}
+
+// Handle cancelar form via AJAX
+document.getElementById('formCancelar').addEventListener('submit', function(e) {
+    e.preventDefault();
+
+    fetch(this.action, {
+        method: 'POST',
+        body: new FormData(this),
+        headers: {
+            'X-Requested-With': 'XMLHttpRequest'
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.sucesso) {
+            location.reload();
+        } else {
+            alert('Erro: ' + data.erro);
+        }
+    })
+    .catch(error => {
+        console.error('Erro:', error);
+        alert('Erro ao cancelar boleto');
+    });
+});
+</script>
+{% endblock %}

@@ -19,7 +19,7 @@ from django.utils import timezone
 from django.db import transaction
 from faker import Faker
 
-from core.models import Contabilidade, Imobiliaria, Imovel, Comprador, TipoImovel
+from core.models import Contabilidade, Imobiliaria, Imovel, Comprador, TipoImovel, ContaBancaria
 from contratos.models import Contrato, TipoCorrecao, StatusContrato, IndiceReajuste
 from financeiro.models import Parcela
 
@@ -72,6 +72,10 @@ class Command(BaseCommand):
             self.stdout.write('Criando Imobiliárias...')
             imobiliarias = self.criar_imobiliarias(contabilidade, 2)
 
+            # 2.1 Criar Contas Bancárias para cada imobiliária
+            self.stdout.write('Criando Contas Bancárias...')
+            contas_bancarias = self.criar_contas_bancarias(imobiliarias)
+
             # 3. Criar 2 Loteamentos com 30 Lotes cada
             self.stdout.write('Criando Loteamentos...')
             lotes = self.criar_loteamentos(imobiliarias, 2, 30)
@@ -109,6 +113,7 @@ class Command(BaseCommand):
         self.stdout.write(self.style.SUCCESS('\n✅ Dados gerados com sucesso!'))
         self.stdout.write(self.style.SUCCESS(f'   • 1 Contabilidade'))
         self.stdout.write(self.style.SUCCESS(f'   • 2 Imobiliárias'))
+        self.stdout.write(self.style.SUCCESS(f'   • {len(contas_bancarias)} Contas Bancárias'))
         self.stdout.write(self.style.SUCCESS(f'   • {len(lotes)} Lotes'))
         self.stdout.write(self.style.SUCCESS(f'   • {len(terrenos)} Terrenos'))
         self.stdout.write(self.style.SUCCESS(f'   • {len(compradores)} Compradores ({pf_count} PF + {pj_count} PJ)'))
@@ -122,6 +127,7 @@ class Command(BaseCommand):
         IndiceReajuste.objects.all().delete()
         Imovel.objects.all().delete()
         Comprador.objects.all().delete()
+        ContaBancaria.objects.all().delete()
         Imobiliaria.objects.all().delete()
         Contabilidade.objects.all().delete()
 
@@ -187,13 +193,90 @@ class Command(BaseCommand):
 
         return imobiliarias
 
+    def criar_contas_bancarias(self, imobiliarias):
+        """
+        Cria Contas Bancárias para cada imobiliária.
+        Configura os campos obrigatórios conforme documentação BRCobranca.
+        """
+        contas = []
+
+        # Configuração apenas para BB, Sicoob e Bradesco
+        bancos_config = [
+            {
+                'banco': '001',  # Banco do Brasil
+                'descricao': 'Conta Principal BB',
+                'agencia': '3073',
+                'agencia_dv': '0',
+                'conta': '12345678',
+                'conta_dv': '9',
+                'convenio': '1234567',  # 7 dígitos obrigatório
+                'carteira': '18',
+                'nosso_numero_atual': 1,
+            },
+            {
+                'banco': '756',  # Sicoob
+                'descricao': 'Conta Sicoob',
+                'agencia': '3073',
+                'agencia_dv': '0',
+                'conta': '12345678',  # max 8 dígitos
+                'conta_dv': '5',
+                'convenio': '1234567',  # max 7 dígitos
+                'carteira': '1',
+                'nosso_numero_atual': 1,
+            },
+            {
+                'banco': '237',  # Bradesco
+                'descricao': 'Conta Bradesco',
+                'agencia': '1234',
+                'agencia_dv': '5',
+                'conta': '1234567',  # max 7 dígitos
+                'conta_dv': '0',
+                'convenio': '',
+                'carteira': '06',
+                'nosso_numero_atual': 1,
+            },
+        ]
+
+        for imobiliaria in imobiliarias:
+            # Criar todas as 3 contas (BB, Sicoob, Bradesco) para cada imobiliária
+            for i, config in enumerate(bancos_config):
+                conta = ContaBancaria.objects.create(
+                    imobiliaria=imobiliaria,
+                    banco=config['banco'],
+                    descricao=f"{config['descricao']} - {imobiliaria.nome}",
+                    principal=(i == 0),  # BB é a principal
+                    agencia=config['agencia'],
+                    agencia_dv=config.get('agencia_dv', ''),
+                    conta=config['conta'],
+                    conta_dv=config.get('conta_dv', ''),
+                    convenio=config['convenio'],
+                    carteira=config['carteira'],
+                    nosso_numero_atual=config['nosso_numero_atual'],
+                    cobranca_registrada=True,
+                    prazo_baixa=30,
+                    prazo_protesto=0,
+                    layout_cnab='CNAB_240',
+                    numero_remessa_cnab_atual=1,
+                    ativo=True
+                )
+                contas.append(conta)
+
+        return contas
+
     def criar_loteamentos(self, imobiliarias, num_loteamentos, lotes_por_loteamento):
-        """Cria Loteamentos com Lotes"""
+        """
+        Cria Loteamentos com Lotes.
+        Últimos 20% dos lotes de cada loteamento ficam disponíveis (não vendidos).
+        """
         lotes = []
+        lotes_disponiveis = []
         nomes_loteamentos = [
             'Residencial Lagoa Dourada',
             'Condomínio Parque das Águas'
         ]
+
+        # Quantidade de lotes que ficarão disponíveis (não vendidos) - 20%
+        lotes_nao_vendidos = int(lotes_por_loteamento * 0.20)
 
         for i in range(num_loteamentos):
             imobiliaria = imobiliarias[i % len(imobiliarias)]
@@ -204,48 +287,92 @@ class Command(BaseCommand):
                 lote_na_quadra = (lote_num - 1) % 10 + 1
 
                 area = Decimal(random.randint(250, 500))
+                valor_m2 = Decimal(random.randint(150, 350))
+                valor_lote = area * valor_m2
+
+                # Últimos lotes ficam disponíveis (não vendidos)
+                disponivel = lote_num > (lotes_por_loteamento - lotes_nao_vendidos)
 
                 lote = Imovel.objects.create(
                     imobiliaria=imobiliaria,
                     tipo=TipoImovel.LOTE,
                     identificacao=f'Quadra {quadra}, Lote {lote_na_quadra:02d}',
                     loteamento=nome_loteamento,
+                    cep='35700-000',
+                    logradouro=f'Rua {quadra}',
+                    numero=str(lote_na_quadra),
+                    bairro=nome_loteamento,
+                    cidade='Sete Lagoas',
+                    estado='MG',
                     endereco=f'Quadra {quadra}, Lote {lote_na_quadra:02d} - {nome_loteamento} - Sete Lagoas/MG',
                     area=area,
+                    valor=valor_lote,
                     matricula=f'{20000+i*1000+lote_num}',
                     inscricao_municipal=f'{10000+i*1000+lote_num}',
-                    disponivel=False,
+                    disponivel=disponivel,
                     ativo=True
                 )
-                lotes.append(lote)
 
-        return lotes
+                if disponivel:
+                    lotes_disponiveis.append(lote)
+                else:
+                    lotes.append(lote)
+
+        self.stdout.write(f'   → {len(lotes_disponiveis)} lotes disponíveis (não vendidos)')
+        return lotes  # Retorna apenas os lotes vendidos para criar contratos
 
     def criar_terrenos(self, imobiliarias, quantidade):
-        """Cria Terrenos"""
+        """
+        Cria Terrenos com endereço estruturado.
+        20% dos terrenos ficam disponíveis (não vendidos).
+        """
         terrenos = []
+        terrenos_disponiveis = []
         bairros = ['Centro', 'Progresso', 'Santa Luzia', 'Várzea', 'Canaan']
+        ceps = ['35700-000', '35701-000', '35702-000', '35703-000']
+
+        # 20% dos terrenos ficam disponíveis
+        terrenos_nao_vendidos = int(quantidade * 0.20)
 
         for i in range(quantidade):
             imobiliaria = random.choice(imobiliarias)
             bairro = random.choice(bairros)
             area = Decimal(random.randint(400, 1000))
+            valor_m2 = Decimal(random.randint(200, 450))
+            valor_terreno = area * valor_m2
+            rua = self.fake.street_name()
+            numero = str(random.randint(100, 999))
+
+            # Últimos terrenos ficam disponíveis
+            disponivel = i >= (quantidade - terrenos_nao_vendidos)
 
             terreno = Imovel.objects.create(
                 imobiliaria=imobiliaria,
                 tipo=TipoImovel.TERRENO,
                 identificacao=f'Terreno {i+1}',
                 loteamento=f'Bairro {bairro}',
-                endereco=f'Rua {self.fake.street_name()}, {random.randint(100, 999)} - {bairro} - Sete Lagoas/MG',
+                cep=random.choice(ceps),
+                logradouro=rua,
+                numero=numero,
+                bairro=bairro,
+                cidade='Sete Lagoas',
+                estado='MG',
+                endereco=f'Rua {rua}, {numero} - {bairro} - Sete Lagoas/MG',
                 area=area,
+                valor=valor_terreno,
                 matricula=f'{30000+i}',
                 inscricao_municipal=f'{15000+i}',
-                disponivel=False,
+                disponivel=disponivel,
                 ativo=True
             )
-            terrenos.append(terreno)
 
-        return terrenos
+            if disponivel:
+                terrenos_disponiveis.append(terreno)
+            else:
+                terrenos.append(terreno)
+
+        self.stdout.write(f'   → {len(terrenos_disponiveis)} terrenos disponíveis (não vendidos)')
+        return terrenos  # Retorna apenas os terrenos vendidos para criar contratos
 
     def criar_compradores(self, quantidade):
         """Cria Compradores - 80% Pessoa Física, 20% Pessoa Jurídica"""
@@ -409,17 +536,28 @@ class Command(BaseCommand):
         return count
 
     def marcar_parcelas_pagas(self, contratos, percentual=0.90):
-        """Marca 90% das parcelas como pagas"""
+        """Marca parcelas como pagas (somente parcelas vencidas até a data atual)"""
+        hoje = timezone.now().date()
+
         for contrato in contratos:
-            parcelas = list(contrato.parcelas.all().order_by('numero_parcela'))
+            # Filtrar apenas parcelas com vencimento até hoje
+            parcelas = list(contrato.parcelas.filter(
+                data_vencimento__lte=hoje
+            ).order_by('numero_parcela'))
+
             total_parcelas = len(parcelas)
             parcelas_a_pagar = int(total_parcelas * percentual)
 
             for i in range(parcelas_a_pagar):
                 parcela = parcelas[i]
 
+                # Data de pagamento entre vencimento e no máximo hoje
                 dias_apos_vencimento = random.randint(0, 10)
                 data_pagamento = parcela.data_vencimento + timedelta(days=dias_apos_vencimento)
+
+                # Garantir que data de pagamento não ultrapasse hoje
+                if data_pagamento > hoje:
+                    data_pagamento = hoje
 
                 if data_pagamento > parcela.data_vencimento:
                     juros, multa = parcela.calcular_juros_multa(data_pagamento)
