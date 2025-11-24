@@ -99,22 +99,61 @@
 
                     <hr>
 
-                    <!-- Multa e Juros -->
+                    <!-- Valores Calculados para Hoje -->
+                    {% if not parcela.pago %}
+                    <div class="alert alert-info">
+                        <h6 class="mb-3"><i class="bi bi-calculator me-2"></i>Valores para Pagamento Hoje ({{ valores_hoje.dias_atraso|default:0 }} {% if valores_hoje.dias_atraso == 1 %}dia{% else %}dias{% endif %} de atraso)</h6>
+                        <div class="row">
+                            <div class="col-md-3">
+                                <label class="form-label fw-bold small">Valor Original</label>
+                                <p class="mb-0">{{ valores_hoje.valor_original|moeda }}</p>
+                            </div>
+                            {% if valores_hoje.vencido %}
+                            <div class="col-md-3">
+                                <label class="form-label fw-bold small text-danger">Multa Hoje</label>
+                                <p class="mb-0 text-danger">+ {{ valores_hoje.multa_hoje|moeda }}</p>
+                                <small class="text-muted">Config: {{ valores_hoje.config_multa_percentual }}% após {{ valores_hoje.config_dias_carencia }} dias</small>
+                            </div>
+                            <div class="col-md-3">
+                                <label class="form-label fw-bold small text-warning">Juros Hoje</label>
+                                <p class="mb-0 text-warning">+ {{ valores_hoje.juros_hoje|moeda }}</p>
+                                <small class="text-muted">Config: {{ valores_hoje.config_juros_percentual }}% a.m.</small>
+                            </div>
+                            {% endif %}
+                            {% if valores_hoje.desconto_disponivel %}
+                            <div class="col-md-3">
+                                <label class="form-label fw-bold small text-success">Desconto Disponível</label>
+                                <p class="mb-0 text-success">- {{ valores_hoje.desconto_hoje|moeda }}</p>
+                                <small class="text-muted">Config: {{ valores_hoje.config_desconto_valor }}{% if valores_hoje.config_desconto_tipo == 'PERCENTUAL' %}%{% else %} R${% endif %} até {{ valores_hoje.config_desconto_dias }} dias antes</small>
+                            </div>
+                            {% endif %}
+                        </div>
+                        <hr class="my-2">
+                        <div class="row">
+                            <div class="col-12">
+                                <strong>Valor Total para Pagamento Hoje:</strong>
+                                <span class="h4 text-primary ms-2">{{ valores_hoje.valor_total_hoje|moeda }}</span>
+                            </div>
+                        </div>
+                    </div>
+                    {% endif %}
+
+                    <!-- Multa e Juros Aplicados no Boleto -->
                     <div class="row">
                         <div class="col-md-4">
-                            <label class="form-label fw-bold">Multa</label>
+                            <label class="form-label fw-bold">Multa (Boleto)</label>
                             <p class="{% if parcela.valor_multa > 0 %}text-danger{% else %}text-muted{% endif %}">
                                 {{ parcela.valor_multa|moeda }}
                             </p>
                         </div>
                         <div class="col-md-4">
-                            <label class="form-label fw-bold">Juros/Mora</label>
+                            <label class="form-label fw-bold">Juros/Mora (Boleto)</label>
                             <p class="{% if parcela.valor_juros > 0 %}text-warning{% else %}text-muted{% endif %}">
                                 {{ parcela.valor_juros|moeda }}
                             </p>
                         </div>
                         <div class="col-md-4">
-                            <label class="form-label fw-bold">Desconto</label>
+                            <label class="form-label fw-bold">Desconto (Boleto)</label>
                             <p class="{% if parcela.valor_desconto > 0 %}text-success{% else %}text-muted{% endif %}">
                                 {{ parcela.valor_desconto|moeda }}
                             </p>

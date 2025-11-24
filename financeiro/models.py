@@ -354,6 +354,70 @@ class Parcela(TimeStampedModel):
         # Formato: CONTRATO-PARCELA/TOTAL (ex: 001-005/012)
         return f"{self.contrato.numero_contrato}-{self.numero_parcela:03d}/{self.contrato.numero_parcelas:03d}"
 
+    def calcular_valores_hoje(self):
+        """
+        Calcula os valores de multa, juros e desconto para pagamento hoje.
+
+        Returns:
+            dict: Dicionário com valores calculados e configurações
+        """
+        from datetime import date, timedelta
+
+        hoje = date.today()
+        config = self.contrato.get_config_boleto()
+
+        # Calcular juros e multa para hoje
+        juros_hoje, multa_hoje = self.calcular_juros_multa(data_referencia=hoje)
+
+        # Calcular desconto (se aplicável - antes do vencimento)
+        desconto_hoje = Decimal('0.00')
+        desconto_disponivel = False
+
+        if hoje <= self.data_vencimento:
+            valor_desconto_config = config.get('valor_desconto', 0) or 0
+            if valor_desconto_config > 0:
+                dias_desconto = config.get('dias_desconto', 0) or 0
+                # Verificar se hoje está dentro do período de desconto
+                data_limite_desconto = self.data_vencimento - timedelta(days=dias_desconto)
+
+                if hoje >= data_limite_desconto:
+                    desconto_disponivel = True
+                    if config.get('tipo_valor_desconto') == 'PERCENTUAL':
+                        desconto_hoje = self.valor_atual * (Decimal(str(valor_desconto_config)) / Decimal('100'))
+                    else:
+                        desconto_hoje = Decimal(str(valor_desconto_config))
+
+        # Valor total para pagamento hoje
+        valor_total_hoje = self.valor_atual + juros_hoje + multa_hoje - desconto_hoje
+
+        # Dias de atraso
+        dias_atraso = 0
+        if hoje > self.data_vencimento:
+            dias_atraso = (hoje - self.data_vencimento).days
+
+        # Configurações do contrato
+        return {
+            # Valores calculados para hoje
+            'valor_original': self.valor_atual,
+            'multa_hoje': multa_hoje,
+            'juros_hoje': juros_hoje,
+            'desconto_hoje': desconto_hoje,
+            'desconto_disponivel': desconto_disponivel,
+            'valor_total_hoje': valor_total_hoje,
+            'dias_atraso': dias_atraso,
+            'vencido': hoje > self.data_vencimento,
+
+            # Configurações do contrato (para exibição)
+            'config_multa_percentual': config.get('valor_multa', 0) or 0,
+            'config_multa_tipo': config.get('tipo_valor_multa', 'PERCENTUAL'),
+            'config_juros_percentual': config.get('valor_juros', 0) or 0,
+            'config_juros_tipo': config.get('tipo_valor_juros', 'PERCENTUAL'),
+            'config_desconto_valor': config.get('valor_desconto', 0) or 0,
+            'config_desconto_tipo': config.get('tipo_valor_desconto', 'PERCENTUAL'),
+            'config_desconto_dias': config.get('dias_desconto', 0) or 0,
+            'config_dias_carencia': config.get('dias_carencia', 0) or 0,
+        }
+
     def obter_proximos_nosso_numero(self, conta_bancaria):
         """
         Obtém o próximo nosso número disponível para a conta bancária.
