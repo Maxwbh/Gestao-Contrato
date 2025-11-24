@@ -351,8 +351,8 @@ class Parcela(TimeStampedModel):
 
     def gerar_numero_documento(self):
         """Gera o número do documento para o boleto"""
-        # Formato: CONTRATO-PARCELA (ex: 001-005)
-        return f"{self.contrato.numero_contrato}-{self.numero_parcela:03d}"
+        # Formato: CONTRATO-PARCELA/TOTAL (ex: 001-005/012)
+        return f"{self.contrato.numero_contrato}-{self.numero_parcela:03d}/{self.contrato.numero_parcelas:03d}"
 
     def obter_proximos_nosso_numero(self, conta_bancaria):
         """
