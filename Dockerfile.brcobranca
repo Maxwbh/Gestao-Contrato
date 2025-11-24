@@ -1,37 +1,91 @@
-# Dockerfile para BRCobranca API
+# Dockerfile para BRCobranca API (Otimizado para Render Free Tier)
 # Este Dockerfile faz build usando repositorios customizados:
 # - API REST: https://github.com/Maxwbh/boleto_cnab_api
 # - Biblioteca: https://github.com/maxwbh/brcobranca
 #
 # Desenvolvedor: Maxwell da Silva Oliveira
 # Empresa: M&S do Brasil LTDA
+#
+# Otimizacoes para Render Free:
+# - Multi-stage build para reduzir tamanho final
+# - Cache de dependencias para builds mais rapidos
+# - Limpeza agressiva de arquivos desnecessarios
 
-FROM ruby:3.1-slim
+# =============================================================================
+# Stage 1: Builder (instala dependencias de build)
+# =============================================================================
+FROM ruby:3.1-slim AS builder
 
-# Instalar dependencias do sistema
+# Instalar dependencias de build (temporarias)
 RUN apt-get update -qq && \
-    apt-get install -y build-essential git libpq-dev ghostscript && \
+    apt-get install -y --no-install-recommends \
+    build-essential \
+    git \
+    libpq-dev && \
     rm -rf /var/lib/apt/lists/*
 
-# Criar diretorio da aplicacao
 WORKDIR /app
 
 # Clonar repositorio da API
-RUN git clone https://github.com/Maxwbh/boleto_cnab_api.git .
+RUN git clone --depth 1 https://github.com/Maxwbh/boleto_cnab_api.git .
 
 # Modificar Gemfile para usar a gem brcobranca customizada
 RUN sed -i "s|gem 'brcobranca'.*|gem 'brcobranca', git: 'https://github.com/maxwbh/brcobranca.git'|g" Gemfile || \
     echo "gem 'brcobranca', git: 'https://github.com/maxwbh/brcobranca.git'" >> Gemfile
 
-# Instalar dependencias
-RUN bundle install
+# Instalar dependencias (sem gems de dev/test para reduzir tamanho)
+RUN bundle config set --local without 'development test' && \
+    bundle install --jobs=4 --retry=3 && \
+    bundle clean --force
+
+# =============================================================================
+# Stage 2: Runtime (imagem final minima)
+# =============================================================================
+FROM ruby:3.1-slim
+
+# Instalar apenas dependencias de runtime (minimas)
+RUN apt-get update -qq && \
+    apt-get install -y --no-install-recommends \
+    ghostscript \
+    libpq5 && \
+    rm -rf /var/lib/apt/lists/* && \
+    apt-get clean
+
+WORKDIR /app
+
+# Copiar apenas o necessario do builder
+COPY --from=builder /usr/local/bundle /usr/local/bundle
+COPY --from=builder /app /app
+
+# Remover arquivos desnecessarios para reduzir tamanho
+RUN rm -rf .git \
+    test \
+    spec \
+    tmp/* \
+    log/* && \
+    find . -name "*.md" -type f -delete && \
+    find . -name "*.txt" -type f -delete
+
+# Criar usuario nao-root para seguranca
+RUN useradd -m -u 1000 brcobranca && \
+    chown -R brcobranca:brcobranca /app
+USER brcobranca
 
 # Definir variaveis de ambiente
-ENV RACK_ENV=production
-ENV PORT=9292
+ENV RACK_ENV=production \
+    PORT=9292 \
+    MALLOC_ARENA_MAX=2
 
-# Expor a porta 9292 (porta padrao do BRCobranca)
+# Expor a porta 9292
 EXPOSE 9292
 
-# Comando para iniciar o servidor
-CMD ["bundle", "exec", "puma", "-p", "9292", "-e", "production"]
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
+    CMD ruby -e "require 'net/http'; exit Net::HTTP.get_response(URI('http://localhost:9292/')).code.to_i < 500 ? 0 : 1"
+
+# Comando para iniciar o servidor com configuracoes otimizadas para free tier
+CMD ["bundle", "exec", "puma", \
+    "-p", "9292", \
+    "-e", "production", \
+    "-t", "1:2", \
+    "--preload"]
