@@ -1,10 +1,10 @@
 # Dockerfile para BRCobranca API
-# Este Dockerfile faz build a partir do repositorio customizado
+# Este Dockerfile faz build usando repositorios customizados:
+# - API REST: https://github.com/Maxwbh/boleto_cnab_api
+# - Biblioteca: https://github.com/maxwbh/brcobranca
 #
 # Desenvolvedor: Maxwell da Silva Oliveira
 # Empresa: M&S do Brasil LTDA
-#
-# Repositorio: https://github.com/maxwbh/brcobranca
 
 FROM ruby:3.1-slim
 
@@ -16,9 +16,15 @@ RUN apt-get update -qq && \
 # Criar diretorio da aplicacao
 WORKDIR /app
 
-# Clonar repositorio customizado
-RUN git clone https://github.com/maxwbh/brcobranca.git . && \
-    bundle install
+# Clonar repositorio da API
+RUN git clone https://github.com/Maxwbh/boleto_cnab_api.git .
+
+# Modificar Gemfile para usar a gem brcobranca customizada
+RUN sed -i "s|gem 'brcobranca'.*|gem 'brcobranca', git: 'https://github.com/maxwbh/brcobranca.git'|g" Gemfile || \
+    echo "gem 'brcobranca', git: 'https://github.com/maxwbh/brcobranca.git'" >> Gemfile
+
+# Instalar dependencias
+RUN bundle install
 
 # Definir variaveis de ambiente
 ENV RACK_ENV=production
