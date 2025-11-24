@@ -1,0 +1,206 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Configuracoes de E-mail - Gestao de Contratos{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <!-- Header -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h2 class="mb-1">
+                <i class="fas fa-envelope text-primary me-2"></i>
+                Configuracoes de E-mail
+            </h2>
+            <p class="text-muted mb-0">Gerencie os servidores SMTP para envio de notificacoes</p>
+        </div>
+        <div>
+            <a href="{% url 'notificacoes:criar_config_email' %}" class="btn btn-primary">
+                <i class="fas fa-plus me-1"></i> Nova Configuracao
+            </a>
+        </div>
+    </div>
+
+    <!-- Filtros -->
+    <div class="card shadow-sm mb-4">
+        <div class="card-body py-2">
+            <form method="get" class="row g-2 align-items-center">
+                <div class="col-md-6">
+                    <div class="input-group">
+                        <span class="input-group-text"><i class="fas fa-search"></i></span>
+                        <input type="text" name="search" class="form-control" placeholder="Buscar por nome, host ou email..." value="{{ search }}">
+                    </div>
+                </div>
+                <div class="col-md-2">
+                    <button type="submit" class="btn btn-outline-primary w-100">Filtrar</button>
+                </div>
+                {% if search %}
+                <div class="col-md-2">
+                    <a href="{% url 'notificacoes:listar_config_email' %}" class="btn btn-outline-secondary w-100">Limpar</a>
+                </div>
+                {% endif %}
+            </form>
+        </div>
+    </div>
+
+    <!-- Lista -->
+    <div class="card shadow-sm">
+        <div class="card-header bg-white d-flex justify-content-between align-items-center">
+            <span>
+                <i class="fas fa-list me-1"></i>
+                {{ total_configuracoes }} configuracao(oes) cadastrada(s)
+            </span>
+        </div>
+        <div class="card-body p-0">
+            {% if configuracoes %}
+            <div class="table-responsive">
+                <table class="table table-hover mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Nome</th>
+                            <th>Servidor SMTP</th>
+                            <th>Porta</th>
+                            <th>E-mail Remetente</th>
+                            <th class="text-center">Seguranca</th>
+                            <th class="text-center">Status</th>
+                            <th class="text-center" style="width: 150px;">Acoes</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for config in configuracoes %}
+                        <tr>
+                            <td>
+                                <strong>{{ config.nome }}</strong>
+                            </td>
+                            <td><code>{{ config.host }}</code></td>
+                            <td>{{ config.porta }}</td>
+                            <td>{{ config.email_remetente }}</td>
+                            <td class="text-center">
+                                {% if config.usar_tls %}
+                                    <span class="badge bg-success">TLS</span>
+                                {% elif config.usar_ssl %}
+                                    <span class="badge bg-info">SSL</span>
+                                {% else %}
+                                    <span class="badge bg-secondary">Nenhuma</span>
+                                {% endif %}
+                            </td>
+                            <td class="text-center">
+                                {% if config.ativo %}
+                                    <span class="badge bg-success">Ativo</span>
+                                {% else %}
+                                    <span class="badge bg-secondary">Inativo</span>
+                                {% endif %}
+                            </td>
+                            <td class="text-center">
+                                <div class="btn-group btn-group-sm">
+                                    <button type="button" class="btn btn-outline-info btn-testar" data-url="{% url 'notificacoes:testar_config_email' config.pk %}" title="Testar Conexao">
+                                        <i class="fas fa-vial"></i>
+                                    </button>
+                                    <a href="{% url 'notificacoes:editar_config_email' config.pk %}" class="btn btn-outline-primary" title="Editar">
+                                        <i class="fas fa-edit"></i>
+                                    </a>
+                                    <a href="{% url 'notificacoes:excluir_config_email' config.pk %}" class="btn btn-outline-danger" title="Excluir">
+                                        <i class="fas fa-trash"></i>
+                                    </a>
+                                </div>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <div class="text-center py-5">
+                <i class="fas fa-envelope fa-3x text-muted mb-3"></i>
+                <p class="text-muted mb-3">Nenhuma configuracao de e-mail encontrada</p>
+                <a href="{% url 'notificacoes:criar_config_email' %}" class="btn btn-primary">
+                    <i class="fas fa-plus me-1"></i> Criar Primeira Configuracao
+                </a>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Paginacao -->
+    {% if is_paginated %}
+    <nav class="mt-4">
+        <ul class="pagination justify-content-center">
+            {% if page_obj.has_previous %}
+            <li class="page-item">
+                <a class="page-link" href="?page={{ page_obj.previous_page_number }}{% if search %}&search={{ search }}{% endif %}">Anterior</a>
+            </li>
+            {% endif %}
+            <li class="page-item disabled">
+                <span class="page-link">Pagina {{ page_obj.number }} de {{ page_obj.paginator.num_pages }}</span>
+            </li>
+            {% if page_obj.has_next %}
+            <li class="page-item">
+                <a class="page-link" href="?page={{ page_obj.next_page_number }}{% if search %}&search={{ search }}{% endif %}">Proximo</a>
+            </li>
+            {% endif %}
+        </ul>
+    </nav>
+    {% endif %}
+</div>
+
+<!-- Modal de Resultado do Teste -->
+<div class="modal fade" id="modalTeste" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="fas fa-vial me-2"></i>Resultado do Teste</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body" id="modalTesteBody">
+                <div class="text-center py-4">
+                    <div class="spinner-border text-primary" role="status">
+                        <span class="visually-hidden">Testando...</span>
+                    </div>
+                    <p class="mt-2">Testando conexao...</p>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Fechar</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const modal = new bootstrap.Modal(document.getElementById('modalTeste'));
+    const modalBody = document.getElementById('modalTesteBody');
+
+    document.querySelectorAll('.btn-testar').forEach(function(btn) {
+        btn.addEventListener('click', function() {
+            const url = this.dataset.url;
+
+            // Mostrar loading
+            modalBody.innerHTML = '<div class="text-center py-4"><div class="spinner-border text-primary" role="status"><span class="visually-hidden">Testando...</span></div><p class="mt-2">Testando conexao...</p></div>';
+            modal.show();
+
+            // Fazer requisicao
+            fetch(url, {
+                method: 'GET',
+                headers: {
+                    'X-Requested-With': 'XMLHttpRequest'
+                }
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.status === 'success') {
+                    modalBody.innerHTML = '<div class="text-center py-4"><i class="fas fa-check-circle fa-3x text-success mb-3"></i><p class="text-success fw-bold">' + data.message + '</p></div>';
+                } else {
+                    modalBody.innerHTML = '<div class="text-center py-4"><i class="fas fa-times-circle fa-3x text-danger mb-3"></i><p class="text-danger fw-bold">' + data.message + '</p></div>';
+                }
+            })
+            .catch(error => {
+                modalBody.innerHTML = '<div class="text-center py-4"><i class="fas fa-exclamation-triangle fa-3x text-warning mb-3"></i><p class="text-warning fw-bold">Erro ao testar: ' + error.message + '</p></div>';
+            });
+        });
+    });
+});
+</script>
+{% endblock %}
