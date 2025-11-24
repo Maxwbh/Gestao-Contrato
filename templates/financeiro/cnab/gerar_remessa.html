@@ -1,0 +1,142 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Gerar Arquivo de Remessa{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2><i class="fas fa-file-export"></i> Gerar Arquivo de Remessa</h2>
+        <a href="{% url 'financeiro:listar_remessas' %}" class="btn btn-secondary">
+            <i class="fas fa-arrow-left"></i> Voltar
+        </a>
+    </div>
+
+    <!-- Selecao de Conta -->
+    <div class="card mb-4">
+        <div class="card-header">
+            <h5 class="mb-0"><i class="fas fa-university"></i> 1. Selecione a Conta Bancaria</h5>
+        </div>
+        <div class="card-body">
+            <form method="get" class="row g-3">
+                <div class="col-md-6">
+                    <label class="form-label">Conta Bancaria</label>
+                    <select name="conta" class="form-select" onchange="this.form.submit()">
+                        <option value="">Selecione uma conta...</option>
+                        {% for conta in contas_bancarias %}
+                        <option value="{{ conta.pk }}" {% if filtro_conta == conta.pk|stringformat:"s" %}selected{% endif %}>
+                            {{ conta.descricao }} - {{ conta.get_codigo_banco_display }} ({{ conta.imobiliaria.nome }})
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    {% if filtro_conta %}
+    <!-- Formulario de Geracao -->
+    <form method="post">
+        {% csrf_token %}
+        <input type="hidden" name="conta_bancaria" value="{{ filtro_conta }}">
+
+        <div class="card mb-4">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="mb-0"><i class="fas fa-barcode"></i> 2. Selecione os Boletos</h5>
+                {% if boletos_disponiveis %}
+                <span class="badge bg-primary">{{ boletos_disponiveis|length }} boletos disponiveis</span>
+                {% endif %}
+            </div>
+            <div class="card-body">
+                {% if boletos_disponiveis %}
+                <div class="mb-3">
+                    <div class="form-check">
+                        <input type="checkbox" class="form-check-input" id="selectAll" onclick="toggleAll(this)">
+                        <label class="form-check-label" for="selectAll"><strong>Selecionar Todos</strong></label>
+                    </div>
+                </div>
+                <div class="table-responsive">
+                    <table class="table table-hover">
+                        <thead>
+                            <tr>
+                                <th width="40"></th>
+                                <th>Nosso Numero</th>
+                                <th>Contrato</th>
+                                <th>Comprador</th>
+                                <th>Parcela</th>
+                                <th>Vencimento</th>
+                                <th>Valor</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for parcela in boletos_disponiveis %}
+                            <tr>
+                                <td>
+                                    <input type="checkbox" class="form-check-input parcela-check" name="parcelas" value="{{ parcela.pk }}">
+                                </td>
+                                <td>{{ parcela.nosso_numero }}</td>
+                                <td>{{ parcela.contrato.numero_contrato }}</td>
+                                <td>{{ parcela.contrato.comprador.nome_completo|truncatechars:30 }}</td>
+                                <td>{{ parcela.numero_parcela }}/{{ parcela.contrato.numero_parcelas }}</td>
+                                <td>{{ parcela.data_vencimento|date:"d/m/Y" }}</td>
+                                <td>R$ {{ parcela.valor_boleto|default:parcela.valor_atual|floatformat:2 }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <div class="alert alert-warning">
+                    <i class="fas fa-exclamation-triangle"></i> Nenhum boleto disponivel para remessa nesta conta.
+                    <br><small>Gere boletos para as parcelas antes de criar o arquivo de remessa.</small>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        {% if boletos_disponiveis %}
+        <div class="card mb-4">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="fas fa-cog"></i> 3. Configuracoes</h5>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-4">
+                        <label class="form-label">Layout CNAB</label>
+                        <select name="layout" class="form-select">
+                            <option value="CNAB_240">CNAB 240</option>
+                            <option value="CNAB_400">CNAB 400</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="d-flex justify-content-end gap-2">
+            <a href="{% url 'financeiro:listar_remessas' %}" class="btn btn-secondary">
+                <i class="fas fa-times"></i> Cancelar
+            </a>
+            <button type="submit" class="btn btn-primary btn-lg">
+                <i class="fas fa-file-export"></i> Gerar Arquivo de Remessa
+            </button>
+        </div>
+        {% endif %}
+    </form>
+    {% else %}
+    <div class="alert alert-info">
+        <i class="fas fa-info-circle"></i> Selecione uma conta bancaria para ver os boletos disponiveis.
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+function toggleAll(source) {
+    var checkboxes = document.querySelectorAll('.parcela-check');
+    checkboxes.forEach(function(checkbox) {
+        checkbox.checked = source.checked;
+    });
+}
+</script>
+{% endblock %}

@@ -1,0 +1,239 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Remessa {{ arquivo.numero_remessa }} - CNAB{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2>
+            <i class="fas fa-file-export"></i> Remessa {{ arquivo.numero_remessa }}
+            {% if arquivo.status == 'GERADO' %}
+            <span class="badge bg-info">Gerado</span>
+            {% elif arquivo.status == 'ENVIADO' %}
+            <span class="badge bg-primary">Enviado</span>
+            {% elif arquivo.status == 'PROCESSADO' %}
+            <span class="badge bg-success">Processado</span>
+            {% elif arquivo.status == 'ERRO' %}
+            <span class="badge bg-danger">Erro</span>
+            {% endif %}
+        </h2>
+        <div>
+            <a href="{% url 'financeiro:listar_remessas' %}" class="btn btn-secondary">
+                <i class="fas fa-arrow-left"></i> Voltar
+            </a>
+        </div>
+    </div>
+
+    <div class="row">
+        <!-- Informacoes do Arquivo -->
+        <div class="col-md-4">
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h5 class="mb-0"><i class="fas fa-info-circle"></i> Informacoes</h5>
+                </div>
+                <div class="card-body">
+                    <table class="table table-sm">
+                        <tr>
+                            <th>Numero:</th>
+                            <td>{{ arquivo.numero_remessa }}</td>
+                        </tr>
+                        <tr>
+                            <th>Arquivo:</th>
+                            <td>{{ arquivo.nome_arquivo }}</td>
+                        </tr>
+                        <tr>
+                            <th>Layout:</th>
+                            <td>{{ arquivo.layout }}</td>
+                        </tr>
+                        <tr>
+                            <th>Conta:</th>
+                            <td>{{ arquivo.conta_bancaria.descricao }}</td>
+                        </tr>
+                        <tr>
+                            <th>Banco:</th>
+                            <td>{{ arquivo.conta_bancaria.get_codigo_banco_display }}</td>
+                        </tr>
+                        <tr>
+                            <th>Imobiliaria:</th>
+                            <td>{{ arquivo.conta_bancaria.imobiliaria.nome }}</td>
+                        </tr>
+                    </table>
+                </div>
+            </div>
+
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h5 class="mb-0"><i class="fas fa-chart-bar"></i> Estatisticas</h5>
+                </div>
+                <div class="card-body">
+                    <table class="table table-sm">
+                        <tr>
+                            <th>Boletos:</th>
+                            <td>{{ arquivo.quantidade_boletos }}</td>
+                        </tr>
+                        <tr>
+                            <th>Valor Total:</th>
+                            <td><strong>R$ {{ arquivo.valor_total|floatformat:2 }}</strong></td>
+                        </tr>
+                        <tr>
+                            <th>Data Geracao:</th>
+                            <td>{{ arquivo.data_geracao|date:"d/m/Y H:i" }}</td>
+                        </tr>
+                        {% if arquivo.data_envio %}
+                        <tr>
+                            <th>Data Envio:</th>
+                            <td>{{ arquivo.data_envio|date:"d/m/Y H:i" }}</td>
+                        </tr>
+                        {% endif %}
+                    </table>
+                </div>
+            </div>
+
+            <!-- Acoes -->
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h5 class="mb-0"><i class="fas fa-cog"></i> Acoes</h5>
+                </div>
+                <div class="card-body d-grid gap-2">
+                    <a href="{% url 'financeiro:download_remessa' arquivo.pk %}" class="btn btn-success">
+                        <i class="fas fa-download"></i> Download do Arquivo
+                    </a>
+                    {% if arquivo.pode_reenviar %}
+                    <button type="button" class="btn btn-warning" onclick="marcarEnviada()">
+                        <i class="fas fa-paper-plane"></i> Marcar como Enviado
+                    </button>
+                    <button type="button" class="btn btn-outline-primary" onclick="regenerarRemessa()">
+                        <i class="fas fa-redo"></i> Regenerar Arquivo
+                    </button>
+                    {% endif %}
+                </div>
+            </div>
+
+            {% if arquivo.erro_mensagem %}
+            <div class="alert alert-danger">
+                <h6><i class="fas fa-exclamation-triangle"></i> Erro</h6>
+                {{ arquivo.erro_mensagem }}
+            </div>
+            {% endif %}
+
+            {% if arquivo.observacoes %}
+            <div class="alert alert-info">
+                <h6><i class="fas fa-sticky-note"></i> Observacoes</h6>
+                {{ arquivo.observacoes }}
+            </div>
+            {% endif %}
+        </div>
+
+        <!-- Lista de Boletos -->
+        <div class="col-md-8">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0"><i class="fas fa-list"></i> Boletos Incluidos ({{ itens|length }})</h5>
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-hover">
+                            <thead>
+                                <tr>
+                                    <th>Nosso Numero</th>
+                                    <th>Contrato</th>
+                                    <th>Comprador</th>
+                                    <th>Vencimento</th>
+                                    <th>Valor</th>
+                                    <th>Status</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for item in itens %}
+                                <tr>
+                                    <td>{{ item.nosso_numero }}</td>
+                                    <td>
+                                        {% if item.parcela %}
+                                        <a href="{% url 'contratos:detalhe' item.parcela.contrato.pk %}">
+                                            {{ item.parcela.contrato.numero_contrato }}
+                                        </a>
+                                        {% else %}
+                                        -
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        {% if item.parcela %}
+                                        {{ item.parcela.contrato.comprador.nome_completo|truncatechars:25 }}
+                                        {% else %}
+                                        -
+                                        {% endif %}
+                                    </td>
+                                    <td>{{ item.data_vencimento|date:"d/m/Y" }}</td>
+                                    <td>R$ {{ item.valor|floatformat:2 }}</td>
+                                    <td>
+                                        {% if item.processado %}
+                                        <span class="badge bg-success">Processado</span>
+                                        {% else %}
+                                        <span class="badge bg-secondary">Pendente</span>
+                                        {% endif %}
+                                        {% if item.codigo_ocorrencia %}
+                                        <br><small>{{ item.codigo_ocorrencia }} - {{ item.descricao_ocorrencia }}</small>
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+function marcarEnviada() {
+    if (!confirm('Deseja marcar esta remessa como enviada ao banco?')) return;
+
+    fetch('{% url "financeiro:marcar_remessa_enviada" arquivo.pk %}', {
+        method: 'POST',
+        headers: {
+            'X-CSRFToken': '{{ csrf_token }}',
+            'Content-Type': 'application/json'
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.sucesso) {
+            alert('Remessa marcada como enviada!');
+            location.reload();
+        } else {
+            alert('Erro: ' + data.erro);
+        }
+    });
+}
+
+function regenerarRemessa() {
+    if (!confirm('Deseja regenerar este arquivo de remessa?')) return;
+
+    fetch('{% url "financeiro:regenerar_remessa" arquivo.pk %}', {
+        method: 'POST',
+        headers: {
+            'X-CSRFToken': '{{ csrf_token }}',
+            'Content-Type': 'application/json'
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.sucesso) {
+            alert('Remessa regenerada com sucesso!');
+            if (data.redirect) {
+                location.href = data.redirect;
+            } else {
+                location.reload();
+            }
+        } else {
+            alert('Erro: ' + data.erro);
+        }
+    });
+}
+</script>
+{% endblock %}
