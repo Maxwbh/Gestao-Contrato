@@ -319,6 +319,10 @@ class BoletoService:
             # Modalidade (codigo_beneficiario quando aplicavel)
             if hasattr(conta_bancaria, 'codigo_beneficiario') and conta_bancaria.codigo_beneficiario:
                 dados['codigo_beneficiario'] = conta_bancaria.codigo_beneficiario
+            # Remover campos nao suportados pelo Sicoob
+            # BRCobranca Sicoob nao aceita: documento_numero, especie_documento, aceite
+            for campo in ['documento_numero', 'especie_documento', 'aceite']:
+                dados.pop(campo, None)
 
         # =====================================================
         # MULTA (apos vencimento)
@@ -412,10 +416,12 @@ class BoletoService:
             resultado = self._chamar_api_boleto(banco_nome, dados_boleto)
 
             if resultado.get('sucesso'):
+                # Usar gerar_numero_documento() para obter o numero, pois alguns bancos
+                # (BB, Sicoob) removem documento_numero dos dados antes de enviar a API
                 return {
                     'sucesso': True,
                     'nosso_numero': str(nosso_numero),
-                    'numero_documento': dados_boleto['numero_documento'],
+                    'numero_documento': parcela.gerar_numero_documento(),
                     'linha_digitavel': resultado.get('linha_digitavel', ''),
                     'codigo_barras': resultado.get('codigo_barras', ''),
                     'valor': Decimal(str(dados_boleto['valor'])),
