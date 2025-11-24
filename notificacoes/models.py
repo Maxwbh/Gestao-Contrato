@@ -189,51 +189,168 @@ class Notificacao(TimeStampedModel):
         self.save()
 
 
+class TipoTemplate(models.TextChoices):
+    """Tipos de templates disponíveis"""
+    BOLETO_CRIADO = 'BOLETO_CRIADO', 'Boleto Criado'
+    BOLETO_5_DIAS = 'BOLETO_5_DIAS', 'Boleto - 5 dias para vencer'
+    BOLETO_VENCE_AMANHA = 'BOLETO_VENCE_AMANHA', 'Boleto - Vence amanhã'
+    BOLETO_VENCEU_ONTEM = 'BOLETO_VENCEU_ONTEM', 'Boleto - Venceu ontem'
+    BOLETO_VENCIDO = 'BOLETO_VENCIDO', 'Boleto Vencido'
+    PAGAMENTO_CONFIRMADO = 'PAGAMENTO_CONFIRMADO', 'Pagamento Confirmado'
+    CONTRATO_CRIADO = 'CONTRATO_CRIADO', 'Contrato Criado'
+    LEMBRETE_PARCELA = 'LEMBRETE_PARCELA', 'Lembrete de Parcela'
+    CUSTOM = 'CUSTOM', 'Personalizado'
+
+
 class TemplateNotificacao(TimeStampedModel):
-    """Templates para notificações"""
+    """Templates para notificações com suporte a TAGs %%TAG%%"""
+
+    TAGS_DISPONIVEIS = """
+    TAGs disponíveis para uso nos templates:
+
+    DADOS DO COMPRADOR:
+    %%NOMECOMPRADOR%% - Nome completo do comprador
+    %%CPFCOMPRADOR%% - CPF do comprador
+    %%CNPJCOMPRADOR%% - CNPJ do comprador (se PJ)
+    %%EMAILCOMPRADOR%% - E-mail do comprador
+    %%TELEFONECOMPRADOR%% - Telefone do comprador
+    %%CELULARCOMPRADOR%% - Celular do comprador
+    %%ENDERECOCOMPRADOR%% - Endereço completo do comprador
+
+    DADOS DA IMOBILIÁRIA:
+    %%NOMEIMOBILIARIA%% - Nome da imobiliária
+    %%CNPJIMOBILIARIA%% - CNPJ da imobiliária
+    %%TELEFONEIMOBILIARIA%% - Telefone da imobiliária
+    %%EMAILIMOBILIARIA%% - E-mail da imobiliária
+
+    DADOS DO CONTRATO:
+    %%NUMEROCONTRATO%% - Número do contrato
+    %%DATACONTRATO%% - Data do contrato
+    %%VALORTOTAL%% - Valor total do contrato
+    %%TOTALPARCELAS%% - Total de parcelas
+
+    DADOS DO IMÓVEL:
+    %%IMOVEL%% - Identificação do imóvel
+    %%LOTEAMENTO%% - Nome do loteamento
+    %%ENDERECOIMOVEL%% - Endereço do imóvel
+
+    DADOS DA PARCELA:
+    %%PARCELA%% - Número da parcela (ex: 5/24)
+    %%NUMEROPARCELA%% - Apenas o número da parcela
+    %%VALORPARCELA%% - Valor da parcela
+    %%DATAVENCIMENTO%% - Data de vencimento
+    %%DIASATRASO%% - Dias de atraso (se vencida)
+    %%VALORJUROS%% - Valor dos juros
+    %%VALORMULTA%% - Valor da multa
+    %%VALORTOTALPARCELA%% - Valor total (parcela + juros + multa)
+
+    DADOS DO BOLETO:
+    %%NOSSONUMERO%% - Nosso número do boleto
+    %%LINHADIGITAVEL%% - Linha digitável do boleto
+    %%CODIGOBARRAS%% - Código de barras
+    %%STATUSBOLETO%% - Status do boleto
+    %%VALORBOLETO%% - Valor do boleto
+
+    DADOS DO SISTEMA:
+    %%DATAATUAL%% - Data atual
+    %%HORAATUAL%% - Hora atual
+    %%LINKBOLETO%% - Link para download do boleto
+    """
 
     nome = models.CharField(max_length=100, verbose_name='Nome do Template')
+    codigo = models.CharField(
+        max_length=30,
+        choices=TipoTemplate.choices,
+        default=TipoTemplate.CUSTOM,
+        verbose_name='Tipo do Template'
+    )
     tipo = models.CharField(
         max_length=20,
         choices=TipoNotificacao.choices,
-        verbose_name='Tipo'
+        verbose_name='Canal de Envio'
     )
     assunto = models.CharField(
         max_length=255,
         blank=True,
         verbose_name='Assunto',
-        help_text='Para e-mails. Variáveis disponíveis: {numero_parcela}, {valor}, {vencimento}, {comprador}'
+        help_text='Para e-mails. Suporta TAGs como %%NOMECOMPRADOR%%'
     )
     corpo = models.TextField(
         verbose_name='Corpo da Mensagem',
-        help_text='Variáveis disponíveis: {numero_parcela}, {valor}, {vencimento}, {comprador}, {contrato}, {imovel}'
+        help_text='Use TAGs como %%NOMECOMPRADOR%%, %%DATAVENCIMENTO%%, etc.'
+    )
+    corpo_html = models.TextField(
+        blank=True,
+        verbose_name='Corpo HTML',
+        help_text='Versão HTML do e-mail (opcional)'
+    )
+
+    # Configurações
+    imobiliaria = models.ForeignKey(
+        'core.Imobiliaria',
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name='templates_notificacao',
+        verbose_name='Imobiliária',
+        help_text='Deixe vazio para template global'
     )
     ativo = models.BooleanField(default=True, verbose_name='Ativo')
 
     class Meta:
         verbose_name = 'Template de Notificação'
         verbose_name_plural = 'Templates de Notificação'
-        ordering = ['nome']
+        ordering = ['codigo', 'nome']
+        unique_together = [['codigo', 'imobiliaria', 'tipo']]
 
     def __str__(self):
         return f"{self.nome} ({self.get_tipo_display()})"
 
     def renderizar(self, contexto):
         """
-        Renderiza o template com o contexto fornecido
+        Renderiza o template substituindo TAGs pelo contexto
 
         Args:
-            contexto (dict): Dicionário com variáveis para substituição
+            contexto (dict): Dicionário com valores para as TAGs
 
         Returns:
-            tuple: (assunto_renderizado, corpo_renderizado)
+            tuple: (assunto_renderizado, corpo_renderizado, corpo_html_renderizado)
         """
         assunto_renderizado = self.assunto
         corpo_renderizado = self.corpo
+        corpo_html_renderizado = self.corpo_html
 
-        for chave, valor in contexto.items():
-            placeholder = f"{{{chave}}}"
-            assunto_renderizado = assunto_renderizado.replace(placeholder, str(valor))
-            corpo_renderizado = corpo_renderizado.replace(placeholder, str(valor))
+        for tag, valor in contexto.items():
+            placeholder = f"%%{tag}%%"
+            valor_str = str(valor) if valor is not None else ''
+            assunto_renderizado = assunto_renderizado.replace(placeholder, valor_str)
+            corpo_renderizado = corpo_renderizado.replace(placeholder, valor_str)
+            if corpo_html_renderizado:
+                corpo_html_renderizado = corpo_html_renderizado.replace(placeholder, valor_str)
 
-        return assunto_renderizado, corpo_renderizado
+        return assunto_renderizado, corpo_renderizado, corpo_html_renderizado
+
+    @classmethod
+    def get_template(cls, codigo, imobiliaria=None, tipo=TipoNotificacao.EMAIL):
+        """
+        Busca o template mais específico disponível.
+        Prioriza template da imobiliária, depois template global.
+        """
+        # Primeiro tenta template específico da imobiliária
+        if imobiliaria:
+            template = cls.objects.filter(
+                codigo=codigo,
+                imobiliaria=imobiliaria,
+                tipo=tipo,
+                ativo=True
+            ).first()
+            if template:
+                return template
+
+        # Senão, busca template global
+        return cls.objects.filter(
+            codigo=codigo,
+            imobiliaria__isnull=True,
+            tipo=tipo,
+            ativo=True
+        ).first()
