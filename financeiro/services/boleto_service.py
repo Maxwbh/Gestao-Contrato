@@ -14,6 +14,7 @@ Empresa: M&S do Brasil LTDA
 import requests
 import json
 import logging
+import time
 from decimal import Decimal
 from datetime import date, timedelta
 from django.conf import settings
@@ -100,6 +101,9 @@ class BoletoService:
             settings, 'BRCOBRANCA_URL', 'http://localhost:9292'
         )
         self.timeout = getattr(settings, 'BRCOBRANCA_TIMEOUT', 30)
+        # Configuracoes de retry
+        self.max_tentativas = getattr(settings, 'BRCOBRANCA_MAX_TENTATIVAS', 3)
+        self.delay_inicial = getattr(settings, 'BRCOBRANCA_DELAY_INICIAL', 2)
 
     def _get_banco_brcobranca(self, codigo_banco):
         """Retorna o nome do banco para a API BRCobranca"""
@@ -429,7 +433,7 @@ class BoletoService:
 
     def _chamar_api_boleto(self, banco_nome, dados_boleto):
         """
-        Chama a API BRCobranca para gerar o boleto.
+        Chama a API BRCobranca para gerar o boleto com retry e backoff.
 
         Args:
             banco_nome: Nome do banco no formato BRCobranca
@@ -438,233 +442,226 @@ class BoletoService:
         Returns:
             dict: Resultado com PDF e dados do boleto
         """
+        # Validar dados basicos antes de chamar API
+        validacao = self._validar_dados_boleto(dados_boleto)
+        if not validacao['valido']:
+            logger.error(f"Dados de boleto invalidos: {validacao['erros']}")
+            return {
+                'sucesso': False,
+                'erro': f"Dados invalidos: {'; '.join(validacao['erros'])}"
+            }
+
+        tentativa = 0
+        delay = self.delay_inicial
+
+        while tentativa < self.max_tentativas:
+            tentativa += 1
+            try:
+                logger.info(f"Tentativa {tentativa}/{self.max_tentativas} de gerar boleto")
+
+                # Gerar PDF do boleto
+                params = {
+                    'bank': banco_nome,
+                    'type': 'pdf',
+                    'data': json.dumps(dados_boleto)
+                }
+
+                logger.info(f"Chamando BRCobranca: {self.brcobranca_url}/api/boleto")
+
+                response = requests.get(
+                    f"{self.brcobranca_url}/api/boleto",
+                    params=params,
+                    timeout=self.timeout
+                )
+
+                # Sucesso
+                if response.status_code == 200:
+                    return self._processar_resposta_sucesso(response)
+
+                # Erros que justificam retry (5xx)
+                elif 500 <= response.status_code < 600:
+                    error_msg = f"Erro do servidor {response.status_code}"
+                    logger.warning(f"{error_msg} - Tentativa {tentativa}/{self.max_tentativas}")
+
+                    if tentativa < self.max_tentativas:
+                        logger.info(f"Aguardando {delay}s antes de nova tentativa...")
+                        time.sleep(delay)
+                        delay *= 2  # Backoff exponencial
+                        continue
+                    else:
+                        return {
+                            'sucesso': False,
+                            'erro': f'{error_msg}. Tente novamente em alguns minutos.'
+                        }
+
+                # Erros 4xx (nao fazer retry)
+                else:
+                    error_msg = self._extrair_mensagem_erro(response)
+                    logger.error(f"Erro na API BRCobranca ({response.status_code}): {error_msg}")
+                    return {
+                        'sucesso': False,
+                        'erro': error_msg
+                    }
+
+            except requests.exceptions.ConnectionError as e:
+                logger.warning(f"Erro de conexao (tentativa {tentativa}): {e}")
+                if tentativa < self.max_tentativas:
+                    logger.info(f"Aguardando {delay}s antes de nova tentativa...")
+                    time.sleep(delay)
+                    delay *= 2
+                    continue
+                else:
+                    return {
+                        'sucesso': False,
+                        'erro': f'Nao foi possivel conectar ao servidor BRCobranca em {self.brcobranca_url}. Verifique se o servico esta disponivel e tente novamente.'
+                    }
+
+            except requests.exceptions.Timeout as e:
+                logger.warning(f"Timeout (tentativa {tentativa}): {e}")
+                if tentativa < self.max_tentativas:
+                    logger.info(f"Aguardando {delay}s antes de nova tentativa...")
+                    time.sleep(delay)
+                    delay *= 2
+                    continue
+                else:
+                    return {
+                        'sucesso': False,
+                        'erro': 'Timeout ao gerar boleto. Tente novamente em alguns minutos.'
+                    }
+
+            except Exception as e:
+                logger.exception(f"Erro inesperado (tentativa {tentativa}): {e}")
+                if tentativa < self.max_tentativas:
+                    logger.info(f"Aguardando {delay}s antes de nova tentativa...")
+                    time.sleep(delay)
+                    delay *= 2
+                    continue
+                else:
+                    return {
+                        'sucesso': False,
+                        'erro': f'Erro ao gerar boleto: {str(e)}'
+                    }
+
+        return {
+            'sucesso': False,
+            'erro': 'Falha ao gerar boleto apos multiplas tentativas. Tente novamente mais tarde.'
+        }
+
+    def _validar_dados_boleto(self, dados):
+        """
+        Valida dados basicos do boleto antes de enviar para API.
+
+        Returns:
+            dict: {'valido': bool, 'erros': list}
+        """
+        erros = []
+
+        # Validacoes basicas
+        campos_obrigatorios = ['cedente', 'agencia', 'conta_corrente', 'nosso_numero',
+                               'data_vencimento', 'valor', 'sacado', 'sacado_documento']
+
+        for campo in campos_obrigatorios:
+            if not dados.get(campo):
+                erros.append(f"Campo obrigatorio ausente: {campo}")
+
+        # Validar valor
         try:
-            # Primeiro, obter linha digitavel e codigo de barras
+            valor = float(dados.get('valor', 0))
+            if valor <= 0:
+                erros.append("Valor do boleto deve ser maior que zero")
+        except ValueError:
+            erros.append("Valor do boleto invalido")
+
+        # Validar data vencimento
+        try:
+            data_str = dados.get('data_vencimento', '')
+            if data_str:
+                # Formato esperado: YYYY/MM/DD
+                parts = data_str.split('/')
+                if len(parts) != 3:
+                    erros.append("Data de vencimento em formato invalido")
+        except Exception as e:
+            erros.append(f"Erro ao validar data: {e}")
+
+        return {
+            'valido': len(erros) == 0,
+            'erros': erros
+        }
+
+    def _processar_resposta_sucesso(self, response):
+        """Processa resposta bem-sucedida da API"""
+        try:
+            content_type = response.headers.get('content-type', '')
             linha_digitavel = ''
             codigo_barras = ''
 
-            # Obter nosso numero formatado
-            try:
-                params_nn = {
-                    'bank': banco_nome,
-                    'data': json.dumps(dados_boleto)
-                }
-                response_nn = requests.get(
-                    f"{self.brcobranca_url}/api/boleto/nosso_numero",
-                    params=params_nn,
-                    timeout=self.timeout
-                )
-                if response_nn.status_code == 200:
-                    nosso_numero_formatado = response_nn.text.strip().strip('"')
-                    logger.info(f"Nosso numero formatado: {nosso_numero_formatado}")
-            except Exception as e:
-                logger.warning(f"Erro ao obter nosso numero formatado: {e}")
-
-            # Gerar PDF do boleto
-            params = {
-                'bank': banco_nome,
-                'type': 'pdf',
-                'data': json.dumps(dados_boleto)
-            }
-
-            logger.info(f"Chamando BRCobranca: {self.brcobranca_url}/api/boleto")
-            logger.debug(f"Parametros: bank={banco_nome}, data={json.dumps(dados_boleto, indent=2)}")
-
-            response = requests.get(
-                f"{self.brcobranca_url}/api/boleto",
-                params=params,
-                timeout=self.timeout
-            )
-
-            if response.status_code == 200:
-                content_type = response.headers.get('content-type', '')
-
-                if 'application/pdf' in content_type:
-                    # Resposta e o PDF diretamente
-                    pdf_content = response.content
-
-                    # Tentar obter linha digitavel separadamente
-                    try:
-                        linha_resp = self._obter_linha_digitavel(banco_nome, dados_boleto)
-                        if linha_resp:
-                            linha_digitavel = linha_resp.get('linha_digitavel', '')
-                            codigo_barras = linha_resp.get('codigo_barras', '')
-                    except Exception as e:
-                        logger.warning(f"Erro ao obter linha digitavel: {e}")
-
-                    return {
-                        'sucesso': True,
-                        'pdf_content': pdf_content,
-                        'linha_digitavel': linha_digitavel,
-                        'codigo_barras': codigo_barras,
-                    }
-
-                elif 'application/json' in content_type:
-                    result = response.json()
-                    if isinstance(result, dict) and 'error' in result:
-                        logger.error(f"Erro da API BRCobranca: {result['error']}")
-                        return {
-                            'sucesso': False,
-                            'erro': result.get('error', 'Erro desconhecido')
-                        }
-                    return {
-                        'sucesso': True,
-                        'pdf_content': result.get('pdf'),
-                        'linha_digitavel': result.get('linha_digitavel', ''),
-                        'codigo_barras': result.get('codigo_barras', ''),
-                    }
-                else:
-                    # Assumir que e PDF
-                    return {
-                        'sucesso': True,
-                        'pdf_content': response.content,
-                        'linha_digitavel': linha_digitavel,
-                        'codigo_barras': codigo_barras,
-                    }
-
-            else:
-                error_msg = f"Erro HTTP {response.status_code}"
-                try:
-                    error_data = response.json()
-                    error_msg = error_data.get('error', error_msg)
-                except:
-                    error_msg = response.text or error_msg
-
-                logger.error(f"Erro na API BRCobranca: {error_msg}")
-                return {
-                    'sucesso': False,
-                    'erro': error_msg
-                }
-
-        except requests.exceptions.ConnectionError as e:
-            logger.error(f"Erro de conexao com BRCobranca: {e}")
-            return {
-                'sucesso': False,
-                'erro': f'Nao foi possivel conectar ao servidor BRCobranca em {self.brcobranca_url}. Verifique se o container Docker esta rodando.'
-            }
-        except requests.exceptions.Timeout as e:
-            logger.error(f"Timeout na API BRCobranca: {e}")
-            return {
-                'sucesso': False,
-                'erro': 'Timeout ao gerar boleto. Tente novamente.'
-            }
-        except Exception as e:
-            logger.exception(f"Erro ao chamar API BRCobranca: {e}")
-            return {
-                'sucesso': False,
-                'erro': str(e)
-            }
-
-    def _obter_linha_digitavel(self, banco_nome, dados_boleto):
-        """
-        Obtem a linha digitavel e codigo de barras do boleto.
-        """
-        try:
-            # Alguns endpoints podem retornar isso diretamente
-            # Tentar validar o boleto para obter os dados
-            params = {
-                'bank': banco_nome,
-                'data': json.dumps(dados_boleto)
-            }
-            response = requests.get(
-                f"{self.brcobranca_url}/api/boleto/validate",
-                params=params,
-                timeout=self.timeout
-            )
-            if response.status_code == 200:
-                result = response.json() if response.headers.get('content-type', '').startswith('application/json') else {}
-                return {
-                    'linha_digitavel': result.get('linha_digitavel', ''),
-                    'codigo_barras': result.get('codigo_barras', ''),
-                }
-        except Exception as e:
-            logger.debug(f"Erro ao obter linha digitavel: {e}")
-        return None
-
-    def gerar_boletos_lote(self, parcelas, conta_bancaria):
-        """
-        Gera boletos para multiplas parcelas usando POST /boleto/multi.
-
-        Args:
-            parcelas: QuerySet ou lista de Parcelas
-            conta_bancaria: Conta bancaria a ser usada
-
-        Returns:
-            list: Lista de resultados
-        """
-        try:
-            banco_nome = self._get_banco_brcobranca(conta_bancaria.banco)
-            if not banco_nome:
-                return [{
-                    'sucesso': False,
-                    'erro': f'Banco {conta_bancaria.banco} nao suportado'
-                }]
-
-            # Preparar dados de todos os boletos
-            boletos_data = []
-            nossos_numeros = {}
-
-            for parcela in parcelas:
-                dados, nosso_numero = self._montar_dados_boleto(parcela, conta_bancaria)
-                dados['bank'] = banco_nome  # Adicionar banco em cada boleto
-                boletos_data.append(dados)
-                nossos_numeros[parcela.id] = nosso_numero
-
-            # Chamar API para multiplos boletos
-            payload = {
-                'type': 'pdf',
-                'data': boletos_data
-            }
-
-            response = requests.post(
-                f"{self.brcobranca_url}/api/boleto/multi",
-                json=payload,
-                timeout=self.timeout * len(parcelas)
-            )
-
-            resultados = []
-            if response.status_code == 200:
-                # O PDF vem como conteudo unico para todos os boletos
+            if 'application/pdf' in content_type:
+                # Resposta e o PDF diretamente
                 pdf_content = response.content
+                logger.info("Boleto gerado com sucesso (PDF)")
 
-                for parcela in parcelas:
-                    resultados.append({
-                        'parcela_id': parcela.id,
-                        'parcela': str(parcela),
-                        'sucesso': True,
-                        'nosso_numero': str(nossos_numeros.get(parcela.id)),
-                        'pdf_content': pdf_content,  # PDF combinado
-                    })
-            else:
-                error_msg = response.text
-                for parcela in parcelas:
-                    resultados.append({
-                        'parcela_id': parcela.id,
-                        'parcela': str(parcela),
+            elif 'application/json' in content_type:
+                result = response.json()
+                if isinstance(result, dict) and 'error' in result:
+                    logger.error(f"Erro da API: {result['error']}")
+                    return {
                         'sucesso': False,
-                        'erro': error_msg
-                    })
+                        'erro': result.get('error', 'Erro desconhecido')
+                    }
+                pdf_content = result.get('pdf')
+                linha_digitavel = result.get('linha_digitavel', '')
+                codigo_barras = result.get('codigo_barras', '')
+                logger.info("Boleto gerado com sucesso (JSON)")
 
-            return resultados
+            else:
+                # Assumir PDF
+                pdf_content = response.content
+                logger.info("Boleto gerado com sucesso")
+
+            return {
+                'sucesso': True,
+                'pdf_content': pdf_content,
+                'linha_digitavel': linha_digitavel,
+                'codigo_barras': codigo_barras,
+            }
 
         except Exception as e:
-            logger.exception(f"Erro ao gerar boletos em lote: {e}")
-            return [{
+            logger.exception(f"Erro ao processar resposta: {e}")
+            return {
                 'sucesso': False,
-                'erro': str(e)
-            }]
+                'erro': f'Erro ao processar resposta: {str(e)}'
+            }
+
+    def _extrair_mensagem_erro(self, response):
+        """Extrai mensagem de erro da resposta"""
+        try:
+            error_data = response.json()
+            if isinstance(error_data, dict):
+                return error_data.get('error', error_data.get('message', response.text))
+        except:
+            pass
+
+        return response.text or f"Erro HTTP {response.status_code}"
 
     def verificar_api_disponivel(self):
-        """Verifica se a API BRCobranca esta disponivel"""
-        try:
-            # A API nao tem endpoint de health, tentar uma chamada basica
-            response = requests.get(
-                f"{self.brcobranca_url}/",
-                timeout=5
-            )
-            return response.status_code in [200, 404]  # 404 e ok, significa que o servidor esta rodando
-        except:
-            return False
+        """Verifica se a API BRCobranca esta disponivel com retry"""
+        for tentativa in range(3):
+            try:
+                response = requests.get(
+                    f"{self.brcobranca_url}/",
+                    timeout=5
+                )
+                disponivel = response.status_code in [200, 404, 405]
+                if disponivel:
+                    logger.info("API BRCobranca disponivel")
+                    return True
+            except Exception as e:
+                logger.debug(f"Verificacao {tentativa + 1}/3 falhou: {e}")
+                if tentativa < 2:
+                    time.sleep(1)
+
+        logger.error(f"API BRCobranca indisponivel em {self.brcobranca_url}")
+        return False
 
 
 class CNABService:
