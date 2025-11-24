@@ -816,7 +816,68 @@ class ImobiliariaForm(forms.ModelForm):
 
 
 class ContaBancariaForm(forms.ModelForm):
-    """Formulário para cadastro de Conta Bancária"""
+    """
+    Formulário para cadastro de Conta Bancária.
+    Valida campos obrigatórios conforme requisitos de cada banco para BRCobranca.
+    """
+
+    # Configuração de campos por banco (conforme BRCobranca)
+    CAMPOS_BANCO = {
+        '001': {  # Banco do Brasil
+            'nome': 'Banco do Brasil',
+            'convenio_obrigatorio': True,
+            'convenio_digitos': 7,
+            'agencia_max': 4,
+            'conta_max': 8,
+            'carteira_padrao': '18',
+        },
+        '033': {  # Santander
+            'nome': 'Santander',
+            'convenio_obrigatorio': True,
+            'convenio_digitos': 7,
+            'agencia_max': 4,
+            'conta_max': 9,
+            'carteira_padrao': '102',
+        },
+        '104': {  # Caixa
+            'nome': 'Caixa Econômica',
+            'convenio_obrigatorio': True,
+            'convenio_digitos': 6,
+            'agencia_max': 4,
+            'carteira_padrao': '1',
+        },
+        '237': {  # Bradesco
+            'nome': 'Bradesco',
+            'convenio_obrigatorio': False,
+            'agencia_max': 4,
+            'conta_max': 7,
+            'carteira_padrao': '06',
+        },
+        '341': {  # Itaú
+            'nome': 'Itaú',
+            'convenio_obrigatorio': False,
+            'convenio_max': 5,
+            'agencia_max': 4,
+            'conta_max': 5,
+            'carteira_padrao': '175',
+        },
+        '748': {  # Sicredi
+            'nome': 'Sicredi',
+            'convenio_obrigatorio': True,
+            'convenio_max': 5,
+            'agencia_max': 4,
+            'conta_max': 5,
+            'carteira_padrao': '3',
+        },
+        '756': {  # Sicoob
+            'nome': 'Sicoob',
+            'convenio_obrigatorio': True,
+            'convenio_max': 7,
+            'agencia_max': 4,
+            'conta_max': 8,
+            'carteira_padrao': '1',
+        },
+    }
 
     class Meta:
         model = ContaBancaria
@@ -834,6 +895,12 @@ class ContaBancariaForm(forms.ModelForm):
             'tipo_pix': forms.Select(attrs={'class': 'form-select'}),
             'layout_cnab': forms.Select(attrs={'class': 'form-select'}),
         }
+        help_texts = {
+            'convenio': 'Código do convênio/beneficiário. Obrigatório para: BB, Santander, Caixa, Sicredi, Sicoob',
+            'carteira': 'Número da carteira de cobrança. Se vazio, usa a carteira padrão do banco.',
+            'agencia': 'Número da agência (apenas números)',
+            'conta': 'Número da conta (apenas números)',
+        }
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -845,6 +912,51 @@ class ContaBancariaForm(forms.ModelForm):
                     field.widget.attrs['class'] = 'form-check-input'
                 else:
                     field.widget.attrs['class'] = 'form-control'
+
+    def clean(self):
+        """Validação customizada baseada no banco selecionado"""
+        cleaned_data = super().clean()
+        banco = cleaned_data.get('banco')
+        convenio = cleaned_data.get('convenio', '') or ''
+        convenio = convenio.strip()
+        agencia = cleaned_data.get('agencia', '') or ''
+        agencia = agencia.strip()
+        conta = cleaned_data.get('conta', '') or ''
+        conta = conta.strip()
+
+        if banco and banco in self.CAMPOS_BANCO:
+            config = self.CAMPOS_BANCO[banco]
+            banco_nome = config.get('nome', banco)
+
+            # Validar convênio obrigatório
+            if config.get('convenio_obrigatorio') and not convenio:
+                self.add_error('convenio', f'Convênio é obrigatório para {banco_nome}')
+
+            # Validar tamanho do convênio
+            if convenio:
+                convenio_numeros = ''.join(filter(str.isdigit, convenio))
+                if config.get('convenio_digitos') and len(convenio_numeros) != config['convenio_digitos']:
+                    self.add_error('convenio',
+                        f'Para {banco_nome}, o convênio deve ter exatamente {config["convenio_digitos"]} dígitos')
+                elif config.get('convenio_max') and len(convenio_numeros) > config['convenio_max']:
+                    self.add_error('convenio',
+                        f'Para {banco_nome}, o convênio deve ter no máximo {config["convenio_max"]} dígitos')
+
+            # Validar tamanho da agência
+            if agencia and config.get('agencia_max'):
+                agencia_numeros = ''.join(filter(str.isdigit, agencia))
+                if len(agencia_numeros) > config['agencia_max']:
+                    self.add_error('agencia',
+                        f'Para {banco_nome}, a agência deve ter no máximo {config["agencia_max"]} dígitos')
+
+            # Validar tamanho da conta
+            if conta and config.get('conta_max'):
+                conta_numeros = ''.join(filter(str.isdigit, conta))
+                if len(conta_numeros) > config['conta_max']:
+                    self.add_error('conta',
+                        f'Para {banco_nome}, a conta deve ter no máximo {config["conta_max"]} dígitos')
+
+        return cleaned_data
 
 
 class AcessoUsuarioForm(forms.ModelForm):
