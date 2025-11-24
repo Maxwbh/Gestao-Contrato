@@ -225,7 +225,7 @@ O projeto está configurado para deploy automático no Render usando o arquivo `
 2. Acesse [render.com](https://render.com)
 3. Crie uma nova aplicação "Blueprint"
 4. Conecte seu repositório GitHub
-5. Selecione o branch: `claude/update-developer-docs-01TGF4Y9D8H9JukuLRBxgQct`
+5. Selecione o branch: `master`
 6. O Render criará automaticamente:
    - ✅ Web Service (Django + Gunicorn)
    - ✅ PostgreSQL Database
@@ -413,9 +413,6 @@ Não é necessária autenticação. A API é pública e gratuita.
 - Verifique sua conexão com a internet
 - Confirme se a API do BCB está disponível: https://api.bcb.gov.br
 
-## 📄 Licença
-
-Este projeto foi desenvolvido para fins comerciais pela M&S do Brasil LTDA.
 
 ## 🤝 Contato
 

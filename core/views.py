@@ -9,7 +9,7 @@ from django.contrib.auth.decorators import login_required
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.http import JsonResponse, HttpResponse
 from django.views.decorators.http import require_http_methods
-from django.views.decorators.csrf import csrf_exempt
+# csrf_exempt removido por questões de segurança - endpoints agora verificam permissões
 from django.core.management import call_command
 from django.db import connection
 from django.contrib.auth import get_user_model
@@ -61,6 +61,84 @@ class AcessoMixin:
         return usuario_tem_acesso_imobiliaria(self.request.user, imobiliaria)
 
 
+# =============================================================================
+# HEALTH CHECK - MONITORAMENTO
+# =============================================================================
+
+def health_check(request):
+    """
+    Endpoint para verificação de saúde da aplicação.
+
+    Retorna JSON com status dos serviços:
+    - database: Conexão com o banco de dados
+    - cache: Conexão com Redis (se configurado)
+
+    Códigos HTTP:
+    - 200: Sistema saudável
+    - 503: Sistema com problemas
+    """
+    import time
+    start_time = time.time()
+
+    status = {
+        'status': 'healthy',
+        'timestamp': datetime.now().isoformat(),
+        'checks': {
+            'database': {'status': 'unknown', 'latency_ms': None},
+            'cache': {'status': 'unknown', 'latency_ms': None},
+        }
+    }
+
+    # Verificar banco de dados
+    try:
+        db_start = time.time()
+        with connection.cursor() as cursor:
+            cursor.execute("SELECT 1")
+            cursor.fetchone()
+        db_latency = (time.time() - db_start) * 1000
+        status['checks']['database'] = {
+            'status': 'healthy',
+            'latency_ms': round(db_latency, 2)
+        }
+    except Exception as e:
+        status['status'] = 'unhealthy'
+        status['checks']['database'] = {
+            'status': 'unhealthy',
+            'error': str(e)
+        }
+
+    # Verificar cache/Redis
+    try:
+        from django.core.cache import cache
+        cache_start = time.time()
+        cache.set('health_check_test', 'ok', 10)
+        result = cache.get('health_check_test')
+        cache_latency = (time.time() - cache_start) * 1000
+
+        if result == 'ok':
+            status['checks']['cache'] = {
+                'status': 'healthy',
+                'latency_ms': round(cache_latency, 2)
+            }
+        else:
+            status['checks']['cache'] = {
+                'status': 'degraded',
+                'message': 'Cache read/write mismatch'
+            }
+    except Exception as e:
+        # Cache não é crítico, então não marca como unhealthy
+        status['checks']['cache'] = {
+            'status': 'unavailable',
+            'message': str(e)
+        }
+
+    # Tempo total de verificação
+    status['total_latency_ms'] = round((time.time() - start_time) * 1000, 2)
+
+    http_status = 200 if status['status'] == 'healthy' else 503
+    return JsonResponse(status, status=http_status)
+
+
 def index(request):
     """Página inicial do sistema"""
     try:
@@ -79,23 +157,104 @@ def index(request):
 @login_required
 def dashboard(request):
     """Dashboard principal com estatísticas"""
+    from datetime import timedelta
+    from django.utils import timezone
+    from django.db.models import Sum, Q
+    from contratos.models import Contrato, StatusContrato
+    from financeiro.models import Parcela
+
+    hoje = timezone.now().date()
+    inicio_mes = hoje.replace(day=1)
+    fim_mes = (inicio_mes + timedelta(days=32)).replace(day=1) - timedelta(days=1)
+
+    # Estatísticas básicas
+    total_contabilidades = Contabilidade.objects.filter(ativo=True).count()
+    total_imobiliarias = Imobiliaria.objects.filter(ativo=True).count()
+    total_imoveis = Imovel.objects.filter(ativo=True).count()
+    total_compradores = Comprador.objects.filter(ativo=True).count()
+
+    # Contratos ativos
+    total_contratos = Contrato.objects.filter(status=StatusContrato.ATIVO).count()
+
+    # Parcelas vencidas (não pagas e vencimento < hoje)
+    parcelas_vencidas_qs = Parcela.objects.filter(
+        pago=False,
+        data_vencimento__lt=hoje
+    ).select_related('contrato', 'contrato__comprador')
+    parcelas_vencidas = parcelas_vencidas_qs.count()
+    parcelas_vencidas_lista = list(parcelas_vencidas_qs.order_by('-data_vencimento')[:10])
+
+    # Parcelas do mês (não pagas, vencem este mês)
+    parcelas_mes = Parcela.objects.filter(
+        pago=False,
+        data_vencimento__gte=inicio_mes,
+        data_vencimento__lte=fim_mes
+    ).count()
+
+    # Valor recebido no mês
+    valor_recebido = Parcela.objects.filter(
+        pago=True,
+        data_pagamento__gte=inicio_mes,
+        data_pagamento__lte=fim_mes
+    ).aggregate(total=Sum('valor_pago'))['total'] or 0
+
+    # Próximas parcelas a vencer (próximos 15 dias)
+    proximas_parcelas = Parcela.objects.filter(
+        pago=False,
+        data_vencimento__gte=hoje,
+        data_vencimento__lte=hoje + timedelta(days=15)
+    ).select_related(
+        'contrato', 'contrato__comprador'
+    ).order_by('data_vencimento')[:10]
+
+    # Adicionar dias para vencer em cada parcela
+    for parcela in proximas_parcelas:
+        parcela.dias_para_vencer = (parcela.data_vencimento - hoje).days
+
+    # Status dos boletos
+    boletos_pendentes = Parcela.objects.filter(
+        pago=False,
+        status_boleto='NAO_GERADO'
+    ).count()
+    boletos_gerados = Parcela.objects.filter(
+        pago=False,
+        status_boleto__in=['GERADO', 'REGISTRADO']
+    ).count()
+    boletos_vencidos = Parcela.objects.filter(
+        pago=False,
+        status_boleto__in=['GERADO', 'REGISTRADO', 'VENCIDO'],
+        data_vencimento__lt=hoje
+    ).count()
+
+    # Formatar valor recebido
+    valor_recebido_formatado = f"{valor_recebido:,.2f}".replace(',', 'X').replace('.', ',').replace('X', '.')
+
     context = {
-        'total_contabilidades': Contabilidade.objects.filter(ativo=True).count(),
-        'total_imobiliarias': Imobiliaria.objects.filter(ativo=True).count(),
-        'total_imoveis': Imovel.objects.filter(ativo=True).count(),
+        'total_contabilidades': total_contabilidades,
+        'total_imobiliarias': total_imobiliarias,
+        'total_imoveis': total_imoveis,
         'imoveis_disponiveis': Imovel.objects.filter(ativo=True, disponivel=True).count(),
-        'total_compradores': Comprador.objects.filter(ativo=True).count(),
+        'total_compradores': total_compradores,
+        'total_contratos': total_contratos,
+        'parcelas_vencidas': parcelas_vencidas,
+        'parcelas_vencidas_lista': parcelas_vencidas_lista,
+        'parcelas_mes': parcelas_mes,
+        'valor_recebido_mes': valor_recebido_formatado,
+        'proximas_parcelas': proximas_parcelas,
+        'boletos_pendentes': boletos_pendentes,
+        'boletos_gerados': boletos_gerados,
+        'boletos_vencidos': boletos_vencidos,
     }
     return render(request, 'core/dashboard.html', context)
 
 
-@csrf_exempt
 def setup(request):
     """
     Página de setup inicial do sistema
     Executa migrations, cria superuser e opcionalmente gera dados de teste
 
     Acessível via: /setup/
+    NOTA: Endpoint protegido - requer superusuário para ações POST
     """
     if request.method == 'GET':
         # Verificar status do banco
@@ -113,28 +272,54 @@ def setup(request):
                 try:
                     total_contabilidades = Contabilidade.objects.count()
                     total_users = get_user_model().objects.count()
+                    total_contas_bancarias = ContaBancaria.objects.count()
+                    total_imobiliarias = Imobiliaria.objects.count()
                 except:
                     total_contabilidades = 0
                     total_users = 0
+                    total_contas_bancarias = 0
+                    total_imobiliarias = 0
             else:
                 total_contabilidades = 0
                 total_users = 0
+                total_contas_bancarias = 0
+                total_imobiliarias = 0
 
         except Exception as e:
             db_ok = False
             has_tables = False
             total_contabilidades = 0
             total_users = 0
+            total_contas_bancarias = 0
+            total_imobiliarias = 0
 
         context = {
             'db_ok': db_ok,
             'has_tables': has_tables,
             'total_contabilidades': total_contabilidades,
             'total_users': total_users,
+            'total_contas_bancarias': total_contas_bancarias,
+            'total_imobiliarias': total_imobiliarias,
         }
         return render(request, 'core/setup.html', context)
 
-    # POST - Executar setup
+    # POST - Executar setup (requer autenticação para ações sensíveis)
+    # Verificar se é primeira configuração (sem usuários) ou se usuário é superuser
+    User = get_user_model()
+    is_first_setup = User.objects.count() == 0
+
+    if not is_first_setup:
+        if not request.user.is_authenticated:
+            return JsonResponse({
+                'status': 'error',
+                'message': 'Autenticação necessária. Faça login como admin.'
+            }, status=401)
+        if not request.user.is_superuser:
+            return JsonResponse({
+                'status': 'error',
+                'message': 'Acesso negado. Apenas superusuários podem executar o setup.'
+            }, status=403)
+
     try:
         action = request.POST.get('action', 'setup')
         out = io.StringIO()
@@ -206,14 +391,13 @@ def setup(request):
         }, status=500)
 
 
-@csrf_exempt
 @require_http_methods(["GET", "POST"])
 def gerar_dados_teste(request):
     """
-    Endpoint para gerar dados de teste
+    Endpoint para gerar dados de teste (APENAS SUPERUSUÁRIO para POST)
 
     GET: Retorna status do sistema
-    POST: Gera dados de teste
+    POST: Gera dados de teste (requer autenticação de superusuário)
 
     Parâmetros POST (form-data ou JSON):
         limpar (bool): Se deve limpar dados antes (default: False)
@@ -222,6 +406,18 @@ def gerar_dados_teste(request):
         curl -X POST http://localhost:8000/api/gerar-dados-teste/ -d "limpar=true"
         curl -X POST http://localhost:8000/api/gerar-dados-teste/ -H "Content-Type: application/json" -d '{"limpar": true}'
     """
+    # Verificar permissões para POST
+    if request.method == 'POST':
+        if not request.user.is_authenticated:
+            return JsonResponse({
+                'status': 'error',
+                'message': 'Autenticação necessária. Faça login como admin.'
+            }, status=401)
+        if not request.user.is_superuser:
+            return JsonResponse({
+                'status': 'error',
+                'message': 'Acesso negado. Apenas superusuários podem gerar dados de teste.'
+            }, status=403)
     # Importar modelos adicionais
     from contratos.models import Contrato, IndiceReajuste
     from financeiro.models import Parcela
@@ -239,6 +435,7 @@ def gerar_dados_teste(request):
                 'dados_existentes': {
                     'contabilidades': Contabilidade.objects.count(),
                     'imobiliarias': Imobiliaria.objects.count(),
+                    'contas_bancarias': ContaBancaria.objects.count(),
                     'imoveis': Imovel.objects.count(),
                     'compradores': Comprador.objects.count(),
                     'contratos': Contrato.objects.count(),
@@ -281,6 +478,7 @@ def gerar_dados_teste(request):
             'dados_gerados': {
                 'contabilidades': Contabilidade.objects.count(),
                 'imobiliarias': Imobiliaria.objects.count(),
+                'contas_bancarias': ContaBancaria.objects.count(),
                 'imoveis': Imovel.objects.count(),
                 'compradores': Comprador.objects.count(),
                 'contratos': Contrato.objects.count(),
@@ -299,7 +497,6 @@ def gerar_dados_teste(request):
         }, status=500)
 
 
-@csrf_exempt
 @require_http_methods(["GET", "POST", "DELETE"])
 def limpar_dados_teste(request):
     """
@@ -913,7 +1110,6 @@ def api_obter_conta_bancaria(request, conta_id):
 
 
 @login_required
-@csrf_exempt
 @require_http_methods(["POST"])
 def api_criar_conta_bancaria(request):
     """Cria uma nova conta bancária"""
@@ -953,7 +1149,6 @@ def api_criar_conta_bancaria(request):
 
 
 @login_required
-@csrf_exempt
 @require_http_methods(["PUT", "POST"])
 def api_atualizar_conta_bancaria(request, conta_id):
     """Atualiza uma conta bancária existente"""
@@ -989,7 +1184,6 @@ def api_atualizar_conta_bancaria(request, conta_id):
 
 
 @login_required
-@csrf_exempt
 @require_http_methods(["DELETE", "POST"])
 def api_excluir_conta_bancaria(request, conta_id):
     """Exclui (soft delete) uma conta bancária"""
