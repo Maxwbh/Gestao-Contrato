@@ -192,21 +192,21 @@ class BoletoService:
         # Codigo do banco (necessario antes de montar 'dados')
         codigo_banco = conta_bancaria.banco
 
-         # Numero do documento
-         numero_documento = parcela.gerar_numero_documento()
- 
-         # Instrucoes (usando configuracoes do contrato)
-         instrucoes = []
-         if config_boleto.get('instrucao_1'):
-             instrucoes.append(config_boleto['instrucao_1'])
-         if config_boleto.get('instrucao_2'):
-             instrucoes.append(config_boleto['instrucao_2'])
-         if config_boleto.get('instrucao_3'):
-             instrucoes.append(config_boleto['instrucao_3'])
-         # Adicionar informacoes padrao
-         instrucoes.append(f"Parcela {parcela.numero_parcela} de {contrato.numero_parcelas}")
-         instrucoes.append(f"Contrato: {contrato.numero_contrato}")
-         instrucoes.append(f"Imovel: {contrato.imovel.identificacao}")
+        # Numero do documento
+        numero_documento = parcela.gerar_numero_documento()
+
+        # Instrucoes (usando configuracoes do contrato)
+        instrucoes = []
+        if config_boleto.get('instrucao_1'):
+            instrucoes.append(config_boleto['instrucao_1'])
+        if config_boleto.get('instrucao_2'):
+            instrucoes.append(config_boleto['instrucao_2'])
+        if config_boleto.get('instrucao_3'):
+            instrucoes.append(config_boleto['instrucao_3'])
+        # Adicionar informacoes padrao
+        instrucoes.append(f"Parcela {parcela.numero_parcela} de {contrato.numero_parcelas}")
+        instrucoes.append(f"Contrato: {contrato.numero_contrato}")
+        instrucoes.append(f"Imovel: {contrato.imovel.identificacao}")
 
         # Dados do boleto no formato BRCobranca
         dados = {
@@ -214,13 +214,13 @@ class BoletoService:
              'cedente': imobiliaria.razao_social or imobiliaria.nome,
              'documento_cedente': documento_cedente,
              'cedente_endereco': f"{imobiliaria.logradouro}, {imobiliaria.numero}" if imobiliaria.logradouro else '',
- 
+
              # Dados Bancarios
              'agencia': conta_bancaria.agencia.replace('-', '').replace('.', ''),
              'conta_corrente': conta_bancaria.conta.replace('-', '').replace('.', ''),
              'convenio': str(conta_bancaria.convenio) if conta_bancaria.convenio else '',
              'carteira': str(carteira),
- 
+
              # Dados do Boleto
              'nosso_numero': str(nosso_numero),
              # manter ambas chaves para compatibilidade com diferentes versões/expectativas
