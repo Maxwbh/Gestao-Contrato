@@ -93,102 +93,190 @@ class BoletoService:
 
     # =========================================================================
     # CAMPOS NAO SUPORTADOS POR BANCO (BRCobranca)
-    # Baseado na documentacao oficial: https://github.com/kivanio/brcobranca
-    # Estes campos serao removidos antes de enviar para a API
+    # Baseado na analise do codigo-fonte oficial: https://github.com/kivanio/brcobranca
+    # Ver documentacao completa em: docs/BRCOBRANCA_CAMPOS_REFERENCIA.md
     #
-    # NOTA: numero_documento agora e enviado para TODOS os bancos conforme API
+    # IMPORTANTE: Todos os campos da classe Base do BRCobranca SAO ACEITOS por
+    # todos os bancos. Isso inclui:
+    # - documento_numero / numero_documento (ENVIAR PARA TODOS OS BANCOS)
+    # - aceite, especie_documento, especie, moeda (campos padrao)
+    # - instrucoes, local_pagamento, cedente_endereco, sacado_endereco
+    # - codigo_multa, valor_multa, percentual_multa, data_multa
+    # - codigo_mora, valor_mora, percentual_mora, data_mora
+    # - desconto, data_desconto
+    #
+    # Filtrar APENAS campos que:
+    # 1. Excedem tamanho maximo do banco
+    # 2. Sao obrigatorios mas estao vazios
+    # 3. Tem formato incompativel com o banco
+    #
+    # NUNCA filtrar campos opcionais validos da classe Base!
     # =========================================================================
     CAMPOS_NAO_SUPORTADOS = {
-        # Banco do Brasil (001) - Todos os campos sao enviados
+        # Banco do Brasil (001)
+        # Aceita TODOS os campos da Base + convenio (4-8 dig) + codigo_servico
         '001': [],
-        # Banco Nordeste (004) - Usa campos padrao
+
+        # Banco Nordeste (004)
+        # Aceita TODOS os campos da Base
         '004': [],
-        # Banestes (021) - Campos padrao
+
+        # Banestes (021)
+        # Aceita TODOS os campos da Base
         '021': [],
-        # Santander (033) - Campos padrao
+
+        # Santander (033)
+        # Aceita TODOS os campos da Base + convenio obrigatorio (7 dig)
         '033': [],
-        # Banrisul (041) - Campos padrao
+
+        # Banrisul (041)
+        # Aceita TODOS os campos da Base
         '041': [],
-        # BRB (070) - Campos padrao
+
+        # BRB (070)
+        # Aceita TODOS os campos da Base
         '070': [],
-        # Banco Inter (077) - Campos padrao
+
+        # Banco Inter (077)
+        # Aceita TODOS os campos da Base
         '077': [],
-        # Unicred (084/136) - Campos padrao
+
+        # Unicred (084/136)
+        # Aceita TODOS os campos da Base + conta_corrente_dv
         '084': [],
-        # Ailos (085) - Campos padrao
+
+        # Ailos (085)
+        # Aceita TODOS os campos da Base
         '085': [],
-        # Caixa (104) - Campos padrao (usa emissao e codigo_beneficiario)
+
+        # Caixa (104)
+        # Aceita TODOS os campos da Base + emissao (1 dig) + codigo_beneficiario
         '104': [],
-        # Cresol (133) - Campos padrao
+
+        # Cresol (133)
+        # Aceita TODOS os campos da Base
         '133': [],
-        # Unicred (136) - Campos padrao
+
+        # Unicred (136)
+        # Aceita TODOS os campos da Base + conta_corrente_dv
         '136': [],
-        # Bradesco (237) - Campos padrao
+
+        # Bradesco (237)
+        # Aceita TODOS os campos da Base
         '237': [],
-        # Itau (341) - Campos padrao (usa seu_numero para carteiras especiais)
+
+        # Itau (341)
+        # Aceita TODOS os campos da Base + seu_numero (para carteiras especificas)
         '341': [],
-        # Banco Mercantil (389) - Campos padrao
+
+        # Banco Mercantil (389)
+        # Aceita TODOS os campos da Base
         '389': [],
-        # Safra (422) - Campos padrao
+
+        # Safra (422)
+        # Aceita TODOS os campos da Base + agencia_dv + conta_corrente_dv
         '422': [],
-        # Sicredi (748) - Todos os campos sao enviados
+
+        # Sicredi (748)
+        # Aceita TODOS os campos da Base + posto (2 dig) + byte_idt (1 dig)
         '748': [],
-        # Sicoob (756) - Todos os campos sao enviados
+
+        # Sicoob (756)
+        # Aceita TODOS os campos da Base + variacao (2 dig) + quantidade (3 dig)
         '756': [],
     }
 
     # =========================================================================
     # CAMPOS ESPECIFICOS POR BANCO (devem ser adicionados)
+    # Campos especificos alem dos campos comuns da classe Base
+    # Ver documentacao completa: docs/BRCOBRANCA_CAMPOS_REFERENCIA.md
     # =========================================================================
     CAMPOS_ESPECIFICOS = {
-        # Banco do Brasil (001) - convenio obrigatorio
+        # Banco do Brasil (001)
+        # Convenio obrigatorio (4-8 digitos)
+        # Codigo_servico opcional (boolean)
         '001': {
             'obrigatorios': ['convenio'],
             'opcionais': ['codigo_servico'],
+            'tamanhos': {'convenio': (4, 8)},  # min, max
         },
+
         # Banco Nordeste (004)
         '004': {
             'obrigatorios': [],
             'opcionais': ['digito_conta_corrente'],
+            'tamanhos': {},
         },
+
         # Banrisul (041)
         '041': {
             'obrigatorios': [],
             'opcionais': ['digito_convenio'],
+            'tamanhos': {},
         },
-        # Caixa (104) - emissao obrigatorio
+
+        # Santander (033)
+        # Convenio obrigatorio (7 digitos)
+        '033': {
+            'obrigatorios': ['convenio'],
+            'opcionais': [],
+            'tamanhos': {'convenio': (7, 7)},
+        },
+
+        # Caixa (104)
+        # Emissao obrigatorio (1 digito, padrao '4')
+        # Codigo_beneficiario opcional (geralmente igual ao convenio)
         '104': {
             'obrigatorios': ['emissao'],
             'opcionais': ['codigo_beneficiario'],
+            'tamanhos': {'emissao': (1, 1), 'convenio': (6, 6)},
         },
-        # Itau (341) - seu_numero para carteiras especiais
+
+        # Itau (341)
+        # Seu_numero obrigatorio para carteiras: 198,106,107,122,142,143,195,196
         '341': {
             'obrigatorios': [],
             'opcionais': ['seu_numero'],
+            'tamanhos': {'seu_numero': (0, 7)},
+            'carteiras_seu_numero': ['198', '106', '107', '122', '142', '143', '195', '196'],
         },
-        # Sicredi (748) - posto e byte_idt obrigatorios
+
+        # Sicredi (748)
+        # Posto obrigatorio (2 digitos)
+        # Byte_idt obrigatorio (1 digito, geralmente '2' para geracao pelo beneficiario)
         '748': {
             'obrigatorios': ['posto', 'byte_idt'],
             'opcionais': [],
+            'tamanhos': {'posto': (2, 2), 'byte_idt': (1, 1)},
         },
-        # Sicoob (756) - variacao e quantidade
+
+        # Sicoob (756)
+        # Variacao obrigatorio (2 digitos, padrao '01')
+        # Quantidade opcional (3 digitos, padrao '001')
+        # Codigo_beneficiario opcional
         '756': {
             'obrigatorios': ['variacao'],
             'opcionais': ['quantidade', 'codigo_beneficiario'],
+            'tamanhos': {'variacao': (2, 2), 'quantidade': (3, 3)},
         },
+
         # Unicred (084/136)
         '084': {
             'obrigatorios': [],
             'opcionais': ['conta_corrente_dv'],
+            'tamanhos': {},
         },
         '136': {
             'obrigatorios': [],
             'opcionais': ['conta_corrente_dv'],
+            'tamanhos': {},
         },
+
         # Safra (422)
         '422': {
             'obrigatorios': [],
             'opcionais': ['agencia_dv', 'conta_corrente_dv'],
+            'tamanhos': {},
         },
     }
 
@@ -734,23 +822,43 @@ class BoletoService:
 
                 # Gerar PDF do boleto via GET
                 # A API BRCobranca espera GET com parametros na query string
+                # Enviando TODOS os campos da classe Base conforme documentacao
+                # Ver: docs/BRCOBRANCA_CAMPOS_REFERENCIA.md
                 params = {
                     'type': 'pdf',
                     'bank': banco_nome,
+
+                    # Dados do Beneficiario (Cedente)
                     'boleto[cedente]': dados_boleto.get('cedente', ''),
                     'boleto[documento_cedente]': dados_boleto.get('documento_cedente', ''),
+
+                    # Dados do Pagador (Sacado)
                     'boleto[sacado]': dados_boleto.get('sacado', ''),
                     'boleto[sacado_documento]': dados_boleto.get('sacado_documento', ''),
+                    'boleto[sacado_endereco]': dados_boleto.get('sacado_endereco', ''),
+
+                    # Dados Bancarios
                     'boleto[agencia]': dados_boleto.get('agencia', ''),
                     'boleto[conta_corrente]': dados_boleto.get('conta_corrente', ''),
                     'boleto[convenio]': dados_boleto.get('convenio', ''),
                     'boleto[carteira]': dados_boleto.get('carteira', ''),
+
+                    # Identificacao do Boleto
                     'boleto[nosso_numero]': dados_boleto.get('nosso_numero', ''),
                     'boleto[numero_documento]': dados_boleto.get('numero_documento', ''),
                     'boleto[documento_numero]': dados_boleto.get('documento_numero', ''),
-                    'boleto[data_vencimento]': dados_boleto.get('data_vencimento', ''),
+
+                    # Valores e Datas
                     'boleto[valor]': dados_boleto.get('valor', ''),
-                    'boleto[sacado_endereco]': dados_boleto.get('sacado_endereco', ''),
+                    'boleto[data_vencimento]': dados_boleto.get('data_vencimento', ''),
+
+                    # Campos obrigatorios da classe Base (ENVIAR SEMPRE)
+                    'boleto[moeda]': dados_boleto.get('moeda', '9'),
+                    'boleto[especie]': dados_boleto.get('especie', 'R$'),
+                    'boleto[especie_documento]': dados_boleto.get('especie_documento', 'DM'),
+                    'boleto[aceite]': dados_boleto.get('aceite', 'S'),
+
+                    # Informacoes e Instrucoes
                     'boleto[local_pagamento]': dados_boleto.get('local_pagamento', 'Pagavel em qualquer banco'),
                     'boleto[instrucao1]': dados_boleto.get('instrucao1', ''),
                     'boleto[instrucao2]': dados_boleto.get('instrucao2', ''),
@@ -759,11 +867,25 @@ class BoletoService:
                 }
 
                 # Adicionar campos opcionais se existirem
-                campos_opcionais = ['variacao', 'posto', 'byte_idt', 'emissao', 'codigo_beneficiario',
-                                   'seu_numero', 'data_documento', 'especie', 'cedente_endereco',
-                                   'codigo_multa', 'percentual_multa', 'valor_multa', 'data_multa',
-                                   'codigo_mora', 'percentual_mora', 'valor_mora', 'data_mora',
-                                   'desconto', 'data_desconto']
+                # Enviando TODOS os campos disponiveis conforme recomendacao
+                campos_opcionais = [
+                    # Campos especificos por banco
+                    'variacao', 'posto', 'byte_idt', 'emissao', 'codigo_beneficiario',
+                    'seu_numero', 'codigo_servico',
+                    # Campos adicionais
+                    'data_documento', 'cedente_endereco', 'data_processamento',
+                    'quantidade', 'avalista', 'avalista_documento',
+                    # Multa
+                    'codigo_multa', 'percentual_multa', 'valor_multa', 'data_multa',
+                    # Mora/Juros
+                    'codigo_mora', 'percentual_mora', 'valor_mora', 'data_mora',
+                    # Desconto
+                    'desconto', 'data_desconto',
+                    # Instrucoes adicionais
+                    'instrucao5', 'instrucao6', 'instrucao7',
+                    # Outros campos opcionais da classe Base
+                    'demonstrativo', 'emv', 'descontos_e_abatimentos'
+                ]
 
                 for campo in campos_opcionais:
                     if campo in dados_boleto and dados_boleto[campo]:
