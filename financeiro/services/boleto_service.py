@@ -95,15 +95,12 @@ class BoletoService:
     # CAMPOS NAO SUPORTADOS POR BANCO (BRCobranca)
     # Baseado na documentacao oficial: https://github.com/kivanio/brcobranca
     # Estes campos serao removidos antes de enviar para a API
+    #
+    # NOTA: numero_documento agora e enviado para TODOS os bancos conforme API
     # =========================================================================
     CAMPOS_NAO_SUPORTADOS = {
-        # Banco do Brasil (001) - Nao suporta numero_documento, especie_documento, aceite
-        '001': [
-            'numero_documento',
-            'documento_numero',  # Remover ambas variantes
-            'especie_documento',
-            'aceite',
-        ],
+        # Banco do Brasil (001) - Todos os campos sao enviados
+        '001': [],
         # Banco Nordeste (004) - Usa campos padrao
         '004': [],
         # Banestes (021) - Campos padrao
@@ -134,18 +131,10 @@ class BoletoService:
         '389': [],
         # Safra (422) - Campos padrao
         '422': [],
-        # Sicredi (748) - Nao suporta numero_documento
-        '748': [
-            'numero_documento',
-            'documento_numero',  # Remover ambas variantes
-        ],
-        # Sicoob (756) - Nao suporta numero_documento, especie_documento, aceite
-        '756': [
-            'numero_documento',
-            'documento_numero',  # Remover ambas variantes
-            'especie_documento',
-            'aceite',
-        ],
+        # Sicredi (748) - Todos os campos sao enviados
+        '748': [],
+        # Sicoob (756) - Todos os campos sao enviados
+        '756': [],
     }
 
     # =========================================================================
@@ -434,9 +423,8 @@ class BoletoService:
         # Instrucoes (usando configuracoes do contrato)
         instrucoes = []
 
-        # Adicionar numero do documento para bancos que nao suportam o campo
-        if codigo_banco in ['001', '748', '756']:  # BB, Sicredi, Sicoob
-            instrucoes.append(f"Doc: {numero_documento}")
+        # Adicionar numero do documento nas instrucoes para referencia
+        instrucoes.append(f"Doc: {numero_documento}")
 
         # Adicionar instrucoes personalizadas
         if config_boleto.get('instrucao_1'):
@@ -686,11 +674,20 @@ class BoletoService:
 
             # Em caso de sucesso, incluir identificadores locais para UI
             if resultado.get('sucesso'):
+                # Usar nosso_numero retornado pela API, se disponivel
+                # Caso contrario, usar o nosso_numero local
+                nosso_numero_final = resultado.get('nosso_numero_api') or str(nosso_numero)
+
+                if resultado.get('nosso_numero_api'):
+                    logger.info(f"Usando nosso_numero da API: {nosso_numero_final}")
+                else:
+                    logger.info(f"Usando nosso_numero local: {nosso_numero_final}")
+
                 # Usar gerar_numero_documento() para obter o numero, pois alguns bancos
                 # (BB, Sicoob) removem documento_numero dos dados antes de enviar a API
                 return {
                     'sucesso': True,
-                    'nosso_numero': str(nosso_numero),
+                    'nosso_numero': nosso_numero_final,
                     'numero_documento': parcela.gerar_numero_documento(),
                     'linha_digitavel': resultado.get('linha_digitavel', ''),
                     'codigo_barras': resultado.get('codigo_barras', ''),
@@ -749,6 +746,8 @@ class BoletoService:
                     'boleto[convenio]': dados_boleto.get('convenio', ''),
                     'boleto[carteira]': dados_boleto.get('carteira', ''),
                     'boleto[nosso_numero]': dados_boleto.get('nosso_numero', ''),
+                    'boleto[numero_documento]': dados_boleto.get('numero_documento', ''),
+                    'boleto[documento_numero]': dados_boleto.get('documento_numero', ''),
                     'boleto[data_vencimento]': dados_boleto.get('data_vencimento', ''),
                     'boleto[valor]': dados_boleto.get('valor', ''),
                     'boleto[sacado_endereco]': dados_boleto.get('sacado_endereco', ''),
@@ -1001,11 +1000,19 @@ class BoletoService:
                 else:
                     logger.warning(f"Dados incompletos - linha_digitavel: {'OK' if linha_digitavel else 'VAZIO'}, codigo_barras: {'OK' if codigo_barras else 'VAZIO'}")
 
+            # Capturar nosso_numero retornado pela API
+            nosso_numero_api = ''
+            if banco_nome and dados_boleto:
+                nosso_numero_api = dados_extras.get('nosso_numero_formatado', '')
+                if nosso_numero_api:
+                    logger.info(f"Nosso numero retornado pela API: {nosso_numero_api}")
+
             return {
                 'sucesso': True,
                 'pdf_content': pdf_content,
                 'linha_digitavel': linha_digitavel,
                 'codigo_barras': codigo_barras,
+                'nosso_numero_api': nosso_numero_api,  # Nosso numero gerado pela API
             }
 
         except Exception as e:
