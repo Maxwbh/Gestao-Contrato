@@ -1064,7 +1064,11 @@ class BoletoService:
     def _obter_dados_boleto(self, banco_nome, dados_boleto):
         """
         Obtem dados do boleto (linha digitavel, codigo de barras, nosso numero formatado)
-        via endpoint /api/boleto/data
+        via endpoint /boleto/nosso_numero da API oficial
+
+        NOTA: Este metodo tenta obter dados adicionais do boleto para exibicao.
+        Se falhar, o sistema continuara funcionando normalmente pois o PDF
+        gerado ja contem todas as informacoes necessarias.
 
         Args:
             banco_nome: Nome do banco no formato BRCobranca
@@ -1079,15 +1083,16 @@ class BoletoService:
                 'data': json.dumps(dados_boleto)
             }
 
+            # Tentar endpoint oficial /boleto/nosso_numero
             response = requests.get(
-                f"{self.brcobranca_url}/api/boleto/data",
+                f"{self.brcobranca_url}/boleto/nosso_numero",
                 params=params,
                 timeout=10
             )
 
             if response.status_code == 200:
                 data = response.json()
-                logger.info(f"Dados do boleto obtidos: linha_digitavel={'sim' if data.get('linha_digitavel') else 'nao'}, codigo_barras={'sim' if data.get('codigo_barras') else 'nao'}")
+                logger.info(f"Dados do boleto obtidos via /boleto/nosso_numero")
                 return {
                     'linha_digitavel': data.get('linha_digitavel', ''),
                     'codigo_barras': data.get('codigo_barras', ''),
@@ -1095,11 +1100,11 @@ class BoletoService:
                     'agencia_conta_boleto': data.get('agencia_conta_boleto', '')
                 }
             else:
-                logger.warning(f"Erro ao obter dados do boleto: HTTP {response.status_code}")
+                logger.debug(f"Endpoint /boleto/nosso_numero retornou {response.status_code}, dados opcionais nao disponiveis")
                 return {}
 
         except Exception as e:
-            logger.warning(f"Nao foi possivel obter dados do boleto via /api/boleto/data: {e}")
+            logger.debug(f"Nao foi possivel obter dados opcionais do boleto: {e}")
             return {}
 
     def _processar_resposta_sucesso(self, response, banco_nome=None, dados_boleto=None):
