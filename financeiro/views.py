@@ -790,11 +790,19 @@ def visualizar_boleto(request, pk):
     comprador = contrato.comprador
     imobiliaria = contrato.imobiliaria
 
+    # Calcular valores para hoje
+    valores_hoje = parcela.calcular_valores_hoje()
+
+    # Verificar se e popup (sem navbar) - verificando se tem parametro popup ou se nao tem referer
+    popup = request.GET.get('popup', 'false').lower() == 'true' or not request.META.get('HTTP_REFERER')
+
     context = {
         'parcela': parcela,
         'contrato': contrato,
         'comprador': comprador,
         'imobiliaria': imobiliaria,
+        'valores_hoje': valores_hoje,
+        'popup': popup,
     }
 
     return render(request, 'financeiro/visualizar_boleto.html', context)
