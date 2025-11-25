@@ -91,6 +91,195 @@ class BoletoService:
         },
     }
 
+    # =========================================================================
+    # CAMPOS NAO SUPORTADOS POR BANCO (BRCobranca)
+    # Baseado na documentacao oficial: https://github.com/kivanio/brcobranca
+    # Estes campos serao removidos antes de enviar para a API
+    # =========================================================================
+    CAMPOS_NAO_SUPORTADOS = {
+        # Banco do Brasil (001) - Nao suporta documento_numero, especie_documento, aceite
+        '001': [
+            'documento_numero',
+            'especie_documento',
+            'aceite',
+        ],
+        # Banco Nordeste (004) - Usa campos padrao
+        '004': [],
+        # Banestes (021) - Campos padrao
+        '021': [],
+        # Santander (033) - Campos padrao
+        '033': [],
+        # Banrisul (041) - Campos padrao
+        '041': [],
+        # BRB (070) - Campos padrao
+        '070': [],
+        # Banco Inter (077) - Campos padrao
+        '077': [],
+        # Unicred (084/136) - Campos padrao
+        '084': [],
+        # Ailos (085) - Campos padrao
+        '085': [],
+        # Caixa (104) - Campos padrao (usa emissao e codigo_beneficiario)
+        '104': [],
+        # Cresol (133) - Campos padrao
+        '133': [],
+        # Unicred (136) - Campos padrao
+        '136': [],
+        # Bradesco (237) - Campos padrao
+        '237': [],
+        # Itau (341) - Campos padrao (usa seu_numero para carteiras especiais)
+        '341': [],
+        # Banco Mercantil (389) - Campos padrao
+        '389': [],
+        # Safra (422) - Campos padrao
+        '422': [],
+        # Sicredi (748) - Nao suporta documento_numero
+        '748': [
+            'documento_numero',
+        ],
+        # Sicoob (756) - Nao suporta documento_numero, especie_documento, aceite
+        '756': [
+            'documento_numero',
+            'especie_documento',
+            'aceite',
+        ],
+    }
+
+    # =========================================================================
+    # CAMPOS ESPECIFICOS POR BANCO (devem ser adicionados)
+    # =========================================================================
+    CAMPOS_ESPECIFICOS = {
+        # Banco do Brasil (001) - convenio obrigatorio
+        '001': {
+            'obrigatorios': ['convenio'],
+            'opcionais': ['codigo_servico'],
+        },
+        # Banco Nordeste (004)
+        '004': {
+            'obrigatorios': [],
+            'opcionais': ['digito_conta_corrente'],
+        },
+        # Banrisul (041)
+        '041': {
+            'obrigatorios': [],
+            'opcionais': ['digito_convenio'],
+        },
+        # Caixa (104) - emissao obrigatorio
+        '104': {
+            'obrigatorios': ['emissao'],
+            'opcionais': ['codigo_beneficiario'],
+        },
+        # Itau (341) - seu_numero para carteiras especiais
+        '341': {
+            'obrigatorios': [],
+            'opcionais': ['seu_numero'],
+        },
+        # Sicredi (748) - posto e byte_idt obrigatorios
+        '748': {
+            'obrigatorios': ['posto', 'byte_idt'],
+            'opcionais': [],
+        },
+        # Sicoob (756) - variacao e quantidade
+        '756': {
+            'obrigatorios': ['variacao'],
+            'opcionais': ['quantidade', 'codigo_beneficiario'],
+        },
+        # Unicred (084/136)
+        '084': {
+            'obrigatorios': [],
+            'opcionais': ['conta_corrente_dv'],
+        },
+        '136': {
+            'obrigatorios': [],
+            'opcionais': ['conta_corrente_dv'],
+        },
+        # Safra (422)
+        '422': {
+            'obrigatorios': [],
+            'opcionais': ['agencia_dv', 'conta_corrente_dv'],
+        },
+    }
+
+    # =========================================================================
+    # TAMANHOS MAXIMOS DE CAMPOS POR BANCO
+    # =========================================================================
+    TAMANHOS_CAMPOS = {
+        '001': {  # Banco do Brasil
+            'agencia': 4,
+            'conta_corrente': 8,
+            'convenio': 8,  # 4-8 digitos
+            'carteira': 2,
+        },
+        '004': {  # Banco Nordeste
+            'agencia': 4,
+            'conta_corrente': 7,
+            'nosso_numero': 7,
+            'carteira': 2,
+        },
+        '033': {  # Santander
+            'agencia': 4,
+            'convenio': 7,
+            'nosso_numero': 7,
+            'conta_corrente': 9,
+        },
+        '041': {  # Banrisul
+            'agencia': 4,
+            'conta_corrente': 8,
+            'nosso_numero': 8,
+            'convenio': 7,
+            'carteira': 1,
+        },
+        '104': {  # Caixa
+            'agencia': 4,
+            'convenio': 6,
+            'nosso_numero': 17,
+        },
+        '237': {  # Bradesco
+            'agencia': 4,
+            'conta_corrente': 7,
+            'nosso_numero': 11,
+            'carteira': 2,
+        },
+        '341': {  # Itau
+            'agencia': 4,
+            'conta_corrente': 5,
+            'convenio': 5,
+            'nosso_numero': 8,
+            'seu_numero': 7,
+        },
+        '422': {  # Safra
+            'agencia': 4,
+            'conta_corrente': 8,
+            'nosso_numero': 9,
+        },
+        '748': {  # Sicredi
+            'agencia': 4,
+            'conta_corrente': 5,
+            'convenio': 5,
+            'nosso_numero': 5,
+            'carteira': 1,
+            'posto': 2,
+        },
+        '756': {  # Sicoob
+            'agencia': 4,
+            'conta_corrente': 8,
+            'convenio': 7,
+            'nosso_numero': 7,
+        },
+        '084': {  # Unicred
+            'agencia': 4,
+            'conta_corrente': 9,
+            'nosso_numero': 10,
+            'carteira': 2,
+        },
+        '136': {  # Unicred
+            'agencia': 4,
+            'conta_corrente': 9,
+            'nosso_numero': 10,
+            'carteira': 2,
+        },
+    }
+
     def __init__(self, brcobranca_url=None):
         """
         Inicializa o servico de boleto.
@@ -133,6 +322,50 @@ class BoletoService:
         if dias_desconto and dias_desconto > 0:
             return data_vencimento - timedelta(days=dias_desconto)
         return None
+
+    def _filtrar_campos_banco(self, dados, codigo_banco):
+        """
+        Filtra e valida campos do boleto conforme suporte do banco no BRCobranca.
+
+        Remove campos nao suportados e aplica tamanhos maximos.
+
+        Args:
+            dados: Dicionario com dados do boleto
+            codigo_banco: Codigo do banco (ex: '001', '756')
+
+        Returns:
+            dict: Dados filtrados e validados
+        """
+        dados_filtrados = dados.copy()
+
+        # Remover campos nao suportados pelo banco
+        campos_remover = self.CAMPOS_NAO_SUPORTADOS.get(codigo_banco, [])
+        for campo in campos_remover:
+            if campo in dados_filtrados:
+                logger.debug(f"Removendo campo '{campo}' nao suportado pelo banco {codigo_banco}")
+                dados_filtrados.pop(campo)
+
+        # Aplicar tamanhos maximos de campos
+        tamanhos = self.TAMANHOS_CAMPOS.get(codigo_banco, {})
+        for campo, tamanho_max in tamanhos.items():
+            if campo in dados_filtrados and dados_filtrados[campo]:
+                valor = str(dados_filtrados[campo])
+                # Remover caracteres nao numericos para campos numericos
+                if campo in ['agencia', 'conta_corrente', 'convenio', 'nosso_numero', 'carteira', 'posto', 'seu_numero']:
+                    valor = ''.join(filter(str.isdigit, valor))
+                # Aplicar padding com zeros e truncar
+                dados_filtrados[campo] = valor.zfill(tamanho_max)[:tamanho_max]
+
+        # Validar campos obrigatorios especificos do banco
+        campos_especificos = self.CAMPOS_ESPECIFICOS.get(codigo_banco, {})
+        campos_obrigatorios = campos_especificos.get('obrigatorios', [])
+        for campo in campos_obrigatorios:
+            if not dados_filtrados.get(campo):
+                logger.warning(f"Campo obrigatorio '{campo}' ausente para banco {codigo_banco}")
+
+        logger.info(f"Campos filtrados para banco {codigo_banco}: removidos={campos_remover}")
+
+        return dados_filtrados
 
     def _montar_dados_boleto(self, parcela, conta_bancaria):
         """
@@ -197,16 +430,56 @@ class BoletoService:
 
         # Instrucoes (usando configuracoes do contrato)
         instrucoes = []
+
+        # Adicionar numero do documento para bancos que nao suportam o campo
+        if codigo_banco in ['001', '748', '756']:  # BB, Sicredi, Sicoob
+            instrucoes.append(f"Doc: {numero_documento}")
+
+        # Adicionar instrucoes personalizadas
         if config_boleto.get('instrucao_1'):
             instrucoes.append(config_boleto['instrucao_1'])
         if config_boleto.get('instrucao_2'):
             instrucoes.append(config_boleto['instrucao_2'])
         if config_boleto.get('instrucao_3'):
             instrucoes.append(config_boleto['instrucao_3'])
+
+        # Adicionar instrucoes de multa se configurada
+        valor_multa_config = config_boleto.get('valor_multa', 0) or 0
+        if valor_multa_config > 0:
+            tipo_multa = config_boleto.get('tipo_valor_multa', 'PERCENTUAL')
+            dias_carencia = config_boleto.get('dias_carencia', 0) or 0
+            if tipo_multa == 'PERCENTUAL':
+                instrucoes.append(f"Multa de {valor_multa_config}% apos {dias_carencia} dias do vencimento")
+            else:
+                instrucoes.append(f"Multa de R$ {valor_multa_config:.2f} apos {dias_carencia} dias do vencimento")
+
+        # Adicionar instrucoes de juros se configurada
+        valor_juros_config = config_boleto.get('valor_juros', 0) or 0
+        if valor_juros_config > 0:
+            tipo_juros = config_boleto.get('tipo_valor_juros', 'PERCENTUAL')
+            if tipo_juros == 'PERCENTUAL':
+                # Calcular juros diario a partir do mensal
+                juros_diario = valor_juros_config / 30
+                instrucoes.append(f"Juros de {juros_diario:.4f}% ao dia ({valor_juros_config}% ao mes)")
+            else:
+                instrucoes.append(f"Juros de R$ {valor_juros_config:.2f} ao dia")
+
+        # Adicionar instrucoes de desconto se configurada
+        valor_desconto_config = config_boleto.get('valor_desconto', 0) or 0
+        if valor_desconto_config > 0:
+            tipo_desconto = config_boleto.get('tipo_valor_desconto', 'PERCENTUAL')
+            dias_desconto = config_boleto.get('dias_desconto', 0) or 0
+            if tipo_desconto == 'PERCENTUAL':
+                valor_desc = float(parcela.valor_atual) * float(valor_desconto_config) / 100
+                instrucoes.append(f"Desconto de R$ {valor_desc:.2f} ate {dias_desconto} dias antes do vencimento")
+            else:
+                instrucoes.append(f"Desconto de R$ {valor_desconto_config:.2f} ate {dias_desconto} dias antes do vencimento")
+
         # Adicionar informacoes padrao
         instrucoes.append(f"Parcela {parcela.numero_parcela} de {contrato.numero_parcelas}")
         instrucoes.append(f"Contrato: {contrato.numero_contrato}")
-        instrucoes.append(f"Imovel: {contrato.imovel.identificacao}")
+        if contrato.imovel and contrato.imovel.identificacao:
+            instrucoes.append(f"Imovel: {contrato.imovel.identificacao}")
 
         # Dados do boleto no formato BRCobranca
         dados = {
@@ -260,9 +533,7 @@ class BoletoService:
             # Formatar convenio com zeros a esquerda se necessario
             if dados.get('convenio'):
                 dados['convenio'] = str(dados['convenio']).zfill(7)
-            # Remover campos nao suportados pelo BB
-            for campo in ['documento_numero', 'especie_documento', 'aceite']:
-                dados.pop(campo, None)
+            # Campos nao suportados sao removidos pelo _filtrar_campos_banco
 
         # Santander (033)
         elif codigo_banco == '033':
@@ -325,6 +596,7 @@ class BoletoService:
             # Modalidade (codigo_beneficiario quando aplicavel)
             if hasattr(conta_bancaria, 'codigo_beneficiario') and conta_bancaria.codigo_beneficiario:
                 dados['codigo_beneficiario'] = conta_bancaria.codigo_beneficiario
+            # Campos nao suportados sao removidos pelo _filtrar_campos_banco
 
         # =====================================================
         # MULTA (apos vencimento)
@@ -383,6 +655,12 @@ class BoletoService:
                 else:
                     dados['desconto'] = float(valor_desconto)
 
+        # =====================================================
+        # FILTRAGEM E VALIDACAO FINAL POR BANCO
+        # Remove campos nao suportados e aplica tamanhos maximos
+        # =====================================================
+        dados = self._filtrar_campos_banco(dados, codigo_banco)
+
         return dados, nosso_numero
 
     def gerar_boleto(self, parcela, conta_bancaria):
@@ -419,17 +697,19 @@ class BoletoService:
 
             # Em caso de sucesso, incluir identificadores locais para UI
             if resultado.get('sucesso'):
-                resultado.setdefault('dados_local', {})
-                resultado['dados_local'].update({
-                    'nosso_numero': nosso_numero,
-                    'numero_documento': numero_documento
-                })
-
-            return resultado
-
-        except KeyError as e:
-            logger.exception("Campo ausente ao gerar boleto: %s", e)
-            return {'sucesso': False, 'erro': f"Campo ausente: {str(e)}. Verifique os dados da parcela/conta."}
+                # Usar gerar_numero_documento() para obter o numero, pois alguns bancos
+                # (BB, Sicoob) removem documento_numero dos dados antes de enviar a API
+                return {
+                    'sucesso': True,
+                    'nosso_numero': str(nosso_numero),
+                    'numero_documento': parcela.gerar_numero_documento(),
+                    'linha_digitavel': resultado.get('linha_digitavel', ''),
+                    'codigo_barras': resultado.get('codigo_barras', ''),
+                    'valor': Decimal(str(dados_boleto['valor'])),
+                    'pdf_content': resultado.get('pdf_content'),
+                }
+            else:
+                return resultado
 
         except Exception as e:
             logger.exception("Erro ao gerar boleto: %s", e)
@@ -463,10 +743,10 @@ class BoletoService:
             try:
                 logger.info(f"Tentativa {tentativa}/{self.max_tentativas} de gerar boleto")
 
-                # Gerar PDF do boleto
+                # Gerar boleto com JSON contendo PDF e dados (linha_digitavel, codigo_barras)
+                # Não especificar 'type' para obter resposta JSON completa
                 params = {
                     'bank': banco_nome,
-                    'type': 'pdf',
                     'data': json.dumps(dados_boleto)
                 }
 
@@ -480,7 +760,7 @@ class BoletoService:
 
                 # Sucesso
                 if response.status_code == 200:
-                    return self._processar_resposta_sucesso(response)
+                    return self._processar_resposta_sucesso(response, banco_nome, dados_boleto)
 
                 # Erros que justificam retry (5xx)
                 elif 500 <= response.status_code < 600:
@@ -618,35 +898,125 @@ class BoletoService:
             'erros': erros
         }
 
-    def _processar_resposta_sucesso(self, response):
+    def _obter_dados_boleto(self, banco_nome, dados_boleto):
+        """
+        Obtem dados do boleto (linha digitavel, codigo de barras, nosso numero formatado)
+        via endpoint /api/boleto/data
+
+        Args:
+            banco_nome: Nome do banco no formato BRCobranca
+            dados_boleto: Dados do boleto
+
+        Returns:
+            dict: Dados do boleto ou dicionario vazio se falhar
+        """
+        try:
+            params = {
+                'bank': banco_nome,
+                'data': json.dumps(dados_boleto)
+            }
+
+            response = requests.get(
+                f"{self.brcobranca_url}/api/boleto/data",
+                params=params,
+                timeout=10
+            )
+
+            if response.status_code == 200:
+                data = response.json()
+                logger.info(f"Dados do boleto obtidos: linha_digitavel={'sim' if data.get('linha_digitavel') else 'nao'}, codigo_barras={'sim' if data.get('codigo_barras') else 'nao'}")
+                return {
+                    'linha_digitavel': data.get('linha_digitavel', ''),
+                    'codigo_barras': data.get('codigo_barras', ''),
+                    'nosso_numero_formatado': data.get('nosso_numero', ''),
+                    'agencia_conta_boleto': data.get('agencia_conta_boleto', '')
+                }
+            else:
+                logger.warning(f"Erro ao obter dados do boleto: HTTP {response.status_code}")
+                return {}
+
+        except Exception as e:
+            logger.warning(f"Nao foi possivel obter dados do boleto via /api/boleto/data: {e}")
+            return {}
+
+    def _processar_resposta_sucesso(self, response, banco_nome=None, dados_boleto=None):
         """Processa resposta bem-sucedida da API"""
+        import base64
+
         try:
             content_type = response.headers.get('content-type', '')
             linha_digitavel = ''
             codigo_barras = ''
+            pdf_content = None
 
             if 'application/pdf' in content_type:
                 # Resposta e o PDF diretamente
                 pdf_content = response.content
                 logger.info("Boleto gerado com sucesso (PDF)")
 
-            elif 'application/json' in content_type:
+                # Fazer chamada adicional para obter dados do boleto
+                if banco_nome and dados_boleto:
+                    dados_extras = self._obter_dados_boleto(banco_nome, dados_boleto)
+                    linha_digitavel = dados_extras.get('linha_digitavel', '')
+                    codigo_barras = dados_extras.get('codigo_barras', '')
+
+            elif 'application/json' in content_type or content_type.startswith('text/'):
+                # Resposta JSON com dados completos
                 result = response.json()
+
+                # Verificar se há erro
                 if isinstance(result, dict) and 'error' in result:
                     logger.error(f"Erro da API: {result['error']}")
                     return {
                         'sucesso': False,
                         'erro': result.get('error', 'Erro desconhecido')
                     }
-                pdf_content = result.get('pdf')
+
+                # Extrair dados do boleto
                 linha_digitavel = result.get('linha_digitavel', '')
                 codigo_barras = result.get('codigo_barras', '')
-                logger.info("Boleto gerado com sucesso (JSON)")
+
+                # Extrair PDF (pode estar em 'pdf', 'boleto', ou 'base64')
+                pdf_base64 = result.get('pdf') or result.get('boleto') or result.get('base64')
+
+                if pdf_base64:
+                    # Decodificar PDF de base64
+                    try:
+                        pdf_content = base64.b64decode(pdf_base64)
+                        logger.info(f"Boleto gerado com sucesso (JSON) - linha_digitavel={'OK' if linha_digitavel else 'VAZIO'}, codigo_barras={'OK' if codigo_barras else 'VAZIO'}")
+                    except Exception as e:
+                        logger.error(f"Erro ao decodificar PDF base64: {e}")
+                        pdf_content = None
+                else:
+                    logger.warning("PDF não encontrado na resposta JSON")
 
             else:
-                # Assumir PDF
-                pdf_content = response.content
-                logger.info("Boleto gerado com sucesso")
+                # Tentar interpretar como JSON mesmo sem content-type correto
+                try:
+                    result = response.json()
+                    linha_digitavel = result.get('linha_digitavel', '')
+                    codigo_barras = result.get('codigo_barras', '')
+                    pdf_base64 = result.get('pdf') or result.get('boleto') or result.get('base64')
+                    if pdf_base64:
+                        pdf_content = base64.b64decode(pdf_base64)
+                    logger.info("Boleto gerado com sucesso (JSON sem content-type)")
+                except:
+                    # Assumir que é PDF direto
+                    pdf_content = response.content
+                    logger.info("Boleto gerado com sucesso (assumido PDF)")
+
+                    # Tentar obter dados adicionais
+                    if banco_nome and dados_boleto:
+                        dados_extras = self._obter_dados_boleto(banco_nome, dados_boleto)
+                        linha_digitavel = dados_extras.get('linha_digitavel', '')
+                        codigo_barras = dados_extras.get('codigo_barras', '')
+
+            if not pdf_content:
+                logger.error("PDF não foi gerado ou não pôde ser extraído da resposta")
+                return {
+                    'sucesso': False,
+                    'erro': 'PDF não foi gerado corretamente'
+                }
 
             return {
                 'sucesso': True,
