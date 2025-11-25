@@ -985,7 +985,7 @@ function gerarBoleto(parcelaId, btn) {
 
             // Abrir boleto em nova aba apos um pequeno delay
             setTimeout(function() {
-                window.open('/financeiro/parcelas/' + parcelaId + '/boleto/visualizar/', '_blank');
+                window.open('/financeiro/parcelas/' + parcelaId + '/boleto/visualizar/?popup=true', '_blank');
             }, 500);
 
         } else {
