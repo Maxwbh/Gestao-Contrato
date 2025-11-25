@@ -735,19 +735,50 @@ class BoletoService:
             try:
                 logger.info(f"Tentativa {tentativa}/{self.max_tentativas} de gerar boleto")
 
-                # Gerar PDF do boleto
-                # A API BRCobranca espera POST com parametros na query string
-                url = f"{self.brcobranca_url}/api/boleto?type=pdf&bank={banco_nome}"
+                # Gerar PDF do boleto via GET
+                # A API BRCobranca espera GET com parametros na query string
+                params = {
+                    'type': 'pdf',
+                    'bank': banco_nome,
+                    'boleto[cedente]': dados_boleto.get('cedente', ''),
+                    'boleto[documento_cedente]': dados_boleto.get('documento_cedente', ''),
+                    'boleto[sacado]': dados_boleto.get('sacado', ''),
+                    'boleto[sacado_documento]': dados_boleto.get('sacado_documento', ''),
+                    'boleto[agencia]': dados_boleto.get('agencia', ''),
+                    'boleto[conta_corrente]': dados_boleto.get('conta_corrente', ''),
+                    'boleto[convenio]': dados_boleto.get('convenio', ''),
+                    'boleto[carteira]': dados_boleto.get('carteira', ''),
+                    'boleto[nosso_numero]': dados_boleto.get('nosso_numero', ''),
+                    'boleto[data_vencimento]': dados_boleto.get('data_vencimento', ''),
+                    'boleto[valor]': dados_boleto.get('valor', ''),
+                    'boleto[sacado_endereco]': dados_boleto.get('sacado_endereco', ''),
+                    'boleto[local_pagamento]': dados_boleto.get('local_pagamento', 'Pagavel em qualquer banco'),
+                    'boleto[instrucao1]': dados_boleto.get('instrucao1', ''),
+                    'boleto[instrucao2]': dados_boleto.get('instrucao2', ''),
+                    'boleto[instrucao3]': dados_boleto.get('instrucao3', ''),
+                    'boleto[instrucao4]': dados_boleto.get('instrucao4', ''),
+                }
+
+                # Adicionar campos opcionais se existirem
+                campos_opcionais = ['variacao', 'posto', 'byte_idt', 'emissao', 'codigo_beneficiario',
+                                   'seu_numero', 'data_documento', 'especie', 'cedente_endereco',
+                                   'codigo_multa', 'percentual_multa', 'valor_multa', 'data_multa',
+                                   'codigo_mora', 'percentual_mora', 'valor_mora', 'data_mora',
+                                   'desconto', 'data_desconto']
+
+                for campo in campos_opcionais:
+                    if campo in dados_boleto and dados_boleto[campo]:
+                        params[f'boleto[{campo}]'] = dados_boleto[campo]
 
                 # Log detalhado da requisicao
+                url = f"{self.brcobranca_url}/api/boleto"
                 logger.info(f"Chamando BRCobranca: {url}")
-                logger.debug(f"Banco: {banco_nome}, data_size={len(json.dumps(dados_boleto))} bytes")
+                logger.debug(f"Banco: {banco_nome}, params count: {len(params)}")
 
-                # Enviar dados como JSON no body via POST
-                response = requests.post(
+                # Enviar via GET
+                response = requests.get(
                     url,
-                    json=dados_boleto,
-                    headers={'Content-Type': 'application/json'},
+                    params=params,
                     timeout=self.timeout
                 )
 
