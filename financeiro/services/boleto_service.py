@@ -426,16 +426,56 @@ class BoletoService:
 
         # Instrucoes (usando configuracoes do contrato)
         instrucoes = []
+
+        # Adicionar numero do documento para bancos que nao suportam o campo
+        if codigo_banco in ['001', '748', '756']:  # BB, Sicredi, Sicoob
+            instrucoes.append(f"Doc: {numero_documento}")
+
+        # Adicionar instrucoes personalizadas
         if config_boleto.get('instrucao_1'):
             instrucoes.append(config_boleto['instrucao_1'])
         if config_boleto.get('instrucao_2'):
             instrucoes.append(config_boleto['instrucao_2'])
         if config_boleto.get('instrucao_3'):
             instrucoes.append(config_boleto['instrucao_3'])
+
+        # Adicionar instrucoes de multa se configurada
+        valor_multa_config = config_boleto.get('valor_multa', 0) or 0
+        if valor_multa_config > 0:
+            tipo_multa = config_boleto.get('tipo_valor_multa', 'PERCENTUAL')
+            dias_carencia = config_boleto.get('dias_carencia', 0) or 0
+            if tipo_multa == 'PERCENTUAL':
+                instrucoes.append(f"Multa de {valor_multa_config}% apos {dias_carencia} dias do vencimento")
+            else:
+                instrucoes.append(f"Multa de R$ {valor_multa_config:.2f} apos {dias_carencia} dias do vencimento")
+
+        # Adicionar instrucoes de juros se configurada
+        valor_juros_config = config_boleto.get('valor_juros', 0) or 0
+        if valor_juros_config > 0:
+            tipo_juros = config_boleto.get('tipo_valor_juros', 'PERCENTUAL')
+            if tipo_juros == 'PERCENTUAL':
+                # Calcular juros diario a partir do mensal
+                juros_diario = valor_juros_config / 30
+                instrucoes.append(f"Juros de {juros_diario:.4f}% ao dia ({valor_juros_config}% ao mes)")
+            else:
+                instrucoes.append(f"Juros de R$ {valor_juros_config:.2f} ao dia")
+
+        # Adicionar instrucoes de desconto se configurada
+        valor_desconto_config = config_boleto.get('valor_desconto', 0) or 0
+        if valor_desconto_config > 0:
+            tipo_desconto = config_boleto.get('tipo_valor_desconto', 'PERCENTUAL')
+            dias_desconto = config_boleto.get('dias_desconto', 0) or 0
+            if tipo_desconto == 'PERCENTUAL':
+                valor_desc = float(parcela.valor_atual) * float(valor_desconto_config) / 100
+                instrucoes.append(f"Desconto de R$ {valor_desc:.2f} ate {dias_desconto} dias antes do vencimento")
+            else:
+                instrucoes.append(f"Desconto de R$ {valor_desconto_config:.2f} ate {dias_desconto} dias antes do vencimento")
+
         # Adicionar informacoes padrao
         instrucoes.append(f"Parcela {parcela.numero_parcela} de {contrato.numero_parcelas}")
         instrucoes.append(f"Contrato: {contrato.numero_contrato}")
-        instrucoes.append(f"Imovel: {contrato.imovel.identificacao}")
+        if contrato.imovel and contrato.imovel.identificacao:
+            instrucoes.append(f"Imovel: {contrato.imovel.identificacao}")
 
         # Dados do boleto no formato BRCobranca
         dados = {
@@ -716,7 +756,7 @@ class BoletoService:
 
                 # Sucesso
                 if response.status_code == 200:
-                    return self._processar_resposta_sucesso(response)
+                    return self._processar_resposta_sucesso(response, banco_nome, dados_boleto)
 
                 # Erros que justificam retry (5xx)
                 elif 500 <= response.status_code < 600:
@@ -828,7 +868,48 @@ class BoletoService:
             'erros': erros
         }
 
-    def _processar_resposta_sucesso(self, response):
+    def _obter_dados_boleto(self, banco_nome, dados_boleto):
+        """
+        Obtem dados do boleto (linha digitavel, codigo de barras, nosso numero formatado)
+        via endpoint /api/boleto/data
+
+        Args:
+            banco_nome: Nome do banco no formato BRCobranca
+            dados_boleto: Dados do boleto
+
+        Returns:
+            dict: Dados do boleto ou dicionario vazio se falhar
+        """
+        try:
+            params = {
+                'bank': banco_nome,
+                'data': json.dumps(dados_boleto)
+            }
+
+            response = requests.get(
+                f"{self.brcobranca_url}/api/boleto/data",
+                params=params,
+                timeout=10
+            )
+
+            if response.status_code == 200:
+                data = response.json()
+                logger.info(f"Dados do boleto obtidos: linha_digitavel={'sim' if data.get('linha_digitavel') else 'nao'}, codigo_barras={'sim' if data.get('codigo_barras') else 'nao'}")
+                return {
+                    'linha_digitavel': data.get('linha_digitavel', ''),
+                    'codigo_barras': data.get('codigo_barras', ''),
+                    'nosso_numero_formatado': data.get('nosso_numero', ''),
+                    'agencia_conta_boleto': data.get('agencia_conta_boleto', '')
+                }
+            else:
+                logger.warning(f"Erro ao obter dados do boleto: HTTP {response.status_code}")
+                return {}
+
+        except Exception as e:
+            logger.warning(f"Nao foi possivel obter dados do boleto via /api/boleto/data: {e}")
+            return {}
+
+    def _processar_resposta_sucesso(self, response, banco_nome=None, dados_boleto=None):
         """Processa resposta bem-sucedida da API"""
         try:
             content_type = response.headers.get('content-type', '')
@@ -839,6 +920,12 @@ class BoletoService:
                 # Resposta e o PDF diretamente
                 pdf_content = response.content
                 logger.info("Boleto gerado com sucesso (PDF)")
+
+                # Fazer chamada adicional para obter dados do boleto
+                if banco_nome and dados_boleto:
+                    dados_extras = self._obter_dados_boleto(banco_nome, dados_boleto)
+                    linha_digitavel = dados_extras.get('linha_digitavel', '')
+                    codigo_barras = dados_extras.get('codigo_barras', '')
 
             elif 'application/json' in content_type:
                 result = response.json()
@@ -857,6 +944,12 @@ class BoletoService:
                 # Assumir PDF
                 pdf_content = response.content
                 logger.info("Boleto gerado com sucesso")
+
+                # Fazer chamada adicional para obter dados do boleto
+                if banco_nome and dados_boleto:
+                    dados_extras = self._obter_dados_boleto(banco_nome, dados_boleto)
+                    linha_digitavel = dados_extras.get('linha_digitavel', '')
+                    codigo_barras = dados_extras.get('codigo_barras', '')
 
             return {
                 'sucesso': True,
