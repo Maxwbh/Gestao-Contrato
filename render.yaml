@@ -64,7 +64,10 @@ services:
   # BRCobranca API (Geracao de Boletos)
   # =============================================================================
   # Servico Docker para geracao de boletos bancarios
-  # Documentacao: https://github.com/akretion/boleto_cnab_api
+  # Usa repositorios customizados:
+  #   - API REST: https://github.com/Maxwbh/boleto_cnab_api
+  #   - Biblioteca: https://github.com/maxwbh/brcobranca
+  # Build a partir do Dockerfile.brcobranca
   - type: web
     name: brcobranca-api
     runtime: docker
