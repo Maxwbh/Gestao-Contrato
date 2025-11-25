@@ -820,50 +820,57 @@ class BoletoService:
             try:
                 logger.info(f"Tentativa {tentativa}/{self.max_tentativas} de gerar boleto")
 
-                # Gerar PDF do boleto via GET
-                # A API BRCobranca espera GET com parametros na query string
-                # Enviando TODOS os campos da classe Base conforme documentacao
-                # Ver: docs/BRCOBRANCA_CAMPOS_REFERENCIA.md
-                params = {
-                    'type': 'pdf',
-                    'bank': banco_nome,
+                # Gerar PDF do boleto via GET /api/boleto
+                # Conforme documentacao customizada da API boleto_cnab_api:
+                # https://github.com/Maxwbh/boleto_cnab_api
+                # Exemplos: https://github.com/Maxwbh/boleto_cnab_api/blob/master/EXEMPLOS_MAXIMO_CAMPOS.md
+                #
+                # Endpoint: GET /api/boleto
+                # Parametros:
+                #   - bank: nome do banco (ex: 'sicoob', 'banco_brasil')
+                #   - type: formato de saida (pdf, jpg, png, tif)
+                #   - data: JSON stringificado com dados do boleto
+                #
+                # Ver documentacao completa: docs/BRCOBRANCA_CAMPOS_REFERENCIA.md
 
+                # Preparar dados do boleto incluindo TODOS os campos disponiveis
+                boleto_data = {
                     # Dados do Beneficiario (Cedente)
-                    'boleto[cedente]': dados_boleto.get('cedente', ''),
-                    'boleto[documento_cedente]': dados_boleto.get('documento_cedente', ''),
+                    'cedente': dados_boleto.get('cedente', ''),
+                    'documento_cedente': dados_boleto.get('documento_cedente', ''),
 
                     # Dados do Pagador (Sacado)
-                    'boleto[sacado]': dados_boleto.get('sacado', ''),
-                    'boleto[sacado_documento]': dados_boleto.get('sacado_documento', ''),
-                    'boleto[sacado_endereco]': dados_boleto.get('sacado_endereco', ''),
+                    'sacado': dados_boleto.get('sacado', ''),
+                    'sacado_documento': dados_boleto.get('sacado_documento', ''),
+                    'sacado_endereco': dados_boleto.get('sacado_endereco', ''),
 
                     # Dados Bancarios
-                    'boleto[agencia]': dados_boleto.get('agencia', ''),
-                    'boleto[conta_corrente]': dados_boleto.get('conta_corrente', ''),
-                    'boleto[convenio]': dados_boleto.get('convenio', ''),
-                    'boleto[carteira]': dados_boleto.get('carteira', ''),
+                    'agencia': dados_boleto.get('agencia', ''),
+                    'conta_corrente': dados_boleto.get('conta_corrente', ''),
+                    'convenio': dados_boleto.get('convenio', ''),
+                    'carteira': dados_boleto.get('carteira', ''),
 
                     # Identificacao do Boleto
-                    'boleto[nosso_numero]': dados_boleto.get('nosso_numero', ''),
-                    'boleto[numero_documento]': dados_boleto.get('numero_documento', ''),
-                    'boleto[documento_numero]': dados_boleto.get('documento_numero', ''),
+                    'nosso_numero': dados_boleto.get('nosso_numero', ''),
+                    'numero_documento': dados_boleto.get('numero_documento', ''),
+                    'documento_numero': dados_boleto.get('documento_numero', ''),
 
                     # Valores e Datas
-                    'boleto[valor]': dados_boleto.get('valor', ''),
-                    'boleto[data_vencimento]': dados_boleto.get('data_vencimento', ''),
+                    'valor': dados_boleto.get('valor', ''),
+                    'data_vencimento': dados_boleto.get('data_vencimento', ''),
 
                     # Campos obrigatorios da classe Base (ENVIAR SEMPRE)
-                    'boleto[moeda]': dados_boleto.get('moeda', '9'),
-                    'boleto[especie]': dados_boleto.get('especie', 'R$'),
-                    'boleto[especie_documento]': dados_boleto.get('especie_documento', 'DM'),
-                    'boleto[aceite]': dados_boleto.get('aceite', 'S'),
+                    'moeda': dados_boleto.get('moeda', '9'),
+                    'especie': dados_boleto.get('especie', 'R$'),
+                    'especie_documento': dados_boleto.get('especie_documento', 'DM'),
+                    'aceite': dados_boleto.get('aceite', 'S'),
 
                     # Informacoes e Instrucoes
-                    'boleto[local_pagamento]': dados_boleto.get('local_pagamento', 'Pagavel em qualquer banco'),
-                    'boleto[instrucao1]': dados_boleto.get('instrucao1', ''),
-                    'boleto[instrucao2]': dados_boleto.get('instrucao2', ''),
-                    'boleto[instrucao3]': dados_boleto.get('instrucao3', ''),
-                    'boleto[instrucao4]': dados_boleto.get('instrucao4', ''),
+                    'local_pagamento': dados_boleto.get('local_pagamento', 'Pagavel em qualquer banco'),
+                    'instrucao1': dados_boleto.get('instrucao1', ''),
+                    'instrucao2': dados_boleto.get('instrucao2', ''),
+                    'instrucao3': dados_boleto.get('instrucao3', ''),
+                    'instrucao4': dados_boleto.get('instrucao4', ''),
                 }
 
                 # Adicionar campos opcionais se existirem
@@ -889,7 +896,14 @@ class BoletoService:
 
                 for campo in campos_opcionais:
                     if campo in dados_boleto and dados_boleto[campo]:
-                        params[f'boleto[{campo}]'] = dados_boleto[campo]
+                        boleto_data[campo] = dados_boleto[campo]
+
+                # Preparar parametros da requisicao conforme API customizada
+                params = {
+                    'bank': banco_nome,
+                    'type': 'pdf',
+                    'data': json.dumps(boleto_data)
+                }
 
                 # Log detalhado da requisicao
                 url = f"{self.brcobranca_url}/api/boleto"
@@ -1051,7 +1065,14 @@ class BoletoService:
     def _obter_dados_boleto(self, banco_nome, dados_boleto):
         """
         Obtem dados do boleto (linha digitavel, codigo de barras, nosso numero formatado)
-        via endpoint /api/boleto/data
+        via endpoint /api/boleto/data da API customizada Maxwell
+
+        Conforme documentacao: https://github.com/Maxwbh/boleto_cnab_api
+        Endpoint: GET /api/boleto/data
+
+        NOTA: Este metodo tenta obter dados adicionais do boleto para exibicao.
+        Se falhar, o sistema continuara funcionando normalmente pois o PDF
+        gerado ja contem todas as informacoes necessarias.
 
         Args:
             banco_nome: Nome do banco no formato BRCobranca
@@ -1066,6 +1087,8 @@ class BoletoService:
                 'data': json.dumps(dados_boleto)
             }
 
+            # Usar endpoint customizado /api/boleto/data
+            # Retorna: codigo_barras, linha_digitavel, nosso_numero com DV, agencia_conta_boleto
             response = requests.get(
                 f"{self.brcobranca_url}/api/boleto/data",
                 params=params,
@@ -1074,7 +1097,7 @@ class BoletoService:
 
             if response.status_code == 200:
                 data = response.json()
-                logger.info(f"Dados do boleto obtidos: linha_digitavel={'sim' if data.get('linha_digitavel') else 'nao'}, codigo_barras={'sim' if data.get('codigo_barras') else 'nao'}")
+                logger.info(f"Dados do boleto obtidos via /api/boleto/data")
                 return {
                     'linha_digitavel': data.get('linha_digitavel', ''),
                     'codigo_barras': data.get('codigo_barras', ''),
@@ -1082,11 +1105,11 @@ class BoletoService:
                     'agencia_conta_boleto': data.get('agencia_conta_boleto', '')
                 }
             else:
-                logger.warning(f"Erro ao obter dados do boleto: HTTP {response.status_code}")
+                logger.debug(f"Endpoint /api/boleto/data retornou {response.status_code}, dados opcionais nao disponiveis")
                 return {}
 
         except Exception as e:
-            logger.warning(f"Nao foi possivel obter dados do boleto via /api/boleto/data: {e}")
+            logger.debug(f"Nao foi possivel obter dados opcionais do boleto: {e}")
             return {}
 
     def _processar_resposta_sucesso(self, response, banco_nome=None, dados_boleto=None):
