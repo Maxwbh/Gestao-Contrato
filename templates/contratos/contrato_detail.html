@@ -1104,12 +1104,12 @@ function calcularEncargos() {
         document.getElementById('pagamento_juros').value = juros.toFixed(2);
         document.getElementById('pagamento_multa').value = multa.toFixed(2);
 
-        alertaDiv.classList.remove('d-none');
-        alertaTexto.textContent = 'Parcela em atraso ha ' + diasAtraso + ' dia(s). Juros e multa calculados automaticamente.';
+        if (alertaDiv) alertaDiv.classList.remove('d-none');
+        if (alertaTexto) alertaTexto.textContent = 'Parcela em atraso ha ' + diasAtraso + ' dia(s). Juros e multa calculados automaticamente.';
     } else {
         document.getElementById('pagamento_juros').value = '0';
         document.getElementById('pagamento_multa').value = '0';
-        alertaDiv.classList.add('d-none');
+        if (alertaDiv) alertaDiv.classList.add('d-none');
     }
 
     calcularTotal();
@@ -1169,8 +1169,8 @@ function atualizarPreviewCarne() {
     var btnGerar = document.getElementById('btnGerarCarne');
 
     if (qtd < 1 || parcelasPendentes.length === 0) {
-        previewDiv.innerHTML = '<small class="text-muted">Nenhuma parcela selecionada</small>';
-        alertaDiv.classList.add('d-none');
+        if (previewDiv) previewDiv.innerHTML = '<small class="text-muted">Nenhuma parcela selecionada</small>';
+        if (alertaDiv) alertaDiv.classList.add('d-none');
         return;
     }
 
@@ -1211,17 +1211,18 @@ function atualizarPreviewCarne() {
     }
     html += '</ul>';
 
-    previewDiv.innerHTML = html;
+    if (previewDiv) previewDiv.innerHTML = html;
 
     if (parcelasAposReajuste > 0) {
-        alertaDiv.classList.remove('d-none');
-        alertaTexto.textContent = parcelasAposReajuste + ' parcela(s) estao apos a data de reajuste e nao serao geradas.';
-        document.getElementById('carne_quantidade').max = parcelasValidas;
+        if (alertaDiv) alertaDiv.classList.remove('d-none');
+        if (alertaTexto) alertaTexto.textContent = parcelasAposReajuste + ' parcela(s) estao apos a data de reajuste e nao serao geradas.';
+        var carneQtdEl = document.getElementById('carne_quantidade');
+        if (carneQtdEl) carneQtdEl.max = parcelasValidas;
     } else {
-        alertaDiv.classList.add('d-none');
+        if (alertaDiv) alertaDiv.classList.add('d-none');
     }
 
-    btnGerar.disabled = parcelasValidas === 0;
+    if (btnGerar) btnGerar.disabled = parcelasValidas === 0;
 }
 
 document.getElementById('formCarne').addEventListener('submit', function(e) {
@@ -1302,9 +1303,18 @@ function abrirModalReajuste() {
     document.getElementById('reajuste_parcela_inicial').value = 1;
     document.getElementById('reajuste_parcela_final').value = {{ contrato.numero_parcelas }};
     document.getElementById('reajuste_info').textContent = '';
-    document.getElementById('previewReajuste').classList.add('d-none');
-    document.getElementById('detalhesCalculo').classList.add('d-none');
-    new bootstrap.Modal(document.getElementById('modalReajuste')).show();
+
+    // Mostrar modal primeiro, depois ocultar elementos (para garantir que estao no DOM)
+    var modal = new bootstrap.Modal(document.getElementById('modalReajuste'));
+    modal.show();
+
+    // Executar apos modal estar visivel
+    setTimeout(function() {
+        var previewEl = document.getElementById('previewReajuste');
+        var detalhesEl = document.getElementById('detalhesCalculo');
+        if (previewEl) previewEl.classList.add('d-none');
+        if (detalhesEl) detalhesEl.classList.add('d-none');
+    }, 100);
 }
 
 function buscarPercentualIndice() {
