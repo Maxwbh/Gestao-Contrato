@@ -983,9 +983,9 @@ function gerarBoleto(parcelaId, btn) {
                 }
             }
 
-            // Abrir boleto em popup modal apos um pequeno delay
+            // Abrir boleto em nova aba apos um pequeno delay
             setTimeout(function() {
-                abrirModalBoleto(parcelaId);
+                window.open('/financeiro/parcelas/' + parcelaId + '/boleto/visualizar/?popup=true', '_blank');
             }, 500);
 
         } else {
