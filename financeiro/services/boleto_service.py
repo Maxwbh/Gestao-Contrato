@@ -97,9 +97,10 @@ class BoletoService:
     # Estes campos serao removidos antes de enviar para a API
     # =========================================================================
     CAMPOS_NAO_SUPORTADOS = {
-        # Banco do Brasil (001) - Nao suporta documento_numero, especie_documento, aceite
+        # Banco do Brasil (001) - Nao suporta numero_documento, especie_documento, aceite
         '001': [
-            'documento_numero',
+            'numero_documento',
+            'documento_numero',  # Remover ambas variantes
             'especie_documento',
             'aceite',
         ],
@@ -133,13 +134,15 @@ class BoletoService:
         '389': [],
         # Safra (422) - Campos padrao
         '422': [],
-        # Sicredi (748) - Nao suporta documento_numero
+        # Sicredi (748) - Nao suporta numero_documento
         '748': [
-            'documento_numero',
+            'numero_documento',
+            'documento_numero',  # Remover ambas variantes
         ],
-        # Sicoob (756) - Nao suporta documento_numero, especie_documento, aceite
+        # Sicoob (756) - Nao suporta numero_documento, especie_documento, aceite
         '756': [
-            'documento_numero',
+            'numero_documento',
+            'documento_numero',  # Remover ambas variantes
             'especie_documento',
             'aceite',
         ],
@@ -669,24 +672,10 @@ class BoletoService:
         Retorna dict padronizado: {'sucesso': bool, 'erro': str, ...}
         """
         try:
+            # Montar dados do boleto (ja inclui numero_documento e validacoes)
             dados_boleto, nosso_numero = self._montar_dados_boleto(parcela, conta_bancaria)
 
-            # Garantir numero_documento presente para evitar KeyError
-            numero_documento = dados_boleto.get('numero_documento')
-            if not numero_documento:
-                contrato = getattr(parcela, 'contrato', None)
-                numero_contrato = str(getattr(contrato, 'numero_contrato', getattr(contrato, 'id', '')))
-                nro_parcela = str(getattr(parcela, 'numero_parcela', '1'))
-                total_parcelas = str(getattr(contrato, 'numero_parcelas', '')).strip()
-                if total_parcelas:
-                    numero_documento = f"{numero_contrato}_{nro_parcela}/{total_parcelas}"
-                else:
-                    numero_documento = f"{numero_contrato}_{nro_parcela}"
-                dados_boleto['numero_documento'] = numero_documento
-                # manter alias esperado pela API quando aplicavel
-                if 'documento_numero' not in dados_boleto:
-                    dados_boleto['documento_numero'] = numero_documento
-
+            # Verificar se banco e suportado
             banco_nome = self._get_banco_brcobranca(getattr(conta_bancaria, 'banco', ''))
             if not banco_nome:
                 msg = f"Banco '{getattr(conta_bancaria, 'banco', '')}' nao suportado pelo BRCobranca"
@@ -735,6 +724,9 @@ class BoletoService:
                 'erro': f"Dados invalidos: {'; '.join(validacao['erros'])}"
             }
 
+        # Remover campos internos que nao devem ser enviados para a API
+        dados_boleto.pop('codigo_banco', None)
+
         tentativa = 0
         delay = self.delay_inicial
 
@@ -743,20 +735,26 @@ class BoletoService:
             try:
                 logger.info(f"Tentativa {tentativa}/{self.max_tentativas} de gerar boleto")
 
-                # Gerar boleto com JSON contendo PDF e dados (linha_digitavel, codigo_barras)
-                # Não especificar 'type' para obter resposta JSON completa
-                params = {
-                    'bank': banco_nome,
-                    'data': json.dumps(dados_boleto)
-                }
+                # Gerar PDF do boleto
+                # A API BRCobranca espera POST com parametros na query string
+                url = f"{self.brcobranca_url}/api/boleto?type=pdf&bank={banco_nome}"
 
-                logger.info(f"Chamando BRCobranca: {self.brcobranca_url}/api/boleto")
+                # Log detalhado da requisicao
+                logger.info(f"Chamando BRCobranca: {url}")
+                logger.debug(f"Banco: {banco_nome}, data_size={len(json.dumps(dados_boleto))} bytes")
 
-                response = requests.get(
-                    f"{self.brcobranca_url}/api/boleto",
-                    params=params,
+                # Enviar dados como JSON no body via POST
+                response = requests.post(
+                    url,
+                    json=dados_boleto,
+                    headers={'Content-Type': 'application/json'},
                     timeout=self.timeout
                 )
+
+                # Log da resposta
+                logger.debug(f"Status code: {response.status_code}")
+                if response.status_code != 200:
+                    logger.debug(f"Response body: {response.text[:500]}")
 
                 # Sucesso
                 if response.status_code == 200:
@@ -941,82 +939,36 @@ class BoletoService:
 
     def _processar_resposta_sucesso(self, response, banco_nome=None, dados_boleto=None):
         """Processa resposta bem-sucedida da API"""
-        import base64
-
         try:
             content_type = response.headers.get('content-type', '')
-            linha_digitavel = ''
-            codigo_barras = ''
-            pdf_content = None
 
-            if 'application/pdf' in content_type:
-                # Resposta e o PDF diretamente
-                pdf_content = response.content
-                logger.info("Boleto gerado com sucesso (PDF)")
-
-                # Fazer chamada adicional para obter dados do boleto
-                if banco_nome and dados_boleto:
-                    dados_extras = self._obter_dados_boleto(banco_nome, dados_boleto)
-                    linha_digitavel = dados_extras.get('linha_digitavel', '')
-                    codigo_barras = dados_extras.get('codigo_barras', '')
-
-            elif 'application/json' in content_type or content_type.startswith('text/'):
-                # Resposta JSON com dados completos
-                result = response.json()
-
-                # Verificar se há erro
-                if isinstance(result, dict) and 'error' in result:
-                    logger.error(f"Erro da API: {result['error']}")
-                    return {
-                        'sucesso': False,
-                        'erro': result.get('error', 'Erro desconhecido')
-                    }
-
-                # Extrair dados do boleto
-                linha_digitavel = result.get('linha_digitavel', '')
-                codigo_barras = result.get('codigo_barras', '')
-
-                # Extrair PDF (pode estar em 'pdf', 'boleto', ou 'base64')
-                pdf_base64 = result.get('pdf') or result.get('boleto') or result.get('base64')
-
-                if pdf_base64:
-                    # Decodificar PDF de base64
-                    try:
-                        pdf_content = base64.b64decode(pdf_base64)
-                        logger.info(f"Boleto gerado com sucesso (JSON) - linha_digitavel={'OK' if linha_digitavel else 'VAZIO'}, codigo_barras={'OK' if codigo_barras else 'VAZIO'}")
-                    except Exception as e:
-                        logger.error(f"Erro ao decodificar PDF base64: {e}")
-                        pdf_content = None
-                else:
-                    logger.warning("PDF não encontrado na resposta JSON")
-
-            else:
-                # Tentar interpretar como JSON mesmo sem content-type correto
-                try:
-                    result = response.json()
-                    linha_digitavel = result.get('linha_digitavel', '')
-                    codigo_barras = result.get('codigo_barras', '')
-                    pdf_base64 = result.get('pdf') or result.get('boleto') or result.get('base64')
-                    if pdf_base64:
-                        pdf_content = base64.b64decode(pdf_base64)
-                    logger.info("Boleto gerado com sucesso (JSON sem content-type)")
-                except:
-                    # Assumir que é PDF direto
-                    pdf_content = response.content
-                    logger.info("Boleto gerado com sucesso (assumido PDF)")
-
-                    # Tentar obter dados adicionais
-                    if banco_nome and dados_boleto:
-                        dados_extras = self._obter_dados_boleto(banco_nome, dados_boleto)
-                        linha_digitavel = dados_extras.get('linha_digitavel', '')
-                        codigo_barras = dados_extras.get('codigo_barras', '')
+            # Extrair PDF da resposta
+            pdf_content = response.content
 
             if not pdf_content:
-                logger.error("PDF não foi gerado ou não pôde ser extraído da resposta")
+                logger.error("PDF vazio na resposta")
                 return {
                     'sucesso': False,
                     'erro': 'PDF não foi gerado corretamente'
                 }
+
+            logger.info(f"Boleto PDF gerado com sucesso ({len(pdf_content)} bytes)")
+
+            # Obter dados adicionais do boleto (linha digitavel e codigo de barras)
+            # via endpoint /api/boleto/data
+            linha_digitavel = ''
+            codigo_barras = ''
+
+            if banco_nome and dados_boleto:
+                logger.info("Obtendo linha digitavel e codigo de barras via /api/boleto/data")
+                dados_extras = self._obter_dados_boleto(banco_nome, dados_boleto)
+                linha_digitavel = dados_extras.get('linha_digitavel', '')
+                codigo_barras = dados_extras.get('codigo_barras', '')
+
+                if linha_digitavel and codigo_barras:
+                    logger.info(f"Dados obtidos com sucesso - linha_digitavel: {linha_digitavel[:20]}..., codigo_barras: {codigo_barras[:20]}...")
+                else:
+                    logger.warning(f"Dados incompletos - linha_digitavel: {'OK' if linha_digitavel else 'VAZIO'}, codigo_barras: {'OK' if codigo_barras else 'VAZIO'}")
 
             return {
                 'sucesso': True,
