@@ -354,6 +354,45 @@ class Parcela(TimeStampedModel):
         # Formato: CONTRATO-PARCELA/TOTAL (ex: 001-005/012)
         return f"{self.contrato.numero_contrato}-{self.numero_parcela:03d}/{self.contrato.numero_parcelas:03d}"
 
+    def get_nosso_numero_formatado(self):
+        """
+        Retorna o nosso número formatado com zeros à esquerda conforme o banco.
+
+        Returns:
+            str: Nosso número formatado
+        """
+        if not self.nosso_numero:
+            return ''
+
+        # Remover caracteres não numéricos
+        nosso_numero = ''.join(filter(str.isdigit, str(self.nosso_numero)))
+
+        if not nosso_numero:
+            return self.nosso_numero
+
+        # Tamanhos padrão por banco (conforme BRCobranca)
+        tamanhos = {
+            '001': 17,  # Banco do Brasil
+            '033': 13,  # Santander
+            '104': 17,  # Caixa
+            '237': 11,  # Bradesco
+            '341': 8,   # Itau
+            '422': 9,   # Safra
+            '748': 5,   # Sicredi
+            '756': 7,   # Sicoob
+            '084': 10,  # Unicred
+            '136': 10,  # Unicred
+        }
+
+        # Obter código do banco da conta bancária
+        if self.conta_bancaria:
+            codigo_banco = self.conta_bancaria.banco
+            tamanho = tamanhos.get(codigo_banco, 10)  # Padrão: 10 dígitos
+            return nosso_numero.zfill(tamanho)
+
+        # Se não tiver conta bancária, retornar com 10 dígitos (padrão)
+        return nosso_numero.zfill(10)
+
     def calcular_valores_hoje(self):
         """
         Calcula os valores de multa, juros e desconto para pagamento hoje.

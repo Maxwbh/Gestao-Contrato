@@ -421,6 +421,9 @@ class BoletoService:
         # Carteira
         carteira = conta_bancaria.carteira or self.CARTEIRAS_PADRAO.get(conta_bancaria.banco, '1')
 
+        # Codigo do banco
+        codigo_banco = conta_bancaria.banco
+
         # Numero do documento
         numero_documento = parcela.gerar_numero_documento()
 
@@ -517,8 +520,6 @@ class BoletoService:
         }
 
         # Adicionar campos especificos por banco
-        codigo_banco = conta_bancaria.banco
-
         # Banco do Brasil (001)
         if codigo_banco == '001':
             # Convenio obrigatorio (4-8 digitos)
@@ -739,10 +740,10 @@ class BoletoService:
             try:
                 logger.info(f"Tentativa {tentativa}/{self.max_tentativas} de gerar boleto")
 
-                # Gerar PDF do boleto
+                # Gerar boleto com JSON contendo PDF e dados (linha_digitavel, codigo_barras)
+                # Não especificar 'type' para obter resposta JSON completa
                 params = {
                     'bank': banco_nome,
-                    'type': 'pdf',
                     'data': json.dumps(dados_boleto)
                 }
 
@@ -911,10 +912,13 @@ class BoletoService:
 
     def _processar_resposta_sucesso(self, response, banco_nome=None, dados_boleto=None):
         """Processa resposta bem-sucedida da API"""
+        import base64
+
         try:
             content_type = response.headers.get('content-type', '')
             linha_digitavel = ''
             codigo_barras = ''
+            pdf_content = None
 
             if 'application/pdf' in content_type:
                 # Resposta e o PDF diretamente
@@ -927,29 +931,63 @@ class BoletoService:
                     linha_digitavel = dados_extras.get('linha_digitavel', '')
                     codigo_barras = dados_extras.get('codigo_barras', '')
 
-            elif 'application/json' in content_type:
+            elif 'application/json' in content_type or content_type.startswith('text/'):
+                # Resposta JSON com dados completos
                 result = response.json()
+
+                # Verificar se há erro
                 if isinstance(result, dict) and 'error' in result:
                     logger.error(f"Erro da API: {result['error']}")
                     return {
                         'sucesso': False,
                         'erro': result.get('error', 'Erro desconhecido')
                     }
-                pdf_content = result.get('pdf')
+
+                # Extrair dados do boleto
                 linha_digitavel = result.get('linha_digitavel', '')
                 codigo_barras = result.get('codigo_barras', '')
-                logger.info("Boleto gerado com sucesso (JSON)")
+
+                # Extrair PDF (pode estar em 'pdf', 'boleto', ou 'base64')
+                pdf_base64 = result.get('pdf') or result.get('boleto') or result.get('base64')
+
+                if pdf_base64:
+                    # Decodificar PDF de base64
+                    try:
+                        pdf_content = base64.b64decode(pdf_base64)
+                        logger.info(f"Boleto gerado com sucesso (JSON) - linha_digitavel={'OK' if linha_digitavel else 'VAZIO'}, codigo_barras={'OK' if codigo_barras else 'VAZIO'}")
+                    except Exception as e:
+                        logger.error(f"Erro ao decodificar PDF base64: {e}")
+                        pdf_content = None
+                else:
+                    logger.warning("PDF não encontrado na resposta JSON")
 
             else:
-                # Assumir PDF
-                pdf_content = response.content
-                logger.info("Boleto gerado com sucesso")
+                # Tentar interpretar como JSON mesmo sem content-type correto
+                try:
+                    result = response.json()
+                    linha_digitavel = result.get('linha_digitavel', '')
+                    codigo_barras = result.get('codigo_barras', '')
+                    pdf_base64 = result.get('pdf') or result.get('boleto') or result.get('base64')
+                    if pdf_base64:
+                        pdf_content = base64.b64decode(pdf_base64)
+                    logger.info("Boleto gerado com sucesso (JSON sem content-type)")
+                except:
+                    # Assumir que é PDF direto
+                    pdf_content = response.content
+                    logger.info("Boleto gerado com sucesso (assumido PDF)")
 
-                # Fazer chamada adicional para obter dados do boleto
-                if banco_nome and dados_boleto:
-                    dados_extras = self._obter_dados_boleto(banco_nome, dados_boleto)
-                    linha_digitavel = dados_extras.get('linha_digitavel', '')
-                    codigo_barras = dados_extras.get('codigo_barras', '')
+                    # Tentar obter dados adicionais
+                    if banco_nome and dados_boleto:
+                        dados_extras = self._obter_dados_boleto(banco_nome, dados_boleto)
+                        linha_digitavel = dados_extras.get('linha_digitavel', '')
+                        codigo_barras = dados_extras.get('codigo_barras', '')
+
+            if not pdf_content:
+                logger.error("PDF não foi gerado ou não pôde ser extraído da resposta")
+                return {
+                    'sucesso': False,
+                    'erro': 'PDF não foi gerado corretamente'
+                }
 
             return {
                 'sucesso': True,
