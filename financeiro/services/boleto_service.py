@@ -1065,7 +1065,10 @@ class BoletoService:
     def _obter_dados_boleto(self, banco_nome, dados_boleto):
         """
         Obtem dados do boleto (linha digitavel, codigo de barras, nosso numero formatado)
-        via endpoint /boleto/nosso_numero da API oficial
+        via endpoint /api/boleto/data da API customizada Maxwell
+
+        Conforme documentacao: https://github.com/Maxwbh/boleto_cnab_api
+        Endpoint: GET /api/boleto/data
 
         NOTA: Este metodo tenta obter dados adicionais do boleto para exibicao.
         Se falhar, o sistema continuara funcionando normalmente pois o PDF
@@ -1084,16 +1087,17 @@ class BoletoService:
                 'data': json.dumps(dados_boleto)
             }
 
-            # Tentar endpoint oficial /boleto/nosso_numero
+            # Usar endpoint customizado /api/boleto/data
+            # Retorna: codigo_barras, linha_digitavel, nosso_numero com DV, agencia_conta_boleto
             response = requests.get(
-                f"{self.brcobranca_url}/boleto/nosso_numero",
+                f"{self.brcobranca_url}/api/boleto/data",
                 params=params,
                 timeout=10
             )
 
             if response.status_code == 200:
                 data = response.json()
-                logger.info(f"Dados do boleto obtidos via /boleto/nosso_numero")
+                logger.info(f"Dados do boleto obtidos via /api/boleto/data")
                 return {
                     'linha_digitavel': data.get('linha_digitavel', ''),
                     'codigo_barras': data.get('codigo_barras', ''),
@@ -1101,7 +1105,7 @@ class BoletoService:
                     'agencia_conta_boleto': data.get('agencia_conta_boleto', '')
                 }
             else:
-                logger.debug(f"Endpoint /boleto/nosso_numero retornou {response.status_code}, dados opcionais nao disponiveis")
+                logger.debug(f"Endpoint /api/boleto/data retornou {response.status_code}, dados opcionais nao disponiveis")
                 return {}
 
         except Exception as e:
