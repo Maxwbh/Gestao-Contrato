@@ -93,11 +93,16 @@ class Command(BaseCommand):
             imoveis = lotes + terrenos
             contratos = self.criar_contratos(imoveis, compradores, imobiliarias)
 
-            # 7. Marcar 90% das parcelas como pagas
+            # 7. Remover parcelas futuras (manter apenas até o mês atual)
+            self.stdout.write('Removendo parcelas futuras...')
+            parcelas_removidas = self.remover_parcelas_futuras()
+            self.stdout.write(f'   {parcelas_removidas} parcelas futuras removidas')
+
+            # 8. Marcar 90% das parcelas como pagas
             self.stdout.write('Marcando parcelas como pagas...')
             self.marcar_parcelas_pagas(contratos, 0.90)
 
-            # 8. Gerar índices de reajuste
+            # 9. Gerar índices de reajuste
             self.stdout.write('Gerando índices de reajuste...')
             indices = self.gerar_indices_reajuste()
 
@@ -200,8 +205,10 @@ class Command(BaseCommand):
             {
                 'banco': '001',  # Banco do Brasil
                 'descricao': 'Conta Principal BB',
-                'agencia': '3073-0',
-                'conta': '12345678-9',
+                'agencia': '3073',
+                'agencia_dv': '0',
+                'conta': '12345678',
+                'conta_dv': '9',
                 'convenio': '1234567',  # 7 dígitos obrigatório
                 'carteira': '18',
                 'nosso_numero_atual': 1,
@@ -210,7 +217,9 @@ class Command(BaseCommand):
                 'banco': '756',  # Sicoob
                 'descricao': 'Conta Sicoob',
                 'agencia': '3073',
-                'conta': '12345678-5',  # max 8 dígitos
+                'agencia_dv': '0',
+                'conta': '12345678',  # max 8 dígitos
+                'conta_dv': '5',
                 'convenio': '1234567',  # max 7 dígitos
                 'carteira': '1',
                 'nosso_numero_atual': 1,
@@ -218,8 +227,10 @@ class Command(BaseCommand):
             {
                 'banco': '237',  # Bradesco
                 'descricao': 'Conta Bradesco',
-                'agencia': '1234-5',
-                'conta': '1234567-0',  # max 7 dígitos
+                'agencia': '1234',
+                'agencia_dv': '5',
+                'conta': '1234567',  # max 7 dígitos
+                'conta_dv': '0',
                 'convenio': '',
                 'carteira': '06',
                 'nosso_numero_atual': 1,
@@ -235,7 +246,9 @@ class Command(BaseCommand):
                     descricao=f"{config['descricao']} - {imobiliaria.nome}",
                     principal=(i == 0),  # BB é a principal
                     agencia=config['agencia'],
+                    agencia_dv=config.get('agencia_dv', ''),
                     conta=config['conta'],
+                    conta_dv=config.get('conta_dv', ''),
                     convenio=config['convenio'],
                     carteira=config['carteira'],
                     nosso_numero_atual=config['nosso_numero_atual'],
@@ -515,6 +528,21 @@ class Command(BaseCommand):
             contratos.append(contrato)
 
         return contratos
+
+    def remover_parcelas_futuras(self):
+        """Remove parcelas com vencimento após o mês atual"""
+        from dateutil.relativedelta import relativedelta
+
+        # Último dia do mês atual
+        hoje = timezone.now().date()
+        ultimo_dia_mes = hoje.replace(day=1) + relativedelta(months=1) - relativedelta(days=1)
+
+        # Deletar parcelas com vencimento futuro
+        parcelas_futuras = Parcela.objects.filter(data_vencimento__gt=ultimo_dia_mes)
+        count = parcelas_futuras.count()
+        parcelas_futuras.delete()
+
+        return count
 
     def marcar_parcelas_pagas(self, contratos, percentual=0.90):
         """Marca parcelas como pagas (somente parcelas vencidas até a data atual)"""

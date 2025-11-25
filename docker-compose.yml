@@ -56,8 +56,11 @@ services:
   # =============================================================================
   # BRCobranca API (Geracao de Boletos)
   # =============================================================================
+  # Usa o Dockerfile customizado com repositorio do Maxwell
   brcobranca:
-    image: akretion/boleto_cnab_api:latest
+    build:
+      context: .
+      dockerfile: Dockerfile.brcobranca
     container_name: brcobranca-api
     restart: unless-stopped
     environment:
