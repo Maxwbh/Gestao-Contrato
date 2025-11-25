@@ -820,11 +820,12 @@ class BoletoService:
             try:
                 logger.info(f"Tentativa {tentativa}/{self.max_tentativas} de gerar boleto")
 
-                # Gerar PDF do boleto via GET /boleto/get
-                # Conforme documentacao oficial da API boleto_cnab_api:
-                # https://github.com/akretion/boleto_cnab_api
+                # Gerar PDF do boleto via GET /api/boleto
+                # Conforme documentacao customizada da API boleto_cnab_api:
+                # https://github.com/Maxwbh/boleto_cnab_api
+                # Exemplos: https://github.com/Maxwbh/boleto_cnab_api/blob/master/EXEMPLOS_MAXIMO_CAMPOS.md
                 #
-                # Endpoint: GET /boleto/get
+                # Endpoint: GET /api/boleto
                 # Parametros:
                 #   - bank: nome do banco (ex: 'sicoob', 'banco_brasil')
                 #   - type: formato de saida (pdf, jpg, png, tif)
@@ -897,7 +898,7 @@ class BoletoService:
                     if campo in dados_boleto and dados_boleto[campo]:
                         boleto_data[campo] = dados_boleto[campo]
 
-                # Preparar parametros da requisicao conforme API oficial
+                # Preparar parametros da requisicao conforme API customizada
                 params = {
                     'bank': banco_nome,
                     'type': 'pdf',
@@ -905,7 +906,7 @@ class BoletoService:
                 }
 
                 # Log detalhado da requisicao
-                url = f"{self.brcobranca_url}/boleto/get"
+                url = f"{self.brcobranca_url}/api/boleto"
                 logger.info(f"Chamando BRCobranca: {url}")
                 logger.debug(f"Banco: {banco_nome}, params count: {len(params)}")
 
