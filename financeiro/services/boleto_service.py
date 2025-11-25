@@ -736,20 +736,25 @@ class BoletoService:
                 logger.info(f"Tentativa {tentativa}/{self.max_tentativas} de gerar boleto")
 
                 # Gerar PDF do boleto
-                # A API BRCobranca requer o parametro 'type'
-                params = {
-                    'bank': banco_nome,
-                    'type': 'pdf',
-                    'data': json.dumps(dados_boleto)
-                }
+                # A API BRCobranca espera POST com parametros na query string
+                url = f"{self.brcobranca_url}/api/boleto?type=pdf&bank={banco_nome}"
 
-                logger.info(f"Chamando BRCobranca: {self.brcobranca_url}/api/boleto")
+                # Log detalhado da requisicao
+                logger.info(f"Chamando BRCobranca: {url}")
+                logger.debug(f"Banco: {banco_nome}, data_size={len(json.dumps(dados_boleto))} bytes")
 
-                response = requests.get(
-                    f"{self.brcobranca_url}/api/boleto",
-                    params=params,
+                # Enviar dados como JSON no body via POST
+                response = requests.post(
+                    url,
+                    json=dados_boleto,
+                    headers={'Content-Type': 'application/json'},
                     timeout=self.timeout
                 )
+
+                # Log da resposta
+                logger.debug(f"Status code: {response.status_code}")
+                if response.status_code != 200:
+                    logger.debug(f"Response body: {response.text[:500]}")
 
                 # Sucesso
                 if response.status_code == 200:
