@@ -97,9 +97,10 @@ class BoletoService:
     # Estes campos serao removidos antes de enviar para a API
     # =========================================================================
     CAMPOS_NAO_SUPORTADOS = {
-        # Banco do Brasil (001) - Nao suporta documento_numero, especie_documento, aceite
+        # Banco do Brasil (001) - Nao suporta numero_documento, especie_documento, aceite
         '001': [
-            'documento_numero',
+            'numero_documento',
+            'documento_numero',  # Remover ambas variantes
             'especie_documento',
             'aceite',
         ],
@@ -133,13 +134,15 @@ class BoletoService:
         '389': [],
         # Safra (422) - Campos padrao
         '422': [],
-        # Sicredi (748) - Nao suporta documento_numero
+        # Sicredi (748) - Nao suporta numero_documento
         '748': [
-            'documento_numero',
+            'numero_documento',
+            'documento_numero',  # Remover ambas variantes
         ],
-        # Sicoob (756) - Nao suporta documento_numero, especie_documento, aceite
+        # Sicoob (756) - Nao suporta numero_documento, especie_documento, aceite
         '756': [
-            'documento_numero',
+            'numero_documento',
+            'documento_numero',  # Remover ambas variantes
             'especie_documento',
             'aceite',
         ],
@@ -669,24 +672,10 @@ class BoletoService:
         Retorna dict padronizado: {'sucesso': bool, 'erro': str, ...}
         """
         try:
+            # Montar dados do boleto (ja inclui numero_documento e validacoes)
             dados_boleto, nosso_numero = self._montar_dados_boleto(parcela, conta_bancaria)
 
-            # Garantir numero_documento presente para evitar KeyError
-            numero_documento = dados_boleto.get('numero_documento')
-            if not numero_documento:
-                contrato = getattr(parcela, 'contrato', None)
-                numero_contrato = str(getattr(contrato, 'numero_contrato', getattr(contrato, 'id', '')))
-                nro_parcela = str(getattr(parcela, 'numero_parcela', '1'))
-                total_parcelas = str(getattr(contrato, 'numero_parcelas', '')).strip()
-                if total_parcelas:
-                    numero_documento = f"{numero_contrato}_{nro_parcela}/{total_parcelas}"
-                else:
-                    numero_documento = f"{numero_contrato}_{nro_parcela}"
-                dados_boleto['numero_documento'] = numero_documento
-                # manter alias esperado pela API quando aplicavel
-                if 'documento_numero' not in dados_boleto:
-                    dados_boleto['documento_numero'] = numero_documento
-
+            # Verificar se banco e suportado
             banco_nome = self._get_banco_brcobranca(getattr(conta_bancaria, 'banco', ''))
             if not banco_nome:
                 msg = f"Banco '{getattr(conta_bancaria, 'banco', '')}' nao suportado pelo BRCobranca"
@@ -734,6 +723,9 @@ class BoletoService:
                 'sucesso': False,
                 'erro': f"Dados invalidos: {'; '.join(validacao['erros'])}"
             }
+
+        # Remover campos internos que nao devem ser enviados para a API
+        dados_boleto.pop('codigo_banco', None)
 
         tentativa = 0
         delay = self.delay_inicial
