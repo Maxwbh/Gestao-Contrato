@@ -420,6 +420,11 @@
         // ====================================================================
         const cpfInputs = document.querySelectorAll('input[name="cpf"], input[name="conjuge_cpf"], input[name="responsavel_cpf"]');
         cpfInputs.forEach(input => {
+            // Aplicar máscara em valores já existentes (edição)
+            if (input.value) {
+                input.value = mascaraCPF(input.value);
+            }
+
             input.addEventListener('input', function(e) {
                 e.target.value = mascaraCPF(e.target.value);
             });
@@ -450,6 +455,11 @@
         // ====================================================================
         const cnpjInputs = document.querySelectorAll('input[name="cnpj"]');
         cnpjInputs.forEach(input => {
+            // Aplicar máscara em valores já existentes (edição)
+            if (input.value) {
+                input.value = mascaraCNPJ(input.value);
+            }
+
             input.addEventListener('input', function(e) {
                 e.target.value = mascaraCNPJ(e.target.value);
             });

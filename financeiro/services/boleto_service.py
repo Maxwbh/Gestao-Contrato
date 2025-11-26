@@ -115,75 +115,93 @@ class BoletoService:
     CAMPOS_NAO_SUPORTADOS = {
         # Banco do Brasil (001)
         # Aceita TODOS os campos da Base + convenio (4-8 dig) + codigo_servico
-        '001': [],
+        # IMPORTANTE: BRCobranca aceita APENAS documento_numero (não aceita numero_documento)
+        '001': ['numero_documento'],
 
         # Banco Nordeste (004)
         # Aceita TODOS os campos da Base
-        '004': [],
+        # IMPORTANTE: BRCobranca aceita APENAS documento_numero (não aceita numero_documento)
+        '004': ['numero_documento'],
 
         # Banestes (021)
         # Aceita TODOS os campos da Base
-        '021': [],
+        # IMPORTANTE: BRCobranca aceita APENAS documento_numero (não aceita numero_documento)
+        '021': ['numero_documento'],
 
         # Santander (033)
         # Aceita TODOS os campos da Base + convenio obrigatorio (7 dig)
-        '033': [],
+        # IMPORTANTE: BRCobranca aceita APENAS documento_numero (não aceita numero_documento)
+        '033': ['numero_documento'],
 
         # Banrisul (041)
         # Aceita TODOS os campos da Base
-        '041': [],
+        # IMPORTANTE: BRCobranca aceita APENAS documento_numero (não aceita numero_documento)
+        '041': ['numero_documento'],
 
         # BRB (070)
         # Aceita TODOS os campos da Base
-        '070': [],
+        # IMPORTANTE: BRCobranca aceita APENAS documento_numero (não aceita numero_documento)
+        '070': ['numero_documento'],
 
         # Banco Inter (077)
         # Aceita TODOS os campos da Base
-        '077': [],
+        # IMPORTANTE: BRCobranca aceita APENAS documento_numero (não aceita numero_documento)
+        '077': ['numero_documento'],
 
         # Unicred (084/136)
         # Aceita TODOS os campos da Base + conta_corrente_dv
-        '084': [],
+        # IMPORTANTE: BRCobranca aceita APENAS documento_numero (não aceita numero_documento)
+        '084': ['numero_documento'],
 
         # Ailos (085)
         # Aceita TODOS os campos da Base
-        '085': [],
+        # IMPORTANTE: BRCobranca aceita APENAS documento_numero (não aceita numero_documento)
+        '085': ['numero_documento'],
 
         # Caixa (104)
         # Aceita TODOS os campos da Base + emissao (1 dig) + codigo_beneficiario
-        '104': [],
+        # IMPORTANTE: BRCobranca aceita APENAS documento_numero (não aceita numero_documento)
+        '104': ['numero_documento'],
 
         # Cresol (133)
         # Aceita TODOS os campos da Base
-        '133': [],
+        # IMPORTANTE: BRCobranca aceita APENAS documento_numero (não aceita numero_documento)
+        '133': ['numero_documento'],
 
         # Unicred (136)
         # Aceita TODOS os campos da Base + conta_corrente_dv
-        '136': [],
+        # IMPORTANTE: BRCobranca aceita APENAS documento_numero (não aceita numero_documento)
+        '136': ['numero_documento'],
 
         # Bradesco (237)
         # Aceita TODOS os campos da Base
-        '237': [],
+        # IMPORTANTE: BRCobranca aceita APENAS documento_numero (não aceita numero_documento)
+        '237': ['numero_documento'],
 
         # Itau (341)
         # Aceita TODOS os campos da Base + seu_numero (para carteiras especificas)
-        '341': [],
+        # IMPORTANTE: BRCobranca aceita APENAS documento_numero (não aceita numero_documento)
+        '341': ['numero_documento'],
 
         # Banco Mercantil (389)
         # Aceita TODOS os campos da Base
-        '389': [],
+        # IMPORTANTE: BRCobranca aceita APENAS documento_numero (não aceita numero_documento)
+        '389': ['numero_documento'],
 
         # Safra (422)
         # Aceita TODOS os campos da Base + agencia_dv + conta_corrente_dv
-        '422': [],
+        # IMPORTANTE: BRCobranca aceita APENAS documento_numero (não aceita numero_documento)
+        '422': ['numero_documento'],
 
         # Sicredi (748)
         # Aceita TODOS os campos da Base + posto (2 dig) + byte_idt (1 dig)
-        '748': [],
+        # IMPORTANTE: BRCobranca aceita APENAS documento_numero (não aceita numero_documento)
+        '748': ['numero_documento'],
 
         # Sicoob (756)
         # Aceita TODOS os campos da Base + variacao (2 dig) + quantidade (3 dig)
-        '756': [],
+        # IMPORTANTE: BRCobranca aceita APENAS documento_numero (não aceita numero_documento)
+        '756': ['numero_documento'],
     }
 
     # =========================================================================
@@ -930,6 +948,20 @@ class BoletoService:
                 elif 500 <= response.status_code < 600:
                     error_msg = f"Erro do servidor {response.status_code}"
                     logger.warning(f"{error_msg} - Tentativa {tentativa}/{self.max_tentativas}")
+
+                    # Log detalhado do erro 500 para debug
+                    logger.error(f"Erro 500 da API BRCobranca. Response body: {response.text[:1000]}")
+                    logger.error(f"Dados enviados - Banco: {banco_nome}")
+                    logger.error(f"Dados do boleto (primeiros campos): cedente={boleto_data.get('cedente')}, "
+                               f"documento_cedente={boleto_data.get('documento_cedente')}, "
+                               f"sacado={boleto_data.get('sacado')}, "
+                               f"valor={boleto_data.get('valor')}, "
+                               f"data_vencimento={boleto_data.get('data_vencimento')}, "
+                               f"nosso_numero={boleto_data.get('nosso_numero')}")
+
+                    # Log completo dos dados em formato JSON (apenas na última tentativa)
+                    if tentativa == self.max_tentativas:
+                        logger.error(f"Dados completos enviados (JSON): {json.dumps(boleto_data, indent=2, default=str)}")
 
                     if tentativa < self.max_tentativas:
                         logger.info(f"Aguardando {delay}s antes de nova tentativa...")
