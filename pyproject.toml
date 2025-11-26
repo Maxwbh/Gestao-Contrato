@@ -1,0 +1,99 @@
+[tool.poetry]
+name = "gestao-contrato"
+version = "1.0.0"
+description = "Sistema de Gestão de Contratos de Venda de Imóveis"
+authors = ["Maxwell da Silva Oliveira <maxwbh@gmail.com>"]
+license = "Proprietary"
+readme = "README.md"
+homepage = "https://msbrasil.inf.br"
+repository = "https://github.com/Maxwbh/Gestao-Contrato"
+
+[tool.poetry.dependencies]
+python = "^3.11"
+Django = "^4.2"
+psycopg2-binary = "^2.9"
+python-decouple = "^3.8"
+dj-database-url = "^2.1"
+gunicorn = "^21.2"
+whitenoise = "^6.6"
+requests = "^2.31"
+celery = "^5.3"
+redis = "^5.0"
+django-crispy-forms = "^2.1"
+crispy-bootstrap5 = "^2.0"
+Pillow = "^10.2"
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^7.4"
+pytest-django = "^4.7"
+pytest-cov = "^4.1"
+pytest-mock = "^3.12"
+pytest-factoryboy = "^2.6"
+factory-boy = "^3.3"
+faker = "^20.1"
+black = "^23.12"
+flake8 = "^7.0"
+isort = "^5.13"
+pylint = "^3.0"
+mypy = "^1.8"
+django-debug-toolbar = "^4.2"
+ipython = "^8.19"
+django-extensions = "^3.2"
+
+[tool.black]
+line-length = 100
+target-version = ['py311']
+include = '\.pyi?$'
+exclude = '''
+/(
+    \.git
+  | \.venv
+  | \.eggs
+  | \.tox
+  | build
+  | dist
+  | migrations
+)/
+'''
+
+[tool.isort]
+profile = "black"
+line_length = 100
+skip_glob = ["*/migrations/*"]
+known_django = ["django"]
+sections = ["FUTURE", "STDLIB", "DJANGO", "THIRDPARTY", "FIRSTPARTY", "LOCALFOLDER"]
+
+[tool.pylint.main]
+load-plugins = ["pylint_django"]
+django-settings-module = "gestao_contrato.settings"
+
+[tool.pylint.format]
+max-line-length = 100
+
+[tool.pylint.messages_control]
+disable = [
+    "missing-docstring",
+    "too-few-public-methods",
+    "invalid-name",
+]
+
+[tool.mypy]
+python_version = "3.11"
+plugins = ["mypy_django_plugin.main"]
+ignore_missing_imports = true
+warn_unused_ignores = true
+warn_redundant_casts = true
+warn_unused_configs = true
+disallow_untyped_defs = false
+check_untyped_defs = true
+
+[[tool.mypy.overrides]]
+module = "*.migrations.*"
+ignore_errors = true
+
+[tool.django-stubs]
+django_settings_module = "gestao_contrato.settings"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
