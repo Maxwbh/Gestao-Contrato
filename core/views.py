@@ -964,18 +964,31 @@ class ImobiliariaCreateView(LoginRequiredMixin, CreateView):
             try:
                 contas = json.loads(contas_json)
                 for conta_data in contas:
+                    # Mesclar agencia_dv com agencia se fornecido
+                    agencia = conta_data.get('agencia', '')
+                    agencia_dv = conta_data.get('agencia_dv', '')
+                    if agencia and agencia_dv:
+                        agencia_completa = f"{agencia}-{agencia_dv}"
+                    else:
+                        agencia_completa = agencia
+
+                    # Mesclar conta_dv com conta se fornecido
+                    conta = conta_data.get('conta', '')
+                    conta_dv = conta_data.get('conta_dv', '')
+                    if conta and conta_dv:
+                        conta_completa = f"{conta}-{conta_dv}"
+                    else:
+                        conta_completa = conta
+
                     ContaBancaria.objects.create(
                         imobiliaria=self.object,
                         banco=conta_data.get('banco', ''),
                         descricao=conta_data.get('descricao', ''),
-                        agencia=conta_data.get('agencia', ''),
-                        agencia_dv=conta_data.get('agencia_dv', ''),
-                        conta=conta_data.get('conta', ''),
-                        conta_dv=conta_data.get('conta_dv', ''),
-                        tipo_conta=conta_data.get('tipo_conta', 'corrente'),
+                        agencia=agencia_completa,
+                        conta=conta_completa,
                         convenio=conta_data.get('convenio', ''),
                         carteira=conta_data.get('carteira', ''),
-                        conta_padrao=conta_data.get('principal', False),
+                        principal=conta_data.get('principal', False),
                     )
             except (json.JSONDecodeError, Exception) as e:
                 messages.warning(self.request, f'Imobiliária criada, mas houve erro ao salvar contas bancárias: {e}')
