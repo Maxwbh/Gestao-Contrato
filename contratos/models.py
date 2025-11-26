@@ -494,7 +494,7 @@ class Contrato(TimeStampedModel):
             if data_limite and data_vencimento > data_limite:
                 break
 
-            Parcela.objects.create(
+            parcela = Parcela.objects.create(
                 contrato=self,
                 numero_parcela=numero,
                 data_vencimento=data_vencimento,
@@ -512,10 +512,6 @@ class Contrato(TimeStampedModel):
                 ultimo_dia = (data_vencimento.replace(day=1) + relativedelta(months=1) - relativedelta(days=1)).day
                 dia = min(self.dia_vencimento, ultimo_dia)
                 data_vencimento = data_vencimento.replace(day=dia)
-
-        # Gerar boletos se solicitado
-        if gerar_boletos:
-            self.gerar_boletos_parcelas(parcelas_criadas, conta_bancaria)
 
         return parcelas_criadas
 
