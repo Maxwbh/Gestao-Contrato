@@ -240,15 +240,29 @@ class Command(BaseCommand):
         for imobiliaria in imobiliarias:
             # Criar todas as 3 contas (BB, Sicoob, Bradesco) para cada imobiliária
             for i, config in enumerate(bancos_config):
+                # Mesclar agencia_dv com agencia se fornecido
+                agencia = config.get('agencia', '')
+                agencia_dv = config.get('agencia_dv', '')
+                if agencia and agencia_dv:
+                    agencia_completa = f"{agencia}-{agencia_dv}"
+                else:
+                    agencia_completa = agencia
+
+                # Mesclar conta_dv com conta se fornecido
+                conta_numero = config.get('conta', '')
+                conta_dv = config.get('conta_dv', '')
+                if conta_numero and conta_dv:
+                    conta_completa = f"{conta_numero}-{conta_dv}"
+                else:
+                    conta_completa = conta_numero
+
                 conta = ContaBancaria.objects.create(
                     imobiliaria=imobiliaria,
                     banco=config['banco'],
                     descricao=f"{config['descricao']} - {imobiliaria.nome}",
                     principal=(i == 0),  # BB é a principal
-                    agencia=config['agencia'],
-                    agencia_dv=config.get('agencia_dv', ''),
-                    conta=config['conta'],
-                    conta_dv=config.get('conta_dv', ''),
+                    agencia=agencia_completa,
+                    conta=conta_completa,
                     convenio=config['convenio'],
                     carteira=config['carteira'],
                     nosso_numero_atual=config['nosso_numero_atual'],
