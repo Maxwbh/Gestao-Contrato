@@ -88,10 +88,24 @@
                                             {% endif %}
                                         </p>
 
-                                        {% if imobiliaria.banco or imobiliaria.pix %}
+                                        {% if imobiliaria.conta_principal %}
                                             <hr>
                                             <p class="card-text">
-                                                <strong><i class="fas fa-university"></i> Dados Bancários:</strong><br>
+                                                <strong><i class="fas fa-university"></i> Conta Principal:</strong>
+                                                <span class="badge bg-success ms-1">Principal</span><br>
+                                                <small>
+                                                    <strong>{{ imobiliaria.conta_principal.banco_nome }}</strong><br>
+                                                    Ag: {{ imobiliaria.conta_principal.agencia }} -
+                                                    Conta: {{ imobiliaria.conta_principal.conta }}<br>
+                                                    {% if imobiliaria.conta_principal.chave_pix %}
+                                                        <i class="fas fa-qrcode"></i> PIX: {{ imobiliaria.conta_principal.chave_pix }}
+                                                    {% endif %}
+                                                </small>
+                                            </p>
+                                        {% elif imobiliaria.banco or imobiliaria.pix %}
+                                            <hr>
+                                            <p class="card-text">
+                                                <strong><i class="fas fa-university"></i> Dados Bancários (legado):</strong><br>
                                                 {% if imobiliaria.banco %}
                                                     <small>
                                                         {{ imobiliaria.banco }}
