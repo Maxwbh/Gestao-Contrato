@@ -911,7 +911,7 @@ class ImobiliariaListView(LoginRequiredMixin, ListView):
     paginate_by = 20
 
     def get_queryset(self):
-        queryset = Imobiliaria.objects.filter(ativo=True).select_related('contabilidade').order_by('-criado_em')
+        queryset = Imobiliaria.objects.filter(ativo=True).select_related('contabilidade').prefetch_related('contas_bancarias').order_by('-criado_em')
 
         # Filtro de busca
         search = self.request.GET.get('search')
@@ -928,6 +928,12 @@ class ImobiliariaListView(LoginRequiredMixin, ListView):
         context = super().get_context_data(**kwargs)
         context['total_imobiliarias'] = Imobiliaria.objects.filter(ativo=True).count()
         context['search'] = self.request.GET.get('search', '')
+
+        # Adicionar conta principal para cada imobiliária
+        imobiliarias = context.get('imobiliarias', [])
+        for imobiliaria in imobiliarias:
+            imobiliaria.conta_principal = imobiliaria.contas_bancarias.filter(principal=True, ativo=True).first()
+
         return context
 
 
