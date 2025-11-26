@@ -931,6 +931,20 @@ class BoletoService:
                     error_msg = f"Erro do servidor {response.status_code}"
                     logger.warning(f"{error_msg} - Tentativa {tentativa}/{self.max_tentativas}")
 
+                    # Log detalhado do erro 500 para debug
+                    logger.error(f"Erro 500 da API BRCobranca. Response body: {response.text[:1000]}")
+                    logger.error(f"Dados enviados - Banco: {banco_nome}")
+                    logger.error(f"Dados do boleto (primeiros campos): cedente={boleto_data.get('cedente')}, "
+                               f"documento_cedente={boleto_data.get('documento_cedente')}, "
+                               f"sacado={boleto_data.get('sacado')}, "
+                               f"valor={boleto_data.get('valor')}, "
+                               f"data_vencimento={boleto_data.get('data_vencimento')}, "
+                               f"nosso_numero={boleto_data.get('nosso_numero')}")
+
+                    # Log completo dos dados em formato JSON (apenas na última tentativa)
+                    if tentativa == self.max_tentativas:
+                        logger.error(f"Dados completos enviados (JSON): {json.dumps(boleto_data, indent=2, default=str)}")
+
                     if tentativa < self.max_tentativas:
                         logger.info(f"Aguardando {delay}s antes de nova tentativa...")
                         time.sleep(delay)
