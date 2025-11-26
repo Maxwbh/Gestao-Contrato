@@ -429,3 +429,117 @@ Para dúvidas ou suporte:
 ---
 
 **Desenvolvido com ❤️ por Maxwell da Silva Oliveira**
+
+## 📚 Documentação
+
+A documentação completa do projeto está organizada em `/docs`:
+
+- **[Documentação Completa](/docs/README.md)** - Índice de toda documentação
+- **[Deploy no Render](/docs/deployment/DEPLOY.md)** - Guia de deploy
+- **[Testes](/docs/development/TESTING.md)** ou [/tests/README.md](/tests/README.md) - Estrutura de testes
+- **[API BRCobranca](/docs/api/BRCOBRANCA.md)** - Integração com boletos
+
+### Estrutura de Diretórios
+
+```
+Gestao-Contrato/
+├── core/                    # App principal (Imobiliárias, Imóveis, Compradores)
+├── contratos/               # Gestão de contratos
+├── financeiro/              # Gestão financeira e boletos
+├── notificacoes/            # Sistema de notificações
+├── accounts/                # Autenticação e permissões
+├── docs/                    # 📚 Documentação organizada
+│   ├── api/                 # Documentação de APIs
+│   ├── architecture/        # Arquitetura do sistema
+│   ├── compliance/          # LGPD e regulamentações
+│   ├── deployment/          # Guias de deploy
+│   ├── development/         # Guias de desenvolvimento
+│   └── troubleshooting/     # Resolução de problemas
+├── tests/                   # 🧪 Testes organizados
+│   ├── unit/                # Testes unitários por app
+│   ├── integration/         # Testes de integração
+│   ├── functional/          # Testes end-to-end
+│   └── fixtures/            # Factories e dados de teste
+├── templates/               # Templates Django
+├── static/                  # Arquivos estáticos
+├── docker-compose.yml       # 🐳 Desenvolvimento local
+├── Dockerfile.brcobranca    # 🐳 API BRCobranca customizada
+├── pytest.ini               # Configuração de testes
+└── pyproject.toml           # Configuração moderna do projeto
+```
+
+## 🧪 Testes
+
+O projeto utiliza **pytest** com estrutura moderna organizada por tipo:
+
+```bash
+# Executar todos os testes
+pytest
+
+# Apenas testes unitários (rápido)
+pytest tests/unit/
+
+# Apenas testes de integração
+pytest tests/integration/
+
+# Com cobertura
+pytest --cov=. --cov-report=html
+
+# Verbose
+pytest -v
+```
+
+**Meta de cobertura:** > 80%
+
+Ver documentação completa em [/tests/README.md](/tests/README.md)
+
+## 🐳 Docker e APIs Customizadas
+
+Este projeto utiliza versões **customizadas** do BRCobranca mantidas por Maxwell da Silva Oliveira:
+
+### Repositórios Oficiais
+- **API REST:** https://github.com/Maxwbh/boleto_cnab_api
+- **Biblioteca Ruby:** https://github.com/Maxwbh/brcobranca
+
+⚠️ **IMPORTANTE:** Use APENAS estes repositórios. Não use os forks originais.
+
+### Docker Compose (Desenvolvimento)
+
+```bash
+# Iniciar todos os serviços (PostgreSQL, Redis, BRCobranca API)
+docker-compose up -d
+
+# Aplicar migrações
+python manage.py migrate
+
+# Criar superusuário
+python manage.py createsuperuser
+
+# Acessar o sistema
+# http://localhost:8000
+```
+
+O `docker-compose.yml` já está configurado para usar os repositórios customizados!
+
+## 🔧 Ferramentas de Desenvolvimento
+
+O projeto inclui configurações modernas para desenvolvimento:
+
+- **black** - Formatação de código
+- **isort** - Ordenação de imports
+- **flake8** - Linting
+- **pylint** - Análise estática
+- **mypy** - Type checking
+- **pytest** - Framework de testes
+- **factory-boy** - Geração de dados de teste
+
+Configurado via `pyproject.toml`
+
+---
+
+**Desenvolvido por:** Maxwell da Silva Oliveira (maxwbh@gmail.com)
+**Empresa:** M&S do Brasil LTDA
+**Website:** https://msbrasil.inf.br
+**Licença:** Proprietary
+
+**Última atualização:** 2025-11-26 - Reestruturação completa da documentação e testes
