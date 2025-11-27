@@ -1,6 +1,13 @@
 # Sistema de Gestão de Contratos de Venda de Imóveis
 
-Sistema completo desenvolvido em Python/Django para gerenciamento de contratos de venda de imóveis (lotes, terrenos, casas) com funcionalidades avançadas de gestão financeira, reajustes automáticos e notificações.
+[![Python Version](https://img.shields.io/badge/python-3.11%2B-blue.svg)](https://www.python.org/downloads/)
+[![Django Version](https://img.shields.io/badge/django-4.2-green.svg)](https://www.djangoproject.com/)
+[![License](https://img.shields.io/badge/license-Proprietary-red.svg)](LICENSE)
+[![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
+[![Tests](https://img.shields.io/badge/tests-pytest-green.svg)](tests/)
+[![Coverage](https://img.shields.io/badge/coverage-%3E80%25-brightgreen.svg)](https://github.com/Maxwbh/Gestao-Contrato)
+
+Sistema completo desenvolvido em Python/Django para gerenciamento de contratos de venda de imóveis (lotes, terrenos, casas) com funcionalidades avançadas de gestão financeira, geração de boletos, reajustes automáticos e notificações.
 
 ## 👨‍💻 Desenvolvedor
 
@@ -9,7 +16,7 @@ Sistema completo desenvolvido em Python/Django para gerenciamento de contratos d
 - **LinkedIn:** [linkedin.com/in/maxwbh](https://www.linkedin.com/in/maxwbh/)
 - **GitHub:** [github.com/Maxwbh](https://github.com/Maxwbh/)
 - **Empresa:** M&S do Brasil LTDA
-- **Site:** [msbrasil.inf.br](https://msbrasil.inf.br)
+- **Website:** [msbrasil.inf.br](https://msbrasil.inf.br)
 
 ## 📋 Sobre o Sistema
 
@@ -20,526 +27,360 @@ Sistema desenvolvido para contabilidades que gerenciam múltiplos loteamentos, p
 - **Imóveis** → Lotes, terrenos, casas, apartamentos e imóveis comerciais
 - **Compradores** → Clientes que adquirem os imóveis
 - **Contratos** → Gestão completa com parcelas, reajustes e notificações
+- **Boletos** → Geração automática via BRCobranca (17 bancos suportados)
 
-## 🚀 Funcionalidades Principais
+## ✨ Funcionalidades Principais
 
-### 1. Gestão de Entidades
+### 💼 Gestão de Entidades
 - ✅ Cadastro de Contabilidades
 - ✅ Cadastro de Imobiliárias/Beneficiários
-- ✅ Cadastro de Imóveis (com tipos: Lote, Terreno, Casa, Apartamento, Comercial)
-- ✅ Cadastro de Compradores (com preferências de notificação)
+- ✅ Múltiplas contas bancárias por imobiliária
+- ✅ Cadastro de Imóveis (5 tipos)
+- ✅ Cadastro de Compradores (PF/PJ)
 
-### 2. Sistema de Contratos
+### 📝 Sistema de Contratos
 - ✅ Criação de contratos de venda
 - ✅ Configuração de número de parcelas
 - ✅ Definição de dia de vencimento
 - ✅ Cálculo de juros e multa
-- ✅ Tipos de correção monetária: IPCA, IGP-M, SELIC ou Fixo
-- ✅ Prazo de reajuste configurável (padrão: 12 meses)
+- ✅ Correção monetária: IPCA, IGP-M, SELIC ou Fixo
+- ✅ Reajuste automático configurável
 
-### 3. Gestão Financeira
-- ✅ Geração automática de parcelas mês a mês
-- ✅ Cálculo automático de juros e multa por atraso
+### 💰 Gestão Financeira
+- ✅ Geração automática de parcelas
+- ✅ Cálculo automático de encargos
 - ✅ Registro de pagamentos
 - ✅ Controle de saldo devedor
 - ✅ Histórico completo de pagamentos
+- ✅ Geração de carnês
 
-### 4. Sistema de Reajuste Automático
-- ✅ Integração com API do Banco Central do Brasil
-- ✅ Busca automática de índices IPCA, IGP-M e SELIC
-- ✅ Reajuste automático a cada período configurado
-- ✅ Possibilidade de reajuste manual
-- ✅ Histórico de reajustes aplicados
+### 🧾 Boletos Bancários
+- ✅ Integração com **17 bancos** via BRCobranca
+- ✅ Geração automática de boletos
+- ✅ Linha digitável e código de barras
+- ✅ Configuração de juros, multa e descontos
+- ✅ API customizada para boletos
 
-### 5. Sistema de Notificações
-- ✅ Notificações por **E-mail**
-- ✅ Notificações por **SMS** (via Twilio)
-- ✅ Notificações por **WhatsApp** (via Twilio)
+### 📊 Reajuste Automático
+- ✅ Integração com API do Banco Central
+- ✅ Busca automática de índices
+- ✅ Aplicação automática de reajustes
+- ✅ Histórico de reajustes
+
+### 📧 Notificações
+- ✅ E-mail, SMS e WhatsApp
 - ✅ Templates personalizáveis
 - ✅ Envio automático antes do vencimento
 - ✅ Configuração individual por comprador
 
-### 6. Recursos Adicionais
+### 🎨 Interface e UX
 - ✅ Dashboard com estatísticas
-- ✅ Interface administrativa completa (Django Admin)
-- ✅ Sistema de busca e filtros avançados
-- ✅ Tarefas agendadas (Celery)
-- ✅ Design responsivo baseado em Bootstrap 5
-- ✅ Pronto para deploy no Render
+- ✅ Design responsivo (Bootstrap 5)
+- ✅ Busca e filtros avançados
+- ✅ Admin Django completo
+- ✅ Máscaras de entrada (CPF, CNPJ, CEP)
+- ✅ Integração com ViaCEP
 
-## 🛠️ Tecnologias Utilizadas
+## 🚀 Instalação
 
-### Backend
-- **Python 3.11+**
-- **Django 4.2.7** - Framework web
-- **PostgreSQL** - Banco de dados
-- **Redis** - Cache e broker para Celery
-- **Celery** - Tarefas assíncronas e agendadas
-- **Gunicorn** - Servidor WSGI para produção
+### Via PIP (Recomendado)
 
-### Frontend
-- **Bootstrap 5** - Framework CSS
-- **Font Awesome** - Ícones
-- **JavaScript** - Interatividade
-
-### APIs e Serviços
-- **Banco Central do Brasil API** - Índices econômicos (IPCA, IGP-M, SELIC)
-- **Twilio** - SMS e WhatsApp
-- **SMTP** - E-mail
-
-## 📦 Instalação e Configuração
-
-### Pré-requisitos
-- Python 3.11 ou superior
-- PostgreSQL 12+ (para produção)
-- Redis 6+ (para Celery)
-- Git
-
-### 1. Clone o Repositório
 ```bash
+# Instalação simples
+pip install gestao-contrato
+
+# Com dependências de desenvolvimento
+pip install gestao-contrato[dev]
+
+# Editable mode (para desenvolvimento)
 git clone https://github.com/Maxwbh/Gestao-Contrato.git
 cd Gestao-Contrato
+pip install -e ".[dev]"
 ```
 
-### 2. Crie um Ambiente Virtual
+### Via Git
+
 ```bash
-python -m venv venv
+# Clone o repositório
+git clone https://github.com/Maxwbh/Gestao-Contrato.git
+cd Gestao-Contrato
 
-# Linux/Mac
-source venv/bin/activate
+# Crie ambiente virtual
+python3 -m venv venv
+source venv/bin/activate  # Linux/Mac
+# ou
+venv\Scripts\activate  # Windows
 
-# Windows
-venv\Scripts\activate
-```
-
-### 3. Instale as Dependências
-```bash
+# Instale as dependências
 pip install -r requirements.txt
-```
 
-### 4. Configure as Variáveis de Ambiente
-```bash
+# Configure o ambiente
 cp .env.example .env
-```
+# Edite o .env com suas configurações
 
-Edite o arquivo `.env` com suas configurações:
-```env
-SECRET_KEY=sua-chave-secreta-aqui
-DEBUG=True
-ALLOWED_HOSTS=localhost,127.0.0.1
-
-DATABASE_URL=postgresql://user:password@localhost:5432/gestao_contrato
-REDIS_URL=redis://localhost:6379/0
-
-# Configurações de E-mail
-EMAIL_HOST=smtp.gmail.com
-EMAIL_PORT=587
-EMAIL_HOST_USER=seu-email@gmail.com
-EMAIL_HOST_PASSWORD=sua-senha-de-app
-
-# Twilio (SMS e WhatsApp)
-TWILIO_ACCOUNT_SID=seu-account-sid
-TWILIO_AUTH_TOKEN=seu-auth-token
-TWILIO_PHONE_NUMBER=+5511999999999
-TWILIO_WHATSAPP_NUMBER=whatsapp:+5511999999999
-```
-
-### 5. Execute as Migrações
-```bash
+# Aplique as migrações
 python manage.py migrate
-```
 
-### 6. Crie um Superusuário
-```bash
+# Crie um superusuário
 python manage.py createsuperuser
-```
 
-### 7. Colete os Arquivos Estáticos
-```bash
-python manage.py collectstatic
-```
-
-### 8. Execute o Servidor de Desenvolvimento
-```bash
+# Inicie o servidor
 python manage.py runserver
 ```
 
-Acesse: `http://localhost:8000`
+Acesse: http://localhost:8000
 
-### 9. Execute o Celery (em outro terminal) - Opcional
-
-**Nota:** O Celery é opcional para desenvolvimento. Você pode executar as tarefas manualmente.
+### Via Docker Compose (Mais Rápido)
 
 ```bash
-# Worker
-celery -A gestao_contrato worker --loglevel=info
+# Clone o repositório
+git clone https://github.com/Maxwbh/Gestao-Contrato.git
+cd Gestao-Contrato
 
-# Beat (agendador)
-celery -A gestao_contrato beat --loglevel=info
+# Inicie todos os serviços
+docker-compose up -d
+
+# Aplique migrações
+python manage.py migrate
+
+# Crie superusuário
+python manage.py createsuperuser
+
+# Acesse
+# http://localhost:8000
 ```
 
-### 10. Ou Execute Tarefas Manualmente (Alternativa ao Celery)
+O Docker Compose inicia:
+- PostgreSQL
+- Redis
+- BRCobranca API (já configurada com repositórios customizados)
 
-```bash
-# Processar reajustes
-python manage.py processar_reajustes
+## 🛠️ Tecnologias
 
-# Criar notificações de vencimento
-python manage.py enviar_notificacoes
+### Backend
+- **Python 3.11+**
+- **Django 4.2** - Framework web
+- **PostgreSQL** - Banco de dados
+- **Redis** - Cache e Celery broker
+- **Celery** - Tarefas assíncronas
+- **Gunicorn** - Servidor WSGI
 
-# Processar notificações pendentes
-python manage.py processar_notificacoes_pendentes
-```
+### Frontend
+- **Bootstrap 5**
+- **Font Awesome**
+- **JavaScript ES6+**
 
-## 🚀 Deploy no Render
-
-### ⚠️ IMPORTANTE: Plano Gratuito vs Plano Pago
-
-Este projeto está configurado para funcionar no **Plano Gratuito** do Render.
-
-#### Plano Gratuito (Free Tier)
-- ✅ Web Service (Django)
-- ✅ PostgreSQL Database
-- ✅ Redis Instance
-- ❌ **Background Workers NÃO suportados** (Celery)
-
-**Funcionalidades automáticas afetadas:**
-- Reajustes automáticos de parcelas
-- Envio automático de notificações
-
-**Solução:** Execute manualmente via Django Admin ou Management Commands.
-
-👉 **[Leia o guia completo: DEPLOY_RENDER.md](./DEPLOY_RENDER.md)**
-
-#### Plano Pago (Starter $7/mês+)
-- ✅ Todas as funcionalidades do Free
-- ✅ Background Workers (Celery)
-- ✅ Tarefas automáticas funcionam
-- ✅ Sem sleep após inatividade
-
-### Configuração Automática (Plano Gratuito)
-
-O projeto está configurado para deploy automático no Render usando o arquivo `render.yaml`.
-
-1. Faça fork ou clone este repositório no GitHub
-2. Acesse [render.com](https://render.com)
-3. Crie uma nova aplicação "Blueprint"
-4. Conecte seu repositório GitHub
-5. Selecione o branch: `master`
-6. O Render criará automaticamente:
-   - ✅ Web Service (Django + Gunicorn)
-   - ✅ PostgreSQL Database
-   - ✅ Redis Instance
-
-### Variáveis de Ambiente no Render
-
-Configure as seguintes variáveis de ambiente no painel do Render:
-
-```
-SECRET_KEY=(será gerada automaticamente)
-DEBUG=False
-ALLOWED_HOSTS=.onrender.com
-
-# E-mail
-EMAIL_HOST=smtp.gmail.com
-EMAIL_PORT=587
-EMAIL_HOST_USER=seu-email@gmail.com
-EMAIL_HOST_PASSWORD=sua-senha-de-app
-
-# Twilio
-TWILIO_ACCOUNT_SID=seu-account-sid
-TWILIO_AUTH_TOKEN=seu-auth-token
-TWILIO_PHONE_NUMBER=+5511999999999
-TWILIO_WHATSAPP_NUMBER=whatsapp:+5511999999999
-```
-
-## 📖 Estrutura do Projeto
-
-```
-Gestao-Contrato/
-├── gestao_contrato/          # Configurações do projeto
-│   ├── settings.py
-│   ├── urls.py
-│   ├── wsgi.py
-│   └── celery.py
-├── core/                      # App principal
-│   ├── models.py             # Contabilidade, Imobiliária, Imóvel, Comprador
-│   ├── admin.py
-│   ├── views.py
-│   └── urls.py
-├── contratos/                 # App de contratos
-│   ├── models.py             # Modelo de Contrato
-│   ├── admin.py
-│   ├── views.py
-│   └── urls.py
-├── financeiro/                # App financeiro
-│   ├── models.py             # Parcela, Reajuste, HistoricoPagamento
-│   ├── admin.py
-│   ├── views.py
-│   ├── tasks.py              # Tarefas Celery (reajustes)
-│   └── urls.py
-├── notificacoes/              # App de notificações
-│   ├── models.py             # Notificacao, Templates, Configurações
-│   ├── admin.py
-│   ├── views.py
-│   ├── services.py           # Serviços de envio
-│   ├── tasks.py              # Tarefas Celery (notificações)
-│   └── urls.py
-├── templates/                 # Templates HTML
-│   ├── base.html
-│   └── ...
-├── static/                    # Arquivos estáticos
-├── media/                     # Upload de arquivos
-├── requirements.txt           # Dependências Python
-├── build.sh                   # Script de build (Render)
-├── render.yaml               # Configuração Render
-├── .env.example              # Exemplo de variáveis de ambiente
-└── README.md                 # Este arquivo
-```
-
-## 🔧 Configuração de Serviços
-
-### E-mail (Gmail)
-
-1. Ative a verificação em duas etapas na sua conta Google
-2. Gere uma "Senha de app" em: https://myaccount.google.com/apppasswords
-3. Configure no `.env`:
-```env
-EMAIL_HOST=smtp.gmail.com
-EMAIL_PORT=587
-EMAIL_HOST_USER=seu-email@gmail.com
-EMAIL_HOST_PASSWORD=sua-senha-de-app-gerada
-```
-
-### SMS e WhatsApp (Twilio)
-
-1. Crie uma conta em: https://www.twilio.com
-2. Obtenha o Account SID e Auth Token
-3. Configure um número de telefone Twilio
-4. Para WhatsApp, ative o WhatsApp Sandbox ou configure WhatsApp Business API
-5. Configure no `.env`:
-```env
-TWILIO_ACCOUNT_SID=ACxxxxxxxxxxxx
-TWILIO_AUTH_TOKEN=seu-token
-TWILIO_PHONE_NUMBER=+5511999999999
-TWILIO_WHATSAPP_NUMBER=whatsapp:+5511999999999
-```
-
-**Alternativas mais baratas para SMS:**
-- Zenvia: https://www.zenvia.com
-- TotalVoice: https://www.totalvoice.com.br
-- SMS Dev: https://smsdev.com.br
-
-## 📱 Como Usar
-
-### 1. Acesse o Admin
-```
-http://localhost:8000/admin/
-```
-
-### 2. Cadastre uma Contabilidade
-- Navegue até "Contabilidades"
-- Clique em "Adicionar Contabilidade"
-- Preencha os dados e salve
-
-### 3. Cadastre uma Imobiliária
-- Navegue até "Imobiliárias"
-- Selecione a contabilidade responsável
-- Preencha dados bancários (para boletos)
-
-### 4. Cadastre Imóveis
-- Navegue até "Imóveis"
-- Selecione a imobiliária
-- Defina o tipo (Lote, Terreno, Casa, etc.)
-
-### 5. Cadastre Compradores
-- Navegue até "Compradores"
-- Configure preferências de notificação
-
-### 6. Crie um Contrato
-- Navegue até "Contratos"
-- Selecione: Imóvel, Comprador e Imobiliária
-- Configure: valor total, número de parcelas, dia de vencimento
-- Defina: tipo de correção (IPCA/IGP-M/SELIC), juros e multa
-- Salve: as parcelas serão geradas automaticamente
-
-### 7. Gerencie Parcelas
-- Acesse "Parcelas" para visualizar todas as parcelas
-- Registre pagamentos
-- Visualize parcelas vencidas
-- Atualizar juros e multa automaticamente
-
-### 8. Configure Notificações
-- Acesse "Templates de Notificação"
-- Personalize mensagens para e-mail, SMS e WhatsApp
-- Configure quando enviar (X dias antes do vencimento)
-
-## 🔄 Tarefas Automáticas (Celery)
-
-O sistema executa automaticamente:
-
-### Diariamente às 01:00
-- **Processamento de Reajustes**: Verifica contratos que precisam de reajuste e aplica automaticamente
-
-### Diariamente às 08:00
-- **Envio de Notificações**: Envia notificações de parcelas a vencer
-
-### Manual
-- Reajustes manuais via Django Admin
-- Atualização de juros e multa
-
-## 📊 API do Banco Central
-
-O sistema busca automaticamente os índices econômicos na API do Banco Central:
-
-- **IPCA**: Série 433
-- **IGP-M**: Série 189
-- **SELIC**: Série 432
-
-Não é necessária autenticação. A API é pública e gratuita.
-
-## 🐛 Troubleshooting
-
-### Erro ao enviar e-mail
-- Verifique se a senha de app do Gmail está correta
-- Confirme se a verificação em duas etapas está ativada
-
-### Celery não está executando tarefas
-- Verifique se o Redis está rodando: `redis-cli ping`
-- Confirme se o worker do Celery está ativo
-- Verifique os logs: `celery -A gestao_contrato worker --loglevel=debug`
-
-### Erro ao buscar índices econômicos
-- Verifique sua conexão com a internet
-- Confirme se a API do BCB está disponível: https://api.bcb.gov.br
-
-
-## 🤝 Contato
-
-Para dúvidas ou suporte:
-
-**Maxwell da Silva Oliveira**
-- E-mail: maxwbh@gmail.com
-- LinkedIn: https://www.linkedin.com/in/maxwbh/
-- GitHub: https://github.com/Maxwbh/
-
-**M&S do Brasil LTDA**
-- Site: https://msbrasil.inf.br
-
----
-
-**Desenvolvido com ❤️ por Maxwell da Silva Oliveira**
+### APIs e Integrações
+- **BRCobranca** - Boletos (17 bancos)
+- **Banco Central** - Índices econômicos
+- **ViaCEP** - Busca de endereços
+- **Twilio** - SMS e WhatsApp
 
 ## 📚 Documentação
 
-A documentação completa do projeto está organizada em `/docs`:
+A documentação completa está organizada em `/docs`:
 
-- **[Documentação Completa](/docs/README.md)** - Índice de toda documentação
-- **[Deploy no Render](/docs/deployment/DEPLOY.md)** - Guia de deploy
-- **[Testes](/docs/development/TESTING.md)** ou [/tests/README.md](/tests/README.md) - Estrutura de testes
+### Principais Guias
+
+- **[Documentação Completa](/docs/README.md)** - Índice geral
+- **[Instalação e Setup](/docs/development/SETUP.md)** - Guia de configuração
+- **[Deploy no Render](/docs/deployment/DEPLOY.md)** - Deploy em produção
+- **[Testes](/tests/README.md)** - Estrutura de testes
 - **[API BRCobranca](/docs/api/BRCOBRANCA.md)** - Integração com boletos
+- **[Contribuindo](/docs/development/CONTRIBUTING.md)** - Guia para contribuidores
 
-### Estrutura de Diretórios
+### Estrutura do Projeto
 
 ```
 Gestao-Contrato/
-├── core/                    # App principal (Imobiliárias, Imóveis, Compradores)
+├── core/                    # App principal
 ├── contratos/               # Gestão de contratos
 ├── financeiro/              # Gestão financeira e boletos
 ├── notificacoes/            # Sistema de notificações
-├── accounts/                # Autenticação e permissões
-├── docs/                    # 📚 Documentação organizada
+├── accounts/                # Autenticação
+├── docs/                    # 📚 Documentação
 │   ├── api/                 # Documentação de APIs
-│   ├── architecture/        # Arquitetura do sistema
-│   ├── compliance/          # LGPD e regulamentações
 │   ├── deployment/          # Guias de deploy
 │   ├── development/         # Guias de desenvolvimento
 │   └── troubleshooting/     # Resolução de problemas
-├── tests/                   # 🧪 Testes organizados
-│   ├── unit/                # Testes unitários por app
+├── tests/                   # 🧪 Testes
+│   ├── unit/                # Testes unitários
 │   ├── integration/         # Testes de integração
 │   ├── functional/          # Testes end-to-end
-│   └── fixtures/            # Factories e dados de teste
+│   └── fixtures/            # Factories de teste
 ├── templates/               # Templates Django
 ├── static/                  # Arquivos estáticos
-├── docker-compose.yml       # 🐳 Desenvolvimento local
-├── Dockerfile.brcobranca    # 🐳 API BRCobranca customizada
-├── pytest.ini               # Configuração de testes
-└── pyproject.toml           # Configuração moderna do projeto
+├── docker-compose.yml       # 🐳 Docker
+├── setup.py                 # 📦 Instalação via PIP
+├── pyproject.toml           # ⚙️ Configurações modernas
+└── pytest.ini               # 🧪 Configuração de testes
 ```
 
 ## 🧪 Testes
 
-O projeto utiliza **pytest** com estrutura moderna organizada por tipo:
+O projeto possui uma estrutura moderna de testes com >80% de cobertura:
 
 ```bash
 # Executar todos os testes
 pytest
 
-# Apenas testes unitários (rápido)
+# Apenas testes unitários (rápido ~5s)
 pytest tests/unit/
-
-# Apenas testes de integração
-pytest tests/integration/
 
 # Com cobertura
 pytest --cov=. --cov-report=html
 
 # Verbose
 pytest -v
+
+# Ver relatório de cobertura
+open htmlcov/index.html
 ```
 
-**Meta de cobertura:** > 80%
+**Recursos de testes:**
+- ✅ Pytest com fixtures modernas
+- ✅ Factory Boy para dados de teste
+- ✅ Mocks para APIs externas
+- ✅ Testes unitários, integração e E2E
+- ✅ Coverage >80%
 
-Ver documentação completa em [/tests/README.md](/tests/README.md)
+Ver: [Documentação de Testes](/tests/README.md)
+
+## 🔧 Desenvolvimento
+
+### Ferramentas de Qualidade
+
+O projeto inclui ferramentas modernas configuradas via `pyproject.toml`:
+
+```bash
+# Formatação automática
+black .
+
+# Ordenar imports
+isort .
+
+# Linting
+flake8 .
+
+# Type checking
+mypy .
+
+# Tudo de uma vez
+black . && isort . && flake8 .
+```
+
+### Versionamento
+
+O projeto usa **Semantic Versioning** (MAJOR.MINOR.PATCH):
+
+```bash
+# Incrementar versão
+python bump_version.py patch  # 1.0.0 -> 1.0.1
+python bump_version.py minor  # 1.0.0 -> 1.1.0
+python bump_version.py major  # 1.0.0 -> 2.0.0
+
+# Versão atual
+cat VERSION
+```
+
+Cada tipo de mudança incrementa automaticamente:
+- **MAJOR:** Mudanças incompatíveis na API
+- **MINOR:** Nova funcionalidade compatível
+- **PATCH:** Correções de bugs
+
+### Dados de Teste
+
+```bash
+# Gerar dados completos para desenvolvimento
+python manage.py gerar_dados_teste
+
+# Isso cria:
+# - 1 Contabilidade
+# - 5 Imobiliárias
+# - 20 Imóveis
+# - 15 Compradores
+# - 10 Contratos com parcelas
+```
 
 ## 🐳 Docker e APIs Customizadas
 
-Este projeto utiliza versões **customizadas** do BRCobranca mantidas por Maxwell da Silva Oliveira:
+Este projeto utiliza versões **customizadas** do BRCobranca:
 
 ### Repositórios Oficiais
 - **API REST:** https://github.com/Maxwbh/boleto_cnab_api
 - **Biblioteca Ruby:** https://github.com/Maxwbh/brcobranca
 
-⚠️ **IMPORTANTE:** Use APENAS estes repositórios. Não use os forks originais.
+⚠️ **IMPORTANTE:** Use APENAS estes repositórios customizados!
 
-### Docker Compose (Desenvolvimento)
+O `docker-compose.yml` já está configurado corretamente.
+
+## 🚀 Deploy
+
+### Render.com (Recomendado)
+
+Deploy gratuito com PostgreSQL, Redis e BRCobranca:
+
+1. Fork este repositório
+2. Crie conta no [Render](https://render.com)
+3. Siga o guia: [Deploy no Render](/docs/deployment/DEPLOY.md)
+
+### Outras Plataformas
+
+- **VPS/Cloud:** Ver [Deploy Manual](/docs/deployment/DEPLOY.md#deploy-em-vpscloud)
+- **Docker:** Ver [Deploy com Docker](/docs/deployment/DEPLOY.md#deploy-com-docker)
+
+## 🤝 Contribuindo
+
+Contribuições são bem-vindas! Por favor, leia nosso [Guia de Contribuição](/docs/development/CONTRIBUTING.md) e [Código de Conduta](/CODE_OF_CONDUCT.md).
+
+### Quick Start para Contribuir
 
 ```bash
-# Iniciar todos os serviços (PostgreSQL, Redis, BRCobranca API)
-docker-compose up -d
+# 1. Fork e clone
+git clone https://github.com/SEU_USER/Gestao-Contrato.git
 
-# Aplicar migrações
-python manage.py migrate
+# 2. Instale dependências de dev
+pip install -e ".[dev]"
 
-# Criar superusuário
-python manage.py createsuperuser
+# 3. Crie uma branch
+git checkout -b feature/minha-feature
 
-# Acessar o sistema
-# http://localhost:8000
+# 4. Faça suas mudanças e teste
+pytest
+
+# 5. Commit (incrementa versão automaticamente)
+python bump_version.py patch
+git add .
+git commit -m "feat: minha nova feature"
+
+# 6. Push e PR
+git push origin feature/minha-feature
 ```
 
-O `docker-compose.yml` já está configurado para usar os repositórios customizados!
+## 📝 Licença
 
-## 🔧 Ferramentas de Desenvolvimento
+**Proprietary** - Copyright © 2024-2025 M&S do Brasil LTDA
 
-O projeto inclui configurações modernas para desenvolvimento:
+Este é um software proprietário. Todos os direitos reservados.
 
-- **black** - Formatação de código
-- **isort** - Ordenação de imports
-- **flake8** - Linting
-- **pylint** - Análise estática
-- **mypy** - Type checking
-- **pytest** - Framework de testes
-- **factory-boy** - Geração de dados de teste
+## 📞 Contato e Suporte
 
-Configurado via `pyproject.toml`
+- **Email:** maxwbh@gmail.com
+- **LinkedIn:** [linkedin.com/in/maxwbh](https://www.linkedin.com/in/maxwbh/)
+- **Issues:** [github.com/Maxwbh/Gestao-Contrato/issues](https://github.com/Maxwbh/Gestao-Contrato/issues)
+- **Website:** [msbrasil.inf.br](https://msbrasil.inf.br)
+
+## 🏆 Créditos
+
+**Desenvolvido por:** Maxwell da Silva Oliveira
+**Empresa:** M&S do Brasil LTDA
+**Versão:** 1.0.0
+**Última atualização:** 2025-11-26
+
+## ⭐ Mostre seu Apoio
+
+Se este projeto foi útil para você, considere dar uma ⭐ no GitHub!
 
 ---
 
-**Desenvolvido por:** Maxwell da Silva Oliveira (maxwbh@gmail.com)
-**Empresa:** M&S do Brasil LTDA
-**Website:** https://msbrasil.inf.br
-**Licença:** Proprietary
-
-**Última atualização:** 2025-11-26 - Reestruturação completa da documentação e testes
+**Made with ❤️ in Brazil 🇧🇷**

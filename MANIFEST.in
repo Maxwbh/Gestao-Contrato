@@ -1,0 +1,59 @@
+# MANIFEST.in
+# Especifica quais arquivos incluir no pacote de distribuição
+
+# Incluir arquivos de documentação
+include README.md
+include LICENSE
+include VERSION
+include CHANGELOG_MODERNIZACAO.md
+include pyproject.toml
+include requirements.txt
+include pytest.ini
+
+# Incluir documentação
+recursive-include docs *.md
+recursive-include docs *.rst
+recursive-include docs *.txt
+
+# Incluir templates e arquivos estáticos
+recursive-include templates *.html
+recursive-include templates *.xml
+recursive-include static *.css
+recursive-include static *.js
+recursive-include static *.png
+recursive-include static *.jpg
+recursive-include static *.svg
+recursive-include static *.woff
+recursive-include static *.woff2
+recursive-include static *.ttf
+
+# Incluir fixtures de teste
+recursive-include tests/fixtures *.json
+recursive-include tests/fixtures *.yaml
+
+# Incluir arquivos de migração
+recursive-include */migrations *.py
+
+# Excluir arquivos desnecessários
+global-exclude __pycache__
+global-exclude *.py[cod]
+global-exclude *$py.class
+global-exclude *.so
+global-exclude .DS_Store
+global-exclude *.log
+global-exclude .env
+global-exclude .env.*
+global-exclude db.sqlite3
+global-exclude .coverage
+global-exclude htmlcov
+
+# Excluir diretórios
+prune .git
+prune .github
+prune .vscode
+prune .idea
+prune venv
+prune env
+prune media
+prune staticfiles
+prune oracle_migration
