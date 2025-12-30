@@ -575,3 +575,437 @@ class RelatorioService:
             return str(obj)
 
         return json.dumps(relatorio, default=converter, indent=2, ensure_ascii=False)
+
+    def exportar_para_excel(self, relatorio: Dict[str, Any]) -> bytes:
+        """
+        Exporta relatório para formato Excel (XLSX).
+
+        Args:
+            relatorio: Relatório gerado
+
+        Returns:
+            bytes: Conteúdo do arquivo Excel
+        """
+        try:
+            from openpyxl import Workbook
+            from openpyxl.styles import Font, Alignment, Border, Side, PatternFill
+            from openpyxl.utils import get_column_letter
+            from io import BytesIO
+        except ImportError:
+            logger.error("openpyxl não instalado. Execute: pip install openpyxl")
+            raise ImportError("Biblioteca openpyxl é necessária para exportar Excel")
+
+        wb = Workbook()
+        ws = wb.active
+
+        tipo = relatorio.get('tipo')
+        ws.title = tipo.replace('_', ' ').title()[:31]
+
+        # Estilos
+        header_font = Font(bold=True, color='FFFFFF')
+        header_fill = PatternFill(start_color='4472C4', end_color='4472C4', fill_type='solid')
+        header_alignment = Alignment(horizontal='center', vertical='center', wrap_text=True)
+        border = Border(
+            left=Side(style='thin'),
+            right=Side(style='thin'),
+            top=Side(style='thin'),
+            bottom=Side(style='thin')
+        )
+        currency_format = '#,##0.00'
+        date_format = 'DD/MM/YYYY'
+
+        row_num = 1
+
+        # Título
+        ws.merge_cells(f'A{row_num}:N{row_num}')
+        ws[f'A{row_num}'] = f"Relatório: {tipo.replace('_', ' ').title()}"
+        ws[f'A{row_num}'].font = Font(bold=True, size=14)
+        row_num += 1
+
+        # Data de geração
+        data_geracao = relatorio.get('data_geracao')
+        if data_geracao:
+            ws[f'A{row_num}'] = f"Gerado em: {data_geracao.strftime('%d/%m/%Y %H:%M')}"
+            row_num += 2
+
+        # Cabeçalhos e dados conforme tipo
+        if tipo in [TipoRelatorio.PRESTACOES_A_PAGAR.value, TipoRelatorio.PRESTACOES_PAGAS.value]:
+            headers = [
+                'Contrato', 'Comprador', 'Documento', 'Parcela', 'Tipo',
+                'Vencimento', 'Valor Original', 'Valor Atual', 'Juros',
+                'Multa', 'Desconto', 'Valor Total', 'Dias Atraso', 'Status Boleto'
+            ]
+            if tipo == TipoRelatorio.PRESTACOES_PAGAS.value:
+                headers.extend(['Data Pagamento', 'Valor Pago'])
+
+            # Escrever cabeçalho
+            for col, header in enumerate(headers, 1):
+                cell = ws.cell(row=row_num, column=col, value=header)
+                cell.font = header_font
+                cell.fill = header_fill
+                cell.alignment = header_alignment
+                cell.border = border
+
+            row_num += 1
+
+            # Escrever dados
+            for item in relatorio.get('itens', []):
+                data_row = [
+                    item.contrato_numero,
+                    item.comprador_nome,
+                    item.comprador_documento,
+                    item.numero_parcela,
+                    item.tipo_parcela,
+                    item.data_vencimento,
+                    float(item.valor_original),
+                    float(item.valor_atual),
+                    float(item.valor_juros),
+                    float(item.valor_multa),
+                    float(item.valor_desconto),
+                    float(item.valor_total),
+                    item.dias_atraso,
+                    item.status_boleto,
+                ]
+                if tipo == TipoRelatorio.PRESTACOES_PAGAS.value:
+                    data_row.extend([
+                        item.data_pagamento,
+                        float(item.valor_pago) if item.valor_pago else 0,
+                    ])
+
+                for col, value in enumerate(data_row, 1):
+                    cell = ws.cell(row=row_num, column=col, value=value)
+                    cell.border = border
+
+                    # Formato de moeda para colunas de valor
+                    if col in [7, 8, 9, 10, 11, 12, 16]:
+                        cell.number_format = currency_format
+                    # Formato de data
+                    if col in [6, 15]:
+                        cell.number_format = date_format
+
+                row_num += 1
+
+            # Totalizadores
+            row_num += 1
+            totalizador = relatorio.get('totalizador')
+            if totalizador:
+                ws[f'A{row_num}'] = 'TOTALIZADORES'
+                ws[f'A{row_num}'].font = Font(bold=True)
+                row_num += 1
+
+                ws[f'A{row_num}'] = 'Total de Parcelas:'
+                ws[f'B{row_num}'] = totalizador.total_parcelas
+                row_num += 1
+
+                ws[f'A{row_num}'] = 'Valor Total:'
+                ws[f'B{row_num}'] = float(totalizador.valor_total)
+                ws[f'B{row_num}'].number_format = currency_format
+                row_num += 1
+
+                if tipo == TipoRelatorio.PRESTACOES_A_PAGAR.value:
+                    ws[f'A{row_num}'] = 'Parcelas Vencidas:'
+                    ws[f'B{row_num}'] = totalizador.parcelas_vencidas
+                    row_num += 1
+
+                    ws[f'A{row_num}'] = 'Valor Vencido:'
+                    ws[f'B{row_num}'] = float(totalizador.valor_vencido)
+                    ws[f'B{row_num}'].number_format = currency_format
+
+        elif tipo == TipoRelatorio.POSICAO_CONTRATOS.value:
+            headers = [
+                'Contrato', 'Comprador', 'Imóvel', 'Data Contrato',
+                'Valor Total', 'Entrada', 'Financiado', 'Total Parcelas',
+                'Pagas', 'A Pagar', 'Vencidas', 'Total Pago',
+                'Saldo Devedor', 'Progresso %', 'Próximo Vencimento'
+            ]
+
+            # Escrever cabeçalho
+            for col, header in enumerate(headers, 1):
+                cell = ws.cell(row=row_num, column=col, value=header)
+                cell.font = header_font
+                cell.fill = header_fill
+                cell.alignment = header_alignment
+                cell.border = border
+
+            row_num += 1
+
+            # Escrever dados
+            for item in relatorio.get('itens', []):
+                data_row = [
+                    item['contrato_numero'],
+                    item['comprador_nome'],
+                    item['imovel'],
+                    item['data_contrato'],
+                    float(item['valor_total']),
+                    float(item['valor_entrada']),
+                    float(item['valor_financiado']),
+                    item['total_parcelas'],
+                    item['parcelas_pagas'],
+                    item['parcelas_a_pagar'],
+                    item['parcelas_vencidas'],
+                    float(item['total_pago']),
+                    float(item['saldo_devedor']),
+                    round(item['progresso_percentual'], 2),
+                    item['proxima_parcela_vencimento'],
+                ]
+
+                for col, value in enumerate(data_row, 1):
+                    cell = ws.cell(row=row_num, column=col, value=value)
+                    cell.border = border
+
+                    # Formato de moeda
+                    if col in [5, 6, 7, 12, 13]:
+                        cell.number_format = currency_format
+                    # Formato de data
+                    if col in [4, 15]:
+                        cell.number_format = date_format
+                    # Formato de percentual
+                    if col == 14:
+                        cell.number_format = '0.00%'
+
+                row_num += 1
+
+        elif tipo == TipoRelatorio.PREVISAO_REAJUSTES.value:
+            headers = [
+                'Contrato', 'Comprador', 'Índice', 'Próximo Reajuste',
+                'Dias Restantes', 'Ciclo', 'Status', 'Parcelas Afetadas',
+                'Bloqueado', 'Último Reajuste'
+            ]
+
+            # Escrever cabeçalho
+            for col, header in enumerate(headers, 1):
+                cell = ws.cell(row=row_num, column=col, value=header)
+                cell.font = header_font
+                cell.fill = header_fill
+                cell.alignment = header_alignment
+                cell.border = border
+
+            row_num += 1
+
+            # Escrever dados
+            for item in relatorio.get('itens', []):
+                data_row = [
+                    item['contrato_numero'],
+                    item['comprador_nome'],
+                    item['tipo_correcao'],
+                    item['data_proximo_reajuste'],
+                    item['dias_para_reajuste'],
+                    item['ciclo_proximo'],
+                    item['status_reajuste'],
+                    item['parcelas_afetadas'],
+                    'Sim' if item['bloqueio_ativo'] else 'Não',
+                    item['ultimo_reajuste'],
+                ]
+
+                for col, value in enumerate(data_row, 1):
+                    cell = ws.cell(row=row_num, column=col, value=value)
+                    cell.border = border
+
+                    if col in [4, 10]:
+                        cell.number_format = date_format
+
+                row_num += 1
+
+        # Ajustar largura das colunas
+        for col in range(1, ws.max_column + 1):
+            column_letter = get_column_letter(col)
+            max_length = 0
+            for row in range(1, ws.max_row + 1):
+                cell = ws.cell(row=row, column=col)
+                try:
+                    if len(str(cell.value)) > max_length:
+                        max_length = len(str(cell.value))
+                except:
+                    pass
+            adjusted_width = min(max_length + 2, 50)
+            ws.column_dimensions[column_letter].width = adjusted_width
+
+        # Salvar em BytesIO
+        output = BytesIO()
+        wb.save(output)
+        output.seek(0)
+
+        return output.getvalue()
+
+    def exportar_para_pdf(self, relatorio: Dict[str, Any]) -> bytes:
+        """
+        Exporta relatório para formato PDF.
+
+        Args:
+            relatorio: Relatório gerado
+
+        Returns:
+            bytes: Conteúdo do arquivo PDF
+        """
+        try:
+            from reportlab.lib import colors
+            from reportlab.lib.pagesizes import A4, landscape
+            from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+            from reportlab.lib.units import mm
+            from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
+            from io import BytesIO
+        except ImportError:
+            logger.error("reportlab não instalado. Execute: pip install reportlab")
+            raise ImportError("Biblioteca reportlab é necessária para exportar PDF")
+
+        output = BytesIO()
+        tipo = relatorio.get('tipo')
+
+        # Usar paisagem para tabelas largas
+        doc = SimpleDocTemplate(
+            output,
+            pagesize=landscape(A4),
+            rightMargin=10*mm,
+            leftMargin=10*mm,
+            topMargin=15*mm,
+            bottomMargin=15*mm
+        )
+
+        elements = []
+        styles = getSampleStyleSheet()
+
+        # Título
+        title_style = ParagraphStyle(
+            'Title',
+            parent=styles['Heading1'],
+            fontSize=16,
+            spaceAfter=12
+        )
+        title = Paragraph(f"Relatório: {tipo.replace('_', ' ').title()}", title_style)
+        elements.append(title)
+
+        # Data de geração
+        data_geracao = relatorio.get('data_geracao')
+        if data_geracao:
+            date_text = Paragraph(
+                f"Gerado em: {data_geracao.strftime('%d/%m/%Y %H:%M')}",
+                styles['Normal']
+            )
+            elements.append(date_text)
+            elements.append(Spacer(1, 10*mm))
+
+        # Construir tabela conforme tipo
+        if tipo in [TipoRelatorio.PRESTACOES_A_PAGAR.value, TipoRelatorio.PRESTACOES_PAGAS.value]:
+            headers = [
+                'Contrato', 'Comprador', 'Parcela', 'Tipo',
+                'Vencimento', 'Valor Atual', 'Juros', 'Multa',
+                'Valor Total', 'Status'
+            ]
+            if tipo == TipoRelatorio.PRESTACOES_PAGAS.value:
+                headers.extend(['Dt Pgto', 'Valor Pago'])
+
+            data = [headers]
+
+            for item in relatorio.get('itens', []):
+                row = [
+                    item.contrato_numero[:15],
+                    item.comprador_nome[:20],
+                    str(item.numero_parcela),
+                    item.tipo_parcela[:10],
+                    item.data_vencimento.strftime('%d/%m/%Y'),
+                    f'R$ {item.valor_atual:,.2f}',
+                    f'R$ {item.valor_juros:,.2f}',
+                    f'R$ {item.valor_multa:,.2f}',
+                    f'R$ {item.valor_total:,.2f}',
+                    item.status_boleto[:10],
+                ]
+                if tipo == TipoRelatorio.PRESTACOES_PAGAS.value:
+                    row.extend([
+                        item.data_pagamento.strftime('%d/%m/%Y') if item.data_pagamento else '-',
+                        f'R$ {item.valor_pago:,.2f}' if item.valor_pago else '-',
+                    ])
+                data.append(row)
+
+            # Linha de totais
+            totalizador = relatorio.get('totalizador')
+            if totalizador:
+                total_row = [
+                    'TOTAL', '', str(totalizador.total_parcelas), '',
+                    '', f'R$ {totalizador.valor_principal:,.2f}',
+                    f'R$ {totalizador.valor_juros:,.2f}',
+                    f'R$ {totalizador.valor_multa:,.2f}',
+                    f'R$ {totalizador.valor_total:,.2f}', ''
+                ]
+                if tipo == TipoRelatorio.PRESTACOES_PAGAS.value:
+                    total_row.extend(['', ''])
+                data.append(total_row)
+
+        elif tipo == TipoRelatorio.POSICAO_CONTRATOS.value:
+            headers = [
+                'Contrato', 'Comprador', 'Valor Total', 'Pago',
+                'Saldo', 'Parcelas', 'Pagas', 'Progresso'
+            ]
+            data = [headers]
+
+            for item in relatorio.get('itens', []):
+                row = [
+                    item['contrato_numero'][:15],
+                    item['comprador_nome'][:25],
+                    f"R$ {float(item['valor_total']):,.2f}",
+                    f"R$ {float(item['total_pago']):,.2f}",
+                    f"R$ {float(item['saldo_devedor']):,.2f}",
+                    str(item['total_parcelas']),
+                    str(item['parcelas_pagas']),
+                    f"{item['progresso_percentual']:.1f}%",
+                ]
+                data.append(row)
+
+        elif tipo == TipoRelatorio.PREVISAO_REAJUSTES.value:
+            headers = [
+                'Contrato', 'Comprador', 'Índice', 'Próx. Reajuste',
+                'Dias', 'Ciclo', 'Status', 'Bloqueado'
+            ]
+            data = [headers]
+
+            for item in relatorio.get('itens', []):
+                row = [
+                    item['contrato_numero'][:15],
+                    item['comprador_nome'][:25],
+                    item['tipo_correcao'],
+                    item['data_proximo_reajuste'].strftime('%d/%m/%Y') if item['data_proximo_reajuste'] else '-',
+                    str(item['dias_para_reajuste']),
+                    str(item['ciclo_proximo']),
+                    item['status_reajuste'],
+                    'Sim' if item['bloqueio_ativo'] else 'Não',
+                ]
+                data.append(row)
+
+        else:
+            data = [['Relatório não suportado para exportação PDF']]
+
+        # Criar tabela
+        col_widths = None
+        if len(data) > 0 and len(data[0]) > 0:
+            available_width = landscape(A4)[0] - 20*mm
+            col_widths = [available_width / len(data[0])] * len(data[0])
+
+        table = Table(data, colWidths=col_widths)
+
+        # Estilo da tabela
+        style = TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#4472C4')),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 0), (-1, 0), 9),
+            ('FONTSIZE', (0, 1), (-1, -1), 8),
+            ('BOTTOMPADDING', (0, 0), (-1, 0), 8),
+            ('TOPPADDING', (0, 0), (-1, 0), 8),
+            ('BACKGROUND', (0, 1), (-1, -1), colors.white),
+            ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
+            ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#E8F0FE')]),
+        ])
+
+        # Destacar última linha (totais) se houver
+        if len(data) > 1:
+            style.add('BACKGROUND', (0, -1), (-1, -1), colors.HexColor('#D6DCE4'))
+            style.add('FONTNAME', (0, -1), (-1, -1), 'Helvetica-Bold')
+
+        table.setStyle(style)
+        elements.append(table)
+
+        # Construir PDF
+        doc.build(elements)
+        output.seek(0)
+
+        return output.getvalue()
