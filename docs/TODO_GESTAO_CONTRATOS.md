@@ -14,13 +14,13 @@ Sistema de gestão de contratos imobiliários com as seguintes características:
 ## 1. MODELO DE DADOS
 
 ### 1.1 Contrato - Ajustes Necessários
-- [ ] Adicionar campo `numero_maximo_parcelas` (validação até 360 meses)
-- [ ] Adicionar campo `quantidade_intermediarias` (máximo 30)
-- [ ] Adicionar campo `ultimo_mes_boleto_gerado` (controle de limite 12 meses)
-- [ ] Adicionar campo `bloqueio_boleto_reajuste` (boolean - bloqueia geração após 12º mês)
-- [ ] Adicionar validação: `prazo_reajuste_meses` padrão = 12
+- [x] Adicionar campo `numero_maximo_parcelas` (validação até 360 meses) ✅ IMPLEMENTADO
+- [x] Adicionar campo `quantidade_intermediarias` (máximo 30) ✅ IMPLEMENTADO
+- [x] Adicionar campo `ultimo_mes_boleto_gerado` (controle de limite 12 meses) ✅ IMPLEMENTADO
+- [x] Adicionar campo `bloqueio_boleto_reajuste` (boolean - bloqueia geração após 12º mês) ✅ IMPLEMENTADO
+- [x] Adicionar validação: `prazo_reajuste_meses` padrão = 12 ✅ IMPLEMENTADO
 
-### 1.2 Nova Model: PrestacaoIntermediaria
+### 1.2 Nova Model: PrestacaoIntermediaria ✅ IMPLEMENTADO
 ```python
 class PrestacaoIntermediaria(models.Model):
     contrato = ForeignKey(Contrato)
@@ -30,17 +30,18 @@ class PrestacaoIntermediaria(models.Model):
     paga = BooleanField(default=False)
     data_pagamento = DateField(null=True)
     parcela_vinculada = ForeignKey(Parcela, null=True)  # Parcela gerada para esta intermediária
+    valor_reajustado = DecimalField(null=True)  # Valor após reajuste
 ```
 
 ### 1.3 Parcela - Ajustes Necessários
-- [ ] Adicionar campo `tipo_parcela` (NORMAL, INTERMEDIARIA, ENTRADA)
-- [ ] Adicionar campo `prestacao_intermediaria` (FK para PrestacaoIntermediaria, null=True)
-- [ ] Adicionar campo `ciclo_reajuste` (1 = meses 1-12, 2 = meses 13-24, etc.)
+- [x] Adicionar campo `tipo_parcela` (NORMAL, INTERMEDIARIA, ENTRADA) ✅ IMPLEMENTADO
+- [x] Adicionar campo `ciclo_reajuste` (1 = meses 1-12, 2 = meses 13-24, etc.) ✅ IMPLEMENTADO
 
 ### 1.4 Reajuste - Ajustes Necessários
-- [ ] Adicionar campo `ciclo` (número do ciclo de 12 meses)
-- [ ] Adicionar campo `data_limite_boleto` (data até quando boletos podem ser gerados)
-- [ ] Adicionar validação de aplicação obrigatória antes de liberar próximo ciclo
+- [x] Adicionar campo `ciclo` (número do ciclo de 12 meses) ✅ IMPLEMENTADO
+- [x] Adicionar campo `data_limite_boleto` (data até quando boletos podem ser gerados) ✅ IMPLEMENTADO
+- [x] Adicionar campo `aplicado` e `data_aplicacao` ✅ IMPLEMENTADO
+- [x] Adicionar validação de aplicação obrigatória antes de liberar próximo ciclo ✅ IMPLEMENTADO
 
 ---
 
