@@ -13,6 +13,10 @@ urlpatterns = [
     path('dashboard/', views.DashboardFinanceiroView.as_view(), name='dashboard'),
     path('api/dashboard-dados/', views.api_dashboard_dados, name='api_dashboard_dados'),
 
+    # Dashboard Consolidado da Contabilidade
+    path('contabilidade/dashboard/', views.DashboardContabilidadeView.as_view(), name='dashboard_contabilidade'),
+    path('api/dashboard-contabilidade/', views.api_dashboard_contabilidade, name='api_dashboard_contabilidade'),
+
     # Dashboard por Imobiliária
     path('imobiliaria/<int:imobiliaria_id>/dashboard/', views.dashboard_imobiliaria, name='dashboard_imobiliaria'),
 
@@ -59,4 +63,14 @@ urlpatterns = [
     path('cnab/retorno/<int:pk>/', views.detalhe_arquivo_retorno, name='detalhe_retorno'),
     path('cnab/retorno/<int:pk>/processar/', views.processar_arquivo_retorno, name='processar_retorno'),
     path('cnab/retorno/<int:pk>/download/', views.download_arquivo_retorno, name='download_retorno'),
+
+    # ==========================================================================
+    # RELATÓRIOS AVANÇADOS
+    # ==========================================================================
+    path('relatorios/prestacoes-a-pagar/', views.RelatorioPrestacoesAPagarView.as_view(), name='relatorio_prestacoes_a_pagar'),
+    path('relatorios/prestacoes-pagas/', views.RelatorioPrestacoesPageasView.as_view(), name='relatorio_prestacoes_pagas'),
+    path('relatorios/posicao-contratos/', views.RelatorioPosicaoContratosView.as_view(), name='relatorio_posicao_contratos'),
+    path('relatorios/previsao-reajustes/', views.RelatorioPrevisaoReajustesView.as_view(), name='relatorio_previsao_reajustes'),
+    path('relatorios/exportar/<str:tipo>/', views.exportar_relatorio, name='exportar_relatorio'),
+    path('api/relatorios/resumo/', views.api_relatorio_resumo, name='api_relatorio_resumo'),
 ]
