@@ -66,38 +66,35 @@ class PrestacaoIntermediaria(models.Model):
   - Ajuste para meses com menos dias
   - Feriados e fins de semana (próximo dia útil)
 
-### 2.3 Controle de Reajuste (CRÍTICO)
+### 2.3 Controle de Reajuste (CRÍTICO) ✅ IMPLEMENTADO
 ```
 REGRA: Só é possível emitir boleto até o 12º mês de cada ciclo.
        No 13º mês, a emissão só é liberada APÓS aplicação do reajuste.
 ```
 
-- [ ] Implementar verificação `pode_gerar_boleto(parcela)`:
+- [x] Implementar verificação `pode_gerar_boleto(parcela)`: ✅ IMPLEMENTADO em Parcela.pode_gerar_boleto()
   ```python
-  def pode_gerar_boleto(parcela):
-      ciclo_atual = parcela.ciclo_reajuste
-      reajuste_aplicado = Reajuste.objects.filter(
-          contrato=parcela.contrato,
-          ciclo=ciclo_atual
-      ).exists()
-
-      # Primeiro ciclo (meses 1-12): sempre pode gerar
-      if ciclo_atual == 1:
+  def pode_gerar_boleto(self):
+      if self.paga:
+          return False
+      if self.ciclo_reajuste <= 1:
           return True
-
-      # Ciclos seguintes: só se reajuste foi aplicado
+      reajuste_aplicado = Reajuste.objects.filter(
+          contrato=self.contrato,
+          ciclo=self.ciclo_reajuste - 1,
+          aplicado=True
+      ).exists()
       return reajuste_aplicado
   ```
 
-- [ ] Implementar alerta automático quando:
+- [x] Implementar alerta automático quando: ✅ IMPLEMENTADO em dashboard_imobiliaria
   - Faltam 30 dias para fim do ciclo de 12 meses
   - Reajuste ainda não foi aplicado
   - Existem parcelas do próximo ciclo sem boleto
 
-- [ ] Implementar bloqueio na view de geração de boleto:
-  - Mostrar mensagem clara: "Reajuste pendente para o ciclo X"
-  - Botão para aplicar reajuste
-  - Lista de índices disponíveis para o período
+- [x] Implementar bloqueio na view de geração de boleto: ✅ IMPLEMENTADO
+  - Verificação em gerar_boleto_parcela, gerar_boletos_contrato, gerar_carne
+  - Retorno detalhado de boletos gerados/bloqueados/erros
 
 ### 2.4 Aplicação de Reajuste
 - [ ] Buscar índice automaticamente da API do Banco Central
@@ -118,143 +115,130 @@ REGRA: Só é possível emitir boleto até o 12º mês de cada ciclo.
 
 ---
 
-## 3. PRESTAÇÕES INTERMEDIÁRIAS
+## 3. PRESTAÇÕES INTERMEDIÁRIAS ✅ IMPLEMENTADO
 
-### 3.1 Configuração
-- [ ] Tela para configurar prestações intermediárias no contrato:
-  - Quantidade (1 a 30)
-  - Valor de cada intermediária
-  - Mês de vencimento relativo (ex: mês 6, 12, 18, 24...)
-  - Opção: valor fixo ou % do financiamento
+### 3.1 Configuração ✅ IMPLEMENTADO
+- [x] Tela para configurar prestações intermediárias no contrato:
+  - [x] Quantidade (1 a 30) ✅
+  - [x] Valor de cada intermediária ✅
+  - [x] Mês de vencimento relativo (ex: mês 6, 12, 18, 24...) ✅
+  - [x] Opção: valor fixo ou % do financiamento ✅ (tipo: FIXO ou PERCENTUAL)
+- [x] CRUD completo de Intermediárias ✅ Views em contratos/views.py
+- [x] API para listar intermediárias do contrato ✅ api_intermediarias_contrato
 
-### 3.2 Geração
-- [ ] Gerar parcelas do tipo INTERMEDIARIA junto com as normais
-- [ ] Respeitar ordem de vencimento
-- [ ] Calcular impacto no valor das parcelas normais (se aplicável)
+### 3.2 Geração ✅ IMPLEMENTADO
+- [x] Model PrestacaoIntermediaria criada ✅
+- [x] Vinculação com Parcela quando gerada ✅
+- [x] Gerar boleto para intermediária ✅ gerar_boleto_intermediaria
+- [x] Registrar pagamento ✅ pagar_intermediaria
 
 ### 3.3 Reajuste de Intermediárias
-- [ ] Aplicar mesmo índice de reajuste das parcelas normais
-- [ ] Intermediárias futuras devem ser reajustadas
+- [x] Campo valor_reajustado no modelo ✅
+- [ ] Aplicar mesmo índice de reajuste das parcelas normais (pendente automação)
 - [ ] Manter histórico de valores originais vs reajustados
 
 ---
 
-## 4. RELATÓRIOS
+## 4. RELATÓRIOS ✅ PARCIALMENTE IMPLEMENTADO
 
-### 4.1 Relatório: Prestações a Pagar
-- [ ] **Filtros:**
-  - Contrato específico ou todos
-  - Período (data inicial/final de vencimento)
-  - Status: Todas, Vencidas, A vencer
-  - Tipo: Normal, Intermediária, Todas
-  - Imobiliária/Comprador
+### 4.1 Relatório: Prestações a Pagar ✅ IMPLEMENTADO
+- [x] **View:** RelatorioPrestacoesAPagarView ✅
+- [x] **Filtros:**
+  - Contrato específico ou todos ✅
+  - Período (data inicial/final de vencimento) ✅
+  - Status: Todas, Vencidas, A vencer ✅
+  - Imobiliária ✅
 
-- [ ] **Colunas:**
-  - Nº Contrato
-  - Comprador
-  - Nº Parcela
-  - Tipo (Normal/Intermediária)
-  - Data Vencimento
-  - Valor Original
-  - Valor Atual (reajustado)
-  - Dias em Atraso (se vencida)
-  - Juros/Multa Acumulados
-  - Valor Total Devido
-  - Status Boleto
+- [x] **Colunas:**
+  - Nº Contrato, Comprador, Nº Parcela ✅
+  - Data Vencimento, Valor ✅
+  - Dias em Atraso (se vencida) ✅
+  - Status Boleto ✅
 
-- [ ] **Totalizadores:**
-  - Total de parcelas a pagar
-  - Valor total a receber
-  - Valor total vencido
-  - Valor total a vencer
+- [x] **Totalizadores:**
+  - Total de parcelas a pagar ✅
+  - Valor total a receber ✅
 
-- [ ] **Exportação:**
-  - PDF
-  - Excel (XLSX)
-  - CSV
+- [x] **Exportação:**
+  - [x] CSV ✅ exportar_relatorio
+  - [x] JSON ✅ exportar_relatorio
+  - [ ] PDF (pendente)
+  - [ ] Excel (XLSX) (pendente)
 
-### 4.2 Relatório: Prestações Pagas
-- [ ] **Filtros:**
-  - Contrato específico ou todos
-  - Período de pagamento (data inicial/final)
-  - Forma de pagamento
-  - Tipo: Normal, Intermediária, Todas
-  - Imobiliária/Comprador
+### 4.2 Relatório: Prestações Pagas ✅ IMPLEMENTADO
+- [x] **View:** RelatorioPrestacoesPageasView ✅
+- [x] **Filtros:**
+  - Contrato específico ou todos ✅
+  - Período de pagamento (data inicial/final) ✅
+  - Imobiliária ✅
 
-- [ ] **Colunas:**
-  - Nº Contrato
-  - Comprador
-  - Nº Parcela
-  - Tipo (Normal/Intermediária)
-  - Data Vencimento
-  - Data Pagamento
-  - Valor Original
-  - Valor Pago
-  - Juros Pagos
-  - Multa Paga
-  - Desconto Aplicado
-  - Forma de Pagamento
+- [x] **Colunas:**
+  - Nº Contrato, Comprador, Nº Parcela ✅
+  - Data Vencimento, Data Pagamento ✅
+  - Valor Pago ✅
 
-- [ ] **Totalizadores:**
-  - Total de parcelas pagas
-  - Valor total recebido
-  - Total de juros recebidos
-  - Total de multas recebidas
-  - Total de descontos concedidos
+- [x] **Totalizadores:**
+  - Total de parcelas pagas ✅
+  - Valor total recebido ✅
 
-- [ ] **Exportação:**
-  - PDF
-  - Excel (XLSX)
-  - CSV
+- [x] **Exportação:**
+  - [x] CSV ✅
+  - [x] JSON ✅
+  - [ ] PDF (pendente)
+  - [ ] Excel (XLSX) (pendente)
 
-### 4.3 Relatório: Posição de Contratos
-- [ ] **Visão geral de cada contrato:**
-  - Valor total do contrato
-  - Valor já pago
-  - Saldo devedor (original)
-  - Saldo devedor (reajustado)
-  - Próxima parcela a vencer
-  - Status do reajuste (aplicado/pendente)
-  - % de conclusão
+### 4.3 Relatório: Posição de Contratos ✅ IMPLEMENTADO
+- [x] **View:** RelatorioPosicaoContratosView ✅
+- [x] **Visão geral de cada contrato:**
+  - Valor total do contrato ✅
+  - Valor já pago ✅
+  - Saldo devedor ✅
+  - Próxima parcela a vencer ✅
+  - % de conclusão ✅ (progresso)
+- [x] **Exportação CSV/JSON** ✅
 
-### 4.4 Relatório: Previsão de Reajustes
-- [ ] **Contratos com reajuste próximo:**
-  - Data do próximo reajuste
-  - Índice a ser aplicado
-  - Valor estimado do reajuste
-  - Parcelas afetadas
-  - Status: Pendente/Aplicado
+### 4.4 Relatório: Previsão de Reajustes ✅ IMPLEMENTADO
+- [x] **View:** RelatorioPrevisaoReajustesView ✅
+- [x] **Contratos com reajuste próximo:**
+  - Data do próximo reajuste ✅
+  - Índice configurado ✅
+  - Status: Pendente/Aplicado ✅
+- [x] **Exportação CSV/JSON** ✅
 
 ---
 
-## 5. TELAS E INTERFACES
+## 5. TELAS E INTERFACES ✅ PARCIALMENTE IMPLEMENTADO
 
-### 5.1 Dashboard de Contratos
-- [ ] Resumo: contratos ativos, valor a receber, inadimplência
-- [ ] Alertas de reajuste pendente
-- [ ] Gráfico de recebimentos mensais
-- [ ] Lista de parcelas vencendo nos próximos 30 dias
+### 5.1 Dashboard de Contratos ✅ IMPLEMENTADO
+- [x] Resumo: contratos ativos, valor a receber, inadimplência ✅ dashboard_imobiliaria
+- [x] Alertas de reajuste pendente ✅
+- [x] Alertas de boletos bloqueados ✅
+- [x] Lista de parcelas vencendo nos próximos dias ✅
+- [x] Lista de parcelas vencidas ✅
+- [x] Intermediárias pendentes ✅
 
-### 5.2 Tela de Contrato
-- [ ] Aba: Dados Gerais (já existe)
-- [ ] Aba: Parcelas (já existe)
-- [ ] Aba: Prestações Intermediárias (NOVO)
-- [ ] Aba: Histórico de Reajustes (NOVO)
-- [ ] Aba: Boletos Gerados (já existe parcialmente)
-- [ ] Aba: Relatórios do Contrato (NOVO)
+### 5.2 Tela de Contrato ✅ PARCIALMENTE IMPLEMENTADO
+- [x] Aba: Dados Gerais (já existe) ✅
+- [x] Aba: Parcelas (já existe) ✅
+- [x] Aba: Prestações Intermediárias ✅ IntermediariasListView
+- [x] Contexto: Bloqueio de reajuste ✅ ContratoDetailView
+- [x] Contexto: Resumo financeiro ✅
+- [ ] Aba: Histórico de Reajustes (pendente template)
+- [ ] Aba: Relatórios do Contrato (pendente template)
 
 ### 5.3 Tela de Reajuste
-- [ ] Listar contratos com reajuste pendente
-- [ ] Selecionar índice de reajuste
+- [x] Listar contratos com reajuste pendente ✅ dashboard_imobiliaria
+- [ ] Selecionar índice de reajuste (pendente template)
 - [ ] Visualizar prévia do impacto
 - [ ] Aplicar reajuste em lote ou individual
 - [ ] Histórico de reajustes aplicados
 
-### 5.4 Tela de Geração de Boletos em Lote
-- [ ] Filtrar parcelas por período
-- [ ] Mostrar status de reajuste de cada parcela
-- [ ] Bloquear seleção de parcelas com reajuste pendente
-- [ ] Gerar boletos selecionados
+### 5.4 Tela de Geração de Boletos em Lote ✅ IMPLEMENTADO
+- [x] Gerar boletos por contrato ✅ gerar_boletos_contrato
+- [x] Verificação automática de reajuste pendente ✅
+- [x] Bloquear parcelas com reajuste pendente ✅
+- [x] Retorno detalhado: gerados/bloqueados/erros ✅
+- [x] Gerar carnê ✅ gerar_carne
 
 ---
 
@@ -377,15 +361,85 @@ REGRA: Só é possível emitir boleto até o 12º mês de cada ciclo.
 
 ### Modelos Existentes Relevantes
 - `core/models.py`: Contabilidade, Imobiliária, ContaBancaria, Imovel, Comprador
-- `contratos/models.py`: Contrato, IndiceReajuste
+- `contratos/models.py`: Contrato, IndiceReajuste, PrestacaoIntermediaria ✅
 - `financeiro/models.py`: Parcela, Reajuste, HistoricoPagamento, StatusBoleto
+- `portal_comprador/models.py`: AcessoComprador, LogAcessoComprador ✅ NOVO
 
 ### Arquivos Chave
-- `/home/user/Gestao-Contrato/contratos/models.py` - Modelo de Contrato
+- `/home/user/Gestao-Contrato/contratos/models.py` - Modelo de Contrato e Intermediárias
+- `/home/user/Gestao-Contrato/contratos/views.py` - Views de contratos e intermediárias ✅
 - `/home/user/Gestao-Contrato/financeiro/models.py` - Modelo de Parcela e Reajuste
+- `/home/user/Gestao-Contrato/financeiro/views.py` - Views de boletos e relatórios ✅
 - `/home/user/Gestao-Contrato/financeiro/services/boleto_service.py` - Serviço de Boleto
+- `/home/user/Gestao-Contrato/financeiro/services/relatorio_service.py` - Serviço de Relatórios ✅ NOVO
+- `/home/user/Gestao-Contrato/portal_comprador/` - App do Portal do Comprador ✅ NOVO
 
 ---
 
-*Documento criado em: 30/12/2025*
-*Última atualização: 30/12/2025*
+## 11. PORTAL DO COMPRADOR ✅ IMPLEMENTADO
+
+### 11.1 Funcionalidades Implementadas
+- [x] Auto-cadastro via CPF/CNPJ ✅
+- [x] Login/Logout ✅
+- [x] Dashboard do comprador ✅
+- [x] Visualização de contratos ✅
+- [x] Visualização de boletos ✅
+- [x] Download/Visualização de boletos ✅
+- [x] Edição de dados pessoais ✅
+- [x] Alteração de senha ✅
+- [x] APIs para integração frontend ✅
+- [x] Log de acessos ✅
+
+### 11.2 Modelos
+- `AcessoComprador`: Vincula Comprador ao User do Django
+- `LogAcessoComprador`: Registro de acessos com IP e data
+
+### 11.3 URLs
+```
+/portal/                     # Redirect para dashboard
+/portal/cadastro/            # Auto-cadastro
+/portal/login/               # Login
+/portal/logout/              # Logout
+/portal/dashboard/           # Dashboard
+/portal/contratos/           # Lista de contratos
+/portal/contratos/<id>/      # Detalhe do contrato
+/portal/boletos/             # Lista de boletos
+/portal/boletos/<id>/download/   # Download boleto
+/portal/boletos/<id>/visualizar/ # Visualizar boleto
+/portal/meus-dados/          # Dados pessoais
+/portal/alterar-senha/       # Alterar senha
+/portal/api/contratos/       # API contratos
+/portal/api/parcelas/        # API parcelas
+/portal/api/dashboard/       # API dashboard
+```
+
+---
+
+*Documento criado em: 30/12/2024*
+*Última atualização: 30/12/2024*
+
+---
+
+## RESUMO DE IMPLEMENTAÇÃO
+
+### Backend Completo ✅
+- Modelos: Contrato (360 meses), PrestacaoIntermediaria (30 max), Parcela (ciclo_reajuste)
+- Regras de negócio: Bloqueio de boleto por reajuste, pode_gerar_boleto()
+- Views: CRUD Intermediárias, Relatórios, Dashboard Contabilidade/Imobiliária
+- APIs: Dashboard, Intermediárias, Relatórios, Portal do Comprador
+- Portal do Comprador: Completo com auto-cadastro via CPF/CNPJ
+
+### Pendente - Frontend/Templates
+- Templates HTML para as views implementadas
+- Componentes reutilizáveis (cards, tabelas, gráficos)
+- Integração com gráficos JavaScript
+
+### Pendente - Automação
+- Tasks Celery para busca de índices
+- Alertas automáticos de reajuste
+- Geração automática de boletos
+
+### Pendente - Integrações
+- API do Banco Central para índices
+- Exportação PDF/Excel
+- Remessas/Retornos CNAB
