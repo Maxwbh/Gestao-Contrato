@@ -25,6 +25,13 @@ class StatusBoleto(models.TextChoices):
     BAIXADO = 'BAIXADO', 'Baixado'
 
 
+class TipoParcela(models.TextChoices):
+    """Tipos de parcela"""
+    NORMAL = 'NORMAL', 'Normal'
+    INTERMEDIARIA = 'INTERMEDIARIA', 'Intermediária'
+    ENTRADA = 'ENTRADA', 'Entrada'
+
+
 class Parcela(TimeStampedModel):
     """Modelo para representar uma parcela do contrato"""
 
@@ -39,6 +46,19 @@ class Parcela(TimeStampedModel):
     )
     data_vencimento = models.DateField(
         verbose_name='Data de Vencimento'
+    )
+
+    # Tipo e ciclo de reajuste
+    tipo_parcela = models.CharField(
+        max_length=15,
+        choices=TipoParcela.choices,
+        default=TipoParcela.NORMAL,
+        verbose_name='Tipo de Parcela'
+    )
+    ciclo_reajuste = models.PositiveIntegerField(
+        default=1,
+        verbose_name='Ciclo de Reajuste',
+        help_text='Ciclo de reajuste da parcela (1 = meses 1-12, 2 = meses 13-24, etc.)'
     )
 
     # Valores
@@ -612,10 +632,35 @@ class Reajuste(TimeStampedModel):
         verbose_name='Parcela Final',
         help_text='Última parcela afetada pelo reajuste'
     )
+
+    # Ciclo de reajuste
+    ciclo = models.PositiveIntegerField(
+        default=1,
+        verbose_name='Ciclo de Reajuste',
+        help_text='Número do ciclo de reajuste (2 = reajuste após 12 meses, 3 = após 24 meses, etc.)'
+    )
+    data_limite_boleto = models.DateField(
+        null=True,
+        blank=True,
+        verbose_name='Data Limite para Boleto',
+        help_text='Data até quando boletos podem ser gerados após este reajuste'
+    )
+
     aplicado_manual = models.BooleanField(
         default=False,
         verbose_name='Aplicado Manualmente',
         help_text='Indica se o reajuste foi aplicado manualmente pelo usuário'
+    )
+    aplicado = models.BooleanField(
+        default=False,
+        verbose_name='Aplicado',
+        help_text='Indica se o reajuste já foi efetivamente aplicado nas parcelas'
+    )
+    data_aplicacao = models.DateTimeField(
+        null=True,
+        blank=True,
+        verbose_name='Data da Aplicação',
+        help_text='Data/hora em que o reajuste foi aplicado'
     )
     observacoes = models.TextField(
         blank=True,
@@ -631,10 +676,24 @@ class Reajuste(TimeStampedModel):
         ]
 
     def __str__(self):
-        return f"Reajuste {self.indice_tipo} - {self.percentual}% - Contrato {self.contrato.numero_contrato}"
+        return f"Reajuste {self.indice_tipo} - {self.percentual}% - Ciclo {self.ciclo} - Contrato {self.contrato.numero_contrato}"
 
     def aplicar_reajuste(self):
-        """Aplica o reajuste nas parcelas especificadas"""
+        """
+        Aplica o reajuste nas parcelas especificadas.
+
+        Atualiza o valor_atual de todas as parcelas não pagas no intervalo
+        e libera a geração de boletos para o próximo ciclo.
+
+        Returns:
+            dict: Resumo da aplicação com quantidade de parcelas e valores
+        """
+        if self.aplicado:
+            return {
+                'sucesso': False,
+                'erro': 'Reajuste já foi aplicado anteriormente'
+            }
+
         parcelas = self.contrato.parcelas.filter(
             numero_parcela__gte=self.parcela_inicial,
             numero_parcela__lte=self.parcela_final,
@@ -642,14 +701,113 @@ class Reajuste(TimeStampedModel):
         )
 
         fator_reajuste = 1 + (self.percentual / 100)
+        parcelas_reajustadas = 0
+        valor_anterior_total = Decimal('0.00')
+        valor_novo_total = Decimal('0.00')
 
         for parcela in parcelas:
+            valor_anterior = parcela.valor_atual
             parcela.valor_atual = parcela.valor_atual * fator_reajuste
-            parcela.save()
+            parcela.save(update_fields=['valor_atual'])
 
-        # Atualizar data do último reajuste no contrato
+            valor_anterior_total += valor_anterior
+            valor_novo_total += parcela.valor_atual
+            parcelas_reajustadas += 1
+
+        # Reajustar também as intermediárias do ciclo
+        intermediarias = self.contrato.intermediarias.filter(
+            paga=False,
+            mes_vencimento__gte=self.parcela_inicial,
+            mes_vencimento__lte=self.parcela_final
+        )
+        for inter in intermediarias:
+            inter.aplicar_reajuste(self.percentual)
+
+        # Marcar como aplicado
+        self.aplicado = True
+        self.data_aplicacao = timezone.now()
+        self.save(update_fields=['aplicado', 'data_aplicacao'])
+
+        # Atualizar dados do contrato
         self.contrato.data_ultimo_reajuste = self.data_reajuste
-        self.contrato.save()
+        self.contrato.ciclo_reajuste_atual = self.ciclo
+        self.contrato.bloqueio_boleto_reajuste = False
+        self.contrato.save(update_fields=[
+            'data_ultimo_reajuste',
+            'ciclo_reajuste_atual',
+            'bloqueio_boleto_reajuste'
+        ])
+
+        return {
+            'sucesso': True,
+            'parcelas_reajustadas': parcelas_reajustadas,
+            'valor_anterior_total': valor_anterior_total,
+            'valor_novo_total': valor_novo_total,
+            'diferenca': valor_novo_total - valor_anterior_total,
+            'percentual_aplicado': self.percentual,
+        }
+
+    @classmethod
+    def criar_reajuste_ciclo(cls, contrato, ciclo, indice_tipo=None, percentual=None):
+        """
+        Cria um reajuste para um ciclo específico do contrato.
+
+        Args:
+            contrato: Contrato a ser reajustado
+            ciclo: Número do ciclo (2, 3, 4, ...)
+            indice_tipo: Tipo do índice (opcional, usa o do contrato)
+            percentual: Percentual do reajuste (opcional, busca automático)
+
+        Returns:
+            Reajuste: Objeto de reajuste criado
+        """
+        from contratos.models import IndiceReajuste
+        from dateutil.relativedelta import relativedelta
+
+        # Usar tipo de correção do contrato se não especificado
+        if not indice_tipo:
+            indice_tipo = contrato.tipo_correcao
+
+        # Calcular período do reajuste
+        prazo = contrato.prazo_reajuste_meses
+        parcela_inicial = (ciclo - 1) * prazo + 1
+        parcela_final = min(ciclo * prazo, contrato.numero_parcelas)
+
+        # Calcular data base para buscar índice
+        data_base = contrato.data_contrato + relativedelta(months=(ciclo - 1) * prazo)
+
+        # Buscar percentual acumulado se não especificado
+        if percentual is None:
+            # Buscar índice acumulado do período
+            ano_inicio = data_base.year
+            mes_inicio = data_base.month
+            data_fim = data_base + relativedelta(months=prazo - 1)
+
+            percentual_acumulado = IndiceReajuste.get_acumulado_periodo(
+                indice_tipo,
+                ano_inicio, mes_inicio,
+                data_fim.year, data_fim.month
+            )
+
+            if percentual_acumulado is not None:
+                percentual = percentual_acumulado
+            else:
+                raise ValueError(f"Índice {indice_tipo} não disponível para o período")
+
+        # Criar o reajuste
+        reajuste = cls.objects.create(
+            contrato=contrato,
+            data_reajuste=timezone.now().date(),
+            indice_tipo=indice_tipo,
+            percentual=percentual,
+            parcela_inicial=parcela_inicial,
+            parcela_final=parcela_final,
+            ciclo=ciclo,
+            data_limite_boleto=data_base + relativedelta(months=prazo * 2),
+            aplicado_manual=False,
+        )
+
+        return reajuste
 
 
 class HistoricoPagamento(TimeStampedModel):
