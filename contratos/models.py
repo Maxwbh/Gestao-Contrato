@@ -7,6 +7,7 @@ Empresa: M&S do Brasil LTDA
 """
 from django.db import models
 from django.core.validators import MinValueValidator, MaxValueValidator
+from django.core.exceptions import ValidationError
 from django.utils import timezone
 from decimal import Decimal
 from dateutil.relativedelta import relativedelta
@@ -485,8 +486,66 @@ class Contrato(TimeStampedModel):
             principal=True, ativo=True
         ).first()
 
+    def clean(self):
+        """Validações de negócio do contrato"""
+        super().clean()
+        errors = {}
+
+        # Validar prazo máximo de 360 meses
+        if self.numero_parcelas and self.numero_parcelas > 360:
+            errors['numero_parcelas'] = 'O número máximo de parcelas é 360 (30 anos).'
+
+        if self.numero_parcelas and self.numero_parcelas < 1:
+            errors['numero_parcelas'] = 'O contrato deve ter pelo menos 1 parcela.'
+
+        # Validar máximo de 30 prestações intermediárias
+        if self.quantidade_intermediarias and self.quantidade_intermediarias > 30:
+            errors['quantidade_intermediarias'] = 'O máximo de prestações intermediárias é 30.'
+
+        # Validar prazo de reajuste (padrão 12, mínimo 1, máximo 24)
+        if self.prazo_reajuste_meses:
+            if self.prazo_reajuste_meses < 1:
+                errors['prazo_reajuste_meses'] = 'O prazo mínimo de reajuste é 1 mês.'
+            elif self.prazo_reajuste_meses > 24:
+                errors['prazo_reajuste_meses'] = 'O prazo máximo de reajuste é 24 meses.'
+
+        # Validar valor de entrada não pode exceder valor total
+        if self.valor_entrada and self.valor_total:
+            if self.valor_entrada >= self.valor_total:
+                errors['valor_entrada'] = 'O valor de entrada deve ser menor que o valor total do contrato.'
+
+        # Validar dia de vencimento (1-28 recomendado para evitar problemas com meses curtos)
+        if self.dia_vencimento and self.dia_vencimento > 28:
+            # Aviso, não erro - aceita mas alerta
+            pass  # Considera-se válido mas ajusta automaticamente
+
+        # Validar que a data do primeiro vencimento não é anterior à data do contrato
+        if self.data_primeiro_vencimento and self.data_contrato:
+            if self.data_primeiro_vencimento < self.data_contrato:
+                errors['data_primeiro_vencimento'] = 'A data do primeiro vencimento não pode ser anterior à data do contrato.'
+
+        # Validar juros e multa dentro de limites legais
+        if self.percentual_juros_mora and self.percentual_juros_mora > Decimal('2.00'):
+            errors['percentual_juros_mora'] = 'O limite legal de juros de mora é 2% ao mês.'
+
+        if self.percentual_multa and self.percentual_multa > Decimal('2.00'):
+            errors['percentual_multa'] = 'O limite legal de multa é 2%.'
+
+        # Validar que imóvel e comprador pertencem à mesma imobiliária
+        if self.imovel_id and self.comprador_id and self.imobiliaria_id:
+            if hasattr(self, 'imovel') and self.imovel.imobiliaria_id != self.imobiliaria_id:
+                errors['imovel'] = 'O imóvel deve pertencer à mesma imobiliária do contrato.'
+            if hasattr(self, 'comprador') and self.comprador.imobiliaria_id != self.imobiliaria_id:
+                errors['comprador'] = 'O comprador deve pertencer à mesma imobiliária do contrato.'
+
+        if errors:
+            raise ValidationError(errors)
+
     def save(self, *args, **kwargs):
         """Override do save para calcular campos automáticos"""
+        # Executar validações de negócio
+        self.full_clean()
+
         # Calcular valor financiado
         self.valor_financiado = self.valor_total - self.valor_entrada
 
@@ -902,6 +961,39 @@ class PrestacaoIntermediaria(TimeStampedModel):
 
     def __str__(self):
         return f"Intermediária {self.numero_sequencial} - Mês {self.mes_vencimento} - Contrato {self.contrato.numero_contrato}"
+
+    def clean(self):
+        """Validações de negócio da prestação intermediária"""
+        super().clean()
+        errors = {}
+
+        # Validar número sequencial (1 a 30)
+        if self.numero_sequencial:
+            if self.numero_sequencial < 1 or self.numero_sequencial > 30:
+                errors['numero_sequencial'] = 'O número sequencial deve estar entre 1 e 30.'
+
+        # Validar mês de vencimento dentro do prazo do contrato
+        if self.mes_vencimento and hasattr(self, 'contrato') and self.contrato:
+            if self.mes_vencimento > self.contrato.numero_parcelas:
+                errors['mes_vencimento'] = f'O mês de vencimento não pode exceder o prazo do contrato ({self.contrato.numero_parcelas} meses).'
+
+        # Validar que não ultrapassa o limite de intermediárias do contrato
+        if hasattr(self, 'contrato') and self.contrato:
+            limite = self.contrato.quantidade_intermediarias
+            if limite and self.numero_sequencial and self.numero_sequencial > limite:
+                errors['numero_sequencial'] = f'O contrato permite no máximo {limite} prestações intermediárias.'
+
+        # Validar valor mínimo
+        if self.valor and self.valor <= Decimal('0'):
+            errors['valor'] = 'O valor da intermediária deve ser maior que zero.'
+
+        if errors:
+            raise ValidationError(errors)
+
+    def save(self, *args, **kwargs):
+        """Override do save para executar validações"""
+        self.full_clean()
+        super().save(*args, **kwargs)
 
     @property
     def valor_atual(self):
