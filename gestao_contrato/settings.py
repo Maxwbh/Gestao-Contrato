@@ -54,6 +54,7 @@ INSTALLED_APPS = [
     'contratos',
     'financeiro',
     'notificacoes',
+    'portal_comprador',
 ]
 
 MIDDLEWARE = [

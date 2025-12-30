@@ -16,6 +16,9 @@ urlpatterns = [
     path('contratos/', include('contratos.urls')),
     path('financeiro/', include('financeiro.urls')),
     path('notificacoes/', include('notificacoes.urls')),
+
+    # Portal do Comprador - Acesso para compradores via CPF/CNPJ
+    path('portal/', include('portal_comprador.urls')),
 ]
 
 # Configuração para servir arquivos estáticos e de mídia em desenvolvimento
