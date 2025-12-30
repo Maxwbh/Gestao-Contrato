@@ -2457,18 +2457,33 @@ def exportar_relatorio(request, tipo):
         return HttpResponse('Tipo de relatório inválido', status=400)
 
     # Exportar
+    from django.utils import timezone
+    timestamp = timezone.now().strftime('%Y%m%d_%H%M%S')
+
     if formato == 'json':
         conteudo = service.exportar_para_json(relatorio)
         content_type = 'application/json'
         extensao = 'json'
+    elif formato == 'excel' or formato == 'xlsx':
+        try:
+            conteudo = service.exportar_para_excel(relatorio)
+            content_type = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+            extensao = 'xlsx'
+        except ImportError as e:
+            return HttpResponse(str(e), status=500)
+    elif formato == 'pdf':
+        try:
+            conteudo = service.exportar_para_pdf(relatorio)
+            content_type = 'application/pdf'
+            extensao = 'pdf'
+        except ImportError as e:
+            return HttpResponse(str(e), status=500)
     else:
         conteudo = service.exportar_para_csv(relatorio)
         content_type = 'text/csv'
         extensao = 'csv'
 
     # Criar response
-    from django.utils import timezone
-    timestamp = timezone.now().strftime('%Y%m%d_%H%M%S')
     filename = f'relatorio_{tipo}_{timestamp}.{extensao}'
 
     response = HttpResponse(conteudo, content_type=content_type)
