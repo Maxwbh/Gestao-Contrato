@@ -162,8 +162,8 @@ REGRA: Só é possível emitir boleto até o 12º mês de cada ciclo.
 - [x] **Exportação:**
   - [x] CSV ✅ exportar_relatorio
   - [x] JSON ✅ exportar_relatorio
-  - [ ] PDF (pendente)
-  - [ ] Excel (XLSX) (pendente)
+  - [x] PDF ✅ exportar_para_pdf() (requer reportlab)
+  - [x] Excel (XLSX) ✅ exportar_para_excel() (requer openpyxl)
 
 ### 4.2 Relatório: Prestações Pagas ✅ IMPLEMENTADO
 - [x] **View:** RelatorioPrestacoesPageasView ✅
@@ -184,8 +184,8 @@ REGRA: Só é possível emitir boleto até o 12º mês de cada ciclo.
 - [x] **Exportação:**
   - [x] CSV ✅
   - [x] JSON ✅
-  - [ ] PDF (pendente)
-  - [ ] Excel (XLSX) (pendente)
+  - [x] PDF ✅ exportar_para_pdf()
+  - [x] Excel (XLSX) ✅ exportar_para_excel()
 
 ### 4.3 Relatório: Posição de Contratos ✅ IMPLEMENTADO
 - [x] **View:** RelatorioPosicaoContratosView ✅
@@ -242,30 +242,46 @@ REGRA: Só é possível emitir boleto até o 12º mês de cada ciclo.
 
 ---
 
-## 6. TAREFAS AUTOMÁTICAS (CELERY)
+## 6. TAREFAS AUTOMÁTICAS (CELERY) ✅ IMPLEMENTADO
 
-### 6.1 Busca de Índices
-- [ ] `buscar_indices_economicos()` - Diário
-  - Consultar API do Banco Central
-  - Armazenar INPC, IGPM, INCC, IGPDI, TR, SELIC
-  - Notificar se índice não disponível
+### 6.1 Busca de Índices ✅ IMPLEMENTADO
+- [x] `buscar_indices_economicos()` - Diário ✅
+  - Consultar API do Banco Central (TR, SELIC)
+  - Armazenar no banco de dados
+  - Registrar erros em log
 
-### 6.2 Alertas de Reajuste
-- [ ] `verificar_reajustes_pendentes()` - Diário
-  - Identificar contratos no 12º mês do ciclo
-  - Enviar alerta para administradores
-  - Gerar relatório de reajustes pendentes
+### 6.2 Alertas de Reajuste ✅ IMPLEMENTADO
+- [x] `verificar_alertas_reajuste()` - Diário ✅
+  - Identificar contratos com reajuste pendente
+  - Enviar alertas por email
+  - Classificar por urgência (7 dias, 30 dias)
+- [x] `enviar_alerta_reajuste()` ✅
+  - Enviar email para administradores
+  - Marcar como urgente se necessário
 
-### 6.3 Geração Automática de Boletos
-- [ ] `gerar_boletos_automaticos()` - Mensal
+### 6.3 Geração Automática de Boletos ✅ IMPLEMENTADO
+- [x] `gerar_boletos_automaticos()` - Mensal ✅
   - Gerar boletos para parcelas do próximo mês
   - Respeitar regra de bloqueio por reajuste
-  - Registrar falhas e notificar
+  - Retornar detalhes: gerados/bloqueados/erros
 
-### 6.4 Atualização de Multa/Juros
-- [ ] `atualizar_encargos_parcelas()` - Diário
+### 6.4 Atualização de Multa/Juros ✅ IMPLEMENTADO
+- [x] `atualizar_juros_multa_parcelas_vencidas()` - Diário ✅
   - Recalcular juros e multa de parcelas vencidas
-  - Atualizar campo valor_atual
+- [x] `limpar_boletos_vencidos()` - Diário ✅
+  - Atualizar status de boletos vencidos
+
+### 6.5 Lembretes de Vencimento ✅ IMPLEMENTADO
+- [x] `enviar_lembretes_vencimento()` - Diário ✅
+  - Enviar lembretes 7, 3 e 1 dia antes do vencimento
+- [x] `enviar_lembrete_parcela()` ✅
+  - Enviar email para comprador
+
+### 6.6 Relatórios e Processamentos ✅ IMPLEMENTADO
+- [x] `gerar_relatorio_diario()` ✅
+  - Estatísticas consolidadas do dia
+- [x] `processar_arquivos_retorno_pendentes()` ✅
+  - Processar arquivos CNAB de retorno
 
 ---
 
@@ -429,17 +445,35 @@ REGRA: Só é possível emitir boleto até o 12º mês de cada ciclo.
 - APIs: Dashboard, Intermediárias, Relatórios, Portal do Comprador
 - Portal do Comprador: Completo com auto-cadastro via CPF/CNPJ
 
+### Serviços Implementados ✅
+- `ReajusteService`: Aplicação de reajustes, simulação, busca de índices
+- `IndiceEconomicoService`: Busca e importação de índices do BCB
+- `RelatorioService`: Geração de relatórios com exportação CSV/JSON/PDF/Excel
+- `BoletoService`: Geração de boletos via BRCobrança
+- `CNABService`: Processamento de arquivos CNAB
+
+### Tasks Celery Implementadas ✅
+- `buscar_indices_economicos`: Busca diária de índices do BCB
+- `verificar_alertas_reajuste`: Alertas diários de reajuste pendente
+- `gerar_boletos_automaticos`: Geração mensal de boletos
+- `enviar_lembretes_vencimento`: Lembretes de parcelas vencendo
+- `atualizar_juros_multa_parcelas_vencidas`: Atualização diária de encargos
+- `limpar_boletos_vencidos`: Atualização de status de boletos
+- `gerar_relatorio_diario`: Relatório consolidado diário
+- `processar_arquivos_retorno_pendentes`: Processamento de retornos CNAB
+
+### Exportação de Relatórios ✅
+- CSV: Implementado
+- JSON: Implementado
+- PDF: Implementado (requer reportlab)
+- Excel: Implementado (requer openpyxl)
+
 ### Pendente - Frontend/Templates
 - Templates HTML para as views implementadas
 - Componentes reutilizáveis (cards, tabelas, gráficos)
 - Integração com gráficos JavaScript
 
-### Pendente - Automação
-- Tasks Celery para busca de índices
-- Alertas automáticos de reajuste
-- Geração automática de boletos
-
-### Pendente - Integrações
-- API do Banco Central para índices
-- Exportação PDF/Excel
-- Remessas/Retornos CNAB
+### Pendente - Integrações Avançadas
+- IBGE API para IPCA/INPC (atualmente apenas BCB)
+- FGV API para IGPM/INCC
+- WhatsApp/SMS para notificações
