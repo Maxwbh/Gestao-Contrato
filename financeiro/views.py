@@ -2534,3 +2534,615 @@ def api_relatorio_resumo(request):
         },
         'reajustes_pendentes': len(relatorio_reajustes.get('itens', [])),
     })
+
+
+# =============================================================================
+# APIs REST - IMOBILIÁRIAS
+# =============================================================================
+
+@login_required
+@require_GET
+def api_imobiliarias_lista(request):
+    """
+    API para listar imobiliárias da contabilidade.
+
+    GET /api/contabilidade/imobiliarias/
+
+    Parâmetros:
+        - contabilidade: ID da contabilidade (opcional)
+        - ativo: true/false (opcional)
+    """
+    from core.models import Contabilidade
+
+    contabilidade_id = request.GET.get('contabilidade')
+    ativo = request.GET.get('ativo', 'true').lower() == 'true'
+
+    queryset = Imobiliaria.objects.all()
+
+    if contabilidade_id:
+        queryset = queryset.filter(contabilidade_id=contabilidade_id)
+
+    if ativo is not None:
+        queryset = queryset.filter(ativo=ativo)
+
+    imobiliarias = []
+    for imob in queryset.select_related('contabilidade'):
+        # Estatísticas básicas
+        contratos_ativos = Contrato.objects.filter(
+            imobiliaria=imob, status=StatusContrato.ATIVO
+        ).count()
+        valor_a_receber = Parcela.objects.filter(
+            contrato__imobiliaria=imob, pago=False
+        ).aggregate(total=Sum('valor_atual'))['total'] or Decimal('0.00')
+
+        imobiliarias.append({
+            'id': imob.id,
+            'razao_social': imob.razao_social,
+            'nome_fantasia': imob.nome_fantasia,
+            'cnpj': imob.cnpj,
+            'email': imob.email,
+            'telefone': imob.telefone,
+            'ativo': imob.ativo,
+            'contabilidade': {
+                'id': imob.contabilidade.id,
+                'nome': imob.contabilidade.razao_social,
+            } if imob.contabilidade else None,
+            'contratos_ativos': contratos_ativos,
+            'valor_a_receber': float(valor_a_receber),
+        })
+
+    return JsonResponse({
+        'sucesso': True,
+        'imobiliarias': imobiliarias,
+        'total': len(imobiliarias),
+    })
+
+
+@login_required
+@require_GET
+def api_imobiliaria_dashboard(request, imobiliaria_id):
+    """
+    API para dados do dashboard de uma imobiliária específica.
+
+    GET /api/imobiliaria/{id}/dashboard/
+    """
+    imobiliaria = get_object_or_404(Imobiliaria, pk=imobiliaria_id)
+    hoje = timezone.now().date()
+
+    # Contratos
+    contratos_qs = Contrato.objects.filter(imobiliaria=imobiliaria)
+    parcelas_qs = Parcela.objects.filter(contrato__imobiliaria=imobiliaria)
+
+    stats_contratos = contratos_qs.aggregate(
+        total=Count('id'),
+        ativos=Count('id', filter=Q(status=StatusContrato.ATIVO)),
+        quitados=Count('id', filter=Q(status=StatusContrato.QUITADO)),
+        cancelados=Count('id', filter=Q(status=StatusContrato.CANCELADO)),
+        valor_total=Sum('valor_total'),
+    )
+
+    stats_parcelas = parcelas_qs.aggregate(
+        total=Count('id'),
+        pagas=Count('id', filter=Q(pago=True)),
+        pendentes=Count('id', filter=Q(pago=False)),
+        vencidas=Count('id', filter=Q(pago=False, data_vencimento__lt=hoje)),
+        valor_recebido=Sum('valor_pago', filter=Q(pago=True)),
+        valor_pendente=Sum('valor_atual', filter=Q(pago=False)),
+        valor_vencido=Sum('valor_atual', filter=Q(pago=False, data_vencimento__lt=hoje)),
+    )
+
+    # Próximas parcelas a vencer
+    proximas_parcelas = parcelas_qs.filter(
+        pago=False,
+        data_vencimento__gte=hoje
+    ).order_by('data_vencimento')[:10]
+
+    proximas = [{
+        'id': p.id,
+        'contrato': p.contrato.numero_contrato,
+        'comprador': p.contrato.comprador.nome,
+        'numero_parcela': p.numero_parcela,
+        'data_vencimento': p.data_vencimento.strftime('%Y-%m-%d'),
+        'valor': float(p.valor_atual),
+        'status_boleto': p.status_boleto,
+    } for p in proximas_parcelas]
+
+    # Parcelas vencidas
+    parcelas_vencidas = parcelas_qs.filter(
+        pago=False,
+        data_vencimento__lt=hoje
+    ).order_by('-data_vencimento')[:10]
+
+    vencidas = [{
+        'id': p.id,
+        'contrato': p.contrato.numero_contrato,
+        'comprador': p.contrato.comprador.nome,
+        'numero_parcela': p.numero_parcela,
+        'data_vencimento': p.data_vencimento.strftime('%Y-%m-%d'),
+        'dias_atraso': (hoje - p.data_vencimento).days,
+        'valor': float(p.valor_atual),
+    } for p in parcelas_vencidas]
+
+    # Contratos com reajuste pendente
+    contratos_reajuste = []
+    for contrato in contratos_qs.filter(status=StatusContrato.ATIVO):
+        if hasattr(contrato, 'verificar_reajuste_necessario'):
+            if contrato.verificar_reajuste_necessario():
+                contratos_reajuste.append({
+                    'id': contrato.id,
+                    'numero': contrato.numero_contrato,
+                    'comprador': contrato.comprador.nome,
+                    'tipo_correcao': contrato.tipo_correcao,
+                    'data_proximo_reajuste': contrato.data_proximo_reajuste.strftime('%Y-%m-%d') if contrato.data_proximo_reajuste else None,
+                })
+
+    return JsonResponse({
+        'sucesso': True,
+        'imobiliaria': {
+            'id': imobiliaria.id,
+            'nome': imobiliaria.nome_fantasia or imobiliaria.razao_social,
+        },
+        'contratos': stats_contratos,
+        'parcelas': stats_parcelas,
+        'proximas_parcelas': proximas,
+        'parcelas_vencidas': vencidas,
+        'reajustes_pendentes': contratos_reajuste,
+    })
+
+
+# =============================================================================
+# APIs REST - CONTRATOS
+# =============================================================================
+
+@login_required
+@require_GET
+def api_contratos_lista(request):
+    """
+    API para listar contratos com filtros.
+
+    GET /api/contratos/
+
+    Parâmetros:
+        - imobiliaria: ID da imobiliária (opcional)
+        - status: Status do contrato (opcional)
+        - comprador: ID do comprador (opcional)
+        - page: Página (default 1)
+        - per_page: Itens por página (default 20)
+    """
+    imobiliaria_id = request.GET.get('imobiliaria')
+    status = request.GET.get('status')
+    comprador_id = request.GET.get('comprador')
+    page = int(request.GET.get('page', 1))
+    per_page = min(int(request.GET.get('per_page', 20)), 100)
+
+    queryset = Contrato.objects.all().select_related(
+        'imobiliaria', 'comprador', 'imovel'
+    )
+
+    if imobiliaria_id:
+        queryset = queryset.filter(imobiliaria_id=imobiliaria_id)
+    if status:
+        queryset = queryset.filter(status=status)
+    if comprador_id:
+        queryset = queryset.filter(comprador_id=comprador_id)
+
+    total = queryset.count()
+    offset = (page - 1) * per_page
+    contratos_page = queryset.order_by('-data_contrato')[offset:offset + per_page]
+
+    contratos = []
+    for c in contratos_page:
+        saldo_devedor = c.calcular_saldo_devedor()
+        progresso = c.calcular_progresso()
+
+        contratos.append({
+            'id': c.id,
+            'numero_contrato': c.numero_contrato,
+            'data_contrato': c.data_contrato.strftime('%Y-%m-%d'),
+            'status': c.status,
+            'imobiliaria': {
+                'id': c.imobiliaria.id,
+                'nome': c.imobiliaria.nome_fantasia or c.imobiliaria.razao_social,
+            },
+            'comprador': {
+                'id': c.comprador.id,
+                'nome': c.comprador.nome,
+                'documento': c.comprador.cpf or c.comprador.cnpj,
+            },
+            'imovel': {
+                'id': c.imovel.id,
+                'identificacao': c.imovel.identificacao,
+            },
+            'valor_total': float(c.valor_total),
+            'valor_entrada': float(c.valor_entrada),
+            'numero_parcelas': c.numero_parcelas,
+            'saldo_devedor': float(saldo_devedor),
+            'progresso': round(progresso, 2),
+            'tipo_correcao': c.tipo_correcao,
+        })
+
+    return JsonResponse({
+        'sucesso': True,
+        'contratos': contratos,
+        'total': total,
+        'page': page,
+        'per_page': per_page,
+        'total_pages': (total + per_page - 1) // per_page,
+    })
+
+
+@login_required
+@require_GET
+def api_contrato_detalhe(request, contrato_id):
+    """
+    API para detalhes de um contrato específico.
+
+    GET /api/contratos/{id}/
+    """
+    contrato = get_object_or_404(
+        Contrato.objects.select_related('imobiliaria', 'comprador', 'imovel'),
+        pk=contrato_id
+    )
+
+    resumo = contrato.get_resumo_financeiro()
+
+    return JsonResponse({
+        'sucesso': True,
+        'contrato': {
+            'id': contrato.id,
+            'numero_contrato': contrato.numero_contrato,
+            'data_contrato': contrato.data_contrato.strftime('%Y-%m-%d'),
+            'data_primeiro_vencimento': contrato.data_primeiro_vencimento.strftime('%Y-%m-%d'),
+            'status': contrato.status,
+            'imobiliaria': {
+                'id': contrato.imobiliaria.id,
+                'nome': contrato.imobiliaria.nome_fantasia or contrato.imobiliaria.razao_social,
+                'cnpj': contrato.imobiliaria.cnpj,
+            },
+            'comprador': {
+                'id': contrato.comprador.id,
+                'nome': contrato.comprador.nome,
+                'documento': contrato.comprador.cpf or contrato.comprador.cnpj,
+                'email': contrato.comprador.email,
+                'telefone': contrato.comprador.telefone,
+            },
+            'imovel': {
+                'id': contrato.imovel.id,
+                'identificacao': contrato.imovel.identificacao,
+                'endereco': contrato.imovel.endereco,
+            },
+            'valores': {
+                'total': float(contrato.valor_total),
+                'entrada': float(contrato.valor_entrada),
+                'financiado': float(contrato.valor_financiado),
+                'parcela_original': float(contrato.valor_parcela_original),
+            },
+            'parcelas': {
+                'numero_total': contrato.numero_parcelas,
+                'dia_vencimento': contrato.dia_vencimento,
+            },
+            'reajuste': {
+                'tipo_correcao': contrato.tipo_correcao,
+                'prazo_meses': contrato.prazo_reajuste_meses,
+                'data_ultimo': contrato.data_ultimo_reajuste.strftime('%Y-%m-%d') if contrato.data_ultimo_reajuste else None,
+                'data_proximo': contrato.data_proximo_reajuste.strftime('%Y-%m-%d') if contrato.data_proximo_reajuste else None,
+                'ciclo_atual': contrato.ciclo_reajuste_atual,
+                'bloqueio_ativo': contrato.bloqueio_boleto_reajuste,
+            },
+            'encargos': {
+                'juros_mora': float(contrato.percentual_juros_mora),
+                'multa': float(contrato.percentual_multa),
+            },
+            'resumo_financeiro': {
+                'valor_pago': float(resumo.get('total_pago', 0)),
+                'valor_a_pagar': float(resumo.get('total_a_pagar', 0)),
+                'valor_vencido': float(resumo.get('total_vencido', 0)),
+                'parcelas_pagas': resumo.get('parcelas_pagas', 0),
+                'parcelas_a_pagar': resumo.get('parcelas_a_pagar', 0),
+                'parcelas_vencidas': resumo.get('parcelas_vencidas', 0),
+                'saldo_devedor': float(resumo.get('saldo_devedor', 0)),
+                'progresso': round(resumo.get('progresso_percentual', 0), 2),
+            },
+        },
+    })
+
+
+@login_required
+@require_GET
+def api_contrato_parcelas(request, contrato_id):
+    """
+    API para listar parcelas de um contrato.
+
+    GET /api/contratos/{id}/parcelas/
+
+    Parâmetros:
+        - status: pago, pendente, vencido (opcional)
+        - page: Página (default 1)
+        - per_page: Itens por página (default 50)
+    """
+    contrato = get_object_or_404(Contrato, pk=contrato_id)
+
+    status_filter = request.GET.get('status')
+    page = int(request.GET.get('page', 1))
+    per_page = min(int(request.GET.get('per_page', 50)), 100)
+    hoje = timezone.now().date()
+
+    queryset = contrato.parcelas.all()
+
+    if status_filter == 'pago':
+        queryset = queryset.filter(pago=True)
+    elif status_filter == 'pendente':
+        queryset = queryset.filter(pago=False, data_vencimento__gte=hoje)
+    elif status_filter == 'vencido':
+        queryset = queryset.filter(pago=False, data_vencimento__lt=hoje)
+
+    total = queryset.count()
+    offset = (page - 1) * per_page
+    parcelas_page = queryset.order_by('numero_parcela')[offset:offset + per_page]
+
+    parcelas = []
+    for p in parcelas_page:
+        parcelas.append({
+            'id': p.id,
+            'numero_parcela': p.numero_parcela,
+            'tipo': p.tipo_parcela,
+            'ciclo_reajuste': p.ciclo_reajuste,
+            'data_vencimento': p.data_vencimento.strftime('%Y-%m-%d'),
+            'valor_original': float(p.valor_original),
+            'valor_atual': float(p.valor_atual),
+            'valor_juros': float(p.valor_juros),
+            'valor_multa': float(p.valor_multa),
+            'valor_desconto': float(p.valor_desconto),
+            'valor_total': float(p.valor_total),
+            'pago': p.pago,
+            'data_pagamento': p.data_pagamento.strftime('%Y-%m-%d') if p.data_pagamento else None,
+            'valor_pago': float(p.valor_pago) if p.valor_pago else None,
+            'dias_atraso': p.dias_atraso,
+            'vencida': p.esta_vencida,
+            'boleto': {
+                'status': p.status_boleto,
+                'nosso_numero': p.nosso_numero,
+                'tem_boleto': p.tem_boleto,
+            },
+        })
+
+    return JsonResponse({
+        'sucesso': True,
+        'contrato_id': contrato.id,
+        'parcelas': parcelas,
+        'total': total,
+        'page': page,
+        'per_page': per_page,
+    })
+
+
+@login_required
+@require_GET
+def api_contrato_reajustes(request, contrato_id):
+    """
+    API para listar histórico de reajustes de um contrato.
+
+    GET /api/contratos/{id}/reajustes/
+    """
+    contrato = get_object_or_404(Contrato, pk=contrato_id)
+
+    reajustes = Reajuste.objects.filter(contrato=contrato).order_by('-data_reajuste')
+
+    lista_reajustes = [{
+        'id': r.id,
+        'data_reajuste': r.data_reajuste.strftime('%Y-%m-%d'),
+        'indice_tipo': r.indice_tipo,
+        'percentual': float(r.percentual),
+        'ciclo': r.ciclo,
+        'parcela_inicial': r.parcela_inicial,
+        'parcela_final': r.parcela_final,
+        'aplicado': r.aplicado,
+        'data_aplicacao': r.data_aplicacao.strftime('%Y-%m-%d %H:%M') if r.data_aplicacao else None,
+        'aplicado_manual': r.aplicado_manual,
+        'observacoes': r.observacoes,
+    } for r in reajustes]
+
+    # Informações de reajuste pendente
+    reajuste_pendente = None
+    if contrato.verificar_reajuste_necessario():
+        reajuste_pendente = {
+            'tipo_correcao': contrato.tipo_correcao,
+            'ciclo_atual': contrato.ciclo_reajuste_atual,
+            'data_proximo': contrato.data_proximo_reajuste.strftime('%Y-%m-%d') if contrato.data_proximo_reajuste else None,
+            'bloqueio_ativo': contrato.bloqueio_boleto_reajuste,
+        }
+
+    return JsonResponse({
+        'sucesso': True,
+        'contrato_id': contrato.id,
+        'reajustes': lista_reajustes,
+        'total': len(lista_reajustes),
+        'reajuste_pendente': reajuste_pendente,
+    })
+
+
+# =============================================================================
+# APIs REST - PARCELAS
+# =============================================================================
+
+@login_required
+@require_GET
+def api_parcelas_lista(request):
+    """
+    API para listar parcelas com filtros avançados.
+
+    GET /api/parcelas/
+
+    Parâmetros:
+        - imobiliaria: ID da imobiliária (opcional)
+        - contrato: ID do contrato (opcional)
+        - status: pago, pendente, vencido (opcional)
+        - data_inicio: Data inicial de vencimento (YYYY-MM-DD)
+        - data_fim: Data final de vencimento (YYYY-MM-DD)
+        - page: Página (default 1)
+        - per_page: Itens por página (default 50)
+    """
+    imobiliaria_id = request.GET.get('imobiliaria')
+    contrato_id = request.GET.get('contrato')
+    status_filter = request.GET.get('status')
+    data_inicio = request.GET.get('data_inicio')
+    data_fim = request.GET.get('data_fim')
+    page = int(request.GET.get('page', 1))
+    per_page = min(int(request.GET.get('per_page', 50)), 100)
+
+    hoje = timezone.now().date()
+    queryset = Parcela.objects.all().select_related(
+        'contrato', 'contrato__comprador', 'contrato__imobiliaria'
+    )
+
+    if imobiliaria_id:
+        queryset = queryset.filter(contrato__imobiliaria_id=imobiliaria_id)
+    if contrato_id:
+        queryset = queryset.filter(contrato_id=contrato_id)
+
+    if status_filter == 'pago':
+        queryset = queryset.filter(pago=True)
+    elif status_filter == 'pendente':
+        queryset = queryset.filter(pago=False, data_vencimento__gte=hoje)
+    elif status_filter == 'vencido':
+        queryset = queryset.filter(pago=False, data_vencimento__lt=hoje)
+
+    if data_inicio:
+        from datetime import datetime
+        queryset = queryset.filter(
+            data_vencimento__gte=datetime.strptime(data_inicio, '%Y-%m-%d').date()
+        )
+    if data_fim:
+        from datetime import datetime
+        queryset = queryset.filter(
+            data_vencimento__lte=datetime.strptime(data_fim, '%Y-%m-%d').date()
+        )
+
+    total = queryset.count()
+    offset = (page - 1) * per_page
+    parcelas_page = queryset.order_by('data_vencimento')[offset:offset + per_page]
+
+    # Totalizadores
+    totais = queryset.aggregate(
+        valor_total=Sum('valor_atual'),
+        valor_pago=Sum('valor_pago', filter=Q(pago=True)),
+    )
+
+    parcelas = [{
+        'id': p.id,
+        'contrato': {
+            'id': p.contrato.id,
+            'numero': p.contrato.numero_contrato,
+        },
+        'comprador': p.contrato.comprador.nome,
+        'imobiliaria': p.contrato.imobiliaria.nome_fantasia or p.contrato.imobiliaria.razao_social,
+        'numero_parcela': p.numero_parcela,
+        'data_vencimento': p.data_vencimento.strftime('%Y-%m-%d'),
+        'valor_atual': float(p.valor_atual),
+        'valor_total': float(p.valor_total),
+        'pago': p.pago,
+        'data_pagamento': p.data_pagamento.strftime('%Y-%m-%d') if p.data_pagamento else None,
+        'dias_atraso': p.dias_atraso,
+        'status_boleto': p.status_boleto,
+    } for p in parcelas_page]
+
+    return JsonResponse({
+        'sucesso': True,
+        'parcelas': parcelas,
+        'total': total,
+        'page': page,
+        'per_page': per_page,
+        'totais': {
+            'valor_total': float(totais['valor_total'] or 0),
+            'valor_pago': float(totais['valor_pago'] or 0),
+        },
+    })
+
+
+@login_required
+@require_POST
+def api_parcela_registrar_pagamento(request, parcela_id):
+    """
+    API para registrar pagamento de uma parcela.
+
+    POST /api/parcelas/{id}/pagamento/
+
+    Body JSON:
+        - valor_pago: Valor pago (obrigatório)
+        - data_pagamento: Data do pagamento (opcional, default hoje)
+        - forma_pagamento: Forma de pagamento (opcional)
+        - observacoes: Observações (opcional)
+    """
+    import json
+    parcela = get_object_or_404(Parcela, pk=parcela_id)
+
+    if parcela.pago:
+        return JsonResponse({
+            'sucesso': False,
+            'erro': 'Esta parcela já está paga.'
+        }, status=400)
+
+    try:
+        data = json.loads(request.body)
+
+        valor_pago = Decimal(str(data.get('valor_pago', 0)))
+        if valor_pago <= 0:
+            return JsonResponse({
+                'sucesso': False,
+                'erro': 'Informe um valor pago válido.'
+            }, status=400)
+
+        data_pagamento = data.get('data_pagamento')
+        if data_pagamento:
+            from datetime import datetime
+            data_pagamento = datetime.strptime(data_pagamento, '%Y-%m-%d').date()
+        else:
+            data_pagamento = timezone.now().date()
+
+        observacoes = data.get('observacoes', '')
+        forma_pagamento = data.get('forma_pagamento', 'DINHEIRO')
+
+        # Registrar pagamento
+        parcela.registrar_pagamento(
+            valor_pago=valor_pago,
+            data_pagamento=data_pagamento,
+            observacoes=observacoes
+        )
+
+        # Criar histórico
+        from financeiro.models import HistoricoPagamento
+        HistoricoPagamento.objects.create(
+            parcela=parcela,
+            data_pagamento=data_pagamento,
+            valor_pago=valor_pago,
+            valor_parcela=parcela.valor_atual,
+            valor_juros=parcela.valor_juros,
+            valor_multa=parcela.valor_multa,
+            valor_desconto=parcela.valor_desconto,
+            forma_pagamento=forma_pagamento,
+            observacoes=observacoes
+        )
+
+        return JsonResponse({
+            'sucesso': True,
+            'mensagem': f'Pagamento de R$ {valor_pago} registrado com sucesso.',
+            'parcela': {
+                'id': parcela.id,
+                'numero_parcela': parcela.numero_parcela,
+                'pago': parcela.pago,
+                'data_pagamento': parcela.data_pagamento.strftime('%Y-%m-%d'),
+                'valor_pago': float(parcela.valor_pago),
+            }
+        })
+
+    except json.JSONDecodeError:
+        return JsonResponse({
+            'sucesso': False,
+            'erro': 'Dados inválidos.'
+        }, status=400)
+    except Exception as e:
+        logger.exception(f"Erro ao registrar pagamento: {e}")
+        return JsonResponse({
+            'sucesso': False,
+            'erro': str(e)
+        }, status=500)

@@ -7,6 +7,7 @@ Empresa: M&S do Brasil LTDA
 """
 from django.db import models
 from django.core.validators import MinValueValidator
+from django.core.exceptions import ValidationError
 from django.utils import timezone
 from decimal import Decimal
 from datetime import timedelta
@@ -269,6 +270,66 @@ class Parcela(TimeStampedModel):
 
     def __str__(self):
         return f"Parcela {self.numero_parcela}/{self.contrato.numero_parcelas} - Contrato {self.contrato.numero_contrato}"
+
+    def clean(self):
+        """Validações de negócio da parcela"""
+        super().clean()
+        errors = {}
+
+        # Validar que não permite boleto para parcela já paga
+        if self.pago and self.status_boleto == StatusBoleto.GERADO:
+            # Se a parcela está paga e tentando gerar boleto, é um problema
+            pass  # Tratado no método gerar_boleto
+
+        # Validar valores positivos
+        if self.valor_original and self.valor_original <= Decimal('0'):
+            errors['valor_original'] = 'O valor original deve ser maior que zero.'
+
+        if self.valor_atual and self.valor_atual <= Decimal('0'):
+            errors['valor_atual'] = 'O valor atual deve ser maior que zero.'
+
+        # Validar data de pagamento não pode ser futura
+        if self.data_pagamento and self.data_pagamento > timezone.now().date():
+            errors['data_pagamento'] = 'A data de pagamento não pode ser no futuro.'
+
+        # Validar que valor pago é informado quando pago=True
+        if self.pago and not self.valor_pago:
+            errors['valor_pago'] = 'Informe o valor pago ao marcar a parcela como paga.'
+
+        # Validar ciclo de reajuste
+        if self.ciclo_reajuste and self.ciclo_reajuste < 1:
+            errors['ciclo_reajuste'] = 'O ciclo de reajuste deve ser pelo menos 1.'
+
+        if errors:
+            raise ValidationError(errors)
+
+    def pode_gerar_boleto(self):
+        """
+        Verifica se é possível gerar boleto para esta parcela.
+        Considera regras de reajuste pendente.
+
+        Returns:
+            tuple: (pode_gerar: bool, motivo: str)
+        """
+        if self.pago:
+            return False, "Parcela já está paga."
+
+        if self.status_boleto == StatusBoleto.PAGO:
+            return False, "Boleto já foi pago."
+
+        # Verificar se o reajuste do ciclo anterior foi aplicado
+        if self.ciclo_reajuste and self.ciclo_reajuste > 1:
+            from financeiro.models import Reajuste
+            reajuste_aplicado = Reajuste.objects.filter(
+                contrato=self.contrato,
+                ciclo=self.ciclo_reajuste,
+                aplicado=True
+            ).exists()
+
+            if not reajuste_aplicado:
+                return False, f"Reajuste pendente para o ciclo {self.ciclo_reajuste}. Aplique o reajuste antes de gerar boletos."
+
+        return True, "Liberado para geração."
 
     @property
     def valor_total(self):
@@ -677,6 +738,57 @@ class Reajuste(TimeStampedModel):
 
     def __str__(self):
         return f"Reajuste {self.indice_tipo} - {self.percentual}% - Ciclo {self.ciclo} - Contrato {self.contrato.numero_contrato}"
+
+    def clean(self):
+        """Validações de negócio do reajuste"""
+        super().clean()
+        errors = {}
+
+        # Validar que o ciclo é sequencial (não pular ciclos)
+        if self.ciclo and self.ciclo > 1 and hasattr(self, 'contrato') and self.contrato:
+            # Verificar se existe reajuste aplicado para o ciclo anterior
+            ciclo_anterior = self.ciclo - 1
+            if ciclo_anterior > 1:  # Ciclo 1 não precisa de reajuste anterior
+                reajuste_anterior = Reajuste.objects.filter(
+                    contrato=self.contrato,
+                    ciclo=ciclo_anterior,
+                    aplicado=True
+                ).exists()
+                if not reajuste_anterior:
+                    errors['ciclo'] = f'O reajuste do ciclo {ciclo_anterior} deve ser aplicado antes do ciclo {self.ciclo}.'
+
+        # Validar que não pode ter reajuste duplicado para o mesmo ciclo
+        if hasattr(self, 'contrato') and self.contrato and self.ciclo:
+            reajuste_existente = Reajuste.objects.filter(
+                contrato=self.contrato,
+                ciclo=self.ciclo
+            ).exclude(pk=self.pk if self.pk else None)
+            if reajuste_existente.exists():
+                errors['ciclo'] = f'Já existe um reajuste cadastrado para o ciclo {self.ciclo} deste contrato.'
+
+        # Validar que reajuste não pode ser aplicado retroativamente
+        if self.data_reajuste and hasattr(self, 'contrato') and self.contrato:
+            # A data do reajuste não pode ser anterior ao início do ciclo
+            from dateutil.relativedelta import relativedelta
+            prazo = self.contrato.prazo_reajuste_meses
+            data_inicio_ciclo = self.contrato.data_contrato + relativedelta(months=(self.ciclo - 1) * prazo)
+            if self.data_reajuste < data_inicio_ciclo:
+                errors['data_reajuste'] = f'A data do reajuste não pode ser anterior ao início do ciclo ({data_inicio_ciclo}).'
+
+        # Validar parcela inicial e final
+        if self.parcela_inicial and self.parcela_final:
+            if self.parcela_inicial > self.parcela_final:
+                errors['parcela_final'] = 'A parcela final deve ser maior ou igual à parcela inicial.'
+
+        # Validar percentual razoável
+        if self.percentual:
+            if self.percentual < Decimal('-50.0000'):
+                errors['percentual'] = 'O percentual de reajuste não pode ser menor que -50%.'
+            elif self.percentual > Decimal('100.0000'):
+                errors['percentual'] = 'O percentual de reajuste não pode ser maior que 100%.'
+
+        if errors:
+            raise ValidationError(errors)
 
     def aplicar_reajuste(self):
         """
