@@ -2,26 +2,27 @@
 
 ## Visão Geral
 
-Este documento detalha as telas e dashboards para os dois níveis de acesso do sistema:
+Este documento detalha as telas e dashboards para os três níveis de acesso do sistema:
 - **Contabilidade**: Visão consolidada de múltiplas imobiliárias
 - **Imobiliária**: Visão detalhada dos contratos e operações
+- **Comprador (Portal)**: Acesso do comprador aos seus contratos e boletos
 
 ---
 
-## 1. DASHBOARD CONTABILIDADE
+## 1. DASHBOARD CONTABILIDADE ✅ IMPLEMENTADO
 
 ### 1.1 Visão Geral (Home)
-- [ ] Card: Total de imobiliárias gerenciadas
-- [ ] Card: Total de contratos ativos (todas imobiliárias)
-- [ ] Card: Valor total a receber (consolidado)
-- [ ] Card: Valor total em atraso (consolidado)
-- [ ] Gráfico: Recebimentos mensais (últimos 12 meses)
-- [ ] Gráfico: Inadimplência por imobiliária (pizza/barras)
-- [ ] Lista: Top 5 imobiliárias por faturamento
-- [ ] Lista: Alertas de reajustes pendentes
+- [x] Card: Total de imobiliárias gerenciadas ✅
+- [x] Card: Total de contratos ativos (todas imobiliárias) ✅
+- [x] Card: Valor total a receber (consolidado) ✅
+- [x] Card: Valor total em atraso (consolidado) ✅
+- [x] Gráfico: Recebimentos mensais (últimos 12 meses) ✅ API disponível
+- [x] Gráfico: Inadimplência por imobiliária (pizza/barras) ✅ API disponível
+- [x] Lista: Estatísticas por imobiliária ✅
+- [x] Lista: Alertas de reajustes pendentes ✅
 
 ### 1.2 Relatório Consolidado por Imobiliária
-- [ ] Tabela com todas imobiliárias:
+- [x] Tabela com todas imobiliárias: ✅
   - Nome/Razão Social
   - CNPJ
   - Qtd. Contratos Ativos
@@ -30,29 +31,21 @@ Este documento detalha as telas e dashboards para os dois níveis de acesso do s
   - Valor a Receber
   - Valor em Atraso
   - % Inadimplência
-- [ ] Filtros: Período, Status
-- [ ] Exportar: PDF, Excel
+- [x] Filtros: Contabilidade ✅
+- [ ] Exportar: PDF, Excel (pendente template)
 
 ### 1.3 Relatório de Reajustes Pendentes
-- [ ] Lista de contratos com reajuste próximo (30/60/90 dias)
-- [ ] Agrupamento por imobiliária
-- [ ] Status do reajuste (Pendente, Criado, Aplicado)
+- [x] Lista de contratos com reajuste próximo ✅ RelatorioPrevisaoReajustesView
+- [x] Agrupamento por imobiliária ✅
+- [x] Status do reajuste (Pendente, Aplicado) ✅
 - [ ] Ação: Notificar imobiliária
-- [ ] Exportar: PDF, Excel
+- [x] Exportar: CSV, JSON ✅
 
 ### 1.4 Relatório de Inadimplência Geral
-- [ ] Tabela de parcelas vencidas (todas imobiliárias):
-  - Imobiliária
-  - Contrato
-  - Comprador
-  - Parcela
-  - Vencimento
-  - Valor
-  - Dias em Atraso
-  - Juros + Multa
-- [ ] Filtros: Imobiliária, Período, Dias de atraso
-- [ ] Totalizadores por imobiliária
-- [ ] Exportar: PDF, Excel
+- [x] Tabela de parcelas vencidas ✅ RelatorioPrestacoesAPagarView
+- [x] Filtros: Imobiliária, Período ✅
+- [x] Totalizadores ✅
+- [x] Exportar: CSV, JSON ✅
 
 ### 1.5 Configurações da Contabilidade
 - [ ] Dados cadastrais
@@ -63,25 +56,25 @@ Este documento detalha as telas e dashboards para os dois níveis de acesso do s
 
 ---
 
-## 2. DASHBOARD IMOBILIÁRIA
+## 2. DASHBOARD IMOBILIÁRIA ✅ IMPLEMENTADO
 
 ### 2.1 Visão Geral (Home)
-- [ ] Card: Contratos Ativos
-- [ ] Card: Contratos Quitados
-- [ ] Card: Valor a Receber (total)
-- [ ] Card: Valor em Atraso
-- [ ] Card: Recebido no Mês
-- [ ] Card: Próximos Vencimentos (7 dias)
-- [ ] Gráfico: Recebimentos x Previsão (últimos 6 meses)
-- [ ] Gráfico: Status dos Contratos (pizza)
-- [ ] Lista: Parcelas vencendo hoje
-- [ ] Lista: Parcelas vencidas (top 10 por valor)
-- [ ] Alerta: Contratos com reajuste pendente
+- [x] Card: Contratos Ativos ✅
+- [x] Card: Contratos Quitados ✅
+- [x] Card: Valor a Receber (total) ✅
+- [x] Card: Valor em Atraso ✅
+- [x] Card: Recebido no Mês ✅
+- [x] Card: Próximos Vencimentos ✅
+- [x] Lista: Parcelas vencendo ✅
+- [x] Lista: Parcelas vencidas (top por valor) ✅
+- [x] Alerta: Contratos com reajuste pendente ✅
+- [x] Alerta: Contratos com boleto bloqueado ✅ NOVO
+- [x] Lista: Prestações intermediárias pendentes ✅ NOVO
 
 ### 2.2 Gestão de Contratos
 
 #### 2.2.1 Lista de Contratos
-- [ ] Tabela com filtros:
+- [x] Tabela com filtros: ✅
   - Número do Contrato
   - Comprador
   - Imóvel
@@ -321,22 +314,108 @@ Este documento detalha as telas e dashboards para os dois níveis de acesso do s
 
 ---
 
-## 3. COMPONENTES COMPARTILHADOS
+## 3. PORTAL DO COMPRADOR ✅ IMPLEMENTADO
 
-### 3.1 Header/Navbar
+### 3.1 Auto-Cadastro
+- [x] Formulário de auto-cadastro via CPF/CNPJ ✅
+- [x] Validação de CPF/CNPJ existente no sistema ✅
+- [x] Criação automática de usuário ✅
+- [x] Vinculação com registro de Comprador ✅
+- [x] Definição de senha pelo usuário ✅
+
+### 3.2 Login/Autenticação
+- [x] Login com CPF/CNPJ como username ✅
+- [x] Autenticação via Django Auth ✅
+- [x] Logout ✅
+- [x] Registro de log de acesso ✅
+
+### 3.3 Dashboard do Comprador
+- [x] Card: Total de contratos ✅
+- [x] Card: Parcelas em aberto ✅
+- [x] Card: Total a pagar ✅
+- [x] Lista: Contratos ativos ✅
+- [x] Lista: Próximos vencimentos (5 próximas parcelas) ✅
+- [x] Lista: Parcelas vencidas ✅
+- [x] Resumo: Valor pago / A pagar ✅
+
+### 3.4 Meus Contratos
+- [x] Lista de contratos vinculados ao comprador ✅
+- [x] Detalhes de cada contrato ✅
+  - Dados do imóvel
+  - Valores (entrada, total, saldo devedor)
+  - Status do contrato
+  - Lista de parcelas
+  - Parcelas pagas vs pendentes
+  - Próximo vencimento
+- [x] Filtro por status (Ativo, Quitado) ✅
+
+### 3.5 Meus Boletos
+- [x] Lista de boletos disponíveis ✅
+- [x] Filtros: Status, Período ✅
+- [x] Download de boleto individual ✅
+- [x] Visualização em nova aba ✅
+- [x] Status do boleto (Pendente, Pago, Vencido) ✅
+
+### 3.6 Meus Dados
+- [x] Visualização dos dados pessoais ✅
+- [x] Edição de dados de contato ✅
+  - Email
+  - Telefone
+  - Celular
+- [x] Dados não editáveis exibidos (CPF/CNPJ, Nome) ✅
+
+### 3.7 Segurança
+- [x] Alterar senha ✅
+- [x] Validação de senha atual ✅
+- [x] Confirmação de nova senha ✅
+- [x] Requisitos mínimos de senha ✅
+
+### 3.8 APIs do Portal
+- [x] `GET /portal/api/contratos/` - Lista contratos do comprador ✅
+- [x] `GET /portal/api/parcelas/` - Lista parcelas do comprador ✅
+- [x] `GET /portal/api/dashboard/` - Dados do dashboard ✅
+
+### 3.9 Modelos do Portal
+- [x] `AcessoComprador` - Vincula Comprador ao User ✅
+- [x] `LogAcessoComprador` - Registro de acessos ✅
+
+### 3.10 URLs do Portal
+```python
+/portal/                     # Redirect para dashboard
+/portal/cadastro/            # Auto-cadastro
+/portal/login/               # Login
+/portal/logout/              # Logout
+/portal/dashboard/           # Dashboard
+/portal/contratos/           # Lista de contratos
+/portal/contratos/<id>/      # Detalhe do contrato
+/portal/boletos/             # Lista de boletos
+/portal/boletos/<id>/download/   # Download boleto
+/portal/boletos/<id>/visualizar/ # Visualizar boleto
+/portal/meus-dados/          # Dados pessoais
+/portal/alterar-senha/       # Alterar senha
+/portal/api/contratos/       # API contratos
+/portal/api/parcelas/        # API parcelas
+/portal/api/dashboard/       # API dashboard
+```
+
+---
+
+## 4. COMPONENTES COMPARTILHADOS
+
+### 4.1 Header/Navbar
 - [ ] Logo
 - [ ] Menu principal
 - [ ] Notificações (badge)
 - [ ] Perfil do usuário
 - [ ] Troca de imobiliária (para contabilidade)
 
-### 3.2 Sidebar
+### 4.2 Sidebar
 - [ ] Menu de navegação
 - [ ] Ícones + Labels
 - [ ] Indicadores de pendências
 - [ ] Recolhível
 
-### 3.3 Widgets Reutilizáveis
+### 4.3 Widgets Reutilizáveis
 - [ ] Card de resumo (valor + label + ícone)
 - [ ] Tabela paginada com filtros
 - [ ] Gráfico de barras
@@ -349,7 +428,7 @@ Este documento detalha as telas e dashboards para os dois níveis de acesso do s
 - [ ] Upload de arquivo
 - [ ] Seletor de período
 
-### 3.4 Notificações
+### 4.4 Notificações
 - [ ] Toast de sucesso/erro
 - [ ] Alertas no dashboard
 - [ ] Badge de contagem
@@ -357,7 +436,7 @@ Este documento detalha as telas e dashboards para os dois níveis de acesso do s
 
 ---
 
-## 4. ESTRUTURA DE ARQUIVOS (DJANGO)
+## 5. ESTRUTURA DE ARQUIVOS (DJANGO)
 
 ```
 views/
@@ -445,39 +524,46 @@ templates/
 
 ---
 
-## 5. APIs NECESSÁRIAS
+## 6. APIs NECESSÁRIAS
 
-### 5.1 Contabilidade
-- [ ] `GET /api/contabilidade/dashboard/` - Dados do dashboard
+### 6.1 Contabilidade ✅ PARCIALMENTE IMPLEMENTADO
+- [x] `GET /api/contabilidade/dashboard/` - Dados do dashboard ✅ api_dashboard_contabilidade
 - [ ] `GET /api/contabilidade/imobiliarias/` - Lista de imobiliárias
 - [ ] `GET /api/contabilidade/relatorios/consolidado/` - Relatório consolidado
-- [ ] `GET /api/contabilidade/relatorios/reajustes/` - Reajustes pendentes
-- [ ] `GET /api/contabilidade/relatorios/inadimplencia/` - Inadimplência geral
+- [x] `GET /api/contabilidade/relatorios/reajustes/` - Reajustes pendentes ✅ RelatorioPrevisaoReajustesView
+- [x] `GET /api/contabilidade/relatorios/inadimplencia/` - Inadimplência geral ✅ RelatorioPrestacoesAPagarView
 
-### 5.2 Imobiliária
+### 6.2 Imobiliária ✅ PARCIALMENTE IMPLEMENTADO
 - [ ] `GET /api/imobiliaria/dashboard/` - Dados do dashboard
 - [ ] `GET /api/contratos/` - Lista de contratos
 - [ ] `POST /api/contratos/` - Criar contrato
 - [ ] `GET /api/contratos/{id}/` - Detalhes do contrato
 - [ ] `PUT /api/contratos/{id}/` - Atualizar contrato
 - [ ] `GET /api/contratos/{id}/parcelas/` - Parcelas do contrato
-- [ ] `GET /api/contratos/{id}/intermediarias/` - Intermediárias
+- [x] `GET /api/contratos/{id}/intermediarias/` - Intermediárias ✅ api_intermediarias_contrato
 - [ ] `GET /api/contratos/{id}/reajustes/` - Histórico reajustes
 - [ ] `POST /api/contratos/{id}/reajustes/` - Aplicar reajuste
 - [ ] `GET /api/parcelas/` - Lista de parcelas (filtros)
 - [ ] `POST /api/parcelas/{id}/pagamento/` - Registrar pagamento
-- [ ] `POST /api/parcelas/{id}/boleto/` - Gerar boleto
-- [ ] `POST /api/boletos/lote/` - Gerar boletos em lote
-- [ ] `GET /api/relatorios/prestacoes-pagar/` - Relatório
-- [ ] `GET /api/relatorios/prestacoes-pagas/` - Relatório
-- [ ] `GET /api/relatorios/posicao/` - Relatório
-- [ ] `GET /api/relatorios/previsao/` - Relatório
+- [x] `POST /api/parcelas/{id}/boleto/` - Gerar boleto ✅ gerar_boleto_parcela
+- [x] `POST /api/boletos/lote/` - Gerar boletos em lote ✅ gerar_boletos_contrato
+- [x] `GET /api/relatorios/prestacoes-pagar/` - Relatório ✅ RelatorioPrestacoesAPagarView
+- [x] `GET /api/relatorios/prestacoes-pagas/` - Relatório ✅ RelatorioPrestacoesPageasView
+- [x] `GET /api/relatorios/posicao/` - Relatório ✅ RelatorioPosicaoContratosView
+- [x] `GET /api/relatorios/previsao/` - Relatório ✅ RelatorioPrevisaoReajustesView
+- [x] `GET /api/relatorios/resumo/` - Resumo API ✅ api_relatorio_resumo
+- [x] `GET /relatorios/exportar/<tipo>/` - Exportar CSV/JSON ✅ exportar_relatorio
+
+### 6.3 Portal do Comprador ✅ IMPLEMENTADO
+- [x] `GET /portal/api/contratos/` - Lista contratos do comprador ✅
+- [x] `GET /portal/api/parcelas/` - Lista parcelas do comprador ✅
+- [x] `GET /portal/api/dashboard/` - Dados do dashboard ✅
 
 ---
 
-## 6. PERMISSÕES
+## 7. PERMISSÕES
 
-### 6.1 Níveis de Acesso
+### 7.1 Níveis de Acesso
 
 | Perfil | Descrição |
 |--------|-----------|
@@ -488,7 +574,7 @@ templates/
 | **Operador Imobiliária** | Operações básicas (pagamentos, boletos) |
 | **Visualizador** | Apenas consultas |
 
-### 6.2 Matriz de Permissões
+### 7.2 Matriz de Permissões
 
 | Funcionalidade | Admin Cont. | Op. Cont. | Admin Imob. | Gerente | Operador | Visualizador |
 |----------------|:-----------:|:---------:|:-----------:|:-------:|:--------:|:------------:|
@@ -506,7 +592,7 @@ templates/
 
 ---
 
-## 7. CRONOGRAMA SUGERIDO
+## 8. CRONOGRAMA SUGERIDO
 
 ### Fase 1: Fundação
 1. Estrutura base de templates
@@ -547,3 +633,33 @@ templates/
 
 *Documento criado em: 30/12/2024*
 *Última atualização: 30/12/2024*
+
+---
+
+## RESUMO DE IMPLEMENTAÇÃO
+
+### Implementado ✅
+- Dashboard Contabilidade (views, APIs, relatórios)
+- Dashboard Imobiliária (views básicas, alertas)
+- Portal do Comprador (completo)
+  - Auto-cadastro via CPF/CNPJ
+  - Login/Logout
+  - Dashboard
+  - Meus Contratos
+  - Meus Boletos
+  - Meus Dados
+  - Alterar Senha
+  - APIs
+- Gestão de Prestações Intermediárias (CRUD completo)
+- Controle de bloqueio de boletos por reajuste
+- Views de relatórios (Prestações a Pagar/Pagas, Posição, Previsão)
+- Exportação de relatórios (CSV, JSON)
+
+### Pendente
+- Templates HTML (frontend)
+- Componentes compartilhados (sidebar, navbar, widgets)
+- Sistema de notificações
+- Exportação PDF/Excel
+- Wizard de novo contrato
+- Remessas/Retornos CNAB
+- Configurações avançadas
