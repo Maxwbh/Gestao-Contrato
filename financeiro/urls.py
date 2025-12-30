@@ -73,4 +73,21 @@ urlpatterns = [
     path('relatorios/previsao-reajustes/', views.RelatorioPrevisaoReajustesView.as_view(), name='relatorio_previsao_reajustes'),
     path('relatorios/exportar/<str:tipo>/', views.exportar_relatorio, name='exportar_relatorio'),
     path('api/relatorios/resumo/', views.api_relatorio_resumo, name='api_relatorio_resumo'),
+
+    # ==========================================================================
+    # APIs REST
+    # ==========================================================================
+    # Imobiliárias
+    path('api/imobiliarias/', views.api_imobiliarias_lista, name='api_imobiliarias'),
+    path('api/imobiliaria/<int:imobiliaria_id>/dashboard/', views.api_imobiliaria_dashboard, name='api_imobiliaria_dashboard'),
+
+    # Contratos
+    path('api/contratos/', views.api_contratos_lista, name='api_contratos'),
+    path('api/contratos/<int:contrato_id>/', views.api_contrato_detalhe, name='api_contrato_detalhe'),
+    path('api/contratos/<int:contrato_id>/parcelas/', views.api_contrato_parcelas, name='api_contrato_parcelas'),
+    path('api/contratos/<int:contrato_id>/reajustes/', views.api_contrato_reajustes, name='api_contrato_reajustes'),
+
+    # Parcelas
+    path('api/parcelas/', views.api_parcelas_lista, name='api_parcelas'),
+    path('api/parcelas/<int:parcela_id>/pagamento/', views.api_parcela_registrar_pagamento, name='api_parcela_pagamento'),
 ]
