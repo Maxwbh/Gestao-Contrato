@@ -1,5 +1,12 @@
 # TODO - Visões e Dashboards
 
+**Desenvolvedor:** Maxwell Oliveira (@maxwbh)
+**Email:** maxwbh@gmail.com
+**LinkedIn:** /maxwbh
+**Empresa:** M&S do Brasil LTDA - www.msbrasil.inf.br
+
+---
+
 ## Visão Geral
 
 Este documento detalha as telas e dashboards para os três níveis de acesso do sistema:
@@ -653,13 +660,13 @@ templates/
 - Gestão de Prestações Intermediárias (CRUD completo)
 - Controle de bloqueio de boletos por reajuste
 - Views de relatórios (Prestações a Pagar/Pagas, Posição, Previsão)
-- Exportação de relatórios (CSV, JSON)
+- Exportação de relatórios (CSV, JSON, PDF, Excel)
+- Tasks Celery para automação
 
 ### Pendente
 - Templates HTML (frontend)
 - Componentes compartilhados (sidebar, navbar, widgets)
 - Sistema de notificações
-- Exportação PDF/Excel
 - Wizard de novo contrato
 - Remessas/Retornos CNAB
 - Configurações avançadas

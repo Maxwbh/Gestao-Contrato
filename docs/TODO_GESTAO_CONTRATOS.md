@@ -1,5 +1,12 @@
 # TODO - Sistema de Gestão de Contratos
 
+**Desenvolvedor:** Maxwell Oliveira (@maxwbh)
+**Email:** maxwbh@gmail.com
+**LinkedIn:** /maxwbh
+**Empresa:** M&S do Brasil LTDA - www.msbrasil.inf.br
+
+---
+
 ## Visão Geral do Projeto
 
 Sistema de gestão de contratos imobiliários com as seguintes características:
