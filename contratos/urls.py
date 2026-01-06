@@ -28,4 +28,23 @@ urlpatterns = [
 
     # API para importar índices
     path('indices/importar/', views.importar_indices_ibge, name='indices_importar'),
+
+    # ===========================================================================
+    # PRESTAÇÕES INTERMEDIÁRIAS
+    # ===========================================================================
+    # Listagem e detalhes
+    path('<int:contrato_id>/intermediarias/', views.IntermediariasListView.as_view(), name='intermediarias_listar'),
+    path('intermediarias/<int:pk>/', views.IntermediariasDetailView.as_view(), name='intermediarias_detalhe'),
+
+    # CRUD de Intermediárias (API)
+    path('<int:contrato_id>/intermediarias/criar/', views.criar_intermediaria, name='intermediarias_criar'),
+    path('intermediarias/<int:pk>/atualizar/', views.atualizar_intermediaria, name='intermediarias_atualizar'),
+    path('intermediarias/<int:pk>/excluir/', views.excluir_intermediaria, name='intermediarias_excluir'),
+
+    # Pagamento e Boleto de Intermediárias
+    path('intermediarias/<int:pk>/pagar/', views.pagar_intermediaria, name='intermediarias_pagar'),
+    path('intermediarias/<int:pk>/gerar-boleto/', views.gerar_boleto_intermediaria, name='intermediarias_gerar_boleto'),
+
+    # API de Intermediárias
+    path('<int:contrato_id>/intermediarias/api/', views.api_intermediarias_contrato, name='intermediarias_api'),
 ]
