@@ -3,6 +3,9 @@ Servico CNAB - Geracao de Remessa e Processamento de Retorno
 
 Integra com BRCobranca para geracao de arquivos CNAB 240/400.
 
+API BRCobranca: https://github.com/Maxwbh/brcobranca
+Docker: docker run -p 9292:9292 maxwbh/brcobranca
+
 Desenvolvedor: Maxwell da Silva Oliveira
 Email: maxwbh@gmail.com
 Empresa: M&S do Brasil LTDA
