@@ -7,6 +7,7 @@ Empresa: M&S do Brasil LTDA
 """
 from django.db import models
 from django.core.validators import MinValueValidator, MaxValueValidator
+from django.core.exceptions import ValidationError
 from django.utils import timezone
 from decimal import Decimal
 from dateutil.relativedelta import relativedelta
@@ -152,6 +153,13 @@ class StatusContrato(models.TextChoices):
     SUSPENSO = 'SUSPENSO', 'Suspenso'
 
 
+class TipoPrestacao(models.TextChoices):
+    """Tipos de prestação"""
+    NORMAL = 'NORMAL', 'Normal'
+    INTERMEDIARIA = 'INTERMEDIARIA', 'Intermediária'
+    ENTRADA = 'ENTRADA', 'Entrada'
+
+
 class Contrato(TimeStampedModel):
     """Modelo principal de Contrato de Venda de Imóvel"""
 
@@ -209,14 +217,39 @@ class Contrato(TimeStampedModel):
 
     # Configurações de Parcelas
     numero_parcelas = models.PositiveIntegerField(
-        validators=[MinValueValidator(1), MaxValueValidator(600)],
+        validators=[MinValueValidator(1), MaxValueValidator(360)],
         verbose_name='Número de Parcelas',
-        help_text='Quantidade total de parcelas do contrato'
+        help_text='Quantidade total de parcelas do contrato (máximo 360 meses = 30 anos)'
     )
     dia_vencimento = models.PositiveIntegerField(
         validators=[MinValueValidator(1), MaxValueValidator(31)],
         verbose_name='Dia de Vencimento',
         help_text='Dia do mês para vencimento das parcelas (1-31)'
+    )
+
+    # Prestações Intermediárias
+    quantidade_intermediarias = models.PositiveIntegerField(
+        default=0,
+        validators=[MinValueValidator(0), MaxValueValidator(30)],
+        verbose_name='Quantidade de Intermediárias',
+        help_text='Quantidade de prestações intermediárias (máximo 30)'
+    )
+
+    # Controle de Ciclo de Reajuste para Boletos
+    ciclo_reajuste_atual = models.PositiveIntegerField(
+        default=1,
+        verbose_name='Ciclo de Reajuste Atual',
+        help_text='Número do ciclo de reajuste atual (1 = meses 1-12, 2 = meses 13-24, etc.)'
+    )
+    ultimo_mes_boleto_gerado = models.PositiveIntegerField(
+        default=0,
+        verbose_name='Último Mês com Boleto Gerado',
+        help_text='Número do último mês (relativo ao contrato) com boleto gerado'
+    )
+    bloqueio_boleto_reajuste = models.BooleanField(
+        default=False,
+        verbose_name='Boleto Bloqueado por Reajuste',
+        help_text='Se True, a geração de boletos está bloqueada até aplicar o reajuste'
     )
 
     # Juros e Multa
@@ -453,8 +486,66 @@ class Contrato(TimeStampedModel):
             principal=True, ativo=True
         ).first()
 
+    def clean(self):
+        """Validações de negócio do contrato"""
+        super().clean()
+        errors = {}
+
+        # Validar prazo máximo de 360 meses
+        if self.numero_parcelas and self.numero_parcelas > 360:
+            errors['numero_parcelas'] = 'O número máximo de parcelas é 360 (30 anos).'
+
+        if self.numero_parcelas and self.numero_parcelas < 1:
+            errors['numero_parcelas'] = 'O contrato deve ter pelo menos 1 parcela.'
+
+        # Validar máximo de 30 prestações intermediárias
+        if self.quantidade_intermediarias and self.quantidade_intermediarias > 30:
+            errors['quantidade_intermediarias'] = 'O máximo de prestações intermediárias é 30.'
+
+        # Validar prazo de reajuste (padrão 12, mínimo 1, máximo 24)
+        if self.prazo_reajuste_meses:
+            if self.prazo_reajuste_meses < 1:
+                errors['prazo_reajuste_meses'] = 'O prazo mínimo de reajuste é 1 mês.'
+            elif self.prazo_reajuste_meses > 24:
+                errors['prazo_reajuste_meses'] = 'O prazo máximo de reajuste é 24 meses.'
+
+        # Validar valor de entrada não pode exceder valor total
+        if self.valor_entrada and self.valor_total:
+            if self.valor_entrada >= self.valor_total:
+                errors['valor_entrada'] = 'O valor de entrada deve ser menor que o valor total do contrato.'
+
+        # Validar dia de vencimento (1-28 recomendado para evitar problemas com meses curtos)
+        if self.dia_vencimento and self.dia_vencimento > 28:
+            # Aviso, não erro - aceita mas alerta
+            pass  # Considera-se válido mas ajusta automaticamente
+
+        # Validar que a data do primeiro vencimento não é anterior à data do contrato
+        if self.data_primeiro_vencimento and self.data_contrato:
+            if self.data_primeiro_vencimento < self.data_contrato:
+                errors['data_primeiro_vencimento'] = 'A data do primeiro vencimento não pode ser anterior à data do contrato.'
+
+        # Validar juros e multa dentro de limites legais
+        if self.percentual_juros_mora and self.percentual_juros_mora > Decimal('2.00'):
+            errors['percentual_juros_mora'] = 'O limite legal de juros de mora é 2% ao mês.'
+
+        if self.percentual_multa and self.percentual_multa > Decimal('2.00'):
+            errors['percentual_multa'] = 'O limite legal de multa é 2%.'
+
+        # Validar que imóvel e comprador pertencem à mesma imobiliária
+        if self.imovel_id and self.comprador_id and self.imobiliaria_id:
+            if hasattr(self, 'imovel') and self.imovel.imobiliaria_id != self.imobiliaria_id:
+                errors['imovel'] = 'O imóvel deve pertencer à mesma imobiliária do contrato.'
+            if hasattr(self, 'comprador') and self.comprador.imobiliaria_id != self.imobiliaria_id:
+                errors['comprador'] = 'O comprador deve pertencer à mesma imobiliária do contrato.'
+
+        if errors:
+            raise ValidationError(errors)
+
     def save(self, *args, **kwargs):
         """Override do save para calcular campos automáticos"""
+        # Executar validações de negócio
+        self.full_clean()
+
         # Calcular valor financiado
         self.valor_financiado = self.valor_total - self.valor_entrada
 
@@ -616,3 +707,354 @@ class Contrato(TimeStampedModel):
 
         # Adicionar o prazo de reajuste
         return data_base + relativedelta(months=self.prazo_reajuste_meses)
+
+    def calcular_ciclo_parcela(self, numero_parcela):
+        """
+        Calcula o ciclo de reajuste de uma parcela.
+        Ciclo 1 = meses 1-12, Ciclo 2 = meses 13-24, etc.
+
+        Args:
+            numero_parcela: Número da parcela (1-based)
+
+        Returns:
+            int: Número do ciclo (1, 2, 3, ...)
+        """
+        return ((numero_parcela - 1) // self.prazo_reajuste_meses) + 1
+
+    def pode_gerar_boleto(self, numero_parcela):
+        """
+        Verifica se é possível gerar boleto para uma parcela específica.
+
+        Regra: Só é possível emitir boleto até o 12º mês de cada ciclo.
+               No 13º mês (início de novo ciclo), a emissão só é liberada
+               APÓS aplicação do reajuste.
+
+        Args:
+            numero_parcela: Número da parcela a verificar
+
+        Returns:
+            tuple: (pode_gerar: bool, motivo: str)
+        """
+        ciclo_parcela = self.calcular_ciclo_parcela(numero_parcela)
+
+        # Primeiro ciclo (meses 1-12): sempre pode gerar
+        if ciclo_parcela == 1:
+            return True, "Primeiro ciclo - liberado"
+
+        # Verificar se o reajuste do ciclo anterior foi aplicado
+        from financeiro.models import Reajuste
+        reajuste_aplicado = Reajuste.objects.filter(
+            contrato=self,
+            ciclo=ciclo_parcela
+        ).exists()
+
+        if reajuste_aplicado:
+            return True, f"Reajuste do ciclo {ciclo_parcela} aplicado"
+
+        return False, f"Reajuste pendente para o ciclo {ciclo_parcela}. Aplique o reajuste antes de gerar boletos."
+
+    def verificar_bloqueio_reajuste(self):
+        """
+        Verifica e atualiza o status de bloqueio de boleto por reajuste.
+
+        Returns:
+            bool: True se está bloqueado, False se liberado
+        """
+        if self.tipo_correcao == TipoCorrecao.FIXO:
+            self.bloqueio_boleto_reajuste = False
+            return False
+
+        # Verificar se a próxima parcela a gerar boleto está em um novo ciclo
+        proxima_parcela = self.ultimo_mes_boleto_gerado + 1
+        if proxima_parcela > self.numero_parcelas:
+            self.bloqueio_boleto_reajuste = False
+            return False
+
+        ciclo_proxima = self.calcular_ciclo_parcela(proxima_parcela)
+
+        # Se está no primeiro ciclo, não há bloqueio
+        if ciclo_proxima == 1:
+            self.bloqueio_boleto_reajuste = False
+            return False
+
+        # Verificar se reajuste foi aplicado
+        pode_gerar, _ = self.pode_gerar_boleto(proxima_parcela)
+        self.bloqueio_boleto_reajuste = not pode_gerar
+        self.save(update_fields=['bloqueio_boleto_reajuste'])
+        return self.bloqueio_boleto_reajuste
+
+    def get_parcelas_ciclo(self, ciclo):
+        """
+        Retorna as parcelas de um ciclo específico.
+
+        Args:
+            ciclo: Número do ciclo (1, 2, 3, ...)
+
+        Returns:
+            QuerySet: Parcelas do ciclo
+        """
+        inicio = (ciclo - 1) * self.prazo_reajuste_meses + 1
+        fim = ciclo * self.prazo_reajuste_meses
+        return self.parcelas.filter(
+            numero_parcela__gte=inicio,
+            numero_parcela__lte=fim
+        )
+
+    def get_parcelas_a_pagar(self):
+        """
+        Retorna as parcelas não pagas do contrato.
+
+        Returns:
+            QuerySet: Parcelas não pagas ordenadas por vencimento
+        """
+        return self.parcelas.filter(pago=False).order_by('data_vencimento')
+
+    def get_parcelas_pagas(self):
+        """
+        Retorna as parcelas pagas do contrato.
+
+        Returns:
+            QuerySet: Parcelas pagas ordenadas por data de pagamento
+        """
+        return self.parcelas.filter(pago=True).order_by('-data_pagamento')
+
+    def get_parcelas_vencidas(self):
+        """
+        Retorna as parcelas vencidas e não pagas.
+
+        Returns:
+            QuerySet: Parcelas vencidas
+        """
+        return self.parcelas.filter(
+            pago=False,
+            data_vencimento__lt=timezone.now().date()
+        ).order_by('data_vencimento')
+
+    def get_resumo_financeiro(self):
+        """
+        Retorna um resumo financeiro do contrato.
+
+        Returns:
+            dict: Resumo com totais e estatísticas
+        """
+        from django.db.models import Sum, Count
+
+        parcelas = self.parcelas.all()
+        pagas = parcelas.filter(pago=True)
+        a_pagar = parcelas.filter(pago=False)
+        vencidas = a_pagar.filter(data_vencimento__lt=timezone.now().date())
+
+        total_pago = pagas.aggregate(total=Sum('valor_pago'))['total'] or Decimal('0.00')
+        total_a_pagar = a_pagar.aggregate(total=Sum('valor_atual'))['total'] or Decimal('0.00')
+        total_vencido = vencidas.aggregate(total=Sum('valor_atual'))['total'] or Decimal('0.00')
+
+        # Calcular juros e multa acumulados em parcelas vencidas
+        total_juros = vencidas.aggregate(total=Sum('valor_juros'))['total'] or Decimal('0.00')
+        total_multa = vencidas.aggregate(total=Sum('valor_multa'))['total'] or Decimal('0.00')
+
+        return {
+            'valor_contrato': self.valor_total,
+            'valor_entrada': self.valor_entrada,
+            'valor_financiado': self.valor_financiado,
+            'total_parcelas': parcelas.count(),
+            'parcelas_pagas': pagas.count(),
+            'parcelas_a_pagar': a_pagar.count(),
+            'parcelas_vencidas': vencidas.count(),
+            'total_pago': total_pago + self.valor_entrada,
+            'total_a_pagar': total_a_pagar,
+            'total_vencido': total_vencido,
+            'total_juros_acumulado': total_juros,
+            'total_multa_acumulada': total_multa,
+            'saldo_devedor': self.calcular_saldo_devedor(),
+            'progresso_percentual': self.calcular_progresso(),
+            'ciclo_atual': self.ciclo_reajuste_atual,
+            'bloqueio_reajuste': self.bloqueio_boleto_reajuste,
+        }
+
+
+class PrestacaoIntermediaria(TimeStampedModel):
+    """
+    Modelo para prestações intermediárias do contrato.
+
+    Prestações intermediárias são parcelas adicionais com valores maiores
+    que vencem em meses específicos do contrato (ex: mês 6, 12, 18...).
+    Um contrato pode ter até 30 prestações intermediárias.
+    """
+
+    contrato = models.ForeignKey(
+        Contrato,
+        on_delete=models.CASCADE,
+        related_name='intermediarias',
+        verbose_name='Contrato'
+    )
+    numero_sequencial = models.PositiveIntegerField(
+        validators=[MinValueValidator(1), MaxValueValidator(30)],
+        verbose_name='Número Sequencial',
+        help_text='Número da intermediária (1 a 30)'
+    )
+    mes_vencimento = models.PositiveIntegerField(
+        validators=[MinValueValidator(1), MaxValueValidator(360)],
+        verbose_name='Mês de Vencimento',
+        help_text='Mês relativo ao início do contrato (ex: 6 = sexto mês)'
+    )
+    valor = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        validators=[MinValueValidator(Decimal('0.01'))],
+        verbose_name='Valor',
+        help_text='Valor da prestação intermediária'
+    )
+
+    # Status de pagamento
+    paga = models.BooleanField(
+        default=False,
+        verbose_name='Paga'
+    )
+    data_pagamento = models.DateField(
+        null=True,
+        blank=True,
+        verbose_name='Data de Pagamento'
+    )
+    valor_pago = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        verbose_name='Valor Pago'
+    )
+
+    # Vinculação com parcela (quando gerada)
+    parcela_vinculada = models.OneToOneField(
+        'financeiro.Parcela',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='intermediaria_origem',
+        verbose_name='Parcela Vinculada',
+        help_text='Parcela gerada para esta intermediária'
+    )
+
+    # Valor reajustado (após aplicação de índices)
+    valor_reajustado = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        verbose_name='Valor Reajustado',
+        help_text='Valor após aplicação de reajustes'
+    )
+
+    observacoes = models.TextField(
+        blank=True,
+        verbose_name='Observações'
+    )
+
+    class Meta:
+        verbose_name = 'Prestação Intermediária'
+        verbose_name_plural = 'Prestações Intermediárias'
+        ordering = ['contrato', 'numero_sequencial']
+        unique_together = [['contrato', 'numero_sequencial']]
+        indexes = [
+            models.Index(fields=['contrato', 'mes_vencimento']),
+            models.Index(fields=['paga']),
+        ]
+
+    def __str__(self):
+        return f"Intermediária {self.numero_sequencial} - Mês {self.mes_vencimento} - Contrato {self.contrato.numero_contrato}"
+
+    def clean(self):
+        """Validações de negócio da prestação intermediária"""
+        super().clean()
+        errors = {}
+
+        # Validar número sequencial (1 a 30)
+        if self.numero_sequencial:
+            if self.numero_sequencial < 1 or self.numero_sequencial > 30:
+                errors['numero_sequencial'] = 'O número sequencial deve estar entre 1 e 30.'
+
+        # Validar mês de vencimento dentro do prazo do contrato
+        if self.mes_vencimento and hasattr(self, 'contrato') and self.contrato:
+            if self.mes_vencimento > self.contrato.numero_parcelas:
+                errors['mes_vencimento'] = f'O mês de vencimento não pode exceder o prazo do contrato ({self.contrato.numero_parcelas} meses).'
+
+        # Validar que não ultrapassa o limite de intermediárias do contrato
+        if hasattr(self, 'contrato') and self.contrato:
+            limite = self.contrato.quantidade_intermediarias
+            if limite and self.numero_sequencial and self.numero_sequencial > limite:
+                errors['numero_sequencial'] = f'O contrato permite no máximo {limite} prestações intermediárias.'
+
+        # Validar valor mínimo
+        if self.valor and self.valor <= Decimal('0'):
+            errors['valor'] = 'O valor da intermediária deve ser maior que zero.'
+
+        if errors:
+            raise ValidationError(errors)
+
+    def save(self, *args, **kwargs):
+        """Override do save para executar validações"""
+        self.full_clean()
+        super().save(*args, **kwargs)
+
+    @property
+    def valor_atual(self):
+        """Retorna o valor atual (reajustado ou original)"""
+        return self.valor_reajustado if self.valor_reajustado else self.valor
+
+    @property
+    def data_vencimento(self):
+        """Calcula a data de vencimento baseada no mês relativo"""
+        from dateutil.relativedelta import relativedelta
+        data_base = self.contrato.data_primeiro_vencimento
+        return data_base + relativedelta(months=self.mes_vencimento - 1)
+
+    @property
+    def ciclo_reajuste(self):
+        """Retorna o ciclo de reajuste desta intermediária"""
+        return self.contrato.calcular_ciclo_parcela(self.mes_vencimento)
+
+    def gerar_parcela(self):
+        """
+        Gera uma parcela vinculada a esta intermediária.
+
+        Returns:
+            Parcela: A parcela gerada ou None se já existir
+        """
+        if self.parcela_vinculada:
+            return self.parcela_vinculada
+
+        from financeiro.models import Parcela
+
+        parcela = Parcela.objects.create(
+            contrato=self.contrato,
+            numero_parcela=0,  # Intermediárias usam número 0 ou negativo
+            data_vencimento=self.data_vencimento,
+            valor_original=self.valor,
+            valor_atual=self.valor_atual,
+            tipo_parcela=TipoPrestacao.INTERMEDIARIA,
+            ciclo_reajuste=self.ciclo_reajuste,
+        )
+
+        self.parcela_vinculada = parcela
+        self.save(update_fields=['parcela_vinculada'])
+
+        return parcela
+
+    def aplicar_reajuste(self, percentual):
+        """
+        Aplica reajuste no valor da intermediária.
+
+        Args:
+            percentual: Percentual de reajuste (ex: 5.5 para 5,5%)
+        """
+        if self.paga:
+            return
+
+        valor_base = self.valor_reajustado if self.valor_reajustado else self.valor
+        fator = 1 + (Decimal(str(percentual)) / 100)
+        self.valor_reajustado = valor_base * fator
+        self.save(update_fields=['valor_reajustado'])
+
+        # Atualizar parcela vinculada se existir
+        if self.parcela_vinculada:
+            self.parcela_vinculada.valor_atual = self.valor_reajustado
+            self.parcela_vinculada.save(update_fields=['valor_atual'])
