@@ -20,8 +20,10 @@ from django.db import transaction
 from faker import Faker
 
 from core.models import Contabilidade, Imobiliaria, Imovel, Comprador, TipoImovel, ContaBancaria
-from contratos.models import Contrato, TipoCorrecao, StatusContrato, IndiceReajuste
-from financeiro.models import Parcela
+from contratos.models import Contrato, TipoCorrecao, StatusContrato, IndiceReajuste, PrestacaoIntermediaria
+from financeiro.models import Parcela, Reajuste
+from portal_comprador.models import AcessoComprador
+from django.contrib.auth.models import User
 
 
 class Command(BaseCommand):
@@ -106,6 +108,18 @@ class Command(BaseCommand):
             self.stdout.write('Gerando índices de reajuste...')
             indices = self.gerar_indices_reajuste()
 
+            # 10. Criar prestações intermediárias para alguns contratos
+            self.stdout.write('Criando prestações intermediárias...')
+            intermediarias = self.criar_prestacoes_intermediarias(contratos)
+
+            # 11. Criar acessos ao portal para alguns compradores
+            self.stdout.write('Criando acessos ao portal do comprador...')
+            acessos = self.criar_acessos_portal(compradores)
+
+            # 12. Criar reajustes aplicados para contratos antigos
+            self.stdout.write('Criando reajustes aplicados...')
+            reajustes = self.criar_reajustes_aplicados(contratos)
+
         # Contagem final
         pf_count = len([c for c in compradores if c.tipo_pessoa == 'PF'])
         pj_count = len([c for c in compradores if c.tipo_pessoa == 'PJ'])
@@ -118,13 +132,27 @@ class Command(BaseCommand):
         self.stdout.write(self.style.SUCCESS(f'   • {len(terrenos)} Terrenos'))
         self.stdout.write(self.style.SUCCESS(f'   • {len(compradores)} Compradores ({pf_count} PF + {pj_count} PJ)'))
         self.stdout.write(self.style.SUCCESS(f'   • {len(contratos)} Contratos'))
+        self.stdout.write(self.style.SUCCESS(f'   • {intermediarias} Prestações Intermediárias'))
+        self.stdout.write(self.style.SUCCESS(f'   • {acessos} Acessos ao Portal'))
+        self.stdout.write(self.style.SUCCESS(f'   • {reajustes} Reajustes Aplicados'))
         self.stdout.write(self.style.SUCCESS(f'   • {indices} Índices de Reajuste'))
 
     def limpar_dados(self):
         """Limpa todos os dados de teste"""
+        # Portal do Comprador
+        AcessoComprador.objects.all().delete()
+        User.objects.filter(username__startswith='comprador_').delete()
+
+        # Financeiro
+        Reajuste.objects.all().delete()
         Parcela.objects.all().delete()
+
+        # Contratos
+        PrestacaoIntermediaria.objects.all().delete()
         Contrato.objects.all().delete()
         IndiceReajuste.objects.all().delete()
+
+        # Core
         Imovel.objects.all().delete()
         Comprador.objects.all().delete()
         ContaBancaria.objects.all().delete()
@@ -684,5 +712,164 @@ class Command(BaseCommand):
                     }
                 )
                 count += 1
+
+        return count
+
+    def criar_prestacoes_intermediarias(self, contratos):
+        """
+        Cria prestações intermediárias para alguns contratos.
+        30% dos contratos terão entre 1 e 5 prestações intermediárias.
+        """
+        count = 0
+        contratos_com_intermediarias = random.sample(
+            contratos,
+            k=int(len(contratos) * 0.30)
+        )
+
+        for contrato in contratos_com_intermediarias:
+            # Número de intermediárias: 1 a 5
+            num_intermediarias = random.randint(1, 5)
+
+            # Atualizar campo do contrato
+            if hasattr(contrato, 'quantidade_intermediarias'):
+                contrato.quantidade_intermediarias = num_intermediarias
+                contrato.save(update_fields=['quantidade_intermediarias'])
+
+            for seq in range(1, num_intermediarias + 1):
+                # Vencimento a cada 12 meses
+                mes_vencimento = seq * 12
+
+                # Valor: 5% a 15% do valor total do contrato
+                percentual = Decimal(str(random.randint(5, 15) / 100))
+                valor = contrato.valor_total * percentual
+
+                # 50% das intermediárias já estão pagas
+                paga = random.choice([True, False])
+                data_pagamento = None
+                valor_pago = None
+
+                if paga:
+                    # Data de pagamento no mês do vencimento
+                    from dateutil.relativedelta import relativedelta
+                    data_base = contrato.data_primeiro_vencimento + relativedelta(months=mes_vencimento - 1)
+                    if data_base <= timezone.now().date():
+                        data_pagamento = data_base + timedelta(days=random.randint(0, 10))
+                        if data_pagamento > timezone.now().date():
+                            data_pagamento = timezone.now().date()
+                        valor_pago = valor
+                    else:
+                        paga = False
+
+                PrestacaoIntermediaria.objects.create(
+                    contrato=contrato,
+                    numero_sequencial=seq,
+                    mes_vencimento=mes_vencimento,
+                    valor=valor,
+                    paga=paga,
+                    data_pagamento=data_pagamento,
+                    valor_pago=valor_pago,
+                    observacoes=f'Prestação intermediária {seq} - gerada para teste'
+                )
+                count += 1
+
+        return count
+
+    def criar_acessos_portal(self, compradores):
+        """
+        Cria acessos ao portal do comprador para 20% dos compradores.
+        Usa CPF ou CNPJ como username.
+        """
+        count = 0
+        compradores_com_acesso = random.sample(
+            compradores,
+            k=int(len(compradores) * 0.20)
+        )
+
+        for comprador in compradores_com_acesso:
+            # Determinar documento (CPF ou CNPJ)
+            if comprador.tipo_pessoa == 'PF':
+                documento = comprador.cpf.replace('.', '').replace('-', '')
+            else:
+                documento = comprador.cnpj.replace('.', '').replace('/', '').replace('-', '')
+
+            username = f'comprador_{documento}'
+
+            # Verificar se usuário já existe
+            if User.objects.filter(username=username).exists():
+                continue
+
+            # Criar usuário
+            user = User.objects.create_user(
+                username=username,
+                email=comprador.email or f'{documento}@teste.com',
+                password='teste123',  # Senha padrão para testes
+                first_name=comprador.nome.split()[0] if comprador.nome else '',
+                last_name=' '.join(comprador.nome.split()[1:3]) if comprador.nome else ''
+            )
+
+            # Criar acesso
+            AcessoComprador.objects.create(
+                comprador=comprador,
+                usuario=user,
+                email_verificado=True,  # Já verificado para testes
+                ativo=True
+            )
+            count += 1
+
+        self.stdout.write(f'   → Senha padrão para acessos de teste: teste123')
+        return count
+
+    def criar_reajustes_aplicados(self, contratos):
+        """
+        Cria reajustes aplicados para contratos com mais de 12 meses.
+        Simula o processo de reajuste anual.
+        """
+        count = 0
+        hoje = timezone.now().date()
+
+        for contrato in contratos:
+            # Calcular quantos ciclos completos de 12 meses se passaram
+            meses_desde_contrato = (hoje.year - contrato.data_contrato.year) * 12 + \
+                                   (hoje.month - contrato.data_contrato.month)
+
+            ciclos_completos = meses_desde_contrato // 12
+
+            if ciclos_completos < 1:
+                continue
+
+            # Criar reajuste para cada ciclo completo
+            for ciclo in range(1, ciclos_completos + 1):
+                # Data do reajuste (12 meses após o início do ciclo anterior)
+                from dateutil.relativedelta import relativedelta
+                data_reajuste = contrato.data_contrato + relativedelta(months=ciclo * 12)
+
+                if data_reajuste > hoje:
+                    continue
+
+                # Percentual de reajuste (baseado em índices)
+                percentual = Decimal(str(round(random.uniform(3.0, 8.0), 2)))
+
+                # Verificar se já existe reajuste para este ciclo
+                if Reajuste.objects.filter(contrato=contrato, ciclo=ciclo).exists():
+                    continue
+
+                Reajuste.objects.create(
+                    contrato=contrato,
+                    data_reajuste=data_reajuste,
+                    indice_aplicado=contrato.tipo_correcao,
+                    percentual_aplicado=percentual,
+                    ciclo=ciclo,
+                    aplicado=True,
+                    data_aplicacao=timezone.make_aware(
+                        datetime.combine(data_reajuste, datetime.min.time())
+                    ),
+                    observacoes=f'Reajuste ciclo {ciclo} - gerado para teste'
+                )
+                count += 1
+
+                # Atualizar ciclo atual do contrato
+                if hasattr(contrato, 'ciclo_reajuste_atual'):
+                    contrato.ciclo_reajuste_atual = ciclo + 1
+                    contrato.save(update_fields=['ciclo_reajuste_atual'])
 
         return count
