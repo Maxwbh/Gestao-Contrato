@@ -531,12 +531,12 @@ class Contrato(TimeStampedModel):
         if self.percentual_multa and self.percentual_multa > Decimal('2.00'):
             errors['percentual_multa'] = 'O limite legal de multa é 2%.'
 
-        # Validar que imóvel e comprador pertencem à mesma imobiliária
-        if self.imovel_id and self.comprador_id and self.imobiliaria_id:
+        # Validar que imóvel pertence à mesma imobiliária do contrato
+        if self.imovel_id and self.imobiliaria_id:
             if hasattr(self, 'imovel') and self.imovel.imobiliaria_id != self.imobiliaria_id:
                 errors['imovel'] = 'O imóvel deve pertencer à mesma imobiliária do contrato.'
-            if hasattr(self, 'comprador') and self.comprador.imobiliaria_id != self.imobiliaria_id:
-                errors['comprador'] = 'O comprador deve pertencer à mesma imobiliária do contrato.'
+        # NOTA: Comprador NÃO tem campo imobiliaria - um comprador pode
+        # comprar imóveis de diferentes imobiliárias através de diferentes contratos
 
         if errors:
             raise ValidationError(errors)
