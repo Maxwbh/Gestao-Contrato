@@ -1,0 +1,47 @@
+#!/bin/bash
+#
+# Git Hook: pre-commit
+# Incrementa a versao do projeto automaticamente antes de cada commit
+#
+# Desenvolvedor: Maxwell da Silva Oliveira (@maxwbh)
+# Email: maxwbh@gmail.com
+# LinkedIn: /maxwbh
+# Empresa: M&S do Brasil LTDA - www.msbrasil.inf.br
+#
+
+# Obter diretorio raiz do projeto
+GIT_DIR=$(git rev-parse --git-dir 2>/dev/null)
+PROJECT_ROOT=$(dirname "$GIT_DIR")
+
+# Arquivo de versao
+VERSION_FILE="$PROJECT_ROOT/VERSION"
+
+# Verificar se arquivo de versao existe
+if [ ! -f "$VERSION_FILE" ]; then
+    echo "1.0.0" > "$VERSION_FILE"
+fi
+
+# Ler versao atual
+CURRENT_VERSION=$(cat "$VERSION_FILE" | tr -d '[:space:]')
+
+# Incrementar patch version
+IFS='.' read -r -a VERSION_PARTS <<< "$CURRENT_VERSION"
+MAJOR="${VERSION_PARTS[0]:-0}"
+MINOR="${VERSION_PARTS[1]:-0}"
+PATCH="${VERSION_PARTS[2]:-0}"
+
+# Incrementar patch
+PATCH=$((PATCH + 1))
+
+# Nova versao
+NEW_VERSION="$MAJOR.$MINOR.$PATCH"
+
+# Escrever nova versao
+echo "$NEW_VERSION" > "$VERSION_FILE"
+
+# Adicionar arquivo de versao ao commit
+git add "$VERSION_FILE"
+
+echo "Versao atualizada: $CURRENT_VERSION -> $NEW_VERSION"
+
+exit 0
