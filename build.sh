@@ -32,6 +32,50 @@ def add_column_if_not_exists(cursor, table, column, column_def):
         print(f"  - {table}.{column} already exists")
 
 with connection.cursor() as cursor:
+    # =========================================================================
+    # CAMPOS TIMESTAMP (criado_em, atualizado_em) - TimeStampedModel
+    # =========================================================================
+    print("Adding timestamp columns to all tables...")
+
+    # Lista de tabelas que herdam de TimeStampedModel
+    timestamp_tables = [
+        'core_contabilidade',
+        'core_imobiliaria',
+        'core_imovel',
+        'core_comprador',
+        'core_contabancaria',
+        'core_acessousuario',
+        'contratos_contrato',
+        'contratos_indicereajuste',
+        'contratos_prestacaointermediaria',
+        'financeiro_parcela',
+        'financeiro_reajuste',
+        'financeiro_historicopagamento',
+        'financeiro_arquivoremessa',
+        'financeiro_itemremessa',
+        'financeiro_arquivoretorno',
+        'financeiro_itemretorno',
+        'notificacoes_templatenotificacao',
+        'notificacoes_configuracaoemail',
+        'notificacoes_configuracaosms',
+        'notificacoes_configuracaowhatsapp',
+        'notificacoes_notificacao',
+        'portal_comprador_acessocomprador',
+        'portal_comprador_logacessocomprador',
+    ]
+
+    for table in timestamp_tables:
+        # Verificar se tabela existe
+        cursor.execute(f"""
+            SELECT 1 FROM information_schema.tables WHERE table_name = '{table}'
+        """)
+        if cursor.fetchone():
+            add_column_if_not_exists(cursor, table, 'criado_em', "TIMESTAMP WITH TIME ZONE DEFAULT NOW()")
+            add_column_if_not_exists(cursor, table, 'atualizado_em', "TIMESTAMP WITH TIME ZONE DEFAULT NOW()")
+
+    print("Timestamp columns checked/added.")
+    print("")
+
     print("Checking core_contabilidade...")
     # CNPJ opcional
     cursor.execute("""
