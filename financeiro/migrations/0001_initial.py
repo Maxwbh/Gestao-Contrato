@@ -24,8 +24,8 @@ class Migration(migrations.Migration):
             name='Parcela',
             fields=[
                 ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-                ('created_at', models.DateTimeField(auto_now_add=True)),
-                ('updated_at', models.DateTimeField(auto_now=True)),
+                ('criado_em', models.DateTimeField(auto_now_add=True, verbose_name='Criado em')),
+                ('atualizado_em', models.DateTimeField(auto_now=True, verbose_name='Atualizado em')),
                 ('numero_parcela', models.PositiveIntegerField(verbose_name='Número da Parcela')),
                 ('data_vencimento', models.DateField(verbose_name='Data de Vencimento')),
                 ('tipo_parcela', models.CharField(
@@ -144,8 +144,8 @@ class Migration(migrations.Migration):
             name='Reajuste',
             fields=[
                 ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-                ('created_at', models.DateTimeField(auto_now_add=True)),
-                ('updated_at', models.DateTimeField(auto_now=True)),
+                ('criado_em', models.DateTimeField(auto_now_add=True, verbose_name='Criado em')),
+                ('atualizado_em', models.DateTimeField(auto_now=True, verbose_name='Atualizado em')),
                 ('data_reajuste', models.DateField(default=django.utils.timezone.now, verbose_name='Data do Reajuste')),
                 ('indice_tipo', models.CharField(max_length=10, verbose_name='Tipo de Índice')),
                 ('percentual', models.DecimalField(
@@ -189,8 +189,8 @@ class Migration(migrations.Migration):
             name='HistoricoPagamento',
             fields=[
                 ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-                ('created_at', models.DateTimeField(auto_now_add=True)),
-                ('updated_at', models.DateTimeField(auto_now=True)),
+                ('criado_em', models.DateTimeField(auto_now_add=True, verbose_name='Criado em')),
+                ('atualizado_em', models.DateTimeField(auto_now=True, verbose_name='Atualizado em')),
                 ('data_pagamento', models.DateField(verbose_name='Data do Pagamento')),
                 ('valor_pago', models.DecimalField(
                     decimal_places=2,
@@ -237,8 +237,8 @@ class Migration(migrations.Migration):
             name='ArquivoRemessa',
             fields=[
                 ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-                ('created_at', models.DateTimeField(auto_now_add=True)),
-                ('updated_at', models.DateTimeField(auto_now=True)),
+                ('criado_em', models.DateTimeField(auto_now_add=True, verbose_name='Criado em')),
+                ('atualizado_em', models.DateTimeField(auto_now=True, verbose_name='Atualizado em')),
                 ('numero_remessa', models.PositiveIntegerField(verbose_name='Número da Remessa')),
                 ('layout', models.CharField(
                     choices=[('CNAB_240', 'CNAB 240'), ('CNAB_400', 'CNAB 400')],
@@ -285,8 +285,8 @@ class Migration(migrations.Migration):
             name='ItemRemessa',
             fields=[
                 ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-                ('created_at', models.DateTimeField(auto_now_add=True)),
-                ('updated_at', models.DateTimeField(auto_now=True)),
+                ('criado_em', models.DateTimeField(auto_now_add=True, verbose_name='Criado em')),
+                ('atualizado_em', models.DateTimeField(auto_now=True, verbose_name='Atualizado em')),
                 ('nosso_numero', models.CharField(max_length=30, verbose_name='Nosso Número')),
                 ('valor', models.DecimalField(decimal_places=2, max_digits=12, verbose_name='Valor')),
                 ('data_vencimento', models.DateField(verbose_name='Data de Vencimento')),
@@ -319,8 +319,8 @@ class Migration(migrations.Migration):
             name='ArquivoRetorno',
             fields=[
                 ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-                ('created_at', models.DateTimeField(auto_now_add=True)),
-                ('updated_at', models.DateTimeField(auto_now=True)),
+                ('criado_em', models.DateTimeField(auto_now_add=True, verbose_name='Criado em')),
+                ('atualizado_em', models.DateTimeField(auto_now=True, verbose_name='Atualizado em')),
                 ('arquivo', models.FileField(upload_to='cnab/retorno/%Y/%m/', verbose_name='Arquivo')),
                 ('nome_arquivo', models.CharField(max_length=100, verbose_name='Nome do Arquivo')),
                 ('layout', models.CharField(
@@ -374,8 +374,8 @@ class Migration(migrations.Migration):
             name='ItemRetorno',
             fields=[
                 ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-                ('created_at', models.DateTimeField(auto_now_add=True)),
-                ('updated_at', models.DateTimeField(auto_now=True)),
+                ('criado_em', models.DateTimeField(auto_now_add=True, verbose_name='Criado em')),
+                ('atualizado_em', models.DateTimeField(auto_now=True, verbose_name='Atualizado em')),
                 ('nosso_numero', models.CharField(max_length=30, verbose_name='Nosso Número')),
                 ('numero_documento', models.CharField(blank=True, max_length=25, verbose_name='Número do Documento')),
                 ('codigo_ocorrencia', models.CharField(max_length=10, verbose_name='Código de Ocorrência')),
