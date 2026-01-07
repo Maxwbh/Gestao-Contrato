@@ -271,3 +271,10 @@ if not DEBUG:
     SECURE_HSTS_SECONDS = 31536000
     SECURE_HSTS_INCLUDE_SUBDOMAINS = True
     SECURE_HSTS_PRELOAD = True
+
+    # CSRF Trusted Origins - Required for Django 4.x+ behind HTTPS proxy
+    CSRF_TRUSTED_ORIGINS = config(
+        'CSRF_TRUSTED_ORIGINS',
+        default='https://*.onrender.com',
+        cast=Csv()
+    )
