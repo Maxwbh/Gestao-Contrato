@@ -539,12 +539,19 @@ class Command(BaseCommand):
             max_parcelas = max(6, min(meses_desde_contrato + 1, 48))
             numero_parcelas = random.randint(min(6, max_parcelas), max_parcelas)
 
-            # Valor do imóvel baseado na área
-            valor_m2 = Decimal(random.randint(150, 350))
-            valor_total = imovel.area * valor_m2
+            # Valor do imóvel baseado na área (garantir precisão decimal)
+            area = Decimal(str(imovel.area)).quantize(Decimal('0.01'))
+            valor_m2 = Decimal(str(random.randint(150, 350)))
+            valor_total = (area * valor_m2).quantize(Decimal('0.01'))
 
-            # Entrada de 10% a 30%
-            valor_entrada = valor_total * Decimal(random.randint(10, 30) / 100)
+            # Limitar valor_total a 9 dígitos inteiros (max 999,999,999.99)
+            max_valor = Decimal('999999999.99')
+            if valor_total > max_valor:
+                valor_total = max_valor
+
+            # Entrada de 10% a 30% (quantizado para 2 casas decimais)
+            percentual = Decimal(str(random.randint(10, 30))) / Decimal('100')
+            valor_entrada = (valor_total * percentual).quantize(Decimal('0.01'))
 
             contrato = Contrato.objects.create(
                 imovel=imovel,
@@ -740,8 +747,9 @@ class Command(BaseCommand):
                 mes_vencimento = seq * 12
 
                 # Valor: 5% a 15% do valor total do contrato
-                percentual = Decimal(str(random.randint(5, 15) / 100))
-                valor = contrato.valor_total * percentual
+                percentual = Decimal(str(random.randint(5, 15))) / Decimal('100')
+                valor_base = Decimal(str(contrato.valor_total)).quantize(Decimal('0.01'))
+                valor = (valor_base * percentual).quantize(Decimal('0.01'))
 
                 # 50% das intermediárias já estão pagas
                 paga = random.choice([True, False])

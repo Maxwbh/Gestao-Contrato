@@ -394,10 +394,10 @@ def setup(request):
 @require_http_methods(["GET", "POST"])
 def gerar_dados_teste(request):
     """
-    Endpoint para gerar dados de teste (APENAS SUPERUSUÁRIO para POST)
+    Endpoint para gerar dados de teste (ACESSÍVEL SEM LOGIN para ambiente de teste)
 
     GET: Retorna status do sistema
-    POST: Gera dados de teste (requer autenticação de superusuário)
+    POST: Gera dados de teste
 
     Parâmetros POST (form-data ou JSON):
         limpar (bool): Se deve limpar dados antes (default: False)
@@ -406,18 +406,8 @@ def gerar_dados_teste(request):
         curl -X POST http://localhost:8000/api/gerar-dados-teste/ -d "limpar=true"
         curl -X POST http://localhost:8000/api/gerar-dados-teste/ -H "Content-Type: application/json" -d '{"limpar": true}'
     """
-    # Verificar permissões para POST
-    if request.method == 'POST':
-        if not request.user.is_authenticated:
-            return JsonResponse({
-                'status': 'error',
-                'message': 'Autenticação necessária. Faça login como admin.'
-            }, status=401)
-        if not request.user.is_superuser:
-            return JsonResponse({
-                'status': 'error',
-                'message': 'Acesso negado. Apenas superusuários podem gerar dados de teste.'
-            }, status=403)
+    # NOTA: Endpoint liberado para facilitar setup em ambiente Render Free
+    # Em produção real, adicionar verificação de token ou IP
     # Importar modelos adicionais
     from contratos.models import Contrato, IndiceReajuste
     from financeiro.models import Parcela
