@@ -35,8 +35,8 @@ Representa um escritório de contabilidade que gerencia múltiplas imobiliárias
 | email | EmailField | E-mail principal |
 | responsavel | CharField(200) | Nome do responsável |
 | ativo | BooleanField | Status de ativo |
-| created_at | DateTimeField | Data de criação |
-| updated_at | DateTimeField | Data de atualização |
+| criado_em | DateTimeField | Data de criação |
+| atualizado_em | DateTimeField | Data de atualização |
 
 ### Imobiliária
 Representa uma imobiliária vinculada a uma contabilidade.

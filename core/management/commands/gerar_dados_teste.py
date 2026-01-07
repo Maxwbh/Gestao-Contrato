@@ -65,77 +65,99 @@ class Command(BaseCommand):
 
         self.stdout.write(self.style.SUCCESS('Iniciando geração de dados de teste...'))
 
-        with transaction.atomic():
-            # 1. Criar Contabilidade
-            self.stdout.write('Criando Contabilidade...')
-            contabilidade = self.criar_contabilidade()
+        try:
+            with transaction.atomic():
+                # 1. Criar Contabilidade
+                self.stdout.write('Criando Contabilidade...')
+                contabilidade = self.criar_contabilidade()
 
-            # 2. Criar 2 Imobiliárias
-            self.stdout.write('Criando Imobiliárias...')
-            imobiliarias = self.criar_imobiliarias(contabilidade, 2)
+                # 2. Criar 2 Imobiliárias
+                self.stdout.write('Criando Imobiliárias...')
+                imobiliarias = self.criar_imobiliarias(contabilidade, 2)
 
-            # 2.1 Criar Contas Bancárias para cada imobiliária
-            self.stdout.write('Criando Contas Bancárias...')
-            contas_bancarias = self.criar_contas_bancarias(imobiliarias)
+                # 2.1 Criar Contas Bancárias para cada imobiliária
+                self.stdout.write('Criando Contas Bancárias...')
+                contas_bancarias = self.criar_contas_bancarias(imobiliarias)
 
-            # 3. Criar 2 Loteamentos com 30 Lotes cada
-            self.stdout.write('Criando Loteamentos...')
-            lotes = self.criar_loteamentos(imobiliarias, 2, 30)
+                # 3. Criar 2 Loteamentos com 30 Lotes cada
+                self.stdout.write('Criando Loteamentos...')
+                lotes = self.criar_loteamentos(imobiliarias, 2, 30)
 
-            # 4. Criar 5 Terrenos
-            self.stdout.write('Criando Terrenos...')
-            terrenos = self.criar_terrenos(imobiliarias, 5)
+                # 4. Criar 5 Terrenos
+                self.stdout.write('Criando Terrenos...')
+                terrenos = self.criar_terrenos(imobiliarias, 5)
 
-            # 5. Criar 60 Compradores (80% PF, 20% PJ)
-            self.stdout.write('Criando Compradores (PF e PJ)...')
-            compradores = self.criar_compradores(60)
+                # 5. Criar 60 Compradores (80% PF, 20% PJ)
+                self.stdout.write('Criando Compradores (PF e PJ)...')
+                compradores = self.criar_compradores(60)
 
-            # 6. Criar Contratos
-            self.stdout.write('Criando Contratos...')
-            imoveis = lotes + terrenos
-            contratos = self.criar_contratos(imoveis, compradores, imobiliarias)
+                # 6. Criar Contratos
+                self.stdout.write('Criando Contratos...')
+                imoveis = lotes + terrenos
+                contratos = self.criar_contratos(imoveis, compradores, imobiliarias)
 
-            # 7. Remover parcelas futuras (manter apenas até o mês atual)
-            self.stdout.write('Removendo parcelas futuras...')
-            parcelas_removidas = self.remover_parcelas_futuras()
-            self.stdout.write(f'   {parcelas_removidas} parcelas futuras removidas')
+                # 7. Remover parcelas futuras (manter apenas até o mês atual)
+                self.stdout.write('Removendo parcelas futuras...')
+                parcelas_removidas = self.remover_parcelas_futuras()
+                self.stdout.write(f'   {parcelas_removidas} parcelas futuras removidas')
 
-            # 8. Marcar 90% das parcelas como pagas
-            self.stdout.write('Marcando parcelas como pagas...')
-            self.marcar_parcelas_pagas(contratos, 0.90)
+                # 8. Marcar 90% das parcelas como pagas
+                self.stdout.write('Marcando parcelas como pagas...')
+                self.marcar_parcelas_pagas(contratos, 0.90)
 
-            # 9. Gerar índices de reajuste
-            self.stdout.write('Gerando índices de reajuste...')
-            indices = self.gerar_indices_reajuste()
+                # 9. Gerar índices de reajuste
+                self.stdout.write('Gerando índices de reajuste...')
+                indices = self.gerar_indices_reajuste()
 
-            # 10. Criar prestações intermediárias para alguns contratos
-            self.stdout.write('Criando prestações intermediárias...')
-            intermediarias = self.criar_prestacoes_intermediarias(contratos)
+                # 10. Criar prestações intermediárias para alguns contratos
+                self.stdout.write('Criando prestações intermediárias...')
+                intermediarias = self.criar_prestacoes_intermediarias(contratos)
 
-            # 11. Criar acessos ao portal para alguns compradores
-            self.stdout.write('Criando acessos ao portal do comprador...')
-            acessos = self.criar_acessos_portal(compradores)
+                # 11. Criar acessos ao portal para alguns compradores
+                self.stdout.write('Criando acessos ao portal do comprador...')
+                acessos = self.criar_acessos_portal(compradores)
 
-            # 12. Criar reajustes aplicados para contratos antigos
-            self.stdout.write('Criando reajustes aplicados...')
-            reajustes = self.criar_reajustes_aplicados(contratos)
+                # 12. Criar reajustes aplicados para contratos antigos
+                self.stdout.write('Criando reajustes aplicados...')
+                reajustes = self.criar_reajustes_aplicados(contratos)
 
-        # Contagem final
-        pf_count = len([c for c in compradores if c.tipo_pessoa == 'PF'])
-        pj_count = len([c for c in compradores if c.tipo_pessoa == 'PJ'])
+            # Contagem final
+            pf_count = len([c for c in compradores if c.tipo_pessoa == 'PF'])
+            pj_count = len([c for c in compradores if c.tipo_pessoa == 'PJ'])
 
-        self.stdout.write(self.style.SUCCESS('\n✅ Dados gerados com sucesso!'))
-        self.stdout.write(self.style.SUCCESS(f'   • 1 Contabilidade'))
-        self.stdout.write(self.style.SUCCESS(f'   • 2 Imobiliárias'))
-        self.stdout.write(self.style.SUCCESS(f'   • {len(contas_bancarias)} Contas Bancárias'))
-        self.stdout.write(self.style.SUCCESS(f'   • {len(lotes)} Lotes'))
-        self.stdout.write(self.style.SUCCESS(f'   • {len(terrenos)} Terrenos'))
-        self.stdout.write(self.style.SUCCESS(f'   • {len(compradores)} Compradores ({pf_count} PF + {pj_count} PJ)'))
-        self.stdout.write(self.style.SUCCESS(f'   • {len(contratos)} Contratos'))
-        self.stdout.write(self.style.SUCCESS(f'   • {intermediarias} Prestações Intermediárias'))
-        self.stdout.write(self.style.SUCCESS(f'   • {acessos} Acessos ao Portal'))
-        self.stdout.write(self.style.SUCCESS(f'   • {reajustes} Reajustes Aplicados'))
-        self.stdout.write(self.style.SUCCESS(f'   • {indices} Índices de Reajuste'))
+            self.stdout.write(self.style.SUCCESS('\n✅ Dados gerados com sucesso!'))
+            self.stdout.write(self.style.SUCCESS(f'   • 1 Contabilidade'))
+            self.stdout.write(self.style.SUCCESS(f'   • 2 Imobiliárias'))
+            self.stdout.write(self.style.SUCCESS(f'   • {len(contas_bancarias)} Contas Bancárias'))
+            self.stdout.write(self.style.SUCCESS(f'   • {len(lotes)} Lotes'))
+            self.stdout.write(self.style.SUCCESS(f'   • {len(terrenos)} Terrenos'))
+            self.stdout.write(self.style.SUCCESS(f'   • {len(compradores)} Compradores ({pf_count} PF + {pj_count} PJ)'))
+            self.stdout.write(self.style.SUCCESS(f'   • {len(contratos)} Contratos'))
+            self.stdout.write(self.style.SUCCESS(f'   • {intermediarias} Prestações Intermediárias'))
+            self.stdout.write(self.style.SUCCESS(f'   • {acessos} Acessos ao Portal'))
+            self.stdout.write(self.style.SUCCESS(f'   • {reajustes} Reajustes Aplicados'))
+            self.stdout.write(self.style.SUCCESS(f'   • {indices} Índices de Reajuste'))
+
+        except Exception as e:
+            import traceback
+            self.stdout.write(self.style.ERROR('\n❌ ERRO NA GERAÇÃO DE DADOS'))
+            self.stdout.write(self.style.ERROR('=' * 60))
+            self.stdout.write(self.style.ERROR(f'Tipo: {type(e).__name__}'))
+            self.stdout.write(self.style.ERROR(f'Mensagem: {str(e)}'))
+
+            # Se for ValidationError, mostrar detalhes dos campos
+            if hasattr(e, 'message_dict'):
+                self.stdout.write(self.style.ERROR('\nErros de validação por campo:'))
+                for field, errors in e.message_dict.items():
+                    self.stdout.write(self.style.ERROR(f'  • {field}: {errors}'))
+
+            # Mostrar traceback completo
+            self.stdout.write(self.style.ERROR('\nTraceback completo:'))
+            self.stdout.write(self.style.ERROR(traceback.format_exc()))
+            self.stdout.write(self.style.ERROR('=' * 60))
+
+            # Re-lançar a exceção para que seja capturada pela view
+            raise
 
     def limpar_dados(self):
         """Limpa todos os dados de teste"""
