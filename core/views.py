@@ -1384,3 +1384,34 @@ def api_listar_acessos_usuario(request, usuario_id):
         return JsonResponse({'status': 'success', 'acessos': data})
     except Exception as e:
         return JsonResponse({'status': 'error', 'message': str(e)}, status=500)
+
+
+# =============================================================================
+# PÁGINA DE DADOS DE TESTE (Admin Only)
+# =============================================================================
+
+@login_required
+def pagina_dados_teste(request):
+    """
+    Página HTML para gerar/limpar dados de teste.
+    Apenas administradores (is_staff ou is_superuser) podem acessar.
+    """
+    if not (request.user.is_staff or request.user.is_superuser):
+        messages.error(request, 'Acesso negado. Apenas administradores podem acessar esta página.')
+        return redirect('core:dashboard')
+
+    from contratos.models import Contrato, IndiceReajuste
+    from financeiro.models import Parcela
+
+    stats = {
+        'contabilidades': Contabilidade.objects.count(),
+        'imobiliarias': Imobiliaria.objects.count(),
+        'contas_bancarias': ContaBancaria.objects.count(),
+        'imoveis': Imovel.objects.count(),
+        'compradores': Comprador.objects.count(),
+        'contratos': Contrato.objects.count(),
+        'parcelas': Parcela.objects.count(),
+        'indices_reajuste': IndiceReajuste.objects.count(),
+    }
+
+    return render(request, 'core/dados_teste.html', {'stats': stats})

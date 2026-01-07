@@ -1,0 +1,295 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Dados de Teste - Gestao de Contratos{% endblock %}
+
+{% block content %}
+<div class="container-fluid main-container">
+    <div class="row">
+        <div class="col-12">
+            <nav aria-label="breadcrumb">
+                <ol class="breadcrumb">
+                    <li class="breadcrumb-item"><a href="{% url 'core:dashboard' %}">Dashboard</a></li>
+                    <li class="breadcrumb-item active">Dados de Teste</li>
+                </ol>
+            </nav>
+        </div>
+    </div>
+
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <span><i class="fas fa-database me-2"></i>Gerador de Dados de Teste</span>
+                    <span class="badge bg-warning text-dark">Apenas Admin</span>
+                </div>
+                <div class="card-body">
+                    <div class="alert alert-info">
+                        <i class="fas fa-info-circle me-2"></i>
+                        <strong>Render Free Tier:</strong> Use esta pagina para popular o banco de dados com dados de teste sem precisar de acesso ao terminal.
+                    </div>
+
+                    <!-- Estatisticas Atuais -->
+                    <h5 class="mb-3"><i class="fas fa-chart-bar me-2"></i>Dados Atuais no Banco</h5>
+                    <div class="row mb-4" id="stats-container">
+                        <div class="col-md-3 col-6 mb-2">
+                            <div class="card bg-primary text-white">
+                                <div class="card-body py-2 text-center">
+                                    <h4 class="mb-0" id="stat-contabilidades">{{ stats.contabilidades }}</h4>
+                                    <small>Contabilidades</small>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-3 col-6 mb-2">
+                            <div class="card bg-success text-white">
+                                <div class="card-body py-2 text-center">
+                                    <h4 class="mb-0" id="stat-imobiliarias">{{ stats.imobiliarias }}</h4>
+                                    <small>Imobiliarias</small>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-3 col-6 mb-2">
+                            <div class="card bg-info text-white">
+                                <div class="card-body py-2 text-center">
+                                    <h4 class="mb-0" id="stat-imoveis">{{ stats.imoveis }}</h4>
+                                    <small>Imoveis</small>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-3 col-6 mb-2">
+                            <div class="card bg-secondary text-white">
+                                <div class="card-body py-2 text-center">
+                                    <h4 class="mb-0" id="stat-compradores">{{ stats.compradores }}</h4>
+                                    <small>Compradores</small>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-3 col-6 mb-2">
+                            <div class="card bg-warning text-dark">
+                                <div class="card-body py-2 text-center">
+                                    <h4 class="mb-0" id="stat-contratos">{{ stats.contratos }}</h4>
+                                    <small>Contratos</small>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-3 col-6 mb-2">
+                            <div class="card bg-danger text-white">
+                                <div class="card-body py-2 text-center">
+                                    <h4 class="mb-0" id="stat-parcelas">{{ stats.parcelas }}</h4>
+                                    <small>Parcelas</small>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-3 col-6 mb-2">
+                            <div class="card bg-dark text-white">
+                                <div class="card-body py-2 text-center">
+                                    <h4 class="mb-0" id="stat-contas">{{ stats.contas_bancarias }}</h4>
+                                    <small>Contas Bancarias</small>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-3 col-6 mb-2">
+                            <div class="card bg-primary text-white">
+                                <div class="card-body py-2 text-center">
+                                    <h4 class="mb-0" id="stat-indices">{{ stats.indices_reajuste }}</h4>
+                                    <small>Indices Reajuste</small>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <hr>
+
+                    <!-- Acoes -->
+                    <h5 class="mb-3"><i class="fas fa-cogs me-2"></i>Acoes</h5>
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <div class="card border-success">
+                                <div class="card-header bg-success text-white">
+                                    <i class="fas fa-plus-circle me-2"></i>Gerar Dados de Teste
+                                </div>
+                                <div class="card-body">
+                                    <p class="card-text">Gera massa completa de dados de teste:</p>
+                                    <ul class="small">
+                                        <li>1 Contabilidade</li>
+                                        <li>2 Imobiliarias</li>
+                                        <li>6 Contas Bancarias (BB, Sicoob, Bradesco)</li>
+                                        <li>60 Lotes + 5 Terrenos</li>
+                                        <li>60 Compradores (48 PF + 12 PJ)</li>
+                                        <li>Contratos com parcelas</li>
+                                        <li>Indices de reajuste (36 meses)</li>
+                                    </ul>
+                                    <div class="form-check mb-3">
+                                        <input class="form-check-input" type="checkbox" id="limpar-antes">
+                                        <label class="form-check-label" for="limpar-antes">
+                                            Limpar dados existentes antes de gerar
+                                        </label>
+                                    </div>
+                                    <button type="button" class="btn btn-success w-100" id="btn-gerar" onclick="gerarDados()">
+                                        <i class="fas fa-play me-2"></i>Gerar Dados
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <div class="card border-danger">
+                                <div class="card-header bg-danger text-white">
+                                    <i class="fas fa-trash-alt me-2"></i>Limpar Dados de Teste
+                                </div>
+                                <div class="card-body">
+                                    <p class="card-text text-danger">
+                                        <strong>ATENCAO:</strong> Esta acao ira excluir TODOS os dados do sistema!
+                                    </p>
+                                    <ul class="small text-muted">
+                                        <li>Todas as parcelas</li>
+                                        <li>Todos os contratos</li>
+                                        <li>Todos os compradores</li>
+                                        <li>Todos os imoveis</li>
+                                        <li>Todas as imobiliarias</li>
+                                        <li>Todas as contabilidades</li>
+                                    </ul>
+                                    <div class="form-check mb-3">
+                                        <input class="form-check-input" type="checkbox" id="confirmar-exclusao">
+                                        <label class="form-check-label text-danger" for="confirmar-exclusao">
+                                            <strong>Confirmo que desejo excluir TODOS os dados</strong>
+                                        </label>
+                                    </div>
+                                    <button type="button" class="btn btn-danger w-100" id="btn-limpar" onclick="limparDados()" disabled>
+                                        <i class="fas fa-trash me-2"></i>Limpar Todos os Dados
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Output -->
+                    <div class="mt-4" id="output-container" style="display: none;">
+                        <h5><i class="fas fa-terminal me-2"></i>Resultado</h5>
+                        <div class="alert" id="output-alert">
+                            <pre id="output-text" class="mb-0" style="white-space: pre-wrap; font-size: 0.85em;"></pre>
+                        </div>
+                    </div>
+
+                    <!-- Loading -->
+                    <div class="text-center mt-4" id="loading" style="display: none;">
+                        <div class="spinner-border text-primary" role="status">
+                            <span class="visually-hidden">Processando...</span>
+                        </div>
+                        <p class="mt-2 text-muted">Processando... Isso pode levar alguns segundos.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+// Habilitar/desabilitar botao de limpar baseado no checkbox
+document.getElementById('confirmar-exclusao').addEventListener('change', function() {
+    document.getElementById('btn-limpar').disabled = !this.checked;
+});
+
+function showLoading(show) {
+    document.getElementById('loading').style.display = show ? 'block' : 'none';
+    document.getElementById('btn-gerar').disabled = show;
+    document.getElementById('btn-limpar').disabled = show || !document.getElementById('confirmar-exclusao').checked;
+}
+
+function showOutput(message, isError) {
+    const container = document.getElementById('output-container');
+    const alert = document.getElementById('output-alert');
+    const text = document.getElementById('output-text');
+
+    container.style.display = 'block';
+    alert.className = 'alert ' + (isError ? 'alert-danger' : 'alert-success');
+    text.textContent = message;
+}
+
+function updateStats(stats) {
+    if (stats) {
+        document.getElementById('stat-contabilidades').textContent = stats.contabilidades || 0;
+        document.getElementById('stat-imobiliarias').textContent = stats.imobiliarias || 0;
+        document.getElementById('stat-imoveis').textContent = stats.imoveis || 0;
+        document.getElementById('stat-compradores').textContent = stats.compradores || 0;
+        document.getElementById('stat-contratos').textContent = stats.contratos || 0;
+        document.getElementById('stat-parcelas').textContent = stats.parcelas || 0;
+        document.getElementById('stat-contas').textContent = stats.contas_bancarias || 0;
+        document.getElementById('stat-indices').textContent = stats.indices_reajuste || 0;
+    }
+}
+
+function gerarDados() {
+    const limpar = document.getElementById('limpar-antes').checked;
+
+    showLoading(true);
+    document.getElementById('output-container').style.display = 'none';
+
+    fetch('{% url "core:gerar_dados_teste" %}', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': '{{ csrf_token }}'
+        },
+        body: JSON.stringify({ limpar: limpar })
+    })
+    .then(response => response.json())
+    .then(data => {
+        showLoading(false);
+        if (data.status === 'success') {
+            showOutput(data.output || 'Dados gerados com sucesso!', false);
+            updateStats(data.dados_gerados);
+        } else {
+            showOutput('Erro: ' + (data.message || 'Erro desconhecido') + '\n\n' + (data.traceback || ''), true);
+        }
+    })
+    .catch(error => {
+        showLoading(false);
+        showOutput('Erro de conexao: ' + error.message, true);
+    });
+}
+
+function limparDados() {
+    if (!document.getElementById('confirmar-exclusao').checked) {
+        alert('Voce precisa confirmar a exclusao primeiro.');
+        return;
+    }
+
+    if (!confirm('TEM CERTEZA que deseja excluir TODOS os dados? Esta acao NAO pode ser desfeita!')) {
+        return;
+    }
+
+    showLoading(true);
+    document.getElementById('output-container').style.display = 'none';
+
+    fetch('{% url "core:limpar_dados_teste" %}', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': '{{ csrf_token }}'
+        },
+        body: JSON.stringify({ confirmar: true })
+    })
+    .then(response => response.json())
+    .then(data => {
+        showLoading(false);
+        if (data.status === 'success') {
+            showOutput('Dados limpos com sucesso!\n\nRegistros excluidos:\n' + JSON.stringify(data.registros_excluidos, null, 2), false);
+            // Zerar estatisticas
+            updateStats({
+                contabilidades: 0, imobiliarias: 0, imoveis: 0,
+                compradores: 0, contratos: 0, parcelas: 0,
+                contas_bancarias: 0, indices_reajuste: 0
+            });
+            document.getElementById('confirmar-exclusao').checked = false;
+            document.getElementById('btn-limpar').disabled = true;
+        } else {
+            showOutput('Erro: ' + (data.message || 'Erro desconhecido'), true);
+        }
+    })
+    .catch(error => {
+        showLoading(false);
+        showOutput('Erro de conexao: ' + error.message, true);
+    });
+}
+</script>
+{% endblock %}

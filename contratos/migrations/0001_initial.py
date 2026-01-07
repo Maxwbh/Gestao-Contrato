@@ -21,8 +21,8 @@ class Migration(migrations.Migration):
             name='IndiceReajuste',
             fields=[
                 ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-                ('created_at', models.DateTimeField(auto_now_add=True)),
-                ('updated_at', models.DateTimeField(auto_now=True)),
+                ('criado_em', models.DateTimeField(auto_now_add=True, verbose_name='Criado em')),
+                ('atualizado_em', models.DateTimeField(auto_now=True, verbose_name='Atualizado em')),
                 ('tipo_indice', models.CharField(
                     choices=[
                         ('IPCA', 'IPCA - Índice de Preços ao Consumidor Amplo'),
@@ -95,8 +95,8 @@ class Migration(migrations.Migration):
             name='Contrato',
             fields=[
                 ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-                ('created_at', models.DateTimeField(auto_now_add=True)),
-                ('updated_at', models.DateTimeField(auto_now=True)),
+                ('criado_em', models.DateTimeField(auto_now_add=True, verbose_name='Criado em')),
+                ('atualizado_em', models.DateTimeField(auto_now=True, verbose_name='Atualizado em')),
                 ('numero_contrato', models.CharField(
                     max_length=50,
                     unique=True,
@@ -269,8 +269,8 @@ class Migration(migrations.Migration):
             name='PrestacaoIntermediaria',
             fields=[
                 ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-                ('created_at', models.DateTimeField(auto_now_add=True)),
-                ('updated_at', models.DateTimeField(auto_now=True)),
+                ('criado_em', models.DateTimeField(auto_now_add=True, verbose_name='Criado em')),
+                ('atualizado_em', models.DateTimeField(auto_now=True, verbose_name='Atualizado em')),
                 ('numero_sequencial', models.PositiveIntegerField(
                     validators=[
                         django.core.validators.MinValueValidator(1),
