@@ -1,11 +1,21 @@
 """
-Servico de Integracao com BRCobranca para Geracao de Boletos
+Servico de Integracao com boleto_cnab_api para Geracao de Boletos
 
-Este servico integra com a API BRCobranca para geracao
-de boletos bancarios. Suporta os principais bancos brasileiros.
+Este servico integra com a API boleto_cnab_api para geracao
+de boletos bancarios e arquivos CNAB. Suporta os principais bancos brasileiros.
 
-API BRCobranca: https://github.com/Maxwbh/brcobranca
-Docker: docker run -p 9292:9292 maxwbh/brcobranca
+API boleto_cnab_api: https://github.com/Maxwbh/boleto_cnab_api
+Docker: docker run -p 9292:9292 maxwbh/boleto_cnab_api
+
+Endpoints disponiveis:
+- GET  /api/health           - Verificacao de saude
+- GET  /api/boleto/validate  - Validar dados do boleto
+- GET  /api/boleto/data      - Obter dados sem gerar PDF
+- GET  /api/boleto/nosso_numero - Obter nosso numero
+- GET  /api/boleto           - Gerar boleto (PDF/JPG/PNG/TIF)
+- POST /api/boleto/multi     - Gerar multiplos boletos
+- POST /api/remessa          - Gerar arquivo CNAB remessa
+- POST /api/retorno          - Processar arquivo CNAB retorno
 
 Desenvolvedor: Maxwell da Silva Oliveira
 Email: maxwbh@gmail.com
@@ -32,13 +42,18 @@ class BRCobrancaError(Exception):
 
 class BoletoService:
     """
-    Servico para geracao de boletos bancarios via BRCobranca.
+    Servico para geracao de boletos bancarios via boleto_cnab_api.
 
-    O BRCobranca (boleto_cnab_api) deve estar rodando como container Docker:
-    docker run -p 9292:9292 akretion/boleto_cnab_api
+    O boleto_cnab_api deve estar rodando como container Docker:
+    docker run -p 9292:9292 maxwbh/boleto_cnab_api
 
     Configurar no settings.py:
     BRCOBRANCA_URL = 'http://localhost:9292'
+
+    Endpoints utilizados:
+    - GET /api/boleto - Gerar boleto individual
+    - POST /api/boleto/multi - Gerar multiplos boletos
+    - GET /api/boleto/validate - Validar dados do boleto
     """
 
     # Mapeamento de codigos de banco para nomes no BRCobranca
