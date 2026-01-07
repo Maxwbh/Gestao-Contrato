@@ -75,28 +75,33 @@ with connection.cursor() as cursor:
             add_column_if_not_exists(cursor, table, 'criado_em', "TIMESTAMP WITH TIME ZONE DEFAULT NOW()")
             add_column_if_not_exists(cursor, table, 'atualizado_em', "TIMESTAMP WITH TIME ZONE DEFAULT NOW()")
 
-            # Corrigir colunas em inglês (se existirem) - REMOVER NOT NULL e adicionar DEFAULT
+            # REMOVER colunas duplicadas em inglês (created_at, updated_at)
+            # Primeiro migrar dados, depois dropar as colunas
             cursor.execute(f"""
                 DO $$
                 BEGIN
-                    -- Se created_at existe, REMOVER NOT NULL e adicionar default
+                    -- Se created_at existe, migrar dados para criado_em e DROPAR
                     IF EXISTS (
                         SELECT 1 FROM information_schema.columns
                         WHERE table_name = '{table}' AND column_name = 'created_at'
                     ) THEN
-                        ALTER TABLE {table} ALTER COLUMN created_at DROP NOT NULL;
-                        ALTER TABLE {table} ALTER COLUMN created_at SET DEFAULT NOW();
-                        UPDATE {table} SET created_at = COALESCE(created_at, criado_em, NOW()) WHERE created_at IS NULL;
+                        -- Migrar dados de created_at para criado_em onde criado_em é NULL
+                        UPDATE {table} SET criado_em = created_at WHERE criado_em IS NULL AND created_at IS NOT NULL;
+                        -- Dropar a coluna duplicada
+                        ALTER TABLE {table} DROP COLUMN created_at;
+                        RAISE NOTICE 'Dropped column created_at from {table}';
                     END IF;
 
-                    -- Se updated_at existe, REMOVER NOT NULL e adicionar default
+                    -- Se updated_at existe, migrar dados para atualizado_em e DROPAR
                     IF EXISTS (
                         SELECT 1 FROM information_schema.columns
                         WHERE table_name = '{table}' AND column_name = 'updated_at'
                     ) THEN
-                        ALTER TABLE {table} ALTER COLUMN updated_at DROP NOT NULL;
-                        ALTER TABLE {table} ALTER COLUMN updated_at SET DEFAULT NOW();
-                        UPDATE {table} SET updated_at = COALESCE(updated_at, atualizado_em, NOW()) WHERE updated_at IS NULL;
+                        -- Migrar dados de updated_at para atualizado_em onde atualizado_em é NULL
+                        UPDATE {table} SET atualizado_em = updated_at WHERE atualizado_em IS NULL AND updated_at IS NOT NULL;
+                        -- Dropar a coluna duplicada
+                        ALTER TABLE {table} DROP COLUMN updated_at;
+                        RAISE NOTICE 'Dropped column updated_at from {table}';
                     END IF;
                 END $$;
             """)
