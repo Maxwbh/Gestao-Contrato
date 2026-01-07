@@ -75,26 +75,28 @@ with connection.cursor() as cursor:
             add_column_if_not_exists(cursor, table, 'criado_em', "TIMESTAMP WITH TIME ZONE DEFAULT NOW()")
             add_column_if_not_exists(cursor, table, 'atualizado_em', "TIMESTAMP WITH TIME ZONE DEFAULT NOW()")
 
-            # Corrigir colunas em inglês (se existirem) - adicionar DEFAULT para evitar NOT NULL error
+            # Corrigir colunas em inglês (se existirem) - REMOVER NOT NULL e adicionar DEFAULT
             cursor.execute(f"""
                 DO $$
                 BEGIN
-                    -- Se created_at existe, adicionar default
+                    -- Se created_at existe, REMOVER NOT NULL e adicionar default
                     IF EXISTS (
                         SELECT 1 FROM information_schema.columns
                         WHERE table_name = '{table}' AND column_name = 'created_at'
                     ) THEN
+                        ALTER TABLE {table} ALTER COLUMN created_at DROP NOT NULL;
                         ALTER TABLE {table} ALTER COLUMN created_at SET DEFAULT NOW();
-                        UPDATE {table} SET created_at = NOW() WHERE created_at IS NULL;
+                        UPDATE {table} SET created_at = COALESCE(created_at, criado_em, NOW()) WHERE created_at IS NULL;
                     END IF;
 
-                    -- Se updated_at existe, adicionar default
+                    -- Se updated_at existe, REMOVER NOT NULL e adicionar default
                     IF EXISTS (
                         SELECT 1 FROM information_schema.columns
                         WHERE table_name = '{table}' AND column_name = 'updated_at'
                     ) THEN
+                        ALTER TABLE {table} ALTER COLUMN updated_at DROP NOT NULL;
                         ALTER TABLE {table} ALTER COLUMN updated_at SET DEFAULT NOW();
-                        UPDATE {table} SET updated_at = NOW() WHERE updated_at IS NULL;
+                        UPDATE {table} SET updated_at = COALESCE(updated_at, atualizado_em, NOW()) WHERE updated_at IS NULL;
                     END IF;
                 END $$;
             """)
