@@ -3146,3 +3146,472 @@ def api_parcela_registrar_pagamento(request, parcela_id):
             'sucesso': False,
             'erro': str(e)
         }, status=500)
+
+
+# =============================================================================
+# APIs REST - BOLETO E CNAB
+# =============================================================================
+
+@login_required
+def api_boleto_gerar(request, parcela_id):
+    """
+    API para gerar boleto de uma parcela.
+
+    POST /api/boletos/{parcela_id}/gerar/
+
+    Body JSON (opcional):
+        - conta_bancaria_id: ID da conta bancária (usa padrão se não informado)
+        - force: Força regeneração mesmo se já existe (default: false)
+        - enviar_email: Envia email ao comprador (default: true)
+
+    Returns:
+        - sucesso: boolean
+        - boleto: dados do boleto gerado
+        - erro: mensagem de erro (se houver)
+    """
+    import json
+
+    parcela = get_object_or_404(Parcela, pk=parcela_id)
+
+    if request.method != 'POST':
+        return JsonResponse({
+            'sucesso': False,
+            'erro': 'Método não permitido. Use POST.'
+        }, status=405)
+
+    try:
+        data = json.loads(request.body) if request.body else {}
+
+        conta_bancaria_id = data.get('conta_bancaria_id')
+        force = data.get('force', False)
+        enviar_email = data.get('enviar_email', True)
+
+        if parcela.pago:
+            return JsonResponse({
+                'sucesso': False,
+                'erro': 'Parcela já está paga.'
+            }, status=400)
+
+        pode_gerar, motivo = parcela.pode_gerar_boleto()
+        if not pode_gerar and not force:
+            return JsonResponse({
+                'sucesso': False,
+                'erro': motivo,
+                'bloqueado_reajuste': True
+            }, status=400)
+
+        if parcela.tem_boleto and not force:
+            return JsonResponse({
+                'sucesso': True,
+                'mensagem': 'Boleto já existe.',
+                'boleto': {
+                    'parcela_id': parcela.id,
+                    'nosso_numero': parcela.nosso_numero,
+                    'linha_digitavel': parcela.linha_digitavel,
+                    'codigo_barras': parcela.codigo_barras,
+                    'valor': float(parcela.valor_boleto or parcela.valor_atual),
+                    'data_vencimento': parcela.data_vencimento.strftime('%Y-%m-%d'),
+                    'status': parcela.status_boleto,
+                    'tem_pdf': bool(parcela.boleto_pdf),
+                }
+            })
+
+        conta_bancaria = None
+        if conta_bancaria_id:
+            conta_bancaria = get_object_or_404(ContaBancaria, pk=conta_bancaria_id, ativo=True)
+
+        resultado = parcela.gerar_boleto(
+            conta_bancaria=conta_bancaria,
+            force=force,
+            enviar_email=enviar_email
+        )
+
+        if resultado and resultado.get('sucesso'):
+            parcela.refresh_from_db()
+            return JsonResponse({
+                'sucesso': True,
+                'mensagem': 'Boleto gerado com sucesso.',
+                'boleto': {
+                    'parcela_id': parcela.id,
+                    'nosso_numero': parcela.nosso_numero,
+                    'linha_digitavel': parcela.linha_digitavel,
+                    'codigo_barras': parcela.codigo_barras,
+                    'valor': float(parcela.valor_boleto or parcela.valor_atual),
+                    'data_vencimento': parcela.data_vencimento.strftime('%Y-%m-%d'),
+                    'status': parcela.status_boleto,
+                    'tem_pdf': bool(parcela.boleto_pdf),
+                    'pix_copia_cola': parcela.pix_copia_cola or None,
+                }
+            })
+        else:
+            return JsonResponse({
+                'sucesso': False,
+                'erro': resultado.get('erro') if resultado else 'Erro ao gerar boleto.'
+            }, status=500)
+
+    except json.JSONDecodeError:
+        return JsonResponse({'sucesso': False, 'erro': 'JSON inválido.'}, status=400)
+    except Exception as e:
+        logger.exception(f"Erro ao gerar boleto via API: {e}")
+        return JsonResponse({'sucesso': False, 'erro': str(e)}, status=500)
+
+
+@login_required
+def api_boleto_detalhe(request, parcela_id):
+    """
+    API para obter detalhes do boleto de uma parcela.
+    GET /api/boletos/{parcela_id}/
+    """
+    parcela = get_object_or_404(Parcela, pk=parcela_id)
+
+    if not parcela.tem_boleto:
+        return JsonResponse({
+            'sucesso': False,
+            'erro': 'Esta parcela não possui boleto gerado.'
+        }, status=404)
+
+    return JsonResponse({
+        'sucesso': True,
+        'boleto': {
+            'parcela_id': parcela.id,
+            'contrato_id': parcela.contrato_id,
+            'numero_parcela': parcela.numero_parcela,
+            'nosso_numero': parcela.nosso_numero,
+            'numero_documento': parcela.numero_documento,
+            'linha_digitavel': parcela.linha_digitavel,
+            'codigo_barras': parcela.codigo_barras,
+            'valor': float(parcela.valor_boleto or parcela.valor_atual),
+            'valor_original': float(parcela.valor_original),
+            'data_vencimento': parcela.data_vencimento.strftime('%Y-%m-%d'),
+            'status': parcela.status_boleto,
+            'status_display': parcela.get_status_boleto_display(),
+            'pago': parcela.pago,
+            'data_pagamento': parcela.data_pagamento.strftime('%Y-%m-%d') if parcela.data_pagamento else None,
+            'valor_pago': float(parcela.valor_pago) if parcela.valor_pago else None,
+            'data_geracao': parcela.data_geracao_boleto.isoformat() if parcela.data_geracao_boleto else None,
+            'tem_pdf': bool(parcela.boleto_pdf),
+            'boleto_url': parcela.boleto_url or None,
+            'pix_copia_cola': parcela.pix_copia_cola or None,
+            'comprador': {
+                'nome': parcela.contrato.comprador.nome,
+                'documento': parcela.contrato.comprador.cpf or parcela.contrato.comprador.cnpj,
+            }
+        }
+    })
+
+
+@login_required
+@require_POST
+def api_boleto_cancelar(request, parcela_id):
+    """
+    API para cancelar boleto de uma parcela.
+    POST /api/boletos/{parcela_id}/cancelar/
+    Body: {"motivo": "texto"}
+    """
+    import json
+    parcela = get_object_or_404(Parcela, pk=parcela_id)
+
+    if not parcela.tem_boleto:
+        return JsonResponse({'sucesso': False, 'erro': 'Sem boleto para cancelar.'}, status=400)
+    if parcela.pago:
+        return JsonResponse({'sucesso': False, 'erro': 'Parcela já paga.'}, status=400)
+
+    try:
+        data = json.loads(request.body) if request.body else {}
+        motivo = data.get('motivo', '')
+        if not motivo:
+            return JsonResponse({'sucesso': False, 'erro': 'Informe o motivo.'}, status=400)
+
+        parcela.cancelar_boleto(motivo=motivo)
+        return JsonResponse({'sucesso': True, 'mensagem': 'Boleto cancelado.'})
+
+    except json.JSONDecodeError:
+        return JsonResponse({'sucesso': False, 'erro': 'JSON inválido.'}, status=400)
+    except Exception as e:
+        logger.exception(f"Erro ao cancelar boleto: {e}")
+        return JsonResponse({'sucesso': False, 'erro': str(e)}, status=500)
+
+
+@login_required
+def api_boletos_lote(request):
+    """
+    API para gerar boletos em lote.
+    POST /api/boletos/lote/
+    Body: {"parcela_ids": [1,2,3], "conta_bancaria_id": 1, "force": false}
+    """
+    import json
+
+    if request.method != 'POST':
+        return JsonResponse({'sucesso': False, 'erro': 'Use POST.'}, status=405)
+
+    try:
+        data = json.loads(request.body)
+        parcela_ids = data.get('parcela_ids', [])
+        conta_bancaria_id = data.get('conta_bancaria_id')
+        force = data.get('force', False)
+        enviar_email = data.get('enviar_email', False)
+
+        if not parcela_ids:
+            return JsonResponse({'sucesso': False, 'erro': 'Informe parcelas.'}, status=400)
+
+        parcelas = Parcela.objects.filter(pk__in=parcela_ids, pago=False)
+        if not parcelas.exists():
+            return JsonResponse({'sucesso': False, 'erro': 'Nenhuma parcela válida.'}, status=400)
+
+        conta_bancaria = None
+        if conta_bancaria_id:
+            conta_bancaria = get_object_or_404(ContaBancaria, pk=conta_bancaria_id, ativo=True)
+
+        resultados = []
+        gerados = erros = bloqueados = 0
+
+        for parcela in parcelas:
+            pode, motivo = parcela.pode_gerar_boleto()
+            if not pode and not force:
+                resultados.append({'parcela_id': parcela.id, 'sucesso': False, 'bloqueado': True, 'erro': motivo})
+                bloqueados += 1
+                continue
+
+            if parcela.tem_boleto and not force:
+                resultados.append({'parcela_id': parcela.id, 'sucesso': True, 'ja_existe': True})
+                continue
+
+            try:
+                res = parcela.gerar_boleto(conta_bancaria=conta_bancaria, force=force, enviar_email=enviar_email)
+                if res and res.get('sucesso'):
+                    gerados += 1
+                    resultados.append({'parcela_id': parcela.id, 'sucesso': True, 'nosso_numero': res.get('nosso_numero')})
+                else:
+                    erros += 1
+                    resultados.append({'parcela_id': parcela.id, 'sucesso': False, 'erro': res.get('erro') if res else 'Erro'})
+            except Exception as e:
+                erros += 1
+                resultados.append({'parcela_id': parcela.id, 'sucesso': False, 'erro': str(e)})
+
+        return JsonResponse({'sucesso': True, 'gerados': gerados, 'erros': erros, 'bloqueados': bloqueados, 'resultados': resultados})
+
+    except json.JSONDecodeError:
+        return JsonResponse({'sucesso': False, 'erro': 'JSON inválido.'}, status=400)
+    except Exception as e:
+        logger.exception(f"Erro em lote: {e}")
+        return JsonResponse({'sucesso': False, 'erro': str(e)}, status=500)
+
+
+# =============================================================================
+# APIs REST - CNAB REMESSA
+# =============================================================================
+
+@login_required
+def api_cnab_remessa_listar(request):
+    """API para listar remessas CNAB. GET /api/cnab/remessas/"""
+    from .models import ArquivoRemessa
+
+    qs = ArquivoRemessa.objects.select_related('conta_bancaria', 'conta_bancaria__imobiliaria').order_by('-data_geracao')
+
+    if request.GET.get('conta_bancaria_id'):
+        qs = qs.filter(conta_bancaria_id=request.GET['conta_bancaria_id'])
+    if request.GET.get('status'):
+        qs = qs.filter(status=request.GET['status'])
+
+    page = int(request.GET.get('page', 1))
+    per_page = min(int(request.GET.get('per_page', 20)), 100)
+    total = qs.count()
+    arquivos = qs[(page-1)*per_page:page*per_page]
+
+    remessas = [{
+        'id': a.id, 'numero_remessa': a.numero_remessa, 'layout': a.layout,
+        'nome_arquivo': a.nome_arquivo, 'status': a.status,
+        'data_geracao': a.data_geracao.isoformat() if a.data_geracao else None,
+        'quantidade_boletos': a.quantidade_boletos, 'valor_total': float(a.valor_total),
+        'conta_bancaria': {'id': a.conta_bancaria.id, 'banco': a.conta_bancaria.banco},
+    } for a in arquivos]
+
+    return JsonResponse({'sucesso': True, 'remessas': remessas, 'total': total, 'page': page})
+
+
+@login_required
+def api_cnab_remessa_detalhe(request, remessa_id):
+    """API para detalhes de remessa. GET /api/cnab/remessas/{id}/"""
+    from .models import ArquivoRemessa
+
+    arq = get_object_or_404(ArquivoRemessa.objects.select_related('conta_bancaria').prefetch_related('itens', 'itens__parcela'), pk=remessa_id)
+
+    itens = [{'id': i.id, 'parcela_id': i.parcela_id, 'nosso_numero': i.nosso_numero,
+              'valor': float(i.valor), 'data_vencimento': i.data_vencimento.strftime('%Y-%m-%d')} for i in arq.itens.all()]
+
+    return JsonResponse({
+        'sucesso': True,
+        'remessa': {
+            'id': arq.id, 'numero_remessa': arq.numero_remessa, 'layout': arq.layout,
+            'nome_arquivo': arq.nome_arquivo, 'status': arq.status,
+            'quantidade_boletos': arq.quantidade_boletos, 'valor_total': float(arq.valor_total),
+            'pode_reenviar': arq.pode_reenviar,
+        },
+        'itens': itens
+    })
+
+
+@login_required
+@require_POST
+def api_cnab_remessa_gerar(request):
+    """
+    API para gerar remessa CNAB.
+    POST /api/cnab/remessas/gerar/
+    Body: {"conta_bancaria_id": 1, "parcela_ids": [1,2,3], "layout": "CNAB_240"}
+    """
+    import json
+    from .models import StatusBoleto
+    from .services.cnab_service import CNABService
+
+    try:
+        data = json.loads(request.body)
+        conta_id = data.get('conta_bancaria_id')
+        parcela_ids = data.get('parcela_ids', [])
+        layout = data.get('layout', 'CNAB_240')
+
+        if not conta_id:
+            return JsonResponse({'sucesso': False, 'erro': 'Informe conta bancária.'}, status=400)
+        if not parcela_ids:
+            return JsonResponse({'sucesso': False, 'erro': 'Informe parcelas.'}, status=400)
+
+        conta = get_object_or_404(ContaBancaria, pk=conta_id, ativo=True)
+        parcelas = Parcela.objects.filter(pk__in=parcela_ids, status_boleto=StatusBoleto.GERADO, pago=False)
+
+        if not parcelas.exists():
+            return JsonResponse({'sucesso': False, 'erro': 'Nenhuma parcela válida.'}, status=400)
+
+        service = CNABService()
+        resultado = service.gerar_remessa(list(parcelas), conta, layout)
+
+        if resultado.get('sucesso'):
+            arq = resultado['arquivo_remessa']
+            return JsonResponse({
+                'sucesso': True,
+                'remessa': {'id': arq.id, 'numero_remessa': arq.numero_remessa, 'nome_arquivo': arq.nome_arquivo,
+                           'quantidade_boletos': resultado.get('quantidade_boletos'), 'valor_total': float(resultado.get('valor_total', 0))}
+            })
+        return JsonResponse({'sucesso': False, 'erro': resultado.get('erro')}, status=500)
+
+    except json.JSONDecodeError:
+        return JsonResponse({'sucesso': False, 'erro': 'JSON inválido.'}, status=400)
+    except Exception as e:
+        logger.exception(f"Erro ao gerar remessa: {e}")
+        return JsonResponse({'sucesso': False, 'erro': str(e)}, status=500)
+
+
+@login_required
+def api_cnab_boletos_disponiveis(request):
+    """API para listar boletos disponíveis para remessa. GET /api/cnab/boletos-disponiveis/?conta_bancaria_id=1"""
+    from .services.cnab_service import CNABService
+
+    conta_id = request.GET.get('conta_bancaria_id')
+    if not conta_id:
+        return JsonResponse({'sucesso': False, 'erro': 'Informe conta bancária.'}, status=400)
+
+    conta = get_object_or_404(ContaBancaria, pk=conta_id, ativo=True)
+    service = CNABService()
+    boletos = service.obter_boletos_sem_remessa(conta)
+
+    data = [{'parcela_id': p.id, 'numero_contrato': p.contrato.numero_contrato, 'numero_parcela': p.numero_parcela,
+             'nosso_numero': p.nosso_numero, 'valor': float(p.valor_boleto or p.valor_atual),
+             'data_vencimento': p.data_vencimento.strftime('%Y-%m-%d'), 'comprador': p.contrato.comprador.nome} for p in boletos]
+
+    return JsonResponse({'sucesso': True, 'boletos': data, 'total': len(data)})
+
+
+# =============================================================================
+# APIs REST - CNAB RETORNO
+# =============================================================================
+
+@login_required
+def api_cnab_retorno_listar(request):
+    """API para listar retornos CNAB. GET /api/cnab/retornos/"""
+    from .models import ArquivoRetorno
+
+    qs = ArquivoRetorno.objects.select_related('conta_bancaria').order_by('-data_upload')
+
+    if request.GET.get('conta_bancaria_id'):
+        qs = qs.filter(conta_bancaria_id=request.GET['conta_bancaria_id'])
+    if request.GET.get('status'):
+        qs = qs.filter(status=request.GET['status'])
+
+    page = int(request.GET.get('page', 1))
+    per_page = min(int(request.GET.get('per_page', 20)), 100)
+    total = qs.count()
+    arquivos = qs[(page-1)*per_page:page*per_page]
+
+    retornos = [{
+        'id': a.id, 'nome_arquivo': a.nome_arquivo, 'layout': a.layout, 'status': a.status,
+        'data_upload': a.data_upload.isoformat() if a.data_upload else None,
+        'total_registros': a.total_registros, 'registros_processados': a.registros_processados,
+        'valor_total_pago': float(a.valor_total_pago),
+    } for a in arquivos]
+
+    return JsonResponse({'sucesso': True, 'retornos': retornos, 'total': total, 'page': page})
+
+
+@login_required
+def api_cnab_retorno_detalhe(request, retorno_id):
+    """API para detalhes de retorno. GET /api/cnab/retornos/{id}/"""
+    from .models import ArquivoRetorno
+
+    arq = get_object_or_404(ArquivoRetorno.objects.select_related('conta_bancaria').prefetch_related('itens'), pk=retorno_id)
+
+    itens = [{'id': i.id, 'nosso_numero': i.nosso_numero, 'codigo_ocorrencia': i.codigo_ocorrencia,
+              'tipo_ocorrencia': i.tipo_ocorrencia, 'valor_pago': float(i.valor_pago) if i.valor_pago else None,
+              'data_credito': i.data_credito.strftime('%Y-%m-%d') if i.data_credito else None, 'processado': i.processado} for i in arq.itens.all()]
+
+    return JsonResponse({
+        'sucesso': True,
+        'retorno': {
+            'id': arq.id, 'nome_arquivo': arq.nome_arquivo, 'layout': arq.layout, 'status': arq.status,
+            'total_registros': arq.total_registros, 'registros_processados': arq.registros_processados,
+            'registros_erro': arq.registros_erro, 'valor_total_pago': float(arq.valor_total_pago),
+        },
+        'itens': itens
+    })
+
+
+@login_required
+@require_POST
+def api_cnab_retorno_processar(request, retorno_id):
+    """API para processar retorno CNAB. POST /api/cnab/retornos/{id}/processar/"""
+    from .models import ArquivoRetorno, StatusArquivoRetorno
+    from .services.cnab_service import CNABService
+
+    arquivo = get_object_or_404(ArquivoRetorno, pk=retorno_id)
+
+    if arquivo.status == StatusArquivoRetorno.PROCESSADO:
+        return JsonResponse({'sucesso': False, 'erro': 'Já processado.'}, status=400)
+
+    try:
+        service = CNABService()
+        resultado = service.processar_retorno(arquivo)
+
+        if resultado.get('sucesso'):
+            return JsonResponse({
+                'sucesso': True, 'total_registros': resultado.get('total_registros', 0),
+                'processados': resultado.get('processados', 0), 'liquidacoes': resultado.get('liquidacoes', 0),
+            })
+        return JsonResponse({'sucesso': False, 'erro': resultado.get('erro')}, status=500)
+
+    except Exception as e:
+        logger.exception(f"Erro ao processar retorno: {e}")
+        return JsonResponse({'sucesso': False, 'erro': str(e)}, status=500)
+
+
+@login_required
+def api_contas_bancarias(request):
+    """API para listar contas bancárias. GET /api/contas-bancarias/"""
+    qs = ContaBancaria.objects.filter(ativo=True).select_related('imobiliaria')
+
+    if request.GET.get('imobiliaria_id'):
+        qs = qs.filter(imobiliaria_id=request.GET['imobiliaria_id'])
+
+    contas = [{
+        'id': c.id, 'banco': c.banco, 'descricao': c.descricao, 'agencia': c.agencia, 'conta': c.conta,
+        'convenio': c.convenio, 'carteira': c.carteira, 'layout_cnab': c.layout_cnab, 'principal': c.principal,
+        'imobiliaria': {'id': c.imobiliaria.id, 'nome': c.imobiliaria.nome}
+    } for c in qs]
+
+    return JsonResponse({'sucesso': True, 'contas': contas})
