@@ -56,8 +56,10 @@ with connection.cursor() as cursor:
         'financeiro_arquivoretorno',
         'financeiro_itemretorno',
         'notificacoes_templatenotificacao',
-        'notificacoes_configuracaonotificacao',
-        'notificacoes_lognotificacao',
+        'notificacoes_configuracaoemail',
+        'notificacoes_configuracaosms',
+        'notificacoes_configuracaowhatsapp',
+        'notificacoes_notificacao',
         'portal_comprador_acessocomprador',
         'portal_comprador_logacessocomprador',
     ]
