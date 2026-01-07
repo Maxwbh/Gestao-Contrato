@@ -34,6 +34,7 @@ def add_column_if_not_exists(cursor, table, column, column_def):
 with connection.cursor() as cursor:
     # =========================================================================
     # CAMPOS TIMESTAMP (criado_em, atualizado_em) - TimeStampedModel
+    # Também verifica created_at/updated_at para compatibilidade
     # =========================================================================
     print("Adding timestamp columns to all tables...")
 
@@ -70,8 +71,33 @@ with connection.cursor() as cursor:
             SELECT 1 FROM information_schema.tables WHERE table_name = '{table}'
         """)
         if cursor.fetchone():
+            # Adicionar colunas em português (usadas pelo Django)
             add_column_if_not_exists(cursor, table, 'criado_em', "TIMESTAMP WITH TIME ZONE DEFAULT NOW()")
             add_column_if_not_exists(cursor, table, 'atualizado_em', "TIMESTAMP WITH TIME ZONE DEFAULT NOW()")
+
+            # Corrigir colunas em inglês (se existirem) - adicionar DEFAULT para evitar NOT NULL error
+            cursor.execute(f"""
+                DO $$
+                BEGIN
+                    -- Se created_at existe, adicionar default
+                    IF EXISTS (
+                        SELECT 1 FROM information_schema.columns
+                        WHERE table_name = '{table}' AND column_name = 'created_at'
+                    ) THEN
+                        ALTER TABLE {table} ALTER COLUMN created_at SET DEFAULT NOW();
+                        UPDATE {table} SET created_at = NOW() WHERE created_at IS NULL;
+                    END IF;
+
+                    -- Se updated_at existe, adicionar default
+                    IF EXISTS (
+                        SELECT 1 FROM information_schema.columns
+                        WHERE table_name = '{table}' AND column_name = 'updated_at'
+                    ) THEN
+                        ALTER TABLE {table} ALTER COLUMN updated_at SET DEFAULT NOW();
+                        UPDATE {table} SET updated_at = NOW() WHERE updated_at IS NULL;
+                    END IF;
+                END $$;
+            """)
 
     print("Timestamp columns checked/added.")
     print("")
