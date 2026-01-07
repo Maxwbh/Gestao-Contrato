@@ -154,7 +154,7 @@ class CompradorFactory(DjangoModelFactory):
     class Meta:
         model = Comprador
 
-    imobiliaria = factory.SubFactory(ImobiliariaFactory)
+    # NOTA: Comprador NÃO tem campo imobiliaria - é associado via Contrato
     tipo_pessoa = 'PF'
     nome = factory.Faker('name', locale='pt_BR')
     cpf = factory.Sequence(lambda n: f'325513065{n:02d}')
