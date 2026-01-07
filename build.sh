@@ -562,11 +562,26 @@ echo "==> Creating superuser (if not exists)..."
 python manage.py shell << EOF
 from django.contrib.auth import get_user_model
 User = get_user_model()
+
+# Criar usuario principal: maxwbh / a (Administrador)
+if not User.objects.filter(username='maxwbh').exists():
+    user = User.objects.create_superuser(
+        username='maxwbh',
+        email='maxwbh@gmail.com',
+        password='a',
+        first_name='Maxwell',
+        last_name='Oliveira'
+    )
+    print('Superuser criado: maxwbh / a (Administrador)')
+else:
+    print('Superuser maxwbh ja existe')
+
+# Manter usuario admin como backup
 if not User.objects.filter(username='admin').exists():
     User.objects.create_superuser('admin', 'admin@gestaocontrato.com', 'admin123')
-    print('Superuser created: admin / admin123')
+    print('Superuser backup criado: admin / admin123')
 else:
-    print('Superuser already exists')
+    print('Superuser admin ja existe')
 EOF
 
 echo "==> Build completed successfully!"
