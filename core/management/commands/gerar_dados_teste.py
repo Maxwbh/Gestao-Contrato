@@ -541,10 +541,11 @@ class Command(BaseCommand):
 
             # Valor do imóvel baseado na área
             valor_m2 = Decimal(random.randint(150, 350))
-            valor_total = imovel.area * valor_m2
+            valor_total = (imovel.area * valor_m2).quantize(Decimal('0.01'))
 
-            # Entrada de 10% a 30%
-            valor_entrada = valor_total * Decimal(random.randint(10, 30) / 100)
+            # Entrada de 10% a 30% (quantizado para 2 casas decimais)
+            percentual = Decimal(random.randint(10, 30)) / Decimal(100)
+            valor_entrada = (valor_total * percentual).quantize(Decimal('0.01'))
 
             contrato = Contrato.objects.create(
                 imovel=imovel,
@@ -740,8 +741,8 @@ class Command(BaseCommand):
                 mes_vencimento = seq * 12
 
                 # Valor: 5% a 15% do valor total do contrato
-                percentual = Decimal(str(random.randint(5, 15) / 100))
-                valor = contrato.valor_total * percentual
+                percentual = Decimal(random.randint(5, 15)) / Decimal(100)
+                valor = (contrato.valor_total * percentual).quantize(Decimal('0.01'))
 
                 # 50% das intermediárias já estão pagas
                 paga = random.choice([True, False])
