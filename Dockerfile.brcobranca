@@ -67,6 +67,10 @@ RUN rm -rf .git \
     find . -name "*.md" -type f -delete && \
     find . -name "*.txt" -type f -delete
 
+# Criar diretorios necessarios para Puma (PID file, logs, sockets)
+RUN mkdir -p tmp log && \
+    chmod 755 tmp log
+
 # Criar usuario nao-root para seguranca
 RUN useradd -m -u 1000 brcobranca && \
     chown -R brcobranca:brcobranca /app
@@ -85,8 +89,10 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
     CMD ruby -e "require 'net/http'; exit Net::HTTP.get_response(URI('http://localhost:9292/')).code.to_i < 500 ? 0 : 1"
 
 # Comando para iniciar o servidor com configuracoes otimizadas para free tier
+# Usando single mode (workers=0) para evitar problemas com preload e economizar memoria
 CMD ["bundle", "exec", "puma", \
     "-p", "9292", \
     "-e", "production", \
     "-t", "1:2", \
-    "--preload"]
+    "-w", "0", \
+    "--pidfile", "tmp/puma.pid"]
