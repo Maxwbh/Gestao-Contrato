@@ -13,7 +13,6 @@ class Migration(migrations.Migration):
 
     dependencies = [
         ('core', '0001_initial'),
-        ('financeiro', '0001_initial'),
     ]
 
     operations = [
@@ -314,14 +313,6 @@ class Migration(migrations.Migration):
                     related_name='intermediarias',
                     to='contratos.contrato',
                     verbose_name='Contrato'
-                )),
-                ('parcela_vinculada', models.OneToOneField(
-                    blank=True,
-                    null=True,
-                    on_delete=django.db.models.deletion.SET_NULL,
-                    related_name='intermediaria_origem',
-                    to='financeiro.parcela',
-                    verbose_name='Parcela Vinculada'
                 )),
             ],
             options={
