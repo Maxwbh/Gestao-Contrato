@@ -29,6 +29,7 @@ urlpatterns = [
     path('dashboard/', views.dashboard, name='dashboard'),
     path('api/gerar-dados-teste/', views.gerar_dados_teste, name='gerar_dados_teste'),
     path('api/limpar-dados-teste/', views.limpar_dados_teste, name='limpar_dados_teste'),
+    path('dados-teste/', views.pagina_dados_teste, name='pagina_dados_teste'),
 
     # CRUD Contabilidade
     path('contabilidades/', views.ContabilidadeListView.as_view(), name='listar_contabilidades'),
