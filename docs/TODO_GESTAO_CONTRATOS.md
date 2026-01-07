@@ -2,8 +2,41 @@
 
 **Desenvolvedor:** Maxwell Oliveira (@maxwbh)
 **Email:** maxwbh@gmail.com
-**LinkedIn:** /maxwbh
-**Empresa:** M&S do Brasil LTDA - www.msbrasil.inf.br
+**LinkedIn:** [/maxwbh](https://linkedin.com/in/maxwbh)
+**GitHub:** [@Maxwbh](https://github.com/Maxwbh)
+**Empresa:** M&S do Brasil LTDA - [www.msbrasil.inf.br](https://www.msbrasil.inf.br)
+
+---
+
+## Versao Atual
+
+Ver arquivo `VERSION` na raiz do projeto.
+
+---
+
+## Credenciais do Sistema
+
+- **Usuario Principal:** maxwbh / a (Administrador)
+- **Usuario Backup:** admin / admin123
+
+---
+
+## Deploy no Render Free
+
+### URLs de Configuracao
+- `/setup/` - Pagina de setup inicial (gera dados de teste)
+- `/dados-teste/` - Pagina para gerar/limpar dados de teste (requer login admin)
+- `/api/gerar-dados-teste/` - API para gerar dados (POST, requer auth)
+- `/api/limpar-dados-teste/` - API para limpar dados (DELETE, requer auth)
+
+### Git Hooks Automaticos
+- `pre-commit` - Incrementa versao automaticamente em cada commit
+- `post-commit` - Exibe informacoes do commit
+
+Para instalar hooks manualmente:
+```bash
+./scripts/install_hooks.sh
+```
 
 ---
 
@@ -484,3 +517,43 @@ REGRA: Só é possível emitir boleto até o 12º mês de cada ciclo.
 - IBGE API para IPCA/INPC (atualmente apenas BCB)
 - FGV API para IGPM/INCC
 - WhatsApp/SMS para notificações
+
+---
+
+## 12. IMPLEMENTACOES RECENTES
+
+### 12.1 Versionamento Automatico (Janeiro 2026)
+- [x] Arquivo VERSION na raiz do projeto
+- [x] Script `scripts/bump_version.py` para incrementar versao
+- [x] Git hook `pre-commit` para incrementar versao automaticamente
+- [x] Git hook `post-commit` para exibir informacoes do commit
+
+### 12.2 Usuario Padrao na Instalacao
+- [x] Usuario principal: maxwbh / a (Administrador)
+- [x] Usuario backup: admin / admin123
+- [x] Atualizado no `build.sh` para deploy no Render
+
+### 12.3 Pagina de Dados de Teste para Render Free
+- [x] `/setup/` - Pagina completa de setup com UI amigavel
+- [x] `/dados-teste/` - Pagina para gerar/limpar dados (admin only)
+- [x] API REST para geracao de dados via POST
+- [x] Modal de progresso visual durante geracao
+
+### 12.4 Configuracao de Autor dos Commits
+- [x] Script `scripts/install_hooks.sh` para instalacao
+- [x] Autor configurado: Maxwell Oliveira <maxwbh@gmail.com>
+- [x] Hooks copiam automaticamente para `.git/hooks/`
+
+---
+
+## PROXIMAS PRIORIDADES
+
+1. **Templates HTML** - Completar templates das views implementadas
+2. **Testes Automatizados** - Aumentar cobertura de testes
+3. **Documentacao API** - Swagger/OpenAPI
+4. **CI/CD** - GitHub Actions para testes e deploy
+
+---
+
+*Documento atualizado em: 07/01/2026*
+*Versao do documento: 2.0*
