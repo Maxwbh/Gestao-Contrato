@@ -90,4 +90,32 @@ urlpatterns = [
     # Parcelas
     path('api/parcelas/', views.api_parcelas_lista, name='api_parcelas'),
     path('api/parcelas/<int:parcela_id>/pagamento/', views.api_parcela_registrar_pagamento, name='api_parcela_pagamento'),
+
+    # ==========================================================================
+    # APIs REST - BOLETO
+    # ==========================================================================
+    path('api/boletos/<int:parcela_id>/', views.api_boleto_detalhe, name='api_boleto_detalhe'),
+    path('api/boletos/<int:parcela_id>/gerar/', views.api_boleto_gerar, name='api_boleto_gerar'),
+    path('api/boletos/<int:parcela_id>/cancelar/', views.api_boleto_cancelar, name='api_boleto_cancelar'),
+    path('api/boletos/lote/', views.api_boletos_lote, name='api_boletos_lote'),
+
+    # ==========================================================================
+    # APIs REST - CNAB REMESSA
+    # ==========================================================================
+    path('api/cnab/remessas/', views.api_cnab_remessa_listar, name='api_cnab_remessas'),
+    path('api/cnab/remessas/<int:remessa_id>/', views.api_cnab_remessa_detalhe, name='api_cnab_remessa_detalhe'),
+    path('api/cnab/remessas/gerar/', views.api_cnab_remessa_gerar, name='api_cnab_remessa_gerar'),
+    path('api/cnab/boletos-disponiveis/', views.api_cnab_boletos_disponiveis, name='api_cnab_boletos_disponiveis'),
+
+    # ==========================================================================
+    # APIs REST - CNAB RETORNO
+    # ==========================================================================
+    path('api/cnab/retornos/', views.api_cnab_retorno_listar, name='api_cnab_retornos'),
+    path('api/cnab/retornos/<int:retorno_id>/', views.api_cnab_retorno_detalhe, name='api_cnab_retorno_detalhe'),
+    path('api/cnab/retornos/<int:retorno_id>/processar/', views.api_cnab_retorno_processar, name='api_cnab_retorno_processar'),
+
+    # ==========================================================================
+    # API - CONTAS BANCÁRIAS
+    # ==========================================================================
+    path('api/contas-bancarias/', views.api_contas_bancarias, name='api_contas_bancarias'),
 ]
