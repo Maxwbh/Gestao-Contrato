@@ -230,12 +230,18 @@
         </div>
     </div>
 
-    <!-- Loading -->
+    <!-- Loading com Timer -->
     <div class="text-center mt-4" id="loading" style="display: none;">
         <div class="spinner-border text-primary" style="width: 3rem; height: 3rem;" role="status">
             <span class="visually-hidden">Processando...</span>
         </div>
         <p class="mt-3 text-muted">Processando... Isso pode levar alguns segundos.</p>
+        <div class="mt-2">
+            <span class="badge bg-info fs-5" id="timer-display">
+                <i class="fas fa-clock me-1"></i>
+                <span id="timer-value">00:00</span>
+            </span>
+        </div>
         <small class="text-muted">Nao feche esta pagina.</small>
     </div>
 
@@ -254,6 +260,33 @@
 </div>
 
 <script>
+// Timer
+let timerInterval = null;
+let startTime = null;
+
+function formatTime(seconds) {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return String(mins).padStart(2, '0') + ':' + String(secs).padStart(2, '0');
+}
+
+function startTimer() {
+    startTime = Date.now();
+    document.getElementById('timer-value').textContent = '00:00';
+    timerInterval = setInterval(() => {
+        const elapsed = Math.floor((Date.now() - startTime) / 1000);
+        document.getElementById('timer-value').textContent = formatTime(elapsed);
+    }, 1000);
+}
+
+function stopTimer() {
+    if (timerInterval) {
+        clearInterval(timerInterval);
+        timerInterval = null;
+    }
+    return startTime ? Math.floor((Date.now() - startTime) / 1000) : 0;
+}
+
 // Habilitar/desabilitar botao de limpar baseado no checkbox
 document.getElementById('confirmar-exclusao').addEventListener('change', function() {
     document.getElementById('btn-limpar').disabled = !this.checked;
@@ -263,6 +296,10 @@ function showLoading(show) {
     document.getElementById('loading').style.display = show ? 'block' : 'none';
     document.getElementById('btn-gerar').disabled = show;
     document.getElementById('btn-limpar').disabled = show || !document.getElementById('confirmar-exclusao').checked;
+
+    if (show) {
+        startTimer();
+    }
 }
 
 function showOutput(message, isError) {
@@ -313,14 +350,16 @@ function gerarDados() {
     })
     .then(response => response.json())
     .then(data => {
+        const elapsedTime = stopTimer();
         showLoading(false);
         if (data.status === 'success') {
-            let msg = 'DADOS GERADOS COM SUCESSO!\n';
-            msg += '================================\n\n';
+            let msg = '✅ DADOS GERADOS COM SUCESSO!\n';
+            msg += '================================\n';
+            msg += '⏱️ Tempo total: ' + formatTime(elapsedTime) + '\n\n';
             if (data.output) {
                 msg += data.output;
             }
-            msg += '\n\nEstatisticas finais:\n';
+            msg += '\n\n📊 Estatisticas finais:\n';
             msg += '- Contabilidades: ' + (data.dados_gerados?.contabilidades || 0) + '\n';
             msg += '- Imobiliarias: ' + (data.dados_gerados?.imobiliarias || 0) + '\n';
             msg += '- Contas Bancarias: ' + (data.dados_gerados?.contas_bancarias || 0) + '\n';
@@ -332,12 +371,16 @@ function gerarDados() {
             showOutput(msg, false);
             updateStats(data.dados_gerados);
         } else {
-            showOutput('ERRO: ' + (data.message || 'Erro desconhecido') + '\n\n' + (data.traceback || ''), true);
+            let msg = '❌ ERRO: ' + (data.message || 'Erro desconhecido');
+            msg += '\n⏱️ Tempo decorrido: ' + formatTime(elapsedTime) + '\n\n';
+            msg += (data.traceback || '');
+            showOutput(msg, true);
         }
     })
     .catch(error => {
+        const elapsedTime = stopTimer();
         showLoading(false);
-        showOutput('ERRO DE CONEXAO: ' + error.message, true);
+        showOutput('❌ ERRO DE CONEXAO: ' + error.message + '\n⏱️ Tempo decorrido: ' + formatTime(elapsedTime), true);
     });
 }
 
@@ -364,11 +407,13 @@ function limparDados() {
     })
     .then(response => response.json())
     .then(data => {
+        const elapsedTime = stopTimer();
         showLoading(false);
         if (data.status === 'success') {
-            let msg = 'DADOS EXCLUIDOS COM SUCESSO!\n';
-            msg += '================================\n\n';
-            msg += 'Registros excluidos:\n';
+            let msg = '🗑️ DADOS EXCLUIDOS COM SUCESSO!\n';
+            msg += '================================\n';
+            msg += '⏱️ Tempo total: ' + formatTime(elapsedTime) + '\n\n';
+            msg += '📊 Registros excluidos:\n';
             if (data.dados_excluidos) {
                 for (const [key, value] of Object.entries(data.dados_excluidos)) {
                     msg += '- ' + key + ': ' + value + '\n';
@@ -384,12 +429,15 @@ function limparDados() {
             document.getElementById('confirmar-exclusao').checked = false;
             document.getElementById('btn-limpar').disabled = true;
         } else {
-            showOutput('ERRO: ' + (data.message || 'Erro desconhecido'), true);
+            let msg = '❌ ERRO: ' + (data.message || 'Erro desconhecido');
+            msg += '\n⏱️ Tempo decorrido: ' + formatTime(elapsedTime);
+            showOutput(msg, true);
         }
     })
     .catch(error => {
+        const elapsedTime = stopTimer();
         showLoading(false);
-        showOutput('ERRO DE CONEXAO: ' + error.message, true);
+        showOutput('❌ ERRO DE CONEXAO: ' + error.message + '\n⏱️ Tempo decorrido: ' + formatTime(elapsedTime), true);
     });
 }
 </script>
