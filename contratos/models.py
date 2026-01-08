@@ -546,12 +546,12 @@ class Contrato(TimeStampedModel):
         # Executar validações de negócio
         self.full_clean()
 
-        # Calcular valor financiado
-        self.valor_financiado = self.valor_total - self.valor_entrada
+        # Calcular valor financiado (quantizado para 2 casas decimais)
+        self.valor_financiado = (self.valor_total - self.valor_entrada).quantize(Decimal('0.01'))
 
-        # Calcular valor da parcela original
+        # Calcular valor da parcela original (quantizado para 2 casas decimais)
         if self.numero_parcelas > 0:
-            self.valor_parcela_original = self.valor_financiado / self.numero_parcelas
+            self.valor_parcela_original = (self.valor_financiado / self.numero_parcelas).quantize(Decimal('0.01'))
 
         super().save(*args, **kwargs)
 
