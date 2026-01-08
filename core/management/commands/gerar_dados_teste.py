@@ -747,17 +747,31 @@ class Command(BaseCommand):
     def criar_prestacoes_intermediarias(self, contratos):
         """
         Cria prestações intermediárias para alguns contratos.
-        30% dos contratos terão entre 1 e 5 prestações intermediárias.
+        30% dos contratos (com prazo >= 24 meses) terão prestações intermediárias.
         """
         count = 0
+
+        # Filtrar apenas contratos com prazo suficiente para intermediárias
+        contratos_longos = [c for c in contratos if c.numero_parcelas >= 24]
+
+        if not contratos_longos:
+            self.stdout.write('   → Nenhum contrato com prazo >= 24 meses para intermediárias')
+            return 0
+
         contratos_com_intermediarias = random.sample(
-            contratos,
-            k=int(len(contratos) * 0.30)
+            contratos_longos,
+            k=min(int(len(contratos_longos) * 0.30), len(contratos_longos))
         )
 
         for contrato in contratos_com_intermediarias:
-            # Número de intermediárias: 1 a 5
-            num_intermediarias = random.randint(1, 5)
+            # Calcular quantas intermediárias cabem no contrato (a cada 12 meses)
+            max_intermediarias = contrato.numero_parcelas // 12
+
+            if max_intermediarias < 1:
+                continue
+
+            # Número de intermediárias: 1 até o máximo permitido
+            num_intermediarias = random.randint(1, min(5, max_intermediarias))
 
             # Atualizar campo do contrato
             if hasattr(contrato, 'quantidade_intermediarias'):
@@ -765,8 +779,10 @@ class Command(BaseCommand):
                 contrato.save(update_fields=['quantidade_intermediarias'])
 
             for seq in range(1, num_intermediarias + 1):
-                # Vencimento a cada 12 meses
+                # Vencimento a cada 12 meses (garantir que não exceda o prazo)
                 mes_vencimento = seq * 12
+                if mes_vencimento > contrato.numero_parcelas:
+                    break
 
                 # Valor: 5% a 15% do valor total do contrato
                 percentual = Decimal(str(random.randint(5, 15))) / Decimal('100')
