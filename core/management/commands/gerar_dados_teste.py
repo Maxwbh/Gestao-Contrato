@@ -899,17 +899,23 @@ class Command(BaseCommand):
                 if Reajuste.objects.filter(contrato=contrato, ciclo=ciclo).exists():
                     continue
 
+                # Calcular parcelas afetadas pelo reajuste
+                # O reajuste afeta as parcelas após 12*ciclo meses
+                parcela_inicial = (ciclo * 12) + 1
+                parcela_final = contrato.numero_parcelas
+
+                # Garantir que parcela_inicial não exceda numero_parcelas
+                if parcela_inicial > parcela_final:
+                    continue
+
                 Reajuste.objects.create(
                     contrato=contrato,
                     data_reajuste=data_reajuste,
-                    indice_aplicado=contrato.tipo_correcao,
-                    percentual_aplicado=percentual,
+                    indice_tipo=contrato.tipo_correcao,
+                    percentual=percentual,
+                    parcela_inicial=parcela_inicial,
+                    parcela_final=parcela_final,
                     ciclo=ciclo,
-                    aplicado=True,
-                    data_aplicacao=timezone.make_aware(
-                        datetime.combine(data_reajuste, datetime.min.time())
-                    ),
-                    observacoes=f'Reajuste ciclo {ciclo} - gerado para teste'
                 )
                 count += 1
 
