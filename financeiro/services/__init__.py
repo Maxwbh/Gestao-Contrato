@@ -1,7 +1,7 @@
 """
-Serviços do módulo financeiro
+Servicos do modulo financeiro
 
-Exporta os principais serviços para uso em outras partes do sistema.
+Exporta os principais servicos para uso em outras partes do sistema.
 """
 from .boleto_service import BoletoService
 from .cnab_service import CNABService
