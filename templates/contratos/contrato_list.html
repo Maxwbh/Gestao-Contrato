@@ -30,10 +30,65 @@
         0%, 100% { opacity: 1; }
         50% { opacity: 0.6; }
     }
+    /* Selecao de contratos */
+    .contrato-selecionado {
+        background-color: #e7f3ff !important;
+    }
+    .acoes-lote {
+        position: sticky;
+        bottom: 0;
+        background: linear-gradient(135deg, #f8f9fa, #e9ecef);
+        border-top: 2px solid #dee2e6;
+        padding: 1rem;
+        margin-top: 1rem;
+        border-radius: 8px;
+        box-shadow: 0 -2px 10px rgba(0,0,0,0.1);
+    }
+    /* Toast Notifications */
+    .toast-container {
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        z-index: 9999;
+    }
+    .toast-notification {
+        min-width: 300px;
+        padding: 15px 20px;
+        margin-bottom: 10px;
+        border-radius: 8px;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+        display: flex;
+        align-items: center;
+        animation: slideIn 0.3s ease-out;
+    }
+    .toast-notification.success {
+        background: linear-gradient(135deg, #28a745, #20c997);
+        color: white;
+    }
+    .toast-notification.error {
+        background: linear-gradient(135deg, #dc3545, #e74c3c);
+        color: white;
+    }
+    .toast-notification i {
+        font-size: 1.2rem;
+        margin-right: 12px;
+    }
+    .toast-notification .toast-close {
+        margin-left: auto;
+        cursor: pointer;
+        opacity: 0.7;
+    }
+    @keyframes slideIn {
+        from { transform: translateX(100%); opacity: 0; }
+        to { transform: translateX(0); opacity: 1; }
+    }
 </style>
 {% endblock %}
 
 {% block content %}
+<!-- Toast Container -->
+<div id="toastContainer" class="toast-container"></div>
+
 <div class="row">
     <div class="col-12">
         <div class="card">
@@ -41,9 +96,14 @@
                 <h4 class="mb-0">
                     <i class="fas fa-file-contract"></i> Gerenciar Contratos
                 </h4>
-                <a href="{% url 'contratos:criar' %}" class="btn btn-light">
-                    <i class="fas fa-plus"></i> Novo Contrato
-                </a>
+                <div>
+                    <button type="button" class="btn btn-success me-2" id="btnGerarLote" style="display: none;" onclick="abrirModalGerarLote()">
+                        <i class="fas fa-barcode"></i> Gerar Boletos (<span id="qtdSelecionados">0</span>)
+                    </button>
+                    <a href="{% url 'contratos:criar' %}" class="btn btn-light">
+                        <i class="fas fa-plus"></i> Novo Contrato
+                    </a>
+                </div>
             </div>
             <div class="card-body">
                 <!-- Barra de Busca e Filtros -->
@@ -167,9 +227,12 @@
 
                 {% if contratos %}
                     <div class="table-responsive">
-                        <table class="table table-hover align-middle">
+                        <table class="table table-hover align-middle" id="tabelaContratos">
                             <thead class="table-light">
                                 <tr>
+                                    <th class="text-center" style="width: 40px;">
+                                        <input type="checkbox" class="form-check-input" id="selecionarTodos" onchange="toggleSelecionarTodos(this)" title="Selecionar todos">
+                                    </th>
                                     <th>Contrato</th>
                                     <th>Comprador</th>
                                     <th>Imovel</th>
@@ -182,7 +245,12 @@
                             </thead>
                             <tbody>
                                 {% for contrato in contratos %}
-                                <tr>
+                                <tr class="contrato-row" data-contrato-id="{{ contrato.pk }}" data-contrato-numero="{{ contrato.numero_contrato }}" data-contrato-status="{{ contrato.status }}">
+                                    <td class="text-center">
+                                        {% if contrato.status == 'ATIVO' %}
+                                        <input type="checkbox" class="form-check-input contrato-checkbox" value="{{ contrato.pk }}" onchange="atualizarSelecao()">
+                                        {% endif %}
+                                    </td>
                                     <td>
                                         <strong>{{ contrato.numero_contrato }}</strong>
                                         <br>
@@ -345,6 +413,60 @@
         </div>
     </div>
 </div>
+
+<!-- Modal de Geracao em Lote -->
+<div class="modal fade" id="modalGerarLote" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header bg-success text-white">
+                <h5 class="modal-title">
+                    <i class="fas fa-barcode"></i> Gerar Boletos em Lote
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="alert alert-info">
+                    <i class="fas fa-info-circle"></i>
+                    <strong>Regras de geracao:</strong>
+                    <ul class="mb-0 mt-2">
+                        <li>Contratos com indice <strong>FIXO</strong>: Todas as parcelas podem ser geradas</li>
+                        <li>Demais indices: Apenas parcelas do ciclo atual (ate reajuste pendente)</li>
+                        <li>Parcelas ja com boleto serao ignoradas</li>
+                    </ul>
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label fw-bold">Quantidade de Boletos por Contrato</label>
+                    <div class="input-group" style="max-width: 300px;">
+                        <button type="button" class="btn btn-outline-secondary" onclick="setQtdLote(1)">1</button>
+                        <button type="button" class="btn btn-outline-secondary" onclick="setQtdLote(6)">6</button>
+                        <button type="button" class="btn btn-outline-secondary" onclick="setQtdLote(12)">12</button>
+                        <input type="number" class="form-control text-center" id="qtdBoletosLote" min="1" max="120" value="1">
+                    </div>
+                    <small class="text-muted">Maximo de boletos a gerar por contrato (respeitando restricoes de reajuste)</small>
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label fw-bold">Contratos Selecionados</label>
+                    <div id="listaContratosSelecionados" class="border rounded p-2" style="max-height: 250px; overflow-y: auto;">
+                        <!-- Lista sera preenchida via JS -->
+                    </div>
+                </div>
+
+                <div id="resultadoGeracaoLote" class="d-none">
+                    <h6 class="mb-2">Resultado da Geracao</h6>
+                    <div id="resultadoConteudo" class="border rounded p-2" style="max-height: 200px; overflow-y: auto;"></div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Fechar</button>
+                <button type="button" class="btn btn-success" id="btnConfirmarGerarLote" onclick="confirmarGerarLote()">
+                    <i class="fas fa-barcode"></i> Gerar Boletos
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
 {% endblock %}
 
 {% block extra_js %}
@@ -353,6 +475,194 @@
         document.getElementById('nomeContrato').textContent = numero;
         document.getElementById('formCancelamento').action = url;
         new bootstrap.Modal(document.getElementById('modalCancelamento')).show();
+    }
+
+    // ============ FUNCOES DE TOAST ============
+
+    function showToast(message, type, duration) {
+        type = type || 'success';
+        duration = duration || 4000;
+        var container = document.getElementById('toastContainer');
+        var toast = document.createElement('div');
+        toast.className = 'toast-notification ' + type;
+
+        var icon = type === 'success' ? 'fa-check-circle' :
+                   type === 'error' ? 'fa-exclamation-circle' : 'fa-info-circle';
+
+        toast.innerHTML = '<i class="fas ' + icon + '"></i>' +
+                          '<span>' + message + '</span>' +
+                          '<span class="toast-close" onclick="this.parentElement.remove()"><i class="fas fa-times"></i></span>';
+
+        container.appendChild(toast);
+
+        setTimeout(function() {
+            toast.style.animation = 'slideOut 0.3s ease-out forwards';
+            setTimeout(function() { toast.remove(); }, 300);
+        }, duration);
+    }
+
+    // ============ FUNCOES DE SELECAO ============
+
+    function toggleSelecionarTodos(checkbox) {
+        var checkboxes = document.querySelectorAll('.contrato-checkbox');
+        checkboxes.forEach(function(cb) {
+            cb.checked = checkbox.checked;
+            var row = cb.closest('tr');
+            if (row) {
+                if (cb.checked) {
+                    row.classList.add('contrato-selecionado');
+                } else {
+                    row.classList.remove('contrato-selecionado');
+                }
+            }
+        });
+        atualizarSelecao();
+    }
+
+    function atualizarSelecao() {
+        var checkboxes = document.querySelectorAll('.contrato-checkbox:checked');
+        var qtd = checkboxes.length;
+        var btnGerar = document.getElementById('btnGerarLote');
+        var qtdSpan = document.getElementById('qtdSelecionados');
+
+        qtdSpan.textContent = qtd;
+
+        if (qtd > 0) {
+            btnGerar.style.display = 'inline-block';
+        } else {
+            btnGerar.style.display = 'none';
+        }
+
+        // Atualizar visual das linhas
+        document.querySelectorAll('.contrato-checkbox').forEach(function(cb) {
+            var row = cb.closest('tr');
+            if (row) {
+                if (cb.checked) {
+                    row.classList.add('contrato-selecionado');
+                } else {
+                    row.classList.remove('contrato-selecionado');
+                }
+            }
+        });
+    }
+
+    // ============ FUNCOES DE GERACAO EM LOTE ============
+
+    function setQtdLote(qtd) {
+        document.getElementById('qtdBoletosLote').value = qtd;
+    }
+
+    function abrirModalGerarLote() {
+        var checkboxes = document.querySelectorAll('.contrato-checkbox:checked');
+        if (checkboxes.length === 0) {
+            alert('Selecione pelo menos um contrato');
+            return;
+        }
+
+        // Preencher lista de contratos selecionados
+        var lista = document.getElementById('listaContratosSelecionados');
+        var html = '<table class="table table-sm mb-0"><thead class="table-light"><tr><th>Contrato</th><th>Status</th></tr></thead><tbody>';
+
+        checkboxes.forEach(function(cb) {
+            var row = cb.closest('tr');
+            var numero = row.getAttribute('data-contrato-numero');
+            html += '<tr><td><strong>' + numero + '</strong></td><td><span class="badge bg-success">Ativo</span></td></tr>';
+        });
+
+        html += '</tbody></table>';
+        lista.innerHTML = html;
+
+        // Resetar resultado
+        document.getElementById('resultadoGeracaoLote').classList.add('d-none');
+        document.getElementById('btnConfirmarGerarLote').disabled = false;
+        document.getElementById('btnConfirmarGerarLote').innerHTML = '<i class="fas fa-barcode"></i> Gerar Boletos';
+
+        new bootstrap.Modal(document.getElementById('modalGerarLote')).show();
+    }
+
+    function confirmarGerarLote() {
+        var checkboxes = document.querySelectorAll('.contrato-checkbox:checked');
+        var contratoIds = Array.from(checkboxes).map(function(cb) { return parseInt(cb.value); });
+        var quantidade = parseInt(document.getElementById('qtdBoletosLote').value) || 1;
+
+        if (contratoIds.length === 0) {
+            alert('Nenhum contrato selecionado');
+            return;
+        }
+
+        var btn = document.getElementById('btnConfirmarGerarLote');
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Gerando boletos...';
+
+        fetch('/financeiro/api/boletos/gerar-lote/', {
+            method: 'POST',
+            headers: {
+                'X-CSRFToken': '{{ csrf_token }}',
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                contratos: contratoIds,
+                quantidade: quantidade
+            })
+        })
+        .then(response => response.json())
+        .then(data => {
+            var resultadoDiv = document.getElementById('resultadoGeracaoLote');
+            var conteudoDiv = document.getElementById('resultadoConteudo');
+
+            if (data.sucesso) {
+                var html = '<div class="alert alert-success mb-2">';
+                html += '<strong>' + data.total_gerados + '</strong> boleto(s) gerado(s) em <strong>' + data.total_contratos + '</strong> contrato(s)';
+                if (data.total_bloqueados > 0) {
+                    html += '<br><small>' + data.total_bloqueados + ' parcela(s) bloqueada(s) por reajuste</small>';
+                }
+                html += '</div>';
+
+                // Detalhes por contrato
+                html += '<table class="table table-sm"><thead class="table-light"><tr><th>Contrato</th><th>Gerados</th><th>Bloqueados</th></tr></thead><tbody>';
+
+                data.resultados.forEach(function(r) {
+                    var trClass = r.sucesso ? '' : 'table-danger';
+                    html += '<tr class="' + trClass + '">';
+                    html += '<td>' + r.numero_contrato + '</td>';
+                    html += '<td><span class="badge bg-success">' + r.gerados + '</span></td>';
+                    html += '<td>';
+                    if (r.bloqueados > 0) {
+                        html += '<span class="badge bg-warning text-dark">' + r.bloqueados + '</span>';
+                    } else {
+                        html += '-';
+                    }
+                    html += '</td>';
+                    html += '</tr>';
+                });
+
+                html += '</tbody></table>';
+
+                conteudoDiv.innerHTML = html;
+                resultadoDiv.classList.remove('d-none');
+
+                showToast(data.mensagem, 'success');
+
+                btn.innerHTML = '<i class="fas fa-check"></i> Concluido';
+                btn.classList.remove('btn-success');
+                btn.classList.add('btn-secondary');
+
+                // Recarregar pagina apos 2 segundos
+                setTimeout(function() {
+                    location.reload();
+                }, 2000);
+
+            } else {
+                showToast('Erro: ' + data.erro, 'error');
+                btn.disabled = false;
+                btn.innerHTML = '<i class="fas fa-barcode"></i> Gerar Boletos';
+            }
+        })
+        .catch(function(error) {
+            showToast('Erro de conexao: ' + error, 'error');
+            btn.disabled = false;
+            btn.innerHTML = '<i class="fas fa-barcode"></i> Gerar Boletos';
+        });
     }
 </script>
 {% endblock %}
