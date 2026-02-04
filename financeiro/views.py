@@ -1635,6 +1635,260 @@ def gerar_carne(request, contrato_id):
         }, status=500)
 
 
+@login_required
+@require_GET
+def api_parcelas_elegibilidade(request, contrato_id):
+    """
+    Retorna informacoes sobre elegibilidade de geracao de boletos para parcelas.
+
+    Regras de elegibilidade por ciclo de reajuste:
+    - Ciclo 1 (parcelas 1-12 para prazo_reajuste_meses=12): Sempre liberado
+    - Ciclo 2+ (parcelas 13+): Requer reajuste aplicado para o ciclo
+    - tipo_correcao='FIXO': Todas as parcelas liberadas (sem reajuste necessario)
+
+    Retorna lista de parcelas com status de elegibilidade e informacoes do ciclo.
+    """
+    contrato = get_object_or_404(Contrato, pk=contrato_id)
+
+    # Obter todas as parcelas nao pagas
+    parcelas = contrato.parcelas.filter(pago=False).order_by('numero_parcela')
+
+    # Verificar se o tipo de correcao e FIXO (sem reajuste necessario)
+    tipo_correcao_fixo = contrato.tipo_correcao == 'FIXO'
+
+    # Informacoes do ciclo atual
+    prazo_reajuste = contrato.prazo_reajuste_meses or 12
+    ciclo_atual = contrato.ciclo_reajuste_atual or 1
+
+    # Reajustes aplicados
+    from financeiro.models import Reajuste
+    reajustes_aplicados = set(
+        Reajuste.objects.filter(contrato=contrato, aplicado=True)
+        .values_list('ciclo', flat=True)
+    )
+
+    # Calcular maximo de parcelas disponiveis para geracao
+    parcelas_disponiveis = []
+    primeiro_ciclo_bloqueado = None
+    total_disponiveis = 0
+    total_bloqueadas = 0
+
+    for parcela in parcelas:
+        ciclo_parcela = contrato.calcular_ciclo_parcela(parcela.numero_parcela)
+
+        # Determinar elegibilidade
+        if tipo_correcao_fixo:
+            # FIXO: todas liberadas
+            pode_gerar = True
+            motivo = "Indice FIXO - sem reajuste necessario"
+        elif ciclo_parcela == 1:
+            # Primeiro ciclo: sempre liberado
+            pode_gerar = True
+            motivo = "Primeiro ciclo - liberado"
+        elif ciclo_parcela in reajustes_aplicados:
+            # Reajuste ja aplicado para este ciclo
+            pode_gerar = True
+            motivo = f"Reajuste do ciclo {ciclo_parcela} aplicado"
+        else:
+            # Reajuste pendente
+            pode_gerar = False
+            motivo = f"Aguardando reajuste do ciclo {ciclo_parcela}"
+            if primeiro_ciclo_bloqueado is None:
+                primeiro_ciclo_bloqueado = ciclo_parcela
+
+        if pode_gerar:
+            total_disponiveis += 1
+        else:
+            total_bloqueadas += 1
+
+        parcelas_disponiveis.append({
+            'id': parcela.id,
+            'numero_parcela': parcela.numero_parcela,
+            'data_vencimento': parcela.data_vencimento.strftime('%d/%m/%Y'),
+            'valor_atual': float(parcela.valor_atual),
+            'ciclo': ciclo_parcela,
+            'pode_gerar': pode_gerar,
+            'tem_boleto': parcela.tem_boleto,
+            'motivo': motivo
+        })
+
+    # Calcular informacoes do proximo ciclo de reajuste
+    proximo_ciclo_reajuste = None
+    if primeiro_ciclo_bloqueado:
+        parcela_inicio_ciclo = ((primeiro_ciclo_bloqueado - 1) * prazo_reajuste) + 1
+        parcela_fim_ciclo = primeiro_ciclo_bloqueado * prazo_reajuste
+        proximo_ciclo_reajuste = {
+            'ciclo': primeiro_ciclo_bloqueado,
+            'parcela_inicial': parcela_inicio_ciclo,
+            'parcela_final': min(parcela_fim_ciclo, contrato.numero_parcelas),
+            'mensagem': f"Aplique o reajuste para liberar as parcelas {parcela_inicio_ciclo} a {min(parcela_fim_ciclo, contrato.numero_parcelas)}"
+        }
+
+    return JsonResponse({
+        'sucesso': True,
+        'contrato_id': contrato.id,
+        'tipo_correcao': contrato.tipo_correcao,
+        'tipo_correcao_fixo': tipo_correcao_fixo,
+        'prazo_reajuste_meses': prazo_reajuste,
+        'ciclo_atual': ciclo_atual,
+        'reajustes_aplicados': list(reajustes_aplicados),
+        'total_parcelas_pendentes': parcelas.count(),
+        'total_disponiveis': total_disponiveis,
+        'total_bloqueadas': total_bloqueadas,
+        'proximo_ciclo_reajuste': proximo_ciclo_reajuste,
+        'parcelas': parcelas_disponiveis
+    })
+
+
+@login_required
+@require_POST
+def api_gerar_boletos_lote(request):
+    """
+    Gera boletos em lote para multiplos contratos.
+
+    Recebe:
+    - contratos: lista de IDs de contratos
+    - quantidade: quantidade de boletos por contrato (opcional, padrao=1)
+    - force: ignorar bloqueio de reajuste (opcional, padrao=False)
+
+    Respeita a logica de reajuste:
+    - Gera apenas parcelas cujo ciclo ja teve reajuste aplicado
+    - tipo_correcao='FIXO' permite gerar todas as parcelas
+    """
+    import json
+
+    try:
+        data = json.loads(request.body)
+        contrato_ids = data.get('contratos', [])
+        quantidade = int(data.get('quantidade', 1))
+        force = data.get('force', False)
+
+        if not contrato_ids:
+            return JsonResponse({
+                'sucesso': False,
+                'erro': 'Nenhum contrato selecionado'
+            }, status=400)
+
+        if quantidade < 1:
+            quantidade = 1
+
+        resultados = []
+        total_gerados = 0
+        total_bloqueados = 0
+        total_erros = 0
+
+        for contrato_id in contrato_ids:
+            try:
+                contrato = Contrato.objects.get(pk=contrato_id, status='ATIVO')
+            except Contrato.DoesNotExist:
+                resultados.append({
+                    'contrato_id': contrato_id,
+                    'sucesso': False,
+                    'erro': 'Contrato nao encontrado ou inativo'
+                })
+                total_erros += 1
+                continue
+
+            # Obter parcelas elegiveis (nao pagas, sem boleto, elegíveis por reajuste)
+            parcelas = contrato.parcelas.filter(
+                pago=False,
+                status_boleto='NAO_GERADO'
+            ).order_by('numero_parcela')
+
+            gerados_contrato = 0
+            bloqueados_contrato = 0
+            parcelas_resultado = []
+
+            for parcela in parcelas[:quantidade + 10]:  # Pegar algumas extras caso algumas sejam bloqueadas
+                if gerados_contrato >= quantidade:
+                    break
+
+                # Verificar elegibilidade por reajuste
+                if not force:
+                    pode_gerar, motivo = contrato.pode_gerar_boleto(parcela.numero_parcela)
+                    if not pode_gerar:
+                        bloqueados_contrato += 1
+                        parcelas_resultado.append({
+                            'parcela_id': parcela.id,
+                            'numero_parcela': parcela.numero_parcela,
+                            'sucesso': False,
+                            'bloqueado': True,
+                            'motivo': motivo
+                        })
+                        continue
+
+                # Gerar boleto
+                try:
+                    resultado = parcela.gerar_boleto(enviar_email=False)
+                    if resultado and resultado.get('sucesso'):
+                        gerados_contrato += 1
+                        total_gerados += 1
+
+                        # Atualizar ultimo mes com boleto gerado
+                        if parcela.numero_parcela > contrato.ultimo_mes_boleto_gerado:
+                            contrato.ultimo_mes_boleto_gerado = parcela.numero_parcela
+
+                        parcelas_resultado.append({
+                            'parcela_id': parcela.id,
+                            'numero_parcela': parcela.numero_parcela,
+                            'sucesso': True,
+                            'nosso_numero': resultado.get('nosso_numero')
+                        })
+                    else:
+                        total_erros += 1
+                        parcelas_resultado.append({
+                            'parcela_id': parcela.id,
+                            'numero_parcela': parcela.numero_parcela,
+                            'sucesso': False,
+                            'erro': resultado.get('erro') if resultado else 'Erro desconhecido'
+                        })
+                except Exception as e:
+                    total_erros += 1
+                    parcelas_resultado.append({
+                        'parcela_id': parcela.id,
+                        'numero_parcela': parcela.numero_parcela,
+                        'sucesso': False,
+                        'erro': str(e)
+                    })
+
+            # Salvar atualizacao do contrato
+            if gerados_contrato > 0:
+                contrato.save(update_fields=['ultimo_mes_boleto_gerado'])
+
+            total_bloqueados += bloqueados_contrato
+
+            resultados.append({
+                'contrato_id': contrato_id,
+                'numero_contrato': contrato.numero_contrato,
+                'sucesso': gerados_contrato > 0,
+                'gerados': gerados_contrato,
+                'bloqueados': bloqueados_contrato,
+                'parcelas': parcelas_resultado
+            })
+
+        return JsonResponse({
+            'sucesso': True,
+            'total_contratos': len(contrato_ids),
+            'total_gerados': total_gerados,
+            'total_bloqueados': total_bloqueados,
+            'total_erros': total_erros,
+            'resultados': resultados,
+            'mensagem': f'{total_gerados} boletos gerados em {len(contrato_ids)} contrato(s)'
+        })
+
+    except json.JSONDecodeError:
+        return JsonResponse({
+            'sucesso': False,
+            'erro': 'Dados invalidos'
+        }, status=400)
+    except Exception as e:
+        logger.exception(f"Erro ao gerar boletos em lote: {e}")
+        return JsonResponse({
+            'sucesso': False,
+            'erro': str(e)
+        }, status=500)
+
+
 # =============================================================================
 # REAJUSTES DE CONTRATO
 # =============================================================================

@@ -720,48 +720,109 @@
 
 <!-- Modal de Gerar Carne -->
 <div class="modal fade" id="modalCarne" tabindex="-1">
-    <div class="modal-dialog">
+    <div class="modal-dialog modal-lg">
         <div class="modal-content">
             <div class="modal-header bg-primary text-white">
                 <h5 class="modal-title">
-                    <i class="fas fa-file-invoice-dollar"></i> Gerar Carne de Boletos
+                    <i class="fas fa-file-invoice-dollar"></i> Gerar Boletos
                 </h5>
                 <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
             </div>
             <form id="formCarne" method="post">
                 {% csrf_token %}
                 <div class="modal-body">
-                    <div class="alert alert-info">
-                        <i class="fas fa-info-circle"></i>
-                        Gere boletos para as proximas parcelas pendentes.
-                        {% if contrato.data_proximo_reajuste %}
-                        <br><strong>Atencao:</strong> Proximo reajuste em {{ contrato.data_proximo_reajuste|date:"d/m/Y" }}.
-                        Parcelas apos esta data nao poderao ter boleto gerado agora.
-                        {% endif %}
-                    </div>
-
-                    <div class="mb-3">
-                        <label class="form-label">Quantidade de Boletos <span class="text-danger">*</span></label>
-                        <input type="number" class="form-control" id="carne_quantidade" name="quantidade" min="1" max="{{ parcelas_pendentes }}" value="1" required>
-                        <small class="text-muted">{{ parcelas_pendentes }} parcela(s) pendente(s) disponivel(eis)</small>
-                    </div>
-
-                    <div class="mb-3">
-                        <label class="form-label">Parcelas que serao geradas:</label>
-                        <div id="preview_parcelas" class="border rounded p-2" style="max-height: 200px; overflow-y: auto;">
-                            <small class="text-muted">Selecione a quantidade...</small>
+                    <!-- Informacoes do Ciclo de Reajuste -->
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <div class="card bg-light">
+                                <div class="card-body py-2">
+                                    <small class="text-muted d-block">Tipo de Correcao</small>
+                                    <strong>{{ contrato.get_tipo_correcao_display }}</strong>
+                                    {% if contrato.tipo_correcao == 'FIXO' %}
+                                    <span class="badge bg-success ms-2">Sem reajuste</span>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="card bg-light">
+                                <div class="card-body py-2">
+                                    <small class="text-muted d-block">Prazo de Reajuste</small>
+                                    <strong>{{ contrato.prazo_reajuste_meses }} meses</strong>
+                                    {% if contrato.tipo_correcao != 'FIXO' %}
+                                    <small class="text-muted">(Ciclo atual: {{ contrato.ciclo_reajuste_atual|default:1 }})</small>
+                                    {% endif %}
+                                </div>
+                            </div>
                         </div>
                     </div>
 
-                    <div id="alertaReajuste" class="alert alert-warning d-none">
+                    <!-- Alerta de Reajuste Necessario -->
+                    <div id="alertaReajusteInfo" class="alert alert-warning d-none">
+                        <div class="d-flex align-items-center">
+                            <i class="fas fa-sync-alt fa-2x me-3"></i>
+                            <div>
+                                <strong>Reajuste Necessario</strong>
+                                <p class="mb-0" id="alertaReajusteInfoTexto"></p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Resumo de Parcelas -->
+                    <div class="row mb-3">
+                        <div class="col-md-4">
+                            <div class="text-center p-2 border rounded bg-success bg-opacity-10">
+                                <div class="fs-4 fw-bold text-success" id="totalDisponiveis">-</div>
+                                <small>Disponiveis</small>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="text-center p-2 border rounded bg-warning bg-opacity-10">
+                                <div class="fs-4 fw-bold text-warning" id="totalBloqueadas">-</div>
+                                <small>Bloqueadas (reajuste)</small>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="text-center p-2 border rounded bg-info bg-opacity-10">
+                                <div class="fs-4 fw-bold text-info" id="totalJaGeradas">-</div>
+                                <small>Ja com boleto</small>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Selecao de Quantidade -->
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">Quantidade de Boletos a Gerar</label>
+                        <div class="input-group">
+                            <button type="button" class="btn btn-outline-secondary" onclick="setQuantidade(1)">1</button>
+                            <button type="button" class="btn btn-outline-secondary" onclick="setQuantidade(6)">6</button>
+                            <button type="button" class="btn btn-outline-secondary" onclick="setQuantidade(12)">12</button>
+                            <input type="number" class="form-control text-center" id="carne_quantidade" name="quantidade" min="1" value="1" required style="max-width: 100px;">
+                            <button type="button" class="btn btn-outline-primary" id="btnMaxDisponiveis" onclick="setQuantidadeMax()">Max</button>
+                        </div>
+                        <small class="text-muted" id="quantidadeInfo"></small>
+                    </div>
+
+                    <!-- Preview das Parcelas -->
+                    <div class="mb-3">
+                        <label class="form-label">Parcelas que serao geradas:</label>
+                        <div id="preview_parcelas" class="border rounded" style="max-height: 250px; overflow-y: auto;">
+                            <div class="text-center py-3 text-muted">
+                                <i class="fas fa-spinner fa-spin"></i> Carregando...
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Alerta de Bloqueio -->
+                    <div id="alertaReajuste" class="alert alert-danger d-none">
                         <i class="fas fa-exclamation-triangle"></i>
                         <span id="alertaReajusteTexto"></span>
                     </div>
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
-                    <button type="submit" class="btn btn-primary" id="btnGerarCarne">
-                        <i class="fas fa-barcode"></i> Gerar Boletos
+                    <button type="submit" class="btn btn-primary" id="btnGerarCarne" disabled>
+                        <i class="fas fa-barcode"></i> Gerar <span id="btnGerarQtd">0</span> Boleto(s)
                     </button>
                 </div>
             </form>
@@ -1152,81 +1213,171 @@ document.getElementById('formPagamento').addEventListener('submit', function(e) 
 
 // ============ FUNCOES DE CARNE ============
 
+// Dados de elegibilidade de parcelas (carregados via API)
+var dadosElegibilidade = null;
+
 function abrirModalCarne() {
+    // Reset estado
     document.getElementById('carne_quantidade').value = 1;
-    atualizarPreviewCarne();
+    document.getElementById('preview_parcelas').innerHTML = '<div class="text-center py-3 text-muted"><i class="fas fa-spinner fa-spin"></i> Carregando...</div>';
+    document.getElementById('btnGerarCarne').disabled = true;
+
+    // Abrir modal
     new bootstrap.Modal(document.getElementById('modalCarne')).show();
+
+    // Carregar dados de elegibilidade via API
+    carregarElegibilidade();
+}
+
+function carregarElegibilidade() {
+    fetch('/financeiro/api/contrato/{{ contrato.pk }}/parcelas-elegibilidade/')
+    .then(response => response.json())
+    .then(data => {
+        if (data.sucesso) {
+            dadosElegibilidade = data;
+            atualizarResumoElegibilidade();
+            atualizarPreviewCarne();
+        } else {
+            document.getElementById('preview_parcelas').innerHTML = '<div class="text-center py-3 text-danger"><i class="fas fa-exclamation-circle"></i> Erro ao carregar: ' + data.erro + '</div>';
+        }
+    })
+    .catch(error => {
+        document.getElementById('preview_parcelas').innerHTML = '<div class="text-center py-3 text-danger"><i class="fas fa-exclamation-circle"></i> Erro de conexao</div>';
+    });
+}
+
+function atualizarResumoElegibilidade() {
+    if (!dadosElegibilidade) return;
+
+    var totalDisponiveis = dadosElegibilidade.total_disponiveis || 0;
+    var totalBloqueadas = dadosElegibilidade.total_bloqueadas || 0;
+    var totalJaGeradas = dadosElegibilidade.parcelas.filter(function(p) { return p.tem_boleto && p.pode_gerar; }).length;
+
+    document.getElementById('totalDisponiveis').textContent = totalDisponiveis;
+    document.getElementById('totalBloqueadas').textContent = totalBloqueadas;
+    document.getElementById('totalJaGeradas').textContent = totalJaGeradas;
+
+    // Atualizar max do input
+    var parcelasParaGerar = dadosElegibilidade.parcelas.filter(function(p) { return p.pode_gerar && !p.tem_boleto; }).length;
+    document.getElementById('carne_quantidade').max = parcelasParaGerar;
+    document.getElementById('quantidadeInfo').textContent = parcelasParaGerar + ' parcela(s) disponivel(eis) para geracao';
+
+    // Mostrar alerta de reajuste se necessario
+    var alertaInfo = document.getElementById('alertaReajusteInfo');
+    var alertaInfoTexto = document.getElementById('alertaReajusteInfoTexto');
+
+    if (dadosElegibilidade.proximo_ciclo_reajuste && !dadosElegibilidade.tipo_correcao_fixo) {
+        alertaInfo.classList.remove('d-none');
+        alertaInfoTexto.textContent = dadosElegibilidade.proximo_ciclo_reajuste.mensagem;
+    } else {
+        alertaInfo.classList.add('d-none');
+    }
+
+    // Atualizar botao max
+    document.getElementById('btnMaxDisponiveis').textContent = 'Max (' + parcelasParaGerar + ')';
+}
+
+function setQuantidade(qtd) {
+    var input = document.getElementById('carne_quantidade');
+    var max = parseInt(input.max) || 1;
+    input.value = Math.min(qtd, max);
+    atualizarPreviewCarne();
+}
+
+function setQuantidadeMax() {
+    var input = document.getElementById('carne_quantidade');
+    input.value = input.max;
+    atualizarPreviewCarne();
 }
 
 document.getElementById('carne_quantidade').addEventListener('change', atualizarPreviewCarne);
 document.getElementById('carne_quantidade').addEventListener('input', atualizarPreviewCarne);
 
 function atualizarPreviewCarne() {
+    if (!dadosElegibilidade) return;
+
     var qtd = parseInt(document.getElementById('carne_quantidade').value) || 0;
     var previewDiv = document.getElementById('preview_parcelas');
     var alertaDiv = document.getElementById('alertaReajuste');
     var alertaTexto = document.getElementById('alertaReajusteTexto');
     var btnGerar = document.getElementById('btnGerarCarne');
+    var btnGerarQtd = document.getElementById('btnGerarQtd');
 
-    if (qtd < 1 || parcelasPendentes.length === 0) {
-        if (previewDiv) previewDiv.innerHTML = '<small class="text-muted">Nenhuma parcela selecionada</small>';
-        if (alertaDiv) alertaDiv.classList.add('d-none');
+    // Filtrar parcelas que podem ser geradas (sem boleto e elegiveis)
+    var parcelasDisponiveis = dadosElegibilidade.parcelas.filter(function(p) {
+        return p.pode_gerar && !p.tem_boleto;
+    });
+
+    var parcelasBloqueadas = dadosElegibilidade.parcelas.filter(function(p) {
+        return !p.pode_gerar && !p.tem_boleto;
+    });
+
+    if (qtd < 1 || parcelasDisponiveis.length === 0) {
+        previewDiv.innerHTML = '<div class="text-center py-3 text-muted"><i class="fas fa-info-circle"></i> Nenhuma parcela disponivel para geracao</div>';
+        btnGerar.disabled = true;
+        btnGerarQtd.textContent = '0';
         return;
     }
 
-    var html = '<ul class="list-unstyled mb-0">';
-    var parcelasAposReajuste = 0;
-    var parcelasValidas = 0;
+    var html = '<table class="table table-sm table-hover mb-0">';
+    html += '<thead class="table-light"><tr><th>#</th><th>Vencimento</th><th class="text-end">Valor</th><th>Ciclo</th><th>Status</th></tr></thead><tbody>';
 
-    for (var i = 0; i < Math.min(qtd, parcelasPendentes.length); i++) {
-        var p = parcelasPendentes[i];
-        var podeGerar = true;
+    var parcelasParaGerar = [];
 
-        // Verificar se a parcela esta apos data de reajuste
-        if (dataReajuste) {
-            var vencParts = p.vencimento.split('/');
-            var vencDate = new Date(vencParts[2], vencParts[1] - 1, vencParts[0]);
-            var reajDate = new Date(dataReajuste);
-
-            if (vencDate >= reajDate) {
-                podeGerar = false;
-                parcelasAposReajuste++;
-            }
-        }
-
-        if (podeGerar) {
-            parcelasValidas++;
-            html += '<li class="py-1 border-bottom">';
-            html += '<i class="fas fa-check text-success me-2"></i>';
-        } else {
-            html += '<li class="py-1 border-bottom text-muted">';
-            html += '<i class="fas fa-times text-danger me-2"></i>';
-        }
-
-        html += '<strong>Parcela ' + p.numero + '</strong> - ' + p.vencimento + ' - R$ ' + p.valor.toFixed(2);
-        if (!podeGerar) {
-            html += ' <small class="text-danger">(apos reajuste)</small>';
-        }
-        html += '</li>';
+    // Primeiro as disponiveis (ate a quantidade solicitada)
+    for (var i = 0; i < Math.min(qtd, parcelasDisponiveis.length); i++) {
+        var p = parcelasDisponiveis[i];
+        parcelasParaGerar.push(p.id);
+        html += '<tr class="table-success">';
+        html += '<td><strong>' + p.numero_parcela + '</strong></td>';
+        html += '<td>' + p.data_vencimento + '</td>';
+        html += '<td class="text-end">R$ ' + p.valor_atual.toFixed(2) + '</td>';
+        html += '<td><span class="badge bg-info">' + p.ciclo + '</span></td>';
+        html += '<td><i class="fas fa-check text-success"></i> Sera gerado</td>';
+        html += '</tr>';
     }
-    html += '</ul>';
 
-    if (previewDiv) previewDiv.innerHTML = html;
+    // Mostrar algumas bloqueadas (se houver)
+    if (parcelasBloqueadas.length > 0) {
+        html += '<tr class="table-secondary"><td colspan="5" class="text-center fw-bold py-2"><i class="fas fa-lock"></i> Bloqueadas (aguardando reajuste)</td></tr>';
+        for (var j = 0; j < Math.min(3, parcelasBloqueadas.length); j++) {
+            var pb = parcelasBloqueadas[j];
+            html += '<tr class="text-muted">';
+            html += '<td>' + pb.numero_parcela + '</td>';
+            html += '<td>' + pb.data_vencimento + '</td>';
+            html += '<td class="text-end">R$ ' + pb.valor_atual.toFixed(2) + '</td>';
+            html += '<td><span class="badge bg-warning text-dark">' + pb.ciclo + '</span></td>';
+            html += '<td><small>' + pb.motivo + '</small></td>';
+            html += '</tr>';
+        }
+        if (parcelasBloqueadas.length > 3) {
+            html += '<tr class="text-muted"><td colspan="5" class="text-center">... e mais ' + (parcelasBloqueadas.length - 3) + ' parcela(s) bloqueada(s)</td></tr>';
+        }
+    }
 
-    if (parcelasAposReajuste > 0) {
-        if (alertaDiv) alertaDiv.classList.remove('d-none');
-        if (alertaTexto) alertaTexto.textContent = parcelasAposReajuste + ' parcela(s) estao apos a data de reajuste e nao serao geradas.';
-        var carneQtdEl = document.getElementById('carne_quantidade');
-        if (carneQtdEl) carneQtdEl.max = parcelasValidas;
+    html += '</tbody></table>';
+    previewDiv.innerHTML = html;
+
+    // Atualizar botao
+    btnGerar.disabled = parcelasParaGerar.length === 0;
+    btnGerarQtd.textContent = parcelasParaGerar.length;
+
+    // Alerta se houver bloqueio
+    if (parcelasBloqueadas.length > 0 && qtd > parcelasDisponiveis.length) {
+        alertaDiv.classList.remove('d-none');
+        alertaTexto.textContent = 'Algumas parcelas estao bloqueadas aguardando reajuste. Aplique o reajuste do ciclo ' + parcelasBloqueadas[0].ciclo + ' para libera-las.';
     } else {
-        if (alertaDiv) alertaDiv.classList.add('d-none');
+        alertaDiv.classList.add('d-none');
     }
-
-    if (btnGerar) btnGerar.disabled = parcelasValidas === 0;
 }
 
 document.getElementById('formCarne').addEventListener('submit', function(e) {
     e.preventDefault();
+
+    if (!dadosElegibilidade) {
+        alert('Dados de elegibilidade nao carregados');
+        return;
+    }
 
     var qtd = parseInt(document.getElementById('carne_quantidade').value) || 0;
     if (qtd < 1) {
@@ -1234,33 +1385,24 @@ document.getElementById('formCarne').addEventListener('submit', function(e) {
         return;
     }
 
-    // Coletar IDs das parcelas validas
+    // Coletar IDs das parcelas disponiveis
+    var parcelasDisponiveis = dadosElegibilidade.parcelas.filter(function(p) {
+        return p.pode_gerar && !p.tem_boleto;
+    });
+
     var parcelaIds = [];
-    for (var i = 0; i < Math.min(qtd, parcelasPendentes.length); i++) {
-        var p = parcelasPendentes[i];
-        var podeGerar = true;
-
-        if (dataReajuste) {
-            var vencParts = p.vencimento.split('/');
-            var vencDate = new Date(vencParts[2], vencParts[1] - 1, vencParts[0]);
-            var reajDate = new Date(dataReajuste);
-            if (vencDate >= reajDate) {
-                podeGerar = false;
-            }
-        }
-
-        if (podeGerar) {
-            parcelaIds.push(p.id);
-        }
+    for (var i = 0; i < Math.min(qtd, parcelasDisponiveis.length); i++) {
+        parcelaIds.push(parcelasDisponiveis[i].id);
     }
 
     if (parcelaIds.length === 0) {
-        alert('Nenhuma parcela valida para gerar boleto');
+        alert('Nenhuma parcela disponivel para gerar boleto');
         return;
     }
 
-    document.getElementById('btnGerarCarne').disabled = true;
-    document.getElementById('btnGerarCarne').innerHTML = '<i class="fas fa-spinner fa-spin"></i> Gerando...';
+    var btn = document.getElementById('btnGerarCarne');
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Gerando ' + parcelaIds.length + ' boleto(s)...';
 
     fetch('/financeiro/contrato/{{ contrato.pk }}/gerar-carne/', {
         method: 'POST',
@@ -1273,18 +1415,22 @@ document.getElementById('formCarne').addEventListener('submit', function(e) {
     .then(response => response.json())
     .then(data => {
         if (data.sucesso) {
-            alert('Carne gerado com sucesso!\n' + data.gerados + ' boleto(s) gerado(s).');
-            location.reload();
+            var msg = data.gerados + ' boleto(s) gerado(s) com sucesso!';
+            if (data.bloqueados > 0) {
+                msg += '\n' + data.bloqueados + ' parcela(s) bloqueada(s) por reajuste.';
+            }
+            showToast(msg, 'success');
+            setTimeout(function() { location.reload(); }, 1500);
         } else {
-            alert('Erro ao gerar carne: ' + data.erro);
-            document.getElementById('btnGerarCarne').disabled = false;
-            document.getElementById('btnGerarCarne').innerHTML = '<i class="fas fa-barcode"></i> Gerar Boletos';
+            showToast('Erro ao gerar boletos: ' + data.erro, 'error');
+            btn.disabled = false;
+            btn.innerHTML = '<i class="fas fa-barcode"></i> Gerar <span id="btnGerarQtd">' + parcelaIds.length + '</span> Boleto(s)';
         }
     })
     .catch(error => {
-        alert('Erro de conexao: ' + error);
-        document.getElementById('btnGerarCarne').disabled = false;
-        document.getElementById('btnGerarCarne').innerHTML = '<i class="fas fa-barcode"></i> Gerar Boletos';
+        showToast('Erro de conexao: ' + error, 'error');
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fas fa-barcode"></i> Gerar <span id="btnGerarQtd">' + parcelaIds.length + '</span> Boleto(s)';
     });
 });
 
