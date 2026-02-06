@@ -2,13 +2,19 @@
 # Desenvolvedor: Maxwell da Silva Oliveira
 # M&S do Brasil LTDA
 #
-# VERSAO FREE TIER (Otimizada)
+# VERSAO FREE TIER (Otimizada) + SUPABASE
 # Esta configuracao e otimizada para o plano gratuito do Render
+# usando Supabase como banco de dados PostgreSQL
 #
-# LIMITACOES DO FREE TIER:
+# BANCO DE DADOS: SUPABASE
+# - Plano gratuito mais generoso (500MB, sem expiracao de 90 dias)
+# - Melhor performance e uptime
+# - Painel de administracao integrado
+# - Backup automatico
+#
+# LIMITACOES DO FREE TIER RENDER:
 # - Sem Background Workers (Celery nao disponivel)
 # - Servico pode "adormecer" apos 15 min de inatividade
-# - PostgreSQL: 1GB storage, 1 conexao
 # - Redis: 25MB memoria
 #
 # SOLUCOES IMPLEMENTADAS:
@@ -17,12 +23,12 @@
 # - Cron externo via cron-job.org (gratuito)
 # - BRCobranca API para geracao de boletos
 
-databases:
-  # PostgreSQL Database (Free: 1GB, expira em 90 dias se inativo)
-  - name: gestao-contrato-db
-    databaseName: gestao_contrato
-    user: gestao_contrato_user
-    plan: free
+# =============================================================================
+# NOTA: Banco de dados agora e SUPABASE (externo)
+# =============================================================================
+# Configure DATABASE_URL manualmente nas Environment Variables do Render
+# com a connection string do Supabase:
+# postgresql://postgres:SUA-SENHA@db.SEU-PROJETO.supabase.co:5432/postgres
 
 services:
   # =============================================================================
@@ -44,10 +50,11 @@ services:
         value: "False"
       - key: ALLOWED_HOSTS
         sync: false
+      # DATABASE_URL - Supabase PostgreSQL
+      # Configure manualmente em Environment Variables do Render:
+      # postgresql://postgres:SUA-SENHA@db.SEU-PROJETO.supabase.co:5432/postgres
       - key: DATABASE_URL
-        fromDatabase:
-          name: gestao-contrato-db
-          property: connectionString
+        sync: false
       - key: REDIS_URL
         fromService:
           name: gestao-contrato-redis
@@ -59,6 +66,11 @@ services:
       # URL do servico BRCobranca
       - key: BRCOBRANCA_URL
         value: "https://brcobranca-api.onrender.com"
+      # Supabase (opcional - para funcionalidades adicionais)
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_KEY
+        sync: false
 
   # =============================================================================
   # BRCobranca API (Geracao de Boletos)
