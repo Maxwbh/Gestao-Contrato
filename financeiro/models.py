@@ -308,16 +308,24 @@ class Parcela(TimeStampedModel):
         Verifica se é possível gerar boleto para esta parcela.
         Considera regras de reajuste pendente.
 
+        Excecao: tipo_correcao='FIXO' permite gerar todos os boletos
+                 sem necessidade de reajuste.
+
         Returns:
             tuple: (pode_gerar: bool, motivo: str)
         """
         if self.pago:
-            return False, "Parcela já está paga."
+            return False, "Parcela ja esta paga."
 
         if self.status_boleto == StatusBoleto.PAGO:
-            return False, "Boleto já foi pago."
+            return False, "Boleto ja foi pago."
 
-        # Verificar se o reajuste do ciclo anterior foi aplicado
+        # Correcao FIXO: sempre pode gerar (nao precisa de reajuste)
+        from contratos.models import TipoCorrecao
+        if self.contrato.tipo_correcao == TipoCorrecao.FIXO:
+            return True, "Indice FIXO - sem necessidade de reajuste"
+
+        # Verificar se o reajuste do ciclo foi aplicado
         if self.ciclo_reajuste and self.ciclo_reajuste > 1:
             from financeiro.models import Reajuste
             reajuste_aplicado = Reajuste.objects.filter(
@@ -329,7 +337,7 @@ class Parcela(TimeStampedModel):
             if not reajuste_aplicado:
                 return False, f"Reajuste pendente para o ciclo {self.ciclo_reajuste}. Aplique o reajuste antes de gerar boletos."
 
-        return True, "Liberado para geração."
+        return True, "Liberado para geracao."
 
     @property
     def valor_total(self):
