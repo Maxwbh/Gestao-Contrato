@@ -52,6 +52,7 @@ urlpatterns = [
     path('contrato/<int:contrato_id>/reajuste/calcular/', views.calcular_reajuste_proporcional, name='calcular_reajuste'),
     path('reajuste/<int:pk>/excluir/', views.excluir_reajuste, name='excluir_reajuste'),
     path('api/indice-reajuste/', views.obter_indice_reajuste, name='api_indice_reajuste'),
+    path('api/calcular-indice-acumulado/', views.api_calcular_indice_acumulado, name='api_calcular_indice_acumulado'),
 
     # ==========================================================================
     # CNAB - Arquivos de Remessa
