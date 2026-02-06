@@ -1405,3 +1405,89 @@ def pagina_dados_teste(request):
     }
 
     return render(request, 'core/dados_teste.html', {'stats': stats})
+
+
+# =============================================================================
+# API - BRASILAPI (CEP e CNPJ)
+# =============================================================================
+
+@login_required
+def api_buscar_cep(request, cep):
+    """
+    Busca endereco pelo CEP usando BrasilAPI.
+
+    URL: /api/cep/<cep>/
+    Metodo: GET
+
+    Retorna:
+    {
+        "sucesso": true,
+        "cep": "01310-100",
+        "logradouro": "Avenida Paulista",
+        "complemento": "",
+        "bairro": "Bela Vista",
+        "cidade": "Sao Paulo",
+        "estado": "SP",
+        "fonte": "BrasilAPI"
+    }
+    """
+    from .services.brasilapi_service import buscar_cep
+
+    resultado = buscar_cep(cep)
+
+    if resultado and resultado.get('sucesso'):
+        return JsonResponse(resultado)
+    else:
+        return JsonResponse(
+            resultado or {'sucesso': False, 'erro': 'Erro ao buscar CEP'},
+            status=404 if resultado and 'nao encontrado' in resultado.get('erro', '') else 500
+        )
+
+
+@login_required
+def api_buscar_cnpj(request, cnpj):
+    """
+    Busca dados da empresa pelo CNPJ usando BrasilAPI.
+
+    URL: /api/cnpj/<cnpj>/
+    Metodo: GET
+
+    Retorna:
+    {
+        "sucesso": true,
+        "cnpj": "00.000.000/0001-91",
+        "razao_social": "EMPRESA LTDA",
+        "nome_fantasia": "EMPRESA",
+        "situacao_cadastral": "ATIVA",
+        "email": "contato@empresa.com",
+        "telefone": "1199999999",
+        "cep": "01310-100",
+        "logradouro": "Avenida Paulista",
+        "numero": "1000",
+        "complemento": "Sala 100",
+        "bairro": "Bela Vista",
+        "cidade": "Sao Paulo",
+        "estado": "SP",
+        "fonte": "BrasilAPI"
+    }
+    """
+    from .services.brasilapi_service import buscar_cnpj
+
+    resultado = buscar_cnpj(cnpj)
+
+    if resultado and resultado.get('sucesso'):
+        return JsonResponse(resultado)
+    else:
+        erro = resultado.get('erro', '') if resultado else ''
+        if 'nao encontrado' in erro.lower():
+            status_code = 404
+        elif 'invalido' in erro.lower():
+            status_code = 400
+        else:
+            status_code = 500
+
+        return JsonResponse(
+            resultado or {'sucesso': False, 'erro': 'Erro ao buscar CNPJ'},
+            status=status_code
+        )
+

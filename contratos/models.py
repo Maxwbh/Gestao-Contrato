@@ -729,23 +729,31 @@ class Contrato(TimeStampedModel):
                No 13º mês (início de novo ciclo), a emissão só é liberada
                APÓS aplicação do reajuste.
 
+        Excecao: tipo_correcao='FIXO' permite gerar todos os boletos
+                 sem necessidade de reajuste.
+
         Args:
             numero_parcela: Número da parcela a verificar
 
         Returns:
             tuple: (pode_gerar: bool, motivo: str)
         """
+        # Correcao FIXO: sempre pode gerar (nao precisa de reajuste)
+        if self.tipo_correcao == TipoCorrecao.FIXO:
+            return True, "Indice FIXO - sem necessidade de reajuste"
+
         ciclo_parcela = self.calcular_ciclo_parcela(numero_parcela)
 
         # Primeiro ciclo (meses 1-12): sempre pode gerar
         if ciclo_parcela == 1:
             return True, "Primeiro ciclo - liberado"
 
-        # Verificar se o reajuste do ciclo anterior foi aplicado
+        # Verificar se o reajuste do ciclo foi aplicado
         from financeiro.models import Reajuste
         reajuste_aplicado = Reajuste.objects.filter(
             contrato=self,
-            ciclo=ciclo_parcela
+            ciclo=ciclo_parcela,
+            aplicado=True  # Deve estar efetivamente aplicado
         ).exists()
 
         if reajuste_aplicado:
