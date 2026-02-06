@@ -193,6 +193,103 @@
     }
 
     /**
+     * Buscar dados da empresa via BrasilAPI (CNPJ)
+     */
+    async function buscarCNPJ(cnpj) {
+        const cnpjLimpo = cnpj.replace(/\D/g, '');
+
+        if (cnpjLimpo.length !== 14) {
+            return { erro: true, mensagem: 'CNPJ deve ter 14 digitos' };
+        }
+
+        try {
+            // Usar o endpoint local que faz proxy para BrasilAPI
+            const response = await fetch(`/api/cnpj/${cnpjLimpo}/`);
+            const data = await response.json();
+
+            if (!data.sucesso) {
+                return { erro: true, mensagem: data.erro || 'CNPJ nao encontrado' };
+            }
+
+            return {
+                erro: false,
+                cnpj: data.cnpj,
+                razao_social: data.razao_social,
+                nome_fantasia: data.nome_fantasia,
+                situacao_cadastral: data.situacao_cadastral,
+                email: data.email,
+                telefone: data.telefone,
+                cep: data.cep,
+                logradouro: data.logradouro,
+                numero: data.numero,
+                complemento: data.complemento,
+                bairro: data.bairro,
+                cidade: data.cidade,
+                estado: data.estado
+            };
+        } catch (error) {
+            console.error('Erro ao buscar CNPJ:', error);
+            return { erro: true, mensagem: 'Erro ao buscar CNPJ. Tente novamente.' };
+        }
+    }
+
+    /**
+     * Preencher campos com dados da empresa (CNPJ)
+     */
+    function preencherDadosEmpresa(dados) {
+        const mapeamento = {
+            // Dados da empresa
+            'nome': dados.razao_social,
+            'id_nome': dados.razao_social,
+            'razao_social': dados.razao_social,
+            'nome_fantasia': dados.nome_fantasia,
+            'id_nome_fantasia': dados.nome_fantasia,
+
+            // Contato
+            'email': dados.email,
+            'id_email': dados.email,
+            'telefone': dados.telefone,
+            'id_telefone': dados.telefone,
+
+            // Endereco
+            'cep': dados.cep,
+            'id_cep': dados.cep,
+            'logradouro': dados.logradouro,
+            'id_logradouro': dados.logradouro,
+            'numero': dados.numero,
+            'id_numero': dados.numero,
+            'complemento': dados.complemento,
+            'id_complemento': dados.complemento,
+            'bairro': dados.bairro,
+            'id_bairro': dados.bairro,
+            'cidade': dados.cidade,
+            'id_cidade': dados.cidade,
+            'estado': dados.estado,
+            'id_estado': dados.estado
+        };
+
+        Object.keys(mapeamento).forEach(campo => {
+            const valor = mapeamento[campo];
+            if (valor) {
+                const elemento = document.querySelector(`[name="${campo}"]`) ||
+                                document.getElementById(campo);
+                if (elemento && !elemento.value) {
+                    elemento.value = valor;
+                    elemento.dispatchEvent(new Event('change'));
+                }
+            }
+        });
+
+        // Mostrar situacao cadastral
+        if (dados.situacao_cadastral) {
+            const situacaoDiv = document.getElementById('situacao-cnpj');
+            if (situacaoDiv) {
+                situacaoDiv.innerHTML = `<span class="badge ${dados.situacao_cadastral === 'ATIVA' ? 'bg-success' : 'bg-danger'}">${dados.situacao_cadastral}</span>`;
+            }
+        }
+    }
+
+    /**
      * Apply currency mask
      */
     function mascaraMoeda(value) {
@@ -525,7 +622,54 @@
                         e.target.classList.remove('is-invalid');
                         e.target.classList.add('is-valid');
                         preencherEndereco(resultado);
-                        showToast('Endereço encontrado!', 'success');
+                        showToast('Endereco encontrado!', 'success');
+                    }
+                }
+            });
+        });
+
+        // ====================================================================
+        // CNPJ inputs with BrasilAPI integration
+        // ====================================================================
+        const cnpjInputs = document.querySelectorAll('input[name="cnpj"], .cnpj-input');
+        cnpjInputs.forEach(input => {
+            input.addEventListener('input', function(e) {
+                e.target.value = mascaraCNPJ(e.target.value);
+            });
+
+            input.addEventListener('blur', async function(e) {
+                const cnpj = e.target.value.replace(/\D/g, '');
+
+                if (cnpj.length === 14) {
+                    // Validar CNPJ primeiro
+                    if (!validarCNPJ(e.target.value)) {
+                        showToast('CNPJ invalido', 'warning');
+                        e.target.classList.add('is-invalid');
+                        e.target.classList.remove('is-valid');
+                        return;
+                    }
+
+                    const originalValue = e.target.value;
+                    e.target.value = 'Buscando...';
+                    e.target.disabled = true;
+
+                    const resultado = await buscarCNPJ(cnpj);
+
+                    e.target.value = originalValue;
+                    e.target.disabled = false;
+
+                    if (resultado.erro) {
+                        showToast(resultado.mensagem, 'warning');
+                        e.target.classList.add('is-invalid');
+                        e.target.classList.remove('is-valid');
+                    } else {
+                        e.target.classList.remove('is-invalid');
+                        e.target.classList.add('is-valid');
+                        preencherDadosEmpresa(resultado);
+
+                        // Mensagem com nome da empresa
+                        const nomeEmpresa = resultado.nome_fantasia || resultado.razao_social;
+                        showToast(`Empresa encontrada: ${nomeEmpresa}`, 'success');
                     }
                 }
             });
