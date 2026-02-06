@@ -1494,6 +1494,7 @@ function calcularReajusteProporcional() {
 
     infoSpan.textContent = 'Calculando reajuste proporcional...';
 
+    // Usar a nova API que segue a metodologia Calculo Exato
     fetch('/financeiro/contrato/{{ contrato.pk }}/reajuste/calcular/?tipo_indice=' + tipoIndice)
     .then(response => response.json())
     .then(data => {
@@ -1501,24 +1502,39 @@ function calcularReajusteProporcional() {
             document.getElementById('reajuste_percentual').value = data.percentual_acumulado.toFixed(4);
             infoSpan.textContent = 'Reajuste acumulado ' + tipoIndice + ' de ' + data.data_inicio + ' a ' + data.data_fim + ': ' + data.percentual_acumulado.toFixed(4) + '%';
 
-            // Mostrar detalhes do calculo
+            // Mostrar detalhes do calculo (metodologia Calculo Exato)
             var html = '<small>';
+            html += '<div class="mb-2 p-2 bg-info bg-opacity-10 rounded">';
+            html += '<strong><i class="fas fa-calculator me-1"></i>Metodologia: Calculo Exato</strong>';
+            html += '<p class="mb-0 mt-1" style="font-size: 0.75rem;">Fator = (1 + i<sub>1</sub>/100) × (1 + i<sub>2</sub>/100) × ... × (1 + i<sub>n</sub>/100)</p>';
+            html += '</div>';
             html += '<p class="mb-1"><strong>Periodo:</strong> ' + data.data_inicio + ' a ' + data.data_fim + '</p>';
-            html += '<p class="mb-1"><strong>Meses:</strong> ' + data.total_meses + '</p>';
-            html += '<table class="table table-sm table-bordered mb-0" style="font-size: 0.75rem;">';
-            html += '<thead><tr><th>Mes/Ano</th><th>Indice</th><th>Dias</th><th>Prop.</th></tr></thead><tbody>';
+            html += '<p class="mb-1"><strong>Total de meses:</strong> ' + data.total_meses + '</p>';
+            html += '<p class="mb-2"><strong>Fator de multiplicacao:</strong> ' + data.fator_acumulado.toFixed(6) + '</p>';
+            html += '<table class="table table-sm table-bordered mb-2" style="font-size: 0.75rem;">';
+            html += '<thead class="table-light"><tr><th>Mes/Ano</th><th>Indice (%)</th><th>Dias</th><th>Prop. (%)</th><th>Fator</th></tr></thead><tbody>';
 
             for (var i = 0; i < data.meses_detalhes.length; i++) {
                 var m = data.meses_detalhes[i];
+                var indiceOriginal = m.indice_original !== null ? m.indice_original.toFixed(2) : '-';
+                var indiceProp = m.indice_proporcional !== undefined ? m.indice_proporcional.toFixed(4) : '0.0000';
                 html += '<tr>';
                 html += '<td>' + m.mes + '/' + m.ano + '</td>';
-                html += '<td>' + m.indice_original.toFixed(2) + '%</td>';
-                html += '<td>' + m.dias_considerados + '/' + m.dias_mes + '</td>';
-                html += '<td>' + m.indice_proporcional.toFixed(4) + '%</td>';
+                html += '<td class="text-end">' + indiceOriginal + '</td>';
+                html += '<td class="text-center">' + m.dias_considerados + '/' + m.dias_mes + '</td>';
+                html += '<td class="text-end">' + indiceProp + '</td>';
+                html += '<td class="text-end">' + (1 + parseFloat(indiceProp) / 100).toFixed(6) + '</td>';
                 html += '</tr>';
             }
 
-            html += '</tbody></table>';
+            html += '</tbody>';
+            html += '<tfoot class="table-light">';
+            html += '<tr><td colspan="4" class="text-end"><strong>Fator Acumulado:</strong></td>';
+            html += '<td class="text-end"><strong>' + data.fator_acumulado.toFixed(6) + '</strong></td></tr>';
+            html += '<tr><td colspan="4" class="text-end"><strong>Percentual Total:</strong></td>';
+            html += '<td class="text-end"><strong class="text-success">' + data.percentual_acumulado.toFixed(4) + '%</strong></td></tr>';
+            html += '</tfoot></table>';
+            html += '<p class="mb-0 text-muted" style="font-size: 0.7rem;"><i class="fas fa-info-circle me-1"></i>Percentual = (Fator - 1) × 100</p>';
             html += '</small>';
 
             detalhesConteudo.innerHTML = html;

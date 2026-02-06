@@ -2055,10 +2055,13 @@ def obter_indice_reajuste(request):
         if indice:
             return JsonResponse({
                 'sucesso': True,
-                'percentual': float(indice.percentual),
+                'percentual': float(indice.valor),  # Campo correto e 'valor', nao 'percentual'
+                'valor': float(indice.valor),
                 'tipo_indice': indice.tipo_indice,
                 'ano': indice.ano,
-                'mes': indice.mes
+                'mes': indice.mes,
+                'valor_acumulado_12m': float(indice.valor_acumulado_12m) if indice.valor_acumulado_12m else None,
+                'valor_acumulado_ano': float(indice.valor_acumulado_ano) if indice.valor_acumulado_ano else None,
             })
         else:
             return JsonResponse({
@@ -2127,7 +2130,7 @@ def calcular_reajuste_proporcional(request, contrato_id):
             ).first()
 
             if indice:
-                percentual_mes = indice.percentual
+                percentual_mes = indice.valor  # Campo correto e 'valor', nao 'percentual'
             else:
                 percentual_mes = Decimal('0')
 
@@ -2184,6 +2187,92 @@ def calcular_reajuste_proporcional(request, contrato_id):
 
     except Exception as e:
         logger.exception(f"Erro ao calcular reajuste proporcional: {e}")
+        return JsonResponse({
+            'sucesso': False,
+            'erro': str(e)
+        }, status=500)
+
+
+@login_required
+def api_calcular_indice_acumulado(request):
+    """
+    API para calcular o índice acumulado com detalhes completos.
+
+    Metodologia Cálculo Exato (calculoexato.com.br):
+    - Fator = produto de (1 + índice_mensal/100) para cada mês
+    - Percentual acumulado = (Fator - 1) * 100
+    - Valor atualizado = Valor original * Fator
+
+    Parâmetros GET:
+        tipo_indice: Tipo do índice (IPCA, IGPM, etc.)
+        ano_inicio: Ano inicial
+        mes_inicio: Mês inicial
+        ano_fim: Ano final
+        mes_fim: Mês final
+        proporcional: Se 'true', calcula pro-rata para primeiro/último mês
+        valor_original: Valor para simular atualização (opcional)
+
+    Retorno:
+        JSON com detalhes completos do cálculo incluindo:
+        - fator_acumulado: Fator multiplicador
+        - percentual_acumulado: Percentual de correção
+        - meses: Lista com detalhes de cada mês
+        - calculo_detalhado: Fórmula textual do cálculo
+        - valor_atualizado: Se valor_original informado
+    """
+    from financeiro.services.reajuste_service import ReajusteService
+    from datetime import date
+
+    try:
+        tipo_indice = request.GET.get('tipo_indice', 'IPCA')
+        ano_inicio = int(request.GET.get('ano_inicio', timezone.now().year - 1))
+        mes_inicio = int(request.GET.get('mes_inicio', 1))
+        ano_fim = int(request.GET.get('ano_fim', timezone.now().year))
+        mes_fim = int(request.GET.get('mes_fim', timezone.now().month))
+        proporcional = request.GET.get('proporcional', 'false').lower() == 'true'
+        valor_original_str = request.GET.get('valor_original', '')
+
+        # Criar datas
+        data_inicio = date(ano_inicio, mes_inicio, 1)
+        data_fim = date(ano_fim, mes_fim, 1)
+
+        # Validar datas
+        if data_inicio > data_fim:
+            return JsonResponse({
+                'sucesso': False,
+                'erro': 'Data inicial deve ser anterior ou igual à data final'
+            }, status=400)
+
+        # Calcular usando o serviço
+        service = ReajusteService()
+        resultado = service.calcular_indice_acumulado_detalhado(
+            tipo_indice=tipo_indice,
+            data_inicio=data_inicio,
+            data_fim=data_fim,
+            proporcional=proporcional
+        )
+
+        # Se valor original informado, calcular valor atualizado
+        if valor_original_str:
+            try:
+                valor_original = Decimal(valor_original_str.replace(',', '.'))
+                fator = Decimal(str(resultado['fator_acumulado']))
+                valor_atualizado = valor_original * fator
+                resultado['valor_original'] = float(valor_original)
+                resultado['valor_atualizado'] = float(valor_atualizado)
+                resultado['diferenca'] = float(valor_atualizado - valor_original)
+            except (ValueError, TypeError):
+                pass
+
+        return JsonResponse(resultado)
+
+    except ValueError as e:
+        return JsonResponse({
+            'sucesso': False,
+            'erro': f'Valor inválido: {str(e)}'
+        }, status=400)
+    except Exception as e:
+        logger.exception(f"Erro ao calcular índice acumulado: {e}")
         return JsonResponse({
             'sucesso': False,
             'erro': str(e)

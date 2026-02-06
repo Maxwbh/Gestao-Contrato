@@ -120,6 +120,146 @@ class ReajusteService:
 
         return len(meses_faltantes) == 0, meses_faltantes
 
+    def calcular_indice_acumulado_detalhado(
+        self,
+        tipo_indice: str,
+        data_inicio: date,
+        data_fim: date,
+        proporcional: bool = False
+    ) -> Dict:
+        """
+        Calcula o índice acumulado com detalhes completos.
+
+        Metodologia Cálculo Exato (calculoexato.com.br):
+        - Fator = produto de (1 + índice_mensal/100) para cada mês
+        - Percentual acumulado = (Fator - 1) * 100
+        - Valor atualizado = Valor original * Fator
+
+        Args:
+            tipo_indice: Tipo do índice (IPCA, IGPM, etc.)
+            data_inicio: Data inicial do período
+            data_fim: Data final do período
+            proporcional: Se True, calcula pro-rata para primeiro e último mês
+
+        Returns:
+            Dict com detalhes completos do cálculo
+        """
+        from calendar import monthrange
+
+        resultado = {
+            'sucesso': False,
+            'tipo_indice': tipo_indice,
+            'data_inicio': data_inicio.isoformat(),
+            'data_fim': data_fim.isoformat(),
+            'proporcional': proporcional,
+            'fator_acumulado': Decimal('1.0'),
+            'percentual_acumulado': Decimal('0.0'),
+            'meses': [],
+            'meses_faltantes': [],
+            'formula': 'Fator = (1 + i1/100) × (1 + i2/100) × ... × (1 + iN/100)',
+            'metodologia': 'Cálculo Exato - Atualização por Índice Econômico'
+        }
+
+        # Iterar pelos meses do período
+        mes_atual = data_inicio.month
+        ano_atual = data_inicio.year
+        fator_acumulado = Decimal('1.0')
+
+        while (ano_atual < data_fim.year) or (ano_atual == data_fim.year and mes_atual <= data_fim.month):
+            # Buscar índice do mês
+            indice = self.buscar_indice(tipo_indice, ano_atual, mes_atual)
+
+            # Calcular dias do mês
+            dias_no_mes = monthrange(ano_atual, mes_atual)[1]
+
+            # Determinar proporção a ser aplicada
+            if proporcional:
+                # Primeiro mês - proporcional aos dias restantes
+                if ano_atual == data_inicio.year and mes_atual == data_inicio.month:
+                    dias_considerados = dias_no_mes - data_inicio.day + 1
+                    proporcao = Decimal(dias_considerados) / Decimal(dias_no_mes)
+                # Último mês - proporcional aos dias até a data final
+                elif ano_atual == data_fim.year and mes_atual == data_fim.month:
+                    dias_considerados = data_fim.day
+                    proporcao = Decimal(dias_considerados) / Decimal(dias_no_mes)
+                # Meses intermediários - índice completo
+                else:
+                    dias_considerados = dias_no_mes
+                    proporcao = Decimal('1.0')
+            else:
+                dias_considerados = dias_no_mes
+                proporcao = Decimal('1.0')
+
+            if indice:
+                percentual_mes = indice.valor
+                percentual_aplicado = percentual_mes * proporcao
+                fator_mes = 1 + (percentual_aplicado / 100)
+                fator_acumulado *= fator_mes
+
+                resultado['meses'].append({
+                    'ano': ano_atual,
+                    'mes': mes_atual,
+                    'mes_nome': self._nome_mes(mes_atual),
+                    'periodo': f"{mes_atual:02d}/{ano_atual}",
+                    'indice_original': float(percentual_mes),
+                    'dias_mes': dias_no_mes,
+                    'dias_considerados': dias_considerados,
+                    'proporcao': float(proporcao),
+                    'indice_aplicado': float(percentual_aplicado),
+                    'fator_mes': float(fator_mes),
+                    'fator_acumulado_ate_aqui': float(fator_acumulado)
+                })
+            else:
+                resultado['meses_faltantes'].append(f"{mes_atual:02d}/{ano_atual}")
+                resultado['meses'].append({
+                    'ano': ano_atual,
+                    'mes': mes_atual,
+                    'mes_nome': self._nome_mes(mes_atual),
+                    'periodo': f"{mes_atual:02d}/{ano_atual}",
+                    'indice_original': None,
+                    'dias_mes': dias_no_mes,
+                    'dias_considerados': dias_considerados,
+                    'proporcao': float(proporcao),
+                    'indice_aplicado': 0,
+                    'fator_mes': 1.0,
+                    'fator_acumulado_ate_aqui': float(fator_acumulado),
+                    'erro': 'Índice não cadastrado'
+                })
+
+            # Avançar para próximo mês
+            mes_atual += 1
+            if mes_atual > 12:
+                mes_atual = 1
+                ano_atual += 1
+
+        # Calcular percentual acumulado
+        percentual_acumulado = (fator_acumulado - 1) * 100
+
+        resultado['fator_acumulado'] = float(fator_acumulado)
+        resultado['percentual_acumulado'] = float(percentual_acumulado)
+        resultado['total_meses'] = len(resultado['meses'])
+        resultado['sucesso'] = len(resultado['meses_faltantes']) == 0
+
+        # Gerar explicação textual do cálculo
+        if resultado['meses']:
+            fatores_str = ' × '.join([
+                f"(1 + {m['indice_aplicado']:.4f}%)"
+                for m in resultado['meses'] if m.get('indice_original') is not None
+            ])
+            resultado['calculo_detalhado'] = (
+                f"Fator = {fatores_str}\n"
+                f"Fator = {fator_acumulado:.6f}\n"
+                f"Percentual = ({fator_acumulado:.6f} - 1) × 100 = {percentual_acumulado:.4f}%"
+            )
+
+        return resultado
+
+    def _nome_mes(self, mes: int) -> str:
+        """Retorna o nome do mês"""
+        nomes = ['', 'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
+                 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro']
+        return nomes[mes] if 1 <= mes <= 12 else ''
+
     # =========================================================================
     # ANÁLISE DE CONTRATOS
     # =========================================================================
