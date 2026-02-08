@@ -13,6 +13,15 @@ pip install -r requirements.txt
 # python manage.py makemigrations --no-input
 
 echo "==> Running database migrations..."
+# Executar migracoes do Django core primeiro (auth, contenttypes, sessions)
+# para garantir que auth_user existe antes das migracoes dos apps locais
+echo "  -> Django core migrations (contenttypes, auth, sessions)..."
+python manage.py migrate contenttypes --no-input
+python manage.py migrate auth --no-input
+python manage.py migrate sessions --no-input
+python manage.py migrate admin --no-input
+
+echo "  -> App migrations..."
 python manage.py migrate --no-input
 
 echo "==> Applying custom schema changes..."
