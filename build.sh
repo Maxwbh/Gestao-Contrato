@@ -21,9 +21,36 @@ with connection.cursor() as cursor:
     cursor.execute("CREATE SCHEMA IF NOT EXISTS gestao_contrato")
     print('Schema gestao_contrato criado/verificado.')
 
-    # Definir search_path para usar o schema
-    cursor.execute("SET search_path TO gestao_contrato, public")
-    print('Search path configurado: gestao_contrato, public')
+    # Verificar se auth_user existe no schema gestao_contrato
+    cursor.execute("""
+        SELECT EXISTS (
+            SELECT 1 FROM information_schema.tables
+            WHERE table_schema = 'gestao_contrato'
+            AND table_name = 'auth_user'
+        )
+    """)
+    auth_exists = cursor.fetchone()[0]
+
+    if not auth_exists:
+        # Verificar se django_migrations existe no schema gestao_contrato
+        cursor.execute("""
+            SELECT EXISTS (
+                SELECT 1 FROM information_schema.tables
+                WHERE table_schema = 'gestao_contrato'
+                AND table_name = 'django_migrations'
+            )
+        """)
+        migrations_exists = cursor.fetchone()[0]
+
+        if migrations_exists:
+            print('ATENCAO: auth_user nao existe mas django_migrations tem registros.')
+            print('Limpando django_migrations no schema gestao_contrato...')
+            cursor.execute("DELETE FROM gestao_contrato.django_migrations")
+            print('Tabela limpa - migracoes serao reaplicadas.')
+        else:
+            print('Schema novo - tabelas serao criadas.')
+    else:
+        print('auth_user existe no schema gestao_contrato - OK.')
 SCHEMAEOF
 
 echo "==> Running database migrations..."
