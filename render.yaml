@@ -24,11 +24,10 @@
 # - BRCobranca API para geracao de boletos
 
 # =============================================================================
-# NOTA: Banco de dados agora e SUPABASE (externo)
+# BANCO DE DADOS: SUPABASE POSTGRESQL (Pooler)
 # =============================================================================
-# Configure DATABASE_URL manualmente nas Environment Variables do Render
-# com a connection string do Supabase:
-# postgresql://postgres:SUA-SENHA@db.SEU-PROJETO.supabase.co:5432/postgres
+# Usando connection pooler (porta 6543) para melhor compatibilidade
+# Projeto: szyouijmxhlbavkzibxa
 
 services:
   # =============================================================================
@@ -49,12 +48,10 @@ services:
       - key: DEBUG
         value: "False"
       - key: ALLOWED_HOSTS
-        sync: false
-      # DATABASE_URL - Supabase PostgreSQL
-      # Configure manualmente em Environment Variables do Render:
-      # postgresql://postgres:SUA-SENHA@db.SEU-PROJETO.supabase.co:5432/postgres
+        value: ".onrender.com,localhost,127.0.0.1"
+      # DATABASE_URL - Supabase PostgreSQL (usando Pooler porta 6543)
       - key: DATABASE_URL
-        sync: false
+        value: "postgresql://postgres.szyouijmxhlbavkzibxa:123ewqasdcxz%21%40%23@aws-0-sa-east-1.pooler.supabase.com:6543/postgres"
       - key: REDIS_URL
         fromService:
           name: gestao-contrato-redis
@@ -66,11 +63,11 @@ services:
       # URL do servico BRCobranca
       - key: BRCOBRANCA_URL
         value: "https://brcobranca-api.onrender.com"
-      # Supabase (opcional - para funcionalidades adicionais)
+      # Supabase API
       - key: SUPABASE_URL
-        sync: false
+        value: "https://szyouijmxhlbavkzibxa.supabase.co"
       - key: SUPABASE_KEY
-        sync: false
+        value: "sb_publishable_aswPuvIXjzcejBTyYWObdQ_BpC5l903"
 
   # =============================================================================
   # BRCobranca API (Geracao de Boletos)
