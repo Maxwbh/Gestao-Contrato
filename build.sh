@@ -16,18 +16,20 @@ echo "==> Creating schema gestao_contrato if not exists..."
 python << 'SCHEMAEOF'
 import os
 import psycopg2
-from urllib.parse import urlparse
+from urllib.parse import urlparse, unquote
 
 # Conectar sem search_path para criar o schema
 database_url = os.environ.get('DATABASE_URL')
 if database_url:
     result = urlparse(database_url)
+    # Decodificar senha (pode ter caracteres especiais URL-encoded)
+    password = unquote(result.password) if result.password else None
     conn = psycopg2.connect(
         host=result.hostname,
         port=result.port or 5432,
         database=result.path[1:],
         user=result.username,
-        password=result.password
+        password=password
     )
     conn.autocommit = True
     cursor = conn.cursor()
