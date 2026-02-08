@@ -661,4 +661,22 @@ else:
     print('Superuser admin ja existe')
 EOF
 
+echo "==> Checking if test data needs to be generated..."
+python manage.py shell << 'TESTDATAEOF'
+from core.models import Contabilidade, Imobiliaria
+
+# Verificar se ja existe dados (primeira execucao)
+if not Contabilidade.objects.exists() and not Imobiliaria.objects.exists():
+    print('Banco vazio - gerando dados de teste na primeira execucao...')
+    # Importar e executar comando de dados de teste
+    from django.core.management import call_command
+    try:
+        call_command('gerar_dados_teste')
+        print('Dados de teste gerados com sucesso!')
+    except Exception as e:
+        print(f'Aviso: Erro ao gerar dados de teste: {e}')
+else:
+    print('Dados ja existem - pulando geracao de dados de teste')
+TESTDATAEOF
+
 echo "==> Build completed successfully!"
