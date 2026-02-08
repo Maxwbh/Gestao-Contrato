@@ -100,9 +100,10 @@ if config('DATABASE_URL', default=None):
         )
     }
     # Usar schema separado para esta aplicacao (compartilhamento de banco)
-    # Schema: gestao_contrato
+    # IMPORTANTE: Usar APENAS gestao_contrato (sem public) para evitar
+    # conflito com django_migrations da outra aplicacao
     DATABASES['default']['OPTIONS'] = {
-        'options': '-c search_path=gestao_contrato,public'
+        'options': '-c search_path=gestao_contrato'
     }
 else:
     DATABASES = {
