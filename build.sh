@@ -12,16 +12,21 @@ pip install -r requirements.txt
 # echo "==> Making migrations..."
 # python manage.py makemigrations --no-input
 
-echo "==> Running database migrations..."
-# Executar migracoes do Django core primeiro (auth, contenttypes, sessions)
-# para garantir que auth_user existe antes das migracoes dos apps locais
-echo "  -> Django core migrations (contenttypes, auth, sessions)..."
-python manage.py migrate contenttypes --no-input
-python manage.py migrate auth --no-input
-python manage.py migrate sessions --no-input
-python manage.py migrate admin --no-input
+echo "==> Creating schema gestao_contrato if not exists..."
+python manage.py shell << 'SCHEMAEOF'
+from django.db import connection
 
-echo "  -> App migrations..."
+with connection.cursor() as cursor:
+    # Criar schema separado para esta aplicacao
+    cursor.execute("CREATE SCHEMA IF NOT EXISTS gestao_contrato")
+    print('Schema gestao_contrato criado/verificado.')
+
+    # Definir search_path para usar o schema
+    cursor.execute("SET search_path TO gestao_contrato, public")
+    print('Search path configurado: gestao_contrato, public')
+SCHEMAEOF
+
+echo "==> Running database migrations..."
 python manage.py migrate --no-input
 
 echo "==> Applying custom schema changes..."
