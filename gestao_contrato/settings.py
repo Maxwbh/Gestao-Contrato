@@ -99,6 +99,11 @@ if config('DATABASE_URL', default=None):
             conn_health_checks=True,
         )
     }
+    # Usar schema separado para esta aplicacao (compartilhamento de banco)
+    # Schema: gestao_contrato
+    DATABASES['default']['OPTIONS'] = {
+        'options': '-c search_path=gestao_contrato,public'
+    }
 else:
     DATABASES = {
         'default': {
