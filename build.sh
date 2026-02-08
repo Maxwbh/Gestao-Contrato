@@ -12,16 +12,43 @@ pip install -r requirements.txt
 # echo "==> Making migrations..."
 # python manage.py makemigrations --no-input
 
-echo "==> Running database migrations..."
-# Executar migracoes do Django core primeiro (auth, contenttypes, sessions)
-# para garantir que auth_user existe antes das migracoes dos apps locais
-echo "  -> Django core migrations (contenttypes, auth, sessions)..."
-python manage.py migrate contenttypes --no-input
-python manage.py migrate auth --no-input
-python manage.py migrate sessions --no-input
-python manage.py migrate admin --no-input
+echo "==> Checking database state..."
+python manage.py shell << 'CHECKDBEOF'
+from django.db import connection
 
-echo "  -> App migrations..."
+with connection.cursor() as cursor:
+    # Verificar se auth_user existe
+    cursor.execute("""
+        SELECT EXISTS (
+            SELECT 1 FROM information_schema.tables
+            WHERE table_name = 'auth_user'
+        )
+    """)
+    auth_exists = cursor.fetchone()[0]
+
+    if not auth_exists:
+        # Verificar se django_migrations existe com registros
+        cursor.execute("""
+            SELECT EXISTS (
+                SELECT 1 FROM information_schema.tables
+                WHERE table_name = 'django_migrations'
+            )
+        """)
+        migrations_table_exists = cursor.fetchone()[0]
+
+        if migrations_table_exists:
+            # Limpar tabela de migracoes para comecar do zero
+            print('ATENCAO: Tabelas nao existem mas django_migrations tem registros.')
+            print('Limpando django_migrations para reiniciar migracoes...')
+            cursor.execute("DELETE FROM django_migrations")
+            print('Tabela django_migrations limpa.')
+        else:
+            print('Banco novo - django_migrations sera criada.')
+    else:
+        print('Tabela auth_user existe - migracoes OK.')
+CHECKDBEOF
+
+echo "==> Running database migrations..."
 python manage.py migrate --no-input
 
 echo "==> Applying custom schema changes..."
