@@ -13,10 +13,25 @@ pip install -r requirements.txt
 # python manage.py makemigrations --no-input
 
 echo "==> Creating schema gestao_contrato if not exists..."
-python manage.py shell << 'SCHEMAEOF'
-from django.db import connection
+python << 'SCHEMAEOF'
+import os
+import psycopg2
+from urllib.parse import urlparse
 
-with connection.cursor() as cursor:
+# Conectar sem search_path para criar o schema
+database_url = os.environ.get('DATABASE_URL')
+if database_url:
+    result = urlparse(database_url)
+    conn = psycopg2.connect(
+        host=result.hostname,
+        port=result.port or 5432,
+        database=result.path[1:],
+        user=result.username,
+        password=result.password
+    )
+    conn.autocommit = True
+    cursor = conn.cursor()
+
     # Criar schema separado para esta aplicacao
     cursor.execute("CREATE SCHEMA IF NOT EXISTS gestao_contrato")
     print('Schema gestao_contrato criado/verificado.')
@@ -51,6 +66,11 @@ with connection.cursor() as cursor:
             print('Schema novo - tabelas serao criadas.')
     else:
         print('auth_user existe no schema gestao_contrato - OK.')
+
+    cursor.close()
+    conn.close()
+else:
+    print('DATABASE_URL nao definida - usando SQLite local')
 SCHEMAEOF
 
 echo "==> Running database migrations..."
