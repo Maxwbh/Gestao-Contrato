@@ -51,7 +51,7 @@ services:
         value: ".onrender.com,localhost,127.0.0.1"
       # DATABASE_URL - Supabase PostgreSQL (usando Pooler porta 6543)
       - key: DATABASE_URL
-        value: "postgresql://postgres.szyouijmxhlbavkzibxa:123ewqasdcxz%21%40%23@aws-0-sa-east-1.pooler.supabase.com:6543/postgres"
+        value: "postgresql://postgres.szyouijmxhlbavkzibxa:123ewqasdcxz%21%40%23@aws-1-us-east-2.pooler.supabase.com:6543/postgres"
       - key: REDIS_URL
         fromService:
           name: gestao-contrato-redis
