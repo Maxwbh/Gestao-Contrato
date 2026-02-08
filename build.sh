@@ -12,41 +12,19 @@ pip install -r requirements.txt
 # echo "==> Making migrations..."
 # python manage.py makemigrations --no-input
 
-echo "==> Checking database state..."
-python manage.py shell << 'CHECKDBEOF'
+echo "==> Creating schema gestao_contrato if not exists..."
+python manage.py shell << 'SCHEMAEOF'
 from django.db import connection
 
 with connection.cursor() as cursor:
-    # Verificar se auth_user existe
-    cursor.execute("""
-        SELECT EXISTS (
-            SELECT 1 FROM information_schema.tables
-            WHERE table_name = 'auth_user'
-        )
-    """)
-    auth_exists = cursor.fetchone()[0]
+    # Criar schema separado para esta aplicacao
+    cursor.execute("CREATE SCHEMA IF NOT EXISTS gestao_contrato")
+    print('Schema gestao_contrato criado/verificado.')
 
-    if not auth_exists:
-        # Verificar se django_migrations existe com registros
-        cursor.execute("""
-            SELECT EXISTS (
-                SELECT 1 FROM information_schema.tables
-                WHERE table_name = 'django_migrations'
-            )
-        """)
-        migrations_table_exists = cursor.fetchone()[0]
-
-        if migrations_table_exists:
-            # Limpar tabela de migracoes para comecar do zero
-            print('ATENCAO: Tabelas nao existem mas django_migrations tem registros.')
-            print('Limpando django_migrations para reiniciar migracoes...')
-            cursor.execute("DELETE FROM django_migrations")
-            print('Tabela django_migrations limpa.')
-        else:
-            print('Banco novo - django_migrations sera criada.')
-    else:
-        print('Tabela auth_user existe - migracoes OK.')
-CHECKDBEOF
+    # Definir search_path para usar o schema
+    cursor.execute("SET search_path TO gestao_contrato, public")
+    print('Search path configurado: gestao_contrato, public')
+SCHEMAEOF
 
 echo "==> Running database migrations..."
 python manage.py migrate --no-input
