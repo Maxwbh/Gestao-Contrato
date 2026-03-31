@@ -2,7 +2,7 @@
 
 **Desenvolvedor:** Maxwell da Silva Oliveira (maxwbh@gmail.com)
 **Empresa:** M&S do Brasil LTDA
-**Última atualização:** 2026-03-30
+**Última atualização:** 2026-03-31
 
 > Pendentes organizados por prioridade.
 > Para documentação do sistema atual, consulte **[SISTEMA.md](SISTEMA.md)**.
@@ -280,20 +280,84 @@
 
 ---
 
+---
+
+## 10. REAJUSTE DE PARCELAS — FOCO ATUAL
+
+> **Objetivo:** tornar o fluxo de reajuste claro, seguro e auditável — do cálculo à confirmação.
+> Estado atual: lógica de backend implementada (ciclos, bloqueio de boleto, índices IBGE/FGV),
+> porém sem interface dedicada, sem preview e sem simulação.
+
+---
+
+### 10.1 Cálculo — Melhorias
+
+| # | Item | Prioridade | Status |
+|---|------|------------|--------|
+| R-01 | **Preview/Simulação antes de aplicar** — endpoint dry-run que retorna a prévia de cada parcela (valor atual → valor reajustado) sem persistir nada | P1 | TO_DO |
+| R-02 | **Acumulado de índices** — quando o reajuste não foi feito no mês exato, calcular automaticamente o acumulado dos meses em atraso (ex: 3 meses de IPCA acumulados) | P1 | TO_DO |
+| R-03 | **Índice composto** — suporte a `ÍNDICE + spread fixo` (ex: IPCA + 2% a.a.), comum em contratos imobiliários | P2 | TO_DO |
+| R-04 | **Teto e piso configuráveis** — limitar reajuste mínimo (0% — sem deflação) e máximo (ex: 15%) por contrato | P2 | TO_DO |
+| R-05 | **Reajuste proporcional acessível via UI** — `calcular_reajuste_proporcional` existe no backend mas não está exposto na interface; surfaçar resultado no formulário de reajuste | P2 | TO_DO |
+| R-06 | **Desfazer reajuste automático** — atualmente só reajustes manuais podem ser excluídos; permitir reverter reajuste automático com registro de auditoria | P3 | TO_DO |
+| R-07 | **Reajuste automático via Celery** — task agendada que aplica índice do mês na data aniversário do contrato, com log e notificação ao gestor | P3 | TO_DO |
+
+---
+
+### 10.2 Entrada de Dados — Melhorias
+
+| # | Item | Prioridade | Status |
+|---|------|------------|--------|
+| R-08 | **Tela dedicada de Reajuste Pendente** — lista todos os contratos com reajuste vencido, agrupados por imobiliária, com ação rápida "Aplicar" | P1 | TO_DO |
+| R-09 | **Formulário com busca automática do índice** — ao selecionar tipo (IPCA, IGP-M…) e mês/ano de referência, buscar o percentual na base e preencher automaticamente; já existe `obter_indice_reajuste` no backend | P1 | TO_DO |
+| R-10 | **Tabela de prévia por parcela no modal** — antes de confirmar, exibir lista parcela / vencimento / valor atual / valor após reajuste / diferença | P1 | TO_DO |
+| R-11 | **Alerta quando há boletos já emitidos no intervalo** — avisar que os boletos precisam ser regenerados após o reajuste e oferecer botão "Regenerar todos" | P1 | TO_DO |
+| R-12 | **Confirmação dupla para reajuste negativo (deflação)** — exibir alerta especial quando percentual < 0% para evitar aplicação acidental | P2 | TO_DO |
+| R-13 | **Seleção de intervalo de parcelas visual** — slider ou campos `De / Até` com preview do total de parcelas afetadas em tempo real | P2 | TO_DO |
+| R-14 | **Histórico detalhado na tela do contrato** — aba "Reajustes" com: ciclo, índice, percentual, parcelas afetadas, data, quem aplicou, botão desfazer | P2 | TO_DO |
+| R-15 | **Aplicação em lote** — selecionar N contratos da mesma imobiliária e aplicar o mesmo índice/percentual de uma vez, com relatório de resultado | P3 | TO_DO |
+
+---
+
+### 10.3 Validações e Regras de Negócio
+
+| # | Item | Prioridade | Status |
+|---|------|------------|--------|
+| R-16 | **Validar sequência de ciclos** (não pular) — já existe no `clean()` do model, porém sem feedback claro na UI quando o ciclo anterior está faltando | P1 | TO_DO |
+| R-17 | **Bloquear reajuste em contrato com parcelas em disputa/negociação** — flag `em_negociacao` no contrato impede reajuste até resolução | P3 | TO_DO |
+| R-18 | **Audit log** — registrar usuário, IP e timestamp de cada reajuste aplicado/desfeito | P2 | TO_DO |
+
+---
+
+### 10.4 Ordem de Execução Sugerida para o Módulo de Reajuste
+
+| Fase | Itens | Resultado esperado |
+|------|-------|-------------------|
+| **1** | R-09, R-10, R-01 | Formulário busca índice automaticamente + preview por parcela antes de aplicar |
+| **2** | R-08, R-16, R-11 | Tela de pendentes + validação de ciclo com feedback + alerta de boletos emitidos |
+| **3** | R-02, R-05, R-04 | Acumulado de índices + proporcional na UI + teto/piso |
+| **4** | R-14, R-18, R-12 | Histórico com auditoria + confirmação para deflação |
+| **5** | R-03, R-13, R-15 | Índice composto + seleção visual + lote |
+| **6** | R-06, R-07, R-17 | Desfazer automático + Celery + bloqueio negociação |
+
+---
+
 ## Ordem de Execução Recomendada
 
 | Fase | Escopo | Seções |
 |------|--------|--------|
 | **1** | Correções críticas de infraestrutura | 1 |
-| **2** | Testes P1 (apps sem cobertura) | 7.1 |
-| **3** | Frontend P2 (telas principais) | 3 (P2) |
-| **4** | APIs P2 | 4 (P2) |
-| **5** | Testes P2 (views e APIs) | 7.2 |
-| **6** | Integrações IBGE, FGV | 2.7, 2.8 |
-| **7** | Permissões e segurança | 6 |
-| **8** | Testes P3/P4 + CI/CD | 7.3, 7.4, 8 |
-| **9** | Frontend P3/P4 | 3 (P3, P4) |
-| **10** | Documentação | 9 |
+| **2** | ⭐ **Reajuste — Fórmulário + Preview + Pendentes** | 10 (Fase 1–2) |
+| **3** | Testes P1 (apps sem cobertura) | 7.1 |
+| **4** | Frontend P2 (telas principais) | 3 (P2) |
+| **5** | ⭐ **Reajuste — Acumulado + Histórico + Auditoria** | 10 (Fase 3–4) |
+| **6** | APIs P2 | 4 (P2) |
+| **7** | Testes P2 (views e APIs) | 7.2 |
+| **8** | Permissões e segurança | 6 |
+| **9** | ⭐ **Reajuste — Índice composto + Lote + Celery** | 10 (Fase 5–6) |
+| **10** | Testes P3/P4 + CI/CD | 7.3, 7.4, 8 |
+| **11** | Frontend P3/P4 | 3 (P3, P4) |
+| **12** | Documentação | 9 |
 
 ---
 
