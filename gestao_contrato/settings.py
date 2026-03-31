@@ -54,6 +54,7 @@ INSTALLED_APPS = [
     'contratos',
     'financeiro',
     'notificacoes',
+    'portal_comprador',
 ]
 
 MIDDLEWARE = [
@@ -98,6 +99,20 @@ if config('DATABASE_URL', default=None):
             conn_health_checks=True,
         )
     }
+    # Usar schema separado para esta aplicacao (compartilhamento de banco)
+    # IMPORTANTE: Usar APENAS gestao_contrato (sem public) para evitar
+    # conflito com django_migrations da outra aplicacao
+    DATABASES['default']['OPTIONS'] = {
+        'options': '-c search_path=gestao_contrato'
+    }
+
+    # Signal para garantir search_path em cada conexao
+    from django.db.backends.signals import connection_created
+    def set_search_path(sender, connection, **kwargs):
+        if connection.vendor == 'postgresql':
+            cursor = connection.cursor()
+            cursor.execute("SET search_path TO gestao_contrato")
+    connection_created.connect(set_search_path)
 else:
     DATABASES = {
         'default': {
@@ -270,3 +285,10 @@ if not DEBUG:
     SECURE_HSTS_SECONDS = 31536000
     SECURE_HSTS_INCLUDE_SUBDOMAINS = True
     SECURE_HSTS_PRELOAD = True
+
+    # CSRF Trusted Origins - Required for Django 4.x+ behind HTTPS proxy
+    CSRF_TRUSTED_ORIGINS = config(
+        'CSRF_TRUSTED_ORIGINS',
+        default='https://*.onrender.com',
+        cast=Csv()
+    )
