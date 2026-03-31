@@ -631,8 +631,8 @@
         // ====================================================================
         // CNPJ inputs with BrasilAPI integration
         // ====================================================================
-        const cnpjInputs = document.querySelectorAll('input[name="cnpj"], .cnpj-input');
-        cnpjInputs.forEach(input => {
+        const cnpjInputsBrasilApi = document.querySelectorAll('input[name="cnpj"], .cnpj-input');
+        cnpjInputsBrasilApi.forEach(input => {
             input.addEventListener('input', function(e) {
                 e.target.value = mascaraCNPJ(e.target.value);
             });
