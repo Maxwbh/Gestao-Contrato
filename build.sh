@@ -8,9 +8,83 @@ echo "==> Installing Python dependencies..."
 pip install --upgrade pip
 pip install -r requirements.txt
 
-# Não rodar makemigrations - tabelas já existem no banco
-# echo "==> Making migrations..."
-# python manage.py makemigrations --no-input
+# ============================================================================
+# NOTA SOBRE MAKEMIGRATIONS
+# ============================================================================
+# Em produção (Render), as migrations já estão commitadas no repositório.
+# O comando `migrate` aplica as migrations existentes.
+#
+# Quando adicionar novos campos/modelos:
+# 1. Rode `python manage.py makemigrations` LOCALMENTE
+# 2. Commit os arquivos de migration gerados
+# 3. Faça deploy - o `migrate` abaixo aplicará as novas migrations
+#
+# NÃO habilite makemigrations aqui em produção - pode gerar migrations
+# inconsistentes entre deploys e causar conflitos.
+# ============================================================================
+
+echo "==> Creating schema gestao_contrato if not exists..."
+python << 'SCHEMAEOF'
+import os
+import psycopg2
+from urllib.parse import urlparse, unquote
+
+# Conectar sem search_path para criar o schema
+database_url = os.environ.get('DATABASE_URL')
+if database_url:
+    result = urlparse(database_url)
+    # Decodificar senha (pode ter caracteres especiais URL-encoded)
+    password = unquote(result.password) if result.password else None
+    conn = psycopg2.connect(
+        host=result.hostname,
+        port=result.port or 5432,
+        database=result.path[1:],
+        user=result.username,
+        password=password
+    )
+    conn.autocommit = True
+    cursor = conn.cursor()
+
+    # Criar schema separado para esta aplicacao
+    cursor.execute("CREATE SCHEMA IF NOT EXISTS gestao_contrato")
+    print('Schema gestao_contrato criado/verificado.')
+
+    # Verificar se auth_user existe no schema gestao_contrato
+    cursor.execute("""
+        SELECT EXISTS (
+            SELECT 1 FROM information_schema.tables
+            WHERE table_schema = 'gestao_contrato'
+            AND table_name = 'auth_user'
+        )
+    """)
+    auth_exists = cursor.fetchone()[0]
+
+    if not auth_exists:
+        # Verificar se django_migrations existe no schema gestao_contrato
+        cursor.execute("""
+            SELECT EXISTS (
+                SELECT 1 FROM information_schema.tables
+                WHERE table_schema = 'gestao_contrato'
+                AND table_name = 'django_migrations'
+            )
+        """)
+        migrations_exists = cursor.fetchone()[0]
+
+        if migrations_exists:
+            print('ATENCAO: auth_user nao existe mas django_migrations tem registros.')
+            print('Limpando django_migrations no schema gestao_contrato...')
+            cursor.execute("DELETE FROM gestao_contrato.django_migrations")
+            print('Tabela limpa - migracoes serao reaplicadas.')
+        else:
+            print('Schema novo - tabelas serao criadas.')
+    else:
+        print('auth_user existe no schema gestao_contrato - OK.')
+
+    cursor.close()
+    conn.close()
+else:
+    print('DATABASE_URL nao definida - usando SQLite local')
+SCHEMAEOF
 
 echo "==> Running database migrations..."
 python manage.py migrate --no-input
@@ -32,6 +106,83 @@ def add_column_if_not_exists(cursor, table, column, column_def):
         print(f"  - {table}.{column} already exists")
 
 with connection.cursor() as cursor:
+    # =========================================================================
+    # CAMPOS TIMESTAMP (criado_em, atualizado_em) - TimeStampedModel
+    # Também verifica created_at/updated_at para compatibilidade
+    # =========================================================================
+    print("Adding timestamp columns to all tables...")
+
+    # Lista de tabelas que herdam de TimeStampedModel
+    timestamp_tables = [
+        'core_contabilidade',
+        'core_imobiliaria',
+        'core_imovel',
+        'core_comprador',
+        'core_contabancaria',
+        'core_acessousuario',
+        'contratos_contrato',
+        'contratos_indicereajuste',
+        'contratos_prestacaointermediaria',
+        'financeiro_parcela',
+        'financeiro_reajuste',
+        'financeiro_historicopagamento',
+        'financeiro_arquivoremessa',
+        'financeiro_itemremessa',
+        'financeiro_arquivoretorno',
+        'financeiro_itemretorno',
+        'notificacoes_templatenotificacao',
+        'notificacoes_configuracaoemail',
+        'notificacoes_configuracaosms',
+        'notificacoes_configuracaowhatsapp',
+        'notificacoes_notificacao',
+        'portal_comprador_acessocomprador',
+        'portal_comprador_logacessocomprador',
+    ]
+
+    for table in timestamp_tables:
+        # Verificar se tabela existe
+        cursor.execute(f"""
+            SELECT 1 FROM information_schema.tables WHERE table_name = '{table}'
+        """)
+        if cursor.fetchone():
+            # Adicionar colunas em português (usadas pelo Django)
+            add_column_if_not_exists(cursor, table, 'criado_em', "TIMESTAMP WITH TIME ZONE DEFAULT NOW()")
+            add_column_if_not_exists(cursor, table, 'atualizado_em', "TIMESTAMP WITH TIME ZONE DEFAULT NOW()")
+
+            # REMOVER colunas duplicadas em inglês (created_at, updated_at)
+            # Primeiro migrar dados, depois dropar as colunas
+            cursor.execute(f"""
+                DO $$
+                BEGIN
+                    -- Se created_at existe, migrar dados para criado_em e DROPAR
+                    IF EXISTS (
+                        SELECT 1 FROM information_schema.columns
+                        WHERE table_name = '{table}' AND column_name = 'created_at'
+                    ) THEN
+                        -- Migrar dados de created_at para criado_em onde criado_em é NULL
+                        UPDATE {table} SET criado_em = created_at WHERE criado_em IS NULL AND created_at IS NOT NULL;
+                        -- Dropar a coluna duplicada
+                        ALTER TABLE {table} DROP COLUMN created_at;
+                        RAISE NOTICE 'Dropped column created_at from {table}';
+                    END IF;
+
+                    -- Se updated_at existe, migrar dados para atualizado_em e DROPAR
+                    IF EXISTS (
+                        SELECT 1 FROM information_schema.columns
+                        WHERE table_name = '{table}' AND column_name = 'updated_at'
+                    ) THEN
+                        -- Migrar dados de updated_at para atualizado_em onde atualizado_em é NULL
+                        UPDATE {table} SET atualizado_em = updated_at WHERE atualizado_em IS NULL AND updated_at IS NOT NULL;
+                        -- Dropar a coluna duplicada
+                        ALTER TABLE {table} DROP COLUMN updated_at;
+                        RAISE NOTICE 'Dropped column updated_at from {table}';
+                    END IF;
+                END $$;
+            """)
+
+    print("Timestamp columns checked/added.")
+    print("")
+
     print("Checking core_contabilidade...")
     # CNPJ opcional
     cursor.execute("""
@@ -562,11 +713,44 @@ echo "==> Creating superuser (if not exists)..."
 python manage.py shell << EOF
 from django.contrib.auth import get_user_model
 User = get_user_model()
+
+# Criar usuario principal: maxwbh / a (Administrador)
+if not User.objects.filter(username='maxwbh').exists():
+    user = User.objects.create_superuser(
+        username='maxwbh',
+        email='maxwbh@gmail.com',
+        password='a',
+        first_name='Maxwell',
+        last_name='Oliveira'
+    )
+    print('Superuser criado: maxwbh / a (Administrador)')
+else:
+    print('Superuser maxwbh ja existe')
+
+# Manter usuario admin como backup
 if not User.objects.filter(username='admin').exists():
     User.objects.create_superuser('admin', 'admin@gestaocontrato.com', 'admin123')
-    print('Superuser created: admin / admin123')
+    print('Superuser backup criado: admin / admin123')
 else:
-    print('Superuser already exists')
+    print('Superuser admin ja existe')
 EOF
+
+echo "==> Checking if test data needs to be generated..."
+python manage.py shell << 'TESTDATAEOF'
+from core.models import Contabilidade, Imobiliaria
+
+# Verificar se ja existe dados (primeira execucao)
+if not Contabilidade.objects.exists() and not Imobiliaria.objects.exists():
+    print('Banco vazio - gerando dados de teste na primeira execucao...')
+    # Importar e executar comando de dados de teste
+    from django.core.management import call_command
+    try:
+        call_command('gerar_dados_teste')
+        print('Dados de teste gerados com sucesso!')
+    except Exception as e:
+        print(f'Aviso: Erro ao gerar dados de teste: {e}')
+else:
+    print('Dados ja existem - pulando geracao de dados de teste')
+TESTDATAEOF
 
 echo "==> Build completed successfully!"
