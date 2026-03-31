@@ -290,6 +290,36 @@
 
 ---
 
+### 10.0 Regras de Reajuste por Faixas de Parcelas (NOVO — PRIORIDADE MÁXIMA)
+
+> **Conceito central:** cada contrato define quais parcelas são reajustadas, por qual índice e em qual período.
+> Exemplo real: parcelas 1–12 sem reajuste / 13–24 pelo IPCA / 25–36 pelo IGPM.
+> Hoje o sistema trata todas as parcelas com um único índice global — isso precisa mudar.
+
+| # | Item | Prioridade | Status |
+|---|------|------------|--------|
+| R-00 | **Modelo de Faixas de Reajuste no Contrato** — substituir campo único `tipo_correcao` por tabela `RegraReajuste(contrato, parcela_inicial, parcela_final, indice_tipo, periodicidade_meses)`; permite múltiplas regras por contrato | P1 | TO_DO |
+| R-00a | **Cálculo automático a partir das regras do contrato** — ao aplicar reajuste, o sistema determina automaticamente: quais parcelas afetadas, qual índice usar e o percentual do período, sem entrada manual do operador | P1 | TO_DO |
+| R-00b | **UI de cadastro de faixas no contrato** — seção "Regras de Reajuste" na tela do contrato com tabela editável: `De (parcela) / Até / Índice / A cada (meses) / Ação` | P1 | TO_DO |
+| R-00c | **Desconto sobre o reajuste** — ao aplicar o reajuste de uma faixa, permitir informar desconto em `%` ou `R$` que reduz o percentual final aplicado (ex: IPCA 5,4% com desconto de 1% → aplica 4,4%; ou desconto fixo de R$ 50,00 por parcela) | P1 | TO_DO |
+| R-00d | **Preview automático no momento do reajuste** — ao clicar "Aplicar Reajuste", o sistema carrega as regras do contrato, busca o índice do período, calcula desconto e exibe tabela: parcela / valor atual / % aplicado / desconto / valor final, antes de confirmar | P1 | TO_DO |
+| R-00e | **Migração de contratos existentes** — script para converter contratos atuais (campo `tipo_correcao` único) para o novo modelo de faixas, preservando histórico de reajustes já aplicados | P2 | TO_DO |
+
+**Exemplo de configuração de faixas:**
+
+```
+Contrato XYZ — Regras de Reajuste:
+┌─────────────┬──────────────┬────────┬──────────────┬─────────────────────┐
+│ Parcelas De │ Parcelas Até │ Índice │ A cada       │ Observação          │
+├─────────────┼──────────────┼────────┼──────────────┼─────────────────────┤
+│      1      │      12      │   —    │      —       │ Sem reajuste        │
+│     13      │      24      │  IPCA  │  12 meses    │ Aniversário anual   │
+│     25      │      36      │  IGPM  │  12 meses    │ Aniversário anual   │
+└─────────────┴──────────────┴────────┴──────────────┴─────────────────────┘
+```
+
+---
+
 ### 10.1 Cálculo — Melhorias
 
 | # | Item | Prioridade | Status |
@@ -297,10 +327,10 @@
 | R-01 | **Preview/Simulação antes de aplicar** — endpoint dry-run que retorna a prévia de cada parcela (valor atual → valor reajustado) sem persistir nada | P1 | TO_DO |
 | R-02 | **Acumulado de índices** — quando o reajuste não foi feito no mês exato, calcular automaticamente o acumulado dos meses em atraso (ex: 3 meses de IPCA acumulados) | P1 | TO_DO |
 | R-03 | **Índice composto** — suporte a `ÍNDICE + spread fixo` (ex: IPCA + 2% a.a.), comum em contratos imobiliários | P2 | TO_DO |
-| R-04 | **Teto e piso configuráveis** — limitar reajuste mínimo (0% — sem deflação) e máximo (ex: 15%) por contrato | P2 | TO_DO |
+| R-04 | **Teto e piso configuráveis** — limitar reajuste mínimo (0% — sem deflação) e máximo (ex: 15%) por contrato ou por faixa | P2 | TO_DO |
 | R-05 | **Reajuste proporcional acessível via UI** — `calcular_reajuste_proporcional` existe no backend mas não está exposto na interface; surfaçar resultado no formulário de reajuste | P2 | TO_DO |
 | R-06 | **Desfazer reajuste automático** — atualmente só reajustes manuais podem ser excluídos; permitir reverter reajuste automático com registro de auditoria | P3 | TO_DO |
-| R-07 | **Reajuste automático via Celery** — task agendada que aplica índice do mês na data aniversário do contrato, com log e notificação ao gestor | P3 | TO_DO |
+| R-07 | **Reajuste automático via Celery** — task agendada que aplica índice do mês na data aniversário do contrato conforme regras de faixas, com log e notificação ao gestor | P3 | TO_DO |
 
 ---
 
@@ -310,12 +340,12 @@
 |---|------|------------|--------|
 | R-08 | **Tela dedicada de Reajuste Pendente** — lista todos os contratos com reajuste vencido, agrupados por imobiliária, com ação rápida "Aplicar" | P1 | TO_DO |
 | R-09 | **Formulário com busca automática do índice** — ao selecionar tipo (IPCA, IGP-M…) e mês/ano de referência, buscar o percentual na base e preencher automaticamente; já existe `obter_indice_reajuste` no backend | P1 | TO_DO |
-| R-10 | **Tabela de prévia por parcela no modal** — antes de confirmar, exibir lista parcela / vencimento / valor atual / valor após reajuste / diferença | P1 | TO_DO |
+| R-10 | **Tabela de prévia por parcela no modal** — antes de confirmar, exibir lista parcela / vencimento / valor atual / % reajuste / desconto / valor final | P1 | TO_DO |
 | R-11 | **Alerta quando há boletos já emitidos no intervalo** — avisar que os boletos precisam ser regenerados após o reajuste e oferecer botão "Regenerar todos" | P1 | TO_DO |
 | R-12 | **Confirmação dupla para reajuste negativo (deflação)** — exibir alerta especial quando percentual < 0% para evitar aplicação acidental | P2 | TO_DO |
-| R-13 | **Seleção de intervalo de parcelas visual** — slider ou campos `De / Até` com preview do total de parcelas afetadas em tempo real | P2 | TO_DO |
-| R-14 | **Histórico detalhado na tela do contrato** — aba "Reajustes" com: ciclo, índice, percentual, parcelas afetadas, data, quem aplicou, botão desfazer | P2 | TO_DO |
-| R-15 | **Aplicação em lote** — selecionar N contratos da mesma imobiliária e aplicar o mesmo índice/percentual de uma vez, com relatório de resultado | P3 | TO_DO |
+| R-13 | **Seleção de intervalo de parcelas visual** — campos `De / Até` preenchidos automaticamente pelas regras do contrato, editáveis para ajuste fino | P2 | TO_DO |
+| R-14 | **Histórico detalhado na tela do contrato** — aba "Reajustes" com: ciclo, índice, percentual, desconto aplicado, parcelas afetadas, data, quem aplicou, botão desfazer | P2 | TO_DO |
+| R-15 | **Aplicação em lote** — selecionar N contratos da mesma imobiliária e aplicar reajuste de uma vez conforme regras de cada contrato, com relatório de resultado | P3 | TO_DO |
 
 ---
 
@@ -333,12 +363,12 @@
 
 | Fase | Itens | Resultado esperado |
 |------|-------|-------------------|
-| **1** | R-09, R-10, R-01 | Formulário busca índice automaticamente + preview por parcela antes de aplicar |
-| **2** | R-08, R-16, R-11 | Tela de pendentes + validação de ciclo com feedback + alerta de boletos emitidos |
-| **3** | R-02, R-05, R-04 | Acumulado de índices + proporcional na UI + teto/piso |
-| **4** | R-14, R-18, R-12 | Histórico com auditoria + confirmação para deflação |
-| **5** | R-03, R-13, R-15 | Índice composto + seleção visual + lote |
-| **6** | R-06, R-07, R-17 | Desfazer automático + Celery + bloqueio negociação |
+| **1** | R-00, R-00b, R-00c | Modelo de faixas + UI de cadastro + desconto no contrato |
+| **2** | R-00a, R-00d, R-01 | Cálculo automático pelas regras + preview dry-run antes de aplicar |
+| **3** | R-08, R-09, R-10, R-11, R-16 | Tela de pendentes + busca automática de índice + tabela de prévia + alertas |
+| **4** | R-02, R-04, R-05 | Acumulado de índices + teto/piso + proporcional na UI |
+| **5** | R-14, R-18, R-12, R-00e | Histórico com auditoria + migração de contratos existentes |
+| **6** | R-03, R-13, R-15, R-06, R-07 | Índice composto + lote + Celery automático |
 
 ---
 
