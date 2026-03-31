@@ -2,19 +2,13 @@
 # Desenvolvedor: Maxwell da Silva Oliveira
 # M&S do Brasil LTDA
 #
-# VERSAO FREE TIER (Otimizada) + SUPABASE
+# VERSAO FREE TIER (Otimizada)
 # Esta configuracao e otimizada para o plano gratuito do Render
-# usando Supabase como banco de dados PostgreSQL
 #
-# BANCO DE DADOS: SUPABASE
-# - Plano gratuito mais generoso (500MB, sem expiracao de 90 dias)
-# - Melhor performance e uptime
-# - Painel de administracao integrado
-# - Backup automatico
-#
-# LIMITACOES DO FREE TIER RENDER:
+# LIMITACOES DO FREE TIER:
 # - Sem Background Workers (Celery nao disponivel)
 # - Servico pode "adormecer" apos 15 min de inatividade
+# - PostgreSQL: 1GB storage, 1 conexao
 # - Redis: 25MB memoria
 #
 # SOLUCOES IMPLEMENTADAS:
@@ -23,11 +17,12 @@
 # - Cron externo via cron-job.org (gratuito)
 # - BRCobranca API para geracao de boletos
 
-# =============================================================================
-# BANCO DE DADOS: SUPABASE POSTGRESQL (Pooler)
-# =============================================================================
-# Usando connection pooler (porta 6543) para melhor compatibilidade
-# Projeto: szyouijmxhlbavkzibxa
+databases:
+  # PostgreSQL Database (Free: 1GB, expira em 90 dias se inativo)
+  - name: gestao-contrato-db
+    databaseName: gestao_contrato
+    user: gestao_contrato_user
+    plan: free
 
 services:
   # =============================================================================
@@ -48,10 +43,11 @@ services:
       - key: DEBUG
         value: "False"
       - key: ALLOWED_HOSTS
-        value: ".onrender.com,localhost,127.0.0.1"
-      # DATABASE_URL - Supabase PostgreSQL (usando Pooler porta 6543)
+        sync: false
       - key: DATABASE_URL
-        value: "postgresql://postgres.szyouijmxhlbavkzibxa:123ewqasdcxz%21%40%23@aws-1-us-east-2.pooler.supabase.com:6543/postgres"
+        fromDatabase:
+          name: gestao-contrato-db
+          property: connectionString
       - key: REDIS_URL
         fromService:
           name: gestao-contrato-redis
@@ -63,11 +59,6 @@ services:
       # URL do servico BRCobranca
       - key: BRCOBRANCA_URL
         value: "https://brcobranca-api.onrender.com"
-      # Supabase API
-      - key: SUPABASE_URL
-        value: "https://szyouijmxhlbavkzibxa.supabase.co"
-      - key: SUPABASE_KEY
-        value: "sb_publishable_aswPuvIXjzcejBTyYWObdQ_BpC5l903"
 
   # =============================================================================
   # BRCobranca API (Geracao de Boletos)
