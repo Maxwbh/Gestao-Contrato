@@ -254,6 +254,7 @@ class CNABService:
             response = requests.post(
                 f'{self.brcobranca_url}/api/remessa',
                 json=dados_remessa,
+                headers={'Accept': 'application/vnd.BoletoApi-v1+json'},
                 timeout=60
             )
 
