@@ -1894,11 +1894,110 @@ def api_gerar_boletos_lote(request):
 # =============================================================================
 
 @login_required
+def preview_reajuste_contrato(request, contrato_id):
+    """
+    Dry-run: calcula o reajuste para o ciclo pendente sem persistir nada.
+
+    GET  → retorna ciclo pendente, índice, período de referência, % acumulado
+           e tabela detalhada por parcela (valor atual → valor novo).
+
+    Parâmetros GET opcionais:
+      - ciclo              : forçar ciclo específico (padrão: ciclo pendente)
+      - desconto_percentual: desconto em p.p. sobre o índice
+      - desconto_valor     : desconto fixo em R$ por parcela
+    """
+    contrato = get_object_or_404(Contrato, pk=contrato_id)
+
+    try:
+        ciclo = request.GET.get('ciclo')
+        if ciclo:
+            ciclo = int(ciclo)
+        else:
+            ciclo = Reajuste.calcular_ciclo_pendente(contrato)
+
+        if not ciclo:
+            return JsonResponse({
+                'sucesso': False,
+                'ciclo_pendente': None,
+                'mensagem': 'Nenhum reajuste pendente para este contrato.',
+            })
+
+        desconto_percentual = request.GET.get('desconto_percentual') or None
+        desconto_valor = request.GET.get('desconto_valor') or None
+
+        resultado = Reajuste.preview_reajuste(
+            contrato, ciclo,
+            desconto_percentual=desconto_percentual,
+            desconto_valor=desconto_valor,
+        )
+
+        if 'erro' in resultado:
+            return JsonResponse({
+                'sucesso': False,
+                'ciclo_pendente': ciclo,
+                'erro': resultado['erro'],
+                'indice_tipo': resultado.get('indice_tipo', ''),
+                'periodo_referencia_inicio': resultado.get('periodo_referencia_inicio', ''),
+                'periodo_referencia_fim': resultado.get('periodo_referencia_fim', ''),
+                'parcela_inicial': resultado.get('parcela_inicial', ''),
+                'parcela_final': resultado.get('parcela_final', ''),
+            })
+
+        # Serializar datas e Decimals para JSON
+        parcelas_json = []
+        for p in resultado['parcelas']:
+            parcelas_json.append({
+                'numero_parcela': p['numero_parcela'],
+                'data_vencimento': p['data_vencimento'].strftime('%d/%m/%Y'),
+                'valor_atual': float(p['valor_atual']),
+                'valor_novo': float(p['valor_novo']),
+                'diferenca': float(p['diferenca']),
+                'tem_boleto': p['tem_boleto'],
+            })
+
+        return JsonResponse({
+            'sucesso': True,
+            'ciclo_pendente': ciclo,
+            'indice_tipo': resultado['indice_tipo'],
+            'periodo_referencia_inicio': resultado['periodo_referencia_inicio'].strftime('%b/%Y'),
+            'periodo_referencia_fim': resultado['periodo_referencia_fim'].strftime('%b/%Y'),
+            'percentual_bruto': float(resultado['percentual_bruto']),
+            'desconto_percentual': float(resultado['desconto_percentual']),
+            'desconto_valor': float(resultado['desconto_valor']),
+            'percentual_liquido': float(resultado['percentual_liquido']),
+            'parcela_inicial': resultado['parcela_inicial'],
+            'parcela_final': resultado['parcela_final'],
+            'parcelas': parcelas_json,
+            'total_parcelas': resultado['total_parcelas'],
+            'valor_anterior_total': float(resultado['valor_anterior_total']),
+            'valor_novo_total': float(resultado['valor_novo_total']),
+            'diferenca_total': float(resultado['diferenca_total']),
+            'boletos_emitidos': resultado['boletos_emitidos'],
+        })
+
+    except Exception as e:
+        logger.exception(f"Erro no preview de reajuste: {e}")
+        return JsonResponse({'sucesso': False, 'erro': str(e)}, status=500)
+
+
+@login_required
 @require_POST
 def aplicar_reajuste_contrato(request, contrato_id):
     """
-    Aplica um reajuste manual nas parcelas de um contrato.
-    Recebe: indice_tipo, percentual, parcela_inicial, parcela_final, observacoes
+    Aplica o reajuste nas parcelas de um contrato.
+
+    Modo automático (recomendado): passa apenas ciclo + desconto opcionais.
+      O sistema determina índice, período de referência, % acumulado e parcelas.
+
+    Modo manual (legado): passa indice_tipo + percentual + parcela_inicial/final.
+
+    JSON body:
+      - ciclo              : ciclo a aplicar (se omitido, usa o ciclo pendente)
+      - desconto_percentual: desconto em p.p. sobre o índice (opcional)
+      - desconto_valor     : desconto fixo em R$ por parcela (opcional)
+      - observacoes        : texto livre
+      --- parâmetros manuais (só usados se ciclo não for informado) ---
+      - indice_tipo, percentual, parcela_inicial, parcela_final
     """
     contrato = get_object_or_404(Contrato, pk=contrato_id)
 
@@ -1906,80 +2005,151 @@ def aplicar_reajuste_contrato(request, contrato_id):
         import json
         data = json.loads(request.body) if request.content_type == 'application/json' else request.POST
 
-        indice_tipo = data.get('indice_tipo', 'MANUAL')
-        percentual = Decimal(str(data.get('percentual', 0)))
-        parcela_inicial = int(data.get('parcela_inicial', 1))
-        parcela_final = int(data.get('parcela_final', contrato.numero_parcelas))
         observacoes = data.get('observacoes', '')
+        desconto_percentual = data.get('desconto_percentual') or None
+        desconto_valor = data.get('desconto_valor') or None
 
-        if percentual == 0:
-            return JsonResponse({
-                'sucesso': False,
-                'erro': 'O percentual de reajuste nao pode ser zero'
-            }, status=400)
+        ciclo_param = data.get('ciclo')
 
-        # Validar parcelas
-        if parcela_inicial < 1 or parcela_final > contrato.numero_parcelas:
-            return JsonResponse({
-                'sucesso': False,
-                'erro': 'Numeros de parcela invalidos'
-            }, status=400)
+        # ── Modo automático ──────────────────────────────────────────────────
+        if ciclo_param:
+            ciclo = int(ciclo_param)
+            preview = Reajuste.preview_reajuste(
+                contrato, ciclo,
+                desconto_percentual=desconto_percentual,
+                desconto_valor=desconto_valor,
+            )
+            if 'erro' in preview:
+                return JsonResponse({'sucesso': False, 'erro': preview['erro']}, status=400)
 
-        if parcela_inicial > parcela_final:
-            return JsonResponse({
-                'sucesso': False,
-                'erro': 'Parcela inicial deve ser menor ou igual a parcela final'
-            }, status=400)
+            reajuste = Reajuste.objects.create(
+                contrato=contrato,
+                data_reajuste=timezone.now().date(),
+                indice_tipo=preview['indice_tipo'],
+                percentual=preview['percentual_liquido'],
+                percentual_bruto=preview['percentual_bruto'],
+                desconto_percentual=Decimal(str(desconto_percentual)) if desconto_percentual else None,
+                desconto_valor=Decimal(str(desconto_valor)) if desconto_valor else None,
+                parcela_inicial=preview['parcela_inicial'],
+                parcela_final=preview['parcela_final'],
+                ciclo=ciclo,
+                periodo_referencia_inicio=preview['periodo_referencia_inicio'],
+                periodo_referencia_fim=preview['periodo_referencia_fim'],
+                aplicado_manual=True,
+                observacoes=observacoes,
+            )
 
-        # Verificar se há parcelas não pagas no intervalo
-        parcelas_pendentes = contrato.parcelas.filter(
-            numero_parcela__gte=parcela_inicial,
-            numero_parcela__lte=parcela_final,
-            pago=False
-        )
+        # ── Modo manual (legado) ─────────────────────────────────────────────
+        else:
+            indice_tipo = data.get('indice_tipo', 'MANUAL')
+            percentual = Decimal(str(data.get('percentual', 0)))
+            parcela_inicial = int(data.get('parcela_inicial', 1))
+            parcela_final = int(data.get('parcela_final', contrato.numero_parcelas))
 
-        if not parcelas_pendentes.exists():
-            return JsonResponse({
-                'sucesso': False,
-                'erro': 'Nenhuma parcela pendente no intervalo selecionado'
-            }, status=400)
+            if percentual == 0:
+                return JsonResponse({'sucesso': False, 'erro': 'O percentual de reajuste nao pode ser zero'}, status=400)
+            if parcela_inicial < 1 or parcela_final > contrato.numero_parcelas:
+                return JsonResponse({'sucesso': False, 'erro': 'Numeros de parcela invalidos'}, status=400)
+            if parcela_inicial > parcela_final:
+                return JsonResponse({'sucesso': False, 'erro': 'Parcela inicial deve ser menor ou igual a parcela final'}, status=400)
 
-        # Criar o registro de reajuste
-        reajuste = Reajuste.objects.create(
-            contrato=contrato,
-            data_reajuste=timezone.now().date(),
-            indice_tipo=indice_tipo,
-            percentual=percentual,
-            parcela_inicial=parcela_inicial,
-            parcela_final=parcela_final,
-            aplicado_manual=True,
-            observacoes=observacoes
-        )
+            ciclo = contrato.ciclo_reajuste_atual + 1
 
-        # Aplicar o reajuste nas parcelas
-        reajuste.aplicar_reajuste()
+            reajuste = Reajuste.objects.create(
+                contrato=contrato,
+                data_reajuste=timezone.now().date(),
+                indice_tipo=indice_tipo,
+                percentual=percentual,
+                percentual_bruto=percentual,
+                desconto_percentual=Decimal(str(desconto_percentual)) if desconto_percentual else None,
+                desconto_valor=Decimal(str(desconto_valor)) if desconto_valor else None,
+                parcela_inicial=parcela_inicial,
+                parcela_final=parcela_final,
+                ciclo=ciclo,
+                aplicado_manual=True,
+                observacoes=observacoes,
+            )
 
-        # Contar parcelas afetadas
-        parcelas_afetadas = parcelas_pendentes.count()
+        if not contrato.parcelas.filter(
+            numero_parcela__gte=reajuste.parcela_inicial,
+            numero_parcela__lte=reajuste.parcela_final,
+            pago=False,
+        ).exists():
+            reajuste.delete()
+            return JsonResponse({'sucesso': False, 'erro': 'Nenhuma parcela pendente no intervalo selecionado'}, status=400)
+
+        resultado = reajuste.aplicar_reajuste()
 
         return JsonResponse({
             'sucesso': True,
-            'mensagem': f'Reajuste de {percentual}% aplicado com sucesso em {parcelas_afetadas} parcela(s)',
+            'mensagem': (
+                f'Reajuste de {reajuste.percentual}% aplicado com sucesso em '
+                f'{resultado["parcelas_reajustadas"]} parcela(s)'
+            ),
             'reajuste_id': reajuste.id,
-            'parcelas_afetadas': parcelas_afetadas
+            'parcelas_afetadas': resultado['parcelas_reajustadas'],
+            'ciclo': reajuste.ciclo,
+            'percentual_bruto': float(reajuste.percentual_bruto or reajuste.percentual),
+            'percentual_liquido': float(reajuste.percentual),
         })
 
     except ValueError as e:
-        return JsonResponse({
-            'sucesso': False,
-            'erro': f'Valor invalido: {str(e)}'
-        }, status=400)
+        return JsonResponse({'sucesso': False, 'erro': f'Valor invalido: {str(e)}'}, status=400)
     except Exception as e:
         logger.exception(f"Erro ao aplicar reajuste: {e}")
-        return JsonResponse({
-            'sucesso': False,
-            'erro': str(e)
-        }, status=500)
+        return JsonResponse({'sucesso': False, 'erro': str(e)}, status=500)
+
+
+@login_required
+def reajustes_pendentes(request):
+    """
+    Lista todos os contratos ativos que possuem ciclo de reajuste pendente,
+    agrupados por imobiliária, com informações do ciclo e período de referência.
+    """
+    from contratos.models import Contrato as ContratoModel
+    from django.db.models import Prefetch
+
+    contratos_ativos = ContratoModel.objects.filter(
+        status='ATIVO'
+    ).select_related('comprador', 'imobiliaria', 'imovel').order_by(
+        'imobiliaria__nome', 'data_contrato'
+    )
+
+    pendentes = []
+    for contrato in contratos_ativos:
+        ciclo = Reajuste.calcular_ciclo_pendente(contrato)
+        if ciclo is None:
+            continue
+
+        inicio_ref, fim_ref = Reajuste.calcular_periodo_referencia(contrato, ciclo)
+        prazo = contrato.prazo_reajuste_meses
+        parcela_inicial = (ciclo - 1) * prazo + 1
+        parcela_final = min(ciclo * prazo, contrato.numero_parcelas)
+
+        pendentes.append({
+            'contrato': contrato,
+            'ciclo': ciclo,
+            'parcela_inicial': parcela_inicial,
+            'parcela_final': parcela_final,
+            'periodo_referencia_inicio': inicio_ref,
+            'periodo_referencia_fim': fim_ref,
+            'indice_tipo': contrato.tipo_correcao,
+        })
+
+    # Agrupar por imobiliária
+    from itertools import groupby
+    pendentes_agrupados = []
+    for imob_nome, grupo in groupby(pendentes, key=lambda x: x['contrato'].imobiliaria.nome):
+        pendentes_agrupados.append({
+            'imobiliaria': imob_nome,
+            'contratos': list(grupo),
+        })
+
+    context = {
+        'pendentes_agrupados': pendentes_agrupados,
+        'total_pendentes': len(pendentes),
+    }
+    return render(request, 'financeiro/reajustes_pendentes.html', context)
 
 
 @login_required
