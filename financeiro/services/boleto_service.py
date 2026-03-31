@@ -944,9 +944,12 @@ class BoletoService:
                 logger.debug(f"Banco: {banco_nome}, params count: {len(params)}")
 
                 # Enviar via GET
+                # O header Accept e necessario para o versionamento via header do Grape API
+                # (version 'v1', using: :header, vendor: 'BoletoApi')
                 response = requests.get(
                     url,
                     params=params,
+                    headers={'Accept': 'application/vnd.BoletoApi-v1+json'},
                     timeout=self.timeout
                 )
 
@@ -1139,6 +1142,7 @@ class BoletoService:
             response = requests.get(
                 f"{self.brcobranca_url}/api/boleto/data",
                 params=params,
+                headers={'Accept': 'application/vnd.BoletoApi-v1+json'},
                 timeout=10
             )
 
