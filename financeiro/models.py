@@ -737,6 +737,48 @@ class Reajuste(TimeStampedModel):
         help_text='Data até quando boletos podem ser gerados após este reajuste'
     )
 
+    # Período de referência do índice (os 12 meses cujo acumulado foi aplicado)
+    periodo_referencia_inicio = models.DateField(
+        null=True,
+        blank=True,
+        verbose_name='Início do Período de Referência',
+        help_text='Primeiro mês do período cujo acumulado foi utilizado'
+    )
+    periodo_referencia_fim = models.DateField(
+        null=True,
+        blank=True,
+        verbose_name='Fim do Período de Referência',
+        help_text='Último mês do período cujo acumulado foi utilizado'
+    )
+
+    # Percentual bruto (índice calculado) e desconto aplicado
+    percentual_bruto = models.DecimalField(
+        max_digits=8,
+        decimal_places=4,
+        null=True,
+        blank=True,
+        verbose_name='Percentual Bruto (%)',
+        help_text='Percentual calculado do índice antes do desconto'
+    )
+    desconto_percentual = models.DecimalField(
+        max_digits=8,
+        decimal_places=4,
+        null=True,
+        blank=True,
+        validators=[MinValueValidator(Decimal('0'))],
+        verbose_name='Desconto em Pontos Percentuais',
+        help_text='Redução em p.p. sobre o índice (ex: IPCA 5,4% - 1 p.p. = 4,4%)'
+    )
+    desconto_valor = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        validators=[MinValueValidator(Decimal('0'))],
+        verbose_name='Desconto em R$ por Parcela',
+        help_text='Desconto fixo em reais subtraído de cada parcela após o percentual'
+    )
+
     aplicado_manual = models.BooleanField(
         default=False,
         verbose_name='Aplicado Manualmente',
@@ -768,6 +810,183 @@ class Reajuste(TimeStampedModel):
 
     def __str__(self):
         return f"Reajuste {self.indice_tipo} - {self.percentual}% - Ciclo {self.ciclo} - Contrato {self.contrato.numero_contrato}"
+
+    @property
+    def percentual_liquido(self):
+        """Percentual efetivamente aplicado após desconto em p.p."""
+        perc = self.percentual
+        if self.desconto_percentual:
+            perc = max(Decimal('0'), perc - self.desconto_percentual)
+        return perc
+
+    # ------------------------------------------------------------------
+    # Métodos de classe para cálculo automático
+    # ------------------------------------------------------------------
+
+    @classmethod
+    def calcular_ciclo_pendente(cls, contrato):
+        """
+        Retorna o próximo ciclo que precisa de reajuste, ou None se estiver em dia.
+
+        Regra:
+        - Ciclo 1 é sempre isento (sem reajuste).
+        - O ciclo N fica pendente quando os primeiros (N-1)*prazo meses do contrato
+          já transcorreram e ainda não foi aplicado.
+        - Contratos FIXO nunca precisam de reajuste.
+        """
+        from django.utils import timezone as tz
+        from dateutil.relativedelta import relativedelta
+
+        if contrato.tipo_correcao == 'FIXO':
+            return None
+
+        prazo = contrato.prazo_reajuste_meses
+        hoje = tz.now().date()
+
+        # Quantos ciclos completos já transcorreram (ciclo 1 não conta)
+        meses_decorridos = (hoje.year - contrato.data_contrato.year) * 12 + \
+                           (hoje.month - contrato.data_contrato.month)
+        ciclos_decorridos = meses_decorridos // prazo  # 0 no primeiro ano
+
+        if ciclos_decorridos < 1:
+            return None  # ainda dentro do ciclo 1 — nenhum reajuste necessário
+
+        # O próximo ciclo a aplicar é o que vem após o último aplicado
+        ultimo_aplicado = contrato.ciclo_reajuste_atual or 1
+        proximo = ultimo_aplicado + 1
+
+        # Não ultrapassa o número de ciclos que já transcorreram
+        if proximo > ciclos_decorridos + 1:
+            return None
+
+        # Verifica se já existe reajuste aplicado para esse ciclo
+        if cls.objects.filter(contrato=contrato, ciclo=proximo, aplicado=True).exists():
+            return None
+
+        # Verifica se há parcelas no intervalo desse ciclo
+        parcela_inicial = (proximo - 1) * prazo + 1
+        if parcela_inicial > contrato.numero_parcelas:
+            return None
+
+        return proximo
+
+    @classmethod
+    def calcular_periodo_referencia(cls, contrato, ciclo):
+        """
+        Retorna (data_inicio, data_fim) do período cujo acumulado será aplicado no ciclo N.
+
+        Regra: o ciclo N usa o acumulado dos 12 meses que correspondem ao ciclo N-1
+        (os 12 meses imediatamente anteriores ao início do novo ciclo).
+
+        Exemplo — contrato Jan/2023, prazo=12:
+          ciclo 2 → referência: Jan/2023 a Dez/2023
+          ciclo 3 → referência: Jan/2024 a Dez/2024
+        """
+        from dateutil.relativedelta import relativedelta
+
+        prazo = contrato.prazo_reajuste_meses
+        # Início do ciclo anterior (N-1)
+        inicio = contrato.data_contrato + relativedelta(months=(ciclo - 2) * prazo)
+        # Fim = último dia antes do início do ciclo N
+        fim = contrato.data_contrato + relativedelta(months=(ciclo - 1) * prazo) - relativedelta(days=1)
+        return inicio, fim
+
+    @classmethod
+    def preview_reajuste(cls, contrato, ciclo,
+                         desconto_percentual=None, desconto_valor=None):
+        """
+        Simula o reajuste sem persistir nada (dry-run).
+
+        Retorna dict com:
+          - ciclo, indice_tipo, periodo_referencia_inicio/fim
+          - percentual_bruto, desconto_percentual, desconto_valor, percentual_liquido
+          - parcela_inicial, parcela_final, parcelas (lista detalhada)
+          - total_parcelas, valor_anterior_total, valor_novo_total, diferenca_total
+          - boletos_emitidos (lista de parcelas com boleto já gerado)
+          - erro (str) se não for possível calcular
+        """
+        from contratos.models import IndiceReajuste
+        from dateutil.relativedelta import relativedelta
+
+        prazo = contrato.prazo_reajuste_meses
+        indice_tipo = contrato.tipo_correcao
+
+        parcela_inicial = (ciclo - 1) * prazo + 1
+        parcela_final = min(ciclo * prazo, contrato.numero_parcelas)
+
+        inicio_ref, fim_ref = cls.calcular_periodo_referencia(contrato, ciclo)
+
+        # Buscar acumulado do índice no período de referência
+        percentual_bruto = IndiceReajuste.get_acumulado_periodo(
+            indice_tipo,
+            inicio_ref.year, inicio_ref.month,
+            fim_ref.year, fim_ref.month,
+        )
+        if percentual_bruto is None:
+            return {
+                'erro': f'Índice {indice_tipo} não disponível para {inicio_ref.strftime("%b/%Y")} '
+                        f'a {fim_ref.strftime("%b/%Y")}. Importe os dados do índice primeiro.',
+                'periodo_referencia_inicio': inicio_ref,
+                'periodo_referencia_fim': fim_ref,
+                'indice_tipo': indice_tipo,
+                'ciclo': ciclo,
+                'parcela_inicial': parcela_inicial,
+                'parcela_final': parcela_final,
+            }
+
+        desc_perc = Decimal(str(desconto_percentual)) if desconto_percentual else Decimal('0')
+        desc_val = Decimal(str(desconto_valor)) if desconto_valor else Decimal('0')
+        percentual_liquido = max(Decimal('0'), percentual_bruto - desc_perc)
+        fator = 1 + (percentual_liquido / 100)
+
+        parcelas_qs = contrato.parcelas.filter(
+            numero_parcela__gte=parcela_inicial,
+            numero_parcela__lte=parcela_final,
+            pago=False,
+        ).order_by('numero_parcela')
+
+        detalhes = []
+        valor_anterior_total = Decimal('0')
+        valor_novo_total = Decimal('0')
+        boletos_emitidos = []
+
+        for p in parcelas_qs:
+            novo_valor = p.valor_atual * fator
+            if desc_val:
+                novo_valor = max(p.valor_atual, novo_valor - desc_val)
+            novo_valor = novo_valor.quantize(Decimal('0.01'))
+
+            detalhes.append({
+                'numero_parcela': p.numero_parcela,
+                'data_vencimento': p.data_vencimento,
+                'valor_atual': p.valor_atual,
+                'valor_novo': novo_valor,
+                'diferenca': novo_valor - p.valor_atual,
+                'tem_boleto': p.tem_boleto,
+            })
+            valor_anterior_total += p.valor_atual
+            valor_novo_total += novo_valor
+            if p.tem_boleto:
+                boletos_emitidos.append(p.numero_parcela)
+
+        return {
+            'ciclo': ciclo,
+            'indice_tipo': indice_tipo,
+            'periodo_referencia_inicio': inicio_ref,
+            'periodo_referencia_fim': fim_ref,
+            'percentual_bruto': percentual_bruto,
+            'desconto_percentual': desc_perc,
+            'desconto_valor': desc_val,
+            'percentual_liquido': percentual_liquido,
+            'parcela_inicial': parcela_inicial,
+            'parcela_final': parcela_final,
+            'parcelas': detalhes,
+            'total_parcelas': len(detalhes),
+            'valor_anterior_total': valor_anterior_total,
+            'valor_novo_total': valor_novo_total,
+            'diferenca_total': valor_novo_total - valor_anterior_total,
+            'boletos_emitidos': boletos_emitidos,
+        }
 
     def clean(self):
         """Validações de negócio do reajuste"""
@@ -842,14 +1061,19 @@ class Reajuste(TimeStampedModel):
             pago=False  # Só reajusta parcelas não pagas
         )
 
-        fator_reajuste = 1 + (self.percentual / 100)
+        perc_liquido = self.percentual_liquido
+        fator_reajuste = 1 + (perc_liquido / 100)
+        desc_val = self.desconto_valor or Decimal('0')
         parcelas_reajustadas = 0
         valor_anterior_total = Decimal('0.00')
         valor_novo_total = Decimal('0.00')
 
         for parcela in parcelas:
             valor_anterior = parcela.valor_atual
-            parcela.valor_atual = parcela.valor_atual * fator_reajuste
+            novo_valor = parcela.valor_atual * fator_reajuste
+            if desc_val:
+                novo_valor = max(parcela.valor_atual, novo_valor - desc_val)
+            parcela.valor_atual = novo_valor.quantize(Decimal('0.01'))
             parcela.save(update_fields=['valor_atual'])
 
             valor_anterior_total += valor_anterior
@@ -927,26 +1151,28 @@ class Reajuste(TimeStampedModel):
         parcela_inicial = (ciclo - 1) * prazo + 1
         parcela_final = min(ciclo * prazo, contrato.numero_parcelas)
 
-        # Calcular data base para buscar índice
-        data_base = contrato.data_contrato + relativedelta(months=(ciclo - 1) * prazo)
+        # Período de referência: os 12 meses do ciclo anterior (N-1)
+        # Ex: ciclo 2 → referência = meses 1-12 do contrato (o ano 1)
+        #     ciclo 3 → referência = meses 13-24 do contrato (o ano 2)
+        inicio_ref, fim_ref = cls.calcular_periodo_referencia(contrato, ciclo)
 
         # Buscar percentual acumulado se não especificado
         if percentual is None:
-            # Buscar índice acumulado do período
-            ano_inicio = data_base.year
-            mes_inicio = data_base.month
-            data_fim = data_base + relativedelta(months=prazo - 1)
-
             percentual_acumulado = IndiceReajuste.get_acumulado_periodo(
                 indice_tipo,
-                ano_inicio, mes_inicio,
-                data_fim.year, data_fim.month
+                inicio_ref.year, inicio_ref.month,
+                fim_ref.year, fim_ref.month,
             )
 
             if percentual_acumulado is not None:
                 percentual = percentual_acumulado
             else:
-                raise ValueError(f"Índice {indice_tipo} não disponível para o período")
+                raise ValueError(
+                    f"Índice {indice_tipo} não disponível para "
+                    f"{inicio_ref.strftime('%b/%Y')} a {fim_ref.strftime('%b/%Y')}"
+                )
+
+        data_inicio_ciclo = contrato.data_contrato + relativedelta(months=(ciclo - 1) * prazo)
 
         # Criar o reajuste
         reajuste = cls.objects.create(
@@ -954,10 +1180,13 @@ class Reajuste(TimeStampedModel):
             data_reajuste=timezone.now().date(),
             indice_tipo=indice_tipo,
             percentual=percentual,
+            percentual_bruto=percentual,
             parcela_inicial=parcela_inicial,
             parcela_final=parcela_final,
             ciclo=ciclo,
-            data_limite_boleto=data_base + relativedelta(months=prazo * 2),
+            periodo_referencia_inicio=inicio_ref,
+            periodo_referencia_fim=fim_ref,
+            data_limite_boleto=data_inicio_ciclo + relativedelta(months=prazo * 2),
             aplicado_manual=False,
         )
 
