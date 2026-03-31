@@ -62,7 +62,7 @@ services:
         generateValue: true
       # URL do servico BRCobranca
       - key: BRCOBRANCA_URL
-        value: "https://brcobranca-api.onrender.com"
+        value: "https://brcobranca-api-m4q9.onrender.com"
       # Supabase API
       - key: SUPABASE_URL
         value: "https://szyouijmxhlbavkzibxa.supabase.co"
@@ -130,7 +130,7 @@ services:
 #    - Agenda: A cada 10 minutos
 #
 # 2. Para o BRCobranca tambem:
-#    - URL: https://brcobranca-api.onrender.com/
+#    - URL: https://brcobranca-api-m4q9.onrender.com/
 #    - Metodo: GET
 #    - Agenda: A cada 10 minutos
 #
