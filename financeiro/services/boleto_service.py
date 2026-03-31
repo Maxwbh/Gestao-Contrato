@@ -1,11 +1,21 @@
 """
-Servico de Integracao com BRCobranca para Geracao de Boletos
+Servico de Integracao com boleto_cnab_api para Geracao de Boletos
 
-Este servico integra com a API BRCobranca (boleto_cnab_api) para geracao
-de boletos bancarios. Suporta os principais bancos brasileiros.
+Este servico integra com a API boleto_cnab_api para geracao
+de boletos bancarios e arquivos CNAB. Suporta os principais bancos brasileiros.
 
-API BRCobranca: https://github.com/akretion/boleto_cnab_api
-Docker: docker run -p 9292:9292 akretion/boleto_cnab_api
+API boleto_cnab_api: https://github.com/Maxwbh/boleto_cnab_api
+Docker: docker run -p 9292:9292 maxwbh/boleto_cnab_api
+
+Endpoints disponiveis:
+- GET  /api/health           - Verificacao de saude
+- GET  /api/boleto/validate  - Validar dados do boleto
+- GET  /api/boleto/data      - Obter dados sem gerar PDF
+- GET  /api/boleto/nosso_numero - Obter nosso numero
+- GET  /api/boleto           - Gerar boleto (PDF/JPG/PNG/TIF)
+- POST /api/boleto/multi     - Gerar multiplos boletos
+- POST /api/remessa          - Gerar arquivo CNAB remessa
+- POST /api/retorno          - Processar arquivo CNAB retorno
 
 Desenvolvedor: Maxwell da Silva Oliveira
 Email: maxwbh@gmail.com
@@ -32,13 +42,18 @@ class BRCobrancaError(Exception):
 
 class BoletoService:
     """
-    Servico para geracao de boletos bancarios via BRCobranca.
+    Servico para geracao de boletos bancarios via boleto_cnab_api.
 
-    O BRCobranca (boleto_cnab_api) deve estar rodando como container Docker:
-    docker run -p 9292:9292 akretion/boleto_cnab_api
+    O boleto_cnab_api deve estar rodando como container Docker:
+    docker run -p 9292:9292 maxwbh/boleto_cnab_api
 
     Configurar no settings.py:
     BRCOBRANCA_URL = 'http://localhost:9292'
+
+    Endpoints utilizados:
+    - GET /api/boleto - Gerar boleto individual
+    - POST /api/boleto/multi - Gerar multiplos boletos
+    - GET /api/boleto/validate - Validar dados do boleto
     """
 
     # Mapeamento de codigos de banco para nomes no BRCobranca
@@ -1231,44 +1246,5 @@ class BoletoService:
         return False
 
 
-class CNABService:
-    """
-    Servico para geracao de arquivos CNAB (remessa/retorno).
-
-    Usa a API BRCobranca para gerar arquivos CNAB240 e CNAB400.
-    """
-
-    def __init__(self, brcobranca_url=None):
-        self.brcobranca_url = brcobranca_url or getattr(
-            settings, 'BRCOBRANCA_URL', 'http://localhost:9292'
-        )
-        self.timeout = getattr(settings, 'BRCOBRANCA_TIMEOUT', 60)
-
-    def gerar_remessa(self, parcelas, conta_bancaria, layout='240'):
-        """
-        Gera arquivo de remessa CNAB para as parcelas.
-
-        Args:
-            parcelas: Lista de parcelas com boletos gerados
-            conta_bancaria: Conta bancaria
-            layout: '240' ou '400'
-
-        Returns:
-            bytes: Conteudo do arquivo CNAB
-        """
-        # TODO: Implementar geracao de remessa CNAB via API
-        raise NotImplementedError("Geracao de CNAB sera implementada em versao futura")
-
-    def processar_retorno(self, arquivo_cnab, conta_bancaria):
-        """
-        Processa arquivo de retorno CNAB.
-
-        Args:
-            arquivo_cnab: Arquivo CNAB de retorno
-            conta_bancaria: Conta bancaria
-
-        Returns:
-            list: Lista de movimentacoes processadas
-        """
-        # TODO: Implementar processamento de retorno CNAB
-        raise NotImplementedError("Processamento de retorno CNAB sera implementado em versao futura")
+# CNABService foi movido para cnab_service.py
+# Importar de: from financeiro.services.cnab_service import CNABService
