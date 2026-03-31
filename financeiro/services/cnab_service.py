@@ -1,14 +1,7 @@
 """
 Servico CNAB - Geracao de Remessa e Processamento de Retorno
 
-Integra com boleto_cnab_api para geracao de arquivos CNAB 240/400.
-
-API boleto_cnab_api: https://github.com/Maxwbh/boleto_cnab_api
-Docker: docker run -p 9292:9292 maxwbh/boleto_cnab_api
-
-Endpoints utilizados:
-- POST /api/remessa  - Gerar arquivo CNAB remessa (240/400)
-- POST /api/retorno  - Processar arquivo CNAB retorno
+Integra com BRCobranca para geracao de arquivos CNAB 240/400.
 
 Desenvolvedor: Maxwell da Silva Oliveira
 Email: maxwbh@gmail.com
@@ -72,16 +65,11 @@ OCORRENCIAS_CNAB = {
 class CNABService:
     """
     Servico para geracao de arquivos de remessa e processamento de retorno.
-    Integra com a API boleto_cnab_api (Docker container).
-
-    Endpoints:
-    - POST /api/remessa - Gerar arquivo CNAB remessa
-    - POST /api/retorno - Processar arquivo CNAB retorno
+    Integra com a API BRCobranca (Docker container).
     """
 
     def __init__(self):
-        # URL do servico boleto_cnab_api (container Docker)
-        # https://github.com/Maxwbh/boleto_cnab_api
+        # URL do servico BRCobranca (container Docker)
         self.brcobranca_url = getattr(
             settings,
             'BRCOBRANCA_URL',
