@@ -943,78 +943,143 @@
 
 <!-- Modal de Reajuste Manual -->
 <div class="modal fade" id="modalReajuste" tabindex="-1">
-    <div class="modal-dialog">
+    <div class="modal-dialog modal-lg">
         <div class="modal-content">
             <div class="modal-header bg-secondary text-white">
                 <h5 class="modal-title">
-                    <i class="fas fa-chart-line"></i> Aplicar Reajuste Manual
+                    <i class="fas fa-chart-line"></i> Aplicar Reajuste
                 </h5>
                 <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
             </div>
             <form id="formReajuste" method="post">
                 {% csrf_token %}
                 <div class="modal-body">
-                    <div class="alert alert-info">
-                        <i class="fas fa-info-circle"></i>
-                        O reajuste sera aplicado apenas nas parcelas <strong>nao pagas</strong> dentro do intervalo selecionado.
+
+                    <!-- Loading spinner -->
+                    <div id="reajuste_loading" class="text-center py-4">
+                        <div class="spinner-border text-secondary" role="status"></div>
+                        <p class="mt-2 text-muted">Calculando reajuste pendente...</p>
                     </div>
 
-                    <div class="mb-3">
-                        <label class="form-label">Tipo de Indice <span class="text-danger">*</span></label>
-                        <select name="indice_tipo" id="reajuste_indice" class="form-select" required onchange="buscarPercentualIndice()">
-                            <option value="">Selecione...</option>
-                            {% for codigo, nome in tipos_indice %}
-                            <option value="{{ codigo }}">{{ nome }}</option>
-                            {% endfor %}
-                        </select>
+                    <!-- Sem reajuste pendente -->
+                    <div id="reajuste_sem_pendente" class="alert alert-success d-none">
+                        <i class="fas fa-check-circle"></i> Nenhum reajuste pendente para este contrato.
                     </div>
 
-                    <div class="mb-3">
-                        <label class="form-label">Percentual de Reajuste (%) <span class="text-danger">*</span></label>
-                        <div class="input-group">
-                            <input type="number" step="0.0001" class="form-control" id="reajuste_percentual" name="percentual" required placeholder="Ex: 5.25">
-                            <span class="input-group-text">%</span>
-                            <button type="button" class="btn btn-outline-secondary" onclick="calcularReajusteProporcional()" title="Calcular reajuste acumulado proporcional">
-                                <i class="fas fa-calculator"></i> Calcular
-                            </button>
-                        </div>
-                        <small class="text-muted" id="reajuste_info"></small>
+                    <!-- Erro ao buscar índice -->
+                    <div id="reajuste_erro_indice" class="alert alert-warning d-none">
+                        <i class="fas fa-exclamation-triangle"></i>
+                        <span id="reajuste_erro_indice_msg"></span>
+                        <br><small>Importe os índices em <a href="{% url 'contratos:indices_listar' %}" target="_blank">Gestão → Índices de Reajuste</a>.</small>
                     </div>
 
-                    <div id="detalhesCalculo" class="alert alert-secondary d-none" style="max-height: 150px; overflow-y: auto;">
-                        <h6><i class="fas fa-info-circle"></i> Detalhes do Calculo</h6>
-                        <div id="detalhesCalculoConteudo"></div>
-                    </div>
+                    <!-- Formulário principal -->
+                    <div id="reajuste_form_area" class="d-none">
 
-                    <div class="row">
-                        <div class="col-md-6">
-                            <div class="mb-3">
-                                <label class="form-label">Parcela Inicial <span class="text-danger">*</span></label>
-                                <input type="number" class="form-control" id="reajuste_parcela_inicial" name="parcela_inicial" min="1" max="{{ contrato.numero_parcelas }}" value="1" required>
+                        <!-- Cabeçalho calculado automaticamente -->
+                        <div class="card bg-light mb-3">
+                            <div class="card-body py-2">
+                                <div class="row g-2 align-items-center">
+                                    <div class="col-sm-3">
+                                        <small class="text-muted d-block">Ciclo</small>
+                                        <strong id="r_ciclo">—</strong>
+                                    </div>
+                                    <div class="col-sm-3">
+                                        <small class="text-muted d-block">Índice</small>
+                                        <strong id="r_indice">—</strong>
+                                    </div>
+                                    <div class="col-sm-3">
+                                        <small class="text-muted d-block">Período de referência</small>
+                                        <strong id="r_periodo">—</strong>
+                                    </div>
+                                    <div class="col-sm-3">
+                                        <small class="text-muted d-block">Parcelas afetadas</small>
+                                        <strong id="r_parcelas_range">—</strong>
+                                    </div>
+                                </div>
                             </div>
                         </div>
-                        <div class="col-md-6">
-                            <div class="mb-3">
-                                <label class="form-label">Parcela Final <span class="text-danger">*</span></label>
-                                <input type="number" class="form-control" id="reajuste_parcela_final" name="parcela_final" min="1" max="{{ contrato.numero_parcelas }}" value="{{ contrato.numero_parcelas }}" required>
+
+                        <!-- % Bruto calculado -->
+                        <div class="row g-3 mb-3">
+                            <div class="col-md-4">
+                                <label class="form-label fw-bold">% Acumulado (índice)</label>
+                                <div class="input-group">
+                                    <input type="text" class="form-control fw-bold text-primary" id="r_pct_bruto" readonly>
+                                    <span class="input-group-text">%</span>
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label">Desconto em p.p. <small class="text-muted">(opcional)</small></label>
+                                <div class="input-group">
+                                    <input type="number" step="0.0001" min="0" class="form-control" id="r_desconto_pct" name="desconto_percentual" placeholder="0.0000" oninput="aplicarDesconto()">
+                                    <span class="input-group-text">p.p.</span>
+                                </div>
+                                <small class="text-muted">Ex: IPCA 5,4% − 1 p.p. = 4,4%</small>
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label">Desconto em R$ / parcela <small class="text-muted">(opcional)</small></label>
+                                <div class="input-group">
+                                    <span class="input-group-text">R$</span>
+                                    <input type="number" step="0.01" min="0" class="form-control" id="r_desconto_val" name="desconto_valor" placeholder="0,00" oninput="aplicarDesconto()">
+                                </div>
                             </div>
                         </div>
+
+                        <!-- % Líquido final -->
+                        <div class="alert alert-primary py-2 mb-3">
+                            <div class="row align-items-center">
+                                <div class="col">
+                                    <strong>% aplicado às parcelas:</strong>
+                                    <span class="h5 ms-2" id="r_pct_liquido">—</span>%
+                                </div>
+                                <div class="col-auto">
+                                    <small class="text-muted">Variação total estimada: <strong id="r_diferenca_total">R$ —</strong></small>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Alerta boletos emitidos -->
+                        <div id="reajuste_alerta_boletos" class="alert alert-warning d-none">
+                            <i class="fas fa-exclamation-triangle"></i>
+                            <strong>Atenção:</strong> <span id="reajuste_alerta_boletos_msg"></span>
+                            Os boletos dessas parcelas precisarão ser regenerados após o reajuste.
+                        </div>
+
+                        <!-- Tabela de prévia por parcela -->
+                        <div class="mb-3">
+                            <label class="form-label fw-bold">Prévia por parcela</label>
+                            <div style="max-height: 240px; overflow-y: auto;">
+                                <table class="table table-sm table-bordered mb-0" style="font-size:0.82rem;">
+                                    <thead class="table-light sticky-top">
+                                        <tr>
+                                            <th class="text-center">#</th>
+                                            <th>Vencimento</th>
+                                            <th class="text-end">Valor Atual</th>
+                                            <th class="text-end">% Aplicado</th>
+                                            <th class="text-end text-success fw-bold">Valor Novo</th>
+                                            <th class="text-end">Diferença</th>
+                                            <th class="text-center">Boleto</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="reajuste_preview_tbody"></tbody>
+                                </table>
+                            </div>
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label">Observações</label>
+                            <textarea class="form-control" name="observacoes" rows="2" placeholder="Motivo do reajuste..."></textarea>
+                        </div>
+
+                        <!-- campos hidden para envio -->
+                        <input type="hidden" name="ciclo" id="r_ciclo_hidden">
                     </div>
 
-                    <div class="mb-3">
-                        <label class="form-label">Observacoes</label>
-                        <textarea class="form-control" name="observacoes" rows="2" placeholder="Motivo do reajuste manual..."></textarea>
-                    </div>
-
-                    <div id="previewReajuste" class="border rounded p-3 bg-light d-none">
-                        <h6><i class="fas fa-calculator"></i> Previa do Reajuste</h6>
-                        <p class="mb-1">Parcelas afetadas: <strong id="preview_qtd">0</strong></p>
-                        <p class="mb-0">Novo valor aproximado: <strong id="preview_novo_valor">R$ 0,00</strong></p>
-                    </div>
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
-                    <button type="submit" class="btn btn-primary" id="btnAplicarReajuste">
+                    <button type="submit" class="btn btn-primary d-none" id="btnAplicarReajuste">
                         <i class="fas fa-check"></i> Aplicar Reajuste
                     </button>
                 </div>
@@ -1637,167 +1702,168 @@ var todasParcelas = [
     {% endfor %}
 ];
 
+// ──────────────────────────────────────────────────────────────────────────────
+// REAJUSTE — variáveis de estado
+// ──────────────────────────────────────────────────────────────────────────────
+var _reajustePreview = null;  // último preview carregado do servidor
+
 function abrirModalReajuste() {
-    document.getElementById('reajuste_indice').value = '';
-    document.getElementById('reajuste_percentual').value = '';
-    document.getElementById('reajuste_parcela_inicial').value = 1;
-    document.getElementById('reajuste_parcela_final').value = {{ contrato.numero_parcelas }};
-    document.getElementById('reajuste_info').textContent = '';
+    // Reset UI
+    _reajustePreview = null;
+    document.getElementById('reajuste_loading').classList.remove('d-none');
+    document.getElementById('reajuste_sem_pendente').classList.add('d-none');
+    document.getElementById('reajuste_erro_indice').classList.add('d-none');
+    document.getElementById('reajuste_form_area').classList.add('d-none');
+    document.getElementById('btnAplicarReajuste').classList.add('d-none');
+    document.getElementById('r_desconto_pct').value = '';
+    document.getElementById('r_desconto_val').value = '';
 
-    // Mostrar modal primeiro, depois ocultar elementos (para garantir que estao no DOM)
-    var modal = new bootstrap.Modal(document.getElementById('modalReajuste'));
-    modal.show();
+    new bootstrap.Modal(document.getElementById('modalReajuste')).show();
 
-    // Executar apos modal estar visivel
-    setTimeout(function() {
-        var previewEl = document.getElementById('previewReajuste');
-        var detalhesEl = document.getElementById('detalhesCalculo');
-        if (previewEl) previewEl.classList.add('d-none');
-        if (detalhesEl) detalhesEl.classList.add('d-none');
-    }, 100);
-}
+    // Buscar preview do ciclo pendente
+    fetch('/financeiro/contrato/{{ contrato.pk }}/reajuste/preview/')
+        .then(r => r.json())
+        .then(data => {
+            document.getElementById('reajuste_loading').classList.add('d-none');
 
-function buscarPercentualIndice() {
-    var tipoIndice = document.getElementById('reajuste_indice').value;
-    var infoSpan = document.getElementById('reajuste_info');
-
-    if (!tipoIndice || tipoIndice === 'MANUAL') {
-        infoSpan.textContent = tipoIndice === 'MANUAL' ? 'Informe o percentual manualmente ou clique em Calcular' : '';
-        document.getElementById('detalhesCalculo').classList.add('d-none');
-        return;
-    }
-
-    infoSpan.textContent = 'Selecione e clique em Calcular para obter o reajuste acumulado proporcional';
-}
-
-function calcularReajusteProporcional() {
-    var tipoIndice = document.getElementById('reajuste_indice').value;
-    var infoSpan = document.getElementById('reajuste_info');
-    var detalhesDiv = document.getElementById('detalhesCalculo');
-    var detalhesConteudo = document.getElementById('detalhesCalculoConteudo');
-
-    if (!tipoIndice) {
-        alert('Selecione um tipo de indice primeiro');
-        return;
-    }
-
-    if (tipoIndice === 'MANUAL') {
-        alert('Para indice manual, informe o percentual diretamente');
-        return;
-    }
-
-    infoSpan.textContent = 'Calculando reajuste proporcional...';
-
-    // Usar a nova API que segue a metodologia Calculo Exato
-    fetch('/financeiro/contrato/{{ contrato.pk }}/reajuste/calcular/?tipo_indice=' + tipoIndice)
-    .then(response => response.json())
-    .then(data => {
-        if (data.sucesso) {
-            document.getElementById('reajuste_percentual').value = data.percentual_acumulado.toFixed(4);
-            infoSpan.textContent = 'Reajuste acumulado ' + tipoIndice + ' de ' + data.data_inicio + ' a ' + data.data_fim + ': ' + data.percentual_acumulado.toFixed(4) + '%';
-
-            // Mostrar detalhes do calculo (metodologia Calculo Exato)
-            var html = '<small>';
-            html += '<div class="mb-2 p-2 bg-info bg-opacity-10 rounded">';
-            html += '<strong><i class="fas fa-calculator me-1"></i>Metodologia: Calculo Exato</strong>';
-            html += '<p class="mb-0 mt-1" style="font-size: 0.75rem;">Fator = (1 + i<sub>1</sub>/100) × (1 + i<sub>2</sub>/100) × ... × (1 + i<sub>n</sub>/100)</p>';
-            html += '</div>';
-            html += '<p class="mb-1"><strong>Periodo:</strong> ' + data.data_inicio + ' a ' + data.data_fim + '</p>';
-            html += '<p class="mb-1"><strong>Total de meses:</strong> ' + data.total_meses + '</p>';
-            html += '<p class="mb-2"><strong>Fator de multiplicacao:</strong> ' + data.fator_acumulado.toFixed(6) + '</p>';
-            html += '<table class="table table-sm table-bordered mb-2" style="font-size: 0.75rem;">';
-            html += '<thead class="table-light"><tr><th>Mes/Ano</th><th>Indice (%)</th><th>Dias</th><th>Prop. (%)</th><th>Fator</th></tr></thead><tbody>';
-
-            for (var i = 0; i < data.meses_detalhes.length; i++) {
-                var m = data.meses_detalhes[i];
-                var indiceOriginal = m.indice_original !== null ? m.indice_original.toFixed(2) : '-';
-                var indiceProp = m.indice_proporcional !== undefined ? m.indice_proporcional.toFixed(4) : '0.0000';
-                html += '<tr>';
-                html += '<td>' + m.mes + '/' + m.ano + '</td>';
-                html += '<td class="text-end">' + indiceOriginal + '</td>';
-                html += '<td class="text-center">' + m.dias_considerados + '/' + m.dias_mes + '</td>';
-                html += '<td class="text-end">' + indiceProp + '</td>';
-                html += '<td class="text-end">' + (1 + parseFloat(indiceProp) / 100).toFixed(6) + '</td>';
-                html += '</tr>';
+            if (!data.sucesso && !data.ciclo_pendente) {
+                document.getElementById('reajuste_sem_pendente').classList.remove('d-none');
+                return;
             }
 
-            html += '</tbody>';
-            html += '<tfoot class="table-light">';
-            html += '<tr><td colspan="4" class="text-end"><strong>Fator Acumulado:</strong></td>';
-            html += '<td class="text-end"><strong>' + data.fator_acumulado.toFixed(6) + '</strong></td></tr>';
-            html += '<tr><td colspan="4" class="text-end"><strong>Percentual Total:</strong></td>';
-            html += '<td class="text-end"><strong class="text-success">' + data.percentual_acumulado.toFixed(4) + '%</strong></td></tr>';
-            html += '</tfoot></table>';
-            html += '<p class="mb-0 text-muted" style="font-size: 0.7rem;"><i class="fas fa-info-circle me-1"></i>Percentual = (Fator - 1) × 100</p>';
-            html += '</small>';
+            if (!data.sucesso && data.erro) {
+                document.getElementById('reajuste_erro_indice_msg').textContent = data.erro;
+                document.getElementById('reajuste_erro_indice').classList.remove('d-none');
+                // Mostrar o formulário na área de cabeçalho mesmo assim
+                preencherCabecalhoReajuste(data);
+                document.getElementById('reajuste_form_area').classList.remove('d-none');
+                return;
+            }
 
-            detalhesConteudo.innerHTML = html;
-            detalhesDiv.classList.remove('d-none');
-
-            atualizarPreviewReajuste();
-        } else {
-            infoSpan.textContent = data.erro;
-            detalhesDiv.classList.add('d-none');
-        }
-    })
-    .catch(error => {
-        infoSpan.textContent = 'Erro ao calcular reajuste: ' + error;
-        detalhesDiv.classList.add('d-none');
-    });
+            _reajustePreview = data;
+            renderizarPreviewReajuste(data);
+        })
+        .catch(err => {
+            document.getElementById('reajuste_loading').classList.add('d-none');
+            document.getElementById('reajuste_erro_indice_msg').textContent = 'Erro ao conectar: ' + err;
+            document.getElementById('reajuste_erro_indice').classList.remove('d-none');
+        });
 }
 
-function atualizarPreviewReajuste() {
-    var percentual = parseFloat(document.getElementById('reajuste_percentual').value) || 0;
-    var parcelaInicial = parseInt(document.getElementById('reajuste_parcela_inicial').value) || 1;
-    var parcelaFinal = parseInt(document.getElementById('reajuste_parcela_final').value) || {{ contrato.numero_parcelas }};
+function preencherCabecalhoReajuste(data) {
+    document.getElementById('r_ciclo').textContent = data.ciclo_pendente || '—';
+    document.getElementById('r_indice').textContent = data.indice_tipo || '—';
+    document.getElementById('r_periodo').textContent =
+        (data.periodo_referencia_inicio || '') + ' a ' + (data.periodo_referencia_fim || '');
+    document.getElementById('r_parcelas_range').textContent =
+        (data.parcela_inicial || '—') + ' a ' + (data.parcela_final || '—');
+    document.getElementById('r_ciclo_hidden').value = data.ciclo_pendente || '';
+}
 
-    var previewDiv = document.getElementById('previewReajuste');
-    var qtdAfetadas = 0;
-    var valorTotalNovo = 0;
+function renderizarPreviewReajuste(data) {
+    preencherCabecalhoReajuste(data);
 
-    for (var i = 0; i < todasParcelas.length; i++) {
-        var p = todasParcelas[i];
-        if (!p.pago && p.numero >= parcelaInicial && p.numero <= parcelaFinal) {
-            qtdAfetadas++;
-            valorTotalNovo += p.valor * (1 + percentual / 100);
-        }
-    }
+    document.getElementById('r_pct_bruto').value = parseFloat(data.percentual_bruto).toFixed(4);
+    atualizarPercentualLiquidoUI(data.percentual_liquido, data.diferenca_total);
+    renderizarTabelaPreview(data.parcelas, data.percentual_liquido);
 
-    if (percentual !== 0 && qtdAfetadas > 0) {
-        document.getElementById('preview_qtd').textContent = qtdAfetadas;
-        document.getElementById('preview_novo_valor').textContent = 'R$ ' + valorTotalNovo.toFixed(2);
-        previewDiv.classList.remove('d-none');
+    // Alerta de boletos emitidos
+    if (data.boletos_emitidos && data.boletos_emitidos.length > 0) {
+        document.getElementById('reajuste_alerta_boletos_msg').textContent =
+            'As parcelas ' + data.boletos_emitidos.join(', ') + ' já possuem boleto emitido. ';
+        document.getElementById('reajuste_alerta_boletos').classList.remove('d-none');
     } else {
-        previewDiv.classList.add('d-none');
+        document.getElementById('reajuste_alerta_boletos').classList.add('d-none');
     }
+
+    document.getElementById('reajuste_form_area').classList.remove('d-none');
+    document.getElementById('btnAplicarReajuste').classList.remove('d-none');
 }
 
-// Event listeners para preview de reajuste
-document.getElementById('reajuste_percentual').addEventListener('input', atualizarPreviewReajuste);
-document.getElementById('reajuste_parcela_inicial').addEventListener('change', atualizarPreviewReajuste);
-document.getElementById('reajuste_parcela_final').addEventListener('change', atualizarPreviewReajuste);
+function renderizarTabelaPreview(parcelas, pctLiquido) {
+    var tbody = document.getElementById('reajuste_preview_tbody');
+    if (!parcelas || parcelas.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted">Nenhuma parcela pendente no intervalo.</td></tr>';
+        return;
+    }
+    var html = '';
+    parcelas.forEach(function(p) {
+        var boletoIcon = p.tem_boleto
+            ? '<span class="badge bg-warning" title="Boleto emitido — precisará ser regenerado"><i class="fas fa-barcode"></i></span>'
+            : '<span class="badge bg-secondary"><i class="fas fa-minus"></i></span>';
+        html += '<tr>';
+        html += '<td class="text-center">' + p.numero_parcela + '</td>';
+        html += '<td>' + p.data_vencimento + '</td>';
+        html += '<td class="text-end">R$ ' + p.valor_atual.toLocaleString('pt-BR', {minimumFractionDigits:2}) + '</td>';
+        html += '<td class="text-end">' + parseFloat(pctLiquido).toFixed(4) + '%</td>';
+        html += '<td class="text-end text-success fw-bold">R$ ' + p.valor_novo.toLocaleString('pt-BR', {minimumFractionDigits:2}) + '</td>';
+        html += '<td class="text-end text-primary">+ R$ ' + p.diferenca.toLocaleString('pt-BR', {minimumFractionDigits:2}) + '</td>';
+        html += '<td class="text-center">' + boletoIcon + '</td>';
+        html += '</tr>';
+    });
+    tbody.innerHTML = html;
+}
+
+function atualizarPercentualLiquidoUI(pctLiquido, diferencaTotal) {
+    document.getElementById('r_pct_liquido').textContent = parseFloat(pctLiquido).toFixed(4);
+    document.getElementById('r_diferenca_total').textContent =
+        'R$ ' + parseFloat(diferencaTotal).toLocaleString('pt-BR', {minimumFractionDigits:2});
+}
+
+function aplicarDesconto() {
+    if (!_reajustePreview) return;
+
+    var descPct = parseFloat(document.getElementById('r_desconto_pct').value) || 0;
+    var descVal = parseFloat(document.getElementById('r_desconto_val').value) || 0;
+    var pctBruto = parseFloat(_reajustePreview.percentual_bruto);
+    var pctLiquido = Math.max(0, pctBruto - descPct);
+    var fator = 1 + pctLiquido / 100;
+
+    // Recalcular por parcela localmente (sem nova chamada ao servidor)
+    var diferencaTotal = 0;
+    var parcelasAtualizadas = _reajustePreview.parcelas.map(function(p) {
+        var novoValor = p.valor_atual * fator;
+        if (descVal) novoValor = Math.max(p.valor_atual, novoValor - descVal);
+        novoValor = Math.round(novoValor * 100) / 100;
+        diferencaTotal += novoValor - p.valor_atual;
+        return Object.assign({}, p, {valor_novo: novoValor, diferenca: novoValor - p.valor_atual});
+    });
+
+    atualizarPercentualLiquidoUI(pctLiquido, diferencaTotal);
+    renderizarTabelaPreview(parcelasAtualizadas, pctLiquido);
+}
+
 
 document.getElementById('formReajuste').addEventListener('submit', function(e) {
     e.preventDefault();
 
-    var percentual = parseFloat(document.getElementById('reajuste_percentual').value) || 0;
-    if (percentual === 0) {
-        alert('Informe um percentual de reajuste valido');
+    var ciclo = document.getElementById('r_ciclo_hidden').value;
+    if (!ciclo) {
+        alert('Nenhum ciclo de reajuste pendente identificado.');
         return;
     }
 
-    var tipoIndice = document.getElementById('reajuste_indice').value;
-    var parcelaInicial = parseInt(document.getElementById('reajuste_parcela_inicial').value);
-    var parcelaFinal = parseInt(document.getElementById('reajuste_parcela_final').value);
-    var observacoes = document.querySelector('#formReajuste textarea[name="observacoes"]').value;
+    var descPct = document.getElementById('r_desconto_pct').value;
+    var descVal = document.getElementById('r_desconto_val').value;
+    var pctLiquido = parseFloat(document.getElementById('r_pct_liquido').textContent) || 0;
 
-    if (!confirm('Confirma a aplicacao do reajuste de ' + percentual + '% nas parcelas ' + parcelaInicial + ' a ' + parcelaFinal + '?\n\nEsta acao alterara os valores das parcelas pendentes.')) {
-        return;
-    }
+    if (!confirm(
+        'Confirma a aplicação do reajuste de ' + pctLiquido.toFixed(4) + '% ' +
+        '(ciclo ' + ciclo + ', parcelas ' +
+        (document.getElementById('r_parcelas_range').textContent) + ')?\n\n' +
+        'Esta ação alterará os valores das parcelas não pagas.'
+    )) { return; }
 
     var btn = document.getElementById('btnAplicarReajuste');
     btn.disabled = true;
     btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Aplicando...';
+
+    var payload = {
+        ciclo: parseInt(ciclo),
+        observacoes: document.querySelector('#formReajuste textarea[name="observacoes"]').value,
+    };
+    if (descPct) payload.desconto_percentual = parseFloat(descPct);
+    if (descVal) payload.desconto_valor = parseFloat(descVal);
 
     fetch('/financeiro/contrato/{{ contrato.pk }}/reajuste/aplicar/', {
         method: 'POST',
@@ -1805,27 +1871,21 @@ document.getElementById('formReajuste').addEventListener('submit', function(e) {
             'X-CSRFToken': '{{ csrf_token }}',
             'Content-Type': 'application/json'
         },
-        body: JSON.stringify({
-            indice_tipo: tipoIndice,
-            percentual: percentual,
-            parcela_inicial: parcelaInicial,
-            parcela_final: parcelaFinal,
-            observacoes: observacoes
-        })
+        body: JSON.stringify(payload)
     })
-    .then(response => response.json())
+    .then(r => r.json())
     .then(data => {
         if (data.sucesso) {
-            alert(data.mensagem);
-            location.reload();
+            showToast(data.mensagem, 'success', 5000);
+            setTimeout(() => location.reload(), 1200);
         } else {
             alert('Erro ao aplicar reajuste: ' + data.erro);
             btn.disabled = false;
             btn.innerHTML = '<i class="fas fa-check"></i> Aplicar Reajuste';
         }
     })
-    .catch(error => {
-        alert('Erro de conexao: ' + error);
+    .catch(err => {
+        alert('Erro de conexao: ' + err);
         btn.disabled = false;
         btn.innerHTML = '<i class="fas fa-check"></i> Aplicar Reajuste';
     });
