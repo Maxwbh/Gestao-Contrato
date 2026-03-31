@@ -29,6 +29,7 @@ urlpatterns = [
     path('dashboard/', views.dashboard, name='dashboard'),
     path('api/gerar-dados-teste/', views.gerar_dados_teste, name='gerar_dados_teste'),
     path('api/limpar-dados-teste/', views.limpar_dados_teste, name='limpar_dados_teste'),
+    path('dados-teste/', views.pagina_dados_teste, name='pagina_dados_teste'),
 
     # CRUD Contabilidade
     path('contabilidades/', views.ContabilidadeListView.as_view(), name='listar_contabilidades'),
@@ -71,4 +72,8 @@ urlpatterns = [
     # API Acesso de Usuários
     path('api/contabilidades/<int:contabilidade_id>/imobiliarias/', views.api_listar_imobiliarias_por_contabilidade, name='api_imobiliarias_contabilidade'),
     path('api/usuarios/<int:usuario_id>/acessos/', views.api_listar_acessos_usuario, name='api_acessos_usuario'),
+
+    # API BrasilAPI (CEP e CNPJ)
+    path('api/cep/<str:cep>/', views.api_buscar_cep, name='api_buscar_cep'),
+    path('api/cnpj/<str:cnpj>/', views.api_buscar_cnpj, name='api_buscar_cnpj'),
 ]

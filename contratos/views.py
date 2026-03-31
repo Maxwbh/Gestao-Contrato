@@ -10,6 +10,7 @@ from django.contrib.auth.mixins import LoginRequiredMixin
 from django.views.generic import ListView, CreateView, UpdateView, DeleteView, DetailView
 from django.urls import reverse_lazy
 from django.contrib import messages
+from django.db import models
 from django.db.models import Q, Sum, Count
 from .models import Contrato, StatusContrato, IndiceReajuste
 from .forms import ContratoForm, IndiceReajusteForm
@@ -18,6 +19,7 @@ from django.http import JsonResponse
 from django.views.decorators.http import require_http_methods
 import json
 from datetime import datetime
+from decimal import Decimal
 
 
 class ContratoListView(LoginRequiredMixin, ListView):
@@ -192,6 +194,7 @@ class ContratoDetailView(LoginRequiredMixin, DetailView):
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         contrato = self.object
+        from django.utils import timezone
 
         context['progresso'] = contrato.calcular_progresso()
         context['valor_pago'] = contrato.calcular_valor_pago()
@@ -203,7 +206,6 @@ class ContratoDetailView(LoginRequiredMixin, DetailView):
         context['parcelas_pendentes'] = contrato.parcelas.filter(pago=False).count()
 
         # Próxima parcela a vencer
-        from django.utils import timezone
         context['proxima_parcela'] = contrato.parcelas.filter(
             pago=False,
             data_vencimento__gte=timezone.now().date()
@@ -247,6 +249,63 @@ class ContratoDetailView(LoginRequiredMixin, DetailView):
                 ativo=True
             ).first()
         context['conta_bancaria'] = conta_bancaria
+
+        # =====================================================================
+        # PRESTAÇÕES INTERMEDIÁRIAS
+        # =====================================================================
+        if hasattr(contrato, 'intermediarias'):
+            context['intermediarias'] = contrato.intermediarias.all().order_by('numero_sequencial')
+            context['total_intermediarias'] = contrato.intermediarias.count()
+            context['intermediarias_pagas'] = contrato.intermediarias.filter(paga=True).count()
+            context['intermediarias_pendentes'] = contrato.intermediarias.filter(paga=False).count()
+        else:
+            context['intermediarias'] = []
+            context['total_intermediarias'] = 0
+            context['intermediarias_pagas'] = 0
+            context['intermediarias_pendentes'] = 0
+
+        # =====================================================================
+        # CONTROLE DE BLOQUEIO DE BOLETO POR REAJUSTE
+        # =====================================================================
+        if hasattr(contrato, 'verificar_bloqueio_reajuste'):
+            bloqueio_info = contrato.verificar_bloqueio_reajuste()
+            context['bloqueio_reajuste'] = bloqueio_info
+        else:
+            context['bloqueio_reajuste'] = {
+                'bloqueado': False,
+                'motivo': '',
+                'ciclo_atual': 1,
+                'ciclo_pendente': None,
+            }
+
+        # Verificar status de cada parcela para geração de boleto
+        parcelas_status_boleto = []
+        for parcela in context['parcelas']:
+            if hasattr(contrato, 'pode_gerar_boleto'):
+                pode_gerar, motivo = contrato.pode_gerar_boleto(parcela.numero_parcela)
+            else:
+                pode_gerar, motivo = True, "Liberado"
+            parcelas_status_boleto.append({
+                'parcela': parcela,
+                'pode_gerar_boleto': pode_gerar,
+                'motivo_bloqueio': motivo if not pode_gerar else '',
+            })
+        context['parcelas_status_boleto'] = parcelas_status_boleto
+
+        # =====================================================================
+        # RESUMO FINANCEIRO DO CONTRATO
+        # =====================================================================
+        if hasattr(contrato, 'get_resumo_financeiro'):
+            context['resumo_financeiro'] = contrato.get_resumo_financeiro()
+        else:
+            context['resumo_financeiro'] = {}
+
+        # =====================================================================
+        # INFORMAÇÕES DE CICLO DE REAJUSTE
+        # =====================================================================
+        context['ciclo_atual'] = getattr(contrato, 'ciclo_reajuste_atual', 1)
+        context['prazo_reajuste'] = getattr(contrato, 'prazo_reajuste_meses', 12)
+        context['ultimo_mes_boleto'] = getattr(contrato, 'ultimo_mes_boleto_gerado', 0)
 
         return context
 
@@ -817,3 +876,394 @@ def _buscar_tr_bcb(ano_inicio, mes_inicio):
         print(f"Erro ao buscar TR: {e}")
 
     return indices
+
+
+# ==============================================================
+# CRUD de Prestações Intermediárias
+# ==============================================================
+
+from .models import PrestacaoIntermediaria
+from django.http import HttpResponseRedirect
+
+
+class IntermediariasListView(LoginRequiredMixin, ListView):
+    """Lista todas as prestações intermediárias de um contrato"""
+    model = PrestacaoIntermediaria
+    template_name = 'contratos/intermediaria_list.html'
+    context_object_name = 'intermediarias'
+    paginate_by = 20
+
+    def get_queryset(self):
+        self.contrato = get_object_or_404(Contrato, pk=self.kwargs['contrato_id'])
+        return PrestacaoIntermediaria.objects.filter(
+            contrato=self.contrato
+        ).select_related('contrato', 'parcela_vinculada').order_by('numero_sequencial')
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['contrato'] = self.contrato
+
+        # Estatísticas
+        intermediarias = self.get_queryset()
+        context['total_intermediarias'] = intermediarias.count()
+        context['intermediarias_pagas'] = intermediarias.filter(paga=True).count()
+        context['intermediarias_pendentes'] = intermediarias.filter(paga=False).count()
+
+        from django.db.models import Sum
+        context['valor_total'] = intermediarias.aggregate(
+            total=Sum('valor')
+        )['total'] or Decimal('0.00')
+        context['valor_pago'] = intermediarias.filter(paga=True).aggregate(
+            total=Sum('valor_pago')
+        )['total'] or Decimal('0.00')
+        context['valor_pendente'] = intermediarias.filter(paga=False).aggregate(
+            total=Sum('valor')
+        )['total'] or Decimal('0.00')
+
+        return context
+
+
+class IntermediariasDetailView(LoginRequiredMixin, DetailView):
+    """Exibe detalhes de uma prestação intermediária"""
+    model = PrestacaoIntermediaria
+    template_name = 'contratos/intermediaria_detail.html'
+    context_object_name = 'intermediaria'
+
+    def get_queryset(self):
+        return PrestacaoIntermediaria.objects.select_related(
+            'contrato', 'contrato__comprador', 'contrato__imovel',
+            'parcela_vinculada'
+        )
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['contrato'] = self.object.contrato
+
+        # Verificar se pode gerar boleto
+        if hasattr(self.object.contrato, 'pode_gerar_boleto'):
+            pode_gerar, motivo = self.object.contrato.pode_gerar_boleto(
+                self.object.mes_vencimento
+            )
+            context['pode_gerar_boleto'] = pode_gerar
+            context['motivo_bloqueio'] = motivo if not pode_gerar else ''
+        else:
+            context['pode_gerar_boleto'] = True
+            context['motivo_bloqueio'] = ''
+
+        return context
+
+
+@login_required
+@require_http_methods(["POST"])
+def criar_intermediaria(request, contrato_id):
+    """Cria uma nova prestação intermediária para um contrato"""
+    contrato = get_object_or_404(Contrato, pk=contrato_id)
+
+    try:
+        data = json.loads(request.body) if request.content_type == 'application/json' else request.POST
+
+        # Validar quantidade máxima de intermediárias
+        qtd_atual = contrato.intermediarias.count() if hasattr(contrato, 'intermediarias') else 0
+        max_intermediarias = getattr(contrato, 'quantidade_intermediarias', 30)
+
+        if qtd_atual >= 30:  # Limite absoluto
+            return JsonResponse({
+                'sucesso': False,
+                'erro': 'Limite máximo de 30 prestações intermediárias atingido'
+            }, status=400)
+
+        # Determinar próximo número sequencial
+        ultimo_numero = contrato.intermediarias.aggregate(
+            max_seq=models.Max('numero_sequencial')
+        )['max_seq'] or 0
+        proximo_numero = ultimo_numero + 1
+
+        # Criar a intermediária
+        intermediaria = PrestacaoIntermediaria.objects.create(
+            contrato=contrato,
+            numero_sequencial=proximo_numero,
+            mes_vencimento=int(data.get('mes_vencimento', 12)),
+            valor=Decimal(str(data.get('valor', 0))),
+            observacoes=data.get('observacoes', '')
+        )
+
+        return JsonResponse({
+            'sucesso': True,
+            'mensagem': f'Prestação intermediária #{proximo_numero} criada com sucesso',
+            'intermediaria_id': intermediaria.id,
+            'numero_sequencial': intermediaria.numero_sequencial
+        })
+
+    except ValueError as e:
+        return JsonResponse({
+            'sucesso': False,
+            'erro': f'Valor inválido: {str(e)}'
+        }, status=400)
+    except Exception as e:
+        return JsonResponse({
+            'sucesso': False,
+            'erro': str(e)
+        }, status=500)
+
+
+@login_required
+@require_http_methods(["POST"])
+def atualizar_intermediaria(request, pk):
+    """Atualiza uma prestação intermediária"""
+    intermediaria = get_object_or_404(PrestacaoIntermediaria, pk=pk)
+
+    if intermediaria.paga:
+        return JsonResponse({
+            'sucesso': False,
+            'erro': 'Não é possível alterar uma prestação já paga'
+        }, status=400)
+
+    try:
+        data = json.loads(request.body) if request.content_type == 'application/json' else request.POST
+
+        if 'mes_vencimento' in data:
+            intermediaria.mes_vencimento = int(data['mes_vencimento'])
+        if 'valor' in data:
+            intermediaria.valor = Decimal(str(data['valor']))
+        if 'observacoes' in data:
+            intermediaria.observacoes = data['observacoes']
+
+        intermediaria.save()
+
+        return JsonResponse({
+            'sucesso': True,
+            'mensagem': 'Prestação intermediária atualizada com sucesso'
+        })
+
+    except Exception as e:
+        return JsonResponse({
+            'sucesso': False,
+            'erro': str(e)
+        }, status=500)
+
+
+@login_required
+@require_http_methods(["POST"])
+def excluir_intermediaria(request, pk):
+    """Exclui uma prestação intermediária"""
+    intermediaria = get_object_or_404(PrestacaoIntermediaria, pk=pk)
+
+    if intermediaria.paga:
+        return JsonResponse({
+            'sucesso': False,
+            'erro': 'Não é possível excluir uma prestação já paga'
+        }, status=400)
+
+    if intermediaria.parcela_vinculada:
+        return JsonResponse({
+            'sucesso': False,
+            'erro': 'Não é possível excluir uma prestação com parcela vinculada. Cancele o boleto primeiro.'
+        }, status=400)
+
+    try:
+        contrato_id = intermediaria.contrato_id
+        numero = intermediaria.numero_sequencial
+        intermediaria.delete()
+
+        return JsonResponse({
+            'sucesso': True,
+            'mensagem': f'Prestação intermediária #{numero} excluída com sucesso',
+            'redirect': f'/contratos/{contrato_id}/intermediarias/'
+        })
+
+    except Exception as e:
+        return JsonResponse({
+            'sucesso': False,
+            'erro': str(e)
+        }, status=500)
+
+
+@login_required
+@require_http_methods(["POST"])
+def pagar_intermediaria(request, pk):
+    """Registra o pagamento de uma prestação intermediária"""
+    intermediaria = get_object_or_404(PrestacaoIntermediaria, pk=pk)
+
+    if intermediaria.paga:
+        return JsonResponse({
+            'sucesso': False,
+            'erro': 'Esta prestação já está paga'
+        }, status=400)
+
+    try:
+        data = json.loads(request.body) if request.content_type == 'application/json' else request.POST
+
+        valor_pago = Decimal(str(data.get('valor_pago', intermediaria.valor)))
+        data_pagamento_str = data.get('data_pagamento', '')
+
+        if data_pagamento_str:
+            data_pagamento = datetime.strptime(data_pagamento_str, '%Y-%m-%d').date()
+        else:
+            from django.utils import timezone
+            data_pagamento = timezone.now().date()
+
+        intermediaria.paga = True
+        intermediaria.valor_pago = valor_pago
+        intermediaria.data_pagamento = data_pagamento
+
+        if 'observacoes' in data:
+            intermediaria.observacoes = data['observacoes']
+
+        intermediaria.save()
+
+        return JsonResponse({
+            'sucesso': True,
+            'mensagem': f'Pagamento de R$ {valor_pago:,.2f} registrado com sucesso',
+            'intermediaria_id': intermediaria.id
+        })
+
+    except Exception as e:
+        return JsonResponse({
+            'sucesso': False,
+            'erro': str(e)
+        }, status=500)
+
+
+@login_required
+@require_http_methods(["POST"])
+def gerar_boleto_intermediaria(request, pk):
+    """Gera boleto para uma prestação intermediária"""
+    from financeiro.models import Parcela, TipoParcela
+    from core.models import ContaBancaria
+
+    intermediaria = get_object_or_404(
+        PrestacaoIntermediaria.objects.select_related('contrato'),
+        pk=pk
+    )
+
+    if intermediaria.paga:
+        return JsonResponse({
+            'sucesso': False,
+            'erro': 'Prestação já está paga'
+        }, status=400)
+
+    if intermediaria.parcela_vinculada:
+        return JsonResponse({
+            'sucesso': False,
+            'erro': 'Esta prestação já possui um boleto vinculado'
+        }, status=400)
+
+    contrato = intermediaria.contrato
+
+    # Verificar bloqueio por reajuste
+    force = request.POST.get('force', 'false').lower() == 'true'
+    if not force and hasattr(contrato, 'pode_gerar_boleto'):
+        pode_gerar, motivo = contrato.pode_gerar_boleto(intermediaria.mes_vencimento)
+        if not pode_gerar:
+            return JsonResponse({
+                'sucesso': False,
+                'erro': f'Boleto bloqueado: {motivo}',
+                'bloqueado_reajuste': True
+            }, status=400)
+
+    try:
+        # Calcular data de vencimento baseada no mês da intermediária
+        from dateutil.relativedelta import relativedelta
+        data_base = contrato.data_primeiro_vencimento
+        data_vencimento = data_base + relativedelta(months=intermediaria.mes_vencimento - 1)
+
+        # Ajustar dia de vencimento
+        dia_vencimento = contrato.dia_vencimento
+        try:
+            data_vencimento = data_vencimento.replace(day=dia_vencimento)
+        except ValueError:
+            # Dia não existe no mês (ex: 31 em fevereiro)
+            import calendar
+            ultimo_dia = calendar.monthrange(data_vencimento.year, data_vencimento.month)[1]
+            data_vencimento = data_vencimento.replace(day=min(dia_vencimento, ultimo_dia))
+
+        # Criar parcela vinculada
+        parcela = Parcela.objects.create(
+            contrato=contrato,
+            numero_parcela=intermediaria.mes_vencimento,
+            data_vencimento=data_vencimento,
+            valor_original=intermediaria.valor,
+            valor_atual=intermediaria.valor_reajustado or intermediaria.valor,
+            tipo_parcela=TipoParcela.INTERMEDIARIA if hasattr(Parcela, 'tipo_parcela') else 'INTERMEDIARIA',
+            ciclo_reajuste=contrato.calcular_ciclo_parcela(intermediaria.mes_vencimento) if hasattr(contrato, 'calcular_ciclo_parcela') else 1,
+        )
+
+        # Vincular parcela à intermediária
+        intermediaria.parcela_vinculada = parcela
+        intermediaria.save()
+
+        # Gerar boleto
+        conta_id = request.POST.get('conta_bancaria_id')
+        if conta_id:
+            conta_bancaria = get_object_or_404(ContaBancaria, pk=conta_id, ativo=True)
+        else:
+            conta_bancaria = contrato.imobiliaria.contas_bancarias.filter(
+                principal=True, ativo=True
+            ).first()
+
+        if conta_bancaria:
+            resultado = parcela.gerar_boleto(conta_bancaria)
+            if resultado and resultado.get('sucesso'):
+                return JsonResponse({
+                    'sucesso': True,
+                    'mensagem': 'Boleto gerado com sucesso',
+                    'parcela_id': parcela.id,
+                    'nosso_numero': resultado.get('nosso_numero', '')
+                })
+            else:
+                return JsonResponse({
+                    'sucesso': False,
+                    'erro': resultado.get('erro') if resultado else 'Erro ao gerar boleto'
+                }, status=500)
+        else:
+            return JsonResponse({
+                'sucesso': True,
+                'mensagem': 'Parcela criada. Configure uma conta bancária para gerar o boleto.',
+                'parcela_id': parcela.id
+            })
+
+    except Exception as e:
+        return JsonResponse({
+            'sucesso': False,
+            'erro': str(e)
+        }, status=500)
+
+
+@login_required
+def api_intermediarias_contrato(request, contrato_id):
+    """API para retornar lista de intermediárias de um contrato em JSON"""
+    contrato = get_object_or_404(Contrato, pk=contrato_id)
+
+    intermediarias = PrestacaoIntermediaria.objects.filter(
+        contrato=contrato
+    ).select_related('parcela_vinculada').order_by('numero_sequencial')
+
+    data = []
+    for inter in intermediarias:
+        # Verificar bloqueio por reajuste
+        if hasattr(contrato, 'pode_gerar_boleto'):
+            pode_gerar, motivo = contrato.pode_gerar_boleto(inter.mes_vencimento)
+        else:
+            pode_gerar, motivo = True, ""
+
+        data.append({
+            'id': inter.id,
+            'numero_sequencial': inter.numero_sequencial,
+            'mes_vencimento': inter.mes_vencimento,
+            'valor': float(inter.valor),
+            'valor_reajustado': float(inter.valor_reajustado) if inter.valor_reajustado else None,
+            'paga': inter.paga,
+            'data_pagamento': inter.data_pagamento.isoformat() if inter.data_pagamento else None,
+            'valor_pago': float(inter.valor_pago) if inter.valor_pago else None,
+            'tem_boleto': inter.parcela_vinculada is not None,
+            'parcela_id': inter.parcela_vinculada_id,
+            'pode_gerar_boleto': pode_gerar,
+            'motivo_bloqueio': motivo if not pode_gerar else '',
+            'observacoes': inter.observacoes,
+        })
+
+    return JsonResponse({
+        'sucesso': True,
+        'total': len(data),
+        'intermediarias': data
+    })

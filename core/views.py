@@ -394,10 +394,10 @@ def setup(request):
 @require_http_methods(["GET", "POST"])
 def gerar_dados_teste(request):
     """
-    Endpoint para gerar dados de teste (APENAS SUPERUSUÁRIO para POST)
+    Endpoint para gerar dados de teste (ACESSÍVEL SEM LOGIN para ambiente de teste)
 
     GET: Retorna status do sistema
-    POST: Gera dados de teste (requer autenticação de superusuário)
+    POST: Gera dados de teste
 
     Parâmetros POST (form-data ou JSON):
         limpar (bool): Se deve limpar dados antes (default: False)
@@ -406,18 +406,8 @@ def gerar_dados_teste(request):
         curl -X POST http://localhost:8000/api/gerar-dados-teste/ -d "limpar=true"
         curl -X POST http://localhost:8000/api/gerar-dados-teste/ -H "Content-Type: application/json" -d '{"limpar": true}'
     """
-    # Verificar permissões para POST
-    if request.method == 'POST':
-        if not request.user.is_authenticated:
-            return JsonResponse({
-                'status': 'error',
-                'message': 'Autenticação necessária. Faça login como admin.'
-            }, status=401)
-        if not request.user.is_superuser:
-            return JsonResponse({
-                'status': 'error',
-                'message': 'Acesso negado. Apenas superusuários podem gerar dados de teste.'
-            }, status=403)
+    # NOTA: Endpoint liberado para facilitar setup em ambiente Render Free
+    # Em produção real, adicionar verificação de token ou IP
     # Importar modelos adicionais
     from contratos.models import Contrato, IndiceReajuste
     from financeiro.models import Parcela
@@ -1384,3 +1374,120 @@ def api_listar_acessos_usuario(request, usuario_id):
         return JsonResponse({'status': 'success', 'acessos': data})
     except Exception as e:
         return JsonResponse({'status': 'error', 'message': str(e)}, status=500)
+
+
+# =============================================================================
+# PÁGINA DE DADOS DE TESTE (Admin Only)
+# =============================================================================
+
+@login_required
+def pagina_dados_teste(request):
+    """
+    Página HTML para gerar/limpar dados de teste.
+    Apenas administradores (is_staff ou is_superuser) podem acessar.
+    """
+    if not (request.user.is_staff or request.user.is_superuser):
+        messages.error(request, 'Acesso negado. Apenas administradores podem acessar esta página.')
+        return redirect('core:dashboard')
+
+    from contratos.models import Contrato, IndiceReajuste
+    from financeiro.models import Parcela
+
+    stats = {
+        'contabilidades': Contabilidade.objects.count(),
+        'imobiliarias': Imobiliaria.objects.count(),
+        'contas_bancarias': ContaBancaria.objects.count(),
+        'imoveis': Imovel.objects.count(),
+        'compradores': Comprador.objects.count(),
+        'contratos': Contrato.objects.count(),
+        'parcelas': Parcela.objects.count(),
+        'indices_reajuste': IndiceReajuste.objects.count(),
+    }
+
+    return render(request, 'core/dados_teste.html', {'stats': stats})
+
+
+# =============================================================================
+# API - BRASILAPI (CEP e CNPJ)
+# =============================================================================
+
+@login_required
+def api_buscar_cep(request, cep):
+    """
+    Busca endereco pelo CEP usando BrasilAPI.
+
+    URL: /api/cep/<cep>/
+    Metodo: GET
+
+    Retorna:
+    {
+        "sucesso": true,
+        "cep": "01310-100",
+        "logradouro": "Avenida Paulista",
+        "complemento": "",
+        "bairro": "Bela Vista",
+        "cidade": "Sao Paulo",
+        "estado": "SP",
+        "fonte": "BrasilAPI"
+    }
+    """
+    from .services.brasilapi_service import buscar_cep
+
+    resultado = buscar_cep(cep)
+
+    if resultado and resultado.get('sucesso'):
+        return JsonResponse(resultado)
+    else:
+        return JsonResponse(
+            resultado or {'sucesso': False, 'erro': 'Erro ao buscar CEP'},
+            status=404 if resultado and 'nao encontrado' in resultado.get('erro', '') else 500
+        )
+
+
+@login_required
+def api_buscar_cnpj(request, cnpj):
+    """
+    Busca dados da empresa pelo CNPJ usando BrasilAPI.
+
+    URL: /api/cnpj/<cnpj>/
+    Metodo: GET
+
+    Retorna:
+    {
+        "sucesso": true,
+        "cnpj": "00.000.000/0001-91",
+        "razao_social": "EMPRESA LTDA",
+        "nome_fantasia": "EMPRESA",
+        "situacao_cadastral": "ATIVA",
+        "email": "contato@empresa.com",
+        "telefone": "1199999999",
+        "cep": "01310-100",
+        "logradouro": "Avenida Paulista",
+        "numero": "1000",
+        "complemento": "Sala 100",
+        "bairro": "Bela Vista",
+        "cidade": "Sao Paulo",
+        "estado": "SP",
+        "fonte": "BrasilAPI"
+    }
+    """
+    from .services.brasilapi_service import buscar_cnpj
+
+    resultado = buscar_cnpj(cnpj)
+
+    if resultado and resultado.get('sucesso'):
+        return JsonResponse(resultado)
+    else:
+        erro = resultado.get('erro', '') if resultado else ''
+        if 'nao encontrado' in erro.lower():
+            status_code = 404
+        elif 'invalido' in erro.lower():
+            status_code = 400
+        else:
+            status_code = 500
+
+        return JsonResponse(
+            resultado or {'sucesso': False, 'erro': 'Erro ao buscar CNPJ'},
+            status=status_code
+        )
+
