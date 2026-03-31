@@ -474,9 +474,17 @@
                                         </td>
                                         <td class="text-center">
                                             {% if parcela.tem_boleto %}
-                                                <span class="badge bg-success" title="Boleto gerado">
-                                                    <i class="fas fa-barcode"></i>
-                                                </span>
+                                                <span class="badge bg-success" title="Boleto gerado"><i class="fas fa-barcode"></i></span>
+                                                {% if parcela.linha_digitavel %}
+                                                <div class="mt-1 d-flex align-items-center justify-content-center gap-1">
+                                                    <span class="font-monospace text-muted" style="font-size:0.65rem;max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="{{ parcela.linha_digitavel }}">{{ parcela.linha_digitavel }}</span>
+                                                    <button type="button" class="btn btn-link btn-sm p-0 text-secondary"
+                                                            onclick="copiarLinhaDigitavel('{{ parcela.linha_digitavel|escapejs }}')"
+                                                            title="Copiar linha digitável">
+                                                        <i class="fas fa-copy" style="font-size:0.75rem;"></i>
+                                                    </button>
+                                                </div>
+                                                {% endif %}
                                             {% else %}
                                                 <span class="badge bg-secondary" title="Sem boleto">
                                                     <i class="fas fa-minus"></i>
@@ -506,6 +514,11 @@
                                                         <button type="button" class="btn btn-outline-primary"
                                                                 onclick="abrirModalBoleto({{ parcela.pk }})" title="Ver Boleto">
                                                             <i class="fas fa-eye"></i>
+                                                        </button>
+                                                        <button type="button" class="btn btn-outline-info"
+                                                                onclick="abrirModalCompartilhar({{ parcela.pk }}, '{{ parcela.linha_digitavel|escapejs }}', {{ parcela.numero_parcela }}, '{{ parcela.data_vencimento|date:"d/m/Y" }}', '{{ parcela.valor_atual|stringformat:"f" }}')"
+                                                                title="Compartilhar Boleto">
+                                                            <i class="fas fa-share-alt"></i>
                                                         </button>
                                                         <button type="button" class="btn btn-outline-warning"
                                                                 onclick="regenerarBoleto({{ parcela.pk }}, this)" title="Atualizar Boleto">
@@ -573,6 +586,81 @@
                     </button>
                     {% endif %}
                 </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Compartilhar Boleto -->
+<div class="modal fade" id="modalCompartilhar" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header bg-info text-white">
+                <h5 class="modal-title">
+                    <i class="fas fa-share-alt me-2"></i>Compartilhar Boleto
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <!-- Linha Digitável -->
+                <div class="mb-4">
+                    <label class="form-label fw-bold">Linha Digitável</label>
+                    <div class="input-group">
+                        <input type="text" class="form-control font-monospace" id="compartilharLinhaDigitavel" readonly>
+                        <button class="btn btn-outline-secondary" type="button" onclick="copiarCampo('compartilharLinhaDigitavel', this)">
+                            <i class="fas fa-copy"></i> Copiar
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Compartilhar via WhatsApp -->
+                <div class="mb-3">
+                    <label class="form-label fw-bold">Enviar por WhatsApp</label>
+                    <div class="d-flex gap-2 flex-wrap">
+                        <a id="btnWhatsAppComprador" href="#" target="_blank" rel="noopener"
+                           class="btn btn-success flex-fill">
+                            <i class="fab fa-whatsapp me-2"></i>Enviar ao Comprador
+                        </a>
+                        <a id="btnWhatsAppLink" href="#" target="_blank" rel="noopener"
+                           class="btn btn-outline-success flex-fill">
+                            <i class="fab fa-whatsapp me-2"></i>Outro número
+                        </a>
+                    </div>
+                    <small class="text-muted mt-1 d-block" id="infoWhatsApp"></small>
+                </div>
+
+                <!-- Compartilhar via E-mail -->
+                <div class="mb-2">
+                    <label class="form-label fw-bold">Enviar por E-mail</label>
+                    <div class="d-flex gap-2 flex-wrap">
+                        <a id="btnEmailComprador" href="#"
+                           class="btn btn-primary flex-fill">
+                            <i class="fas fa-envelope me-2"></i>Enviar ao Comprador
+                        </a>
+                        <button type="button" class="btn btn-outline-primary flex-fill"
+                                onclick="copiarMensagemEmail()">
+                            <i class="fas fa-copy me-2"></i>Copiar mensagem
+                        </button>
+                    </div>
+                    <small class="text-muted mt-1 d-block" id="infoEmail"></small>
+                </div>
+
+                <!-- Link do Boleto -->
+                <div class="mt-3 pt-3 border-top">
+                    <label class="form-label fw-bold">Link do Boleto</label>
+                    <div class="input-group">
+                        <input type="text" class="form-control" id="compartilharLinkBoleto" readonly>
+                        <button class="btn btn-outline-secondary" type="button" onclick="copiarCampo('compartilharLinkBoleto', this)">
+                            <i class="fas fa-copy"></i>
+                        </button>
+                        <a id="btnAbrirBoleto" href="#" target="_blank" class="btn btn-outline-info">
+                            <i class="fas fa-external-link-alt"></i>
+                        </a>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Fechar</button>
             </div>
         </div>
     </div>
@@ -975,6 +1063,110 @@ function abrirModalBoleto(parcelaId) {
     new bootstrap.Modal(document.getElementById('modalBoleto')).show();
 }
 
+// ============ COMPARTILHAR BOLETO ============
+
+var _compartilharDados = {};
+
+function abrirModalCompartilhar(parcelaId, linhaDigitavel, numeroParcela, vencimento, valor) {
+    var baseUrl = window.location.origin;
+    var urlBoleto = baseUrl + '/financeiro/parcelas/' + parcelaId + '/boleto/visualizar/?popup=true';
+    var compradorEmail = '{{ contrato.comprador.email|escapejs }}';
+    var compradorCelular = '{{ contrato.comprador.celular|escapejs }}';
+    var compradorNome = '{{ contrato.comprador.nome|escapejs }}';
+    var numeroContrato = '{{ contrato.numero_contrato|escapejs }}';
+
+    // Formatar valor
+    var valorNum = parseFloat(String(valor).replace(',', '.')) || 0;
+    var valorFmt = valorNum.toLocaleString('pt-BR', {style: 'currency', currency: 'BRL'});
+
+    // Montar mensagem
+    var mensagem = 'Olá, ' + compradorNome + '!\n\n'
+        + 'Segue o boleto referente ao seu contrato:\n'
+        + 'Contrato: ' + numeroContrato + '\n'
+        + 'Parcela: ' + numeroParcela + '\n'
+        + 'Vencimento: ' + vencimento + '\n'
+        + 'Valor: ' + valorFmt + '\n';
+    if (linhaDigitavel) {
+        mensagem += 'Linha Digitável: ' + linhaDigitavel + '\n';
+    }
+    mensagem += '\nVisualizar boleto: ' + urlBoleto;
+
+    var assunto = 'Boleto - Contrato ' + numeroContrato + ' - Parcela ' + numeroParcela;
+
+    // Guardar para uso do botão copiar mensagem
+    _compartilharDados.mensagem = mensagem;
+    _compartilharDados.assunto = assunto;
+
+    // Preencher campos
+    document.getElementById('compartilharLinhaDigitavel').value = linhaDigitavel || '(não disponível)';
+    document.getElementById('compartilharLinkBoleto').value = urlBoleto;
+    document.getElementById('btnAbrirBoleto').href = urlBoleto;
+
+    // WhatsApp
+    var celularLimpo = compradorCelular.replace(/\D/g, '');
+    if (celularLimpo.length >= 10 && !celularLimpo.startsWith('55')) {
+        celularLimpo = '55' + celularLimpo;
+    }
+    var msgWa = encodeURIComponent(mensagem);
+    if (celularLimpo) {
+        document.getElementById('btnWhatsAppComprador').href = 'https://wa.me/' + celularLimpo + '?text=' + msgWa;
+        document.getElementById('infoWhatsApp').textContent = 'Celular do comprador: ' + compradorCelular;
+    } else {
+        document.getElementById('btnWhatsAppComprador').href = 'https://wa.me/?text=' + msgWa;
+        document.getElementById('infoWhatsApp').textContent = 'Celular não cadastrado — abrirá o WhatsApp para você escolher o contato.';
+    }
+    document.getElementById('btnWhatsAppLink').href = 'https://wa.me/?text=' + msgWa;
+
+    // E-mail
+    var mailtoUrl = 'mailto:' + encodeURIComponent(compradorEmail)
+        + '?subject=' + encodeURIComponent(assunto)
+        + '&body=' + encodeURIComponent(mensagem);
+    document.getElementById('btnEmailComprador').href = mailtoUrl;
+    document.getElementById('infoEmail').textContent = 'E-mail do comprador: ' + compradorEmail;
+
+    new bootstrap.Modal(document.getElementById('modalCompartilhar')).show();
+}
+
+function copiarLinhaDigitavel(texto) {
+    navigator.clipboard.writeText(texto).then(function() {
+        showToast('Linha digitável copiada!', 'success', 2500);
+    }).catch(function() {
+        // fallback
+        var el = document.createElement('textarea');
+        el.value = texto;
+        document.body.appendChild(el);
+        el.select();
+        document.execCommand('copy');
+        document.body.removeChild(el);
+        showToast('Linha digitável copiada!', 'success', 2500);
+    });
+}
+
+function copiarCampo(elementId, btn) {
+    var el = document.getElementById(elementId);
+    navigator.clipboard.writeText(el.value).then(function() {
+        if (btn) {
+            var orig = btn.innerHTML;
+            btn.innerHTML = '<i class="fas fa-check"></i> Copiado!';
+            btn.classList.add('btn-success');
+            btn.classList.remove('btn-outline-secondary');
+            setTimeout(function() {
+                btn.innerHTML = orig;
+                btn.classList.remove('btn-success');
+                btn.classList.add('btn-outline-secondary');
+            }, 2000);
+        }
+    });
+}
+
+function copiarMensagemEmail() {
+    if (_compartilharDados.mensagem) {
+        navigator.clipboard.writeText(_compartilharDados.mensagem).then(function() {
+            showToast('Mensagem copiada! Cole no seu e-mail.', 'success', 3000);
+        });
+    }
+}
+
 // ============ FUNCOES DE TOAST ============
 
 function showToast(message, type = 'success', duration = 4000) {
@@ -1037,8 +1229,10 @@ function gerarBoleto(parcelaId, btn) {
                 // Atualizar botoes de acao
                 var acoesCol = row.querySelector('td:last-child .btn-group');
                 if (acoesCol) {
+                    var linhaDigResp = data.linha_digitavel || '';
                     acoesCol.innerHTML =
                         '<button type="button" class="btn btn-outline-primary" onclick="abrirModalBoleto(' + parcelaId + ')" title="Ver Boleto"><i class="fas fa-eye"></i></button>' +
+                        '<button type="button" class="btn btn-outline-info" onclick="abrirModalCompartilhar(' + parcelaId + ', \'' + linhaDigResp + '\', \'\', \'\', \'\')" title="Compartilhar Boleto"><i class="fas fa-share-alt"></i></button>' +
                         '<button type="button" class="btn btn-outline-warning" onclick="regenerarBoleto(' + parcelaId + ', this)" title="Atualizar Boleto"><i class="fas fa-sync"></i></button>' +
                         '<button type="button" class="btn btn-outline-success" onclick="abrirModalPagamento(' + parcelaId + ')" title="Registrar Pagamento"><i class="fas fa-dollar-sign"></i></button>';
                 }
