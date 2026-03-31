@@ -52,7 +52,7 @@
 ### P4 — Baixo
 | # | Item |
 |---|------|
-| 2.12 | PIX — linha digitável e QR Code no boleto |
+| 2.12 | PIX — linha digitável e QR Code no boleto | ⚠️ Prioridade **extremamente baixa** / Alta complexidade — TO_DO 2050 |
 
 ---
 
