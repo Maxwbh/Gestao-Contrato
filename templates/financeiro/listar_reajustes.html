@@ -1,0 +1,103 @@
+{% extends 'base.html' %}
+{% load static %}
+{% load format_filters %}
+
+{% block title %}Histórico de Reajustes{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h2 class="mb-1"><i class="fas fa-history me-2"></i>Histórico de Reajustes</h2>
+            <p class="text-muted mb-0">Todos os reajustes aplicados nos contratos</p>
+        </div>
+        <a href="{% url 'financeiro:reajustes_pendentes' %}" class="btn btn-warning">
+            <i class="fas fa-exclamation-triangle me-1"></i>Ver Pendentes
+        </a>
+    </div>
+
+    {% if reajustes %}
+    <div class="card">
+        <div class="table-responsive">
+            <table class="table table-hover mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th>Contrato</th>
+                        <th>Data</th>
+                        <th class="text-center">Ciclo</th>
+                        <th>Índice</th>
+                        <th class="text-center">Período Referência</th>
+                        <th class="text-end">% Bruto</th>
+                        <th class="text-end">Desconto</th>
+                        <th class="text-end text-success fw-bold">% Aplicado</th>
+                        <th class="text-center">Parcelas</th>
+                        <th class="text-center">Status</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for r in reajustes %}
+                    <tr>
+                        <td>
+                            <a href="{% url 'contratos:detalhe' r.contrato.pk %}">
+                                {{ r.contrato.numero_contrato }}
+                            </a>
+                        </td>
+                        <td>{{ r.data_reajuste|date:"d/m/Y" }}</td>
+                        <td class="text-center">
+                            <span class="badge bg-secondary">{{ r.ciclo }}</span>
+                        </td>
+                        <td><span class="badge bg-info text-dark">{{ r.indice_tipo }}</span></td>
+                        <td class="text-center small font-monospace">
+                            {% if r.periodo_referencia_inicio %}
+                                {{ r.periodo_referencia_inicio|date:"m/Y" }} → {{ r.periodo_referencia_fim|date:"m/Y" }}
+                            {% else %}
+                                <span class="text-muted">—</span>
+                            {% endif %}
+                        </td>
+                        <td class="text-end">
+                            {% if r.percentual_bruto %}
+                                {{ r.percentual_bruto }}%
+                            {% else %}
+                                <span class="text-muted">—</span>
+                            {% endif %}
+                        </td>
+                        <td class="text-end small text-danger">
+                            {% if r.desconto_percentual %}
+                                − {{ r.desconto_percentual }} p.p.
+                            {% endif %}
+                            {% if r.desconto_valor %}
+                                − R$ {{ r.desconto_valor }}/parc.
+                            {% endif %}
+                            {% if not r.desconto_percentual and not r.desconto_valor %}
+                                <span class="text-muted">—</span>
+                            {% endif %}
+                        </td>
+                        <td class="text-end fw-bold text-success">{{ r.percentual }}%</td>
+                        <td class="text-center small text-muted">
+                            {{ r.parcela_inicial }}–{{ r.parcela_final }}
+                        </td>
+                        <td class="text-center">
+                            {% if r.aplicado %}
+                                <span class="badge bg-success">Aplicado</span>
+                                {% if r.aplicado_manual %}
+                                    <span class="badge bg-secondary">Manual</span>
+                                {% endif %}
+                            {% else %}
+                                <span class="badge bg-warning text-dark">Pendente</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    {% else %}
+    <div class="alert alert-info">
+        <i class="fas fa-info-circle me-2"></i>Nenhum reajuste registrado ainda.
+    </div>
+    {% endif %}
+
+</div>
+{% endblock %}

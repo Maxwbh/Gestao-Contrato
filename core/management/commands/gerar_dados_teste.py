@@ -867,61 +867,73 @@ class Command(BaseCommand):
 
     def criar_reajustes_aplicados(self, contratos):
         """
-        Cria reajustes aplicados para contratos com mais de 12 meses.
-        Simula o processo de reajuste anual.
+        Cria e aplica reajustes para contratos com mais de 12 meses.
+
+        Regra correta:
+        - Ciclo 1 (parcelas 1-12): isento.
+        - Ciclo N (parcelas 13-24, 25-36, …): usa o acumulado do índice
+          nos 12 meses do ciclo anterior (período de referência correto).
+        - Busca o índice real da base; se não disponível, usa percentual
+          aleatório realista para não bloquear os dados de teste.
         """
+        from dateutil.relativedelta import relativedelta
+        from contratos.models import IndiceReajuste
+
         count = 0
         hoje = timezone.now().date()
 
         for contrato in contratos:
-            # Calcular quantos ciclos completos de 12 meses se passaram
-            meses_desde_contrato = (hoje.year - contrato.data_contrato.year) * 12 + \
-                                   (hoje.month - contrato.data_contrato.month)
-
-            ciclos_completos = meses_desde_contrato // 12
+            prazo = contrato.prazo_reajuste_meses
+            meses_decorridos = (hoje.year - contrato.data_contrato.year) * 12 + \
+                               (hoje.month - contrato.data_contrato.month)
+            ciclos_completos = meses_decorridos // prazo
 
             if ciclos_completos < 1:
                 continue
 
-            # Criar reajuste para cada ciclo completo
-            for ciclo in range(1, ciclos_completos + 1):
-                # Data do reajuste (12 meses após o início do ciclo anterior)
-                from dateutil.relativedelta import relativedelta
-                data_reajuste = contrato.data_contrato + relativedelta(months=ciclo * 12)
+            # Aplicar cada ciclo pendente sequencialmente (ciclo 2, 3, …)
+            for ciclo in range(2, ciclos_completos + 2):
+                data_inicio_ciclo = contrato.data_contrato + relativedelta(months=(ciclo - 1) * prazo)
+                if data_inicio_ciclo > hoje:
+                    break
 
-                if data_reajuste > hoje:
-                    continue
-
-                # Percentual de reajuste (baseado em índices)
-                percentual = Decimal(str(round(random.uniform(3.0, 8.0), 2)))
-
-                # Verificar se já existe reajuste para este ciclo
                 if Reajuste.objects.filter(contrato=contrato, ciclo=ciclo).exists():
                     continue
 
-                # Calcular parcelas afetadas pelo reajuste
-                # O reajuste afeta as parcelas após 12*ciclo meses
-                parcela_inicial = (ciclo * 12) + 1
-                parcela_final = contrato.numero_parcelas
+                parcela_inicial = (ciclo - 1) * prazo + 1
+                parcela_final = min(ciclo * prazo, contrato.numero_parcelas)
 
-                # Garantir que parcela_inicial não exceda numero_parcelas
-                if parcela_inicial > parcela_final:
-                    continue
+                if parcela_inicial > contrato.numero_parcelas:
+                    break
 
-                Reajuste.objects.create(
+                # Período de referência: os 12 meses do ciclo anterior
+                inicio_ref = contrato.data_contrato + relativedelta(months=(ciclo - 2) * prazo)
+                fim_ref = data_inicio_ciclo - relativedelta(days=1)
+
+                # Buscar acumulado real do índice; fallback: percentual aleatório
+                percentual_bruto = IndiceReajuste.get_acumulado_periodo(
+                    contrato.tipo_correcao,
+                    inicio_ref.year, inicio_ref.month,
+                    fim_ref.year, fim_ref.month,
+                )
+                if percentual_bruto is None:
+                    percentual_bruto = Decimal(str(round(random.uniform(3.5, 6.5), 4)))
+
+                reajuste = Reajuste.objects.create(
                     contrato=contrato,
-                    data_reajuste=data_reajuste,
+                    data_reajuste=data_inicio_ciclo,
                     indice_tipo=contrato.tipo_correcao,
-                    percentual=percentual,
+                    percentual=percentual_bruto,
+                    percentual_bruto=percentual_bruto,
                     parcela_inicial=parcela_inicial,
                     parcela_final=parcela_final,
                     ciclo=ciclo,
+                    periodo_referencia_inicio=inicio_ref,
+                    periodo_referencia_fim=fim_ref,
+                    aplicado_manual=False,
                 )
-                count += 1
 
-                # Atualizar ciclo atual do contrato
-                if hasattr(contrato, 'ciclo_reajuste_atual'):
-                    contrato.ciclo_reajuste_atual = ciclo + 1
-                    contrato.save(update_fields=['ciclo_reajuste_atual'])
+                reajuste.aplicar_reajuste()
+                count += 1
 
         return count
