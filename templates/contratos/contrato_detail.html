@@ -963,8 +963,8 @@ function abrirModalBoleto(parcelaId) {
     var iframe = document.getElementById('iframeBoleto');
     var btnDownload = document.getElementById('btnDownloadBoleto');
 
-    // Configurar URLs
-    var urlVisualizar = '/financeiro/parcelas/' + parcelaId + '/boleto/visualizar/';
+    // Configurar URLs - popup=true evita extends condicional no template
+    var urlVisualizar = '/financeiro/parcelas/' + parcelaId + '/boleto/visualizar/?popup=true';
     var urlDownload = '/financeiro/parcelas/' + parcelaId + '/boleto/download/';
 
     // Carregar no iframe
