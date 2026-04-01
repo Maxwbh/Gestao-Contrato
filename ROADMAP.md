@@ -777,8 +777,6 @@ FLUXO MENSAL
 
 ---
 
----
-
 ## 15. REGRAS DE BLOQUEIO DE BOLETO — CASCATA E LOTE ✅ CONCLUÍDO
 
 > **Contexto:** a implementação anterior de `pode_gerar_boleto()` só verificava o ciclo próprio da
