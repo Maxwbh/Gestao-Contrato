@@ -354,6 +354,11 @@ class Imobiliaria(TimeStampedModel):
     def __str__(self):
         return self.nome
 
+    @property
+    def nome_fantasia(self):
+        """Compatibilidade: retorna razao_social como nome_fantasia"""
+        return self.razao_social or ''
+
     def clean(self):
         from django.core.exceptions import ValidationError
         errors = {}
