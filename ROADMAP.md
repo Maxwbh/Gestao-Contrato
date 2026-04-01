@@ -2,7 +2,7 @@
 
 **Desenvolvedor:** Maxwell da Silva Oliveira (maxwbh@gmail.com)
 **Empresa:** M&S do Brasil LTDA
-**Última atualização:** 2026-04-01 (rev 2)
+**Última atualização:** 2026-04-01 (rev 3)
 
 > Pendentes organizados por prioridade.
 > Para documentação do sistema atual, consulte **[SISTEMA.md](SISTEMA.md)**.
@@ -513,12 +513,11 @@
 | **11** | Permissões e segurança | 6 | — |
 | **12** | Cálculos contratuais avançados (rescisão, cessão, mora pro rata) | 11 (G-10, G-11, G-15) | — |
 | **13** | ⭐ **Contrato Tabela Price + Intermediárias (HU-360)** | 13 | ✅ |
-| **14** | ⭐ **Sistema de Amortização: Tabela Price e SAC** | 10 | ✅ |
-| **15** | Testes P3/P4 + CI/CD | 7.3, 7.4, 8 | — |
-| **16** | Frontend P3/P4 | 3 (P3, P4) | — |
-| **17** | Documentação | 9 | — |
-| **15** | Frontend P3/P4 | 3 (P3, P4) | — |
-| **16** | Documentação | 9 | — |
+| **14** | ⭐ **Sistema de Amortização: Tabela Price e SAC** | 14 | ✅ |
+| **15** | ⭐ **Regras de Bloqueio de Boleto — Cascata + Lote** | 15 | ✅ |
+| **16** | Testes P3/P4 + CI/CD | 7.3, 7.4, 8 | — |
+| **17** | Frontend P3/P4 | 3 (P3, P4) | — |
+| **18** | Documentação | 9 | — |
 
 ---
 
@@ -560,8 +559,8 @@
 
 | # | Bug | Arquivo | Linha | Impacto |
 |---|-----|---------|-------|---------|
-| **BUG-01** | `Parcela.pode_gerar_boleto()` usa `self.ciclo_reajuste` (campo atualizado só após reajuste) — para parcelas recém-criadas `ciclo_reajuste` = 1 → **bloco nunca dispara** para parcelas do ciclo 2+ | `financeiro/models.py` | ~329 | **Crítico** — usuário gera boleto de parcela 13+ sem reajuste |
-| **BUG-02** | `Contrato.pode_gerar_boleto()` bloqueia para ciclo > 1 **sem verificar data** — bloqueia mesmo antes do reajuste ser devido | `contratos/models.py` | ~862 | Médio — impede geração antecipada legítima |
+| **BUG-01** | ~~`Parcela.pode_gerar_boleto()` usa `self.ciclo_reajuste` (campo atualizado só após reajuste) — para parcelas recém-criadas `ciclo_reajuste` = 1 → bloco nunca dispara para parcelas do ciclo 2+~~ | `financeiro/models.py` | — | ✅ **Corrigido (Seção 15)** — cascata completa do ciclo 2 ao ciclo da parcela |
+| **BUG-02** | ~~`Contrato.pode_gerar_boleto()` bloqueia para ciclo > 1 sem verificar data — bloqueia mesmo antes do reajuste ser devido~~ | `contratos/models.py` | — | ✅ **Corrigido (Seção 15)** — cascata + data + helper `get_primeiro_ciclo_bloqueado()` |
 
 #### Funcionalidades Ausentes ❌
 
@@ -589,7 +588,7 @@
 
 ---
 
-### 13.2 BUG-01 — Fix `Parcela.pode_gerar_boleto()` ⚠️ CRÍTICO
+### 13.2 BUG-01 — Fix `Parcela.pode_gerar_boleto()` ✅ CORRIGIDO (ver Seção 15)
 
 **Problema:** usa `self.ciclo_reajuste` (campo pós-reajuste) em vez de calcular o ciclo dinamicamente.
 
@@ -635,7 +634,7 @@ if ciclo_da_parcela > 1:
 
 ---
 
-### 13.3 BUG-02 — Fix `Contrato.pode_gerar_boleto()` — Verificação de Data
+### 13.3 BUG-02 — Fix `Contrato.pode_gerar_boleto()` ✅ CORRIGIDO (ver Seção 15)
 
 **Problema:** bloqueia imediatamente ao entrar no ciclo 2, mesmo antes da data do reajuste.
 
@@ -774,6 +773,79 @@ FLUXO MENSAL
 
 ---
 
+---
+
+## 15. REGRAS DE BLOQUEIO DE BOLETO — CASCATA E LOTE ✅ CONCLUÍDO
+
+> **Contexto:** a implementação anterior de `pode_gerar_boleto()` só verificava o ciclo próprio da
+> parcela. Se o ciclo 2 estava pendente mas a parcela pertencia ao ciclo 3 (data ainda não vencida),
+> o bloqueio não era aplicado. Além disso, geração em lote (carnê) não respeitava o limite do ciclo atual.
+> O usuário especificou as regras corretas na sessão de 2026-04-01.
+
+---
+
+### 15.1 Regras de Negócio (Especificação)
+
+| # | Regra |
+|---|-------|
+| R-B01 | **Se hoje ≥ data de qualquer reajuste pendente (ciclo N)**, todos os boletos do ciclo N em diante ficam bloqueados — não apenas os do ciclo N |
+| R-B02 | **Geração em lote (carnê)** só é permitida até o último boleto do ciclo atual (último ciclo totalmente reajustado) |
+| R-B03 | **Boletos de ciclos futuros** (data ainda não chegou) só podem ser gerados individualmente |
+| R-B04 | **Intermediárias sem reajuste** (`intermediarias_reajustadas=False`) podem ser geradas a qualquer momento, independente de bloqueio |
+| R-B05 | **Intermediárias com reajuste** seguem a mesma regra das parcelas normais |
+| R-B06 | **Índice FIXO** — sem reajuste, sem bloqueio; todos os boletos sempre liberados |
+
+---
+
+### 15.2 Implementação
+
+| # | Item | Arquivo | Status |
+|---|------|---------|--------|
+| B-01 | `Parcela.pode_gerar_boleto()` — loop cascata ciclo 2..ciclo_da_parcela; break se data futura; bloqueia ao encontrar primeiro ciclo pendente | `financeiro/models.py` | ✅ |
+| B-02 | `Contrato.pode_gerar_boleto()` — mesma lógica de cascata | `contratos/models.py` | ✅ |
+| B-03 | `Contrato.get_primeiro_ciclo_bloqueado()` — helper; retorna número do primeiro ciclo pendente (ou None) | `contratos/models.py` | ✅ |
+| B-04 | `gerar_boleto_intermediaria()` — pula verificação se `contrato.intermediarias_reajustadas=False` | `contratos/views.py` | ✅ |
+| B-05 | `gerar_carne()` — calcula `max_parcela_lote` antes do loop; ciclos futuros/pendentes bloqueados em lote com mensagem orientativa | `financeiro/views.py` | ✅ |
+
+---
+
+### 15.3 Algoritmo de Cascata
+
+```
+para ciclo_check = 2 até ciclo_da_parcela:
+    data_reajuste = data_contrato + (ciclo_check - 1) * prazo_meses
+    se hoje < data_reajuste:
+        break  ← ciclo futuro, não bloqueia
+    se Reajuste.aplicado(ciclo_check) == False:
+        return False, "Reajuste ciclo {ciclo_check} pendente desde {data}"
+return True, "Liberado"
+```
+
+**Exemplo — contrato Jan/2024, prazo 12, ciclo 2 pendente:**
+```
+Parcela 12 (ciclo 1) → loop vazio → Liberada ✓
+Parcela 13 (ciclo 2) → ciclo 2: hoje >= data, não aplicado → Bloqueada ✓
+Parcela 25 (ciclo 3) → ciclo 2: hoje >= data, não aplicado → Bloqueada ✓ (cascata)
+```
+
+---
+
+### 15.4 Lógica de Limite de Lote (`gerar_carne`)
+
+```
+max_parcela_lote = None  # sem limite por padrão
+para ciclo = 2..total_ciclos+1:
+    data_reajuste = data_contrato + (ciclo-1) * prazo
+    se hoje < data_reajuste:
+        max_parcela_lote = (ciclo-1) * prazo  ← limita ao ciclo anterior
+        break
+    se não aplicado(ciclo):
+        max_parcela_lote = (ciclo-1) * prazo  ← limita ao ciclo anterior
+        break
+```
+
+---
+
 ## Resumo Quantitativo
 
 | Categoria | P1 | P2 | P3 | P4 | Total | Concluído |
@@ -784,6 +856,8 @@ FLUXO MENSAL
 | Contrato Real (gaps) | — | — | 9 | 6 | 15 | ✅ 9/9 (P3) · 6 pendentes P4 |
 | CNAB Remessa | — | 8 | — | — | 8 | ✅ 8/8 |
 | HU-360 Tabela Price | 2 | 9 | 2 | — | 13 | ✅ 13/13 |
+| SAC / Tabela Price | 1 | 4 | — | — | 5 | ✅ 5/5 |
+| Bloqueio Boleto (Cascata) | 2 | 3 | — | — | 5 | ✅ 5/5 |
 | Frontend | — | 17 | 15 | 3 | 35 | — |
 | APIs | — | 6 | 5 | — | 11 | — |
 | Celery | — | 2 | 2 | 1 | 5 | — |
@@ -844,3 +918,11 @@ FLUXO MENSAL
 - Wizard step4: exibe sistema, taxa ciclo 1, PMT inicial e último (SAC); preview de parcelas mostra breakdown amort/juros para SAC
 - `api_preview_parcelas`: suporte a `tipo_amortizacao=SAC`; retorna `amortizacao` e `juros_embutido` por parcela
 - Admin: `tipo_amortizacao` no fieldset "Configurações de Parcelas"
+
+**Seção 15 — Regras de Bloqueio de Boleto — Cascata + Lote:**
+- `Parcela.pode_gerar_boleto()` reescrito: verifica em **cascata** do ciclo 2 até o ciclo da parcela — se qualquer ciclo intermediário venceu sem reajuste aplicado, bloqueia a parcela e todas as subsequentes
+- `Contrato.pode_gerar_boleto()` reescrito com mesma lógica de cascata
+- `Contrato.get_primeiro_ciclo_bloqueado()` — novo helper; retorna o menor ciclo bloqueado (ou None)
+- `gerar_boleto_intermediaria()`: respeita `intermediarias_reajustadas` — se `False`, pula verificação de reajuste; intermediárias fixas sempre liberadas independente do ciclo
+- `gerar_carne()`: calcula `max_parcela_lote` antes do loop — determina o último ciclo totalmente reajustado; parcelas de ciclos futuros ou bloqueados são recusadas em lote com mensagem orientativa para geração individual
+- **Impactos corrigidos:** `ContratoForm` agora inclui `tipo_amortizacao`; `gerar_dados_teste.py` distribui 25% SAC / 75% Price e chama `recalcular_amortizacao()` após TabelaJuros; `contrato_detail.html` exibe badge do sistema de amortização
