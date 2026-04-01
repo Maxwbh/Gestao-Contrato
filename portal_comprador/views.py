@@ -608,3 +608,171 @@ def api_resumo_financeiro(request):
         'sucesso': True,
         'resumo': stats
     })
+
+
+# =============================================================================
+# FASE 9 — APIs P2 do Portal do Comprador
+# =============================================================================
+
+@login_required(login_url='portal_comprador:login')
+def api_portal_vencimentos(request):
+    """
+    Lista vencimentos (parcelas pendentes/vencidas) do comprador logado.
+
+    GET /portal/api/vencimentos/
+
+    Filtros: status (pendente/vencido/a_vencer), data_inicio, data_fim,
+             contrato (id), page, per_page
+    """
+    comprador = get_comprador_from_request(request)
+    if not comprador:
+        return JsonResponse({'erro': 'Acesso não autorizado'}, status=403)
+
+    hoje = timezone.now().date()
+    qs = Parcela.objects.select_related(
+        'contrato', 'contrato__comprador', 'contrato__imovel'
+    ).filter(contrato__comprador=comprador)
+
+    # Filtro por status
+    status = request.GET.get('status', '')
+    if status == 'pendente':
+        qs = qs.filter(pago=False)
+    elif status == 'vencido':
+        qs = qs.filter(pago=False, data_vencimento__lt=hoje)
+    elif status == 'a_vencer':
+        qs = qs.filter(pago=False, data_vencimento__gte=hoje)
+    elif status == 'pago':
+        qs = qs.filter(pago=True)
+    else:
+        # Default: apenas pendentes (não pagas)
+        qs = qs.filter(pago=False)
+
+    # Filtros de período
+    data_inicio = request.GET.get('data_inicio', '')
+    data_fim = request.GET.get('data_fim', '')
+    if data_inicio:
+        from datetime import datetime as dt
+        qs = qs.filter(data_vencimento__gte=dt.strptime(data_inicio, '%Y-%m-%d').date())
+    if data_fim:
+        from datetime import datetime as dt
+        qs = qs.filter(data_vencimento__lte=dt.strptime(data_fim, '%Y-%m-%d').date())
+
+    contrato_id = request.GET.get('contrato')
+    if contrato_id:
+        qs = qs.filter(contrato_id=contrato_id)
+
+    qs = qs.order_by('data_vencimento', 'numero_parcela')
+
+    # Paginação
+    page = max(1, int(request.GET.get('page', 1)))
+    per_page = min(max(1, int(request.GET.get('per_page', 50))), 100)
+    total = qs.count()
+    offset = (page - 1) * per_page
+    parcelas_page = qs[offset:offset + per_page]
+
+    parcelas_data = []
+    for p in parcelas_page:
+        dias_atraso = max(0, (hoje - p.data_vencimento).days) if not p.pago and p.data_vencimento < hoje else 0
+        parcelas_data.append({
+            'id': p.id,
+            'contrato': {
+                'id': p.contrato.id,
+                'numero': p.contrato.numero_contrato,
+                'imovel': p.contrato.imovel.identificacao if p.contrato.imovel else '',
+            },
+            'numero_parcela': p.numero_parcela,
+            'total_parcelas': p.contrato.numero_parcelas,
+            'data_vencimento': p.data_vencimento.strftime('%Y-%m-%d'),
+            'valor_atual': float(p.valor_atual),
+            'pago': p.pago,
+            'data_pagamento': p.data_pagamento.strftime('%Y-%m-%d') if p.data_pagamento else None,
+            'dias_atraso': dias_atraso,
+            'tem_boleto': p.tem_boleto,
+            'status_boleto': p.status_boleto,
+            'linha_digitavel': p.linha_digitavel or '',
+        })
+
+    totais = qs.aggregate(
+        valor_total=Sum('valor_atual'),
+        vencidas=Count('id', filter=Q(pago=False, data_vencimento__lt=hoje)),
+    )
+
+    return JsonResponse({
+        'sucesso': True,
+        'parcelas': parcelas_data,
+        'total': total,
+        'page': page,
+        'per_page': per_page,
+        'totais': {
+            'valor_total': float(totais['valor_total'] or 0),
+            'quantidade_vencidas': totais['vencidas'] or 0,
+        },
+    })
+
+
+@login_required(login_url='portal_comprador:login')
+def api_portal_boletos(request):
+    """
+    Lista boletos do comprador logado.
+
+    GET /portal/api/boletos/
+
+    Filtros: status_boleto (GERADO/REGISTRADO/PAGO/VENCIDO/CANCELADO),
+             contrato (id), page, per_page
+    """
+    comprador = get_comprador_from_request(request)
+    if not comprador:
+        return JsonResponse({'erro': 'Acesso não autorizado'}, status=403)
+
+    hoje = timezone.now().date()
+    qs = Parcela.objects.select_related(
+        'contrato', 'contrato__imovel'
+    ).filter(
+        contrato__comprador=comprador
+    ).exclude(status_boleto='NAO_GERADO')
+
+    # Filtros
+    status_boleto = request.GET.get('status_boleto', '')
+    if status_boleto:
+        qs = qs.filter(status_boleto=status_boleto.upper())
+
+    contrato_id = request.GET.get('contrato')
+    if contrato_id:
+        qs = qs.filter(contrato_id=contrato_id)
+
+    qs = qs.order_by('-data_vencimento', 'numero_parcela')
+
+    # Paginação
+    page = max(1, int(request.GET.get('page', 1)))
+    per_page = min(max(1, int(request.GET.get('per_page', 50))), 100)
+    total = qs.count()
+    offset = (page - 1) * per_page
+    boletos_page = qs[offset:offset + per_page]
+
+    boletos_data = []
+    for p in boletos_page:
+        boletos_data.append({
+            'id': p.id,
+            'contrato': {
+                'id': p.contrato.id,
+                'numero': p.contrato.numero_contrato,
+                'imovel': p.contrato.imovel.identificacao if p.contrato.imovel else '',
+            },
+            'numero_parcela': p.numero_parcela,
+            'data_vencimento': p.data_vencimento.strftime('%Y-%m-%d'),
+            'valor_atual': float(p.valor_atual),
+            'pago': p.pago,
+            'status_boleto': p.status_boleto,
+            'nosso_numero': p.nosso_numero or '',
+            'linha_digitavel': p.linha_digitavel or '',
+            'url_visualizar': f'/portal/boletos/{p.id}/visualizar/',
+            'url_download': f'/portal/boletos/{p.id}/download/',
+        })
+
+    return JsonResponse({
+        'sucesso': True,
+        'boletos': boletos_data,
+        'total': total,
+        'page': page,
+        'per_page': per_page,
+    })
