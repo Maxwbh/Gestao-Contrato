@@ -8,7 +8,6 @@ import pytest
 from pytest_factoryboy import register
 from django.conf import settings
 from django.test import Client
-from rest_framework.test import APIClient
 
 # Importar todas as factories
 from tests.fixtures.factories import (
@@ -48,8 +47,8 @@ register(ArquivoRetornoFactory)
 
 @pytest.fixture
 def api_client():
-    """Cliente da API REST Framework"""
-    return APIClient()
+    """Cliente HTTP do Django (sem DRF)"""
+    return Client()
 
 
 @pytest.fixture
@@ -69,10 +68,10 @@ def authenticated_client(db, user_factory):
 
 @pytest.fixture
 def authenticated_api_client(db, user_factory):
-    """Cliente API autenticado"""
-    client = APIClient()
+    """Cliente HTTP autenticado (alias)"""
+    client = Client()
     user = user_factory(password='testpass123')
-    client.force_authenticate(user=user)
+    client.force_login(user)
     return client
 
 
@@ -87,10 +86,10 @@ def admin_client(db, superuser_factory):
 
 @pytest.fixture
 def admin_api_client(db, superuser_factory):
-    """Cliente API autenticado como admin"""
-    client = APIClient()
+    """Cliente HTTP autenticado como admin (alias)"""
+    client = Client()
     admin = superuser_factory(password='admin123')
-    client.force_authenticate(user=admin)
+    client.force_login(admin)
     return client
 
 
@@ -206,6 +205,10 @@ def configure_test_settings(settings):
     settings.CELERY_TASK_ALWAYS_EAGER = True  # Executa tasks síncronamente
     settings.CELERY_TASK_EAGER_PROPAGATES = True
     settings.EMAIL_BACKEND = 'django.core.mail.backends.locmem.EmailBackend'
+    # Use simpler static files storage to avoid collectstatic requirement
+    settings.STATICFILES_STORAGE = 'django.contrib.staticfiles.storage.StaticFilesStorage'
+    # Disable HTTPS redirect for tests
+    settings.SECURE_SSL_REDIRECT = False
     return settings
 
 
