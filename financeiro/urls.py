@@ -48,9 +48,12 @@ urlpatterns = [
 
     # Reajustes
     path('reajustes/', views.listar_reajustes, name='listar_reajustes'),
+    path('reajustes/pendentes/', views.reajustes_pendentes, name='reajustes_pendentes'),
     path('contrato/<int:contrato_id>/reajuste/aplicar/', views.aplicar_reajuste_contrato, name='aplicar_reajuste'),
+    path('contrato/<int:contrato_id>/reajuste/preview/', views.preview_reajuste_contrato, name='preview_reajuste'),
     path('contrato/<int:contrato_id>/reajuste/calcular/', views.calcular_reajuste_proporcional, name='calcular_reajuste'),
     path('reajuste/<int:pk>/excluir/', views.excluir_reajuste, name='excluir_reajuste'),
+    path('reajustes/aplicar-lote/', views.aplicar_reajuste_lote, name='aplicar_reajuste_lote'),
     path('api/indice-reajuste/', views.obter_indice_reajuste, name='api_indice_reajuste'),
     path('api/calcular-indice-acumulado/', views.api_calcular_indice_acumulado, name='api_calcular_indice_acumulado'),
 
@@ -125,4 +128,9 @@ urlpatterns = [
     # API - CONTAS BANCÁRIAS
     # ==========================================================================
     path('api/contas-bancarias/', views.api_contas_bancarias, name='api_contas_bancarias'),
+
+    # ==========================================================================
+    # API - NOTIFICAÇÕES
+    # ==========================================================================
+    path('api/reajustes-pendentes/count/', views.api_reajustes_pendentes_count, name='api_reajustes_pendentes_count'),
 ]
