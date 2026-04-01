@@ -754,13 +754,6 @@ with connection.cursor() as cursor:
         add_column_if_not_exists(cursor, 'contratos_contrato', 'instrucao_boleto_1', "VARCHAR(255) DEFAULT ''")
         add_column_if_not_exists(cursor, 'contratos_contrato', 'instrucao_boleto_2', "VARCHAR(255) DEFAULT ''")
         add_column_if_not_exists(cursor, 'contratos_contrato', 'instrucao_boleto_3', "VARCHAR(255) DEFAULT ''")
-        # G-14: Testemunhas
-        add_column_if_not_exists(cursor, 'contratos_contrato', 'testemunha_1_nome', "VARCHAR(200) DEFAULT ''")
-        add_column_if_not_exists(cursor, 'contratos_contrato', 'testemunha_1_cpf', "VARCHAR(14) DEFAULT ''")
-        add_column_if_not_exists(cursor, 'contratos_contrato', 'testemunha_2_nome', "VARCHAR(200) DEFAULT ''")
-        add_column_if_not_exists(cursor, 'contratos_contrato', 'testemunha_2_cpf', "VARCHAR(14) DEFAULT ''")
-        # G-15: Prazo escritura
-        add_column_if_not_exists(cursor, 'contratos_contrato', 'prazo_escritura_dias', "INTEGER NULL DEFAULT 90")
 
         # Criar índice para conta bancária
         cursor.execute("""
