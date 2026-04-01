@@ -112,6 +112,14 @@ class ContratoAdmin(admin.ModelAdmin):
                 'reajuste_teto',
             )
         }),
+        ('Parâmetros de Intermediárias', {
+            'fields': (
+                'intermediarias_reduzem_pmt',
+                'intermediarias_reajustadas',
+            ),
+            'classes': ('collapse',),
+            'description': 'Controla como as prestações intermediárias interagem com as parcelas mensais.'
+        }),
         ('Cláusulas Contratuais', {
             'fields': (
                 'percentual_fruicao',

@@ -356,6 +356,26 @@ class Contrato(TimeStampedModel):
         verbose_name='Taxa de Cessão de Direitos (%)',
         help_text='Percentual cobrado sobre o valor atualizado para cessão de direitos a terceiros'
     )
+    # Parâmetros de Intermediárias
+    intermediarias_reduzem_pmt = models.BooleanField(
+        default=False,
+        verbose_name='Intermediárias Reduzem PMT',
+        help_text=(
+            'Se marcado, o valor das intermediárias é deduzido do saldo '
+            'financiado antes de calcular a parcela mensal. '
+            'Se desmarcado, as intermediárias são amortizações extras sobre '
+            'a parcela mensal cheia.'
+        )
+    )
+    intermediarias_reajustadas = models.BooleanField(
+        default=True,
+        verbose_name='Intermediárias Reajustadas pelo Índice',
+        help_text=(
+            'Se marcado, as intermediárias têm o valor atualizado pelo mesmo '
+            'índice (IPCA etc.) a cada ciclo de reajuste. '
+            'Se desmarcado, o valor das intermediárias é fixo até o vencimento.'
+        )
+    )
 
     # Status
     status = models.CharField(
@@ -839,12 +859,13 @@ class Contrato(TimeStampedModel):
         """
         Verifica se é possível gerar boleto para uma parcela específica.
 
-        Regra: Só é possível emitir boleto até o 12º mês de cada ciclo.
-               No 13º mês (início de novo ciclo), a emissão só é liberada
-               APÓS aplicação do reajuste.
+        Regra: o boleto só é bloqueado se:
+          1. a parcela pertence a um ciclo > 1
+          2. a data prevista do reajuste desse ciclo já passou (hoje >= data_prevista)
+          3. o reajuste do ciclo ainda não foi aplicado
 
-        Excecao: tipo_correcao='FIXO' permite gerar todos os boletos
-                 sem necessidade de reajuste.
+        Quando hoje < data_prevista, a geração antecipada é permitida.
+        Índice FIXO nunca bloqueia.
 
         Args:
             numero_parcela: Número da parcela a verificar
@@ -852,28 +873,44 @@ class Contrato(TimeStampedModel):
         Returns:
             tuple: (pode_gerar: bool, motivo: str)
         """
-        # Correcao FIXO: sempre pode gerar (nao precisa de reajuste)
         if self.tipo_correcao == TipoCorrecao.FIXO:
-            return True, "Indice FIXO - sem necessidade de reajuste"
+            return True, "Índice FIXO — sem necessidade de reajuste."
 
-        ciclo_parcela = self.calcular_ciclo_parcela(numero_parcela)
+        prazo = self.prazo_reajuste_meses or 12
+        ciclo_parcela = (numero_parcela - 1) // prazo + 1
 
-        # Primeiro ciclo (meses 1-12): sempre pode gerar
         if ciclo_parcela == 1:
-            return True, "Primeiro ciclo - liberado"
+            return True, "Primeiro ciclo — liberado."
 
-        # Verificar se o reajuste do ciclo foi aplicado
+        from dateutil.relativedelta import relativedelta
+        from django.utils import timezone as tz
+
+        data_reajuste_prevista = (
+            self.data_contrato
+            + relativedelta(months=(ciclo_parcela - 1) * prazo)
+        )
+
+        if tz.now().date() < data_reajuste_prevista:
+            return True, (
+                f"Reajuste do ciclo {ciclo_parcela} ainda não vencido "
+                f"(previsto {data_reajuste_prevista.strftime('%d/%m/%Y')})."
+            )
+
         from financeiro.models import Reajuste
         reajuste_aplicado = Reajuste.objects.filter(
             contrato=self,
             ciclo=ciclo_parcela,
-            aplicado=True  # Deve estar efetivamente aplicado
+            aplicado=True
         ).exists()
 
         if reajuste_aplicado:
-            return True, f"Reajuste do ciclo {ciclo_parcela} aplicado"
+            return True, f"Reajuste do ciclo {ciclo_parcela} aplicado."
 
-        return False, f"Reajuste pendente para o ciclo {ciclo_parcela}. Aplique o reajuste antes de gerar boletos."
+        return False, (
+            f"Reajuste do ciclo {ciclo_parcela} pendente desde "
+            f"{data_reajuste_prevista.strftime('%d/%m/%Y')}. "
+            f"Execute o reajuste antes de gerar boletos."
+        )
 
     def verificar_bloqueio_reajuste(self):
         """
