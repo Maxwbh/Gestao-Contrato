@@ -274,6 +274,32 @@ with connection.cursor() as cursor:
     add_column_if_not_exists(cursor, 'core_imobiliaria', 'instrucao_padrao', "VARCHAR(255) DEFAULT ''")
     add_column_if_not_exists(cursor, 'core_imobiliaria', 'tipo_titulo', "VARCHAR(5) DEFAULT 'RC'")
     add_column_if_not_exists(cursor, 'core_imobiliaria', 'aceite', "BOOLEAN DEFAULT FALSE")
+    # G-10: Suporte a vendedor PF
+    add_column_if_not_exists(cursor, 'core_imobiliaria', 'tipo_pessoa', "VARCHAR(2) NOT NULL DEFAULT 'PJ'")
+    add_column_if_not_exists(cursor, 'core_imobiliaria', 'cpf', "VARCHAR(14) NULL")
+    cursor.execute("""
+        DO $$
+        BEGIN
+            IF EXISTS (
+                SELECT 1 FROM information_schema.columns
+                WHERE table_schema = current_schema()
+                  AND table_name = 'core_imobiliaria'
+                  AND column_name = 'cnpj'
+                  AND is_nullable = 'NO'
+            ) THEN
+                ALTER TABLE core_imobiliaria ALTER COLUMN cnpj DROP NOT NULL;
+            END IF;
+            IF EXISTS (
+                SELECT 1 FROM information_schema.columns
+                WHERE table_schema = current_schema()
+                  AND table_name = 'core_imobiliaria'
+                  AND column_name = 'razao_social'
+                  AND is_nullable = 'NO'
+            ) THEN
+                ALTER TABLE core_imobiliaria ALTER COLUMN razao_social DROP NOT NULL;
+            END IF;
+        END $$;
+    """)
 
     print("Checking core_imovel...")
     # Loteamento opcional
@@ -728,6 +754,13 @@ with connection.cursor() as cursor:
         add_column_if_not_exists(cursor, 'contratos_contrato', 'instrucao_boleto_1', "VARCHAR(255) DEFAULT ''")
         add_column_if_not_exists(cursor, 'contratos_contrato', 'instrucao_boleto_2', "VARCHAR(255) DEFAULT ''")
         add_column_if_not_exists(cursor, 'contratos_contrato', 'instrucao_boleto_3', "VARCHAR(255) DEFAULT ''")
+        # G-14: Testemunhas
+        add_column_if_not_exists(cursor, 'contratos_contrato', 'testemunha_1_nome', "VARCHAR(200) DEFAULT ''")
+        add_column_if_not_exists(cursor, 'contratos_contrato', 'testemunha_1_cpf', "VARCHAR(14) DEFAULT ''")
+        add_column_if_not_exists(cursor, 'contratos_contrato', 'testemunha_2_nome', "VARCHAR(200) DEFAULT ''")
+        add_column_if_not_exists(cursor, 'contratos_contrato', 'testemunha_2_cpf', "VARCHAR(14) DEFAULT ''")
+        # G-15: Prazo escritura
+        add_column_if_not_exists(cursor, 'contratos_contrato', 'prazo_escritura_dias', "INTEGER NULL DEFAULT 90")
 
         # Criar índice para conta bancária
         cursor.execute("""
