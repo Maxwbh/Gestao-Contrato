@@ -95,6 +95,7 @@ class Command(BaseCommand):
                 self.stdout.write('Criando Contratos...')
                 imoveis = lotes + terrenos
                 contratos = self.criar_contratos(imoveis, compradores, imobiliarias)
+                tabela_juros_count = TabelaJurosContrato.objects.count()
 
                 # 7. Remover parcelas futuras (manter apenas até o mês atual)
                 self.stdout.write('Removendo parcelas futuras...')
@@ -105,19 +106,24 @@ class Command(BaseCommand):
                 self.stdout.write('Marcando parcelas como pagas...')
                 self.marcar_parcelas_pagas(contratos, 0.90)
 
-                # 9. Gerar índices de reajuste
+                # 9. Simular boletos gerados para demonstração da remessa
+                self.stdout.write('Simulando boletos gerados (para demo de remessa)...')
+                boletos_simulados = self.simular_boletos_gerados(contratos, contas_bancarias)
+                self.stdout.write(f'   {boletos_simulados} boletos simulados')
+
+                # 10. Gerar índices de reajuste
                 self.stdout.write('Gerando índices de reajuste...')
                 indices = self.gerar_indices_reajuste()
 
-                # 10. Criar prestações intermediárias para alguns contratos
+                # 11. Criar prestações intermediárias para alguns contratos
                 self.stdout.write('Criando prestações intermediárias...')
                 intermediarias = self.criar_prestacoes_intermediarias(contratos)
 
-                # 11. Criar acessos ao portal para alguns compradores
+                # 12. Criar acessos ao portal para alguns compradores
                 self.stdout.write('Criando acessos ao portal do comprador...')
                 acessos = self.criar_acessos_portal(compradores)
 
-                # 12. Criar reajustes aplicados para contratos antigos
+                # 13. Criar reajustes aplicados para contratos antigos
                 self.stdout.write('Criando reajustes aplicados...')
                 reajustes = self.criar_reajustes_aplicados(contratos)
 
@@ -133,6 +139,8 @@ class Command(BaseCommand):
             self.stdout.write(self.style.SUCCESS(f'   • {len(terrenos)} Terrenos'))
             self.stdout.write(self.style.SUCCESS(f'   • {len(compradores)} Compradores ({pf_count} PF + {pj_count} PJ)'))
             self.stdout.write(self.style.SUCCESS(f'   • {len(contratos)} Contratos'))
+            self.stdout.write(self.style.SUCCESS(f'   • {tabela_juros_count} Faixas de Juros Escalantes (TabelaJurosContrato)'))
+            self.stdout.write(self.style.SUCCESS(f'   • {boletos_simulados} Boletos Simulados (prontos para remessa)'))
             self.stdout.write(self.style.SUCCESS(f'   • {intermediarias} Prestações Intermediárias'))
             self.stdout.write(self.style.SUCCESS(f'   • {acessos} Acessos ao Portal'))
             self.stdout.write(self.style.SUCCESS(f'   • {reajustes} Reajustes Aplicados'))
@@ -161,6 +169,10 @@ class Command(BaseCommand):
 
     def limpar_dados(self):
         """Limpa todos os dados de teste"""
+        from financeiro.models import ArquivoRemessa, ArquivoRetorno
+        ArquivoRemessa.objects.all().delete()
+        ArquivoRetorno.objects.all().delete()
+
         # Portal do Comprador
         AcessoComprador.objects.all().delete()
         User.objects.filter(username__startswith='comprador_').delete()
@@ -684,6 +696,55 @@ class Command(BaseCommand):
                     data_pagamento=data_pagamento,
                     observacoes='Pagamento gerado automaticamente para teste'
                 )
+
+    def simular_boletos_gerados(self, contratos, contas_bancarias):
+        """
+        Simula boletos gerados para parcelas não pagas, vinculando-as a uma conta bancária.
+        Permite demonstrar a geração de remessa sem depender do BRCobrança.
+        """
+        from financeiro.models import StatusBoleto
+        from django.utils import timezone as tz
+
+        count = 0
+        hoje = tz.now()
+
+        # Pegar contas bancárias principais (uma por imobiliária)
+        contas_principais = {cb.imobiliaria_id: cb for cb in contas_bancarias if cb.principal}
+
+        for contrato in contratos:
+            conta = contas_principais.get(contrato.imobiliaria_id)
+            if not conta:
+                conta = contas_bancarias[0] if contas_bancarias else None
+            if not conta:
+                continue
+
+            # Pegar até 3 parcelas não pagas do contrato
+            parcelas_nao_pagas = list(
+                contrato.parcelas.filter(pago=False).order_by('numero_parcela')[:3]
+            )
+
+            for parcela in parcelas_nao_pagas:
+                if parcela.status_boleto == StatusBoleto.GERADO:
+                    continue
+
+                # Incrementar nosso número na conta
+                conta.nosso_numero_atual += 1
+
+                parcela.conta_bancaria = conta
+                parcela.status_boleto = StatusBoleto.GERADO
+                parcela.nosso_numero = str(conta.nosso_numero_atual).zfill(10)
+                parcela.numero_documento = f'{contrato.numero_contrato}/{parcela.numero_parcela:03d}'
+                parcela.data_geracao_boleto = hoje
+                parcela.save(update_fields=[
+                    'conta_bancaria', 'status_boleto', 'nosso_numero',
+                    'numero_documento', 'data_geracao_boleto'
+                ])
+                count += 1
+
+            # Salvar o nosso_numero_atual atualizado da conta
+            conta.save(update_fields=['nosso_numero_atual'])
+
+        return count
 
     def gerar_cpf(self):
         """Gera um CPF fictício formatado"""
