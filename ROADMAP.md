@@ -2,7 +2,7 @@
 
 **Desenvolvedor:** Maxwell da Silva Oliveira (maxwbh@gmail.com)
 **Empresa:** M&S do Brasil LTDA
-**Última atualização:** 2026-04-01 (rev 3)
+**Última atualização:** 2026-04-01 (rev 4)
 
 > Pendentes organizados por prioridade.
 > Para documentação do sistema atual, consulte **[SISTEMA.md](SISTEMA.md)**.
@@ -59,25 +59,25 @@
 ## 3. FRONTEND — TEMPLATES E INTERFACES
 
 ### P2 — Alto
-| # | Tela/Componente |
-|---|-----------------|
-| 3.1 | Aba Histórico de Reajustes (contrato) |
-| 3.2 | Aba Boletos gerados (lista com status e download) |
-| 3.3 | Wizard de criação de contrato (7 etapas) |
-| 3.4 | Dashboard Contabilidade: gráfico recebimentos mensais |
-| 3.5 | Dashboard Contabilidade: gráfico inadimplência por imobiliária |
-| 3.6 | Dashboard Contabilidade: tabela vencimentos consolidados |
-| 3.7 | Dashboard Imobiliária: filtros na lista de contratos |
-| 3.8 | Dashboard Imobiliária: busca rápida por contrato/comprador |
-| 3.9 | Dashboard Imobiliária: ações em lote (gerar boletos) |
-| 3.10 | Dashboard Imobiliária: fluxo de caixa previsto vs realizado |
-| 3.11 | Gestão de Boletos: interface geração em lote com progresso |
-| 3.12 | Gestão de Boletos: download ZIP de vários boletos |
-| 3.13 | Gestão de Parcelas: seleção múltipla para ações em lote |
-| 3.14 | Gestão de Parcelas: juros/multa/total nas vencidas |
-| 3.15 | Sidebar recolhível com indicadores de pendências |
-| 3.16 | Toast de sucesso/erro padronizado |
-| 3.17 | Centro de notificações com badge |
+| # | Tela/Componente | Status |
+|---|-----------------|--------|
+| 3.1 | Aba Histórico de Reajustes (contrato) | ✅ Implementado como R-14 |
+| 3.2 | Aba Boletos gerados (lista com status e download) | — |
+| 3.3 | Wizard de criação de contrato (4 etapas) | ✅ step1 a step4 |
+| 3.4 | Dashboard Contabilidade: gráfico recebimentos mensais | — |
+| 3.5 | Dashboard Contabilidade: gráfico inadimplência por imobiliária | — |
+| 3.6 | Dashboard Contabilidade: tabela vencimentos consolidados | — |
+| 3.7 | Dashboard Imobiliária: filtros na lista de contratos | — |
+| 3.8 | Dashboard Imobiliária: busca rápida por contrato/comprador | — |
+| 3.9 | Dashboard Imobiliária: ações em lote (gerar boletos) | — |
+| 3.10 | Dashboard Imobiliária: fluxo de caixa previsto vs realizado | — |
+| 3.11 | Gestão de Boletos: interface geração em lote com progresso | ✅ `gerar_carne` + templates |
+| 3.12 | Gestão de Boletos: download ZIP de vários boletos | — |
+| 3.13 | Gestão de Parcelas: seleção múltipla para ações em lote | ✅ Seleção múltipla implementada |
+| 3.14 | Gestão de Parcelas: juros/multa/total nas vencidas | — |
+| 3.15 | Sidebar recolhível com indicadores de pendências | — |
+| 3.16 | Toast de sucesso/erro padronizado | — |
+| 3.17 | Centro de notificações com badge | — |
 
 ### P3 — Médio
 | # | Tela/Componente |
@@ -280,13 +280,11 @@
 
 ---
 
----
-
-## 10. REAJUSTE DE PARCELAS — FOCO ATUAL
+## 10. REAJUSTE DE PARCELAS ✅ CONCLUÍDO
 
 > **Objetivo:** tornar o fluxo de reajuste claro, seguro e auditável — do cálculo à confirmação.
-> Estado atual: lógica de backend implementada (ciclos, bloqueio de boleto, índices IBGE/FGV),
-> porém sem cálculo automático do acumulado, sem preview e sem interface dedicada.
+> Implementação completa: cálculo automático do acumulado, preview por parcela, interface dedicada,
+> histórico, auditoria, desfazer e aplicação em lote — todos os itens R-01 a R-19 concluídos.
 
 ---
 
@@ -562,22 +560,24 @@
 | **BUG-01** | ~~`Parcela.pode_gerar_boleto()` usa `self.ciclo_reajuste` (campo atualizado só após reajuste) — para parcelas recém-criadas `ciclo_reajuste` = 1 → bloco nunca dispara para parcelas do ciclo 2+~~ | `financeiro/models.py` | — | ✅ **Corrigido (Seção 15)** — cascata completa do ciclo 2 ao ciclo da parcela |
 | **BUG-02** | ~~`Contrato.pode_gerar_boleto()` bloqueia para ciclo > 1 sem verificar data — bloqueia mesmo antes do reajuste ser devido~~ | `contratos/models.py` | — | ✅ **Corrigido (Seção 15)** — cascata + data + helper `get_primeiro_ciclo_bloqueado()` |
 
-#### Funcionalidades Ausentes ❌
+#### Funcionalidades Ausentes — ✅ Todas Resolvidas
 
-| # | Lacuna | Impacto |
-|---|--------|---------|
-| **L-01** | Formulário web de criação de contrato não suporta `TabelaJurosContrato` inline (só Django Admin) | Alto — fluxo de criação incompleto |
-| **L-02** | Não há criação em lote de intermediárias (padrão: "R$X a cada Y meses") | Alto — 60 intermediárias criadas manualmente |
-| **L-03** | Regra de negócio não definida: PMT considera PV das intermediárias ou não? | Alto — afeta cálculo da parcela inicial |
-| **L-04** | Geração de boleto para intermediária não está disponível na web UI | Médio |
-| **L-05** | Sem preview de parcelas com projeção de reajustes futuros na criação | Médio |
-| **L-06** | Sem validação de consistência financeira na criação | Baixo |
+| # | Lacuna | Solução | Status |
+|---|--------|---------|--------|
+| **L-01** | Formulário web de criação de contrato não suporta `TabelaJurosContrato` inline (só Django Admin) | Wizard step2 implementa `TabelaJurosContrato` inline | ✅ |
+| **L-02** | Não há criação em lote de intermediárias (padrão: "R$X a cada Y meses") | Wizard step3: criação em lote com padrão (R$X a cada Y meses) e manual | ✅ |
+| **L-03** | Regra de negócio não definida: PMT considera PV das intermediárias ou não? | Parametrizado via `intermediarias_reduzem_pmt`; decisão em 13.1 | ✅ |
+| **L-04** | Geração de boleto para intermediária não está disponível na web UI | `gerar_boleto_intermediaria()` + `intermediaria_list.html` | ✅ |
+| **L-05** | Sem preview de parcelas com projeção de reajustes futuros na criação | step4 + `api_preview_parcelas` projeta primeiras 24 parcelas | ✅ |
+| **L-06** | Sem validação de consistência financeira na criação | Validação financeira implementada no wizard (`_calcular_resumo`) | ✅ |
 
 ---
 
-### 13.1 Definição de Regra de Negócio — L-03 (Decisão Necessária)
+### 13.1 Definição de Regra de Negócio — L-03 — Decisão Tomada ✅
 
 > **Questão:** no cálculo da parcela mensal, as intermediárias são deduzidas do PV?
+>
+> **Decisão:** Opção A — Parametrizado via `intermediarias_reduzem_pmt`. Implementado no Wizard step1 e `_salvar_contrato()`.
 
 | Opção | Fórmula parcela inicial | Comportamento |
 |-------|------------------------|---------------|
@@ -589,6 +589,8 @@
 ---
 
 ### 13.2 BUG-01 — Fix `Parcela.pode_gerar_boleto()` ✅ CORRIGIDO (ver Seção 15)
+
+> **Nota:** O fix implementado supera esta especificação — ver **Seção 15** para o algoritmo de cascata completo (ciclo 2 até ciclo da parcela).
 
 **Problema:** usa `self.ciclo_reajuste` (campo pós-reajuste) em vez de calcular o ciclo dinamicamente.
 
@@ -635,6 +637,8 @@ if ciclo_da_parcela > 1:
 ---
 
 ### 13.3 BUG-02 — Fix `Contrato.pode_gerar_boleto()` ✅ CORRIGIDO (ver Seção 15)
+
+> **Nota:** O fix implementado supera esta especificação — ver **Seção 15** para o algoritmo de cascata completo (ciclo 2 até ciclo da parcela).
 
 **Problema:** bloqueia imediatamente ao entrar no ciclo 2, mesmo antes da data do reajuste.
 
@@ -859,12 +863,12 @@ para ciclo = 2..total_ciclos+1:
 | Infraestrutura | 3 | 2 | 1 | — | 6 | ✅ 3/3 P1 |
 | Backend — Regras | — | 8 | 3 | 1 | 12 | ✅ 8/8 P2 |
 | Reajuste | 4 | 4 | 7 | — | 15+4=19 | ✅ 19/19 |
-| Contrato Real (gaps) | — | — | 9 | 6 | 15 | ✅ 9/9 (P3) · 6 pendentes P4 |
+| Contrato Real (gaps) | — | — | 9 | 6 | 15 | ✅ 9/9 implementados · 6 pendentes (G-10..G-16) |
 | CNAB Remessa | — | 8 | — | — | 8 | ✅ 8/8 |
 | HU-360 Tabela Price | 2 | 9 | 2 | — | 13 | ✅ 13/13 |
 | SAC / Tabela Price | 1 | 4 | — | — | 5 | ✅ 5/5 |
 | Bloqueio Boleto (Cascata) | 2 | 3 | — | — | 5 | ✅ 5/5 |
-| Frontend | — | 17 | 15 | 3 | 35 | — |
+| Frontend | — | 17 | 15 | 3 | 35 | ⚠️ ~4/17 P2 · 0/15 P3 |
 | APIs | — | 6 | 5 | — | 11 | — |
 | Celery | — | 2 | 2 | 1 | 5 | — |
 | Permissões | — | 4 | 4 | 2 | 10 | — |
@@ -896,7 +900,7 @@ para ciclo = 2..total_ciclos+1:
 - Filtro por imobiliária na lista de remessas
 - Script de dados de teste: `simular_boletos_gerados()` + limpeza de `ArquivoRemessa/Retorno`
 
-**Seção 13 — HU-360 Contrato Tabela Price + Intermediárias (Fases 1 e 2):**
+**Seção 13 — HU-360 Contrato Tabela Price + Intermediárias (Fases 1 a 4) — lacunas L-01..L-06 todas fechadas:**
 - BUG-01 fix: `Parcela.pode_gerar_boleto()` — cálculo dinâmico de ciclo + verificação de data de reajuste
 - BUG-02 fix: `Contrato.pode_gerar_boleto()` — só bloqueia se `hoje >= data_reajuste_prevista` E sem reajuste aplicado
 - Novos campos: `intermediarias_reduzem_pmt` e `intermediarias_reajustadas` no Contrato (migration 0007)
