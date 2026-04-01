@@ -1164,9 +1164,9 @@ def gerar_boleto_intermediaria(request, pk):
 
     contrato = intermediaria.contrato
 
-    # Verificar bloqueio por reajuste
+    # Verificar bloqueio por reajuste (apenas quando intermediárias são reajustadas)
     force = request.POST.get('force', 'false').lower() == 'true'
-    if not force and hasattr(contrato, 'pode_gerar_boleto'):
+    if not force and contrato.intermediarias_reajustadas and hasattr(contrato, 'pode_gerar_boleto'):
         pode_gerar, motivo = contrato.pode_gerar_boleto(intermediaria.mes_vencimento)
         if not pode_gerar:
             return JsonResponse({
