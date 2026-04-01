@@ -32,6 +32,7 @@
                         <th class="text-end">Desconto</th>
                         <th class="text-end text-success fw-bold">% Aplicado</th>
                         <th class="text-center">Parcelas</th>
+                        <th>Por</th>
                         <th class="text-center">Status</th>
                     </tr>
                 </thead>
@@ -57,25 +58,36 @@
                         </td>
                         <td class="text-end">
                             {% if r.percentual_bruto %}
-                                {{ r.percentual_bruto }}%
+                                {{ r.percentual_bruto|floatformat:2 }}%
                             {% else %}
                                 <span class="text-muted">—</span>
                             {% endif %}
                         </td>
                         <td class="text-end small text-danger">
                             {% if r.desconto_percentual %}
-                                − {{ r.desconto_percentual }} p.p.
+                                − {{ r.desconto_percentual|floatformat:2 }} p.p.
                             {% endif %}
                             {% if r.desconto_valor %}
-                                − R$ {{ r.desconto_valor }}/parc.
+                                − R$ {{ r.desconto_valor|floatformat:2 }}/parc.
                             {% endif %}
-                            {% if not r.desconto_percentual and not r.desconto_valor %}
+                            {% if r.teto_aplicado and r.percentual_bruto and r.percentual < r.percentual_bruto %}
+                                <span class="text-warning" title="Teto de {{ r.teto_aplicado }}% aplicado">teto</span>
+                            {% endif %}
+                            {% if r.piso_aplicado and r.percentual_bruto and r.percentual > r.percentual_bruto %}
+                                <span class="text-info" title="Piso de {{ r.piso_aplicado }}% aplicado">piso</span>
+                            {% endif %}
+                            {% if not r.desconto_percentual and not r.desconto_valor and not r.teto_aplicado and not r.piso_aplicado %}
                                 <span class="text-muted">—</span>
                             {% endif %}
                         </td>
-                        <td class="text-end fw-bold text-success">{{ r.percentual }}%</td>
+                        <td class="text-end fw-bold {% if r.percentual < 0 %}text-danger{% else %}text-success{% endif %}">
+                            {% if r.percentual >= 0 %}+{% endif %}{{ r.percentual|floatformat:2 }}%
+                        </td>
                         <td class="text-center small text-muted">
                             {{ r.parcela_inicial }}–{{ r.parcela_final }}
+                        </td>
+                        <td class="small text-muted">
+                            {% if r.usuario %}{{ r.usuario.get_short_name|default:r.usuario.username }}{% else %}—{% endif %}
                         </td>
                         <td class="text-center">
                             {% if r.aplicado %}
