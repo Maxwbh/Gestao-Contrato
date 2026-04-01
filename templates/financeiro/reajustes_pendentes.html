@@ -25,10 +25,24 @@
     </div>
     {% else %}
 
-    <div class="alert alert-warning mb-4">
-        <i class="fas fa-exclamation-triangle me-2"></i>
-        <strong>{{ total_pendentes }} contrato{{ total_pendentes|pluralize }}</strong>
-        com reajuste pendente.
+    <div class="alert alert-warning mb-3 d-flex justify-content-between align-items-center">
+        <div>
+            <i class="fas fa-exclamation-triangle me-2"></i>
+            <strong>{{ total_pendentes }} contrato{{ total_pendentes|pluralize }}</strong>
+            com reajuste pendente.
+        </div>
+        <div class="d-flex gap-2 align-items-center">
+            <span class="text-muted small" id="lote_selecao_info">Nenhum selecionado</span>
+            <button type="button" class="btn btn-sm btn-outline-primary" id="btnSelecionarTodos" onclick="selecionarTodos(true)">
+                <i class="fas fa-check-double me-1"></i>Selecionar Todos
+            </button>
+            <button type="button" class="btn btn-sm btn-outline-secondary" onclick="selecionarTodos(false)">
+                <i class="fas fa-times me-1"></i>Limpar
+            </button>
+            <button type="button" class="btn btn-sm btn-success d-none" id="btnAplicarLote" onclick="abrirModalLote()">
+                <i class="fas fa-bolt me-1"></i>Aplicar Selecionados
+            </button>
+        </div>
     </div>
 
     {% for grupo in pendentes_agrupados %}
@@ -37,12 +51,22 @@
             <h5 class="mb-0">
                 <i class="fas fa-building me-2"></i>{{ grupo.imobiliaria }}
             </h5>
-            <span class="badge bg-warning text-dark">{{ grupo.contratos|length }} pendente{{ grupo.contratos|length|pluralize }}</span>
+            <div class="d-flex align-items-center gap-2">
+                <span class="badge bg-warning text-dark">{{ grupo.contratos|length }} pendente{{ grupo.contratos|length|pluralize }}</span>
+                <button type="button" class="btn btn-xs btn-outline-secondary btn-sm"
+                        onclick="selecionarGrupo('{{ grupo.imobiliaria|escapejs }}', true)"
+                        title="Selecionar todos desta imobiliária">
+                    <i class="fas fa-check-double"></i>
+                </button>
+            </div>
         </div>
         <div class="table-responsive">
             <table class="table table-hover mb-0">
                 <thead class="table-light">
                     <tr>
+                        <th class="text-center" style="width:40px;">
+                            <input type="checkbox" class="form-check-input" onchange="selecionarGrupo('{{ grupo.imobiliaria|escapejs }}', this.checked)" title="Selecionar grupo">
+                        </th>
                         <th>Contrato</th>
                         <th>Comprador</th>
                         <th class="text-center">Ciclo</th>
@@ -52,9 +76,17 @@
                         <th class="text-center">Ações</th>
                     </tr>
                 </thead>
-                <tbody>
+                <tbody data-grupo="{{ grupo.imobiliaria|escapejs }}">
                     {% for item in grupo.contratos %}
                     <tr>
+                        <td class="text-center">
+                            <input type="checkbox"
+                                   class="form-check-input contrato-check"
+                                   value="{{ item.contrato.pk }}"
+                                   data-grupo="{{ grupo.imobiliaria|escapejs }}"
+                                   data-ciclo="{{ item.ciclo }}"
+                                   onchange="atualizarSelecao()">
+                        </td>
                         <td>
                             <a href="{% url 'contratos:detalhe' item.contrato.pk %}" class="fw-bold">
                                 {{ item.contrato.numero_contrato }}
@@ -72,6 +104,9 @@
                         </td>
                         <td>
                             <span class="badge bg-info text-dark">{{ item.indice_tipo }}</span>
+                            {% if item.contrato.spread_reajuste %}
+                            <br><small class="text-muted">+{{ item.contrato.spread_reajuste|floatformat:2 }} p.p.</small>
+                            {% endif %}
                         </td>
                         <td>
                             <span class="font-monospace small">
@@ -97,7 +132,180 @@
         </div>
     </div>
     {% endfor %}
+
+    <!-- Modal de aplicação em lote -->
+    <div class="modal fade" id="modalLote" tabindex="-1">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header bg-success text-white">
+                    <h5 class="modal-title"><i class="fas fa-bolt me-2"></i>Aplicar Reajuste em Lote</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div id="lote_contratos_preview" class="mb-3">
+                        <p class="text-muted">Contratos selecionados para aplicação:</p>
+                        <ul id="lote_lista_contratos" class="list-unstyled small"></ul>
+                    </div>
+
+                    <hr>
+
+                    <div class="row g-3 mb-3">
+                        <div class="col-md-6">
+                            <label class="form-label">Desconto em p.p. <small class="text-muted">(aplicado a todos)</small></label>
+                            <div class="input-group">
+                                <input type="number" step="0.0001" min="0" class="form-control" id="lote_desconto_pct" placeholder="0.0000">
+                                <span class="input-group-text">p.p.</span>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Desconto em R$ / parcela <small class="text-muted">(opcional)</small></label>
+                            <div class="input-group">
+                                <span class="input-group-text">R$</span>
+                                <input type="number" step="0.01" min="0" class="form-control" id="lote_desconto_val" placeholder="0,00">
+                            </div>
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Observações</label>
+                        <input type="text" class="form-control" id="lote_obs" value="Reajuste em lote" placeholder="Motivo...">
+                    </div>
+
+                    <div class="alert alert-warning py-2">
+                        <i class="fas fa-exclamation-triangle me-1"></i>
+                        <strong>Atenção:</strong> Os percentuais serão calculados individualmente por contrato
+                        (cada um com seu índice e período de referência). O desconto será aplicado a todos igualmente.
+                    </div>
+
+                    <!-- Resultado do lote (após aplicação) -->
+                    <div id="lote_resultado" class="d-none"></div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="button" class="btn btn-success" id="btnConfirmarLote" onclick="confirmarLote()">
+                        <i class="fas fa-bolt me-1"></i>Confirmar Aplicação
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     {% endif %}
 
 </div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+var _selecionados = [];
+
+function atualizarSelecao() {
+    _selecionados = Array.from(document.querySelectorAll('.contrato-check:checked')).map(el => ({
+        id: parseInt(el.value),
+        grupo: el.dataset.grupo,
+        ciclo: el.dataset.ciclo,
+        texto: el.closest('tr').querySelector('td:nth-child(2) a').textContent.trim(),
+    }));
+
+    document.getElementById('lote_selecao_info').textContent =
+        _selecionados.length > 0
+            ? _selecionados.length + ' contrato(s) selecionado(s)'
+            : 'Nenhum selecionado';
+
+    var btn = document.getElementById('btnAplicarLote');
+    if (_selecionados.length > 0) {
+        btn.classList.remove('d-none');
+    } else {
+        btn.classList.add('d-none');
+    }
+}
+
+function selecionarTodos(estado) {
+    document.querySelectorAll('.contrato-check').forEach(el => { el.checked = estado; });
+    atualizarSelecao();
+}
+
+function selecionarGrupo(grupo, estado) {
+    document.querySelectorAll('.contrato-check[data-grupo="' + grupo + '"]').forEach(el => {
+        el.checked = estado;
+    });
+    atualizarSelecao();
+}
+
+function abrirModalLote() {
+    if (_selecionados.length === 0) return;
+
+    var lista = document.getElementById('lote_lista_contratos');
+    lista.innerHTML = _selecionados.map(s =>
+        '<li><i class="fas fa-arrow-right text-success me-1"></i><strong>' + s.texto + '</strong> — Ciclo ' + s.ciclo + '</li>'
+    ).join('');
+
+    document.getElementById('lote_resultado').classList.add('d-none');
+    document.getElementById('btnConfirmarLote').disabled = false;
+    document.getElementById('btnConfirmarLote').innerHTML = '<i class="fas fa-bolt me-1"></i>Confirmar Aplicação';
+
+    new bootstrap.Modal(document.getElementById('modalLote')).show();
+}
+
+function confirmarLote() {
+    if (_selecionados.length === 0) return;
+
+    var btn = document.getElementById('btnConfirmarLote');
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Aplicando...';
+
+    var payload = {
+        contrato_ids: _selecionados.map(s => s.id),
+        observacoes: document.getElementById('lote_obs').value || 'Reajuste em lote',
+    };
+    var descPct = document.getElementById('lote_desconto_pct').value;
+    var descVal = document.getElementById('lote_desconto_val').value;
+    if (descPct) payload.desconto_percentual = parseFloat(descPct);
+    if (descVal) payload.desconto_valor = parseFloat(descVal);
+
+    fetch('/financeiro/reajustes/aplicar-lote/', {
+        method: 'POST',
+        headers: {
+            'X-CSRFToken': '{{ csrf_token }}',
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(payload),
+    })
+    .then(r => r.json())
+    .then(data => {
+        var html = '<div class="mt-3">';
+        html += '<h6>' + data.total_ok + ' aplicados com sucesso, ' + data.total_erro + ' com erro.</h6>';
+        html += '<div style="max-height:200px;overflow-y:auto;">';
+        html += '<table class="table table-sm table-bordered mb-0" style="font-size:0.82rem;">';
+        html += '<thead class="table-light"><tr><th>Contrato</th><th>Status</th><th>Detalhe</th></tr></thead><tbody>';
+        data.resultados.forEach(function(r) {
+            var cls = r.sucesso ? 'text-success' : 'text-danger';
+            var status = r.sucesso ? '✓ OK' : '✗ Erro';
+            var detalhe = r.sucesso
+                ? (r.percentual.toFixed(4) + '% — ' + r.parcelas_reajustadas + ' parcelas')
+                : (r.erro || '');
+            html += '<tr><td>' + (r.numero_contrato || r.contrato_id) + '</td>';
+            html += '<td class="' + cls + '">' + status + '</td>';
+            html += '<td>' + detalhe + '</td></tr>';
+        });
+        html += '</tbody></table></div></div>';
+
+        var resultado = document.getElementById('lote_resultado');
+        resultado.innerHTML = html;
+        resultado.classList.remove('d-none');
+
+        btn.innerHTML = '<i class="fas fa-check me-1"></i>Concluído';
+
+        if (data.total_ok > 0) {
+            setTimeout(() => location.reload(), 2500);
+        }
+    })
+    .catch(err => {
+        document.getElementById('lote_resultado').innerHTML =
+            '<div class="alert alert-danger mt-2">Erro de conexão: ' + err + '</div>';
+        document.getElementById('lote_resultado').classList.remove('d-none');
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fas fa-bolt me-1"></i>Tentar Novamente';
+    });
+}
+</script>
 {% endblock %}
