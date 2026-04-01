@@ -1050,19 +1050,25 @@ def listar_arquivos_remessa(request):
     # Filtros
     conta_id = request.GET.get('conta')
     status = request.GET.get('status')
+    imobiliaria_id = request.GET.get('imobiliaria')
 
     if conta_id:
         arquivos = arquivos.filter(conta_bancaria_id=conta_id)
     if status:
         arquivos = arquivos.filter(status=status)
+    if imobiliaria_id:
+        arquivos = arquivos.filter(conta_bancaria__imobiliaria_id=imobiliaria_id)
 
     contas = ContaBancaria.objects.filter(ativo=True).select_related('imobiliaria')
+    imobiliarias = Imobiliaria.objects.filter(ativo=True).order_by('nome')
 
     context = {
         'arquivos': arquivos[:100],
         'contas_bancarias': contas,
+        'imobiliarias': imobiliarias,
         'filtro_conta': conta_id,
         'filtro_status': status,
+        'filtro_imobiliaria': imobiliaria_id,
     }
     return render(request, 'financeiro/cnab/listar_remessas.html', context)
 
@@ -1093,73 +1099,107 @@ def detalhe_arquivo_remessa(request, pk):
 def gerar_arquivo_remessa(request):
     """
     View para gerar novo arquivo de remessa.
-    GET: Exibe formulario com boletos disponiveis
-    POST: Gera o arquivo com os boletos selecionados
+
+    GET: Exibe boletos disponíveis com filtros por escopo
+         Escopos: tudo | imobiliaria | contrato | conta
+    POST: Gera 1 arquivo de remessa por conta bancária a partir
+          das parcelas selecionadas (auto-split por conta).
     """
     from .models import ArquivoRemessa, Parcela, StatusBoleto
     from .services.cnab_service import CNABService
 
+    service = CNABService()
+    imobiliarias = Imobiliaria.objects.filter(ativo=True).order_by('nome')
     contas = ContaBancaria.objects.filter(ativo=True).select_related('imobiliaria')
+    contratos = Contrato.objects.filter(
+        status='ATIVO'
+    ).select_related('comprador', 'imobiliaria').order_by('numero_contrato')
 
     if request.method == 'POST':
-        conta_id = request.POST.get('conta_bancaria')
         layout = request.POST.get('layout', 'CNAB_240')
-        parcela_ids = request.POST.getlist('parcelas')
-
-        if not conta_id:
-            messages.error(request, 'Selecione uma conta bancaria.')
-            return redirect('financeiro:gerar_remessa')
+        parcela_ids = [int(x) for x in request.POST.getlist('parcelas') if x.isdigit()]
 
         if not parcela_ids:
             messages.error(request, 'Selecione pelo menos uma parcela.')
             return redirect('financeiro:gerar_remessa')
 
-        conta = get_object_or_404(ContaBancaria, pk=conta_id, ativo=True)
-        parcelas = Parcela.objects.filter(
-            pk__in=parcela_ids,
-            status_boleto=StatusBoleto.GERADO,
-            pago=False
-        )
-
-        if not parcelas.exists():
-            messages.error(request, 'Nenhuma parcela valida selecionada.')
-            return redirect('financeiro:gerar_remessa')
-
         try:
-            service = CNABService()
-            resultado = service.gerar_remessa(list(parcelas), conta, layout)
+            resultado = service.gerar_remessas_por_escopo(parcela_ids, layout)
 
-            if resultado.get('sucesso'):
-                arquivo = resultado.get('arquivo_remessa')
+            remessas = resultado['remessas_geradas']
+            erros = resultado['erros']
+
+            for r in remessas:
+                arq = r['arquivo_remessa']
+                aviso = f" ({r['aviso']})" if r.get('aviso') else ''
                 messages.success(
                     request,
-                    f"Remessa {arquivo.numero_remessa} gerada com sucesso! "
-                    f"{resultado.get('quantidade_boletos')} boletos, "
-                    f"R$ {resultado.get('valor_total'):,.2f}"
+                    f"Remessa #{arq.numero_remessa} — {arq.conta_bancaria}: "
+                    f"{r['quantidade_boletos']} boleto(s), "
+                    f"R$ {r['valor_total']:,.2f}{aviso}"
                 )
-                return redirect('financeiro:detalhe_remessa', pk=arquivo.pk)
-            else:
-                messages.error(request, f"Erro ao gerar remessa: {resultado.get('erro')}")
+
+            for erro in erros:
+                messages.warning(request, erro)
+
+            if not remessas:
+                messages.error(request, 'Nenhuma remessa foi gerada.')
+                return redirect('financeiro:gerar_remessa')
+
+            # Se gerou apenas 1, vai direto para o detalhe
+            if len(remessas) == 1:
+                return redirect('financeiro:detalhe_remessa', pk=remessas[0]['arquivo_remessa'].pk)
+
+            return redirect('financeiro:listar_remessas')
 
         except Exception as e:
-            logger.exception(f"Erro ao gerar remessa: {e}")
+            logger.exception(f"Erro ao gerar remessa(s): {e}")
             messages.error(request, f"Erro ao gerar remessa: {str(e)}")
+            return redirect('financeiro:gerar_remessa')
 
-        return redirect('financeiro:gerar_remessa')
+    # GET — filtros de escopo
+    escopo = request.GET.get('escopo', 'tudo')
+    imobiliaria_id = request.GET.get('imobiliaria') or None
+    contrato_id = request.GET.get('contrato') or None
+    conta_id = request.GET.get('conta') or None
 
-    # GET - Exibir boletos disponiveis
-    conta_id = request.GET.get('conta')
-    boletos_disponiveis = []
-
+    conta_obj = None
     if conta_id:
-        conta = get_object_or_404(ContaBancaria, pk=conta_id, ativo=True)
-        service = CNABService()
-        boletos_disponiveis = service.obter_boletos_sem_remessa(conta)
+        conta_obj = ContaBancaria.objects.filter(pk=conta_id, ativo=True).first()
+
+    # Parcelas disponíveis (sem remessa)
+    boletos_disponiveis = service.obter_boletos_sem_remessa(
+        conta_bancaria=conta_obj,
+        imobiliaria_id=imobiliaria_id,
+        contrato_id=contrato_id,
+    )
+
+    # Parcelas em remessa pendente (já em GERADO, não enviada) — para aviso
+    boletos_pendentes = service.obter_boletos_em_remessa_pendente(
+        conta_bancaria=conta_obj,
+        imobiliaria_id=imobiliaria_id,
+        contrato_id=contrato_id,
+    )
+
+    # Agrupar disponíveis por conta_bancaria para exibição
+    from collections import defaultdict
+    grupos_conta = defaultdict(list)
+    for p in boletos_disponiveis:
+        grupos_conta[p.conta_bancaria].append(p)
 
     context = {
         'contas_bancarias': contas,
+        'imobiliarias': imobiliarias,
+        'contratos': contratos,
+        'escopo': escopo,
         'filtro_conta': conta_id,
+        'filtro_imobiliaria': imobiliaria_id,
+        'filtro_contrato': contrato_id,
+        'grupos_conta': dict(grupos_conta),  # {ContaBancaria: [Parcela, ...]}
         'boletos_disponiveis': boletos_disponiveis,
+        'boletos_pendentes': boletos_pendentes,
+        'total_disponivel': len(boletos_disponiveis),
+        'today': timezone.now().date(),
     }
     return render(request, 'financeiro/cnab/gerar_remessa.html', context)
 
@@ -4195,20 +4235,39 @@ def api_cnab_remessa_gerar(request):
 
 @login_required
 def api_cnab_boletos_disponiveis(request):
-    """API para listar boletos disponíveis para remessa. GET /api/cnab/boletos-disponiveis/?conta_bancaria_id=1"""
+    """
+    API para listar boletos disponíveis para remessa.
+    GET /api/cnab/boletos-disponiveis/
+    Params: conta_bancaria_id, imobiliaria_id, contrato_id (todos opcionais)
+    """
     from .services.cnab_service import CNABService
 
     conta_id = request.GET.get('conta_bancaria_id')
-    if not conta_id:
-        return JsonResponse({'sucesso': False, 'erro': 'Informe conta bancária.'}, status=400)
+    imobiliaria_id = request.GET.get('imobiliaria_id') or None
+    contrato_id = request.GET.get('contrato_id') or None
 
-    conta = get_object_or_404(ContaBancaria, pk=conta_id, ativo=True)
+    conta = None
+    if conta_id:
+        conta = get_object_or_404(ContaBancaria, pk=conta_id, ativo=True)
+
     service = CNABService()
-    boletos = service.obter_boletos_sem_remessa(conta)
+    boletos = service.obter_boletos_sem_remessa(
+        conta_bancaria=conta,
+        imobiliaria_id=imobiliaria_id,
+        contrato_id=contrato_id,
+    )
 
-    data = [{'parcela_id': p.id, 'numero_contrato': p.contrato.numero_contrato, 'numero_parcela': p.numero_parcela,
-             'nosso_numero': p.nosso_numero, 'valor': float(p.valor_boleto or p.valor_atual),
-             'data_vencimento': p.data_vencimento.strftime('%Y-%m-%d'), 'comprador': p.contrato.comprador.nome} for p in boletos]
+    data = [{
+        'parcela_id': p.id,
+        'numero_contrato': p.contrato.numero_contrato,
+        'numero_parcela': p.numero_parcela,
+        'nosso_numero': p.nosso_numero,
+        'valor': float(p.valor_boleto or p.valor_atual),
+        'data_vencimento': p.data_vencimento.strftime('%Y-%m-%d'),
+        'comprador': p.contrato.comprador.nome,
+        'conta_bancaria_id': p.conta_bancaria_id,
+        'conta_bancaria': str(p.conta_bancaria) if p.conta_bancaria else None,
+    } for p in boletos]
 
     return JsonResponse({'sucesso': True, 'boletos': data, 'total': len(data)})
 
