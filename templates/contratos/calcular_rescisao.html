@@ -1,0 +1,138 @@
+{% extends 'base.html' %}
+
+{% block title %}Cálculo de Rescisão — Contrato {{ contrato.numero_contrato }}{% endblock %}
+
+{% block content %}
+<div class="row">
+  <div class="col-12 col-lg-9 mx-auto">
+
+    <!-- Cabeçalho -->
+    <div class="d-flex justify-content-between align-items-center mb-3">
+      <h4 class="mb-0">
+        <i class="fas fa-file-contract me-2 text-danger"></i>
+        Cálculo de Rescisão
+      </h4>
+      <a href="{% url 'contratos:detalhe' contrato.pk %}" class="btn btn-outline-secondary btn-sm">
+        <i class="fas fa-arrow-left me-1"></i> Voltar ao Contrato
+      </a>
+    </div>
+
+    <!-- Info do contrato -->
+    <div class="card mb-3">
+      <div class="card-body py-2">
+        <div class="row g-2 small text-muted">
+          <div class="col-auto"><strong>Contrato:</strong> {{ contrato.numero_contrato }}</div>
+          <div class="col-auto"><strong>Comprador:</strong> {{ contrato.comprador.nome }}</div>
+          <div class="col-auto"><strong>Imóvel:</strong> {{ contrato.imovel }}</div>
+          <div class="col-auto"><strong>Status:</strong> {{ contrato.get_status_display }}</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Formulário -->
+    <div class="card mb-3">
+      <div class="card-header py-2">
+        <i class="fas fa-calendar-alt me-2"></i><strong>Data de Referência</strong>
+      </div>
+      <div class="card-body">
+        <form method="post" class="row g-3 align-items-end">
+          {% csrf_token %}
+          <div class="col-md-4">
+            <label class="form-label">Data da Rescisão</label>
+            <input type="date" name="data_rescisao" class="form-control"
+                   value="{{ data_rescisao|date:'Y-m-d' }}" required>
+          </div>
+          <div class="col-auto">
+            <button type="submit" class="btn btn-danger">
+              <i class="fas fa-calculator me-1"></i> Calcular
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- Resultado -->
+    {% if resultado %}
+    <div class="card border-danger">
+      <div class="card-header bg-danger text-white py-2">
+        <i class="fas fa-chart-bar me-2"></i><strong>Resultado do Cálculo</strong>
+        <small class="ms-2">Referência: {{ resultado.data_rescisao|date:"d/m/Y" }}</small>
+      </div>
+      <div class="card-body">
+
+        <!-- Valores pagos -->
+        <h6 class="text-success">Valores Pagos pelo Comprador</h6>
+        <table class="table table-sm mb-3">
+          <tr>
+            <td>Entrada paga</td>
+            <td class="text-end fw-bold">R$ {{ resultado.valor_entrada|floatformat:2 }}</td>
+          </tr>
+          <tr>
+            <td>Parcelas pagas</td>
+            <td class="text-end fw-bold">R$ {{ resultado.valor_pago_parcelas|floatformat:2 }}</td>
+          </tr>
+          <tr class="table-success">
+            <td><strong>Total pago</strong></td>
+            <td class="text-end fw-bold">R$ {{ resultado.valor_pago_total|floatformat:2 }}</td>
+          </tr>
+        </table>
+
+        <!-- Retenções -->
+        <h6 class="text-danger">Retenções (sobre saldo devedor de R$ {{ resultado.saldo_devedor|floatformat:2 }})</h6>
+        <table class="table table-sm mb-3">
+          <tr>
+            <td>
+              Fruição ({{ resultado.percentual_fruicao }}%/mês × {{ resultado.meses_ocupados }} meses)
+              <small class="text-muted d-block">Uso do imóvel pelo comprador</small>
+            </td>
+            <td class="text-end text-danger fw-bold">− R$ {{ resultado.fruicao|floatformat:2 }}</td>
+          </tr>
+          <tr>
+            <td>
+              Multa Penal ({{ resultado.percentual_multa_penal }}%)
+              <small class="text-muted d-block">Cláusula penal contratual</small>
+            </td>
+            <td class="text-end text-danger fw-bold">− R$ {{ resultado.multa_penal|floatformat:2 }}</td>
+          </tr>
+          <tr>
+            <td>
+              Despesas Administrativas ({{ resultado.percentual_desp_adm }}%)
+              <small class="text-muted d-block">Custos administrativos de rescisão</small>
+            </td>
+            <td class="text-end text-danger fw-bold">− R$ {{ resultado.desp_adm|floatformat:2 }}</td>
+          </tr>
+          <tr class="table-danger">
+            <td><strong>Total de Retenções</strong></td>
+            <td class="text-end fw-bold">R$ {{ resultado.total_retencoes|floatformat:2 }}</td>
+          </tr>
+        </table>
+
+        <!-- Devolução -->
+        <div class="alert {% if resultado.devolucao > 0 %}alert-success{% else %}alert-warning{% endif %} d-flex justify-content-between align-items-center">
+          <div>
+            <i class="fas {% if resultado.devolucao > 0 %}fa-check-circle{% else %}fa-exclamation-circle{% endif %} me-2"></i>
+            <strong>Valor a Devolver ao Comprador</strong>
+            <small class="d-block text-muted">Total Pago − Total Retenções</small>
+          </div>
+          <span class="fs-4 fw-bold">R$ {{ resultado.devolucao|floatformat:2 }}</span>
+        </div>
+
+        {% if resultado.devolucao == 0 %}
+        <div class="alert alert-warning small">
+          <i class="fas fa-info-circle me-1"></i>
+          As retenções superam ou igualam o valor pago. Não há valor a devolver.
+        </div>
+        {% endif %}
+
+        <p class="text-muted small mt-2 mb-0">
+          <i class="fas fa-info-circle me-1"></i>
+          Cálculo baseado nas cláusulas contratuais. Percentuais configuráveis em
+          <a href="{% url 'contratos:editar' contrato.pk %}">Editar Contrato</a>.
+        </p>
+      </div>
+    </div>
+    {% endif %}
+
+  </div>
+</div>
+{% endblock %}
