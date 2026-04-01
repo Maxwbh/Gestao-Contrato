@@ -110,13 +110,23 @@ class CNABService:
             return str(float(valor))
         return '0.0'
 
+    def _parsear_numero_dv(self, valor: str) -> tuple:
+        """Separa número e dígito verificador. Aceita '1234-5' ou '1234 5' ou '1234'."""
+        if not valor:
+            return '', ''
+        for sep in ['-', ' ']:
+            if sep in valor:
+                partes = valor.split(sep, 1)
+                return partes[0].strip(), partes[1].strip()
+        return valor.strip(), ''
+
     def _montar_dados_boleto(self, parcela, conta_bancaria) -> dict:
         """
         Monta os dados de um boleto para o BRCobranca.
         """
         contrato = parcela.contrato
         comprador = contrato.comprador
-        imobiliaria = contrato.imovel.imobiliaria
+        imobiliaria = contrato.imobiliaria
 
         # Determinar tipo de documento do comprador
         cpf_cnpj = self._formatar_cpf_cnpj(
@@ -129,6 +139,9 @@ class CNABService:
             endereco_sacado += f", {comprador.numero}"
         if comprador.complemento:
             endereco_sacado += f" - {comprador.complemento}"
+
+        agencia_num, agencia_dv = self._parsear_numero_dv(conta_bancaria.agencia)
+        conta_num, conta_dv = self._parsear_numero_dv(conta_bancaria.conta)
 
         boleto_data = {
             # Identificacao
@@ -154,9 +167,10 @@ class CNABService:
             'documento_cedente': self._formatar_cpf_cnpj(imobiliaria.cnpj),
 
             # Dados bancarios
-            'agencia': conta_bancaria.agencia.replace('-', '').split('-')[0] if conta_bancaria.agencia else '',
-            'conta_corrente': conta_bancaria.conta.replace('-', '').split('-')[0] if conta_bancaria.conta else '',
-            'digito_conta_corrente': conta_bancaria.conta.split('-')[1] if '-' in (conta_bancaria.conta or '') else '',
+            'agencia': agencia_num,
+            'agencia_dv': agencia_dv,
+            'conta_corrente': conta_num,
+            'digito_conta': conta_dv,
             'convenio': conta_bancaria.convenio or '',
             'carteira': conta_bancaria.carteira or '',
             'variacao': '',
@@ -215,12 +229,15 @@ class CNABService:
         imobiliaria = conta_bancaria.imobiliaria
 
         # Estrutura de dados do cedente/empresa
+        agencia_num, agencia_dv = self._parsear_numero_dv(conta_bancaria.agencia)
+        conta_num, conta_dv = self._parsear_numero_dv(conta_bancaria.conta)
         dados_empresa = {
             'empresa_mae': imobiliaria.razao_social or imobiliaria.nome,
             'documento_cedente': self._formatar_cpf_cnpj(imobiliaria.cnpj),
-            'agencia': conta_bancaria.agencia.replace('-', '').split('-')[0] if conta_bancaria.agencia else '',
-            'conta_corrente': conta_bancaria.conta.replace('-', '').split('-')[0] if conta_bancaria.conta else '',
-            'digito_conta': conta_bancaria.conta.split('-')[1] if '-' in (conta_bancaria.conta or '') else '',
+            'agencia': agencia_num,
+            'agencia_dv': agencia_dv,
+            'conta_corrente': conta_num,
+            'digito_conta': conta_dv,
             'convenio': conta_bancaria.convenio or '',
             'carteira': conta_bancaria.carteira or '',
             'sequencial_remessa': numero_remessa,
@@ -358,9 +375,8 @@ class CNABService:
         header += 'REMESSA'.ljust(7)
         header += '01'  # Tipo servico (cobranca)
         header += 'COBRANCA'.ljust(15)
-        agencia_num = conta_bancaria.agencia.replace('-', '').split('-')[0] if conta_bancaria.agencia else ''
-        conta_num = conta_bancaria.conta.replace('-', '').split('-')[0] if conta_bancaria.conta else ''
-        conta_dv = conta_bancaria.conta.split('-')[1] if '-' in (conta_bancaria.conta or '') else ''
+        agencia_num, agencia_dv = self._parsear_numero_dv(conta_bancaria.agencia)
+        conta_num, conta_dv = self._parsear_numero_dv(conta_bancaria.conta)
         header += agencia_num.zfill(4)
         header += '00'  # Digito agencia
         header += conta_num.zfill(8)
