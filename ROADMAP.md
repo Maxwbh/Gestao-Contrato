@@ -2,7 +2,7 @@
 
 **Desenvolvedor:** Maxwell da Silva Oliveira (maxwbh@gmail.com)
 **Empresa:** M&S do Brasil LTDA
-**Última atualização:** 2026-04-01 (rev 5)
+**Última atualização:** 2026-04-01 (rev 6)
 
 > Pendentes organizados por prioridade.
 > Para documentação do sistema atual, consulte **[SISTEMA.md](SISTEMA.md)**.
@@ -109,15 +109,15 @@
 
 ## 4. APIs — ENDPOINTS PENDENTES
 
-### P2 — Alto
-| Endpoint | Descrição |
-|----------|-----------|
-| `GET /api/contabilidade/vencimentos/` | Tabela com filtros (período, imobiliária, status) |
-| `POST /api/contabilidade/boletos/gerar/massa/` | Geração em massa |
-| `GET /api/imobiliaria/<id>/vencimentos/` | Filtros por período e comprador |
-| `GET /api/imobiliaria/<id>/fluxo-caixa/` | Previsão mensal vs realizado |
-| `GET /portal/api/vencimentos/` | Filtros por período e status |
-| `GET /portal/api/boletos/` | Lista com filtros |
+### P2 — Alto ✅ CONCLUÍDO (Fase 9)
+| Endpoint | Descrição | Status |
+|----------|-----------|--------|
+| `GET /financeiro/api/contabilidade/vencimentos/` | Tabela com filtros (período, imobiliária, status) | ✅ `api_contabilidade_vencimentos` |
+| `POST /financeiro/api/contabilidade/boletos/gerar/massa/` | Geração em massa | ✅ alias de `api_gerar_boletos_lote` |
+| `GET /financeiro/api/imobiliaria/<id>/vencimentos/` | Filtros por período e comprador | ✅ `api_imobiliaria_vencimentos` |
+| `GET /financeiro/api/imobiliaria/<id>/fluxo-caixa/` | Previsão mensal vs realizado | ✅ `api_imobiliaria_fluxo_caixa` |
+| `GET /portal/api/vencimentos/` | Filtros por período e status | ✅ `api_portal_vencimentos` |
+| `GET /portal/api/boletos/` | Lista com filtros | ✅ `api_portal_boletos` |
 
 ### P3 — Médio
 | Endpoint | Descrição |
@@ -505,8 +505,8 @@
 | **5** | ⭐ **Reajuste — Índice composto + Lote + Celery** | 10 (Fase 5) | ✅ |
 | **6** | ⭐ **Adequação ao contrato real — estrutura de dados** | 11 | ✅ |
 | **7** | ⭐ **CNAB Remessa — por escopo, BRCobrança, anti-duplicata** | 12 | ✅ |
-| **8** | Frontend P2 (telas principais) | 3 (P2) | — |
-| **9** | APIs P2 | 4 (P2) | — |
+| **8** | Frontend P2 (telas principais) | 3 (P2) | ✅ |
+| **9** | APIs P2 | 4 (P2) | ✅ |
 | **10** | Testes P2 (views e APIs) | 7.2 | — |
 | **11** | Permissões e segurança | 6 | — |
 | **12** | Cálculos contratuais avançados (rescisão, cessão, mora pro rata) | 11 (G-10, G-11, G-15) | — |
