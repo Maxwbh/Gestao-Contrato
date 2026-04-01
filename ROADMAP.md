@@ -513,7 +513,10 @@
 | **11** | Permissões e segurança | 6 | — |
 | **12** | Cálculos contratuais avançados (rescisão, cessão, mora pro rata) | 11 (G-10, G-11, G-15) | — |
 | **13** | ⭐ **Contrato Tabela Price + Intermediárias (HU-360)** | 13 | ✅ |
-| **14** | Testes P3/P4 + CI/CD | 7.3, 7.4, 8 | — |
+| **14** | ⭐ **Sistema de Amortização: Tabela Price e SAC** | 10 | ✅ |
+| **15** | Testes P3/P4 + CI/CD | 7.3, 7.4, 8 | — |
+| **16** | Frontend P3/P4 | 3 (P3, P4) | — |
+| **17** | Documentação | 9 | — |
 | **15** | Frontend P3/P4 | 3 (P3, P4) | — |
 | **16** | Documentação | 9 | — |
 
@@ -826,3 +829,18 @@ FLUXO MENSAL
 - Alert no detalhe do contrato: intermediárias vencidas sem boleto; seção resumo com tabela e botão gerar boleto
 - Template `intermediaria_list.html` — lista completa com estatísticas, paginação, ação gerar boleto via AJAX
 - URL `/contratos/wizard/api/preview-parcelas/` para o endpoint de preview
+
+**Seção 14 — Sistema de Amortização Tabela Price e SAC:**
+- `TipoAmortizacao` (TextChoices: PRICE | SAC) adicionado a `contratos/models.py`
+- Campo `tipo_amortizacao` no `Contrato` com default=PRICE (migration 0008)
+- Campos `amortizacao` + `juros_embutido` (DecimalField null) na `Parcela` (migration financeiro 0005)
+- `Parcela._calcular_price_tabela(pv, taxa, n)` — retorna lista (pmt, amort, juros) para Tabela Price
+- `Parcela._calcular_sac_tabela(pv, taxa, n)` — retorna lista (pmt, amort, juros) para SAC
+- `Contrato.recalcular_amortizacao(base_pv)` — recalcula todas as parcelas NORMAL com o sistema correto; chamado pelo wizard após criar TabelaJuros
+- `Contrato.calcular_saldo_devedor()` — SAC usa soma de `amortizacao` (principal real); Price usa soma de `valor_atual`
+- `Parcela.preview_reajuste()` — modo SAC: saldo corrigido → nova amort constante → tabela decrescente
+- `Reajuste.aplicar_reajuste()` — modo SAC: recalcula e persiste amortizacao + juros_embutido por parcela
+- Wizard step1: campo `tipo_amortizacao` com painel explicativo JS (Price vs SAC)
+- Wizard step4: exibe sistema, taxa ciclo 1, PMT inicial e último (SAC); preview de parcelas mostra breakdown amort/juros para SAC
+- `api_preview_parcelas`: suporte a `tipo_amortizacao=SAC`; retorna `amortizacao` e `juros_embutido` por parcela
+- Admin: `tipo_amortizacao` no fieldset "Configurações de Parcelas"
