@@ -1,0 +1,323 @@
+{% extends 'base.html' %}
+
+{% block title %}Wizard — Etapa 1: Dados Básicos{% endblock %}
+
+{% block content %}
+<div class="row">
+  <div class="col-12 col-lg-10 mx-auto">
+
+    <!-- Progress bar -->
+    <div class="card mb-3">
+      <div class="card-body py-2">
+        <div class="d-flex justify-content-between align-items-center mb-1">
+          <small class="text-muted">Etapa {{ step_num }} de 4</small>
+          <small class="text-muted">Dados Básicos</small>
+        </div>
+        <div class="progress" style="height: 8px;">
+          <div class="progress-bar bg-primary" style="width: 25%;"></div>
+        </div>
+        <div class="d-flex justify-content-between mt-2">
+          <span class="badge bg-primary">1. Dados Básicos</span>
+          <span class="badge bg-secondary">2. Juros</span>
+          <span class="badge bg-secondary">3. Intermediárias</span>
+          <span class="badge bg-secondary">4. Confirmar</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <h5 class="mb-0">
+          <i class="fas fa-file-contract me-2"></i>Novo Contrato — Etapa 1: Dados Básicos
+        </h5>
+      </div>
+      <div class="card-body">
+
+        {% if messages %}
+          {% for msg in messages %}
+            <div class="alert alert-{{ msg.tags }} alert-dismissible fade show" role="alert">
+              {{ msg }}
+              <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+            </div>
+          {% endfor %}
+        {% endif %}
+
+        <form method="post" action="{% url 'contratos:wizard' step='basico' %}">
+          {% csrf_token %}
+
+          {% if form.non_field_errors %}
+            <div class="alert alert-danger">
+              {% for e in form.non_field_errors %}{{ e }}{% endfor %}
+            </div>
+          {% endif %}
+
+          <!-- Partes -->
+          <div class="card mb-3 border-primary">
+            <div class="card-header bg-primary bg-opacity-10">
+              <i class="fas fa-users me-2"></i><strong>Partes do Contrato</strong>
+            </div>
+            <div class="card-body">
+              <div class="row">
+                <div class="col-md-4 mb-2">
+                  <label class="form-label">{{ form.imobiliaria.label }} *</label>
+                  {{ form.imobiliaria }}
+                  {% if form.imobiliaria.errors %}<div class="text-danger small">{{ form.imobiliaria.errors }}</div>{% endif %}
+                </div>
+                <div class="col-md-4 mb-2">
+                  <label class="form-label">{{ form.comprador.label }} *</label>
+                  {{ form.comprador }}
+                  {% if form.comprador.errors %}<div class="text-danger small">{{ form.comprador.errors }}</div>{% endif %}
+                </div>
+                <div class="col-md-4 mb-2">
+                  <label class="form-label">{{ form.imovel.label }} *</label>
+                  {{ form.imovel }}
+                  {% if form.imovel.errors %}<div class="text-danger small">{{ form.imovel.errors }}</div>{% endif %}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Dados do contrato -->
+          <div class="card mb-3 border-primary">
+            <div class="card-header bg-primary bg-opacity-10">
+              <i class="fas fa-file-alt me-2"></i><strong>Dados do Contrato</strong>
+            </div>
+            <div class="card-body">
+              <div class="row">
+                <div class="col-md-4 mb-2">
+                  <label class="form-label">{{ form.numero_contrato.label }} *</label>
+                  {{ form.numero_contrato }}
+                  {% if form.numero_contrato.errors %}<div class="text-danger small">{{ form.numero_contrato.errors }}</div>{% endif %}
+                </div>
+                <div class="col-md-4 mb-2">
+                  <label class="form-label">{{ form.data_contrato.label }} *</label>
+                  {{ form.data_contrato }}
+                  {% if form.data_contrato.errors %}<div class="text-danger small">{{ form.data_contrato.errors }}</div>{% endif %}
+                </div>
+                <div class="col-md-4 mb-2">
+                  <label class="form-label">{{ form.data_primeiro_vencimento.label }} *</label>
+                  {{ form.data_primeiro_vencimento }}
+                  {% if form.data_primeiro_vencimento.errors %}<div class="text-danger small">{{ form.data_primeiro_vencimento.errors }}</div>{% endif %}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Valores -->
+          <div class="card mb-3 border-primary">
+            <div class="card-header bg-primary bg-opacity-10">
+              <i class="fas fa-dollar-sign me-2"></i><strong>Valores</strong>
+            </div>
+            <div class="card-body">
+              <div class="row">
+                <div class="col-md-4 mb-2">
+                  <label class="form-label">{{ form.valor_total.label }} *</label>
+                  {{ form.valor_total }}
+                  {% if form.valor_total.errors %}<div class="text-danger small">{{ form.valor_total.errors }}</div>{% endif %}
+                </div>
+                <div class="col-md-4 mb-2">
+                  <label class="form-label">{{ form.valor_entrada.label }}</label>
+                  {{ form.valor_entrada }}
+                  {% if form.valor_entrada.errors %}<div class="text-danger small">{{ form.valor_entrada.errors }}</div>{% endif %}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Parcelas -->
+          <div class="card mb-3 border-primary">
+            <div class="card-header bg-primary bg-opacity-10">
+              <i class="fas fa-calendar-alt me-2"></i><strong>Configuração de Parcelas</strong>
+            </div>
+            <div class="card-body">
+              <div class="row">
+                <div class="col-md-3 mb-2">
+                  <label class="form-label">{{ form.numero_parcelas.label }} *</label>
+                  {{ form.numero_parcelas }}
+                  {% if form.numero_parcelas.errors %}<div class="text-danger small">{{ form.numero_parcelas.errors }}</div>{% endif %}
+                </div>
+                <div class="col-md-3 mb-2">
+                  <label class="form-label">{{ form.dia_vencimento.label }} *</label>
+                  {{ form.dia_vencimento }}
+                  {% if form.dia_vencimento.errors %}<div class="text-danger small">{{ form.dia_vencimento.errors }}</div>{% endif %}
+                </div>
+                <div class="col-md-6 mb-2">
+                  <label class="form-label fw-semibold">{{ form.tipo_amortizacao.label }} *</label>
+                  {{ form.tipo_amortizacao }}
+                  {% if form.tipo_amortizacao.errors %}<div class="text-danger small">{{ form.tipo_amortizacao.errors }}</div>{% endif %}
+                  <div id="amort_help" class="small text-muted mt-1"></div>
+                </div>
+              </div>
+              <!-- Painel explicativo do sistema de amortização -->
+              <div id="amort_price_info" class="alert alert-info py-2 mt-1 d-none" role="alert">
+                <strong>Tabela Price:</strong> PMT (prestação) constante a cada ciclo de reajuste.
+                Juros decrescentes e amortização crescente a cada período.
+                Carga de juros maior no início.
+              </div>
+              <div id="amort_sac_info" class="alert alert-warning py-2 mt-1 d-none" role="alert">
+                <strong>SAC:</strong> Amortização constante = saldo / n restantes.
+                Juros decrescentes, portanto a <em>prestação diminui a cada mês</em>.
+                Saldo devedor real decresce mais rapidamente do que na Price.
+              </div>
+            </div>
+          </div>
+
+          <!-- Juros e Multa -->
+          <div class="card mb-3">
+            <div class="card-header">
+              <i class="fas fa-percentage me-2"></i><strong>Juros e Multa por Atraso</strong>
+            </div>
+            <div class="card-body">
+              <div class="row">
+                <div class="col-md-3 mb-2">
+                  <label class="form-label">{{ form.percentual_juros_mora.label }}</label>
+                  {{ form.percentual_juros_mora }}
+                </div>
+                <div class="col-md-3 mb-2">
+                  <label class="form-label">{{ form.percentual_multa.label }}</label>
+                  {{ form.percentual_multa }}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Correção Monetária -->
+          <div class="card mb-3">
+            <div class="card-header">
+              <i class="fas fa-chart-line me-2"></i><strong>Correção Monetária</strong>
+            </div>
+            <div class="card-body">
+              <div class="row">
+                <div class="col-md-3 mb-2">
+                  <label class="form-label">{{ form.tipo_correcao.label }}</label>
+                  {{ form.tipo_correcao }}
+                </div>
+                <div class="col-md-3 mb-2">
+                  <label class="form-label">{{ form.prazo_reajuste_meses.label }}</label>
+                  {{ form.prazo_reajuste_meses }}
+                </div>
+                <div class="col-md-3 mb-2">
+                  <label class="form-label">{{ form.tipo_correcao_fallback.label }}</label>
+                  {{ form.tipo_correcao_fallback }}
+                </div>
+                <div class="col-md-3 mb-2">
+                  <label class="form-label">{{ form.spread_reajuste.label }}</label>
+                  {{ form.spread_reajuste }}
+                </div>
+                <div class="col-md-3 mb-2">
+                  <label class="form-label">{{ form.reajuste_piso.label }}</label>
+                  {{ form.reajuste_piso }}
+                </div>
+                <div class="col-md-3 mb-2">
+                  <label class="form-label">{{ form.reajuste_teto.label }}</label>
+                  {{ form.reajuste_teto }}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Intermediárias config -->
+          <div class="card mb-3">
+            <div class="card-header">
+              <i class="fas fa-layer-group me-2"></i><strong>Configuração de Intermediárias</strong>
+            </div>
+            <div class="card-body">
+              <div class="row">
+                <div class="col-md-6 mb-2">
+                  <div class="form-check form-switch">
+                    {{ form.intermediarias_reduzem_pmt }}
+                    <label class="form-check-label ms-2" for="{{ form.intermediarias_reduzem_pmt.id_for_label }}">
+                      {{ form.intermediarias_reduzem_pmt.label }}
+                    </label>
+                  </div>
+                </div>
+                <div class="col-md-6 mb-2">
+                  <div class="form-check form-switch">
+                    {{ form.intermediarias_reajustadas }}
+                    <label class="form-check-label ms-2" for="{{ form.intermediarias_reajustadas.id_for_label }}">
+                      {{ form.intermediarias_reajustadas.label }}
+                    </label>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Rescisão e Cessão -->
+          <div class="card mb-3">
+            <div class="card-header">
+              <i class="fas fa-handshake me-2"></i><strong>Rescisão e Cessão</strong>
+            </div>
+            <div class="card-body">
+              <div class="row">
+                <div class="col-md-3 mb-2">
+                  <label class="form-label">{{ form.percentual_fruicao.label }}</label>
+                  {{ form.percentual_fruicao }}
+                </div>
+                <div class="col-md-3 mb-2">
+                  <label class="form-label">{{ form.percentual_multa_rescisao_penal.label }}</label>
+                  {{ form.percentual_multa_rescisao_penal }}
+                </div>
+                <div class="col-md-3 mb-2">
+                  <label class="form-label">{{ form.percentual_multa_rescisao_adm.label }}</label>
+                  {{ form.percentual_multa_rescisao_adm }}
+                </div>
+                <div class="col-md-3 mb-2">
+                  <label class="form-label">{{ form.percentual_cessao.label }}</label>
+                  {{ form.percentual_cessao }}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Observações -->
+          <div class="card mb-3">
+            <div class="card-header">
+              <i class="fas fa-sticky-note me-2"></i><strong>Observações</strong>
+            </div>
+            <div class="card-body">
+              {{ form.observacoes }}
+            </div>
+          </div>
+
+          <div class="d-flex justify-content-between mt-3">
+            <a href="{% url 'contratos:listar' %}" class="btn btn-outline-secondary">
+              <i class="fas fa-times me-2"></i>Cancelar
+            </a>
+            <button type="submit" class="btn btn-primary">
+              Próximo: Tabela de Juros <i class="fas fa-arrow-right ms-2"></i>
+            </button>
+          </div>
+        </form>
+
+      </div>
+    </div>
+  </div>
+</div>
+{% block extra_js %}
+<script>
+function atualizarAmortizacaoInfo() {
+    var sel = document.getElementById('{{ form.tipo_amortizacao.id_for_label }}');
+    if (!sel) return;
+    document.getElementById('amort_price_info').classList.toggle('d-none', sel.value !== 'PRICE');
+    document.getElementById('amort_sac_info').classList.toggle('d-none', sel.value !== 'SAC');
+}
+document.addEventListener('DOMContentLoaded', function() {
+    var sel = document.getElementById('{{ form.tipo_amortizacao.id_for_label }}');
+    if (sel) { sel.addEventListener('change', atualizarAmortizacaoInfo); atualizarAmortizacaoInfo(); }
+
+    function calcularFinanciado() {
+        var total = parseFloat(document.getElementById('{{ form.valor_total.id_for_label }}').value) || 0;
+        var entrada = parseFloat(document.getElementById('{{ form.valor_entrada.id_for_label }}').value) || 0;
+        var el = document.getElementById('valor_financiado_display');
+        if (el) el.textContent = 'R$ ' + (total - entrada).toLocaleString('pt-BR', {minimumFractionDigits: 2});
+    }
+    var vt = document.getElementById('{{ form.valor_total.id_for_label }}');
+    var ve = document.getElementById('{{ form.valor_entrada.id_for_label }}');
+    if (vt) vt.addEventListener('input', calcularFinanciado);
+    if (ve) ve.addEventListener('input', calcularFinanciado);
+    calcularFinanciado();
+});
+</script>
+{% endblock %}
+{% endblock %}

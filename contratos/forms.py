@@ -8,6 +8,7 @@ from django import forms
 from django.db.models import Q
 from crispy_forms.helper import FormHelper
 from crispy_forms.layout import Layout, Field, Row, Column, HTML, Div
+from decimal import Decimal
 from .models import Contrato, TipoCorrecao, StatusContrato, IndiceReajuste
 from core.models import Imovel, Comprador, Imobiliaria
 
@@ -22,6 +23,7 @@ class ContratoForm(forms.ModelForm):
             'numero_contrato', 'data_contrato', 'data_primeiro_vencimento',
             'valor_total', 'valor_entrada',
             'numero_parcelas', 'dia_vencimento',
+            'tipo_amortizacao',
             'percentual_juros_mora', 'percentual_multa',
             'tipo_correcao', 'prazo_reajuste_meses',
             'status', 'observacoes'
@@ -379,3 +381,190 @@ class IndiceReajusteForm(forms.ModelForm):
                 )
 
         return cleaned_data
+
+
+# =============================================================================
+# WIZARD — Contrato com Tabela Price + Intermediárias
+# =============================================================================
+
+class ContratoWizardBasicoForm(forms.ModelForm):
+    """Wizard Step 1: Dados básicos do contrato"""
+
+    class Meta:
+        model = Contrato
+        fields = [
+            'imobiliaria', 'imovel', 'comprador',
+            'numero_contrato', 'data_contrato', 'data_primeiro_vencimento',
+            'valor_total', 'valor_entrada',
+            'numero_parcelas', 'dia_vencimento',
+            'tipo_amortizacao',
+            'percentual_juros_mora', 'percentual_multa',
+            'tipo_correcao', 'prazo_reajuste_meses', 'tipo_correcao_fallback',
+            'spread_reajuste', 'reajuste_piso', 'reajuste_teto',
+            'intermediarias_reduzem_pmt', 'intermediarias_reajustadas',
+            'percentual_fruicao', 'percentual_multa_rescisao_penal',
+            'percentual_multa_rescisao_adm', 'percentual_cessao',
+            'observacoes',
+        ]
+        widgets = {
+            'data_contrato': forms.DateInput(attrs={'type': 'date'}, format='%Y-%m-%d'),
+            'data_primeiro_vencimento': forms.DateInput(attrs={'type': 'date'}, format='%Y-%m-%d'),
+            'valor_total': forms.NumberInput(attrs={'step': '0.01', 'min': '0.01', 'placeholder': '350000,00'}),
+            'valor_entrada': forms.NumberInput(attrs={'step': '0.01', 'min': '0', 'placeholder': '100000,00'}),
+            'numero_parcelas': forms.NumberInput(attrs={'min': '1', 'max': '600', 'placeholder': '360'}),
+            'dia_vencimento': forms.NumberInput(attrs={'min': '1', 'max': '28', 'placeholder': '10'}),
+            'percentual_juros_mora': forms.NumberInput(attrs={'step': '0.01', 'placeholder': '1,00'}),
+            'percentual_multa': forms.NumberInput(attrs={'step': '0.01', 'placeholder': '2,00'}),
+            'prazo_reajuste_meses': forms.NumberInput(attrs={'min': '1', 'max': '120', 'placeholder': '12'}),
+            'spread_reajuste': forms.NumberInput(attrs={'step': '0.0001', 'placeholder': '0,0000'}),
+            'reajuste_piso': forms.NumberInput(attrs={'step': '0.0001', 'placeholder': 'Ex: 0,0000'}),
+            'reajuste_teto': forms.NumberInput(attrs={'step': '0.0001', 'placeholder': 'Ex: 15,0000'}),
+            'percentual_fruicao': forms.NumberInput(attrs={'step': '0.0001', 'placeholder': '0,5000'}),
+            'percentual_multa_rescisao_penal': forms.NumberInput(attrs={'step': '0.0001', 'placeholder': '10,0000'}),
+            'percentual_multa_rescisao_adm': forms.NumberInput(attrs={'step': '0.0001', 'placeholder': '12,0000'}),
+            'percentual_cessao': forms.NumberInput(attrs={'step': '0.0001', 'placeholder': '3,0000'}),
+            'observacoes': forms.Textarea(attrs={'rows': 2}),
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        for field_name, field in self.fields.items():
+            if 'class' not in field.widget.attrs:
+                if isinstance(field.widget, forms.Select):
+                    field.widget.attrs['class'] = 'form-select'
+                elif isinstance(field.widget, forms.CheckboxInput):
+                    field.widget.attrs['class'] = 'form-check-input'
+                else:
+                    field.widget.attrs['class'] = 'form-control'
+        self.fields['imovel'].queryset = Imovel.objects.filter(disponivel=True, ativo=True)
+        self.fields['comprador'].queryset = Comprador.objects.filter(ativo=True)
+        self.fields['imobiliaria'].queryset = Imobiliaria.objects.filter(ativo=True)
+
+    def clean(self):
+        cleaned_data = super().clean()
+        valor_total = cleaned_data.get('valor_total')
+        valor_entrada = cleaned_data.get('valor_entrada')
+        if valor_total and valor_entrada and valor_entrada >= valor_total:
+            raise forms.ValidationError({'valor_entrada': 'O valor de entrada deve ser menor que o valor total.'})
+        return cleaned_data
+
+    def cleaned_data_serializable(self):
+        """Returns cleaned_data with all values serialized for JSON session storage"""
+        from datetime import date
+        data = {}
+        for k, v in self.cleaned_data.items():
+            if isinstance(v, Decimal):
+                data[k] = str(v)
+            elif isinstance(v, date):
+                data[k] = v.isoformat()
+            elif hasattr(v, 'pk'):  # FK / model instance
+                data[k] = v.pk
+            elif v is None:
+                data[k] = None
+            else:
+                data[k] = v
+        return data
+
+
+class TabelaJurosForm(forms.Form):
+    """Linha de TabelaJurosContrato no wizard step 2"""
+    ciclo_inicio = forms.IntegerField(
+        min_value=1, max_value=100,
+        widget=forms.NumberInput(attrs={'class': 'form-control form-control-sm', 'min': '1'}),
+        label='Ciclo Início'
+    )
+    ciclo_fim = forms.IntegerField(
+        min_value=1, max_value=100, required=False,
+        widget=forms.NumberInput(attrs={'class': 'form-control form-control-sm', 'min': '1', 'placeholder': '(em aberto)'}),
+        label='Ciclo Fim'
+    )
+    juros_mensal = forms.DecimalField(
+        max_digits=8, decimal_places=4,
+        min_value=0, max_value=100,
+        widget=forms.NumberInput(attrs={'class': 'form-control form-control-sm', 'step': '0.0001', 'placeholder': '0,6000'}),
+        label='Taxa Mensal (%)'
+    )
+    observacoes = forms.CharField(
+        required=False, max_length=200,
+        widget=forms.TextInput(attrs={'class': 'form-control form-control-sm', 'placeholder': 'Opcional'}),
+        label='Observações'
+    )
+
+    def clean(self):
+        cleaned_data = super().clean()
+        inicio = cleaned_data.get('ciclo_inicio')
+        fim = cleaned_data.get('ciclo_fim')
+        if inicio and fim and fim < inicio:
+            raise forms.ValidationError('Ciclo Fim deve ser maior ou igual ao Ciclo Início.')
+        return cleaned_data
+
+
+class IntermediariaPadraoForm(forms.Form):
+    """Criação de intermediárias por padrão (valor + intervalo + count)"""
+    valor = forms.DecimalField(
+        max_digits=12, decimal_places=2, min_value=Decimal('0.01'),
+        widget=forms.NumberInput(attrs={'class': 'form-control', 'step': '0.01', 'placeholder': '5000,00'}),
+        label='Valor (R$)'
+    )
+    intervalo_meses = forms.IntegerField(
+        min_value=1, max_value=360,
+        initial=6,
+        widget=forms.NumberInput(attrs={'class': 'form-control', 'min': '1', 'placeholder': '6'}),
+        label='Intervalo (meses)'
+    )
+    numero_ocorrencias = forms.IntegerField(
+        min_value=1, max_value=60,
+        widget=forms.NumberInput(attrs={'class': 'form-control', 'min': '1', 'placeholder': '60'}),
+        label='Número de Ocorrências'
+    )
+    mes_inicio = forms.IntegerField(
+        min_value=1, max_value=360,
+        initial=6,
+        widget=forms.NumberInput(attrs={'class': 'form-control', 'min': '1', 'placeholder': '6'}),
+        label='Mês do Primeiro Vencimento'
+    )
+
+    def gerar_intermediarias(self):
+        """Retorna lista de dicts {numero_sequencial, mes_vencimento, valor}"""
+        valor = self.cleaned_data['valor']
+        intervalo = self.cleaned_data['intervalo_meses']
+        count = self.cleaned_data['numero_ocorrencias']
+        mes_inicio = self.cleaned_data['mes_inicio']
+        resultado = []
+        for i in range(count):
+            mes = mes_inicio + i * intervalo
+            resultado.append({
+                'numero_sequencial': i + 1,
+                'mes_vencimento': mes,
+                'valor': valor,
+            })
+        return resultado
+
+    def gerar_intermediarias_serializable(self):
+        """Same as gerar_intermediarias but values are JSON-serializable"""
+        rows = self.gerar_intermediarias()
+        return [
+            {'numero_sequencial': r['numero_sequencial'],
+             'mes_vencimento': r['mes_vencimento'],
+             'valor': str(r['valor'])}
+            for r in rows
+        ]
+
+
+class IntermediariaManualForm(forms.Form):
+    """Linha individual de intermediária (modo manual)"""
+    numero_sequencial = forms.IntegerField(
+        min_value=1, max_value=60,
+        widget=forms.NumberInput(attrs={'class': 'form-control form-control-sm', 'min': '1'}),
+        label='Seq.'
+    )
+    mes_vencimento = forms.IntegerField(
+        min_value=1, max_value=360,
+        widget=forms.NumberInput(attrs={'class': 'form-control form-control-sm', 'min': '1'}),
+        label='Mês'
+    )
+    valor = forms.DecimalField(
+        max_digits=12, decimal_places=2, min_value=Decimal('0.01'),
+        widget=forms.NumberInput(attrs={'class': 'form-control form-control-sm', 'step': '0.01'}),
+        label='Valor (R$)'
+    )
