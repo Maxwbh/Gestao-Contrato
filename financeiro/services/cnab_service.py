@@ -794,9 +794,19 @@ class CNABService:
             'valor_total_pago': valor_total_pago,
         }
 
-    def obter_boletos_sem_remessa(self, conta_bancaria=None) -> List:
+    def obter_boletos_sem_remessa(
+        self,
+        conta_bancaria=None,
+        imobiliaria_id=None,
+        contrato_id=None
+    ) -> List:
         """
-        Retorna lista de parcelas com boleto gerado mas sem arquivo de remessa.
+        Retorna parcelas com boleto gerado mas sem arquivo de remessa.
+
+        Args:
+            conta_bancaria: Filtrar por ContaBancaria específica
+            imobiliaria_id: Filtrar por Imobiliaria (via contrato)
+            contrato_id: Filtrar por Contrato específico
         """
         from financeiro.models import Parcela, StatusBoleto
 
@@ -805,10 +815,134 @@ class CNABService:
             pago=False,
             itens_remessa__isnull=True
         ).select_related(
-            'contrato', 'contrato__comprador', 'contrato__imovel'
+            'contrato', 'contrato__comprador', 'contrato__imovel',
+            'contrato__imobiliaria', 'conta_bancaria', 'conta_bancaria__imobiliaria'
         )
 
         if conta_bancaria:
             queryset = queryset.filter(conta_bancaria=conta_bancaria)
 
-        return list(queryset.order_by('data_vencimento'))
+        if imobiliaria_id:
+            queryset = queryset.filter(contrato__imobiliaria_id=imobiliaria_id)
+
+        if contrato_id:
+            queryset = queryset.filter(contrato_id=contrato_id)
+
+        return list(queryset.order_by('conta_bancaria', 'data_vencimento'))
+
+    def obter_boletos_em_remessa_pendente(
+        self,
+        conta_bancaria=None,
+        imobiliaria_id=None,
+        contrato_id=None
+    ) -> List:
+        """
+        Retorna parcelas já incluídas em remessa com status GERADO (não enviada).
+        Usado para exibir aviso de duplicata potencial.
+        """
+        from financeiro.models import Parcela, StatusBoleto
+
+        queryset = Parcela.objects.filter(
+            status_boleto=StatusBoleto.GERADO,
+            pago=False,
+            itens_remessa__arquivo_remessa__status='GERADO'
+        ).select_related(
+            'contrato', 'contrato__comprador', 'conta_bancaria',
+            'contrato__imobiliaria'
+        ).prefetch_related('itens_remessa__arquivo_remessa').distinct()
+
+        if conta_bancaria:
+            queryset = queryset.filter(conta_bancaria=conta_bancaria)
+
+        if imobiliaria_id:
+            queryset = queryset.filter(contrato__imobiliaria_id=imobiliaria_id)
+
+        if contrato_id:
+            queryset = queryset.filter(contrato_id=contrato_id)
+
+        return list(queryset.order_by('conta_bancaria', 'data_vencimento'))
+
+    def gerar_remessas_por_escopo(
+        self,
+        parcela_ids: List[int],
+        layout: str = 'CNAB_240'
+    ) -> Dict:
+        """
+        Gera remessas agrupando automaticamente as parcelas por conta_bancaria.
+        Cada conta gera exatamente 1 arquivo de remessa.
+
+        Args:
+            parcela_ids: IDs das parcelas selecionadas
+            layout: Layout CNAB (CNAB_240 ou CNAB_400)
+
+        Returns:
+            dict com:
+              - remessas_geradas: list de dicts com info das remessas criadas
+              - erros: list de erros por conta
+              - total_boletos: int
+              - total_valor: Decimal
+        """
+        from financeiro.models import Parcela, StatusBoleto
+        from collections import defaultdict
+
+        # Buscar parcelas válidas
+        parcelas = list(
+            Parcela.objects.filter(
+                pk__in=parcela_ids,
+                status_boleto=StatusBoleto.GERADO,
+                pago=False,
+                itens_remessa__isnull=True
+            ).select_related('conta_bancaria', 'contrato')
+        )
+
+        if not parcelas:
+            return {
+                'remessas_geradas': [],
+                'erros': ['Nenhuma parcela válida selecionada.'],
+                'total_boletos': 0,
+                'total_valor': Decimal('0.00'),
+            }
+
+        # Agrupar por conta_bancaria
+        grupos: Dict = defaultdict(list)
+        sem_conta = []
+        for p in parcelas:
+            if p.conta_bancaria:
+                grupos[p.conta_bancaria].append(p)
+            else:
+                sem_conta.append(p)
+
+        remessas_geradas = []
+        erros = []
+
+        if sem_conta:
+            erros.append(
+                f"{len(sem_conta)} parcela(s) sem conta bancária associada foram ignoradas."
+            )
+
+        for conta, lista_parcelas in grupos.items():
+            resultado = self.gerar_remessa(lista_parcelas, conta, layout)
+            if resultado.get('sucesso'):
+                arq = resultado['arquivo_remessa']
+                remessas_geradas.append({
+                    'arquivo_remessa': arq,
+                    'conta_bancaria': conta,
+                    'quantidade_boletos': resultado['quantidade_boletos'],
+                    'valor_total': resultado['valor_total'],
+                    'numero_remessa': resultado['numero_remessa'],
+                    'aviso': resultado.get('aviso', ''),
+                })
+            else:
+                erros.append(
+                    f"Conta {conta}: {resultado.get('erro', 'Erro desconhecido')}"
+                )
+
+        total_boletos = sum(r['quantidade_boletos'] for r in remessas_geradas)
+        total_valor = sum(r['valor_total'] for r in remessas_geradas)
+
+        return {
+            'remessas_geradas': remessas_geradas,
+            'erros': erros,
+            'total_boletos': total_boletos,
+            'total_valor': total_valor,
+        }
