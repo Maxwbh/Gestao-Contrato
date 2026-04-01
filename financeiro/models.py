@@ -98,6 +98,23 @@ class Parcela(TimeStampedModel):
         verbose_name='Valor de Desconto',
         help_text='Desconto concedido na parcela'
     )
+    # Breakdown amortização/juros embutidos (Tabela Price e SAC)
+    amortizacao = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        verbose_name='Amortização',
+        help_text='Parcela de amortização do principal embutida nesta prestação'
+    )
+    juros_embutido = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        verbose_name='Juros Embutidos',
+        help_text='Parcela de juros do financiamento embutida nesta prestação'
+    )
 
     # Status de Pagamento
     pago = models.BooleanField(
@@ -974,6 +991,57 @@ class Reajuste(TimeStampedModel):
         fator = i / (1 - (1 + i) ** (-n_parcelas))
         return (saldo * fator).quantize(Decimal('0.01'))
 
+    @staticmethod
+    def _calcular_price_tabela(pv, taxa_mensal_pct, n):
+        """
+        Gera tabela completa de Tabela Price: lista de (pmt, amort, juros) para n períodos.
+
+        pmt constante, amort crescente, juros decrescentes.
+        Se taxa=0, degenera em linear (amort=pmt=PV/n, juros=0).
+        """
+        if n <= 0:
+            return []
+        i = taxa_mensal_pct / Decimal('100')
+        pmt = Parcela._calcular_pmt(pv, taxa_mensal_pct, n)
+        tabela = []
+        saldo = pv
+        for k in range(n):
+            juros_k = (saldo * i).quantize(Decimal('0.01'))
+            if k == n - 1:
+                # última parcela: amort = saldo restante (corrige arredondamentos)
+                amort_k = saldo
+                pmt_k = amort_k + juros_k
+            else:
+                amort_k = (pmt - juros_k).quantize(Decimal('0.01'))
+                pmt_k = pmt
+            saldo = (saldo - amort_k).quantize(Decimal('0.01'))
+            tabela.append((pmt_k, amort_k, juros_k))
+        return tabela
+
+    @staticmethod
+    def _calcular_sac_tabela(pv, taxa_mensal_pct, n):
+        """
+        Gera tabela completa de SAC: lista de (pmt, amort, juros) para n períodos.
+
+        amort constante = PV/n, juros decrescentes, pmt decrescente.
+        """
+        if n <= 0:
+            return []
+        i = taxa_mensal_pct / Decimal('100')
+        amort = (pv / Decimal(n)).quantize(Decimal('0.01'))
+        tabela = []
+        saldo = pv
+        for k in range(n):
+            juros_k = (saldo * i).quantize(Decimal('0.01'))
+            if k == n - 1:
+                amort_k = saldo  # última parcela: zera o saldo
+            else:
+                amort_k = amort
+            pmt_k = amort_k + juros_k
+            saldo = (saldo - amort_k).quantize(Decimal('0.01'))
+            tabela.append((pmt_k, amort_k, juros_k))
+        return tabela
+
     @classmethod
     def preview_reajuste(cls, contrato, ciclo,
                          desconto_percentual=None, desconto_valor=None):
@@ -1073,7 +1141,10 @@ class Reajuste(TimeStampedModel):
         valor_novo_total = Decimal('0')
         boletos_emitidos = []
 
-        if usa_tabela_price:
+        from contratos.models import TipoAmortizacao
+        usa_sac = usa_tabela_price and contrato.tipo_amortizacao == TipoAmortizacao.SAC
+
+        if usa_tabela_price and not usa_sac:
             # MODO TABELA PRICE
             # Todas as parcelas NORMAL não pagas (todos os ciclos futuros)
             todas_restantes = contrato.parcelas.filter(
@@ -1106,9 +1177,54 @@ class Reajuste(TimeStampedModel):
                     'valor_novo': novo_pmt,
                     'diferenca': novo_pmt - p.valor_atual,
                     'tem_boleto': p.tem_boleto,
+                    'amortizacao_nova': None,
+                    'juros_novo': None,
                 })
                 valor_anterior_total += p.valor_atual
                 valor_novo_total += novo_pmt
+                if p.tem_boleto:
+                    boletos_emitidos.append(p.numero_parcela)
+
+        elif usa_sac:
+            # MODO SAC — amortização constante recalculada sobre o saldo corrigido
+            todas_restantes = contrato.parcelas.filter(
+                pago=False,
+                tipo_parcela='NORMAL',
+            ).order_by('numero_parcela')
+
+            n_restantes = todas_restantes.count()
+
+            # Saldo SAC = soma das amortizações pendentes (principal real)
+            saldo_atual = todas_restantes.aggregate(
+                total=Sum('amortizacao')
+            )['total']
+            if saldo_atual is None:
+                # fallback se amortizacao não preenchida
+                saldo_atual = todas_restantes.aggregate(
+                    total=Sum('valor_atual')
+                )['total'] or Decimal('0')
+
+            saldo_atualizado = (saldo_atual * (1 + percentual_com_caps / 100)).quantize(Decimal('0.01'))
+
+            # Recalcula tabela SAC com nova taxa do ciclo
+            tabela_sac = cls._calcular_sac_tabela(saldo_atualizado, taxa_tabela, n_restantes)
+
+            parcela_final = contrato.numero_parcelas
+            for p, (pmt_k, amort_k, juros_k) in zip(todas_restantes, tabela_sac):
+                if desc_val and pmt_k > desc_val:
+                    pmt_k = (pmt_k - desc_val).quantize(Decimal('0.01'))
+                detalhes.append({
+                    'numero_parcela': p.numero_parcela,
+                    'data_vencimento': p.data_vencimento,
+                    'valor_atual': p.valor_atual,
+                    'valor_novo': pmt_k,
+                    'diferenca': pmt_k - p.valor_atual,
+                    'tem_boleto': p.tem_boleto,
+                    'amortizacao_nova': amort_k,
+                    'juros_novo': juros_k,
+                })
+                valor_anterior_total += p.valor_atual
+                valor_novo_total += pmt_k
                 if p.tem_boleto:
                     boletos_emitidos.append(p.numero_parcela)
 
@@ -1143,7 +1259,7 @@ class Reajuste(TimeStampedModel):
         return {
             'ciclo': ciclo,
             'indice_tipo': indice_tipo,
-            'tipo_calculo': 'TABELA_PRICE' if usa_tabela_price else 'SIMPLES',
+            'tipo_calculo': 'SAC' if usa_sac else ('TABELA_PRICE' if usa_tabela_price else 'SIMPLES'),
             'periodo_referencia_inicio': inicio_ref,
             'periodo_referencia_fim': fim_ref,
             'percentual_bruto': percentual_bruto,
@@ -1251,10 +1367,12 @@ class Reajuste(TimeStampedModel):
         valor_novo_total = Decimal('0.00')
 
         # Determina modo de cálculo
+        from contratos.models import TipoAmortizacao
         taxa_tabela = TabelaJurosContrato.get_juros_para_ciclo(self.contrato, self.ciclo)
         usa_tabela_price = taxa_tabela is not None
+        usa_sac = usa_tabela_price and self.contrato.tipo_amortizacao == TipoAmortizacao.SAC
 
-        if usa_tabela_price:
+        if usa_tabela_price and not usa_sac:
             # MODO TABELA PRICE
             # Atualiza TODAS as parcelas normais restantes com o novo PMT
             parcelas = self.contrato.parcelas.filter(
@@ -1278,6 +1396,33 @@ class Reajuste(TimeStampedModel):
                 parcela.save(update_fields=['valor_atual'])
                 valor_anterior_total += valor_anterior
                 valor_novo_total += novo_pmt
+                parcelas_reajustadas += 1
+
+        elif usa_sac:
+            # MODO SAC — recalcula amortização constante sobre saldo corrigido
+            parcelas = list(self.contrato.parcelas.filter(
+                pago=False,
+                tipo_parcela='NORMAL',
+            ).order_by('numero_parcela'))
+
+            n_restantes = len(parcelas)
+            saldo_atual = sum(
+                (p.amortizacao or p.valor_atual) for p in parcelas
+            )
+
+            saldo_atualizado = (saldo_atual * (1 + perc_final / 100)).quantize(Decimal('0.01'))
+            tabela_sac = self._calcular_sac_tabela(saldo_atualizado, taxa_tabela, n_restantes)
+
+            for parcela, (pmt_k, amort_k, juros_k) in zip(parcelas, tabela_sac):
+                if desc_val and pmt_k > desc_val:
+                    pmt_k = (pmt_k - desc_val).quantize(Decimal('0.01'))
+                valor_anterior = parcela.valor_atual
+                parcela.valor_atual = pmt_k
+                parcela.amortizacao = amort_k
+                parcela.juros_embutido = juros_k
+                parcela.save(update_fields=['valor_atual', 'amortizacao', 'juros_embutido'])
+                valor_anterior_total += valor_anterior
+                valor_novo_total += pmt_k
                 parcelas_reajustadas += 1
 
         else:

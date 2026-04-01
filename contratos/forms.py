@@ -396,6 +396,7 @@ class ContratoWizardBasicoForm(forms.ModelForm):
             'numero_contrato', 'data_contrato', 'data_primeiro_vencimento',
             'valor_total', 'valor_entrada',
             'numero_parcelas', 'dia_vencimento',
+            'tipo_amortizacao',
             'percentual_juros_mora', 'percentual_multa',
             'tipo_correcao', 'prazo_reajuste_meses', 'tipo_correcao_fallback',
             'spread_reajuste', 'reajuste_piso', 'reajuste_teto',
