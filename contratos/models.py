@@ -288,6 +288,24 @@ class Contrato(TimeStampedModel):
         blank=True,
         verbose_name='Data do Último Reajuste'
     )
+    reajuste_piso = models.DecimalField(
+        max_digits=8,
+        decimal_places=4,
+        null=True,
+        blank=True,
+        validators=[MinValueValidator(Decimal('0'))],
+        verbose_name='Piso de Reajuste (%)',
+        help_text='Percentual mínimo aplicado ao reajuste (ex: 0 para nunca aplicar deflação)'
+    )
+    reajuste_teto = models.DecimalField(
+        max_digits=8,
+        decimal_places=4,
+        null=True,
+        blank=True,
+        validators=[MinValueValidator(Decimal('0'))],
+        verbose_name='Teto de Reajuste (%)',
+        help_text='Percentual máximo aplicado ao reajuste (ex: 15 para limitar a 15%)'
+    )
 
     # Status
     status = models.CharField(
