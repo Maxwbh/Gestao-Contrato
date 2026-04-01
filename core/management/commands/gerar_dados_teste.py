@@ -361,8 +361,6 @@ class Command(BaseCommand):
                     imobiliaria=imobiliaria,
                     tipo=TipoImovel.LOTE,
                     identificacao=f'Quadra {quadra}, Lote {lote_na_quadra:02d}',
-                    quadra=str(quadra),
-                    lote=f'{lote_na_quadra:02d}',
                     loteamento=nome_loteamento,
                     cep='35700-000',
                     logradouro=f'Rua {quadra}',
