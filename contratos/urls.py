@@ -53,4 +53,10 @@ urlpatterns = [
 
     # API de Intermediárias
     path('<int:contrato_id>/intermediarias/api/', views.api_intermediarias_contrato, name='intermediarias_api'),
+
+    # ===========================================================================
+    # G-11: Rescisão · G-12: Cessão de Direitos
+    # ===========================================================================
+    path('<int:pk>/rescisao/', views.calcular_rescisao_view, name='calcular_rescisao'),
+    path('<int:pk>/cessao/', views.calcular_cessao_view, name='calcular_cessao'),
 ]
