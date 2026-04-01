@@ -502,6 +502,45 @@ class Contrato(TimeStampedModel):
         help_text='Terceira linha de instrução do boleto'
     )
 
+    # ============================================================
+    # Testemunhas do Contrato (G-14)
+    # ============================================================
+    testemunha_1_nome = models.CharField(
+        max_length=200,
+        blank=True,
+        verbose_name='Testemunha 1 — Nome',
+        help_text='Nome completo da primeira testemunha'
+    )
+    testemunha_1_cpf = models.CharField(
+        max_length=14,
+        blank=True,
+        verbose_name='Testemunha 1 — CPF',
+        help_text='CPF da primeira testemunha (formato XXX.XXX.XXX-XX)'
+    )
+    testemunha_2_nome = models.CharField(
+        max_length=200,
+        blank=True,
+        verbose_name='Testemunha 2 — Nome',
+        help_text='Nome completo da segunda testemunha'
+    )
+    testemunha_2_cpf = models.CharField(
+        max_length=14,
+        blank=True,
+        verbose_name='Testemunha 2 — CPF',
+        help_text='CPF da segunda testemunha (formato XXX.XXX.XXX-XX)'
+    )
+
+    # ============================================================
+    # Prazo para Lavratura de Escritura (G-15)
+    # ============================================================
+    prazo_escritura_dias = models.IntegerField(
+        default=90,
+        blank=True,
+        null=True,
+        verbose_name='Prazo para Escritura (dias)',
+        help_text='Prazo em dias após quitação para lavratura de escritura pública (padrão: 90 dias = 60+30)'
+    )
+
     # Observações
     observacoes = models.TextField(
         blank=True,
@@ -1118,6 +1157,130 @@ class Contrato(TimeStampedModel):
             'progresso_percentual': self.calcular_progresso(),
             'ciclo_atual': self.ciclo_reajuste_atual,
             'bloqueio_reajuste': self.bloqueio_boleto_reajuste,
+        }
+
+    def calcular_mora_pro_rata(self, valor_base, data_vencimento, data_calculo=None):
+        """
+        G-16: Calcula juros de mora pro rata die.
+
+        Fórmula: juro_diario = percentual_juros_mora / 30
+        Juros = valor_base × juro_diario × dias_atraso
+
+        Args:
+            valor_base (Decimal): valor da parcela em atraso
+            data_vencimento (date): data de vencimento da parcela
+            data_calculo (date, optional): data de referência (padrão: hoje)
+
+        Returns:
+            dict com: dias_atraso, taxa_diaria, valor_juros, valor_multa, total
+        """
+        from django.utils import timezone as tz
+        data_ref = data_calculo or tz.now().date()
+        dias_atraso = max(0, (data_ref - data_vencimento).days)
+
+        # Taxa diária = taxa mensal / 30 (pro rata die simples, conforme cláusula contratual)
+        taxa_mensal = self.percentual_juros_mora or Decimal('1.0000')
+        taxa_diaria = taxa_mensal / Decimal('30')
+
+        valor_juros = (valor_base * taxa_diaria * dias_atraso / Decimal('100')).quantize(Decimal('0.01'))
+        valor_multa = (valor_base * (self.percentual_multa or Decimal('2.0000')) / Decimal('100')).quantize(Decimal('0.01'))
+
+        return {
+            'dias_atraso': dias_atraso,
+            'taxa_diaria': taxa_diaria,
+            'taxa_mensal': taxa_mensal,
+            'valor_base': valor_base,
+            'valor_juros': valor_juros,
+            'valor_multa': valor_multa,
+            'total': valor_base + valor_juros + valor_multa,
+        }
+
+    def calcular_rescisao(self, data_rescisao=None):
+        """
+        G-11: Calcula o valor de devolução em caso de rescisão pelo comprador.
+
+        Fórmula (cláusula contratual Parque das Nogueiras):
+          Saldo atualizado = saldo devedor atual
+          Fruição        = saldo_atual × percentual_fruicao / 100 × meses_ocupados
+          Multa penal    = saldo_atual × percentual_multa_rescisao_penal / 100
+          Desp. adm.     = saldo_atual × percentual_multa_rescisao_adm / 100
+          Valor pago     = entrada + parcelas pagas (valor pago)
+          Devolução      = valor_pago − fruição − multa_penal − desp_adm
+
+        Returns:
+            dict com todos os componentes do cálculo
+        """
+        from django.utils import timezone as tz
+        from django.db.models import Sum
+
+        data_ref = data_rescisao or tz.now().date()
+        saldo = self.calcular_saldo_devedor()
+
+        # Meses desde o início do contrato (uso do imóvel pelo comprador)
+        meses_ocupados = (
+            (data_ref.year - self.data_contrato.year) * 12
+            + (data_ref.month - self.data_contrato.month)
+        )
+        meses_ocupados = max(0, meses_ocupados)
+
+        # Valores pagos
+        total_pago_parcelas = self.parcelas.filter(pago=True).aggregate(
+            total=Sum('valor_pago')
+        )['total'] or Decimal('0.00')
+        total_pago = (self.valor_entrada or Decimal('0.00')) + total_pago_parcelas
+
+        # Encargos de rescisão calculados sobre o saldo atualizado
+        pct_fruicao = (self.percentual_fruicao or Decimal('0.5000')) / Decimal('100')
+        pct_penal   = (self.percentual_multa_rescisao_penal or Decimal('10.0000')) / Decimal('100')
+        pct_adm     = (self.percentual_multa_rescisao_adm or Decimal('12.0000')) / Decimal('100')
+
+        fruicao     = (saldo * pct_fruicao * meses_ocupados).quantize(Decimal('0.01'))
+        multa_penal = (saldo * pct_penal).quantize(Decimal('0.01'))
+        desp_adm    = (saldo * pct_adm).quantize(Decimal('0.01'))
+
+        total_retencoes = fruicao + multa_penal + desp_adm
+        devolucao = max(Decimal('0.00'), (total_pago - total_retencoes).quantize(Decimal('0.01')))
+
+        return {
+            'data_rescisao': data_ref,
+            'saldo_devedor': saldo,
+            'meses_ocupados': meses_ocupados,
+            'valor_pago_total': total_pago,
+            'valor_entrada': self.valor_entrada or Decimal('0.00'),
+            'valor_pago_parcelas': total_pago_parcelas,
+            'percentual_fruicao': self.percentual_fruicao or Decimal('0.5000'),
+            'fruicao': fruicao,
+            'percentual_multa_penal': self.percentual_multa_rescisao_penal or Decimal('10.0000'),
+            'multa_penal': multa_penal,
+            'percentual_desp_adm': self.percentual_multa_rescisao_adm or Decimal('12.0000'),
+            'desp_adm': desp_adm,
+            'total_retencoes': total_retencoes,
+            'devolucao': devolucao,
+        }
+
+    def calcular_cessao(self, data_cessao=None):
+        """
+        G-12: Calcula a taxa de cessão de direitos.
+
+        Fórmula: taxa_cessao = saldo_devedor × percentual_cessao / 100
+
+        Returns:
+            dict com os componentes do cálculo de cessão
+        """
+        from django.utils import timezone as tz
+
+        data_ref = data_cessao or tz.now().date()
+        saldo = self.calcular_saldo_devedor()
+
+        pct_cessao = (self.percentual_cessao or Decimal('3.0000')) / Decimal('100')
+        taxa = (saldo * pct_cessao).quantize(Decimal('0.01'))
+
+        return {
+            'data_cessao': data_ref,
+            'saldo_devedor': saldo,
+            'percentual_cessao': self.percentual_cessao or Decimal('3.0000'),
+            'taxa_cessao': taxa,
+            'saldo_apos_cessao': saldo,  # saldo permanece — apenas a taxa muda de titular
         }
 
 

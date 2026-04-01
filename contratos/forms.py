@@ -35,6 +35,9 @@ class ContratoForm(forms.ModelForm):
             'tipo_valor_juros', 'valor_juros_boleto', 'dias_carencia_boleto',
             'tipo_valor_desconto', 'valor_desconto_boleto', 'dias_desconto_boleto',
             'instrucao_boleto_1', 'instrucao_boleto_2', 'instrucao_boleto_3',
+            'testemunha_1_nome', 'testemunha_1_cpf',
+            'testemunha_2_nome', 'testemunha_2_cpf',
+            'prazo_escritura_dias',
             'status', 'observacoes',
         ]
         widgets = {
@@ -112,6 +115,11 @@ class ContratoForm(forms.ModelForm):
             'instrucao_boleto_3': forms.TextInput(attrs={
                 'placeholder': 'Instrução adicional (opcional)'
             }),
+            'testemunha_1_nome': forms.TextInput(attrs={'placeholder': 'Nome completo da 1ª testemunha'}),
+            'testemunha_1_cpf': forms.TextInput(attrs={'placeholder': 'XXX.XXX.XXX-XX'}),
+            'testemunha_2_nome': forms.TextInput(attrs={'placeholder': 'Nome completo da 2ª testemunha'}),
+            'testemunha_2_cpf': forms.TextInput(attrs={'placeholder': 'XXX.XXX.XXX-XX'}),
+            'prazo_escritura_dias': forms.NumberInput(attrs={'min': '1', 'placeholder': '90'}),
             'observacoes': forms.Textarea(attrs={
                 'rows': 3,
                 'placeholder': 'Observações adicionais sobre o contrato...'
@@ -339,6 +347,25 @@ class ContratoForm(forms.ModelForm):
                 Column(Field('instrucao_boleto_3', wrapper_class='mb-2'), css_class='col-md-4'),
             ),
             HTML('</div>'),
+            HTML('</div></div>'),
+
+            # Card: Testemunhas
+            HTML('''
+                <div class="card mb-3 card-opcional">
+                    <div class="card-header py-2">
+                        <i class="fas fa-users me-2"></i><strong>Testemunhas do Contrato</strong>
+                    </div>
+                    <div class="card-body py-3">
+            '''),
+            Row(
+                Column(Field('testemunha_1_nome', wrapper_class='mb-2'), css_class='col-md-5'),
+                Column(Field('testemunha_1_cpf', wrapper_class='mb-2'), css_class='col-md-3'),
+                Column(Field('testemunha_2_nome', wrapper_class='mb-2'), css_class='col-md-5'),
+                Column(Field('testemunha_2_cpf', wrapper_class='mb-2'), css_class='col-md-3'),
+            ),
+            Row(
+                Column(Field('prazo_escritura_dias', wrapper_class='mb-2'), css_class='col-md-4'),
+            ),
             HTML('</div></div>'),
 
             # Card: Observacoes
