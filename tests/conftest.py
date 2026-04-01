@@ -58,6 +58,14 @@ def client():
 
 
 @pytest.fixture
+def requests_mock():
+    """Mock para requisições HTTP usando requests-mock"""
+    import requests_mock as rm
+    with rm.Mocker() as m:
+        yield m
+
+
+@pytest.fixture
 def authenticated_client(db, user_factory):
     """Cliente HTTP autenticado"""
     client = Client()
@@ -91,6 +99,56 @@ def admin_api_client(db, superuser_factory):
     admin = superuser_factory(password='admin123')
     client.force_login(admin)
     return client
+
+
+@pytest.fixture
+def client_logged_in(db, user_factory):
+    """Cliente HTTP autenticado como usuário comum (alias)"""
+    client = Client()
+    user = user_factory(password='testpass123')
+    client.force_login(user)
+    return client
+
+
+@pytest.fixture
+def client_admin(db, super_user_factory):
+    """Cliente HTTP autenticado como admin"""
+    client = Client()
+    admin = super_user_factory(password='admin123')
+    client.force_login(admin)
+    return client
+
+
+# =============================================================================
+# FIXTURES ESPECÍFICAS DE COMPRADOR
+# =============================================================================
+
+@pytest.fixture
+def comprador_pf(db):
+    """Comprador Pessoa Física para testes"""
+    from core.models import Comprador
+    return Comprador.objects.create(
+        tipo_pessoa='PF',
+        nome='João da Silva',
+        cpf='123.456.789-01',
+        email='joao@teste.com',
+        telefone='(31) 3333-4444',
+        celular='(31) 99999-8888',
+    )
+
+
+@pytest.fixture
+def comprador_pj(db):
+    """Comprador Pessoa Jurídica para testes"""
+    from core.models import Comprador
+    return Comprador.objects.create(
+        tipo_pessoa='PJ',
+        nome='Empresa Teste LTDA',
+        cnpj='12.345.678/0001-90',
+        email='empresa@teste.com',
+        telefone='(31) 3333-5555',
+        celular='(31) 88888-7777',
+    )
 
 
 # =============================================================================
@@ -142,6 +200,13 @@ def parcela_paga(db, parcela_factory, historico_pagamento_factory):
 @pytest.fixture
 def mock_brcobranca_success(requests_mock):
     """Mock da API BRCobranca retornando sucesso"""
+    # Service uses BRCOBRANCA_URL setting (defaults to http://localhost:9292)
+    requests_mock.get(
+        'http://localhost:9292/api/boleto',
+        content=b'%PDF-1.4 Mock PDF Content',
+        status_code=200
+    )
+    # Also register legacy URL in case settings override
     requests_mock.get(
         'https://brcobranca-api.onrender.com/api/boleto',
         content=b'%PDF-1.4 Mock PDF Content',
@@ -153,6 +218,11 @@ def mock_brcobranca_success(requests_mock):
 @pytest.fixture
 def mock_brcobranca_error(requests_mock):
     """Mock da API BRCobranca retornando erro 500"""
+    requests_mock.get(
+        'http://localhost:9292/api/boleto',
+        json={'erro': 'Erro interno do servidor'},
+        status_code=500
+    )
     requests_mock.get(
         'https://brcobranca-api.onrender.com/api/boleto',
         json={'erro': 'Erro interno do servidor'},
@@ -209,6 +279,9 @@ def configure_test_settings(settings):
     settings.STATICFILES_STORAGE = 'django.contrib.staticfiles.storage.StaticFilesStorage'
     # Disable HTTPS redirect for tests
     settings.SECURE_SSL_REDIRECT = False
+    # Add humanize for template tag support
+    if 'django.contrib.humanize' not in settings.INSTALLED_APPS:
+        settings.INSTALLED_APPS = list(settings.INSTALLED_APPS) + ['django.contrib.humanize']
     return settings
 
 
