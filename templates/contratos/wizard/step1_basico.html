@@ -141,6 +141,23 @@
                   {{ form.dia_vencimento }}
                   {% if form.dia_vencimento.errors %}<div class="text-danger small">{{ form.dia_vencimento.errors }}</div>{% endif %}
                 </div>
+                <div class="col-md-6 mb-2">
+                  <label class="form-label fw-semibold">{{ form.tipo_amortizacao.label }} *</label>
+                  {{ form.tipo_amortizacao }}
+                  {% if form.tipo_amortizacao.errors %}<div class="text-danger small">{{ form.tipo_amortizacao.errors }}</div>{% endif %}
+                  <div id="amort_help" class="small text-muted mt-1"></div>
+                </div>
+              </div>
+              <!-- Painel explicativo do sistema de amortização -->
+              <div id="amort_price_info" class="alert alert-info py-2 mt-1 d-none" role="alert">
+                <strong>Tabela Price:</strong> PMT (prestação) constante a cada ciclo de reajuste.
+                Juros decrescentes e amortização crescente a cada período.
+                Carga de juros maior no início.
+              </div>
+              <div id="amort_sac_info" class="alert alert-warning py-2 mt-1 d-none" role="alert">
+                <strong>SAC:</strong> Amortização constante = saldo / n restantes.
+                Juros decrescentes, portanto a <em>prestação diminui a cada mês</em>.
+                Saldo devedor real decresce mais rapidamente do que na Price.
               </div>
             </div>
           </div>
@@ -277,4 +294,30 @@
     </div>
   </div>
 </div>
+{% block extra_js %}
+<script>
+function atualizarAmortizacaoInfo() {
+    var sel = document.getElementById('{{ form.tipo_amortizacao.id_for_label }}');
+    if (!sel) return;
+    document.getElementById('amort_price_info').classList.toggle('d-none', sel.value !== 'PRICE');
+    document.getElementById('amort_sac_info').classList.toggle('d-none', sel.value !== 'SAC');
+}
+document.addEventListener('DOMContentLoaded', function() {
+    var sel = document.getElementById('{{ form.tipo_amortizacao.id_for_label }}');
+    if (sel) { sel.addEventListener('change', atualizarAmortizacaoInfo); atualizarAmortizacaoInfo(); }
+
+    function calcularFinanciado() {
+        var total = parseFloat(document.getElementById('{{ form.valor_total.id_for_label }}').value) || 0;
+        var entrada = parseFloat(document.getElementById('{{ form.valor_entrada.id_for_label }}').value) || 0;
+        var el = document.getElementById('valor_financiado_display');
+        if (el) el.textContent = 'R$ ' + (total - entrada).toLocaleString('pt-BR', {minimumFractionDigits: 2});
+    }
+    var vt = document.getElementById('{{ form.valor_total.id_for_label }}');
+    var ve = document.getElementById('{{ form.valor_entrada.id_for_label }}');
+    if (vt) vt.addEventListener('input', calcularFinanciado);
+    if (ve) ve.addEventListener('input', calcularFinanciado);
+    calcularFinanciado();
+});
+</script>
+{% endblock %}
 {% endblock %}

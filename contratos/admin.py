@@ -92,7 +92,8 @@ class ContratoAdmin(admin.ModelAdmin):
             'fields': (
                 'numero_parcelas',
                 'data_primeiro_vencimento',
-                'dia_vencimento'
+                'dia_vencimento',
+                'tipo_amortizacao',
             )
         }),
         ('Juros e Multa (Mora)', {

@@ -1320,13 +1320,13 @@ def api_preview_parcelas(request):
         except (ValueError, TypeError):
             data_base = date.today()
 
+        tipo_amortizacao = str(payload.get('tipo_amortizacao', 'PRICE')).upper()
+
         valor_financiado = valor_total - valor_entrada
         if reduzem_pmt:
             base_pmt = max(valor_financiado - soma_inter, D('0.01'))
         else:
             base_pmt = valor_financiado
-
-        pmt = (base_pmt / numero_parcelas).quantize(D('0.01')) if numero_parcelas else D('0')
 
         # Juros por ciclo
         juros_rows = payload.get('juros', [])
@@ -1351,8 +1351,21 @@ def api_preview_parcelas(request):
             inter_list = json.loads(inter_list)
         inter_mes = {int(r['mes_vencimento']): D(str(r['valor'])) for r in inter_list}
 
-        # Gerar primeiras 24 parcelas (ou menos)
+        # Gerar tabela de amortização para primeiros 24 períodos
+        from financeiro.models import Parcela as _P
+        juros_ciclo1 = get_juros_ciclo(1)
         preview_count = min(numero_parcelas, 24)
+
+        if tipo_amortizacao == 'SAC':
+            # Pré-calcular tabela SAC completa para os primeiros 24
+            tabela_full = _P._calcular_sac_tabela(base_pmt, juros_ciclo1, numero_parcelas)
+            tabela_preview = tabela_full[:preview_count]
+            pmt_ref = tabela_full[0][0] if tabela_full else D('0')
+        else:
+            # Price: PMT constante para ciclo 1
+            pmt_ref = _P._calcular_pmt(base_pmt, juros_ciclo1, numero_parcelas)
+            tabela_preview = None  # calculado inline
+
         parcelas = []
         for i in range(1, preview_count + 1):
             ciclo = (i - 1) // prazo_reajuste + 1
@@ -1364,19 +1377,31 @@ def api_preview_parcelas(request):
                 import calendar
                 ultimo = calendar.monthrange(venc.year, venc.month)[1]
                 venc = venc.replace(day=min(dia_vencimento, ultimo))
+
+            if tipo_amortizacao == 'SAC':
+                pmt_k, amort_k, juros_k = tabela_preview[i - 1]
+            else:
+                # Para Price: recalcula PMT se ciclo mudar (projeção aproximada)
+                pmt_k = _P._calcular_pmt(base_pmt, juros_ciclo, numero_parcelas - (i - 1))
+                amort_k = None
+                juros_k = None
+
             parcelas.append({
                 'numero': i,
                 'ciclo': ciclo,
                 'vencimento': venc.strftime('%d/%m/%Y'),
-                'valor': float(pmt),
+                'valor': float(pmt_k),
                 'juros_mensal': float(juros_ciclo),
                 'inicio_ciclo': (i - 1) % prazo_reajuste == 0 and i > 1,
                 'intermediaria': float(inter_mes[i]) if i in inter_mes else None,
+                'amortizacao': float(amort_k) if amort_k is not None else None,
+                'juros_embutido': float(juros_k) if juros_k is not None else None,
             })
 
         return JsonResponse({
             'sucesso': True,
-            'pmt': float(pmt),
+            'tipo_amortizacao': tipo_amortizacao,
+            'pmt': float(pmt_ref),
             'valor_financiado': float(valor_financiado),
             'base_pmt': float(base_pmt),
             'total_parcelas': numero_parcelas,
@@ -1599,13 +1624,32 @@ class ContratoWizardView(LoginRequiredMixin, View):
 
         soma_intermediarias = sum(D(str(r['valor'])) for r in intermediarias)
         reduzem_pmt = basico.get('intermediarias_reduzem_pmt', False)
+        tipo_amortizacao = basico.get('tipo_amortizacao', 'PRICE')
 
         if reduzem_pmt:
             base_pmt = max(valor_financiado - soma_intermediarias, D('0.01'))
         else:
             base_pmt = valor_financiado
 
-        pmt_ciclo1 = (base_pmt / numero_parcelas).quantize(D('0.01')) if numero_parcelas else D('0')
+        # Usar taxa do ciclo 1 se definida
+        taxa_ciclo1 = D('0')
+        for row in juros_rows:
+            if int(row.get('ciclo_inicio', 999)) == 1:
+                taxa_ciclo1 = D(str(row.get('juros_mensal', 0)))
+                break
+
+        if numero_parcelas > 0:
+            from financeiro.models import Parcela as _P
+            if tipo_amortizacao == 'SAC':
+                # PMT do primeiro período SAC (o maior)
+                tabela = _P._calcular_sac_tabela(base_pmt, taxa_ciclo1, numero_parcelas)
+                pmt_ciclo1 = tabela[0][0] if tabela else D('0')
+                pmt_ultimo = tabela[-1][0] if tabela else D('0')
+            else:
+                pmt_ciclo1 = _P._calcular_pmt(base_pmt, taxa_ciclo1, numero_parcelas)
+                pmt_ultimo = pmt_ciclo1  # Price: PMT constante por ciclo
+        else:
+            pmt_ciclo1 = pmt_ultimo = D('0')
 
         return {
             'valor_total': valor_total,
@@ -1613,6 +1657,9 @@ class ContratoWizardView(LoginRequiredMixin, View):
             'valor_financiado': valor_financiado,
             'numero_parcelas': numero_parcelas,
             'pmt_ciclo1': pmt_ciclo1,
+            'pmt_ultimo': pmt_ultimo,
+            'taxa_ciclo1': taxa_ciclo1,
+            'tipo_amortizacao': tipo_amortizacao,
             'soma_intermediarias': soma_intermediarias,
             'n_intermediarias': len(intermediarias),
             'juros_rows': juros_rows,
@@ -1655,18 +1702,15 @@ class ContratoWizardView(LoginRequiredMixin, View):
                 valor=D(str(row['valor'])),
             )
 
-        # If intermediarias_reduzem_pmt: recalculate parcelas
+        # Recalcula amortização (Price ou SAC) com base na TabelaJuros recém-criada.
+        # Também trata intermediarias_reduzem_pmt.
+        from django.db.models import Sum
+        base_pv = contrato.valor_financiado
         if contrato.intermediarias_reduzem_pmt:
-            from django.db.models import Sum
             soma = contrato.intermediarias.aggregate(total=Sum('valor'))['total'] or D('0')
-            base = max(contrato.valor_financiado - soma, D('0.01'))
-            novo_pmt = (base / contrato.numero_parcelas).quantize(D('0.01'))
-            contrato.parcelas.filter(tipo_parcela='NORMAL').update(
-                valor_original=novo_pmt,
-                valor_atual=novo_pmt,
-            )
-            contrato.valor_parcela_original = novo_pmt
-            contrato.save(update_fields=['valor_parcela_original'])
+            base_pv = max(base_pv - soma, D('0.01'))
+
+        contrato.recalcular_amortizacao(base_pv=base_pv)
 
         return contrato
 
@@ -1710,6 +1754,7 @@ class ContratoWizardView(LoginRequiredMixin, View):
             spread_reajuste=to_dec(basico.get('spread_reajuste')),
             reajuste_piso=to_dec(basico.get('reajuste_piso')),
             reajuste_teto=to_dec(basico.get('reajuste_teto')),
+            tipo_amortizacao=basico.get('tipo_amortizacao', 'PRICE'),
             intermediarias_reduzem_pmt=bool(basico.get('intermediarias_reduzem_pmt', False)),
             intermediarias_reajustadas=bool(basico.get('intermediarias_reajustadas', True)),
             percentual_fruicao=to_dec(basico.get('percentual_fruicao', '0.5000')),
