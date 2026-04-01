@@ -18,8 +18,8 @@ from core.models import (
     Imovel,
     Comprador,
 )
-from contratos.models import Contrato, Parcela, Reajuste
-from financeiro.models import HistoricoPagamento, ArquivoRetorno
+from contratos.models import Contrato
+from financeiro.models import Parcela, Reajuste, HistoricoPagamento, ArquivoRetorno
 
 fake = Faker('pt_BR')
 User = get_user_model()
@@ -81,9 +81,10 @@ class ImobiliariaFactory(DjangoModelFactory):
         model = Imobiliaria
 
     contabilidade = factory.SubFactory(ContabilidadeFactory)
+    tipo_pessoa = 'PJ'
     nome = factory.Sequence(lambda n: f'Imobiliária {n}')
     razao_social = factory.LazyAttribute(lambda obj: f'{obj.nome} Negócios Imobiliários LTDA')
-    cnpj = factory.Sequence(lambda n: f'34567892{n:06d}22')
+    cnpj = factory.Sequence(lambda n: f'12.345.{n:03d}/0001-{(n % 99):02d}')
 
     # Endereço estruturado
     cep = factory.Faker('postcode', locale='pt_BR')
@@ -129,7 +130,7 @@ class ImovelFactory(DjangoModelFactory):
     imobiliaria = factory.SubFactory(ImobiliariaFactory)
     tipo = 'LOTE'
     identificacao = factory.Sequence(lambda n: f'Quadra 1, Lote {n}')
-    descricao = factory.LazyAttribute(lambda obj: f'Loteamento Premium - {obj.identificacao}')
+    loteamento = factory.Sequence(lambda n: f'Loteamento {n}')
 
     # Endereço
     cep = factory.Faker('postcode', locale='pt_BR')
@@ -139,14 +140,10 @@ class ImovelFactory(DjangoModelFactory):
     cidade = factory.Faker('city', locale='pt_BR')
     estado = 'MG'
 
-    # Dimensões
-    area_total = Decimal('360.00')
-    area_construida = Decimal('0.00')
-    testada = Decimal('12.00')
-
+    area = Decimal('360.00')
+    valor = Decimal('100000.00')
     matricula = factory.Sequence(lambda n: f'MAT-{n:06d}')
-    status = 'disponivel'
-    valor_venda = Decimal('100000.00')
+    disponivel = True
     ativo = True
 
 
@@ -157,11 +154,11 @@ class CompradorFactory(DjangoModelFactory):
     # NOTA: Comprador NÃO tem campo imobiliaria - é associado via Contrato
     tipo_pessoa = 'PF'
     nome = factory.Faker('name', locale='pt_BR')
-    cpf = factory.Sequence(lambda n: f'325513065{n:02d}')
+    cpf = factory.Sequence(lambda n: f'325.513.{n:03d}-{(n % 99):02d}')
     rg = factory.Sequence(lambda n: f'MG{n:08d}')
     data_nascimento = factory.LazyFunction(lambda: date.today() - timedelta(days=365*30))
     profissao = factory.Faker('job', locale='pt_BR')
-    estado_civil = 'solteiro'
+    estado_civil = 'SOLTEIRO'
 
     # Endereço
     cep = factory.Faker('postcode', locale='pt_BR')
@@ -200,13 +197,14 @@ class ContratoFactory(DjangoModelFactory):
     numero_parcelas = 12
     dia_vencimento = 5
 
-    percentual_juros_mora = Decimal('0.033')
+    tipo_amortizacao = 'PRICE'
+    percentual_juros_mora = Decimal('1.00')
     percentual_multa = Decimal('2.00')
 
     tipo_correcao = 'IPCA'
     prazo_reajuste_meses = 12
 
-    status = 'ativo'
+    status = 'ATIVO'
 
 
 class ParcelaFactory(DjangoModelFactory):
@@ -218,7 +216,7 @@ class ParcelaFactory(DjangoModelFactory):
     data_vencimento = factory.LazyFunction(lambda: date.today() + timedelta(days=30))
     valor_original = Decimal('7500.00')
     valor_atual = Decimal('7500.00')
-    status = 'pendente'
+    pago = False
 
 
 class ReajusteFactory(DjangoModelFactory):
@@ -231,6 +229,8 @@ class ReajusteFactory(DjangoModelFactory):
     percentual = Decimal('5.79')
     parcela_inicial = 1
     parcela_final = 12
+    ciclo = 2
+    aplicado = True
     aplicado_manual = False
 
 
@@ -249,7 +249,7 @@ class HistoricoPagamentoFactory(DjangoModelFactory):
     valor_juros = Decimal('0.00')
     valor_multa = Decimal('0.00')
     valor_desconto = Decimal('0.00')
-    forma_pagamento = 'dinheiro'
+    forma_pagamento = 'DINHEIRO'
 
 
 class ArquivoRetornoFactory(DjangoModelFactory):
@@ -258,5 +258,6 @@ class ArquivoRetornoFactory(DjangoModelFactory):
 
     conta_bancaria = factory.SubFactory(ContaBancariaFactory)
     nome_arquivo = factory.Sequence(lambda n: f'retorno_{n}.ret')
-    data_upload = factory.LazyFunction(date.today)
-    processado = False
+    layout = 'CNAB_240'
+    status = 'PENDENTE'
+    arquivo = factory.django.FileField(filename='retorno.ret', data=b'HEADER\nDETALHE\nTRAILER')
