@@ -163,6 +163,19 @@
             </div>
         </div>
 
+        <!-- Alerta: Intermediárias Vencidas sem Boleto (HU-13) -->
+        {% if intermediarias_vencidas_sem_boleto %}
+        <div class="alert alert-warning d-flex align-items-center mb-3" role="alert">
+            <i class="fas fa-exclamation-triangle me-2 fs-5"></i>
+            <div>
+                <strong>{{ intermediarias_vencidas_sem_boleto|length }} prestação(ões) intermediária(s) vencida(s)</strong> sem boleto gerado.
+                <a href="{% url 'contratos:intermediarias_listar' contrato.pk %}" class="alert-link ms-2">
+                    Ver intermediárias &rarr;
+                </a>
+            </div>
+        </div>
+        {% endif %}
+
         <!-- Estatisticas Rapidas -->
         <div class="row mb-4">
             <div class="col-md-3">
@@ -601,6 +614,74 @@
                         </div>
                     </div>
                 </div>
+
+                <!-- Prestações Intermediárias (HU-13) -->
+                {% if total_intermediarias > 0 %}
+                <div class="card mt-3">
+                    <div class="card-header bg-warning text-dark d-flex justify-content-between align-items-center">
+                        <span><i class="fas fa-hand-holding-usd"></i> Prestações Intermediárias</span>
+                        <div>
+                            <span class="badge bg-success me-1">{{ intermediarias_pagas }} pagas</span>
+                            <span class="badge bg-secondary me-1">{{ intermediarias_pendentes }} pendentes</span>
+                            {% if intermediarias_vencidas_sem_boleto %}
+                            <span class="badge bg-danger">{{ intermediarias_vencidas_sem_boleto|length }} vencidas</span>
+                            {% endif %}
+                            <a href="{% url 'contratos:intermediarias_listar' contrato.pk %}" class="btn btn-sm btn-outline-dark ms-2">
+                                <i class="fas fa-list"></i> Ver todas
+                            </a>
+                        </div>
+                    </div>
+                    <div class="table-responsive">
+                        <table class="table table-sm mb-0">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>#</th>
+                                    <th>Mês</th>
+                                    <th>Valor</th>
+                                    <th>Situação</th>
+                                    <th></th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for inter in intermediarias|slice:":10" %}
+                                <tr class="{% if not inter.paga and intermediarias_vencidas_sem_boleto and inter in intermediarias_vencidas_sem_boleto %}table-danger{% endif %}">
+                                    <td>{{ inter.numero_sequencial }}</td>
+                                    <td>Mês {{ inter.mes_vencimento }}</td>
+                                    <td>{{ inter.valor|moeda }}</td>
+                                    <td>
+                                        {% if inter.paga %}
+                                        <span class="badge bg-success">Paga</span>
+                                        {% elif inter.parcela_vinculada %}
+                                        <span class="badge bg-info">Boleto gerado</span>
+                                        {% else %}
+                                        <span class="badge bg-secondary">Pendente</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        {% if not inter.paga and not inter.parcela_vinculada %}
+                                        <button class="btn btn-xs btn-outline-primary btn-gerar-boleto-inter"
+                                                data-inter-id="{{ inter.pk }}"
+                                                title="Gerar boleto">
+                                            <i class="fas fa-barcode"></i>
+                                        </button>
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                                {% if total_intermediarias > 10 %}
+                                <tr>
+                                    <td colspan="5" class="text-center text-muted small py-2">
+                                        <a href="{% url 'contratos:intermediarias_listar' contrato.pk %}">
+                                            + {{ total_intermediarias|add:"-10" }} mais &rarr;
+                                        </a>
+                                    </td>
+                                </tr>
+                                {% endif %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+                {% endif %}
 
                 <!-- Observacoes -->
                 {% if contrato.observacoes %}
