@@ -1,0 +1,12 @@
+{% extends 'base.html' %}
+{% block title %}Alterar Senha{% endblock %}
+{% block content %}
+<div class="container">
+    <h1>Alterar Senha</h1>
+    <form method="post">
+        {% csrf_token %}
+        {{ form.as_p }}
+        <button type="submit">Alterar</button>
+    </form>
+</div>
+{% endblock %}

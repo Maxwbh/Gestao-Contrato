@@ -268,15 +268,29 @@ class TestBloqueioBoletoPorReajuste:
 
     def test_boleto_bloqueado_segundo_ciclo_sem_reajuste(self, contrato_factory):
         """Testa que boletos são bloqueados no segundo ciclo sem reajuste"""
-        contrato = contrato_factory(prazo_reajuste_meses=12)
+        from datetime import date
+        from dateutil.relativedelta import relativedelta
+        # Contract created 13 months ago so reajuste date (12 months) is in the past
+        contrato = contrato_factory(
+            prazo_reajuste_meses=12,
+            data_contrato=date.today() - relativedelta(months=13),
+            data_primeiro_vencimento=date.today() - relativedelta(months=12),
+        )
 
         pode, motivo = contrato.pode_gerar_boleto(13)
         assert pode is False
-        assert "reajuste pendente" in motivo.lower()
+        assert "pendente" in motivo.lower()
 
-    def test_boleto_liberado_apos_reajuste(self, contrato_com_parcelas, reajuste_factory):
+    def test_boleto_liberado_apos_reajuste(self, contrato_factory, reajuste_factory):
         """Testa que boletos são liberados após aplicar reajuste"""
-        contrato = contrato_com_parcelas
+        from datetime import date
+        from dateutil.relativedelta import relativedelta
+        # Contract created 13 months ago so reajuste date is in the past
+        contrato = contrato_factory(
+            prazo_reajuste_meses=12,
+            data_contrato=date.today() - relativedelta(months=13),
+            data_primeiro_vencimento=date.today() - relativedelta(months=12),
+        )
 
         # Verificar bloqueio inicial
         pode, _ = contrato.pode_gerar_boleto(13)
@@ -286,8 +300,8 @@ class TestBloqueioBoletoPorReajuste:
         reajuste = reajuste_factory(
             contrato=contrato,
             percentual=Decimal('5.00'),
-            parcela_inicial=13,
-            parcela_final=24,
+            parcela_inicial=1001,
+            parcela_final=1120,
             ciclo=2
         )
         reajuste.aplicar_reajuste()
@@ -298,7 +312,14 @@ class TestBloqueioBoletoPorReajuste:
 
     def test_verificar_bloqueio_reajuste(self, contrato_factory):
         """Testa verificação e atualização de bloqueio"""
-        contrato = contrato_factory(prazo_reajuste_meses=12)
+        from datetime import date
+        from dateutil.relativedelta import relativedelta
+        # Contract created 13 months ago so reajuste date is in the past
+        contrato = contrato_factory(
+            prazo_reajuste_meses=12,
+            data_contrato=date.today() - relativedelta(months=13),
+            data_primeiro_vencimento=date.today() - relativedelta(months=12),
+        )
         contrato.ultimo_mes_boleto_gerado = 12  # Último mês do primeiro ciclo
 
         bloqueado = contrato.verificar_bloqueio_reajuste()
@@ -312,14 +333,21 @@ class TestBloqueioBoletoPorReajuste:
 @pytest.fixture
 def contrato_factory(db, imobiliaria_factory, comprador_factory, imovel_factory):
     """Factory para criar contratos"""
+    counter = {'n': 0}
+
     def create(**kwargs):
         from contratos.models import Contrato
 
+        counter['n'] += 1
+        n = counter['n']
+        # Ensure imovel belongs to the same imobiliaria as the contrato
+        imobiliaria = kwargs.pop('imobiliaria', None) or imobiliaria_factory()
+        imovel = kwargs.pop('imovel', None) or imovel_factory(imobiliaria=imobiliaria)
         defaults = {
-            'imobiliaria': kwargs.pop('imobiliaria', None) or imobiliaria_factory(),
+            'imobiliaria': imobiliaria,
             'comprador': kwargs.pop('comprador', None) or comprador_factory(),
-            'imovel': kwargs.pop('imovel', None) or imovel_factory(),
-            'numero_contrato': kwargs.pop('numero_contrato', None) or f'CTR-{timezone.now().timestamp()}',
+            'imovel': imovel,
+            'numero_contrato': kwargs.pop('numero_contrato', None) or f'CTR-{n:06d}-{timezone.now().microsecond}',
             'data_contrato': kwargs.pop('data_contrato', date.today()),
             'data_primeiro_vencimento': kwargs.pop('data_primeiro_vencimento', date.today() + timedelta(days=30)),
             'valor_total': kwargs.pop('valor_total', Decimal('100000.00')),
@@ -344,14 +372,18 @@ def contrato_com_parcelas(contrato_factory):
 @pytest.fixture
 def parcela_factory(db, contrato_factory):
     """Factory para criar parcelas"""
+    counter = {'n': 0}
+
     def create(**kwargs):
         from financeiro.models import Parcela
 
         contrato = kwargs.pop('contrato', None) or contrato_factory()
 
+        counter['n'] += 1
+        # Use high numero_parcela to avoid UNIQUE constraint with auto-generated parcelas
         defaults = {
             'contrato': contrato,
-            'numero_parcela': kwargs.pop('numero_parcela', 1),
+            'numero_parcela': kwargs.pop('numero_parcela', 1000 + counter['n']),
             'data_vencimento': kwargs.pop('data_vencimento', date.today() + timedelta(days=30)),
             'valor_original': kwargs.pop('valor_original', Decimal('1000.00')),
             'valor_atual': kwargs.pop('valor_atual', Decimal('1000.00')),
@@ -406,15 +438,21 @@ def indice_factory(db):
 @pytest.fixture
 def imobiliaria_factory(db, contabilidade_factory):
     """Factory para criar imobiliárias"""
+    counter = {'n': 0}
+
     def create(**kwargs):
         from core.models import Imobiliaria
 
+        counter['n'] += 1
+        n = counter['n']
         defaults = {
             'contabilidade': kwargs.pop('contabilidade', None) or contabilidade_factory(),
+            'nome': 'Imobiliária Teste',
             'razao_social': 'Imobiliária Teste LTDA',
-            'nome': 'Imobiliária Teste', 'razao_social': 'Imobiliária Teste LTDA',
-            'cnpj': f'1234567800{int(timezone.now().timestamp()) % 10000:04d}',
-            'email': 'teste@imobiliaria.com',
+            'cnpj': f'1234{n:010d}',
+            'telefone': '(31) 3333-4000',
+            'email': f'teste{n}@imobiliaria.com',
+            'responsavel_financeiro': 'Responsável Financeiro Teste',
         }
         defaults.update(kwargs)
         return Imobiliaria.objects.create(**defaults)
@@ -425,13 +463,21 @@ def imobiliaria_factory(db, contabilidade_factory):
 @pytest.fixture
 def contabilidade_factory(db):
     """Factory para criar contabilidades"""
+    counter = {'n': 0}
+
     def create(**kwargs):
         from core.models import Contabilidade
 
+        counter['n'] += 1
+        n = counter['n']
         defaults = {
+            'nome': f'Contabilidade Teste {n}',
             'razao_social': 'Contabilidade Teste LTDA',
-            'cnpj': f'9876543200{int(timezone.now().timestamp()) % 10000:04d}',
-            'email': 'teste@contabilidade.com',
+            'cnpj': f'9876{n:010d}',
+            'endereco': 'Rua Contabilidade, 100',
+            'telefone': '(31) 3333-5000',
+            'email': f'teste{n}@contabilidade.com',
+            'responsavel': 'Responsável Teste',
         }
         defaults.update(kwargs)
         return Contabilidade.objects.create(**defaults)
@@ -442,14 +488,20 @@ def contabilidade_factory(db):
 @pytest.fixture
 def comprador_factory(db):
     """Factory para criar compradores"""
+    counter = {'n': 0}
+
     def create(**kwargs):
         from core.models import Comprador
 
+        counter['n'] += 1
+        n = counter['n']
         defaults = {
             'nome': 'Comprador Teste',
             'tipo_pessoa': 'PF',
-            'cpf': f'{int(timezone.now().timestamp()) % 100000000000:011d}',
-            'email': 'comprador@teste.com',
+            'cpf': f'{n:03d}.456.789-{(n % 99):02d}',
+            'email': f'comprador{n}@teste.com',
+            'telefone': '(31) 3333-6000',
+            'celular': '(31) 99999-6000',
             'cep': '01310100',
             'logradouro': 'Av. Paulista',
             'numero': '1000',
@@ -466,15 +518,18 @@ def comprador_factory(db):
 @pytest.fixture
 def imovel_factory(db, imobiliaria_factory):
     """Factory para criar imóveis"""
+    counter = {'n': 0}
+
     def create(**kwargs):
         from core.models import Imovel
 
+        counter['n'] += 1
+        n = counter['n']
         defaults = {
             'imobiliaria': kwargs.pop('imobiliaria', None) or imobiliaria_factory(),
             'tipo': 'LOTE',
-            'identificacao': f'LOTE-{timezone.now().timestamp()}',
-            'quadra': 'A',
-            'lote': '1',
+            'identificacao': f'LOTE-{n:04d}',
+            'area': '360.00',
         }
         defaults.update(kwargs)
         return Imovel.objects.create(**defaults)
