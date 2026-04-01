@@ -212,7 +212,9 @@ class ParcelaFactory(DjangoModelFactory):
         model = Parcela
 
     contrato = factory.SubFactory(ContratoFactory)
-    numero_parcela = factory.Sequence(lambda n: n + 1)
+    # Use high sequence numbers to avoid UNIQUE constraint failures with auto-generated
+    # parcelas (contrato_id, numero_parcela) must be unique; auto-generated start from 1
+    numero_parcela = factory.Sequence(lambda n: 1000 + n)
     data_vencimento = factory.LazyFunction(lambda: date.today() + timedelta(days=30))
     valor_original = Decimal('7500.00')
     valor_atual = Decimal('7500.00')
