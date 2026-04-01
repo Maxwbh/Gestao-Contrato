@@ -79,8 +79,29 @@
           <div class="col-md-4 mb-3">
             <div class="card h-100">
               <div class="card-body text-center">
-                <div class="text-muted small">PMT Ciclo 1 (estimado)</div>
+                {% if resumo.tipo_amortizacao == 'SAC' %}
+                <div class="text-muted small">1ª Prestação (SAC, estimada)</div>
                 <div class="fs-4 fw-bold text-success">R$ {{ resumo.pmt_ciclo1 }}</div>
+                <div class="small text-muted">Última: R$ {{ resumo.pmt_ultimo }}</div>
+                {% else %}
+                <div class="text-muted small">PMT Ciclo 1 (Tabela Price, estimado)</div>
+                <div class="fs-4 fw-bold text-success">R$ {{ resumo.pmt_ciclo1 }}</div>
+                {% endif %}
+              </div>
+            </div>
+          </div>
+          <div class="col-md-4 mb-3">
+            <div class="card h-100">
+              <div class="card-body text-center">
+                <div class="text-muted small">Sistema de Amortização</div>
+                <div class="fs-5 fw-bold">
+                  {% if resumo.tipo_amortizacao == 'SAC' %}
+                  <span class="badge bg-warning text-dark">SAC</span>
+                  {% else %}
+                  <span class="badge bg-info text-dark">Tabela Price</span>
+                  {% endif %}
+                </div>
+                <div class="small text-muted mt-1">Taxa ciclo 1: {{ resumo.taxa_ciclo1 }}% a.m.</div>
               </div>
             </div>
           </div>
@@ -250,6 +271,7 @@ function carregarPreviewParcelas() {
         prazo_reajuste_meses: '{{ resumo.basico.prazo_reajuste_meses|default:12 }}',
         dia_vencimento: '{{ resumo.basico.dia_vencimento|default:1 }}',
         data_primeiro_vencimento: '{{ resumo.basico.data_primeiro_vencimento }}',
+        tipo_amortizacao: '{{ resumo.tipo_amortizacao|default:"PRICE" }}',
         intermediarias_reduzem_pmt: {{ resumo.reduzem_pmt|yesno:"true,false" }},
         soma_intermediarias: '{{ resumo.soma_intermediarias }}',
         juros: {{ resumo.juros_rows|safe|default:"[]" }},
@@ -272,15 +294,20 @@ function carregarPreviewParcelas() {
             container.innerHTML = '<p class="text-danger p-3"><i class="fas fa-exclamation-circle me-1"></i>' + (data.erro || 'Erro ao calcular') + '</p>';
             return;
         }
+        var isSAC = data.tipo_amortizacao === 'SAC';
         var rows = data.parcelas.map(function(p) {
             var trClass = p.inicio_ciclo ? 'table-warning' : '';
             var inter = p.intermediaria ? '<br><small class="text-info">+ Inter. R$ ' + p.intermediaria.toFixed(2) + '</small>' : '';
             var juros = p.juros_mensal > 0 ? p.juros_mensal.toFixed(4) + '% a.m.' : '—';
-            return '<tr class="' + trClass + '"><td>' + p.numero + '</td><td>' + p.vencimento + '</td><td>' + p.ciclo + (p.inicio_ciclo ? ' <span class="badge bg-warning text-dark">início</span>' : '') + '</td><td>' + juros + '</td><td>R$ ' + p.valor.toFixed(2) + inter + '</td></tr>';
+            var breakdown = isSAC && p.amortizacao !== null
+                ? '<br><small class="text-muted">Amort: R$ ' + p.amortizacao.toFixed(2) + ' | Juros: R$ ' + p.juros_embutido.toFixed(2) + '</small>'
+                : '';
+            return '<tr class="' + trClass + '"><td>' + p.numero + '</td><td>' + p.vencimento + '</td><td>' + p.ciclo + (p.inicio_ciclo ? ' <span class="badge bg-warning text-dark">início</span>' : '') + '</td><td>' + juros + '</td><td>R$ ' + p.valor.toFixed(2) + inter + breakdown + '</td></tr>';
         }).join('');
+        var sistema = isSAC ? '<span class="badge bg-warning text-dark">SAC</span>' : '<span class="badge bg-info text-dark">Price</span>';
         container.innerHTML =
-            '<div class="table-responsive"><table class="table table-sm table-hover mb-0"><thead class="table-light"><tr><th>#</th><th>Vencimento</th><th>Ciclo</th><th>Juros</th><th>Valor</th></tr></thead><tbody>' + rows + '</tbody></table></div>' +
-            '<p class="text-muted p-2 mb-0 small">PMT ciclo 1: <strong>R$ ' + data.pmt.toFixed(2) + '</strong> &mdash; base: <strong>R$ ' + data.base_pmt.toFixed(2) + '</strong> &mdash; ' + data.preview_count + ' de ' + data.total_parcelas + ' parcelas</p>';
+            '<div class="table-responsive"><table class="table table-sm table-hover mb-0"><thead class="table-light"><tr><th>#</th><th>Vencimento</th><th>Ciclo</th><th>Juros</th><th>Valor' + (isSAC ? ' (Amort + Juros)' : '') + '</th></tr></thead><tbody>' + rows + '</tbody></table></div>' +
+            '<p class="text-muted p-2 mb-0 small">' + sistema + ' | 1ª prestação: <strong>R$ ' + data.pmt.toFixed(2) + '</strong> &mdash; base: <strong>R$ ' + data.base_pmt.toFixed(2) + '</strong> &mdash; ' + data.preview_count + ' de ' + data.total_parcelas + ' parcelas</p>';
     })
     .catch(function(err) {
         btn.disabled = false;
