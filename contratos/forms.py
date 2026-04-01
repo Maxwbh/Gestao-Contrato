@@ -528,6 +528,11 @@ class ContratoWizardBasicoForm(forms.ModelForm):
             'intermediarias_reduzem_pmt', 'intermediarias_reajustadas',
             'percentual_fruicao', 'percentual_multa_rescisao_penal',
             'percentual_multa_rescisao_adm', 'percentual_cessao',
+            'usar_config_boleto_imobiliaria', 'conta_bancaria_padrao',
+            'tipo_valor_multa', 'valor_multa_boleto',
+            'tipo_valor_juros', 'valor_juros_boleto', 'dias_carencia_boleto',
+            'tipo_valor_desconto', 'valor_desconto_boleto', 'dias_desconto_boleto',
+            'instrucao_boleto_1', 'instrucao_boleto_2', 'instrucao_boleto_3',
             'observacoes',
         ]
         widgets = {
@@ -547,6 +552,14 @@ class ContratoWizardBasicoForm(forms.ModelForm):
             'percentual_multa_rescisao_penal': forms.NumberInput(attrs={'step': '0.0001', 'placeholder': '10,0000'}),
             'percentual_multa_rescisao_adm': forms.NumberInput(attrs={'step': '0.0001', 'placeholder': '12,0000'}),
             'percentual_cessao': forms.NumberInput(attrs={'step': '0.0001', 'placeholder': '3,0000'}),
+            'valor_multa_boleto': forms.NumberInput(attrs={'step': '0.0001', 'min': '0'}),
+            'valor_juros_boleto': forms.NumberInput(attrs={'step': '0.0001', 'min': '0'}),
+            'dias_carencia_boleto': forms.NumberInput(attrs={'min': '0'}),
+            'valor_desconto_boleto': forms.NumberInput(attrs={'step': '0.0001', 'min': '0'}),
+            'dias_desconto_boleto': forms.NumberInput(attrs={'min': '0'}),
+            'instrucao_boleto_1': forms.TextInput(attrs={'placeholder': 'Instrução 1 (opcional)'}),
+            'instrucao_boleto_2': forms.TextInput(attrs={'placeholder': 'Instrução 2 (opcional)'}),
+            'instrucao_boleto_3': forms.TextInput(attrs={'placeholder': 'Instrução 3 (opcional)'}),
             'observacoes': forms.Textarea(attrs={'rows': 2}),
         }
 
@@ -563,6 +576,9 @@ class ContratoWizardBasicoForm(forms.ModelForm):
         self.fields['imovel'].queryset = Imovel.objects.filter(disponivel=True, ativo=True)
         self.fields['comprador'].queryset = Comprador.objects.filter(ativo=True)
         self.fields['imobiliaria'].queryset = Imobiliaria.objects.filter(ativo=True)
+        from financeiro.models import ContaBancaria
+        self.fields['conta_bancaria_padrao'].queryset = ContaBancaria.objects.filter(ativo=True)
+        self.fields['conta_bancaria_padrao'].required = False
 
     def clean(self):
         cleaned_data = super().clean()
