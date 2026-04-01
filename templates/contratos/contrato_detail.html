@@ -707,6 +707,102 @@
             </div>
         </div>
 
+        <!-- 3.2 Aba Boletos Gerados -->
+        {% with boletos=parcelas|dictsort:"numero_parcela" %}
+        {% if parcelas %}
+        <div class="card mt-4">
+            <div class="card-header bg-success text-white d-flex justify-content-between align-items-center">
+                <span><i class="fas fa-barcode"></i> Boletos Gerados</span>
+                <span class="badge bg-light text-dark" id="badgeTotalBoletos">—</span>
+            </div>
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-sm table-hover mb-0" id="tabelaBoletos">
+                        <thead class="table-light">
+                            <tr>
+                                <th class="text-center">#</th>
+                                <th>Vencimento</th>
+                                <th class="text-end">Valor</th>
+                                <th>Nosso Número</th>
+                                <th>Linha Digitável</th>
+                                <th class="text-center">Status</th>
+                                <th class="text-center">Ações</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for parcela in parcelas %}
+                            {% if parcela.tem_boleto %}
+                            <tr>
+                                <td class="text-center"><strong>{{ parcela.numero_parcela }}</strong></td>
+                                <td>{{ parcela.data_vencimento|date:"d/m/Y" }}</td>
+                                <td class="text-end">{{ parcela.valor_atual|moeda }}</td>
+                                <td>
+                                    {% if parcela.nosso_numero %}
+                                    <span class="font-monospace small text-muted">{{ parcela.get_nosso_numero_formatado }}</span>
+                                    {% else %}-{% endif %}
+                                </td>
+                                <td>
+                                    {% if parcela.linha_digitavel %}
+                                    <div class="d-flex align-items-center gap-1">
+                                        <span class="font-monospace text-muted" style="font-size:0.7rem;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="{{ parcela.linha_digitavel }}">{{ parcela.linha_digitavel }}</span>
+                                        <button type="button" class="btn btn-link btn-sm p-0 text-secondary"
+                                                onclick="copiarLinhaDigitavel('{{ parcela.linha_digitavel|escapejs }}')"
+                                                title="Copiar linha digitável">
+                                            <i class="fas fa-copy" style="font-size:0.75rem;"></i>
+                                        </button>
+                                    </div>
+                                    {% else %}-{% endif %}
+                                </td>
+                                <td class="text-center">
+                                    {% if parcela.status_boleto == 'PAGO' %}
+                                        <span class="badge bg-success">Pago</span>
+                                    {% elif parcela.status_boleto == 'GERADO' %}
+                                        <span class="badge bg-primary">Gerado</span>
+                                    {% elif parcela.status_boleto == 'REGISTRADO' %}
+                                        <span class="badge bg-info text-dark">Registrado</span>
+                                    {% elif parcela.status_boleto == 'VENCIDO' %}
+                                        <span class="badge bg-warning text-dark">Vencido</span>
+                                    {% elif parcela.status_boleto == 'CANCELADO' %}
+                                        <span class="badge bg-secondary">Cancelado</span>
+                                    {% elif parcela.status_boleto == 'PROTESTADO' %}
+                                        <span class="badge bg-danger">Protestado</span>
+                                    {% else %}
+                                        <span class="badge bg-secondary">{{ parcela.status_boleto }}</span>
+                                    {% endif %}
+                                </td>
+                                <td class="text-center">
+                                    <div class="btn-group btn-group-sm">
+                                        <a href="{% url 'financeiro:visualizar_boleto' parcela.pk %}"
+                                           class="btn btn-outline-primary" title="Visualizar" target="_blank">
+                                            <i class="fas fa-eye"></i>
+                                        </a>
+                                        <a href="{% url 'financeiro:download_boleto' parcela.pk %}"
+                                           class="btn btn-outline-success" title="Download PDF">
+                                            <i class="fas fa-download"></i>
+                                        </a>
+                                        {% if parcela.status_boleto != 'CANCELADO' and parcela.status_boleto != 'PAGO' %}
+                                        <button type="button" class="btn btn-outline-danger"
+                                                onclick="cancelarBoleto({{ parcela.pk }})" title="Cancelar Boleto">
+                                            <i class="fas fa-times"></i>
+                                        </button>
+                                        {% endif %}
+                                    </div>
+                                </td>
+                            </tr>
+                            {% endif %}
+                            {% endfor %}
+                            {% comment %}If no boleto rows were rendered{% endcomment %}
+                        </tbody>
+                    </table>
+                </div>
+                <div id="semBoletos" class="p-3 text-center text-muted d-none">
+                    <i class="fas fa-info-circle"></i> Nenhum boleto gerado para este contrato.
+                </div>
+            </div>
+        </div>
+        {% endif %}
+        {% endwith %}
+
         <!-- Botoes de Acao -->
         <div class="card mt-4">
             <div class="card-body d-flex justify-content-between">
@@ -2132,5 +2228,20 @@ function excluirReajuste(reajusteId, ciclo, percentual) {
         alert('Erro de conexao: ' + error);
     });
 }
+
+// 3.2 — Badge "Boletos Gerados"
+document.addEventListener('DOMContentLoaded', function() {
+    var tabelaBoletos = document.getElementById('tabelaBoletos');
+    if (!tabelaBoletos) return;
+    var linhas = tabelaBoletos.querySelectorAll('tbody tr');
+    var count = linhas.length;
+    var badge = document.getElementById('badgeTotalBoletos');
+    if (badge) badge.textContent = count + ' boleto(s)';
+    if (count === 0) {
+        var semBoletos = document.getElementById('semBoletos');
+        if (semBoletos) semBoletos.classList.remove('d-none');
+        tabelaBoletos.classList.add('d-none');
+    }
+});
 </script>
 {% endblock %}

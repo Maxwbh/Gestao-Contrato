@@ -2,7 +2,7 @@
 
 **Desenvolvedor:** Maxwell da Silva Oliveira (maxwbh@gmail.com)
 **Empresa:** M&S do Brasil LTDA
-**Última atualização:** 2026-04-01 (rev 4)
+**Última atualização:** 2026-04-01 (rev 5)
 
 > Pendentes organizados por prioridade.
 > Para documentação do sistema atual, consulte **[SISTEMA.md](SISTEMA.md)**.
@@ -62,22 +62,22 @@
 | # | Tela/Componente | Status |
 |---|-----------------|--------|
 | 3.1 | Aba Histórico de Reajustes (contrato) | ✅ Implementado como R-14 |
-| 3.2 | Aba Boletos gerados (lista com status e download) | — |
+| 3.2 | Aba Boletos gerados (lista com status e download) | ✅ Card "Boletos Gerados" em `contrato_detail.html` |
 | 3.3 | Wizard de criação de contrato (4 etapas) | ✅ step1 a step4 |
-| 3.4 | Dashboard Contabilidade: gráfico recebimentos mensais | — |
-| 3.5 | Dashboard Contabilidade: gráfico inadimplência por imobiliária | — |
-| 3.6 | Dashboard Contabilidade: tabela vencimentos consolidados | — |
-| 3.7 | Dashboard Imobiliária: filtros na lista de contratos | — |
-| 3.8 | Dashboard Imobiliária: busca rápida por contrato/comprador | — |
-| 3.9 | Dashboard Imobiliária: ações em lote (gerar boletos) | — |
+| 3.4 | Dashboard Contabilidade: gráfico recebimentos mensais | ✅ Chart.js barras em `dashboard.html` |
+| 3.5 | Dashboard Contabilidade: gráfico inadimplência por imobiliária | ✅ Chart.js linha em `dashboard.html` |
+| 3.6 | Dashboard Contabilidade: tabela vencimentos consolidados | ✅ Tabela próximos 3 meses em `dashboard.html` |
+| 3.7 | Dashboard Imobiliária: filtros na lista de contratos | ✅ Status + imobiliária em `contrato_list.html` |
+| 3.8 | Dashboard Imobiliária: busca rápida por contrato/comprador | ✅ Busca textual em `contrato_list.html` |
+| 3.9 | Dashboard Imobiliária: ações em lote (gerar boletos) | ✅ `abrirModalGerarLote()` em `contrato_list.html` |
 | 3.10 | Dashboard Imobiliária: fluxo de caixa previsto vs realizado | — |
 | 3.11 | Gestão de Boletos: interface geração em lote com progresso | ✅ `gerar_carne` + templates |
 | 3.12 | Gestão de Boletos: download ZIP de vários boletos | — |
 | 3.13 | Gestão de Parcelas: seleção múltipla para ações em lote | ✅ Seleção múltipla implementada |
-| 3.14 | Gestão de Parcelas: juros/multa/total nas vencidas | — |
+| 3.14 | Gestão de Parcelas: juros/multa/total nas vencidas | ✅ Cálculo dinâmico em `listar_parcelas` view |
 | 3.15 | Sidebar recolhível com indicadores de pendências | — |
-| 3.16 | Toast de sucesso/erro padronizado | — |
-| 3.17 | Centro de notificações com badge | — |
+| 3.16 | Toast de sucesso/erro padronizado | ✅ `window.showToast()` global em `base.html` |
+| 3.17 | Centro de notificações com badge | ✅ Badge navbar + endpoint `api_reajustes_pendentes_count` |
 
 ### P3 — Médio
 | # | Tela/Componente |
