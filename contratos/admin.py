@@ -127,18 +127,9 @@ class ContratoAdmin(admin.ModelAdmin):
                 'percentual_multa_rescisao_penal',
                 'percentual_multa_rescisao_adm',
                 'percentual_cessao',
-                'prazo_escritura_dias',
             ),
             'classes': ('collapse',),
-            'description': 'Percentuais definidos em cláusula contratual para rescisão, fruição, cessão e prazo de escritura.'
-        }),
-        ('Testemunhas', {
-            'fields': (
-                ('testemunha_1_nome', 'testemunha_1_cpf'),
-                ('testemunha_2_nome', 'testemunha_2_cpf'),
-            ),
-            'classes': ('collapse',),
-            'description': 'Testemunhas para fins de impressão do contrato (G-14).'
+            'description': 'Percentuais definidos em cláusula contratual para rescisão, fruição e cessão.'
         }),
         ('Informações de Pagamento', {
             'fields': (
