@@ -389,6 +389,78 @@
     <!-- Custom JS -->
     <script src="{% static 'js/custom.js' %}"></script>
 
+    <!-- =====================================================
+         SISTEMA DE TOAST GLOBAL (3.16)
+         Uso: window.showToast('Mensagem', 'success'|'error'|'warning'|'info')
+         ===================================================== -->
+    <div id="globalToastContainer" style="
+        position: fixed; top: 20px; right: 20px; z-index: 99999;
+        display: flex; flex-direction: column; gap: 10px; min-width: 320px;
+    "></div>
+    <style>
+        .global-toast {
+            display: flex; align-items: flex-start; gap: 12px;
+            padding: 14px 18px; border-radius: 8px; color: #fff;
+            box-shadow: 0 4px 16px rgba(0,0,0,.2);
+            animation: toastIn .3s ease-out;
+            cursor: pointer;
+        }
+        @keyframes toastIn { from { transform: translateX(120%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+        @keyframes toastOut { from { transform: translateX(0); opacity: 1; } to { transform: translateX(120%); opacity: 0; } }
+        .global-toast.success { background: linear-gradient(135deg,#27ae60,#2ecc71); }
+        .global-toast.error   { background: linear-gradient(135deg,#c0392b,#e74c3c); }
+        .global-toast.warning { background: linear-gradient(135deg,#d68910,#f39c12); }
+        .global-toast.info    { background: linear-gradient(135deg,#1a5276,#2980b9); }
+        .global-toast .toast-icon { font-size: 1.3rem; margin-top: 1px; }
+        .global-toast .toast-body { flex: 1; font-size: .92rem; line-height: 1.4; }
+        .global-toast .toast-close { opacity: .7; font-size: .85rem; margin-top: 2px; flex-shrink: 0; }
+        .global-toast .toast-close:hover { opacity: 1; }
+        /* Badge de notificações */
+        .badge-notify { font-size: .6rem; vertical-align: super; }
+    </style>
+    <script>
+    window.showToast = function(message, type, duration) {
+        type = type || 'info';
+        duration = duration || 4000;
+        const icons = { success: 'fa-check-circle', error: 'fa-times-circle', warning: 'fa-exclamation-triangle', info: 'fa-info-circle' };
+        const container = document.getElementById('globalToastContainer');
+        const toast = document.createElement('div');
+        toast.className = 'global-toast ' + type;
+        toast.innerHTML = `
+            <i class="fas ${icons[type] || icons.info} toast-icon"></i>
+            <div class="toast-body">${message}</div>
+            <i class="fas fa-times toast-close" onclick="this.closest('.global-toast').remove()"></i>`;
+        container.appendChild(toast);
+        setTimeout(() => {
+            toast.style.animation = 'toastOut .3s ease-in forwards';
+            setTimeout(() => toast.remove(), 310);
+        }, duration);
+        toast.addEventListener('click', () => toast.remove());
+    };
+
+    // Notificações: carregar count de reajustes pendentes (3.17)
+    {% if user.is_authenticated %}
+    document.addEventListener('DOMContentLoaded', function() {
+        fetch('{% url "financeiro:api_reajustes_pendentes_count" %}')
+            .then(r => r.ok ? r.json() : null)
+            .then(data => {
+                if (data && data.count > 0) {
+                    const link = document.getElementById('notificacoesDropdown');
+                    if (link) {
+                        const badge = document.createElement('span');
+                        badge.className = 'badge bg-danger badge-notify ms-1';
+                        badge.id = 'badgeReajustesPendentes';
+                        badge.textContent = data.count;
+                        badge.title = data.count + ' reajuste(s) pendente(s)';
+                        link.appendChild(badge);
+                    }
+                }
+            })
+            .catch(() => {});
+    });
+    {% endif %}
+    </script>
+
     {% block extra_js %}{% endblock %}
 </body>
 </html>
