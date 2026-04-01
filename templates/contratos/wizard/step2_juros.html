@@ -1,0 +1,187 @@
+{% extends 'base.html' %}
+
+{% block title %}Wizard — Etapa 2: Tabela de Juros{% endblock %}
+
+{% block content %}
+<div class="row">
+  <div class="col-12 col-lg-10 mx-auto">
+
+    <!-- Progress bar -->
+    <div class="card mb-3">
+      <div class="card-body py-2">
+        <div class="d-flex justify-content-between align-items-center mb-1">
+          <small class="text-muted">Etapa {{ step_num }} de 4</small>
+          <small class="text-muted">Tabela de Juros</small>
+        </div>
+        <div class="progress" style="height: 8px;">
+          <div class="progress-bar bg-primary" style="width: 50%;"></div>
+        </div>
+        <div class="d-flex justify-content-between mt-2">
+          <span class="badge bg-success">1. Dados Básicos</span>
+          <span class="badge bg-primary">2. Juros</span>
+          <span class="badge bg-secondary">3. Intermediárias</span>
+          <span class="badge bg-secondary">4. Confirmar</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <h5 class="mb-0">
+          <i class="fas fa-percentage me-2"></i>Etapa 2: Faixas de Taxa de Juros (Tabela Price)
+        </h5>
+      </div>
+      <div class="card-body">
+
+        {% if messages %}
+          {% for msg in messages %}
+            <div class="alert alert-{{ msg.tags }} alert-dismissible fade show" role="alert">
+              {{ msg }}
+              <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+            </div>
+          {% endfor %}
+        {% endif %}
+
+        <p class="text-muted small mb-3">
+          Defina as faixas de taxa de juros mensal para diferentes ciclos de reajuste.
+          Cada faixa se aplica a um intervalo de ciclos. O Ciclo Fim pode ser deixado em branco para indicar "sem limite".
+        </p>
+
+        <form method="post" action="{% url 'contratos:wizard' step='juros' %}" id="juros-form">
+          {% csrf_token %}
+          <input type="hidden" name="juros_count" id="juros-count" value="{{ juros_rows|length }}">
+
+          <div class="table-responsive mb-3">
+            <table class="table table-bordered table-sm align-middle" id="juros-table">
+              <thead class="table-light">
+                <tr>
+                  <th style="width: 130px;">Ciclo Início *</th>
+                  <th style="width: 130px;">Ciclo Fim</th>
+                  <th style="width: 160px;">Taxa Mensal (%) *</th>
+                  <th>Observações</th>
+                  <th style="width: 50px;"></th>
+                </tr>
+              </thead>
+              <tbody id="juros-tbody">
+                {% for row in juros_rows %}
+                <tr>
+                  <td>
+                    <input type="number" class="form-control form-control-sm"
+                           name="juros_{{ forloop.counter0 }}_ciclo_inicio"
+                           value="{{ row.ciclo_inicio }}" min="1" required>
+                  </td>
+                  <td>
+                    <input type="number" class="form-control form-control-sm"
+                           name="juros_{{ forloop.counter0 }}_ciclo_fim"
+                           value="{{ row.ciclo_fim|default:'' }}" min="1"
+                           placeholder="(em aberto)">
+                  </td>
+                  <td>
+                    <input type="number" class="form-control form-control-sm"
+                           name="juros_{{ forloop.counter0 }}_juros_mensal"
+                           value="{{ row.juros_mensal }}" step="0.0001" min="0" max="100" required>
+                  </td>
+                  <td>
+                    <input type="text" class="form-control form-control-sm"
+                           name="juros_{{ forloop.counter0 }}_observacoes"
+                           value="{{ row.observacoes|default:'' }}" placeholder="Opcional">
+                  </td>
+                  <td class="text-center">
+                    <button type="button" class="btn btn-sm btn-outline-danger remove-row" title="Remover">
+                      <i class="fas fa-trash"></i>
+                    </button>
+                  </td>
+                </tr>
+                {% empty %}
+                <tr>
+                  <td>
+                    <input type="number" class="form-control form-control-sm"
+                           name="juros_0_ciclo_inicio" value="1" min="1" required>
+                  </td>
+                  <td>
+                    <input type="number" class="form-control form-control-sm"
+                           name="juros_0_ciclo_fim" value="1" min="1">
+                  </td>
+                  <td>
+                    <input type="number" class="form-control form-control-sm"
+                           name="juros_0_juros_mensal" value="0.0000" step="0.0001" min="0" max="100" required>
+                  </td>
+                  <td>
+                    <input type="text" class="form-control form-control-sm"
+                           name="juros_0_observacoes" value="Ciclo 1 — isenção" placeholder="Opcional">
+                  </td>
+                  <td class="text-center">
+                    <button type="button" class="btn btn-sm btn-outline-danger remove-row" title="Remover">
+                      <i class="fas fa-trash"></i>
+                    </button>
+                  </td>
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+
+          <button type="button" class="btn btn-outline-success btn-sm mb-3" id="add-row">
+            <i class="fas fa-plus me-1"></i>Adicionar Faixa
+          </button>
+
+          <div class="d-flex justify-content-between mt-3">
+            <a href="{% url 'contratos:wizard' step='basico' %}" class="btn btn-outline-secondary">
+              <i class="fas fa-arrow-left me-2"></i>Voltar
+            </a>
+            <button type="submit" class="btn btn-primary">
+              Próximo: Intermediárias <i class="fas fa-arrow-right ms-2"></i>
+            </button>
+          </div>
+        </form>
+
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function () {
+  const tbody = document.getElementById('juros-tbody');
+  const countInput = document.getElementById('juros-count');
+
+  function reindex() {
+    const rows = tbody.querySelectorAll('tr');
+    rows.forEach((tr, i) => {
+      tr.querySelectorAll('input').forEach(inp => {
+        // name like juros_0_field -> juros_i_field
+        inp.name = inp.name.replace(/juros_\d+_/, `juros_${i}_`);
+      });
+    });
+    countInput.value = rows.length;
+  }
+
+  document.getElementById('add-row').addEventListener('click', function () {
+    const idx = tbody.querySelectorAll('tr').length;
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td><input type="number" class="form-control form-control-sm" name="juros_${idx}_ciclo_inicio" min="1" required></td>
+      <td><input type="number" class="form-control form-control-sm" name="juros_${idx}_ciclo_fim" min="1" placeholder="(em aberto)"></td>
+      <td><input type="number" class="form-control form-control-sm" name="juros_${idx}_juros_mensal" step="0.0001" min="0" max="100" placeholder="0.6000" required></td>
+      <td><input type="text" class="form-control form-control-sm" name="juros_${idx}_observacoes" placeholder="Opcional"></td>
+      <td class="text-center"><button type="button" class="btn btn-sm btn-outline-danger remove-row"><i class="fas fa-trash"></i></button></td>
+    `;
+    tbody.appendChild(tr);
+    reindex();
+  });
+
+  tbody.addEventListener('click', function (e) {
+    const btn = e.target.closest('.remove-row');
+    if (btn) {
+      const rows = tbody.querySelectorAll('tr');
+      if (rows.length > 1) {
+        btn.closest('tr').remove();
+        reindex();
+      }
+    }
+  });
+})();
+</script>
+{% endblock %}
