@@ -2,7 +2,7 @@
 
 **Desenvolvedor:** Maxwell da Silva Oliveira (maxwbh@gmail.com)
 **Empresa:** M&S do Brasil LTDA
-**Última atualização:** 2026-03-31
+**Última atualização:** 2026-04-01
 
 > Pendentes organizados por prioridade.
 > Para documentação do sistema atual, consulte **[SISTEMA.md](SISTEMA.md)**.
@@ -362,36 +362,106 @@
 
 ---
 
+## 11. ADEQUAÇÃO AO CONTRATO REAL — Minuta Parque das Nogueiras ✅ CONCLUÍDO
+
+> **Contexto:** Análise comparativa do contrato real "MINUTA L 13 Q C 22072020.pdf"
+> (promessa de compra e venda de lote, Sete Lagoas/MG) contra a estrutura de dados do sistema.
+> Gaps identificados e implementados.
+
+---
+
+### 11.1 Gaps de Estrutura de Dados
+
+| # | Gap identificado | Solução implementada | Status |
+|---|-----------------|----------------------|--------|
+| G-01 | **Vendedor pessoa física** — contrato tem CPF do vendedor (não imobiliária) | `Contrato.vendedor_nome` + `Contrato.vendedor_cpf_cnpj` | ✅ |
+| G-02 | **Índice de fallback** — INPC substitui IGPM se extinto (cláusula contratual) | `Contrato.tipo_correcao_fallback`; usado automaticamente em `preview_reajuste()` quando índice principal sem dados | ✅ |
+| G-03 | **Taxa de fruição** — 0,5%/mês sobre valor atualizado em rescisão pelo comprador | `Contrato.percentual_fruicao` (default 0,5000%) | ✅ |
+| G-04 | **Multa penal de rescisão** — 10% do valor atualizado retido pelo vendedor | `Contrato.percentual_multa_rescisao_penal` (default 10,0000%) | ✅ |
+| G-05 | **Despesas administrativas de rescisão** — 12% retido | `Contrato.percentual_multa_rescisao_adm` (default 12,0000%) | ✅ |
+| G-06 | **Taxa de cessão de direitos** — 3% sobre valor atualizado | `Contrato.percentual_cessao` (default 3,0000%) | ✅ |
+| G-07 | **Juros compostos escalantes por ano** — ano 1 fixo, ano 2: 0,60% a.m., ano 3: 0,65%… ano 7+: 0,85% a.m. | Novo model `TabelaJurosContrato` (ciclo_inicio, ciclo_fim, juros_mensal); `get_juros_para_ciclo()` usado no `preview_reajuste()` com precedência sobre `spread_reajuste` fixo | ✅ |
+| G-08 | **`calcular_saldo_devedor()` incorreto** para contratos com tabela price / juros compostos embutidos | Reescrito: soma `valor_atual` das parcelas NORMAL não pagas (correto para qualquer estrutura de parcelas, inclusive price) | ✅ |
+| G-09 | **`Imovel.identificacao` como texto livre** — genérico o suficiente para lote, apto, sala, endereço DF, quarto de hotel | Mantido genérico; help_text atualizado com exemplos variados. Campos específicos `quadra`/`lote` propostos e revertidos por decisão de design | ✅ |
+
+---
+
+### 11.2 Gaps Pendentes (Fora do Escopo Atual)
+
+> Estes gaps existem no contrato real mas requerem features completas, não apenas campos.
+
+| # | Gap | Complexidade | Prioridade |
+|---|-----|--------------|------------|
+| G-10 | **Cálculo de rescisão** — tela/endpoint que aplica fruição + multa penal + adm e gera valor de devolução | Alta | P3 |
+| G-11 | **Cálculo de cessão** — tela para calcular taxa de cessão e registrar transferência de comprador | Média | P3 |
+| G-12 | **Taxa condominial (APMRPN)** — 1,32% de fração ideal mensal, cobrada separado do contrato | Alta | P4 |
+| G-13 | **Testemunhas do contrato** — campos testemunha_1_nome, testemunha_1_cpf etc. para impressão do contrato | Baixa | P4 |
+| G-14 | **Prazo para escritura** — prazo de 60+30 dias após quitação para lavratura de escritura | Média | P4 |
+| G-15 | **Juros de mora pro rata die** — 0,033%/dia (contrato usa esta fórmula, não 1%/mês simples) | Média | P3 |
+
+---
+
+### 11.3 Admin e Ferramentas
+
+| # | Item | Status |
+|---|------|--------|
+| A-01 | `TabelaJurosContrato` registrado no Django Admin (`TabelaJurosContratoAdmin` + `TabelaJurosInline` no Contrato) | ✅ |
+| A-02 | `ContratoAdmin` fieldsets atualizados com todos os novos campos (Vendedor, Cláusulas Contratuais, fallback, spread) | ✅ |
+| A-03 | Link **"Dados de Teste"** adicionado no menu Admin do `base.html` (visível para staff/superuser) | ✅ |
+| A-04 | Página de Dados de Teste inclui counter de `TabelaJurosContrato` + atualiza via JS pós-geração | ✅ |
+
+---
+
+### 11.4 Migration
+
+| Migration | App | Conteúdo |
+|-----------|-----|----------|
+| `contratos/0005_contrato_clausulas_vendedor_tabela_juros` | contratos | Cria `TabelaJurosContrato`; adiciona 7 campos ao `Contrato`: `vendedor_nome`, `vendedor_cpf_cnpj`, `tipo_correcao_fallback`, `percentual_fruicao`, `percentual_multa_rescisao_penal`, `percentual_multa_rescisao_adm`, `percentual_cessao` |
+
+---
+
 ## Ordem de Execução Recomendada
 
-| Fase | Escopo | Seções |
-|------|--------|--------|
-| **1** | Correções críticas de infraestrutura | 1 |
-| **2** | ⭐ **Reajuste — Fórmulário + Preview + Pendentes** | 10 (Fase 1–2) |
-| **3** | Testes P1 (apps sem cobertura) | 7.1 |
-| **4** | Frontend P2 (telas principais) | 3 (P2) |
-| **5** | ⭐ **Reajuste — Acumulado + Histórico + Auditoria** | 10 (Fase 3–4) |
-| **6** | APIs P2 | 4 (P2) |
-| **7** | Testes P2 (views e APIs) | 7.2 |
-| **8** | Permissões e segurança | 6 |
-| **9** | ⭐ **Reajuste — Índice composto + Lote + Celery** | 10 (Fase 5–6) |
-| **10** | Testes P3/P4 + CI/CD | 7.3, 7.4, 8 |
-| **11** | Frontend P3/P4 | 3 (P3, P4) |
-| **12** | Documentação | 9 |
+| Fase | Escopo | Seções | Status |
+|------|--------|--------|--------|
+| **1** | Correções críticas de infraestrutura | 1 | ✅ |
+| **2** | ⭐ **Reajuste — Formulário + Preview + Pendentes** | 10 (Fase 1–2) | ✅ |
+| **3** | Testes P1 (apps sem cobertura) | 7.1 | ✅ |
+| **4** | ⭐ **Reajuste — Acumulado + Histórico + Auditoria** | 10 (Fase 3–4) | ✅ |
+| **5** | ⭐ **Reajuste — Índice composto + Lote + Celery** | 10 (Fase 5) | ✅ |
+| **6** | ⭐ **Adequação ao contrato real — estrutura de dados** | 11 | ✅ |
+| **7** | Frontend P2 (telas principais) | 3 (P2) | — |
+| **8** | APIs P2 | 4 (P2) | — |
+| **9** | Testes P2 (views e APIs) | 7.2 | — |
+| **10** | Permissões e segurança | 6 | — |
+| **11** | Cálculos contratuais avançados (rescisão, cessão, mora pro rata) | 11 (G-10, G-11, G-15) | — |
+| **12** | Testes P3/P4 + CI/CD | 7.3, 7.4, 8 | — |
+| **13** | Frontend P3/P4 | 3 (P3, P4) | — |
+| **14** | Documentação | 9 | — |
 
 ---
 
 ## Resumo Quantitativo
 
-| Categoria | P1 | P2 | P3 | P4 | Total |
-|-----------|----|----|----|----|-------|
-| Infraestrutura | 3 | 2 | 1 | — | 6 |
-| Backend | — | ✅8 | 3 | 1 | 12 |
-| Frontend | — | 17 | 15 | 3 | 35 |
-| APIs | — | 6 | 5 | — | 11 |
-| Celery | — | 2 | 2 | 1 | 5 |
-| Permissões | — | 4 | 4 | 2 | 10 |
-| Testes | ✅104 | ~164 | ~37 | ~41 | ~346 |
-| CI/CD | — | 2 | 4 | 2 | 8 |
-| Documentação | — | — | 1 | 3 | 4 |
-| **Total** | **~107** | **~205** | **~72** | **~53** | **~437** |
+| Categoria | P1 | P2 | P3 | P4 | Total | Concluído |
+|-----------|----|----|----|----|-------|-----------|
+| Infraestrutura | 3 | 2 | 1 | — | 6 | ✅ 3/3 P1 |
+| Backend — Regras | — | 8 | 3 | 1 | 12 | ✅ 8/8 P2 |
+| Reajuste | 4 | 4 | 7 | — | 15+4=19 | ✅ 19/19 |
+| Contrato Real (gaps) | — | — | 9 | 6 | 15 | ✅ 9/9 (P3) · 6 pendentes P4 |
+| Frontend | — | 17 | 15 | 3 | 35 | — |
+| APIs | — | 6 | 5 | — | 11 | — |
+| Celery | — | 2 | 2 | 1 | 5 | — |
+| Permissões | — | 4 | 4 | 2 | 10 | — |
+| Testes | 104 | ~164 | ~37 | ~41 | ~346 | ✅ 104/104 P1 |
+| CI/CD | — | 2 | 4 | 2 | 8 | — |
+| Documentação | — | — | 1 | 3 | 4 | — |
+| **Total** | **~111** | **~209** | **~88** | **~59** | **~467** | |
+
+### ✅ Fases concluídas nesta sessão (2026-04-01)
+- **Seção 11 completa:** Análise do contrato real + 9 gaps estruturais implementados
+- `TabelaJurosContrato` — juros escalantes por ciclo (0,60% → 0,85% a.m.)
+- `calcular_saldo_devedor()` — corrigido para tabela price e juros compostos
+- Fallback de índice automático em `preview_reajuste()`
+- 6 novos campos no `Contrato` (vendedor, cláusulas contratuais)
+- Admin, navegação e dados de teste atualizados
