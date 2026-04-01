@@ -194,17 +194,22 @@ class Command(BaseCommand):
         Contabilidade.objects.all().delete()
 
     def criar_contabilidade(self):
-        """Cria 1 Contabilidade"""
-        return Contabilidade.objects.create(
-            nome='Contabilidade Sete Lagoas',
-            razao_social='M&S Contabilidade e Consultoria LTDA',
+        """Cria 1 Contabilidade (get_or_create — idempotente)"""
+        obj, created = Contabilidade.objects.get_or_create(
             cnpj='12.345.678/0001-90',
-            endereco='Rua Principal, 123 - Centro - Sete Lagoas/MG - CEP: 35700-000',
-            telefone='(31) 3773-1234',
-            email='contato@msbrasil.inf.br',
-            responsavel='Maxwell da Silva Oliveira',
-            ativo=True
+            defaults={
+                'nome': 'Contabilidade Sete Lagoas',
+                'razao_social': 'M&S Contabilidade e Consultoria LTDA',
+                'endereco': 'Rua Principal, 123 - Centro - Sete Lagoas/MG - CEP: 35700-000',
+                'telefone': '(31) 3773-1234',
+                'email': 'contato@msbrasil.inf.br',
+                'responsavel': 'Maxwell da Silva Oliveira',
+                'ativo': True,
+            }
         )
+        if not created:
+            self.stdout.write('   → Contabilidade já existe, reutilizando.')
+        return obj
 
     def criar_imobiliarias(self, contabilidade, quantidade):
         """Cria Imobiliárias com endereço estruturado"""
@@ -231,26 +236,32 @@ class Command(BaseCommand):
         ]
 
         for i, d in enumerate(dados[:quantidade]):
-            imobiliaria = Imobiliaria.objects.create(
-                contabilidade=contabilidade,
-                nome=d['nome'],
-                razao_social=f'{d["nome"]} Negócios Imobiliários LTDA',
-                cnpj=f'23.456.78{i}/0001-{10+i}',
-                cep=d['cep'],
-                logradouro=d['logradouro'],
-                numero=d['numero'],
-                bairro=d['bairro'],
-                cidade=d['cidade'],
-                estado=d['estado'],
-                telefone=f'(31) 3773-{2000+i*100}',
-                email=f'contato@{d["nome"].lower().replace(" ", "")}.com.br',
-                responsavel_financeiro=self.fake.name(),
-                banco='Banco do Brasil',
-                agencia=f'{3000+i}',
-                conta=f'{50000+i*1000}-{i}',
-                pix=f'pix@{d["nome"].lower().replace(" ", "")}.com.br',
-                ativo=True
+            cnpj = f'23.456.78{i}/0001-{10+i:02d}'
+            imobiliaria, created = Imobiliaria.objects.get_or_create(
+                cnpj=cnpj,
+                defaults={
+                    'contabilidade': contabilidade,
+                    'tipo_pessoa': 'PJ',
+                    'nome': d['nome'],
+                    'razao_social': f'{d["nome"]} Negócios Imobiliários LTDA',
+                    'cep': d['cep'],
+                    'logradouro': d['logradouro'],
+                    'numero': d['numero'],
+                    'bairro': d['bairro'],
+                    'cidade': d['cidade'],
+                    'estado': d['estado'],
+                    'telefone': f'(31) 3773-{2000+i*100}',
+                    'email': f'contato@{d["nome"].lower().replace(" ", "")}.com.br',
+                    'responsavel_financeiro': self.fake.name(),
+                    'banco': 'Banco do Brasil',
+                    'agencia': f'{3000+i}',
+                    'conta': f'{50000+i*1000}-{i}',
+                    'pix': f'pix@{d["nome"].lower().replace(" ", "")}.com.br',
+                    'ativo': True,
+                }
             )
+            if not created:
+                self.stdout.write(f'   → Imobiliária "{d["nome"]}" já existe, reutilizando.')
             imobiliarias.append(imobiliaria)
 
         return imobiliarias
@@ -318,22 +329,24 @@ class Command(BaseCommand):
                 else:
                     conta_completa = conta_numero
 
-                conta = ContaBancaria.objects.create(
+                conta, _ = ContaBancaria.objects.get_or_create(
                     imobiliaria=imobiliaria,
                     banco=config['banco'],
-                    descricao=f"{config['descricao']} - {imobiliaria.nome}",
-                    principal=(i == 0),  # BB é a principal
-                    agencia=agencia_completa,
-                    conta=conta_completa,
-                    convenio=config['convenio'],
-                    carteira=config['carteira'],
-                    nosso_numero_atual=config['nosso_numero_atual'],
-                    cobranca_registrada=True,
-                    prazo_baixa=30,
-                    prazo_protesto=0,
-                    layout_cnab='CNAB_240',
-                    numero_remessa_cnab_atual=1,
-                    ativo=True
+                    defaults=dict(
+                        descricao=f"{config['descricao']} - {imobiliaria.nome}",
+                        principal=(i == 0),  # BB é a principal
+                        agencia=agencia_completa,
+                        conta=conta_completa,
+                        convenio=config['convenio'],
+                        carteira=config['carteira'],
+                        nosso_numero_atual=config['nosso_numero_atual'],
+                        cobranca_registrada=True,
+                        prazo_baixa=30,
+                        prazo_protesto=0,
+                        layout_cnab='CNAB_240',
+                        numero_remessa_cnab_atual=1,
+                        ativo=True,
+                    )
                 )
                 contas.append(conta)
 
