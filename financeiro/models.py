@@ -324,12 +324,10 @@ class Parcela(TimeStampedModel):
         """
         Verifica se é possível gerar boleto para esta parcela.
 
-        Regra: o boleto só é bloqueado se:
-          1. a parcela pertence a um ciclo > 1 (número_parcela > prazo_reajuste_meses)
-          2. a data prevista do reajuste desse ciclo já passou (hoje >= data_prevista)
-          3. o reajuste do ciclo ainda não foi aplicado
+        Regra de cascata: se QUALQUER ciclo entre 2 e o ciclo desta parcela
+        já venceu (hoje >= data_prevista) e ainda não foi aplicado, todos os
+        boletos desse ciclo em diante ficam bloqueados.
 
-        Quando hoje < data_prevista do reajuste, a geração antecipada é permitida.
         Índice FIXO nunca bloqueia.
 
         Returns:
@@ -346,32 +344,38 @@ class Parcela(TimeStampedModel):
         if self.contrato.tipo_correcao == TipoCorrecao.FIXO:
             return True, "Índice FIXO — sem necessidade de reajuste."
 
-        # Calcular o ciclo ao qual esta parcela pertence (dinamicamente)
         prazo = self.contrato.prazo_reajuste_meses or 12
         ciclo_da_parcela = (self.numero_parcela - 1) // prazo + 1
 
-        if ciclo_da_parcela > 1:
-            from dateutil.relativedelta import relativedelta
-            from django.utils import timezone as tz
+        if ciclo_da_parcela <= 1:
+            return True, "Primeiro ciclo — liberado."
 
-            # Data em que o reajuste desse ciclo deveria ter sido aplicado
-            data_reajuste_prevista = (
+        from dateutil.relativedelta import relativedelta
+        from django.utils import timezone as tz
+
+        hoje = tz.now().date()
+
+        # Verifica em cascata do ciclo 2 até o ciclo desta parcela
+        for ciclo_check in range(2, ciclo_da_parcela + 1):
+            data_reajuste = (
                 self.contrato.data_contrato
-                + relativedelta(months=(ciclo_da_parcela - 1) * prazo)
+                + relativedelta(months=(ciclo_check - 1) * prazo)
             )
+            if hoje < data_reajuste:
+                # Ciclo ainda não venceu — os subsequentes também não
+                break
 
-            if tz.now().date() >= data_reajuste_prevista:
-                reajuste_aplicado = Reajuste.objects.filter(
-                    contrato=self.contrato,
-                    ciclo=ciclo_da_parcela,
-                    aplicado=True
-                ).exists()
-                if not reajuste_aplicado:
-                    return False, (
-                        f"Reajuste do ciclo {ciclo_da_parcela} pendente desde "
-                        f"{data_reajuste_prevista.strftime('%d/%m/%Y')}. "
-                        f"Execute o reajuste antes de gerar boletos."
-                    )
+            reajuste_aplicado = Reajuste.objects.filter(
+                contrato=self.contrato,
+                ciclo=ciclo_check,
+                aplicado=True
+            ).exists()
+            if not reajuste_aplicado:
+                return False, (
+                    f"Reajuste do ciclo {ciclo_check} pendente desde "
+                    f"{data_reajuste.strftime('%d/%m/%Y')}. "
+                    f"Execute o reajuste antes de gerar boletos."
+                )
 
         return True, "Liberado para geração."
 
