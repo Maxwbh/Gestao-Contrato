@@ -43,4 +43,8 @@ urlpatterns = [
     # ==========================================================================
     path('api/contratos/<int:contrato_id>/parcelas/', views.api_parcelas_contrato, name='api_parcelas_contrato'),
     path('api/resumo-financeiro/', views.api_resumo_financeiro, name='api_resumo_financeiro'),
+
+    # Fase 9 — APIs P2 do Portal do Comprador
+    path('api/vencimentos/', views.api_portal_vencimentos, name='api_portal_vencimentos'),
+    path('api/boletos/', views.api_portal_boletos, name='api_portal_boletos'),
 ]
