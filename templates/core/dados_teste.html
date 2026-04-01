@@ -125,6 +125,15 @@
                                 </div>
                             </div>
                         </div>
+                        <div class="col-md-3 col-6 mb-3">
+                            <div class="card text-white h-100" style="background-color: #20c997;">
+                                <div class="card-body py-3 text-center">
+                                    <i class="fas fa-percentage fa-2x mb-2 opacity-75"></i>
+                                    <h3 class="mb-0" id="stat-tabela-juros">{{ stats.tabela_juros }}</h3>
+                                    <small>Faixas Juros Escalantes</small>
+                                </div>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -144,9 +153,10 @@
                         <div class="col-6">
                             <ul class="small mb-0">
                                 <li>1 Contabilidade</li>
-                                <li>2 Imobiliarias</li>
-                                <li>6 Contas Bancarias</li>
-                                <li>65 Imoveis (Lotes/Terrenos)</li>
+                                <li>2 Imobiliárias</li>
+                                <li>6 Contas Bancárias</li>
+                                <li>65 Imóveis (Lotes/Terrenos)</li>
+                                <li>252 Índices de Reajuste</li>
                             </ul>
                         </div>
                         <div class="col-6">
@@ -154,7 +164,8 @@
                                 <li>60 Compradores (PF/PJ)</li>
                                 <li>60 Contratos</li>
                                 <li>+1000 Parcelas</li>
-                                <li>252 Indices de Reajuste</li>
+                                <li>~10 Tabelas de Juros Escalantes</li>
+                                <li>Reajustes aplicados (ciclos passados)</li>
                             </ul>
                         </div>
                     </div>
@@ -325,6 +336,7 @@ function updateStats(stats) {
         document.getElementById('stat-parcelas').textContent = stats.parcelas || 0;
         document.getElementById('stat-contas').textContent = stats.contas_bancarias || 0;
         document.getElementById('stat-indices').textContent = stats.indices_reajuste || 0;
+        document.getElementById('stat-tabela-juros').textContent = stats.tabela_juros || 0;
     }
 }
 
@@ -368,6 +380,7 @@ function gerarDados() {
             msg += '- Contratos: ' + (data.dados_gerados?.contratos || 0) + '\n';
             msg += '- Parcelas: ' + (data.dados_gerados?.parcelas || 0) + '\n';
             msg += '- Indices de Reajuste: ' + (data.dados_gerados?.indices_reajuste || 0) + '\n';
+            msg += '- Faixas Juros Escalantes: ' + (data.dados_gerados?.tabela_juros || 0) + '\n';
             showOutput(msg, false);
             updateStats(data.dados_gerados);
         } else {
