@@ -618,6 +618,8 @@ class Command(BaseCommand):
                 percentual_multa_rescisao_penal=Decimal('10.0000'),
                 percentual_multa_rescisao_adm=Decimal('12.0000'),
                 percentual_cessao=Decimal('3.0000'),
+                intermediarias_reduzem_pmt=random.random() < 0.3,
+                intermediarias_reajustadas=random.random() < 0.7,
                 status=StatusContrato.ATIVO,
                 observacoes=f'Contrato gerado automaticamente para teste'
             )
