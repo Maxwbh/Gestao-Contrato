@@ -1,0 +1,320 @@
+{% extends 'base.html' %}
+
+{% block title %}Wizard — Etapa 4: Confirmar{% endblock %}
+
+{% block content %}
+<div class="row">
+  <div class="col-12 col-lg-10 mx-auto">
+
+    <!-- Progress bar -->
+    <div class="card mb-3">
+      <div class="card-body py-2">
+        <div class="d-flex justify-content-between align-items-center mb-1">
+          <small class="text-muted">Etapa {{ step_num }} de 4</small>
+          <small class="text-muted">Confirmação</small>
+        </div>
+        <div class="progress" style="height: 8px;">
+          <div class="progress-bar bg-success" style="width: 100%;"></div>
+        </div>
+        <div class="d-flex justify-content-between mt-2">
+          <span class="badge bg-success">1. Dados Básicos</span>
+          <span class="badge bg-success">2. Juros</span>
+          <span class="badge bg-success">3. Intermediárias</span>
+          <span class="badge bg-primary">4. Confirmar</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header bg-success bg-opacity-10">
+        <h5 class="mb-0">
+          <i class="fas fa-check-circle me-2 text-success"></i>Etapa 4: Revisar e Confirmar
+        </h5>
+      </div>
+      <div class="card-body">
+
+        {% if messages %}
+          {% for msg in messages %}
+            <div class="alert alert-{{ msg.tags }} alert-dismissible fade show" role="alert">
+              {{ msg }}
+              <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+            </div>
+          {% endfor %}
+        {% endif %}
+
+        <!-- Resumo financeiro -->
+        <div class="row mb-4">
+          <div class="col-md-4 mb-3">
+            <div class="card border-primary h-100">
+              <div class="card-body text-center">
+                <div class="text-muted small">Valor Total</div>
+                <div class="fs-4 fw-bold text-primary">R$ {{ resumo.valor_total }}</div>
+              </div>
+            </div>
+          </div>
+          <div class="col-md-4 mb-3">
+            <div class="card border-secondary h-100">
+              <div class="card-body text-center">
+                <div class="text-muted small">Entrada</div>
+                <div class="fs-4 fw-bold">R$ {{ resumo.valor_entrada }}</div>
+              </div>
+            </div>
+          </div>
+          <div class="col-md-4 mb-3">
+            <div class="card border-info h-100">
+              <div class="card-body text-center">
+                <div class="text-muted small">Financiado</div>
+                <div class="fs-4 fw-bold text-info">R$ {{ resumo.valor_financiado }}</div>
+              </div>
+            </div>
+          </div>
+          <div class="col-md-4 mb-3">
+            <div class="card h-100">
+              <div class="card-body text-center">
+                <div class="text-muted small">Parcelas</div>
+                <div class="fs-4 fw-bold">{{ resumo.numero_parcelas }}x</div>
+              </div>
+            </div>
+          </div>
+          <div class="col-md-4 mb-3">
+            <div class="card h-100">
+              <div class="card-body text-center">
+                {% if resumo.tipo_amortizacao == 'SAC' %}
+                <div class="text-muted small">1ª Prestação (SAC, estimada)</div>
+                <div class="fs-4 fw-bold text-success">R$ {{ resumo.pmt_ciclo1 }}</div>
+                <div class="small text-muted">Última: R$ {{ resumo.pmt_ultimo }}</div>
+                {% else %}
+                <div class="text-muted small">PMT Ciclo 1 (Tabela Price, estimado)</div>
+                <div class="fs-4 fw-bold text-success">R$ {{ resumo.pmt_ciclo1 }}</div>
+                {% endif %}
+              </div>
+            </div>
+          </div>
+          <div class="col-md-4 mb-3">
+            <div class="card h-100">
+              <div class="card-body text-center">
+                <div class="text-muted small">Sistema de Amortização</div>
+                <div class="fs-5 fw-bold">
+                  {% if resumo.tipo_amortizacao == 'SAC' %}
+                  <span class="badge bg-warning text-dark">SAC</span>
+                  {% else %}
+                  <span class="badge bg-info text-dark">Tabela Price</span>
+                  {% endif %}
+                </div>
+                <div class="small text-muted mt-1">Taxa ciclo 1: {{ resumo.taxa_ciclo1 }}% a.m.</div>
+              </div>
+            </div>
+          </div>
+          <div class="col-md-4 mb-3">
+            <div class="card h-100">
+              <div class="card-body text-center">
+                <div class="text-muted small">Intermediárias</div>
+                <div class="fs-4 fw-bold">{{ resumo.n_intermediarias }} (R$ {{ resumo.soma_intermediarias }})</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Dados básicos resumo -->
+        <div class="card mb-3">
+          <div class="card-header d-flex justify-content-between align-items-center">
+            <span><i class="fas fa-file-alt me-2"></i><strong>Dados Básicos</strong></span>
+            <a href="{% url 'contratos:wizard' step='basico' %}" class="btn btn-sm btn-outline-secondary">
+              <i class="fas fa-edit me-1"></i>Editar
+            </a>
+          </div>
+          <div class="card-body">
+            <div class="row">
+              <div class="col-md-4"><small class="text-muted">Contrato:</small><br><strong>{{ resumo.basico.numero_contrato }}</strong></div>
+              <div class="col-md-4"><small class="text-muted">Data:</small><br>{{ resumo.basico.data_contrato }}</div>
+              <div class="col-md-4"><small class="text-muted">1º Vencimento:</small><br>{{ resumo.basico.data_primeiro_vencimento }}</div>
+              <div class="col-md-4 mt-2"><small class="text-muted">Tipo Correção:</small><br>{{ resumo.basico.tipo_correcao }}</div>
+              <div class="col-md-4 mt-2"><small class="text-muted">Prazo Reajuste:</small><br>{{ resumo.basico.prazo_reajuste_meses }} meses</div>
+              <div class="col-md-4 mt-2">
+                <small class="text-muted">Intermediárias reduzem PMT:</small><br>
+                {% if resumo.reduzem_pmt %}<span class="badge bg-warning text-dark">Sim</span>{% else %}<span class="badge bg-secondary">Não</span>{% endif %}
+                &nbsp;
+                <small class="text-muted">Reajustadas:</small>
+                {% if resumo.reajustadas %}<span class="badge bg-info text-dark">Sim</span>{% else %}<span class="badge bg-secondary">Não</span>{% endif %}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Faixas de juros -->
+        <div class="card mb-3">
+          <div class="card-header d-flex justify-content-between align-items-center">
+            <span><i class="fas fa-percentage me-2"></i><strong>Faixas de Juros ({{ resumo.juros_rows|length }})</strong></span>
+            <a href="{% url 'contratos:wizard' step='juros' %}" class="btn btn-sm btn-outline-secondary">
+              <i class="fas fa-edit me-1"></i>Editar
+            </a>
+          </div>
+          <div class="card-body p-0">
+            {% if resumo.juros_rows %}
+            <div class="table-responsive">
+              <table class="table table-sm mb-0">
+                <thead class="table-light">
+                  <tr>
+                    <th>Ciclo Início</th>
+                    <th>Ciclo Fim</th>
+                    <th>Taxa Mensal (%)</th>
+                    <th>Observações</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {% for row in resumo.juros_rows %}
+                  <tr>
+                    <td>{{ row.ciclo_inicio }}</td>
+                    <td>{% if row.ciclo_fim %}{{ row.ciclo_fim }}{% else %}<em class="text-muted">em aberto</em>{% endif %}</td>
+                    <td>{{ row.juros_mensal }}%</td>
+                    <td>{{ row.observacoes|default:'-' }}</td>
+                  </tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            </div>
+            {% else %}
+            <p class="text-muted p-3 mb-0">Nenhuma faixa de juros definida.</p>
+            {% endif %}
+          </div>
+        </div>
+
+        <!-- Intermediárias -->
+        <div class="card mb-4">
+          <div class="card-header d-flex justify-content-between align-items-center">
+            <span><i class="fas fa-layer-group me-2"></i><strong>Intermediárias ({{ resumo.intermediarias_total }})</strong></span>
+            <a href="{% url 'contratos:wizard' step='intermediarias' %}" class="btn btn-sm btn-outline-secondary">
+              <i class="fas fa-edit me-1"></i>Editar
+            </a>
+          </div>
+          <div class="card-body p-0">
+            {% if resumo.intermediarias %}
+            <div class="table-responsive">
+              <table class="table table-sm mb-0">
+                <thead class="table-light">
+                  <tr>
+                    <th>Seq.</th>
+                    <th>Mês</th>
+                    <th>Valor (R$)</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {% for row in resumo.intermediarias %}
+                  <tr>
+                    <td>{{ row.numero_sequencial }}</td>
+                    <td>{{ row.mes_vencimento }}</td>
+                    <td>{{ row.valor }}</td>
+                  </tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            </div>
+            {% if resumo.intermediarias_total > 12 %}
+            <p class="text-muted p-2 mb-0 small">
+              <i class="fas fa-info-circle me-1"></i>
+              Exibindo as primeiras 12 de {{ resumo.intermediarias_total }} intermediárias.
+            </p>
+            {% endif %}
+            {% else %}
+            <p class="text-muted p-3 mb-0">Nenhuma intermediária.</p>
+            {% endif %}
+          </div>
+        </div>
+
+        <!-- HU-10: Preview de parcelas (primeiras 24) -->
+        <div class="card mb-4">
+          <div class="card-header d-flex justify-content-between align-items-center">
+            <span><i class="fas fa-calendar-alt me-2"></i><strong>Projeção de Parcelas (primeiras 24)</strong></span>
+            <button id="btnLoadPreview" class="btn btn-sm btn-outline-info" onclick="carregarPreviewParcelas()">
+              <i class="fas fa-sync-alt me-1"></i> Calcular
+            </button>
+          </div>
+          <div id="previewParcelasContainer" class="card-body p-0">
+            <p class="text-muted p-3 mb-0 small">
+              <i class="fas fa-info-circle me-1"></i>
+              Clique em <strong>Calcular</strong> para ver a projeção das primeiras 24 parcelas.
+            </p>
+          </div>
+        </div>
+
+        <!-- Action buttons -->
+        <div class="d-flex justify-content-between">
+          <a href="{% url 'contratos:wizard' step='intermediarias' %}" class="btn btn-outline-secondary">
+            <i class="fas fa-arrow-left me-2"></i>Voltar
+          </a>
+          <form method="post" action="{% url 'contratos:wizard' step='salvar' %}">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-success btn-lg px-5">
+              <i class="fas fa-save me-2"></i>Criar Contrato
+            </button>
+          </form>
+        </div>
+
+      </div>
+    </div>
+  </div>
+</div>
+
+{% block extra_js %}
+<script>
+function carregarPreviewParcelas() {
+    var btn = document.getElementById('btnLoadPreview');
+    var container = document.getElementById('previewParcelasContainer');
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i> Calculando...';
+    container.innerHTML = '<p class="text-muted p-3">Carregando...</p>';
+
+    var payload = {
+        valor_total: '{{ resumo.valor_total }}',
+        valor_entrada: '{{ resumo.valor_entrada }}',
+        numero_parcelas: {{ resumo.numero_parcelas }},
+        prazo_reajuste_meses: '{{ resumo.basico.prazo_reajuste_meses|default:12 }}',
+        dia_vencimento: '{{ resumo.basico.dia_vencimento|default:1 }}',
+        data_primeiro_vencimento: '{{ resumo.basico.data_primeiro_vencimento }}',
+        tipo_amortizacao: '{{ resumo.tipo_amortizacao|default:"PRICE" }}',
+        intermediarias_reduzem_pmt: {{ resumo.reduzem_pmt|yesno:"true,false" }},
+        soma_intermediarias: '{{ resumo.soma_intermediarias }}',
+        juros: {{ resumo.juros_rows|safe|default:"[]" }},
+        intermediarias_lista: {{ resumo.intermediarias|safe|default:"[]" }},
+    };
+
+    fetch('{% url "contratos:wizard_preview_parcelas" %}', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': document.cookie.match(/csrftoken=([^;]+)/)?.[1] || '',
+        },
+        body: JSON.stringify(payload),
+    })
+    .then(r => r.json())
+    .then(data => {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fas fa-sync-alt me-1"></i> Recalcular';
+        if (!data.sucesso) {
+            container.innerHTML = '<p class="text-danger p-3"><i class="fas fa-exclamation-circle me-1"></i>' + (data.erro || 'Erro ao calcular') + '</p>';
+            return;
+        }
+        var isSAC = data.tipo_amortizacao === 'SAC';
+        var rows = data.parcelas.map(function(p) {
+            var trClass = p.inicio_ciclo ? 'table-warning' : '';
+            var inter = p.intermediaria ? '<br><small class="text-info">+ Inter. R$ ' + p.intermediaria.toFixed(2) + '</small>' : '';
+            var juros = p.juros_mensal > 0 ? p.juros_mensal.toFixed(4) + '% a.m.' : '—';
+            var breakdown = isSAC && p.amortizacao !== null
+                ? '<br><small class="text-muted">Amort: R$ ' + p.amortizacao.toFixed(2) + ' | Juros: R$ ' + p.juros_embutido.toFixed(2) + '</small>'
+                : '';
+            return '<tr class="' + trClass + '"><td>' + p.numero + '</td><td>' + p.vencimento + '</td><td>' + p.ciclo + (p.inicio_ciclo ? ' <span class="badge bg-warning text-dark">início</span>' : '') + '</td><td>' + juros + '</td><td>R$ ' + p.valor.toFixed(2) + inter + breakdown + '</td></tr>';
+        }).join('');
+        var sistema = isSAC ? '<span class="badge bg-warning text-dark">SAC</span>' : '<span class="badge bg-info text-dark">Price</span>';
+        container.innerHTML =
+            '<div class="table-responsive"><table class="table table-sm table-hover mb-0"><thead class="table-light"><tr><th>#</th><th>Vencimento</th><th>Ciclo</th><th>Juros</th><th>Valor' + (isSAC ? ' (Amort + Juros)' : '') + '</th></tr></thead><tbody>' + rows + '</tbody></table></div>' +
+            '<p class="text-muted p-2 mb-0 small">' + sistema + ' | 1ª prestação: <strong>R$ ' + data.pmt.toFixed(2) + '</strong> &mdash; base: <strong>R$ ' + data.base_pmt.toFixed(2) + '</strong> &mdash; ' + data.preview_count + ' de ' + data.total_parcelas + ' parcelas</p>';
+    })
+    .catch(function(err) {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fas fa-sync-alt me-1"></i> Recalcular';
+        container.innerHTML = '<p class="text-danger p-3">Erro de comunicação: ' + err + '</p>';
+    });
+}
+</script>
+{% endblock %}
+{% endblock %}

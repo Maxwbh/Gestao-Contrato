@@ -258,11 +258,34 @@ def api_dashboard_dados(request):
         inadimplencia_mensal['valores'].append(float(valor_inadimplente))
         inadimplencia_mensal['quantidades'].append(parcelas_vencidas.count())
 
+    # Tabela vencimentos consolidados - próximos 3 meses (3.6)
+    vencimentos_proximos = []
+    for i in range(3):
+        data = hoje + relativedelta(months=i)
+        primeiro_dia = data.replace(day=1)
+        ultimo_dia = (primeiro_dia + relativedelta(months=1)) - timedelta(days=1)
+
+        parcelas_mes = parcelas_qs.filter(
+            pago=False,
+            data_vencimento__gte=primeiro_dia,
+            data_vencimento__lte=ultimo_dia
+        )
+        agg = parcelas_mes.aggregate(
+            total_valor=Sum('valor_atual'),
+            quantidade=Count('id')
+        )
+        vencimentos_proximos.append({
+            'mes': f"{meses[data.month - 1]}/{data.year}",
+            'quantidade': agg['quantidade'] or 0,
+            'valor_total': float(agg['total_valor'] or 0),
+        })
+
     return JsonResponse({
         'status_parcelas': status_parcelas,
         'status_contratos': status_contratos,
         'recebimentos_mensais': recebimentos_mensais,
         'inadimplencia_mensal': inadimplencia_mensal,
+        'vencimentos_proximos': vencimentos_proximos,
     })
 
 
@@ -347,8 +370,21 @@ def listar_parcelas(request):
     valor_total = parcelas.aggregate(total=Sum('valor_atual'))['total'] or Decimal('0.00')
     parcelas_vencidas_count = parcelas.filter(pago=False, data_vencimento__lt=hoje).count()
 
+    # 3.14 — Calcular juros/multa dinâmico para parcelas vencidas não pagas
+    parcelas_lista = list(parcelas[:500])
+    for p in parcelas_lista:
+        if not p.pago and p.data_vencimento < hoje:
+            juros, multa = p.calcular_juros_multa(hoje)
+            p.juros_dinamico = juros
+            p.multa_dinamico = multa
+            p.total_com_encargos = p.valor_atual + juros + multa
+        else:
+            p.juros_dinamico = None
+            p.multa_dinamico = None
+            p.total_com_encargos = None
+
     context = {
-        'parcelas': parcelas[:500],  # Limitar para performance
+        'parcelas': parcelas_lista,
         'imobiliarias': imobiliarias,
         'compradores': compradores,
         # Valores atuais dos filtros
@@ -1050,19 +1086,25 @@ def listar_arquivos_remessa(request):
     # Filtros
     conta_id = request.GET.get('conta')
     status = request.GET.get('status')
+    imobiliaria_id = request.GET.get('imobiliaria')
 
     if conta_id:
         arquivos = arquivos.filter(conta_bancaria_id=conta_id)
     if status:
         arquivos = arquivos.filter(status=status)
+    if imobiliaria_id:
+        arquivos = arquivos.filter(conta_bancaria__imobiliaria_id=imobiliaria_id)
 
     contas = ContaBancaria.objects.filter(ativo=True).select_related('imobiliaria')
+    imobiliarias = Imobiliaria.objects.filter(ativo=True).order_by('nome')
 
     context = {
         'arquivos': arquivos[:100],
         'contas_bancarias': contas,
+        'imobiliarias': imobiliarias,
         'filtro_conta': conta_id,
         'filtro_status': status,
+        'filtro_imobiliaria': imobiliaria_id,
     }
     return render(request, 'financeiro/cnab/listar_remessas.html', context)
 
@@ -1093,73 +1135,107 @@ def detalhe_arquivo_remessa(request, pk):
 def gerar_arquivo_remessa(request):
     """
     View para gerar novo arquivo de remessa.
-    GET: Exibe formulario com boletos disponiveis
-    POST: Gera o arquivo com os boletos selecionados
+
+    GET: Exibe boletos disponíveis com filtros por escopo
+         Escopos: tudo | imobiliaria | contrato | conta
+    POST: Gera 1 arquivo de remessa por conta bancária a partir
+          das parcelas selecionadas (auto-split por conta).
     """
     from .models import ArquivoRemessa, Parcela, StatusBoleto
     from .services.cnab_service import CNABService
 
+    service = CNABService()
+    imobiliarias = Imobiliaria.objects.filter(ativo=True).order_by('nome')
     contas = ContaBancaria.objects.filter(ativo=True).select_related('imobiliaria')
+    contratos = Contrato.objects.filter(
+        status='ATIVO'
+    ).select_related('comprador', 'imobiliaria').order_by('numero_contrato')
 
     if request.method == 'POST':
-        conta_id = request.POST.get('conta_bancaria')
         layout = request.POST.get('layout', 'CNAB_240')
-        parcela_ids = request.POST.getlist('parcelas')
-
-        if not conta_id:
-            messages.error(request, 'Selecione uma conta bancaria.')
-            return redirect('financeiro:gerar_remessa')
+        parcela_ids = [int(x) for x in request.POST.getlist('parcelas') if x.isdigit()]
 
         if not parcela_ids:
             messages.error(request, 'Selecione pelo menos uma parcela.')
             return redirect('financeiro:gerar_remessa')
 
-        conta = get_object_or_404(ContaBancaria, pk=conta_id, ativo=True)
-        parcelas = Parcela.objects.filter(
-            pk__in=parcela_ids,
-            status_boleto=StatusBoleto.GERADO,
-            pago=False
-        )
-
-        if not parcelas.exists():
-            messages.error(request, 'Nenhuma parcela valida selecionada.')
-            return redirect('financeiro:gerar_remessa')
-
         try:
-            service = CNABService()
-            resultado = service.gerar_remessa(list(parcelas), conta, layout)
+            resultado = service.gerar_remessas_por_escopo(parcela_ids, layout)
 
-            if resultado.get('sucesso'):
-                arquivo = resultado.get('arquivo_remessa')
+            remessas = resultado['remessas_geradas']
+            erros = resultado['erros']
+
+            for r in remessas:
+                arq = r['arquivo_remessa']
+                aviso = f" ({r['aviso']})" if r.get('aviso') else ''
                 messages.success(
                     request,
-                    f"Remessa {arquivo.numero_remessa} gerada com sucesso! "
-                    f"{resultado.get('quantidade_boletos')} boletos, "
-                    f"R$ {resultado.get('valor_total'):,.2f}"
+                    f"Remessa #{arq.numero_remessa} — {arq.conta_bancaria}: "
+                    f"{r['quantidade_boletos']} boleto(s), "
+                    f"R$ {r['valor_total']:,.2f}{aviso}"
                 )
-                return redirect('financeiro:detalhe_remessa', pk=arquivo.pk)
-            else:
-                messages.error(request, f"Erro ao gerar remessa: {resultado.get('erro')}")
+
+            for erro in erros:
+                messages.warning(request, erro)
+
+            if not remessas:
+                messages.error(request, 'Nenhuma remessa foi gerada.')
+                return redirect('financeiro:gerar_remessa')
+
+            # Se gerou apenas 1, vai direto para o detalhe
+            if len(remessas) == 1:
+                return redirect('financeiro:detalhe_remessa', pk=remessas[0]['arquivo_remessa'].pk)
+
+            return redirect('financeiro:listar_remessas')
 
         except Exception as e:
-            logger.exception(f"Erro ao gerar remessa: {e}")
+            logger.exception(f"Erro ao gerar remessa(s): {e}")
             messages.error(request, f"Erro ao gerar remessa: {str(e)}")
+            return redirect('financeiro:gerar_remessa')
 
-        return redirect('financeiro:gerar_remessa')
+    # GET — filtros de escopo
+    escopo = request.GET.get('escopo', 'tudo')
+    imobiliaria_id = request.GET.get('imobiliaria') or None
+    contrato_id = request.GET.get('contrato') or None
+    conta_id = request.GET.get('conta') or None
 
-    # GET - Exibir boletos disponiveis
-    conta_id = request.GET.get('conta')
-    boletos_disponiveis = []
-
+    conta_obj = None
     if conta_id:
-        conta = get_object_or_404(ContaBancaria, pk=conta_id, ativo=True)
-        service = CNABService()
-        boletos_disponiveis = service.obter_boletos_sem_remessa(conta)
+        conta_obj = ContaBancaria.objects.filter(pk=conta_id, ativo=True).first()
+
+    # Parcelas disponíveis (sem remessa)
+    boletos_disponiveis = service.obter_boletos_sem_remessa(
+        conta_bancaria=conta_obj,
+        imobiliaria_id=imobiliaria_id,
+        contrato_id=contrato_id,
+    )
+
+    # Parcelas em remessa pendente (já em GERADO, não enviada) — para aviso
+    boletos_pendentes = service.obter_boletos_em_remessa_pendente(
+        conta_bancaria=conta_obj,
+        imobiliaria_id=imobiliaria_id,
+        contrato_id=contrato_id,
+    )
+
+    # Agrupar disponíveis por conta_bancaria para exibição
+    from collections import defaultdict
+    grupos_conta = defaultdict(list)
+    for p in boletos_disponiveis:
+        grupos_conta[p.conta_bancaria].append(p)
 
     context = {
         'contas_bancarias': contas,
+        'imobiliarias': imobiliarias,
+        'contratos': contratos,
+        'escopo': escopo,
         'filtro_conta': conta_id,
+        'filtro_imobiliaria': imobiliaria_id,
+        'filtro_contrato': contrato_id,
+        'grupos_conta': dict(grupos_conta),  # {ContaBancaria: [Parcela, ...]}
         'boletos_disponiveis': boletos_disponiveis,
+        'boletos_pendentes': boletos_pendentes,
+        'total_disponivel': len(boletos_disponiveis),
+        'today': timezone.now().date(),
     }
     return render(request, 'financeiro/cnab/gerar_remessa.html', context)
 
@@ -1543,6 +1619,30 @@ def gerar_carne(request, contrato_id):
                 'erro': 'Nenhuma parcela valida encontrada'
             }, status=400)
 
+        # =====================================================================
+        # LIMITE DE LOTE: apenas até o último boleto do ciclo atual
+        # Regra: em lote só é permitido gerar boletos dentro do ciclo atual
+        # (último ciclo onde todos os reajustes foram aplicados).
+        # Ciclos futuros (data ainda não chegou) só são permitidos individualmente.
+        # =====================================================================
+        max_parcela_lote = None  # None = sem limite (FIXO ou todos ciclos quitados)
+        if not force and contrato.tipo_correcao != 'FIXO':
+            from dateutil.relativedelta import relativedelta as _rd
+            prazo_lote = contrato.prazo_reajuste_meses or 12
+            hoje_lote = timezone.now().date()
+            total_ciclos_lote = (contrato.numero_parcelas - 1) // prazo_lote + 1
+            for _ciclo in range(2, total_ciclos_lote + 2):
+                data_rd = contrato.data_contrato + _rd(months=(_ciclo - 1) * prazo_lote)
+                if hoje_lote < data_rd:
+                    # Ciclo ainda futuro → lote só até o ciclo anterior
+                    max_parcela_lote = (_ciclo - 1) * prazo_lote
+                    break
+                from financeiro.models import Reajuste as _Reaj
+                if not _Reaj.objects.filter(contrato=contrato, ciclo=_ciclo, aplicado=True).exists():
+                    # Ciclo vencido mas não reajustado → lote só até o ciclo anterior
+                    max_parcela_lote = (_ciclo - 1) * prazo_lote
+                    break
+
         resultados = []
         gerados = 0
         bloqueados = 0
@@ -1550,20 +1650,21 @@ def gerar_carne(request, contrato_id):
 
         for parcela in parcelas:
             # =====================================================================
-            # VERIFICAÇÃO DE BLOQUEIO POR REAJUSTE (usando pode_gerar_boleto)
+            # BLOQUEIO DE LOTE: parcelas além do ciclo atual não são permitidas em lote
             # =====================================================================
-            if not force and hasattr(contrato, 'pode_gerar_boleto'):
-                pode_gerar, motivo = contrato.pode_gerar_boleto(parcela.numero_parcela)
-                if not pode_gerar:
-                    resultados.append({
-                        'parcela_id': parcela.id,
-                        'numero_parcela': parcela.numero_parcela,
-                        'sucesso': False,
-                        'bloqueado_reajuste': True,
-                        'erro': motivo
-                    })
-                    bloqueados += 1
-                    continue
+            if not force and max_parcela_lote is not None and parcela.numero_parcela > max_parcela_lote:
+                resultados.append({
+                    'parcela_id': parcela.id,
+                    'numero_parcela': parcela.numero_parcela,
+                    'sucesso': False,
+                    'bloqueado_reajuste': True,
+                    'erro': (
+                        f"Parcela {parcela.numero_parcela} pertence a um ciclo futuro ou com reajuste "
+                        f"pendente. Boletos de ciclos futuros só podem ser gerados individualmente."
+                    )
+                })
+                bloqueados += 1
+                continue
 
             # Verificar se ja tem boleto
             if parcela.tem_boleto and not force:
@@ -4195,20 +4296,39 @@ def api_cnab_remessa_gerar(request):
 
 @login_required
 def api_cnab_boletos_disponiveis(request):
-    """API para listar boletos disponíveis para remessa. GET /api/cnab/boletos-disponiveis/?conta_bancaria_id=1"""
+    """
+    API para listar boletos disponíveis para remessa.
+    GET /api/cnab/boletos-disponiveis/
+    Params: conta_bancaria_id, imobiliaria_id, contrato_id (todos opcionais)
+    """
     from .services.cnab_service import CNABService
 
     conta_id = request.GET.get('conta_bancaria_id')
-    if not conta_id:
-        return JsonResponse({'sucesso': False, 'erro': 'Informe conta bancária.'}, status=400)
+    imobiliaria_id = request.GET.get('imobiliaria_id') or None
+    contrato_id = request.GET.get('contrato_id') or None
 
-    conta = get_object_or_404(ContaBancaria, pk=conta_id, ativo=True)
+    conta = None
+    if conta_id:
+        conta = get_object_or_404(ContaBancaria, pk=conta_id, ativo=True)
+
     service = CNABService()
-    boletos = service.obter_boletos_sem_remessa(conta)
+    boletos = service.obter_boletos_sem_remessa(
+        conta_bancaria=conta,
+        imobiliaria_id=imobiliaria_id,
+        contrato_id=contrato_id,
+    )
 
-    data = [{'parcela_id': p.id, 'numero_contrato': p.contrato.numero_contrato, 'numero_parcela': p.numero_parcela,
-             'nosso_numero': p.nosso_numero, 'valor': float(p.valor_boleto or p.valor_atual),
-             'data_vencimento': p.data_vencimento.strftime('%Y-%m-%d'), 'comprador': p.contrato.comprador.nome} for p in boletos]
+    data = [{
+        'parcela_id': p.id,
+        'numero_contrato': p.contrato.numero_contrato,
+        'numero_parcela': p.numero_parcela,
+        'nosso_numero': p.nosso_numero,
+        'valor': float(p.valor_boleto or p.valor_atual),
+        'data_vencimento': p.data_vencimento.strftime('%Y-%m-%d'),
+        'comprador': p.contrato.comprador.nome,
+        'conta_bancaria_id': p.conta_bancaria_id,
+        'conta_bancaria': str(p.conta_bancaria) if p.conta_bancaria else None,
+    } for p in boletos]
 
     return JsonResponse({'sucesso': True, 'boletos': data, 'total': len(data)})
 
@@ -4309,3 +4429,23 @@ def api_contas_bancarias(request):
     } for c in qs]
 
     return JsonResponse({'sucesso': True, 'contas': contas})
+
+
+# ==========================================================================
+# API - NOTIFICAÇÕES
+# ==========================================================================
+
+@login_required
+@require_GET
+def api_reajustes_pendentes_count(request):
+    """Retorna contagem de contratos ativos com reajuste pendente (badge navbar)."""
+    from contratos.models import TipoCorrecao
+    contratos_ativos = Contrato.objects.filter(
+        status=StatusContrato.ATIVO
+    ).exclude(tipo_correcao=TipoCorrecao.FIXO).select_related()
+
+    count = sum(
+        1 for c in contratos_ativos
+        if c.get_primeiro_ciclo_bloqueado() is not None
+    )
+    return JsonResponse({'count': count})
