@@ -779,6 +779,52 @@ class Reajuste(TimeStampedModel):
         help_text='Desconto fixo em reais subtraído de cada parcela após o percentual'
     )
 
+    # Spread aplicado (snapshot do contrato no momento do reajuste)
+    spread_aplicado = models.DecimalField(
+        max_digits=8,
+        decimal_places=4,
+        null=True,
+        blank=True,
+        default=Decimal('0'),
+        verbose_name='Spread Aplicado (p.p.)',
+        help_text='Pontos percentuais de spread adicionados ao índice bruto'
+    )
+
+    # Controle de teto/piso aplicados no momento do reajuste
+    piso_aplicado = models.DecimalField(
+        max_digits=8,
+        decimal_places=4,
+        null=True,
+        blank=True,
+        verbose_name='Piso Aplicado (%)',
+        help_text='Piso de reajuste vigente no contrato no momento da aplicação'
+    )
+    teto_aplicado = models.DecimalField(
+        max_digits=8,
+        decimal_places=4,
+        null=True,
+        blank=True,
+        verbose_name='Teto Aplicado (%)',
+        help_text='Teto de reajuste vigente no contrato no momento da aplicação'
+    )
+
+    # Audit log
+    usuario = models.ForeignKey(
+        'auth.User',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='reajustes_aplicados',
+        verbose_name='Usuário',
+        help_text='Usuário que aplicou o reajuste'
+    )
+    ip_address = models.GenericIPAddressField(
+        null=True,
+        blank=True,
+        verbose_name='Endereço IP',
+        help_text='IP do usuário que aplicou o reajuste'
+    )
+
     aplicado_manual = models.BooleanField(
         default=False,
         verbose_name='Aplicado Manualmente',
@@ -922,22 +968,54 @@ class Reajuste(TimeStampedModel):
             inicio_ref.year, inicio_ref.month,
             fim_ref.year, fim_ref.month,
         )
+        # Spread: TabelaJurosContrato tem precedência sobre spread_reajuste fixo
+        from contratos.models import TabelaJurosContrato
+        spread_tabela = TabelaJurosContrato.get_juros_para_ciclo(contrato, ciclo)
+        spread = spread_tabela if spread_tabela is not None else (contrato.spread_reajuste or Decimal('0'))
+
         if percentual_bruto is None:
-            return {
-                'erro': f'Índice {indice_tipo} não disponível para {inicio_ref.strftime("%b/%Y")} '
-                        f'a {fim_ref.strftime("%b/%Y")}. Importe os dados do índice primeiro.',
-                'periodo_referencia_inicio': inicio_ref,
-                'periodo_referencia_fim': fim_ref,
-                'indice_tipo': indice_tipo,
-                'ciclo': ciclo,
-                'parcela_inicial': parcela_inicial,
-                'parcela_final': parcela_final,
-            }
+            # Tentar índice de fallback configurado no contrato
+            fallback = contrato.tipo_correcao_fallback
+            if fallback:
+                percentual_bruto = IndiceReajuste.get_acumulado_periodo(
+                    fallback,
+                    inicio_ref.year, inicio_ref.month,
+                    fim_ref.year, fim_ref.month,
+                )
+                if percentual_bruto is not None:
+                    indice_tipo = fallback  # usar fallback nos metadados
+            if percentual_bruto is None:
+                return {
+                    'erro': f'Índice {indice_tipo} não disponível para {inicio_ref.strftime("%b/%Y")} '
+                            f'a {fim_ref.strftime("%b/%Y")}. Importe os dados do índice primeiro.',
+                    'periodo_referencia_inicio': inicio_ref,
+                    'periodo_referencia_fim': fim_ref,
+                    'indice_tipo': indice_tipo,
+                    'ciclo': ciclo,
+                    'parcela_inicial': parcela_inicial,
+                    'parcela_final': parcela_final,
+                    'spread': spread,
+                }
 
         desc_perc = Decimal(str(desconto_percentual)) if desconto_percentual else Decimal('0')
         desc_val = Decimal(str(desconto_valor)) if desconto_valor else Decimal('0')
-        percentual_liquido = max(Decimal('0'), percentual_bruto - desc_perc)
-        fator = 1 + (percentual_liquido / 100)
+
+        # Spread (índice composto): índice + spread → percentual_bruto_com_spread
+        percentual_bruto_com_spread = percentual_bruto + spread
+
+        # Descontar sobre o percentual já acrescido do spread
+        percentual_liquido = percentual_bruto_com_spread - desc_perc
+
+        # Aplicar teto e piso do contrato
+        piso = contrato.reajuste_piso
+        teto = contrato.reajuste_teto
+        percentual_com_caps = percentual_liquido
+        if piso is not None:
+            percentual_com_caps = max(piso, percentual_com_caps)
+        if teto is not None:
+            percentual_com_caps = min(teto, percentual_com_caps)
+
+        fator = 1 + (percentual_com_caps / 100)
 
         parcelas_qs = contrato.parcelas.filter(
             numero_parcela__gte=parcela_inicial,
@@ -974,10 +1052,17 @@ class Reajuste(TimeStampedModel):
             'indice_tipo': indice_tipo,
             'periodo_referencia_inicio': inicio_ref,
             'periodo_referencia_fim': fim_ref,
-            'percentual_bruto': percentual_bruto,
+            'percentual_bruto': percentual_bruto,           # índice puro acumulado
+            'spread': spread,                               # spread do contrato
+            'percentual_bruto_com_spread': percentual_bruto_com_spread,  # bruto + spread
             'desconto_percentual': desc_perc,
             'desconto_valor': desc_val,
-            'percentual_liquido': percentual_liquido,
+            'percentual_liquido': percentual_liquido,       # pós-spread, pós-desconto
+            'percentual_final': percentual_com_caps,        # pós-caps (valor efetivo)
+            'piso': piso,
+            'teto': teto,
+            'piso_ativado': piso is not None and percentual_liquido < piso,
+            'teto_ativado': teto is not None and percentual_liquido > teto,
             'parcela_inicial': parcela_inicial,
             'parcela_final': parcela_final,
             'parcelas': detalhes,
@@ -1062,7 +1147,13 @@ class Reajuste(TimeStampedModel):
         )
 
         perc_liquido = self.percentual_liquido
-        fator_reajuste = 1 + (perc_liquido / 100)
+        # Aplicar teto/piso registrados no momento da criação do reajuste
+        perc_final = perc_liquido
+        if self.piso_aplicado is not None:
+            perc_final = max(self.piso_aplicado, perc_final)
+        if self.teto_aplicado is not None:
+            perc_final = min(self.teto_aplicado, perc_final)
+        fator_reajuste = 1 + (perc_final / 100)
         desc_val = self.desconto_valor or Decimal('0')
         parcelas_reajustadas = 0
         valor_anterior_total = Decimal('0.00')
