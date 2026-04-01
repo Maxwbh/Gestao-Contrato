@@ -360,7 +360,7 @@
 
 ---
 
-## 11. ADEQUAÇÃO AO CONTRATO REAL — Minuta Parque das Nogueiras ✅ CONCLUÍDO (G-10..G-16 implementados)
+## 11. ADEQUAÇÃO AO CONTRATO REAL — Minuta Parque das Nogueiras ✅ CONCLUÍDO
 
 > **Contexto:** Análise comparativa do contrato real "MINUTA L 13 Q C 22072020.pdf"
 > (promessa de compra e venda de lote, Sete Lagoas/MG) contra a estrutura de dados do sistema.
@@ -391,9 +391,9 @@
 | G-10 | **`Imobiliaria` PF/PJ** — `tipo_pessoa` (PF/PJ), `cpf` adicionados; `cnpj` e `razao_social` tornados opcionais; `clean()` valida documento conforme tipo; `documento` property; `core migration 0003` idempotente; admin e build.sh atualizados | Média | P2 | ✅ |
 | G-11 | **Cálculo de rescisão** — `Contrato.calcular_rescisao()` (fruição × meses + multa penal + desp. adm.); view `calcular_rescisao_view`; template `calcular_rescisao.html`; URL `<pk>/rescisao/`; botão na tela do contrato | Alta | P3 | ✅ |
 | G-12 | **Cálculo de cessão** — `Contrato.calcular_cessao()`; view `calcular_cessao_view`; template `calcular_cessao.html`; URL `<pk>/cessao/`; botão na tela do contrato | Média | P3 | ✅ |
-| G-13 | **Taxa condominial (APMRPN)** — 1,32% de fração ideal mensal, cobrada separado do contrato | Alta | P4 | ❌ Pendente |
-| G-14 | **Testemunhas do contrato** — `testemunha_1_nome`, `testemunha_1_cpf`, `testemunha_2_nome`, `testemunha_2_cpf` em Contrato; migration 0009; form e admin atualizados | Baixa | P4 | ✅ |
-| G-15 | **Prazo para escritura** — `prazo_escritura_dias` (default 90) em Contrato; migration 0009; form e admin atualizados | Média | P4 | ✅ |
+| G-13 | **Taxa condominial (APMRPN)** — fora do escopo do sistema | Alta | — | 🚫 Fora do escopo |
+| G-14 | **Testemunhas do contrato** — fora do escopo do sistema | Baixa | — | 🚫 Fora do escopo |
+| G-15 | **Prazo para escritura** — fora do escopo do sistema | Média | — | 🚫 Fora do escopo |
 | G-16 | **Juros de mora pro rata die** — `Contrato.calcular_mora_pro_rata()`: `taxa_diaria = percentual_juros_mora / 30`; usado em `calcular_rescisao()` para base de cálculo correto | Média | P3 | ✅ |
 
 ---
