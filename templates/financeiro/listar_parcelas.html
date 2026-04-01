@@ -63,7 +63,8 @@
                             <th>Vencimento</th>
                             <th class="text-end">Valor Original</th>
                             <th class="text-end">Valor Atual</th>
-                            <th class="text-end">Juros/Multa</th>
+                            <th class="text-end">Juros / Multa</th>
+                            <th class="text-end">Total c/ Encargos</th>
                             <th class="text-center">Status</th>
                             <th>Data Pgto</th>
                             <th class="text-center">Ações</th>
@@ -81,9 +82,21 @@
                             <td class="text-end">R$ {{ parcela.valor_original|floatformat:2 }}</td>
                             <td class="text-end">R$ {{ parcela.valor_atual|floatformat:2 }}</td>
                             <td class="text-end">
-                                {% if parcela.valor_juros or parcela.valor_multa %}
+                                {% if parcela.juros_dinamico is not None %}
+                                    <span class="text-danger">
+                                        R$ {{ parcela.juros_dinamico|floatformat:2 }} /
+                                        R$ {{ parcela.multa_dinamico|floatformat:2 }}
+                                    </span>
+                                {% elif parcela.valor_juros or parcela.valor_multa %}
                                     R$ {{ parcela.valor_juros|floatformat:2|default:"0.00" }} /
                                     R$ {{ parcela.valor_multa|floatformat:2|default:"0.00" }}
+                                {% else %}
+                                    -
+                                {% endif %}
+                            </td>
+                            <td class="text-end">
+                                {% if parcela.total_com_encargos %}
+                                    <strong class="text-danger">R$ {{ parcela.total_com_encargos|floatformat:2 }}</strong>
                                 {% else %}
                                     -
                                 {% endif %}
