@@ -1,0 +1,10 @@
+{% extends 'base.html' %}
+{% block title %}Relatório{% endblock %}
+{% block content %}
+<div class="container">
+    <h1>Relatório</h1>
+    {% if relatorio %}
+    <div>{{ relatorio }}</div>
+    {% endif %}
+</div>
+{% endblock %}

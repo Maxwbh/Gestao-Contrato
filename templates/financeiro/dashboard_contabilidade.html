@@ -1,0 +1,83 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Dashboard Contabilidade{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <h1>Dashboard Contabilidade</h1>
+
+    {% if contabilidades %}
+    <div class="row mb-3">
+        <div class="col">
+            <form method="get">
+                <select name="contabilidade" class="form-control" onchange="this.form.submit()">
+                    <option value="">Todas as Contabilidades</option>
+                    {% for c in contabilidades %}
+                    <option value="{{ c.pk }}" {% if contabilidade_selecionada.pk == c.pk %}selected{% endif %}>{{ c.nome }}</option>
+                    {% endfor %}
+                </select>
+            </form>
+        </div>
+    </div>
+    {% endif %}
+
+    <div class="row">
+        <div class="col-md-3">
+            <div class="card">
+                <div class="card-body">
+                    <h5>Imobiliárias</h5>
+                    <h2>{{ total_imobiliarias }}</h2>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row mt-3">
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-header">Contratos</div>
+                <div class="card-body">
+                    <p>Total: {{ stats_contratos.total }}</p>
+                    <p>Ativos: {{ stats_contratos.ativos }}</p>
+                    <p>Quitados: {{ stats_contratos.quitados }}</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-header">Parcelas</div>
+                <div class="card-body">
+                    <p>Total: {{ stats_parcelas.total }}</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    {% if stats_por_imobiliaria %}
+    <div class="row mt-3">
+        <div class="col">
+            <div class="card">
+                <div class="card-header">Por Imobiliária</div>
+                <div class="card-body">
+                    <table class="table">
+                        <thead>
+                            <tr><th>Imobiliária</th><th>Contratos</th><th>Parcelas</th></tr>
+                        </thead>
+                        <tbody>
+                            {% for stat in stats_por_imobiliaria %}
+                            <tr>
+                                <td>{{ stat.nome }}</td>
+                                <td>{{ stat.total_contratos }}</td>
+                                <td>{{ stat.total_parcelas }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
