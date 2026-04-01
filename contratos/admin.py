@@ -6,7 +6,24 @@ Email: maxwbh@gmail.com
 """
 from django.contrib import admin
 from django.utils.html import format_html
-from .models import Contrato
+from .models import Contrato, TabelaJurosContrato
+
+
+class TabelaJurosInline(admin.TabularInline):
+    model = TabelaJurosContrato
+    extra = 0
+    fields = ['ciclo_inicio', 'ciclo_fim', 'juros_mensal', 'observacoes']
+    verbose_name = 'Faixa de Juros'
+    verbose_name_plural = 'Tabela de Juros Escalantes'
+
+
+@admin.register(TabelaJurosContrato)
+class TabelaJurosContratoAdmin(admin.ModelAdmin):
+    list_display = ['contrato', 'ciclo_inicio', 'ciclo_fim', 'juros_mensal', 'observacoes']
+    list_filter = ['contrato__imobiliaria']
+    search_fields = ['contrato__numero_contrato']
+    autocomplete_fields = ['contrato']
+    ordering = ['contrato', 'ciclo_inicio']
 
 
 @admin.register(Contrato)
@@ -46,6 +63,7 @@ class ContratoAdmin(admin.ModelAdmin):
     ]
     autocomplete_fields = ['imovel', 'comprador', 'imobiliaria']
     date_hierarchy = 'data_contrato'
+    inlines = [TabelaJurosInline]
 
     fieldsets = (
         ('Informações do Contrato', {
@@ -62,6 +80,14 @@ class ContratoAdmin(admin.ModelAdmin):
                 'imobiliaria'
             )
         }),
+        ('Vendedor', {
+            'fields': (
+                'vendedor_nome',
+                'vendedor_cpf_cnpj',
+            ),
+            'classes': ('collapse',),
+            'description': 'Preencher quando o vendedor for pessoa física diferente da imobiliária.'
+        }),
         ('Valores', {
             'fields': (
                 'valor_total',
@@ -77,7 +103,7 @@ class ContratoAdmin(admin.ModelAdmin):
                 'dia_vencimento'
             )
         }),
-        ('Juros e Multa', {
+        ('Juros e Multa (Mora)', {
             'fields': (
                 'percentual_juros_mora',
                 'percentual_multa'
@@ -86,9 +112,23 @@ class ContratoAdmin(admin.ModelAdmin):
         ('Correção Monetária', {
             'fields': (
                 'tipo_correcao',
+                'tipo_correcao_fallback',
                 'prazo_reajuste_meses',
-                'data_ultimo_reajuste'
+                'data_ultimo_reajuste',
+                'spread_reajuste',
+                'reajuste_piso',
+                'reajuste_teto',
             )
+        }),
+        ('Cláusulas Contratuais', {
+            'fields': (
+                'percentual_fruicao',
+                'percentual_multa_rescisao_penal',
+                'percentual_multa_rescisao_adm',
+                'percentual_cessao',
+            ),
+            'classes': ('collapse',),
+            'description': 'Percentuais definidos em cláusula contratual para rescisão, fruição e cessão.'
         }),
         ('Informações de Pagamento', {
             'fields': (
