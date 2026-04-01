@@ -258,11 +258,34 @@ def api_dashboard_dados(request):
         inadimplencia_mensal['valores'].append(float(valor_inadimplente))
         inadimplencia_mensal['quantidades'].append(parcelas_vencidas.count())
 
+    # Tabela vencimentos consolidados - próximos 3 meses (3.6)
+    vencimentos_proximos = []
+    for i in range(3):
+        data = hoje + relativedelta(months=i)
+        primeiro_dia = data.replace(day=1)
+        ultimo_dia = (primeiro_dia + relativedelta(months=1)) - timedelta(days=1)
+
+        parcelas_mes = parcelas_qs.filter(
+            pago=False,
+            data_vencimento__gte=primeiro_dia,
+            data_vencimento__lte=ultimo_dia
+        )
+        agg = parcelas_mes.aggregate(
+            total_valor=Sum('valor_atual'),
+            quantidade=Count('id')
+        )
+        vencimentos_proximos.append({
+            'mes': f"{meses[data.month - 1]}/{data.year}",
+            'quantidade': agg['quantidade'] or 0,
+            'valor_total': float(agg['total_valor'] or 0),
+        })
+
     return JsonResponse({
         'status_parcelas': status_parcelas,
         'status_contratos': status_contratos,
         'recebimentos_mensais': recebimentos_mensais,
         'inadimplencia_mensal': inadimplencia_mensal,
+        'vencimentos_proximos': vencimentos_proximos,
     })
 
 
@@ -347,8 +370,21 @@ def listar_parcelas(request):
     valor_total = parcelas.aggregate(total=Sum('valor_atual'))['total'] or Decimal('0.00')
     parcelas_vencidas_count = parcelas.filter(pago=False, data_vencimento__lt=hoje).count()
 
+    # 3.14 — Calcular juros/multa dinâmico para parcelas vencidas não pagas
+    parcelas_lista = list(parcelas[:500])
+    for p in parcelas_lista:
+        if not p.pago and p.data_vencimento < hoje:
+            juros, multa = p.calcular_juros_multa(hoje)
+            p.juros_dinamico = juros
+            p.multa_dinamico = multa
+            p.total_com_encargos = p.valor_atual + juros + multa
+        else:
+            p.juros_dinamico = None
+            p.multa_dinamico = None
+            p.total_com_encargos = None
+
     context = {
-        'parcelas': parcelas[:500],  # Limitar para performance
+        'parcelas': parcelas_lista,
         'imobiliarias': imobiliarias,
         'compradores': compradores,
         # Valores atuais dos filtros
@@ -4393,3 +4429,23 @@ def api_contas_bancarias(request):
     } for c in qs]
 
     return JsonResponse({'sucesso': True, 'contas': contas})
+
+
+# ==========================================================================
+# API - NOTIFICAÇÕES
+# ==========================================================================
+
+@login_required
+@require_GET
+def api_reajustes_pendentes_count(request):
+    """Retorna contagem de contratos ativos com reajuste pendente (badge navbar)."""
+    from contratos.models import TipoCorrecao
+    contratos_ativos = Contrato.objects.filter(
+        status=StatusContrato.ATIVO
+    ).exclude(tipo_correcao=TipoCorrecao.FIXO).select_related()
+
+    count = sum(
+        1 for c in contratos_ativos
+        if c.get_primeiro_ciclo_bloqueado() is not None
+    )
+    return JsonResponse({'count': count})

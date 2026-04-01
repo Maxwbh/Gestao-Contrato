@@ -287,6 +287,33 @@
         </div>
     </div>
 
+    <!-- 3.6 Tabela Vencimentos Consolidados — Próximos 3 Meses -->
+    <div class="row mb-4">
+        <div class="col-md-12">
+            <div class="card">
+                <div class="card-header bg-primary text-white">
+                    <i class="bi bi-calendar3"></i> Vencimentos Previstos — Próximos 3 Meses
+                </div>
+                <div class="card-body p-0">
+                    <div class="table-responsive">
+                        <table class="table table-hover mb-0" id="tabelaVencimentos">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Mês</th>
+                                    <th class="text-center">Qtd. Parcelas</th>
+                                    <th class="text-end">Valor Total Previsto</th>
+                                </tr>
+                            </thead>
+                            <tbody id="tabelaVencimentosBody">
+                                <tr><td colspan="3" class="text-center text-muted py-3">Carregando...</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- Tabela de Contratos em Atraso -->
     <div class="row">
         <div class="col-md-12">
@@ -504,6 +531,19 @@ document.addEventListener('DOMContentLoaded', function() {
                     }
                 }
             });
+            // 3.6 Tabela vencimentos próximos 3 meses
+            const tbody = document.getElementById('tabelaVencimentosBody');
+            if (data.vencimentos_proximos && data.vencimentos_proximos.length) {
+                tbody.innerHTML = data.vencimentos_proximos.map(v => `
+                    <tr>
+                        <td><strong>${v.mes}</strong></td>
+                        <td class="text-center"><span class="badge bg-secondary">${v.quantidade}</span></td>
+                        <td class="text-end text-primary fw-bold">R$ ${v.valor_total.toLocaleString('pt-BR', {minimumFractionDigits: 2})}</td>
+                    </tr>
+                `).join('');
+            } else {
+                tbody.innerHTML = '<tr><td colspan="3" class="text-center text-muted">Nenhuma parcela prevista.</td></tr>';
+            }
         })
         .catch(error => {
             console.error('Erro ao carregar dados do dashboard:', error);
