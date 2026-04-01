@@ -2,7 +2,7 @@
 
 **Desenvolvedor:** Maxwell da Silva Oliveira (maxwbh@gmail.com)
 **Empresa:** M&S do Brasil LTDA
-**Última atualização:** 2026-04-01
+**Última atualização:** 2026-04-01 (rev 2)
 
 > Pendentes organizados por prioridade.
 > Para documentação do sistema atual, consulte **[SISTEMA.md](SISTEMA.md)**.
@@ -422,6 +422,80 @@
 
 ---
 
+## 12. CNAB — REMESSA E RETORNO ✅ CONCLUÍDO
+
+> **Objetivo:** geração de arquivos de remessa CNAB 240/400 por escopo (Conta, Imobiliária, Contrato, Individual) com controle de duplicatas e integração com BRCobrança.
+
+---
+
+### 12.1 Serviço CNABService (`financeiro/services/cnab_service.py`)
+
+| # | Item | Status |
+|---|------|--------|
+| C-01 | **`gerar_remessa()`** — gera 1 arquivo por `ContaBancaria`; chama `POST /api/remessa` no BRCobrança; fallback local em CNAB 400 simplificado se container indisponível | ✅ |
+| C-02 | **`_gerar_remessa_local()`** — gera CNAB 400 localmente (fallback sem BRCobrança); campos corretos (header, detalhe, trailer) | ✅ |
+| C-03 | **`obter_boletos_sem_remessa()`** — filtros por `conta_bancaria`, `imobiliaria_id`, `contrato_id`; usa `itens_remessa__isnull=True` para controle de duplicata | ✅ |
+| C-04 | **`obter_boletos_em_remessa_pendente()`** — retorna boletos já em remessa com status `GERADO` (não enviada), para exibir aviso na UI | ✅ |
+| C-05 | **`gerar_remessas_por_escopo()`** — recebe lista de `parcela_ids`, agrupa por `conta_bancaria`, chama `gerar_remessa()` para cada grupo; retorna lista de remessas geradas + erros | ✅ |
+| C-06 | **`_parsear_numero_dv()`** — helper para separar número e dígito verificador de agência/conta (`"3073-0"` → `("3073", "0")`); corrige bug anterior que mesclava número+DV | ✅ |
+| C-07 | **Campo `imobiliaria` correto** — `_montar_dados_boleto()` usa `contrato.imobiliaria` (FK direto no Contrato) em vez de `contrato.imovel.imobiliaria` | ✅ |
+| C-08 | **Campos BRCobrança alinhados** — `agencia`, `agencia_dv`, `conta_corrente`, `digito_conta` separados; `dados_empresa` e boleto usam mesma nomenclatura | ✅ |
+
+---
+
+### 12.2 Views (`financeiro/views.py`)
+
+| # | Item | Status |
+|---|------|--------|
+| V-01 | **`gerar_arquivo_remessa()` GET** — filtros por escopo (tudo / imobiliária / contrato / conta); boletos agrupados por `conta_bancaria` em `grupos_conta`; `today` para destaque de vencidos | ✅ |
+| V-02 | **`gerar_arquivo_remessa()` POST** — chama `gerar_remessas_por_escopo()`; redireciona para detalhe se 1 remessa, para lista se múltiplas | ✅ |
+| V-03 | **`listar_arquivos_remessa()`** — filtro adicional por imobiliária via `conta_bancaria__imobiliaria_id` | ✅ |
+| V-04 | **`api_cnab_boletos_disponiveis()`** — parâmetros `conta_bancaria_id` (opcional), `imobiliaria_id` (opcional), `contrato_id` (opcional) | ✅ |
+
+---
+
+### 12.3 Templates
+
+| # | Item | Status |
+|---|------|--------|
+| T-01 | **`gerar_remessa.html`** — seletor de escopo com dropdowns contextuais; boletos agrupados por conta; checkbox "todos desta conta" + checkbox global; contador de selecionados; botão gerar habilitado dinamicamente; aviso de boletos em remessa pendente com link | ✅ |
+| T-02 | **`listar_remessas.html`** — filtro por imobiliária adicionado ao lado do filtro de conta e status | ✅ |
+
+---
+
+### 12.4 Script de Dados de Teste (`gerar_dados_teste.py`)
+
+| # | Item | Status |
+|---|------|--------|
+| D-01 | **`limpar_dados()`** — inclui `ArquivoRemessa.objects.all().delete()` e `ArquivoRetorno.objects.all().delete()` antes de limpar Parcela | ✅ |
+| D-02 | **`simular_boletos_gerados()`** — simula até 3 boletos por contrato com status `GERADO`, `nosso_numero`, `conta_bancaria` vinculada; sem chamar BRCobrança — dados suficientes para demonstrar geração de remessa | ✅ |
+| D-03 | **Output do `handle()`** — inclui contagem de `TabelaJurosContrato` e boletos simulados | ✅ |
+
+---
+
+### 12.5 Controle de Duplicatas
+
+| Mecanismo | Descrição |
+|-----------|-----------|
+| `itens_remessa__isnull=True` | Filtra parcelas sem nenhum ItemRemessa — exclui automaticamente da lista de disponíveis |
+| `obter_boletos_em_remessa_pendente()` | Retorna as que *já têm* remessa GERADO — exibidas como aviso na UI |
+| `gerar_remessas_por_escopo()` + `Parcela.filter(itens_remessa__isnull=True)` | Validação dupla na geração: mesmo se o usuário enviar IDs de parcelas já em remessa, o service as filtra novamente |
+
+---
+
+### 12.6 BRCobrança Integration
+
+| Item | Detalhe |
+|------|---------|
+| **API endpoint** | `POST /api/remessa` · `POST /api/retorno` |
+| **Container** | `docker run -p 9292:9292 maxwbh/boleto_cnab_api` |
+| **URL configurável** | `settings.BRCOBRANCA_URL` (default `http://localhost:9292`) |
+| **Fallback** | `ConnectionError` → `_gerar_remessa_local()` — CNAB 400 gerado em Python |
+| **Payload** | `{"bank": "banco_brasil", "type": "cnab240", "data": [...]}` |
+| **Bancos suportados** | BB (001), Santander (033), Caixa (104), Bradesco (237), Itaú (341), Sicredi (748), Sicoob (756) e outros |
+
+---
+
 ## Ordem de Execução Recomendada
 
 | Fase | Escopo | Seções | Status |
@@ -432,14 +506,15 @@
 | **4** | ⭐ **Reajuste — Acumulado + Histórico + Auditoria** | 10 (Fase 3–4) | ✅ |
 | **5** | ⭐ **Reajuste — Índice composto + Lote + Celery** | 10 (Fase 5) | ✅ |
 | **6** | ⭐ **Adequação ao contrato real — estrutura de dados** | 11 | ✅ |
-| **7** | Frontend P2 (telas principais) | 3 (P2) | — |
-| **8** | APIs P2 | 4 (P2) | — |
-| **9** | Testes P2 (views e APIs) | 7.2 | — |
-| **10** | Permissões e segurança | 6 | — |
-| **11** | Cálculos contratuais avançados (rescisão, cessão, mora pro rata) | 11 (G-10, G-11, G-15) | — |
-| **12** | Testes P3/P4 + CI/CD | 7.3, 7.4, 8 | — |
-| **13** | Frontend P3/P4 | 3 (P3, P4) | — |
-| **14** | Documentação | 9 | — |
+| **7** | ⭐ **CNAB Remessa — por escopo, BRCobrança, anti-duplicata** | 12 | ✅ |
+| **8** | Frontend P2 (telas principais) | 3 (P2) | — |
+| **9** | APIs P2 | 4 (P2) | — |
+| **10** | Testes P2 (views e APIs) | 7.2 | — |
+| **11** | Permissões e segurança | 6 | — |
+| **12** | Cálculos contratuais avançados (rescisão, cessão, mora pro rata) | 11 (G-10, G-11, G-15) | — |
+| **13** | Testes P3/P4 + CI/CD | 7.3, 7.4, 8 | — |
+| **14** | Frontend P3/P4 | 3 (P3, P4) | — |
+| **15** | Documentação | 9 | — |
 
 ---
 
@@ -460,13 +535,25 @@
 | Documentação | — | — | 1 | 3 | 4 | — |
 | **Total** | **~111** | **~209** | **~88** | **~59** | **~467** | |
 
-### ✅ Fases concluídas nesta sessão (2026-04-01)
-- **Seção 11 completa:** Análise do contrato real + 9 gaps estruturais implementados
+### ✅ Fases concluídas (2026-04-01)
+
+**Seção 11 — Adequação ao Contrato Real:**
 - `TabelaJurosContrato` — juros escalantes por ciclo (0,60% → 0,85% a.m.)
 - `calcular_saldo_devedor()` — corrigido para tabela price e juros compostos
 - Fallback de índice automático em `preview_reajuste()`
 - Cláusulas contratuais no `Contrato` (fruição, rescisão, cessão)
-- Admin, navegação e dados de teste atualizados
-- `preview_reajuste()` e `aplicar_reajuste()` com **MODO TABELA PRICE**: PMT recalculado sobre saldo atualizado pelo índice, aplicado a todas as parcelas restantes. Método `_calcular_pmt()` adicionado ao `Reajuste`.
-- Bug corrigido: intermediárias usavam percentual bruto, agora usam `perc_final` (com piso/teto)
+- `preview_reajuste()` e `aplicar_reajuste()` com **MODO TABELA PRICE** e `_calcular_pmt()`
+- Bug corrigido: intermediárias usavam percentual bruto → agora `perc_final` (com piso/teto)
 - `criar_reajuste_ciclo()` depreciado com `DeprecationWarning`
+- Admin, navegação e dados de teste atualizados
+
+**Seção 12 — CNAB Remessa:**
+- Geração por escopo: Todos / Por Imobiliária / Por Contrato / Por Conta Bancária
+- Auto-split por `conta_bancaria` → 1 arquivo de remessa por conta
+- `gerar_remessas_por_escopo()` agrupa parcelas e chama `gerar_remessa()` para cada grupo
+- Controle de duplicatas: `itens_remessa__isnull=True` + aviso UI de pendentes
+- `_parsear_numero_dv()`: corrige bug de agência/conta (separar número e DV)
+- `imobiliaria` corrigido: `contrato.imobiliaria` em vez de `contrato.imovel.imobiliaria`
+- Campos BRCobrança alinhados: `agencia`, `agencia_dv`, `conta_corrente`, `digito_conta`
+- Filtro por imobiliária na lista de remessas
+- Script de dados de teste: `simular_boletos_gerados()` + limpeza de `ArquivoRemessa/Retorno`
