@@ -569,9 +569,18 @@ class Command(BaseCommand):
             meses_desde_contrato = (hoje.year - data_primeiro_vencimento.year) * 12 + \
                                    (hoje.month - data_primeiro_vencimento.month)
 
-            # Limitar parcelas entre 6 e o máximo que cabe até hoje
-            max_parcelas = max(6, min(meses_desde_contrato + 1, 48))
-            numero_parcelas = random.randint(min(6, max_parcelas), max_parcelas)
+            # 5% dos contratos são longos (120-360 parcelas) — representam loteamentos
+            # Para esses, a data do contrato é recuada para caber mais parcelas
+            if random.random() < 0.05:
+                numero_parcelas = random.choice([120, 180, 240, 360])
+                # Recua a data do contrato para ter pelo menos 24 meses decorridos
+                dias_atras = random.randint(730, 1460)
+                data_contrato = hoje - timedelta(days=dias_atras)
+                data_primeiro_vencimento = data_contrato + timedelta(days=30)
+            else:
+                # Limitar parcelas entre 6 e o máximo que cabe até hoje
+                max_parcelas = max(6, min(meses_desde_contrato + 1, 48))
+                numero_parcelas = random.randint(min(6, max_parcelas), max_parcelas)
 
             # Valor do imóvel baseado na área (garantir precisão decimal)
             area = Decimal(str(imovel.area)).quantize(Decimal('0.01'))
@@ -600,10 +609,12 @@ class Command(BaseCommand):
                 dia_vencimento=random.choice([5, 10, 15, 20, 25]),
                 percentual_juros_mora=Decimal('1.00'),
                 percentual_multa=Decimal('2.00'),
-                tipo_correcao=random.choice([
-                    TipoCorrecao.IPCA, TipoCorrecao.IGPM, TipoCorrecao.INCC,
-                    TipoCorrecao.IGPDI, TipoCorrecao.INPC, TipoCorrecao.TR
-                ]),
+                tipo_correcao=random.choices(
+                    [TipoCorrecao.IPCA, TipoCorrecao.IGPM, TipoCorrecao.INCC,
+                     TipoCorrecao.IGPDI, TipoCorrecao.INPC, TipoCorrecao.TR,
+                     TipoCorrecao.FIXO],
+                    weights=[25, 20, 15, 10, 10, 10, 10], k=1
+                )[0],
                 prazo_reajuste_meses=12,
                 # 30% dos contratos têm spread (0.5 a 2 p.p.)
                 spread_reajuste=Decimal(str(round(random.uniform(0.5, 2.0), 4))) if random.random() < 0.3 else None,
@@ -805,9 +816,10 @@ class Command(BaseCommand):
             ('SELIC', 0.80, 1.10, 'BCB'),            # SELIC: 0.8% a 1.1%
         ]
 
-        # Gerar últimos 36 meses
+        # Gerar últimos 36 meses (usa relativedelta para datas precisas)
+        from dateutil.relativedelta import relativedelta
         for meses_atras in range(36, 0, -1):
-            data = hoje - timedelta(days=meses_atras * 30)
+            data = hoje - relativedelta(months=meses_atras)
             ano = data.year
             mes = data.month
 
@@ -864,14 +876,15 @@ class Command(BaseCommand):
         )
 
         for contrato in contratos_com_intermediarias:
-            # Calcular quantas intermediárias cabem no contrato (a cada 12 meses)
-            max_intermediarias = contrato.numero_parcelas // 12
+            # Intervalo: 50% usa a cada 6 meses, 50% a cada 12 meses
+            intervalo = random.choice([6, 12])
+            max_intermediarias = contrato.numero_parcelas // intervalo
 
             if max_intermediarias < 1:
                 continue
 
             # Número de intermediárias: 1 até o máximo permitido
-            num_intermediarias = random.randint(1, min(5, max_intermediarias))
+            num_intermediarias = random.randint(1, min(10, max_intermediarias))
 
             # Atualizar campo do contrato
             if hasattr(contrato, 'quantidade_intermediarias'):
@@ -879,8 +892,8 @@ class Command(BaseCommand):
                 contrato.save(update_fields=['quantidade_intermediarias'])
 
             for seq in range(1, num_intermediarias + 1):
-                # Vencimento a cada 12 meses (garantir que não exceda o prazo)
-                mes_vencimento = seq * 12
+                # Vencimento a cada `intervalo` meses
+                mes_vencimento = seq * intervalo
                 if mes_vencimento > contrato.numero_parcelas:
                     break
 
@@ -983,6 +996,10 @@ class Command(BaseCommand):
         hoje = timezone.now().date()
 
         for contrato in contratos:
+            # FIXO não tem reajuste
+            if contrato.tipo_correcao == TipoCorrecao.FIXO:
+                continue
+
             prazo = contrato.prazo_reajuste_meses
             meses_decorridos = (hoje.year - contrato.data_contrato.year) * 12 + \
                                (hoje.month - contrato.data_contrato.month)
