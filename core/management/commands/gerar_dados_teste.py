@@ -20,7 +20,7 @@ from django.db import transaction
 from faker import Faker
 
 from core.models import Contabilidade, Imobiliaria, Imovel, Comprador, TipoImovel, ContaBancaria
-from contratos.models import Contrato, TipoCorrecao, StatusContrato, IndiceReajuste, PrestacaoIntermediaria
+from contratos.models import Contrato, TipoCorrecao, StatusContrato, IndiceReajuste, PrestacaoIntermediaria, TabelaJurosContrato
 from financeiro.models import Parcela, Reajuste
 from portal_comprador.models import AcessoComprador
 from django.contrib.auth.models import User
@@ -361,6 +361,8 @@ class Command(BaseCommand):
                     imobiliaria=imobiliaria,
                     tipo=TipoImovel.LOTE,
                     identificacao=f'Quadra {quadra}, Lote {lote_na_quadra:02d}',
+                    quadra=str(quadra),
+                    lote=f'{lote_na_quadra:02d}',
                     loteamento=nome_loteamento,
                     cep='35700-000',
                     logradouro=f'Rua {quadra}',
@@ -599,10 +601,40 @@ class Command(BaseCommand):
                 reajuste_piso=Decimal('0.0000') if random.random() < 0.2 else None,
                 # 15% têm teto (entre 10% e 15%)
                 reajuste_teto=Decimal(str(round(random.uniform(10.0, 15.0), 4))) if random.random() < 0.15 else None,
+                # Fallback INPC para contratos com IGPM (20% de chance)
+                tipo_correcao_fallback='INPC' if random.random() < 0.2 else '',
+                # 10% dos contratos têm dados de vendedor pessoa física
+                vendedor_nome=self.fake.name() if random.random() < 0.1 else '',
+                vendedor_cpf_cnpj='',
+                # Cláusulas padrão
+                percentual_fruicao=Decimal('0.5000'),
+                percentual_multa_rescisao_penal=Decimal('10.0000'),
+                percentual_multa_rescisao_adm=Decimal('12.0000'),
+                percentual_cessao=Decimal('3.0000'),
                 status=StatusContrato.ATIVO,
                 observacoes=f'Contrato gerado automaticamente para teste'
             )
             contratos.append(contrato)
+
+            # 15% dos contratos têm juros escalantes por ciclo (tabela price progressiva)
+            if random.random() < 0.15 and numero_parcelas >= 24:
+                faixas = [
+                    (1, 1, Decimal('0.0000')),    # Ano 1: sem juros adicionais
+                    (2, 2, Decimal('0.6000')),
+                    (3, 3, Decimal('0.6500')),
+                    (4, 4, Decimal('0.7000')),
+                    (5, 5, Decimal('0.7500')),
+                    (6, 6, Decimal('0.8000')),
+                    (7, None, Decimal('0.8500')),  # Ano 7 em diante
+                ]
+                for ciclo_ini, ciclo_fim, juros in faixas:
+                    TabelaJurosContrato.objects.create(
+                        contrato=contrato,
+                        ciclo_inicio=ciclo_ini,
+                        ciclo_fim=ciclo_fim,
+                        juros_mensal=juros,
+                        observacoes='Gerado por dados de teste'
+                    )
 
         return contratos
 
