@@ -255,15 +255,28 @@ class ContratoDetailView(LoginRequiredMixin, DetailView):
         # PRESTAÇÕES INTERMEDIÁRIAS
         # =====================================================================
         if hasattr(contrato, 'intermediarias'):
-            context['intermediarias'] = contrato.intermediarias.all().order_by('numero_sequencial')
-            context['total_intermediarias'] = contrato.intermediarias.count()
-            context['intermediarias_pagas'] = contrato.intermediarias.filter(paga=True).count()
-            context['intermediarias_pendentes'] = contrato.intermediarias.filter(paga=False).count()
+            from django.utils import timezone as tz
+            from dateutil.relativedelta import relativedelta
+            todas = contrato.intermediarias.all().order_by('numero_sequencial')
+            context['intermediarias'] = todas
+            context['total_intermediarias'] = todas.count()
+            context['intermediarias_pagas'] = todas.filter(paga=True).count()
+            context['intermediarias_pendentes'] = todas.filter(paga=False).count()
+            # Intermediárias vencidas sem boleto gerado
+            hoje = tz.now().date()
+            vencidas_sem_boleto = [
+                inter for inter in todas.filter(paga=False, parcela_vinculada__isnull=True)
+                if (contrato.data_primeiro_vencimento + relativedelta(months=inter.mes_vencimento - 1)).replace(
+                    day=min(contrato.dia_vencimento, 28)
+                ) <= hoje
+            ]
+            context['intermediarias_vencidas_sem_boleto'] = vencidas_sem_boleto
         else:
             context['intermediarias'] = []
             context['total_intermediarias'] = 0
             context['intermediarias_pagas'] = 0
             context['intermediarias_pendentes'] = 0
+            context['intermediarias_vencidas_sem_boleto'] = []
 
         # =====================================================================
         # CONTROLE DE BLOQUEIO DE BOLETO POR REAJUSTE
@@ -1268,6 +1281,111 @@ def api_intermediarias_contrato(request, contrato_id):
         'total': len(data),
         'intermediarias': data
     })
+
+
+# =============================================================================
+# HU-08 — API Preview de Parcelas (projeção sem salvar)
+# =============================================================================
+
+@login_required
+def api_preview_parcelas(request):
+    """
+    GET/POST: recebe dados do wizard (step1 + step2) e retorna projeção
+    das primeiras N parcelas com marcação dos ciclos de reajuste.
+    """
+    from decimal import Decimal as D
+    from dateutil.relativedelta import relativedelta
+    import json
+
+    try:
+        if request.method == 'POST':
+            payload = json.loads(request.body)
+        else:
+            payload = request.GET
+
+        valor_total = D(str(payload.get('valor_total', 0)))
+        valor_entrada = D(str(payload.get('valor_entrada', 0)))
+        numero_parcelas = int(payload.get('numero_parcelas', 1))
+        prazo_reajuste = int(payload.get('prazo_reajuste_meses', 12))
+        reduzem_pmt = str(payload.get('intermediarias_reduzem_pmt', 'false')).lower() in ('true', '1')
+        soma_inter = D(str(payload.get('soma_intermediarias', 0)))
+
+        data_primeiro_vencimento = payload.get('data_primeiro_vencimento', '')
+        dia_vencimento = int(payload.get('dia_vencimento', 1))
+
+        from datetime import date
+        try:
+            from datetime import datetime
+            data_base = datetime.strptime(data_primeiro_vencimento, '%Y-%m-%d').date()
+        except (ValueError, TypeError):
+            data_base = date.today()
+
+        valor_financiado = valor_total - valor_entrada
+        if reduzem_pmt:
+            base_pmt = max(valor_financiado - soma_inter, D('0.01'))
+        else:
+            base_pmt = valor_financiado
+
+        pmt = (base_pmt / numero_parcelas).quantize(D('0.01')) if numero_parcelas else D('0')
+
+        # Juros por ciclo
+        juros_rows = payload.get('juros', [])
+        if isinstance(juros_rows, str):
+            juros_rows = json.loads(juros_rows)
+
+        def get_juros_ciclo(ciclo):
+            for row in juros_rows:
+                ci = int(row.get('ciclo_inicio', 1))
+                cf = row.get('ciclo_fim')
+                if cf:
+                    if ci <= ciclo <= int(cf):
+                        return D(str(row['juros_mensal']))
+                else:
+                    if ciclo >= ci:
+                        return D(str(row['juros_mensal']))
+            return D('0')
+
+        # Intermediárias por mês
+        inter_list = payload.get('intermediarias_lista', [])
+        if isinstance(inter_list, str):
+            inter_list = json.loads(inter_list)
+        inter_mes = {int(r['mes_vencimento']): D(str(r['valor'])) for r in inter_list}
+
+        # Gerar primeiras 24 parcelas (ou menos)
+        preview_count = min(numero_parcelas, 24)
+        parcelas = []
+        for i in range(1, preview_count + 1):
+            ciclo = (i - 1) // prazo_reajuste + 1
+            juros_ciclo = get_juros_ciclo(ciclo)
+            venc = data_base + relativedelta(months=i - 1)
+            try:
+                venc = venc.replace(day=dia_vencimento)
+            except ValueError:
+                import calendar
+                ultimo = calendar.monthrange(venc.year, venc.month)[1]
+                venc = venc.replace(day=min(dia_vencimento, ultimo))
+            parcelas.append({
+                'numero': i,
+                'ciclo': ciclo,
+                'vencimento': venc.strftime('%d/%m/%Y'),
+                'valor': float(pmt),
+                'juros_mensal': float(juros_ciclo),
+                'inicio_ciclo': (i - 1) % prazo_reajuste == 0 and i > 1,
+                'intermediaria': float(inter_mes[i]) if i in inter_mes else None,
+            })
+
+        return JsonResponse({
+            'sucesso': True,
+            'pmt': float(pmt),
+            'valor_financiado': float(valor_financiado),
+            'base_pmt': float(base_pmt),
+            'total_parcelas': numero_parcelas,
+            'preview_count': preview_count,
+            'parcelas': parcelas,
+        })
+
+    except Exception as e:
+        return JsonResponse({'sucesso': False, 'erro': str(e)}, status=400)
 
 
 # =============================================================================
