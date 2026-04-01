@@ -512,7 +512,7 @@
 | **10** | Testes P2 (views e APIs) | 7.2 | — |
 | **11** | Permissões e segurança | 6 | — |
 | **12** | Cálculos contratuais avançados (rescisão, cessão, mora pro rata) | 11 (G-10, G-11, G-15) | — |
-| **13** | ⭐ **Contrato Tabela Price + Intermediárias (HU-360)** | 13 | — |
+| **13** | ⭐ **Contrato Tabela Price + Intermediárias (HU-360)** | 13 | ✅ |
 | **14** | Testes P3/P4 + CI/CD | 7.3, 7.4, 8 | — |
 | **15** | Frontend P3/P4 | 3 (P3, P4) | — |
 | **16** | Documentação | 9 | — |
@@ -671,36 +671,36 @@ return False, (
 
 #### Fase 1 — Bugs Críticos (P1) 🔴
 
-| # | Item | Arquivo | Estimativa |
-|---|------|---------|------------|
-| HU-01 | Fix `Parcela.pode_gerar_boleto()` — cálculo dinâmico de ciclo + verificação de data | `financeiro/models.py` | Pequeno |
-| HU-02 | Fix `Contrato.pode_gerar_boleto()` — adicionar verificação de data | `contratos/models.py` | Pequeno |
-| HU-03 | Definir regra de negócio L-03 (Opção A recomendada) e documentar | `ROADMAP.md` | Pequeno |
+| # | Item | Arquivo | Status |
+|---|------|---------|--------|
+| HU-01 | Fix `Parcela.pode_gerar_boleto()` — cálculo dinâmico de ciclo + verificação de data | `financeiro/models.py` | ✅ |
+| HU-02 | Fix `Contrato.pode_gerar_boleto()` — adicionar verificação de data | `contratos/models.py` | ✅ |
+| HU-03 | Campos `intermediarias_reduzem_pmt` + `intermediarias_reajustadas` no Contrato; migration 0007 | `contratos/models.py` | ✅ |
 
 #### Fase 2 — Formulário de Criação Completo (P1) 🔴
 
-| # | Item | Arquivo | Estimativa |
-|---|------|---------|------------|
-| HU-04 | `ContratoCompletoCreateView` — view com formsets para TabelaJuros + Intermediárias | `contratos/views.py` | Grande |
-| HU-05 | `TabelaJurosFormSet` — formset inline para criação de N faixas de juros | `contratos/forms.py` | Médio |
-| HU-06 | `IntermediariasFormSet` — formset para criação manual ou padrão (`valor + intervalo + n_ocorrencias`) | `contratos/forms.py` | Médio |
-| HU-07 | Template `contrato_form_completo.html` — wizard com 3 seções dinâmicas | `templates/contratos/` | Grande |
+| # | Item | Arquivo | Status |
+|---|------|---------|--------|
+| HU-04 | `ContratoWizardView` — wizard 4 etapas com sessão Django | `contratos/views.py` | ✅ |
+| HU-05 | `TabelaJurosForm` — linhas dinâmicas de faixas de juros | `contratos/forms.py` | ✅ |
+| HU-06 | `IntermediariaPadraoForm` + `IntermediariaManualForm` — padrão (intervalo+n) ou manual | `contratos/forms.py` | ✅ |
+| HU-07 | Templates wizard — step1 a step4 com progress bar e Bootstrap 5 | `templates/contratos/wizard/` | ✅ |
 
 #### Fase 3 — Preview e Validações (P2) 🟡
 
-| # | Item | Arquivo | Estimativa |
-|---|------|---------|------------|
-| HU-08 | `api_preview_parcelas` — endpoint que retorna prévia das parcelas geradas (com projeção de reajuste) | `contratos/views.py` | Médio |
-| HU-09 | Validação: total_intermediárias + total_parcelas_ciclo1 — consistência financeira | `contratos/forms.py` | Pequeno |
-| HU-10 | Preview no formulário: tabela de parcelas com marcação das intermediárias e datas de reajuste | Template | Médio |
+| # | Item | Arquivo | Status |
+|---|------|---------|--------|
+| HU-08 | `api_preview_parcelas` — endpoint GET/POST que retorna projeção das primeiras 24 parcelas (ciclo, juros, intermediárias) | `contratos/views.py` | ✅ |
+| HU-09 | Validação financeira na preview: PMT base = `valor_financiado - soma_inter` se `reduzem_pmt=True` | `contratos/views.py` | ✅ |
+| HU-10 | Preview de parcelas no step4: tabela JS via `api_preview_parcelas` com marcação de início de ciclo e intermediárias | `templates/contratos/wizard/step4_preview.html` | ✅ |
 
 #### Fase 4 — Geração de Boleto para Intermediárias (P2) 🟡
 
-| # | Item | Arquivo | Estimativa |
-|---|------|---------|------------|
-| HU-11 | `gerar_boleto_intermediaria()` — cria Parcela tipo INTERMEDIARIA e vincula via `parcela_vinculada` | `contratos/models.py` | Médio |
-| HU-12 | View de geração de boleto para intermediárias vencidas | `financeiro/views.py` | Médio |
-| HU-13 | Alert na tela do contrato: intermediárias vencidas sem boleto | `templates/contratos/` | Pequeno |
+| # | Item | Arquivo | Status |
+|---|------|---------|--------|
+| HU-11 | `gerar_boleto_intermediaria()` — cria Parcela tipo INTERMEDIARIA e vincula via `parcela_vinculada` | `contratos/views.py` | ✅ (já existia) |
+| HU-12 | Template `intermediaria_list.html` com tabela, estatísticas e botão gerar boleto | `templates/contratos/intermediaria_list.html` | ✅ |
+| HU-13 | Alert na tela do contrato: intermediárias vencidas sem boleto + seção resumo | `templates/contratos/contrato_detail.html` | ✅ |
 
 ---
 
@@ -759,15 +759,15 @@ FLUXO MENSAL
 
 ---
 
-### 13.6 Questões Abertas (Necessitam Decisão do Usuário)
+### 13.6 Decisões Confirmadas pelo Usuário (2026-04-01)
 
-| # | Questão | Opções |
-|---|---------|--------|
-| Q-01 | **Intermediárias afetam PMT inicial?** (L-03) | A) Não (PMT = 250k/360); B) Sim (PMT calculado sobre PV líquido) |
-| Q-02 | **Intermediárias são reajustadas pelo IPCA?** | A) Sim (valor_reajustado atualizado); B) Não (valor fixo) |
-| Q-03 | **Intermediária vence junto com parcela normal?** | A) Boleto separado; B) Boleto único somado |
-| Q-04 | **Ciclo 1 com taxa 0,0000%** — deve constar na `TabelaJurosContrato`? | A) Sim (explícito); B) Não (ausência = 0%) |
-| Q-05 | **Wizard em múltiplas etapas ou formulário único com seções?** | A) Multi-step (3 páginas + preview); B) Single page com JS |
+| # | Questão | Decisão |
+|---|---------|---------|
+| Q-01 | **Intermediárias afetam PMT inicial?** | **Parametrizável** — campo `intermediarias_reduzem_pmt` (bool) no Contrato. Se `True`, PMT = `(valor_financiado - soma_intermediarias) / n`. |
+| Q-02 | **Intermediárias são reajustadas pelo IPCA?** | **Parametrizável** — campo `intermediarias_reajustadas` (bool) no Contrato. Se `True`, valor é atualizado pelo mesmo índice a cada ciclo. |
+| Q-03 | **Intermediária vence junto com parcela normal?** | **Boleto separado** — `PrestacaoIntermediaria` gera Parcela tipo `INTERMEDIARIA` independente. |
+| Q-04 | **Ciclo 1 com taxa 0,0000%** — constar na `TabelaJurosContrato`? | **Explícito** — ciclo 1 sempre registrado na tabela com `juros_mensal=0`. |
+| Q-05 | **Wizard em múltiplas etapas ou formulário único?** | **Wizard 4 etapas** — sessão Django; step1 dados básicos, step2 juros, step3 intermediárias, step4 preview + salvar. |
 
 ---
 
@@ -780,7 +780,7 @@ FLUXO MENSAL
 | Reajuste | 4 | 4 | 7 | — | 15+4=19 | ✅ 19/19 |
 | Contrato Real (gaps) | — | — | 9 | 6 | 15 | ✅ 9/9 (P3) · 6 pendentes P4 |
 | CNAB Remessa | — | 8 | — | — | 8 | ✅ 8/8 |
-| HU-360 Tabela Price | 2 | 9 | 2 | — | 13 | ❌ 0/13 |
+| HU-360 Tabela Price | 2 | 9 | 2 | — | 13 | ✅ 13/13 |
 | Frontend | — | 17 | 15 | 3 | 35 | — |
 | APIs | — | 6 | 5 | — | 11 | — |
 | Celery | — | 2 | 2 | 1 | 5 | — |
@@ -812,3 +812,17 @@ FLUXO MENSAL
 - Campos BRCobrança alinhados: `agencia`, `agencia_dv`, `conta_corrente`, `digito_conta`
 - Filtro por imobiliária na lista de remessas
 - Script de dados de teste: `simular_boletos_gerados()` + limpeza de `ArquivoRemessa/Retorno`
+
+**Seção 13 — HU-360 Contrato Tabela Price + Intermediárias (Fases 1 e 2):**
+- BUG-01 fix: `Parcela.pode_gerar_boleto()` — cálculo dinâmico de ciclo + verificação de data de reajuste
+- BUG-02 fix: `Contrato.pode_gerar_boleto()` — só bloqueia se `hoje >= data_reajuste_prevista` E sem reajuste aplicado
+- Novos campos: `intermediarias_reduzem_pmt` e `intermediarias_reajustadas` no Contrato (migration 0007)
+- Wizard 4 etapas em sessão Django: step1 dados básicos, step2 juros escalantes, step3 intermediárias (padrão/manual/nenhuma), step4 preview + salvar
+- 4 forms: `ContratoWizardBasicoForm`, `TabelaJurosForm`, `IntermediariaPadraoForm`, `IntermediariaManualForm`
+- `_salvar_contrato()`: cria Contrato + TabelaJurosContrato + PrestacaoIntermediaria em `transaction.atomic()`; recalcula PMT se `intermediarias_reduzem_pmt=True`
+- Botão "Novo Contrato (Wizard)" na lista de contratos; admin atualizado com fieldset de intermediárias
+- `api_preview_parcelas` — projeção das primeiras 24 parcelas (ciclo, juros, intermediárias marcadas) via GET/POST JSON
+- Preview interativo no step4 do wizard: JS carrega tabela via API, marca início de ciclo com badge
+- Alert no detalhe do contrato: intermediárias vencidas sem boleto; seção resumo com tabela e botão gerar boleto
+- Template `intermediaria_list.html` — lista completa com estatísticas, paginação, ação gerar boleto via AJAX
+- URL `/contratos/wizard/api/preview-parcelas/` para o endpoint de preview
