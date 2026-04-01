@@ -80,14 +80,6 @@ class ContratoAdmin(admin.ModelAdmin):
                 'imobiliaria'
             )
         }),
-        ('Vendedor', {
-            'fields': (
-                'vendedor_nome',
-                'vendedor_cpf_cnpj',
-            ),
-            'classes': ('collapse',),
-            'description': 'Preencher quando o vendedor for pessoa física diferente da imobiliária.'
-        }),
         ('Valores', {
             'fields': (
                 'valor_total',
