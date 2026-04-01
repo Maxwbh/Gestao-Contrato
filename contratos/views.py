@@ -1765,3 +1765,67 @@ class ContratoWizardView(LoginRequiredMixin, View):
             observacoes=basico.get('observacoes', ''),
         )
         return contrato
+
+
+# =============================================================================
+# G-11: Cálculo de Rescisão
+# =============================================================================
+
+@login_required
+def calcular_rescisao_view(request, pk):
+    """
+    Calcula o valor de devolução em caso de rescisão pelo comprador.
+    GET: exibe formulário com data de rescisão.
+    POST: processa cálculo e exibe resultado.
+    """
+    contrato = get_object_or_404(Contrato, pk=pk)
+
+    from datetime import date as date_type
+    resultado = None
+    data_rescisao = None
+
+    if request.method == 'POST':
+        data_str = request.POST.get('data_rescisao', '')
+        try:
+            data_rescisao = date_type.fromisoformat(data_str) if data_str else date_type.today()
+        except ValueError:
+            data_rescisao = date_type.today()
+        resultado = contrato.calcular_rescisao(data_rescisao)
+
+    return render(request, 'contratos/calcular_rescisao.html', {
+        'contrato': contrato,
+        'resultado': resultado,
+        'data_rescisao': data_rescisao,
+    })
+
+
+# =============================================================================
+# G-12: Cálculo de Cessão de Direitos
+# =============================================================================
+
+@login_required
+def calcular_cessao_view(request, pk):
+    """
+    Calcula a taxa de cessão de direitos.
+    GET: exibe formulário com data de cessão.
+    POST: processa cálculo e exibe resultado.
+    """
+    contrato = get_object_or_404(Contrato, pk=pk)
+
+    from datetime import date as date_type
+    resultado = None
+    data_cessao = None
+
+    if request.method == 'POST':
+        data_str = request.POST.get('data_cessao', '')
+        try:
+            data_cessao = date_type.fromisoformat(data_str) if data_str else date_type.today()
+        except ValueError:
+            data_cessao = date_type.today()
+        resultado = contrato.calcular_cessao(data_cessao)
+
+    return render(request, 'contratos/calcular_cessao.html', {
+        'contrato': contrato,
+        'resultado': resultado,
+        'data_cessao': data_cessao,
+    })
