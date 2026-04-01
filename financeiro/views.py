@@ -4449,3 +4449,240 @@ def api_reajustes_pendentes_count(request):
         if c.get_primeiro_ciclo_bloqueado() is not None
     )
     return JsonResponse({'count': count})
+
+
+# ==========================================================================
+# FASE 9 — APIs P2
+# ==========================================================================
+
+def _serializar_parcela(p, hoje):
+    """Serializa uma parcela para JSON (helper compartilhado)."""
+    return {
+        'id': p.id,
+        'contrato': {
+            'id': p.contrato.id,
+            'numero': p.contrato.numero_contrato,
+        },
+        'comprador': p.contrato.comprador.nome,
+        'imobiliaria': {
+            'id': p.contrato.imobiliaria_id,
+            'nome': p.contrato.imobiliaria.nome_fantasia or p.contrato.imobiliaria.razao_social,
+        },
+        'numero_parcela': p.numero_parcela,
+        'total_parcelas': p.contrato.numero_parcelas,
+        'data_vencimento': p.data_vencimento.strftime('%Y-%m-%d'),
+        'valor_atual': float(p.valor_atual),
+        'pago': p.pago,
+        'data_pagamento': p.data_pagamento.strftime('%Y-%m-%d') if p.data_pagamento else None,
+        'dias_atraso': max(0, (hoje - p.data_vencimento).days) if not p.pago and p.data_vencimento < hoje else 0,
+        'status_boleto': p.status_boleto,
+        'tem_boleto': p.tem_boleto,
+        'linha_digitavel': p.linha_digitavel or '',
+    }
+
+
+def _filtrar_parcelas_periodo(qs, request, hoje):
+    """Aplica filtros comuns de período e status."""
+    status = request.GET.get('status', '')
+    data_inicio = request.GET.get('data_inicio', '')
+    data_fim = request.GET.get('data_fim', '')
+
+    if status == 'pago':
+        qs = qs.filter(pago=True)
+    elif status == 'pendente':
+        qs = qs.filter(pago=False, data_vencimento__gte=hoje)
+    elif status == 'vencido':
+        qs = qs.filter(pago=False, data_vencimento__lt=hoje)
+    elif status == 'a_vencer':
+        qs = qs.filter(pago=False, data_vencimento__gte=hoje)
+
+    if data_inicio:
+        from datetime import datetime as dt
+        qs = qs.filter(data_vencimento__gte=dt.strptime(data_inicio, '%Y-%m-%d').date())
+    if data_fim:
+        from datetime import datetime as dt
+        qs = qs.filter(data_vencimento__lte=dt.strptime(data_fim, '%Y-%m-%d').date())
+    return qs
+
+
+def _paginar(qs, request):
+    """Retorna (items, total, page, per_page)."""
+    page = max(1, int(request.GET.get('page', 1)))
+    per_page = min(max(1, int(request.GET.get('per_page', 50))), 200)
+    total = qs.count()
+    offset = (page - 1) * per_page
+    return qs[offset:offset + per_page], total, page, per_page
+
+
+# --------------------------------------------------------------------------
+# 4-P2-1 : GET /financeiro/api/contabilidade/vencimentos/
+# --------------------------------------------------------------------------
+
+@login_required
+@require_GET
+def api_contabilidade_vencimentos(request):
+    """
+    Lista vencimentos consolidados para a Contabilidade.
+
+    Filtros: imobiliaria, status, data_inicio, data_fim, comprador, page, per_page
+    """
+    hoje = timezone.now().date()
+
+    qs = Parcela.objects.select_related(
+        'contrato', 'contrato__comprador', 'contrato__imobiliaria'
+    )
+
+    imobiliaria_id = request.GET.get('imobiliaria')
+    if imobiliaria_id:
+        qs = qs.filter(contrato__imobiliaria_id=imobiliaria_id)
+
+    comprador_id = request.GET.get('comprador')
+    if comprador_id:
+        qs = qs.filter(contrato__comprador_id=comprador_id)
+
+    qs = _filtrar_parcelas_periodo(qs, request, hoje)
+    qs = qs.order_by('data_vencimento', 'contrato_id', 'numero_parcela')
+
+    totais = qs.aggregate(
+        total_valor=Sum('valor_atual'),
+        total_pago=Sum('valor_pago', filter=Q(pago=True)),
+        quantidade=Count('id'),
+        vencidas=Count('id', filter=Q(pago=False, data_vencimento__lt=hoje)),
+    )
+
+    page_qs, total, page, per_page = _paginar(qs, request)
+    parcelas = [_serializar_parcela(p, hoje) for p in page_qs]
+
+    return JsonResponse({
+        'sucesso': True,
+        'parcelas': parcelas,
+        'total': total,
+        'page': page,
+        'per_page': per_page,
+        'totais': {
+            'quantidade': totais['quantidade'] or 0,
+            'valor_total': float(totais['total_valor'] or 0),
+            'valor_pago': float(totais['total_pago'] or 0),
+            'quantidade_vencidas': totais['vencidas'] or 0,
+        },
+    })
+
+
+# --------------------------------------------------------------------------
+# 4-P2-2 : POST /financeiro/api/contabilidade/boletos/gerar/massa/
+# --------------------------------------------------------------------------
+# Re-usa api_gerar_boletos_lote (registrado como alias na urls.py)
+
+api_contabilidade_boletos_massa = api_gerar_boletos_lote
+
+
+# --------------------------------------------------------------------------
+# 4-P2-3 : GET /financeiro/api/imobiliaria/<id>/vencimentos/
+# --------------------------------------------------------------------------
+
+@login_required
+@require_GET
+def api_imobiliaria_vencimentos(request, imobiliaria_id):
+    """
+    Lista vencimentos de uma imobiliária específica.
+
+    Filtros: status, data_inicio, data_fim, comprador, page, per_page
+    """
+    imobiliaria = get_object_or_404(Imobiliaria, pk=imobiliaria_id)
+    hoje = timezone.now().date()
+
+    qs = Parcela.objects.select_related(
+        'contrato', 'contrato__comprador', 'contrato__imobiliaria'
+    ).filter(contrato__imobiliaria=imobiliaria)
+
+    comprador_id = request.GET.get('comprador')
+    if comprador_id:
+        qs = qs.filter(contrato__comprador_id=comprador_id)
+
+    qs = _filtrar_parcelas_periodo(qs, request, hoje)
+    qs = qs.order_by('data_vencimento', 'numero_parcela')
+
+    totais = qs.aggregate(
+        total_valor=Sum('valor_atual'),
+        total_pago=Sum('valor_pago', filter=Q(pago=True)),
+        quantidade=Count('id'),
+        vencidas=Count('id', filter=Q(pago=False, data_vencimento__lt=hoje)),
+    )
+
+    page_qs, total, page, per_page = _paginar(qs, request)
+    parcelas = [_serializar_parcela(p, hoje) for p in page_qs]
+
+    return JsonResponse({
+        'sucesso': True,
+        'imobiliaria': {
+            'id': imobiliaria.id,
+            'nome': imobiliaria.nome_fantasia or imobiliaria.razao_social,
+        },
+        'parcelas': parcelas,
+        'total': total,
+        'page': page,
+        'per_page': per_page,
+        'totais': {
+            'quantidade': totais['quantidade'] or 0,
+            'valor_total': float(totais['total_valor'] or 0),
+            'valor_pago': float(totais['total_pago'] or 0),
+            'quantidade_vencidas': totais['vencidas'] or 0,
+        },
+    })
+
+
+# --------------------------------------------------------------------------
+# 4-P2-4 : GET /financeiro/api/imobiliaria/<id>/fluxo-caixa/
+# --------------------------------------------------------------------------
+
+@login_required
+@require_GET
+def api_imobiliaria_fluxo_caixa(request, imobiliaria_id):
+    """
+    Fluxo de caixa mensal previsto vs realizado para uma imobiliária.
+
+    Retorna os últimos 6 meses + próximos 6 meses.
+    """
+    imobiliaria = get_object_or_404(Imobiliaria, pk=imobiliaria_id)
+    hoje = timezone.now().date()
+    meses_nomes = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez']
+
+    base_qs = Parcela.objects.filter(contrato__imobiliaria=imobiliaria)
+
+    meses = []
+    for i in range(-5, 7):  # -5 (5 meses atrás) até +6 (6 meses à frente)
+        ref = hoje + relativedelta(months=i)
+        primeiro = ref.replace(day=1)
+        ultimo = (primeiro + relativedelta(months=1)) - timedelta(days=1)
+
+        qs_mes = base_qs.filter(data_vencimento__gte=primeiro, data_vencimento__lte=ultimo)
+        agg = qs_mes.aggregate(
+            esperado=Sum('valor_atual'),
+            recebido=Sum('valor_pago', filter=Q(pago=True)),
+            qtd_total=Count('id'),
+            qtd_pago=Count('id', filter=Q(pago=True)),
+            qtd_vencido=Count('id', filter=Q(pago=False, data_vencimento__lt=hoje)),
+        )
+
+        meses.append({
+            'mes': f"{meses_nomes[ref.month - 1]}/{ref.year}",
+            'ano_mes': ref.strftime('%Y-%m'),
+            'passado': i < 0,
+            'corrente': i == 0,
+            'futuro': i > 0,
+            'esperado': float(agg['esperado'] or 0),
+            'recebido': float(agg['recebido'] or 0),
+            'pendente': float((agg['esperado'] or 0) - (agg['recebido'] or 0)),
+            'qtd_total': agg['qtd_total'] or 0,
+            'qtd_pago': agg['qtd_pago'] or 0,
+            'qtd_vencido': agg['qtd_vencido'] or 0,
+        })
+
+    return JsonResponse({
+        'sucesso': True,
+        'imobiliaria': {
+            'id': imobiliaria.id,
+            'nome': imobiliaria.nome_fantasia or imobiliaria.razao_social,
+        },
+        'meses': meses,
+    })
