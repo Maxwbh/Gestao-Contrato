@@ -133,4 +133,12 @@ urlpatterns = [
     # API - NOTIFICAÇÕES
     # ==========================================================================
     path('api/reajustes-pendentes/count/', views.api_reajustes_pendentes_count, name='api_reajustes_pendentes_count'),
+
+    # ==========================================================================
+    # FASE 9 — APIs P2 (Contabilidade + Imobiliária)
+    # ==========================================================================
+    path('api/contabilidade/vencimentos/', views.api_contabilidade_vencimentos, name='api_contabilidade_vencimentos'),
+    path('api/contabilidade/boletos/gerar/massa/', views.api_contabilidade_boletos_massa, name='api_contabilidade_boletos_massa'),
+    path('api/imobiliaria/<int:imobiliaria_id>/vencimentos/', views.api_imobiliaria_vencimentos, name='api_imobiliaria_vencimentos'),
+    path('api/imobiliaria/<int:imobiliaria_id>/fluxo-caixa/', views.api_imobiliaria_fluxo_caixa, name='api_imobiliaria_fluxo_caixa'),
 ]
