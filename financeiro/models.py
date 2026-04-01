@@ -968,26 +968,39 @@ class Reajuste(TimeStampedModel):
             inicio_ref.year, inicio_ref.month,
             fim_ref.year, fim_ref.month,
         )
-        spread = contrato.spread_reajuste or Decimal('0')
+        # Spread: TabelaJurosContrato tem precedência sobre spread_reajuste fixo
+        from contratos.models import TabelaJurosContrato
+        spread_tabela = TabelaJurosContrato.get_juros_para_ciclo(contrato, ciclo)
+        spread = spread_tabela if spread_tabela is not None else (contrato.spread_reajuste or Decimal('0'))
 
         if percentual_bruto is None:
-            return {
-                'erro': f'Índice {indice_tipo} não disponível para {inicio_ref.strftime("%b/%Y")} '
-                        f'a {fim_ref.strftime("%b/%Y")}. Importe os dados do índice primeiro.',
-                'periodo_referencia_inicio': inicio_ref,
-                'periodo_referencia_fim': fim_ref,
-                'indice_tipo': indice_tipo,
-                'ciclo': ciclo,
-                'parcela_inicial': parcela_inicial,
-                'parcela_final': parcela_final,
-                'spread': spread,
-            }
+            # Tentar índice de fallback configurado no contrato
+            fallback = contrato.tipo_correcao_fallback
+            if fallback:
+                percentual_bruto = IndiceReajuste.get_acumulado_periodo(
+                    fallback,
+                    inicio_ref.year, inicio_ref.month,
+                    fim_ref.year, fim_ref.month,
+                )
+                if percentual_bruto is not None:
+                    indice_tipo = fallback  # usar fallback nos metadados
+            if percentual_bruto is None:
+                return {
+                    'erro': f'Índice {indice_tipo} não disponível para {inicio_ref.strftime("%b/%Y")} '
+                            f'a {fim_ref.strftime("%b/%Y")}. Importe os dados do índice primeiro.',
+                    'periodo_referencia_inicio': inicio_ref,
+                    'periodo_referencia_fim': fim_ref,
+                    'indice_tipo': indice_tipo,
+                    'ciclo': ciclo,
+                    'parcela_inicial': parcela_inicial,
+                    'parcela_final': parcela_final,
+                    'spread': spread,
+                }
 
         desc_perc = Decimal(str(desconto_percentual)) if desconto_percentual else Decimal('0')
         desc_val = Decimal(str(desconto_valor)) if desconto_valor else Decimal('0')
 
-        # Spread (índice composto): IPCA + spread → percentual_bruto_com_spread
-        spread = contrato.spread_reajuste or Decimal('0')
+        # Spread (índice composto): índice + spread → percentual_bruto_com_spread
         percentual_bruto_com_spread = percentual_bruto + spread
 
         # Descontar sobre o percentual já acrescido do spread
