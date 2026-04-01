@@ -306,6 +306,15 @@ class Contrato(TimeStampedModel):
         verbose_name='Teto de Reajuste (%)',
         help_text='Percentual máximo aplicado ao reajuste (ex: 15 para limitar a 15%)'
     )
+    spread_reajuste = models.DecimalField(
+        max_digits=8,
+        decimal_places=4,
+        null=True,
+        blank=True,
+        default=Decimal('0'),
+        verbose_name='Spread de Reajuste (p.p.)',
+        help_text='Pontos percentuais adicionados ao índice (ex: IPCA + 2 p.p. → spread=2.0000)'
+    )
 
     # Status
     status = models.CharField(
