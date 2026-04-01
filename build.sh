@@ -125,10 +125,11 @@ python manage.py shell << 'SQLEOF'
 from django.db import connection
 
 def add_column_if_not_exists(cursor, table, column, column_def):
-    """Adiciona coluna se não existir"""
+    """Adiciona coluna se não existir (verifica apenas no schema atual)"""
     cursor.execute(f"""
         SELECT 1 FROM information_schema.columns
-        WHERE table_name = '{table}' AND column_name = '{column}'
+        WHERE table_schema = current_schema()
+          AND table_name = '{table}' AND column_name = '{column}'
     """)
     if not cursor.fetchone():
         cursor.execute(f"ALTER TABLE {table} ADD COLUMN {column} {column_def}")
@@ -173,7 +174,7 @@ with connection.cursor() as cursor:
     for table in timestamp_tables:
         # Verificar se tabela existe
         cursor.execute(f"""
-            SELECT 1 FROM information_schema.tables WHERE table_name = '{table}'
+            SELECT 1 FROM information_schema.tables WHERE table_schema = current_schema() AND table_name = '{table}'
         """)
         if cursor.fetchone():
             # Adicionar colunas em português (usadas pelo Django)
@@ -357,7 +358,8 @@ with connection.cursor() as cursor:
     print("Checking core_contabancaria...")
     cursor.execute("""
         SELECT 1 FROM information_schema.tables
-        WHERE table_name = 'core_contabancaria'
+        WHERE table_schema = current_schema()
+          AND table_name = 'core_contabancaria'
     """)
     if not cursor.fetchone():
         cursor.execute("""
@@ -396,7 +398,8 @@ with connection.cursor() as cursor:
     print("Checking core_acessousuario...")
     cursor.execute("""
         SELECT 1 FROM information_schema.tables
-        WHERE table_name = 'core_acessousuario'
+        WHERE table_schema = current_schema()
+          AND table_name = 'core_acessousuario'
     """)
     if not cursor.fetchone():
         cursor.execute("""
@@ -421,7 +424,8 @@ with connection.cursor() as cursor:
     print("Checking contratos_indicereajuste...")
     cursor.execute("""
         SELECT 1 FROM information_schema.tables
-        WHERE table_name = 'contratos_indicereajuste'
+        WHERE table_schema = current_schema()
+          AND table_name = 'contratos_indicereajuste'
     """)
     if not cursor.fetchone():
         cursor.execute("""
@@ -466,7 +470,8 @@ with connection.cursor() as cursor:
     print("Checking financeiro_parcela for boleto fields...")
     cursor.execute("""
         SELECT 1 FROM information_schema.tables
-        WHERE table_name = 'financeiro_parcela'
+        WHERE table_schema = current_schema()
+          AND table_name = 'financeiro_parcela'
     """)
     if cursor.fetchone():
         # Campos de identificação do boleto
@@ -519,7 +524,8 @@ with connection.cursor() as cursor:
     print("Checking notificacoes_templatenotificacao...")
     cursor.execute("""
         SELECT 1 FROM information_schema.tables
-        WHERE table_name = 'notificacoes_templatenotificacao'
+        WHERE table_schema = current_schema()
+          AND table_name = 'notificacoes_templatenotificacao'
     """)
     if cursor.fetchone():
         add_column_if_not_exists(cursor, 'notificacoes_templatenotificacao', 'codigo', "VARCHAR(30) DEFAULT 'CUSTOM'")
@@ -537,7 +543,8 @@ with connection.cursor() as cursor:
     print("Checking financeiro_arquivoremessa...")
     cursor.execute("""
         SELECT 1 FROM information_schema.tables
-        WHERE table_name = 'financeiro_arquivoremessa'
+        WHERE table_schema = current_schema()
+          AND table_name = 'financeiro_arquivoremessa'
     """)
     if not cursor.fetchone():
         cursor.execute("""
@@ -573,7 +580,8 @@ with connection.cursor() as cursor:
     print("Checking financeiro_itemremessa...")
     cursor.execute("""
         SELECT 1 FROM information_schema.tables
-        WHERE table_name = 'financeiro_itemremessa'
+        WHERE table_schema = current_schema()
+          AND table_name = 'financeiro_itemremessa'
     """)
     if not cursor.fetchone():
         cursor.execute("""
@@ -600,7 +608,8 @@ with connection.cursor() as cursor:
     print("Checking financeiro_arquivoretorno...")
     cursor.execute("""
         SELECT 1 FROM information_schema.tables
-        WHERE table_name = 'financeiro_arquivoretorno'
+        WHERE table_schema = current_schema()
+          AND table_name = 'financeiro_arquivoretorno'
     """)
     if not cursor.fetchone():
         cursor.execute("""
@@ -637,7 +646,8 @@ with connection.cursor() as cursor:
     print("Checking financeiro_itemretorno...")
     cursor.execute("""
         SELECT 1 FROM information_schema.tables
-        WHERE table_name = 'financeiro_itemretorno'
+        WHERE table_schema = current_schema()
+          AND table_name = 'financeiro_itemretorno'
     """)
     if not cursor.fetchone():
         cursor.execute("""
@@ -681,7 +691,8 @@ with connection.cursor() as cursor:
     print("Checking contratos_contrato for boleto config fields...")
     cursor.execute("""
         SELECT 1 FROM information_schema.tables
-        WHERE table_name = 'contratos_contrato'
+        WHERE table_schema = current_schema()
+          AND table_name = 'contratos_contrato'
     """)
     if cursor.fetchone():
         # Usar configurações da imobiliária ou personalizadas
