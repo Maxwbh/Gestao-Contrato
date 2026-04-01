@@ -95,6 +95,7 @@ class Command(BaseCommand):
                 self.stdout.write('Criando Contratos...')
                 imoveis = lotes + terrenos
                 contratos = self.criar_contratos(imoveis, compradores, imobiliarias)
+                tabela_juros_count = TabelaJurosContrato.objects.count()
 
                 # 7. Remover parcelas futuras (manter apenas até o mês atual)
                 self.stdout.write('Removendo parcelas futuras...')
@@ -105,19 +106,24 @@ class Command(BaseCommand):
                 self.stdout.write('Marcando parcelas como pagas...')
                 self.marcar_parcelas_pagas(contratos, 0.90)
 
-                # 9. Gerar índices de reajuste
+                # 9. Simular boletos gerados para demonstração da remessa
+                self.stdout.write('Simulando boletos gerados (para demo de remessa)...')
+                boletos_simulados = self.simular_boletos_gerados(contratos, contas_bancarias)
+                self.stdout.write(f'   {boletos_simulados} boletos simulados')
+
+                # 10. Gerar índices de reajuste
                 self.stdout.write('Gerando índices de reajuste...')
                 indices = self.gerar_indices_reajuste()
 
-                # 10. Criar prestações intermediárias para alguns contratos
+                # 11. Criar prestações intermediárias para alguns contratos
                 self.stdout.write('Criando prestações intermediárias...')
                 intermediarias = self.criar_prestacoes_intermediarias(contratos)
 
-                # 11. Criar acessos ao portal para alguns compradores
+                # 12. Criar acessos ao portal para alguns compradores
                 self.stdout.write('Criando acessos ao portal do comprador...')
                 acessos = self.criar_acessos_portal(compradores)
 
-                # 12. Criar reajustes aplicados para contratos antigos
+                # 13. Criar reajustes aplicados para contratos antigos
                 self.stdout.write('Criando reajustes aplicados...')
                 reajustes = self.criar_reajustes_aplicados(contratos)
 
@@ -133,6 +139,8 @@ class Command(BaseCommand):
             self.stdout.write(self.style.SUCCESS(f'   • {len(terrenos)} Terrenos'))
             self.stdout.write(self.style.SUCCESS(f'   • {len(compradores)} Compradores ({pf_count} PF + {pj_count} PJ)'))
             self.stdout.write(self.style.SUCCESS(f'   • {len(contratos)} Contratos'))
+            self.stdout.write(self.style.SUCCESS(f'   • {tabela_juros_count} Faixas de Juros Escalantes (TabelaJurosContrato)'))
+            self.stdout.write(self.style.SUCCESS(f'   • {boletos_simulados} Boletos Simulados (prontos para remessa)'))
             self.stdout.write(self.style.SUCCESS(f'   • {intermediarias} Prestações Intermediárias'))
             self.stdout.write(self.style.SUCCESS(f'   • {acessos} Acessos ao Portal'))
             self.stdout.write(self.style.SUCCESS(f'   • {reajustes} Reajustes Aplicados'))
@@ -161,6 +169,10 @@ class Command(BaseCommand):
 
     def limpar_dados(self):
         """Limpa todos os dados de teste"""
+        from financeiro.models import ArquivoRemessa, ArquivoRetorno
+        ArquivoRemessa.objects.all().delete()
+        ArquivoRetorno.objects.all().delete()
+
         # Portal do Comprador
         AcessoComprador.objects.all().delete()
         User.objects.filter(username__startswith='comprador_').delete()
@@ -557,9 +569,18 @@ class Command(BaseCommand):
             meses_desde_contrato = (hoje.year - data_primeiro_vencimento.year) * 12 + \
                                    (hoje.month - data_primeiro_vencimento.month)
 
-            # Limitar parcelas entre 6 e o máximo que cabe até hoje
-            max_parcelas = max(6, min(meses_desde_contrato + 1, 48))
-            numero_parcelas = random.randint(min(6, max_parcelas), max_parcelas)
+            # 5% dos contratos são longos (120-360 parcelas) — representam loteamentos
+            # Para esses, a data do contrato é recuada para caber mais parcelas
+            if random.random() < 0.05:
+                numero_parcelas = random.choice([120, 180, 240, 360])
+                # Recua a data do contrato para ter pelo menos 24 meses decorridos
+                dias_atras = random.randint(730, 1460)
+                data_contrato = hoje - timedelta(days=dias_atras)
+                data_primeiro_vencimento = data_contrato + timedelta(days=30)
+            else:
+                # Limitar parcelas entre 6 e o máximo que cabe até hoje
+                max_parcelas = max(6, min(meses_desde_contrato + 1, 48))
+                numero_parcelas = random.randint(min(6, max_parcelas), max_parcelas)
 
             # Valor do imóvel baseado na área (garantir precisão decimal)
             area = Decimal(str(imovel.area)).quantize(Decimal('0.01'))
@@ -588,10 +609,12 @@ class Command(BaseCommand):
                 dia_vencimento=random.choice([5, 10, 15, 20, 25]),
                 percentual_juros_mora=Decimal('1.00'),
                 percentual_multa=Decimal('2.00'),
-                tipo_correcao=random.choice([
-                    TipoCorrecao.IPCA, TipoCorrecao.IGPM, TipoCorrecao.INCC,
-                    TipoCorrecao.IGPDI, TipoCorrecao.INPC, TipoCorrecao.TR
-                ]),
+                tipo_correcao=random.choices(
+                    [TipoCorrecao.IPCA, TipoCorrecao.IGPM, TipoCorrecao.INCC,
+                     TipoCorrecao.IGPDI, TipoCorrecao.INPC, TipoCorrecao.TR,
+                     TipoCorrecao.FIXO],
+                    weights=[25, 20, 15, 10, 10, 10, 10], k=1
+                )[0],
                 prazo_reajuste_meses=12,
                 # 30% dos contratos têm spread (0.5 a 2 p.p.)
                 spread_reajuste=Decimal(str(round(random.uniform(0.5, 2.0), 4))) if random.random() < 0.3 else None,
@@ -601,21 +624,22 @@ class Command(BaseCommand):
                 reajuste_teto=Decimal(str(round(random.uniform(10.0, 15.0), 4))) if random.random() < 0.15 else None,
                 # Fallback INPC para contratos com IGPM (20% de chance)
                 tipo_correcao_fallback='INPC' if random.random() < 0.2 else '',
-                # 10% dos contratos têm dados de vendedor pessoa física
-                vendedor_nome=self.fake.name() if random.random() < 0.1 else '',
-                vendedor_cpf_cnpj='',
                 # Cláusulas padrão
                 percentual_fruicao=Decimal('0.5000'),
                 percentual_multa_rescisao_penal=Decimal('10.0000'),
                 percentual_multa_rescisao_adm=Decimal('12.0000'),
                 percentual_cessao=Decimal('3.0000'),
+                intermediarias_reduzem_pmt=random.random() < 0.3,
+                intermediarias_reajustadas=random.random() < 0.7,
+                tipo_amortizacao='SAC' if random.random() < 0.25 else 'PRICE',
                 status=StatusContrato.ATIVO,
                 observacoes=f'Contrato gerado automaticamente para teste'
             )
             contratos.append(contrato)
 
             # 15% dos contratos têm juros escalantes por ciclo (tabela price progressiva)
-            if random.random() < 0.15 and numero_parcelas >= 24:
+            tem_tabela_juros = random.random() < 0.15 and numero_parcelas >= 24
+            if tem_tabela_juros:
                 faixas = [
                     (1, 1, Decimal('0.0000')),    # Ano 1: sem juros adicionais
                     (2, 2, Decimal('0.6000')),
@@ -633,6 +657,8 @@ class Command(BaseCommand):
                         juros_mensal=juros,
                         observacoes='Gerado por dados de teste'
                     )
+                # Recalcula parcelas com sistema correto (Price ou SAC) após TabelaJuros
+                contrato.recalcular_amortizacao()
 
         return contratos
 
@@ -688,6 +714,55 @@ class Command(BaseCommand):
                     observacoes='Pagamento gerado automaticamente para teste'
                 )
 
+    def simular_boletos_gerados(self, contratos, contas_bancarias):
+        """
+        Simula boletos gerados para parcelas não pagas, vinculando-as a uma conta bancária.
+        Permite demonstrar a geração de remessa sem depender do BRCobrança.
+        """
+        from financeiro.models import StatusBoleto
+        from django.utils import timezone as tz
+
+        count = 0
+        hoje = tz.now()
+
+        # Pegar contas bancárias principais (uma por imobiliária)
+        contas_principais = {cb.imobiliaria_id: cb for cb in contas_bancarias if cb.principal}
+
+        for contrato in contratos:
+            conta = contas_principais.get(contrato.imobiliaria_id)
+            if not conta:
+                conta = contas_bancarias[0] if contas_bancarias else None
+            if not conta:
+                continue
+
+            # Pegar até 3 parcelas não pagas do contrato
+            parcelas_nao_pagas = list(
+                contrato.parcelas.filter(pago=False).order_by('numero_parcela')[:3]
+            )
+
+            for parcela in parcelas_nao_pagas:
+                if parcela.status_boleto == StatusBoleto.GERADO:
+                    continue
+
+                # Incrementar nosso número na conta
+                conta.nosso_numero_atual += 1
+
+                parcela.conta_bancaria = conta
+                parcela.status_boleto = StatusBoleto.GERADO
+                parcela.nosso_numero = str(conta.nosso_numero_atual).zfill(10)
+                parcela.numero_documento = f'{contrato.numero_contrato}/{parcela.numero_parcela:03d}'
+                parcela.data_geracao_boleto = hoje
+                parcela.save(update_fields=[
+                    'conta_bancaria', 'status_boleto', 'nosso_numero',
+                    'numero_documento', 'data_geracao_boleto'
+                ])
+                count += 1
+
+            # Salvar o nosso_numero_atual atualizado da conta
+            conta.save(update_fields=['nosso_numero_atual'])
+
+        return count
+
     def gerar_cpf(self):
         """Gera um CPF fictício formatado"""
         cpf = [random.randint(0, 9) for _ in range(9)]
@@ -741,9 +816,10 @@ class Command(BaseCommand):
             ('SELIC', 0.80, 1.10, 'BCB'),            # SELIC: 0.8% a 1.1%
         ]
 
-        # Gerar últimos 36 meses
+        # Gerar últimos 36 meses (usa relativedelta para datas precisas)
+        from dateutil.relativedelta import relativedelta
         for meses_atras in range(36, 0, -1):
-            data = hoje - timedelta(days=meses_atras * 30)
+            data = hoje - relativedelta(months=meses_atras)
             ano = data.year
             mes = data.month
 
@@ -800,14 +876,15 @@ class Command(BaseCommand):
         )
 
         for contrato in contratos_com_intermediarias:
-            # Calcular quantas intermediárias cabem no contrato (a cada 12 meses)
-            max_intermediarias = contrato.numero_parcelas // 12
+            # Intervalo: 50% usa a cada 6 meses, 50% a cada 12 meses
+            intervalo = random.choice([6, 12])
+            max_intermediarias = contrato.numero_parcelas // intervalo
 
             if max_intermediarias < 1:
                 continue
 
             # Número de intermediárias: 1 até o máximo permitido
-            num_intermediarias = random.randint(1, min(5, max_intermediarias))
+            num_intermediarias = random.randint(1, min(10, max_intermediarias))
 
             # Atualizar campo do contrato
             if hasattr(contrato, 'quantidade_intermediarias'):
@@ -815,8 +892,8 @@ class Command(BaseCommand):
                 contrato.save(update_fields=['quantidade_intermediarias'])
 
             for seq in range(1, num_intermediarias + 1):
-                # Vencimento a cada 12 meses (garantir que não exceda o prazo)
-                mes_vencimento = seq * 12
+                # Vencimento a cada `intervalo` meses
+                mes_vencimento = seq * intervalo
                 if mes_vencimento > contrato.numero_parcelas:
                     break
 
@@ -919,6 +996,10 @@ class Command(BaseCommand):
         hoje = timezone.now().date()
 
         for contrato in contratos:
+            # FIXO não tem reajuste
+            if contrato.tipo_correcao == TipoCorrecao.FIXO:
+                continue
+
             prazo = contrato.prazo_reajuste_meses
             meses_decorridos = (hoje.year - contrato.data_contrato.year) * 12 + \
                                (hoje.month - contrato.data_contrato.month)
