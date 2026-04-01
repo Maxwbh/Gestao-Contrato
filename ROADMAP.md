@@ -512,9 +512,262 @@
 | **10** | Testes P2 (views e APIs) | 7.2 | — |
 | **11** | Permissões e segurança | 6 | — |
 | **12** | Cálculos contratuais avançados (rescisão, cessão, mora pro rata) | 11 (G-10, G-11, G-15) | — |
-| **13** | Testes P3/P4 + CI/CD | 7.3, 7.4, 8 | — |
-| **14** | Frontend P3/P4 | 3 (P3, P4) | — |
-| **15** | Documentação | 9 | — |
+| **13** | ⭐ **Contrato Tabela Price + Intermediárias (HU-360)** | 13 | — |
+| **14** | Testes P3/P4 + CI/CD | 7.3, 7.4, 8 | — |
+| **15** | Frontend P3/P4 | 3 (P3, P4) | — |
+| **16** | Documentação | 9 | — |
+
+---
+
+## 13. HU-360 — CONTRATO TABELA PRICE COM JUROS ESCALANTES E INTERMEDIÁRIAS
+
+> **História de Usuário (HU-360):**
+> Como usuário quero criar um contrato de 360 parcelas com:
+> - Imóvel R$350.000 · Entrada R$100.000 · Financiado R$250.000
+> - Intermediárias de R$5.000 a cada 6 meses
+> - Correção anual pelo IPCA (a cada 12 meses)
+> - Juros compostos escalantes (Tabela Price):
+>   - Ciclo 1 (parc. 1–12): 0% a.m. — parcelas lineares (isenção)
+>   - Ciclo 2 (parc. 13–24): 0,60% a.m. → PMT recalculado na 13ª
+>   - Ciclo 3 (parc. 25–36): 0,65% a.m. → PMT recalculado na 25ª
+>   - Ciclo 4+ (parc. 37–360): 0,70% a.m. → PMT recalculado na 37ª
+> - **Bloqueio de boleto:** se hoje ≥ data prevista do reajuste do ciclo e o reajuste ainda não foi aplicado, nenhum boleto do ciclo pode ser gerado
+
+---
+
+### 13.0 Análise do Sistema Atual
+
+#### O que já funciona ✅
+
+| Item | Localização | Descrição |
+|------|-------------|-----------|
+| `TabelaJurosContrato` | `contratos/models.py` | Juros por ciclo (ciclo_inicio/ciclo_fim/juros_mensal) |
+| `TabelaJurosContrato.get_juros_para_ciclo()` | `contratos/models.py` | Retorna taxa para o ciclo N |
+| `preview_reajuste()` MODO TABELA PRICE | `financeiro/models.py` | PMT recalculado sobre saldo atualizado pelo IPCA |
+| `aplicar_reajuste()` MODO TABELA PRICE | `financeiro/models.py` | Aplica PMT a todas as parcelas restantes |
+| `_calcular_pmt()` | `financeiro/models.py` | `PMT = PV × i / (1−(1+i)^−n)` |
+| `calcular_saldo_devedor()` | `contratos/models.py` | Soma `valor_atual` de NORMAL não pagas (correto para price) |
+| `calcular_ciclo_pendente()` | `financeiro/models.py` | Detecta reajuste pendente com verificação de data |
+| `PrestacaoIntermediaria` model | `contratos/models.py` | FK→Contrato; O2O→Parcela; valor, mes_vencimento, paga |
+| `Contrato.pode_gerar_boleto(numero_parcela)` | `contratos/models.py` | Verifica ciclo via `calcular_ciclo_parcela()` (dinâmico) |
+| `TabelaJurosInline` | `contratos/admin.py` | Edição de TabelaJurosContrato dentro do Contrato (Admin) |
+| `gerar_parcelas()` linear ciclo 1 | `contratos/models.py` | Parcelas 1–12 geradas com `valor_financiado / n` (correto: ciclo 1 sem juros) |
+
+#### Bugs Identificados ❌
+
+| # | Bug | Arquivo | Linha | Impacto |
+|---|-----|---------|-------|---------|
+| **BUG-01** | `Parcela.pode_gerar_boleto()` usa `self.ciclo_reajuste` (campo atualizado só após reajuste) — para parcelas recém-criadas `ciclo_reajuste` = 1 → **bloco nunca dispara** para parcelas do ciclo 2+ | `financeiro/models.py` | ~329 | **Crítico** — usuário gera boleto de parcela 13+ sem reajuste |
+| **BUG-02** | `Contrato.pode_gerar_boleto()` bloqueia para ciclo > 1 **sem verificar data** — bloqueia mesmo antes do reajuste ser devido | `contratos/models.py` | ~862 | Médio — impede geração antecipada legítima |
+
+#### Funcionalidades Ausentes ❌
+
+| # | Lacuna | Impacto |
+|---|--------|---------|
+| **L-01** | Formulário web de criação de contrato não suporta `TabelaJurosContrato` inline (só Django Admin) | Alto — fluxo de criação incompleto |
+| **L-02** | Não há criação em lote de intermediárias (padrão: "R$X a cada Y meses") | Alto — 60 intermediárias criadas manualmente |
+| **L-03** | Regra de negócio não definida: PMT considera PV das intermediárias ou não? | Alto — afeta cálculo da parcela inicial |
+| **L-04** | Geração de boleto para intermediária não está disponível na web UI | Médio |
+| **L-05** | Sem preview de parcelas com projeção de reajustes futuros na criação | Médio |
+| **L-06** | Sem validação de consistência financeira na criação | Baixo |
+
+---
+
+### 13.1 Definição de Regra de Negócio — L-03 (Decisão Necessária)
+
+> **Questão:** no cálculo da parcela mensal, as intermediárias são deduzidas do PV?
+
+| Opção | Fórmula parcela inicial | Comportamento |
+|-------|------------------------|---------------|
+| **A — Independente** (recomendado para loteamentos) | `PMT = valor_financiado / n` (ciclo 1 sem juros) | Intermediárias reduzem saldo devedor no reajuste seguinte — PMT diminui a cada ciclo |
+| **B — Dedução de PV** | `PV_liquido = valor_financiado − PV(intermediárias, taxa, n)` → PMT sobre PV_liquido | PMT inicial menor; intermediárias não afetam recalculate |
+
+**Recomendação:** Opção A. É como o contrato Parque das Nogueiras funciona (minuta analisada na seção 11): as intermediárias são parcelas extras de amortização e reduzem o saldo devedor calculado na próxima recalculação de PMT.
+
+---
+
+### 13.2 BUG-01 — Fix `Parcela.pode_gerar_boleto()` ⚠️ CRÍTICO
+
+**Problema:** usa `self.ciclo_reajuste` (campo pós-reajuste) em vez de calcular o ciclo dinamicamente.
+
+**Comportamento atual:**
+```
+Parcela 15 criada → ciclo_reajuste = 1 (padrão)
+pode_gerar_boleto() → self.ciclo_reajuste (1) > 1? NÃO → retorna True ❌
+```
+
+**Comportamento correto:**
+```
+Parcela 15, prazo=12 → ciclo = (15-1)//12 + 1 = 2
+data_reajuste_ciclo2 = data_contrato + 12 meses
+hoje >= data_reajuste? SIM → reajuste aplicado? NÃO → retorna False ✓
+```
+
+**Fix a implementar:**
+```python
+# financeiro/models.py — Parcela.pode_gerar_boleto()
+prazo = self.contrato.prazo_reajuste_meses
+ciclo_da_parcela = (self.numero_parcela - 1) // prazo + 1
+
+if ciclo_da_parcela > 1:
+    from dateutil.relativedelta import relativedelta
+    from django.utils import timezone as tz
+    data_reajuste_prevista = (
+        self.contrato.data_contrato
+        + relativedelta(months=(ciclo_da_parcela - 1) * prazo)
+    )
+    if tz.now().date() >= data_reajuste_prevista:
+        reajuste_aplicado = Reajuste.objects.filter(
+            contrato=self.contrato,
+            ciclo=ciclo_da_parcela,
+            aplicado=True
+        ).exists()
+        if not reajuste_aplicado:
+            return False, (
+                f"Reajuste do ciclo {ciclo_da_parcela} pendente "
+                f"desde {data_reajuste_prevista.strftime('%d/%m/%Y')}. "
+                f"Execute o reajuste antes de gerar boletos."
+            )
+```
+
+---
+
+### 13.3 BUG-02 — Fix `Contrato.pode_gerar_boleto()` — Verificação de Data
+
+**Problema:** bloqueia imediatamente ao entrar no ciclo 2, mesmo antes da data do reajuste.
+
+**Fix:** replicar a lógica de data acima:
+```python
+# contratos/models.py — Contrato.pode_gerar_boleto()
+ciclo_parcela = self.calcular_ciclo_parcela(numero_parcela)
+if ciclo_parcela == 1:
+    return True, "Primeiro ciclo - liberado"
+
+from dateutil.relativedelta import relativedelta
+from django.utils import timezone as tz
+data_reajuste_prevista = (
+    self.data_contrato + relativedelta(months=(ciclo_parcela - 1) * self.prazo_reajuste_meses)
+)
+if tz.now().date() < data_reajuste_prevista:
+    return True, f"Reajuste do ciclo {ciclo_parcela} ainda não vencido (previsto {data_reajuste_prevista.strftime('%d/%m/%Y')})"
+
+from financeiro.models import Reajuste
+reajuste_aplicado = Reajuste.objects.filter(
+    contrato=self, ciclo=ciclo_parcela, aplicado=True
+).exists()
+if reajuste_aplicado:
+    return True, f"Reajuste do ciclo {ciclo_parcela} aplicado"
+
+return False, (
+    f"Reajuste do ciclo {ciclo_parcela} pendente "
+    f"desde {data_reajuste_prevista.strftime('%d/%m/%Y')}. "
+    f"Execute o reajuste antes de gerar boletos."
+)
+```
+
+---
+
+### 13.4 Plano de Implementação
+
+#### Fase 1 — Bugs Críticos (P1) 🔴
+
+| # | Item | Arquivo | Estimativa |
+|---|------|---------|------------|
+| HU-01 | Fix `Parcela.pode_gerar_boleto()` — cálculo dinâmico de ciclo + verificação de data | `financeiro/models.py` | Pequeno |
+| HU-02 | Fix `Contrato.pode_gerar_boleto()` — adicionar verificação de data | `contratos/models.py` | Pequeno |
+| HU-03 | Definir regra de negócio L-03 (Opção A recomendada) e documentar | `ROADMAP.md` | Pequeno |
+
+#### Fase 2 — Formulário de Criação Completo (P1) 🔴
+
+| # | Item | Arquivo | Estimativa |
+|---|------|---------|------------|
+| HU-04 | `ContratoCompletoCreateView` — view com formsets para TabelaJuros + Intermediárias | `contratos/views.py` | Grande |
+| HU-05 | `TabelaJurosFormSet` — formset inline para criação de N faixas de juros | `contratos/forms.py` | Médio |
+| HU-06 | `IntermediariasFormSet` — formset para criação manual ou padrão (`valor + intervalo + n_ocorrencias`) | `contratos/forms.py` | Médio |
+| HU-07 | Template `contrato_form_completo.html` — wizard com 3 seções dinâmicas | `templates/contratos/` | Grande |
+
+#### Fase 3 — Preview e Validações (P2) 🟡
+
+| # | Item | Arquivo | Estimativa |
+|---|------|---------|------------|
+| HU-08 | `api_preview_parcelas` — endpoint que retorna prévia das parcelas geradas (com projeção de reajuste) | `contratos/views.py` | Médio |
+| HU-09 | Validação: total_intermediárias + total_parcelas_ciclo1 — consistência financeira | `contratos/forms.py` | Pequeno |
+| HU-10 | Preview no formulário: tabela de parcelas com marcação das intermediárias e datas de reajuste | Template | Médio |
+
+#### Fase 4 — Geração de Boleto para Intermediárias (P2) 🟡
+
+| # | Item | Arquivo | Estimativa |
+|---|------|---------|------------|
+| HU-11 | `gerar_boleto_intermediaria()` — cria Parcela tipo INTERMEDIARIA e vincula via `parcela_vinculada` | `contratos/models.py` | Médio |
+| HU-12 | View de geração de boleto para intermediárias vencidas | `financeiro/views.py` | Médio |
+| HU-13 | Alert na tela do contrato: intermediárias vencidas sem boleto | `templates/contratos/` | Pequeno |
+
+---
+
+### 13.5 Fluxo Completo da História de Usuário
+
+```
+CRIAÇÃO DO CONTRATO (HU-04 a HU-10)
+┌─────────────────────────────────────────────────────────┐
+│ 1. Dados básicos                                         │
+│    Imovel R$350k · Entrada R$100k · 360 parcelas        │
+│    Dia vencimento: 10 · IPCA · prazo_reajuste: 12 meses │
+├─────────────────────────────────────────────────────────┤
+│ 2. Juros Escalantes (TabelaJurosContrato)               │
+│    Ciclo 1 (1–12):   0,0000% a.m.                       │
+│    Ciclo 2 (13–24):  0,6000% a.m.                       │
+│    Ciclo 3 (25–36):  0,6500% a.m.                       │
+│    Ciclo 4 (37–∞):   0,7000% a.m.                       │
+├─────────────────────────────────────────────────────────┤
+│ 3. Intermediárias (padrão ou manual)                    │
+│    Padrão: R$5.000 a cada 6 meses → 60 registros       │
+│    Meses: 6, 12, 18, 24, 30 ... 360                     │
+├─────────────────────────────────────────────────────────┤
+│ 4. Preview                                              │
+│    Parc. 1–12:  R$ 694,44/mês  (250.000/360)           │
+│    Parc. 13+:  PMT recalc. com IPCA + 0,6% a.m.        │
+│    Parc. 25+:  PMT recalc. com IPCA + 0,65% a.m.       │
+└─────────────────────────────────────────────────────────┘
+          ↓ SALVAR
+PARCELAS GERADAS: 360 × R$694,44 (ajuste no último para fechar)
+
+FLUXO MENSAL
+┌─────────────────────────────────────────────────────────┐
+│ Meses 1–12: gerar boleto → OK (ciclo 1)                 │
+├─────────────────────────────────────────────────────────┤
+│ Mês 6: Intermediária vence                              │
+│   → Alert na tela do contrato                           │
+│   → Gerar boleto da intermediária (HU-11)               │
+├─────────────────────────────────────────────────────────┤
+│ Mês 12: último do ciclo 1                               │
+│   → Reajuste IPCA pendente surge no dashboard           │
+├─────────────────────────────────────────────────────────┤
+│ Mês 13: hoje >= data_reajuste E reajuste NÃO aplicado  │
+│   → pode_gerar_boleto() → False ← BUG-01 fix           │
+│   → Sistema exige reajuste antes de gerar boleto        │
+├─────────────────────────────────────────────────────────┤
+│ Usuário aplica reajuste (IPCA acumulado do ano)         │
+│   → MODO TABELA PRICE:                                  │
+│      saldo_devedor atualizado pelo IPCA                 │
+│      PMT = saldo × 0,006 / (1-(1,006)^-348)            │
+│      Parcelas 13–360 atualizadas                        │
+│   → Intermediárias reajustadas pelo IPCA               │
+├─────────────────────────────────────────────────────────┤
+│ Mês 13+: pode_gerar_boleto() → True                    │
+└─────────────────────────────────────────────────────────┘
+```
+
+---
+
+### 13.6 Questões Abertas (Necessitam Decisão do Usuário)
+
+| # | Questão | Opções |
+|---|---------|--------|
+| Q-01 | **Intermediárias afetam PMT inicial?** (L-03) | A) Não (PMT = 250k/360); B) Sim (PMT calculado sobre PV líquido) |
+| Q-02 | **Intermediárias são reajustadas pelo IPCA?** | A) Sim (valor_reajustado atualizado); B) Não (valor fixo) |
+| Q-03 | **Intermediária vence junto com parcela normal?** | A) Boleto separado; B) Boleto único somado |
+| Q-04 | **Ciclo 1 com taxa 0,0000%** — deve constar na `TabelaJurosContrato`? | A) Sim (explícito); B) Não (ausência = 0%) |
+| Q-05 | **Wizard em múltiplas etapas ou formulário único com seções?** | A) Multi-step (3 páginas + preview); B) Single page com JS |
 
 ---
 
@@ -526,6 +779,8 @@
 | Backend — Regras | — | 8 | 3 | 1 | 12 | ✅ 8/8 P2 |
 | Reajuste | 4 | 4 | 7 | — | 15+4=19 | ✅ 19/19 |
 | Contrato Real (gaps) | — | — | 9 | 6 | 15 | ✅ 9/9 (P3) · 6 pendentes P4 |
+| CNAB Remessa | — | 8 | — | — | 8 | ✅ 8/8 |
+| HU-360 Tabela Price | 2 | 9 | 2 | — | 13 | ❌ 0/13 |
 | Frontend | — | 17 | 15 | 3 | 35 | — |
 | APIs | — | 6 | 5 | — | 11 | — |
 | Celery | — | 2 | 2 | 1 | 5 | — |
@@ -533,7 +788,7 @@
 | Testes | 104 | ~164 | ~37 | ~41 | ~346 | ✅ 104/104 P1 |
 | CI/CD | — | 2 | 4 | 2 | 8 | — |
 | Documentação | — | — | 1 | 3 | 4 | — |
-| **Total** | **~111** | **~209** | **~88** | **~59** | **~467** | |
+| **Total** | **~113** | **~220** | **~90** | **~59** | **~482** | |
 
 ### ✅ Fases concluídas (2026-04-01)
 
