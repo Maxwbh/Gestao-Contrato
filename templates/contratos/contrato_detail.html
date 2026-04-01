@@ -1962,35 +1962,54 @@ var todasParcelas = [
 var _reajustePreview = null;  // último preview carregado do servidor
 
 function abrirModalReajuste() {
-    // Reset UI
-    _reajustePreview = null;
-    document.getElementById('reajuste_loading').classList.remove('d-none');
-    document.getElementById('reajuste_sem_pendente').classList.add('d-none');
-    document.getElementById('reajuste_erro_indice').classList.add('d-none');
-    document.getElementById('reajuste_form_area').classList.add('d-none');
-    document.getElementById('btnAplicarReajuste').classList.add('d-none');
-    document.getElementById('r_desconto_pct').value = '';
-    document.getElementById('r_desconto_val').value = '';
+    var elModal    = document.getElementById('modalReajuste');
+    if (!elModal) {
+        console.error('[Reajuste] Modal #modalReajuste não encontrado no DOM.');
+        alert('Erro interno: recarregue a página e tente novamente.');
+        return;
+    }
 
-    new bootstrap.Modal(document.getElementById('modalReajuste')).show();
+    // Reset UI (com null-safe)
+    _reajustePreview = null;
+    var elLoading   = document.getElementById('reajuste_loading');
+    var elSemPend   = document.getElementById('reajuste_sem_pendente');
+    var elErrInd    = document.getElementById('reajuste_erro_indice');
+    var elForm      = document.getElementById('reajuste_form_area');
+    var elBtnApl    = document.getElementById('btnAplicarReajuste');
+    var elDesctPct  = document.getElementById('r_desconto_pct');
+    var elDesctVal  = document.getElementById('r_desconto_val');
+
+    if (elLoading)  elLoading.classList.remove('d-none');
+    if (elSemPend)  elSemPend.classList.add('d-none');
+    if (elErrInd)   elErrInd.classList.add('d-none');
+    if (elForm)     elForm.classList.add('d-none');
+    if (elBtnApl)   elBtnApl.classList.add('d-none');
+    if (elDesctPct) elDesctPct.value = '';
+    if (elDesctVal) elDesctVal.value = '';
+
+    new bootstrap.Modal(elModal).show();
 
     // Buscar preview do ciclo pendente
     fetch('/financeiro/contrato/{{ contrato.pk }}/reajuste/preview/')
         .then(r => r.json())
         .then(data => {
-            document.getElementById('reajuste_loading').classList.add('d-none');
+            var l = document.getElementById('reajuste_loading');
+            if (l) l.classList.add('d-none');
 
             if (!data.sucesso && !data.ciclo_pendente) {
-                document.getElementById('reajuste_sem_pendente').classList.remove('d-none');
+                var sp = document.getElementById('reajuste_sem_pendente');
+                if (sp) sp.classList.remove('d-none');
                 return;
             }
 
             if (!data.sucesso && data.erro) {
-                document.getElementById('reajuste_erro_indice_msg').textContent = data.erro;
-                document.getElementById('reajuste_erro_indice').classList.remove('d-none');
-                // Mostrar o formulário na área de cabeçalho mesmo assim
+                var msg = document.getElementById('reajuste_erro_indice_msg');
+                var err = document.getElementById('reajuste_erro_indice');
+                if (msg) msg.textContent = data.erro;
+                if (err) err.classList.remove('d-none');
                 preencherCabecalhoReajuste(data);
-                document.getElementById('reajuste_form_area').classList.remove('d-none');
+                var fa = document.getElementById('reajuste_form_area');
+                if (fa) fa.classList.remove('d-none');
                 return;
             }
 
@@ -1998,9 +2017,12 @@ function abrirModalReajuste() {
             renderizarPreviewReajuste(data);
         })
         .catch(err => {
-            document.getElementById('reajuste_loading').classList.add('d-none');
-            document.getElementById('reajuste_erro_indice_msg').textContent = 'Erro ao conectar: ' + err;
-            document.getElementById('reajuste_erro_indice').classList.remove('d-none');
+            var l2 = document.getElementById('reajuste_loading');
+            var m2 = document.getElementById('reajuste_erro_indice_msg');
+            var e2 = document.getElementById('reajuste_erro_indice');
+            if (l2) l2.classList.add('d-none');
+            if (m2) m2.textContent = 'Erro ao conectar: ' + err;
+            if (e2) e2.classList.remove('d-none');
         });
 }
 
