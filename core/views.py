@@ -460,6 +460,7 @@ def gerar_dados_teste(request):
 
         output = out.getvalue()
 
+        from contratos.models import TabelaJurosContrato
         # Retornar sucesso
         return JsonResponse({
             'status': 'success',
@@ -474,6 +475,7 @@ def gerar_dados_teste(request):
                 'contratos': Contrato.objects.count(),
                 'parcelas': Parcela.objects.count(),
                 'indices_reajuste': IndiceReajuste.objects.count(),
+                'tabela_juros': TabelaJurosContrato.objects.count(),
             }
         })
 
@@ -1390,7 +1392,7 @@ def pagina_dados_teste(request):
         messages.error(request, 'Acesso negado. Apenas administradores podem acessar esta página.')
         return redirect('core:dashboard')
 
-    from contratos.models import Contrato, IndiceReajuste
+    from contratos.models import Contrato, IndiceReajuste, TabelaJurosContrato
     from financeiro.models import Parcela
 
     stats = {
@@ -1402,6 +1404,7 @@ def pagina_dados_teste(request):
         'contratos': Contrato.objects.count(),
         'parcelas': Parcela.objects.count(),
         'indices_reajuste': IndiceReajuste.objects.count(),
+        'tabela_juros': TabelaJurosContrato.objects.count(),
     }
 
     return render(request, 'core/dados_teste.html', {'stats': stats})
