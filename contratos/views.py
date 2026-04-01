@@ -7,6 +7,7 @@ Email: maxwbh@gmail.com
 from django.shortcuts import render, get_object_or_404, redirect
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.mixins import LoginRequiredMixin
+from django.views import View
 from django.views.generic import ListView, CreateView, UpdateView, DeleteView, DetailView
 from django.urls import reverse_lazy
 from django.contrib import messages
@@ -1267,3 +1268,337 @@ def api_intermediarias_contrato(request, contrato_id):
         'total': len(data),
         'intermediarias': data
     })
+
+
+# =============================================================================
+# WIZARD — Contrato com Tabela Price + Intermediárias
+# =============================================================================
+
+class ContratoWizardView(LoginRequiredMixin, View):
+    """
+    Wizard de 4 etapas para criar contratos com TabelaJuros escalante
+    e intermediárias parametrizadas.
+
+    Etapas:
+      1. basico        — dados do contrato
+      2. juros         — faixas de TabelaJurosContrato
+      3. intermediarias — padrão (intervalo) ou manual
+      4. preview       — confirmação + salvar
+    """
+    STEPS = ['basico', 'juros', 'intermediarias', 'preview']
+    SESSION_KEY = 'wizard_contrato'
+
+    def _session(self, request):
+        return request.session.setdefault(self.SESSION_KEY, {})
+
+    def _clear(self, request):
+        request.session.pop(self.SESSION_KEY, None)
+        request.session.modified = True
+
+    def get(self, request, step='basico'):
+        from .forms import (
+            ContratoWizardBasicoForm, TabelaJurosForm,
+            IntermediariaPadraoForm, IntermediariaManualForm,
+        )
+        sess = self._session(request)
+
+        if step == 'basico':
+            form = ContratoWizardBasicoForm(initial=sess.get('basico'))
+            return render(request, 'contratos/wizard/step1_basico.html', {
+                'form': form, 'step': step, 'step_num': 1,
+            })
+
+        elif step == 'juros':
+            if 'basico' not in sess:
+                return redirect('contratos:wizard', step='basico')
+            juros_data = sess.get('juros', [{'ciclo_inicio': 1, 'ciclo_fim': 1, 'juros_mensal': '0.0000', 'observacoes': 'Ciclo 1 — isenção'}])
+            return render(request, 'contratos/wizard/step2_juros.html', {
+                'juros_rows': juros_data, 'step': step, 'step_num': 2,
+                'basico': sess['basico'],
+            })
+
+        elif step == 'intermediarias':
+            if 'basico' not in sess:
+                return redirect('contratos:wizard', step='basico')
+            padrao_form = IntermediariaPadraoForm(initial=sess.get('intermediarias_padrao_initial', {'intervalo_meses': 6, 'mes_inicio': 6}))
+            manual_rows = sess.get('intermediarias_manual', [])
+            modo = sess.get('intermediarias_modo', 'padrao')
+            return render(request, 'contratos/wizard/step3_intermediarias.html', {
+                'padrao_form': padrao_form,
+                'manual_rows': manual_rows,
+                'modo': modo,
+                'step': step, 'step_num': 3,
+                'basico': sess['basico'],
+            })
+
+        elif step == 'preview':
+            if 'basico' not in sess:
+                return redirect('contratos:wizard', step='basico')
+            resumo = self._calcular_resumo(sess)
+            return render(request, 'contratos/wizard/step4_preview.html', {
+                'resumo': resumo, 'step': step, 'step_num': 4,
+                'sess': sess,
+            })
+
+        return redirect('contratos:wizard', step='basico')
+
+    def post(self, request, step='basico'):
+        from .forms import (
+            ContratoWizardBasicoForm, TabelaJurosForm,
+            IntermediariaPadraoForm, IntermediariaManualForm,
+        )
+        from contratos.models import TabelaJurosContrato, PrestacaoIntermediaria
+        from django.db import transaction
+        sess = self._session(request)
+
+        if step == 'basico':
+            form = ContratoWizardBasicoForm(request.POST)
+            if form.is_valid():
+                sess['basico'] = form.cleaned_data_serializable()
+                request.session.modified = True
+                return redirect('contratos:wizard', step='juros')
+            return render(request, 'contratos/wizard/step1_basico.html', {
+                'form': form, 'step': step, 'step_num': 1,
+            })
+
+        elif step == 'juros':
+            # Parse juros rows from POST
+            juros_rows = []
+            errors = []
+            count = int(request.POST.get('juros_count', 0))
+            for i in range(count):
+                f = TabelaJurosForm({
+                    'ciclo_inicio': request.POST.get(f'juros_{i}_ciclo_inicio'),
+                    'ciclo_fim': request.POST.get(f'juros_{i}_ciclo_fim'),
+                    'juros_mensal': request.POST.get(f'juros_{i}_juros_mensal'),
+                    'observacoes': request.POST.get(f'juros_{i}_observacoes', ''),
+                })
+                if f.is_valid():
+                    juros_rows.append({
+                        'ciclo_inicio': f.cleaned_data['ciclo_inicio'],
+                        'ciclo_fim': f.cleaned_data['ciclo_fim'],
+                        'juros_mensal': str(f.cleaned_data['juros_mensal']),
+                        'observacoes': f.cleaned_data['observacoes'],
+                    })
+                else:
+                    errors.extend(f.errors.as_text().splitlines())
+
+            if errors:
+                messages.error(request, f'Erros nas faixas de juros: {"; ".join(errors[:3])}')
+                return redirect('contratos:wizard', step='juros')
+
+            sess['juros'] = juros_rows
+            request.session.modified = True
+            return redirect('contratos:wizard', step='intermediarias')
+
+        elif step == 'intermediarias':
+            modo = request.POST.get('modo', 'padrao')
+            sess['intermediarias_modo'] = modo
+
+            if modo == 'padrao':
+                form = IntermediariaPadraoForm(request.POST)
+                if form.is_valid():
+                    sess['intermediarias_padrao_initial'] = {
+                        'valor': str(form.cleaned_data['valor']),
+                        'intervalo_meses': form.cleaned_data['intervalo_meses'],
+                        'numero_ocorrencias': form.cleaned_data['numero_ocorrencias'],
+                        'mes_inicio': form.cleaned_data['mes_inicio'],
+                    }
+                    sess['intermediarias_lista'] = form.gerar_intermediarias_serializable()
+                    request.session.modified = True
+                    return redirect('contratos:wizard', step='preview')
+                padrao_form = form
+                return render(request, 'contratos/wizard/step3_intermediarias.html', {
+                    'padrao_form': padrao_form, 'manual_rows': [],
+                    'modo': modo, 'step': step, 'step_num': 3, 'basico': sess.get('basico', {}),
+                })
+
+            elif modo == 'manual':
+                count = int(request.POST.get('inter_count', 0))
+                lista = []
+                errors = []
+                for i in range(count):
+                    f = IntermediariaManualForm({
+                        'numero_sequencial': request.POST.get(f'inter_{i}_seq'),
+                        'mes_vencimento': request.POST.get(f'inter_{i}_mes'),
+                        'valor': request.POST.get(f'inter_{i}_valor'),
+                    })
+                    if f.is_valid():
+                        lista.append({
+                            'numero_sequencial': f.cleaned_data['numero_sequencial'],
+                            'mes_vencimento': f.cleaned_data['mes_vencimento'],
+                            'valor': str(f.cleaned_data['valor']),
+                        })
+                    else:
+                        errors.extend(f.errors.as_text().splitlines())
+
+                if errors:
+                    messages.error(request, f'Erros nas intermediárias: {"; ".join(errors[:3])}')
+                    return redirect('contratos:wizard', step='intermediarias')
+
+                sess['intermediarias_lista'] = lista
+                request.session.modified = True
+                return redirect('contratos:wizard', step='preview')
+
+            elif modo == 'nenhuma':
+                sess['intermediarias_lista'] = []
+                request.session.modified = True
+                return redirect('contratos:wizard', step='preview')
+
+        elif step == 'salvar':
+            if 'basico' not in sess:
+                return redirect('contratos:wizard', step='basico')
+
+            try:
+                with transaction.atomic():
+                    contrato = self._salvar_contrato(request, sess)
+                self._clear(request)
+                messages.success(
+                    request,
+                    f'Contrato {contrato.numero_contrato} criado com sucesso! '
+                    f'{contrato.parcelas.count()} parcelas geradas.'
+                )
+                return redirect('contratos:detalhe', pk=contrato.pk)
+            except Exception as e:
+                import logging
+                logging.getLogger(__name__).exception('Erro ao salvar wizard')
+                messages.error(request, f'Erro ao criar contrato: {e}')
+                return redirect('contratos:wizard', step='preview')
+
+        return redirect('contratos:wizard', step='basico')
+
+    def _calcular_resumo(self, sess):
+        """Calcula o resumo financeiro do wizard para o step de preview"""
+        from decimal import Decimal as D
+        basico = sess.get('basico', {})
+        juros_rows = sess.get('juros', [])
+        intermediarias = sess.get('intermediarias_lista', [])
+
+        valor_total = D(str(basico.get('valor_total', 0)))
+        valor_entrada = D(str(basico.get('valor_entrada', 0)))
+        numero_parcelas = int(basico.get('numero_parcelas', 1))
+        valor_financiado = valor_total - valor_entrada
+
+        soma_intermediarias = sum(D(str(r['valor'])) for r in intermediarias)
+        reduzem_pmt = basico.get('intermediarias_reduzem_pmt', False)
+
+        if reduzem_pmt:
+            base_pmt = max(valor_financiado - soma_intermediarias, D('0.01'))
+        else:
+            base_pmt = valor_financiado
+
+        pmt_ciclo1 = (base_pmt / numero_parcelas).quantize(D('0.01')) if numero_parcelas else D('0')
+
+        return {
+            'valor_total': valor_total,
+            'valor_entrada': valor_entrada,
+            'valor_financiado': valor_financiado,
+            'numero_parcelas': numero_parcelas,
+            'pmt_ciclo1': pmt_ciclo1,
+            'soma_intermediarias': soma_intermediarias,
+            'n_intermediarias': len(intermediarias),
+            'juros_rows': juros_rows,
+            'intermediarias': intermediarias[:12],  # show first 12
+            'intermediarias_total': len(intermediarias),
+            'basico': basico,
+            'reduzem_pmt': reduzem_pmt,
+            'reajustadas': basico.get('intermediarias_reajustadas', True),
+        }
+
+    def _salvar_contrato(self, request, sess):
+        """Cria o contrato com TabelaJuros e intermediárias em uma única transação"""
+        from decimal import Decimal as D
+        from contratos.models import TabelaJurosContrato, PrestacaoIntermediaria
+        from .forms import ContratoWizardBasicoForm
+
+        basico = sess['basico']
+        # Reconstruct form from session data
+        form = ContratoWizardBasicoForm(basico)
+        # We need to pass dates as strings matching widget format
+        # Use cleaned_data stored in session directly
+        contrato = self._criar_contrato_from_session(basico)
+
+        # TabelaJuros rows
+        for row in sess.get('juros', []):
+            TabelaJurosContrato.objects.create(
+                contrato=contrato,
+                ciclo_inicio=row['ciclo_inicio'],
+                ciclo_fim=row.get('ciclo_fim'),
+                juros_mensal=D(str(row['juros_mensal'])),
+                observacoes=row.get('observacoes', ''),
+            )
+
+        # Intermediárias
+        for row in sess.get('intermediarias_lista', []):
+            PrestacaoIntermediaria.objects.create(
+                contrato=contrato,
+                numero_sequencial=row['numero_sequencial'],
+                mes_vencimento=row['mes_vencimento'],
+                valor=D(str(row['valor'])),
+            )
+
+        # If intermediarias_reduzem_pmt: recalculate parcelas
+        if contrato.intermediarias_reduzem_pmt:
+            from django.db.models import Sum
+            soma = contrato.intermediarias.aggregate(total=Sum('valor'))['total'] or D('0')
+            base = max(contrato.valor_financiado - soma, D('0.01'))
+            novo_pmt = (base / contrato.numero_parcelas).quantize(D('0.01'))
+            contrato.parcelas.filter(tipo_parcela='NORMAL').update(
+                valor_original=novo_pmt,
+                valor_atual=novo_pmt,
+            )
+            contrato.valor_parcela_original = novo_pmt
+            contrato.save(update_fields=['valor_parcela_original'])
+
+        return contrato
+
+    def _criar_contrato_from_session(self, basico):
+        """Creates a Contrato object from session data dict"""
+        from contratos.models import Contrato
+        from decimal import Decimal as D
+        from datetime import date
+
+        def to_date(v):
+            if isinstance(v, date):
+                return v
+            if isinstance(v, str):
+                from datetime import datetime
+                for fmt in ('%Y-%m-%d', '%d/%m/%Y'):
+                    try:
+                        return datetime.strptime(v, fmt).date()
+                    except ValueError:
+                        pass
+            return v
+
+        def to_dec(v):
+            return D(str(v)) if v not in (None, '', 'None') else None
+
+        contrato = Contrato.objects.create(
+            imobiliaria_id=basico['imobiliaria'],
+            imovel_id=basico['imovel'],
+            comprador_id=basico['comprador'],
+            numero_contrato=basico['numero_contrato'],
+            data_contrato=to_date(basico['data_contrato']),
+            data_primeiro_vencimento=to_date(basico['data_primeiro_vencimento']),
+            valor_total=to_dec(basico['valor_total']),
+            valor_entrada=to_dec(basico['valor_entrada']) or D('0'),
+            numero_parcelas=int(basico['numero_parcelas']),
+            dia_vencimento=int(basico['dia_vencimento']),
+            percentual_juros_mora=to_dec(basico.get('percentual_juros_mora', '1.00')),
+            percentual_multa=to_dec(basico.get('percentual_multa', '2.00')),
+            tipo_correcao=basico.get('tipo_correcao', 'IPCA'),
+            prazo_reajuste_meses=int(basico.get('prazo_reajuste_meses', 12)),
+            tipo_correcao_fallback=basico.get('tipo_correcao_fallback', ''),
+            spread_reajuste=to_dec(basico.get('spread_reajuste')),
+            reajuste_piso=to_dec(basico.get('reajuste_piso')),
+            reajuste_teto=to_dec(basico.get('reajuste_teto')),
+            intermediarias_reduzem_pmt=bool(basico.get('intermediarias_reduzem_pmt', False)),
+            intermediarias_reajustadas=bool(basico.get('intermediarias_reajustadas', True)),
+            percentual_fruicao=to_dec(basico.get('percentual_fruicao', '0.5000')),
+            percentual_multa_rescisao_penal=to_dec(basico.get('percentual_multa_rescisao_penal', '10.0000')),
+            percentual_multa_rescisao_adm=to_dec(basico.get('percentual_multa_rescisao_adm', '12.0000')),
+            percentual_cessao=to_dec(basico.get('percentual_cessao', '3.0000')),
+            status=basico.get('status', 'ATIVO'),
+            observacoes=basico.get('observacoes', ''),
+        )
+        return contrato
