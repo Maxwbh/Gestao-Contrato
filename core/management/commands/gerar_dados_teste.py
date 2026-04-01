@@ -620,13 +620,15 @@ class Command(BaseCommand):
                 percentual_cessao=Decimal('3.0000'),
                 intermediarias_reduzem_pmt=random.random() < 0.3,
                 intermediarias_reajustadas=random.random() < 0.7,
+                tipo_amortizacao='SAC' if random.random() < 0.25 else 'PRICE',
                 status=StatusContrato.ATIVO,
                 observacoes=f'Contrato gerado automaticamente para teste'
             )
             contratos.append(contrato)
 
             # 15% dos contratos têm juros escalantes por ciclo (tabela price progressiva)
-            if random.random() < 0.15 and numero_parcelas >= 24:
+            tem_tabela_juros = random.random() < 0.15 and numero_parcelas >= 24
+            if tem_tabela_juros:
                 faixas = [
                     (1, 1, Decimal('0.0000')),    # Ano 1: sem juros adicionais
                     (2, 2, Decimal('0.6000')),
@@ -644,6 +646,8 @@ class Command(BaseCommand):
                         juros_mensal=juros,
                         observacoes='Gerado por dados de teste'
                     )
+                # Recalcula parcelas com sistema correto (Price ou SAC) após TabelaJuros
+                contrato.recalcular_amortizacao()
 
         return contratos
 
