@@ -374,7 +374,7 @@
 
 | # | Gap identificado | Solução implementada | Status |
 |---|-----------------|----------------------|--------|
-| G-01 | **Vendedor pessoa física** — contrato tem CPF do vendedor (não imobiliária) | `Contrato.vendedor_nome` + `Contrato.vendedor_cpf_cnpj` | ✅ |
+| G-01 | ~~**Vendedor pessoa física**~~ — `Contrato.imobiliaria` (FK `Imobiliária/Beneficiário`) já é o vendedor; campos `vendedor_nome`/`vendedor_cpf_cnpj` eram redundantes | Campos removidos (`migration 0006`). Ver G-10 para suporte a vendedor PF | ❌ Removido |
 | G-02 | **Índice de fallback** — INPC substitui IGPM se extinto (cláusula contratual) | `Contrato.tipo_correcao_fallback`; usado automaticamente em `preview_reajuste()` quando índice principal sem dados | ✅ |
 | G-03 | **Taxa de fruição** — 0,5%/mês sobre valor atualizado em rescisão pelo comprador | `Contrato.percentual_fruicao` (default 0,5000%) | ✅ |
 | G-04 | **Multa penal de rescisão** — 10% do valor atualizado retido pelo vendedor | `Contrato.percentual_multa_rescisao_penal` (default 10,0000%) | ✅ |
@@ -392,12 +392,13 @@
 
 | # | Gap | Complexidade | Prioridade |
 |---|-----|--------------|------------|
-| G-10 | **Cálculo de rescisão** — tela/endpoint que aplica fruição + multa penal + adm e gera valor de devolução | Alta | P3 |
-| G-11 | **Cálculo de cessão** — tela para calcular taxa de cessão e registrar transferência de comprador | Média | P3 |
-| G-12 | **Taxa condominial (APMRPN)** — 1,32% de fração ideal mensal, cobrada separado do contrato | Alta | P4 |
-| G-13 | **Testemunhas do contrato** — campos testemunha_1_nome, testemunha_1_cpf etc. para impressão do contrato | Baixa | P4 |
-| G-14 | **Prazo para escritura** — prazo de 60+30 dias após quitação para lavratura de escritura | Média | P4 |
-| G-15 | **Juros de mora pro rata die** — 0,033%/dia (contrato usa esta fórmula, não 1%/mês simples) | Média | P3 |
+| G-10 | **`Imobiliaria` suporta apenas PJ (CNPJ obrigatório)** — para contratos onde o vendedor é pessoa física (CPF), o model `Imobiliaria` não é adequado. Solução: adicionar `tipo_pessoa` (PF/PJ) e tornar `cnpj` opcional quando PF, com campo `cpf` para pessoa física | Média | P2 |
+| G-11 | **Cálculo de rescisão** — tela/endpoint que aplica fruição + multa penal + adm e gera valor de devolução | Alta | P3 |
+| G-12 | **Cálculo de cessão** — tela para calcular taxa de cessão e registrar transferência de comprador | Média | P3 |
+| G-13 | **Taxa condominial (APMRPN)** — 1,32% de fração ideal mensal, cobrada separado do contrato | Alta | P4 |
+| G-14 | **Testemunhas do contrato** — campos testemunha_1_nome, testemunha_1_cpf etc. para impressão do contrato | Baixa | P4 |
+| G-15 | **Prazo para escritura** — prazo de 60+30 dias após quitação para lavratura de escritura | Média | P4 |
+| G-16 | **Juros de mora pro rata die** — 0,033%/dia (contrato usa esta fórmula, não 1%/mês simples) | Média | P3 |
 
 ---
 
@@ -406,7 +407,7 @@
 | # | Item | Status |
 |---|------|--------|
 | A-01 | `TabelaJurosContrato` registrado no Django Admin (`TabelaJurosContratoAdmin` + `TabelaJurosInline` no Contrato) | ✅ |
-| A-02 | `ContratoAdmin` fieldsets atualizados com todos os novos campos (Vendedor, Cláusulas Contratuais, fallback, spread) | ✅ |
+| A-02 | `ContratoAdmin` fieldsets atualizados com novos campos (Cláusulas Contratuais, fallback, spread, piso/teto). Fieldset Vendedor removido — coberto pelo FK `imobiliaria` | ✅ |
 | A-03 | Link **"Dados de Teste"** adicionado no menu Admin do `base.html` (visível para staff/superuser) | ✅ |
 | A-04 | Página de Dados de Teste inclui counter de `TabelaJurosContrato` + atualiza via JS pós-geração | ✅ |
 
@@ -416,7 +417,8 @@
 
 | Migration | App | Conteúdo |
 |-----------|-----|----------|
-| `contratos/0005_contrato_clausulas_vendedor_tabela_juros` | contratos | Cria `TabelaJurosContrato`; adiciona 7 campos ao `Contrato`: `vendedor_nome`, `vendedor_cpf_cnpj`, `tipo_correcao_fallback`, `percentual_fruicao`, `percentual_multa_rescisao_penal`, `percentual_multa_rescisao_adm`, `percentual_cessao` |
+| `contratos/0005_contrato_clausulas_vendedor_tabela_juros` | contratos | Cria `TabelaJurosContrato`; adiciona ao `Contrato`: `tipo_correcao_fallback`, `percentual_fruicao`, `percentual_multa_rescisao_penal`, `percentual_multa_rescisao_adm`, `percentual_cessao`, `vendedor_nome`, `vendedor_cpf_cnpj` (estes dois removidos na 0006) |
+| `contratos/0006_remove_vendedor_campos_redundantes` | contratos | Remove `vendedor_nome` e `vendedor_cpf_cnpj` do `Contrato` — redundantes com `imobiliaria` FK |
 
 ---
 

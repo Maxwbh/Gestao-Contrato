@@ -601,9 +601,6 @@ class Command(BaseCommand):
                 reajuste_teto=Decimal(str(round(random.uniform(10.0, 15.0), 4))) if random.random() < 0.15 else None,
                 # Fallback INPC para contratos com IGPM (20% de chance)
                 tipo_correcao_fallback='INPC' if random.random() < 0.2 else '',
-                # 10% dos contratos têm dados de vendedor pessoa física
-                vendedor_nome=self.fake.name() if random.random() < 0.1 else '',
-                vendedor_cpf_cnpj='',
                 # Cláusulas padrão
                 percentual_fruicao=Decimal('0.5000'),
                 percentual_multa_rescisao_penal=Decimal('10.0000'),
