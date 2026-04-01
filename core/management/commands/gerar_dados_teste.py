@@ -593,6 +593,12 @@ class Command(BaseCommand):
                     TipoCorrecao.IGPDI, TipoCorrecao.INPC, TipoCorrecao.TR
                 ]),
                 prazo_reajuste_meses=12,
+                # 30% dos contratos têm spread (0.5 a 2 p.p.)
+                spread_reajuste=Decimal(str(round(random.uniform(0.5, 2.0), 4))) if random.random() < 0.3 else None,
+                # 20% têm piso (0%)
+                reajuste_piso=Decimal('0.0000') if random.random() < 0.2 else None,
+                # 15% têm teto (entre 10% e 15%)
+                reajuste_teto=Decimal(str(round(random.uniform(10.0, 15.0), 4))) if random.random() < 0.15 else None,
                 status=StatusContrato.ATIVO,
                 observacoes=f'Contrato gerado automaticamente para teste'
             )
@@ -919,12 +925,26 @@ class Command(BaseCommand):
                 if percentual_bruto is None:
                     percentual_bruto = Decimal(str(round(random.uniform(3.5, 6.5), 4)))
 
+                # Aplicar spread do contrato (índice composto)
+                spread = contrato.spread_reajuste or Decimal('0')
+                percentual_com_spread = percentual_bruto + spread
+
+                # Aplicar teto e piso configurados no contrato
+                percentual_final = percentual_com_spread
+                if contrato.reajuste_piso is not None:
+                    percentual_final = max(contrato.reajuste_piso, percentual_final)
+                if contrato.reajuste_teto is not None:
+                    percentual_final = min(contrato.reajuste_teto, percentual_final)
+
                 reajuste = Reajuste.objects.create(
                     contrato=contrato,
                     data_reajuste=data_inicio_ciclo,
                     indice_tipo=contrato.tipo_correcao,
-                    percentual=percentual_bruto,
+                    percentual=percentual_final,
                     percentual_bruto=percentual_bruto,
+                    spread_aplicado=spread if spread else None,
+                    piso_aplicado=contrato.reajuste_piso,
+                    teto_aplicado=contrato.reajuste_teto,
                     parcela_inicial=parcela_inicial,
                     parcela_final=parcela_final,
                     ciclo=ciclo,
