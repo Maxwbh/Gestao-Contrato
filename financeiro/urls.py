@@ -128,4 +128,9 @@ urlpatterns = [
     # API - CONTAS BANCÁRIAS
     # ==========================================================================
     path('api/contas-bancarias/', views.api_contas_bancarias, name='api_contas_bancarias'),
+
+    # ==========================================================================
+    # API - NOTIFICAÇÕES
+    # ==========================================================================
+    path('api/reajustes-pendentes/count/', views.api_reajustes_pendentes_count, name='api_reajustes_pendentes_count'),
 ]
