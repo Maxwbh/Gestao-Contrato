@@ -311,6 +311,16 @@
                             <div class="info-label">Valor Original Parcela</div>
                             <div class="info-value">{{ contrato.valor_parcela_original|moeda }}</div>
                         </div>
+                        <div class="info-item">
+                            <div class="info-label">Sistema de Amortização</div>
+                            <div class="info-value">
+                                {% if contrato.tipo_amortizacao == 'SAC' %}
+                                <span class="badge bg-warning text-dark">SAC — Amortização Constante</span>
+                                {% else %}
+                                <span class="badge bg-info text-dark">Tabela Price</span>
+                                {% endif %}
+                            </div>
+                        </div>
                     </div>
                 </div>
 
