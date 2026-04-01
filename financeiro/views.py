@@ -1583,6 +1583,30 @@ def gerar_carne(request, contrato_id):
                 'erro': 'Nenhuma parcela valida encontrada'
             }, status=400)
 
+        # =====================================================================
+        # LIMITE DE LOTE: apenas até o último boleto do ciclo atual
+        # Regra: em lote só é permitido gerar boletos dentro do ciclo atual
+        # (último ciclo onde todos os reajustes foram aplicados).
+        # Ciclos futuros (data ainda não chegou) só são permitidos individualmente.
+        # =====================================================================
+        max_parcela_lote = None  # None = sem limite (FIXO ou todos ciclos quitados)
+        if not force and contrato.tipo_correcao != 'FIXO':
+            from dateutil.relativedelta import relativedelta as _rd
+            prazo_lote = contrato.prazo_reajuste_meses or 12
+            hoje_lote = timezone.now().date()
+            total_ciclos_lote = (contrato.numero_parcelas - 1) // prazo_lote + 1
+            for _ciclo in range(2, total_ciclos_lote + 2):
+                data_rd = contrato.data_contrato + _rd(months=(_ciclo - 1) * prazo_lote)
+                if hoje_lote < data_rd:
+                    # Ciclo ainda futuro → lote só até o ciclo anterior
+                    max_parcela_lote = (_ciclo - 1) * prazo_lote
+                    break
+                from financeiro.models import Reajuste as _Reaj
+                if not _Reaj.objects.filter(contrato=contrato, ciclo=_ciclo, aplicado=True).exists():
+                    # Ciclo vencido mas não reajustado → lote só até o ciclo anterior
+                    max_parcela_lote = (_ciclo - 1) * prazo_lote
+                    break
+
         resultados = []
         gerados = 0
         bloqueados = 0
@@ -1590,20 +1614,21 @@ def gerar_carne(request, contrato_id):
 
         for parcela in parcelas:
             # =====================================================================
-            # VERIFICAÇÃO DE BLOQUEIO POR REAJUSTE (usando pode_gerar_boleto)
+            # BLOQUEIO DE LOTE: parcelas além do ciclo atual não são permitidas em lote
             # =====================================================================
-            if not force and hasattr(contrato, 'pode_gerar_boleto'):
-                pode_gerar, motivo = contrato.pode_gerar_boleto(parcela.numero_parcela)
-                if not pode_gerar:
-                    resultados.append({
-                        'parcela_id': parcela.id,
-                        'numero_parcela': parcela.numero_parcela,
-                        'sucesso': False,
-                        'bloqueado_reajuste': True,
-                        'erro': motivo
-                    })
-                    bloqueados += 1
-                    continue
+            if not force and max_parcela_lote is not None and parcela.numero_parcela > max_parcela_lote:
+                resultados.append({
+                    'parcela_id': parcela.id,
+                    'numero_parcela': parcela.numero_parcela,
+                    'sucesso': False,
+                    'bloqueado_reajuste': True,
+                    'erro': (
+                        f"Parcela {parcela.numero_parcela} pertence a um ciclo futuro ou com reajuste "
+                        f"pendente. Boletos de ciclos futuros só podem ser gerados individualmente."
+                    )
+                })
+                bloqueados += 1
+                continue
 
             # Verificar se ja tem boleto
             if parcela.tem_boleto and not force:
