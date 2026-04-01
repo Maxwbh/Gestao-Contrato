@@ -117,6 +117,13 @@ else:
     print('DATABASE_URL nao definida - usando SQLite local')
 SCHEMAEOF
 
+# Garantir search_path via PGOPTIONS para todos os comandos manage.py seguintes.
+# Mais confiável que o sinal connection_created em ambientes com pgBouncer (Supabase),
+# pois aplica -c search_path no startup packet de cada nova conexão libpq.
+if [ -n "$DATABASE_URL" ]; then
+    export PGOPTIONS="${PGOPTIONS:+$PGOPTIONS }-c search_path=gestao_contrato"
+fi
+
 echo "==> Running database migrations..."
 python manage.py migrate --no-input
 
