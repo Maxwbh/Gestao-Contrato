@@ -821,11 +821,17 @@ para ciclo_check = 2 até ciclo_da_parcela:
 return True, "Liberado"
 ```
 
-**Exemplo — contrato Jan/2024, prazo 12, ciclo 2 pendente:**
+**Exemplo — contrato Jan/2024, prazo 12, ciclo 2 pendente (hoje >= Jan/2025, reajuste não aplicado):**
 ```
-Parcela 12 (ciclo 1) → loop vazio → Liberada ✓
-Parcela 13 (ciclo 2) → ciclo 2: hoje >= data, não aplicado → Bloqueada ✓
-Parcela 25 (ciclo 3) → ciclo 2: hoje >= data, não aplicado → Bloqueada ✓ (cascata)
+Parcela 12 (ciclo 1) → loop vazio (ciclo 1, não verifica) → Liberada ✓
+Parcela 13 (ciclo 2) → ciclo 2: hoje >= Jan/2025, não aplicado → Bloqueada ✗
+Parcela 14 (ciclo 2) → ciclo 2: hoje >= Jan/2025, não aplicado → Bloqueada ✗
+...
+Parcela 25 (ciclo 3) → ciclo 2: hoje >= Jan/2025, não aplicado → Bloqueada ✗ (cascata)
+...
+Parcela 360 (ciclo 30) → ciclo 2: hoje >= Jan/2025, não aplicado → Bloqueada ✗ (cascata)
+
+→ Nenhum boleto pode ser gerado da parcela 13 à 360 até o reajuste do ciclo 2 ser aplicado.
 ```
 
 ---
