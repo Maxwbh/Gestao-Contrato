@@ -310,32 +310,32 @@
 
 ---
 
-### 10.1 Cálculo Automático — PRIORIDADE MÁXIMA
+### 10.1 Cálculo Automático
 
 | # | Item | Prioridade | Status |
 |---|------|------------|--------|
-| R-01 | **Determinar automaticamente o ciclo atual** — com base na `data_contrato` e nas parcelas já pagas/vencidas, o sistema identifica qual ciclo está pendente de reajuste sem entrada manual | P1 | TO_DO |
-| R-02 | **Calcular acumulado do índice para o período de referência** — dado o ciclo, calcular automaticamente o IPCA acumulado dos 12 meses anteriores (ex: ciclo 2 → soma/produto dos índices mensais de jan–dez/2023); já existe `valor_acumulado_12m` no model `IndiceReajuste`, usar esse campo | P1 | TO_DO |
-| R-03 | **Determinar as parcelas afetadas automaticamente** — ciclo N afeta parcelas `(N-1)*12 + 1` até `N*12`; exibir no formulário sem que o operador precise digitar | P1 | TO_DO |
-| R-04 | **Preview/Simulação dry-run antes de aplicar** — endpoint que recebe `contrato_id + ciclo`, calcula tudo e retorna: ciclo, índice, período de referência, % acumulado, parcelas afetadas e tabela parcela→valor atual→valor reajustado, sem persistir | P1 | TO_DO |
-| R-05 | **Desconto sobre o reajuste** — ao confirmar, permitir informar desconto em `%` ou `R$` que reduz o valor final (ex: IPCA 5,4% com desconto de 1% → aplica 4,4%; ou desconto fixo de R$ 50,00 por parcela) | P1 | TO_DO |
-| R-06 | **Teto e piso configuráveis por contrato** — reajuste mínimo (padrão 0%, sem deflação forçada) e máximo (ex: 15%); aplicados após desconto | P2 | TO_DO |
-| R-07 | **Índice composto** — suporte a `ÍNDICE + spread fixo` (ex: IPCA + 2% a.a.) configurável no contrato | P3 | TO_DO |
-| R-08 | **Reajuste automático via Celery** — task agendada que aplica o ciclo correto na data aniversário do contrato, com log e notificação ao gestor | P3 | TO_DO |
+| R-01 | **Determinar automaticamente o ciclo atual** — `Reajuste.calcular_ciclo_pendente(contrato)` | P1 | ✅ P1 |
+| R-02 | **Calcular acumulado do índice para o período de referência** — `IndiceReajuste.get_acumulado_periodo(...)` com período do ciclo anterior | P1 | ✅ P1 |
+| R-03 | **Determinar as parcelas afetadas automaticamente** — ciclo N → parcelas `(N-1)*prazo+1` até `N*prazo` | P1 | ✅ P1 |
+| R-04 | **Preview/Simulação dry-run antes de aplicar** — `Reajuste.preview_reajuste(contrato, ciclo, ...)` | P1 | ✅ P1 |
+| R-05 | **Desconto sobre o reajuste** — `desconto_percentual` (p.p.) e `desconto_valor` (R$/parcela) | P1 | ✅ P1 |
+| R-06 | **Teto e piso configuráveis por contrato** — `Contrato.reajuste_piso/teto`; aplicados após desconto | P2 | ✅ P2 |
+| R-07 | **Índice composto** — `Contrato.spread_reajuste` (p.p. adicionados ao índice bruto); snapshot em `Reajuste.spread_aplicado` | P3 | ✅ P3 |
+| R-08 | **Reajuste automático via Celery** — `aplicar_reajuste_automatico` reescrita com ciclos corretos; `processar_reajustes_pendentes` para todos os contratos | P3 | ✅ P3 |
 
 ---
 
-### 10.2 Interface de Aplicação — PRIORIDADE MÁXIMA
+### 10.2 Interface de Aplicação
 
 | # | Item | Prioridade | Status |
 |---|------|------------|--------|
-| R-09 | **Formulário de reajuste simplificado** — ao abrir, sistema pré-preenche automaticamente: ciclo pendente, índice do contrato, período de referência e percentual acumulado buscado da base; operador só confirma (ou informa desconto) | P1 | TO_DO |
-| R-10 | **Tabela de prévia por parcela** — antes de confirmar, exibir: parcela / vencimento / valor atual / % aplicado / desconto / valor final / diferença; total de impacto no rodapé | P1 | TO_DO |
-| R-11 | **Tela de Reajustes Pendentes** — lista todos os contratos com ciclo vencido e não aplicado, agrupados por imobiliária, com botão "Aplicar" direto na lista | P1 | TO_DO |
-| R-12 | **Alerta de boletos já emitidos** — quando há boletos gerados nas parcelas que serão reajustadas, exibir aviso com botão "Regenerar todos após reajuste" | P1 | TO_DO |
-| R-13 | **Confirmação dupla para deflação** — alerta especial quando percentual acumulado < 0% | P2 | TO_DO |
-| R-14 | **Histórico de reajustes na tela do contrato** — tabela: ciclo / período de referência / índice / % acumulado / desconto / parcelas afetadas / data / operador / botão desfazer | P2 | TO_DO |
-| R-15 | **Aplicação em lote** — selecionar N contratos da mesma imobiliária e aplicar o ciclo pendente de cada um de uma vez, com relatório de resultado | P3 | TO_DO |
+| R-09 | **Formulário de reajuste simplificado** — modal pré-preenchido com ciclo/índice/período/% ao abrir | P1 | ✅ P1 |
+| R-10 | **Tabela de prévia por parcela** — parcela / vencimento / valor atual / % / valor novo / diferença | P1 | ✅ P1 |
+| R-11 | **Tela de Reajustes Pendentes** — lista agrupada por imobiliária com botão Aplicar | P1 | ✅ P1 |
+| R-12 | **Alerta de boletos já emitidos** — aviso no modal com lista das parcelas afetadas | P1 | ✅ P1 |
+| R-13 | **Confirmação dupla para deflação** — alert especial + segunda confirmação quando % final < 0 | P2 | ✅ P2 |
+| R-14 | **Histórico de reajustes na tela do contrato** — ciclo / ref. / % bruto / desconto / % aplicado / data / operador / desfazer | P2 | ✅ P2 |
+| R-15 | **Aplicação em lote** — checkboxes na tela de pendentes; modal com desconto global; endpoint `POST /reajustes/aplicar-lote/`; relatório por contrato | P3 | ✅ P3 |
 
 ---
 
@@ -343,22 +343,22 @@
 
 | # | Item | Prioridade | Status |
 |---|------|------------|--------|
-| R-16 | **Validar sequência de ciclos na UI** — já existe no `clean()` do model; surfaçar o erro com mensagem clara ("O ciclo 2 deve ser aplicado antes do ciclo 3") | P1 | TO_DO |
-| R-17 | **Bloquear geração de boleto enquanto ciclo pendente** — já implementado (`pode_gerar_boleto`); garantir que mensagem de bloqueio indica exatamente qual ciclo está faltando e oferece atalho para aplicar | P1 | TO_DO |
-| R-18 | **Audit log** — registrar usuário, IP e timestamp de cada reajuste aplicado/desfeito | P2 | TO_DO |
-| R-19 | **Desfazer reajuste automático** — atualmente só manuais podem ser revertidos; estender para automáticos com registro de auditoria | P3 | TO_DO |
+| R-16 | **Validar sequência de ciclos na UI** — `clean()` no model valida sequência; erro surfaçado via JSON na view | P1 | ✅ P1 |
+| R-17 | **Bloquear geração de boleto enquanto ciclo pendente** — `pode_gerar_boleto` implementado | P1 | ✅ P1 |
+| R-18 | **Audit log** — `Reajuste.usuario` (FK auth.User) + `Reajuste.ip_address`; capturados em todas as views de aplicação | P2 | ✅ P2 |
+| R-19 | **Desfazer reajuste automático** — `excluir_reajuste` estendida para todos os reajustes (não só manuais); reverte parcelas + intermediárias + `ciclo_reajuste_atual` | P3 | ✅ P3 |
 
 ---
 
-### 10.4 Ordem de Execução Sugerida
+### 10.4 Ordem de Execução — Concluída
 
-| Fase | Itens | Resultado esperado |
-|------|-------|-------------------|
-| **1** | R-01, R-02, R-03, R-04 | Sistema calcula automaticamente ciclo + acumulado + parcelas afetadas + preview |
-| **2** | R-09, R-10, R-05 | Formulário pré-preenchido + tabela de prévia + campo de desconto |
-| **3** | R-11, R-12, R-16, R-17 | Tela de pendentes + alertas de boletos + mensagens de bloqueio claras |
-| **4** | R-06, R-14, R-18, R-13 | Teto/piso + histórico com auditoria + confirmação deflação |
-| **5** | R-07, R-15, R-19 | Índice composto + lote + Celery + desfazer automático |
+| Fase | Itens | Status |
+|------|-------|--------|
+| **1 (P1)** | R-01, R-02, R-03, R-04 | ✅ Concluído |
+| **2 (P1)** | R-09, R-10, R-05 | ✅ Concluído |
+| **3 (P1)** | R-11, R-12, R-16, R-17 | ✅ Concluído |
+| **4 (P2)** | R-06, R-14, R-18, R-13 | ✅ Concluído |
+| **5 (P3)** | R-07, R-08, R-15, R-19 | ✅ Concluído |
 
 ---
 

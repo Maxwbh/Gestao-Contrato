@@ -779,6 +779,17 @@ class Reajuste(TimeStampedModel):
         help_text='Desconto fixo em reais subtraído de cada parcela após o percentual'
     )
 
+    # Spread aplicado (snapshot do contrato no momento do reajuste)
+    spread_aplicado = models.DecimalField(
+        max_digits=8,
+        decimal_places=4,
+        null=True,
+        blank=True,
+        default=Decimal('0'),
+        verbose_name='Spread Aplicado (p.p.)',
+        help_text='Pontos percentuais de spread adicionados ao índice bruto'
+    )
+
     # Controle de teto/piso aplicados no momento do reajuste
     piso_aplicado = models.DecimalField(
         max_digits=8,
@@ -957,6 +968,8 @@ class Reajuste(TimeStampedModel):
             inicio_ref.year, inicio_ref.month,
             fim_ref.year, fim_ref.month,
         )
+        spread = contrato.spread_reajuste or Decimal('0')
+
         if percentual_bruto is None:
             return {
                 'erro': f'Índice {indice_tipo} não disponível para {inicio_ref.strftime("%b/%Y")} '
@@ -967,11 +980,18 @@ class Reajuste(TimeStampedModel):
                 'ciclo': ciclo,
                 'parcela_inicial': parcela_inicial,
                 'parcela_final': parcela_final,
+                'spread': spread,
             }
 
         desc_perc = Decimal(str(desconto_percentual)) if desconto_percentual else Decimal('0')
         desc_val = Decimal(str(desconto_valor)) if desconto_valor else Decimal('0')
-        percentual_liquido = percentual_bruto - desc_perc
+
+        # Spread (índice composto): IPCA + spread → percentual_bruto_com_spread
+        spread = contrato.spread_reajuste or Decimal('0')
+        percentual_bruto_com_spread = percentual_bruto + spread
+
+        # Descontar sobre o percentual já acrescido do spread
+        percentual_liquido = percentual_bruto_com_spread - desc_perc
 
         # Aplicar teto e piso do contrato
         piso = contrato.reajuste_piso
@@ -1019,11 +1039,13 @@ class Reajuste(TimeStampedModel):
             'indice_tipo': indice_tipo,
             'periodo_referencia_inicio': inicio_ref,
             'periodo_referencia_fim': fim_ref,
-            'percentual_bruto': percentual_bruto,
+            'percentual_bruto': percentual_bruto,           # índice puro acumulado
+            'spread': spread,                               # spread do contrato
+            'percentual_bruto_com_spread': percentual_bruto_com_spread,  # bruto + spread
             'desconto_percentual': desc_perc,
             'desconto_valor': desc_val,
-            'percentual_liquido': percentual_liquido,
-            'percentual_final': percentual_com_caps,  # pós-caps
+            'percentual_liquido': percentual_liquido,       # pós-spread, pós-desconto
+            'percentual_final': percentual_com_caps,        # pós-caps (valor efetivo)
             'piso': piso,
             'teto': teto,
             'piso_ativado': piso is not None and percentual_liquido < piso,
