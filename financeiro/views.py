@@ -1962,6 +1962,8 @@ def preview_reajuste_contrato(request, contrato_id):
             'periodo_referencia_inicio': resultado['periodo_referencia_inicio'].strftime('%b/%Y'),
             'periodo_referencia_fim': resultado['periodo_referencia_fim'].strftime('%b/%Y'),
             'percentual_bruto': float(resultado['percentual_bruto']),
+            'spread': float(resultado['spread']),
+            'percentual_bruto_com_spread': float(resultado['percentual_bruto_com_spread']),
             'desconto_percentual': float(resultado['desconto_percentual']),
             'desconto_valor': float(resultado['desconto_valor']),
             'percentual_liquido': float(resultado['percentual_liquido']),
@@ -2040,6 +2042,7 @@ def aplicar_reajuste_contrato(request, contrato_id):
                 indice_tipo=preview['indice_tipo'],
                 percentual=preview['percentual_final'],
                 percentual_bruto=preview['percentual_bruto'],
+                spread_aplicado=preview['spread'] if preview['spread'] else None,
                 desconto_percentual=Decimal(str(desconto_percentual)) if desconto_percentual else None,
                 desconto_valor=Decimal(str(desconto_valor)) if desconto_valor else None,
                 piso_aplicado=preview['piso'],
@@ -2168,6 +2171,155 @@ def reajustes_pendentes(request):
         'total_pendentes': len(pendentes),
     }
     return render(request, 'financeiro/reajustes_pendentes.html', context)
+
+
+@login_required
+@require_POST
+def aplicar_reajuste_lote(request):
+    """
+    Aplica reajuste automático em múltiplos contratos de uma vez.
+
+    Corpo JSON:
+      - contrato_ids: lista de IDs de contratos (int[])
+      - desconto_percentual: desconto em p.p. aplicado a todos (opcional)
+      - desconto_valor: desconto em R$ por parcela aplicado a todos (opcional)
+      - observacoes: texto livre (opcional)
+
+    Retorna JSON com resumo por contrato: sucesso, erro, parcelas_reajustadas.
+    """
+    import json
+
+    try:
+        data = json.loads(request.body) if request.content_type == 'application/json' else request.POST
+    except (json.JSONDecodeError, Exception):
+        return JsonResponse({'sucesso': False, 'erro': 'Corpo da requisição inválido'}, status=400)
+
+    contrato_ids = data.get('contrato_ids', [])
+    if not contrato_ids:
+        return JsonResponse({'sucesso': False, 'erro': 'Nenhum contrato selecionado'}, status=400)
+
+    desconto_percentual = data.get('desconto_percentual') or None
+    desconto_valor = data.get('desconto_valor') or None
+    observacoes = data.get('observacoes', 'Reajuste em lote')
+
+    def get_client_ip(req):
+        x_forwarded = req.META.get('HTTP_X_FORWARDED_FOR')
+        if x_forwarded:
+            return x_forwarded.split(',')[0].strip()
+        return req.META.get('REMOTE_ADDR')
+
+    resultados = []
+    total_ok = 0
+    total_erro = 0
+
+    for contrato_id in contrato_ids:
+        try:
+            contrato = Contrato.objects.get(pk=int(contrato_id))
+        except (Contrato.DoesNotExist, ValueError):
+            resultados.append({'contrato_id': contrato_id, 'sucesso': False, 'erro': 'Contrato não encontrado'})
+            total_erro += 1
+            continue
+
+        ciclo = Reajuste.calcular_ciclo_pendente(contrato)
+        if ciclo is None:
+            resultados.append({
+                'contrato_id': contrato_id,
+                'numero_contrato': contrato.numero_contrato,
+                'sucesso': False,
+                'erro': 'Nenhum ciclo pendente',
+            })
+            total_erro += 1
+            continue
+
+        try:
+            preview = Reajuste.preview_reajuste(
+                contrato, ciclo,
+                desconto_percentual=desconto_percentual,
+                desconto_valor=desconto_valor,
+            )
+        except Exception as e:
+            resultados.append({
+                'contrato_id': contrato_id,
+                'numero_contrato': contrato.numero_contrato,
+                'sucesso': False,
+                'erro': f'Erro no preview: {e}',
+            })
+            total_erro += 1
+            continue
+
+        if 'erro' in preview:
+            resultados.append({
+                'contrato_id': contrato_id,
+                'numero_contrato': contrato.numero_contrato,
+                'sucesso': False,
+                'erro': preview['erro'],
+            })
+            total_erro += 1
+            continue
+
+        if not contrato.parcelas.filter(
+            numero_parcela__gte=preview['parcela_inicial'],
+            numero_parcela__lte=preview['parcela_final'],
+            pago=False,
+        ).exists():
+            resultados.append({
+                'contrato_id': contrato_id,
+                'numero_contrato': contrato.numero_contrato,
+                'sucesso': False,
+                'erro': 'Sem parcelas pendentes no intervalo',
+            })
+            total_erro += 1
+            continue
+
+        try:
+            reajuste = Reajuste.objects.create(
+                contrato=contrato,
+                data_reajuste=timezone.now().date(),
+                indice_tipo=preview['indice_tipo'],
+                percentual=preview['percentual_final'],
+                percentual_bruto=preview['percentual_bruto'],
+                spread_aplicado=preview['spread'] if preview['spread'] else None,
+                desconto_percentual=Decimal(str(desconto_percentual)) if desconto_percentual else None,
+                desconto_valor=Decimal(str(desconto_valor)) if desconto_valor else None,
+                piso_aplicado=preview['piso'],
+                teto_aplicado=preview['teto'],
+                parcela_inicial=preview['parcela_inicial'],
+                parcela_final=preview['parcela_final'],
+                ciclo=ciclo,
+                periodo_referencia_inicio=preview['periodo_referencia_inicio'],
+                periodo_referencia_fim=preview['periodo_referencia_fim'],
+                aplicado_manual=True,
+                usuario=request.user,
+                ip_address=get_client_ip(request),
+                observacoes=observacoes,
+            )
+            resultado = reajuste.aplicar_reajuste()
+            resultados.append({
+                'contrato_id': contrato_id,
+                'numero_contrato': contrato.numero_contrato,
+                'sucesso': True,
+                'ciclo': ciclo,
+                'percentual': float(preview['percentual_final']),
+                'parcelas_reajustadas': resultado.get('parcelas_reajustadas', 0),
+            })
+            total_ok += 1
+        except Exception as e:
+            logger.exception(f"Erro ao aplicar reajuste em lote no contrato {contrato_id}: {e}")
+            resultados.append({
+                'contrato_id': contrato_id,
+                'numero_contrato': getattr(contrato, 'numero_contrato', str(contrato_id)),
+                'sucesso': False,
+                'erro': str(e),
+            })
+            total_erro += 1
+
+    return JsonResponse({
+        'sucesso': True,
+        'total_processados': len(resultados),
+        'total_ok': total_ok,
+        'total_erro': total_erro,
+        'resultados': resultados,
+    })
 
 
 @login_required

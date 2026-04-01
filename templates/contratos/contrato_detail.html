@@ -329,6 +329,12 @@
                             <div class="info-value text-warning">{{ contrato.data_proximo_reajuste|date:"d/m/Y" }}</div>
                         </div>
                         {% endif %}
+                        {% if contrato.spread_reajuste %}
+                        <div class="info-item">
+                            <div class="info-label">Spread</div>
+                            <div class="info-value text-info">+{{ contrato.spread_reajuste|floatformat:2 }} p.p.</div>
+                        </div>
+                        {% endif %}
                         {% if contrato.reajuste_piso is not None %}
                         <div class="info-item">
                             <div class="info-label">Piso Reajuste</div>
@@ -1047,6 +1053,13 @@
                                 <div class="input-group">
                                     <input type="text" class="form-control fw-bold text-primary" id="r_pct_bruto" readonly>
                                     <span class="input-group-text">%</span>
+                                </div>
+                                <!-- Spread info (hidden when spread=0) -->
+                                <div id="r_spread_row" class="d-none mt-1">
+                                    <small class="text-muted">
+                                        Spread: <span class="text-info fw-bold" id="r_spread_val"></span> p.p.
+                                        → <span class="text-primary fw-bold" id="r_pct_com_spread"></span>%
+                                    </small>
                                 </div>
                             </div>
                             <div class="col-md-4">
@@ -1818,6 +1831,14 @@ function renderizarPreviewReajuste(data) {
     preencherCabecalhoReajuste(data);
 
     document.getElementById('r_pct_bruto').value = parseFloat(data.percentual_bruto).toFixed(4);
+    // Mostrar spread se configurado no contrato
+    if (data.spread && data.spread !== 0) {
+        document.getElementById('r_spread_val').textContent = parseFloat(data.spread).toFixed(4);
+        document.getElementById('r_pct_com_spread').textContent = parseFloat(data.percentual_bruto_com_spread).toFixed(4);
+        document.getElementById('r_spread_row').classList.remove('d-none');
+    } else {
+        document.getElementById('r_spread_row').classList.add('d-none');
+    }
     atualizarPercentualLiquidoUI(data.percentual_final, data.diferenca_total);
     renderizarTabelaPreview(data.parcelas, data.percentual_final);
 
