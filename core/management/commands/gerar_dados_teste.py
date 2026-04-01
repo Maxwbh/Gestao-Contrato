@@ -233,9 +233,10 @@ class Command(BaseCommand):
         for i, d in enumerate(dados[:quantidade]):
             imobiliaria = Imobiliaria.objects.create(
                 contabilidade=contabilidade,
+                tipo_pessoa='PJ',
                 nome=d['nome'],
                 razao_social=f'{d["nome"]} Negócios Imobiliários LTDA',
-                cnpj=f'23.456.78{i}/0001-{10+i}',
+                cnpj=f'23.456.78{i}/0001-{10+i:02d}',
                 cep=d['cep'],
                 logradouro=d['logradouro'],
                 numero=d['numero'],
