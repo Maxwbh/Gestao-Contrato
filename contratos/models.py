@@ -323,20 +323,6 @@ class Contrato(TimeStampedModel):
         help_text='Índice substituto caso o principal seja extinto (ex: INPC se IGPM for extinto)'
     )
 
-    # Dados do Vendedor (pode ser pessoa física diferente da imobiliária)
-    vendedor_nome = models.CharField(
-        max_length=200,
-        blank=True,
-        verbose_name='Nome do Vendedor',
-        help_text='Nome completo do vendedor (quando diferente da imobiliária)'
-    )
-    vendedor_cpf_cnpj = models.CharField(
-        max_length=18,
-        blank=True,
-        verbose_name='CPF/CNPJ do Vendedor',
-        help_text='CPF ou CNPJ do vendedor pessoa física ou jurídica'
-    )
-
     # Cláusulas contratuais
     percentual_fruicao = models.DecimalField(
         max_digits=6,
