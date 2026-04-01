@@ -249,10 +249,10 @@ with connection.cursor() as cursor:
     add_column_if_not_exists(cursor, 'core_imobiliaria', 'cidade', "VARCHAR(100) DEFAULT ''")
     add_column_if_not_exists(cursor, 'core_imobiliaria', 'estado', "VARCHAR(2) DEFAULT ''")
 
-    # Configurações de Boleto
-    add_column_if_not_exists(cursor, 'core_imobiliaria', 'tipo_valor_multa', "VARCHAR(10) DEFAULT 'percentual'")
+    # Configurações de Boleto — defaults MAIÚSCULOS para corresponder ao TipoValor do modelo
+    add_column_if_not_exists(cursor, 'core_imobiliaria', 'tipo_valor_multa', "VARCHAR(10) DEFAULT 'PERCENTUAL'")
     add_column_if_not_exists(cursor, 'core_imobiliaria', 'percentual_multa_padrao', "DECIMAL(10,2) DEFAULT 0")
-    add_column_if_not_exists(cursor, 'core_imobiliaria', 'tipo_valor_juros', "VARCHAR(10) DEFAULT 'percentual'")
+    add_column_if_not_exists(cursor, 'core_imobiliaria', 'tipo_valor_juros', "VARCHAR(10) DEFAULT 'PERCENTUAL'")
     add_column_if_not_exists(cursor, 'core_imobiliaria', 'percentual_juros_padrao', "DECIMAL(10,4) DEFAULT 0")
     add_column_if_not_exists(cursor, 'core_imobiliaria', 'dias_para_encargos_padrao', "INTEGER DEFAULT 0")
     add_column_if_not_exists(cursor, 'core_imobiliaria', 'boleto_sem_valor', "BOOLEAN DEFAULT FALSE")
@@ -260,13 +260,13 @@ with connection.cursor() as cursor:
     add_column_if_not_exists(cursor, 'core_imobiliaria', 'campo_desconto_abatimento_pdf', "BOOLEAN DEFAULT FALSE")
 
     # Descontos
-    add_column_if_not_exists(cursor, 'core_imobiliaria', 'tipo_valor_desconto', "VARCHAR(10) DEFAULT 'percentual'")
+    add_column_if_not_exists(cursor, 'core_imobiliaria', 'tipo_valor_desconto', "VARCHAR(10) DEFAULT 'PERCENTUAL'")
     add_column_if_not_exists(cursor, 'core_imobiliaria', 'percentual_desconto_padrao', "DECIMAL(10,2) DEFAULT 0")
     add_column_if_not_exists(cursor, 'core_imobiliaria', 'dias_para_desconto_padrao', "INTEGER DEFAULT 0")
-    add_column_if_not_exists(cursor, 'core_imobiliaria', 'tipo_valor_desconto2', "VARCHAR(10) DEFAULT 'percentual'")
+    add_column_if_not_exists(cursor, 'core_imobiliaria', 'tipo_valor_desconto2', "VARCHAR(10) DEFAULT 'PERCENTUAL'")
     add_column_if_not_exists(cursor, 'core_imobiliaria', 'desconto2_padrao', "DECIMAL(10,2) DEFAULT 0")
     add_column_if_not_exists(cursor, 'core_imobiliaria', 'dias_para_desconto2_padrao', "INTEGER DEFAULT 0")
-    add_column_if_not_exists(cursor, 'core_imobiliaria', 'tipo_valor_desconto3', "VARCHAR(10) DEFAULT 'percentual'")
+    add_column_if_not_exists(cursor, 'core_imobiliaria', 'tipo_valor_desconto3', "VARCHAR(10) DEFAULT 'PERCENTUAL'")
     add_column_if_not_exists(cursor, 'core_imobiliaria', 'desconto3_padrao', "DECIMAL(10,2) DEFAULT 0")
     add_column_if_not_exists(cursor, 'core_imobiliaria', 'dias_para_desconto3_padrao', "INTEGER DEFAULT 0")
 
@@ -765,8 +765,63 @@ with connection.cursor() as cursor:
             END $$;
         """)
         print("  + Contrato boleto config fields added/verified")
+
+        # =========================================================================
+        # CAMPOS HU-360 / G-11/G-12 — amortização, fallback, cláusulas, intermediárias
+        # Cobertos pelas migrations 0005/0007/0008, mas repetidos aqui como fallback
+        # =========================================================================
+        # Tabela Price / SAC (migration 0008)
+        add_column_if_not_exists(cursor, 'contratos_contrato', 'tipo_amortizacao', "VARCHAR(5) DEFAULT 'PRICE'")
+
+        # Índice fallback (migration 0005)
+        add_column_if_not_exists(cursor, 'contratos_contrato', 'tipo_correcao_fallback', "VARCHAR(10) DEFAULT ''")
+
+        # Cláusulas contratuais (migration 0005)
+        add_column_if_not_exists(cursor, 'contratos_contrato', 'percentual_fruicao', "DECIMAL(10,4) DEFAULT 0")
+        add_column_if_not_exists(cursor, 'contratos_contrato', 'percentual_multa_rescisao_penal', "DECIMAL(10,4) DEFAULT 0")
+        add_column_if_not_exists(cursor, 'contratos_contrato', 'percentual_multa_rescisao_adm', "DECIMAL(10,4) DEFAULT 0")
+        add_column_if_not_exists(cursor, 'contratos_contrato', 'percentual_cessao', "DECIMAL(10,4) DEFAULT 0")
+
+        # Parâmetros de intermediárias (migration 0007)
+        add_column_if_not_exists(cursor, 'contratos_contrato', 'intermediarias_reduzem_pmt', "BOOLEAN DEFAULT FALSE")
+        add_column_if_not_exists(cursor, 'contratos_contrato', 'intermediarias_reajustadas', "BOOLEAN DEFAULT TRUE")
+
+        print("  + Contrato HU-360/G-11/G-12 fields added/verified")
     else:
         print("  - contratos_contrato table not found (will be created by migrations)")
+
+    # =========================================================================
+    # TABELA contratos_tabelajuroscontrato — Juros Escalantes (Q-04)
+    # Criada pela migration 0005, repetida aqui como fallback
+    # =========================================================================
+    print("Checking contratos_tabelajuroscontrato...")
+    cursor.execute("""
+        SELECT 1 FROM information_schema.tables
+        WHERE table_schema = current_schema()
+          AND table_name = 'contratos_tabelajuroscontrato'
+    """)
+    if not cursor.fetchone():
+        cursor.execute("""
+            CREATE TABLE contratos_tabelajuroscontrato (
+                id SERIAL PRIMARY KEY,
+                contrato_id INTEGER NOT NULL REFERENCES contratos_contrato(id) ON DELETE CASCADE,
+                ciclo_inicio INTEGER NOT NULL,
+                ciclo_fim INTEGER NULL,
+                juros_mensal DECIMAL(10,4) NOT NULL DEFAULT 0,
+                observacoes VARCHAR(200) DEFAULT ''
+            )
+        """)
+        cursor.execute("""
+            DO $$
+            BEGIN
+                IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'contratos_t_contrat_56940a_idx') THEN
+                    CREATE INDEX contratos_t_contrat_56940a_idx ON contratos_tabelajuroscontrato(contrato_id, ciclo_inicio);
+                END IF;
+            END $$;
+        """)
+        print("  + Created table contratos_tabelajuroscontrato")
+    else:
+        print("  - contratos_tabelajuroscontrato already exists")
 
     # =========================================================================
     # TABELAS DE SISTEMA DJANGO — garantir que existem no schema correto
