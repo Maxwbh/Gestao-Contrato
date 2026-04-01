@@ -502,45 +502,6 @@ class Contrato(TimeStampedModel):
         help_text='Terceira linha de instrução do boleto'
     )
 
-    # ============================================================
-    # Testemunhas do Contrato (G-14)
-    # ============================================================
-    testemunha_1_nome = models.CharField(
-        max_length=200,
-        blank=True,
-        verbose_name='Testemunha 1 — Nome',
-        help_text='Nome completo da primeira testemunha'
-    )
-    testemunha_1_cpf = models.CharField(
-        max_length=14,
-        blank=True,
-        verbose_name='Testemunha 1 — CPF',
-        help_text='CPF da primeira testemunha (formato XXX.XXX.XXX-XX)'
-    )
-    testemunha_2_nome = models.CharField(
-        max_length=200,
-        blank=True,
-        verbose_name='Testemunha 2 — Nome',
-        help_text='Nome completo da segunda testemunha'
-    )
-    testemunha_2_cpf = models.CharField(
-        max_length=14,
-        blank=True,
-        verbose_name='Testemunha 2 — CPF',
-        help_text='CPF da segunda testemunha (formato XXX.XXX.XXX-XX)'
-    )
-
-    # ============================================================
-    # Prazo para Lavratura de Escritura (G-15)
-    # ============================================================
-    prazo_escritura_dias = models.IntegerField(
-        default=90,
-        blank=True,
-        null=True,
-        verbose_name='Prazo para Escritura (dias)',
-        help_text='Prazo em dias após quitação para lavratura de escritura pública (padrão: 90 dias = 60+30)'
-    )
-
     # Observações
     observacoes = models.TextField(
         blank=True,
