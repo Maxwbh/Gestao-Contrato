@@ -153,6 +153,12 @@ class StatusContrato(models.TextChoices):
     SUSPENSO = 'SUSPENSO', 'Suspenso'
 
 
+class TipoAmortizacao(models.TextChoices):
+    """Sistema de amortização do contrato"""
+    PRICE = 'PRICE', 'Tabela Price (PMT constante por ciclo)'
+    SAC = 'SAC', 'SAC — Amortização Constante (PMT decrescente)'
+
+
 class TipoPrestacao(models.TextChoices):
     """Tipos de prestação"""
     NORMAL = 'NORMAL', 'Normal'
@@ -356,6 +362,18 @@ class Contrato(TimeStampedModel):
         verbose_name='Taxa de Cessão de Direitos (%)',
         help_text='Percentual cobrado sobre o valor atualizado para cessão de direitos a terceiros'
     )
+    # Sistema de Amortização
+    tipo_amortizacao = models.CharField(
+        max_length=10,
+        choices=TipoAmortizacao.choices,
+        default=TipoAmortizacao.PRICE,
+        verbose_name='Sistema de Amortização',
+        help_text=(
+            'Tabela Price: PMT constante por ciclo, juros decrescentes, amortização crescente. '
+            'SAC: amortização constante, PMT e juros decrescentes a cada período.'
+        )
+    )
+
     # Parâmetros de Intermediárias
     intermediarias_reduzem_pmt = models.BooleanField(
         default=False,
@@ -703,6 +721,60 @@ class Contrato(TimeStampedModel):
 
         return parcelas_criadas
 
+    def recalcular_amortizacao(self, base_pv=None):
+        """
+        Recalcula valor_original, valor_atual, amortizacao e juros_embutido
+        de todas as parcelas NORMAL não pagas, de acordo com tipo_amortizacao e
+        a TabelaJurosContrato do ciclo 1.
+
+        Chamado pelo wizard após criar TabelaJurosContrato, ou manualmente via admin.
+
+        Args:
+            base_pv: Valor presente base. Se None, usa valor_financiado.
+        """
+        from financeiro.models import Parcela as ParcelaModel
+        from django.db.models import Sum
+
+        pv = base_pv if base_pv is not None else self.valor_financiado
+        if pv <= 0 or self.numero_parcelas <= 0:
+            return
+
+        taxa = TabelaJurosContrato.get_juros_para_ciclo(self, 1) or Decimal('0')
+
+        parcelas_qs = self.parcelas.filter(
+            tipo_parcela='NORMAL'
+        ).order_by('numero_parcela')
+
+        n = parcelas_qs.count()
+        if n == 0:
+            return
+
+        if self.tipo_amortizacao == TipoAmortizacao.SAC:
+            # SAC: amortização constante = PV / n; juros_k = saldo_k × taxa/100
+            tabela = ParcelaModel._calcular_sac_tabela(pv, taxa, n)
+        else:
+            # Tabela Price: PMT constante = PV × i / (1-(1+i)^-n)
+            tabela = ParcelaModel._calcular_price_tabela(pv, taxa, n)
+
+        updates = []
+        for parcela, (pmt_k, amort_k, juros_k) in zip(parcelas_qs, tabela):
+            parcela.valor_original = pmt_k
+            parcela.valor_atual = pmt_k
+            parcela.amortizacao = amort_k
+            parcela.juros_embutido = juros_k
+            updates.append(parcela)
+
+        ParcelaModel.objects.bulk_update(
+            updates, ['valor_original', 'valor_atual', 'amortizacao', 'juros_embutido']
+        )
+
+        # Atualizar valor_parcela_original no contrato
+        if updates:
+            self.valor_parcela_original = updates[0].valor_original
+            type(self).objects.filter(pk=self.pk).update(
+                valor_parcela_original=self.valor_parcela_original
+            )
+
     def gerar_boletos_parcelas(self, parcelas=None, conta_bancaria=None):
         """
         Gera boletos para as parcelas do contrato.
@@ -767,20 +839,21 @@ class Contrato(TimeStampedModel):
 
     def calcular_saldo_devedor(self):
         """
-        Calcula o saldo devedor como soma das parcelas normais em aberto.
+        Calcula o saldo devedor das parcelas normais em aberto.
 
-        Este método é correto para contratos com juros compostos embutidos nas
-        parcelas (tabela price, juros escalantes), onde o saldo devedor contratual
-        é o total das parcelas futuras e não a diferença simples financiado − pago.
-        Parcelas de entrada e intermediárias são excluídas — referem-se a valores
-        já tratados separadamente no fluxo do contrato.
+        - Tabela Price: soma de valor_atual (PMTs futuros = total futuro comprometido)
+        - SAC: soma de amortizacao das parcelas pendentes (principal restante real)
+          Se amortizacao não preenchida ainda, cai para valor_atual como fallback.
         """
         from django.db.models import Sum
-        saldo = self.parcelas.filter(
-            pago=False,
-            tipo_parcela='NORMAL'
-        ).aggregate(total=Sum('valor_atual'))['total'] or Decimal('0.00')
-        return saldo
+        qs = self.parcelas.filter(pago=False, tipo_parcela='NORMAL')
+        if self.tipo_amortizacao == TipoAmortizacao.SAC:
+            saldo = qs.aggregate(total=Sum('amortizacao'))['total']
+            if saldo is None:
+                saldo = qs.aggregate(total=Sum('valor_atual'))['total'] or Decimal('0.00')
+        else:
+            saldo = qs.aggregate(total=Sum('valor_atual'))['total'] or Decimal('0.00')
+        return saldo or Decimal('0.00')
 
     def validar_soma_intermediarias(self):
         """
