@@ -288,6 +288,88 @@ class Contrato(TimeStampedModel):
         blank=True,
         verbose_name='Data do Último Reajuste'
     )
+    reajuste_piso = models.DecimalField(
+        max_digits=8,
+        decimal_places=4,
+        null=True,
+        blank=True,
+        validators=[MinValueValidator(Decimal('0'))],
+        verbose_name='Piso de Reajuste (%)',
+        help_text='Percentual mínimo aplicado ao reajuste (ex: 0 para nunca aplicar deflação)'
+    )
+    reajuste_teto = models.DecimalField(
+        max_digits=8,
+        decimal_places=4,
+        null=True,
+        blank=True,
+        validators=[MinValueValidator(Decimal('0'))],
+        verbose_name='Teto de Reajuste (%)',
+        help_text='Percentual máximo aplicado ao reajuste (ex: 15 para limitar a 15%)'
+    )
+    spread_reajuste = models.DecimalField(
+        max_digits=8,
+        decimal_places=4,
+        null=True,
+        blank=True,
+        default=Decimal('0'),
+        verbose_name='Spread de Reajuste (p.p.)',
+        help_text='Pontos percentuais adicionados ao índice (ex: IPCA + 2 p.p. → spread=2.0000)'
+    )
+    tipo_correcao_fallback = models.CharField(
+        max_length=10,
+        choices=TipoCorrecao.choices,
+        blank=True,
+        verbose_name='Índice de Fallback',
+        help_text='Índice substituto caso o principal seja extinto (ex: INPC se IGPM for extinto)'
+    )
+
+    # Dados do Vendedor (pode ser pessoa física diferente da imobiliária)
+    vendedor_nome = models.CharField(
+        max_length=200,
+        blank=True,
+        verbose_name='Nome do Vendedor',
+        help_text='Nome completo do vendedor (quando diferente da imobiliária)'
+    )
+    vendedor_cpf_cnpj = models.CharField(
+        max_length=18,
+        blank=True,
+        verbose_name='CPF/CNPJ do Vendedor',
+        help_text='CPF ou CNPJ do vendedor pessoa física ou jurídica'
+    )
+
+    # Cláusulas contratuais
+    percentual_fruicao = models.DecimalField(
+        max_digits=6,
+        decimal_places=4,
+        default=Decimal('0.5000'),
+        validators=[MinValueValidator(Decimal('0')), MaxValueValidator(Decimal('100'))],
+        verbose_name='Taxa de Fruição (% a.m.)',
+        help_text='Percentual mensal de fruição em caso de rescisão (uso do imóvel pelo comprador)'
+    )
+    percentual_multa_rescisao_penal = models.DecimalField(
+        max_digits=6,
+        decimal_places=4,
+        default=Decimal('10.0000'),
+        validators=[MinValueValidator(Decimal('0')), MaxValueValidator(Decimal('100'))],
+        verbose_name='Multa Penal de Rescisão (%)',
+        help_text='Percentual de cláusula penal retido em caso de rescisão pelo comprador'
+    )
+    percentual_multa_rescisao_adm = models.DecimalField(
+        max_digits=6,
+        decimal_places=4,
+        default=Decimal('12.0000'),
+        validators=[MinValueValidator(Decimal('0')), MaxValueValidator(Decimal('100'))],
+        verbose_name='Despesas Administrativas de Rescisão (%)',
+        help_text='Percentual de despesas administrativas retido em caso de rescisão'
+    )
+    percentual_cessao = models.DecimalField(
+        max_digits=6,
+        decimal_places=4,
+        default=Decimal('3.0000'),
+        validators=[MinValueValidator(Decimal('0')), MaxValueValidator(Decimal('100'))],
+        verbose_name='Taxa de Cessão de Direitos (%)',
+        help_text='Percentual cobrado sobre o valor atualizado para cessão de direitos a terceiros'
+    )
 
     # Status
     status = models.CharField(
@@ -678,10 +760,21 @@ class Contrato(TimeStampedModel):
         return valor_pago + self.valor_entrada
 
     def calcular_saldo_devedor(self):
-        """Calcula o saldo devedor atual"""
-        valor_pago = self.calcular_valor_pago() - self.valor_entrada
-        saldo_devedor = self.valor_financiado - valor_pago
-        return max(saldo_devedor, Decimal('0.00'))
+        """
+        Calcula o saldo devedor como soma das parcelas normais em aberto.
+
+        Este método é correto para contratos com juros compostos embutidos nas
+        parcelas (tabela price, juros escalantes), onde o saldo devedor contratual
+        é o total das parcelas futuras e não a diferença simples financiado − pago.
+        Parcelas de entrada e intermediárias são excluídas — referem-se a valores
+        já tratados separadamente no fluxo do contrato.
+        """
+        from django.db.models import Sum
+        saldo = self.parcelas.filter(
+            pago=False,
+            tipo_parcela='NORMAL'
+        ).aggregate(total=Sum('valor_atual'))['total'] or Decimal('0.00')
+        return saldo
 
     def validar_soma_intermediarias(self):
         """
@@ -913,6 +1006,86 @@ class Contrato(TimeStampedModel):
             'ciclo_atual': self.ciclo_reajuste_atual,
             'bloqueio_reajuste': self.bloqueio_boleto_reajuste,
         }
+
+
+class TabelaJurosContrato(TimeStampedModel):
+    """
+    Tabela de juros compostos escalantes por ciclo de reajuste.
+
+    Permite modelar contratos onde a taxa de juros mensais embutida nas parcelas
+    varia conforme o ano/ciclo (ex: Ano 1 fixo, Ano 2: 0,60% a.m., Ano 3: 0,65% a.m.).
+    Esta estrutura substitui o campo único `spread_reajuste` para contratos com
+    juros progressivos definidos em cláusula contratual.
+
+    Exemplo (Minuta Parque das Nogueiras):
+        ciclo 1: juros_mensal=0.0000  (parcela fixa no 1º ano)
+        ciclo 2: juros_mensal=0.6000
+        ciclo 3: juros_mensal=0.6500
+        ...
+        ciclo 7, ciclo_fim=None: juros_mensal=0.8500  (ciclos 7 em diante)
+    """
+    contrato = models.ForeignKey(
+        'Contrato',
+        on_delete=models.CASCADE,
+        related_name='tabela_juros',
+        verbose_name='Contrato'
+    )
+    ciclo_inicio = models.PositiveIntegerField(
+        validators=[MinValueValidator(1)],
+        verbose_name='Ciclo Início',
+        help_text='Primeiro ciclo de reajuste em que esta taxa se aplica (1 = ano 1)'
+    )
+    ciclo_fim = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+        validators=[MinValueValidator(1)],
+        verbose_name='Ciclo Fim',
+        help_text='Último ciclo de aplicação. Deixe em branco para "este ciclo em diante"'
+    )
+    juros_mensal = models.DecimalField(
+        max_digits=8,
+        decimal_places=4,
+        validators=[MinValueValidator(Decimal('0'))],
+        verbose_name='Juros Mensais (%)',
+        help_text='Taxa de juros compostos mensais embutida nas parcelas deste ciclo (ex: 0.6000 = 0,60% a.m.)'
+    )
+    observacoes = models.CharField(
+        max_length=200,
+        blank=True,
+        verbose_name='Observações',
+        help_text='Ex: Conforme cláusula 8.2 do contrato'
+    )
+
+    class Meta:
+        verbose_name = 'Tabela de Juros por Ciclo'
+        verbose_name_plural = 'Tabela de Juros por Ciclo'
+        ordering = ['contrato', 'ciclo_inicio']
+        indexes = [
+            models.Index(fields=['contrato', 'ciclo_inicio']),
+        ]
+
+    def __str__(self):
+        fim = str(self.ciclo_fim) if self.ciclo_fim else '∞'
+        return f"Contrato {self.contrato.numero_contrato} — Ciclos {self.ciclo_inicio}–{fim}: {self.juros_mensal}% a.m."
+
+    def clean(self):
+        if self.ciclo_fim is not None and self.ciclo_fim < self.ciclo_inicio:
+            raise ValidationError({'ciclo_fim': 'Ciclo Fim deve ser maior ou igual ao Ciclo Início.'})
+
+    @classmethod
+    def get_juros_para_ciclo(cls, contrato, ciclo):
+        """
+        Retorna a taxa de juros mensal configurada para um dado ciclo de reajuste.
+        Retorna None se não houver tabela configurada para o contrato/ciclo.
+        """
+        faixa = cls.objects.filter(
+            contrato=contrato,
+            ciclo_inicio__lte=ciclo,
+        ).filter(
+            models.Q(ciclo_fim__gte=ciclo) | models.Q(ciclo_fim__isnull=True)
+        ).order_by('-ciclo_inicio').first()
+
+        return faixa.juros_mensal if faixa else None
 
 
 class PrestacaoIntermediaria(TimeStampedModel):
