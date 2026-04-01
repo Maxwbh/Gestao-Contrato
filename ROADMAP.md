@@ -380,7 +380,7 @@
 | G-04 | **Multa penal de rescisão** — 10% do valor atualizado retido pelo vendedor | `Contrato.percentual_multa_rescisao_penal` (default 10,0000%) | ✅ |
 | G-05 | **Despesas administrativas de rescisão** — 12% retido | `Contrato.percentual_multa_rescisao_adm` (default 12,0000%) | ✅ |
 | G-06 | **Taxa de cessão de direitos** — 3% sobre valor atualizado | `Contrato.percentual_cessao` (default 3,0000%) | ✅ |
-| G-07 | **Juros compostos escalantes por ano** — ano 1 fixo, ano 2: 0,60% a.m., ano 3: 0,65%… ano 7+: 0,85% a.m. | Novo model `TabelaJurosContrato` (ciclo_inicio, ciclo_fim, juros_mensal); `get_juros_para_ciclo()` usado no `preview_reajuste()` com precedência sobre `spread_reajuste` fixo | ✅ |
+| G-07 | **Juros compostos escalantes por ano** — ano 1 fixo, ano 2: 0,60% a.m., ano 3: 0,65%… ano 7+: 0,85% a.m. | `TabelaJurosContrato` + cálculo Tabela Price correto: `preview_reajuste()` e `aplicar_reajuste()` distinguem **MODO TABELA PRICE** (PMT recalculado sobre saldo atualizado, todas as parcelas restantes) de **MODO SIMPLES** (multiplicação por fator, apenas ciclo atual). `_calcular_pmt()` implementa `PMT = PV × i / (1−(1+i)^−n)` | ✅ |
 | G-08 | **`calcular_saldo_devedor()` incorreto** para contratos com tabela price / juros compostos embutidos | Reescrito: soma `valor_atual` das parcelas NORMAL não pagas (correto para qualquer estrutura de parcelas, inclusive price) | ✅ |
 | G-09 | **`Imovel.identificacao` como texto livre** — genérico o suficiente para lote, apto, sala, endereço DF, quarto de hotel | Mantido genérico; help_text atualizado com exemplos variados. Campos específicos `quadra`/`lote` propostos e revertidos por decisão de design | ✅ |
 
@@ -465,5 +465,8 @@
 - `TabelaJurosContrato` — juros escalantes por ciclo (0,60% → 0,85% a.m.)
 - `calcular_saldo_devedor()` — corrigido para tabela price e juros compostos
 - Fallback de índice automático em `preview_reajuste()`
-- 6 novos campos no `Contrato` (vendedor, cláusulas contratuais)
+- Cláusulas contratuais no `Contrato` (fruição, rescisão, cessão)
 - Admin, navegação e dados de teste atualizados
+- `preview_reajuste()` e `aplicar_reajuste()` com **MODO TABELA PRICE**: PMT recalculado sobre saldo atualizado pelo índice, aplicado a todas as parcelas restantes. Método `_calcular_pmt()` adicionado ao `Reajuste`.
+- Bug corrigido: intermediárias usavam percentual bruto, agora usam `perc_final` (com piso/teto)
+- `criar_reajuste_ciclo()` depreciado com `DeprecationWarning`
