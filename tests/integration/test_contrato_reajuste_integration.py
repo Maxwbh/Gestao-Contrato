@@ -420,7 +420,7 @@ def imobiliaria_factory(db, contabilidade_factory):
         defaults = {
             'contabilidade': kwargs.pop('contabilidade', None) or contabilidade_factory(),
             'razao_social': 'Imobiliária Teste LTDA',
-            'nome_fantasia': 'Imobiliária Teste',
+            'nome': 'Imobiliária Teste', 'razao_social': 'Imobiliária Teste LTDA',
             'cnpj': f'1234567800{int(timezone.now().timestamp()) % 10000:04d}',
             'email': 'teste@imobiliaria.com',
         }
