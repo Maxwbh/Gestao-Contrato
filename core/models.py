@@ -526,6 +526,18 @@ class Imovel(TimeStampedModel):
         verbose_name='Identificação',
         help_text='Ex: Quadra 1, Lote 15'
     )
+    quadra = models.CharField(
+        max_length=20,
+        blank=True,
+        verbose_name='Quadra',
+        help_text='Identificação da quadra/bloco (ex: A, B, 01)'
+    )
+    lote = models.CharField(
+        max_length=20,
+        blank=True,
+        verbose_name='Lote',
+        help_text='Número do lote (ex: 13, 15A)'
+    )
     loteamento = models.CharField(
         max_length=200,
         blank=True,
