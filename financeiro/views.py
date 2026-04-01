@@ -1965,6 +1965,11 @@ def preview_reajuste_contrato(request, contrato_id):
             'desconto_percentual': float(resultado['desconto_percentual']),
             'desconto_valor': float(resultado['desconto_valor']),
             'percentual_liquido': float(resultado['percentual_liquido']),
+            'percentual_final': float(resultado['percentual_final']),
+            'piso': float(resultado['piso']) if resultado['piso'] is not None else None,
+            'teto': float(resultado['teto']) if resultado['teto'] is not None else None,
+            'piso_ativado': resultado['piso_ativado'],
+            'teto_ativado': resultado['teto_ativado'],
             'parcela_inicial': resultado['parcela_inicial'],
             'parcela_final': resultado['parcela_final'],
             'parcelas': parcelas_json,
@@ -2001,6 +2006,13 @@ def aplicar_reajuste_contrato(request, contrato_id):
     """
     contrato = get_object_or_404(Contrato, pk=contrato_id)
 
+    # Capturar IP do usuário
+    def get_client_ip(req):
+        x_forwarded = req.META.get('HTTP_X_FORWARDED_FOR')
+        if x_forwarded:
+            return x_forwarded.split(',')[0].strip()
+        return req.META.get('REMOTE_ADDR')
+
     try:
         import json
         data = json.loads(request.body) if request.content_type == 'application/json' else request.POST
@@ -2026,16 +2038,20 @@ def aplicar_reajuste_contrato(request, contrato_id):
                 contrato=contrato,
                 data_reajuste=timezone.now().date(),
                 indice_tipo=preview['indice_tipo'],
-                percentual=preview['percentual_liquido'],
+                percentual=preview['percentual_final'],
                 percentual_bruto=preview['percentual_bruto'],
                 desconto_percentual=Decimal(str(desconto_percentual)) if desconto_percentual else None,
                 desconto_valor=Decimal(str(desconto_valor)) if desconto_valor else None,
+                piso_aplicado=preview['piso'],
+                teto_aplicado=preview['teto'],
                 parcela_inicial=preview['parcela_inicial'],
                 parcela_final=preview['parcela_final'],
                 ciclo=ciclo,
                 periodo_referencia_inicio=preview['periodo_referencia_inicio'],
                 periodo_referencia_fim=preview['periodo_referencia_fim'],
                 aplicado_manual=True,
+                usuario=request.user,
+                ip_address=get_client_ip(request),
                 observacoes=observacoes,
             )
 
@@ -2067,6 +2083,8 @@ def aplicar_reajuste_contrato(request, contrato_id):
                 parcela_final=parcela_final,
                 ciclo=ciclo,
                 aplicado_manual=True,
+                usuario=request.user,
+                ip_address=get_client_ip(request),
                 observacoes=observacoes,
             )
 
@@ -2157,21 +2175,15 @@ def reajustes_pendentes(request):
 def excluir_reajuste(request, pk):
     """
     Exclui um reajuste e reverte os valores das parcelas.
-    Apenas reajustes manuais podem ser excluidos.
     """
     reajuste = get_object_or_404(Reajuste, pk=pk)
-
-    if not reajuste.aplicado_manual:
-        return JsonResponse({
-            'sucesso': False,
-            'erro': 'Apenas reajustes manuais podem ser excluidos'
-        }, status=400)
 
     try:
         contrato = reajuste.contrato
 
-        # Reverter o reajuste nas parcelas
-        fator_reajuste = 1 + (reajuste.percentual / 100)
+        # Calcular o fator efetivamente aplicado (percentual já inclui teto/piso)
+        perc_aplicado = reajuste.percentual
+        fator_reajuste = 1 + (perc_aplicado / 100)
 
         parcelas = contrato.parcelas.filter(
             numero_parcela__gte=reajuste.parcela_inicial,
@@ -2181,8 +2193,25 @@ def excluir_reajuste(request, pk):
 
         for parcela in parcelas:
             # Reverter o valor (dividir pelo fator aplicado)
-            parcela.valor_atual = parcela.valor_atual / fator_reajuste
-            parcela.save()
+            if fator_reajuste != 0:
+                parcela.valor_atual = (parcela.valor_atual / fator_reajuste).quantize(Decimal('0.01'))
+            parcela.save(update_fields=['valor_atual'])
+
+        # Reverter intermediárias
+        intermediarias = contrato.intermediarias.filter(
+            paga=False,
+            mes_vencimento__gte=reajuste.parcela_inicial,
+            mes_vencimento__lte=reajuste.parcela_final,
+        )
+        for inter in intermediarias:
+            if fator_reajuste != 0:
+                inter.valor_atual = (inter.valor_atual / fator_reajuste).quantize(Decimal('0.01'))
+            inter.save(update_fields=['valor_atual'])
+
+        # Restaurar ciclo_reajuste_atual do contrato
+        if contrato.ciclo_reajuste_atual >= reajuste.ciclo:
+            contrato.ciclo_reajuste_atual = reajuste.ciclo - 1
+            contrato.save(update_fields=['ciclo_reajuste_atual'])
 
         # Excluir o registro de reajuste
         reajuste.delete()
