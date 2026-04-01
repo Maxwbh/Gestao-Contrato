@@ -928,16 +928,40 @@ class Contrato(TimeStampedModel):
         """
         return ((numero_parcela - 1) // self.prazo_reajuste_meses) + 1
 
+    def get_primeiro_ciclo_bloqueado(self):
+        """
+        Retorna o número do primeiro ciclo cujo reajuste já venceu mas não foi aplicado.
+
+        Returns:
+            int | None: número do ciclo bloqueado, ou None se não há bloqueio.
+        """
+        if self.tipo_correcao == TipoCorrecao.FIXO:
+            return None
+
+        prazo = self.prazo_reajuste_meses or 12
+        from django.utils import timezone as tz
+
+        hoje = tz.now().date()
+        total_ciclos = (self.numero_parcelas - 1) // prazo + 1
+
+        for ciclo in range(2, total_ciclos + 1):
+            data_reajuste = self.data_contrato + relativedelta(months=(ciclo - 1) * prazo)
+            if hoje < data_reajuste:
+                break  # ciclos futuros não bloqueiam
+            from financeiro.models import Reajuste
+            if not Reajuste.objects.filter(contrato=self, ciclo=ciclo, aplicado=True).exists():
+                return ciclo
+
+        return None
+
     def pode_gerar_boleto(self, numero_parcela):
         """
         Verifica se é possível gerar boleto para uma parcela específica.
 
-        Regra: o boleto só é bloqueado se:
-          1. a parcela pertence a um ciclo > 1
-          2. a data prevista do reajuste desse ciclo já passou (hoje >= data_prevista)
-          3. o reajuste do ciclo ainda não foi aplicado
+        Regra de cascata: se QUALQUER ciclo entre 2 e o ciclo da parcela já
+        venceu (hoje >= data_prevista) e ainda não foi aplicado, a parcela e
+        todas as subsequentes ficam bloqueadas.
 
-        Quando hoje < data_prevista, a geração antecipada é permitida.
         Índice FIXO nunca bloqueia.
 
         Args:
@@ -952,38 +976,31 @@ class Contrato(TimeStampedModel):
         prazo = self.prazo_reajuste_meses or 12
         ciclo_parcela = (numero_parcela - 1) // prazo + 1
 
-        if ciclo_parcela == 1:
+        if ciclo_parcela <= 1:
             return True, "Primeiro ciclo — liberado."
 
-        from dateutil.relativedelta import relativedelta
         from django.utils import timezone as tz
 
-        data_reajuste_prevista = (
-            self.data_contrato
-            + relativedelta(months=(ciclo_parcela - 1) * prazo)
-        )
+        hoje = tz.now().date()
 
-        if tz.now().date() < data_reajuste_prevista:
-            return True, (
-                f"Reajuste do ciclo {ciclo_parcela} ainda não vencido "
-                f"(previsto {data_reajuste_prevista.strftime('%d/%m/%Y')})."
-            )
+        # Verifica em cascata do ciclo 2 até o ciclo desta parcela
+        for ciclo_check in range(2, ciclo_parcela + 1):
+            data_reajuste = self.data_contrato + relativedelta(months=(ciclo_check - 1) * prazo)
+            if hoje < data_reajuste:
+                break  # ciclo ainda não venceu
 
-        from financeiro.models import Reajuste
-        reajuste_aplicado = Reajuste.objects.filter(
-            contrato=self,
-            ciclo=ciclo_parcela,
-            aplicado=True
-        ).exists()
+            from financeiro.models import Reajuste
+            reajuste_aplicado = Reajuste.objects.filter(
+                contrato=self, ciclo=ciclo_check, aplicado=True
+            ).exists()
+            if not reajuste_aplicado:
+                return False, (
+                    f"Reajuste do ciclo {ciclo_check} pendente desde "
+                    f"{data_reajuste.strftime('%d/%m/%Y')}. "
+                    f"Execute o reajuste antes de gerar boletos."
+                )
 
-        if reajuste_aplicado:
-            return True, f"Reajuste do ciclo {ciclo_parcela} aplicado."
-
-        return False, (
-            f"Reajuste do ciclo {ciclo_parcela} pendente desde "
-            f"{data_reajuste_prevista.strftime('%d/%m/%Y')}. "
-            f"Execute o reajuste antes de gerar boletos."
-        )
+        return True, f"Reajuste do ciclo {ciclo_parcela} aplicado."
 
     def verificar_bloqueio_reajuste(self):
         """
