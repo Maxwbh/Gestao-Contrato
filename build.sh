@@ -80,6 +80,37 @@ if database_url:
     else:
         print('auth_user existe no schema gestao_contrato - OK.')
 
+    # Verificar django_session no schema gestao_contrato
+    # Se estiver ausente (pode ter sido criada em public antes da search_path ser configurada),
+    # forçar reaplicação da migration de sessions
+    cursor.execute("""
+        SELECT EXISTS (
+            SELECT 1 FROM information_schema.tables
+            WHERE table_schema = 'gestao_contrato'
+            AND table_name = 'django_session'
+        )
+    """)
+    session_exists = cursor.fetchone()[0]
+
+    if not session_exists:
+        print('ATENCAO: django_session nao existe em gestao_contrato.')
+        cursor.execute("""
+            SELECT EXISTS (
+                SELECT 1 FROM information_schema.tables
+                WHERE table_schema = 'gestao_contrato'
+                AND table_name = 'django_migrations'
+            )
+        """)
+        migrations_exists2 = cursor.fetchone()[0]
+        if migrations_exists2:
+            cursor.execute("""
+                DELETE FROM gestao_contrato.django_migrations
+                WHERE app = 'sessions'
+            """)
+            print('Registro sessions removido de django_migrations - sera reaplicado.')
+    else:
+        print('django_session existe em gestao_contrato - OK.')
+
     cursor.close()
     conn.close()
 else:
@@ -693,6 +724,132 @@ with connection.cursor() as cursor:
     else:
         print("  - contratos_contrato table not found (will be created by migrations)")
 
+    # =========================================================================
+    # TABELAS DE SISTEMA DJANGO — garantir que existem no schema correto
+    # Problema: se search_path mudou após o primeiro migrate, essas tabelas
+    # podem estar no schema 'public' mas não em 'gestao_contrato'.
+    # =========================================================================
+    print("Ensuring Django system tables exist in gestao_contrato schema...")
+
+    # django_session — necessária para qualquer login (incluindo admin)
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS django_session (
+            session_key  varchar(40)  NOT NULL PRIMARY KEY,
+            session_data text         NOT NULL,
+            expire_date  timestamptz  NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS django_session_de54fa62
+            ON django_session (expire_date);
+        CREATE INDEX IF NOT EXISTS django_session_a7c96b15
+            ON django_session (session_key varchar_pattern_ops);
+    """)
+    print("  + django_session OK")
+
+    # django_content_type — necessária para admin, permissions, log
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS django_content_type (
+            id         serial       NOT NULL PRIMARY KEY,
+            app_label  varchar(100) NOT NULL,
+            model      varchar(100) NOT NULL,
+            UNIQUE (app_label, model)
+        );
+    """)
+    print("  + django_content_type OK")
+
+    # auth_permission — necessária para admin
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS auth_permission (
+            id               serial       NOT NULL PRIMARY KEY,
+            content_type_id  integer      NOT NULL
+                REFERENCES django_content_type(id) ON DELETE CASCADE
+                DEFERRABLE INITIALLY DEFERRED,
+            codename         varchar(100) NOT NULL,
+            name             varchar(255) NOT NULL,
+            UNIQUE (content_type_id, codename)
+        );
+        CREATE INDEX IF NOT EXISTS auth_permission_content_type_id_codename
+            ON auth_permission (content_type_id, codename);
+    """)
+    print("  + auth_permission OK")
+
+    # auth_user_user_permissions M2M
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS auth_user_user_permissions (
+            id             bigserial NOT NULL PRIMARY KEY,
+            user_id        integer   NOT NULL
+                REFERENCES auth_user(id) ON DELETE CASCADE
+                DEFERRABLE INITIALLY DEFERRED,
+            permission_id  integer   NOT NULL
+                REFERENCES auth_permission(id) ON DELETE CASCADE
+                DEFERRABLE INITIALLY DEFERRED,
+            UNIQUE (user_id, permission_id)
+        );
+    """)
+    print("  + auth_user_user_permissions OK")
+
+    # auth_group
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS auth_group (
+            id    serial       NOT NULL PRIMARY KEY,
+            name  varchar(150) NOT NULL UNIQUE
+        );
+    """)
+    print("  + auth_group OK")
+
+    # auth_group_permissions M2M
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS auth_group_permissions (
+            id            bigserial NOT NULL PRIMARY KEY,
+            group_id      integer   NOT NULL
+                REFERENCES auth_group(id) ON DELETE CASCADE
+                DEFERRABLE INITIALLY DEFERRED,
+            permission_id integer   NOT NULL
+                REFERENCES auth_permission(id) ON DELETE CASCADE
+                DEFERRABLE INITIALLY DEFERRED,
+            UNIQUE (group_id, permission_id)
+        );
+    """)
+    print("  + auth_group_permissions OK")
+
+    # auth_user_groups M2M
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS auth_user_groups (
+            id       bigserial NOT NULL PRIMARY KEY,
+            user_id  integer   NOT NULL
+                REFERENCES auth_user(id) ON DELETE CASCADE
+                DEFERRABLE INITIALLY DEFERRED,
+            group_id integer   NOT NULL
+                REFERENCES auth_group(id) ON DELETE CASCADE
+                DEFERRABLE INITIALLY DEFERRED,
+            UNIQUE (user_id, group_id)
+        );
+    """)
+    print("  + auth_user_groups OK")
+
+    # django_admin_log — necessária para admin (log de ações)
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS django_admin_log (
+            id               serial       NOT NULL PRIMARY KEY,
+            action_time      timestamptz  NOT NULL,
+            object_id        text         NULL,
+            object_repr      varchar(200) NOT NULL,
+            action_flag      smallint     NOT NULL CHECK (action_flag >= 0),
+            change_message   text         NOT NULL,
+            content_type_id  integer      NULL
+                REFERENCES django_content_type(id) ON DELETE SET NULL
+                DEFERRABLE INITIALLY DEFERRED,
+            user_id          integer      NOT NULL
+                REFERENCES auth_user(id) ON DELETE CASCADE
+                DEFERRABLE INITIALLY DEFERRED
+        );
+        CREATE INDEX IF NOT EXISTS django_admin_log_content_type_id
+            ON django_admin_log (content_type_id);
+        CREATE INDEX IF NOT EXISTS django_admin_log_user_id
+            ON django_admin_log (user_id);
+    """)
+    print("  + django_admin_log OK")
+
+    print("Django system tables ensured.")
     print("All schema changes applied successfully!")
 SQLEOF
 
