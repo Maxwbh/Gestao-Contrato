@@ -211,8 +211,8 @@
                 <div class="progress progress-lg">
                     <div class="progress-bar {% if progresso >= 100 %}bg-success{% elif progresso >= 50 %}bg-info{% else %}bg-warning{% endif %}"
                          role="progressbar"
-                         style="width: {{ progresso }}%"
-                         aria-valuenow="{{ progresso }}"
+                         style="width: {{ progresso|stringformat:'f' }}%"
+                         aria-valuenow="{{ progresso|stringformat:'f' }}"
                          aria-valuemin="0"
                          aria-valuemax="100">
                         {{ progresso|floatformat:1 }}%
@@ -547,9 +547,9 @@
                 <div class="card mb-3">
                     <div class="card-header bg-secondary text-white d-flex justify-content-between align-items-center">
                         <span><i class="fas fa-chart-line"></i> Reajustes</span>
-                        <button type="button" class="btn btn-sm btn-light" onclick="abrirModalReajuste()">
-                            <i class="fas fa-plus"></i> Novo
-                        </button>
+                        <a href="{% url 'financeiro:aplicar_reajuste' contrato_id=contrato.pk %}" class="btn btn-sm btn-light">
+                            <i class="fas fa-plus"></i> Aplicar Reajuste
+                        </a>
                     </div>
                     <div class="card-body p-0">
                         {% if reajustes %}
