@@ -42,6 +42,37 @@
           {% endfor %}
         {% endif %}
 
+        <!-- Configuração de Intermediárias -->
+        <div class="card mb-4 border-primary">
+          <div class="card-header bg-primary bg-opacity-10">
+            <i class="fas fa-cog me-2"></i><strong>Configuração de Intermediárias</strong>
+          </div>
+          <div class="card-body">
+            <div class="row">
+              <div class="col-md-6 mb-2">
+                <div class="form-check form-switch">
+                  <input class="form-check-input" type="checkbox" name="intermediarias_reduzem_pmt"
+                         id="id_intermediarias_reduzem_pmt"
+                         {% if basico.intermediarias_reduzem_pmt %}checked{% endif %}>
+                  <label class="form-check-label ms-2" for="id_intermediarias_reduzem_pmt">
+                    Intermediárias reduzem o valor da parcela (PMT)
+                  </label>
+                </div>
+              </div>
+              <div class="col-md-6 mb-2">
+                <div class="form-check form-switch">
+                  <input class="form-check-input" type="checkbox" name="intermediarias_reajustadas"
+                         id="id_intermediarias_reajustadas"
+                         {% if basico.intermediarias_reajustadas is not False %}checked{% endif %}>
+                  <label class="form-check-label ms-2" for="id_intermediarias_reajustadas">
+                    Intermediárias são reajustadas junto com as parcelas
+                  </label>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
         <!-- Mode selector -->
         <div class="btn-group mb-4" role="group">
           <input type="radio" class="btn-check" name="modo-ui" id="modo-padrao" value="padrao" {% if modo == 'padrao' %}checked{% endif %}>
@@ -192,6 +223,24 @@
 {% block extra_js %}
 <script>
 (function () {
+  // Injeta valores dos checkboxes de configuração no formulário que for submetido
+  function injetarConfigEmFormulario(form) {
+    ['intermediarias_reduzem_pmt', 'intermediarias_reajustadas'].forEach(function (nome) {
+      var chk = document.getElementById('id_' + nome);
+      var hidden = form.querySelector('input[type="hidden"][name="' + nome + '"]');
+      if (!hidden) {
+        hidden = document.createElement('input');
+        hidden.type = 'hidden';
+        hidden.name = nome;
+        form.appendChild(hidden);
+      }
+      hidden.value = (chk && chk.checked) ? 'on' : '';
+    });
+  }
+  document.querySelectorAll('form').forEach(function (form) {
+    form.addEventListener('submit', function () { injetarConfigEmFormulario(form); });
+  });
+
   // Toggle panels by radio button
   const panels = {
     padrao: document.getElementById('panel-padrao'),
