@@ -25,8 +25,17 @@ class ContratoForm(forms.ModelForm):
             'numero_parcelas', 'dia_vencimento',
             'tipo_amortizacao',
             'percentual_juros_mora', 'percentual_multa',
-            'tipo_correcao', 'prazo_reajuste_meses',
-            'status', 'observacoes'
+            'tipo_correcao', 'prazo_reajuste_meses', 'tipo_correcao_fallback',
+            'spread_reajuste', 'reajuste_piso', 'reajuste_teto',
+            'intermediarias_reduzem_pmt', 'intermediarias_reajustadas',
+            'percentual_fruicao', 'percentual_multa_rescisao_penal',
+            'percentual_multa_rescisao_adm', 'percentual_cessao',
+            'usar_config_boleto_imobiliaria', 'conta_bancaria_padrao',
+            'tipo_valor_multa', 'valor_multa_boleto',
+            'tipo_valor_juros', 'valor_juros_boleto', 'dias_carencia_boleto',
+            'tipo_valor_desconto', 'valor_desconto_boleto', 'dias_desconto_boleto',
+            'instrucao_boleto_1', 'instrucao_boleto_2', 'instrucao_boleto_3',
+            'status', 'observacoes',
         ]
         widgets = {
             'data_contrato': forms.DateInput(
@@ -38,41 +47,70 @@ class ContratoForm(forms.ModelForm):
                 format='%Y-%m-%d'
             ),
             'valor_total': forms.NumberInput(attrs={
-                'step': '0.01',
-                'min': '0.01',
-                'placeholder': '0,00'
+                'step': '0.01', 'min': '0.01', 'placeholder': '350000,00'
             }),
             'valor_entrada': forms.NumberInput(attrs={
-                'step': '0.01',
-                'min': '0',
-                'placeholder': '0,00'
+                'step': '0.01', 'min': '0', 'placeholder': '100000,00'
             }),
             'numero_parcelas': forms.NumberInput(attrs={
-                'min': '1',
-                'max': '600',
-                'placeholder': 'Ex: 120'
+                'min': '1', 'max': '600', 'placeholder': 'Ex: 120'
             }),
             'dia_vencimento': forms.NumberInput(attrs={
-                'min': '1',
-                'max': '31',
-                'placeholder': 'Ex: 10'
+                'min': '1', 'max': '31', 'placeholder': 'Ex: 10'
             }),
             'percentual_juros_mora': forms.NumberInput(attrs={
-                'step': '0.01',
-                'min': '0',
-                'max': '100',
-                'placeholder': '1,00'
+                'step': '0.01', 'min': '0', 'max': '100', 'placeholder': '1,00'
             }),
             'percentual_multa': forms.NumberInput(attrs={
-                'step': '0.01',
-                'min': '0',
-                'max': '100',
-                'placeholder': '2,00'
+                'step': '0.01', 'min': '0', 'max': '100', 'placeholder': '2,00'
             }),
             'prazo_reajuste_meses': forms.NumberInput(attrs={
-                'min': '1',
-                'max': '120',
-                'placeholder': '12'
+                'min': '1', 'max': '120', 'placeholder': '12'
+            }),
+            'spread_reajuste': forms.NumberInput(attrs={
+                'step': '0.0001', 'placeholder': '0,0000'
+            }),
+            'reajuste_piso': forms.NumberInput(attrs={
+                'step': '0.0001', 'placeholder': 'Ex: 0,0000'
+            }),
+            'reajuste_teto': forms.NumberInput(attrs={
+                'step': '0.0001', 'placeholder': 'Ex: 15,0000'
+            }),
+            'percentual_fruicao': forms.NumberInput(attrs={
+                'step': '0.0001', 'placeholder': '0,5000'
+            }),
+            'percentual_multa_rescisao_penal': forms.NumberInput(attrs={
+                'step': '0.0001', 'placeholder': '10,0000'
+            }),
+            'percentual_multa_rescisao_adm': forms.NumberInput(attrs={
+                'step': '0.0001', 'placeholder': '12,0000'
+            }),
+            'percentual_cessao': forms.NumberInput(attrs={
+                'step': '0.0001', 'placeholder': '3,0000'
+            }),
+            'valor_multa_boleto': forms.NumberInput(attrs={
+                'step': '0.01', 'min': '0', 'placeholder': '2,00'
+            }),
+            'valor_juros_boleto': forms.NumberInput(attrs={
+                'step': '0.0001', 'min': '0', 'placeholder': '0,0333'
+            }),
+            'dias_carencia_boleto': forms.NumberInput(attrs={
+                'min': '0', 'placeholder': '0'
+            }),
+            'valor_desconto_boleto': forms.NumberInput(attrs={
+                'step': '0.01', 'min': '0', 'placeholder': '0,00'
+            }),
+            'dias_desconto_boleto': forms.NumberInput(attrs={
+                'min': '0', 'placeholder': '0'
+            }),
+            'instrucao_boleto_1': forms.TextInput(attrs={
+                'placeholder': 'Ex: Após vencimento cobrar multa e juros'
+            }),
+            'instrucao_boleto_2': forms.TextInput(attrs={
+                'placeholder': 'Ex: Não receber após 30 dias do vencimento'
+            }),
+            'instrucao_boleto_3': forms.TextInput(attrs={
+                'placeholder': 'Instrução adicional (opcional)'
             }),
             'observacoes': forms.Textarea(attrs={
                 'rows': 3,
@@ -108,6 +146,10 @@ class ContratoForm(forms.ModelForm):
         self.fields['comprador'].queryset = Comprador.objects.filter(ativo=True)
         self.fields['imobiliaria'].queryset = Imobiliaria.objects.filter(ativo=True)
 
+        # Importar ContaBancaria para o queryset
+        from core.models import ContaBancaria
+        self.fields['conta_bancaria_padrao'].queryset = ContaBancaria.objects.filter(ativo=True)
+
         # Se for edicao, desabilitar campos que nao devem ser alterados
         if self.instance and self.instance.pk:
             self.fields['numero_parcelas'].disabled = True
@@ -123,14 +165,14 @@ class ContratoForm(forms.ModelForm):
         self.helper.layout = Layout(
             # Legenda
             HTML('''
-                <div class="legenda-campos">
+                <div class="legenda-campos mb-3">
                     <i class="fas fa-info-circle me-1"></i>
                     <span class="obrigatorio">* Campos obrigatorios</span>
                     <span class="ms-3 opcional">Demais campos sao opcionais</span>
                 </div>
             '''),
 
-            # Card: Partes do Contrato (Obrigatorio)
+            # Card: Partes do Contrato
             HTML('''
                 <div class="card mb-3 card-obrigatorio">
                     <div class="card-header py-2">
@@ -145,7 +187,7 @@ class ContratoForm(forms.ModelForm):
             ),
             HTML('</div></div>'),
 
-            # Card: Dados do Contrato (Obrigatorio)
+            # Card: Dados do Contrato
             HTML('''
                 <div class="card mb-3 card-obrigatorio">
                     <div class="card-header py-2">
@@ -160,7 +202,7 @@ class ContratoForm(forms.ModelForm):
             ),
             HTML('</div></div>'),
 
-            # Card: Valores (Obrigatorio)
+            # Card: Valores
             HTML('''
                 <div class="card mb-3 card-obrigatorio">
                     <div class="card-header py-2">
@@ -172,9 +214,21 @@ class ContratoForm(forms.ModelForm):
                 Column(Field('valor_total', wrapper_class='mb-2 campo-obrigatorio'), css_class='col-md-6'),
                 Column(Field('valor_entrada', wrapper_class='mb-2'), css_class='col-md-6'),
             ),
+            HTML('''
+                <div class="row mt-2">
+                    <div class="col-md-6">
+                        <small class="text-muted">Valor Financiado (calculado):</small>
+                        <div id="valor-financiado" class="valor-calculado">R$ 0,00</div>
+                    </div>
+                    <div class="col-md-6">
+                        <small class="text-muted">Valor Estimado da Parcela (sem juros):</small>
+                        <div id="valor-parcela" class="valor-calculado">R$ 0,00</div>
+                    </div>
+                </div>
+            '''),
             HTML('</div></div>'),
 
-            # Card: Parcelas (Obrigatorio)
+            # Card: Parcelas
             HTML('''
                 <div class="card mb-3 card-obrigatorio">
                     <div class="card-header py-2">
@@ -183,13 +237,14 @@ class ContratoForm(forms.ModelForm):
                     <div class="card-body py-3">
             '''),
             Row(
-                Column(Field('numero_parcelas', wrapper_class='mb-2 campo-obrigatorio'), css_class='col-md-3'),
-                Column(Field('dia_vencimento', wrapper_class='mb-2 campo-obrigatorio'), css_class='col-md-3'),
-                Column(Field('data_primeiro_vencimento', wrapper_class='mb-2 campo-obrigatorio'), css_class='col-md-6'),
+                Column(Field('tipo_amortizacao', wrapper_class='mb-2 campo-obrigatorio'), css_class='col-md-4'),
+                Column(Field('numero_parcelas', wrapper_class='mb-2 campo-obrigatorio'), css_class='col-md-2'),
+                Column(Field('dia_vencimento', wrapper_class='mb-2 campo-obrigatorio'), css_class='col-md-2'),
+                Column(Field('data_primeiro_vencimento', wrapper_class='mb-2 campo-obrigatorio'), css_class='col-md-4'),
             ),
             HTML('</div></div>'),
 
-            # Card: Juros e Multa (Opcional)
+            # Card: Juros e Multa por Atraso
             HTML('''
                 <div class="card mb-3 card-opcional">
                     <div class="card-header py-2">
@@ -203,21 +258,90 @@ class ContratoForm(forms.ModelForm):
             ),
             HTML('</div></div>'),
 
-            # Card: Correcao Monetaria (Opcional)
+            # Card: Correcao Monetaria
             HTML('''
                 <div class="card mb-3 card-opcional">
                     <div class="card-header py-2">
-                        <i class="fas fa-chart-line me-2"></i><strong>Correcao Monetaria</strong>
+                        <i class="fas fa-chart-line me-2"></i><strong>Correcao Monetaria e Reajuste</strong>
                     </div>
                     <div class="card-body py-3">
             '''),
             Row(
-                Column(Field('tipo_correcao', wrapper_class='mb-2'), css_class='col-md-6'),
-                Column(Field('prazo_reajuste_meses', wrapper_class='mb-2'), css_class='col-md-6'),
+                Column(Field('tipo_correcao', wrapper_class='mb-2'), css_class='col-md-4'),
+                Column(Field('prazo_reajuste_meses', wrapper_class='mb-2'), css_class='col-md-4'),
+                Column(Field('tipo_correcao_fallback', wrapper_class='mb-2'), css_class='col-md-4'),
+            ),
+            Row(
+                Column(Field('spread_reajuste', wrapper_class='mb-2'), css_class='col-md-4'),
+                Column(Field('reajuste_piso', wrapper_class='mb-2'), css_class='col-md-4'),
+                Column(Field('reajuste_teto', wrapper_class='mb-2'), css_class='col-md-4'),
             ),
             HTML('</div></div>'),
 
-            # Card: Observacoes (Opcional)
+            # Card: Clausulas Contratuais
+            HTML('''
+                <div class="card mb-3 card-opcional">
+                    <div class="card-header py-2">
+                        <i class="fas fa-gavel me-2"></i><strong>Clausulas Contratuais</strong>
+                    </div>
+                    <div class="card-body py-3">
+            '''),
+            Row(
+                Column(Field('percentual_fruicao', wrapper_class='mb-2'), css_class='col-md-3'),
+                Column(Field('percentual_multa_rescisao_penal', wrapper_class='mb-2'), css_class='col-md-3'),
+                Column(Field('percentual_multa_rescisao_adm', wrapper_class='mb-2'), css_class='col-md-3'),
+                Column(Field('percentual_cessao', wrapper_class='mb-2'), css_class='col-md-3'),
+            ),
+            HTML('</div></div>'),
+
+            # Card: Intermediarias
+            HTML('''
+                <div class="card mb-3 card-opcional">
+                    <div class="card-header py-2">
+                        <i class="fas fa-layer-group me-2"></i><strong>Parcelas Intermediarias</strong>
+                    </div>
+                    <div class="card-body py-3">
+            '''),
+            Row(
+                Column(Field('intermediarias_reduzem_pmt', wrapper_class='mb-2'), css_class='col-md-6'),
+                Column(Field('intermediarias_reajustadas', wrapper_class='mb-2'), css_class='col-md-6'),
+            ),
+            HTML('</div></div>'),
+
+            # Card: Configuracao de Boleto
+            HTML('''
+                <div class="card mb-3 card-opcional">
+                    <div class="card-header py-2">
+                        <i class="fas fa-barcode me-2"></i><strong>Configuracao de Boleto</strong>
+                    </div>
+                    <div class="card-body py-3">
+            '''),
+            Row(
+                Column(Field('usar_config_boleto_imobiliaria', wrapper_class='mb-2'), css_class='col-md-6'),
+                Column(Field('conta_bancaria_padrao', wrapper_class='mb-2'), css_class='col-md-6'),
+            ),
+            HTML('<div id="boleto-config-personalizada">'),
+            Row(
+                Column(Field('tipo_valor_multa', wrapper_class='mb-2'), css_class='col-md-3'),
+                Column(Field('valor_multa_boleto', wrapper_class='mb-2'), css_class='col-md-3'),
+                Column(Field('tipo_valor_juros', wrapper_class='mb-2'), css_class='col-md-3'),
+                Column(Field('valor_juros_boleto', wrapper_class='mb-2'), css_class='col-md-3'),
+            ),
+            Row(
+                Column(Field('dias_carencia_boleto', wrapper_class='mb-2'), css_class='col-md-4'),
+                Column(Field('tipo_valor_desconto', wrapper_class='mb-2'), css_class='col-md-4'),
+                Column(Field('valor_desconto_boleto', wrapper_class='mb-2'), css_class='col-md-2'),
+                Column(Field('dias_desconto_boleto', wrapper_class='mb-2'), css_class='col-md-2'),
+            ),
+            Row(
+                Column(Field('instrucao_boleto_1', wrapper_class='mb-2'), css_class='col-md-4'),
+                Column(Field('instrucao_boleto_2', wrapper_class='mb-2'), css_class='col-md-4'),
+                Column(Field('instrucao_boleto_3', wrapper_class='mb-2'), css_class='col-md-4'),
+            ),
+            HTML('</div>'),
+            HTML('</div></div>'),
+
+            # Card: Observacoes
             HTML('''
                 <div class="card mb-3 card-opcional">
                     <div class="card-header py-2">
@@ -404,6 +528,11 @@ class ContratoWizardBasicoForm(forms.ModelForm):
             'intermediarias_reduzem_pmt', 'intermediarias_reajustadas',
             'percentual_fruicao', 'percentual_multa_rescisao_penal',
             'percentual_multa_rescisao_adm', 'percentual_cessao',
+            'usar_config_boleto_imobiliaria', 'conta_bancaria_padrao',
+            'tipo_valor_multa', 'valor_multa_boleto',
+            'tipo_valor_juros', 'valor_juros_boleto', 'dias_carencia_boleto',
+            'tipo_valor_desconto', 'valor_desconto_boleto', 'dias_desconto_boleto',
+            'instrucao_boleto_1', 'instrucao_boleto_2', 'instrucao_boleto_3',
             'observacoes',
         ]
         widgets = {
@@ -423,6 +552,14 @@ class ContratoWizardBasicoForm(forms.ModelForm):
             'percentual_multa_rescisao_penal': forms.NumberInput(attrs={'step': '0.0001', 'placeholder': '10,0000'}),
             'percentual_multa_rescisao_adm': forms.NumberInput(attrs={'step': '0.0001', 'placeholder': '12,0000'}),
             'percentual_cessao': forms.NumberInput(attrs={'step': '0.0001', 'placeholder': '3,0000'}),
+            'valor_multa_boleto': forms.NumberInput(attrs={'step': '0.0001', 'min': '0'}),
+            'valor_juros_boleto': forms.NumberInput(attrs={'step': '0.0001', 'min': '0'}),
+            'dias_carencia_boleto': forms.NumberInput(attrs={'min': '0'}),
+            'valor_desconto_boleto': forms.NumberInput(attrs={'step': '0.0001', 'min': '0'}),
+            'dias_desconto_boleto': forms.NumberInput(attrs={'min': '0'}),
+            'instrucao_boleto_1': forms.TextInput(attrs={'placeholder': 'Instrução 1 (opcional)'}),
+            'instrucao_boleto_2': forms.TextInput(attrs={'placeholder': 'Instrução 2 (opcional)'}),
+            'instrucao_boleto_3': forms.TextInput(attrs={'placeholder': 'Instrução 3 (opcional)'}),
             'observacoes': forms.Textarea(attrs={'rows': 2}),
         }
 
@@ -439,6 +576,9 @@ class ContratoWizardBasicoForm(forms.ModelForm):
         self.fields['imovel'].queryset = Imovel.objects.filter(disponivel=True, ativo=True)
         self.fields['comprador'].queryset = Comprador.objects.filter(ativo=True)
         self.fields['imobiliaria'].queryset = Imobiliaria.objects.filter(ativo=True)
+        from financeiro.models import ContaBancaria
+        self.fields['conta_bancaria_padrao'].queryset = ContaBancaria.objects.filter(ativo=True)
+        self.fields['conta_bancaria_padrao'].required = False
 
     def clean(self):
         cleaned_data = super().clean()

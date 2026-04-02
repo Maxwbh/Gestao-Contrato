@@ -321,6 +321,11 @@ class ContratoDetailView(LoginRequiredMixin, DetailView):
         context['prazo_reajuste'] = getattr(contrato, 'prazo_reajuste_meses', 12)
         context['ultimo_mes_boleto'] = getattr(contrato, 'ultimo_mes_boleto_gerado', 0)
 
+        # =====================================================================
+        # Q-04: TABELA DE JUROS ESCALANTES
+        # =====================================================================
+        context['tabela_juros'] = contrato.tabela_juros.all().order_by('ciclo_inicio')
+
         return context
 
 
@@ -1765,3 +1770,144 @@ class ContratoWizardView(LoginRequiredMixin, View):
             observacoes=basico.get('observacoes', ''),
         )
         return contrato
+
+
+# =============================================================================
+# G-11: Cálculo de Rescisão
+# =============================================================================
+
+@login_required
+def calcular_rescisao_view(request, pk):
+    """
+    Calcula o valor de devolução em caso de rescisão pelo comprador.
+    GET: exibe formulário com data de rescisão.
+    POST: processa cálculo e exibe resultado.
+    """
+    contrato = get_object_or_404(Contrato, pk=pk)
+
+    from datetime import date as date_type
+    resultado = None
+    data_rescisao = None
+
+    if request.method == 'POST':
+        data_str = request.POST.get('data_rescisao', '')
+        try:
+            data_rescisao = date_type.fromisoformat(data_str) if data_str else date_type.today()
+        except ValueError:
+            data_rescisao = date_type.today()
+        resultado = contrato.calcular_rescisao(data_rescisao)
+
+    return render(request, 'contratos/calcular_rescisao.html', {
+        'contrato': contrato,
+        'resultado': resultado,
+        'data_rescisao': data_rescisao,
+    })
+
+
+# =============================================================================
+# G-12: Cálculo de Cessão de Direitos
+# =============================================================================
+
+@login_required
+def calcular_cessao_view(request, pk):
+    """
+    Calcula a taxa de cessão de direitos.
+    GET: exibe formulário com data de cessão.
+    POST: processa cálculo e exibe resultado.
+    """
+    contrato = get_object_or_404(Contrato, pk=pk)
+
+    from datetime import date as date_type
+    resultado = None
+    data_cessao = None
+
+    if request.method == 'POST':
+        data_str = request.POST.get('data_cessao', '')
+        try:
+            data_cessao = date_type.fromisoformat(data_str) if data_str else date_type.today()
+        except ValueError:
+            data_cessao = date_type.today()
+        resultado = contrato.calcular_cessao(data_cessao)
+
+    return render(request, 'contratos/calcular_cessao.html', {
+        'contrato': contrato,
+        'resultado': resultado,
+        'data_cessao': data_cessao,
+    })
+
+
+# =============================================================================
+# TabelaJurosContrato — CRUD inline (Q-04 / HU-360)
+# Permite gerenciar juros escalantes diretamente na tela do contrato.
+# =============================================================================
+
+from .models import TabelaJurosContrato
+
+
+@login_required
+@require_http_methods(["GET", "POST"])
+def api_tabela_juros_contrato(request, pk):
+    """
+    GET  → retorna lista JSON das faixas de juros do contrato.
+    POST → cria uma nova faixa (ciclo_inicio, ciclo_fim opcional, juros_mensal, observacoes).
+    """
+    contrato = get_object_or_404(Contrato, pk=pk)
+
+    if request.method == 'GET':
+        rows = list(
+            contrato.tabela_juros.order_by('ciclo_inicio').values(
+                'id', 'ciclo_inicio', 'ciclo_fim', 'juros_mensal', 'observacoes'
+            )
+        )
+        for r in rows:
+            r['juros_mensal'] = str(r['juros_mensal'])
+        return JsonResponse({'sucesso': True, 'tabela': rows})
+
+    # POST
+    import json
+    try:
+        data = json.loads(request.body)
+    except Exception:
+        data = request.POST
+
+    try:
+        ciclo_inicio = int(data.get('ciclo_inicio', 0))
+        ciclo_fim_raw = data.get('ciclo_fim') or None
+        ciclo_fim = int(ciclo_fim_raw) if ciclo_fim_raw else None
+        from decimal import Decimal as D
+        juros_mensal = D(str(data.get('juros_mensal', '0')))
+        observacoes = str(data.get('observacoes', ''))[:200]
+    except Exception as e:
+        return JsonResponse({'sucesso': False, 'erro': str(e)}, status=400)
+
+    if ciclo_inicio < 1:
+        return JsonResponse({'sucesso': False, 'erro': 'ciclo_inicio deve ser >= 1'}, status=400)
+    if ciclo_fim and ciclo_fim < ciclo_inicio:
+        return JsonResponse({'sucesso': False, 'erro': 'ciclo_fim deve ser >= ciclo_inicio'}, status=400)
+
+    entry = TabelaJurosContrato.objects.create(
+        contrato=contrato,
+        ciclo_inicio=ciclo_inicio,
+        ciclo_fim=ciclo_fim,
+        juros_mensal=juros_mensal,
+        observacoes=observacoes,
+    )
+    return JsonResponse({
+        'sucesso': True,
+        'entry': {
+            'id': entry.pk,
+            'ciclo_inicio': entry.ciclo_inicio,
+            'ciclo_fim': entry.ciclo_fim,
+            'juros_mensal': str(entry.juros_mensal),
+            'observacoes': entry.observacoes,
+        }
+    }, status=201)
+
+
+@login_required
+@require_http_methods(["DELETE"])
+def api_tabela_juros_delete(request, pk):
+    """DELETE → remove uma faixa de juros pelo ID."""
+    entry = get_object_or_404(TabelaJurosContrato, pk=pk)
+    entry.delete()
+    return JsonResponse({'sucesso': True})
