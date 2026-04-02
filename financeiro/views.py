@@ -2089,6 +2089,126 @@ def preview_reajuste_contrato(request, contrato_id):
 
 
 @login_required
+def aplicar_reajuste_pagina(request, contrato_id):
+    """
+    Página dedicada para aplicar reajuste em um contrato.
+
+    GET  → calcula o preview server-side e exibe o formulário.
+           Query params opcionais: desconto_percentual, desconto_valor
+    POST → aplica o reajuste e redireciona para o detalhe do contrato.
+    """
+    contrato = get_object_or_404(Contrato, pk=contrato_id)
+
+    def get_client_ip(req):
+        x_forwarded = req.META.get('HTTP_X_FORWARDED_FOR')
+        if x_forwarded:
+            return x_forwarded.split(',')[0].strip()
+        return req.META.get('REMOTE_ADDR')
+
+    if request.method == 'POST':
+        ciclo_param = request.POST.get('ciclo')
+        desconto_percentual = request.POST.get('desconto_percentual') or None
+        desconto_valor = request.POST.get('desconto_valor') or None
+        observacoes = request.POST.get('observacoes', '')
+
+        try:
+            if not ciclo_param:
+                messages.error(request, 'Ciclo de reajuste não informado.')
+                return redirect('financeiro:aplicar_reajuste', contrato_id=contrato_id)
+
+            ciclo = int(ciclo_param)
+            preview = Reajuste.preview_reajuste(
+                contrato, ciclo,
+                desconto_percentual=desconto_percentual,
+                desconto_valor=desconto_valor,
+            )
+
+            if 'erro' in preview:
+                messages.error(request, preview['erro'])
+                return redirect('financeiro:aplicar_reajuste', contrato_id=contrato_id)
+
+            if not contrato.parcelas.filter(
+                numero_parcela__gte=preview['parcela_inicial'],
+                numero_parcela__lte=preview['parcela_final'],
+                pago=False,
+            ).exists():
+                messages.error(request, 'Nenhuma parcela pendente no intervalo selecionado.')
+                return redirect('financeiro:aplicar_reajuste', contrato_id=contrato_id)
+
+            reajuste = Reajuste.objects.create(
+                contrato=contrato,
+                data_reajuste=timezone.now().date(),
+                indice_tipo=preview['indice_tipo'],
+                percentual=preview['percentual_final'],
+                percentual_bruto=preview['percentual_bruto'],
+                spread_aplicado=preview['spread'] if preview.get('spread') else None,
+                desconto_percentual=Decimal(str(desconto_percentual)) if desconto_percentual else None,
+                desconto_valor=Decimal(str(desconto_valor)) if desconto_valor else None,
+                piso_aplicado=preview.get('piso'),
+                teto_aplicado=preview.get('teto'),
+                parcela_inicial=preview['parcela_inicial'],
+                parcela_final=preview['parcela_final'],
+                ciclo=ciclo,
+                periodo_referencia_inicio=preview['periodo_referencia_inicio'],
+                periodo_referencia_fim=preview['periodo_referencia_fim'],
+                aplicado_manual=True,
+                usuario=request.user,
+                ip_address=get_client_ip(request),
+                observacoes=observacoes,
+            )
+
+            resultado = reajuste.aplicar_reajuste()
+            messages.success(
+                request,
+                f'Reajuste do ciclo {ciclo} ({preview["percentual_final"]:,.4f}%) '
+                f'aplicado em {resultado["parcelas_reajustadas"]} parcela(s).'
+            )
+            return redirect('contratos:detalhe', pk=contrato_id)
+
+        except Exception as e:
+            logger.exception(f'Erro ao aplicar reajuste: {e}')
+            messages.error(request, f'Erro ao aplicar reajuste: {e}')
+            return redirect('financeiro:aplicar_reajuste', contrato_id=contrato_id)
+
+    # ── GET ──────────────────────────────────────────────────────────────────
+    ciclo = Reajuste.calcular_ciclo_pendente(contrato)
+
+    if not ciclo:
+        context = {
+            'contrato': contrato,
+            'sem_pendente': True,
+            'proximo_reajuste': contrato.data_proximo_reajuste,
+        }
+        return render(request, 'financeiro/aplicar_reajuste.html', context)
+
+    desconto_percentual = request.GET.get('desconto_percentual') or None
+    desconto_valor = request.GET.get('desconto_valor') or None
+
+    preview = Reajuste.preview_reajuste(
+        contrato, ciclo,
+        desconto_percentual=desconto_percentual,
+        desconto_valor=desconto_valor,
+    )
+
+    # Calcular histórico de reajustes já aplicados
+    reajustes_anteriores = Reajuste.objects.filter(
+        contrato=contrato, aplicado=True
+    ).order_by('ciclo')
+
+    context = {
+        'contrato': contrato,
+        'ciclo': ciclo,
+        'preview': preview,
+        'desconto_percentual': desconto_percentual or '',
+        'desconto_valor': desconto_valor or '',
+        'reajustes_anteriores': reajustes_anteriores,
+        'sem_pendente': False,
+        'tem_erro': 'erro' in preview,
+    }
+    return render(request, 'financeiro/aplicar_reajuste.html', context)
+
+
+@login_required
 @require_POST
 def aplicar_reajuste_contrato(request, contrato_id):
     """
