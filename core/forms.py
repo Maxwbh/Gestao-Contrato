@@ -826,10 +826,13 @@ class ContaBancariaForm(forms.ModelForm):
         '001': {  # Banco do Brasil
             'nome': 'Banco do Brasil',
             'convenio_obrigatorio': True,
-            'convenio_digitos': 7,
+            'convenio_min': 4,
+            'convenio_max': 8,
             'agencia_max': 4,
             'conta_max': 8,
+            'carteira_max': 2,
             'carteira_padrao': '18',
+            'campos_extras': [],
         },
         '033': {  # Santander
             'nome': 'Santander',
@@ -837,21 +840,32 @@ class ContaBancariaForm(forms.ModelForm):
             'convenio_digitos': 7,
             'agencia_max': 4,
             'conta_max': 9,
+            'nosso_numero_max': 7,
             'carteira_padrao': '102',
+            'campos_extras': [],
         },
-        '104': {  # Caixa
+        '104': {  # Caixa Econômica Federal
             'nome': 'Caixa Econômica',
             'convenio_obrigatorio': True,
             'convenio_digitos': 6,
             'agencia_max': 4,
+            'carteira_max': 1,
+            'nosso_numero_max': 15,
             'carteira_padrao': '1',
+            'campos_extras': ['emissao', 'codigo_beneficiario'],
+            'emissao_obrigatorio': True,
+            'emissao_digitos': 1,
+            'codigo_beneficiario_obrigatorio': True,
         },
         '237': {  # Bradesco
             'nome': 'Bradesco',
             'convenio_obrigatorio': False,
             'agencia_max': 4,
             'conta_max': 7,
+            'carteira_max': 2,
+            'nosso_numero_max': 11,
             'carteira_padrao': '06',
+            'campos_extras': [],
         },
         '341': {  # Itaú
             'nome': 'Itaú',
@@ -859,7 +873,9 @@ class ContaBancariaForm(forms.ModelForm):
             'convenio_max': 5,
             'agencia_max': 4,
             'conta_max': 5,
+            'nosso_numero_max': 8,
             'carteira_padrao': '175',
+            'campos_extras': [],
         },
         '748': {  # Sicredi
             'nome': 'Sicredi',
@@ -867,7 +883,14 @@ class ContaBancariaForm(forms.ModelForm):
             'convenio_max': 5,
             'agencia_max': 4,
             'conta_max': 5,
+            'carteira_max': 1,
+            'nosso_numero_max': 5,
             'carteira_padrao': '3',
+            'campos_extras': ['posto', 'byte_idt'],
+            'posto_obrigatorio': True,
+            'posto_digitos': 2,
+            'byte_idt_obrigatorio': True,
+            'byte_idt_digitos': 1,
         },
         '756': {  # Sicoob
             'nome': 'Sicoob',
@@ -875,7 +898,9 @@ class ContaBancariaForm(forms.ModelForm):
             'convenio_max': 7,
             'agencia_max': 4,
             'conta_max': 8,
+            'nosso_numero_max': 7,
             'carteira_padrao': '1',
+            'campos_extras': [],
         },
     }
 
@@ -885,6 +910,7 @@ class ContaBancariaForm(forms.ModelForm):
             'banco', 'descricao', 'principal',
             'agencia', 'conta',
             'convenio', 'carteira', 'nosso_numero_atual', 'modalidade',
+            'posto', 'byte_idt', 'emissao', 'codigo_beneficiario',
             'tipo_pix', 'chave_pix',
             'cobranca_registrada', 'prazo_baixa', 'prazo_protesto',
             'layout_cnab', 'numero_remessa_cnab_atual'
@@ -923,6 +949,14 @@ class ContaBancariaForm(forms.ModelForm):
         agencia = agencia.strip()
         conta = cleaned_data.get('conta', '') or ''
         conta = conta.strip()
+        posto = cleaned_data.get('posto', '') or ''
+        posto = posto.strip()
+        byte_idt = cleaned_data.get('byte_idt', '') or ''
+        byte_idt = byte_idt.strip()
+        emissao = cleaned_data.get('emissao', '') or ''
+        emissao = emissao.strip()
+        codigo_beneficiario = cleaned_data.get('codigo_beneficiario', '') or ''
+        codigo_beneficiario = codigo_beneficiario.strip()
 
         if banco and banco in self.CAMPOS_BANCO:
             config = self.CAMPOS_BANCO[banco]
@@ -938,6 +972,9 @@ class ContaBancariaForm(forms.ModelForm):
                 if config.get('convenio_digitos') and len(convenio_numeros) != config['convenio_digitos']:
                     self.add_error('convenio',
                         f'Para {banco_nome}, o convênio deve ter exatamente {config["convenio_digitos"]} dígitos')
+                elif config.get('convenio_min') and len(convenio_numeros) < config['convenio_min']:
+                    self.add_error('convenio',
+                        f'Para {banco_nome}, o convênio deve ter entre {config["convenio_min"]} e {config["convenio_max"]} dígitos')
                 elif config.get('convenio_max') and len(convenio_numeros) > config['convenio_max']:
                     self.add_error('convenio',
                         f'Para {banco_nome}, o convênio deve ter no máximo {config["convenio_max"]} dígitos')
@@ -955,6 +992,33 @@ class ContaBancariaForm(forms.ModelForm):
                 if len(conta_numeros) > config['conta_max']:
                     self.add_error('conta',
                         f'Para {banco_nome}, a conta deve ter no máximo {config["conta_max"]} dígitos')
+
+            # Sicredi: posto e byte_idt obrigatórios
+            if config.get('posto_obrigatorio') and not posto:
+                self.add_error('posto', f'Posto é obrigatório para {banco_nome}')
+            if posto and config.get('posto_digitos'):
+                posto_nums = ''.join(filter(str.isdigit, posto))
+                if len(posto_nums) != config['posto_digitos']:
+                    self.add_error('posto',
+                        f'Para {banco_nome}, o posto deve ter exatamente {config["posto_digitos"]} dígitos')
+
+            if config.get('byte_idt_obrigatorio') and not byte_idt:
+                self.add_error('byte_idt', f'Byte IDT é obrigatório para {banco_nome}')
+            if byte_idt and config.get('byte_idt_digitos'):
+                if len(byte_idt) != config['byte_idt_digitos']:
+                    self.add_error('byte_idt',
+                        f'Para {banco_nome}, o Byte IDT deve ter exatamente {config["byte_idt_digitos"]} caractere')
+
+            # Caixa: emissao e codigo_beneficiario obrigatórios
+            if config.get('emissao_obrigatorio') and not emissao:
+                self.add_error('emissao', f'Tipo de Emissão é obrigatório para {banco_nome}')
+            if emissao and config.get('emissao_digitos'):
+                if len(emissao) != config['emissao_digitos']:
+                    self.add_error('emissao',
+                        f'Para {banco_nome}, o tipo de emissão deve ter exatamente {config["emissao_digitos"]} dígito')
+
+            if config.get('codigo_beneficiario_obrigatorio') and not codigo_beneficiario:
+                self.add_error('codigo_beneficiario', f'Código do Beneficiário é obrigatório para {banco_nome}')
 
         return cleaned_data
 
