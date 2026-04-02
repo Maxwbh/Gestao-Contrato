@@ -49,7 +49,8 @@ urlpatterns = [
     # Reajustes
     path('reajustes/', views.listar_reajustes, name='listar_reajustes'),
     path('reajustes/pendentes/', views.reajustes_pendentes, name='reajustes_pendentes'),
-    path('contrato/<int:contrato_id>/reajuste/aplicar/', views.aplicar_reajuste_contrato, name='aplicar_reajuste'),
+    path('contrato/<int:contrato_id>/reajuste/', views.aplicar_reajuste_pagina, name='aplicar_reajuste'),
+    path('contrato/<int:contrato_id>/reajuste/api/', views.aplicar_reajuste_contrato, name='aplicar_reajuste_api'),
     path('contrato/<int:contrato_id>/reajuste/preview/', views.preview_reajuste_contrato, name='preview_reajuste'),
     path('contrato/<int:contrato_id>/reajuste/calcular/', views.calcular_reajuste_proporcional, name='calcular_reajuste'),
     path('reajuste/<int:pk>/excluir/', views.excluir_reajuste, name='excluir_reajuste'),
