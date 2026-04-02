@@ -61,7 +61,7 @@
     <div class="card shadow-sm">
         <div class="card-header bg-white">
             <i class="fas fa-list me-1"></i>
-            {{ notificacoes.count }} notificacao(oes)
+            {{ paginator.count }} notificacao(oes)
         </div>
         <div class="card-body p-0">
             {% if notificacoes %}
@@ -127,6 +127,9 @@
                 <p class="text-muted mb-0">Nenhuma notificacao encontrada</p>
             </div>
             {% endif %}
+        </div>
+        <div class="card-footer">
+            {% include "includes/pagination_perpage.html" %}
         </div>
     </div>
 </div>
