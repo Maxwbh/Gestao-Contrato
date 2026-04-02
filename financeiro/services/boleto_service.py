@@ -781,6 +781,16 @@ class BoletoService:
         Retorna dict padronizado: {'sucesso': bool, 'erro': str, ...}
         """
         try:
+            # Validar conta bancária para bancos com campos obrigatórios
+            if getattr(conta_bancaria, 'banco', '') == '001' and not getattr(conta_bancaria, 'convenio', ''):
+                return {
+                    'sucesso': False,
+                    'erro': (
+                        'Banco do Brasil requer o campo "Convênio" preenchido na conta bancária. '
+                        'Acesse Configurações → Conta Bancária e informe o número do convênio.'
+                    )
+                }
+
             # Montar dados do boleto (ja inclui numero_documento e validacoes)
             dados_boleto, nosso_numero = self._montar_dados_boleto(parcela, conta_bancaria)
 
