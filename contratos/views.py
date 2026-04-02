@@ -1460,9 +1460,11 @@ class ContratoWizardView(LoginRequiredMixin, View):
             if 'basico' not in sess:
                 return redirect('contratos:wizard', step='basico')
             juros_data = sess.get('juros', [{'ciclo_inicio': 1, 'ciclo_fim': 1, 'juros_mensal': '0.0000', 'observacoes': 'Ciclo 1 — isenção'}])
+            prazo = sess['basico'].get('prazo_reajuste_meses', 12)
             return render(request, 'contratos/wizard/step2_juros.html', {
                 'juros_rows': juros_data, 'step': step, 'step_num': 2,
                 'basico': sess['basico'],
+                'prazo_reajuste_meses': prazo,
             })
 
         elif step == 'intermediarias':
