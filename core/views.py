@@ -18,6 +18,7 @@ from django.views.generic import ListView, CreateView, UpdateView, DeleteView
 from django.urls import reverse_lazy
 from django.contrib import messages
 from datetime import datetime, timedelta
+from .mixins import PaginacaoMixin
 from .models import (
     Contabilidade, Imobiliaria, Imovel, Comprador, TipoImovel,
     ContaBancaria, BancoBrasil, LayoutCNAB, AcessoUsuario,
@@ -641,7 +642,7 @@ def limpar_dados_teste(request):
 # CRUD VIEWS - CONTABILIDADE
 # =============================================================================
 
-class ContabilidadeListView(LoginRequiredMixin, ListView):
+class ContabilidadeListView(LoginRequiredMixin, PaginacaoMixin, ListView):
     """Lista todas as contabilidades ativas"""
     model = Contabilidade
     template_name = 'core/contabilidade_list.html'
@@ -744,7 +745,7 @@ class ContabilidadeDeleteView(LoginRequiredMixin, DeleteView):
 # CRUD VIEWS - COMPRADOR
 # =============================================================================
 
-class CompradorListView(LoginRequiredMixin, ListView):
+class CompradorListView(LoginRequiredMixin, PaginacaoMixin, ListView):
     """Lista todos os compradores ativos"""
     model = Comprador
     template_name = 'core/comprador_list.html'
@@ -824,7 +825,7 @@ class CompradorDeleteView(LoginRequiredMixin, DeleteView):
 # CRUD VIEWS - IMOVEL
 # =============================================================================
 
-class ImovelListView(LoginRequiredMixin, ListView):
+class ImovelListView(LoginRequiredMixin, PaginacaoMixin, ListView):
     """Lista todos os imóveis ativos"""
     model = Imovel
     template_name = 'core/imovel_list.html'
@@ -832,7 +833,7 @@ class ImovelListView(LoginRequiredMixin, ListView):
     paginate_by = 20
 
     def get_queryset(self):
-        queryset = Imovel.objects.filter(ativo=True).select_related('imobiliaria').order_by('-criado_em')
+        queryset = Imovel.objects.filter(ativo=True).select_related('imobiliaria').prefetch_related('contratos').order_by('-criado_em')
 
         # Filtros
         search = self.request.GET.get('search')
@@ -931,7 +932,7 @@ class ImovelDeleteView(LoginRequiredMixin, DeleteView):
 # CRUD VIEWS - IMOBILIARIA
 # =============================================================================
 
-class ImobiliariaListView(LoginRequiredMixin, ListView):
+class ImobiliariaListView(LoginRequiredMixin, PaginacaoMixin, ListView):
     """Lista todas as imobiliárias ativas"""
     model = Imobiliaria
     template_name = 'core/imobiliaria_list.html'
@@ -1265,7 +1266,7 @@ def api_listar_bancos(request):
 # CRUD VIEWS - ACESSO USUÁRIO
 # =============================================================================
 
-class AcessoUsuarioListView(LoginRequiredMixin, ListView):
+class AcessoUsuarioListView(LoginRequiredMixin, PaginacaoMixin, ListView):
     """Lista todos os acessos de usuários"""
     model = AcessoUsuario
     template_name = 'core/acesso_list.html'
