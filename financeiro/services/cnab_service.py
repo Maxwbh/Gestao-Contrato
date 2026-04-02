@@ -99,16 +99,19 @@ class CNABService:
         return ''
 
     def _formatar_data(self, data: date) -> str:
-        """Formata data para o padrao BRCobranca (DD/MM/YYYY)"""
+        """Formata data para o padrao BRCobranca (YYYY/MM/DD)"""
         if data:
-            return data.strftime('%d/%m/%Y')
+            return data.strftime('%Y/%m/%d')
         return ''
 
-    def _formatar_valor(self, valor: Decimal) -> str:
-        """Formata valor para string"""
+    def _formatar_valor(self, valor) -> float:
+        """Formata valor para float"""
         if valor:
-            return str(float(valor))
-        return '0.0'
+            try:
+                return float(valor)
+            except (ValueError, TypeError):
+                return 0.0
+        return 0.0
 
     def _parsear_numero_dv(self, valor: str) -> tuple:
         """Separa número e dígito verificador. Aceita '1234-5' ou '1234 5' ou '1234'."""
@@ -143,50 +146,52 @@ class CNABService:
         agencia_num, agencia_dv = self._parsear_numero_dv(conta_bancaria.agencia)
         conta_num, conta_dv = self._parsear_numero_dv(conta_bancaria.conta)
 
+        convenio = conta_bancaria.convenio or ''
+        # Para Banco do Brasil, convenio é obrigatório; formata com zeros à esquerda (7 dígitos)
+        if conta_bancaria.banco == '001' and convenio:
+            convenio = ''.join(filter(str.isdigit, convenio)).zfill(7)[:8]
+
         boleto_data = {
             # Identificacao
-            'nosso_numero': parcela.nosso_numero,
-            'numero_documento': parcela.numero_documento,
+            'nosso_numero': str(parcela.nosso_numero or '1'),
+            'documento_numero': parcela.numero_documento or '',
 
             # Valores e datas
             'valor': self._formatar_valor(parcela.valor_boleto or parcela.valor_atual),
             'data_vencimento': self._formatar_data(parcela.data_vencimento),
-            'data_documento': self._formatar_data(parcela.data_geracao_boleto.date() if parcela.data_geracao_boleto else timezone.now().date()),
+            'data_documento': self._formatar_data(
+                parcela.data_geracao_boleto.date() if parcela.data_geracao_boleto else timezone.now().date()
+            ),
 
-            # Dados do sacado (pagador)
+            # Campos obrigatórios da classe Base BRCobranca
+            'moeda': '9',
+            'especie': 'R$',
+            'especie_documento': 'DM',
+            'aceite': 'S',
+
+            # Dados do sacado (pagador) — nomes corretos do BRCobranca
             'sacado': comprador.nome[:60],
-            'documento_sacado': cpf_cnpj,
-            'endereco_sacado': endereco_sacado[:80],
-            'bairro_sacado': (comprador.bairro or '')[:40],
-            'cidade_sacado': (comprador.cidade or '')[:30],
-            'uf_sacado': (comprador.estado or '')[:2],
-            'cep_sacado': self._formatar_cpf_cnpj(comprador.cep or ''),
+            'sacado_documento': cpf_cnpj,
+            'sacado_endereco': endereco_sacado[:80],
 
             # Dados do cedente (recebedor)
             'cedente': (imobiliaria.razao_social or imobiliaria.nome)[:60],
             'documento_cedente': self._formatar_cpf_cnpj(imobiliaria.cnpj),
 
-            # Dados bancarios
+            # Dados bancários
             'agencia': agencia_num,
-            'agencia_dv': agencia_dv,
             'conta_corrente': conta_num,
-            'digito_conta': conta_dv,
-            'convenio': conta_bancaria.convenio or '',
+            'convenio': convenio,
             'carteira': conta_bancaria.carteira or '',
-            'variacao': '',
-            'codigo_cedente': conta_bancaria.convenio or '',
 
             # Instrucoes
             'instrucao1': f'Parcela {parcela.numero_parcela}/{contrato.numero_parcelas} - Contrato {contrato.numero_contrato}',
             'instrucao2': '',
             'instrucao3': '',
             'instrucao4': '',
-            'instrucao5': '',
-            'instrucao6': '',
 
-            # Multa e juros
-            'percentual_multa': self._formatar_valor(contrato.percentual_multa),
-            'valor_mora': self._formatar_valor(contrato.percentual_juros_mora / 30),  # Juros diario
+            # Local de pagamento
+            'local_pagamento': 'Pagavel em qualquer banco ate o vencimento',
         }
 
         return boleto_data
@@ -209,6 +214,16 @@ class CNABService:
             dict: Resultado com arquivo gerado e estatisticas
         """
         from financeiro.models import ArquivoRemessa, ItemRemessa
+
+        # Validar conta bancária para bancos com campos obrigatórios
+        if conta_bancaria.banco == '001' and not conta_bancaria.convenio:
+            return {
+                'sucesso': False,
+                'erro': (
+                    'Banco do Brasil requer o campo "Convênio" preenchido na conta bancária. '
+                    'Acesse Configurações → Conta Bancária e informe o número do convênio.'
+                )
+            }
 
         # Validar parcelas
         parcelas_validas = [p for p in parcelas if p.tem_boleto and not p.pago]
