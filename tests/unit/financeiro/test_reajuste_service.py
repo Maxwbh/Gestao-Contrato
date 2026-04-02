@@ -118,25 +118,36 @@ class TestReajusteServiceIntegracao(TestCase):
         # Criar estrutura base
         cls.contabilidade = Contabilidade.objects.create(
             nome='Contabilidade Teste',
-            documento='12345678000100'
+            razao_social='Contabilidade Teste LTDA',
+            cnpj='12345678000100',
+            endereco='Rua Teste, 123',
+            telefone='(31) 3333-0010',
+            email='reajuste@contabilidade.com',
+            responsavel='Responsável Reajuste',
         )
 
         cls.imobiliaria = Imobiliaria.objects.create(
             contabilidade=cls.contabilidade,
             nome='Imobiliária Teste',
-            documento='98765432000100'
+            cnpj='98765432000100',
+            telefone='(31) 3333-0011',
+            email='reajuste@imobiliaria.com',
+            responsavel_financeiro='Responsável Financeiro Reajuste',
         )
 
         cls.comprador = Comprador.objects.create(
-            imobiliaria=cls.imobiliaria,
             nome='Comprador Teste',
-            documento='12345678901'
+            tipo_pessoa='PF',
+            cpf='123.456.789-01',
+            telefone='(31) 3333-0012',
+            celular='(31) 99999-0012',
+            email='reajuste@comprador.com',
         )
 
         cls.imovel = Imovel.objects.create(
             imobiliaria=cls.imobiliaria,
             identificacao='LOTE-001',
-            endereco='Rua Teste, 123'
+            area='360.00',
         )
 
         # Contrato de 24 meses
@@ -146,6 +157,7 @@ class TestReajusteServiceIntegracao(TestCase):
             imovel=cls.imovel,
             numero_contrato='CONT-001',
             data_contrato=date.today() - timedelta(days=400),  # 13 meses atrás
+            data_primeiro_vencimento=date.today() - timedelta(days=370),
             valor_total=Decimal('100000.00'),
             valor_entrada=Decimal('10000.00'),
             numero_parcelas=24,
@@ -166,16 +178,18 @@ class TestReajusteServiceIntegracao(TestCase):
         """Testa simulação de reajuste"""
         from financeiro.models import Parcela
 
-        # Criar algumas parcelas
+        # Criar apenas parcelas que ainda não existem (o contrato auto-gera parcelas no save)
+        existing = set(self.contrato.parcelas.values_list('numero_parcela', flat=True))
         for i in range(1, 13):
-            Parcela.objects.create(
-                contrato=self.contrato,
-                numero_parcela=i,
-                data_vencimento=date.today() + timedelta(days=30 * i),
-                valor_original=Decimal('3750.00'),
-                valor_atual=Decimal('3750.00'),
-                ciclo_reajuste=1
-            )
+            if i not in existing:
+                Parcela.objects.create(
+                    contrato=self.contrato,
+                    numero_parcela=i,
+                    data_vencimento=date.today() + timedelta(days=30 * i),
+                    valor_original=Decimal('3750.00'),
+                    valor_atual=Decimal('3750.00'),
+                    ciclo_reajuste=1
+                )
 
         service = ReajusteService()
         resultado = service.simular_reajuste(
@@ -220,25 +234,36 @@ class TestReajusteAplicacao(TestCase):
         # Criar estrutura base
         cls.contabilidade = Contabilidade.objects.create(
             nome='Contabilidade Reajuste',
-            documento='11111111000100'
+            razao_social='Contabilidade Reajuste LTDA',
+            cnpj='11111111000100',
+            endereco='Rua Reajuste, 100',
+            telefone='(31) 3333-0020',
+            email='reaplicacao@contabilidade.com',
+            responsavel='Responsável ReAplicacao',
         )
 
         cls.imobiliaria = Imobiliaria.objects.create(
             contabilidade=cls.contabilidade,
             nome='Imobiliária Reajuste',
-            documento='22222222000100'
+            cnpj='22222222000100',
+            telefone='(31) 3333-0021',
+            email='reaplicacao@imobiliaria.com',
+            responsavel_financeiro='Responsável Financeiro ReAplicacao',
         )
 
         cls.comprador = Comprador.objects.create(
-            imobiliaria=cls.imobiliaria,
             nome='Comprador Reajuste',
-            documento='33333333333'
+            tipo_pessoa='PF',
+            cpf='333.333.333-34',
+            telefone='(31) 3333-0022',
+            celular='(31) 99999-0022',
+            email='reaplicacao@comprador.com',
         )
 
         cls.imovel = Imovel.objects.create(
             imobiliaria=cls.imobiliaria,
             identificacao='LOTE-REA-001',
-            endereco='Rua Reajuste, 100'
+            area='360.00',
         )
 
         # Criar índices para teste
@@ -266,6 +291,7 @@ class TestReajusteAplicacao(TestCase):
             imovel=self.imovel,
             numero_contrato='CONT-REA-001',
             data_contrato=date.today() - timedelta(days=365),
+            data_primeiro_vencimento=date.today() + timedelta(days=30),
             valor_total=Decimal('50000.00'),
             valor_entrada=Decimal('5000.00'),
             numero_parcelas=24,
@@ -275,18 +301,22 @@ class TestReajusteAplicacao(TestCase):
             status=StatusContrato.ATIVO
         )
 
-        # Criar parcelas
+        # Marcar as primeiras 6 parcelas como pagas (auto-geradas no save)
+        existing = set(contrato.parcelas.values_list('numero_parcela', flat=True))
         for i in range(1, 25):
-            ciclo = 1 if i <= 12 else 2
-            Parcela.objects.create(
-                contrato=contrato,
-                numero_parcela=i,
-                data_vencimento=date.today() + timedelta(days=30 * i),
-                valor_original=Decimal('1875.00'),
-                valor_atual=Decimal('1875.00'),
-                ciclo_reajuste=ciclo,
-                pago=(i <= 6)  # Primeiras 6 pagas
-            )
+            if i not in existing:
+                ciclo = 1 if i <= 12 else 2
+                Parcela.objects.create(
+                    contrato=contrato,
+                    numero_parcela=i,
+                    data_vencimento=date.today() + timedelta(days=30 * i),
+                    valor_original=Decimal('1875.00'),
+                    valor_atual=Decimal('1875.00'),
+                    ciclo_reajuste=ciclo,
+                    pago=(i <= 6)  # Primeiras 6 pagas
+                )
+        # Mark first 6 auto-generated parcelas as paid
+        contrato.parcelas.filter(numero_parcela__lte=6).update(pago=True)
 
         service = ReajusteService()
         resultado = service.aplicar_reajuste(
