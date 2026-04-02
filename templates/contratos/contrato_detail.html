@@ -1703,26 +1703,7 @@ function copiarMensagemEmail() {
 }
 
 // ============ FUNCOES DE TOAST ============
-
-function showToast(message, type = 'success', duration = 4000) {
-    var container = document.getElementById('toastContainer');
-    var toast = document.createElement('div');
-    toast.className = 'toast-notification ' + type;
-
-    var icon = type === 'success' ? 'fa-check-circle' :
-               type === 'error' ? 'fa-exclamation-circle' : 'fa-info-circle';
-
-    toast.innerHTML = '<i class="fas ' + icon + '"></i>' +
-                      '<span>' + message + '</span>' +
-                      '<span class="toast-close" onclick="this.parentElement.remove()"><i class="fas fa-times"></i></span>';
-
-    container.appendChild(toast);
-
-    setTimeout(function() {
-        toast.style.animation = 'slideOut 0.3s ease-out forwards';
-        setTimeout(function() { toast.remove(); }, 300);
-    }, duration);
-}
+// Usa o showToast/showErrorModal globais definidos no base.html
 
 // ============ FUNCOES DE BOLETO ============
 
@@ -1931,13 +1912,13 @@ document.getElementById('formPagamento').addEventListener('submit', function(e) 
     .then(response => response.json())
     .then(data => {
         if (data.sucesso) {
-            alert('Pagamento registrado com sucesso!');
+            showToast('Pagamento registrado com sucesso!', 'success');
             location.reload();
         } else {
-            alert('Erro ao registrar pagamento: ' + data.erro);
+            showErrorModal('Erro ao registrar pagamento: ' + data.erro);
         }
     })
-    .catch(error => alert('Erro de conexao: ' + error));
+    .catch(error => showErrorModal('Erro de conexão: ' + error));
 });
 
 // ============ FUNCOES DE CARNE ============
@@ -2104,13 +2085,13 @@ document.getElementById('formCarne').addEventListener('submit', function(e) {
     e.preventDefault();
 
     if (!dadosElegibilidade) {
-        alert('Dados de elegibilidade nao carregados');
+        showErrorModal('Dados de elegibilidade não carregados. Recarregue a página.');
         return;
     }
 
     var qtd = parseInt(document.getElementById('carne_quantidade').value) || 0;
     if (qtd < 1) {
-        alert('Selecione pelo menos 1 parcela');
+        showErrorModal('Selecione pelo menos 1 parcela.');
         return;
     }
 
@@ -2125,7 +2106,7 @@ document.getElementById('formCarne').addEventListener('submit', function(e) {
     }
 
     if (parcelaIds.length === 0) {
-        alert('Nenhuma parcela disponivel para gerar boleto');
+        showErrorModal('Nenhuma parcela disponível para gerar boleto.');
         return;
     }
 
@@ -2181,7 +2162,7 @@ function abrirModalReajuste() {
     var elModal    = document.getElementById('modalReajuste');
     if (!elModal) {
         console.error('[Reajuste] Modal #modalReajuste não encontrado no DOM.');
-        alert('Erro interno: recarregue a página e tente novamente.');
+        showErrorModal('Erro interno: recarregue a página e tente novamente.');
         return;
     }
 
@@ -2377,7 +2358,7 @@ document.getElementById('formReajuste').addEventListener('submit', function(e) {
 
     var ciclo = document.getElementById('r_ciclo_hidden').value;
     if (!ciclo) {
-        alert('Nenhum ciclo de reajuste pendente identificado.');
+        showErrorModal('Nenhum ciclo de reajuste pendente identificado.');
         return;
     }
 
@@ -2429,13 +2410,13 @@ document.getElementById('formReajuste').addEventListener('submit', function(e) {
             showToast(data.mensagem, 'success', 5000);
             setTimeout(() => location.reload(), 1200);
         } else {
-            alert('Erro ao aplicar reajuste: ' + data.erro);
+            showErrorModal('Erro ao aplicar reajuste: ' + data.erro);
             btn.disabled = false;
             btn.innerHTML = '<i class="fas fa-check"></i> Aplicar Reajuste';
         }
     })
     .catch(err => {
-        alert('Erro de conexao: ' + err);
+        showErrorModal('Erro de conexão: ' + err);
         btn.disabled = false;
         btn.innerHTML = '<i class="fas fa-check"></i> Aplicar Reajuste';
     });
@@ -2459,11 +2440,11 @@ function excluirReajuste(reajusteId, ciclo, percentual) {
             showToast(data.mensagem, 'success', 4000);
             setTimeout(() => location.reload(), 1000);
         } else {
-            alert('Erro ao desfazer reajuste: ' + data.erro);
+            showErrorModal('Erro ao desfazer reajuste: ' + data.erro);
         }
     })
     .catch(error => {
-        alert('Erro de conexao: ' + error);
+        showErrorModal('Erro de conexão: ' + error);
     });
 }
 
@@ -2529,10 +2510,10 @@ function excluirFaixaJuros(entryId) {
             if (row) row.remove();
             showToast('Faixa removida.', 'success', 2000);
         } else {
-            alert('Erro: ' + (data.erro || 'Erro desconhecido'));
+            showErrorModal('Erro: ' + (data.erro || 'Erro desconhecido'));
         }
     })
-    .catch(() => alert('Erro de conexão.'));
+    .catch(() => showErrorModal('Erro de conexão.'));
 }
 
 // 3.2 — Badge "Boletos Gerados"
