@@ -122,8 +122,25 @@
             <div class="col-md-10">
                 <div class="setup-card text-center">
                     <h1><i class="fas fa-rocket me-2"></i>Setup do Sistema</h1>
-                    <p class="lead">Configuração Inicial do Sistema de Gestão de Contratos</p>
+                    <p class="lead">Configuração do Sistema de Gestão de Contratos</p>
                     <p class="text-muted">Desenvolvido por Maxwell da Silva Oliveira</p>
+
+                    {% if not has_superuser %}
+                    <div class="alert alert-danger mt-3 text-start">
+                        <i class="fas fa-exclamation-triangle me-2"></i>
+                        <strong>Configuração obrigatória:</strong> Nenhum administrador encontrado.
+                        Crie um usuário admin antes de acessar o sistema.
+                    </div>
+                    {% else %}
+                    <div class="alert alert-info mt-3 text-start">
+                        <i class="fas fa-info-circle me-2"></i>
+                        <strong>Setup opcional:</strong> O sistema está configurado e funcionando.
+                        Esta página é para manutenção e geração de dados de teste.
+                        <a href="/" class="btn btn-sm btn-success ms-3">
+                            <i class="fas fa-home me-1"></i> Voltar para o Sistema
+                        </a>
+                    </div>
+                    {% endif %}
                 </div>
 
                 <div class="setup-card">
@@ -145,9 +162,9 @@
                             </p>
                         </div>
                         <div class="col-md-6">
-                            <p><strong>Superusuário:</strong>
-                                <span class="status-badge {% if total_users > 0 %}status-ok{% else %}status-error{% endif %}">
-                                    {% if total_users > 0 %}<i class="fas fa-check me-1"></i>{{ total_users }} usuário(s){% else %}<i class="fas fa-times me-1"></i>Nenhum{% endif %}
+                            <p><strong>Superusuário Admin:</strong>
+                                <span class="status-badge {% if has_superuser %}status-ok{% else %}status-error{% endif %}">
+                                    {% if has_superuser %}<i class="fas fa-check me-1"></i>Configurado ({{ total_users }} usuário(s)){% else %}<i class="fas fa-times me-1"></i>Nenhum admin cadastrado{% endif %}
                                 </span>
                             </p>
                         </div>
@@ -178,7 +195,7 @@
                         <i class="fas fa-exclamation-triangle me-2"></i>
                         <strong>Atenção:</strong> Existem imobiliárias sem contas bancárias configuradas.
                         Para gerar boletos, é necessário ter pelo menos uma conta bancária principal.
-                        <br><strong>Execute "Gerar Dados" com a opção "Limpar antes" marcada.</strong>
+                        <a href="/imobiliarias/" class="btn btn-sm btn-warning ms-2">Configurar Contas Bancárias</a>
                     </div>
                     {% endif %}
                 </div>
@@ -199,10 +216,11 @@
                                     </p>
 
                                     <div class="form-check form-switch d-flex justify-content-center mb-3">
-                                        <input class="form-check-input me-2" type="checkbox" id="limparAntes" checked>
+                                        <input class="form-check-input me-2" type="checkbox" id="limparAntes">
                                         <label class="form-check-label" for="limparAntes">
                                             <i class="fas fa-trash-alt me-1 text-danger"></i>
                                             Limpar dados existentes antes
+                                            <small class="text-danger d-block">(⚠️ Apaga todos os dados permanentemente)</small>
                                         </label>
                                     </div>
 
