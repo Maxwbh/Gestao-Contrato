@@ -349,14 +349,41 @@
         </div>
     </nav>
 
+    <!-- Modal de Erro Global -->
+    <div class="modal fade" id="errorModal" tabindex="-1" aria-labelledby="errorModalLabel" aria-modal="true" role="dialog">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content border-0 shadow">
+                <div class="modal-header bg-danger text-white border-0">
+                    <h5 class="modal-title d-flex align-items-center gap-2" id="errorModalLabel">
+                        <i class="fas fa-exclamation-circle"></i>
+                        <span id="errorModalTitle">Erro</span>
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Fechar"></button>
+                </div>
+                <div class="modal-body py-4">
+                    <p class="mb-0" id="errorModalMessage" style="white-space: pre-wrap;"></p>
+                </div>
+                <div class="modal-footer border-0 justify-content-center">
+                    <button type="button" class="btn btn-danger px-5" data-bs-dismiss="modal">
+                        <i class="fas fa-check me-1"></i> OK
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- Main Content -->
     <div class="container main-container">
         {% if messages %}
             {% for message in messages %}
-                <div class="alert alert-{{ message.tags }} alert-dismissible fade show" role="alert">
-                    {{ message }}
-                    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-                </div>
+                {% if 'error' in message.tags or 'danger' in message.tags %}
+                    <div class="d-none msg-error-popup">{{ message }}</div>
+                {% else %}
+                    <div class="alert alert-{{ message.tags }} alert-dismissible fade show" role="alert">
+                        {{ message }}
+                        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                    </div>
+                {% endif %}
             {% endfor %}
         {% endif %}
 
@@ -419,10 +446,25 @@
         .badge-notify { font-size: .6rem; vertical-align: super; }
     </style>
     <script>
+    // Mostra modal de erro global com botão OK
+    window.showErrorModal = function(message, title) {
+        var modal = document.getElementById('errorModal');
+        if (!modal) return;
+        document.getElementById('errorModalTitle').textContent = title || 'Erro';
+        document.getElementById('errorModalMessage').textContent = message || '';
+        var bsModal = bootstrap.Modal.getOrCreateInstance(modal);
+        bsModal.show();
+    };
+
     window.showToast = function(message, type, duration) {
         type = type || 'info';
+        // Erros e avisos críticos: usar modal em vez de toast auto-dismiss
+        if (type === 'error') {
+            window.showErrorModal(message);
+            return;
+        }
         duration = duration || 4000;
-        const icons = { success: 'fa-check-circle', error: 'fa-times-circle', warning: 'fa-exclamation-triangle', info: 'fa-info-circle' };
+        const icons = { success: 'fa-check-circle', warning: 'fa-exclamation-triangle', info: 'fa-info-circle' };
         const container = document.getElementById('globalToastContainer');
         const toast = document.createElement('div');
         toast.className = 'global-toast ' + type;
@@ -437,6 +479,14 @@
         }, duration);
         toast.addEventListener('click', () => toast.remove());
     };
+
+    // Mostrar mensagens de erro do Django como modal (em vez de alert inline)
+    document.addEventListener('DOMContentLoaded', function() {
+        document.querySelectorAll('.msg-error-popup').forEach(function(el) {
+            window.showErrorModal(el.textContent.trim());
+            el.remove();
+        });
+    });
 
     // Notificações: carregar count de reajustes pendentes (3.17)
     {% if user.is_authenticated %}
