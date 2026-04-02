@@ -1448,6 +1448,25 @@ def api_preview_parcelas(request):
 # WIZARD — Contrato com Tabela Price + Intermediárias
 # =============================================================================
 
+def _gerar_numero_contrato():
+    """Gera o próximo número de contrato no formato CTR-AAAA-NNNN."""
+    from django.utils import timezone
+    from contratos.models import Contrato
+    ano = timezone.now().year
+    prefix = f'CTR-{ano}-'
+    ultimos = Contrato.objects.filter(
+        numero_contrato__startswith=prefix
+    ).values_list('numero_contrato', flat=True)
+    seq = 1
+    for n in ultimos:
+        try:
+            num = int(n[len(prefix):])
+            if num >= seq:
+                seq = num + 1
+        except (ValueError, IndexError):
+            pass
+    return f'{prefix}{seq:04d}'
+
 class ContratoWizardView(LoginRequiredMixin, View):
     """
     Wizard de 4 etapas para criar contratos com TabelaJuros escalante
@@ -1477,7 +1496,11 @@ class ContratoWizardView(LoginRequiredMixin, View):
         sess = self._session(request)
 
         if step == 'basico':
-            form = ContratoWizardBasicoForm(initial=sess.get('basico'))
+            initial = sess.get('basico', {})
+            if not initial.get('numero_contrato'):
+                initial = dict(initial)
+                initial['numero_contrato'] = _gerar_numero_contrato()
+            form = ContratoWizardBasicoForm(initial=initial)
             return render(request, 'contratos/wizard/step1_basico.html', {
                 'form': form, 'step': step, 'step_num': 1,
             })
