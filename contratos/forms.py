@@ -525,41 +525,22 @@ class ContratoWizardBasicoForm(forms.ModelForm):
             'percentual_juros_mora', 'percentual_multa',
             'tipo_correcao', 'prazo_reajuste_meses', 'tipo_correcao_fallback',
             'spread_reajuste', 'reajuste_piso', 'reajuste_teto',
-            'intermediarias_reduzem_pmt', 'intermediarias_reajustadas',
-            'percentual_fruicao', 'percentual_multa_rescisao_penal',
-            'percentual_multa_rescisao_adm', 'percentual_cessao',
-            'usar_config_boleto_imobiliaria', 'conta_bancaria_padrao',
-            'tipo_valor_multa', 'valor_multa_boleto',
-            'tipo_valor_juros', 'valor_juros_boleto', 'dias_carencia_boleto',
-            'tipo_valor_desconto', 'valor_desconto_boleto', 'dias_desconto_boleto',
-            'instrucao_boleto_1', 'instrucao_boleto_2', 'instrucao_boleto_3',
             'observacoes',
         ]
         widgets = {
             'data_contrato': forms.DateInput(attrs={'type': 'date'}, format='%Y-%m-%d'),
             'data_primeiro_vencimento': forms.DateInput(attrs={'type': 'date'}, format='%Y-%m-%d'),
-            'valor_total': forms.NumberInput(attrs={'step': '0.01', 'min': '0.01', 'placeholder': '350000,00'}),
-            'valor_entrada': forms.NumberInput(attrs={'step': '0.01', 'min': '0', 'placeholder': '100000,00'}),
-            'numero_parcelas': forms.NumberInput(attrs={'min': '1', 'max': '600', 'placeholder': '360'}),
-            'dia_vencimento': forms.NumberInput(attrs={'min': '1', 'max': '28', 'placeholder': '10'}),
-            'percentual_juros_mora': forms.NumberInput(attrs={'step': '0.01', 'placeholder': '1,00'}),
-            'percentual_multa': forms.NumberInput(attrs={'step': '0.01', 'placeholder': '2,00'}),
-            'prazo_reajuste_meses': forms.NumberInput(attrs={'min': '1', 'max': '120', 'placeholder': '12'}),
-            'spread_reajuste': forms.NumberInput(attrs={'step': '0.0001', 'placeholder': '0,0000'}),
-            'reajuste_piso': forms.NumberInput(attrs={'step': '0.0001', 'placeholder': 'Ex: 0,0000'}),
-            'reajuste_teto': forms.NumberInput(attrs={'step': '0.0001', 'placeholder': 'Ex: 15,0000'}),
-            'percentual_fruicao': forms.NumberInput(attrs={'step': '0.0001', 'placeholder': '0,5000'}),
-            'percentual_multa_rescisao_penal': forms.NumberInput(attrs={'step': '0.0001', 'placeholder': '10,0000'}),
-            'percentual_multa_rescisao_adm': forms.NumberInput(attrs={'step': '0.0001', 'placeholder': '12,0000'}),
-            'percentual_cessao': forms.NumberInput(attrs={'step': '0.0001', 'placeholder': '3,0000'}),
-            'valor_multa_boleto': forms.NumberInput(attrs={'step': '0.0001', 'min': '0'}),
-            'valor_juros_boleto': forms.NumberInput(attrs={'step': '0.0001', 'min': '0'}),
-            'dias_carencia_boleto': forms.NumberInput(attrs={'min': '0'}),
-            'valor_desconto_boleto': forms.NumberInput(attrs={'step': '0.0001', 'min': '0'}),
-            'dias_desconto_boleto': forms.NumberInput(attrs={'min': '0'}),
-            'instrucao_boleto_1': forms.TextInput(attrs={'placeholder': 'Instrução 1 (opcional)'}),
-            'instrucao_boleto_2': forms.TextInput(attrs={'placeholder': 'Instrução 2 (opcional)'}),
-            'instrucao_boleto_3': forms.TextInput(attrs={'placeholder': 'Instrução 3 (opcional)'}),
+            'numero_contrato': forms.TextInput(attrs={'title': 'Ex: 0001/2026', 'autocomplete': 'off'}),
+            'valor_total': forms.NumberInput(attrs={'step': '0.01', 'min': '0.01', 'title': 'Ex: 350000.00'}),
+            'valor_entrada': forms.NumberInput(attrs={'step': '0.01', 'min': '0', 'title': 'Ex: 100000.00'}),
+            'numero_parcelas': forms.NumberInput(attrs={'min': '1', 'max': '600', 'title': 'Ex: 360'}),
+            'dia_vencimento': forms.NumberInput(attrs={'min': '1', 'max': '28', 'title': 'Ex: 10'}),
+            'percentual_juros_mora': forms.NumberInput(attrs={'step': '0.01', 'title': 'Ex: 1,00'}),
+            'percentual_multa': forms.NumberInput(attrs={'step': '0.01', 'title': 'Ex: 2,00'}),
+            'prazo_reajuste_meses': forms.NumberInput(attrs={'min': '1', 'max': '120', 'title': 'Ex: 12'}),
+            'spread_reajuste': forms.NumberInput(attrs={'step': '0.0001', 'title': 'Ex: 0,0000'}),
+            'reajuste_piso': forms.NumberInput(attrs={'step': '0.0001', 'title': 'Ex: 0,0000 (sem piso)'}),
+            'reajuste_teto': forms.NumberInput(attrs={'step': '0.0001', 'title': 'Ex: 15,0000'}),
             'observacoes': forms.Textarea(attrs={'rows': 2}),
         }
 
@@ -576,9 +557,6 @@ class ContratoWizardBasicoForm(forms.ModelForm):
         self.fields['imovel'].queryset = Imovel.objects.filter(disponivel=True, ativo=True)
         self.fields['comprador'].queryset = Comprador.objects.filter(ativo=True)
         self.fields['imobiliaria'].queryset = Imobiliaria.objects.filter(ativo=True)
-        from financeiro.models import ContaBancaria
-        self.fields['conta_bancaria_padrao'].queryset = ContaBancaria.objects.filter(ativo=True)
-        self.fields['conta_bancaria_padrao'].required = False
 
     def clean(self):
         cleaned_data = super().clean()
