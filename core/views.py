@@ -787,11 +787,11 @@ class CompradorDeleteView(LoginRequiredMixin, DeleteView):
     model = Comprador
     success_url = reverse_lazy('core:listar_compradores')
 
-    def delete(self, request, *args, **kwargs):
+    def form_valid(self, form):
         self.object = self.get_object()
         self.object.ativo = False
         self.object.save()
-        messages.success(request, f'Comprador {self.object.nome} removido com sucesso!')
+        messages.success(self.request, f'Comprador {self.object.nome} removido com sucesso!')
         return redirect(self.success_url)
 
 
@@ -883,11 +883,11 @@ class ImovelDeleteView(LoginRequiredMixin, DeleteView):
     model = Imovel
     success_url = reverse_lazy('core:listar_imoveis')
 
-    def delete(self, request, *args, **kwargs):
+    def form_valid(self, form):
         self.object = self.get_object()
         self.object.ativo = False
         self.object.save()
-        messages.success(request, f'Imóvel {self.object.identificacao} removido com sucesso!')
+        messages.success(self.request, f'Imóvel {self.object.identificacao} removido com sucesso!')
         return redirect(self.success_url)
 
 
@@ -1042,11 +1042,11 @@ class ImobiliariaDeleteView(LoginRequiredMixin, DeleteView):
     model = Imobiliaria
     success_url = reverse_lazy('core:listar_imobiliarias')
 
-    def delete(self, request, *args, **kwargs):
+    def form_valid(self, form):
         self.object = self.get_object()
         self.object.ativo = False
         self.object.save()
-        messages.success(request, f'Imobiliária {self.object.nome} removida com sucesso!')
+        messages.success(self.request, f'Imobiliária {self.object.nome} removida com sucesso!')
         return redirect(self.success_url)
 
 
