@@ -370,6 +370,139 @@
                             <div class="info-value text-warning">{{ contrato.reajuste_teto|floatformat:2 }}%</div>
                         </div>
                         {% endif %}
+                        {% if contrato.tipo_correcao_fallback %}
+                        <div class="info-item">
+                            <div class="info-label">Índice Fallback</div>
+                            <div class="info-value text-muted">{{ contrato.get_tipo_correcao_fallback_display }}</div>
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>
+
+                <!-- Cláusulas Contratuais -->
+                <div class="card info-card mb-3" style="border-left:4px solid #6f42c1;">
+                    <div class="card-header text-white" style="background-color:#6f42c1;">
+                        <i class="fas fa-file-alt"></i> Cláusulas Contratuais
+                    </div>
+                    <div class="card-body">
+                        <div class="info-item">
+                            <div class="info-label">% Fruição</div>
+                            <div class="info-value">{{ contrato.percentual_fruicao|default:"0.00" }}% a.m.</div>
+                        </div>
+                        <div class="info-item">
+                            <div class="info-label">Multa Rescisão Penal</div>
+                            <div class="info-value">{{ contrato.percentual_multa_rescisao_penal|default:"0.00" }}%</div>
+                        </div>
+                        <div class="info-item">
+                            <div class="info-label">Desp. Adm. Rescisão</div>
+                            <div class="info-value">{{ contrato.percentual_multa_rescisao_adm|default:"0.00" }}%</div>
+                        </div>
+                        <div class="info-item">
+                            <div class="info-label">% Cessão de Direitos</div>
+                            <div class="info-value">{{ contrato.percentual_cessao|default:"0.00" }}%</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Parâmetros de Intermediárias -->
+                <div class="card info-card mb-3" style="border-left:4px solid #fd7e14;">
+                    <div class="card-header text-white" style="background-color:#fd7e14;">
+                        <i class="fas fa-sliders-h"></i> Parâmetros de Intermediárias
+                    </div>
+                    <div class="card-body">
+                        <div class="info-item">
+                            <div class="info-label">Reduzem PMT</div>
+                            <div class="info-value">
+                                {% if contrato.intermediarias_reduzem_pmt %}
+                                <span class="badge bg-success">Sim</span>
+                                {% else %}
+                                <span class="badge bg-secondary">Não</span>
+                                {% endif %}
+                            </div>
+                        </div>
+                        <div class="info-item">
+                            <div class="info-label">Reajustadas</div>
+                            <div class="info-value">
+                                {% if contrato.intermediarias_reajustadas %}
+                                <span class="badge bg-success">Sim</span>
+                                {% else %}
+                                <span class="badge bg-secondary">Não</span>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Configuração de Boleto -->
+                <div class="card info-card mb-3" style="border-left:4px solid #20c997;">
+                    <div class="card-header text-white" style="background-color:#20c997;">
+                        <i class="fas fa-barcode"></i> Configuração de Boleto
+                    </div>
+                    <div class="card-body">
+                        <div class="info-item">
+                            <div class="info-label">Config. Boleto</div>
+                            <div class="info-value">
+                                {% if contrato.usar_config_boleto_imobiliaria %}
+                                <span class="badge bg-info">Padrão da Imobiliária</span>
+                                {% else %}
+                                <span class="badge bg-warning text-dark">Personalizada</span>
+                                {% endif %}
+                            </div>
+                        </div>
+                        {% if not contrato.usar_config_boleto_imobiliaria %}
+                        {% if contrato.tipo_valor_multa %}
+                        <div class="info-item">
+                            <div class="info-label">Multa (boleto)</div>
+                            <div class="info-value">
+                                {{ contrato.valor_multa_boleto|default:"0.00" }}
+                                {% if contrato.tipo_valor_multa == 'PERCENTUAL' %}%{% else %}R${% endif %}
+                            </div>
+                        </div>
+                        {% endif %}
+                        {% if contrato.tipo_valor_juros %}
+                        <div class="info-item">
+                            <div class="info-label">Juros (boleto)</div>
+                            <div class="info-value">
+                                {{ contrato.valor_juros_boleto|default:"0.00" }}
+                                {% if contrato.tipo_valor_juros == 'PERCENTUAL' %}% a.m.{% else %}R$ a.m.{% endif %}
+                            </div>
+                        </div>
+                        {% endif %}
+                        {% if contrato.dias_carencia_boleto %}
+                        <div class="info-item">
+                            <div class="info-label">Carência</div>
+                            <div class="info-value">{{ contrato.dias_carencia_boleto }} dias</div>
+                        </div>
+                        {% endif %}
+                        {% if contrato.tipo_valor_desconto %}
+                        <div class="info-item">
+                            <div class="info-label">Desconto (boleto)</div>
+                            <div class="info-value">
+                                {{ contrato.valor_desconto_boleto|default:"0.00" }}
+                                {% if contrato.tipo_valor_desconto == 'PERCENTUAL' %}%{% else %}R${% endif %}
+                                {% if contrato.dias_desconto_boleto %} — {{ contrato.dias_desconto_boleto }}d antes{% endif %}
+                            </div>
+                        </div>
+                        {% endif %}
+                        {% if contrato.instrucao_boleto_1 %}
+                        <div class="info-item">
+                            <div class="info-label">Instrução 1</div>
+                            <div class="info-value small">{{ contrato.instrucao_boleto_1 }}</div>
+                        </div>
+                        {% endif %}
+                        {% if contrato.instrucao_boleto_2 %}
+                        <div class="info-item">
+                            <div class="info-label">Instrução 2</div>
+                            <div class="info-value small">{{ contrato.instrucao_boleto_2 }}</div>
+                        </div>
+                        {% endif %}
+                        {% if contrato.instrucao_boleto_3 %}
+                        <div class="info-item">
+                            <div class="info-label">Instrução 3</div>
+                            <div class="info-value small">{{ contrato.instrucao_boleto_3 }}</div>
+                        </div>
+                        {% endif %}
+                        {% endif %}
                     </div>
                 </div>
 
@@ -495,6 +628,83 @@
                             <i class="fas fa-info-circle"></i> Nenhum reajuste aplicado
                         </div>
                         {% endif %}
+                    </div>
+                </div>
+
+                <!-- Q-04: Tabela de Juros Escalantes -->
+                <div class="card mb-3" style="border-left:4px solid #0dcaf0;">
+                    <div class="card-header bg-dark text-white d-flex justify-content-between align-items-center">
+                        <span><i class="fas fa-percentage"></i> Juros Escalantes</span>
+                        <button type="button" class="btn btn-sm btn-light" data-bs-toggle="collapse" data-bs-target="#formAddJuros">
+                            <i class="fas fa-plus"></i> Adicionar Faixa
+                        </button>
+                    </div>
+                    <!-- Formulário inline (colapsável) -->
+                    <div id="formAddJuros" class="collapse border-bottom">
+                        <div class="card-body bg-light">
+                            <div class="row g-2 align-items-end">
+                                <div class="col">
+                                    <label class="form-label form-label-sm mb-1">Ciclo Início</label>
+                                    <input type="number" id="juros_ciclo_inicio" class="form-control form-control-sm" min="1" placeholder="1">
+                                </div>
+                                <div class="col">
+                                    <label class="form-label form-label-sm mb-1">Ciclo Fim</label>
+                                    <input type="number" id="juros_ciclo_fim" class="form-control form-control-sm" min="1" placeholder="∞">
+                                </div>
+                                <div class="col">
+                                    <label class="form-label form-label-sm mb-1">Juros % a.m.</label>
+                                    <input type="number" id="juros_mensal" class="form-control form-control-sm" step="0.0001" min="0" placeholder="0.5">
+                                </div>
+                                <div class="col-12 col-sm-auto">
+                                    <label class="form-label form-label-sm mb-1">Observações</label>
+                                    <input type="text" id="juros_observacoes" class="form-control form-control-sm" maxlength="200" placeholder="Opcional">
+                                </div>
+                                <div class="col-auto">
+                                    <button type="button" class="btn btn-sm btn-primary" onclick="salvarFaixaJuros()">
+                                        <i class="fas fa-save"></i> Salvar
+                                    </button>
+                                </div>
+                            </div>
+                            <div id="juros_erro" class="text-danger small mt-1 d-none"></div>
+                        </div>
+                    </div>
+                    <div class="card-body p-0">
+                        <div id="tabela-juros-container">
+                            {% if tabela_juros %}
+                            <table class="table table-sm table-hover mb-0" style="font-size:0.80rem;">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th class="text-center">Ciclo Início</th>
+                                        <th class="text-center">Ciclo Fim</th>
+                                        <th class="text-end">Juros % a.m.</th>
+                                        <th>Observações</th>
+                                        <th></th>
+                                    </tr>
+                                </thead>
+                                <tbody id="tabela-juros-body">
+                                    {% for faixa in tabela_juros %}
+                                    <tr id="juros-row-{{ faixa.pk }}">
+                                        <td class="text-center">{{ faixa.ciclo_inicio }}</td>
+                                        <td class="text-center">{% if faixa.ciclo_fim %}{{ faixa.ciclo_fim }}{% else %}&infin;{% endif %}</td>
+                                        <td class="text-end">{{ faixa.juros_mensal|floatformat:4 }}%</td>
+                                        <td class="text-muted small">{{ faixa.observacoes|default:"—" }}</td>
+                                        <td class="text-center">
+                                            <button type="button" class="btn btn-xs btn-outline-danger"
+                                                    onclick="excluirFaixaJuros({{ faixa.pk }})"
+                                                    title="Remover faixa">
+                                                <i class="fas fa-trash"></i>
+                                            </button>
+                                        </td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                            {% else %}
+                            <div class="p-3 text-center text-muted" id="juros-vazio">
+                                <i class="fas fa-info-circle"></i> Nenhuma faixa de juros configurada (usa juros padrão do contrato)
+                            </div>
+                            {% endif %}
+                        </div>
                     </div>
                 </div>
             </div>
@@ -809,11 +1019,17 @@
                 <a href="{% url 'contratos:listar' %}" class="btn btn-secondary">
                     <i class="fas fa-arrow-left"></i> Voltar para Lista
                 </a>
-                <div>
+                <div class="d-flex flex-wrap gap-2">
                     <a href="{% url 'contratos:editar' contrato.pk %}" class="btn btn-primary">
                         <i class="fas fa-edit"></i> Editar Contrato
                     </a>
                     {% if contrato.status != 'CANCELADO' %}
+                    <a href="{% url 'contratos:calcular_rescisao' contrato.pk %}" class="btn btn-outline-danger">
+                        <i class="fas fa-file-contract me-1"></i> Calcular Rescisão
+                    </a>
+                    <a href="{% url 'contratos:calcular_cessao' contrato.pk %}" class="btn btn-outline-warning">
+                        <i class="fas fa-exchange-alt me-1"></i> Calcular Cessão
+                    </a>
                     <button type="button" class="btn btn-danger" onclick="confirmarCancelamento()">
                         <i class="fas fa-ban"></i> Cancelar Contrato
                     </button>
@@ -1962,35 +2178,54 @@ var todasParcelas = [
 var _reajustePreview = null;  // último preview carregado do servidor
 
 function abrirModalReajuste() {
-    // Reset UI
-    _reajustePreview = null;
-    document.getElementById('reajuste_loading').classList.remove('d-none');
-    document.getElementById('reajuste_sem_pendente').classList.add('d-none');
-    document.getElementById('reajuste_erro_indice').classList.add('d-none');
-    document.getElementById('reajuste_form_area').classList.add('d-none');
-    document.getElementById('btnAplicarReajuste').classList.add('d-none');
-    document.getElementById('r_desconto_pct').value = '';
-    document.getElementById('r_desconto_val').value = '';
+    var elModal    = document.getElementById('modalReajuste');
+    if (!elModal) {
+        console.error('[Reajuste] Modal #modalReajuste não encontrado no DOM.');
+        alert('Erro interno: recarregue a página e tente novamente.');
+        return;
+    }
 
-    new bootstrap.Modal(document.getElementById('modalReajuste')).show();
+    // Reset UI (com null-safe)
+    _reajustePreview = null;
+    var elLoading   = document.getElementById('reajuste_loading');
+    var elSemPend   = document.getElementById('reajuste_sem_pendente');
+    var elErrInd    = document.getElementById('reajuste_erro_indice');
+    var elForm      = document.getElementById('reajuste_form_area');
+    var elBtnApl    = document.getElementById('btnAplicarReajuste');
+    var elDesctPct  = document.getElementById('r_desconto_pct');
+    var elDesctVal  = document.getElementById('r_desconto_val');
+
+    if (elLoading)  elLoading.classList.remove('d-none');
+    if (elSemPend)  elSemPend.classList.add('d-none');
+    if (elErrInd)   elErrInd.classList.add('d-none');
+    if (elForm)     elForm.classList.add('d-none');
+    if (elBtnApl)   elBtnApl.classList.add('d-none');
+    if (elDesctPct) elDesctPct.value = '';
+    if (elDesctVal) elDesctVal.value = '';
+
+    new bootstrap.Modal(elModal).show();
 
     // Buscar preview do ciclo pendente
     fetch('/financeiro/contrato/{{ contrato.pk }}/reajuste/preview/')
         .then(r => r.json())
         .then(data => {
-            document.getElementById('reajuste_loading').classList.add('d-none');
+            var l = document.getElementById('reajuste_loading');
+            if (l) l.classList.add('d-none');
 
             if (!data.sucesso && !data.ciclo_pendente) {
-                document.getElementById('reajuste_sem_pendente').classList.remove('d-none');
+                var sp = document.getElementById('reajuste_sem_pendente');
+                if (sp) sp.classList.remove('d-none');
                 return;
             }
 
             if (!data.sucesso && data.erro) {
-                document.getElementById('reajuste_erro_indice_msg').textContent = data.erro;
-                document.getElementById('reajuste_erro_indice').classList.remove('d-none');
-                // Mostrar o formulário na área de cabeçalho mesmo assim
+                var msg = document.getElementById('reajuste_erro_indice_msg');
+                var err = document.getElementById('reajuste_erro_indice');
+                if (msg) msg.textContent = data.erro;
+                if (err) err.classList.remove('d-none');
                 preencherCabecalhoReajuste(data);
-                document.getElementById('reajuste_form_area').classList.remove('d-none');
+                var fa = document.getElementById('reajuste_form_area');
+                if (fa) fa.classList.remove('d-none');
                 return;
             }
 
@@ -1998,9 +2233,12 @@ function abrirModalReajuste() {
             renderizarPreviewReajuste(data);
         })
         .catch(err => {
-            document.getElementById('reajuste_loading').classList.add('d-none');
-            document.getElementById('reajuste_erro_indice_msg').textContent = 'Erro ao conectar: ' + err;
-            document.getElementById('reajuste_erro_indice').classList.remove('d-none');
+            var l2 = document.getElementById('reajuste_loading');
+            var m2 = document.getElementById('reajuste_erro_indice_msg');
+            var e2 = document.getElementById('reajuste_erro_indice');
+            if (l2) l2.classList.add('d-none');
+            if (m2) m2.textContent = 'Erro ao conectar: ' + err;
+            if (e2) e2.classList.remove('d-none');
         });
 }
 
@@ -2227,6 +2465,74 @@ function excluirReajuste(reajusteId, ciclo, percentual) {
     .catch(error => {
         alert('Erro de conexao: ' + error);
     });
+}
+
+// ============ Q-04: TABELA DE JUROS ESCALANTES ============
+var urlTabelaJuros = "{% url 'contratos:api_tabela_juros' contrato.pk %}";
+var urlTabelaJurosDeleteBase = "{% url 'contratos:api_tabela_juros_delete' 9999999 %}".replace('/9999999/', '/');
+
+function salvarFaixaJuros() {
+    var cicloInicio = parseInt(document.getElementById('juros_ciclo_inicio').value) || 0;
+    var cicloFim = document.getElementById('juros_ciclo_fim').value;
+    var jurosMensal = document.getElementById('juros_mensal').value;
+    var observacoes = document.getElementById('juros_observacoes').value;
+    var erroEl = document.getElementById('juros_erro');
+    erroEl.classList.add('d-none');
+
+    if (cicloInicio < 1) {
+        erroEl.textContent = 'Ciclo Início deve ser >= 1.';
+        erroEl.classList.remove('d-none');
+        return;
+    }
+    if (!jurosMensal || isNaN(parseFloat(jurosMensal))) {
+        erroEl.textContent = 'Informe o percentual de juros.';
+        erroEl.classList.remove('d-none');
+        return;
+    }
+
+    fetch(urlTabelaJuros, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': '{{ csrf_token }}'
+        },
+        body: JSON.stringify({
+            ciclo_inicio: cicloInicio,
+            ciclo_fim: cicloFim || null,
+            juros_mensal: jurosMensal,
+            observacoes: observacoes
+        })
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.sucesso) {
+            showToast('Faixa de juros adicionada!', 'success', 3000);
+            setTimeout(() => location.reload(), 700);
+        } else {
+            erroEl.textContent = data.erro || 'Erro ao salvar.';
+            erroEl.classList.remove('d-none');
+        }
+    })
+    .catch(() => { erroEl.textContent = 'Erro de conexão.'; erroEl.classList.remove('d-none'); });
+}
+
+function excluirFaixaJuros(entryId) {
+    if (!confirm('Remover esta faixa de juros?')) return;
+    fetch(urlTabelaJurosDeleteBase + entryId + '/excluir/', {
+        method: 'DELETE',
+        headers: { 'X-CSRFToken': '{{ csrf_token }}' }
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.sucesso) {
+            var row = document.getElementById('juros-row-' + entryId);
+            if (row) row.remove();
+            showToast('Faixa removida.', 'success', 2000);
+        } else {
+            alert('Erro: ' + (data.erro || 'Erro desconhecido'));
+        }
+    })
+    .catch(() => alert('Erro de conexão.'));
 }
 
 // 3.2 — Badge "Boletos Gerados"
