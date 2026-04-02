@@ -1289,6 +1289,32 @@ def api_intermediarias_contrato(request, contrato_id):
 
 
 # =============================================================================
+# Wizard — API: imóveis disponíveis por imobiliária
+# =============================================================================
+
+@login_required
+def api_wizard_imoveis(request):
+    """Retorna imóveis disponíveis pertencentes à imobiliária informada."""
+    from core.models import Imovel as _Imovel
+    imobiliaria_id = request.GET.get('imobiliaria_id')
+    if not imobiliaria_id:
+        return JsonResponse({'imoveis': []})
+    qs = _Imovel.objects.filter(
+        imobiliaria_id=imobiliaria_id,
+        disponivel=True,
+        ativo=True,
+    ).values('id', 'identificacao', 'loteamento')
+    imoveis = [
+        {
+            'id': i['id'],
+            'texto': f"{i['identificacao']}{' — ' + i['loteamento'] if i['loteamento'] else ''}",
+        }
+        for i in qs
+    ]
+    return JsonResponse({'imoveis': imoveis})
+
+
+# =============================================================================
 # HU-08 — API Preview de Parcelas (projeção sem salvar)
 # =============================================================================
 
@@ -1544,6 +1570,11 @@ class ContratoWizardView(LoginRequiredMixin, View):
         elif step == 'intermediarias':
             modo = request.POST.get('modo', 'padrao')
             sess['intermediarias_modo'] = modo
+
+            # Salva configuração de intermediárias na seção basico da sessão
+            if 'basico' in sess:
+                sess['basico']['intermediarias_reduzem_pmt'] = request.POST.get('intermediarias_reduzem_pmt') == 'on'
+                sess['basico']['intermediarias_reajustadas'] = request.POST.get('intermediarias_reajustadas') == 'on'
 
             if modo == 'padrao':
                 form = IntermediariaPadraoForm(request.POST)
