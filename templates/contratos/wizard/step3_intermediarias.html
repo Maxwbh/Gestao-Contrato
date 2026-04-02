@@ -173,8 +173,8 @@
                   {% empty %}
                   <tr>
                     <td><input type="number" class="form-control form-control-sm" name="inter_0_seq" value="1" min="1" required></td>
-                    <td><input type="number" class="form-control form-control-sm" name="inter_0_mes" min="1" placeholder="6" required></td>
-                    <td><input type="number" class="form-control form-control-sm" name="inter_0_valor" step="0.01" min="0.01" placeholder="5000.00" required></td>
+                    <td><input type="number" class="form-control form-control-sm" name="inter_0_mes" min="1" title="Número do mês do contrato em que esta parcela vence" required></td>
+                    <td><input type="number" class="form-control form-control-sm" name="inter_0_valor" step="0.01" min="0.01" title="Valor em reais desta prestação intermediária" required></td>
                     <td class="text-center"><button type="button" class="btn btn-sm btn-outline-danger remove-inter"><i class="fas fa-trash"></i></button></td>
                   </tr>
                   {% endfor %}
