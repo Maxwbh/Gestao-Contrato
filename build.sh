@@ -49,36 +49,32 @@ if database_url:
     cursor.execute("CREATE SCHEMA IF NOT EXISTS gestao_contrato")
     print('Schema gestao_contrato criado/verificado.')
 
-    # Verificar se auth_user existe no schema gestao_contrato
+    # Verificar se o banco tem tabelas da aplicacao (banco vazio = primeira instalacao)
     cursor.execute("""
-        SELECT EXISTS (
-            SELECT 1 FROM information_schema.tables
-            WHERE table_schema = 'gestao_contrato'
-            AND table_name = 'auth_user'
-        )
+        SELECT COUNT(*) FROM information_schema.tables
+        WHERE table_schema = 'gestao_contrato'
+        AND table_type = 'BASE TABLE'
     """)
-    auth_exists = cursor.fetchone()[0]
+    table_count = cursor.fetchone()[0]
 
-    if not auth_exists:
-        # Verificar se django_migrations existe no schema gestao_contrato
+    if table_count == 0:
+        print('Schema vazio - tabelas serao criadas pelas migrations.')
+    else:
+        # Banco ja tem tabelas - verificar se auth_user existe
         cursor.execute("""
             SELECT EXISTS (
                 SELECT 1 FROM information_schema.tables
                 WHERE table_schema = 'gestao_contrato'
-                AND table_name = 'django_migrations'
+                AND table_name = 'auth_user'
             )
         """)
-        migrations_exists = cursor.fetchone()[0]
-
-        if migrations_exists:
-            print('ATENCAO: auth_user nao existe mas django_migrations tem registros.')
-            print('Limpando django_migrations no schema gestao_contrato...')
-            cursor.execute("DELETE FROM gestao_contrato.django_migrations")
-            print('Tabela limpa - migracoes serao reaplicadas.')
+        auth_exists = cursor.fetchone()[0]
+        if auth_exists:
+            print(f'Schema gestao_contrato OK ({table_count} tabelas encontradas).')
         else:
-            print('Schema novo - tabelas serao criadas.')
-    else:
-        print('auth_user existe no schema gestao_contrato - OK.')
+            print(f'ATENCAO: {table_count} tabelas existem mas auth_user nao encontrado.')
+            print('Nao resetando migrations para preservar dados existentes.')
+            print('Execute python manage.py migrate manualmente se necessario.')
 
     # Verificar django_session no schema gestao_contrato
     # Se estiver ausente (pode ter sido criada em public antes da search_path ser configurada),
@@ -991,22 +987,5 @@ else:
     print('Superuser admin ja existe')
 EOF
 
-echo "==> Checking if test data needs to be generated..."
-python manage.py shell << 'TESTDATAEOF'
-from core.models import Contabilidade, Imobiliaria
-
-# Verificar se ja existe dados (primeira execucao)
-if not Contabilidade.objects.exists() and not Imobiliaria.objects.exists():
-    print('Banco vazio - gerando dados de teste na primeira execucao...')
-    # Importar e executar comando de dados de teste
-    from django.core.management import call_command
-    try:
-        call_command('gerar_dados_teste')
-        print('Dados de teste gerados com sucesso!')
-    except Exception as e:
-        print(f'Aviso: Erro ao gerar dados de teste: {e}')
-else:
-    print('Dados ja existem - pulando geracao de dados de teste')
-TESTDATAEOF
 
 echo "==> Build completed successfully!"
