@@ -852,6 +852,123 @@ para ciclo = 2..total_ciclos+1:
 
 ---
 
+## 16. MAPA INTERATIVO DE LOTES ⚙️ EM ANDAMENTO
+
+> **Contexto:** pesquisa de mercado (2026-04-02) identificou mapa interativo como feature central em
+> todos os principais concorrentes (LoteWin, Terravista, LotNet, SmartIPTU). A implementação inicial
+> usa Leaflet + OSM. Esta seção documenta a evolução para um mapa de nível profissional.
+
+---
+
+### 16.1 Mapa da Lista de Imóveis ⚙️ MELHORADO (2026-04-02)
+
+| # | Item | Status |
+|---|------|--------|
+| M-01 | Tiles Carto Voyager (visual igual ao Google Maps, gratuito, sem API key) | ✅ |
+| M-02 | Tiles Esri Satellite + Dark (switcher de camadas) | ✅ |
+| M-03 | Leaflet.markercluster — agrupamento de marcadores | ✅ |
+| M-04 | DivIcon customizado: círculo verde (disponível) / vermelho (vendido) | ✅ |
+| M-05 | Filtro por loteamento no mapa (dropdown JS, sem reload) | ✅ |
+| M-06 | Filtro por status no mapa (disponível / vendido) | ✅ |
+| M-07 | Legenda inline no canto inferior direito | ✅ |
+| M-08 | Popup com hover — abre ao passar o mouse sobre o marcador | ✅ |
+| M-09 | Contador dinâmico de marcadores visíveis | ✅ |
+| M-10 | Todos os imóveis com coord. passados ao mapa (não paginado) | ✅ |
+
+### 16.2 Página Dedicada por Loteamento — TODO
+
+| # | Item | Prioridade |
+|---|------|-----------|
+| M-11 | Página `/imoveis/loteamento/{slug}/` — mapa dedicado do empreendimento | P2 |
+| M-12 | Estatísticas do loteamento: total, disponíveis %, valor médio por lote | P2 |
+| M-13 | Polígonos de lote (boundaries) com `lat/lng` de cada vértice — modelo `LotePoligono` | P3 |
+| M-14 | Upload de planta baixa (imagem) como overlay no mapa | P3 |
+| M-15 | Link direto "Ver no Google Maps / Waze" no popup do marcador | P3 |
+| M-16 | Geolocalização do usuário para mostrar lotes próximos | P4 |
+
+---
+
+## 17. DASHBOARD KPIs E GRÁFICOS — TODO
+
+> **Contexto:** todos os concorrentes têm dashboard com KPIs visuais. O sistema atual tem um
+> dashboard básico. Esta seção especifica o redesign completo.
+
+### 17.1 KPIs Principais (cards topo)
+
+| # | Métrica | Cálculo |
+|---|---------|---------|
+| K-01 | Total de lotes / Vendidos / Disponíveis | count() por Imovel.disponivel |
+| K-02 | Arrecadação do mês atual | sum(valor_pago) de Parcelas pagas no mês |
+| K-03 | Inadimplência ativa | count(Parcelas vencidas não pagas) |
+| K-04 | Contratos ativos | count(Contrato status=ATIVO) |
+| K-05 | Saldo total da carteira | sum(valor_atual) de Parcelas não pagas |
+| K-06 | Reajustes pendentes | count(contratos com ciclo pendente) |
+
+### 17.2 Gráficos
+
+| # | Gráfico | Biblioteca | Prioridade |
+|---|---------|-----------|-----------|
+| G-01 | Arrecadação mensal (barras) — 12 meses | Chart.js | P2 |
+| G-02 | Inadimplência por faixa de atraso (pizza) — 1–30d, 31–60d, 60d+ | Chart.js | P2 |
+| G-03 | Fluxo de caixa previsto vs. realizado (linha) | Chart.js | P2 |
+| G-04 | Parcelas vencendo esta semana (tabela destacada) | Template | P1 |
+| G-05 | Top 5 contratos com maior saldo devedor | Template | P3 |
+
+### 17.3 Implementação
+
+| # | Item | Arquivo | Prioridade |
+|---|------|---------|-----------|
+| D-01 | `DashboardFinanceiroView` — enriquecer com KPIs reais | `financeiro/views.py` | P2 |
+| D-02 | API `api_kpis_dashboard` — endpoint JSON para gráficos | `financeiro/views.py` | P2 |
+| D-03 | Template redesign com Chart.js | `templates/financeiro/dashboard.html` | P2 |
+| D-04 | Widget "Parcelas da semana" no dashboard principal | template | P1 |
+
+---
+
+## 18. SIMULADOR DE RENEGOCIAÇÃO / ANTECIPAÇÃO — TODO
+
+> **Referência:** LoteWin, SGL e SIVI oferecem simulação de antecipação de parcelas com desconto.
+
+| # | Item | Descrição | Prioridade |
+|---|------|-----------|-----------|
+| R-01 | Tela simulador: quantas parcelas antecipar + % desconto | GET view, sem persistir | P2 |
+| R-02 | Preview: valor original vs. valor antecipado (economia total) | render server-side | P2 |
+| R-03 | Aplicar antecipação: cria HistoricoPagamento com flag `antecipado=True` | POST view | P2 |
+| R-04 | Renegociação: alterar prazo/valor de parcelas em atraso | P3 |
+| R-05 | Recibo de quitação antecipada (PDF) | P3 |
+
+---
+
+## 19. NOTIFICAÇÕES E COBRANÇA AUTOMÁTICA — TODO
+
+> **Referência:** GELOT, SGL e LoteWin enviam alertas por WhatsApp/e-mail automaticamente.
+
+| # | Item | Prioridade |
+|---|------|-----------|
+| N-01 | E-mail automático D-5 antes do vencimento da parcela | P2 |
+| N-02 | E-mail de inadimplência após D+3 | P2 |
+| N-03 | Régua de cobrança configurável (D-5, D+3, D+10, D+30) | P3 |
+| N-04 | Integração WhatsApp (Evolution API / Z-API) | P3 |
+| N-05 | Push notification portal comprador | P4 |
+
+---
+
+## 20. MELHORIAS DE UX / INTERFACE — TODO
+
+> **Referência:** pesquisa de concorrentes e inspeção de sistemas líderes (2026-04-02).
+
+| # | Item | Descrição | Prioridade |
+|---|------|-----------|-----------|
+| U-01 | Dark mode toggle (persistido em localStorage) | Carto dark já disponível no mapa | P3 |
+| U-02 | Timeline visual de ciclos na tela de parcelas | Linha do tempo horizontal com ciclos | P2 |
+| U-03 | Simulador inline de parcelas no cadastro de contrato | Preview em tempo real enquanto preenche | P2 |
+| U-04 | Exportar relatórios em Excel (openpyxl) | Complementar ao PDF | P3 |
+| U-05 | Portal do comprador — redesign mobile-first | Compradores acessam via celular | P2 |
+| U-06 | Busca global (Ctrl+K) — busca rápida por contrato, comprador, lote | P3 |
+| U-07 | Impressão de carnê de pagamento (PDF multi-página) | P3 |
+
+---
+
 ## Resumo Quantitativo
 
 | Categoria | P1 | P2 | P3 | P4 | Total | Concluído |
@@ -859,19 +976,24 @@ para ciclo = 2..total_ciclos+1:
 | Infraestrutura | 3 | 2 | 1 | — | 6 | ✅ 3/3 P1 |
 | Backend — Regras | — | 8 | 3 | 1 | 12 | ✅ 8/8 P2 |
 | Reajuste | 4 | 4 | 7 | — | 15+4=19 | ✅ 19/19 |
-| Contrato Real (gaps) | — | — | 9 | 6 | 15 | ✅ 9/9 implementados · 6 pendentes (G-10..G-16) |
+| Contrato Real (gaps) | — | — | 9 | 6 | 15 | ✅ 9/9 implementados · 6 pendentes |
 | CNAB Remessa | — | 8 | — | — | 8 | ✅ 8/8 |
 | HU-360 Tabela Price | 2 | 9 | 2 | — | 13 | ✅ 13/13 |
 | SAC / Tabela Price | 1 | 4 | — | — | 5 | ✅ 5/5 |
 | Bloqueio Boleto (Cascata) | 2 | 3 | — | — | 5 | ✅ 5/5 |
-| Frontend | — | 17 | 15 | 3 | 35 | ⚠️ ~4/17 P2 · 0/15 P3 |
+| Mapa Interativo (Seção 16) | — | 5 | 6 | 1 | 12 | ✅ 10/10 M-01..M-10 |
+| Dashboard KPIs (Seção 17) | 1 | 5 | 2 | — | 8 | ⏳ 0/8 |
+| Simulador Antecipação (Seção 18) | — | 3 | 2 | — | 5 | ⏳ 0/5 |
+| Notificações (Seção 19) | — | 2 | 2 | 1 | 5 | ⏳ 0/5 |
+| UX / Interface (Seção 20) | — | 3 | 4 | — | 7 | ⏳ 0/7 |
+| Frontend | — | 17 | 15 | 3 | 35 | ⚠️ ~4/17 P2 |
 | APIs | — | 6 | 5 | — | 11 | — |
 | Celery | — | 2 | 2 | 1 | 5 | — |
 | Permissões | — | 4 | 4 | 2 | 10 | — |
-| Testes | 104 | ~164 | ~37 | ~41 | ~346 | ✅ 104/104 P1 |
+| Testes | 104 | ~164 | ~37 | ~41 | ~346 | ✅ 104/104 P1 · ✅ 396 passando |
 | CI/CD | — | 2 | 4 | 2 | 8 | — |
 | Documentação | — | — | 1 | 3 | 4 | — |
-| **Total** | **~113** | **~220** | **~90** | **~59** | **~482** | |
+| **Total** | **~117** | **~251** | **~107** | **~61** | **~536** | |
 
 ### ✅ Fases concluídas (2026-04-01)
 
