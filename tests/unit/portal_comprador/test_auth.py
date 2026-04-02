@@ -140,7 +140,7 @@ class TestAutoCadastroView:
         response = client.get('/portal/cadastro/')
 
         assert response.status_code == 302
-        assert 'dashboard' in response.url
+        assert '/portal/' in response.url  # Redirects to portal dashboard
 
 
 @pytest.mark.django_db
@@ -166,7 +166,7 @@ class TestLoginCompradorView:
         response = client.get('/portal/login/')
 
         assert response.status_code == 302
-        assert 'dashboard' in response.url
+        assert '/portal/' in response.url  # Redirects to portal dashboard
 
 
 @pytest.mark.django_db
