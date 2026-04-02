@@ -13,6 +13,7 @@ from django.utils import timezone
 from django.db.models import Sum, Count, Q, F
 from django.views.generic import TemplateView
 from django.views.decorators.http import require_POST, require_GET
+from django.core.paginator import Paginator
 from django.views.decorators.clickjacking import xframe_options_sameorigin
 from datetime import timedelta
 from dateutil.relativedelta import relativedelta
@@ -369,15 +370,28 @@ def listar_parcelas(request):
             Q(contrato__numero_contrato__icontains=busca)
         )
 
-    # Estatísticas
+    # Estatísticas (sobre o queryset filtrado completo)
     hoje = timezone.now().date()
     total_parcelas = parcelas.count()
     valor_total = parcelas.aggregate(total=Sum('valor_atual'))['total'] or Decimal('0.00')
     parcelas_vencidas_count = parcelas.filter(pago=False, data_vencimento__lt=hoje).count()
 
-    # 3.14 — Calcular juros/multa dinâmico para parcelas vencidas não pagas
-    parcelas_lista = list(parcelas[:500])
-    for p in parcelas_lista:
+    # Paginação
+    per_page = request.GET.get('per_page', '25')
+    try:
+        per_page = min(int(per_page), 100)
+    except (ValueError, TypeError):
+        per_page = 25
+
+    paginator = Paginator(parcelas, per_page)
+    page_number = request.GET.get('page', 1)
+    try:
+        page_obj = paginator.get_page(page_number)
+    except Exception:
+        page_obj = paginator.get_page(1)
+
+    # Calcular juros/multa dinâmico para parcelas vencidas não pagas na página atual
+    for p in page_obj:
         if not p.pago and p.data_vencimento < hoje:
             juros, multa = p.calcular_juros_multa(hoje)
             p.juros_dinamico = juros
@@ -389,7 +403,10 @@ def listar_parcelas(request):
             p.total_com_encargos = None
 
     context = {
-        'parcelas': parcelas_lista,
+        'parcelas': page_obj,
+        'page_obj': page_obj,
+        'paginator': paginator,
+        'is_paginated': paginator.num_pages > 1,
         'imobiliarias': imobiliarias,
         'compradores': compradores,
         # Valores atuais dos filtros
@@ -472,10 +489,22 @@ def registrar_pagamento(request, pk):
 @login_required
 def listar_reajustes(request):
     """Lista todos os reajustes"""
-    reajustes = Reajuste.objects.select_related('contrato').all()
+    reajustes = Reajuste.objects.select_related('contrato', 'usuario').order_by('-data_reajuste')
+
+    per_page = request.GET.get('per_page', '25')
+    try:
+        per_page = min(int(per_page), 100)
+    except (ValueError, TypeError):
+        per_page = 25
+
+    paginator = Paginator(reajustes, per_page)
+    page_obj = paginator.get_page(request.GET.get('page', 1))
 
     context = {
-        'reajustes': reajustes,
+        'reajustes': page_obj,
+        'page_obj': page_obj,
+        'paginator': paginator,
+        'is_paginated': paginator.num_pages > 1,
     }
     return render(request, 'financeiro/listar_reajustes.html', context)
 
@@ -559,8 +588,20 @@ def parcelas_mes_atual(request):
             parcelas_por_imobiliaria[imob_nome]['pendentes'] += 1
             parcelas_por_imobiliaria[imob_nome]['valor_pendente'] += parcela.valor_atual
 
+    per_page = request.GET.get('per_page', '25')
+    try:
+        per_page = min(int(per_page), 100)
+    except (ValueError, TypeError):
+        per_page = 25
+
+    paginator = Paginator(parcelas, per_page)
+    page_obj = paginator.get_page(request.GET.get('page', 1))
+
     context = {
-        'parcelas': parcelas,
+        'parcelas': page_obj,
+        'page_obj': page_obj,
+        'paginator': paginator,
+        'is_paginated': paginator.num_pages > 1,
         'imobiliarias': imobiliarias,
         'filtro_imobiliaria': imobiliaria_id,
         'filtro_status': status,
@@ -1104,8 +1145,20 @@ def listar_arquivos_remessa(request):
     contas = ContaBancaria.objects.filter(ativo=True).select_related('imobiliaria')
     imobiliarias = Imobiliaria.objects.filter(ativo=True).order_by('nome')
 
+    per_page = request.GET.get('per_page', '25')
+    try:
+        per_page = min(int(per_page), 100)
+    except (ValueError, TypeError):
+        per_page = 25
+
+    paginator = Paginator(arquivos, per_page)
+    page_obj = paginator.get_page(request.GET.get('page', 1))
+
     context = {
-        'arquivos': arquivos[:100],
+        'arquivos': page_obj,
+        'page_obj': page_obj,
+        'paginator': paginator,
+        'is_paginated': paginator.num_pages > 1,
         'contas_bancarias': contas,
         'imobiliarias': imobiliarias,
         'filtro_conta': conta_id,
@@ -1365,8 +1418,20 @@ def listar_arquivos_retorno(request):
 
     contas = ContaBancaria.objects.filter(ativo=True).select_related('imobiliaria')
 
+    per_page = request.GET.get('per_page', '25')
+    try:
+        per_page = min(int(per_page), 100)
+    except (ValueError, TypeError):
+        per_page = 25
+
+    paginator = Paginator(arquivos, per_page)
+    page_obj = paginator.get_page(request.GET.get('page', 1))
+
     context = {
-        'arquivos': arquivos[:100],
+        'arquivos': page_obj,
+        'page_obj': page_obj,
+        'paginator': paginator,
+        'is_paginated': paginator.num_pages > 1,
         'contas_bancarias': contas,
         'filtro_conta': conta_id,
         'filtro_status': status,
@@ -2394,10 +2459,20 @@ def reajustes_pendentes(request):
             'indice_tipo': contrato.tipo_correcao,
         })
 
-    # Agrupar por imobiliária
+    # Paginação sobre a lista plana de pendentes
+    per_page = request.GET.get('per_page', '25')
+    try:
+        per_page = min(int(per_page), 100)
+    except (ValueError, TypeError):
+        per_page = 25
+
+    paginator = Paginator(pendentes, per_page)
+    page_obj = paginator.get_page(request.GET.get('page', 1))
+
+    # Agrupar apenas os itens da página atual por imobiliária
     from itertools import groupby
     pendentes_agrupados = []
-    for imob_nome, grupo in groupby(pendentes, key=lambda x: x['contrato'].imobiliaria.nome):
+    for imob_nome, grupo in groupby(list(page_obj), key=lambda x: x['contrato'].imobiliaria.nome):
         pendentes_agrupados.append({
             'imobiliaria': imob_nome,
             'contratos': list(grupo),
@@ -2406,6 +2481,9 @@ def reajustes_pendentes(request):
     context = {
         'pendentes_agrupados': pendentes_agrupados,
         'total_pendentes': len(pendentes),
+        'page_obj': page_obj,
+        'paginator': paginator,
+        'is_paginated': paginator.num_pages > 1,
     }
     return render(request, 'financeiro/reajustes_pendentes.html', context)
 
