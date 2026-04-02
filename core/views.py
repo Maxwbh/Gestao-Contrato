@@ -141,6 +141,18 @@ def health_check(request):
 
 def index(request):
     """Página inicial do sistema"""
+    from django.contrib.auth import get_user_model
+    User = get_user_model()
+
+    # Redirecionar para setup SOMENTE se não houver nenhum superusuário cadastrado
+    try:
+        has_superuser = User.objects.filter(is_superuser=True).exists()
+    except Exception:
+        has_superuser = False
+
+    if not has_superuser:
+        return redirect('core:setup')
+
     try:
         context = {
             'total_contabilidades': Contabilidade.objects.filter(ativo=True).count(),
@@ -148,9 +160,13 @@ def index(request):
             'total_imoveis': Imovel.objects.filter(ativo=True).count(),
             'total_compradores': Comprador.objects.filter(ativo=True).count(),
         }
-    except Exception as e:
-        # Se banco não está configurado, redirecionar para setup
-        return redirect('core:setup')
+    except Exception:
+        context = {
+            'total_contabilidades': 0,
+            'total_imobiliarias': 0,
+            'total_imoveis': 0,
+            'total_compradores': 0,
+        }
     return render(request, 'core/index.html', context)
 
 
@@ -272,16 +288,19 @@ def setup(request):
                 try:
                     total_contabilidades = Contabilidade.objects.count()
                     total_users = get_user_model().objects.count()
+                    has_superuser = get_user_model().objects.filter(is_superuser=True).exists()
                     total_contas_bancarias = ContaBancaria.objects.count()
                     total_imobiliarias = Imobiliaria.objects.count()
                 except:
                     total_contabilidades = 0
                     total_users = 0
+                    has_superuser = False
                     total_contas_bancarias = 0
                     total_imobiliarias = 0
             else:
                 total_contabilidades = 0
                 total_users = 0
+                has_superuser = False
                 total_contas_bancarias = 0
                 total_imobiliarias = 0
 
@@ -290,6 +309,7 @@ def setup(request):
             has_tables = False
             total_contabilidades = 0
             total_users = 0
+            has_superuser = False
             total_contas_bancarias = 0
             total_imobiliarias = 0
 
@@ -298,6 +318,7 @@ def setup(request):
             'has_tables': has_tables,
             'total_contabilidades': total_contabilidades,
             'total_users': total_users,
+            'has_superuser': has_superuser,
             'total_contas_bancarias': total_contas_bancarias,
             'total_imobiliarias': total_imobiliarias,
         }
@@ -831,13 +852,24 @@ class ImovelListView(LoginRequiredMixin, ListView):
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        context['total_imoveis'] = Imovel.objects.filter(ativo=True).count()
-        context['imoveis_disponiveis'] = Imovel.objects.filter(ativo=True, disponivel=True).count()
-        context['imoveis_com_coordenadas'] = Imovel.objects.filter(
-            ativo=True,
+        ativos = Imovel.objects.filter(ativo=True)
+        context['total_imoveis'] = ativos.count()
+        context['imoveis_disponiveis'] = ativos.filter(disponivel=True).count()
+
+        # Todos os imóveis com coordenadas — passados ao mapa (não paginado)
+        todos_mapa = ativos.filter(
             latitude__isnull=False,
             longitude__isnull=False
-        ).count()
+        ).select_related('imobiliaria').order_by('loteamento', 'identificacao')
+        context['todos_imoveis_mapa'] = todos_mapa
+        context['imoveis_com_coordenadas'] = todos_mapa.count()
+
+        # Lista de loteamentos distintos para o filtro do mapa
+        context['loteamentos'] = (
+            ativos.exclude(loteamento='').exclude(loteamento__isnull=True)
+            .values_list('loteamento', flat=True)
+            .distinct().order_by('loteamento')
+        )
         context['imobiliarias'] = Imobiliaria.objects.filter(ativo=True)
         context['search'] = self.request.GET.get('search', '')
         return context
