@@ -396,7 +396,7 @@ def setup(request):
             gerar_dados = request.POST.get('gerar_dados') == 'true'
             if gerar_dados:
                 messages.append('📋 Gerando dados de teste...')
-                call_command('gerar_dados_teste', stdout=out)
+                call_command('gerar_dados_teste', limpar=True, stdout=out)
                 messages.append('✅ Dados de teste gerados!')
 
             messages.append('🎉 Setup completo finalizado!')
