@@ -138,8 +138,8 @@
                 </ul>
 
                 {% if indices %}
-                <div class="table-responsive">
-                    <table class="table table-hover align-middle">
+                <div class="table-responsive" style="overflow-x: auto;">
+                    <table class="table table-sm table-hover align-middle" style="font-size: 0.875rem;">
                         <thead class="table-light">
                             <tr>
                                 <th>Tipo</th>
@@ -200,30 +200,7 @@
                     </table>
                 </div>
 
-                <!-- Paginacao -->
-                {% if is_paginated %}
-                <nav>
-                    <ul class="pagination justify-content-center">
-                        {% if page_obj.has_previous %}
-                        <li class="page-item">
-                            <a class="page-link" href="?page={{ page_obj.previous_page_number }}{% if tipo_filter %}&tipo={{ tipo_filter }}{% endif %}{% if ano_filter %}&ano={{ ano_filter }}{% endif %}">
-                                <i class="fas fa-chevron-left"></i>
-                            </a>
-                        </li>
-                        {% endif %}
-                        <li class="page-item active">
-                            <span class="page-link">{{ page_obj.number }} / {{ page_obj.paginator.num_pages }}</span>
-                        </li>
-                        {% if page_obj.has_next %}
-                        <li class="page-item">
-                            <a class="page-link" href="?page={{ page_obj.next_page_number }}{% if tipo_filter %}&tipo={{ tipo_filter }}{% endif %}{% if ano_filter %}&ano={{ ano_filter }}{% endif %}">
-                                <i class="fas fa-chevron-right"></i>
-                            </a>
-                        </li>
-                        {% endif %}
-                    </ul>
-                </nav>
-                {% endif %}
+                {% include "includes/pagination_perpage.html" %}
 
                 {% else %}
                 <div class="alert alert-info text-center">

@@ -15,6 +15,7 @@ from django.db import models
 from django.db.models import Q, Sum, Count
 from .models import Contrato, StatusContrato, IndiceReajuste
 from .forms import ContratoForm, IndiceReajusteForm
+from core.mixins import PaginacaoMixin
 import requests
 from django.http import JsonResponse
 from django.views.decorators.http import require_http_methods
@@ -23,7 +24,7 @@ from datetime import datetime
 from decimal import Decimal
 
 
-class ContratoListView(LoginRequiredMixin, ListView):
+class ContratoListView(LoginRequiredMixin, PaginacaoMixin, ListView):
     """Lista todos os contratos"""
     model = Contrato
     template_name = 'contratos/contrato_list.html'
@@ -386,7 +387,7 @@ def parcelas_contrato(request, pk):
 # CRUD de Índices de Reajuste
 # ==============================================================
 
-class IndiceReajusteListView(LoginRequiredMixin, ListView):
+class IndiceReajusteListView(LoginRequiredMixin, PaginacaoMixin, ListView):
     """Lista todos os índices de reajuste"""
     model = IndiceReajuste
     template_name = 'contratos/indice_list.html'
@@ -905,7 +906,7 @@ from .models import PrestacaoIntermediaria
 from django.http import HttpResponseRedirect
 
 
-class IntermediariasListView(LoginRequiredMixin, ListView):
+class IntermediariasListView(LoginRequiredMixin, PaginacaoMixin, ListView):
     """Lista todas as prestações intermediárias de um contrato"""
     model = PrestacaoIntermediaria
     template_name = 'contratos/intermediaria_list.html'
@@ -1674,13 +1675,23 @@ class ContratoWizardView(LoginRequiredMixin, View):
     def _calcular_resumo(self, sess):
         """Calcula o resumo financeiro do wizard para o step de preview"""
         from decimal import Decimal as D
+        import json as _json
+
+        def to_dec(val, default=0):
+            if val is None:
+                return D(str(default))
+            try:
+                return D(str(val))
+            except Exception:
+                return D(str(default))
+
         basico = sess.get('basico', {})
         juros_rows = sess.get('juros', [])
         intermediarias = sess.get('intermediarias_lista', [])
 
-        valor_total = D(str(basico.get('valor_total', 0)))
-        valor_entrada = D(str(basico.get('valor_entrada', 0)))
-        numero_parcelas = int(basico.get('numero_parcelas', 1))
+        valor_total = to_dec(basico.get('valor_total'), 0)
+        valor_entrada = to_dec(basico.get('valor_entrada'), 0)
+        numero_parcelas = int(basico.get('numero_parcelas') or 1)
         valor_financiado = valor_total - valor_entrada
 
         soma_intermediarias = sum(D(str(r['valor'])) for r in intermediarias)
@@ -1695,8 +1706,8 @@ class ContratoWizardView(LoginRequiredMixin, View):
         # Usar taxa do ciclo 1 se definida
         taxa_ciclo1 = D('0')
         for row in juros_rows:
-            if int(row.get('ciclo_inicio', 999)) == 1:
-                taxa_ciclo1 = D(str(row.get('juros_mensal', 0)))
+            if int(row.get('ciclo_inicio') or 999) == 1:
+                taxa_ciclo1 = to_dec(row.get('juros_mensal'), 0)
                 break
 
         if numero_parcelas > 0:
@@ -1712,6 +1723,7 @@ class ContratoWizardView(LoginRequiredMixin, View):
         else:
             pmt_ciclo1 = pmt_ultimo = D('0')
 
+        intermediarias_preview = intermediarias[:12]
         return {
             'valor_total': valor_total,
             'valor_entrada': valor_entrada,
@@ -1724,7 +1736,9 @@ class ContratoWizardView(LoginRequiredMixin, View):
             'soma_intermediarias': soma_intermediarias,
             'n_intermediarias': len(intermediarias),
             'juros_rows': juros_rows,
-            'intermediarias': intermediarias[:12],  # show first 12
+            'juros_json': _json.dumps(juros_rows),
+            'intermediarias': intermediarias_preview,
+            'intermediarias_json': _json.dumps(intermediarias_preview),
             'intermediarias_total': len(intermediarias),
             'basico': basico,
             'reduzem_pmt': reduzem_pmt,
