@@ -18,6 +18,7 @@ urlpatterns = [
     path('wizard/', views.ContratoWizardView.as_view(), name='wizard'),
     path('wizard/<str:step>/', views.ContratoWizardView.as_view(), name='wizard'),
     path('wizard/api/preview-parcelas/', views.api_preview_parcelas, name='wizard_preview_parcelas'),
+    path('wizard/api/imoveis/', views.api_wizard_imoveis, name='wizard_imoveis'),
 
     path('<int:pk>/', views.ContratoDetailView.as_view(), name='detalhe'),
     path('<int:pk>/editar/', views.ContratoUpdateView.as_view(), name='editar'),
