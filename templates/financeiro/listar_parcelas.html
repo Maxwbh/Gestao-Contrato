@@ -8,9 +8,12 @@
     .badge-pago { background-color: #28a745; }
     .badge-pendente { background-color: #ffc107; color: #212529; }
     .badge-vencida { background-color: #dc3545; }
+    .badge-boleto-gerado { background-color: #0d6efd; }
     .table-parcelas th { white-space: nowrap; }
     .btn-filter { margin-right: 5px; margin-bottom: 5px; }
     .btn-filter.active { box-shadow: 0 0 0 0.2rem rgba(0,123,255,.5); }
+    #revalidar-resultado .invalido { color: #dc3545; }
+    #revalidar-resultado .valido { color: #28a745; }
 </style>
 {% endblock %}
 
@@ -23,34 +26,87 @@
         </div>
     </div>
 
-    <!-- Filtros -->
-    <div class="card mb-4">
+    <!-- Filtros por Status de Pagamento -->
+    <div class="card mb-3">
         <div class="card-body">
-            <strong class="me-3">Filtrar por:</strong>
-            <a href="{% url 'financeiro:listar_parcelas' %}"
-               class="btn btn-outline-secondary btn-filter {% if not request.GET.status %}active{% endif %}">
+            <strong class="me-3">Status pagamento:</strong>
+            <a href="{% url 'financeiro:listar_parcelas' %}{% if filtro_status_boleto %}?status_boleto={{ filtro_status_boleto }}{% endif %}"
+               class="btn btn-outline-secondary btn-filter {% if not filtro_status and not filtro_status_boleto or not filtro_status %}{% if not filtro_status %}active{% endif %}{% endif %}">
                 Todas
             </a>
-            <a href="{% url 'financeiro:listar_parcelas' %}?status=pagas"
-               class="btn btn-outline-success btn-filter {% if request.GET.status == 'pagas' %}active{% endif %}">
+            <a href="{% url 'financeiro:listar_parcelas' %}?status=pagas{% if filtro_status_boleto %}&status_boleto={{ filtro_status_boleto }}{% endif %}"
+               class="btn btn-outline-success btn-filter {% if filtro_status == 'pagas' %}active{% endif %}">
                 <i class="fas fa-check-circle"></i> Pagas
             </a>
-            <a href="{% url 'financeiro:listar_parcelas' %}?status=pendentes"
-               class="btn btn-outline-warning btn-filter {% if request.GET.status == 'pendentes' %}active{% endif %}">
+            <a href="{% url 'financeiro:listar_parcelas' %}?status=pendentes{% if filtro_status_boleto %}&status_boleto={{ filtro_status_boleto }}{% endif %}"
+               class="btn btn-outline-warning btn-filter {% if filtro_status == 'pendentes' %}active{% endif %}">
                 <i class="fas fa-clock"></i> Pendentes
             </a>
-            <a href="{% url 'financeiro:listar_parcelas' %}?status=vencidas"
-               class="btn btn-outline-danger btn-filter {% if request.GET.status == 'vencidas' %}active{% endif %}">
+            <a href="{% url 'financeiro:listar_parcelas' %}?status=vencidas{% if filtro_status_boleto %}&status_boleto={{ filtro_status_boleto }}{% endif %}"
+               class="btn btn-outline-danger btn-filter {% if filtro_status == 'vencidas' %}active{% endif %}">
                 <i class="fas fa-exclamation-triangle"></i> Vencidas
             </a>
         </div>
     </div>
 
+    <!-- Filtros por Status do Boleto -->
+    <div class="card mb-4">
+        <div class="card-body">
+            <strong class="me-3">Status boleto:</strong>
+            <a href="{% url 'financeiro:listar_parcelas' %}{% if filtro_status %}?status={{ filtro_status }}{% endif %}"
+               class="btn btn-outline-secondary btn-filter {% if not filtro_status_boleto %}active{% endif %}">
+                Todos
+            </a>
+            <a href="{% url 'financeiro:listar_parcelas' %}?status_boleto=NAO_GERADO{% if filtro_status %}&status={{ filtro_status }}{% endif %}"
+               class="btn btn-outline-secondary btn-filter {% if filtro_status_boleto == 'NAO_GERADO' %}active{% endif %}">
+                Não Gerado
+            </a>
+            <a href="{% url 'financeiro:listar_parcelas' %}?status_boleto=GERADO{% if filtro_status %}&status={{ filtro_status }}{% endif %}"
+               class="btn btn-outline-primary btn-filter {% if filtro_status_boleto == 'GERADO' %}active{% endif %}">
+                <i class="fas fa-file-invoice"></i> Gerado
+            </a>
+            <a href="{% url 'financeiro:listar_parcelas' %}?status_boleto=REGISTRADO{% if filtro_status %}&status={{ filtro_status }}{% endif %}"
+               class="btn btn-outline-info btn-filter {% if filtro_status_boleto == 'REGISTRADO' %}active{% endif %}">
+                Registrado
+            </a>
+            <a href="{% url 'financeiro:listar_parcelas' %}?status_boleto=CANCELADO{% if filtro_status %}&status={{ filtro_status }}{% endif %}"
+               class="btn btn-outline-dark btn-filter {% if filtro_status_boleto == 'CANCELADO' %}active{% endif %}">
+                Cancelado
+            </a>
+        </div>
+    </div>
+
+    <!-- Painel Re-validar (só aparece quando filtro status_boleto=GERADO) -->
+    {% if filtro_status_boleto == 'GERADO' %}
+    <div class="card mb-4 border-primary">
+        <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
+            <span><i class="fas fa-shield-alt me-2"></i>Re-validar Boletos Gerados</span>
+            <button class="btn btn-light btn-sm" id="btn-revalidar" onclick="revalidarBoletos()">
+                <i class="fas fa-sync-alt me-1"></i> Executar Re-validação
+            </button>
+        </div>
+        <div class="card-body">
+            <p class="text-muted mb-2">
+                Verifica se todos os boletos com status <strong>Gerado</strong> ainda possuem os dados necessários
+                (nosso número, conta bancária, campos obrigatórios por banco, CPF/CNPJ do comprador).
+            </p>
+            <div id="revalidar-resultado" class="d-none">
+                <hr>
+                <div id="revalidar-resumo" class="mb-3"></div>
+                <div id="revalidar-detalhes"></div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
     <!-- Tabela de Parcelas -->
     <div class="card">
         <div class="card-header">
             <strong>Lista de Parcelas</strong>
-            <span class="badge bg-secondary ms-2">{{ parcelas.count }} registro(s)</span>
+            <span class="badge bg-secondary ms-2">{{ total_parcelas }} registro(s)</span>
+            {% if filtro_status_boleto %}
+            <span class="badge bg-primary ms-1">Boleto: {{ filtro_status_boleto }}</span>
+            {% endif %}
         </div>
         <div class="card-body p-0">
             <div class="table-responsive">
@@ -66,13 +122,14 @@
                             <th class="text-end">Juros / Multa</th>
                             <th class="text-end">Total c/ Encargos</th>
                             <th class="text-center">Status</th>
+                            <th class="text-center">Boleto</th>
                             <th>Data Pgto</th>
                             <th class="text-center">Ações</th>
                         </tr>
                     </thead>
                     <tbody>
                         {% for parcela in parcelas %}
-                        <tr>
+                        <tr data-parcela-id="{{ parcela.pk }}">
                             <td>
                                 <a href="#">{{ parcela.contrato.numero_contrato }}</a>
                             </td>
@@ -110,6 +167,21 @@
                                     <span class="badge badge-pendente">Pendente</span>
                                 {% endif %}
                             </td>
+                            <td class="text-center">
+                                {% if parcela.status_boleto == 'GERADO' %}
+                                    <span class="badge badge-boleto-gerado">Gerado</span>
+                                {% elif parcela.status_boleto == 'REGISTRADO' %}
+                                    <span class="badge bg-info">Registrado</span>
+                                {% elif parcela.status_boleto == 'PAGO' %}
+                                    <span class="badge bg-success">Pago</span>
+                                {% elif parcela.status_boleto == 'CANCELADO' %}
+                                    <span class="badge bg-dark">Cancelado</span>
+                                {% elif parcela.status_boleto == 'VENCIDO' %}
+                                    <span class="badge bg-warning text-dark">Vencido</span>
+                                {% else %}
+                                    <span class="badge bg-secondary">{{ parcela.get_status_boleto_display }}</span>
+                                {% endif %}
+                            </td>
                             <td>
                                 {% if parcela.data_pagamento %}
                                     {{ parcela.data_pagamento|date:"d/m/Y" }}
@@ -126,7 +198,7 @@
                         </tr>
                         {% empty %}
                         <tr>
-                            <td colspan="10" class="text-center py-4 text-muted">
+                            <td colspan="12" class="text-center py-4 text-muted">
                                 <i class="fas fa-inbox fa-3x mb-3 d-block"></i>
                                 Nenhuma parcela encontrada.
                             </td>
@@ -138,4 +210,77 @@
         </div>
     </div>
 </div>
+
+{% if filtro_status_boleto == 'GERADO' %}
+<script>
+function revalidarBoletos() {
+    const btn = document.getElementById('btn-revalidar');
+    const resultadoDiv = document.getElementById('revalidar-resultado');
+    const resumoDiv = document.getElementById('revalidar-resumo');
+    const detalhesDiv = document.getElementById('revalidar-detalhes');
+
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i> Validando...';
+
+    // Coleta IDs das parcelas visíveis na tabela
+    const parcela_ids = Array.from(
+        document.querySelectorAll('tr[data-parcela-id]')
+    ).map(tr => parseInt(tr.dataset.parcelaId));
+
+    fetch('{% url "financeiro:api_boletos_revalidar" %}', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': '{{ csrf_token }}',
+        },
+        body: JSON.stringify({ parcela_ids: parcela_ids }),
+    })
+    .then(resp => resp.json())
+    .then(data => {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fas fa-sync-alt me-1"></i> Executar Re-validação';
+        resultadoDiv.classList.remove('d-none');
+
+        if (!data.sucesso) {
+            resumoDiv.innerHTML = `<div class="alert alert-danger">${data.erro}</div>`;
+            detalhesDiv.innerHTML = '';
+            return;
+        }
+
+        const corResumo = data.invalidos > 0 ? 'warning' : 'success';
+        resumoDiv.innerHTML = `
+            <div class="alert alert-${corResumo} mb-0">
+                <strong>Resultado:</strong>
+                ${data.total} boleto(s) verificado(s) —
+                <span class="text-success"><strong>${data.validos}</strong> válido(s)</span>,
+                <span class="text-danger"><strong>${data.invalidos}</strong> com problema(s)</span>
+            </div>`;
+
+        if (data.invalidos === 0) {
+            detalhesDiv.innerHTML = '';
+            return;
+        }
+
+        const invalidos = data.resultados.filter(r => !r.valido);
+        let html = '<div class="mt-3"><strong class="text-danger">Boletos com problema:</strong><ul class="list-group mt-2">';
+        invalidos.forEach(r => {
+            html += `<li class="list-group-item list-group-item-danger">
+                <strong>Parcela #${r.parcela_id}</strong> — Contrato: ${r.contrato} — Nosso Nº: ${r.nosso_numero}
+                <ul class="mb-0 mt-1">`;
+            r.erros.forEach(e => { html += `<li>${e}</li>`; });
+            html += '</ul></li>';
+        });
+        html += '</ul></div>';
+        detalhesDiv.innerHTML = html;
+    })
+    .catch(err => {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fas fa-sync-alt me-1"></i> Executar Re-validação';
+        resumoDiv.innerHTML = `<div class="alert alert-danger">Erro: ${err.message}</div>`;
+        resultadoDiv.classList.remove('d-none');
+        detalhesDiv.innerHTML = '';
+    });
+}
+</script>
+{% endif %}
 {% endblock %}
