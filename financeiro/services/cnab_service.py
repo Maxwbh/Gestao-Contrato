@@ -194,6 +194,28 @@ class CNABService:
             'local_pagamento': 'Pagavel em qualquer banco ate o vencimento',
         }
 
+        # Campos específicos por banco
+        banco = conta_bancaria.banco
+
+        # Sicredi (748): posto e byte_idt obrigatórios
+        if banco == '748':
+            boleto_data['posto'] = getattr(conta_bancaria, 'posto', '') or '01'
+            boleto_data['byte_idt'] = getattr(conta_bancaria, 'byte_idt', '') or '2'
+
+        # Caixa Econômica (104): emissao e codigo_beneficiario obrigatórios
+        elif banco == '104':
+            boleto_data['emissao'] = getattr(conta_bancaria, 'emissao', '') or '4'
+            codigo_benef = getattr(conta_bancaria, 'codigo_beneficiario', '') or conta_bancaria.convenio or ''
+            boleto_data['codigo_beneficiario'] = codigo_benef
+
+        # Sicoob (756): variacao e quantidade
+        elif banco == '756':
+            boleto_data['variacao'] = '01'
+            boleto_data['quantidade'] = '001'
+            codigo_benef = getattr(conta_bancaria, 'codigo_beneficiario', '')
+            if codigo_benef:
+                boleto_data['codigo_beneficiario'] = codigo_benef
+
         return boleto_data
 
     def gerar_remessa(
@@ -224,6 +246,41 @@ class CNABService:
                     'Acesse Configurações → Conta Bancária e informe o número do convênio.'
                 )
             }
+        if conta_bancaria.banco == '033' and not conta_bancaria.convenio:
+            return {
+                'sucesso': False,
+                'erro': (
+                    'Santander requer o campo "Convênio" preenchido na conta bancária (7 dígitos). '
+                    'Acesse Configurações → Conta Bancária e informe o número do convênio.'
+                )
+            }
+        if conta_bancaria.banco == '104' and not conta_bancaria.convenio:
+            return {
+                'sucesso': False,
+                'erro': (
+                    'Caixa Econômica requer o campo "Convênio" preenchido na conta bancária (6 dígitos). '
+                    'Acesse Configurações → Conta Bancária e informe o número do convênio.'
+                )
+            }
+        if conta_bancaria.banco == '748':
+            posto = getattr(conta_bancaria, 'posto', '') or ''
+            byte_idt = getattr(conta_bancaria, 'byte_idt', '') or ''
+            if not posto:
+                return {
+                    'sucesso': False,
+                    'erro': (
+                        'Sicredi requer o campo "Posto" preenchido na conta bancária (2 dígitos). '
+                        'Acesse Configurações → Conta Bancária e informe o Posto.'
+                    )
+                }
+            if not byte_idt:
+                return {
+                    'sucesso': False,
+                    'erro': (
+                        'Sicredi requer o campo "Byte IDT" preenchido na conta bancária (1 dígito, geralmente "2"). '
+                        'Acesse Configurações → Conta Bancária e informe o Byte IDT.'
+                    )
+                }
 
         # Validar parcelas
         parcelas_validas = [p for p in parcelas if p.tem_boleto and not p.pago]

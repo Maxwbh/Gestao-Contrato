@@ -1141,6 +1141,10 @@ def api_obter_conta_bancaria(request, conta_id):
             'carteira': conta.carteira,
             'nosso_numero_atual': conta.nosso_numero_atual,
             'modalidade': conta.modalidade,
+            'posto': conta.posto,
+            'byte_idt': conta.byte_idt,
+            'emissao': conta.emissao,
+            'codigo_beneficiario': conta.codigo_beneficiario,
             'tipo_pix': conta.tipo_pix,
             'chave_pix': conta.chave_pix,
             'principal': conta.principal,
@@ -1176,6 +1180,10 @@ def api_criar_conta_bancaria(request):
             carteira=data.get('carteira', ''),
             nosso_numero_atual=data.get('nosso_numero_atual', 0),
             modalidade=data.get('modalidade', ''),
+            posto=data.get('posto', ''),
+            byte_idt=data.get('byte_idt', ''),
+            emissao=data.get('emissao', ''),
+            codigo_beneficiario=data.get('codigo_beneficiario', ''),
             tipo_pix=data.get('tipo_pix', ''),
             chave_pix=data.get('chave_pix', ''),
             principal=data.get('principal', False),
@@ -1212,6 +1220,10 @@ def api_atualizar_conta_bancaria(request, conta_id):
         conta.carteira = data.get('carteira', conta.carteira)
         conta.nosso_numero_atual = data.get('nosso_numero_atual', conta.nosso_numero_atual)
         conta.modalidade = data.get('modalidade', conta.modalidade)
+        conta.posto = data.get('posto', conta.posto)
+        conta.byte_idt = data.get('byte_idt', conta.byte_idt)
+        conta.emissao = data.get('emissao', conta.emissao)
+        conta.codigo_beneficiario = data.get('codigo_beneficiario', conta.codigo_beneficiario)
         conta.tipo_pix = data.get('tipo_pix', conta.tipo_pix)
         conta.chave_pix = data.get('chave_pix', conta.chave_pix)
         conta.principal = data.get('principal', conta.principal)
