@@ -53,8 +53,8 @@
         </div>
         <div class="card-body p-0">
             {% if configuracoes %}
-            <div class="table-responsive">
-                <table class="table table-hover mb-0">
+            <div class="table-responsive" style="overflow-x: auto;">
+                <table class="table table-sm table-hover mb-0" style="font-size: 0.875rem;">
                     <thead class="table-light">
                         <tr>
                             <th>Nome</th>
@@ -121,26 +121,7 @@
         </div>
     </div>
 
-    <!-- Paginacao -->
-    {% if is_paginated %}
-    <nav class="mt-4">
-        <ul class="pagination justify-content-center">
-            {% if page_obj.has_previous %}
-            <li class="page-item">
-                <a class="page-link" href="?page={{ page_obj.previous_page_number }}{% if search %}&search={{ search }}{% endif %}">Anterior</a>
-            </li>
-            {% endif %}
-            <li class="page-item disabled">
-                <span class="page-link">Pagina {{ page_obj.number }} de {{ page_obj.paginator.num_pages }}</span>
-            </li>
-            {% if page_obj.has_next %}
-            <li class="page-item">
-                <a class="page-link" href="?page={{ page_obj.next_page_number }}{% if search %}&search={{ search }}{% endif %}">Proximo</a>
-            </li>
-            {% endif %}
-        </ul>
-    </nav>
-    {% endif %}
+    {% include "includes/pagination_perpage.html" %}
 </div>
 
 <!-- Modal de Resultado do Teste -->
