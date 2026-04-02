@@ -1289,6 +1289,32 @@ def api_intermediarias_contrato(request, contrato_id):
 
 
 # =============================================================================
+# Wizard — API: imóveis disponíveis por imobiliária
+# =============================================================================
+
+@login_required
+def api_wizard_imoveis(request):
+    """Retorna imóveis disponíveis pertencentes à imobiliária informada."""
+    from core.models import Imovel as _Imovel
+    imobiliaria_id = request.GET.get('imobiliaria_id')
+    if not imobiliaria_id:
+        return JsonResponse({'imoveis': []})
+    qs = _Imovel.objects.filter(
+        imobiliaria_id=imobiliaria_id,
+        disponivel=True,
+        ativo=True,
+    ).values('id', 'identificacao', 'loteamento')
+    imoveis = [
+        {
+            'id': i['id'],
+            'texto': f"{i['identificacao']}{' — ' + i['loteamento'] if i['loteamento'] else ''}",
+        }
+        for i in qs
+    ]
+    return JsonResponse({'imoveis': imoveis})
+
+
+# =============================================================================
 # HU-08 — API Preview de Parcelas (projeção sem salvar)
 # =============================================================================
 
@@ -1422,6 +1448,25 @@ def api_preview_parcelas(request):
 # WIZARD — Contrato com Tabela Price + Intermediárias
 # =============================================================================
 
+def _gerar_numero_contrato():
+    """Gera o próximo número de contrato no formato CTR-AAAA-NNNN."""
+    from django.utils import timezone
+    from contratos.models import Contrato
+    ano = timezone.now().year
+    prefix = f'CTR-{ano}-'
+    ultimos = Contrato.objects.filter(
+        numero_contrato__startswith=prefix
+    ).values_list('numero_contrato', flat=True)
+    seq = 1
+    for n in ultimos:
+        try:
+            num = int(n[len(prefix):])
+            if num >= seq:
+                seq = num + 1
+        except (ValueError, IndexError):
+            pass
+    return f'{prefix}{seq:04d}'
+
 class ContratoWizardView(LoginRequiredMixin, View):
     """
     Wizard de 4 etapas para criar contratos com TabelaJuros escalante
@@ -1451,7 +1496,11 @@ class ContratoWizardView(LoginRequiredMixin, View):
         sess = self._session(request)
 
         if step == 'basico':
-            form = ContratoWizardBasicoForm(initial=sess.get('basico'))
+            initial = sess.get('basico', {})
+            if not initial.get('numero_contrato'):
+                initial = dict(initial)
+                initial['numero_contrato'] = _gerar_numero_contrato()
+            form = ContratoWizardBasicoForm(initial=initial)
             return render(request, 'contratos/wizard/step1_basico.html', {
                 'form': form, 'step': step, 'step_num': 1,
             })
@@ -1544,6 +1593,11 @@ class ContratoWizardView(LoginRequiredMixin, View):
         elif step == 'intermediarias':
             modo = request.POST.get('modo', 'padrao')
             sess['intermediarias_modo'] = modo
+
+            # Salva configuração de intermediárias na seção basico da sessão
+            if 'basico' in sess:
+                sess['basico']['intermediarias_reduzem_pmt'] = request.POST.get('intermediarias_reduzem_pmt') == 'on'
+                sess['basico']['intermediarias_reajustadas'] = request.POST.get('intermediarias_reajustadas') == 'on'
 
             if modo == 'padrao':
                 form = IntermediariaPadraoForm(request.POST)
