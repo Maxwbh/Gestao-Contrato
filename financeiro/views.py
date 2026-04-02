@@ -316,7 +316,7 @@ def listar_parcelas(request):
     imobiliarias = Imobiliaria.objects.filter(ativo=True).order_by('nome')
     compradores = Comprador.objects.filter(ativo=True).order_by('nome')
 
-    # Filtro por Status
+    # Filtro por Status de Pagamento
     status = request.GET.get('status', '')
     if status == 'pagas':
         parcelas = parcelas.filter(pago=True)
@@ -326,6 +326,11 @@ def listar_parcelas(request):
         parcelas = parcelas.filter(pago=False, data_vencimento__lt=timezone.now().date())
     elif status == 'a_vencer':
         parcelas = parcelas.filter(pago=False, data_vencimento__gte=timezone.now().date())
+
+    # Filtro por Status do Boleto
+    status_boleto_filtro = request.GET.get('status_boleto', '')
+    if status_boleto_filtro:
+        parcelas = parcelas.filter(status_boleto=status_boleto_filtro)
 
     # Filtro por Imobiliária
     imobiliaria_id = request.GET.get('imobiliaria', '')
@@ -389,6 +394,7 @@ def listar_parcelas(request):
         'compradores': compradores,
         # Valores atuais dos filtros
         'filtro_status': status,
+        'filtro_status_boleto': status_boleto_filtro,
         'filtro_imobiliaria': imobiliaria_id,
         'filtro_comprador': comprador_id,
         'filtro_contrato': contrato_param,
@@ -4320,6 +4326,134 @@ def api_boletos_lote(request):
     except Exception as e:
         logger.exception(f"Erro em lote: {e}")
         return JsonResponse({'sucesso': False, 'erro': str(e)}, status=500)
+
+
+# =============================================================================
+# APIs REST - REVALIDAR BOLETOS
+# =============================================================================
+
+@login_required
+@require_POST
+def api_boletos_revalidar(request):
+    """
+    Revalida boletos com status GERADO, verificando se todos os dados
+    necessários ainda estão presentes e consistentes.
+
+    POST /api/boletos/revalidar/
+    Body: {"parcela_ids": [1,2,3]}  -- se vazio, revalida todos com status GERADO
+    """
+    import json
+
+    CAMPOS_OBRIG_BANCO = {
+        '001': ['convenio'],
+        '033': ['convenio'],
+        '104': ['convenio'],
+        '748': ['posto', 'byte_idt'],
+        '756': [],
+    }
+
+    NOMES_BANCO = {
+        '001': 'Banco do Brasil',
+        '033': 'Santander',
+        '104': 'Caixa Econômica',
+        '237': 'Bradesco',
+        '341': 'Itaú',
+        '748': 'Sicredi',
+        '756': 'Sicoob',
+    }
+
+    try:
+        data = json.loads(request.body) if request.body else {}
+    except json.JSONDecodeError:
+        return JsonResponse({'sucesso': False, 'erro': 'JSON inválido.'}, status=400)
+
+    parcela_ids = data.get('parcela_ids', [])
+
+    qs = Parcela.objects.filter(
+        status_boleto=StatusBoleto.GERADO
+    ).select_related(
+        'conta_bancaria',
+        'contrato',
+        'contrato__comprador',
+        'contrato__imovel',
+        'contrato__imovel__imobiliaria',
+    )
+
+    if parcela_ids:
+        qs = qs.filter(pk__in=parcela_ids)
+
+    resultados = []
+    validos = invalidos = 0
+
+    for parcela in qs:
+        erros_parcela = []
+
+        # 1. Nosso número
+        if not parcela.nosso_numero:
+            erros_parcela.append('Sem nosso_numero')
+
+        # 2. Conta bancária
+        conta = parcela.conta_bancaria
+        if not conta:
+            erros_parcela.append('Sem conta bancária associada')
+        else:
+            banco = conta.banco
+            nome_banco = NOMES_BANCO.get(banco, f'Banco {banco}')
+
+            # Campos obrigatórios por banco
+            campos_obrig = CAMPOS_OBRIG_BANCO.get(banco, [])
+            for campo in campos_obrig:
+                valor = getattr(conta, campo, '') or ''
+                if not valor.strip():
+                    erros_parcela.append(f'{nome_banco}: campo "{campo}" obrigatório ausente na conta bancária')
+
+            # Agência e conta corrente básicos
+            if not (conta.agencia or '').strip():
+                erros_parcela.append('Agência bancária ausente')
+            if not (conta.conta_corrente or '').strip():
+                erros_parcela.append('Conta corrente ausente')
+
+            # CNPJ da imobiliária
+            imobiliaria = getattr(conta, 'imobiliaria', None)
+            if imobiliaria and not (imobiliaria.cnpj or '').strip():
+                erros_parcela.append('CNPJ da imobiliária ausente')
+
+        # 3. Dados do comprador
+        comprador = parcela.contrato.comprador if parcela.contrato_id else None
+        if comprador:
+            doc = (comprador.cpf or '') or (getattr(comprador, 'cnpj', '') or '')
+            if not doc.strip():
+                erros_parcela.append('Comprador sem CPF/CNPJ')
+        else:
+            erros_parcela.append('Sem comprador no contrato')
+
+        if erros_parcela:
+            invalidos += 1
+            resultados.append({
+                'parcela_id': parcela.id,
+                'valido': False,
+                'erros': erros_parcela,
+                'contrato': parcela.contrato.numero_contrato if parcela.contrato_id else '-',
+                'nosso_numero': parcela.nosso_numero or '-',
+            })
+        else:
+            validos += 1
+            resultados.append({
+                'parcela_id': parcela.id,
+                'valido': True,
+                'erros': [],
+                'contrato': parcela.contrato.numero_contrato if parcela.contrato_id else '-',
+                'nosso_numero': parcela.nosso_numero,
+            })
+
+    total = validos + invalidos
+    return JsonResponse({
+        'sucesso': True,
+        'total': total,
+        'validos': validos,
+        'invalidos': invalidos,
+        'resultados': resultados,
+    })
 
 
 # =============================================================================
