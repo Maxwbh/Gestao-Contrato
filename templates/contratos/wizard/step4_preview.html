@@ -274,8 +274,8 @@ function carregarPreviewParcelas() {
         tipo_amortizacao: '{{ resumo.tipo_amortizacao|default:"PRICE" }}',
         intermediarias_reduzem_pmt: {{ resumo.reduzem_pmt|yesno:"true,false" }},
         soma_intermediarias: '{{ resumo.soma_intermediarias }}',
-        juros: {{ resumo.juros_rows|safe|default:"[]" }},
-        intermediarias_lista: {{ resumo.intermediarias|safe|default:"[]" }},
+        juros: {{ resumo.juros_json|default:"[]" }},
+        intermediarias_lista: {{ resumo.intermediarias_json|default:"[]" }},
     };
 
     fetch('{% url "contratos:wizard_preview_parcelas" %}', {
