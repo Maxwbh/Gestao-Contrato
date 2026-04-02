@@ -127,6 +127,10 @@ class Command(BaseCommand):
                 self.stdout.write('Criando reajustes aplicados...')
                 reajustes = self.criar_reajustes_aplicados(contratos)
 
+                # 14. Verificar dados para boleto e remessa
+                self.stdout.write('Verificando integridade dos dados para boleto/remessa...')
+                self.verificar_dados_boleto_remessa(contratos, contas_bancarias)
+
             # Contagem final
             pf_count = len([c for c in compradores if c.tipo_pessoa == 'PF'])
             pj_count = len([c for c in compradores if c.tipo_pessoa == 'PJ'])
@@ -732,37 +736,63 @@ class Command(BaseCommand):
 
     def simular_boletos_gerados(self, contratos, contas_bancarias):
         """
-        Simula boletos gerados para parcelas não pagas, vinculando-as a uma conta bancária.
-        Permite demonstrar a geração de remessa sem depender do BRCobrança.
+        Simula boletos gerados para parcelas VENCIDAS e pendentes,
+        distribuindo entre TODAS as contas bancárias disponíveis
+        (BB, Sicoob, Bradesco) de cada imobiliária.
+        Parcelas PAGAS não recebem boleto (não entram em remessa).
         """
         from financeiro.models import StatusBoleto
         from django.utils import timezone as tz
 
         count = 0
         hoje = tz.now()
+        hoje_date = hoje.date()
 
-        # Pegar contas bancárias principais (uma por imobiliária)
-        contas_principais = {cb.imobiliaria_id: cb for cb in contas_bancarias if cb.principal}
+        # Mapear TODAS as contas por imobiliária (não só a principal)
+        contas_por_imob: dict = {}
+        for cb in contas_bancarias:
+            contas_por_imob.setdefault(cb.imobiliaria_id, [])
+            contas_por_imob[cb.imobiliaria_id].append(cb)
 
-        for contrato in contratos:
-            conta = contas_principais.get(contrato.imobiliaria_id)
-            if not conta:
-                conta = contas_bancarias[0] if contas_bancarias else None
-            if not conta:
+        # Ordenar: principal primeiro, depois as demais
+        for imob_id, contas in contas_por_imob.items():
+            contas.sort(key=lambda c: (not c.principal, c.banco))
+
+        for idx, contrato in enumerate(contratos):
+            contas_imob = contas_por_imob.get(contrato.imobiliaria_id)
+            if not contas_imob:
                 continue
 
-            # Pegar até 3 parcelas não pagas do contrato
-            parcelas_nao_pagas = list(
-                contrato.parcelas.filter(pago=False).order_by('numero_parcela')[:3]
+            # Alternar conta bancária entre os contratos (round-robin entre BB, Sicoob, Bradesco)
+            conta = contas_imob[idx % len(contas_imob)]
+
+            # Parcelas vencidas não pagas (prioridade)
+            parcelas_vencidas = list(
+                contrato.parcelas.filter(
+                    pago=False,
+                    data_vencimento__lt=hoje_date,
+                    status_boleto__in=['PENDENTE', 'ERRO']
+                ).order_by('data_vencimento')[:5]
             )
 
-            for parcela in parcelas_nao_pagas:
-                if parcela.status_boleto == StatusBoleto.GERADO:
+            # Parcelas a vencer não pagas (complemento)
+            parcelas_a_vencer = list(
+                contrato.parcelas.filter(
+                    pago=False,
+                    data_vencimento__gte=hoje_date,
+                    status_boleto__in=['PENDENTE', 'ERRO']
+                ).order_by('data_vencimento')[:2]
+            )
+
+            # Priorizar vencidas; se não houver, usar a vencer
+            parcelas_alvo = parcelas_vencidas if parcelas_vencidas else parcelas_a_vencer
+
+            for parcela in parcelas_alvo:
+                # Garantir que parcela não está paga (dupla verificação)
+                if parcela.pago:
                     continue
 
-                # Incrementar nosso número na conta
                 conta.nosso_numero_atual += 1
-
                 parcela.conta_bancaria = conta
                 parcela.status_boleto = StatusBoleto.GERADO
                 parcela.nosso_numero = str(conta.nosso_numero_atual).zfill(10)
@@ -774,10 +804,114 @@ class Command(BaseCommand):
                 ])
                 count += 1
 
-            # Salvar o nosso_numero_atual atualizado da conta
             conta.save(update_fields=['nosso_numero_atual'])
 
+        # Estatísticas por banco
+        from financeiro.models import Parcela, StatusBoleto as SB
+        for cb in contas_bancarias:
+            qtd = Parcela.objects.filter(
+                conta_bancaria=cb, status_boleto=SB.GERADO, pago=False
+            ).count()
+            if qtd > 0:
+                self.stdout.write(f'   → {cb.get_banco_display()} ({cb.banco}): {qtd} boletos simulados')
+
         return count
+
+    def verificar_dados_boleto_remessa(self, contratos, contas_bancarias):
+        """
+        Verifica se os dados gerados estão completos para emissão de boleto
+        e geração de arquivo remessa, reportando problemas encontrados.
+
+        Regras verificadas (conforme BRCobranca):
+        - Conta bancária: agencia, conta, convenio (se obrigatório), posto/byte_idt (Sicredi), emissao (Caixa)
+        - Imobiliária: CNPJ preenchido (cedente do boleto)
+        - Comprador: CPF ou CNPJ preenchido, endereço, nome
+        - Parcela com boleto: nosso_numero, numero_documento, conta_bancaria
+        - Parcelas PAGAS não devem ter boleto gerado (não entram em remessa)
+        """
+        from financeiro.models import Parcela, StatusBoleto
+
+        CAMPOS_OBRIG_BANCO = {
+            '001': {'convenio': 'Convênio (4-8 dígitos)'},
+            '033': {'convenio': 'Convênio (7 dígitos)'},
+            '104': {'convenio': 'Convênio (6 dígitos)', 'emissao': 'Emissão (1 dígito)', 'codigo_beneficiario': 'Código Beneficiário'},
+            '748': {'convenio': 'Convênio', 'posto': 'Posto (2 dígitos)', 'byte_idt': 'Byte IDT (1 dígito)'},
+            '756': {'convenio': 'Convênio'},
+        }
+
+        alertas = []
+        ok_count = 0
+
+        # 1. Verificar contas bancárias
+        for cb in contas_bancarias:
+            problemas_cb = []
+            if not cb.agencia:
+                problemas_cb.append('Agência vazia')
+            if not cb.conta:
+                problemas_cb.append('Conta vazia')
+            campos_req = CAMPOS_OBRIG_BANCO.get(cb.banco, {})
+            for campo, label in campos_req.items():
+                valor = getattr(cb, campo, '') or ''
+                if not valor.strip():
+                    problemas_cb.append(f'{label} vazio')
+            if problemas_cb:
+                alertas.append(f'Conta {cb.get_banco_display()} ({cb}): {", ".join(problemas_cb)}')
+            else:
+                ok_count += 1
+
+        # 2. Verificar imobiliárias
+        for contrato in contratos[:10]:  # Amostra
+            imob = contrato.imobiliaria
+            if not imob.cnpj and not getattr(imob, 'cpf', None):
+                alertas.append(f'Imobiliária "{imob.nome}" sem CNPJ/CPF (necessário para cedente do boleto)')
+
+        # 3. Verificar compradores
+        sem_doc = 0
+        sem_end = 0
+        for contrato in contratos:
+            c = contrato.comprador
+            if not c.cpf and not c.cnpj:
+                sem_doc += 1
+            if not c.nome:
+                alertas.append(f'Comprador ID {c.pk} sem nome')
+            if not (getattr(c, 'logradouro', '') or getattr(c, 'endereco', '')):
+                sem_end += 1
+        if sem_doc:
+            alertas.append(f'{sem_doc} comprador(es) sem CPF/CNPJ (campo sacado_documento do boleto)')
+        if sem_end:
+            alertas.append(f'{sem_end} comprador(es) sem endereço (campo sacado_endereco do boleto)')
+
+        # 4. Verificar parcelas com boleto gerado
+        parcelas_boleto = Parcela.objects.filter(status_boleto=StatusBoleto.GERADO)
+        sem_nosso_num = parcelas_boleto.filter(nosso_numero='').count()
+        sem_num_doc = parcelas_boleto.filter(numero_documento='').count()
+        sem_conta = parcelas_boleto.filter(conta_bancaria__isnull=True).count()
+        pagas_com_boleto = parcelas_boleto.filter(pago=True).count()
+
+        if sem_nosso_num:
+            alertas.append(f'{sem_nosso_num} boleto(s) sem nosso_numero')
+        if sem_num_doc:
+            alertas.append(f'{sem_num_doc} boleto(s) sem numero_documento')
+        if sem_conta:
+            alertas.append(f'{sem_conta} boleto(s) sem conta_bancária vinculada')
+        if pagas_com_boleto:
+            alertas.append(
+                f'⚠ {pagas_com_boleto} parcela(s) PAGA(S) ainda com status GERADO '
+                f'— não entrarão em remessa (correto), mas status deveria ser PAGO'
+            )
+
+        # 5. Resumo por banco
+        for cb in contas_bancarias:
+            qtd = parcelas_boleto.filter(conta_bancaria=cb, pago=False).count()
+            self.stdout.write(f'   [OK] {cb.get_banco_display():20s} — {qtd} boletos prontos para remessa')
+
+        # 6. Exibir resultado
+        if alertas:
+            self.stdout.write(self.style.WARNING(f'\n⚠ {len(alertas)} problema(s) encontrado(s):'))
+            for a in alertas:
+                self.stdout.write(self.style.WARNING(f'   • {a}'))
+        else:
+            self.stdout.write(self.style.SUCCESS('   Todos os dados verificados sem problemas.'))
 
     def gerar_cpf(self):
         """Gera um CPF fictício formatado"""
