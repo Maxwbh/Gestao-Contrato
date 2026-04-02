@@ -292,7 +292,7 @@
                                         <div class="progress mb-1">
                                             <div class="progress-bar {% if progresso >= 100 %}bg-success{% elif progresso >= 50 %}bg-info{% else %}bg-warning{% endif %}"
                                                  role="progressbar"
-                                                 style="width: {{ progresso }}%"
+                                                 style="width: {{ progresso|stringformat:'f' }}%"
                                                  aria-valuenow="{{ progresso }}"
                                                  aria-valuemin="0"
                                                  aria-valuemax="100">
