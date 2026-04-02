@@ -515,6 +515,34 @@ class ContaBancaria(TimeStampedModel):
         help_text='Prazo em dias para protesto. 0 = não protestar'
     )
 
+    # Campos específicos por banco
+    # Sicredi (748): posto e byte_idt são OBRIGATÓRIOS
+    posto = models.CharField(
+        max_length=2,
+        blank=True,
+        verbose_name='Posto (Sicredi)',
+        help_text='Código do posto. Obrigatório para Sicredi (2 dígitos)'
+    )
+    byte_idt = models.CharField(
+        max_length=1,
+        blank=True,
+        verbose_name='Byte IDT (Sicredi)',
+        help_text='Byte de identificação. Obrigatório para Sicredi (1 dígito, geralmente "2")'
+    )
+    # Caixa Econômica (104): emissao e codigo_beneficiario são OBRIGATÓRIOS
+    emissao = models.CharField(
+        max_length=1,
+        blank=True,
+        verbose_name='Emissão (Caixa)',
+        help_text='Tipo de emissão. Obrigatório para Caixa Econômica (1 dígito, geralmente "4")'
+    )
+    codigo_beneficiario = models.CharField(
+        max_length=20,
+        blank=True,
+        verbose_name='Código Beneficiário (Caixa)',
+        help_text='Código do beneficiário. Obrigatório para Caixa Econômica (geralmente igual ao convênio)'
+    )
+
     # Configurações CNAB
     layout_cnab = models.CharField(
         max_length=10,
