@@ -65,8 +65,8 @@
         <div class="card-header bg-warning text-dark">
             <i class="fas fa-list"></i> Lista de Intermediárias
         </div>
-        <div class="table-responsive">
-            <table class="table table-hover mb-0">
+        <div class="table-responsive" style="overflow-x: auto;">
+            <table class="table table-sm table-hover mb-0" style="font-size: 0.875rem;">
                 <thead class="table-light">
                     <tr>
                         <th>#</th>
@@ -137,27 +137,9 @@
                 </tbody>
             </table>
         </div>
-        {% if is_paginated %}
         <div class="card-footer">
-            <nav>
-                <ul class="pagination pagination-sm mb-0 justify-content-center">
-                    {% if page_obj.has_previous %}
-                    <li class="page-item">
-                        <a class="page-link" href="?page={{ page_obj.previous_page_number }}">Anterior</a>
-                    </li>
-                    {% endif %}
-                    <li class="page-item active">
-                        <span class="page-link">{{ page_obj.number }} / {{ page_obj.paginator.num_pages }}</span>
-                    </li>
-                    {% if page_obj.has_next %}
-                    <li class="page-item">
-                        <a class="page-link" href="?page={{ page_obj.next_page_number }}">Próxima</a>
-                    </li>
-                    {% endif %}
-                </ul>
-            </nav>
+            {% include "includes/pagination_perpage.html" %}
         </div>
-        {% endif %}
     </div>
 
 </div>
