@@ -12,6 +12,7 @@ from django.urls import reverse_lazy
 from django.contrib import messages
 from django.http import JsonResponse
 from django.db.models import Q
+from core.mixins import PaginacaoMixin
 from .models import (
     Notificacao, TemplateNotificacao,
     ConfiguracaoEmail, ConfiguracaoSMS, ConfiguracaoWhatsApp
@@ -54,7 +55,7 @@ def configuracoes(request):
 # CRUD VIEWS - CONFIGURACAO EMAIL
 # =============================================================================
 
-class ConfiguracaoEmailListView(LoginRequiredMixin, ListView):
+class ConfiguracaoEmailListView(LoginRequiredMixin, PaginacaoMixin, ListView):
     """Lista todas as configuracoes de email"""
     model = ConfiguracaoEmail
     template_name = 'notificacoes/config_email_list.html'
@@ -176,7 +177,7 @@ def testar_conexao_email(request, pk):
 # CRUD VIEWS - TEMPLATE NOTIFICACAO (Mensagens de Email)
 # =============================================================================
 
-class TemplateNotificacaoListView(LoginRequiredMixin, ListView):
+class TemplateNotificacaoListView(LoginRequiredMixin, PaginacaoMixin, ListView):
     """Lista todos os templates de notificacao"""
     model = TemplateNotificacao
     template_name = 'notificacoes/template_list.html'
