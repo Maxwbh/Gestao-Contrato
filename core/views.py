@@ -831,13 +831,24 @@ class ImovelListView(LoginRequiredMixin, ListView):
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        context['total_imoveis'] = Imovel.objects.filter(ativo=True).count()
-        context['imoveis_disponiveis'] = Imovel.objects.filter(ativo=True, disponivel=True).count()
-        context['imoveis_com_coordenadas'] = Imovel.objects.filter(
-            ativo=True,
+        ativos = Imovel.objects.filter(ativo=True)
+        context['total_imoveis'] = ativos.count()
+        context['imoveis_disponiveis'] = ativos.filter(disponivel=True).count()
+
+        # Todos os imóveis com coordenadas — passados ao mapa (não paginado)
+        todos_mapa = ativos.filter(
             latitude__isnull=False,
             longitude__isnull=False
-        ).count()
+        ).select_related('imobiliaria').order_by('loteamento', 'identificacao')
+        context['todos_imoveis_mapa'] = todos_mapa
+        context['imoveis_com_coordenadas'] = todos_mapa.count()
+
+        # Lista de loteamentos distintos para o filtro do mapa
+        context['loteamentos'] = (
+            ativos.exclude(loteamento='').exclude(loteamento__isnull=True)
+            .values_list('loteamento', flat=True)
+            .distinct().order_by('loteamento')
+        )
         context['imobiliarias'] = Imobiliaria.objects.filter(ativo=True)
         context['search'] = self.request.GET.get('search', '')
         return context
