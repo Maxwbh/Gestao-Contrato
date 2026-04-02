@@ -1,0 +1,10 @@
+{% extends 'base.html' %}
+{% block title %}Meus Boletos{% endblock %}
+{% block content %}
+<div class="container">
+    <h1>Meus Boletos</h1>
+    {% for parcela in parcelas %}
+    <div>Parcela {{ parcela.numero_parcela }}</div>
+    {% endfor %}
+</div>
+{% endblock %}
