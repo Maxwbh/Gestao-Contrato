@@ -109,6 +109,7 @@ urlpatterns = [
     path('api/boletos/<int:parcela_id>/gerar/', views.api_boleto_gerar, name='api_boleto_gerar'),
     path('api/boletos/<int:parcela_id>/cancelar/', views.api_boleto_cancelar, name='api_boleto_cancelar'),
     path('api/boletos/lote/', views.api_boletos_lote, name='api_boletos_lote'),
+    path('api/boletos/revalidar/', views.api_boletos_revalidar, name='api_boletos_revalidar'),
 
     # ==========================================================================
     # APIs REST - CNAB REMESSA
