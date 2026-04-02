@@ -682,24 +682,24 @@ class IntermediariaPadraoForm(forms.Form):
     """Criação de intermediárias por padrão (valor + intervalo + count)"""
     valor = forms.DecimalField(
         max_digits=12, decimal_places=2, min_value=Decimal('0.01'),
-        widget=forms.NumberInput(attrs={'class': 'form-control', 'step': '0.01', 'placeholder': '5000,00'}),
+        widget=forms.NumberInput(attrs={'class': 'form-control', 'step': '0.01', 'title': 'Valor em reais de cada prestação intermediária'}),
         label='Valor (R$)'
     )
     intervalo_meses = forms.IntegerField(
         min_value=1, max_value=360,
         initial=6,
-        widget=forms.NumberInput(attrs={'class': 'form-control', 'min': '1', 'placeholder': '6'}),
+        widget=forms.NumberInput(attrs={'class': 'form-control', 'min': '1', 'title': 'Número de meses entre cada ocorrência (ex: 6 = semestral, 12 = anual)'}),
         label='Intervalo (meses)'
     )
     numero_ocorrencias = forms.IntegerField(
         min_value=1, max_value=60,
-        widget=forms.NumberInput(attrs={'class': 'form-control', 'min': '1', 'placeholder': '60'}),
+        widget=forms.NumberInput(attrs={'class': 'form-control', 'min': '1', 'title': 'Quantas vezes essa prestação intermediária ocorrerá'}),
         label='Número de Ocorrências'
     )
     mes_inicio = forms.IntegerField(
         min_value=1, max_value=360,
         initial=6,
-        widget=forms.NumberInput(attrs={'class': 'form-control', 'min': '1', 'placeholder': '6'}),
+        widget=forms.NumberInput(attrs={'class': 'form-control', 'min': '1', 'title': 'Número do mês do contrato em que ocorre a primeira intermediária (ex: 6 = no 6º mês)'}),
         label='Mês do Primeiro Vencimento'
     )
 
