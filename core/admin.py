@@ -29,14 +29,19 @@ class ContabilidadeAdmin(admin.ModelAdmin):
 
 @admin.register(Imobiliaria)
 class ImobiliariaAdmin(admin.ModelAdmin):
-    list_display = ['nome', 'razao_social', 'cnpj', 'contabilidade', 'responsavel_financeiro', 'ativo']
-    list_filter = ['ativo', 'contabilidade', 'criado_em']
-    search_fields = ['nome', 'razao_social', 'cnpj', 'responsavel_financeiro']
+    list_display = ['nome', 'tipo_pessoa', 'documento_display', 'contabilidade', 'responsavel_financeiro', 'ativo']
+    list_filter = ['ativo', 'tipo_pessoa', 'contabilidade', 'criado_em']
+    search_fields = ['nome', 'razao_social', 'cnpj', 'cpf', 'responsavel_financeiro']
     readonly_fields = ['criado_em', 'atualizado_em']
     autocomplete_fields = ['contabilidade']
     fieldsets = (
-        ('Informações Básicas', {
-            'fields': ('contabilidade', 'nome', 'razao_social', 'cnpj')
+        ('Tipo de Pessoa', {
+            'fields': ('contabilidade', 'tipo_pessoa'),
+            'description': 'Selecione PJ para empresa/imobiliária ou PF para vendedor pessoa física.',
+        }),
+        ('Identificação', {
+            'fields': ('nome', 'razao_social', 'cnpj', 'cpf'),
+            'description': 'Para PJ: preencha CNPJ. Para PF: preencha apenas CPF.',
         }),
         ('Contato', {
             'fields': ('endereco', 'telefone', 'email', 'responsavel_financeiro')
@@ -48,6 +53,10 @@ class ImobiliariaAdmin(admin.ModelAdmin):
             'fields': ('ativo', 'criado_em', 'atualizado_em')
         }),
     )
+
+    def documento_display(self, obj):
+        return obj.documento or '—'
+    documento_display.short_description = 'CNPJ / CPF'
 
 
 @admin.register(Imovel)

@@ -101,20 +101,51 @@ class LayoutCNAB(models.TextChoices):
 
 
 class Imobiliaria(TimeStampedModel):
-    """Modelo para representar a Imobiliária/Beneficiário do contrato"""
+    """Modelo para representar a Imobiliária/Beneficiário do contrato (PF ou PJ)"""
+
+    TIPO_PESSOA_CHOICES = [
+        ('PJ', 'Pessoa Jurídica'),
+        ('PF', 'Pessoa Física'),
+    ]
+
     contabilidade = models.ForeignKey(
         Contabilidade,
         on_delete=models.PROTECT,
         related_name='imobiliarias',
         verbose_name='Contabilidade'
     )
-    nome = models.CharField(max_length=200, verbose_name='Nome da Imobiliária')
-    razao_social = models.CharField(max_length=200, verbose_name='Razão Social')
+    tipo_pessoa = models.CharField(
+        max_length=2,
+        choices=TIPO_PESSOA_CHOICES,
+        default='PJ',
+        verbose_name='Tipo de Pessoa',
+        help_text='PJ = Empresa/Imobiliária · PF = Vendedor Pessoa Física'
+    )
+    nome = models.CharField(
+        max_length=200,
+        verbose_name='Nome / Nome Completo',
+        help_text='Razão Social para PJ ou Nome Completo para PF'
+    )
+    razao_social = models.CharField(
+        max_length=200,
+        blank=True,
+        verbose_name='Razão Social / Nome Fantasia',
+        help_text='Razão social ou nome fantasia (opcional para PF)'
+    )
     cnpj = models.CharField(
         max_length=20,
         unique=True,
+        blank=True,
+        null=True,
         verbose_name='CNPJ',
-        help_text='Suporta formato numérico atual e alfanumérico (preparado para 2026)'
+        help_text='Obrigatório para PJ. Suporta formato alfanumérico (preparado para 2026)'
+    )
+    cpf = models.CharField(
+        max_length=14,
+        blank=True,
+        null=True,
+        verbose_name='CPF',
+        help_text='Obrigatório para vendedor Pessoa Física (formato XXX.XXX.XXX-XX)'
     )
 
     # Dados de Endereço (estruturado)
@@ -322,6 +353,32 @@ class Imobiliaria(TimeStampedModel):
 
     def __str__(self):
         return self.nome
+
+    @property
+    def nome_fantasia(self):
+        """Compatibilidade: retorna razao_social como nome_fantasia"""
+        return self.razao_social or ''
+
+    def clean(self):
+        from django.core.exceptions import ValidationError
+        errors = {}
+        if self.tipo_pessoa == 'PJ':
+            if not self.cnpj:
+                errors['cnpj'] = 'CNPJ é obrigatório para Pessoa Jurídica.'
+        else:  # PF
+            if not self.cpf:
+                errors['cpf'] = 'CPF é obrigatório para Pessoa Física.'
+        if errors:
+            raise ValidationError(errors)
+
+    @property
+    def documento(self):
+        """Retorna CNPJ para PJ ou CPF para PF."""
+        return self.cnpj if self.tipo_pessoa == 'PJ' else self.cpf
+
+    @property
+    def is_pf(self):
+        return self.tipo_pessoa == 'PF'
 
 
 class BancoBrasil(models.TextChoices):
