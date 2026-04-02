@@ -565,6 +565,9 @@ class Command(BaseCommand):
         random.shuffle(compradores_disponiveis)
         hoje = timezone.now().date()
 
+        # Offset global para evitar colisão com contratos já existentes no banco
+        seq_global = Contrato.objects.count()
+
         for i, imovel in enumerate(imoveis):
             if not compradores_disponiveis:
                 break
@@ -613,7 +616,7 @@ class Command(BaseCommand):
                 imovel=imovel,
                 comprador=comprador,
                 imobiliaria=imovel.imobiliaria,
-                numero_contrato=f'CTR-{data_contrato.year}-{i+1:04d}',
+                numero_contrato=f'CTR-{data_contrato.year}-{seq_global + i + 1:04d}',
                 data_contrato=data_contrato,
                 data_primeiro_vencimento=data_primeiro_vencimento,
                 valor_total=valor_total,
