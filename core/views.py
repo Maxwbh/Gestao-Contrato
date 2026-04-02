@@ -327,7 +327,11 @@ def setup(request):
     # POST - Executar setup (requer autenticação para ações sensíveis)
     # Verificar se é primeira configuração (sem usuários) ou se usuário é superuser
     User = get_user_model()
-    is_first_setup = User.objects.count() == 0
+    try:
+        is_first_setup = User.objects.count() == 0
+    except Exception:
+        # Tabelas ainda não existem (migrations não foram executadas) — permitir acesso livre
+        is_first_setup = True
 
     if not is_first_setup:
         if not request.user.is_authenticated:
@@ -409,7 +413,7 @@ def setup(request):
         return JsonResponse({
             'status': 'error',
             'message': f'Erro no setup: {str(e)}'
-        }, status=500)
+        })
 
 
 @require_http_methods(["GET", "POST"])
@@ -507,7 +511,7 @@ def gerar_dados_teste(request):
             'message': 'Erro ao gerar dados',
             'error': str(e),
             'traceback': traceback.format_exc()
-        }, status=500)
+        })
 
 
 @require_http_methods(["GET", "POST", "DELETE"])
