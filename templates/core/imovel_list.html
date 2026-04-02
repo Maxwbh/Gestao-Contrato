@@ -182,6 +182,7 @@
                                                             <i class="fas fa-map-marker-alt"></i>
                                                         </button>
                                                         {% endif %}
+                                                        {% if not imovel.disponivel %}{% with contrato=imovel.contratos.first %}{% if contrato %}<a href="{% url 'contratos:detalhe' contrato.pk %}" class="btn btn-outline-secondary btn-sm" title="Ver Contrato {{ contrato.numero_contrato }}"><i class="fas fa-file-contract"></i></a>{% endif %}{% endwith %}{% endif %}
                                                         <a href="{% url 'core:editar_imovel' imovel.pk %}"
                                                            class="btn btn-outline-primary"
                                                            title="Editar">
@@ -201,34 +202,7 @@
                                 {% endfor %}
                             </div>
 
-                            <!-- Paginação -->
-                            {% if is_paginated %}
-                                <nav aria-label="Navegação de páginas">
-                                    <ul class="pagination justify-content-center">
-                                        {% if page_obj.has_previous %}
-                                            <li class="page-item">
-                                                <a class="page-link" href="?page={{ page_obj.previous_page_number }}{% if search %}&search={{ search }}{% endif %}">
-                                                    <i class="fas fa-chevron-left"></i>
-                                                </a>
-                                            </li>
-                                        {% endif %}
-
-                                        <li class="page-item active">
-                                            <span class="page-link">
-                                                {{ page_obj.number }} / {{ page_obj.paginator.num_pages }}
-                                            </span>
-                                        </li>
-
-                                        {% if page_obj.has_next %}
-                                            <li class="page-item">
-                                                <a class="page-link" href="?page={{ page_obj.next_page_number }}{% if search %}&search={{ search }}{% endif %}">
-                                                    <i class="fas fa-chevron-right"></i>
-                                                </a>
-                                            </li>
-                                        {% endif %}
-                                    </ul>
-                                </nav>
-                            {% endif %}
+                            {% include "includes/pagination_perpage.html" %}
                         {% else %}
                             <div class="alert alert-info text-center">
                                 <i class="fas fa-info-circle fa-3x mb-3"></i>
