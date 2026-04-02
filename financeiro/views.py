@@ -1159,6 +1159,16 @@ def gerar_arquivo_remessa(request):
             messages.error(request, 'Selecione pelo menos uma parcela.')
             return redirect('financeiro:gerar_remessa')
 
+        # Verificar se há parcelas pagas na seleção — informar ao usuário
+        from .models import Parcela as _Parcela
+        pagas_selecionadas = _Parcela.objects.filter(pk__in=parcela_ids, pago=True).count()
+        if pagas_selecionadas:
+            messages.warning(
+                request,
+                f'{pagas_selecionadas} parcela(s) PAGA(S) foram ignoradas — '
+                'parcelas pagas não entram em arquivo de remessa.'
+            )
+
         try:
             resultado = service.gerar_remessas_por_escopo(parcela_ids, layout)
 
@@ -4390,10 +4400,17 @@ def api_cnab_remessa_gerar(request):
             return JsonResponse({'sucesso': False, 'erro': 'Informe parcelas.'}, status=400)
 
         conta = get_object_or_404(ContaBancaria, pk=conta_id, ativo=True)
+
+        # Contar pagas para informar ao chamador
+        pagas_count = Parcela.objects.filter(pk__in=parcela_ids, pago=True).count()
+
         parcelas = Parcela.objects.filter(pk__in=parcela_ids, status_boleto=StatusBoleto.GERADO, pago=False)
 
         if not parcelas.exists():
-            return JsonResponse({'sucesso': False, 'erro': 'Nenhuma parcela válida.'}, status=400)
+            msg = 'Nenhuma parcela válida.'
+            if pagas_count:
+                msg = f'Todas as {pagas_count} parcela(s) selecionada(s) estão PAGAS. Parcelas pagas não entram em remessa.'
+            return JsonResponse({'sucesso': False, 'erro': msg}, status=400)
 
         service = CNABService()
         resultado = service.gerar_remessa(list(parcelas), conta, layout)
