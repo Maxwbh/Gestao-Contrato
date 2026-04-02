@@ -4,31 +4,39 @@
 {% block title %}Imóveis - Gestão de Contratos{% endblock %}
 
 {% block extra_css %}
+<!-- Leaflet CSS -->
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<!-- Leaflet MarkerCluster CSS -->
+<link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css" />
+<link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css" />
 <style>
     #mapa-imoveis {
-        height: 500px;
+        height: 560px;
         border-radius: 8px;
-        border: 2px solid #27ae60;
+        border: 1px solid #dee2e6;
+        z-index: 1;
     }
-    .nav-tabs .nav-link.active {
-        background-color: #27ae60;
-        color: white;
-        border-color: #27ae60;
+    /* Marcadores custom por status */
+    .lote-marker {
+        display: flex; align-items: center; justify-content: center;
+        border-radius: 50%; border: 2px solid rgba(0,0,0,0.25);
+        font-size: 10px; font-weight: 700; color: #fff;
+        box-shadow: 0 2px 6px rgba(0,0,0,0.35);
     }
-    .nav-tabs .nav-link {
-        color: #2c3e50;
-    }
-    .imovel-popup {
-        min-width: 200px;
-    }
-    .imovel-popup h6 {
-        margin-bottom: 8px;
-        color: #2c3e50;
-    }
-    .imovel-popup .badge {
-        font-size: 0.7rem;
-    }
+    .lote-disponivel  { background: #28a745; }
+    .lote-vendido     { background: #dc3545; }
+    .lote-reservado   { background: #fd7e14; }
+    /* Popup */
+    .lote-popup { min-width: 220px; font-size: 0.85rem; }
+    .lote-popup .popup-title { font-size: 1rem; font-weight: 700; margin-bottom: 6px; color: #1a1a2e; }
+    /* Mapa controls */
+    .mapa-toolbar { background: #fff; border: 1px solid #dee2e6; border-radius: 6px; padding: 8px 12px; margin-bottom: 10px; }
+    /* Legenda */
+    .mapa-legenda { background: rgba(255,255,255,0.92); border-radius: 6px; padding: 8px 12px; font-size: 0.8rem; box-shadow: 0 1px 5px rgba(0,0,0,0.2); }
+    .legenda-dot { display: inline-block; width: 12px; height: 12px; border-radius: 50%; margin-right: 4px; vertical-align: middle; }
+    /* Tabs */
+    .nav-tabs .nav-link.active { background-color: #0d6efd; color: #fff; border-color: #0d6efd; }
+    .nav-tabs .nav-link { color: #495057; }
 </style>
 {% endblock %}
 
@@ -241,11 +249,47 @@
 
                     <!-- Tab: Mapa -->
                     <div class="tab-pane fade" id="mapa" role="tabpanel">
-                        <div id="mapa-imoveis"></div>
-                        <div class="mt-2 text-muted small">
-                            <i class="fas fa-info-circle"></i>
-                            Clique em um marcador para ver detalhes. Verde = Disponível, Vermelho = Vendido.
+
+                        <!-- Barra de controles do mapa -->
+                        <div class="mapa-toolbar d-flex flex-wrap gap-2 align-items-center">
+                            <!-- Filtro por loteamento -->
+                            <select id="filtroLoteamento" class="form-select form-select-sm" style="max-width:220px;"
+                                    onchange="filtrarPorLoteamento(this.value)">
+                                <option value="">Todos os loteamentos</option>
+                                {% for lot in loteamentos %}
+                                <option value="{{ lot|escapejs }}">{{ lot }}</option>
+                                {% endfor %}
+                            </select>
+
+                            <!-- Filtro por status -->
+                            <select id="filtroStatus" class="form-select form-select-sm" style="max-width:160px;"
+                                    onchange="filtrarPorStatus(this.value)">
+                                <option value="">Todos os status</option>
+                                <option value="disponivel">Disponível</option>
+                                <option value="vendido">Vendido</option>
+                            </select>
+
+                            <!-- Tipo de mapa -->
+                            <div class="btn-group btn-group-sm ms-auto" id="btnTileGroup">
+                                <button class="btn btn-outline-secondary active" onclick="mudarTiles('voyager', this)">
+                                    <i class="fas fa-map me-1"></i>Mapa
+                                </button>
+                                <button class="btn btn-outline-secondary" onclick="mudarTiles('satellite', this)">
+                                    <i class="fas fa-satellite me-1"></i>Satélite
+                                </button>
+                                <button class="btn btn-outline-secondary" onclick="mudarTiles('dark', this)">
+                                    <i class="fas fa-moon me-1"></i>Dark
+                                </button>
+                            </div>
+
+                            <!-- Contador dinâmico -->
+                            <span id="mapaContador" class="badge bg-light text-dark border fs-6 ms-2">
+                                {{ imoveis_com_coordenadas }} no mapa
+                            </span>
                         </div>
+
+                        <!-- Mapa principal -->
+                        <div id="mapa-imoveis"></div>
                     </div>
                 </div>
             </div>
@@ -287,109 +331,189 @@
 
 {% block extra_js %}
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
 <script>
-    // Modal de exclusão
-    function confirmarExclusao(nome, url) {
-        document.getElementById('nomeImovel').textContent = nome;
-        document.getElementById('formExclusao').action = url;
-        new bootstrap.Modal(document.getElementById('modalExclusao')).show();
-    }
+// ─── Modal de exclusão ───────────────────────────────────────────────────────
+function confirmarExclusao(nome, url) {
+    document.getElementById('nomeImovel').textContent = nome;
+    document.getElementById('formExclusao').action = url;
+    new bootstrap.Modal(document.getElementById('modalExclusao')).show();
+}
 
-    // Mapa
-    let map;
-    const imoveisData = [
-        {% for imovel in imoveis %}
-        {% if imovel.latitude and imovel.longitude %}
-        {
-            id: {{ imovel.pk }},
-            lat: {{ imovel.latitude }},
-            lng: {{ imovel.longitude }},
-            nome: "{{ imovel.identificacao|escapejs }}",
-            loteamento: "{{ imovel.loteamento|escapejs }}",
-            tipo: "{{ imovel.get_tipo_display|escapejs }}",
-            area: "{{ imovel.area }}",
-            valor: "{{ imovel.valor|default:'0' }}",
-            disponivel: {{ imovel.disponivel|yesno:"true,false" }},
-            editUrl: "{% url 'core:editar_imovel' imovel.pk %}"
-        },
-        {% endif %}
-        {% endfor %}
-    ];
+// ─── Dados de todos os imóveis com coordenadas (não paginado) ────────────────
+const imoveisData = [
+    {% for imovel in todos_imoveis_mapa %}
+    {
+        id: {{ imovel.pk }},
+        lat: {{ imovel.latitude }},
+        lng: {{ imovel.longitude }},
+        nome: "{{ imovel.identificacao|escapejs }}",
+        loteamento: "{{ imovel.loteamento|default:''|escapejs }}",
+        tipo: "{{ imovel.get_tipo_display|escapejs }}",
+        area: "{{ imovel.area|stringformat:'f' }}",
+        valor: "{{ imovel.valor|default:'0'|stringformat:'f' }}",
+        disponivel: {{ imovel.disponivel|yesno:"true,false" }},
+        cidade: "{{ imovel.cidade|default:''|escapejs }}",
+        estado: "{{ imovel.estado|default:''|escapejs }}",
+        editUrl: "{% url 'core:editar_imovel' imovel.pk %}"
+    },
+    {% endfor %}
+];
 
-    document.addEventListener('DOMContentLoaded', function() {
-        // Inicializar mapa
-        map = L.map('mapa-imoveis').setView([-15.7801, -47.9292], 4);
+// ─── Tile layers (100% gratuitos, sem API key) ───────────────────────────────
+const TILES = {
+    voyager: L.tileLayer(
+        'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',
+        { attribution: '&copy; <a href="https://carto.com/">CARTO</a> | &copy; <a href="https://www.openstreetmap.org/">OSM</a>', maxZoom: 19 }
+    ),
+    satellite: L.tileLayer(
+        'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+        { attribution: '&copy; Esri &mdash; Source: Esri, Maxar, Earthstar Geographics', maxZoom: 19 }
+    ),
+    dark: L.tileLayer(
+        'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
+        { attribution: '&copy; <a href="https://carto.com/">CARTO</a> | &copy; <a href="https://www.openstreetmap.org/">OSM</a>', maxZoom: 19 }
+    )
+};
 
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-            attribution: '&copy; OpenStreetMap'
-        }).addTo(map);
+let map, clusterGroup, tileAtivo = 'voyager';
+let filtroLot = '', filtroSt = '';
 
-        // Ícones customizados
-        const iconeVerde = L.icon({
-            iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-green.png',
-            shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-shadow.png',
-            iconSize: [25, 41],
-            iconAnchor: [12, 41],
-            popupAnchor: [1, -34],
-            shadowSize: [41, 41]
-        });
+// Criar ícone customizado DivIcon por status
+function criarIcone(disponivel, nome) {
+    const cls  = disponivel ? 'lote-disponivel' : 'lote-vendido';
+    const icn  = disponivel ? '✓' : '✗';
+    return L.divIcon({
+        className: '',
+        html: `<div class="lote-marker ${cls}" style="width:28px;height:28px;" title="${nome}">${icn}</div>`,
+        iconSize: [28, 28],
+        iconAnchor: [14, 14],
+        popupAnchor: [0, -16]
+    });
+}
 
-        const iconeVermelho = L.icon({
-            iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-red.png',
-            shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-shadow.png',
-            iconSize: [25, 41],
-            iconAnchor: [12, 41],
-            popupAnchor: [1, -34],
-            shadowSize: [41, 41]
-        });
+function formatarMoeda(v) {
+    const n = parseFloat(v);
+    if (!n) return '—';
+    return 'R$ ' + n.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+}
 
-        // Adicionar marcadores
-        const bounds = [];
-        imoveisData.forEach(function(imovel) {
-            const icone = imovel.disponivel ? iconeVerde : iconeVermelho;
-            const marker = L.marker([imovel.lat, imovel.lng], {icon: icone}).addTo(map);
+function popupHtml(d) {
+    const statusClass = d.disponivel ? 'bg-success' : 'bg-danger';
+    const statusText  = d.disponivel ? 'Disponível' : 'Vendido';
+    const local = d.cidade ? `${d.cidade}/${d.estado}` : '—';
+    return `
+    <div class="lote-popup">
+        <div class="popup-title"><i class="fas fa-map-marker-alt me-1"></i>${d.nome}</div>
+        ${d.loteamento ? `<div><strong>Loteamento:</strong> ${d.loteamento}</div>` : ''}
+        <div><strong>Tipo:</strong> ${d.tipo}</div>
+        <div><strong>Área:</strong> ${d.area} m²</div>
+        <div><strong>Valor:</strong> ${formatarMoeda(d.valor)}</div>
+        <div><strong>Local:</strong> ${local}</div>
+        <div class="mt-2 d-flex align-items-center gap-2">
+            <span class="badge ${statusClass}">${statusText}</span>
+            <a href="${d.editUrl}" class="btn btn-sm btn-outline-primary py-0 px-2">
+                <i class="fas fa-edit"></i> Editar
+            </a>
+        </div>
+    </div>`;
+}
 
-            const valorFormatado = imovel.valor && imovel.valor !== '0' ?
-                'R$ ' + parseFloat(imovel.valor).toLocaleString('pt-BR', {minimumFractionDigits: 2}) : '-';
+function adicionarMarcadores(dados) {
+    clusterGroup.clearLayers();
+    let visible = 0;
+    dados.forEach(d => {
+        if (filtroLot && d.loteamento !== filtroLot) return;
+        if (filtroSt === 'disponivel' && !d.disponivel) return;
+        if (filtroSt === 'vendido'    &&  d.disponivel) return;
+        const m = L.marker([d.lat, d.lng], {icon: criarIcone(d.disponivel, d.nome)});
+        m.bindPopup(popupHtml(d), {maxWidth: 260});
+        m.on('mouseover', function() { this.openPopup(); });
+        clusterGroup.addLayer(m);
+        visible++;
+    });
+    document.getElementById('mapaContador').textContent = visible + ' no mapa';
+    return visible;
+}
 
-            marker.bindPopup(`
-                <div class="imovel-popup">
-                    <h6><i class="fas fa-home"></i> ${imovel.nome}</h6>
-                    <p class="mb-1"><strong>Loteamento:</strong> ${imovel.loteamento}</p>
-                    <p class="mb-1"><strong>Tipo:</strong> ${imovel.tipo}</p>
-                    <p class="mb-1"><strong>Área:</strong> ${imovel.area} m²</p>
-                    <p class="mb-1"><strong>Valor:</strong> ${valorFormatado}</p>
-                    <span class="badge ${imovel.disponivel ? 'bg-success' : 'bg-secondary'}">
-                        ${imovel.disponivel ? 'Disponível' : 'Vendido'}
-                    </span>
-                    <hr>
-                    <a href="${imovel.editUrl}" class="btn btn-sm btn-primary">
-                        <i class="fas fa-edit"></i> Editar
-                    </a>
-                </div>
-            `);
+document.addEventListener('DOMContentLoaded', function () {
+    map = L.map('mapa-imoveis').setView([-15.7801, -47.9292], 4);
+    TILES.voyager.addTo(map);
 
-            bounds.push([imovel.lat, imovel.lng]);
-        });
-
-        // Ajustar zoom para mostrar todos os marcadores
-        if (bounds.length > 0) {
-            map.fitBounds(bounds, {padding: [20, 20]});
+    clusterGroup = L.markerClusterGroup({
+        showCoverageOnHover: false,
+        maxClusterRadius: 50,
+        iconCreateFunction: function(cluster) {
+            const n = cluster.getChildCount();
+            return L.divIcon({
+                html: `<div style="background:#0d6efd;color:#fff;border-radius:50%;width:36px;height:36px;
+                              display:flex;align-items:center;justify-content:center;
+                              font-weight:700;font-size:13px;border:2px solid #fff;
+                              box-shadow:0 2px 6px rgba(0,0,0,0.3);">${n}</div>`,
+                className: '', iconSize: [36, 36]
+            });
         }
     });
+    map.addLayer(clusterGroup);
 
-    // Função para ver imóvel no mapa
-    function verNoMapa(lat, lng, nome) {
-        // Mudar para aba do mapa
-        const mapaTab = document.getElementById('mapa-tab');
-        const tab = new bootstrap.Tab(mapaTab);
-        tab.show();
+    // Legenda
+    const legenda = L.control({ position: 'bottomright' });
+    legenda.onAdd = function() {
+        const d = L.DomUtil.create('div', 'mapa-legenda');
+        d.innerHTML = `
+            <div class="fw-bold mb-1">Legenda</div>
+            <div><span class="legenda-dot" style="background:#28a745;"></span> Disponível</div>
+            <div><span class="legenda-dot" style="background:#dc3545;"></span> Vendido</div>
+            <div><span class="legenda-dot" style="background:#0d6efd;"></span> Cluster</div>`;
+        return d;
+    };
+    legenda.addTo(map);
 
-        // Aguardar um pouco e centralizar no imóvel
-        setTimeout(function() {
-            map.invalidateSize();
-            map.setView([lat, lng], 17);
-        }, 200);
+    // Adicionar marcadores
+    const n = adicionarMarcadores(imoveisData);
+    if (n > 0) {
+        map.fitBounds(clusterGroup.getBounds(), { padding: [30, 30] });
     }
+});
+
+// ─── Troca de tiles ──────────────────────────────────────────────────────────
+function mudarTiles(nome, btn) {
+    if (tileAtivo === nome) return;
+    map.removeLayer(TILES[tileAtivo]);
+    TILES[nome].addTo(map);
+    tileAtivo = nome;
+    document.querySelectorAll('#btnTileGroup .btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+}
+
+// ─── Filtros ─────────────────────────────────────────────────────────────────
+function filtrarPorLoteamento(v) {
+    filtroLot = v;
+    const n = adicionarMarcadores(imoveisData);
+    if (n > 0 && clusterGroup.getLayers().length > 0) {
+        map.fitBounds(clusterGroup.getBounds(), { padding: [30, 30] });
+    }
+}
+function filtrarPorStatus(v) {
+    filtroSt = v;
+    adicionarMarcadores(imoveisData);
+}
+
+// ─── Ver imóvel no mapa (botão da lista) ─────────────────────────────────────
+function verNoMapa(lat, lng, nome) {
+    const mapaTab = new bootstrap.Tab(document.getElementById('mapa-tab'));
+    mapaTab.show();
+    setTimeout(function() {
+        map.invalidateSize();
+        map.setView([lat, lng], 18);
+        // Abrir popup do marcador mais próximo
+        clusterGroup.eachLayer(function(layer) {
+            const ll = layer.getLatLng();
+            if (Math.abs(ll.lat - lat) < 0.0001 && Math.abs(ll.lng - lng) < 0.0001) {
+                layer.openPopup();
+            }
+        });
+    }, 250);
+}
 </script>
 {% endblock %}
