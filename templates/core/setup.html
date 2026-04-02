@@ -215,8 +215,16 @@
                                         Imóveis, Compradores, Contratos, Parcelas e Índices de Reajuste.
                                     </p>
 
+                                    <!-- Previsão baseada em histórico -->
+                                    <div id="estimativaBox" class="alert alert-light border mb-3 text-start d-none">
+                                        <small class="text-muted">
+                                            <i class="fas fa-history me-1"></i>
+                                            <span id="estimativaTexto"></span>
+                                        </small>
+                                    </div>
+
                                     <div class="form-check form-switch d-flex justify-content-center mb-3">
-                                        <input class="form-check-input me-2" type="checkbox" id="limparAntes">
+                                        <input class="form-check-input me-2" type="checkbox" id="limparAntes" onchange="atualizarEstimativa()">
                                         <label class="form-check-label" for="limparAntes">
                                             <i class="fas fa-trash-alt me-1 text-danger"></i>
                                             Limpar dados existentes antes
@@ -230,6 +238,21 @@
                                     </button>
                                 </div>
                             </div>
+                        </div>
+                    </div>
+
+                    <!-- Histórico de Execuções -->
+                    <div class="mt-4">
+                        <h6 class="text-muted mb-3"><i class="fas fa-history me-2"></i>Histórico de Execuções</h6>
+                        <div id="historySection">
+                            <p class="text-muted text-center py-3 small">
+                                <i class="fas fa-clock me-2"></i>Nenhuma geração registrada ainda
+                            </p>
+                        </div>
+                        <div class="text-end mt-1">
+                            <button class="btn btn-sm btn-outline-secondary" onclick="limparHistorico()">
+                                <i class="fas fa-trash-alt me-1"></i>Limpar histórico
+                            </button>
                         </div>
                     </div>
                 </div>
@@ -298,12 +321,16 @@
                 <div class="modal-body p-0">
                     <!-- Progress Bar -->
                     <div class="px-4 pt-3">
-                        <div class="progress" style="height: 8px;">
-                            <div id="progressBar" class="progress-bar progress-bar-striped progress-bar-animated bg-primary" style="width: 0%"></div>
+                        <div class="progress" style="height: 10px; border-radius: 5px;">
+                            <div id="progressBar" class="progress-bar progress-bar-striped progress-bar-animated bg-primary" style="width: 0%; transition: width 0.3s ease;"></div>
                         </div>
-                        <div class="d-flex justify-content-between mt-1">
-                            <small id="progressPercent" class="text-muted">0%</small>
-                            <small id="progressTime" class="text-muted">Calculando...</small>
+                        <div class="d-flex justify-content-between mt-2">
+                            <span class="d-flex align-items-center gap-2">
+                                <small id="progressPercent" class="fw-bold text-primary">0%</small>
+                                <small class="text-muted">|</small>
+                                <small id="elapsedTime" class="text-muted"><i class="fas fa-stopwatch me-1"></i>0s</small>
+                            </span>
+                            <small id="progressTime" class="text-muted fst-italic">Calculando...</small>
                         </div>
                     </div>
 
@@ -392,17 +419,113 @@
         }
         const csrftoken = getCookie('csrftoken');
 
+        // ===== HISTÓRICO DE GERAÇÕES (localStorage) =====
+        const HISTORY_KEY = 'gestao_geracoes_v1';
+
+        function loadHistory() {
+            try { return JSON.parse(localStorage.getItem(HISTORY_KEY) || '[]'); }
+            catch { return []; }
+        }
+
+        function saveToHistory(entry) {
+            const h = loadHistory();
+            h.unshift(entry);
+            if (h.length > 10) h.splice(10);
+            localStorage.setItem(HISTORY_KEY, JSON.stringify(h));
+        }
+
+        function limparHistorico() {
+            if (!confirm('Limpar histórico de execuções?')) return;
+            localStorage.removeItem(HISTORY_KEY);
+            renderHistory();
+            atualizarEstimativa();
+        }
+
+        function getEstimatedDuration(limpar) {
+            const hist = loadHistory().filter(h => h.limpar === limpar);
+            if (hist.length === 0) return limpar ? 90000 : 75000;
+            const recent = hist.slice(0, 5);
+            return recent.reduce((s, h) => s + h.duration, 0) / recent.length;
+        }
+
+        function formatMs(ms) {
+            const s = Math.round(ms / 1000);
+            if (s < 60) return `${s}s`;
+            return `${Math.floor(s/60)}m ${s%60}s`;
+        }
+
+        function renderHistory() {
+            const container = document.getElementById('historySection');
+            if (!container) return;
+            const history = loadHistory();
+            if (history.length === 0) {
+                container.innerHTML = '<p class="text-muted text-center py-3 small"><i class="fas fa-clock me-2"></i>Nenhuma geração registrada ainda</p>';
+                return;
+            }
+            const rows = history.map((h, i) => {
+                const d = new Date(h.timestamp);
+                const dateStr = d.toLocaleDateString('pt-BR') + ' ' + d.toLocaleTimeString('pt-BR', {hour:'2-digit', minute:'2-digit'});
+                const badge = h.limpar
+                    ? '<span class="badge bg-danger">Com Limpeza</span>'
+                    : '<span class="badge bg-primary">Incremental</span>';
+                const bold = i === 0 ? 'fw-semibold' : '';
+                const records = h.records ? h.records.toLocaleString('pt-BR') : '-';
+                return `<tr class="${bold}">
+                    <td class="small">${dateStr}</td>
+                    <td>${badge}</td>
+                    <td class="small text-center">${formatMs(h.duration)}</td>
+                    <td class="small text-center text-muted">${records}</td>
+                </tr>`;
+            }).join('');
+            container.innerHTML = `
+                <div class="table-responsive">
+                <table class="table table-sm table-hover mb-0">
+                    <thead class="table-light"><tr>
+                        <th class="small">Data/Hora</th>
+                        <th class="small">Tipo</th>
+                        <th class="small text-center">Duração</th>
+                        <th class="small text-center">Registros</th>
+                    </tr></thead>
+                    <tbody>${rows}</tbody>
+                </table>
+                </div>`;
+        }
+
+        function atualizarEstimativa() {
+            const limpar = document.getElementById('limparAntes').checked;
+            const box = document.getElementById('estimativaBox');
+            const texto = document.getElementById('estimativaTexto');
+            const hist = loadHistory().filter(h => h.limpar === limpar);
+            if (hist.length === 0) { box.classList.add('d-none'); return; }
+            const avg = getEstimatedDuration(limpar);
+            const tipo = limpar ? 'com limpeza' : 'incremental';
+            texto.textContent = `Baseado em ${hist.length} execução(ões) ${tipo}: previsão de ~${formatMs(avg)}`;
+            box.classList.remove('d-none');
+        }
+
+        // ===== MODAL E PROGRESSO =====
         let progressModal;
         let startTime;
+        let elapsedInterval;
+        let progressInterval;
 
         document.addEventListener('DOMContentLoaded', function() {
             progressModal = new bootstrap.Modal(document.getElementById('progressModal'));
+            renderHistory();
+            atualizarEstimativa();
         });
 
+        function stopTimers() {
+            clearInterval(elapsedInterval);
+            clearInterval(progressInterval);
+        }
+
         function resetModal() {
+            stopTimers();
             document.getElementById('progressBar').style.width = '0%';
             document.getElementById('progressPercent').textContent = '0%';
             document.getElementById('progressTime').textContent = 'Calculando...';
+            document.getElementById('elapsedTime').innerHTML = '<i class="fas fa-stopwatch me-1"></i>0s';
             document.getElementById('progressIcon').innerHTML = '<i class="fas fa-cog fa-spin fa-3x mb-3"></i>';
             document.getElementById('progressTitle').textContent = 'Gerando Dados de Teste';
             document.getElementById('progressSubtitle').textContent = 'Aguarde...';
@@ -410,46 +533,26 @@
             document.getElementById('stepsList').parentElement.classList.remove('d-none');
             document.getElementById('btnCancelar').classList.add('d-none');
             document.getElementById('btnConcluir').classList.add('d-none');
-
             document.querySelectorAll('.step-item').forEach(item => {
                 item.classList.remove('active', 'completed', 'error');
                 item.classList.add('pending');
+                item.style.display = '';
             });
         }
 
         function updateStep(stepName, status) {
             const step = document.querySelector(`[data-step="${stepName}"]`);
-            if (step) {
-                step.classList.remove('pending', 'active', 'completed', 'error');
-                step.classList.add(status);
-
-                const icon = step.querySelector('.step-icon i');
-                if (status === 'active') {
-                    icon.className = 'fas fa-spinner fa-spin';
-                } else if (status === 'completed') {
-                    icon.className = 'fas fa-check';
-                } else if (status === 'error') {
-                    icon.className = 'fas fa-times';
-                }
-            }
+            if (!step) return;
+            step.classList.remove('pending', 'active', 'completed', 'error');
+            step.classList.add(status);
+            const icon = step.querySelector('.step-icon i');
+            if (status === 'active') icon.className = 'fas fa-spinner fa-spin';
+            else if (status === 'completed') icon.className = 'fas fa-check';
+            else if (status === 'error') icon.className = 'fas fa-times';
         }
 
-        function updateProgress(percent) {
-            document.getElementById('progressBar').style.width = percent + '%';
-            document.getElementById('progressPercent').textContent = percent + '%';
-
-            if (startTime && percent > 0) {
-                const elapsed = (Date.now() - startTime) / 1000;
-                const estimated = (elapsed / percent) * (100 - percent);
-                if (estimated > 0 && percent < 100) {
-                    document.getElementById('progressTime').textContent = `~${Math.ceil(estimated)}s restantes`;
-                } else {
-                    document.getElementById('progressTime').textContent = '';
-                }
-            }
-        }
-
-        function showResult(success, data) {
+        function showResult(success, data, duration) {
+            stopTimers();
             document.getElementById('stepsList').parentElement.classList.add('d-none');
             document.getElementById('resultSection').classList.remove('d-none');
 
@@ -459,33 +562,36 @@
             const resultCards = document.getElementById('resultCards');
 
             if (success) {
+                const stats = data.dados_gerados || data.estatisticas || data;
+                const totalRecords = (stats.contratos||0) + (stats.parcelas||0) + (stats.imoveis||0) + (stats.compradores||0);
+
                 resultIcon.className = 'fas fa-check-circle fa-4x text-success mb-3';
                 resultTitle.textContent = 'Dados Gerados com Sucesso!';
-                resultMessage.textContent = 'Todos os dados de teste foram criados.';
-                document.getElementById('progressIcon').innerHTML = '<i class="fas fa-check-circle fa-3x mb-3"></i>';
+                resultMessage.textContent = `Concluído em ${formatMs(duration)} — ${totalRecords.toLocaleString('pt-BR')} registros criados.`;
+                document.getElementById('progressIcon').innerHTML = '<i class="fas fa-check-circle fa-3x mb-3" style="color:#28a745"></i>';
                 document.getElementById('progressTitle').textContent = 'Concluído!';
-                document.getElementById('progressSubtitle').textContent = 'Geração finalizada com sucesso';
+                document.getElementById('progressSubtitle').textContent = `em ${formatMs(duration)}`;
+                document.getElementById('progressTime').textContent = '';
+                document.getElementById('elapsedTime').innerHTML = `<i class="fas fa-stopwatch me-1"></i>${formatMs(duration)}`;
 
-                // Build result cards
-                const stats = data.estatisticas || data;
                 resultCards.innerHTML = `
-                    <div class="col-4"><div class="result-card success"><div class="number">${stats.contabilidades || 1}</div><div class="label">Contabilidade</div></div></div>
-                    <div class="col-4"><div class="result-card info"><div class="number">${stats.imobiliarias || 2}</div><div class="label">Imobiliárias</div></div></div>
-                    <div class="col-4"><div class="result-card info"><div class="number">${stats.contas_bancarias || 4}</div><div class="label">Contas</div></div></div>
-                    <div class="col-4"><div class="result-card info"><div class="number">${stats.imoveis || 65}</div><div class="label">Imóveis</div></div></div>
-                    <div class="col-4"><div class="result-card info"><div class="number">${stats.compradores || 60}</div><div class="label">Compradores</div></div></div>
-                    <div class="col-4"><div class="result-card success"><div class="number">${stats.contratos || 60}</div><div class="label">Contratos</div></div></div>
-                    <div class="col-6"><div class="result-card warning"><div class="number">${stats.parcelas || 0}</div><div class="label">Parcelas</div></div></div>
-                    <div class="col-6"><div class="result-card info"><div class="number">${stats.indices || 252}</div><div class="label">Índices</div></div></div>
+                    <div class="col-4"><div class="result-card success"><div class="number">${stats.contabilidades||1}</div><div class="label">Contabilidade</div></div></div>
+                    <div class="col-4"><div class="result-card info"><div class="number">${stats.imobiliarias||2}</div><div class="label">Imobiliárias</div></div></div>
+                    <div class="col-4"><div class="result-card info"><div class="number">${stats.contas_bancarias||4}</div><div class="label">Contas</div></div></div>
+                    <div class="col-4"><div class="result-card info"><div class="number">${stats.imoveis||65}</div><div class="label">Imóveis</div></div></div>
+                    <div class="col-4"><div class="result-card info"><div class="number">${stats.compradores||60}</div><div class="label">Compradores</div></div></div>
+                    <div class="col-4"><div class="result-card success"><div class="number">${stats.contratos||60}</div><div class="label">Contratos</div></div></div>
+                    <div class="col-6"><div class="result-card warning"><div class="number">${stats.parcelas||0}</div><div class="label">Parcelas</div></div></div>
+                    <div class="col-6"><div class="result-card info"><div class="number">${stats.indices_reajuste||252}</div><div class="label">Índices</div></div></div>
                 `;
             } else {
                 resultIcon.className = 'fas fa-times-circle fa-4x text-danger mb-3';
                 resultTitle.textContent = 'Erro na Geração';
                 resultMessage.textContent = data.message || data.error || 'Ocorreu um erro inesperado.';
-                document.getElementById('progressIcon').innerHTML = '<i class="fas fa-times-circle fa-3x mb-3"></i>';
+                document.getElementById('progressIcon').innerHTML = '<i class="fas fa-times-circle fa-3x mb-3" style="color:#dc3545"></i>';
                 document.getElementById('progressTitle').textContent = 'Erro!';
                 document.getElementById('progressSubtitle').textContent = 'A geração falhou';
-                resultCards.innerHTML = `<div class="col-12"><div class="alert alert-danger">${data.error || data.message}</div></div>`;
+                resultCards.innerHTML = `<div class="col-12"><div class="alert alert-danger small">${data.error||data.message||'Erro desconhecido'}</div></div>`;
             }
 
             document.getElementById('btnCancelar').classList.remove('d-none');
@@ -494,72 +600,83 @@
 
         async function iniciarGeracaoDados() {
             const limpar = document.getElementById('limparAntes').checked;
-
-            if (limpar) {
-                if (!confirm('⚠️ Isso irá LIMPAR todos os dados existentes e gerar novos.\n\nDeseja continuar?')) {
-                    return;
-                }
-            }
+            if (limpar && !confirm('⚠️ Isso irá LIMPAR todos os dados existentes e gerar novos.\n\nDeseja continuar?')) return;
 
             resetModal();
             progressModal.show();
             startTime = Date.now();
 
-            // Simular progresso visual enquanto aguarda a API
-            const steps = ['limpar', 'contabilidade', 'imobiliarias', 'contas', 'imoveis', 'compradores', 'contratos', 'pagamentos', 'indices'];
-            let currentStep = 0;
+            const estimatedTotal = getEstimatedDuration(limpar);
+            const allSteps = ['limpar', 'contabilidade', 'imobiliarias', 'contas', 'imoveis', 'compradores', 'contratos', 'pagamentos', 'indices'];
+            const activeSteps = limpar ? allSteps : allSteps.slice(1);
 
-            // Hide limpar step if not cleaning
-            if (!limpar) {
-                document.querySelector('[data-step="limpar"]').style.display = 'none';
-                currentStep = 1;
-            }
+            if (!limpar) document.querySelector('[data-step="limpar"]').style.display = 'none';
 
-            // Start visual progress
-            const progressInterval = setInterval(() => {
-                if (currentStep < steps.length) {
-                    // Mark current as active
-                    if (currentStep > 0 || limpar) {
-                        const prevStep = limpar ? currentStep - 1 : currentStep;
-                        if (prevStep >= 0 && steps[prevStep]) {
-                            updateStep(steps[prevStep], 'completed');
-                        }
-                    }
-                    updateStep(steps[currentStep], 'active');
-                    updateProgress(Math.min(95, ((currentStep + 1) / steps.length) * 100));
-                    currentStep++;
+            let stepIdx = 0;
+            const stepInterval = Math.max(400, estimatedTotal / (activeSteps.length + 1));
+
+            // Cronômetro real (atualiza a cada 200ms)
+            elapsedInterval = setInterval(() => {
+                const elapsed = Date.now() - startTime;
+                document.getElementById('elapsedTime').innerHTML = `<i class="fas fa-stopwatch me-1"></i>${formatMs(elapsed)}`;
+
+                // Progresso baseado no tempo estimado (máx 93%)
+                const timePct = Math.min(93, (elapsed / estimatedTotal) * 100);
+                document.getElementById('progressBar').style.width = timePct + '%';
+                document.getElementById('progressPercent').textContent = Math.floor(timePct) + '%';
+
+                const remaining = estimatedTotal - elapsed;
+                if (remaining > 500) {
+                    document.getElementById('progressTime').textContent = `~${formatMs(remaining)} restantes`;
+                } else if (elapsed >= estimatedTotal) {
+                    document.getElementById('progressTime').textContent = 'Aguardando servidor...';
+                    document.getElementById('progressSubtitle').textContent = 'Processamento demorou mais que o previsto';
                 }
-            }, 800);
+            }, 200);
+
+            // Avanço de steps baseado no tempo estimado
+            progressInterval = setInterval(() => {
+                if (stepIdx > 0) updateStep(activeSteps[stepIdx - 1], 'completed');
+                if (stepIdx < activeSteps.length) {
+                    updateStep(activeSteps[stepIdx], 'active');
+                    stepIdx++;
+                }
+            }, stepInterval);
 
             try {
                 const response = await fetch('/api/gerar-dados-teste/', {
                     method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'X-CSRFToken': csrftoken,
-                    },
-                    body: JSON.stringify({ limpar: limpar })
+                    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrftoken },
+                    body: JSON.stringify({ limpar })
                 });
 
-                clearInterval(progressInterval);
+                const duration = Date.now() - startTime;
+                stopTimers();
 
                 const data = await response.json();
+                const success = data.status === 'success';
 
-                // Complete all steps
-                steps.forEach(step => {
-                    if (document.querySelector(`[data-step="${step}"]`).style.display !== 'none') {
-                        updateStep(step, data.status === 'success' ? 'completed' : 'error');
-                    }
+                allSteps.forEach(s => {
+                    const el = document.querySelector(`[data-step="${s}"]`);
+                    if (el && el.style.display !== 'none') updateStep(s, success ? 'completed' : 'error');
                 });
-                updateProgress(100);
+                document.getElementById('progressBar').style.width = '100%';
+                document.getElementById('progressPercent').textContent = '100%';
 
-                setTimeout(() => {
-                    showResult(data.status === 'success', data);
-                }, 500);
+                if (success) {
+                    const stats = data.dados_gerados || {};
+                    const totalRecords = (stats.contratos||0) + (stats.parcelas||0) + (stats.imoveis||0) + (stats.compradores||0);
+                    saveToHistory({ timestamp: Date.now(), duration, limpar, records: totalRecords });
+                    renderHistory();
+                    atualizarEstimativa();
+                }
+
+                setTimeout(() => showResult(success, data, duration), 400);
 
             } catch (error) {
-                clearInterval(progressInterval);
-                showResult(false, { error: error.toString() });
+                const duration = Date.now() - startTime;
+                stopTimers();
+                showResult(false, { error: error.toString() }, duration);
             }
         }
 
