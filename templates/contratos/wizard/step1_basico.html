@@ -113,18 +113,24 @@
               <div class="row">
                 <div class="col-md-4 mb-2">
                   <label class="form-label">{{ form.valor_total.label }} *</label>
-                  {{ form.valor_total }}
+                  <div class="input-group">
+                    <span class="input-group-text">R$</span>
+                    {{ form.valor_total }}
+                  </div>
                   {% if form.valor_total.errors %}<div class="text-danger small">{{ form.valor_total.errors }}</div>{% endif %}
                 </div>
                 <div class="col-md-4 mb-2">
                   <label class="form-label">{{ form.valor_entrada.label }}</label>
-                  {{ form.valor_entrada }}
+                  <div class="input-group">
+                    <span class="input-group-text">R$</span>
+                    {{ form.valor_entrada }}
+                  </div>
                   {% if form.valor_entrada.errors %}<div class="text-danger small">{{ form.valor_entrada.errors }}</div>{% endif %}
                 </div>
                 <div class="col-md-4 mb-2 d-flex align-items-end">
                   <div>
                     <label class="form-label text-muted small">Valor Financiado</label>
-                    <div id="valor_financiado_display" class="fw-bold text-primary">R$ —</div>
+                    <div id="valor_financiado_display" class="fw-bold text-primary fs-5">R$ —</div>
                   </div>
                 </div>
               </div>
@@ -140,12 +146,18 @@
               <div class="row">
                 <div class="col-md-3 mb-2">
                   <label class="form-label">{{ form.numero_parcelas.label }} *</label>
-                  {{ form.numero_parcelas }}
+                  <div class="input-group">
+                    {{ form.numero_parcelas }}
+                    <span class="input-group-text">meses</span>
+                  </div>
                   {% if form.numero_parcelas.errors %}<div class="text-danger small">{{ form.numero_parcelas.errors }}</div>{% endif %}
                 </div>
                 <div class="col-md-3 mb-2">
                   <label class="form-label">{{ form.dia_vencimento.label }} *</label>
-                  {{ form.dia_vencimento }}
+                  <div class="input-group">
+                    <span class="input-group-text">dia</span>
+                    {{ form.dia_vencimento }}
+                  </div>
                   {% if form.dia_vencimento.errors %}<div class="text-danger small">{{ form.dia_vencimento.errors }}</div>{% endif %}
                 </div>
                 <div class="col-md-6 mb-2">
@@ -177,11 +189,17 @@
               <div class="row">
                 <div class="col-md-3 mb-2">
                   <label class="form-label">{{ form.percentual_juros_mora.label }}</label>
-                  {{ form.percentual_juros_mora }}
+                  <div class="input-group">
+                    {{ form.percentual_juros_mora }}
+                    <span class="input-group-text">% a.m.</span>
+                  </div>
                 </div>
                 <div class="col-md-3 mb-2">
                   <label class="form-label">{{ form.percentual_multa.label }}</label>
-                  {{ form.percentual_multa }}
+                  <div class="input-group">
+                    {{ form.percentual_multa }}
+                    <span class="input-group-text">%</span>
+                  </div>
                 </div>
               </div>
             </div>
@@ -200,7 +218,10 @@
                 </div>
                 <div class="col-md-3 mb-2">
                   <label class="form-label">{{ form.prazo_reajuste_meses.label }}</label>
-                  {{ form.prazo_reajuste_meses }}
+                  <div class="input-group">
+                    {{ form.prazo_reajuste_meses }}
+                    <span class="input-group-text">meses</span>
+                  </div>
                 </div>
                 <div class="col-md-3 mb-2">
                   <label class="form-label">{{ form.tipo_correcao_fallback.label }}</label>
@@ -208,15 +229,24 @@
                 </div>
                 <div class="col-md-3 mb-2">
                   <label class="form-label">{{ form.spread_reajuste.label }}</label>
-                  {{ form.spread_reajuste }}
+                  <div class="input-group">
+                    {{ form.spread_reajuste }}
+                    <span class="input-group-text">% a.a.</span>
+                  </div>
                 </div>
                 <div class="col-md-3 mb-2">
                   <label class="form-label">{{ form.reajuste_piso.label }}</label>
-                  {{ form.reajuste_piso }}
+                  <div class="input-group">
+                    {{ form.reajuste_piso }}
+                    <span class="input-group-text">%</span>
+                  </div>
                 </div>
                 <div class="col-md-3 mb-2">
                   <label class="form-label">{{ form.reajuste_teto.label }}</label>
-                  {{ form.reajuste_teto }}
+                  <div class="input-group">
+                    {{ form.reajuste_teto }}
+                    <span class="input-group-text">%</span>
+                  </div>
                 </div>
               </div>
             </div>
@@ -253,8 +283,13 @@
 (function () {
   var IMOVEIS_URL = '{% url "contratos:wizard_imoveis" %}';
 
+  // ── Inicializa tooltips Bootstrap nos elementos com [title] ───────────────
+  document.querySelectorAll('[title]').forEach(function (el) {
+    new bootstrap.Tooltip(el, { trigger: 'hover focus', placement: 'top' });
+  });
+
   // ── Amortização info ──────────────────────────────────────────────────────
-  var selAmort = document.getElementById('{{ form.tipo_amortizacao.id_for_label }}');
+  var selAmort  = document.getElementById('{{ form.tipo_amortizacao.id_for_label }}');
   var priceInfo = document.getElementById('amort_price_info');
   var sacInfo   = document.getElementById('amort_sac_info');
 
@@ -269,9 +304,9 @@
   }
 
   // ── Valor financiado ──────────────────────────────────────────────────────
-  var elTotal    = document.getElementById('{{ form.valor_total.id_for_label }}');
-  var elEntrada  = document.getElementById('{{ form.valor_entrada.id_for_label }}');
-  var elDisplay  = document.getElementById('valor_financiado_display');
+  var elTotal   = document.getElementById('{{ form.valor_total.id_for_label }}');
+  var elEntrada = document.getElementById('{{ form.valor_entrada.id_for_label }}');
+  var elDisplay = document.getElementById('valor_financiado_display');
 
   function calcularFinanciado() {
     if (!elDisplay) return;
@@ -286,31 +321,35 @@
   if (elEntrada) elEntrada.addEventListener('input', calcularFinanciado);
   calcularFinanciado();
 
-  // ── Número do contrato — máscara NNNN/AAAA ───────────────────────────────
+  // ── Número do contrato — máscara CTR-AAAA-NNNN ───────────────────────────
   var elNumero = document.getElementById('{{ form.numero_contrato.id_for_label }}');
   if (elNumero) {
     function mascaraNumeroContrato(value) {
-      var digits = value.replace(/\D/g, '');
-      if (digits.length <= 4) return digits;
-      return digits.slice(0, 4) + '/' + digits.slice(4, 8);
-    }
-    elNumero.addEventListener('input', function (e) {
-      var pos = e.target.selectionStart;
-      var raw = e.target.value;
-      e.target.value = mascaraNumeroContrato(raw);
-      // Ajusta cursor após inserção automática da barra
-      if (raw.replace(/\D/g, '').length === 4 && pos === 4) {
-        e.target.setSelectionRange(5, 5);
+      // Se o usuário digitou somente dígitos, aplica o padrão CTR-ANO-NNNN
+      var semEspaco = value.trim();
+      if (/^\d+$/.test(semEspaco)) {
+        var ano = new Date().getFullYear();
+        return 'CTR-' + ano + '-' + semEspaco.slice(0, 4).padStart(4, '0');
       }
-    });
-    // Formata valor inicial (ao voltar ao formulário com dados da sessão)
-    if (elNumero.value) {
-      elNumero.value = mascaraNumeroContrato(elNumero.value.replace('/', ''));
+      // Caso contrário mantém o valor livre (o usuário escolheu outro formato)
+      return value.toUpperCase();
     }
+
+    // Formata ao sair do campo (blur) — preserva edição livre enquanto digita
+    elNumero.addEventListener('blur', function () {
+      this.value = mascaraNumeroContrato(this.value);
+    });
+
+    // Converte para maiúsculas a cada tecla
+    elNumero.addEventListener('input', function () {
+      var pos = this.selectionStart;
+      this.value = this.value.toUpperCase();
+      this.setSelectionRange(pos, pos);
+    });
   }
 
   // ── Filtro de imóveis por imobiliária ─────────────────────────────────────
-  var selImob  = document.getElementById('{{ form.imobiliaria.id_for_label }}');
+  var selImob   = document.getElementById('{{ form.imobiliaria.id_for_label }}');
   var selImovel = document.getElementById('{{ form.imovel.id_for_label }}');
   var imovelHint = document.getElementById('imovel_hint');
   var imovelSelecionado = '{{ form.imovel.value|default:"" }}';
@@ -341,7 +380,6 @@
       imovelSelecionado = '';
       carregarImoveis(selImob.value, false);
     });
-    // Carga inicial: se já há imobiliária selecionada, popula o select de imóveis
     if (selImob.value) {
       carregarImoveis(selImob.value, true);
     } else {
