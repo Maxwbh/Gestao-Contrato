@@ -1238,6 +1238,40 @@ nav.app-navbar .sidenav-trigger {
 .table-sm th, .table-sm td { padding: 0.4rem 0.6rem; }
 .table .text-nowrap { white-space: nowrap; }
 
+/* Qualquer input dentro de form sem .form-control/.btn (cobre form.as_p) */
+form input:not([type="submit"]):not([type="button"]):not([type="checkbox"]):not([type="radio"]):not([type="hidden"]):not([type="file"]):not([type="range"]):not(.form-control):not(.btn),
+form textarea:not(.form-control),
+form select:not(.form-select):not(.materialize-select):not([class]) {
+    background-color: #fff !important;
+    border: 1px solid #ced4da !important;
+    border-bottom: 1px solid #ced4da !important;
+    border-radius: 8px !important;
+    padding: 0.6rem 0.85rem !important;
+    height: auto !important;
+    width: 100% !important;
+    font-size: 0.95rem !important;
+    line-height: 1.5 !important;
+    color: var(--dark-text) !important;
+    box-sizing: border-box !important;
+    box-shadow: none !important;
+    margin: 0 0 0.75rem 0 !important;
+    display: block !important;
+}
+form input:not([type="submit"]):not([type="button"]):not([type="checkbox"]):not([type="radio"]):not([type="hidden"]):not(.form-control):not(.btn):focus,
+form textarea:not(.form-control):focus {
+    border-color: var(--secondary-color) !important;
+    box-shadow: 0 0 0 3px rgba(52,152,219,0.18) !important;
+    outline: none !important;
+}
+/* form.as_p — <p> label + input */
+form p label {
+    display: block;
+    font-weight: 600;
+    font-size: 0.9rem;
+    margin-bottom: 0.25rem;
+    color: var(--dark-text);
+}
+
 /* ========================================================================
    OVERRIDE MATERIALIZE GLOBAL INPUT STYLES
    Materialize usa input[type="text"]:not(.browser-default) com alta
