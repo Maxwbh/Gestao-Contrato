@@ -27,26 +27,36 @@ class TestFinanceiroTasks(TestCase):
         # Criar estrutura base
         cls.contabilidade = Contabilidade.objects.create(
             nome='Contabilidade Tasks',
-            documento='44444444000100'
+            razao_social='Contabilidade Tasks LTDA',
+            cnpj='44444444000100',
+            endereco='Rua Task, 123',
+            telefone='(31) 3333-0030',
+            email='tasks@contabilidade.com',
+            responsavel='Responsável Tasks',
         )
 
         cls.imobiliaria = Imobiliaria.objects.create(
             contabilidade=cls.contabilidade,
             nome='Imobiliária Tasks',
-            documento='55555555000100'
+            cnpj='55555555000100',
+            telefone='(31) 3333-0031',
+            email='tasks@imobiliaria.com',
+            responsavel_financeiro='Responsável Financeiro Tasks',
         )
 
         cls.comprador = Comprador.objects.create(
-            imobiliaria=cls.imobiliaria,
             nome='Comprador Tasks',
-            documento='66666666666',
-            email='comprador@teste.com'
+            tipo_pessoa='PF',
+            cpf='666.666.666-67',
+            telefone='(31) 3333-0032',
+            celular='(31) 99999-0032',
+            email='comprador@teste.com',
         )
 
         cls.imovel = Imovel.objects.create(
             imobiliaria=cls.imobiliaria,
             identificacao='LOTE-TASK-001',
-            endereco='Rua Task, 123'
+            area='360.00',
         )
 
         # Criar contrato
@@ -56,6 +66,7 @@ class TestFinanceiroTasks(TestCase):
             imovel=cls.imovel,
             numero_contrato='CONT-TASK-001',
             data_contrato=date.today() - timedelta(days=60),
+            data_primeiro_vencimento=date.today() + timedelta(days=30),
             valor_total=Decimal('100000.00'),
             valor_entrada=Decimal('10000.00'),
             numero_parcelas=36,
@@ -65,17 +76,19 @@ class TestFinanceiroTasks(TestCase):
             status=StatusContrato.ATIVO
         )
 
-        # Criar parcelas
+        # Create only parcelas not already auto-generated
+        existing = set(cls.contrato.parcelas.values_list('numero_parcela', flat=True))
         for i in range(1, 37):
-            vencimento = date.today() + timedelta(days=30 * (i - 2))  # Algumas já vencidas
-            Parcela.objects.create(
-                contrato=cls.contrato,
-                numero_parcela=i,
-                data_vencimento=vencimento,
-                valor_original=Decimal('2500.00'),
-                valor_atual=Decimal('2500.00'),
-                ciclo_reajuste=1 if i <= 12 else (2 if i <= 24 else 3)
-            )
+            if i not in existing:
+                vencimento = date.today() + timedelta(days=30 * (i - 2))
+                Parcela.objects.create(
+                    contrato=cls.contrato,
+                    numero_parcela=i,
+                    data_vencimento=vencimento,
+                    valor_original=Decimal('2500.00'),
+                    valor_atual=Decimal('2500.00'),
+                    ciclo_reajuste=1 if i <= 12 else (2 if i <= 24 else 3)
+                )
 
     def test_atualizar_juros_multa_parcelas_vencidas(self):
         """Testa task de atualização de juros e multa"""
@@ -150,7 +163,7 @@ class TestFinanceiroTasks(TestCase):
         # Deve retornar quantidade de lembretes agendados
         self.assertIsInstance(resultado, int)
 
-    @patch('financeiro.tasks.ReajusteService')
+    @patch('financeiro.services.reajuste_service.ReajusteService')
     def test_verificar_alertas_reajuste(self, mock_service_class):
         """Testa task de verificação de alertas de reajuste"""
         from financeiro.tasks import verificar_alertas_reajuste
@@ -169,7 +182,7 @@ class TestFinanceiroTasks(TestCase):
         self.assertIn('bloqueados', resultado)
         self.assertIn('alertas_enviados', resultado)
 
-    @patch('financeiro.tasks.IndiceEconomicoService')
+    @patch('financeiro.services.reajuste_service.IndiceEconomicoService')
     def test_buscar_indices_economicos(self, mock_service_class):
         """Testa task de busca de índices econômicos"""
         from financeiro.tasks import buscar_indices_economicos
@@ -206,13 +219,21 @@ class TestTasksGeracao(TestCase):
         # Criar estrutura base
         cls.contabilidade = Contabilidade.objects.create(
             nome='Contabilidade Geração',
-            documento='77777777000100'
+            razao_social='Contabilidade Geração LTDA',
+            cnpj='77777777000100',
+            endereco='Rua Geração, 456',
+            telefone='(31) 3333-0040',
+            email='geracao@contabilidade.com',
+            responsavel='Responsável Geração',
         )
 
         cls.imobiliaria = Imobiliaria.objects.create(
             contabilidade=cls.contabilidade,
             nome='Imobiliária Geração',
-            documento='88888888000100'
+            cnpj='88888888000100',
+            telefone='(31) 3333-0041',
+            email='geracao@imobiliaria.com',
+            responsavel_financeiro='Responsável Financeiro Geração',
         )
 
         cls.conta = ContaBancaria.objects.create(
@@ -221,22 +242,24 @@ class TestTasksGeracao(TestCase):
             banco='001',
             agencia='1234',
             conta='56789',
-            digito='0',
             convenio='123456',
             principal=True,
             ativo=True
         )
 
         cls.comprador = Comprador.objects.create(
-            imobiliaria=cls.imobiliaria,
             nome='Comprador Geração',
-            documento='99999999999'
+            tipo_pessoa='PF',
+            cpf='999.999.999-99',
+            telefone='(31) 3333-0042',
+            celular='(31) 99999-0042',
+            email='geracao@comprador.com',
         )
 
         cls.imovel = Imovel.objects.create(
             imobiliaria=cls.imobiliaria,
             identificacao='LOTE-GER-001',
-            endereco='Rua Geração, 456'
+            area='360.00',
         )
 
         # Criar contrato
@@ -246,6 +269,7 @@ class TestTasksGeracao(TestCase):
             imovel=cls.imovel,
             numero_contrato='CONT-GER-001',
             data_contrato=date.today() - timedelta(days=30),
+            data_primeiro_vencimento=date.today() + timedelta(days=30),
             valor_total=Decimal('50000.00'),
             valor_entrada=Decimal('5000.00'),
             numero_parcelas=24,
@@ -255,18 +279,20 @@ class TestTasksGeracao(TestCase):
             status=StatusContrato.ATIVO
         )
 
-        # Criar parcelas para o próximo mês
+        # Criar parcelas para o próximo mês (apenas as não geradas automaticamente)
+        existing = set(cls.contrato.parcelas.values_list('numero_parcela', flat=True))
         proximo_mes = date.today().replace(day=1) + timedelta(days=32)
         for i in range(1, 25):
-            vencimento = proximo_mes.replace(day=15) + timedelta(days=30 * (i - 1))
-            Parcela.objects.create(
-                contrato=cls.contrato,
-                numero_parcela=i,
-                data_vencimento=vencimento,
-                valor_original=Decimal('1875.00'),
-                valor_atual=Decimal('1875.00'),
-                ciclo_reajuste=1 if i <= 12 else 2
-            )
+            if i not in existing:
+                vencimento = proximo_mes.replace(day=15) + timedelta(days=30 * (i - 1))
+                Parcela.objects.create(
+                    contrato=cls.contrato,
+                    numero_parcela=i,
+                    data_vencimento=vencimento,
+                    valor_original=Decimal('1875.00'),
+                    valor_atual=Decimal('1875.00'),
+                    ciclo_reajuste=1 if i <= 12 else 2
+                )
 
     @patch('financeiro.models.Parcela.gerar_boleto')
     def test_gerar_boletos_automaticos(self, mock_gerar):
@@ -300,26 +326,36 @@ class TestEnvioEmail(TestCase):
         # Setup
         contabilidade = Contabilidade.objects.create(
             nome='Contabilidade Email',
-            documento='10101010000100'
+            razao_social='Contabilidade Email LTDA',
+            cnpj='10101010000100',
+            endereco='Rua Email, 789',
+            telefone='(31) 3333-0050',
+            email='email@contabilidade.com',
+            responsavel='Responsável Email',
         )
 
         imobiliaria = Imobiliaria.objects.create(
             contabilidade=contabilidade,
             nome='Imobiliária Email',
-            documento='20202020000100'
+            cnpj='20202020000100',
+            telefone='(31) 3333-0051',
+            email='email@imobiliaria.com',
+            responsavel_financeiro='Responsável Financeiro Email',
         )
 
         comprador = Comprador.objects.create(
-            imobiliaria=imobiliaria,
             nome='Comprador Email',
-            documento='30303030303',
-            email='teste@email.com'
+            tipo_pessoa='PF',
+            cpf='303.030.303-03',
+            telefone='(31) 3333-0052',
+            celular='(31) 99999-0052',
+            email='teste@email.com',
         )
 
         imovel = Imovel.objects.create(
             imobiliaria=imobiliaria,
             identificacao='LOTE-EMAIL-001',
-            endereco='Rua Email, 789'
+            area='360.00',
         )
 
         contrato = Contrato.objects.create(
@@ -328,6 +364,7 @@ class TestEnvioEmail(TestCase):
             imovel=imovel,
             numero_contrato='CONT-EMAIL-001',
             data_contrato=date.today(),
+            data_primeiro_vencimento=date.today() + timedelta(days=30),
             valor_total=Decimal('30000.00'),
             valor_entrada=Decimal('3000.00'),
             numero_parcelas=12,
@@ -336,9 +373,10 @@ class TestEnvioEmail(TestCase):
             status=StatusContrato.ATIVO
         )
 
+        # Use high numero_parcela to avoid UNIQUE constraint with auto-generated
         parcela = Parcela.objects.create(
             contrato=contrato,
-            numero_parcela=1,
+            numero_parcela=100,
             data_vencimento=date.today() + timedelta(days=7),
             valor_original=Decimal('2250.00'),
             valor_atual=Decimal('2250.00'),
@@ -362,26 +400,36 @@ class TestEnvioEmail(TestCase):
         # Setup
         contabilidade = Contabilidade.objects.create(
             nome='Contabilidade Alerta',
-            documento='40404040000100'
+            razao_social='Contabilidade Alerta LTDA',
+            cnpj='40404040000100',
+            endereco='Rua Alerta, 321',
+            telefone='(31) 3333-0060',
+            email='alerta@contabilidade.com',
+            responsavel='Responsável Alerta',
         )
 
         imobiliaria = Imobiliaria.objects.create(
             contabilidade=contabilidade,
             nome='Imobiliária Alerta',
-            documento='50505050000100',
-            email='imob@teste.com'
+            cnpj='50505050000100',
+            telefone='(31) 3333-0061',
+            email='imob@teste.com',
+            responsavel_financeiro='Responsável Financeiro Alerta',
         )
 
         comprador = Comprador.objects.create(
-            imobiliaria=imobiliaria,
             nome='Comprador Alerta',
-            documento='60606060606'
+            tipo_pessoa='PF',
+            cpf='606.060.606-06',
+            telefone='(31) 3333-0062',
+            celular='(31) 99999-0062',
+            email='alerta@comprador.com',
         )
 
         imovel = Imovel.objects.create(
             imobiliaria=imobiliaria,
             identificacao='LOTE-ALERTA-001',
-            endereco='Rua Alerta, 321'
+            area='360.00',
         )
 
         contrato = Contrato.objects.create(
@@ -390,6 +438,7 @@ class TestEnvioEmail(TestCase):
             imovel=imovel,
             numero_contrato='CONT-ALERTA-001',
             data_contrato=date.today() - timedelta(days=360),
+            data_primeiro_vencimento=date.today() - timedelta(days=330),
             valor_total=Decimal('80000.00'),
             valor_entrada=Decimal('8000.00'),
             numero_parcelas=36,
