@@ -51,7 +51,7 @@ class TestDashboardView:
 
     def test_dashboard_requer_login(self, client):
         """Testa que dashboard requer autenticacao"""
-        response = client.get('/portal/dashboard/')
+        response = client.get('/portal/')
 
         assert response.status_code == 302
         assert 'login' in response.url
@@ -61,7 +61,7 @@ class TestDashboardView:
         usuario = UserFactory()
         client.force_login(usuario)
 
-        response = client.get('/portal/dashboard/')
+        response = client.get('/portal/')
 
         assert response.status_code == 302
 
@@ -69,7 +69,7 @@ class TestDashboardView:
         """Testa dashboard com comprador logado"""
         client = comprador_logado['client']
 
-        response = client.get('/portal/dashboard/')
+        response = client.get('/portal/')
 
         assert response.status_code == 200
 
@@ -78,7 +78,7 @@ class TestDashboardView:
         client = comprador_logado['client']
         acesso = comprador_logado['acesso']
 
-        client.get('/portal/dashboard/')
+        client.get('/portal/')
 
         log = LogAcessoComprador.objects.filter(
             acesso_comprador=acesso,
@@ -116,7 +116,7 @@ class TestMeusContratosView:
             valor_entrada=Decimal('10000.00'),
             numero_parcelas=12,
             dia_vencimento=5,
-            status='ativo',
+            status='ATIVO',
         )
 
         response = client.get('/portal/contratos/')
@@ -222,7 +222,7 @@ class TestMeusDadosView:
 
     def test_meus_dados_requer_login(self, client):
         """Testa que meus_dados requer autenticacao"""
-        response = client.get('/portal/dados/')
+        response = client.get('/portal/meus-dados/')
 
         assert response.status_code == 302
         assert 'login' in response.url
@@ -231,7 +231,7 @@ class TestMeusDadosView:
         """Testa acesso GET a meus_dados"""
         client = comprador_logado['client']
 
-        response = client.get('/portal/dados/')
+        response = client.get('/portal/meus-dados/')
 
         assert response.status_code == 200
 

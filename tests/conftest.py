@@ -8,7 +8,6 @@ import pytest
 from pytest_factoryboy import register
 from django.conf import settings
 from django.test import Client
-from rest_framework.test import APIClient
 
 # Importar todas as factories
 from tests.fixtures.factories import (
@@ -48,14 +47,22 @@ register(ArquivoRetornoFactory)
 
 @pytest.fixture
 def api_client():
-    """Cliente da API REST Framework"""
-    return APIClient()
+    """Cliente HTTP do Django (sem DRF)"""
+    return Client()
 
 
 @pytest.fixture
 def client():
     """Cliente HTTP do Django"""
     return Client()
+
+
+@pytest.fixture
+def requests_mock():
+    """Mock para requisições HTTP usando requests-mock"""
+    import requests_mock as rm
+    with rm.Mocker() as m:
+        yield m
 
 
 @pytest.fixture
@@ -69,10 +76,10 @@ def authenticated_client(db, user_factory):
 
 @pytest.fixture
 def authenticated_api_client(db, user_factory):
-    """Cliente API autenticado"""
-    client = APIClient()
+    """Cliente HTTP autenticado (alias)"""
+    client = Client()
     user = user_factory(password='testpass123')
-    client.force_authenticate(user=user)
+    client.force_login(user)
     return client
 
 
@@ -87,11 +94,61 @@ def admin_client(db, superuser_factory):
 
 @pytest.fixture
 def admin_api_client(db, superuser_factory):
-    """Cliente API autenticado como admin"""
-    client = APIClient()
+    """Cliente HTTP autenticado como admin (alias)"""
+    client = Client()
     admin = superuser_factory(password='admin123')
-    client.force_authenticate(user=admin)
+    client.force_login(admin)
     return client
+
+
+@pytest.fixture
+def client_logged_in(db, user_factory):
+    """Cliente HTTP autenticado como usuário comum (alias)"""
+    client = Client()
+    user = user_factory(password='testpass123')
+    client.force_login(user)
+    return client
+
+
+@pytest.fixture
+def client_admin(db, super_user_factory):
+    """Cliente HTTP autenticado como admin"""
+    client = Client()
+    admin = super_user_factory(password='admin123')
+    client.force_login(admin)
+    return client
+
+
+# =============================================================================
+# FIXTURES ESPECÍFICAS DE COMPRADOR
+# =============================================================================
+
+@pytest.fixture
+def comprador_pf(db):
+    """Comprador Pessoa Física para testes"""
+    from core.models import Comprador
+    return Comprador.objects.create(
+        tipo_pessoa='PF',
+        nome='João da Silva',
+        cpf='123.456.789-01',
+        email='joao@teste.com',
+        telefone='(31) 3333-4444',
+        celular='(31) 99999-8888',
+    )
+
+
+@pytest.fixture
+def comprador_pj(db):
+    """Comprador Pessoa Jurídica para testes"""
+    from core.models import Comprador
+    return Comprador.objects.create(
+        tipo_pessoa='PJ',
+        nome='Empresa Teste LTDA',
+        cnpj='12.345.678/0001-90',
+        email='empresa@teste.com',
+        telefone='(31) 3333-5555',
+        celular='(31) 88888-7777',
+    )
 
 
 # =============================================================================
@@ -143,6 +200,13 @@ def parcela_paga(db, parcela_factory, historico_pagamento_factory):
 @pytest.fixture
 def mock_brcobranca_success(requests_mock):
     """Mock da API BRCobranca retornando sucesso"""
+    # Service uses BRCOBRANCA_URL setting (defaults to http://localhost:9292)
+    requests_mock.get(
+        'http://localhost:9292/api/boleto',
+        content=b'%PDF-1.4 Mock PDF Content',
+        status_code=200
+    )
+    # Also register legacy URL in case settings override
     requests_mock.get(
         'https://brcobranca-api.onrender.com/api/boleto',
         content=b'%PDF-1.4 Mock PDF Content',
@@ -154,6 +218,11 @@ def mock_brcobranca_success(requests_mock):
 @pytest.fixture
 def mock_brcobranca_error(requests_mock):
     """Mock da API BRCobranca retornando erro 500"""
+    requests_mock.get(
+        'http://localhost:9292/api/boleto',
+        json={'erro': 'Erro interno do servidor'},
+        status_code=500
+    )
     requests_mock.get(
         'https://brcobranca-api.onrender.com/api/boleto',
         json={'erro': 'Erro interno do servidor'},
@@ -206,6 +275,13 @@ def configure_test_settings(settings):
     settings.CELERY_TASK_ALWAYS_EAGER = True  # Executa tasks síncronamente
     settings.CELERY_TASK_EAGER_PROPAGATES = True
     settings.EMAIL_BACKEND = 'django.core.mail.backends.locmem.EmailBackend'
+    # Use simpler static files storage to avoid collectstatic requirement
+    settings.STATICFILES_STORAGE = 'django.contrib.staticfiles.storage.StaticFilesStorage'
+    # Disable HTTPS redirect for tests
+    settings.SECURE_SSL_REDIRECT = False
+    # Add humanize for template tag support
+    if 'django.contrib.humanize' not in settings.INSTALLED_APPS:
+        settings.INSTALLED_APPS = list(settings.INSTALLED_APPS) + ['django.contrib.humanize']
     return settings
 
 
