@@ -50,6 +50,12 @@
         font-size: 0.7rem;
         margin-left: 5px;
     }
+    .ag-theme-material .ag-root-wrapper { border-radius: 0; border: none; }
+    .ag-theme-material .ag-header { background-color: #f8f9fa; }
+    .ag-theme-material .ag-header-cell-text { color: #212529; font-weight: 600; }
+    .ag-theme-material .ag-row-even { background-color: #fff; }
+    .ag-theme-material .ag-row-odd  { background-color: #f8f9fa; }
+    .ag-theme-material .ag-row:hover { background-color: #e8f4fd !important; }
 </style>
 {% endblock %}
 
@@ -138,92 +144,15 @@
                 </ul>
 
                 {% if indices %}
-                <div class="table-responsive">
-                    <table class="table table-hover align-middle">
-                        <thead class="table-light">
-                            <tr>
-                                <th>Tipo</th>
-                                <th>Periodo</th>
-                                <th class="text-end">Valor (%)</th>
-                                <th class="text-end">Acum. Ano (%)</th>
-                                <th class="text-end">Acum. 12m (%)</th>
-                                <th>Fonte</th>
-                                <th class="text-center">Acoes</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {% for indice in indices %}
-                            <tr>
-                                <td>
-                                    <span class="badge indice-badge {% if indice.tipo_indice == 'IPCA' %}bg-primary{% elif indice.tipo_indice == 'IGPM' %}bg-success{% elif indice.tipo_indice == 'INCC' %}bg-info{% elif indice.tipo_indice == 'INPC' %}bg-danger{% elif indice.tipo_indice == 'TR' %}bg-dark{% else %}bg-warning text-dark{% endif %}">
-                                        {{ indice.tipo_indice }}
-                                    </span>
-                                </td>
-                                <td>
-                                    <strong>{{ indice.mes_nome }}/{{ indice.ano }}</strong>
-                                </td>
-                                <td class="text-end">
-                                    <span class="{% if indice.valor > 0 %}valor-positivo{% elif indice.valor < 0 %}valor-negativo{% endif %}">
-                                        {{ indice.valor|floatformat:4 }}%
-                                    </span>
-                                </td>
-                                <td class="text-end">
-                                    {% if indice.valor_acumulado_ano %}
-                                        {{ indice.valor_acumulado_ano|floatformat:4 }}%
-                                    {% else %}
-                                        <span class="text-muted">-</span>
-                                    {% endif %}
-                                </td>
-                                <td class="text-end">
-                                    {% if indice.valor_acumulado_12m %}
-                                        {{ indice.valor_acumulado_12m|floatformat:4 }}%
-                                    {% else %}
-                                        <span class="text-muted">-</span>
-                                    {% endif %}
-                                </td>
-                                <td>
-                                    <small class="text-muted">{{ indice.fonte|default:"-" }}</small>
-                                </td>
-                                <td class="text-center">
-                                    <div class="btn-group btn-group-sm">
-                                        <a href="{% url 'contratos:indices_editar' indice.pk %}" class="btn btn-outline-primary" title="Editar">
-                                            <i class="fas fa-edit"></i>
-                                        </a>
-                                        <button type="button" class="btn btn-outline-danger" title="Excluir" onclick="confirmarExclusao('{{ indice }}', '{% url 'contratos:indices_excluir' indice.pk %}')">
-                                            <i class="fas fa-trash"></i>
-                                        </button>
-                                    </div>
-                                </td>
-                            </tr>
-                            {% endfor %}
-                        </tbody>
-                    </table>
+                <div class="d-flex align-items-center gap-2 mb-2">
+                    <i class="fas fa-search text-muted"></i>
+                    <input type="text" class="form-control form-control-sm" style="width: 200px;"
+                           placeholder="Busca rápida na página..."
+                           oninput="if(window.indicesGridApi) window.indicesGridApi.setGridOption('quickFilterText', this.value)">
                 </div>
+                <div id="indicesGrid" class="ag-theme-material" style="width: 100%;"></div>
 
-                <!-- Paginacao -->
-                {% if is_paginated %}
-                <nav>
-                    <ul class="pagination justify-content-center">
-                        {% if page_obj.has_previous %}
-                        <li class="page-item">
-                            <a class="page-link" href="?page={{ page_obj.previous_page_number }}{% if tipo_filter %}&tipo={{ tipo_filter }}{% endif %}{% if ano_filter %}&ano={{ ano_filter }}{% endif %}">
-                                <i class="fas fa-chevron-left"></i>
-                            </a>
-                        </li>
-                        {% endif %}
-                        <li class="page-item active">
-                            <span class="page-link">{{ page_obj.number }} / {{ page_obj.paginator.num_pages }}</span>
-                        </li>
-                        {% if page_obj.has_next %}
-                        <li class="page-item">
-                            <a class="page-link" href="?page={{ page_obj.next_page_number }}{% if tipo_filter %}&tipo={{ tipo_filter }}{% endif %}{% if ano_filter %}&ano={{ ano_filter }}{% endif %}">
-                                <i class="fas fa-chevron-right"></i>
-                            </a>
-                        </li>
-                        {% endif %}
-                    </ul>
-                </nav>
-                {% endif %}
+                {% include "includes/pagination_perpage.html" %}
 
                 {% else %}
                 <div class="alert alert-info text-center">
@@ -355,6 +284,125 @@
 
 {% block extra_js %}
 <script>
+    // ===== AG GRID - INDICES =====
+    const indicesRowData = [
+    {% for indice in indices %}
+    {
+        pk: {{ indice.pk }},
+        tipo_indice: "{{ indice.tipo_indice|escapejs }}",
+        periodo: "{{ indice.mes_nome|escapejs }}/{{ indice.ano }}",
+        ano: {{ indice.ano }},
+        valor: {{ indice.valor|floatformat:4 }},
+        valor_acum_ano: {% if indice.valor_acumulado_ano %}{{ indice.valor_acumulado_ano|floatformat:4 }}{% else %}null{% endif %},
+        valor_acum_12m: {% if indice.valor_acumulado_12m %}{{ indice.valor_acumulado_12m|floatformat:4 }}{% else %}null{% endif %},
+        fonte: "{{ indice.fonte|default:'-'|escapejs }}",
+        edit_url: "{% url 'contratos:indices_editar' indice.pk %}",
+        del_url: "{% url 'contratos:indices_excluir' indice.pk %}",
+        label: "{{ indice|escapejs }}",
+    },
+    {% endfor %}
+    ];
+
+    function tipoBadge(tipo) {
+        const map = { IPCA: 'bg-primary', IGPM: 'bg-success', INCC: 'bg-info text-dark', INPC: 'bg-danger', TR: 'bg-dark' };
+        return `<span class="badge ${map[tipo] || 'bg-warning text-dark'}">${tipo}</span>`;
+    }
+
+    function valorRenderer(params) {
+        if (params.value == null) return '<span class="text-muted">—</span>';
+        const v = parseFloat(params.value);
+        const cls = v > 0 ? 'valor-positivo' : v < 0 ? 'valor-negativo' : '';
+        return `<span class="${cls}">${v.toFixed(4)}%</span>`;
+    }
+
+    const indicesColumnDefs = [
+        {
+            headerName: 'Tipo',
+            field: 'tipo_indice',
+            filter: 'agTextColumnFilter',
+            floatingFilter: true,
+            minWidth: 90,
+            cellRenderer: params => tipoBadge(params.value),
+        },
+        {
+            headerName: 'Período',
+            field: 'periodo',
+            filter: 'agTextColumnFilter',
+            floatingFilter: true,
+            minWidth: 110,
+            cellRenderer: params => `<strong>${params.value}</strong>`,
+            sort: 'desc',
+        },
+        {
+            headerName: 'Valor (%)',
+            field: 'valor',
+            filter: 'agNumberColumnFilter',
+            floatingFilter: true,
+            minWidth: 100,
+            type: 'numericColumn',
+            cellRenderer: valorRenderer,
+        },
+        {
+            headerName: 'Acum. Ano (%)',
+            field: 'valor_acum_ano',
+            filter: 'agNumberColumnFilter',
+            floatingFilter: true,
+            minWidth: 120,
+            type: 'numericColumn',
+            cellRenderer: valorRenderer,
+        },
+        {
+            headerName: 'Acum. 12m (%)',
+            field: 'valor_acum_12m',
+            filter: 'agNumberColumnFilter',
+            floatingFilter: true,
+            minWidth: 120,
+            type: 'numericColumn',
+            cellRenderer: valorRenderer,
+        },
+        {
+            headerName: 'Fonte',
+            field: 'fonte',
+            filter: 'agTextColumnFilter',
+            floatingFilter: true,
+            minWidth: 90,
+            cellRenderer: params => `<small class="text-muted">${params.value}</small>`,
+        },
+        {
+            headerName: 'Ações',
+            field: 'pk',
+            sortable: false,
+            filter: false,
+            minWidth: 100,
+            cellRenderer: params => {
+                const d = params.data;
+                return `<div class="d-flex gap-1">
+                    <a href="${d.edit_url}" class="btn btn-sm btn-outline-primary" title="Editar"><i class="fas fa-edit"></i></a>
+                    <button class="btn btn-sm btn-outline-danger" title="Excluir"
+                        onclick="confirmarExclusao('${d.label.replace(/'/g,"\\'")}', '${d.del_url}')">
+                        <i class="fas fa-trash"></i></button>
+                </div>`;
+            },
+        },
+    ];
+
+    document.addEventListener('DOMContentLoaded', function() {
+        const gridEl = document.getElementById('indicesGrid');
+        if (gridEl) {
+            window.indicesGridApi = agGrid.createGrid(gridEl, {
+                columnDefs: indicesColumnDefs,
+                rowData: indicesRowData,
+                domLayout: 'autoHeight',
+                defaultColDef: { sortable: true, resizable: true },
+                rowHeight: 42,
+                headerHeight: 48,
+                floatingFiltersHeight: 36,
+                suppressCellFocus: true,
+                enableCellTextSelection: true,
+            });
+        }
+    });
+
     function aplicarFiltroTipo(tipo) {
         const ano = document.getElementById('filtroAno').value;
         let url = '{% url "contratos:indices_listar" %}';

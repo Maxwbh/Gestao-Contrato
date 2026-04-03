@@ -99,16 +99,29 @@ class CNABService:
         return ''
 
     def _formatar_data(self, data: date) -> str:
-        """Formata data para o padrao BRCobranca (DD/MM/YYYY)"""
+        """Formata data para o padrao BRCobranca (YYYY/MM/DD)"""
         if data:
-            return data.strftime('%d/%m/%Y')
+            return data.strftime('%Y/%m/%d')
         return ''
 
-    def _formatar_valor(self, valor: Decimal) -> str:
-        """Formata valor para string"""
+    def _formatar_valor(self, valor) -> float:
+        """Formata valor para float"""
         if valor:
-            return str(float(valor))
-        return '0.0'
+            try:
+                return float(valor)
+            except (ValueError, TypeError):
+                return 0.0
+        return 0.0
+
+    def _parsear_numero_dv(self, valor: str) -> tuple:
+        """Separa número e dígito verificador. Aceita '1234-5' ou '1234 5' ou '1234'."""
+        if not valor:
+            return '', ''
+        for sep in ['-', ' ']:
+            if sep in valor:
+                partes = valor.split(sep, 1)
+                return partes[0].strip(), partes[1].strip()
+        return valor.strip(), ''
 
     def _montar_dados_boleto(self, parcela, conta_bancaria) -> dict:
         """
@@ -116,7 +129,7 @@ class CNABService:
         """
         contrato = parcela.contrato
         comprador = contrato.comprador
-        imobiliaria = contrato.imovel.imobiliaria
+        imobiliaria = contrato.imobiliaria
 
         # Determinar tipo de documento do comprador
         cpf_cnpj = self._formatar_cpf_cnpj(
@@ -130,50 +143,78 @@ class CNABService:
         if comprador.complemento:
             endereco_sacado += f" - {comprador.complemento}"
 
+        agencia_num, agencia_dv = self._parsear_numero_dv(conta_bancaria.agencia)
+        conta_num, conta_dv = self._parsear_numero_dv(conta_bancaria.conta)
+
+        convenio = conta_bancaria.convenio or ''
+        # Para Banco do Brasil, convenio é obrigatório; formata com zeros à esquerda (7 dígitos)
+        if conta_bancaria.banco == '001' and convenio:
+            convenio = ''.join(filter(str.isdigit, convenio)).zfill(7)[:8]
+
         boleto_data = {
             # Identificacao
-            'nosso_numero': parcela.nosso_numero,
-            'numero_documento': parcela.numero_documento,
+            'nosso_numero': str(parcela.nosso_numero or '1'),
+            'documento_numero': parcela.numero_documento or '',
 
             # Valores e datas
             'valor': self._formatar_valor(parcela.valor_boleto or parcela.valor_atual),
             'data_vencimento': self._formatar_data(parcela.data_vencimento),
-            'data_documento': self._formatar_data(parcela.data_geracao_boleto.date() if parcela.data_geracao_boleto else timezone.now().date()),
+            'data_documento': self._formatar_data(
+                parcela.data_geracao_boleto.date() if parcela.data_geracao_boleto else timezone.now().date()
+            ),
 
-            # Dados do sacado (pagador)
+            # Campos obrigatórios da classe Base BRCobranca
+            'moeda': '9',
+            'especie': 'R$',
+            'especie_documento': 'DM',
+            'aceite': 'S',
+
+            # Dados do sacado (pagador) — nomes corretos do BRCobranca
             'sacado': comprador.nome[:60],
-            'documento_sacado': cpf_cnpj,
-            'endereco_sacado': endereco_sacado[:80],
-            'bairro_sacado': (comprador.bairro or '')[:40],
-            'cidade_sacado': (comprador.cidade or '')[:30],
-            'uf_sacado': (comprador.estado or '')[:2],
-            'cep_sacado': self._formatar_cpf_cnpj(comprador.cep or ''),
+            'sacado_documento': cpf_cnpj,
+            'sacado_endereco': endereco_sacado[:80],
 
             # Dados do cedente (recebedor)
             'cedente': (imobiliaria.razao_social or imobiliaria.nome)[:60],
             'documento_cedente': self._formatar_cpf_cnpj(imobiliaria.cnpj),
 
-            # Dados bancarios
-            'agencia': conta_bancaria.agencia.replace('-', '').split('-')[0] if conta_bancaria.agencia else '',
-            'conta_corrente': conta_bancaria.conta.replace('-', '').split('-')[0] if conta_bancaria.conta else '',
-            'digito_conta_corrente': conta_bancaria.conta.split('-')[1] if '-' in (conta_bancaria.conta or '') else '',
-            'convenio': conta_bancaria.convenio or '',
+            # Dados bancários
+            'agencia': agencia_num,
+            'conta_corrente': conta_num,
+            'convenio': convenio,
             'carteira': conta_bancaria.carteira or '',
-            'variacao': '',
-            'codigo_cedente': conta_bancaria.convenio or '',
 
             # Instrucoes
             'instrucao1': f'Parcela {parcela.numero_parcela}/{contrato.numero_parcelas} - Contrato {contrato.numero_contrato}',
             'instrucao2': '',
             'instrucao3': '',
             'instrucao4': '',
-            'instrucao5': '',
-            'instrucao6': '',
 
-            # Multa e juros
-            'percentual_multa': self._formatar_valor(contrato.percentual_multa),
-            'valor_mora': self._formatar_valor(contrato.percentual_juros_mora / 30),  # Juros diario
+            # Local de pagamento
+            'local_pagamento': 'Pagavel em qualquer banco ate o vencimento',
         }
+
+        # Campos específicos por banco
+        banco = conta_bancaria.banco
+
+        # Sicredi (748): posto e byte_idt obrigatórios
+        if banco == '748':
+            boleto_data['posto'] = getattr(conta_bancaria, 'posto', '') or '01'
+            boleto_data['byte_idt'] = getattr(conta_bancaria, 'byte_idt', '') or '2'
+
+        # Caixa Econômica (104): emissao e codigo_beneficiario obrigatórios
+        elif banco == '104':
+            boleto_data['emissao'] = getattr(conta_bancaria, 'emissao', '') or '4'
+            codigo_benef = getattr(conta_bancaria, 'codigo_beneficiario', '') or conta_bancaria.convenio or ''
+            boleto_data['codigo_beneficiario'] = codigo_benef
+
+        # Sicoob (756): variacao e quantidade
+        elif banco == '756':
+            boleto_data['variacao'] = '01'
+            boleto_data['quantidade'] = '001'
+            codigo_benef = getattr(conta_bancaria, 'codigo_beneficiario', '')
+            if codigo_benef:
+                boleto_data['codigo_beneficiario'] = codigo_benef
 
         return boleto_data
 
@@ -196,6 +237,51 @@ class CNABService:
         """
         from financeiro.models import ArquivoRemessa, ItemRemessa
 
+        # Validar conta bancária para bancos com campos obrigatórios
+        if conta_bancaria.banco == '001' and not conta_bancaria.convenio:
+            return {
+                'sucesso': False,
+                'erro': (
+                    'Banco do Brasil requer o campo "Convênio" preenchido na conta bancária. '
+                    'Acesse Configurações → Conta Bancária e informe o número do convênio.'
+                )
+            }
+        if conta_bancaria.banco == '033' and not conta_bancaria.convenio:
+            return {
+                'sucesso': False,
+                'erro': (
+                    'Santander requer o campo "Convênio" preenchido na conta bancária (7 dígitos). '
+                    'Acesse Configurações → Conta Bancária e informe o número do convênio.'
+                )
+            }
+        if conta_bancaria.banco == '104' and not conta_bancaria.convenio:
+            return {
+                'sucesso': False,
+                'erro': (
+                    'Caixa Econômica requer o campo "Convênio" preenchido na conta bancária (6 dígitos). '
+                    'Acesse Configurações → Conta Bancária e informe o número do convênio.'
+                )
+            }
+        if conta_bancaria.banco == '748':
+            posto = getattr(conta_bancaria, 'posto', '') or ''
+            byte_idt = getattr(conta_bancaria, 'byte_idt', '') or ''
+            if not posto:
+                return {
+                    'sucesso': False,
+                    'erro': (
+                        'Sicredi requer o campo "Posto" preenchido na conta bancária (2 dígitos). '
+                        'Acesse Configurações → Conta Bancária e informe o Posto.'
+                    )
+                }
+            if not byte_idt:
+                return {
+                    'sucesso': False,
+                    'erro': (
+                        'Sicredi requer o campo "Byte IDT" preenchido na conta bancária (1 dígito, geralmente "2"). '
+                        'Acesse Configurações → Conta Bancária e informe o Byte IDT.'
+                    )
+                }
+
         # Validar parcelas
         parcelas_validas = [p for p in parcelas if p.tem_boleto and not p.pago]
         if not parcelas_validas:
@@ -215,12 +301,15 @@ class CNABService:
         imobiliaria = conta_bancaria.imobiliaria
 
         # Estrutura de dados do cedente/empresa
+        agencia_num, agencia_dv = self._parsear_numero_dv(conta_bancaria.agencia)
+        conta_num, conta_dv = self._parsear_numero_dv(conta_bancaria.conta)
         dados_empresa = {
             'empresa_mae': imobiliaria.razao_social or imobiliaria.nome,
             'documento_cedente': self._formatar_cpf_cnpj(imobiliaria.cnpj),
-            'agencia': conta_bancaria.agencia.replace('-', '').split('-')[0] if conta_bancaria.agencia else '',
-            'conta_corrente': conta_bancaria.conta.replace('-', '').split('-')[0] if conta_bancaria.conta else '',
-            'digito_conta': conta_bancaria.conta.split('-')[1] if '-' in (conta_bancaria.conta or '') else '',
+            'agencia': agencia_num,
+            'agencia_dv': agencia_dv,
+            'conta_corrente': conta_num,
+            'digito_conta': conta_dv,
             'convenio': conta_bancaria.convenio or '',
             'carteira': conta_bancaria.carteira or '',
             'sequencial_remessa': numero_remessa,
@@ -358,9 +447,8 @@ class CNABService:
         header += 'REMESSA'.ljust(7)
         header += '01'  # Tipo servico (cobranca)
         header += 'COBRANCA'.ljust(15)
-        agencia_num = conta_bancaria.agencia.replace('-', '').split('-')[0] if conta_bancaria.agencia else ''
-        conta_num = conta_bancaria.conta.replace('-', '').split('-')[0] if conta_bancaria.conta else ''
-        conta_dv = conta_bancaria.conta.split('-')[1] if '-' in (conta_bancaria.conta or '') else ''
+        agencia_num, agencia_dv = self._parsear_numero_dv(conta_bancaria.agencia)
+        conta_num, conta_dv = self._parsear_numero_dv(conta_bancaria.conta)
         header += agencia_num.zfill(4)
         header += '00'  # Digito agencia
         header += conta_num.zfill(8)
@@ -794,9 +882,19 @@ class CNABService:
             'valor_total_pago': valor_total_pago,
         }
 
-    def obter_boletos_sem_remessa(self, conta_bancaria=None) -> List:
+    def obter_boletos_sem_remessa(
+        self,
+        conta_bancaria=None,
+        imobiliaria_id=None,
+        contrato_id=None
+    ) -> List:
         """
-        Retorna lista de parcelas com boleto gerado mas sem arquivo de remessa.
+        Retorna parcelas com boleto gerado mas sem arquivo de remessa.
+
+        Args:
+            conta_bancaria: Filtrar por ContaBancaria específica
+            imobiliaria_id: Filtrar por Imobiliaria (via contrato)
+            contrato_id: Filtrar por Contrato específico
         """
         from financeiro.models import Parcela, StatusBoleto
 
@@ -805,10 +903,134 @@ class CNABService:
             pago=False,
             itens_remessa__isnull=True
         ).select_related(
-            'contrato', 'contrato__comprador', 'contrato__imovel'
+            'contrato', 'contrato__comprador', 'contrato__imovel',
+            'contrato__imobiliaria', 'conta_bancaria', 'conta_bancaria__imobiliaria'
         )
 
         if conta_bancaria:
             queryset = queryset.filter(conta_bancaria=conta_bancaria)
 
-        return list(queryset.order_by('data_vencimento'))
+        if imobiliaria_id:
+            queryset = queryset.filter(contrato__imobiliaria_id=imobiliaria_id)
+
+        if contrato_id:
+            queryset = queryset.filter(contrato_id=contrato_id)
+
+        return list(queryset.order_by('conta_bancaria', 'data_vencimento'))
+
+    def obter_boletos_em_remessa_pendente(
+        self,
+        conta_bancaria=None,
+        imobiliaria_id=None,
+        contrato_id=None
+    ) -> List:
+        """
+        Retorna parcelas já incluídas em remessa com status GERADO (não enviada).
+        Usado para exibir aviso de duplicata potencial.
+        """
+        from financeiro.models import Parcela, StatusBoleto
+
+        queryset = Parcela.objects.filter(
+            status_boleto=StatusBoleto.GERADO,
+            pago=False,
+            itens_remessa__arquivo_remessa__status='GERADO'
+        ).select_related(
+            'contrato', 'contrato__comprador', 'conta_bancaria',
+            'contrato__imobiliaria'
+        ).prefetch_related('itens_remessa__arquivo_remessa').distinct()
+
+        if conta_bancaria:
+            queryset = queryset.filter(conta_bancaria=conta_bancaria)
+
+        if imobiliaria_id:
+            queryset = queryset.filter(contrato__imobiliaria_id=imobiliaria_id)
+
+        if contrato_id:
+            queryset = queryset.filter(contrato_id=contrato_id)
+
+        return list(queryset.order_by('conta_bancaria', 'data_vencimento'))
+
+    def gerar_remessas_por_escopo(
+        self,
+        parcela_ids: List[int],
+        layout: str = 'CNAB_240'
+    ) -> Dict:
+        """
+        Gera remessas agrupando automaticamente as parcelas por conta_bancaria.
+        Cada conta gera exatamente 1 arquivo de remessa.
+
+        Args:
+            parcela_ids: IDs das parcelas selecionadas
+            layout: Layout CNAB (CNAB_240 ou CNAB_400)
+
+        Returns:
+            dict com:
+              - remessas_geradas: list de dicts com info das remessas criadas
+              - erros: list de erros por conta
+              - total_boletos: int
+              - total_valor: Decimal
+        """
+        from financeiro.models import Parcela, StatusBoleto
+        from collections import defaultdict
+
+        # Buscar parcelas válidas
+        parcelas = list(
+            Parcela.objects.filter(
+                pk__in=parcela_ids,
+                status_boleto=StatusBoleto.GERADO,
+                pago=False,
+                itens_remessa__isnull=True
+            ).select_related('conta_bancaria', 'contrato')
+        )
+
+        if not parcelas:
+            return {
+                'remessas_geradas': [],
+                'erros': ['Nenhuma parcela válida selecionada.'],
+                'total_boletos': 0,
+                'total_valor': Decimal('0.00'),
+            }
+
+        # Agrupar por conta_bancaria
+        grupos: Dict = defaultdict(list)
+        sem_conta = []
+        for p in parcelas:
+            if p.conta_bancaria:
+                grupos[p.conta_bancaria].append(p)
+            else:
+                sem_conta.append(p)
+
+        remessas_geradas = []
+        erros = []
+
+        if sem_conta:
+            erros.append(
+                f"{len(sem_conta)} parcela(s) sem conta bancária associada foram ignoradas."
+            )
+
+        for conta, lista_parcelas in grupos.items():
+            resultado = self.gerar_remessa(lista_parcelas, conta, layout)
+            if resultado.get('sucesso'):
+                arq = resultado['arquivo_remessa']
+                remessas_geradas.append({
+                    'arquivo_remessa': arq,
+                    'conta_bancaria': conta,
+                    'quantidade_boletos': resultado['quantidade_boletos'],
+                    'valor_total': resultado['valor_total'],
+                    'numero_remessa': resultado['numero_remessa'],
+                    'aviso': resultado.get('aviso', ''),
+                })
+            else:
+                erros.append(
+                    f"Conta {conta}: {resultado.get('erro', 'Erro desconhecido')}"
+                )
+
+        total_boletos = sum(r['quantidade_boletos'] for r in remessas_geradas)
+        total_valor = sum(r['valor_total'] for r in remessas_geradas)
+
+        return {
+            'remessas_geradas': remessas_geradas,
+            'erros': erros,
+            'total_boletos': total_boletos,
+            'total_valor': total_valor,
+        }

@@ -49,18 +49,47 @@ if database_url:
     cursor.execute("CREATE SCHEMA IF NOT EXISTS gestao_contrato")
     print('Schema gestao_contrato criado/verificado.')
 
-    # Verificar se auth_user existe no schema gestao_contrato
+    # Verificar se o banco tem tabelas da aplicacao (banco vazio = primeira instalacao)
+    cursor.execute("""
+        SELECT COUNT(*) FROM information_schema.tables
+        WHERE table_schema = 'gestao_contrato'
+        AND table_type = 'BASE TABLE'
+    """)
+    table_count = cursor.fetchone()[0]
+
+    if table_count == 0:
+        print('Schema vazio - tabelas serao criadas pelas migrations.')
+    else:
+        # Banco ja tem tabelas - verificar se auth_user existe
+        cursor.execute("""
+            SELECT EXISTS (
+                SELECT 1 FROM information_schema.tables
+                WHERE table_schema = 'gestao_contrato'
+                AND table_name = 'auth_user'
+            )
+        """)
+        auth_exists = cursor.fetchone()[0]
+        if auth_exists:
+            print(f'Schema gestao_contrato OK ({table_count} tabelas encontradas).')
+        else:
+            print(f'ATENCAO: {table_count} tabelas existem mas auth_user nao encontrado.')
+            print('Nao resetando migrations para preservar dados existentes.')
+            print('Execute python manage.py migrate manualmente se necessario.')
+
+    # Verificar django_session no schema gestao_contrato
+    # Se estiver ausente (pode ter sido criada em public antes da search_path ser configurada),
+    # forçar reaplicação da migration de sessions
     cursor.execute("""
         SELECT EXISTS (
             SELECT 1 FROM information_schema.tables
             WHERE table_schema = 'gestao_contrato'
-            AND table_name = 'auth_user'
+            AND table_name = 'django_session'
         )
     """)
-    auth_exists = cursor.fetchone()[0]
+    session_exists = cursor.fetchone()[0]
 
-    if not auth_exists:
-        # Verificar se django_migrations existe no schema gestao_contrato
+    if not session_exists:
+        print('ATENCAO: django_session nao existe em gestao_contrato.')
         cursor.execute("""
             SELECT EXISTS (
                 SELECT 1 FROM information_schema.tables
@@ -68,23 +97,28 @@ if database_url:
                 AND table_name = 'django_migrations'
             )
         """)
-        migrations_exists = cursor.fetchone()[0]
-
-        if migrations_exists:
-            print('ATENCAO: auth_user nao existe mas django_migrations tem registros.')
-            print('Limpando django_migrations no schema gestao_contrato...')
-            cursor.execute("DELETE FROM gestao_contrato.django_migrations")
-            print('Tabela limpa - migracoes serao reaplicadas.')
-        else:
-            print('Schema novo - tabelas serao criadas.')
+        migrations_exists2 = cursor.fetchone()[0]
+        if migrations_exists2:
+            cursor.execute("""
+                DELETE FROM gestao_contrato.django_migrations
+                WHERE app = 'sessions'
+            """)
+            print('Registro sessions removido de django_migrations - sera reaplicado.')
     else:
-        print('auth_user existe no schema gestao_contrato - OK.')
+        print('django_session existe em gestao_contrato - OK.')
 
     cursor.close()
     conn.close()
 else:
     print('DATABASE_URL nao definida - usando SQLite local')
 SCHEMAEOF
+
+# Garantir search_path via PGOPTIONS para todos os comandos manage.py seguintes.
+# Mais confiável que o sinal connection_created em ambientes com pgBouncer (Supabase),
+# pois aplica -c search_path no startup packet de cada nova conexão libpq.
+if [ -n "$DATABASE_URL" ]; then
+    export PGOPTIONS="${PGOPTIONS:+$PGOPTIONS }-c search_path=gestao_contrato"
+fi
 
 echo "==> Running database migrations..."
 python manage.py migrate --no-input
@@ -94,10 +128,11 @@ python manage.py shell << 'SQLEOF'
 from django.db import connection
 
 def add_column_if_not_exists(cursor, table, column, column_def):
-    """Adiciona coluna se não existir"""
+    """Adiciona coluna se não existir (verifica apenas no schema atual)"""
     cursor.execute(f"""
         SELECT 1 FROM information_schema.columns
-        WHERE table_name = '{table}' AND column_name = '{column}'
+        WHERE table_schema = current_schema()
+          AND table_name = '{table}' AND column_name = '{column}'
     """)
     if not cursor.fetchone():
         cursor.execute(f"ALTER TABLE {table} ADD COLUMN {column} {column_def}")
@@ -142,7 +177,7 @@ with connection.cursor() as cursor:
     for table in timestamp_tables:
         # Verificar se tabela existe
         cursor.execute(f"""
-            SELECT 1 FROM information_schema.tables WHERE table_name = '{table}'
+            SELECT 1 FROM information_schema.tables WHERE table_schema = current_schema() AND table_name = '{table}'
         """)
         if cursor.fetchone():
             # Adicionar colunas em português (usadas pelo Django)
@@ -210,10 +245,10 @@ with connection.cursor() as cursor:
     add_column_if_not_exists(cursor, 'core_imobiliaria', 'cidade', "VARCHAR(100) DEFAULT ''")
     add_column_if_not_exists(cursor, 'core_imobiliaria', 'estado', "VARCHAR(2) DEFAULT ''")
 
-    # Configurações de Boleto
-    add_column_if_not_exists(cursor, 'core_imobiliaria', 'tipo_valor_multa', "VARCHAR(10) DEFAULT 'percentual'")
+    # Configurações de Boleto — defaults MAIÚSCULOS para corresponder ao TipoValor do modelo
+    add_column_if_not_exists(cursor, 'core_imobiliaria', 'tipo_valor_multa', "VARCHAR(10) DEFAULT 'PERCENTUAL'")
     add_column_if_not_exists(cursor, 'core_imobiliaria', 'percentual_multa_padrao', "DECIMAL(10,2) DEFAULT 0")
-    add_column_if_not_exists(cursor, 'core_imobiliaria', 'tipo_valor_juros', "VARCHAR(10) DEFAULT 'percentual'")
+    add_column_if_not_exists(cursor, 'core_imobiliaria', 'tipo_valor_juros', "VARCHAR(10) DEFAULT 'PERCENTUAL'")
     add_column_if_not_exists(cursor, 'core_imobiliaria', 'percentual_juros_padrao', "DECIMAL(10,4) DEFAULT 0")
     add_column_if_not_exists(cursor, 'core_imobiliaria', 'dias_para_encargos_padrao', "INTEGER DEFAULT 0")
     add_column_if_not_exists(cursor, 'core_imobiliaria', 'boleto_sem_valor', "BOOLEAN DEFAULT FALSE")
@@ -221,13 +256,13 @@ with connection.cursor() as cursor:
     add_column_if_not_exists(cursor, 'core_imobiliaria', 'campo_desconto_abatimento_pdf', "BOOLEAN DEFAULT FALSE")
 
     # Descontos
-    add_column_if_not_exists(cursor, 'core_imobiliaria', 'tipo_valor_desconto', "VARCHAR(10) DEFAULT 'percentual'")
+    add_column_if_not_exists(cursor, 'core_imobiliaria', 'tipo_valor_desconto', "VARCHAR(10) DEFAULT 'PERCENTUAL'")
     add_column_if_not_exists(cursor, 'core_imobiliaria', 'percentual_desconto_padrao', "DECIMAL(10,2) DEFAULT 0")
     add_column_if_not_exists(cursor, 'core_imobiliaria', 'dias_para_desconto_padrao', "INTEGER DEFAULT 0")
-    add_column_if_not_exists(cursor, 'core_imobiliaria', 'tipo_valor_desconto2', "VARCHAR(10) DEFAULT 'percentual'")
+    add_column_if_not_exists(cursor, 'core_imobiliaria', 'tipo_valor_desconto2', "VARCHAR(10) DEFAULT 'PERCENTUAL'")
     add_column_if_not_exists(cursor, 'core_imobiliaria', 'desconto2_padrao', "DECIMAL(10,2) DEFAULT 0")
     add_column_if_not_exists(cursor, 'core_imobiliaria', 'dias_para_desconto2_padrao', "INTEGER DEFAULT 0")
-    add_column_if_not_exists(cursor, 'core_imobiliaria', 'tipo_valor_desconto3', "VARCHAR(10) DEFAULT 'percentual'")
+    add_column_if_not_exists(cursor, 'core_imobiliaria', 'tipo_valor_desconto3', "VARCHAR(10) DEFAULT 'PERCENTUAL'")
     add_column_if_not_exists(cursor, 'core_imobiliaria', 'desconto3_padrao', "DECIMAL(10,2) DEFAULT 0")
     add_column_if_not_exists(cursor, 'core_imobiliaria', 'dias_para_desconto3_padrao', "INTEGER DEFAULT 0")
 
@@ -235,6 +270,32 @@ with connection.cursor() as cursor:
     add_column_if_not_exists(cursor, 'core_imobiliaria', 'instrucao_padrao', "VARCHAR(255) DEFAULT ''")
     add_column_if_not_exists(cursor, 'core_imobiliaria', 'tipo_titulo', "VARCHAR(5) DEFAULT 'RC'")
     add_column_if_not_exists(cursor, 'core_imobiliaria', 'aceite', "BOOLEAN DEFAULT FALSE")
+    # G-10: Suporte a vendedor PF
+    add_column_if_not_exists(cursor, 'core_imobiliaria', 'tipo_pessoa', "VARCHAR(2) NOT NULL DEFAULT 'PJ'")
+    add_column_if_not_exists(cursor, 'core_imobiliaria', 'cpf', "VARCHAR(14) NULL")
+    cursor.execute("""
+        DO $$
+        BEGIN
+            IF EXISTS (
+                SELECT 1 FROM information_schema.columns
+                WHERE table_schema = current_schema()
+                  AND table_name = 'core_imobiliaria'
+                  AND column_name = 'cnpj'
+                  AND is_nullable = 'NO'
+            ) THEN
+                ALTER TABLE core_imobiliaria ALTER COLUMN cnpj DROP NOT NULL;
+            END IF;
+            IF EXISTS (
+                SELECT 1 FROM information_schema.columns
+                WHERE table_schema = current_schema()
+                  AND table_name = 'core_imobiliaria'
+                  AND column_name = 'razao_social'
+                  AND is_nullable = 'NO'
+            ) THEN
+                ALTER TABLE core_imobiliaria ALTER COLUMN razao_social DROP NOT NULL;
+            END IF;
+        END $$;
+    """)
 
     print("Checking core_imovel...")
     # Loteamento opcional
@@ -326,7 +387,8 @@ with connection.cursor() as cursor:
     print("Checking core_contabancaria...")
     cursor.execute("""
         SELECT 1 FROM information_schema.tables
-        WHERE table_name = 'core_contabancaria'
+        WHERE table_schema = current_schema()
+          AND table_name = 'core_contabancaria'
     """)
     if not cursor.fetchone():
         cursor.execute("""
@@ -365,7 +427,8 @@ with connection.cursor() as cursor:
     print("Checking core_acessousuario...")
     cursor.execute("""
         SELECT 1 FROM information_schema.tables
-        WHERE table_name = 'core_acessousuario'
+        WHERE table_schema = current_schema()
+          AND table_name = 'core_acessousuario'
     """)
     if not cursor.fetchone():
         cursor.execute("""
@@ -390,7 +453,8 @@ with connection.cursor() as cursor:
     print("Checking contratos_indicereajuste...")
     cursor.execute("""
         SELECT 1 FROM information_schema.tables
-        WHERE table_name = 'contratos_indicereajuste'
+        WHERE table_schema = current_schema()
+          AND table_name = 'contratos_indicereajuste'
     """)
     if not cursor.fetchone():
         cursor.execute("""
@@ -430,12 +494,18 @@ with connection.cursor() as cursor:
     add_column_if_not_exists(cursor, 'core_contabancaria', 'prazo_protesto', "INTEGER DEFAULT 0")
     add_column_if_not_exists(cursor, 'core_contabancaria', 'layout_cnab', "VARCHAR(10) DEFAULT 'CNAB_240'")
     add_column_if_not_exists(cursor, 'core_contabancaria', 'numero_remessa_cnab_atual', "INTEGER DEFAULT 0")
+    # Campos específicos por banco (BRCobranca)
+    add_column_if_not_exists(cursor, 'core_contabancaria', 'posto', "VARCHAR(2) DEFAULT ''")
+    add_column_if_not_exists(cursor, 'core_contabancaria', 'byte_idt', "VARCHAR(1) DEFAULT ''")
+    add_column_if_not_exists(cursor, 'core_contabancaria', 'emissao', "VARCHAR(1) DEFAULT ''")
+    add_column_if_not_exists(cursor, 'core_contabancaria', 'codigo_beneficiario', "VARCHAR(20) DEFAULT ''")
 
     # Adicionar campos de boleto na tabela financeiro_parcela
     print("Checking financeiro_parcela for boleto fields...")
     cursor.execute("""
         SELECT 1 FROM information_schema.tables
-        WHERE table_name = 'financeiro_parcela'
+        WHERE table_schema = current_schema()
+          AND table_name = 'financeiro_parcela'
     """)
     if cursor.fetchone():
         # Campos de identificação do boleto
@@ -488,7 +558,8 @@ with connection.cursor() as cursor:
     print("Checking notificacoes_templatenotificacao...")
     cursor.execute("""
         SELECT 1 FROM information_schema.tables
-        WHERE table_name = 'notificacoes_templatenotificacao'
+        WHERE table_schema = current_schema()
+          AND table_name = 'notificacoes_templatenotificacao'
     """)
     if cursor.fetchone():
         add_column_if_not_exists(cursor, 'notificacoes_templatenotificacao', 'codigo', "VARCHAR(30) DEFAULT 'CUSTOM'")
@@ -506,7 +577,8 @@ with connection.cursor() as cursor:
     print("Checking financeiro_arquivoremessa...")
     cursor.execute("""
         SELECT 1 FROM information_schema.tables
-        WHERE table_name = 'financeiro_arquivoremessa'
+        WHERE table_schema = current_schema()
+          AND table_name = 'financeiro_arquivoremessa'
     """)
     if not cursor.fetchone():
         cursor.execute("""
@@ -542,7 +614,8 @@ with connection.cursor() as cursor:
     print("Checking financeiro_itemremessa...")
     cursor.execute("""
         SELECT 1 FROM information_schema.tables
-        WHERE table_name = 'financeiro_itemremessa'
+        WHERE table_schema = current_schema()
+          AND table_name = 'financeiro_itemremessa'
     """)
     if not cursor.fetchone():
         cursor.execute("""
@@ -569,7 +642,8 @@ with connection.cursor() as cursor:
     print("Checking financeiro_arquivoretorno...")
     cursor.execute("""
         SELECT 1 FROM information_schema.tables
-        WHERE table_name = 'financeiro_arquivoretorno'
+        WHERE table_schema = current_schema()
+          AND table_name = 'financeiro_arquivoretorno'
     """)
     if not cursor.fetchone():
         cursor.execute("""
@@ -606,7 +680,8 @@ with connection.cursor() as cursor:
     print("Checking financeiro_itemretorno...")
     cursor.execute("""
         SELECT 1 FROM information_schema.tables
-        WHERE table_name = 'financeiro_itemretorno'
+        WHERE table_schema = current_schema()
+          AND table_name = 'financeiro_itemretorno'
     """)
     if not cursor.fetchone():
         cursor.execute("""
@@ -650,7 +725,8 @@ with connection.cursor() as cursor:
     print("Checking contratos_contrato for boleto config fields...")
     cursor.execute("""
         SELECT 1 FROM information_schema.tables
-        WHERE table_name = 'contratos_contrato'
+        WHERE table_schema = current_schema()
+          AND table_name = 'contratos_contrato'
     """)
     if cursor.fetchone():
         # Usar configurações da imobiliária ou personalizadas
@@ -690,9 +766,190 @@ with connection.cursor() as cursor:
             END $$;
         """)
         print("  + Contrato boleto config fields added/verified")
+
+        # =========================================================================
+        # CAMPOS HU-360 / G-11/G-12 — amortização, fallback, cláusulas, intermediárias
+        # Cobertos pelas migrations 0005/0007/0008, mas repetidos aqui como fallback
+        # =========================================================================
+        # Tabela Price / SAC (migration 0008)
+        add_column_if_not_exists(cursor, 'contratos_contrato', 'tipo_amortizacao', "VARCHAR(5) DEFAULT 'PRICE'")
+
+        # Índice fallback (migration 0005)
+        add_column_if_not_exists(cursor, 'contratos_contrato', 'tipo_correcao_fallback', "VARCHAR(10) DEFAULT ''")
+
+        # Cláusulas contratuais (migration 0005)
+        add_column_if_not_exists(cursor, 'contratos_contrato', 'percentual_fruicao', "DECIMAL(10,4) DEFAULT 0")
+        add_column_if_not_exists(cursor, 'contratos_contrato', 'percentual_multa_rescisao_penal', "DECIMAL(10,4) DEFAULT 0")
+        add_column_if_not_exists(cursor, 'contratos_contrato', 'percentual_multa_rescisao_adm', "DECIMAL(10,4) DEFAULT 0")
+        add_column_if_not_exists(cursor, 'contratos_contrato', 'percentual_cessao', "DECIMAL(10,4) DEFAULT 0")
+
+        # Parâmetros de intermediárias (migration 0007)
+        add_column_if_not_exists(cursor, 'contratos_contrato', 'intermediarias_reduzem_pmt', "BOOLEAN DEFAULT FALSE")
+        add_column_if_not_exists(cursor, 'contratos_contrato', 'intermediarias_reajustadas', "BOOLEAN DEFAULT TRUE")
+
+        print("  + Contrato HU-360/G-11/G-12 fields added/verified")
     else:
         print("  - contratos_contrato table not found (will be created by migrations)")
 
+    # =========================================================================
+    # TABELA contratos_tabelajuroscontrato — Juros Escalantes (Q-04)
+    # Criada pela migration 0005, repetida aqui como fallback
+    # =========================================================================
+    print("Checking contratos_tabelajuroscontrato...")
+    cursor.execute("""
+        SELECT 1 FROM information_schema.tables
+        WHERE table_schema = current_schema()
+          AND table_name = 'contratos_tabelajuroscontrato'
+    """)
+    if not cursor.fetchone():
+        cursor.execute("""
+            CREATE TABLE contratos_tabelajuroscontrato (
+                id SERIAL PRIMARY KEY,
+                contrato_id INTEGER NOT NULL REFERENCES contratos_contrato(id) ON DELETE CASCADE,
+                ciclo_inicio INTEGER NOT NULL,
+                ciclo_fim INTEGER NULL,
+                juros_mensal DECIMAL(10,4) NOT NULL DEFAULT 0,
+                observacoes VARCHAR(200) DEFAULT ''
+            )
+        """)
+        cursor.execute("""
+            DO $$
+            BEGIN
+                IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'contratos_t_contrat_56940a_idx') THEN
+                    CREATE INDEX contratos_t_contrat_56940a_idx ON contratos_tabelajuroscontrato(contrato_id, ciclo_inicio);
+                END IF;
+            END $$;
+        """)
+        print("  + Created table contratos_tabelajuroscontrato")
+    else:
+        print("  - contratos_tabelajuroscontrato already exists")
+
+    # =========================================================================
+    # TABELAS DE SISTEMA DJANGO — garantir que existem no schema correto
+    # Problema: se search_path mudou após o primeiro migrate, essas tabelas
+    # podem estar no schema 'public' mas não em 'gestao_contrato'.
+    # =========================================================================
+    print("Ensuring Django system tables exist in gestao_contrato schema...")
+
+    # django_session — necessária para qualquer login (incluindo admin)
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS django_session (
+            session_key  varchar(40)  NOT NULL PRIMARY KEY,
+            session_data text         NOT NULL,
+            expire_date  timestamptz  NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS django_session_de54fa62
+            ON django_session (expire_date);
+        CREATE INDEX IF NOT EXISTS django_session_a7c96b15
+            ON django_session (session_key varchar_pattern_ops);
+    """)
+    print("  + django_session OK")
+
+    # django_content_type — necessária para admin, permissions, log
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS django_content_type (
+            id         serial       NOT NULL PRIMARY KEY,
+            app_label  varchar(100) NOT NULL,
+            model      varchar(100) NOT NULL,
+            UNIQUE (app_label, model)
+        );
+    """)
+    print("  + django_content_type OK")
+
+    # auth_permission — necessária para admin
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS auth_permission (
+            id               serial       NOT NULL PRIMARY KEY,
+            content_type_id  integer      NOT NULL
+                REFERENCES django_content_type(id) ON DELETE CASCADE
+                DEFERRABLE INITIALLY DEFERRED,
+            codename         varchar(100) NOT NULL,
+            name             varchar(255) NOT NULL,
+            UNIQUE (content_type_id, codename)
+        );
+        CREATE INDEX IF NOT EXISTS auth_permission_content_type_id_codename
+            ON auth_permission (content_type_id, codename);
+    """)
+    print("  + auth_permission OK")
+
+    # auth_user_user_permissions M2M
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS auth_user_user_permissions (
+            id             bigserial NOT NULL PRIMARY KEY,
+            user_id        integer   NOT NULL
+                REFERENCES auth_user(id) ON DELETE CASCADE
+                DEFERRABLE INITIALLY DEFERRED,
+            permission_id  integer   NOT NULL
+                REFERENCES auth_permission(id) ON DELETE CASCADE
+                DEFERRABLE INITIALLY DEFERRED,
+            UNIQUE (user_id, permission_id)
+        );
+    """)
+    print("  + auth_user_user_permissions OK")
+
+    # auth_group
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS auth_group (
+            id    serial       NOT NULL PRIMARY KEY,
+            name  varchar(150) NOT NULL UNIQUE
+        );
+    """)
+    print("  + auth_group OK")
+
+    # auth_group_permissions M2M
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS auth_group_permissions (
+            id            bigserial NOT NULL PRIMARY KEY,
+            group_id      integer   NOT NULL
+                REFERENCES auth_group(id) ON DELETE CASCADE
+                DEFERRABLE INITIALLY DEFERRED,
+            permission_id integer   NOT NULL
+                REFERENCES auth_permission(id) ON DELETE CASCADE
+                DEFERRABLE INITIALLY DEFERRED,
+            UNIQUE (group_id, permission_id)
+        );
+    """)
+    print("  + auth_group_permissions OK")
+
+    # auth_user_groups M2M
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS auth_user_groups (
+            id       bigserial NOT NULL PRIMARY KEY,
+            user_id  integer   NOT NULL
+                REFERENCES auth_user(id) ON DELETE CASCADE
+                DEFERRABLE INITIALLY DEFERRED,
+            group_id integer   NOT NULL
+                REFERENCES auth_group(id) ON DELETE CASCADE
+                DEFERRABLE INITIALLY DEFERRED,
+            UNIQUE (user_id, group_id)
+        );
+    """)
+    print("  + auth_user_groups OK")
+
+    # django_admin_log — necessária para admin (log de ações)
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS django_admin_log (
+            id               serial       NOT NULL PRIMARY KEY,
+            action_time      timestamptz  NOT NULL,
+            object_id        text         NULL,
+            object_repr      varchar(200) NOT NULL,
+            action_flag      smallint     NOT NULL CHECK (action_flag >= 0),
+            change_message   text         NOT NULL,
+            content_type_id  integer      NULL
+                REFERENCES django_content_type(id) ON DELETE SET NULL
+                DEFERRABLE INITIALLY DEFERRED,
+            user_id          integer      NOT NULL
+                REFERENCES auth_user(id) ON DELETE CASCADE
+                DEFERRABLE INITIALLY DEFERRED
+        );
+        CREATE INDEX IF NOT EXISTS django_admin_log_content_type_id
+            ON django_admin_log (content_type_id);
+        CREATE INDEX IF NOT EXISTS django_admin_log_user_id
+            ON django_admin_log (user_id);
+    """)
+    print("  + django_admin_log OK")
+
+    print("Django system tables ensured.")
     print("All schema changes applied successfully!")
 SQLEOF
 
@@ -735,22 +992,5 @@ else:
     print('Superuser admin ja existe')
 EOF
 
-echo "==> Checking if test data needs to be generated..."
-python manage.py shell << 'TESTDATAEOF'
-from core.models import Contabilidade, Imobiliaria
-
-# Verificar se ja existe dados (primeira execucao)
-if not Contabilidade.objects.exists() and not Imobiliaria.objects.exists():
-    print('Banco vazio - gerando dados de teste na primeira execucao...')
-    # Importar e executar comando de dados de teste
-    from django.core.management import call_command
-    try:
-        call_command('gerar_dados_teste')
-        print('Dados de teste gerados com sucesso!')
-    except Exception as e:
-        print(f'Aviso: Erro ao gerar dados de teste: {e}')
-else:
-    print('Dados ja existem - pulando geracao de dados de teste')
-TESTDATAEOF
 
 echo "==> Build completed successfully!"
