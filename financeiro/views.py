@@ -13,6 +13,7 @@ from django.utils import timezone
 from django.db.models import Sum, Count, Q, F
 from django.views.generic import TemplateView
 from django.views.decorators.http import require_POST, require_GET
+from django.core.paginator import Paginator
 from django.views.decorators.clickjacking import xframe_options_sameorigin
 from datetime import timedelta
 from dateutil.relativedelta import relativedelta
@@ -316,7 +317,7 @@ def listar_parcelas(request):
     imobiliarias = Imobiliaria.objects.filter(ativo=True).order_by('nome')
     compradores = Comprador.objects.filter(ativo=True).order_by('nome')
 
-    # Filtro por Status
+    # Filtro por Status de Pagamento
     status = request.GET.get('status', '')
     if status == 'pagas':
         parcelas = parcelas.filter(pago=True)
@@ -326,6 +327,11 @@ def listar_parcelas(request):
         parcelas = parcelas.filter(pago=False, data_vencimento__lt=timezone.now().date())
     elif status == 'a_vencer':
         parcelas = parcelas.filter(pago=False, data_vencimento__gte=timezone.now().date())
+
+    # Filtro por Status do Boleto
+    status_boleto_filtro = request.GET.get('status_boleto', '')
+    if status_boleto_filtro:
+        parcelas = parcelas.filter(status_boleto=status_boleto_filtro)
 
     # Filtro por Imobiliária
     imobiliaria_id = request.GET.get('imobiliaria', '')
@@ -364,15 +370,28 @@ def listar_parcelas(request):
             Q(contrato__numero_contrato__icontains=busca)
         )
 
-    # Estatísticas
+    # Estatísticas (sobre o queryset filtrado completo)
     hoje = timezone.now().date()
     total_parcelas = parcelas.count()
     valor_total = parcelas.aggregate(total=Sum('valor_atual'))['total'] or Decimal('0.00')
     parcelas_vencidas_count = parcelas.filter(pago=False, data_vencimento__lt=hoje).count()
 
-    # 3.14 — Calcular juros/multa dinâmico para parcelas vencidas não pagas
-    parcelas_lista = list(parcelas[:500])
-    for p in parcelas_lista:
+    # Paginação
+    per_page = request.GET.get('per_page', '25')
+    try:
+        per_page = min(int(per_page), 100)
+    except (ValueError, TypeError):
+        per_page = 25
+
+    paginator = Paginator(parcelas, per_page)
+    page_number = request.GET.get('page', 1)
+    try:
+        page_obj = paginator.get_page(page_number)
+    except Exception:
+        page_obj = paginator.get_page(1)
+
+    # Calcular juros/multa dinâmico para parcelas vencidas não pagas na página atual
+    for p in page_obj:
         if not p.pago and p.data_vencimento < hoje:
             juros, multa = p.calcular_juros_multa(hoje)
             p.juros_dinamico = juros
@@ -384,11 +403,15 @@ def listar_parcelas(request):
             p.total_com_encargos = None
 
     context = {
-        'parcelas': parcelas_lista,
+        'parcelas': page_obj,
+        'page_obj': page_obj,
+        'paginator': paginator,
+        'is_paginated': paginator.num_pages > 1,
         'imobiliarias': imobiliarias,
         'compradores': compradores,
         # Valores atuais dos filtros
         'filtro_status': status,
+        'filtro_status_boleto': status_boleto_filtro,
         'filtro_imobiliaria': imobiliaria_id,
         'filtro_comprador': comprador_id,
         'filtro_contrato': contrato_param,
@@ -466,10 +489,22 @@ def registrar_pagamento(request, pk):
 @login_required
 def listar_reajustes(request):
     """Lista todos os reajustes"""
-    reajustes = Reajuste.objects.select_related('contrato').all()
+    reajustes = Reajuste.objects.select_related('contrato', 'usuario').order_by('-data_reajuste')
+
+    per_page = request.GET.get('per_page', '25')
+    try:
+        per_page = min(int(per_page), 100)
+    except (ValueError, TypeError):
+        per_page = 25
+
+    paginator = Paginator(reajustes, per_page)
+    page_obj = paginator.get_page(request.GET.get('page', 1))
 
     context = {
-        'reajustes': reajustes,
+        'reajustes': page_obj,
+        'page_obj': page_obj,
+        'paginator': paginator,
+        'is_paginated': paginator.num_pages > 1,
     }
     return render(request, 'financeiro/listar_reajustes.html', context)
 
@@ -553,8 +588,20 @@ def parcelas_mes_atual(request):
             parcelas_por_imobiliaria[imob_nome]['pendentes'] += 1
             parcelas_por_imobiliaria[imob_nome]['valor_pendente'] += parcela.valor_atual
 
+    per_page = request.GET.get('per_page', '25')
+    try:
+        per_page = min(int(per_page), 100)
+    except (ValueError, TypeError):
+        per_page = 25
+
+    paginator = Paginator(parcelas, per_page)
+    page_obj = paginator.get_page(request.GET.get('page', 1))
+
     context = {
-        'parcelas': parcelas,
+        'parcelas': page_obj,
+        'page_obj': page_obj,
+        'paginator': paginator,
+        'is_paginated': paginator.num_pages > 1,
         'imobiliarias': imobiliarias,
         'filtro_imobiliaria': imobiliaria_id,
         'filtro_status': status,
@@ -1098,8 +1145,20 @@ def listar_arquivos_remessa(request):
     contas = ContaBancaria.objects.filter(ativo=True).select_related('imobiliaria')
     imobiliarias = Imobiliaria.objects.filter(ativo=True).order_by('nome')
 
+    per_page = request.GET.get('per_page', '25')
+    try:
+        per_page = min(int(per_page), 100)
+    except (ValueError, TypeError):
+        per_page = 25
+
+    paginator = Paginator(arquivos, per_page)
+    page_obj = paginator.get_page(request.GET.get('page', 1))
+
     context = {
-        'arquivos': arquivos[:100],
+        'arquivos': page_obj,
+        'page_obj': page_obj,
+        'paginator': paginator,
+        'is_paginated': paginator.num_pages > 1,
         'contas_bancarias': contas,
         'imobiliarias': imobiliarias,
         'filtro_conta': conta_id,
@@ -1359,8 +1418,20 @@ def listar_arquivos_retorno(request):
 
     contas = ContaBancaria.objects.filter(ativo=True).select_related('imobiliaria')
 
+    per_page = request.GET.get('per_page', '25')
+    try:
+        per_page = min(int(per_page), 100)
+    except (ValueError, TypeError):
+        per_page = 25
+
+    paginator = Paginator(arquivos, per_page)
+    page_obj = paginator.get_page(request.GET.get('page', 1))
+
     context = {
-        'arquivos': arquivos[:100],
+        'arquivos': page_obj,
+        'page_obj': page_obj,
+        'paginator': paginator,
+        'is_paginated': paginator.num_pages > 1,
         'contas_bancarias': contas,
         'filtro_conta': conta_id,
         'filtro_status': status,
@@ -2388,10 +2459,20 @@ def reajustes_pendentes(request):
             'indice_tipo': contrato.tipo_correcao,
         })
 
-    # Agrupar por imobiliária
+    # Paginação sobre a lista plana de pendentes
+    per_page = request.GET.get('per_page', '25')
+    try:
+        per_page = min(int(per_page), 100)
+    except (ValueError, TypeError):
+        per_page = 25
+
+    paginator = Paginator(pendentes, per_page)
+    page_obj = paginator.get_page(request.GET.get('page', 1))
+
+    # Agrupar apenas os itens da página atual por imobiliária
     from itertools import groupby
     pendentes_agrupados = []
-    for imob_nome, grupo in groupby(pendentes, key=lambda x: x['contrato'].imobiliaria.nome):
+    for imob_nome, grupo in groupby(list(page_obj), key=lambda x: x['contrato'].imobiliaria.nome):
         pendentes_agrupados.append({
             'imobiliaria': imob_nome,
             'contratos': list(grupo),
@@ -2400,6 +2481,9 @@ def reajustes_pendentes(request):
     context = {
         'pendentes_agrupados': pendentes_agrupados,
         'total_pendentes': len(pendentes),
+        'page_obj': page_obj,
+        'paginator': paginator,
+        'is_paginated': paginator.num_pages > 1,
     }
     return render(request, 'financeiro/reajustes_pendentes.html', context)
 
@@ -4320,6 +4404,134 @@ def api_boletos_lote(request):
     except Exception as e:
         logger.exception(f"Erro em lote: {e}")
         return JsonResponse({'sucesso': False, 'erro': str(e)}, status=500)
+
+
+# =============================================================================
+# APIs REST - REVALIDAR BOLETOS
+# =============================================================================
+
+@login_required
+@require_POST
+def api_boletos_revalidar(request):
+    """
+    Revalida boletos com status GERADO, verificando se todos os dados
+    necessários ainda estão presentes e consistentes.
+
+    POST /api/boletos/revalidar/
+    Body: {"parcela_ids": [1,2,3]}  -- se vazio, revalida todos com status GERADO
+    """
+    import json
+
+    CAMPOS_OBRIG_BANCO = {
+        '001': ['convenio'],
+        '033': ['convenio'],
+        '104': ['convenio'],
+        '748': ['posto', 'byte_idt'],
+        '756': [],
+    }
+
+    NOMES_BANCO = {
+        '001': 'Banco do Brasil',
+        '033': 'Santander',
+        '104': 'Caixa Econômica',
+        '237': 'Bradesco',
+        '341': 'Itaú',
+        '748': 'Sicredi',
+        '756': 'Sicoob',
+    }
+
+    try:
+        data = json.loads(request.body) if request.body else {}
+    except json.JSONDecodeError:
+        return JsonResponse({'sucesso': False, 'erro': 'JSON inválido.'}, status=400)
+
+    parcela_ids = data.get('parcela_ids', [])
+
+    qs = Parcela.objects.filter(
+        status_boleto=StatusBoleto.GERADO
+    ).select_related(
+        'conta_bancaria',
+        'contrato',
+        'contrato__comprador',
+        'contrato__imovel',
+        'contrato__imovel__imobiliaria',
+    )
+
+    if parcela_ids:
+        qs = qs.filter(pk__in=parcela_ids)
+
+    resultados = []
+    validos = invalidos = 0
+
+    for parcela in qs:
+        erros_parcela = []
+
+        # 1. Nosso número
+        if not parcela.nosso_numero:
+            erros_parcela.append('Sem nosso_numero')
+
+        # 2. Conta bancária
+        conta = parcela.conta_bancaria
+        if not conta:
+            erros_parcela.append('Sem conta bancária associada')
+        else:
+            banco = conta.banco
+            nome_banco = NOMES_BANCO.get(banco, f'Banco {banco}')
+
+            # Campos obrigatórios por banco
+            campos_obrig = CAMPOS_OBRIG_BANCO.get(banco, [])
+            for campo in campos_obrig:
+                valor = getattr(conta, campo, '') or ''
+                if not valor.strip():
+                    erros_parcela.append(f'{nome_banco}: campo "{campo}" obrigatório ausente na conta bancária')
+
+            # Agência e conta corrente básicos
+            if not (conta.agencia or '').strip():
+                erros_parcela.append('Agência bancária ausente')
+            if not (conta.conta_corrente or '').strip():
+                erros_parcela.append('Conta corrente ausente')
+
+            # CNPJ da imobiliária
+            imobiliaria = getattr(conta, 'imobiliaria', None)
+            if imobiliaria and not (imobiliaria.cnpj or '').strip():
+                erros_parcela.append('CNPJ da imobiliária ausente')
+
+        # 3. Dados do comprador
+        comprador = parcela.contrato.comprador if parcela.contrato_id else None
+        if comprador:
+            doc = (comprador.cpf or '') or (getattr(comprador, 'cnpj', '') or '')
+            if not doc.strip():
+                erros_parcela.append('Comprador sem CPF/CNPJ')
+        else:
+            erros_parcela.append('Sem comprador no contrato')
+
+        if erros_parcela:
+            invalidos += 1
+            resultados.append({
+                'parcela_id': parcela.id,
+                'valido': False,
+                'erros': erros_parcela,
+                'contrato': parcela.contrato.numero_contrato if parcela.contrato_id else '-',
+                'nosso_numero': parcela.nosso_numero or '-',
+            })
+        else:
+            validos += 1
+            resultados.append({
+                'parcela_id': parcela.id,
+                'valido': True,
+                'erros': [],
+                'contrato': parcela.contrato.numero_contrato if parcela.contrato_id else '-',
+                'nosso_numero': parcela.nosso_numero,
+            })
+
+    total = validos + invalidos
+    return JsonResponse({
+        'sucesso': True,
+        'total': total,
+        'validos': validos,
+        'invalidos': invalidos,
+        'resultados': resultados,
+    })
 
 
 # =============================================================================
