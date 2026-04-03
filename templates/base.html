@@ -417,11 +417,25 @@
             hover: false
         });
 
+        // Ajustar largura das modals Bootstrap antes de inicializar Materialize
+        document.querySelectorAll('.modal').forEach(function(modal) {
+            var dialog = modal.querySelector('.modal-dialog');
+            if (dialog) {
+                if (dialog.classList.contains('modal-xl'))       modal.style.width = 'min(95vw, 1140px)';
+                else if (dialog.classList.contains('modal-lg'))  modal.style.width = 'min(95vw, 800px)';
+                else if (dialog.classList.contains('modal-sm'))  modal.style.width = 'min(90vw, 400px)';
+                else                                              modal.style.width = 'min(95vw, 600px)';
+            } else {
+                modal.style.width = 'min(90vw, 500px)';
+            }
+        });
+
         // Modals
         M.Modal.init(document.querySelectorAll('.modal'));
 
-        // Select fields (Materialize)
-        M.FormSelect.init(document.querySelectorAll('select'));
+        // Select fields: inicializar apenas selects que pedem estilo Materialize
+        // (excluindo form-select do Bootstrap que têm estilo nativo próprio)
+        M.FormSelect.init(document.querySelectorAll('select.materialize-select'));
 
         // Tooltips
         M.Tooltip.init(document.querySelectorAll('.tooltipped'));
