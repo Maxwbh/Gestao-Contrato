@@ -11,7 +11,7 @@
     <div class="row mb-3">
         <div class="col">
             <form method="get">
-                <select name="contabilidade" class="form-control" onchange="this.form.submit()">
+                <select name="contabilidade" class="form-select" onchange="this.form.submit()">
                     <option value="">Todas as Contabilidades</option>
                     {% for c in contabilidades %}
                     <option value="{{ c.pk }}" {% if contabilidade_selecionada.pk == c.pk %}selected{% endif %}>{{ c.nome }}</option>

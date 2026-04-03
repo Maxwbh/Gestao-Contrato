@@ -4,115 +4,191 @@
 
 {% block title %}Histórico de Reajustes{% endblock %}
 
+{% block extra_css %}
+<style>
+    .ag-theme-material .ag-root-wrapper { border-radius: 0; border: none; }
+    .ag-theme-material .ag-header { background-color: #343a40; }
+    .ag-theme-material .ag-header-cell-text { color: #fff; font-weight: 600; }
+    .ag-theme-material .ag-header-icon { color: #fff; }
+    .ag-theme-material .ag-row-even { background-color: #fff; }
+    .ag-theme-material .ag-row-odd  { background-color: #f8f9fa; }
+    .ag-theme-material .ag-row:hover { background-color: #e8f4fd !important; }
+</style>
+{% endblock %}
+
 {% block content %}
 <div class="container-fluid py-4">
 
-    <div class="d-flex justify-content-between align-items-center mb-4">
+    <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
         <div>
             <h2 class="mb-1"><i class="fas fa-history me-2"></i>Histórico de Reajustes</h2>
             <p class="text-muted mb-0">Todos os reajustes aplicados nos contratos</p>
         </div>
-        <a href="{% url 'financeiro:reajustes_pendentes' %}" class="btn btn-warning">
-            <i class="fas fa-exclamation-triangle me-1"></i>Ver Pendentes
-        </a>
+        <div class="d-flex align-items-center gap-2">
+            <i class="fas fa-search text-muted"></i>
+            <input type="text" id="gridQuickFilter" class="form-control form-control-sm"
+                   placeholder="Busca rápida..." style="width: 200px;"
+                   oninput="if(window.reajustesGridApi) window.reajustesGridApi.setGridOption('quickFilterText', this.value)">
+            <a href="{% url 'financeiro:reajustes_pendentes' %}" class="btn btn-warning">
+                <i class="fas fa-exclamation-triangle me-1"></i>Ver Pendentes
+            </a>
+        </div>
     </div>
 
-    {% if reajustes %}
     <div class="card">
-        <div class="table-responsive">
-            <table class="table table-hover mb-0">
-                <thead class="table-light">
-                    <tr>
-                        <th>Contrato</th>
-                        <th>Data</th>
-                        <th class="text-center">Ciclo</th>
-                        <th>Índice</th>
-                        <th class="text-center">Período Referência</th>
-                        <th class="text-end">% Bruto</th>
-                        <th class="text-end">Desconto</th>
-                        <th class="text-end text-success fw-bold">% Aplicado</th>
-                        <th class="text-center">Parcelas</th>
-                        <th>Por</th>
-                        <th class="text-center">Status</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for r in reajustes %}
-                    <tr>
-                        <td>
-                            <a href="{% url 'contratos:detalhe' r.contrato.pk %}">
-                                {{ r.contrato.numero_contrato }}
-                            </a>
-                        </td>
-                        <td>{{ r.data_reajuste|date:"d/m/Y" }}</td>
-                        <td class="text-center">
-                            <span class="badge bg-secondary">{{ r.ciclo }}</span>
-                        </td>
-                        <td><span class="badge bg-info text-dark">{{ r.indice_tipo }}</span></td>
-                        <td class="text-center small font-monospace">
-                            {% if r.periodo_referencia_inicio %}
-                                {{ r.periodo_referencia_inicio|date:"m/Y" }} → {{ r.periodo_referencia_fim|date:"m/Y" }}
-                            {% else %}
-                                <span class="text-muted">—</span>
-                            {% endif %}
-                        </td>
-                        <td class="text-end">
-                            {% if r.percentual_bruto %}
-                                {{ r.percentual_bruto|floatformat:2 }}%
-                            {% else %}
-                                <span class="text-muted">—</span>
-                            {% endif %}
-                        </td>
-                        <td class="text-end small text-danger">
-                            {% if r.desconto_percentual %}
-                                − {{ r.desconto_percentual|floatformat:2 }} p.p.
-                            {% endif %}
-                            {% if r.desconto_valor %}
-                                − R$ {{ r.desconto_valor|floatformat:2 }}/parc.
-                            {% endif %}
-                            {% if r.teto_aplicado and r.percentual_bruto and r.percentual < r.percentual_bruto %}
-                                <span class="text-warning" title="Teto de {{ r.teto_aplicado }}% aplicado">teto</span>
-                            {% endif %}
-                            {% if r.piso_aplicado and r.percentual_bruto and r.percentual > r.percentual_bruto %}
-                                <span class="text-info" title="Piso de {{ r.piso_aplicado }}% aplicado">piso</span>
-                            {% endif %}
-                            {% if not r.desconto_percentual and not r.desconto_valor and not r.teto_aplicado and not r.piso_aplicado %}
-                                <span class="text-muted">—</span>
-                            {% endif %}
-                        </td>
-                        <td class="text-end fw-bold {% if r.percentual < 0 %}text-danger{% else %}text-success{% endif %}">
-                            {% if r.percentual >= 0 %}+{% endif %}{{ r.percentual|floatformat:2 }}%
-                        </td>
-                        <td class="text-center small text-muted">
-                            {{ r.parcela_inicial }}–{{ r.parcela_final }}
-                        </td>
-                        <td class="small text-muted">
-                            {% if r.usuario %}{{ r.usuario.get_short_name|default:r.usuario.username }}{% else %}—{% endif %}
-                        </td>
-                        <td class="text-center">
-                            {% if r.aplicado %}
-                                <span class="badge bg-success">Aplicado</span>
-                                {% if r.aplicado_manual %}
-                                    <span class="badge bg-secondary">Manual</span>
-                                {% endif %}
-                            {% else %}
-                                <span class="badge bg-warning text-dark">Pendente</span>
-                            {% endif %}
-                        </td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
-        </div>
+        <div id="reajustesGrid" class="ag-theme-material" style="width: 100%;"></div>
         <div class="card-footer">
             {% include "includes/pagination_perpage.html" %}
         </div>
     </div>
-    {% else %}
-    <div class="alert alert-info">
-        <i class="fas fa-info-circle me-2"></i>Nenhum reajuste registrado ainda.
-    </div>
-    {% endif %}
 
 </div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+const reajustesRowData = [
+{% for r in reajustes %}
+{
+    pk: {{ r.pk }},
+    contrato: "{{ r.contrato.numero_contrato|escapejs }}",
+    contrato_pk: {{ r.contrato.pk }},
+    data_reajuste: "{{ r.data_reajuste|date:'d/m/Y' }}",
+    ciclo: {{ r.ciclo }},
+    indice_tipo: "{{ r.indice_tipo|escapejs }}",
+    periodo: "{% if r.periodo_referencia_inicio %}{{ r.periodo_referencia_inicio|date:'m/Y' }} → {{ r.periodo_referencia_fim|date:'m/Y' }}{% endif %}",
+    percentual_bruto: {% if r.percentual_bruto %}{{ r.percentual_bruto|floatformat:4 }}{% else %}null{% endif %},
+    percentual: {{ r.percentual|floatformat:4 }},
+    aplicado: {{ r.aplicado|yesno:"true,false" }},
+    aplicado_manual: {{ r.aplicado_manual|yesno:"true,false" }},
+    usuario: "{% if r.usuario %}{{ r.usuario.get_short_name|default:r.usuario.username|escapejs }}{% else %}—{% endif %}",
+    parcela_inicial: {{ r.parcela_inicial }},
+    parcela_final: {{ r.parcela_final }},
+},
+{% endfor %}
+];
+
+function indiceBadge(tipo) {
+    const colors = { IPCA: 'bg-primary', IGPM: 'bg-success', INCC: 'bg-info text-dark', INPC: 'bg-danger', TR: 'bg-dark', SELIC: 'bg-warning text-dark' };
+    return `<span class="badge ${colors[tipo] || 'bg-secondary'}">${tipo}</span>`;
+}
+
+function statusRenderer(params) {
+    const d = params.data;
+    if (d.aplicado) {
+        let s = '<span class="badge bg-success">Aplicado</span>';
+        if (d.aplicado_manual) s += ' <span class="badge bg-secondary">Manual</span>';
+        return s;
+    }
+    return '<span class="badge bg-warning text-dark">Pendente</span>';
+}
+
+const reajustesColumnDefs = [
+    {
+        headerName: 'Contrato',
+        field: 'contrato',
+        filter: 'agTextColumnFilter',
+        floatingFilter: true,
+        minWidth: 120,
+        cellRenderer: params => `<a href="/contratos/${params.data.contrato_pk}/">${params.value}</a>`,
+    },
+    {
+        headerName: 'Data',
+        field: 'data_reajuste',
+        filter: 'agTextColumnFilter',
+        floatingFilter: true,
+        minWidth: 105,
+        sort: 'desc',
+    },
+    {
+        headerName: 'Ciclo',
+        field: 'ciclo',
+        filter: 'agNumberColumnFilter',
+        floatingFilter: true,
+        minWidth: 80,
+        cellRenderer: params => `<span class="badge bg-secondary">${params.value}</span>`,
+    },
+    {
+        headerName: 'Índice',
+        field: 'indice_tipo',
+        filter: 'agTextColumnFilter',
+        floatingFilter: true,
+        minWidth: 90,
+        cellRenderer: params => indiceBadge(params.value),
+    },
+    {
+        headerName: 'Período Ref.',
+        field: 'periodo',
+        filter: 'agTextColumnFilter',
+        floatingFilter: true,
+        minWidth: 140,
+        cellRenderer: params => params.value ? `<small class="font-monospace">${params.value}</small>` : '<span class="text-muted">—</span>',
+    },
+    {
+        headerName: '% Bruto',
+        field: 'percentual_bruto',
+        filter: 'agNumberColumnFilter',
+        floatingFilter: true,
+        minWidth: 100,
+        type: 'numericColumn',
+        cellRenderer: params => params.value != null ? `${parseFloat(params.value).toFixed(2)}%` : '<span class="text-muted">—</span>',
+    },
+    {
+        headerName: '% Aplicado',
+        field: 'percentual',
+        filter: 'agNumberColumnFilter',
+        floatingFilter: true,
+        minWidth: 110,
+        type: 'numericColumn',
+        cellRenderer: params => {
+            const v = parseFloat(params.value);
+            const cls = v < 0 ? 'text-danger' : 'text-success';
+            const sign = v >= 0 ? '+' : '';
+            return `<strong class="${cls}">${sign}${v.toFixed(2)}%</strong>`;
+        },
+    },
+    {
+        headerName: 'Parcelas',
+        field: 'parcela_inicial',
+        filter: 'agNumberColumnFilter',
+        floatingFilter: true,
+        minWidth: 100,
+        cellRenderer: params => `<small>${params.value}–${params.data.parcela_final}</small>`,
+    },
+    {
+        headerName: 'Por',
+        field: 'usuario',
+        filter: 'agTextColumnFilter',
+        floatingFilter: true,
+        minWidth: 100,
+        cellRenderer: params => `<small class="text-muted">${params.value}</small>`,
+    },
+    {
+        headerName: 'Status',
+        field: 'aplicado',
+        filter: 'agTextColumnFilter',
+        floatingFilter: true,
+        minWidth: 120,
+        cellRenderer: statusRenderer,
+    },
+];
+
+document.addEventListener('DOMContentLoaded', function() {
+    window.reajustesGridApi = agGrid.createGrid(
+        document.getElementById('reajustesGrid'),
+        {
+            columnDefs: reajustesColumnDefs,
+            rowData: reajustesRowData,
+            domLayout: 'autoHeight',
+            defaultColDef: { sortable: true, resizable: true },
+            rowHeight: 42,
+            headerHeight: 48,
+            floatingFiltersHeight: 36,
+            suppressCellFocus: true,
+            enableCellTextSelection: true,
+            overlayNoRowsTemplate: '<div class="text-center py-4 text-muted"><i class="fas fa-inbox fa-2x mb-2 d-block"></i>Nenhum reajuste registrado ainda.</div>',
+        }
+    );
+});
+</script>
 {% endblock %}
