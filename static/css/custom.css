@@ -1398,6 +1398,231 @@ nav.app-navbar .sidenav-trigger {
 .card-opcional > .card-header::after { content: " (Opcional)"; font-size: 0.7rem; opacity: 0.85; font-weight: normal; }
 
 /* ========================================================================
+   BOOTSTRAP LIST-GROUP BRIDGE
+   ======================================================================== */
+.list-group {
+    display: flex;
+    flex-direction: column;
+    padding: 0;
+    margin: 0;
+    border-radius: 8px;
+    overflow: hidden;
+}
+.list-group-flush { border-radius: 0; }
+.list-group-item {
+    display: flex;
+    align-items: center;
+    padding: 0.75rem 1rem;
+    background: #fff;
+    border: none;
+    border-bottom: 1px solid #f0f0f0;
+    font-size: 0.92rem;
+    color: var(--dark-text);
+}
+.list-group-item:last-child { border-bottom: none; }
+.list-group-item:hover { background: #f8f9fa; }
+.list-group-flush .list-group-item { border-left: none; border-right: none; }
+
+/* ========================================================================
+   BOOTSTRAP TABLE EXTRA CLASSES
+   ======================================================================== */
+.table-light th, .table-light { background-color: #f8f9fa !important; color: var(--dark-text); }
+.table-light th { background-color: #f0f0f0 !important; color: var(--dark-text) !important; font-weight: 600; }
+.table-dark th, .table-dark { background-color: var(--primary-color) !important; color: #fff; }
+.table-success { background-color: #d4edda !important; }
+.table-danger  { background-color: #f8d7da !important; }
+.table-warning { background-color: #fff3cd !important; }
+
+/* ========================================================================
+   BOOTSTRAP D-GRID BRIDGE
+   ======================================================================== */
+.d-grid { display: grid !important; }
+.d-grid.gap-2 { gap: 0.5rem; }
+.d-grid.gap-3 { gap: 1rem; }
+
+/* ========================================================================
+   BOOTSTRAP OPACITY UTILITIES
+   ======================================================================== */
+.opacity-100 { opacity: 1 !important; }
+.opacity-75  { opacity: 0.75 !important; }
+.opacity-50  { opacity: 0.5 !important; }
+.opacity-25  { opacity: 0.25 !important; }
+.opacity-0   { opacity: 0 !important; }
+
+/* ========================================================================
+   BOOTSTRAP TEXT DECORATION UTILITIES
+   ======================================================================== */
+.text-decoration-none       { text-decoration: none !important; }
+.text-decoration-underline  { text-decoration: underline !important; }
+.text-decoration-line-through { text-decoration: line-through !important; }
+.text-nowrap   { white-space: nowrap !important; }
+.text-break    { word-break: break-word !important; overflow-wrap: break-word !important; }
+.text-uppercase { text-transform: uppercase !important; }
+.text-lowercase { text-transform: lowercase !important; }
+.text-capitalize { text-transform: capitalize !important; }
+.font-monospace { font-family: monospace !important; }
+.lh-1  { line-height: 1 !important; }
+.lh-sm { line-height: 1.25 !important; }
+.lh-base { line-height: 1.5 !important; }
+.lh-lg { line-height: 2 !important; }
+
+/* ========================================================================
+   BOOTSTRAP NAV / TABS BRIDGE
+   ======================================================================== */
+.nav {
+    display: flex;
+    flex-wrap: wrap;
+    padding: 0;
+    margin: 0;
+    list-style: none;
+    gap: 4px;
+}
+.nav-link {
+    display: block;
+    padding: 0.5rem 1rem;
+    color: var(--secondary-color);
+    text-decoration: none;
+    border-radius: 6px;
+    transition: all 0.2s;
+    font-weight: 500;
+}
+.nav-link:hover  { background: rgba(52,152,219,0.1); color: var(--secondary-color); }
+.nav-link.active { background: var(--secondary-color); color: #fff; }
+.nav-link.disabled { opacity: 0.5; pointer-events: none; }
+.nav-tabs {
+    border-bottom: 2px solid #dee2e6;
+    gap: 0;
+}
+.nav-tabs .nav-link { border-radius: 6px 6px 0 0; border: 1px solid transparent; color: var(--dark-text); }
+.nav-tabs .nav-link:hover { border-color: #dee2e6; background: #f8f9fa; }
+.nav-tabs .nav-link.active {
+    background: #fff;
+    border-color: #dee2e6 #dee2e6 #fff;
+    color: var(--primary-color);
+    font-weight: 600;
+    margin-bottom: -2px;
+}
+.nav-pills .nav-link { border-radius: 50rem; }
+.nav-pills .nav-link.active { background: var(--secondary-color); color: #fff; }
+.tab-content > .tab-pane { display: none; }
+.tab-content > .active   { display: block; }
+
+/* ========================================================================
+   BOOTSTRAP COLLAPSE / ACCORDION BRIDGE
+   ======================================================================== */
+.collapse:not(.show) { display: none; }
+.collapsing {
+    height: 0;
+    overflow: hidden;
+    transition: height 0.35s ease;
+}
+.accordion-item {
+    border: 1px solid #dee2e6;
+    border-radius: 8px;
+    margin-bottom: 4px;
+    overflow: hidden;
+}
+.accordion-header { margin: 0; }
+.accordion-button {
+    display: flex;
+    align-items: center;
+    width: 100%;
+    padding: 0.85rem 1.25rem;
+    background: #f8f9fa;
+    border: none;
+    cursor: pointer;
+    font-weight: 600;
+    color: var(--dark-text);
+    text-align: left;
+}
+.accordion-button:not(.collapsed) { background: var(--primary-color); color: #fff; }
+.accordion-body { padding: 1rem 1.25rem; }
+
+/* ========================================================================
+   BOOTSTRAP SPINNER BRIDGE
+   ======================================================================== */
+.spinner-border {
+    display: inline-block;
+    width: 2rem;
+    height: 2rem;
+    border: 0.25em solid currentColor;
+    border-right-color: transparent;
+    border-radius: 50%;
+    animation: spin 0.75s linear infinite;
+}
+.spinner-border-sm { width: 1rem; height: 1rem; border-width: 0.15em; }
+.spinner-grow {
+    display: inline-block;
+    width: 2rem;
+    height: 2rem;
+    background: currentColor;
+    border-radius: 50%;
+    animation: grow 0.75s linear infinite;
+    opacity: 0;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+@keyframes grow { 0% { transform: scale(0); opacity: 0; } 50% { opacity: 1; } 100% { transform: scale(1); opacity: 0; } }
+
+/* ========================================================================
+   BOOTSTRAP TOOLTIP / POPOVER BRIDGE (basic)
+   ======================================================================== */
+[data-bs-toggle="tooltip"] { cursor: help; }
+
+/* ========================================================================
+   BOOTSTRAP CLOSE BUTTON
+   ======================================================================== */
+.btn-close {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.5rem;
+    height: 1.5rem;
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    opacity: 0.6;
+    font-size: 1.1rem;
+    line-height: 1;
+    padding: 0;
+    color: currentColor;
+}
+.btn-close::before { content: '×'; font-size: 1.4rem; line-height: 1; }
+.btn-close:hover   { opacity: 1; }
+.btn-close-white   { color: #fff; filter: brightness(2); }
+
+/* ========================================================================
+   BOOTSTRAP CONTAINER QUERY / py-4 container-fluid FIX
+   ======================================================================== */
+.container-fluid.py-4 { padding-top: 1.5rem; padding-bottom: 1.5rem; }
+
+/* ========================================================================
+   STATS CARD
+   ======================================================================== */
+.stats-card {
+    background: linear-gradient(135deg, var(--secondary-color), #2980b9);
+    color: white;
+    padding: 2rem;
+    border-radius: 12px;
+    margin-bottom: 1.5rem;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    transition: all 0.3s ease;
+}
+.stats-card:hover { transform: translateY(-4px); box-shadow: 0 8px 20px rgba(0,0,0,0.2); }
+.stats-card h3    { font-size: 3rem; font-weight: 700; margin-bottom: 0.5rem; }
+.stats-card p     { margin: 0; opacity: 0.95; font-size: 1.1rem; }
+
+/* ========================================================================
+   SEARCH BAR
+   ======================================================================== */
+.search-bar {
+    background: white;
+    padding: 1.25rem;
+    border-radius: 12px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+    margin-bottom: 1.5rem;
+}
+
+/* ========================================================================
    RESPONSIVIDADE GERAL
    ======================================================================== */
 @media (max-width: 768px) {
