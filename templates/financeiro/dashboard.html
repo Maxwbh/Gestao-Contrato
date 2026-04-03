@@ -389,11 +389,35 @@ document.addEventListener('DOMContentLoaded', function() {
     const urlParams = new URLSearchParams(window.location.search);
     const imobiliariaId = urlParams.get('imobiliaria') || '';
 
+    const apiUrl = `{% url 'financeiro:api_dashboard_dados' %}?imobiliaria=${imobiliariaId}`;
+    console.log('[Dashboard] Buscando dados em:', apiUrl);
+
+    function mostrarErroDashboard(msg) {
+        const container = document.querySelector('.container-fluid');
+        if (!container) return;
+        const alerta = document.createElement('div');
+        alerta.className = 'alert alert-danger alert-dismissible fade show mt-3';
+        alerta.innerHTML = `<strong><i class="fas fa-exclamation-triangle me-1"></i>Erro ao carregar gráficos:</strong> ${msg}
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>`;
+        container.insertBefore(alerta, container.firstChild);
+    }
+
     // Carregar dados da API
-    fetch(`{% url 'financeiro:api_dashboard_dados' %}?imobiliaria=${imobiliariaId}`)
-        .then(response => response.json())
+    fetch(apiUrl)
+        .then(response => {
+            console.log('[Dashboard] Status HTTP:', response.status, response.url);
+            if (!response.ok) {
+                return response.text().then(text => {
+                    console.error('[Dashboard] Corpo do erro (primeiros 500 chars):', text.substring(0, 500));
+                    throw new Error(`HTTP ${response.status} — ${response.statusText}`);
+                });
+            }
+            return response.json();
+        })
         .then(data => {
+            console.log('[Dashboard] Dados recebidos:', JSON.stringify(data).substring(0, 300));
             // Grafico de Status das Parcelas (Pizza)
+            try {
             new Chart(document.getElementById('chartStatusParcelas'), {
                 type: 'doughnut',
                 data: {
@@ -415,8 +439,10 @@ document.addEventListener('DOMContentLoaded', function() {
                     }
                 }
             });
+            } catch(e) { console.error('[Dashboard] Erro chartStatusParcelas:', e); }
 
             // Grafico de Status dos Contratos (Pizza)
+            try {
             new Chart(document.getElementById('chartStatusContratos'), {
                 type: 'doughnut',
                 data: {
@@ -438,8 +464,10 @@ document.addEventListener('DOMContentLoaded', function() {
                     }
                 }
             });
+            } catch(e) { console.error('[Dashboard] Erro chartStatusContratos:', e); }
 
             // Grafico de Recebimentos Mensais (Barras)
+            try {
             new Chart(document.getElementById('chartRecebimentos'), {
                 type: 'bar',
                 data: {
@@ -485,8 +513,10 @@ document.addEventListener('DOMContentLoaded', function() {
                     }
                 }
             });
+            } catch(e) { console.error('[Dashboard] Erro chartRecebimentos:', e); }
 
             // Grafico de Inadimplencia (Linha)
+            try {
             new Chart(document.getElementById('chartInadimplencia'), {
                 type: 'line',
                 data: {
@@ -531,22 +561,31 @@ document.addEventListener('DOMContentLoaded', function() {
                     }
                 }
             });
+            } catch(e) { console.error('[Dashboard] Erro chartInadimplencia:', e); }
+
             // 3.6 Tabela vencimentos próximos 3 meses
-            const tbody = document.getElementById('tabelaVencimentosBody');
-            if (data.vencimentos_proximos && data.vencimentos_proximos.length) {
-                tbody.innerHTML = data.vencimentos_proximos.map(v => `
-                    <tr>
-                        <td><strong>${v.mes}</strong></td>
-                        <td class="text-center"><span class="badge bg-secondary">${v.quantidade}</span></td>
-                        <td class="text-end text-primary fw-bold">R$ ${v.valor_total.toLocaleString('pt-BR', {minimumFractionDigits: 2})}</td>
-                    </tr>
-                `).join('');
-            } else {
-                tbody.innerHTML = '<tr><td colspan="3" class="text-center text-muted">Nenhuma parcela prevista.</td></tr>';
-            }
+            try {
+                const tbody = document.getElementById('tabelaVencimentosBody');
+                if (data.vencimentos_proximos && data.vencimentos_proximos.length) {
+                    tbody.innerHTML = data.vencimentos_proximos.map(v => `
+                        <tr>
+                            <td><strong>${v.mes}</strong></td>
+                            <td class="text-center"><span class="badge bg-secondary">${v.quantidade}</span></td>
+                            <td class="text-end text-primary fw-bold">R$ ${v.valor_total.toLocaleString('pt-BR', {minimumFractionDigits: 2})}</td>
+                        </tr>
+                    `).join('');
+                } else {
+                    tbody.innerHTML = '<tr><td colspan="3" class="text-center text-muted">Nenhuma parcela prevista.</td></tr>';
+                }
+            } catch(e) { console.error('[Dashboard] Erro tabela vencimentos:', e); }
+
+            console.log('[Dashboard] Inicialização concluída com sucesso.');
         })
         .catch(error => {
-            console.error('Erro ao carregar dados do dashboard:', error);
+            console.error('[Dashboard] Falha na requisição à API:', error.message || error);
+            mostrarErroDashboard(error.message || 'Verifique o console para detalhes.');
+            const tbody = document.getElementById('tabelaVencimentosBody');
+            if (tbody) tbody.innerHTML = '<tr><td colspan="3" class="text-center text-danger">Erro ao carregar dados da API.</td></tr>';
         });
 });
 </script>
