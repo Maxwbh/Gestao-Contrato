@@ -140,6 +140,11 @@ def health_check(request):
     return JsonResponse(status, status=http_status)
 
 
+def roadmap(request):
+    """Página de Roadmap do sistema"""
+    return render(request, 'core/roadmap.html')
+
+
 def index(request):
     """Página inicial do sistema"""
     from django.contrib.auth import get_user_model
