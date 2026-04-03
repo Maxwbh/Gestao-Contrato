@@ -9,11 +9,19 @@
     .badge-pendente { background-color: #ffc107; color: #212529; }
     .badge-vencida { background-color: #dc3545; }
     .badge-boleto-gerado { background-color: #0d6efd; }
-    .table-parcelas th { white-space: nowrap; }
     .btn-filter { margin-right: 5px; margin-bottom: 5px; }
     .btn-filter.active { box-shadow: 0 0 0 0.2rem rgba(0,123,255,.5); }
     #revalidar-resultado .invalido { color: #dc3545; }
     #revalidar-resultado .valido { color: #28a745; }
+    /* AG Grid overrides */
+    .ag-theme-material .ag-root-wrapper { border-radius: 0; border: none; }
+    .ag-theme-material .ag-header { background-color: #343a40; }
+    .ag-theme-material .ag-header-cell-text { color: #fff; font-weight: 600; }
+    .ag-theme-material .ag-header-icon { color: #fff; }
+    .ag-theme-material .ag-row-even { background-color: #fff; }
+    .ag-theme-material .ag-row-odd  { background-color: #f8f9fa; }
+    .ag-theme-material .ag-row:hover { background-color: #e8f4fd !important; }
+    .ag-grid-actions .btn { padding: 1px 6px; font-size: 0.75rem; margin: 1px; }
 </style>
 {% endblock %}
 
@@ -101,7 +109,7 @@
 
     <!-- Tabela de Parcelas -->
     <div class="card">
-        <div class="card-header d-flex justify-content-between align-items-center">
+        <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
             <div>
                 <strong>Lista de Parcelas</strong>
                 <span class="badge bg-secondary ms-2">{{ total_parcelas }} registro(s)</span>
@@ -109,126 +117,16 @@
                 <span class="badge bg-primary ms-1">Boleto: {{ filtro_status_boleto }}</span>
                 {% endif %}
             </div>
+            <div class="d-flex align-items-center gap-2">
+                <i class="fas fa-search text-muted"></i>
+                <input type="text" id="gridQuickFilter" class="form-control form-control-sm"
+                       placeholder="Busca rápida na página..." style="width: 220px;"
+                       oninput="if(window.parcelasGridApi) window.parcelasGridApi.setGridOption('quickFilterText', this.value)">
+            </div>
         </div>
         <div class="card-body p-0">
-            <div class="table-responsive">
-                <table class="table table-striped table-hover table-parcelas mb-0">
-                    <thead class="table-dark">
-                        <tr>
-                            <th>Contrato</th>
-                            <th>Comprador</th>
-                            <th>Parcela</th>
-                            <th>Vencimento</th>
-                            <th class="text-end">Valor Original</th>
-                            <th class="text-end">Valor Atual</th>
-                            <th class="text-end">Juros / Multa</th>
-                            <th class="text-end">Total c/ Encargos</th>
-                            <th class="text-center">Status</th>
-                            <th class="text-center">Boleto</th>
-                            <th>Data Pgto</th>
-                            <th class="text-center">Ações</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% for parcela in parcelas %}
-                        <tr data-parcela-id="{{ parcela.pk }}">
-                            <td>{{ parcela.contrato.numero_contrato }}</td>
-                            <td>{{ parcela.contrato.comprador.nome|truncatechars:25 }}</td>
-                            <td>{{ parcela.numero_parcela }}/{{ parcela.contrato.numero_parcelas }}</td>
-                            <td>{{ parcela.data_vencimento|date:"d/m/Y" }}</td>
-                            <td class="text-end">R$ {{ parcela.valor_original|floatformat:2 }}</td>
-                            <td class="text-end">R$ {{ parcela.valor_atual|floatformat:2 }}</td>
-                            <td class="text-end">
-                                {% if parcela.juros_dinamico is not None %}
-                                    <span class="text-danger">
-                                        R$ {{ parcela.juros_dinamico|floatformat:2 }} /
-                                        R$ {{ parcela.multa_dinamico|floatformat:2 }}
-                                    </span>
-                                {% elif parcela.valor_juros or parcela.valor_multa %}
-                                    R$ {{ parcela.valor_juros|floatformat:2|default:"0.00" }} /
-                                    R$ {{ parcela.valor_multa|floatformat:2|default:"0.00" }}
-                                {% else %}
-                                    -
-                                {% endif %}
-                            </td>
-                            <td class="text-end">
-                                {% if parcela.total_com_encargos %}
-                                    <strong class="text-danger">R$ {{ parcela.total_com_encargos|floatformat:2 }}</strong>
-                                {% else %}
-                                    -
-                                {% endif %}
-                            </td>
-                            <td class="text-center">
-                                {% if parcela.pago %}
-                                    <span class="badge badge-pago">Pago</span>
-                                {% elif parcela.esta_vencida %}
-                                    <span class="badge badge-vencida">Vencida</span>
-                                {% else %}
-                                    <span class="badge badge-pendente">Pendente</span>
-                                {% endif %}
-                            </td>
-                            <td class="text-center">
-                                {% if parcela.status_boleto == 'GERADO' %}
-                                    <span class="badge badge-boleto-gerado">Gerado</span>
-                                {% elif parcela.status_boleto == 'REGISTRADO' %}
-                                    <span class="badge bg-info">Registrado</span>
-                                {% elif parcela.status_boleto == 'PAGO' %}
-                                    <span class="badge bg-success">Pago</span>
-                                {% elif parcela.status_boleto == 'CANCELADO' %}
-                                    <span class="badge bg-dark">Cancelado</span>
-                                {% elif parcela.status_boleto == 'VENCIDO' %}
-                                    <span class="badge bg-warning text-dark">Vencido</span>
-                                {% else %}
-                                    <span class="badge bg-light text-muted">—</span>
-                                {% endif %}
-                            </td>
-                            <td>
-                                {% if parcela.data_pagamento %}
-                                    {{ parcela.data_pagamento|date:"d/m/Y" }}
-                                {% else %}
-                                    -
-                                {% endif %}
-                            </td>
-                            <td class="text-center" style="white-space:nowrap;">
-                                <!-- Ver detalhes -->
-                                <a href="{% url 'financeiro:detalhe_parcela' parcela.pk %}"
-                                   class="btn btn-sm btn-outline-secondary" title="Ver detalhes">
-                                    <i class="fas fa-eye"></i>
-                                </a>
-                                <!-- Visualizar Contrato -->
-                                <a href="{% url 'contratos:detalhe' parcela.contrato.pk %}"
-                                   class="btn btn-sm btn-outline-info" title="Visualizar contrato">
-                                    <i class="fas fa-file-contract"></i>
-                                </a>
-                                {% if not parcela.pago %}
-                                <!-- Gerar Boleto -->
-                                <button type="button"
-                                        class="btn btn-sm btn-outline-primary"
-                                        title="Gerar boleto"
-                                        onclick="abrirModalBoleto({{ parcela.pk }}, '{{ parcela.contrato.numero_contrato }}', {{ parcela.numero_parcela }})">
-                                    <i class="fas fa-barcode"></i>
-                                </button>
-                                <!-- Pagar -->
-                                <button type="button"
-                                        class="btn btn-sm btn-outline-success"
-                                        title="Registrar pagamento"
-                                        onclick="abrirModalPagar({{ parcela.pk }}, '{{ parcela.contrato.numero_contrato }}', {{ parcela.numero_parcela }}, {{ parcela.valor_total|default:parcela.valor_atual }}, {{ parcela.valor_juros|default:'0' }}, {{ parcela.valor_multa|default:'0' }})">
-                                    <i class="fas fa-dollar-sign"></i>
-                                </button>
-                                {% endif %}
-                            </td>
-                        </tr>
-                        {% empty %}
-                        <tr>
-                            <td colspan="12" class="text-center py-4 text-muted">
-                                <i class="fas fa-inbox fa-3x mb-3 d-block"></i>
-                                Nenhuma parcela encontrada.
-                            </td>
-                        </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
-            </div>
+            <!-- AG Grid -->
+            <div id="parcelasGrid" class="ag-theme-material" style="width: 100%;"></div>
         </div>
         <div class="card-footer">
             {% include "includes/pagination_perpage.html" %}
@@ -337,6 +235,172 @@
 const CSRF_TOKEN = '{{ csrf_token }}';
 let parcelaAtualId = null;
 
+// ===== DADOS DA PÁGINA ATUAL =====
+const parcelasRowData = [
+{% for parcela in parcelas %}
+{
+    pk: {{ parcela.pk }},
+    contrato: "{{ parcela.contrato.numero_contrato|escapejs }}",
+    contrato_pk: {{ parcela.contrato.pk }},
+    comprador: "{{ parcela.contrato.comprador.nome|escapejs }}",
+    numero_parcela: {{ parcela.numero_parcela }},
+    total_parcelas: {{ parcela.contrato.numero_parcelas }},
+    vencimento: "{{ parcela.data_vencimento|date:'Y-m-d' }}",
+    vencimento_fmt: "{{ parcela.data_vencimento|date:'d/m/Y' }}",
+    valor_original: {{ parcela.valor_original|default:0 }},
+    valor_atual: {{ parcela.valor_atual|default:0 }},
+    valor_total: {{ parcela.valor_total|default:parcela.valor_atual|default:0 }},
+    pago: {{ parcela.pago|yesno:"true,false" }},
+    esta_vencida: {{ parcela.esta_vencida|yesno:"true,false" }},
+    status_boleto: "{{ parcela.status_boleto|default:'' }}",
+    data_pagamento: "{{ parcela.data_pagamento|date:'d/m/Y'|default:'' }}",
+    juros: {{ parcela.juros_dinamico|default:parcela.valor_juros|default:0 }},
+    multa: {{ parcela.multa_dinamico|default:parcela.valor_multa|default:0 }},
+},
+{% endfor %}
+];
+
+// ===== AG GRID =====
+function formatBRL(value) {
+    if (value == null || value === '') return '—';
+    return 'R$ ' + parseFloat(value).toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+}
+
+function statusRenderer(params) {
+    const data = params.data;
+    if (data.pago) return '<span class="badge badge-pago">Pago</span>';
+    if (data.esta_vencida) return '<span class="badge badge-vencida">Vencida</span>';
+    return '<span class="badge badge-pendente">Pendente</span>';
+}
+
+function boletoRenderer(params) {
+    const s = params.value;
+    if (s === 'GERADO')     return '<span class="badge badge-boleto-gerado">Gerado</span>';
+    if (s === 'REGISTRADO') return '<span class="badge bg-info">Registrado</span>';
+    if (s === 'PAGO')       return '<span class="badge bg-success">Pago</span>';
+    if (s === 'CANCELADO')  return '<span class="badge bg-dark">Cancelado</span>';
+    if (s === 'VENCIDO')    return '<span class="badge bg-warning text-dark">Vencido</span>';
+    return '<span class="badge bg-light text-muted">—</span>';
+}
+
+function acoesRenderer(params) {
+    const d = params.data;
+    let html = '<div class="ag-grid-actions">';
+    html += `<a href="/financeiro/parcelas/${d.pk}/" class="btn btn-sm btn-outline-secondary" title="Ver detalhes"><i class="fas fa-eye"></i></a>`;
+    html += `<a href="/contratos/${d.contrato_pk}/" class="btn btn-sm btn-outline-info" title="Ver contrato"><i class="fas fa-file-contract"></i></a>`;
+    if (!d.pago) {
+        html += `<button class="btn btn-sm btn-outline-primary" title="Gerar boleto" onclick="abrirModalBoleto(${d.pk}, '${d.contrato.replace(/'/g,"\\'")}', ${d.numero_parcela})"><i class="fas fa-barcode"></i></button>`;
+        html += `<button class="btn btn-sm btn-outline-success" title="Registrar pagamento" onclick="abrirModalPagar(${d.pk}, '${d.contrato.replace(/'/g,"\\'")}', ${d.numero_parcela}, ${d.valor_total}, ${d.juros}, ${d.multa})"><i class="fas fa-dollar-sign"></i></button>`;
+    }
+    html += '</div>';
+    return html;
+}
+
+const parcelasColumnDefs = [
+    {
+        headerName: 'Contrato',
+        field: 'contrato',
+        filter: 'agTextColumnFilter',
+        floatingFilter: true,
+        minWidth: 120,
+        cellRenderer: params => `<strong>${params.value}</strong>`,
+    },
+    {
+        headerName: 'Comprador',
+        field: 'comprador',
+        filter: 'agTextColumnFilter',
+        floatingFilter: true,
+        minWidth: 160,
+    },
+    {
+        headerName: 'Parcela',
+        field: 'numero_parcela',
+        filter: 'agNumberColumnFilter',
+        floatingFilter: true,
+        minWidth: 90,
+        cellRenderer: params => `${params.value}/${params.data.total_parcelas}`,
+    },
+    {
+        headerName: 'Vencimento',
+        field: 'vencimento',
+        filter: 'agDateColumnFilter',
+        floatingFilter: true,
+        minWidth: 120,
+        cellRenderer: params => params.data.vencimento_fmt,
+        sort: 'desc',
+    },
+    {
+        headerName: 'Valor Original',
+        field: 'valor_original',
+        filter: 'agNumberColumnFilter',
+        floatingFilter: true,
+        minWidth: 130,
+        type: 'numericColumn',
+        cellRenderer: params => formatBRL(params.value),
+    },
+    {
+        headerName: 'Valor Atual',
+        field: 'valor_atual',
+        filter: 'agNumberColumnFilter',
+        floatingFilter: true,
+        minWidth: 120,
+        type: 'numericColumn',
+        cellRenderer: params => formatBRL(params.value),
+    },
+    {
+        headerName: 'Status',
+        field: 'pago',
+        filter: 'agTextColumnFilter',
+        floatingFilter: true,
+        minWidth: 110,
+        cellRenderer: statusRenderer,
+    },
+    {
+        headerName: 'Boleto',
+        field: 'status_boleto',
+        filter: 'agTextColumnFilter',
+        floatingFilter: true,
+        minWidth: 110,
+        cellRenderer: boletoRenderer,
+    },
+    {
+        headerName: 'Data Pgto',
+        field: 'data_pagamento',
+        filter: 'agTextColumnFilter',
+        floatingFilter: true,
+        minWidth: 110,
+    },
+    {
+        headerName: 'Ações',
+        field: 'pk',
+        sortable: false,
+        filter: false,
+        minWidth: 155,
+        cellRenderer: acoesRenderer,
+    },
+];
+
+document.addEventListener('DOMContentLoaded', function() {
+    window.parcelasGridApi = agGrid.createGrid(
+        document.getElementById('parcelasGrid'),
+        {
+            columnDefs: parcelasColumnDefs,
+            rowData: parcelasRowData,
+            domLayout: 'autoHeight',
+            defaultColDef: {
+                sortable: true,
+                resizable: true,
+                suppressMovable: false,
+            },
+            rowHeight: 42,
+            headerHeight: 48,
+            floatingFiltersHeight: 36,
+            suppressCellFocus: true,
+            enableCellTextSelection: true,
+        }
+    );
+});
+
 // ===== GERAR BOLETO =====
 function abrirModalBoleto(parcelaId, contrato, numParcela) {
     parcelaAtualId = parcelaId;
@@ -376,12 +440,6 @@ function confirmarGerarBoleto() {
                 (data.nosso_numero ? '<br><small>Nosso número: <strong>' + data.nosso_numero + '</strong></small>' : '');
             document.getElementById('modalBoletoForm').classList.add('d-none');
             btn.classList.add('d-none');
-            // Atualiza badge na linha
-            const row = document.querySelector('tr[data-parcela-id="' + parcelaAtualId + '"]');
-            if (row) {
-                const cell = row.querySelectorAll('td')[9];
-                if (cell) cell.innerHTML = '<span class="badge badge-boleto-gerado">Gerado</span>';
-            }
         } else {
             res.className = 'alert alert-danger';
             res.innerHTML = '<i class="fas fa-exclamation-triangle me-1"></i> ' + (data.erro || 'Erro ao gerar boleto.');
@@ -402,7 +460,6 @@ function abrirModalPagar(parcelaId, contrato, numParcela, valorTotal, valorJuros
     parcelaAtualId = parcelaId;
     document.getElementById('modalPagarInfo').textContent =
         'Contrato: ' + contrato + ' — Parcela ' + numParcela + ' — Total: R$ ' + parseFloat(valorTotal).toFixed(2);
-    // Data de hoje
     const hoje = new Date().toISOString().split('T')[0];
     document.getElementById('pagarData').value = hoje;
     document.getElementById('pagarValor').value = parseFloat(valorTotal).toFixed(2);
@@ -442,7 +499,6 @@ function confirmarPagar() {
     .then(r => r.json())
     .then(resp => {
         if (resp.sucesso) {
-            // Fecha modal e recarrega página
             bootstrap.Modal.getInstance(document.getElementById('modalPagar')).hide();
             window.location.reload();
         } else {
@@ -469,9 +525,8 @@ function revalidarBoletos() {
     btn.disabled = true;
     btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i> Validando...';
 
-    const parcela_ids = Array.from(
-        document.querySelectorAll('tr[data-parcela-id]')
-    ).map(tr => parseInt(tr.dataset.parcelaId));
+    // Obter IDs visíveis do AG Grid
+    const parcela_ids = parcelasRowData.map(r => r.pk);
 
     fetch('{% url "financeiro:api_boletos_revalidar" %}', {
         method: 'POST',
