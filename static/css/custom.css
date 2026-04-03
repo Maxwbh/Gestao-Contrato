@@ -802,6 +802,8 @@ nav.app-navbar .sidenav-trigger {
 .col-11 { width: 91.6667%; }
 .col-12 { width: 100%; }
 .col-auto { width: auto; flex: 0 0 auto; }
+/* .col sem sufixo = coluna flexível igual ao Bootstrap */
+.row > .col { flex: 1 0 0%; min-width: 0; padding-left: 0.75rem; padding-right: 0.75rem; }
 
 @media (min-width: 576px) {
     .col-sm-1  { width: 8.3333%; }
