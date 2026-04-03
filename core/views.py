@@ -18,6 +18,7 @@ from django.views.generic import ListView, CreateView, UpdateView, DeleteView
 from django.urls import reverse_lazy
 from django.contrib import messages
 from datetime import datetime, timedelta
+from .mixins import PaginacaoMixin
 from .models import (
     Contabilidade, Imobiliaria, Imovel, Comprador, TipoImovel,
     ContaBancaria, BancoBrasil, LayoutCNAB, AcessoUsuario,
@@ -139,8 +140,25 @@ def health_check(request):
     return JsonResponse(status, status=http_status)
 
 
+def roadmap(request):
+    """Página de Roadmap do sistema"""
+    return render(request, 'core/roadmap.html')
+
+
 def index(request):
     """Página inicial do sistema"""
+    from django.contrib.auth import get_user_model
+    User = get_user_model()
+
+    # Redirecionar para setup SOMENTE se não houver nenhum superusuário cadastrado
+    try:
+        has_superuser = User.objects.filter(is_superuser=True).exists()
+    except Exception:
+        has_superuser = False
+
+    if not has_superuser:
+        return redirect('core:setup')
+
     try:
         context = {
             'total_contabilidades': Contabilidade.objects.filter(ativo=True).count(),
@@ -148,9 +166,13 @@ def index(request):
             'total_imoveis': Imovel.objects.filter(ativo=True).count(),
             'total_compradores': Comprador.objects.filter(ativo=True).count(),
         }
-    except Exception as e:
-        # Se banco não está configurado, redirecionar para setup
-        return redirect('core:setup')
+    except Exception:
+        context = {
+            'total_contabilidades': 0,
+            'total_imobiliarias': 0,
+            'total_imoveis': 0,
+            'total_compradores': 0,
+        }
     return render(request, 'core/index.html', context)
 
 
@@ -272,16 +294,19 @@ def setup(request):
                 try:
                     total_contabilidades = Contabilidade.objects.count()
                     total_users = get_user_model().objects.count()
+                    has_superuser = get_user_model().objects.filter(is_superuser=True).exists()
                     total_contas_bancarias = ContaBancaria.objects.count()
                     total_imobiliarias = Imobiliaria.objects.count()
                 except:
                     total_contabilidades = 0
                     total_users = 0
+                    has_superuser = False
                     total_contas_bancarias = 0
                     total_imobiliarias = 0
             else:
                 total_contabilidades = 0
                 total_users = 0
+                has_superuser = False
                 total_contas_bancarias = 0
                 total_imobiliarias = 0
 
@@ -290,6 +315,7 @@ def setup(request):
             has_tables = False
             total_contabilidades = 0
             total_users = 0
+            has_superuser = False
             total_contas_bancarias = 0
             total_imobiliarias = 0
 
@@ -298,6 +324,7 @@ def setup(request):
             'has_tables': has_tables,
             'total_contabilidades': total_contabilidades,
             'total_users': total_users,
+            'has_superuser': has_superuser,
             'total_contas_bancarias': total_contas_bancarias,
             'total_imobiliarias': total_imobiliarias,
         }
@@ -306,7 +333,11 @@ def setup(request):
     # POST - Executar setup (requer autenticação para ações sensíveis)
     # Verificar se é primeira configuração (sem usuários) ou se usuário é superuser
     User = get_user_model()
-    is_first_setup = User.objects.count() == 0
+    try:
+        is_first_setup = User.objects.count() == 0
+    except Exception:
+        # Tabelas ainda não existem (migrations não foram executadas) — permitir acesso livre
+        is_first_setup = True
 
     if not is_first_setup:
         if not request.user.is_authenticated:
@@ -371,7 +402,7 @@ def setup(request):
             gerar_dados = request.POST.get('gerar_dados') == 'true'
             if gerar_dados:
                 messages.append('📋 Gerando dados de teste...')
-                call_command('gerar_dados_teste', stdout=out)
+                call_command('gerar_dados_teste', limpar=True, stdout=out)
                 messages.append('✅ Dados de teste gerados!')
 
             messages.append('🎉 Setup completo finalizado!')
@@ -388,7 +419,7 @@ def setup(request):
         return JsonResponse({
             'status': 'error',
             'message': f'Erro no setup: {str(e)}'
-        }, status=500)
+        })
 
 
 @require_http_methods(["GET", "POST"])
@@ -460,6 +491,7 @@ def gerar_dados_teste(request):
 
         output = out.getvalue()
 
+        from contratos.models import TabelaJurosContrato
         # Retornar sucesso
         return JsonResponse({
             'status': 'success',
@@ -474,6 +506,7 @@ def gerar_dados_teste(request):
                 'contratos': Contrato.objects.count(),
                 'parcelas': Parcela.objects.count(),
                 'indices_reajuste': IndiceReajuste.objects.count(),
+                'tabela_juros': TabelaJurosContrato.objects.count(),
             }
         })
 
@@ -484,7 +517,7 @@ def gerar_dados_teste(request):
             'message': 'Erro ao gerar dados',
             'error': str(e),
             'traceback': traceback.format_exc()
-        }, status=500)
+        })
 
 
 @require_http_methods(["GET", "POST", "DELETE"])
@@ -614,7 +647,7 @@ def limpar_dados_teste(request):
 # CRUD VIEWS - CONTABILIDADE
 # =============================================================================
 
-class ContabilidadeListView(LoginRequiredMixin, ListView):
+class ContabilidadeListView(LoginRequiredMixin, PaginacaoMixin, ListView):
     """Lista todas as contabilidades ativas"""
     model = Contabilidade
     template_name = 'core/contabilidade_list.html'
@@ -717,7 +750,7 @@ class ContabilidadeDeleteView(LoginRequiredMixin, DeleteView):
 # CRUD VIEWS - COMPRADOR
 # =============================================================================
 
-class CompradorListView(LoginRequiredMixin, ListView):
+class CompradorListView(LoginRequiredMixin, PaginacaoMixin, ListView):
     """Lista todos os compradores ativos"""
     model = Comprador
     template_name = 'core/comprador_list.html'
@@ -785,11 +818,11 @@ class CompradorDeleteView(LoginRequiredMixin, DeleteView):
     model = Comprador
     success_url = reverse_lazy('core:listar_compradores')
 
-    def delete(self, request, *args, **kwargs):
+    def form_valid(self, form):
         self.object = self.get_object()
         self.object.ativo = False
         self.object.save()
-        messages.success(request, f'Comprador {self.object.nome} removido com sucesso!')
+        messages.success(self.request, f'Comprador {self.object.nome} removido com sucesso!')
         return redirect(self.success_url)
 
 
@@ -797,7 +830,7 @@ class CompradorDeleteView(LoginRequiredMixin, DeleteView):
 # CRUD VIEWS - IMOVEL
 # =============================================================================
 
-class ImovelListView(LoginRequiredMixin, ListView):
+class ImovelListView(LoginRequiredMixin, PaginacaoMixin, ListView):
     """Lista todos os imóveis ativos"""
     model = Imovel
     template_name = 'core/imovel_list.html'
@@ -805,7 +838,7 @@ class ImovelListView(LoginRequiredMixin, ListView):
     paginate_by = 20
 
     def get_queryset(self):
-        queryset = Imovel.objects.filter(ativo=True).select_related('imobiliaria').order_by('-criado_em')
+        queryset = Imovel.objects.filter(ativo=True).select_related('imobiliaria').prefetch_related('contratos').order_by('-criado_em')
 
         # Filtros
         search = self.request.GET.get('search')
@@ -829,13 +862,24 @@ class ImovelListView(LoginRequiredMixin, ListView):
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        context['total_imoveis'] = Imovel.objects.filter(ativo=True).count()
-        context['imoveis_disponiveis'] = Imovel.objects.filter(ativo=True, disponivel=True).count()
-        context['imoveis_com_coordenadas'] = Imovel.objects.filter(
-            ativo=True,
+        ativos = Imovel.objects.filter(ativo=True)
+        context['total_imoveis'] = ativos.count()
+        context['imoveis_disponiveis'] = ativos.filter(disponivel=True).count()
+
+        # Todos os imóveis com coordenadas — passados ao mapa (não paginado)
+        todos_mapa = ativos.filter(
             latitude__isnull=False,
             longitude__isnull=False
-        ).count()
+        ).select_related('imobiliaria').order_by('loteamento', 'identificacao')
+        context['todos_imoveis_mapa'] = todos_mapa
+        context['imoveis_com_coordenadas'] = todos_mapa.count()
+
+        # Lista de loteamentos distintos para o filtro do mapa
+        context['loteamentos'] = (
+            ativos.exclude(loteamento='').exclude(loteamento__isnull=True)
+            .values_list('loteamento', flat=True)
+            .distinct().order_by('loteamento')
+        )
         context['imobiliarias'] = Imobiliaria.objects.filter(ativo=True)
         context['search'] = self.request.GET.get('search', '')
         return context
@@ -881,11 +925,11 @@ class ImovelDeleteView(LoginRequiredMixin, DeleteView):
     model = Imovel
     success_url = reverse_lazy('core:listar_imoveis')
 
-    def delete(self, request, *args, **kwargs):
+    def form_valid(self, form):
         self.object = self.get_object()
         self.object.ativo = False
         self.object.save()
-        messages.success(request, f'Imóvel {self.object.identificacao} removido com sucesso!')
+        messages.success(self.request, f'Imóvel {self.object.identificacao} removido com sucesso!')
         return redirect(self.success_url)
 
 
@@ -893,7 +937,7 @@ class ImovelDeleteView(LoginRequiredMixin, DeleteView):
 # CRUD VIEWS - IMOBILIARIA
 # =============================================================================
 
-class ImobiliariaListView(LoginRequiredMixin, ListView):
+class ImobiliariaListView(LoginRequiredMixin, PaginacaoMixin, ListView):
     """Lista todas as imobiliárias ativas"""
     model = Imobiliaria
     template_name = 'core/imobiliaria_list.html'
@@ -1040,11 +1084,11 @@ class ImobiliariaDeleteView(LoginRequiredMixin, DeleteView):
     model = Imobiliaria
     success_url = reverse_lazy('core:listar_imobiliarias')
 
-    def delete(self, request, *args, **kwargs):
+    def form_valid(self, form):
         self.object = self.get_object()
         self.object.ativo = False
         self.object.save()
-        messages.success(request, f'Imobiliária {self.object.nome} removida com sucesso!')
+        messages.success(self.request, f'Imobiliária {self.object.nome} removida com sucesso!')
         return redirect(self.success_url)
 
 
@@ -1102,6 +1146,10 @@ def api_obter_conta_bancaria(request, conta_id):
             'carteira': conta.carteira,
             'nosso_numero_atual': conta.nosso_numero_atual,
             'modalidade': conta.modalidade,
+            'posto': conta.posto,
+            'byte_idt': conta.byte_idt,
+            'emissao': conta.emissao,
+            'codigo_beneficiario': conta.codigo_beneficiario,
             'tipo_pix': conta.tipo_pix,
             'chave_pix': conta.chave_pix,
             'principal': conta.principal,
@@ -1137,6 +1185,10 @@ def api_criar_conta_bancaria(request):
             carteira=data.get('carteira', ''),
             nosso_numero_atual=data.get('nosso_numero_atual', 0),
             modalidade=data.get('modalidade', ''),
+            posto=data.get('posto', ''),
+            byte_idt=data.get('byte_idt', ''),
+            emissao=data.get('emissao', ''),
+            codigo_beneficiario=data.get('codigo_beneficiario', ''),
             tipo_pix=data.get('tipo_pix', ''),
             chave_pix=data.get('chave_pix', ''),
             principal=data.get('principal', False),
@@ -1173,6 +1225,10 @@ def api_atualizar_conta_bancaria(request, conta_id):
         conta.carteira = data.get('carteira', conta.carteira)
         conta.nosso_numero_atual = data.get('nosso_numero_atual', conta.nosso_numero_atual)
         conta.modalidade = data.get('modalidade', conta.modalidade)
+        conta.posto = data.get('posto', conta.posto)
+        conta.byte_idt = data.get('byte_idt', conta.byte_idt)
+        conta.emissao = data.get('emissao', conta.emissao)
+        conta.codigo_beneficiario = data.get('codigo_beneficiario', conta.codigo_beneficiario)
         conta.tipo_pix = data.get('tipo_pix', conta.tipo_pix)
         conta.chave_pix = data.get('chave_pix', conta.chave_pix)
         conta.principal = data.get('principal', conta.principal)
@@ -1227,7 +1283,7 @@ def api_listar_bancos(request):
 # CRUD VIEWS - ACESSO USUÁRIO
 # =============================================================================
 
-class AcessoUsuarioListView(LoginRequiredMixin, ListView):
+class AcessoUsuarioListView(LoginRequiredMixin, PaginacaoMixin, ListView):
     """Lista todos os acessos de usuários"""
     model = AcessoUsuario
     template_name = 'core/acesso_list.html'
@@ -1390,7 +1446,7 @@ def pagina_dados_teste(request):
         messages.error(request, 'Acesso negado. Apenas administradores podem acessar esta página.')
         return redirect('core:dashboard')
 
-    from contratos.models import Contrato, IndiceReajuste
+    from contratos.models import Contrato, IndiceReajuste, TabelaJurosContrato
     from financeiro.models import Parcela
 
     stats = {
@@ -1402,6 +1458,7 @@ def pagina_dados_teste(request):
         'contratos': Contrato.objects.count(),
         'parcelas': Parcela.objects.count(),
         'indices_reajuste': IndiceReajuste.objects.count(),
+        'tabela_juros': TabelaJurosContrato.objects.count(),
     }
 
     return render(request, 'core/dados_teste.html', {'stats': stats})

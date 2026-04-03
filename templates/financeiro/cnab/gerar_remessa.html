@@ -12,119 +12,220 @@
         </a>
     </div>
 
-    <!-- Selecao de Conta -->
+    <!-- Filtros de Escopo -->
     <div class="card mb-4">
         <div class="card-header">
-            <h5 class="mb-0"><i class="fas fa-university"></i> 1. Selecione a Conta Bancaria</h5>
+            <h5 class="mb-0"><i class="fas fa-filter"></i> Filtros</h5>
         </div>
         <div class="card-body">
-            <form method="get" class="row g-3">
-                <div class="col-md-6">
-                    <label class="form-label">Conta Bancaria</label>
-                    <select name="conta" class="form-select" onchange="this.form.submit()">
-                        <option value="">Selecione uma conta...</option>
-                        {% for conta in contas_bancarias %}
-                        <option value="{{ conta.pk }}" {% if filtro_conta == conta.pk|stringformat:"s" %}selected{% endif %}>
-                            {{ conta.descricao }} - {{ conta.get_codigo_banco_display }} ({{ conta.imobiliaria.nome }})
+            <form method="get" id="form-filtro" class="row g-3 align-items-end">
+                <div class="col-md-3">
+                    <label class="form-label">Escopo</label>
+                    <select name="escopo" class="form-select" id="sel-escopo" onchange="atualizarEscopo()">
+                        <option value="tudo" {% if escopo == 'tudo' %}selected{% endif %}>Todos os Boletos</option>
+                        <option value="imobiliaria" {% if escopo == 'imobiliaria' %}selected{% endif %}>Por Imobiliária</option>
+                        <option value="contrato" {% if escopo == 'contrato' %}selected{% endif %}>Por Contrato</option>
+                        <option value="conta" {% if escopo == 'conta' %}selected{% endif %}>Por Conta Bancária</option>
+                    </select>
+                </div>
+
+                <!-- Filtro Imobiliária -->
+                <div class="col-md-3 filtro-campo" id="campo-imobiliaria" style="display:none;">
+                    <label class="form-label">Imobiliária</label>
+                    <select name="imobiliaria" class="form-select">
+                        <option value="">Todas</option>
+                        {% for imob in imobiliarias %}
+                        <option value="{{ imob.pk }}" {% if filtro_imobiliaria == imob.pk|stringformat:"s" %}selected{% endif %}>
+                            {{ imob.nome }}
                         </option>
                         {% endfor %}
                     </select>
+                </div>
+
+                <!-- Filtro Contrato -->
+                <div class="col-md-3 filtro-campo" id="campo-contrato" style="display:none;">
+                    <label class="form-label">Contrato</label>
+                    <select name="contrato" class="form-select">
+                        <option value="">Selecione...</option>
+                        {% for c in contratos %}
+                        <option value="{{ c.pk }}" {% if filtro_contrato == c.pk|stringformat:"s" %}selected{% endif %}>
+                            {{ c.numero_contrato }} — {{ c.comprador.nome }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <!-- Filtro Conta Bancária -->
+                <div class="col-md-3 filtro-campo" id="campo-conta" style="display:none;">
+                    <label class="form-label">Conta Bancária</label>
+                    <select name="conta" class="form-select">
+                        <option value="">Todas</option>
+                        {% for conta in contas_bancarias %}
+                        <option value="{{ conta.pk }}" {% if filtro_conta == conta.pk|stringformat:"s" %}selected{% endif %}>
+                            {{ conta.descricao }} ({{ conta.imobiliaria.nome }})
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <div class="col-md-2">
+                    <button type="submit" class="btn btn-outline-primary w-100">
+                        <i class="fas fa-search"></i> Filtrar
+                    </button>
                 </div>
             </form>
         </div>
     </div>
 
-    {% if filtro_conta %}
-    <!-- Formulario de Geracao -->
-    <form method="post">
-        {% csrf_token %}
-        <input type="hidden" name="conta_bancaria" value="{{ filtro_conta }}">
-
-        <div class="card mb-4">
-            <div class="card-header d-flex justify-content-between align-items-center">
-                <h5 class="mb-0"><i class="fas fa-barcode"></i> 2. Selecione os Boletos</h5>
-                {% if boletos_disponiveis %}
-                <span class="badge bg-primary">{{ boletos_disponiveis|length }} boletos disponiveis</span>
-                {% endif %}
-            </div>
-            <div class="card-body">
-                {% if boletos_disponiveis %}
-                <div class="mb-3">
-                    <div class="form-check">
-                        <input type="checkbox" class="form-check-input" id="selectAll" onclick="toggleAll(this)">
-                        <label class="form-check-label" for="selectAll"><strong>Selecionar Todos</strong></label>
-                    </div>
-                </div>
-                <div class="table-responsive">
-                    <table class="table table-hover">
-                        <thead>
-                            <tr>
-                                <th width="40"></th>
-                                <th>Nosso Numero</th>
-                                <th>Contrato</th>
-                                <th>Comprador</th>
-                                <th>Parcela</th>
-                                <th>Vencimento</th>
-                                <th>Valor</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {% for parcela in boletos_disponiveis %}
-                            <tr>
-                                <td>
-                                    <input type="checkbox" class="form-check-input parcela-check" name="parcelas" value="{{ parcela.pk }}">
-                                </td>
-                                <td>{{ parcela.nosso_numero }}</td>
-                                <td>{{ parcela.contrato.numero_contrato }}</td>
-                                <td>{{ parcela.contrato.comprador.nome_completo|truncatechars:30 }}</td>
-                                <td>{{ parcela.numero_parcela }}/{{ parcela.contrato.numero_parcelas }}</td>
-                                <td>{{ parcela.data_vencimento|date:"d/m/Y" }}</td>
-                                <td>R$ {{ parcela.valor_boleto|default:parcela.valor_atual|floatformat:2 }}</td>
-                            </tr>
-                            {% endfor %}
-                        </tbody>
-                    </table>
-                </div>
-                {% else %}
-                <div class="alert alert-warning">
-                    <i class="fas fa-exclamation-triangle"></i> Nenhum boleto disponivel para remessa nesta conta.
-                    <br><small>Gere boletos para as parcelas antes de criar o arquivo de remessa.</small>
-                </div>
-                {% endif %}
-            </div>
+    <!-- Aviso: Boletos em Remessa Pendente -->
+    {% if boletos_pendentes %}
+    <div class="alert alert-warning mb-4">
+        <i class="fas fa-exclamation-triangle"></i>
+        <strong>{{ boletos_pendentes|length }} boleto(s) já estão em remessa não enviada.</strong>
+        Eles não aparecerão abaixo pois já foram incluídos em uma remessa com status <em>Gerado</em>.
+        <a href="{% url 'financeiro:listar_remessas' %}?status=GERADO" class="alert-link ms-2">Ver remessas pendentes</a>
+        <div class="mt-2">
+            <small class="text-muted">
+                Contratos:
+                {% for p in boletos_pendentes %}{{ p.contrato.numero_contrato }}{% if not forloop.last %}, {% endif %}{% endfor %}
+            </small>
         </div>
+    </div>
+    {% endif %}
 
-        {% if boletos_disponiveis %}
-        <div class="card mb-4">
-            <div class="card-header">
-                <h5 class="mb-0"><i class="fas fa-cog"></i> 3. Configuracoes</h5>
-            </div>
-            <div class="card-body">
-                <div class="row">
-                    <div class="col-md-4">
-                        <label class="form-label">Layout CNAB</label>
-                        <select name="layout" class="form-select">
+    {% if grupos_conta %}
+    <!-- Formulário de Geração -->
+    <form method="post" id="form-remessa">
+        {% csrf_token %}
+
+        <!-- Configuração Layout -->
+        <div class="card mb-3">
+            <div class="card-body py-2">
+                <div class="row align-items-center">
+                    <div class="col-md-3">
+                        <label class="form-label mb-1">Layout CNAB</label>
+                        <select name="layout" class="form-select form-select-sm">
                             <option value="CNAB_240">CNAB 240</option>
                             <option value="CNAB_400">CNAB 400</option>
                         </select>
                     </div>
+                    <div class="col-md-5 d-flex align-items-end">
+                        <div class="form-check mt-3">
+                            <input type="checkbox" class="form-check-input" id="selectAllGlobal" onchange="toggleTodos(this)">
+                            <label class="form-check-label" for="selectAllGlobal">
+                                <strong>Selecionar Todos ({{ total_disponivel }} boletos)</strong>
+                            </label>
+                        </div>
+                    </div>
+                    <div class="col-md-4 text-end d-flex align-items-end justify-content-end">
+                        <div>
+                            <span class="text-muted me-3" id="contador-selecionados">0 selecionados</span>
+                            <button type="submit" class="btn btn-primary" id="btn-gerar" disabled>
+                                <i class="fas fa-file-export"></i> Gerar Remessa(s)
+                            </button>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
 
-        <div class="d-flex justify-content-end gap-2">
+        {% for conta, parcelas in grupos_conta.items %}
+        <!-- Grupo por Conta Bancária -->
+        <div class="card mb-4">
+            <div class="card-header bg-light d-flex justify-content-between align-items-center">
+                <div>
+                    <i class="fas fa-university text-primary me-2"></i>
+                    <strong>{{ conta.descricao }}</strong>
+                    <span class="text-muted ms-2">— {{ conta.imobiliaria.nome }}</span>
+                    <span class="badge bg-secondary ms-2">Banco {{ conta.banco }}</span>
+                </div>
+                <div class="d-flex align-items-center gap-3">
+                    <span class="badge bg-primary">{{ parcelas|length }} boleto(s)</span>
+                    <div class="form-check mb-0">
+                        <input type="checkbox" class="form-check-input check-grupo" id="checkGrupo_{{ conta.pk }}"
+                               data-grupo="{{ conta.pk }}" onchange="toggleGrupo('{{ conta.pk }}', this)">
+                        <label class="form-check-label" for="checkGrupo_{{ conta.pk }}">Todos desta conta</label>
+                    </div>
+                </div>
+            </div>
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-hover mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th width="40"></th>
+                                <th>Nosso Número</th>
+                                <th>Contrato</th>
+                                <th>Comprador</th>
+                                <th>Imobiliária</th>
+                                <th>Parcela</th>
+                                <th>Vencimento</th>
+                                <th class="text-end">Valor</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for parcela in parcelas %}
+                            <tr>
+                                <td>
+                                    <input type="checkbox" class="form-check-input parcela-check grupo-{{ conta.pk }}"
+                                           name="parcelas" value="{{ parcela.pk }}" onchange="atualizarContador()">
+                                </td>
+                                <td><code>{{ parcela.nosso_numero }}</code></td>
+                                <td>
+                                    <a href="{% url 'contratos:detalhe' parcela.contrato.pk %}" target="_blank">
+                                        {{ parcela.contrato.numero_contrato }}
+                                    </a>
+                                </td>
+                                <td>{{ parcela.contrato.comprador.nome|truncatechars:30 }}</td>
+                                <td><small>{{ parcela.contrato.imobiliaria.nome }}</small></td>
+                                <td>{{ parcela.numero_parcela }}/{{ parcela.contrato.numero_parcelas }}</td>
+                                <td>
+                                    {% if parcela.data_vencimento < today %}
+                                        <span class="text-danger">{{ parcela.data_vencimento|date:"d/m/Y" }}</span>
+                                    {% else %}
+                                        {{ parcela.data_vencimento|date:"d/m/Y" }}
+                                    {% endif %}
+                                </td>
+                                <td class="text-end">
+                                    <strong>R$ {{ parcela.valor_boleto|default:parcela.valor_atual|floatformat:2 }}</strong>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                        <tfoot class="table-light">
+                            <tr>
+                                <td colspan="7" class="text-end text-muted"><strong>{{ parcelas|length }} boleto(s)</strong></td>
+                                <td class="text-end text-muted">
+                                    <strong>{{ parcelas|length }} registro(s)</strong>
+                                </td>
+                            </tr>
+                        </tfoot>
+                    </table>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+
+        <!-- Botão final -->
+        <div class="d-flex justify-content-end gap-2 mb-4">
             <a href="{% url 'financeiro:listar_remessas' %}" class="btn btn-secondary">
                 <i class="fas fa-times"></i> Cancelar
             </a>
-            <button type="submit" class="btn btn-primary btn-lg">
-                <i class="fas fa-file-export"></i> Gerar Arquivo de Remessa
+            <button type="submit" class="btn btn-primary btn-lg" id="btn-gerar-bottom" disabled>
+                <i class="fas fa-file-export"></i> Gerar Remessa(s) — <span id="contador-bottom">0</span> boleto(s)
             </button>
         </div>
-        {% endif %}
     </form>
+
     {% else %}
     <div class="alert alert-info">
-        <i class="fas fa-info-circle"></i> Selecione uma conta bancaria para ver os boletos disponiveis.
+        <i class="fas fa-info-circle"></i>
+        {% if escopo == 'tudo' %}
+            Nenhum boleto disponível para remessa.
+            <a href="{% url 'financeiro:listar_parcelas' %}" class="alert-link">Gere boletos para as parcelas primeiro.</a>
+        {% else %}
+            Nenhum boleto disponível para os filtros selecionados.
+        {% endif %}
     </div>
     {% endif %}
 </div>
@@ -132,11 +233,54 @@
 
 {% block extra_js %}
 <script>
-function toggleAll(source) {
-    var checkboxes = document.querySelectorAll('.parcela-check');
-    checkboxes.forEach(function(checkbox) {
-        checkbox.checked = source.checked;
+const escopo = '{{ escopo }}';
+
+function atualizarEscopo() {
+    const sel = document.getElementById('sel-escopo').value;
+    document.getElementById('campo-imobiliaria').style.display = (sel === 'imobiliaria') ? '' : 'none';
+    document.getElementById('campo-contrato').style.display = (sel === 'contrato') ? '' : 'none';
+    document.getElementById('campo-conta').style.display = (sel === 'conta') ? '' : 'none';
+}
+
+function toggleTodos(source) {
+    document.querySelectorAll('.parcela-check').forEach(cb => cb.checked = source.checked);
+    document.querySelectorAll('.check-grupo').forEach(cb => cb.checked = source.checked);
+    atualizarContador();
+}
+
+function toggleGrupo(grupoId, source) {
+    document.querySelectorAll(`.grupo-${grupoId}`).forEach(cb => cb.checked = source.checked);
+    atualizarContador();
+}
+
+function atualizarContador() {
+    const total = document.querySelectorAll('.parcela-check:checked').length;
+    document.getElementById('contador-selecionados').textContent = total + ' selecionados';
+    document.getElementById('contador-bottom').textContent = total;
+    const habilitado = total > 0;
+    document.getElementById('btn-gerar').disabled = !habilitado;
+    document.getElementById('btn-gerar-bottom').disabled = !habilitado;
+
+    // Atualizar estado dos checkboxes de grupo
+    document.querySelectorAll('.check-grupo').forEach(grupoCb => {
+        const grupoId = grupoCb.dataset.grupo;
+        const todos = document.querySelectorAll(`.grupo-${grupoId}`);
+        const marcados = document.querySelectorAll(`.grupo-${grupoId}:checked`);
+        grupoCb.checked = todos.length > 0 && marcados.length === todos.length;
+        grupoCb.indeterminate = marcados.length > 0 && marcados.length < todos.length;
     });
 }
+
+// Inicializar visibilidade dos campos de escopo
+document.addEventListener('DOMContentLoaded', function() {
+    atualizarEscopo();
+
+    // Mostrar campo correto baseado no escopo atual
+    const sel = document.getElementById('sel-escopo');
+    if (sel.value === 'imobiliaria') {
+        sel.value = 'imobiliaria';
+    }
+    atualizarEscopo();
+});
 </script>
 {% endblock %}

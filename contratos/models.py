@@ -153,6 +153,12 @@ class StatusContrato(models.TextChoices):
     SUSPENSO = 'SUSPENSO', 'Suspenso'
 
 
+class TipoAmortizacao(models.TextChoices):
+    """Sistema de amortização do contrato"""
+    PRICE = 'PRICE', 'Tabela Price (PMT constante por ciclo)'
+    SAC = 'SAC', 'SAC — Amortização Constante (PMT decrescente)'
+
+
 class TipoPrestacao(models.TextChoices):
     """Tipos de prestação"""
     NORMAL = 'NORMAL', 'Normal'
@@ -287,6 +293,106 @@ class Contrato(TimeStampedModel):
         null=True,
         blank=True,
         verbose_name='Data do Último Reajuste'
+    )
+    reajuste_piso = models.DecimalField(
+        max_digits=8,
+        decimal_places=4,
+        null=True,
+        blank=True,
+        validators=[MinValueValidator(Decimal('0'))],
+        verbose_name='Piso de Reajuste (%)',
+        help_text='Percentual mínimo aplicado ao reajuste (ex: 0 para nunca aplicar deflação)'
+    )
+    reajuste_teto = models.DecimalField(
+        max_digits=8,
+        decimal_places=4,
+        null=True,
+        blank=True,
+        validators=[MinValueValidator(Decimal('0'))],
+        verbose_name='Teto de Reajuste (%)',
+        help_text='Percentual máximo aplicado ao reajuste (ex: 15 para limitar a 15%)'
+    )
+    spread_reajuste = models.DecimalField(
+        max_digits=8,
+        decimal_places=4,
+        null=True,
+        blank=True,
+        default=Decimal('0'),
+        verbose_name='Spread de Reajuste (p.p.)',
+        help_text='Pontos percentuais adicionados ao índice (ex: IPCA + 2 p.p. → spread=2.0000)'
+    )
+    tipo_correcao_fallback = models.CharField(
+        max_length=10,
+        choices=TipoCorrecao.choices,
+        blank=True,
+        verbose_name='Índice de Fallback',
+        help_text='Índice substituto caso o principal seja extinto (ex: INPC se IGPM for extinto)'
+    )
+
+    # Cláusulas contratuais
+    percentual_fruicao = models.DecimalField(
+        max_digits=6,
+        decimal_places=4,
+        default=Decimal('0.5000'),
+        validators=[MinValueValidator(Decimal('0')), MaxValueValidator(Decimal('100'))],
+        verbose_name='Taxa de Fruição (% a.m.)',
+        help_text='Percentual mensal de fruição em caso de rescisão (uso do imóvel pelo comprador)'
+    )
+    percentual_multa_rescisao_penal = models.DecimalField(
+        max_digits=6,
+        decimal_places=4,
+        default=Decimal('10.0000'),
+        validators=[MinValueValidator(Decimal('0')), MaxValueValidator(Decimal('100'))],
+        verbose_name='Multa Penal de Rescisão (%)',
+        help_text='Percentual de cláusula penal retido em caso de rescisão pelo comprador'
+    )
+    percentual_multa_rescisao_adm = models.DecimalField(
+        max_digits=6,
+        decimal_places=4,
+        default=Decimal('12.0000'),
+        validators=[MinValueValidator(Decimal('0')), MaxValueValidator(Decimal('100'))],
+        verbose_name='Despesas Administrativas de Rescisão (%)',
+        help_text='Percentual de despesas administrativas retido em caso de rescisão'
+    )
+    percentual_cessao = models.DecimalField(
+        max_digits=6,
+        decimal_places=4,
+        default=Decimal('3.0000'),
+        validators=[MinValueValidator(Decimal('0')), MaxValueValidator(Decimal('100'))],
+        verbose_name='Taxa de Cessão de Direitos (%)',
+        help_text='Percentual cobrado sobre o valor atualizado para cessão de direitos a terceiros'
+    )
+    # Sistema de Amortização
+    tipo_amortizacao = models.CharField(
+        max_length=10,
+        choices=TipoAmortizacao.choices,
+        default=TipoAmortizacao.PRICE,
+        verbose_name='Sistema de Amortização',
+        help_text=(
+            'Tabela Price: PMT constante por ciclo, juros decrescentes, amortização crescente. '
+            'SAC: amortização constante, PMT e juros decrescentes a cada período.'
+        )
+    )
+
+    # Parâmetros de Intermediárias
+    intermediarias_reduzem_pmt = models.BooleanField(
+        default=False,
+        verbose_name='Intermediárias Reduzem PMT',
+        help_text=(
+            'Se marcado, o valor das intermediárias é deduzido do saldo '
+            'financiado antes de calcular a parcela mensal. '
+            'Se desmarcado, as intermediárias são amortizações extras sobre '
+            'a parcela mensal cheia.'
+        )
+    )
+    intermediarias_reajustadas = models.BooleanField(
+        default=True,
+        verbose_name='Intermediárias Reajustadas pelo Índice',
+        help_text=(
+            'Se marcado, as intermediárias têm o valor atualizado pelo mesmo '
+            'índice (IPCA etc.) a cada ciclo de reajuste. '
+            'Se desmarcado, o valor das intermediárias é fixo até o vencimento.'
+        )
     )
 
     # Status
@@ -615,6 +721,60 @@ class Contrato(TimeStampedModel):
 
         return parcelas_criadas
 
+    def recalcular_amortizacao(self, base_pv=None):
+        """
+        Recalcula valor_original, valor_atual, amortizacao e juros_embutido
+        de todas as parcelas NORMAL não pagas, de acordo com tipo_amortizacao e
+        a TabelaJurosContrato do ciclo 1.
+
+        Chamado pelo wizard após criar TabelaJurosContrato, ou manualmente via admin.
+
+        Args:
+            base_pv: Valor presente base. Se None, usa valor_financiado.
+        """
+        from financeiro.models import Parcela as ParcelaModel
+        from django.db.models import Sum
+
+        pv = base_pv if base_pv is not None else self.valor_financiado
+        if pv <= 0 or self.numero_parcelas <= 0:
+            return
+
+        taxa = TabelaJurosContrato.get_juros_para_ciclo(self, 1) or Decimal('0')
+
+        parcelas_qs = self.parcelas.filter(
+            tipo_parcela='NORMAL'
+        ).order_by('numero_parcela')
+
+        n = parcelas_qs.count()
+        if n == 0:
+            return
+
+        if self.tipo_amortizacao == TipoAmortizacao.SAC:
+            # SAC: amortização constante = PV / n; juros_k = saldo_k × taxa/100
+            tabela = ParcelaModel._calcular_sac_tabela(pv, taxa, n)
+        else:
+            # Tabela Price: PMT constante = PV × i / (1-(1+i)^-n)
+            tabela = ParcelaModel._calcular_price_tabela(pv, taxa, n)
+
+        updates = []
+        for parcela, (pmt_k, amort_k, juros_k) in zip(parcelas_qs, tabela):
+            parcela.valor_original = pmt_k
+            parcela.valor_atual = pmt_k
+            parcela.amortizacao = amort_k
+            parcela.juros_embutido = juros_k
+            updates.append(parcela)
+
+        ParcelaModel.objects.bulk_update(
+            updates, ['valor_original', 'valor_atual', 'amortizacao', 'juros_embutido']
+        )
+
+        # Atualizar valor_parcela_original no contrato
+        if updates:
+            self.valor_parcela_original = updates[0].valor_original
+            type(self).objects.filter(pk=self.pk).update(
+                valor_parcela_original=self.valor_parcela_original
+            )
+
     def gerar_boletos_parcelas(self, parcelas=None, conta_bancaria=None):
         """
         Gera boletos para as parcelas do contrato.
@@ -678,10 +838,22 @@ class Contrato(TimeStampedModel):
         return valor_pago + self.valor_entrada
 
     def calcular_saldo_devedor(self):
-        """Calcula o saldo devedor atual"""
-        valor_pago = self.calcular_valor_pago() - self.valor_entrada
-        saldo_devedor = self.valor_financiado - valor_pago
-        return max(saldo_devedor, Decimal('0.00'))
+        """
+        Calcula o saldo devedor das parcelas normais em aberto.
+
+        - Tabela Price: soma de valor_atual (PMTs futuros = total futuro comprometido)
+        - SAC: soma de amortizacao das parcelas pendentes (principal restante real)
+          Se amortizacao não preenchida ainda, cai para valor_atual como fallback.
+        """
+        from django.db.models import Sum
+        qs = self.parcelas.filter(pago=False, tipo_parcela='NORMAL')
+        if self.tipo_amortizacao == TipoAmortizacao.SAC:
+            saldo = qs.aggregate(total=Sum('amortizacao'))['total']
+            if saldo is None:
+                saldo = qs.aggregate(total=Sum('valor_atual'))['total'] or Decimal('0.00')
+        else:
+            saldo = qs.aggregate(total=Sum('valor_atual'))['total'] or Decimal('0.00')
+        return saldo or Decimal('0.00')
 
     def validar_soma_intermediarias(self):
         """
@@ -756,16 +928,41 @@ class Contrato(TimeStampedModel):
         """
         return ((numero_parcela - 1) // self.prazo_reajuste_meses) + 1
 
+    def get_primeiro_ciclo_bloqueado(self):
+        """
+        Retorna o número do primeiro ciclo cujo reajuste já venceu mas não foi aplicado.
+
+        Returns:
+            int | None: número do ciclo bloqueado, ou None se não há bloqueio.
+        """
+        if self.tipo_correcao == TipoCorrecao.FIXO:
+            return None
+
+        prazo = self.prazo_reajuste_meses or 12
+        from django.utils import timezone as tz
+
+        hoje = tz.now().date()
+        total_ciclos = (self.numero_parcelas - 1) // prazo + 1
+
+        for ciclo in range(2, total_ciclos + 1):
+            data_reajuste = self.data_contrato + relativedelta(months=(ciclo - 1) * prazo)
+            if hoje < data_reajuste:
+                break  # ciclos futuros não bloqueiam
+            from financeiro.models import Reajuste
+            if not Reajuste.objects.filter(contrato=self, ciclo=ciclo, aplicado=True).exists():
+                return ciclo
+
+        return None
+
     def pode_gerar_boleto(self, numero_parcela):
         """
         Verifica se é possível gerar boleto para uma parcela específica.
 
-        Regra: Só é possível emitir boleto até o 12º mês de cada ciclo.
-               No 13º mês (início de novo ciclo), a emissão só é liberada
-               APÓS aplicação do reajuste.
+        Regra de cascata: se QUALQUER ciclo entre 2 e o ciclo da parcela já
+        venceu (hoje >= data_prevista) e ainda não foi aplicado, a parcela e
+        todas as subsequentes ficam bloqueadas.
 
-        Excecao: tipo_correcao='FIXO' permite gerar todos os boletos
-                 sem necessidade de reajuste.
+        Índice FIXO nunca bloqueia.
 
         Args:
             numero_parcela: Número da parcela a verificar
@@ -773,28 +970,37 @@ class Contrato(TimeStampedModel):
         Returns:
             tuple: (pode_gerar: bool, motivo: str)
         """
-        # Correcao FIXO: sempre pode gerar (nao precisa de reajuste)
         if self.tipo_correcao == TipoCorrecao.FIXO:
-            return True, "Indice FIXO - sem necessidade de reajuste"
+            return True, "Índice FIXO — sem necessidade de reajuste."
 
-        ciclo_parcela = self.calcular_ciclo_parcela(numero_parcela)
+        prazo = self.prazo_reajuste_meses or 12
+        ciclo_parcela = (numero_parcela - 1) // prazo + 1
 
-        # Primeiro ciclo (meses 1-12): sempre pode gerar
-        if ciclo_parcela == 1:
-            return True, "Primeiro ciclo - liberado"
+        if ciclo_parcela <= 1:
+            return True, "Primeiro ciclo — liberado."
 
-        # Verificar se o reajuste do ciclo foi aplicado
-        from financeiro.models import Reajuste
-        reajuste_aplicado = Reajuste.objects.filter(
-            contrato=self,
-            ciclo=ciclo_parcela,
-            aplicado=True  # Deve estar efetivamente aplicado
-        ).exists()
+        from django.utils import timezone as tz
 
-        if reajuste_aplicado:
-            return True, f"Reajuste do ciclo {ciclo_parcela} aplicado"
+        hoje = tz.now().date()
 
-        return False, f"Reajuste pendente para o ciclo {ciclo_parcela}. Aplique o reajuste antes de gerar boletos."
+        # Verifica em cascata do ciclo 2 até o ciclo desta parcela
+        for ciclo_check in range(2, ciclo_parcela + 1):
+            data_reajuste = self.data_contrato + relativedelta(months=(ciclo_check - 1) * prazo)
+            if hoje < data_reajuste:
+                break  # ciclo ainda não venceu
+
+            from financeiro.models import Reajuste
+            reajuste_aplicado = Reajuste.objects.filter(
+                contrato=self, ciclo=ciclo_check, aplicado=True
+            ).exists()
+            if not reajuste_aplicado:
+                return False, (
+                    f"Reajuste do ciclo {ciclo_check} pendente desde "
+                    f"{data_reajuste.strftime('%d/%m/%Y')}. "
+                    f"Execute o reajuste antes de gerar boletos."
+                )
+
+        return True, f"Reajuste do ciclo {ciclo_parcela} aplicado."
 
     def verificar_bloqueio_reajuste(self):
         """
@@ -913,6 +1119,210 @@ class Contrato(TimeStampedModel):
             'ciclo_atual': self.ciclo_reajuste_atual,
             'bloqueio_reajuste': self.bloqueio_boleto_reajuste,
         }
+
+    def calcular_mora_pro_rata(self, valor_base, data_vencimento, data_calculo=None):
+        """
+        G-16: Calcula juros de mora pro rata die.
+
+        Fórmula: juro_diario = percentual_juros_mora / 30
+        Juros = valor_base × juro_diario × dias_atraso
+
+        Args:
+            valor_base (Decimal): valor da parcela em atraso
+            data_vencimento (date): data de vencimento da parcela
+            data_calculo (date, optional): data de referência (padrão: hoje)
+
+        Returns:
+            dict com: dias_atraso, taxa_diaria, valor_juros, valor_multa, total
+        """
+        from django.utils import timezone as tz
+        data_ref = data_calculo or tz.now().date()
+        dias_atraso = max(0, (data_ref - data_vencimento).days)
+
+        # Taxa diária = taxa mensal / 30 (pro rata die simples, conforme cláusula contratual)
+        taxa_mensal = self.percentual_juros_mora or Decimal('1.0000')
+        taxa_diaria = taxa_mensal / Decimal('30')
+
+        valor_juros = (valor_base * taxa_diaria * dias_atraso / Decimal('100')).quantize(Decimal('0.01'))
+        valor_multa = (valor_base * (self.percentual_multa or Decimal('2.0000')) / Decimal('100')).quantize(Decimal('0.01'))
+
+        return {
+            'dias_atraso': dias_atraso,
+            'taxa_diaria': taxa_diaria,
+            'taxa_mensal': taxa_mensal,
+            'valor_base': valor_base,
+            'valor_juros': valor_juros,
+            'valor_multa': valor_multa,
+            'total': valor_base + valor_juros + valor_multa,
+        }
+
+    def calcular_rescisao(self, data_rescisao=None):
+        """
+        G-11: Calcula o valor de devolução em caso de rescisão pelo comprador.
+
+        Fórmula (cláusula contratual Parque das Nogueiras):
+          Saldo atualizado = saldo devedor atual
+          Fruição        = saldo_atual × percentual_fruicao / 100 × meses_ocupados
+          Multa penal    = saldo_atual × percentual_multa_rescisao_penal / 100
+          Desp. adm.     = saldo_atual × percentual_multa_rescisao_adm / 100
+          Valor pago     = entrada + parcelas pagas (valor pago)
+          Devolução      = valor_pago − fruição − multa_penal − desp_adm
+
+        Returns:
+            dict com todos os componentes do cálculo
+        """
+        from django.utils import timezone as tz
+        from django.db.models import Sum
+
+        data_ref = data_rescisao or tz.now().date()
+        saldo = self.calcular_saldo_devedor()
+
+        # Meses desde o início do contrato (uso do imóvel pelo comprador)
+        meses_ocupados = (
+            (data_ref.year - self.data_contrato.year) * 12
+            + (data_ref.month - self.data_contrato.month)
+        )
+        meses_ocupados = max(0, meses_ocupados)
+
+        # Valores pagos
+        total_pago_parcelas = self.parcelas.filter(pago=True).aggregate(
+            total=Sum('valor_pago')
+        )['total'] or Decimal('0.00')
+        total_pago = (self.valor_entrada or Decimal('0.00')) + total_pago_parcelas
+
+        # Encargos de rescisão calculados sobre o saldo atualizado
+        pct_fruicao = (self.percentual_fruicao or Decimal('0.5000')) / Decimal('100')
+        pct_penal   = (self.percentual_multa_rescisao_penal or Decimal('10.0000')) / Decimal('100')
+        pct_adm     = (self.percentual_multa_rescisao_adm or Decimal('12.0000')) / Decimal('100')
+
+        fruicao     = (saldo * pct_fruicao * meses_ocupados).quantize(Decimal('0.01'))
+        multa_penal = (saldo * pct_penal).quantize(Decimal('0.01'))
+        desp_adm    = (saldo * pct_adm).quantize(Decimal('0.01'))
+
+        total_retencoes = fruicao + multa_penal + desp_adm
+        devolucao = max(Decimal('0.00'), (total_pago - total_retencoes).quantize(Decimal('0.01')))
+
+        return {
+            'data_rescisao': data_ref,
+            'saldo_devedor': saldo,
+            'meses_ocupados': meses_ocupados,
+            'valor_pago_total': total_pago,
+            'valor_entrada': self.valor_entrada or Decimal('0.00'),
+            'valor_pago_parcelas': total_pago_parcelas,
+            'percentual_fruicao': self.percentual_fruicao or Decimal('0.5000'),
+            'fruicao': fruicao,
+            'percentual_multa_penal': self.percentual_multa_rescisao_penal or Decimal('10.0000'),
+            'multa_penal': multa_penal,
+            'percentual_desp_adm': self.percentual_multa_rescisao_adm or Decimal('12.0000'),
+            'desp_adm': desp_adm,
+            'total_retencoes': total_retencoes,
+            'devolucao': devolucao,
+        }
+
+    def calcular_cessao(self, data_cessao=None):
+        """
+        G-12: Calcula a taxa de cessão de direitos.
+
+        Fórmula: taxa_cessao = saldo_devedor × percentual_cessao / 100
+
+        Returns:
+            dict com os componentes do cálculo de cessão
+        """
+        from django.utils import timezone as tz
+
+        data_ref = data_cessao or tz.now().date()
+        saldo = self.calcular_saldo_devedor()
+
+        pct_cessao = (self.percentual_cessao or Decimal('3.0000')) / Decimal('100')
+        taxa = (saldo * pct_cessao).quantize(Decimal('0.01'))
+
+        return {
+            'data_cessao': data_ref,
+            'saldo_devedor': saldo,
+            'percentual_cessao': self.percentual_cessao or Decimal('3.0000'),
+            'taxa_cessao': taxa,
+            'saldo_apos_cessao': saldo,  # saldo permanece — apenas a taxa muda de titular
+        }
+
+
+class TabelaJurosContrato(TimeStampedModel):
+    """
+    Tabela de juros compostos escalantes por ciclo de reajuste.
+
+    Permite modelar contratos onde a taxa de juros mensais embutida nas parcelas
+    varia conforme o ano/ciclo (ex: Ano 1 fixo, Ano 2: 0,60% a.m., Ano 3: 0,65% a.m.).
+    Esta estrutura substitui o campo único `spread_reajuste` para contratos com
+    juros progressivos definidos em cláusula contratual.
+
+    Exemplo (Minuta Parque das Nogueiras):
+        ciclo 1: juros_mensal=0.0000  (parcela fixa no 1º ano)
+        ciclo 2: juros_mensal=0.6000
+        ciclo 3: juros_mensal=0.6500
+        ...
+        ciclo 7, ciclo_fim=None: juros_mensal=0.8500  (ciclos 7 em diante)
+    """
+    contrato = models.ForeignKey(
+        'Contrato',
+        on_delete=models.CASCADE,
+        related_name='tabela_juros',
+        verbose_name='Contrato'
+    )
+    ciclo_inicio = models.PositiveIntegerField(
+        validators=[MinValueValidator(1)],
+        verbose_name='Ciclo Início',
+        help_text='Primeiro ciclo de reajuste em que esta taxa se aplica (1 = ano 1)'
+    )
+    ciclo_fim = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+        validators=[MinValueValidator(1)],
+        verbose_name='Ciclo Fim',
+        help_text='Último ciclo de aplicação. Deixe em branco para "este ciclo em diante"'
+    )
+    juros_mensal = models.DecimalField(
+        max_digits=8,
+        decimal_places=4,
+        validators=[MinValueValidator(Decimal('0'))],
+        verbose_name='Juros Mensais (%)',
+        help_text='Taxa de juros compostos mensais embutida nas parcelas deste ciclo (ex: 0.6000 = 0,60% a.m.)'
+    )
+    observacoes = models.CharField(
+        max_length=200,
+        blank=True,
+        verbose_name='Observações',
+        help_text='Ex: Conforme cláusula 8.2 do contrato'
+    )
+
+    class Meta:
+        verbose_name = 'Tabela de Juros por Ciclo'
+        verbose_name_plural = 'Tabela de Juros por Ciclo'
+        ordering = ['contrato', 'ciclo_inicio']
+        indexes = [
+            models.Index(fields=['contrato', 'ciclo_inicio']),
+        ]
+
+    def __str__(self):
+        fim = str(self.ciclo_fim) if self.ciclo_fim else '∞'
+        return f"Contrato {self.contrato.numero_contrato} — Ciclos {self.ciclo_inicio}–{fim}: {self.juros_mensal}% a.m."
+
+    def clean(self):
+        if self.ciclo_fim is not None and self.ciclo_fim < self.ciclo_inicio:
+            raise ValidationError({'ciclo_fim': 'Ciclo Fim deve ser maior ou igual ao Ciclo Início.'})
+
+    @classmethod
+    def get_juros_para_ciclo(cls, contrato, ciclo):
+        """
+        Retorna a taxa de juros mensal configurada para um dado ciclo de reajuste.
+        Retorna None se não houver tabela configurada para o contrato/ciclo.
+        """
+        faixa = cls.objects.filter(
+            contrato=contrato,
+            ciclo_inicio__lte=ciclo,
+        ).filter(
+            models.Q(ciclo_fim__gte=ciclo) | models.Q(ciclo_fim__isnull=True)
+        ).order_by('-ciclo_inicio').first()
+
+        return faixa.juros_mensal if faixa else None
 
 
 class PrestacaoIntermediaria(TimeStampedModel):
