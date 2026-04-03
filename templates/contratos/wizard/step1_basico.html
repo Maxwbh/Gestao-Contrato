@@ -1,0 +1,391 @@
+{% extends 'base.html' %}
+
+{% block title %}Wizard — Etapa 1: Dados Básicos{% endblock %}
+
+{% block content %}
+<div class="row">
+  <div class="col-12 col-lg-10 mx-auto">
+
+    <!-- Progress bar -->
+    <div class="card mb-3">
+      <div class="card-body py-2">
+        <div class="d-flex justify-content-between align-items-center mb-1">
+          <small class="text-muted">Etapa {{ step_num }} de 4</small>
+          <small class="text-muted">Dados Básicos</small>
+        </div>
+        <div class="progress" style="height: 8px;">
+          <div class="progress-bar bg-primary" style="width: 25%;"></div>
+        </div>
+        <div class="d-flex justify-content-between mt-2">
+          <span class="badge bg-primary">1. Dados Básicos</span>
+          <span class="badge bg-secondary">2. Juros</span>
+          <span class="badge bg-secondary">3. Intermediárias</span>
+          <span class="badge bg-secondary">4. Confirmar</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <h5 class="mb-0">
+          <i class="fas fa-file-contract me-2"></i>Novo Contrato — Etapa 1: Dados Básicos
+        </h5>
+      </div>
+      <div class="card-body">
+
+        {% if messages %}
+          {% for msg in messages %}
+            <div class="alert alert-{{ msg.tags }} alert-dismissible alert-permanent fade show" role="alert">
+              {{ msg }}
+              <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+            </div>
+          {% endfor %}
+        {% endif %}
+
+        <form method="post" action="{% url 'contratos:wizard' step='basico' %}">
+          {% csrf_token %}
+
+          {% if form.non_field_errors %}
+            <div class="alert alert-danger alert-permanent">
+              {% for e in form.non_field_errors %}{{ e }}{% endfor %}
+            </div>
+          {% endif %}
+
+          <!-- Partes -->
+          <div class="card mb-3 border-primary">
+            <div class="card-header bg-primary bg-opacity-10">
+              <i class="fas fa-users me-2"></i><strong>Partes do Contrato</strong>
+            </div>
+            <div class="card-body">
+              <div class="row">
+                <div class="col-md-4 mb-2">
+                  <label class="form-label">{{ form.imobiliaria.label }} *</label>
+                  {{ form.imobiliaria }}
+                  {% if form.imobiliaria.errors %}<div class="text-danger small">{{ form.imobiliaria.errors }}</div>{% endif %}
+                </div>
+                <div class="col-md-4 mb-2">
+                  <label class="form-label">{{ form.comprador.label }} *</label>
+                  {{ form.comprador }}
+                  {% if form.comprador.errors %}<div class="text-danger small">{{ form.comprador.errors }}</div>{% endif %}
+                </div>
+                <div class="col-md-4 mb-2">
+                  <label class="form-label">{{ form.imovel.label }} *</label>
+                  {{ form.imovel }}
+                  {% if form.imovel.errors %}<div class="text-danger small">{{ form.imovel.errors }}</div>{% endif %}
+                  <small id="imovel_hint" class="form-text text-muted d-none">Selecione uma imobiliária primeiro.</small>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Dados do contrato -->
+          <div class="card mb-3 border-primary">
+            <div class="card-header bg-primary bg-opacity-10">
+              <i class="fas fa-file-alt me-2"></i><strong>Dados do Contrato</strong>
+            </div>
+            <div class="card-body">
+              <div class="row">
+                <div class="col-md-4 mb-2">
+                  <label class="form-label">{{ form.numero_contrato.label }} *</label>
+                  {{ form.numero_contrato }}
+                  {% if form.numero_contrato.errors %}<div class="text-danger small">{{ form.numero_contrato.errors }}</div>{% endif %}
+                </div>
+                <div class="col-md-4 mb-2">
+                  <label class="form-label">{{ form.data_contrato.label }} *</label>
+                  {{ form.data_contrato }}
+                  {% if form.data_contrato.errors %}<div class="text-danger small">{{ form.data_contrato.errors }}</div>{% endif %}
+                </div>
+                <div class="col-md-4 mb-2">
+                  <label class="form-label">{{ form.data_primeiro_vencimento.label }} *</label>
+                  {{ form.data_primeiro_vencimento }}
+                  {% if form.data_primeiro_vencimento.errors %}<div class="text-danger small">{{ form.data_primeiro_vencimento.errors }}</div>{% endif %}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Valores -->
+          <div class="card mb-3 border-primary">
+            <div class="card-header bg-primary bg-opacity-10">
+              <i class="fas fa-dollar-sign me-2"></i><strong>Valores</strong>
+            </div>
+            <div class="card-body">
+              <div class="row">
+                <div class="col-md-4 mb-2">
+                  <label class="form-label">{{ form.valor_total.label }} *</label>
+                  <div class="input-group">
+                    <span class="input-group-text">R$</span>
+                    {{ form.valor_total }}
+                  </div>
+                  {% if form.valor_total.errors %}<div class="text-danger small">{{ form.valor_total.errors }}</div>{% endif %}
+                </div>
+                <div class="col-md-4 mb-2">
+                  <label class="form-label">{{ form.valor_entrada.label }}</label>
+                  <div class="input-group">
+                    <span class="input-group-text">R$</span>
+                    {{ form.valor_entrada }}
+                  </div>
+                  {% if form.valor_entrada.errors %}<div class="text-danger small">{{ form.valor_entrada.errors }}</div>{% endif %}
+                </div>
+                <div class="col-md-4 mb-2 d-flex align-items-end">
+                  <div>
+                    <label class="form-label text-muted small">Valor Financiado</label>
+                    <div id="valor_financiado_display" class="fw-bold text-primary fs-5">R$ —</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Parcelas -->
+          <div class="card mb-3 border-primary">
+            <div class="card-header bg-primary bg-opacity-10">
+              <i class="fas fa-calendar-alt me-2"></i><strong>Configuração de Parcelas</strong>
+            </div>
+            <div class="card-body">
+              <div class="row">
+                <div class="col-md-3 mb-2">
+                  <label class="form-label">{{ form.numero_parcelas.label }} *</label>
+                  <div class="input-group">
+                    {{ form.numero_parcelas }}
+                    <span class="input-group-text">meses</span>
+                  </div>
+                  {% if form.numero_parcelas.errors %}<div class="text-danger small">{{ form.numero_parcelas.errors }}</div>{% endif %}
+                </div>
+                <div class="col-md-3 mb-2">
+                  <label class="form-label">{{ form.dia_vencimento.label }} *</label>
+                  <div class="input-group">
+                    <span class="input-group-text">dia</span>
+                    {{ form.dia_vencimento }}
+                  </div>
+                  {% if form.dia_vencimento.errors %}<div class="text-danger small">{{ form.dia_vencimento.errors }}</div>{% endif %}
+                </div>
+                <div class="col-md-6 mb-2">
+                  <label class="form-label fw-semibold">{{ form.tipo_amortizacao.label }} *</label>
+                  {{ form.tipo_amortizacao }}
+                  {% if form.tipo_amortizacao.errors %}<div class="text-danger small">{{ form.tipo_amortizacao.errors }}</div>{% endif %}
+                </div>
+              </div>
+              <!-- Painel explicativo do sistema de amortização -->
+              <div id="amort_price_info" class="alert alert-info alert-permanent py-2 mt-1 d-none" role="alert">
+                <strong>Tabela Price:</strong> PMT (prestação) constante a cada ciclo de reajuste.
+                Juros decrescentes e amortização crescente a cada período.
+                Carga de juros maior no início.
+              </div>
+              <div id="amort_sac_info" class="alert alert-warning alert-permanent py-2 mt-1 d-none" role="alert">
+                <strong>SAC:</strong> Amortização constante = saldo / n restantes.
+                Juros decrescentes, portanto a <em>prestação diminui a cada mês</em>.
+                Saldo devedor real decresce mais rapidamente do que na Price.
+              </div>
+            </div>
+          </div>
+
+          <!-- Juros e Multa -->
+          <div class="card mb-3">
+            <div class="card-header">
+              <i class="fas fa-percentage me-2"></i><strong>Juros e Multa por Atraso</strong>
+            </div>
+            <div class="card-body">
+              <div class="row">
+                <div class="col-md-3 mb-2">
+                  <label class="form-label">{{ form.percentual_juros_mora.label }}</label>
+                  <div class="input-group">
+                    {{ form.percentual_juros_mora }}
+                    <span class="input-group-text">% a.m.</span>
+                  </div>
+                </div>
+                <div class="col-md-3 mb-2">
+                  <label class="form-label">{{ form.percentual_multa.label }}</label>
+                  <div class="input-group">
+                    {{ form.percentual_multa }}
+                    <span class="input-group-text">%</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Correção Monetária -->
+          <div class="card mb-3">
+            <div class="card-header">
+              <i class="fas fa-chart-line me-2"></i><strong>Correção Monetária</strong>
+            </div>
+            <div class="card-body">
+              <div class="row">
+                <div class="col-md-3 mb-2">
+                  <label class="form-label">{{ form.tipo_correcao.label }}</label>
+                  {{ form.tipo_correcao }}
+                </div>
+                <div class="col-md-3 mb-2">
+                  <label class="form-label">{{ form.prazo_reajuste_meses.label }}</label>
+                  <div class="input-group">
+                    {{ form.prazo_reajuste_meses }}
+                    <span class="input-group-text">meses</span>
+                  </div>
+                </div>
+                <div class="col-md-3 mb-2">
+                  <label class="form-label">{{ form.tipo_correcao_fallback.label }}</label>
+                  {{ form.tipo_correcao_fallback }}
+                </div>
+                <div class="col-md-3 mb-2">
+                  <label class="form-label">{{ form.spread_reajuste.label }}</label>
+                  <div class="input-group">
+                    {{ form.spread_reajuste }}
+                    <span class="input-group-text">% a.a.</span>
+                  </div>
+                </div>
+                <div class="col-md-3 mb-2">
+                  <label class="form-label">{{ form.reajuste_piso.label }}</label>
+                  <div class="input-group">
+                    {{ form.reajuste_piso }}
+                    <span class="input-group-text">%</span>
+                  </div>
+                </div>
+                <div class="col-md-3 mb-2">
+                  <label class="form-label">{{ form.reajuste_teto.label }}</label>
+                  <div class="input-group">
+                    {{ form.reajuste_teto }}
+                    <span class="input-group-text">%</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Observações -->
+          <div class="card mb-3">
+            <div class="card-header">
+              <i class="fas fa-sticky-note me-2"></i><strong>Observações</strong>
+            </div>
+            <div class="card-body">
+              {{ form.observacoes }}
+            </div>
+          </div>
+
+          <div class="d-flex justify-content-between mt-3">
+            <a href="{% url 'contratos:listar' %}" class="btn btn-outline-secondary">
+              <i class="fas fa-times me-2"></i>Cancelar
+            </a>
+            <button type="submit" class="btn btn-primary">
+              Próximo: Tabela de Juros <i class="fas fa-arrow-right ms-2"></i>
+            </button>
+          </div>
+        </form>
+
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function () {
+  var IMOVEIS_URL = '{% url "contratos:wizard_imoveis" %}';
+
+  // ── Inicializa tooltips Bootstrap nos elementos com [title] ───────────────
+  document.querySelectorAll('[title]').forEach(function (el) {
+    new bootstrap.Tooltip(el, { trigger: 'hover focus', placement: 'top' });
+  });
+
+  // ── Amortização info ──────────────────────────────────────────────────────
+  var selAmort  = document.getElementById('{{ form.tipo_amortizacao.id_for_label }}');
+  var priceInfo = document.getElementById('amort_price_info');
+  var sacInfo   = document.getElementById('amort_sac_info');
+
+  function atualizarAmortizacaoInfo() {
+    if (!selAmort || !priceInfo || !sacInfo) return;
+    priceInfo.classList.toggle('d-none', selAmort.value !== 'PRICE');
+    sacInfo.classList.toggle('d-none',   selAmort.value !== 'SAC');
+  }
+  if (selAmort) {
+    selAmort.addEventListener('change', atualizarAmortizacaoInfo);
+    atualizarAmortizacaoInfo();
+  }
+
+  // ── Valor financiado ──────────────────────────────────────────────────────
+  var elTotal   = document.getElementById('{{ form.valor_total.id_for_label }}');
+  var elEntrada = document.getElementById('{{ form.valor_entrada.id_for_label }}');
+  var elDisplay = document.getElementById('valor_financiado_display');
+
+  function calcularFinanciado() {
+    if (!elDisplay) return;
+    var total   = parseFloat(elTotal   ? elTotal.value   : 0) || 0;
+    var entrada = parseFloat(elEntrada ? elEntrada.value : 0) || 0;
+    var fin = total - entrada;
+    elDisplay.textContent = fin > 0
+      ? 'R$ ' + fin.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})
+      : 'R$ —';
+  }
+  if (elTotal)   elTotal.addEventListener('input', calcularFinanciado);
+  if (elEntrada) elEntrada.addEventListener('input', calcularFinanciado);
+  calcularFinanciado();
+
+  // ── Número do contrato — máscara CTR-AAAA-NNNN ───────────────────────────
+  var elNumero = document.getElementById('{{ form.numero_contrato.id_for_label }}');
+  if (elNumero) {
+    function mascaraNumeroContrato(value) {
+      // Se o usuário digitou somente dígitos, aplica o padrão CTR-ANO-NNNN
+      var semEspaco = value.trim();
+      if (/^\d+$/.test(semEspaco)) {
+        var ano = new Date().getFullYear();
+        return 'CTR-' + ano + '-' + semEspaco.slice(0, 4).padStart(4, '0');
+      }
+      // Caso contrário mantém o valor livre (o usuário escolheu outro formato)
+      return value.toUpperCase();
+    }
+
+    // Formata ao sair do campo (blur) — preserva edição livre enquanto digita
+    elNumero.addEventListener('blur', function () {
+      this.value = mascaraNumeroContrato(this.value);
+    });
+
+    // Converte para maiúsculas a cada tecla
+    elNumero.addEventListener('input', function () {
+      var pos = this.selectionStart;
+      this.value = this.value.toUpperCase();
+      this.setSelectionRange(pos, pos);
+    });
+  }
+
+  // ── Filtro de imóveis por imobiliária ─────────────────────────────────────
+  var selImob   = document.getElementById('{{ form.imobiliaria.id_for_label }}');
+  var selImovel = document.getElementById('{{ form.imovel.id_for_label }}');
+  var imovelHint = document.getElementById('imovel_hint');
+  var imovelSelecionado = '{{ form.imovel.value|default:"" }}';
+
+  function carregarImoveis(imobId, manter) {
+    if (!selImovel) return;
+    if (!imobId) {
+      selImovel.innerHTML = '<option value="">---------</option>';
+      if (imovelHint) imovelHint.classList.remove('d-none');
+      return;
+    }
+    if (imovelHint) imovelHint.classList.add('d-none');
+    fetch(IMOVEIS_URL + '?imobiliaria_id=' + imobId)
+      .then(function (r) { return r.json(); })
+      .then(function (data) {
+        var html = '<option value="">---------</option>';
+        data.imoveis.forEach(function (i) {
+          var sel = (manter && String(i.id) === String(imovelSelecionado)) ? ' selected' : '';
+          html += '<option value="' + i.id + '"' + sel + '>' + i.texto + '</option>';
+        });
+        selImovel.innerHTML = html;
+      })
+      .catch(function () {});
+  }
+
+  if (selImob && selImovel) {
+    selImob.addEventListener('change', function () {
+      imovelSelecionado = '';
+      carregarImoveis(selImob.value, false);
+    });
+    if (selImob.value) {
+      carregarImoveis(selImob.value, true);
+    } else {
+      if (imovelHint) imovelHint.classList.remove('d-none');
+    }
+  }
+})();
+</script>
+{% endblock %}

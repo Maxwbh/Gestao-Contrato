@@ -1,0 +1,10 @@
+{% extends 'base.html' %}
+{% block title %}Meus Dados{% endblock %}
+{% block content %}
+<div class="container">
+    <h1>Meus Dados</h1>
+    {% if comprador %}
+    <p>{{ comprador.nome }}</p>
+    {% endif %}
+</div>
+{% endblock %}

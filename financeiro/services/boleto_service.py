@@ -657,8 +657,11 @@ class BoletoService:
 
         # Caixa (104)
         elif codigo_banco == '104':
-            dados['codigo_beneficiario'] = conta_bancaria.convenio or ''
-            dados['emissao'] = '4'  # Emissao pelo beneficiario
+            # Codigo beneficiario: usar campo especifico, com fallback para convenio
+            codigo_benef = getattr(conta_bancaria, 'codigo_beneficiario', '') or conta_bancaria.convenio or ''
+            dados['codigo_beneficiario'] = codigo_benef
+            # Tipo de emissao: usar campo especifico, com fallback para '4' (beneficiario)
+            dados['emissao'] = getattr(conta_bancaria, 'emissao', '') or '4'
             # Convenio deve ter 6 digitos
             if dados.get('convenio'):
                 dados['convenio'] = str(dados['convenio']).zfill(6)
@@ -679,9 +682,9 @@ class BoletoService:
 
         # Sicredi (748)
         elif codigo_banco == '748':
-            # Campos obrigatorios
-            dados['posto'] = getattr(conta_bancaria, 'posto', '01') or '01'
-            dados['byte_idt'] = '2'  # Geracao pelo beneficiario
+            # Campos obrigatorios: usar valores do modelo com fallbacks seguros
+            dados['posto'] = getattr(conta_bancaria, 'posto', '') or '01'
+            dados['byte_idt'] = getattr(conta_bancaria, 'byte_idt', '') or '2'
             # Nosso numero max 5 digitos
             if dados.get('nosso_numero'):
                 dados['nosso_numero'] = str(dados['nosso_numero']).zfill(5)[:5]
@@ -781,6 +784,53 @@ class BoletoService:
         Retorna dict padronizado: {'sucesso': bool, 'erro': str, ...}
         """
         try:
+            # Validar conta bancária para bancos com campos obrigatórios
+            banco = getattr(conta_bancaria, 'banco', '')
+            convenio = getattr(conta_bancaria, 'convenio', '') or ''
+            if banco == '001' and not convenio:
+                return {
+                    'sucesso': False,
+                    'erro': (
+                        'Banco do Brasil requer o campo "Convênio" preenchido na conta bancária. '
+                        'Acesse Configurações → Conta Bancária e informe o número do convênio.'
+                    )
+                }
+            if banco == '033' and not convenio:
+                return {
+                    'sucesso': False,
+                    'erro': (
+                        'Santander requer o campo "Convênio" preenchido na conta bancária (7 dígitos). '
+                        'Acesse Configurações → Conta Bancária e informe o número do convênio.'
+                    )
+                }
+            if banco == '104' and not convenio:
+                return {
+                    'sucesso': False,
+                    'erro': (
+                        'Caixa Econômica requer o campo "Convênio" preenchido na conta bancária (6 dígitos). '
+                        'Acesse Configurações → Conta Bancária e informe o número do convênio.'
+                    )
+                }
+            if banco == '748':
+                posto = getattr(conta_bancaria, 'posto', '') or ''
+                byte_idt = getattr(conta_bancaria, 'byte_idt', '') or ''
+                if not posto:
+                    return {
+                        'sucesso': False,
+                        'erro': (
+                            'Sicredi requer o campo "Posto" preenchido na conta bancária (2 dígitos). '
+                            'Acesse Configurações → Conta Bancária e informe o Posto.'
+                        )
+                    }
+                if not byte_idt:
+                    return {
+                        'sucesso': False,
+                        'erro': (
+                            'Sicredi requer o campo "Byte IDT" preenchido na conta bancária (1 dígito). '
+                            'Acesse Configurações → Conta Bancária e informe o Byte IDT.'
+                        )
+                    }
+
             # Montar dados do boleto (ja inclui numero_documento e validacoes)
             dados_boleto, nosso_numero = self._montar_dados_boleto(parcela, conta_bancaria)
 
