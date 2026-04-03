@@ -1362,6 +1362,108 @@ nav.app-navbar .sidenav-trigger {
 /* ========================================================================
    BOOTSTRAP MISC UTILITIES
    ======================================================================== */
+
+/* Typography extras */
+.lead      { font-size: 1.2rem; font-weight: 300; line-height: 1.6; }
+.display-1 { font-size: 5rem; font-weight: 300; line-height: 1.2; }
+.display-2 { font-size: 4.5rem; font-weight: 300; line-height: 1.2; }
+.display-3 { font-size: 4rem; font-weight: 300; line-height: 1.2; }
+.display-4 { font-size: 3.5rem; font-weight: 300; line-height: 1.2; }
+.display-5 { font-size: 3rem; font-weight: 300; line-height: 1.2; }
+.display-6 { font-size: 2.5rem; font-weight: 300; line-height: 1.2; }
+.fw-semibold { font-weight: 600 !important; }
+.fw-medium   { font-weight: 500 !important; }
+
+/* Accessibility */
+.visually-hidden, .sr-only {
+    position: absolute !important;
+    width: 1px !important;
+    height: 1px !important;
+    padding: 0 !important;
+    margin: -1px !important;
+    overflow: hidden !important;
+    clip: rect(0,0,0,0) !important;
+    white-space: nowrap !important;
+    border: 0 !important;
+}
+.visually-hidden-focusable:not(:focus):not(:focus-within) {
+    position: absolute !important;
+    width: 1px !important;
+    height: 1px !important;
+    overflow: hidden !important;
+    clip: rect(0,0,0,0) !important;
+}
+
+/* Sticky positioning */
+.sticky-top    { position: sticky !important; top: 0 !important; z-index: 1020; }
+.sticky-bottom { position: sticky !important; bottom: 0 !important; z-index: 1020; }
+
+/* Background opacity helpers */
+.bg-opacity-10 { --bg-opacity: 0.10; }
+.bg-opacity-25 { --bg-opacity: 0.25; }
+.bg-opacity-50 { --bg-opacity: 0.50; }
+.bg-opacity-75 { --bg-opacity: 0.75; }
+
+/* Input group sizes */
+.input-group-sm .form-control, .input-group-sm .form-select,
+.input-group-sm .input-group-text, .input-group-sm .btn {
+    padding: 0.28rem 0.6rem;
+    font-size: 0.82rem;
+    border-radius: 6px;
+}
+.input-group-lg .form-control, .input-group-lg .form-select,
+.input-group-lg .input-group-text, .input-group-lg .btn {
+    padding: 0.75rem 1rem;
+    font-size: 1.05rem;
+    border-radius: 10px;
+}
+
+/* Border color extras */
+.border-info      { border-color: #17a2b8 !important; }
+.border-secondary { border-color: #6c757d !important; }
+.border-light     { border-color: #f8f9fa !important; }
+.border-dark      { border-color: var(--primary-color) !important; }
+.border-white     { border-color: #fff !important; }
+
+/* Vstack / Hstack */
+.vstack { display: flex; flex-direction: column; align-self: stretch; }
+.hstack { display: flex; flex-direction: row; align-items: center; }
+.hstack .vr { width: 1px; align-self: stretch; background: currentColor; opacity: 0.25; margin: 0 0.5rem; }
+
+/* Ratio / Aspect ratio */
+.ratio { position: relative; width: 100%; }
+.ratio::before { display: block; content: ""; padding-top: var(--ratio-padding, 56.25%); }
+.ratio > * { position: absolute; top: 0; left: 0; width: 100%; height: 100%; }
+.ratio-16x9 { --ratio-padding: 56.25%; }
+.ratio-4x3  { --ratio-padding: 75%; }
+.ratio-1x1  { --ratio-padding: 100%; }
+
+/* Stretched link */
+.stretched-link::after {
+    position: absolute; top: 0; right: 0; bottom: 0; left: 0;
+    z-index: 1; content: "";
+}
+
+/* nav-item (fixes list-item inside nav) */
+.nav-item { list-style: none; }
+
+/* table-active */
+.table-active { background-color: rgba(0,0,0,0.075) !important; }
+.table-secondary { background-color: #e2e3e5 !important; }
+.table-info      { background-color: #d1ecf1 !important; }
+.table-primary   { background-color: #cce5ff !important; }
+.table-light     { background-color: #f8f9fa !important; }
+
+/* list-group-item action + color variants */
+.list-group-item-action { cursor: pointer; width: 100%; }
+.list-group-item-action:hover { background: #f0f4f8; }
+.list-group-item-primary   { background: #cce5ff; color: #004085; }
+.list-group-item-success   { background: #d4edda; color: #155724; }
+.list-group-item-danger    { background: #f8d7da; color: #721c24; }
+.list-group-item-warning   { background: #fff3cd; color: #856404; }
+.list-group-item-info      { background: #d1ecf1; color: #0c5460; }
+.list-group-item-secondary { background: #e2e3e5; color: #383d41; }
+
 .w-100 { width: 100% !important; }
 .w-75  { width: 75% !important; }
 .w-50  { width: 50% !important; }
