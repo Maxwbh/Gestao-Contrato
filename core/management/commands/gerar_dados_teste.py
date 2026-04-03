@@ -20,7 +20,7 @@ from django.db import transaction
 from faker import Faker
 
 from core.models import Contabilidade, Imobiliaria, Imovel, Comprador, TipoImovel, ContaBancaria
-from contratos.models import Contrato, TipoCorrecao, StatusContrato, IndiceReajuste, PrestacaoIntermediaria
+from contratos.models import Contrato, TipoCorrecao, StatusContrato, IndiceReajuste, PrestacaoIntermediaria, TabelaJurosContrato
 from financeiro.models import Parcela, Reajuste
 from portal_comprador.models import AcessoComprador
 from django.contrib.auth.models import User
@@ -95,6 +95,7 @@ class Command(BaseCommand):
                 self.stdout.write('Criando Contratos...')
                 imoveis = lotes + terrenos
                 contratos = self.criar_contratos(imoveis, compradores, imobiliarias)
+                tabela_juros_count = TabelaJurosContrato.objects.count()
 
                 # 7. Remover parcelas futuras (manter apenas até o mês atual)
                 self.stdout.write('Removendo parcelas futuras...')
@@ -105,21 +106,30 @@ class Command(BaseCommand):
                 self.stdout.write('Marcando parcelas como pagas...')
                 self.marcar_parcelas_pagas(contratos, 0.90)
 
-                # 9. Gerar índices de reajuste
+                # 9. Simular boletos gerados para demonstração da remessa
+                self.stdout.write('Simulando boletos gerados (para demo de remessa)...')
+                boletos_simulados = self.simular_boletos_gerados(contratos, contas_bancarias)
+                self.stdout.write(f'   {boletos_simulados} boletos simulados')
+
+                # 10. Gerar índices de reajuste
                 self.stdout.write('Gerando índices de reajuste...')
                 indices = self.gerar_indices_reajuste()
 
-                # 10. Criar prestações intermediárias para alguns contratos
+                # 11. Criar prestações intermediárias para alguns contratos
                 self.stdout.write('Criando prestações intermediárias...')
                 intermediarias = self.criar_prestacoes_intermediarias(contratos)
 
-                # 11. Criar acessos ao portal para alguns compradores
+                # 12. Criar acessos ao portal para alguns compradores
                 self.stdout.write('Criando acessos ao portal do comprador...')
                 acessos = self.criar_acessos_portal(compradores)
 
-                # 12. Criar reajustes aplicados para contratos antigos
+                # 13. Criar reajustes aplicados para contratos antigos
                 self.stdout.write('Criando reajustes aplicados...')
                 reajustes = self.criar_reajustes_aplicados(contratos)
+
+                # 14. Verificar dados para boleto e remessa
+                self.stdout.write('Verificando integridade dos dados para boleto/remessa...')
+                self.verificar_dados_boleto_remessa(contratos, contas_bancarias)
 
             # Contagem final
             pf_count = len([c for c in compradores if c.tipo_pessoa == 'PF'])
@@ -133,6 +143,8 @@ class Command(BaseCommand):
             self.stdout.write(self.style.SUCCESS(f'   • {len(terrenos)} Terrenos'))
             self.stdout.write(self.style.SUCCESS(f'   • {len(compradores)} Compradores ({pf_count} PF + {pj_count} PJ)'))
             self.stdout.write(self.style.SUCCESS(f'   • {len(contratos)} Contratos'))
+            self.stdout.write(self.style.SUCCESS(f'   • {tabela_juros_count} Faixas de Juros Escalantes (TabelaJurosContrato)'))
+            self.stdout.write(self.style.SUCCESS(f'   • {boletos_simulados} Boletos Simulados (prontos para remessa)'))
             self.stdout.write(self.style.SUCCESS(f'   • {intermediarias} Prestações Intermediárias'))
             self.stdout.write(self.style.SUCCESS(f'   • {acessos} Acessos ao Portal'))
             self.stdout.write(self.style.SUCCESS(f'   • {reajustes} Reajustes Aplicados'))
@@ -161,6 +173,10 @@ class Command(BaseCommand):
 
     def limpar_dados(self):
         """Limpa todos os dados de teste"""
+        from financeiro.models import ArquivoRemessa, ArquivoRetorno
+        ArquivoRemessa.objects.all().delete()
+        ArquivoRetorno.objects.all().delete()
+
         # Portal do Comprador
         AcessoComprador.objects.all().delete()
         User.objects.filter(username__startswith='comprador_').delete()
@@ -182,17 +198,22 @@ class Command(BaseCommand):
         Contabilidade.objects.all().delete()
 
     def criar_contabilidade(self):
-        """Cria 1 Contabilidade"""
-        return Contabilidade.objects.create(
-            nome='Contabilidade Sete Lagoas',
-            razao_social='M&S Contabilidade e Consultoria LTDA',
+        """Cria 1 Contabilidade (get_or_create — idempotente)"""
+        obj, created = Contabilidade.objects.get_or_create(
             cnpj='12.345.678/0001-90',
-            endereco='Rua Principal, 123 - Centro - Sete Lagoas/MG - CEP: 35700-000',
-            telefone='(31) 3773-1234',
-            email='contato@msbrasil.inf.br',
-            responsavel='Maxwell da Silva Oliveira',
-            ativo=True
+            defaults={
+                'nome': 'Contabilidade Sete Lagoas',
+                'razao_social': 'M&S Contabilidade e Consultoria LTDA',
+                'endereco': 'Rua Principal, 123 - Centro - Sete Lagoas/MG - CEP: 35700-000',
+                'telefone': '(31) 3773-1234',
+                'email': 'contato@msbrasil.inf.br',
+                'responsavel': 'Maxwell da Silva Oliveira',
+                'ativo': True,
+            }
         )
+        if not created:
+            self.stdout.write('   → Contabilidade já existe, reutilizando.')
+        return obj
 
     def criar_imobiliarias(self, contabilidade, quantidade):
         """Cria Imobiliárias com endereço estruturado"""
@@ -219,26 +240,32 @@ class Command(BaseCommand):
         ]
 
         for i, d in enumerate(dados[:quantidade]):
-            imobiliaria = Imobiliaria.objects.create(
-                contabilidade=contabilidade,
-                nome=d['nome'],
-                razao_social=f'{d["nome"]} Negócios Imobiliários LTDA',
-                cnpj=f'23.456.78{i}/0001-{10+i}',
-                cep=d['cep'],
-                logradouro=d['logradouro'],
-                numero=d['numero'],
-                bairro=d['bairro'],
-                cidade=d['cidade'],
-                estado=d['estado'],
-                telefone=f'(31) 3773-{2000+i*100}',
-                email=f'contato@{d["nome"].lower().replace(" ", "")}.com.br',
-                responsavel_financeiro=self.fake.name(),
-                banco='Banco do Brasil',
-                agencia=f'{3000+i}',
-                conta=f'{50000+i*1000}-{i}',
-                pix=f'pix@{d["nome"].lower().replace(" ", "")}.com.br',
-                ativo=True
+            cnpj = f'23.456.78{i}/0001-{10+i:02d}'
+            imobiliaria, created = Imobiliaria.objects.get_or_create(
+                cnpj=cnpj,
+                defaults={
+                    'contabilidade': contabilidade,
+                    'tipo_pessoa': 'PJ',
+                    'nome': d['nome'],
+                    'razao_social': f'{d["nome"]} Negócios Imobiliários LTDA',
+                    'cep': d['cep'],
+                    'logradouro': d['logradouro'],
+                    'numero': d['numero'],
+                    'bairro': d['bairro'],
+                    'cidade': d['cidade'],
+                    'estado': d['estado'],
+                    'telefone': f'(31) 3773-{2000+i*100}',
+                    'email': f'contato@{d["nome"].lower().replace(" ", "")}.com.br',
+                    'responsavel_financeiro': self.fake.name(),
+                    'banco': 'Banco do Brasil',
+                    'agencia': f'{3000+i}',
+                    'conta': f'{50000+i*1000}-{i}',
+                    'pix': f'pix@{d["nome"].lower().replace(" ", "")}.com.br',
+                    'ativo': True,
+                }
             )
+            if not created:
+                self.stdout.write(f'   → Imobiliária "{d["nome"]}" já existe, reutilizando.')
             imobiliarias.append(imobiliaria)
 
         return imobiliarias
@@ -306,22 +333,24 @@ class Command(BaseCommand):
                 else:
                     conta_completa = conta_numero
 
-                conta = ContaBancaria.objects.create(
+                conta, _ = ContaBancaria.objects.get_or_create(
                     imobiliaria=imobiliaria,
                     banco=config['banco'],
-                    descricao=f"{config['descricao']} - {imobiliaria.nome}",
-                    principal=(i == 0),  # BB é a principal
-                    agencia=agencia_completa,
-                    conta=conta_completa,
-                    convenio=config['convenio'],
-                    carteira=config['carteira'],
-                    nosso_numero_atual=config['nosso_numero_atual'],
-                    cobranca_registrada=True,
-                    prazo_baixa=30,
-                    prazo_protesto=0,
-                    layout_cnab='CNAB_240',
-                    numero_remessa_cnab_atual=1,
-                    ativo=True
+                    defaults=dict(
+                        descricao=f"{config['descricao']} - {imobiliaria.nome}",
+                        principal=(i == 0),  # BB é a principal
+                        agencia=agencia_completa,
+                        conta=conta_completa,
+                        convenio=config['convenio'],
+                        carteira=config['carteira'],
+                        nosso_numero_atual=config['nosso_numero_atual'],
+                        cobranca_registrada=True,
+                        prazo_baixa=30,
+                        prazo_protesto=0,
+                        layout_cnab='CNAB_240',
+                        numero_remessa_cnab_atual=1,
+                        ativo=True,
+                    )
                 )
                 contas.append(conta)
 
@@ -540,6 +569,9 @@ class Command(BaseCommand):
         random.shuffle(compradores_disponiveis)
         hoje = timezone.now().date()
 
+        # Offset global para evitar colisão com contratos já existentes no banco
+        seq_global = Contrato.objects.count()
+
         for i, imovel in enumerate(imoveis):
             if not compradores_disponiveis:
                 break
@@ -557,9 +589,18 @@ class Command(BaseCommand):
             meses_desde_contrato = (hoje.year - data_primeiro_vencimento.year) * 12 + \
                                    (hoje.month - data_primeiro_vencimento.month)
 
-            # Limitar parcelas entre 6 e o máximo que cabe até hoje
-            max_parcelas = max(6, min(meses_desde_contrato + 1, 48))
-            numero_parcelas = random.randint(min(6, max_parcelas), max_parcelas)
+            # 5% dos contratos são longos (120-360 parcelas) — representam loteamentos
+            # Para esses, a data do contrato é recuada para caber mais parcelas
+            if random.random() < 0.05:
+                numero_parcelas = random.choice([120, 180, 240, 360])
+                # Recua a data do contrato para ter pelo menos 24 meses decorridos
+                dias_atras = random.randint(730, 1460)
+                data_contrato = hoje - timedelta(days=dias_atras)
+                data_primeiro_vencimento = data_contrato + timedelta(days=30)
+            else:
+                # Limitar parcelas entre 6 e o máximo que cabe até hoje
+                max_parcelas = max(6, min(meses_desde_contrato + 1, 48))
+                numero_parcelas = random.randint(min(6, max_parcelas), max_parcelas)
 
             # Valor do imóvel baseado na área (garantir precisão decimal)
             area = Decimal(str(imovel.area)).quantize(Decimal('0.01'))
@@ -579,7 +620,7 @@ class Command(BaseCommand):
                 imovel=imovel,
                 comprador=comprador,
                 imobiliaria=imovel.imobiliaria,
-                numero_contrato=f'CTR-{data_contrato.year}-{i+1:04d}',
+                numero_contrato=f'CTR-{data_contrato.year}-{seq_global + i + 1:04d}',
                 data_contrato=data_contrato,
                 data_primeiro_vencimento=data_primeiro_vencimento,
                 valor_total=valor_total,
@@ -588,15 +629,56 @@ class Command(BaseCommand):
                 dia_vencimento=random.choice([5, 10, 15, 20, 25]),
                 percentual_juros_mora=Decimal('1.00'),
                 percentual_multa=Decimal('2.00'),
-                tipo_correcao=random.choice([
-                    TipoCorrecao.IPCA, TipoCorrecao.IGPM, TipoCorrecao.INCC,
-                    TipoCorrecao.IGPDI, TipoCorrecao.INPC, TipoCorrecao.TR
-                ]),
+                tipo_correcao=random.choices(
+                    [TipoCorrecao.IPCA, TipoCorrecao.IGPM, TipoCorrecao.INCC,
+                     TipoCorrecao.IGPDI, TipoCorrecao.INPC, TipoCorrecao.TR,
+                     TipoCorrecao.FIXO],
+                    weights=[25, 20, 15, 10, 10, 10, 10], k=1
+                )[0],
                 prazo_reajuste_meses=12,
+                # 30% dos contratos têm spread (0.5 a 2 p.p.)
+                spread_reajuste=Decimal(str(round(random.uniform(0.5, 2.0), 4))) if random.random() < 0.3 else None,
+                # 20% têm piso (0%)
+                reajuste_piso=Decimal('0.0000') if random.random() < 0.2 else None,
+                # 15% têm teto (entre 10% e 15%)
+                reajuste_teto=Decimal(str(round(random.uniform(10.0, 15.0), 4))) if random.random() < 0.15 else None,
+                # Fallback INPC para contratos com IGPM (20% de chance)
+                tipo_correcao_fallback='INPC' if random.random() < 0.2 else '',
+                # Cláusulas padrão
+                percentual_fruicao=Decimal('0.5000'),
+                percentual_multa_rescisao_penal=Decimal('10.0000'),
+                percentual_multa_rescisao_adm=Decimal('12.0000'),
+                percentual_cessao=Decimal('3.0000'),
+                intermediarias_reduzem_pmt=random.random() < 0.3,
+                intermediarias_reajustadas=random.random() < 0.7,
+                tipo_amortizacao='SAC' if random.random() < 0.25 else 'PRICE',
                 status=StatusContrato.ATIVO,
                 observacoes=f'Contrato gerado automaticamente para teste'
             )
             contratos.append(contrato)
+
+            # 15% dos contratos têm juros escalantes por ciclo (tabela price progressiva)
+            tem_tabela_juros = random.random() < 0.15 and numero_parcelas >= 24
+            if tem_tabela_juros:
+                faixas = [
+                    (1, 1, Decimal('0.0000')),    # Ano 1: sem juros adicionais
+                    (2, 2, Decimal('0.6000')),
+                    (3, 3, Decimal('0.6500')),
+                    (4, 4, Decimal('0.7000')),
+                    (5, 5, Decimal('0.7500')),
+                    (6, 6, Decimal('0.8000')),
+                    (7, None, Decimal('0.8500')),  # Ano 7 em diante
+                ]
+                for ciclo_ini, ciclo_fim, juros in faixas:
+                    TabelaJurosContrato.objects.create(
+                        contrato=contrato,
+                        ciclo_inicio=ciclo_ini,
+                        ciclo_fim=ciclo_fim,
+                        juros_mensal=juros,
+                        observacoes='Gerado por dados de teste'
+                    )
+                # Recalcula parcelas com sistema correto (Price ou SAC) após TabelaJuros
+                contrato.recalcular_amortizacao()
 
         return contratos
 
@@ -652,6 +734,185 @@ class Command(BaseCommand):
                     observacoes='Pagamento gerado automaticamente para teste'
                 )
 
+    def simular_boletos_gerados(self, contratos, contas_bancarias):
+        """
+        Simula boletos gerados para parcelas VENCIDAS e pendentes,
+        distribuindo entre TODAS as contas bancárias disponíveis
+        (BB, Sicoob, Bradesco) de cada imobiliária.
+        Parcelas PAGAS não recebem boleto (não entram em remessa).
+        """
+        from financeiro.models import StatusBoleto
+        from django.utils import timezone as tz
+
+        count = 0
+        hoje = tz.now()
+        hoje_date = hoje.date()
+
+        # Mapear TODAS as contas por imobiliária (não só a principal)
+        contas_por_imob: dict = {}
+        for cb in contas_bancarias:
+            contas_por_imob.setdefault(cb.imobiliaria_id, [])
+            contas_por_imob[cb.imobiliaria_id].append(cb)
+
+        # Ordenar: principal primeiro, depois as demais
+        for imob_id, contas in contas_por_imob.items():
+            contas.sort(key=lambda c: (not c.principal, c.banco))
+
+        for idx, contrato in enumerate(contratos):
+            contas_imob = contas_por_imob.get(contrato.imobiliaria_id)
+            if not contas_imob:
+                continue
+
+            # Alternar conta bancária entre os contratos (round-robin entre BB, Sicoob, Bradesco)
+            conta = contas_imob[idx % len(contas_imob)]
+
+            # Parcelas vencidas não pagas (prioridade)
+            parcelas_vencidas = list(
+                contrato.parcelas.filter(
+                    pago=False,
+                    data_vencimento__lt=hoje_date,
+                    status_boleto__in=['PENDENTE', 'ERRO']
+                ).order_by('data_vencimento')[:5]
+            )
+
+            # Parcelas a vencer não pagas (complemento)
+            parcelas_a_vencer = list(
+                contrato.parcelas.filter(
+                    pago=False,
+                    data_vencimento__gte=hoje_date,
+                    status_boleto__in=['PENDENTE', 'ERRO']
+                ).order_by('data_vencimento')[:2]
+            )
+
+            # Priorizar vencidas; se não houver, usar a vencer
+            parcelas_alvo = parcelas_vencidas if parcelas_vencidas else parcelas_a_vencer
+
+            for parcela in parcelas_alvo:
+                # Garantir que parcela não está paga (dupla verificação)
+                if parcela.pago:
+                    continue
+
+                conta.nosso_numero_atual += 1
+                parcela.conta_bancaria = conta
+                parcela.status_boleto = StatusBoleto.GERADO
+                parcela.nosso_numero = str(conta.nosso_numero_atual).zfill(10)
+                parcela.numero_documento = f'{contrato.numero_contrato}/{parcela.numero_parcela:03d}'
+                parcela.data_geracao_boleto = hoje
+                parcela.save(update_fields=[
+                    'conta_bancaria', 'status_boleto', 'nosso_numero',
+                    'numero_documento', 'data_geracao_boleto'
+                ])
+                count += 1
+
+            conta.save(update_fields=['nosso_numero_atual'])
+
+        # Estatísticas por banco
+        from financeiro.models import Parcela, StatusBoleto as SB
+        for cb in contas_bancarias:
+            qtd = Parcela.objects.filter(
+                conta_bancaria=cb, status_boleto=SB.GERADO, pago=False
+            ).count()
+            if qtd > 0:
+                self.stdout.write(f'   → {cb.get_banco_display()} ({cb.banco}): {qtd} boletos simulados')
+
+        return count
+
+    def verificar_dados_boleto_remessa(self, contratos, contas_bancarias):
+        """
+        Verifica se os dados gerados estão completos para emissão de boleto
+        e geração de arquivo remessa, reportando problemas encontrados.
+
+        Regras verificadas (conforme BRCobranca):
+        - Conta bancária: agencia, conta, convenio (se obrigatório), posto/byte_idt (Sicredi), emissao (Caixa)
+        - Imobiliária: CNPJ preenchido (cedente do boleto)
+        - Comprador: CPF ou CNPJ preenchido, endereço, nome
+        - Parcela com boleto: nosso_numero, numero_documento, conta_bancaria
+        - Parcelas PAGAS não devem ter boleto gerado (não entram em remessa)
+        """
+        from financeiro.models import Parcela, StatusBoleto
+
+        CAMPOS_OBRIG_BANCO = {
+            '001': {'convenio': 'Convênio (4-8 dígitos)'},
+            '033': {'convenio': 'Convênio (7 dígitos)'},
+            '104': {'convenio': 'Convênio (6 dígitos)', 'emissao': 'Emissão (1 dígito)', 'codigo_beneficiario': 'Código Beneficiário'},
+            '748': {'convenio': 'Convênio', 'posto': 'Posto (2 dígitos)', 'byte_idt': 'Byte IDT (1 dígito)'},
+            '756': {'convenio': 'Convênio'},
+        }
+
+        alertas = []
+        ok_count = 0
+
+        # 1. Verificar contas bancárias
+        for cb in contas_bancarias:
+            problemas_cb = []
+            if not cb.agencia:
+                problemas_cb.append('Agência vazia')
+            if not cb.conta:
+                problemas_cb.append('Conta vazia')
+            campos_req = CAMPOS_OBRIG_BANCO.get(cb.banco, {})
+            for campo, label in campos_req.items():
+                valor = getattr(cb, campo, '') or ''
+                if not valor.strip():
+                    problemas_cb.append(f'{label} vazio')
+            if problemas_cb:
+                alertas.append(f'Conta {cb.get_banco_display()} ({cb}): {", ".join(problemas_cb)}')
+            else:
+                ok_count += 1
+
+        # 2. Verificar imobiliárias
+        for contrato in contratos[:10]:  # Amostra
+            imob = contrato.imobiliaria
+            if not imob.cnpj and not getattr(imob, 'cpf', None):
+                alertas.append(f'Imobiliária "{imob.nome}" sem CNPJ/CPF (necessário para cedente do boleto)')
+
+        # 3. Verificar compradores
+        sem_doc = 0
+        sem_end = 0
+        for contrato in contratos:
+            c = contrato.comprador
+            if not c.cpf and not c.cnpj:
+                sem_doc += 1
+            if not c.nome:
+                alertas.append(f'Comprador ID {c.pk} sem nome')
+            if not (getattr(c, 'logradouro', '') or getattr(c, 'endereco', '')):
+                sem_end += 1
+        if sem_doc:
+            alertas.append(f'{sem_doc} comprador(es) sem CPF/CNPJ (campo sacado_documento do boleto)')
+        if sem_end:
+            alertas.append(f'{sem_end} comprador(es) sem endereço (campo sacado_endereco do boleto)')
+
+        # 4. Verificar parcelas com boleto gerado
+        parcelas_boleto = Parcela.objects.filter(status_boleto=StatusBoleto.GERADO)
+        sem_nosso_num = parcelas_boleto.filter(nosso_numero='').count()
+        sem_num_doc = parcelas_boleto.filter(numero_documento='').count()
+        sem_conta = parcelas_boleto.filter(conta_bancaria__isnull=True).count()
+        pagas_com_boleto = parcelas_boleto.filter(pago=True).count()
+
+        if sem_nosso_num:
+            alertas.append(f'{sem_nosso_num} boleto(s) sem nosso_numero')
+        if sem_num_doc:
+            alertas.append(f'{sem_num_doc} boleto(s) sem numero_documento')
+        if sem_conta:
+            alertas.append(f'{sem_conta} boleto(s) sem conta_bancária vinculada')
+        if pagas_com_boleto:
+            alertas.append(
+                f'⚠ {pagas_com_boleto} parcela(s) PAGA(S) ainda com status GERADO '
+                f'— não entrarão em remessa (correto), mas status deveria ser PAGO'
+            )
+
+        # 5. Resumo por banco
+        for cb in contas_bancarias:
+            qtd = parcelas_boleto.filter(conta_bancaria=cb, pago=False).count()
+            self.stdout.write(f'   [OK] {cb.get_banco_display():20s} — {qtd} boletos prontos para remessa')
+
+        # 6. Exibir resultado
+        if alertas:
+            self.stdout.write(self.style.WARNING(f'\n⚠ {len(alertas)} problema(s) encontrado(s):'))
+            for a in alertas:
+                self.stdout.write(self.style.WARNING(f'   • {a}'))
+        else:
+            self.stdout.write(self.style.SUCCESS('   Todos os dados verificados sem problemas.'))
+
     def gerar_cpf(self):
         """Gera um CPF fictício formatado"""
         cpf = [random.randint(0, 9) for _ in range(9)]
@@ -705,9 +966,10 @@ class Command(BaseCommand):
             ('SELIC', 0.80, 1.10, 'BCB'),            # SELIC: 0.8% a 1.1%
         ]
 
-        # Gerar últimos 36 meses
+        # Gerar últimos 36 meses (usa relativedelta para datas precisas)
+        from dateutil.relativedelta import relativedelta
         for meses_atras in range(36, 0, -1):
-            data = hoje - timedelta(days=meses_atras * 30)
+            data = hoje - relativedelta(months=meses_atras)
             ano = data.year
             mes = data.month
 
@@ -764,14 +1026,15 @@ class Command(BaseCommand):
         )
 
         for contrato in contratos_com_intermediarias:
-            # Calcular quantas intermediárias cabem no contrato (a cada 12 meses)
-            max_intermediarias = contrato.numero_parcelas // 12
+            # Intervalo: 50% usa a cada 6 meses, 50% a cada 12 meses
+            intervalo = random.choice([6, 12])
+            max_intermediarias = contrato.numero_parcelas // intervalo
 
             if max_intermediarias < 1:
                 continue
 
             # Número de intermediárias: 1 até o máximo permitido
-            num_intermediarias = random.randint(1, min(5, max_intermediarias))
+            num_intermediarias = random.randint(1, min(10, max_intermediarias))
 
             # Atualizar campo do contrato
             if hasattr(contrato, 'quantidade_intermediarias'):
@@ -779,8 +1042,8 @@ class Command(BaseCommand):
                 contrato.save(update_fields=['quantidade_intermediarias'])
 
             for seq in range(1, num_intermediarias + 1):
-                # Vencimento a cada 12 meses (garantir que não exceda o prazo)
-                mes_vencimento = seq * 12
+                # Vencimento a cada `intervalo` meses
+                mes_vencimento = seq * intervalo
                 if mes_vencimento > contrato.numero_parcelas:
                     break
 
@@ -883,6 +1146,10 @@ class Command(BaseCommand):
         hoje = timezone.now().date()
 
         for contrato in contratos:
+            # FIXO não tem reajuste
+            if contrato.tipo_correcao == TipoCorrecao.FIXO:
+                continue
+
             prazo = contrato.prazo_reajuste_meses
             meses_decorridos = (hoje.year - contrato.data_contrato.year) * 12 + \
                                (hoje.month - contrato.data_contrato.month)
@@ -919,12 +1186,26 @@ class Command(BaseCommand):
                 if percentual_bruto is None:
                     percentual_bruto = Decimal(str(round(random.uniform(3.5, 6.5), 4)))
 
+                # Aplicar spread do contrato (índice composto)
+                spread = contrato.spread_reajuste or Decimal('0')
+                percentual_com_spread = percentual_bruto + spread
+
+                # Aplicar teto e piso configurados no contrato
+                percentual_final = percentual_com_spread
+                if contrato.reajuste_piso is not None:
+                    percentual_final = max(contrato.reajuste_piso, percentual_final)
+                if contrato.reajuste_teto is not None:
+                    percentual_final = min(contrato.reajuste_teto, percentual_final)
+
                 reajuste = Reajuste.objects.create(
                     contrato=contrato,
                     data_reajuste=data_inicio_ciclo,
                     indice_tipo=contrato.tipo_correcao,
-                    percentual=percentual_bruto,
+                    percentual=percentual_final,
                     percentual_bruto=percentual_bruto,
+                    spread_aplicado=spread if spread else None,
+                    piso_aplicado=contrato.reajuste_piso,
+                    teto_aplicado=contrato.reajuste_teto,
                     parcela_inicial=parcela_inicial,
                     parcela_final=parcela_final,
                     ciclo=ciclo,
