@@ -494,6 +494,11 @@ with connection.cursor() as cursor:
     add_column_if_not_exists(cursor, 'core_contabancaria', 'prazo_protesto', "INTEGER DEFAULT 0")
     add_column_if_not_exists(cursor, 'core_contabancaria', 'layout_cnab', "VARCHAR(10) DEFAULT 'CNAB_240'")
     add_column_if_not_exists(cursor, 'core_contabancaria', 'numero_remessa_cnab_atual', "INTEGER DEFAULT 0")
+    # Campos específicos por banco (BRCobranca)
+    add_column_if_not_exists(cursor, 'core_contabancaria', 'posto', "VARCHAR(2) DEFAULT ''")
+    add_column_if_not_exists(cursor, 'core_contabancaria', 'byte_idt', "VARCHAR(1) DEFAULT ''")
+    add_column_if_not_exists(cursor, 'core_contabancaria', 'emissao', "VARCHAR(1) DEFAULT ''")
+    add_column_if_not_exists(cursor, 'core_contabancaria', 'codigo_beneficiario', "VARCHAR(20) DEFAULT ''")
 
     # Adicionar campos de boleto na tabela financeiro_parcela
     print("Checking financeiro_parcela for boleto fields...")
