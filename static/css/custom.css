@@ -495,6 +495,46 @@ a:not(.btn):hover {
 }
 
 /* ========================================================================
+   RESET DE CONFLITOS MATERIALIZE → BOOTSTRAP
+   Materialize define estilos globais que conflitam com Bootstrap classes
+   ======================================================================== */
+
+/* Materialize define line-height e margin em p — preservar mas não quebrar */
+p { margin-bottom: 0.75rem; line-height: 1.6; }
+
+/* Materialize define cores em links — nossa personalização */
+a { color: var(--secondary-color); }
+a:hover { color: #2980b9; text-decoration: none; }
+
+/* Materialize remove list-style mas mantemos para listas não-nav */
+ul:not(.sidenav):not(.dropdown-content):not(.pagination):not(.breadcrumb):not(.nav):not(.list-group):not(.collapsible) {
+    list-style: disc;
+    padding-left: 1.5rem;
+}
+ul:not(.sidenav):not(.dropdown-content):not(.pagination):not(.breadcrumb):not(.nav):not(.list-group):not(.collapsible) li {
+    list-style: disc;
+}
+
+/* Materialize define table width=100% com borders — nosso override */
+table { border-collapse: collapse; }
+
+/* Materialize define blockquote com border-left */
+blockquote { border-left: 5px solid var(--secondary-color); margin: 1rem 0; padding: 0.5rem 1rem; background: #f8f9fa; border-radius: 0 6px 6px 0; }
+
+/* Materialize chips */
+.chip { display: inline-flex; align-items: center; padding: 0 12px; height: 32px; border-radius: 16px; background: #e0e0e0; font-size: 0.875rem; }
+
+/* Materialize truncate */
+.truncate { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: block; }
+
+/* Fixes para o row do Materialize (evitar margin-bottom: 20px sobrepor) */
+.row { margin-bottom: 0 !important; }
+.row.mb-4 { margin-bottom: 1.5rem !important; }
+.row.mb-3 { margin-bottom: 1rem !important; }
+.row.mb-2 { margin-bottom: 0.5rem !important; }
+.row.mb-1 { margin-bottom: 0.25rem !important; }
+
+/* ========================================================================
    MATERIALIZE — NAVBAR & SIDENAV CUSTOMIZAÇÃO
    ======================================================================== */
 nav.app-navbar {
@@ -1195,6 +1235,73 @@ nav.app-navbar .sidenav-trigger {
 .table-responsive { overflow-x: auto; -webkit-overflow-scrolling: touch; }
 .table-sm th, .table-sm td { padding: 0.4rem 0.6rem; }
 .table .text-nowrap { white-space: nowrap; }
+
+/* ========================================================================
+   OVERRIDE MATERIALIZE GLOBAL INPUT STYLES
+   Materialize usa input[type="text"]:not(.browser-default) com alta
+   especificidade que sobrescreve .form-control. Usamos !important aqui.
+   ======================================================================== */
+input.form-control,
+input.form-control[type="text"],
+input.form-control[type="email"],
+input.form-control[type="password"],
+input.form-control[type="number"],
+input.form-control[type="tel"],
+input.form-control[type="url"],
+input.form-control[type="search"],
+input.form-control[type="date"],
+input.form-control[type="datetime-local"],
+input.form-control[type="time"],
+input.form-control[type="month"],
+input.form-control[type="week"],
+textarea.form-control,
+select.form-select {
+    background-color: #fff !important;
+    border: 1px solid #ced4da !important;
+    border-bottom: 1px solid #ced4da !important;
+    border-radius: 8px !important;
+    padding: 0.6rem 0.85rem !important;
+    height: auto !important;
+    line-height: 1.5 !important;
+    box-shadow: none !important;
+    box-sizing: border-box !important;
+    margin: 0 0 0 0 !important;
+    color: var(--dark-text) !important;
+    font-size: 0.95rem !important;
+    width: 100% !important;
+    display: block !important;
+    transition: border-color 0.15s ease, box-shadow 0.15s ease !important;
+}
+input.form-control:focus,
+textarea.form-control:focus {
+    border: 1px solid var(--secondary-color) !important;
+    border-bottom: 1px solid var(--secondary-color) !important;
+    box-shadow: 0 0 0 3px rgba(52,152,219,0.18) !important;
+    outline: none !important;
+}
+input.form-control::placeholder,
+textarea.form-control::placeholder { color: #adb5bd !important; opacity: 1 !important; }
+input.form-control:disabled,
+input.form-control[readonly],
+textarea.form-control:disabled { background-color: #e9ecef !important; opacity: 1 !important; }
+
+/* Override Materialize label global style para .form-label */
+label.form-label,
+.form-label {
+    font-size: 0.92rem !important;
+    color: var(--dark-text) !important;
+    font-weight: 600 !important;
+    position: static !important;
+    transform: none !important;
+    height: auto !important;
+    line-height: normal !important;
+    display: block !important;
+    margin-bottom: 0.4rem !important;
+}
+
+/* Materialize remove margin/height do input-field wrapper — resetar */
+.input-field { margin: 0 !important; }
+.input-field > label { position: static !important; transform: none !important; color: var(--dark-text) !important; }
 
 /* ========================================================================
    BOOTSTRAP FORM BRIDGE
