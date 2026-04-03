@@ -3,7 +3,7 @@
 ## Fluxo Git (obrigatório)
 
 ```
-claude/fix-boleto-generation-error-tuqwA  →  PR  →  V3.1  →  merge  →  main
+claude/fix-boleto-generation-error-tuqwA  →  PR  →  V3.1  →  merge  →  master
           (desenvolvimento Claude)            (review)   (staging)          (produção)
 ```
 
@@ -13,14 +13,14 @@ claude/fix-boleto-generation-error-tuqwA  →  PR  →  V3.1  →  merge  →  m
 |--------|--------|--------------|
 | `claude/fix-boleto-generation-error-tuqwA` | Desenvolvimento / testes | Claude |
 | `V3.1` | Integração / staging | Merge via PR revisado por @maxwbh |
-| `main` | Produção | Merge de V3.1 por @maxwbh — commits verificados |
+| `master` | Produção | Merge de V3.1 por @maxwbh — commits verificados |
 
 ### Workflow por Fase
 
 1. **Durante o desenvolvimento**: Claude commita e pusha **sempre** em `claude/fix-boleto-generation-error-tuqwA`
 2. **Fase concluída**: Claude abre **PR** de `claude/fix-boleto-generation-error-tuqwA` → `V3.1`
 3. **Revisão**: @maxwbh valida e faz merge do PR em `V3.1`
-4. **Produção**: @maxwbh faz merge de `V3.1` → `main` com commits atribuídos a @maxwbh (verificados)
+4. **Produção**: @maxwbh faz merge de `V3.1` → `master` com commits atribuídos a @maxwbh (verificados)
 
 ### Comandos Claude (resumo)
 
@@ -54,6 +54,6 @@ git push -u origin claude/fix-boleto-generation-error-tuqwA
 
 ## Branches de Produção
 
-- `main` — produção final (@maxwbh)
+- `master` — produção final (@maxwbh)
 - `V3.1` — staging / integração
 - `claude/fix-boleto-generation-error-tuqwA` — desenvolvimento Claude
