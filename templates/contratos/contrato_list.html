@@ -77,6 +77,15 @@
     .contrato-selecionado {
         background-color: #e7f3ff !important;
     }
+    /* AG Grid overrides */
+    .ag-theme-material .ag-root-wrapper { border-radius: 0; border: none; }
+    .ag-theme-material .ag-header { background-color: #f8f9fa; }
+    .ag-theme-material .ag-header-cell-text { color: #212529; font-weight: 600; }
+    .ag-theme-material .ag-row-even { background-color: #fff; }
+    .ag-theme-material .ag-row-odd  { background-color: #f8f9fa; }
+    .ag-theme-material .ag-row:hover { background-color: #e8f4fd !important; }
+    .ag-theme-material .ag-row-selected { background-color: #cfe2ff !important; }
+    .ag-grid-actions .btn { padding: 1px 6px; font-size: 0.75rem; margin: 1px; }
     .acoes-lote {
         position: sticky;
         bottom: 0;
@@ -341,117 +350,46 @@
                     {% include "includes/pagination_perpage.html" %}
                 </div>
 
-                <!-- ===== TABLE VIEW ===== -->
+                <!-- ===== TABLE VIEW (AG Grid) ===== -->
                 <div id="table-view-container">
-                {% if contratos %}
-                    <div class="table-responsive" style="overflow-x: auto;">
-                        <table class="table table-sm table-hover align-middle" id="tabelaContratos" style="font-size: 0.85rem;">
-                            <thead class="table-light">
-                                <tr>
-                                    <th class="text-center" style="width: 40px;">
-                                        <input type="checkbox" class="form-check-input" id="selecionarTodos" onchange="toggleSelecionarTodos(this)" title="Selecionar todos">
-                                    </th>
-                                    <th>Contrato</th>
-                                    <th>Comprador</th>
-                                    <th>Imovel</th>
-                                    <th>Valor Total</th>
-                                    <th>Parcelas</th>
-                                    <th>Progresso</th>
-                                    <th>Status</th>
-                                    <th class="text-center">Acoes</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {% for contrato in contratos %}
-                                <tr class="contrato-row" data-contrato-id="{{ contrato.pk }}" data-contrato-numero="{{ contrato.numero_contrato }}" data-contrato-status="{{ contrato.status }}">
-                                    <td class="text-center">
-                                        {% if contrato.status == 'ATIVO' %}
-                                        <input type="checkbox" class="form-check-input contrato-checkbox" value="{{ contrato.pk }}" onchange="atualizarSelecao()">
-                                        {% endif %}
-                                    </td>
-                                    <td>
-                                        <strong>{{ contrato.numero_contrato }}</strong>
-                                        <br>
-                                        <small class="text-muted">
-                                            {{ contrato.data_contrato|date:"d/m/Y" }}
-                                        </small>
-                                    </td>
-                                    <td>
-                                        <i class="fas fa-user text-primary"></i>
-                                        {{ contrato.comprador.nome }}
-                                    </td>
-                                    <td>
-                                        <i class="fas fa-home text-success"></i>
-                                        {{ contrato.imovel.identificacao }}
-                                        <br>
-                                        <small class="text-muted">{{ contrato.imovel.loteamento }}</small>
-                                    </td>
-                                    <td>
-                                        <strong>R$ {{ contrato.valor_total|floatformat:2 }}</strong>
-                                        {% if contrato.valor_entrada > 0 %}
-                                        <br>
-                                        <small class="text-muted">Entrada: R$ {{ contrato.valor_entrada|floatformat:2 }}</small>
-                                        {% endif %}
-                                    </td>
-                                    <td class="text-center">
-                                        <span class="badge bg-secondary">
-                                            {{ contrato.numero_parcelas }}x
-                                        </span>
-                                        <br>
-                                        <small class="text-muted">
-                                            R$ {{ contrato.valor_parcela_original|floatformat:2 }}
-                                        </small>
-                                    </td>
-                                    <td style="min-width: 120px;">
-                                        {% with progresso=contrato.calcular_progresso %}
-                                        <div class="progress mb-1">
-                                            <div class="progress-bar {% if progresso >= 100 %}bg-success{% elif progresso >= 50 %}bg-info{% else %}bg-warning{% endif %}"
-                                                 role="progressbar"
-                                                 style="width: {{ progresso|stringformat:'f' }}%"
-                                                 aria-valuenow="{{ progresso }}"
-                                                 aria-valuemin="0"
-                                                 aria-valuemax="100">
-                                            </div>
-                                        </div>
-                                        <small class="text-muted">{{ progresso|floatformat:1 }}% pago</small>
-                                        {% endwith %}
-                                    </td>
-                                    <td>
-                                        <span class="badge status-badge {% if contrato.status == 'ATIVO' %}bg-success{% elif contrato.status == 'QUITADO' %}bg-primary{% elif contrato.status == 'CANCELADO' %}bg-danger{% else %}bg-warning text-dark{% endif %}">
-                                            {{ contrato.get_status_display }}
-                                        </span>
-                                    </td>
-                                    <td class="text-center">
-                                        <div class="btn-group btn-group-sm" role="group">
-                                            <a href="{% url 'contratos:detalhe' contrato.pk %}"
-                                               class="btn btn-outline-info"
-                                               title="Ver Detalhes">
-                                                <i class="fas fa-eye"></i>
-                                            </a>
-                                            <a href="{% url 'contratos:editar' contrato.pk %}"
-                                               class="btn btn-outline-primary"
-                                               title="Editar">
-                                                <i class="fas fa-edit"></i>
-                                            </a>
-                                            {% if contrato.status != 'CANCELADO' %}
-                                            <button type="button"
-                                                    class="btn btn-outline-danger"
-                                                    title="Cancelar Contrato"
-                                                    onclick="confirmarCancelamento('{{ contrato.numero_contrato }}', '{% url 'contratos:excluir' contrato.pk %}')">
-                                                <i class="fas fa-ban"></i>
-                                            </button>
-                                            {% endif %}
-                                        </div>
-                                    </td>
-                                </tr>
-                                {% endfor %}
-                            </tbody>
-                        </table>
+                    <div class="px-3 pt-3 pb-2 border-bottom bg-light d-flex align-items-center gap-2">
+                        <i class="fas fa-search text-muted"></i>
+                        <input type="text" id="contratosQuickFilter" class="form-control form-control-sm"
+                               placeholder="Busca rápida na página..." style="width: 220px;"
+                               oninput="if(window.contratosGridApi) window.contratosGridApi.setGridOption('quickFilterText', this.value)">
                     </div>
-
-                    {% include "includes/pagination_perpage.html" %}
-                {% else %}
-                    <div class="alert alert-info text-center">
+                    <!-- Dados para AG Grid -->
+                    <script>
+                    var contratosRowData = [
+                    {% for contrato in contratos %}
+                    {
+                        pk: {{ contrato.pk }},
+                        numero: "{{ contrato.numero_contrato|escapejs }}",
+                        data_contrato: "{{ contrato.data_contrato|date:'d/m/Y' }}",
+                        comprador: "{{ contrato.comprador.nome|escapejs }}",
+                        imovel: "{{ contrato.imovel.identificacao|escapejs }}",
+                        loteamento: "{{ contrato.imovel.loteamento|default:''|escapejs }}",
+                        valor_total: {{ contrato.valor_total|default:0 }},
+                        valor_entrada: {{ contrato.valor_entrada|default:0 }},
+                        numero_parcelas: {{ contrato.numero_parcelas }},
+                        valor_parcela: {{ contrato.valor_parcela_original|default:0 }},
+                        progresso: {{ contrato.calcular_progresso|floatformat:1 }},
+                        status: "{{ contrato.status }}",
+                        status_display: "{{ contrato.get_status_display|escapejs }}",
+                        is_ativo: {% if contrato.status == 'ATIVO' %}true{% else %}false{% endif %},
+                        detalhe_url: "{% url 'contratos:detalhe' contrato.pk %}",
+                        editar_url: "{% url 'contratos:editar' contrato.pk %}",
+                        cancelar_url: "{% url 'contratos:excluir' contrato.pk %}",
+                    },
+                    {% endfor %}
+                    ];
+                    </script>
+                    <div id="contratosGrid" class="ag-theme-material" style="width: 100%;"></div>
+                    <div class="p-3">
+                        {% include "includes/pagination_perpage.html" %}
+                    </div>
+                    {% if not contratos %}
+                    <div class="alert alert-info text-center m-3">
                         <i class="fas fa-info-circle fa-3x mb-3"></i>
                         <h5>Nenhum contrato encontrado</h5>
                         <p>
@@ -465,7 +403,7 @@
                             <i class="fas fa-plus"></i> Cadastrar Primeiro Contrato
                         </a>
                     </div>
-                {% endif %}
+                    {% endif %}
                 </div><!-- /table-view-container -->
             </div>
         </div>
@@ -593,50 +531,157 @@
         }, duration);
     }
 
-    // ============ FUNCOES DE SELECAO ============
+    // ============ AG GRID - CONTRATOS ============
 
-    function toggleSelecionarTodos(checkbox) {
-        var checkboxes = document.querySelectorAll('.contrato-checkbox');
-        checkboxes.forEach(function(cb) {
-            cb.checked = checkbox.checked;
-            var row = cb.closest('tr');
-            if (row) {
-                if (cb.checked) {
-                    row.classList.add('contrato-selecionado');
-                } else {
-                    row.classList.remove('contrato-selecionado');
-                }
-            }
-        });
-        atualizarSelecao();
+    function formatBRL(value) {
+        if (value == null) return '—';
+        return 'R$ ' + parseFloat(value).toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2});
     }
 
-    function atualizarSelecao() {
-        var checkboxes = document.querySelectorAll('.contrato-checkbox:checked');
-        var qtd = checkboxes.length;
-        var btnGerar = document.getElementById('btnGerarLote');
-        var qtdSpan = document.getElementById('qtdSelecionados');
+    function progressoRenderer(params) {
+        const p = parseFloat(params.value) || 0;
+        const cls = p >= 100 ? 'bg-success' : p >= 50 ? 'bg-info' : 'bg-warning';
+        return `<div style="min-width:100px;">
+            <div class="progress mb-1" style="height:6px;">
+                <div class="progress-bar ${cls}" style="width:${Math.min(p,100)}%"></div>
+            </div>
+            <small class="text-muted">${p.toFixed(1)}% pago</small>
+        </div>`;
+    }
 
-        qtdSpan.textContent = qtd;
+    function statusRenderer(params) {
+        const s = params.data.status;
+        const label = params.data.status_display;
+        if (s === 'ATIVO')     return `<span class="badge bg-success">${label}</span>`;
+        if (s === 'QUITADO')   return `<span class="badge bg-primary">${label}</span>`;
+        if (s === 'CANCELADO') return `<span class="badge bg-danger">${label}</span>`;
+        return `<span class="badge bg-warning text-dark">${label}</span>`;
+    }
 
-        if (qtd > 0) {
-            btnGerar.style.display = 'inline-block';
-        } else {
-            btnGerar.style.display = 'none';
+    function acoesContratoRenderer(params) {
+        const d = params.data;
+        let html = `<div class="ag-grid-actions">
+            <a href="${d.detalhe_url}" class="btn btn-sm btn-outline-info" title="Ver Detalhes"><i class="fas fa-eye"></i></a>
+            <a href="${d.editar_url}" class="btn btn-sm btn-outline-primary" title="Editar"><i class="fas fa-edit"></i></a>`;
+        if (d.status !== 'CANCELADO') {
+            html += `<button class="btn btn-sm btn-outline-danger" title="Cancelar"
+                onclick="confirmarCancelamento('${d.numero.replace(/'/g,"\\'")}', '${d.cancelar_url}')">
+                <i class="fas fa-ban"></i></button>`;
         }
-
-        // Atualizar visual das linhas
-        document.querySelectorAll('.contrato-checkbox').forEach(function(cb) {
-            var row = cb.closest('tr');
-            if (row) {
-                if (cb.checked) {
-                    row.classList.add('contrato-selecionado');
-                } else {
-                    row.classList.remove('contrato-selecionado');
-                }
-            }
-        });
+        html += '</div>';
+        return html;
     }
+
+    const contratosColumnDefs = [
+        {
+            headerName: '',
+            field: 'pk',
+            checkboxSelection: params => params.data.is_ativo,
+            headerCheckboxSelection: true,
+            headerCheckboxSelectionFilteredOnly: true,
+            width: 50,
+            minWidth: 50,
+            maxWidth: 50,
+            sortable: false,
+            filter: false,
+            resizable: false,
+        },
+        {
+            headerName: 'Contrato',
+            field: 'numero',
+            filter: 'agTextColumnFilter',
+            floatingFilter: true,
+            minWidth: 130,
+            cellRenderer: params => `<strong>${params.value}</strong><br><small class="text-muted">${params.data.data_contrato}</small>`,
+        },
+        {
+            headerName: 'Comprador',
+            field: 'comprador',
+            filter: 'agTextColumnFilter',
+            floatingFilter: true,
+            minWidth: 160,
+            cellRenderer: params => `<i class="fas fa-user text-primary me-1"></i>${params.value}`,
+        },
+        {
+            headerName: 'Imóvel',
+            field: 'imovel',
+            filter: 'agTextColumnFilter',
+            floatingFilter: true,
+            minWidth: 150,
+            cellRenderer: params => `<i class="fas fa-home text-success me-1"></i>${params.value}<br><small class="text-muted">${params.data.loteamento}</small>`,
+        },
+        {
+            headerName: 'Valor Total',
+            field: 'valor_total',
+            filter: 'agNumberColumnFilter',
+            floatingFilter: true,
+            minWidth: 130,
+            type: 'numericColumn',
+            cellRenderer: params => `<strong>${formatBRL(params.value)}</strong>`,
+        },
+        {
+            headerName: 'Parcelas',
+            field: 'numero_parcelas',
+            filter: 'agNumberColumnFilter',
+            floatingFilter: true,
+            minWidth: 100,
+            type: 'numericColumn',
+            cellRenderer: params => `<span class="badge bg-secondary">${params.value}x</span><br><small class="text-muted">${formatBRL(params.data.valor_parcela)}</small>`,
+        },
+        {
+            headerName: 'Progresso',
+            field: 'progresso',
+            filter: 'agNumberColumnFilter',
+            floatingFilter: true,
+            minWidth: 140,
+            cellRenderer: progressoRenderer,
+        },
+        {
+            headerName: 'Status',
+            field: 'status',
+            filter: 'agTextColumnFilter',
+            floatingFilter: true,
+            minWidth: 110,
+            cellRenderer: statusRenderer,
+        },
+        {
+            headerName: 'Ações',
+            field: 'pk',
+            sortable: false,
+            filter: false,
+            minWidth: 145,
+            cellRenderer: acoesContratoRenderer,
+        },
+    ];
+
+    document.addEventListener('DOMContentLoaded', function() {
+        window.contratosGridApi = agGrid.createGrid(
+            document.getElementById('contratosGrid'),
+            {
+                columnDefs: contratosColumnDefs,
+                rowData: typeof contratosRowData !== 'undefined' ? contratosRowData : [],
+                domLayout: 'autoHeight',
+                rowSelection: 'multiple',
+                suppressRowClickSelection: true,
+                defaultColDef: {
+                    sortable: true,
+                    resizable: true,
+                },
+                rowHeight: 52,
+                headerHeight: 48,
+                floatingFiltersHeight: 36,
+                suppressCellFocus: true,
+                enableCellTextSelection: true,
+                onSelectionChanged: function() {
+                    const rows = window.contratosGridApi.getSelectedRows();
+                    const qtd = rows.length;
+                    document.getElementById('qtdSelecionados').textContent = qtd;
+                    document.getElementById('btnGerarLote').style.display = qtd > 0 ? 'inline-block' : 'none';
+                },
+                overlayNoRowsTemplate: '<div class="text-center py-4 text-muted"><i class="fas fa-inbox fa-2x mb-2 d-block"></i>Nenhum contrato encontrado</div>',
+            }
+        );
+    });
 
     // ============ FUNCOES DE GERACAO EM LOTE ============
 
@@ -645,26 +690,20 @@
     }
 
     function abrirModalGerarLote() {
-        var checkboxes = document.querySelectorAll('.contrato-checkbox:checked');
-        if (checkboxes.length === 0) {
+        var selectedRows = window.contratosGridApi ? window.contratosGridApi.getSelectedRows() : [];
+        if (selectedRows.length === 0) {
             showErrorModal('Selecione pelo menos um contrato.');
             return;
         }
 
-        // Preencher lista de contratos selecionados
         var lista = document.getElementById('listaContratosSelecionados');
         var html = '<table class="table table-sm mb-0"><thead class="table-light"><tr><th>Contrato</th><th>Status</th></tr></thead><tbody>';
-
-        checkboxes.forEach(function(cb) {
-            var row = cb.closest('tr');
-            var numero = row.getAttribute('data-contrato-numero');
-            html += '<tr><td><strong>' + numero + '</strong></td><td><span class="badge bg-success">Ativo</span></td></tr>';
+        selectedRows.forEach(function(row) {
+            html += '<tr><td><strong>' + row.numero + '</strong></td><td><span class="badge bg-success">Ativo</span></td></tr>';
         });
-
         html += '</tbody></table>';
         lista.innerHTML = html;
 
-        // Resetar resultado
         document.getElementById('resultadoGeracaoLote').classList.add('d-none');
         document.getElementById('btnConfirmarGerarLote').disabled = false;
         document.getElementById('btnConfirmarGerarLote').innerHTML = '<i class="fas fa-barcode"></i> Gerar Boletos';
@@ -673,8 +712,8 @@
     }
 
     function confirmarGerarLote() {
-        var checkboxes = document.querySelectorAll('.contrato-checkbox:checked');
-        var contratoIds = Array.from(checkboxes).map(function(cb) { return parseInt(cb.value); });
+        var selectedRows = window.contratosGridApi ? window.contratosGridApi.getSelectedRows() : [];
+        var contratoIds = selectedRows.map(function(row) { return row.pk; });
         var quantidade = parseInt(document.getElementById('qtdBoletosLote').value) || 1;
 
         if (contratoIds.length === 0) {
