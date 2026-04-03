@@ -5,369 +5,243 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% block title %}Gestão de Contratos{% endblock %}</title>
 
-    <!-- Bootstrap 5 CSS -->
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- Materialize CSS -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/materialize/1.0.0/css/materialize.min.css">
+    <!-- Material Icons -->
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
     <!-- Font Awesome -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- AG Grid Community -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/ag-grid-community@31.3.4/styles/ag-grid.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/ag-grid-community@31.3.4/styles/ag-theme-material.css">
     <!-- Custom CSS -->
     {% load static %}
     <link rel="stylesheet" href="{% static 'css/custom.css' %}">
 
-    <style>
-        :root {
-            --primary-color: #2c3e50;
-            --secondary-color: #3498db;
-            --success-color: #27ae60;
-            --danger-color: #e74c3c;
-            --warning-color: #f39c12;
-            --light-bg: #ecf0f1;
-        }
-
-        body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background-color: var(--light-bg);
-        }
-
-        .navbar {
-            background-color: var(--primary-color);
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-        }
-
-        .navbar-brand {
-            font-weight: bold;
-            font-size: 1.5rem;
-        }
-
-        .main-container {
-            margin-top: 2rem;
-            margin-bottom: 2rem;
-        }
-
-        .card {
-            border: none;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-            border-radius: 8px;
-            margin-bottom: 1.5rem;
-        }
-
-        .card-header {
-            background-color: var(--primary-color);
-            color: white;
-            font-weight: bold;
-            border-radius: 8px 8px 0 0 !important;
-        }
-
-        .btn-primary {
-            background-color: var(--secondary-color);
-            border-color: var(--secondary-color);
-        }
-
-        .btn-primary:hover {
-            background-color: #2980b9;
-            border-color: #2980b9;
-        }
-
-        .stats-card {
-            background: linear-gradient(135deg, var(--secondary-color), #2980b9);
-            color: white;
-            padding: 1.5rem;
-            border-radius: 8px;
-            margin-bottom: 1rem;
-        }
-
-        .stats-card h3 {
-            font-size: 2.5rem;
-            margin-bottom: 0.5rem;
-        }
-
-        .stats-card p {
-            margin: 0;
-            opacity: 0.9;
-        }
-
-        .footer {
-            background-color: var(--primary-color);
-            color: white;
-            padding: 2rem 0;
-            margin-top: 3rem;
-        }
-
-        .table-hover tbody tr:hover {
-            background-color: #f8f9fa;
-        }
-
-        .badge-custom {
-            padding: 0.5rem 1rem;
-            border-radius: 20px;
-        }
-
-        /* ============================================
-           ESTILOS GLOBAIS PARA FORMULARIOS
-           Campos Obrigatorios vs Opcionais
-           ============================================ */
-
-        /* Legenda de campos */
-        .legenda-campos {
-            background: #f8f9fa;
-            border-radius: 6px;
-            padding: 0.5rem 1rem;
-            margin-bottom: 1rem;
-            font-size: 0.85rem;
-            border: 1px solid #dee2e6;
-        }
-        .legenda-campos .obrigatorio {
-            color: #e74c3c;
-            font-weight: bold;
-        }
-        .legenda-campos .opcional {
-            color: #6c757d;
-        }
-
-        /* Indicador de campo obrigatorio no label */
-        .campo-obrigatorio label::after,
-        .campo-obrigatorio .form-label::after {
-            content: " *";
-            color: #e74c3c;
-            font-weight: bold;
-        }
-
-        /* Borda esquerda nos campos obrigatorios */
-        .campo-obrigatorio .form-control,
-        .campo-obrigatorio .form-select {
-            border-left: 3px solid #e74c3c;
-        }
-
-        /* Card de secao obrigatoria */
-        .card-obrigatorio {
-            border-left: 4px solid #e74c3c !important;
-        }
-        .card-obrigatorio > .card-header::after {
-            content: " (Obrigatorio)";
-            font-size: 0.7rem;
-            opacity: 0.85;
-            font-weight: normal;
-        }
-
-        /* Card de secao opcional */
-        .card-opcional {
-            border-left: 4px solid #95a5a6 !important;
-        }
-        .card-opcional > .card-header {
-            background: linear-gradient(135deg, #7f8c8d, #95a5a6) !important;
-        }
-        .card-opcional > .card-header::after {
-            content: " (Opcional)";
-            font-size: 0.7rem;
-            opacity: 0.85;
-            font-weight: normal;
-        }
-
-        /* Input groups com campos obrigatorios */
-        .campo-obrigatorio .input-group .form-control {
-            border-left: 3px solid #e74c3c;
-        }
-    </style>
-
     {% block extra_css %}{% endblock %}
 </head>
-<body>
-    <!-- Navbar -->
-    <nav class="navbar navbar-expand-lg navbar-dark">
-        <div class="container-fluid">
-            <a class="navbar-brand" href="{% url 'core:index' %}">
-                <i class="fas fa-file-contract"></i> Gestão de Contratos
-            </a>
-            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
-                <span class="navbar-toggler-icon"></span>
-            </button>
-            <div class="collapse navbar-collapse" id="navbarNav">
-                <ul class="navbar-nav me-auto">
-                    <!-- Dashboard Principal -->
-                    <li class="nav-item">
-                        <a class="nav-link" href="{% url 'core:dashboard' %}">
-                            <i class="fas fa-tachometer-alt"></i> Dashboard
-                        </a>
-                    </li>
+<body class="grey lighten-4">
 
-                    <!-- Financeiro -->
-                    <li class="nav-item dropdown">
-                        <a class="nav-link dropdown-toggle" href="#" id="financeiroDropdown" role="button" data-bs-toggle="dropdown">
-                            <i class="fas fa-dollar-sign"></i> Financeiro
-                        </a>
-                        <ul class="dropdown-menu">
-                            <li><a class="dropdown-item" href="{% url 'financeiro:dashboard' %}">
-                                <i class="fas fa-chart-line"></i> Dashboard Financeiro
-                            </a></li>
-                            <li><hr class="dropdown-divider"></li>
-                            <li><a class="dropdown-item" href="{% url 'financeiro:listar_parcelas' %}">
-                                <i class="fas fa-list"></i> Todas as Parcelas
-                            </a></li>
-                            <li><a class="dropdown-item" href="{% url 'financeiro:parcelas_mes' %}">
-                                <i class="fas fa-calendar-alt"></i> Parcelas do Mês
-                            </a></li>
-                            <li><hr class="dropdown-divider"></li>
-                            <li class="dropdown-header">
-                                <i class="fas fa-barcode"></i> Boletos
-                            </li>
-                            <li><a class="dropdown-item" href="{% url 'financeiro:listar_parcelas' %}?status_boleto=NAO_GERADO">
-                                <i class="fas fa-exclamation-circle text-warning"></i> Pendentes de Geração
-                            </a></li>
-                            <li><a class="dropdown-item" href="{% url 'financeiro:listar_parcelas' %}?status_boleto=GERADO">
-                                <i class="fas fa-check-circle text-success"></i> Boletos Gerados
-                            </a></li>
-                            <li><hr class="dropdown-divider"></li>
-                            <li class="dropdown-header">
-                                <i class="fas fa-file-alt"></i> CNAB
-                            </li>
-                            <li><a class="dropdown-item" href="{% url 'financeiro:listar_remessas' %}">
-                                <i class="fas fa-file-export"></i> Arquivos de Remessa
-                            </a></li>
-                            <li><a class="dropdown-item" href="{% url 'financeiro:listar_retornos' %}">
-                                <i class="fas fa-file-import"></i> Arquivos de Retorno
-                            </a></li>
-                        </ul>
-                    </li>
-
-                    <!-- Contratos -->
-                    <li class="nav-item dropdown">
-                        <a class="nav-link dropdown-toggle" href="#" id="contratosDropdown" role="button" data-bs-toggle="dropdown">
-                            <i class="fas fa-file-contract"></i> Contratos
-                        </a>
-                        <ul class="dropdown-menu">
-                            <li><a class="dropdown-item" href="{% url 'contratos:listar' %}">
-                                <i class="fas fa-list"></i> Todos os Contratos
-                            </a></li>
-                            <li><a class="dropdown-item" href="{% url 'contratos:criar' %}">
-                                <i class="fas fa-plus-circle"></i> Novo Contrato
-                            </a></li>
-                            <li><hr class="dropdown-divider"></li>
-                            <li><a class="dropdown-item" href="{% url 'contratos:indices_listar' %}">
-                                <i class="fas fa-chart-bar"></i> Índices de Reajuste
-                            </a></li>
-                        </ul>
-                    </li>
-
-                    <!-- Cadastros -->
-                    <li class="nav-item dropdown">
-                        <a class="nav-link dropdown-toggle" href="#" id="cadastrosDropdown" role="button" data-bs-toggle="dropdown">
-                            <i class="fas fa-database"></i> Cadastros
-                        </a>
-                        <ul class="dropdown-menu">
-                            <li class="dropdown-header">
-                                <i class="fas fa-building"></i> Estrutura
-                            </li>
-                            <li><a class="dropdown-item" href="{% url 'core:listar_contabilidades' %}">
-                                <i class="fas fa-calculator"></i> Contabilidades
-                            </a></li>
-                            <li><a class="dropdown-item" href="{% url 'core:listar_imobiliarias' %}">
-                                <i class="fas fa-building"></i> Imobiliárias
-                            </a></li>
-                            <li><a class="dropdown-item" href="{% url 'core:listar_imoveis' %}">
-                                <i class="fas fa-home"></i> Imóveis
-                            </a></li>
-                            <li><hr class="dropdown-divider"></li>
-                            <li class="dropdown-header">
-                                <i class="fas fa-users"></i> Pessoas
-                            </li>
-                            <li><a class="dropdown-item" href="{% url 'core:listar_compradores' %}">
-                                <i class="fas fa-user-tie"></i> Compradores
-                            </a></li>
-                        </ul>
-                    </li>
-
-                    <!-- Notificações -->
-                    <li class="nav-item dropdown">
-                        <a class="nav-link dropdown-toggle" href="#" id="notificacoesDropdown" role="button" data-bs-toggle="dropdown">
-                            <i class="fas fa-bell"></i> Notificacoes
-                        </a>
-                        <ul class="dropdown-menu">
-                            <li><a class="dropdown-item" href="{% url 'notificacoes:listar' %}">
-                                <i class="fas fa-history"></i> Historico de Envios
-                            </a></li>
-                            <li><hr class="dropdown-divider"></li>
-                            <li class="dropdown-header">
-                                <i class="fas fa-cogs"></i> Configuracoes
-                            </li>
-                            <li><a class="dropdown-item" href="{% url 'notificacoes:listar_config_email' %}">
-                                <i class="fas fa-envelope"></i> Servidores de E-mail
-                            </a></li>
-                            <li><a class="dropdown-item" href="{% url 'notificacoes:listar_templates' %}">
-                                <i class="fas fa-file-alt"></i> Templates de Mensagens
-                            </a></li>
-                        </ul>
-                    </li>
-                </ul>
-
-                <!-- Menu à direita -->
-                <ul class="navbar-nav ms-auto">
-                    {% if user.is_staff or user.is_superuser %}
-                    <li class="nav-item dropdown">
-                        <a class="nav-link dropdown-toggle" href="#" id="adminDropdown" role="button" data-bs-toggle="dropdown">
-                            <i class="fas fa-cog"></i> Admin
-                        </a>
-                        <ul class="dropdown-menu dropdown-menu-end">
-                            <li><a class="dropdown-item" href="{% url 'core:listar_acessos' %}">
-                                <i class="fas fa-key"></i> Acessos de Usuários
-                            </a></li>
-                            <li><a class="dropdown-item" href="{% url 'core:pagina_dados_teste' %}">
-                                <i class="fas fa-database"></i> Dados de Teste
-                            </a></li>
-                            <li><hr class="dropdown-divider"></li>
-                            <li><a class="dropdown-item" href="/admin/">
-                                <i class="fas fa-tools"></i> Django Admin
-                            </a></li>
-                        </ul>
-                    </li>
-                    {% endif %}
-                    {% if user.is_authenticated %}
-                    <li class="nav-item dropdown">
-                        <a class="nav-link dropdown-toggle" href="#" id="userDropdown" role="button" data-bs-toggle="dropdown">
-                            <i class="fas fa-user-circle"></i> {{ user.first_name|default:user.username }}
-                        </a>
-                        <ul class="dropdown-menu dropdown-menu-end">
-                            <li><a class="dropdown-item" href="{% url 'accounts:perfil' %}">
-                                <i class="fas fa-user"></i> Meu Perfil
-                            </a></li>
-                            <li><a class="dropdown-item" href="{% url 'accounts:alterar_senha' %}">
-                                <i class="fas fa-key"></i> Alterar Senha
-                            </a></li>
-                            <li><hr class="dropdown-divider"></li>
-                            <li><a class="dropdown-item" href="{% url 'accounts:logout' %}">
-                                <i class="fas fa-sign-out-alt"></i> Sair
-                            </a></li>
-                        </ul>
-                    </li>
-                    {% else %}
-                    <li class="nav-item">
-                        <a class="nav-link" href="{% url 'accounts:login' %}">
-                            <i class="fas fa-sign-in-alt"></i> Entrar
-                        </a>
-                    </li>
-                    {% endif %}
-                </ul>
+    <!-- Sidenav (mobile) -->
+    <ul class="sidenav" id="mobile-sidenav">
+        <li>
+            <div class="user-view" style="background: var(--primary-color); padding: 16px;">
+                <span class="white-text brand-logo-text">
+                    <i class="fas fa-file-contract"></i> Gestão de Contratos
+                </span>
             </div>
+        </li>
+        <li><a href="{% url 'core:dashboard' %}"><i class="fas fa-tachometer-alt left"></i> Dashboard</a></li>
+        <li><div class="divider"></div></li>
+        <!-- Financeiro -->
+        <li><a class="subheader">Financeiro</a></li>
+        <li><a href="{% url 'financeiro:dashboard' %}"><i class="fas fa-chart-line left"></i> Dashboard Financeiro</a></li>
+        <li><a href="{% url 'financeiro:listar_parcelas' %}"><i class="fas fa-list left"></i> Todas as Parcelas</a></li>
+        <li><a href="{% url 'financeiro:parcelas_mes' %}"><i class="fas fa-calendar-alt left"></i> Parcelas do Mês</a></li>
+        <li><a href="{% url 'financeiro:listar_remessas' %}"><i class="fas fa-file-export left"></i> Arquivos de Remessa</a></li>
+        <li><a href="{% url 'financeiro:listar_retornos' %}"><i class="fas fa-file-import left"></i> Arquivos de Retorno</a></li>
+        <li><div class="divider"></div></li>
+        <!-- Contratos -->
+        <li><a class="subheader">Contratos</a></li>
+        <li><a href="{% url 'contratos:listar' %}"><i class="fas fa-list left"></i> Todos os Contratos</a></li>
+        <li><a href="{% url 'contratos:criar' %}"><i class="fas fa-plus-circle left"></i> Novo Contrato</a></li>
+        <li><a href="{% url 'contratos:indices_listar' %}"><i class="fas fa-chart-bar left"></i> Índices de Reajuste</a></li>
+        <li><div class="divider"></div></li>
+        <!-- Cadastros -->
+        <li><a class="subheader">Cadastros</a></li>
+        <li><a href="{% url 'core:listar_contabilidades' %}"><i class="fas fa-calculator left"></i> Contabilidades</a></li>
+        <li><a href="{% url 'core:listar_imobiliarias' %}"><i class="fas fa-building left"></i> Imobiliárias</a></li>
+        <li><a href="{% url 'core:listar_imoveis' %}"><i class="fas fa-home left"></i> Imóveis</a></li>
+        <li><a href="{% url 'core:listar_compradores' %}"><i class="fas fa-user-tie left"></i> Compradores</a></li>
+        <li><div class="divider"></div></li>
+        <li><a href="{% url 'core:roadmap' %}"><i class="fas fa-map-marked-alt left"></i> Roadmap</a></li>
+        <li><div class="divider"></div></li>
+        <!-- Notificações -->
+        <li><a class="subheader">Notificações</a></li>
+        <li><a href="{% url 'notificacoes:listar' %}"><i class="fas fa-history left"></i> Histórico de Envios</a></li>
+        <li><a href="{% url 'notificacoes:listar_config_email' %}"><i class="fas fa-envelope left"></i> Servidores de E-mail</a></li>
+        <li><a href="{% url 'notificacoes:listar_templates' %}"><i class="fas fa-file-alt left"></i> Templates de Mensagens</a></li>
+        {% if user.is_staff or user.is_superuser %}
+        <li><div class="divider"></div></li>
+        <li><a class="subheader">Admin</a></li>
+        <li><a href="{% url 'core:listar_acessos' %}"><i class="fas fa-key left"></i> Acessos de Usuários</a></li>
+        <li><a href="{% url 'core:pagina_dados_teste' %}"><i class="fas fa-database left"></i> Dados de Teste</a></li>
+        <li><a href="/admin/"><i class="fas fa-tools left"></i> Django Admin</a></li>
+        {% endif %}
+        {% if user.is_authenticated %}
+        <li><div class="divider"></div></li>
+        <li><a href="{% url 'accounts:perfil' %}"><i class="fas fa-user left"></i> Meu Perfil</a></li>
+        <li><a href="{% url 'accounts:alterar_senha' %}"><i class="fas fa-key left"></i> Alterar Senha</a></li>
+        <li><a href="{% url 'accounts:logout' %}"><i class="fas fa-sign-out-alt left"></i> Sair</a></li>
+        {% else %}
+        <li><a href="{% url 'accounts:login' %}"><i class="fas fa-sign-in-alt left"></i> Entrar</a></li>
+        {% endif %}
+    </ul>
+
+    <!-- Navbar -->
+    <nav class="app-navbar" role="navigation">
+        <div class="nav-wrapper container-fluid" style="padding: 0 1rem;">
+            <!-- Hamburger (mobile) -->
+            <a href="#" data-target="mobile-sidenav" class="sidenav-trigger">
+                <i class="material-icons">menu</i>
+            </a>
+
+            <!-- Brand -->
+            <a class="brand-logo truncate" href="{% url 'core:index' %}" style="position: relative; font-size: 1.3rem;">
+                <i class="fas fa-file-contract"></i>
+                <span class="hide-on-med-and-down"> Gestão de Contratos</span>
+            </a>
+
+            <!-- Desktop nav links -->
+            <ul class="right hide-on-med-and-down">
+                <li>
+                    <a href="{% url 'core:dashboard' %}">
+                        <i class="fas fa-tachometer-alt"></i> Dashboard
+                    </a>
+                </li>
+
+                <!-- Financeiro dropdown -->
+                <li>
+                    <a class="dropdown-trigger" href="#!" data-target="dd-financeiro">
+                        <i class="fas fa-dollar-sign"></i> Financeiro
+                        <i class="material-icons right">arrow_drop_down</i>
+                    </a>
+                </li>
+
+                <!-- Contratos dropdown -->
+                <li>
+                    <a class="dropdown-trigger" href="#!" data-target="dd-contratos">
+                        <i class="fas fa-file-contract"></i> Contratos
+                        <i class="material-icons right">arrow_drop_down</i>
+                    </a>
+                </li>
+
+                <!-- Cadastros dropdown -->
+                <li>
+                    <a class="dropdown-trigger" href="#!" data-target="dd-cadastros">
+                        <i class="fas fa-database"></i> Cadastros
+                        <i class="material-icons right">arrow_drop_down</i>
+                    </a>
+                </li>
+
+                <!-- Roadmap -->
+                <li>
+                    <a href="{% url 'core:roadmap' %}">
+                        <i class="fas fa-map-marked-alt"></i> Roadmap
+                    </a>
+                </li>
+
+                <!-- Notificações dropdown -->
+                <li>
+                    <a class="dropdown-trigger" href="#!" data-target="dd-notificacoes" id="notificacoesDropdown">
+                        <i class="fas fa-bell"></i> Notificações
+                        <i class="material-icons right">arrow_drop_down</i>
+                    </a>
+                </li>
+
+                {% if user.is_staff or user.is_superuser %}
+                <!-- Admin dropdown -->
+                <li>
+                    <a class="dropdown-trigger" href="#!" data-target="dd-admin">
+                        <i class="fas fa-cog"></i> Admin
+                        <i class="material-icons right">arrow_drop_down</i>
+                    </a>
+                </li>
+                {% endif %}
+
+                {% if user.is_authenticated %}
+                <!-- User dropdown -->
+                <li>
+                    <a class="dropdown-trigger" href="#!" data-target="dd-user">
+                        <i class="fas fa-user-circle"></i> {{ user.first_name|default:user.username }}
+                        <i class="material-icons right">arrow_drop_down</i>
+                    </a>
+                </li>
+                {% else %}
+                <li>
+                    <a href="{% url 'accounts:login' %}">
+                        <i class="fas fa-sign-in-alt"></i> Entrar
+                    </a>
+                </li>
+                {% endif %}
+            </ul>
         </div>
     </nav>
 
+    <!-- Dropdown Structures -->
+    <ul id="dd-financeiro" class="dropdown-content app-dropdown">
+        <li><a href="{% url 'financeiro:dashboard' %}"><i class="fas fa-chart-line"></i> Dashboard Financeiro</a></li>
+        <li class="divider" tabindex="-1"></li>
+        <li><a href="{% url 'financeiro:listar_parcelas' %}"><i class="fas fa-list"></i> Todas as Parcelas</a></li>
+        <li><a href="{% url 'financeiro:parcelas_mes' %}"><i class="fas fa-calendar-alt"></i> Parcelas do Mês</a></li>
+        <li class="divider" tabindex="-1"></li>
+        <li><a class="dropdown-header-item disabled"><i class="fas fa-barcode"></i> Boletos</a></li>
+        <li><a href="{% url 'financeiro:listar_parcelas' %}?status_boleto=NAO_GERADO"><i class="fas fa-exclamation-circle orange-text"></i> Pendentes de Geração</a></li>
+        <li><a href="{% url 'financeiro:listar_parcelas' %}?status_boleto=GERADO"><i class="fas fa-check-circle green-text"></i> Boletos Gerados</a></li>
+        <li class="divider" tabindex="-1"></li>
+        <li><a class="dropdown-header-item disabled"><i class="fas fa-file-alt"></i> CNAB</a></li>
+        <li><a href="{% url 'financeiro:listar_remessas' %}"><i class="fas fa-file-export"></i> Arquivos de Remessa</a></li>
+        <li><a href="{% url 'financeiro:listar_retornos' %}"><i class="fas fa-file-import"></i> Arquivos de Retorno</a></li>
+    </ul>
+
+    <ul id="dd-contratos" class="dropdown-content app-dropdown">
+        <li><a href="{% url 'contratos:listar' %}"><i class="fas fa-list"></i> Todos os Contratos</a></li>
+        <li><a href="{% url 'contratos:criar' %}"><i class="fas fa-plus-circle"></i> Novo Contrato</a></li>
+        <li class="divider" tabindex="-1"></li>
+        <li><a href="{% url 'contratos:indices_listar' %}"><i class="fas fa-chart-bar"></i> Índices de Reajuste</a></li>
+    </ul>
+
+    <ul id="dd-cadastros" class="dropdown-content app-dropdown">
+        <li><a class="dropdown-header-item disabled"><i class="fas fa-building"></i> Estrutura</a></li>
+        <li><a href="{% url 'core:listar_contabilidades' %}"><i class="fas fa-calculator"></i> Contabilidades</a></li>
+        <li><a href="{% url 'core:listar_imobiliarias' %}"><i class="fas fa-building"></i> Imobiliárias</a></li>
+        <li><a href="{% url 'core:listar_imoveis' %}"><i class="fas fa-home"></i> Imóveis</a></li>
+        <li class="divider" tabindex="-1"></li>
+        <li><a class="dropdown-header-item disabled"><i class="fas fa-users"></i> Pessoas</a></li>
+        <li><a href="{% url 'core:listar_compradores' %}"><i class="fas fa-user-tie"></i> Compradores</a></li>
+    </ul>
+
+    <ul id="dd-notificacoes" class="dropdown-content app-dropdown">
+        <li><a href="{% url 'notificacoes:listar' %}"><i class="fas fa-history"></i> Histórico de Envios</a></li>
+        <li class="divider" tabindex="-1"></li>
+        <li><a class="dropdown-header-item disabled"><i class="fas fa-cogs"></i> Configurações</a></li>
+        <li><a href="{% url 'notificacoes:listar_config_email' %}"><i class="fas fa-envelope"></i> Servidores de E-mail</a></li>
+        <li><a href="{% url 'notificacoes:listar_templates' %}"><i class="fas fa-file-alt"></i> Templates de Mensagens</a></li>
+    </ul>
+
+    {% if user.is_staff or user.is_superuser %}
+    <ul id="dd-admin" class="dropdown-content app-dropdown">
+        <li><a href="{% url 'core:listar_acessos' %}"><i class="fas fa-key"></i> Acessos de Usuários</a></li>
+        <li><a href="{% url 'core:pagina_dados_teste' %}"><i class="fas fa-database"></i> Dados de Teste</a></li>
+        <li class="divider" tabindex="-1"></li>
+        <li><a href="/admin/"><i class="fas fa-tools"></i> Django Admin</a></li>
+    </ul>
+    {% endif %}
+
+    {% if user.is_authenticated %}
+    <ul id="dd-user" class="dropdown-content app-dropdown">
+        <li><a href="{% url 'accounts:perfil' %}"><i class="fas fa-user"></i> Meu Perfil</a></li>
+        <li><a href="{% url 'accounts:alterar_senha' %}"><i class="fas fa-key"></i> Alterar Senha</a></li>
+        <li class="divider" tabindex="-1"></li>
+        <li><a href="{% url 'accounts:logout' %}"><i class="fas fa-sign-out-alt"></i> Sair</a></li>
+    </ul>
+    {% endif %}
+
     <!-- Modal de Erro Global -->
-    <div class="modal fade" id="errorModal" tabindex="-1" aria-labelledby="errorModalLabel" aria-modal="true" role="dialog">
-        <div class="modal-dialog modal-dialog-centered">
-            <div class="modal-content border-0 shadow">
-                <div class="modal-header bg-danger text-white border-0">
-                    <h5 class="modal-title d-flex align-items-center gap-2" id="errorModalLabel">
-                        <i class="fas fa-exclamation-circle"></i>
-                        <span id="errorModalTitle">Erro</span>
-                    </h5>
-                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Fechar"></button>
-                </div>
-                <div class="modal-body py-4">
-                    <p class="mb-0" id="errorModalMessage" style="white-space: pre-wrap;"></p>
-                </div>
-                <div class="modal-footer border-0 justify-content-center">
-                    <button type="button" class="btn btn-danger px-5" data-bs-dismiss="modal">
-                        <i class="fas fa-check me-1"></i> OK
-                    </button>
-                </div>
+    <div id="errorModal" class="modal app-modal">
+        <div class="modal-content">
+            <div class="modal-header-custom bg-danger white-text">
+                <i class="fas fa-exclamation-circle"></i>
+                <span id="errorModalTitle">Erro</span>
+                <a href="#!" class="modal-close white-text" style="float:right; font-size:1.4rem; line-height:1;">&times;</a>
+            </div>
+            <div class="modal-body-custom">
+                <p id="errorModalMessage" style="white-space: pre-wrap;"></p>
+            </div>
+            <div class="modal-footer">
+                <a href="#!" class="modal-close btn btn-danger waves-effect waves-light">
+                    <i class="fas fa-check me-1"></i> OK
+                </a>
             </div>
         </div>
     </div>
@@ -391,46 +265,57 @@
     </div>
 
     <!-- Footer -->
-    <footer class="footer mt-auto">
-        <div class="container text-center">
-            <p class="mb-1">
+    <footer class="app-footer">
+        <div class="container center-align">
+            <p class="mb-0">
                 <strong>Sistema de Gestão de Contratos de Venda de Imóveis</strong>
             </p>
             <p class="mb-0">
                 Desenvolvido por <strong>Maxwell da Silva Oliveira</strong> |
-                <a href="https://msbrasil.inf.br" target="_blank" class="text-white">M&S do Brasil LTDA</a>
+                <a href="https://msbrasil.inf.br" target="_blank" class="white-text">M&S do Brasil LTDA</a>
             </p>
             <p class="mt-2 mb-0">
-                <a href="https://www.linkedin.com/in/maxwbh/" target="_blank" class="text-white me-3">
+                <a href="https://www.linkedin.com/in/maxwbh/" target="_blank" class="white-text me-3">
                     <i class="fab fa-linkedin"></i> LinkedIn
                 </a>
-                <a href="https://github.com/Maxwbh/" target="_blank" class="text-white">
+                <a href="https://github.com/Maxwbh/" target="_blank" class="white-text">
                     <i class="fab fa-github"></i> GitHub
                 </a>
             </p>
         </div>
     </footer>
 
-    <!-- Bootstrap 5 JS -->
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <!-- Materialize JS -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/materialize/1.0.0/js/materialize.min.js"></script>
+    <!-- AG Grid Community -->
+    <script src="https://cdn.jsdelivr.net/npm/ag-grid-community@31.3.4/dist/ag-grid-community.min.js"></script>
     <!-- Custom JS -->
     <script src="{% static 'js/custom.js' %}"></script>
 
-    <!-- =====================================================
-         SISTEMA DE TOAST GLOBAL (3.16)
-         Uso: window.showToast('Mensagem', 'success'|'error'|'warning'|'info')
-         ===================================================== -->
+    <!-- Toast Container (keeping our custom system) -->
     <div id="globalToastContainer" style="
-        position: fixed; top: 20px; right: 20px; z-index: 99999;
+        position: fixed; top: 70px; right: 20px; z-index: 99999;
         display: flex; flex-direction: column; gap: 10px; min-width: 320px;
+        pointer-events: none;
     "></div>
+
     <style>
+        :root {
+            --primary-color: #2c3e50;
+            --secondary-color: #3498db;
+            --success-color: #27ae60;
+            --danger-color: #e74c3c;
+            --warning-color: #f39c12;
+            --light-bg: #ecf0f1;
+        }
+
         .global-toast {
             display: flex; align-items: flex-start; gap: 12px;
             padding: 14px 18px; border-radius: 8px; color: #fff;
             box-shadow: 0 4px 16px rgba(0,0,0,.2);
             animation: toastIn .3s ease-out;
             cursor: pointer;
+            pointer-events: all;
         }
         @keyframes toastIn { from { transform: translateX(120%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
         @keyframes toastOut { from { transform: translateX(0); opacity: 1; } to { transform: translateX(120%); opacity: 0; } }
@@ -442,71 +327,190 @@
         .global-toast .toast-body { flex: 1; font-size: .92rem; line-height: 1.4; }
         .global-toast .toast-close { opacity: .7; font-size: .85rem; margin-top: 2px; flex-shrink: 0; }
         .global-toast .toast-close:hover { opacity: 1; }
-        /* Badge de notificações */
         .badge-notify { font-size: .6rem; vertical-align: super; }
     </style>
+
     <script>
-    // Mostra modal de erro global com botão OK
+    // ================================================================
+    // BOOTSTRAP COMPATIBILITY SHIM
+    // Maps bootstrap.Modal API → Materialize M.Modal
+    // ================================================================
+    window.bootstrap = {
+        Modal: function(element, options) {
+            var el = (typeof element === 'string') ? document.querySelector(element) : element;
+            if (!el) return { show: function(){}, hide: function(){} };
+            var instance = M.Modal.getInstance(el);
+            if (!instance) {
+                instance = M.Modal.init(el, options || {});
+            }
+            return {
+                show: function() { instance.open(); },
+                hide: function() { instance.close(); },
+                toggle: function() { if (instance.isOpen) instance.close(); else instance.open(); },
+                _element: el,
+                _instance: instance
+            };
+        }
+    };
+    bootstrap.Modal.getInstance = function(el) {
+        if (!el) return null;
+        var instance = M.Modal.getInstance(el);
+        if (!instance) return null;
+        return {
+            show: function() { instance.open(); },
+            hide: function() { instance.close(); },
+            _instance: instance
+        };
+    };
+    bootstrap.Modal.getOrCreateInstance = function(el, opts) {
+        if (typeof el === 'string') el = document.querySelector(el);
+        if (!el) return { show: function(){}, hide: function(){} };
+        var instance = M.Modal.getInstance(el) || M.Modal.init(el, opts || {});
+        return {
+            show: function() { instance.open(); },
+            hide: function() { instance.close(); },
+            _instance: instance
+        };
+    };
+
+    // ================================================================
+    // GLOBAL TOAST & ERROR MODAL
+    // ================================================================
     window.showErrorModal = function(message, title) {
         var modal = document.getElementById('errorModal');
         if (!modal) return;
         document.getElementById('errorModalTitle').textContent = title || 'Erro';
         document.getElementById('errorModalMessage').textContent = message || '';
-        var bsModal = bootstrap.Modal.getOrCreateInstance(modal);
-        bsModal.show();
+        var instance = M.Modal.getInstance(modal) || M.Modal.init(modal);
+        instance.open();
     };
 
     window.showToast = function(message, type, duration) {
         type = type || 'info';
-        // Erros e avisos críticos: usar modal em vez de toast auto-dismiss
         if (type === 'error') {
             window.showErrorModal(message);
             return;
         }
         duration = duration || 4000;
-        const icons = { success: 'fa-check-circle', warning: 'fa-exclamation-triangle', info: 'fa-info-circle' };
-        const container = document.getElementById('globalToastContainer');
-        const toast = document.createElement('div');
+        var icons = { success: 'fa-check-circle', warning: 'fa-exclamation-triangle', info: 'fa-info-circle' };
+        var container = document.getElementById('globalToastContainer');
+        var toast = document.createElement('div');
         toast.className = 'global-toast ' + type;
-        toast.innerHTML = `
-            <i class="fas ${icons[type] || icons.info} toast-icon"></i>
-            <div class="toast-body">${message}</div>
-            <i class="fas fa-times toast-close" onclick="this.closest('.global-toast').remove()"></i>`;
+        toast.innerHTML =
+            '<i class="fas ' + (icons[type] || icons.info) + ' toast-icon"></i>' +
+            '<div class="toast-body">' + message + '</div>' +
+            '<i class="fas fa-times toast-close" onclick="this.closest(\'.global-toast\').remove()"></i>';
         container.appendChild(toast);
-        setTimeout(() => {
+        setTimeout(function() {
             toast.style.animation = 'toastOut .3s ease-in forwards';
-            setTimeout(() => toast.remove(), 310);
+            setTimeout(function() { if (toast.parentNode) toast.remove(); }, 310);
         }, duration);
-        toast.addEventListener('click', () => toast.remove());
+        toast.addEventListener('click', function() { toast.remove(); });
     };
 
-    // Mostrar mensagens de erro do Django como modal (em vez de alert inline)
+    // ================================================================
+    // INITIALIZE MATERIALIZE COMPONENTS
+    // ================================================================
     document.addEventListener('DOMContentLoaded', function() {
+        // Sidenav
+        M.Sidenav.init(document.querySelectorAll('.sidenav'));
+
+        // Dropdowns
+        M.Dropdown.init(document.querySelectorAll('.dropdown-trigger'), {
+            coverTrigger: false,
+            constrainWidth: false,
+            hover: false
+        });
+
+        // Ajustar largura das modals Bootstrap antes de inicializar Materialize
+        document.querySelectorAll('.modal').forEach(function(modal) {
+            var dialog = modal.querySelector('.modal-dialog');
+            if (dialog) {
+                if (dialog.classList.contains('modal-xl'))       modal.style.width = 'min(95vw, 1140px)';
+                else if (dialog.classList.contains('modal-lg'))  modal.style.width = 'min(95vw, 800px)';
+                else if (dialog.classList.contains('modal-sm'))  modal.style.width = 'min(90vw, 400px)';
+                else                                              modal.style.width = 'min(95vw, 600px)';
+            } else {
+                modal.style.width = 'min(90vw, 500px)';
+            }
+        });
+
+        // Modals
+        M.Modal.init(document.querySelectorAll('.modal'));
+
+        // Select fields: inicializar apenas selects que pedem estilo Materialize
+        // (excluindo form-select do Bootstrap que têm estilo nativo próprio)
+        M.FormSelect.init(document.querySelectorAll('select.materialize-select'));
+
+        // Tooltips
+        M.Tooltip.init(document.querySelectorAll('.tooltipped'));
+
+        // Collapsible
+        M.Collapsible.init(document.querySelectorAll('.collapsible'));
+
+        // Handle data-bs-dismiss="modal" buttons
+        document.querySelectorAll('[data-bs-dismiss="modal"]').forEach(function(btn) {
+            btn.addEventListener('click', function() {
+                var modal = btn.closest('.modal');
+                if (modal) {
+                    var instance = M.Modal.getInstance(modal);
+                    if (instance) instance.close();
+                }
+            });
+        });
+
+        // Handle data-bs-toggle="modal" triggers
+        document.querySelectorAll('[data-bs-toggle="modal"]').forEach(function(trigger) {
+            trigger.addEventListener('click', function(e) {
+                e.preventDefault();
+                var target = trigger.getAttribute('data-bs-target') || trigger.getAttribute('href');
+                if (target) {
+                    var el = document.querySelector(target);
+                    if (el) {
+                        var instance = M.Modal.getInstance(el) || M.Modal.init(el);
+                        instance.open();
+                    }
+                }
+            });
+        });
+
+        // Handle alert dismissal (data-bs-dismiss="alert")
+        document.querySelectorAll('[data-bs-dismiss="alert"]').forEach(function(btn) {
+            btn.addEventListener('click', function() {
+                var alert = btn.closest('.alert');
+                if (alert) alert.remove();
+            });
+        });
+
+        // Show Django error messages as modal
         document.querySelectorAll('.msg-error-popup').forEach(function(el) {
             window.showErrorModal(el.textContent.trim());
             el.remove();
         });
     });
 
-    // Notificações: carregar count de reajustes pendentes (3.17)
+    // ================================================================
+    // BADGE: Reajustes pendentes
+    // ================================================================
     {% if user.is_authenticated %}
     document.addEventListener('DOMContentLoaded', function() {
         fetch('{% url "financeiro:api_reajustes_pendentes_count" %}')
-            .then(r => r.ok ? r.json() : null)
-            .then(data => {
+            .then(function(r) { return r.ok ? r.json() : null; })
+            .then(function(data) {
                 if (data && data.count > 0) {
-                    const link = document.getElementById('notificacoesDropdown');
+                    var link = document.getElementById('notificacoesDropdown');
                     if (link) {
-                        const badge = document.createElement('span');
-                        badge.className = 'badge bg-danger badge-notify ms-1';
+                        var badge = document.createElement('span');
+                        badge.className = 'new badge red badge-notify ms-1';
                         badge.id = 'badgeReajustesPendentes';
+                        badge.setAttribute('data-badge-caption', '');
                         badge.textContent = data.count;
                         badge.title = data.count + ' reajuste(s) pendente(s)';
                         link.appendChild(badge);
                     }
                 }
             })
-            .catch(() => {});
+            .catch(function() {});
     });
     {% endif %}
     </script>
