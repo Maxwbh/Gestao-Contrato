@@ -1,0 +1,97 @@
+{% extends 'base.html' %}
+
+{% block title %}Cálculo de Cessão de Direitos — Contrato {{ contrato.numero_contrato }}{% endblock %}
+
+{% block content %}
+<div class="row">
+  <div class="col-12 col-lg-9 mx-auto">
+
+    <!-- Cabeçalho -->
+    <div class="d-flex justify-content-between align-items-center mb-3">
+      <h4 class="mb-0">
+        <i class="fas fa-exchange-alt me-2 text-warning"></i>
+        Cessão de Direitos
+      </h4>
+      <a href="{% url 'contratos:detalhe' contrato.pk %}" class="btn btn-outline-secondary btn-sm">
+        <i class="fas fa-arrow-left me-1"></i> Voltar ao Contrato
+      </a>
+    </div>
+
+    <!-- Info do contrato -->
+    <div class="card mb-3">
+      <div class="card-body py-2">
+        <div class="row g-2 small text-muted">
+          <div class="col-auto"><strong>Contrato:</strong> {{ contrato.numero_contrato }}</div>
+          <div class="col-auto"><strong>Comprador:</strong> {{ contrato.comprador.nome }}</div>
+          <div class="col-auto"><strong>Imóvel:</strong> {{ contrato.imovel }}</div>
+          <div class="col-auto"><strong>Status:</strong> {{ contrato.get_status_display }}</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Formulário -->
+    <div class="card mb-3">
+      <div class="card-header py-2">
+        <i class="fas fa-calendar-alt me-2"></i><strong>Data de Referência</strong>
+      </div>
+      <div class="card-body">
+        <form method="post" class="row g-3 align-items-end">
+          {% csrf_token %}
+          <div class="col-md-4">
+            <label class="form-label">Data da Cessão</label>
+            <input type="date" name="data_cessao" class="form-control"
+                   value="{{ data_cessao|date:'Y-m-d' }}" required>
+          </div>
+          <div class="col-auto">
+            <button type="submit" class="btn btn-warning">
+              <i class="fas fa-calculator me-1"></i> Calcular
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- Resultado -->
+    {% if resultado %}
+    <div class="card border-warning">
+      <div class="card-header bg-warning text-dark py-2">
+        <i class="fas fa-chart-bar me-2"></i><strong>Resultado do Cálculo</strong>
+        <small class="ms-2">Referência: {{ resultado.data_cessao|date:"d/m/Y" }}</small>
+      </div>
+      <div class="card-body">
+
+        <table class="table table-bordered mb-3">
+          <tr>
+            <td>Saldo Devedor Atualizado</td>
+            <td class="text-end fw-bold">R$ {{ resultado.saldo_devedor|floatformat:2 }}</td>
+          </tr>
+          <tr>
+            <td>Percentual de Cessão</td>
+            <td class="text-end">{{ resultado.percentual_cessao }}%</td>
+          </tr>
+          <tr class="table-warning">
+            <td><strong>Taxa de Cessão a Pagar ao Vendedor</strong></td>
+            <td class="text-end fw-bold fs-5">R$ {{ resultado.taxa_cessao|floatformat:2 }}</td>
+          </tr>
+        </table>
+
+        <div class="alert alert-info small">
+          <i class="fas fa-info-circle me-1"></i>
+          Após o pagamento da taxa de cessão ao vendedor ({{ contrato.imobiliaria.nome }}),
+          o saldo devedor de <strong>R$ {{ resultado.saldo_devedor|floatformat:2 }}</strong>
+          permanece vinculado ao contrato e será assumido pelo novo titular.
+        </div>
+
+        <p class="text-muted small mt-2 mb-0">
+          Percentual configurável em
+          <a href="{% url 'contratos:editar' contrato.pk %}">Editar Contrato</a>
+          (campo "Taxa de Cessão de Direitos").
+        </p>
+
+      </div>
+    </div>
+    {% endif %}
+
+  </div>
+</div>
+{% endblock %}
