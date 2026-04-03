@@ -361,21 +361,45 @@
 
             <div class="roadmap-item">
                 <div class="item-header">
-                    <span class="item-icon"><i class="fas fa-file-export text-danger"></i></span>
+                    <span class="item-icon"><i class="fas fa-file-csv text-success"></i></span>
                     <div class="flex-grow-1">
-                        <div class="item-title">Exportação CSV / Excel</div>
+                        <div class="item-title">Exportação CSV</div>
+                    </div>
+                    <span class="status-badge status-done">Concluído</span>
+                </div>
+                <div class="item-body">
+                    <p class="item-desc">
+                        Botão <strong>Exportar CSV</strong> em todas as grades AG Grid.
+                        Usa <code>exportDataAsCsv()</code> nativo da Community Edition —
+                        exporta os dados da página atual com os filtros aplicados.
+                        Células com HTML são sanitizadas automaticamente antes da exportação.
+                    </p>
+                    <div class="item-tags">
+                        <span class="tag bg-light text-dark border">exportDataAsCsv()</span>
+                        <span class="tag bg-light text-dark border">AG Grid Community</span>
+                        <span class="tag" style="background:#d1e7dd;color:#0f5132;">Concluído</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="roadmap-item">
+                <div class="item-header">
+                    <span class="item-icon"><i class="fas fa-file-excel text-success"></i></span>
+                    <div class="flex-grow-1">
+                        <div class="item-title">Exportação Excel (.xlsx)</div>
                     </div>
                     <span class="status-badge status-planned">Planejado</span>
                 </div>
                 <div class="item-body">
                     <p class="item-desc">
-                        Exportar a grade atual (com filtros aplicados) para CSV ou Excel diretamente
-                        via AG Grid. Sem necessidade de bibliotecas extras — exportação nativa
-                        da Community Edition.
+                        <code>exportDataAsExcel()</code> é exclusivo do AG Grid <strong>Enterprise</strong> (pago).
+                        Alternativa: gerar XLSX server-side via <code>openpyxl</code> / <code>xlsxwriter</code>
+                        em endpoints Django dedicados por relatório.
                     </p>
                     <div class="item-tags">
-                        <span class="tag bg-light text-dark border">CSV Export</span>
-                        <span class="tag bg-light text-dark border">Excel Export</span>
+                        <span class="tag bg-light text-dark border">openpyxl</span>
+                        <span class="tag bg-light text-dark border">Django view</span>
+                        <span class="tag bg-light text-dark border">AG Grid Enterprise</span>
                     </div>
                 </div>
             </div>
@@ -393,7 +417,7 @@
                 <p class="phase-title">Fase 3 — Filtros &amp; Pesquisa Avançada</p>
                 <p class="phase-subtitle">Localização e filtragem inteligente de dados</p>
             </div>
-            <span class="ms-auto status-badge status-progress">Em progresso</span>
+            <span class="ms-auto status-badge status-done">Concluído</span>
         </div>
         <div class="roadmap-items">
 
@@ -459,21 +483,22 @@
 
             <div class="roadmap-item">
                 <div class="item-header">
-                    <span class="item-icon"><i class="fas fa-calendar-alt text-warning"></i></span>
+                    <span class="item-icon"><i class="fas fa-check-circle text-success"></i></span>
                     <div class="flex-grow-1">
-                        <div class="item-title">Range picker de datas integrado</div>
+                        <div class="item-title">Range picker de datas + filtros avançados em Parcelas</div>
                     </div>
-                    <span class="status-badge status-planned">Planejado</span>
+                    <span class="status-badge status-done">Concluído</span>
                 </div>
                 <div class="item-body">
                     <p class="item-desc">
-                        Seletor de intervalo de datas visual (Flatpickr ou MaterialDateRangePicker)
-                        nas listagens de parcelas e contratos. Atalhos: Hoje, Esta semana,
-                        Este mês, Últimos 30/60/90 dias.
+                        Painel de filtros avançados na listagem de parcelas com Flatpickr 4.6.13
+                        (intervalo de datas, atalhos: Hoje / Esta semana / Este mês / Próx. 90 dias),
+                        filtro por imobiliária e busca textual por comprador/contrato.
                     </p>
                     <div class="item-tags">
-                        <span class="tag bg-light text-dark border">Date Range Picker</span>
-                        <span class="tag bg-light text-dark border">Flatpickr</span>
+                        <span class="tag" style="background:#d1e7dd;color:#0f5132;">Concluído</span>
+                        <span class="tag bg-light text-dark border">Flatpickr 4.6.13</span>
+                        <span class="tag bg-light text-dark border">Date Range</span>
                     </div>
                 </div>
             </div>
@@ -563,19 +588,25 @@
                 <div class="item-header">
                     <span class="item-icon"><i class="fas fa-file-pdf text-danger"></i></span>
                     <div class="flex-grow-1">
-                        <div class="item-title">Geração de relatórios em PDF</div>
+                        <div class="item-title">Relatórios em PDF</div>
                     </div>
                     <span class="status-badge status-planned">Planejado</span>
                 </div>
                 <div class="item-body">
                     <p class="item-desc">
                         Exportação de contratos, extratos de pagamento e posição de inadimplência
-                        em PDF com layout profissional usando WeasyPrint ou ReportLab.
+                        em PDF com layout profissional. <strong>Não é nativo do AG Grid</strong> —
+                        requer implementação server-side via <strong>WeasyPrint</strong> ou
+                        <strong>ReportLab</strong> (renderiza templates HTML → PDF) ou
+                        client-side via <strong>jsPDF</strong>.
+                        As páginas de relatório já existem como stubs em
+                        <code>templates/financeiro/relatorios/</code>.
                     </p>
                     <div class="item-tags">
                         <span class="tag bg-light text-dark border">WeasyPrint</span>
-                        <span class="tag bg-light text-dark border">PDF</span>
-                        <span class="tag bg-light text-dark border">Relatórios</span>
+                        <span class="tag bg-light text-dark border">ReportLab</span>
+                        <span class="tag bg-light text-dark border">jsPDF</span>
+                        <span class="tag bg-light text-dark border">Server-side</span>
                     </div>
                 </div>
             </div>
