@@ -1,39 +1,87 @@
 {% comment %}
 Include: per-page selector + pagination nav.
 Usage: {% include "includes/pagination_perpage.html" %}
-Requires: page_obj, is_paginated to be in context (standard Django ListView context).
+Requires: page_obj, paginator, is_paginated in context (standard Django ListView).
 {% endcomment %}
 <div class="d-flex justify-content-between align-items-center mt-3 flex-wrap gap-2">
+
   <!-- Per-page selector -->
   <div class="d-flex align-items-center gap-2">
-    <small class="text-muted">Exibir:</small>
+    <small class="text-muted fw-semibold">Exibir:</small>
     <select id="perPageSelect" class="form-select form-select-sm" style="width: auto;" title="Registros por página">
-      <option value="5"  {% if paginator.per_page == 5  %}selected{% endif %}>5</option>
-      <option value="10" {% if paginator.per_page == 10 %}selected{% endif %}>10</option>
-      <option value="20" {% if paginator.per_page == 20 %}selected{% endif %}>20</option>
-      <option value="30" {% if paginator.per_page == 30 %}selected{% endif %}>30</option>
+      {% with pp=paginator.per_page %}
+      <option value="5"   {% if pp == 5   %}selected{% endif %}>5</option>
+      <option value="10"  {% if pp == 10  %}selected{% endif %}>10</option>
+      <option value="15"  {% if pp == 15  %}selected{% endif %}>15</option>
+      <option value="25"  {% if pp == 25  %}selected{% endif %}>25</option>
+      <option value="50"  {% if pp == 50  %}selected{% endif %}>50</option>
+      <option value="100" {% if pp == 100 %}selected{% endif %}>100</option>
+      {% endwith %}
     </select>
-    <small class="text-muted">por página &mdash; {{ paginator.count }} registro{{ paginator.count|pluralize }}</small>
+    <small class="text-muted">
+      por página
+      {% if paginator.count %}
+        &mdash;
+        <strong>{{ paginator.count }}</strong>
+        registro{{ paginator.count|pluralize }}
+      {% endif %}
+    </small>
   </div>
 
   <!-- Pagination nav -->
   {% if is_paginated %}
   <nav aria-label="Navegação de páginas">
     <ul class="pagination pagination-sm mb-0">
+
       {% if page_obj.has_previous %}
-        <li class="page-item"><a class="page-link" id="pgFirst" href="#">«</a></li>
-        <li class="page-item"><a class="page-link" id="pgPrev" href="#">‹</a></li>
+        <li class="page-item">
+          <a class="page-link" id="pgFirst" href="#" title="Primeira página">«</a>
+        </li>
+        <li class="page-item">
+          <a class="page-link" id="pgPrev" href="#" title="Página anterior">‹</a>
+        </li>
+      {% else %}
+        <li class="page-item disabled"><span class="page-link">«</span></li>
+        <li class="page-item disabled"><span class="page-link">‹</span></li>
       {% endif %}
-      <li class="page-item active">
-        <span class="page-link">{{ page_obj.number }} / {{ page_obj.paginator.num_pages }}</span>
-      </li>
+
+      <!-- Páginas próximas -->
+      {% for i in page_obj.paginator.page_range %}
+        {% if i == page_obj.number %}
+          <li class="page-item active">
+            <span class="page-link">{{ i }}</span>
+          </li>
+        {% elif i >= page_obj.number|add:"-2" and i <= page_obj.number|add:"2" %}
+          <li class="page-item">
+            <a class="page-link pgNum" href="#" data-page="{{ i }}">{{ i }}</a>
+          </li>
+        {% elif i == 1 or i == page_obj.paginator.num_pages %}
+          {% if i == 1 and page_obj.number > 4 %}
+            <li class="page-item"><a class="page-link pgNum" href="#" data-page="1">1</a></li>
+            <li class="page-item disabled"><span class="page-link">…</span></li>
+          {% elif i == page_obj.paginator.num_pages and page_obj.number < page_obj.paginator.num_pages|add:"-3" %}
+            <li class="page-item disabled"><span class="page-link">…</span></li>
+            <li class="page-item"><a class="page-link pgNum" href="#" data-page="{{ i }}">{{ i }}</a></li>
+          {% endif %}
+        {% endif %}
+      {% endfor %}
+
       {% if page_obj.has_next %}
-        <li class="page-item"><a class="page-link" id="pgNext" href="#">›</a></li>
-        <li class="page-item"><a class="page-link" id="pgLast" href="#">»</a></li>
+        <li class="page-item">
+          <a class="page-link" id="pgNext" href="#" title="Próxima página">›</a>
+        </li>
+        <li class="page-item">
+          <a class="page-link" id="pgLast" href="#" title="Última página">»</a>
+        </li>
+      {% else %}
+        <li class="page-item disabled"><span class="page-link">›</span></li>
+        <li class="page-item disabled"><span class="page-link">»</span></li>
       {% endif %}
+
     </ul>
   </nav>
   {% endif %}
+
 </div>
 
 <script>
@@ -43,19 +91,29 @@ Requires: page_obj, is_paginated to be in context (standard Django ListView cont
     for (var k in params) { url.searchParams.set(k, params[k]); }
     return url.toString();
   }
+
+  // Per-page selector
   var sel = document.getElementById('perPageSelect');
   if (sel) {
     sel.addEventListener('change', function() {
-      window.location.href = buildUrl({per_page: this.value, page: 1});
+      window.location.href = buildUrl({ per_page: this.value, page: 1 });
     });
   }
+
+  // First / Prev / Next / Last
   var first = document.getElementById('pgFirst');
   var prev  = document.getElementById('pgPrev');
   var next  = document.getElementById('pgNext');
   var last  = document.getElementById('pgLast');
-  if (first) first.href = buildUrl({page: 1});
-  if (prev)  prev.href  = buildUrl({page: {{ page_obj.previous_page_number|default:1 }}});
-  if (next)  next.href  = buildUrl({page: {{ page_obj.next_page_number|default:1 }}});
-  if (last)  last.href  = buildUrl({page: {{ page_obj.paginator.num_pages }}});
+  if (first) first.href = buildUrl({ page: 1 });
+  if (prev)  prev.href  = buildUrl({ page: {{ page_obj.previous_page_number|default:1 }} });
+  if (next)  next.href  = buildUrl({ page: {{ page_obj.next_page_number|default:1 }} });
+  if (last)  last.href  = buildUrl({ page: {{ page_obj.paginator.num_pages }} });
+
+  // Numbered page links
+  document.querySelectorAll('.pgNum').forEach(function(a) {
+    var p = a.getAttribute('data-page');
+    if (p) a.href = buildUrl({ page: p });
+  });
 })();
 </script>
