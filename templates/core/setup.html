@@ -4,8 +4,11 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Setup - Gestão de Contratos</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- Materialize CSS -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/materialize/1.0.0/css/materialize.min.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    {% load static %}
+    <link rel="stylesheet" href="{% static 'css/custom.css' %}">
     <style>
         body {
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
@@ -400,7 +403,28 @@
         </div>
     </div>
 
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/materialize/1.0.0/js/materialize.min.js"></script>
+    <script>
+    // Bootstrap Modal shim para Materialize
+    window.bootstrap = {
+        Modal: function(el, opts) {
+            if (typeof el === 'string') el = document.querySelector(el);
+            if (!el) return { show: function(){}, hide: function(){} };
+            if (el.style.width === '') el.style.width = 'min(95vw, 600px)';
+            var instance = M.Modal.getInstance(el) || M.Modal.init(el, opts || {});
+            return { show: function() { instance.open(); }, hide: function() { instance.close(); } };
+        }
+    };
+    document.addEventListener('DOMContentLoaded', function() {
+        M.Modal.init(document.querySelectorAll('.modal'));
+        document.querySelectorAll('[data-bs-dismiss="modal"]').forEach(function(btn) {
+            btn.addEventListener('click', function() {
+                var modal = btn.closest('.modal');
+                if (modal) { var i = M.Modal.getInstance(modal); if (i) i.close(); }
+            });
+        });
+    });
+    </script>
     <script>
         // CSRF Token
         function getCookie(name) {
