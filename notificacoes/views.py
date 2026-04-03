@@ -12,6 +12,7 @@ from django.urls import reverse_lazy
 from django.contrib import messages
 from django.http import JsonResponse
 from django.db.models import Q
+from django.core.paginator import Paginator
 from core.mixins import PaginacaoMixin
 from .models import (
     Notificacao, TemplateNotificacao,
@@ -34,8 +35,22 @@ def listar_notificacoes(request):
     if tipo:
         notificacoes = notificacoes.filter(tipo=tipo)
 
+    notificacoes = notificacoes.order_by('-data_agendamento')
+
+    per_page = request.GET.get('per_page', '25')
+    try:
+        per_page = min(int(per_page), 100)
+    except (ValueError, TypeError):
+        per_page = 25
+
+    paginator = Paginator(notificacoes, per_page)
+    page_obj = paginator.get_page(request.GET.get('page', 1))
+
     context = {
-        'notificacoes': notificacoes,
+        'notificacoes': page_obj,
+        'page_obj': page_obj,
+        'paginator': paginator,
+        'is_paginated': paginator.num_pages > 1,
     }
     return render(request, 'notificacoes/listar.html', context)
 
