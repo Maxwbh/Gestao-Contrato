@@ -357,6 +357,10 @@
                         <input type="text" id="contratosQuickFilter" class="form-control form-control-sm"
                                placeholder="Busca rápida na página..." style="width: 220px;"
                                oninput="if(window.contratosGridApi) window.contratosGridApi.setGridOption('quickFilterText', this.value)">
+                        <button type="button" class="btn btn-sm btn-outline-success" title="Exportar CSV"
+                                onclick="window.contratosGridApi && window.contratosGridApi.exportDataAsCsv({fileName:'contratos.csv', processCellCallback: cleanCsvCellContratos})">
+                            <i class="fas fa-file-csv me-1"></i>CSV
+                        </button>
                     </div>
                     <!-- Dados para AG Grid -->
                     <script>
@@ -529,6 +533,16 @@
             toast.style.animation = 'slideOut 0.3s ease-out forwards';
             setTimeout(function() { toast.remove(); }, 300);
         }, duration);
+    }
+
+    function cleanCsvCellContratos(params) {
+        const v = params.value;
+        if (v == null) return '';
+        if (typeof v === 'string' && v.includes('<')) {
+            const d = document.createElement('div'); d.innerHTML = v;
+            return (d.textContent || d.innerText || '').trim();
+        }
+        return v;
     }
 
     // ============ AG GRID - CONTRATOS ============
