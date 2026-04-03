@@ -51,7 +51,7 @@
     <!-- Header -->
     <div class="d-flex justify-content-between align-items-center mb-4">
         <div>
-            <h2><i class="bi bi-graph-up-arrow"></i> Dashboard Financeiro</h2>
+            <h2><i class="fas fa-chart-line"></i> Dashboard Financeiro</h2>
             <p class="text-muted mb-0">
                 {% if imobiliaria_selecionada %}
                     {{ imobiliaria_selecionada.nome }}
@@ -126,7 +126,7 @@
         <div class="col-md-3">
             <div class="card periodo-card h-100">
                 <div class="card-header bg-primary text-white">
-                    <i class="bi bi-calendar-date"></i> Mes Atual
+                    <i class="fas fa-calendar-day"></i> Mes Atual
                 </div>
                 <div class="card-body">
                     <div class="d-flex justify-content-between mb-2">
@@ -152,7 +152,7 @@
         <div class="col-md-3">
             <div class="card periodo-card h-100">
                 <div class="card-header bg-secondary text-white">
-                    <i class="bi bi-calendar-minus"></i> Mes Passado
+                    <i class="fas fa-calendar-minus"></i> Mes Passado
                 </div>
                 <div class="card-body">
                     <div class="d-flex justify-content-between mb-2">
@@ -178,7 +178,7 @@
         <div class="col-md-3">
             <div class="card periodo-card h-100">
                 <div class="card-header bg-info text-white">
-                    <i class="bi bi-calendar-range"></i> Ultimos 6 Meses
+                    <i class="fas fa-calendar-alt"></i> Ultimos 6 Meses
                 </div>
                 <div class="card-body">
                     <div class="d-flex justify-content-between mb-2">
@@ -204,7 +204,7 @@
         <div class="col-md-3">
             <div class="card periodo-card h-100">
                 <div class="card-header bg-dark text-white">
-                    <i class="bi bi-calendar-check"></i> Ano Atual
+                    <i class="fas fa-calendar-check"></i> Ano Atual
                 </div>
                 <div class="card-body">
                     <div class="d-flex justify-content-between mb-2">
@@ -234,7 +234,7 @@
         <div class="col-md-6">
             <div class="card">
                 <div class="card-header">
-                    <i class="bi bi-pie-chart"></i> Status das Parcelas
+                    <i class="fas fa-chart-pie"></i> Status das Parcelas
                 </div>
                 <div class="card-body">
                     <div class="chart-container">
@@ -246,7 +246,7 @@
         <div class="col-md-6">
             <div class="card">
                 <div class="card-header">
-                    <i class="bi bi-pie-chart-fill"></i> Status dos Contratos
+                    <i class="fas fa-chart-pie"></i> Status dos Contratos
                 </div>
                 <div class="card-body">
                     <div class="chart-container">
@@ -261,7 +261,7 @@
         <div class="col-md-12">
             <div class="card">
                 <div class="card-header">
-                    <i class="bi bi-bar-chart"></i> Recebimentos Mensais (Ultimos 12 meses)
+                    <i class="fas fa-chart-bar"></i> Recebimentos Mensais (Ultimos 12 meses)
                 </div>
                 <div class="card-body">
                     <div class="chart-container" style="height: 350px;">
@@ -276,7 +276,7 @@
         <div class="col-md-12">
             <div class="card">
                 <div class="card-header">
-                    <i class="bi bi-graph-down-arrow"></i> Inadimplencia Mensal
+                    <i class="fas fa-chart-line"></i> Inadimplencia Mensal
                 </div>
                 <div class="card-body">
                     <div class="chart-container" style="height: 350px;">
@@ -292,7 +292,7 @@
         <div class="col-md-12">
             <div class="card">
                 <div class="card-header bg-primary text-white">
-                    <i class="bi bi-calendar3"></i> Vencimentos Previstos — Próximos 3 Meses
+                    <i class="fas fa-calendar"></i> Vencimentos Previstos — Próximos 3 Meses
                 </div>
                 <div class="card-body p-0">
                     <div class="table-responsive">
@@ -319,7 +319,7 @@
         <div class="col-md-12">
             <div class="card">
                 <div class="card-header bg-danger text-white">
-                    <i class="bi bi-exclamation-triangle"></i> Top 10 Contratos com Maior Atraso
+                    <i class="fas fa-exclamation-triangle"></i> Top 10 Contratos com Maior Atraso
                 </div>
                 <div class="card-body">
                     {% if contratos_mais_atraso %}
@@ -361,7 +361,7 @@
                                         <a href="{% url 'contratos:detalhe' item.contrato.pk %}"
                                            class="btn btn-sm btn-outline-primary"
                                            title="Ver Contrato">
-                                            <i class="bi bi-eye"></i>
+                                            <i class="fas fa-eye"></i>
                                         </a>
                                     </td>
                                 </tr>
@@ -371,7 +371,7 @@
                     </div>
                     {% else %}
                     <div class="alert alert-success mb-0">
-                        <i class="bi bi-check-circle"></i> Nenhum contrato em atraso!
+                        <i class="fas fa-check-circle"></i> Nenhum contrato em atraso!
                     </div>
                     {% endif %}
                 </div>
