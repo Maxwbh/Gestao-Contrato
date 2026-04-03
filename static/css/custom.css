@@ -696,13 +696,29 @@ nav.app-navbar .sidenav-trigger {
     gap: 8px;
     background: #fafafa;
 }
-/* Bootstrap modal wrapper compatibility */
-.modal.fade {
-    display: block;
-    opacity: 0;
-    pointer-events: none;
+/* Bootstrap modal wrapper — Materialize controla display e posição */
+.modal {
+    /* max-height aumentado para modals mais longas */
+    max-height: 90% !important;
+    overflow-y: auto !important;
+    padding: 0 !important;
+    background: transparent !important;
+    border-radius: 12px !important;
 }
-.modal-dialog { margin: 0; padding: 0; }
+.modal .modal-dialog {
+    margin: 0;
+    padding: 0;
+    width: 100%;
+    max-width: none;
+}
+.modal .modal-content {
+    border-radius: 12px;
+    overflow: hidden;
+    background: #fff;
+    box-shadow: 0 10px 40px rgba(0,0,0,0.3);
+}
+.modal-dialog-centered { /* Materialize já centraliza */ }
+.modal-dialog-scrollable .modal-body { overflow-y: auto; max-height: 60vh; }
 
 /* ========================================================================
    MATERIALIZE — FOOTER
@@ -745,6 +761,7 @@ nav.app-navbar .sidenav-trigger {
 .col-10 { width: 83.3333%; }
 .col-11 { width: 91.6667%; }
 .col-12 { width: 100%; }
+.col-auto { width: auto; flex: 0 0 auto; }
 
 @media (min-width: 576px) {
     .col-sm-1  { width: 8.3333%; }
@@ -853,6 +870,7 @@ nav.app-navbar .sidenav-trigger {
 .justify-content-end     { justify-content: flex-end !important; }
 .justify-content-between { justify-content: space-between !important; }
 .justify-content-around  { justify-content: space-around !important; }
+.justify-content-evenly  { justify-content: space-evenly !important; }
 
 .gap-0 { gap: 0 !important; }
 .gap-1 { gap: 0.25rem !important; }
