@@ -49,10 +49,12 @@ urlpatterns = [
     # Reajustes
     path('reajustes/', views.listar_reajustes, name='listar_reajustes'),
     path('reajustes/pendentes/', views.reajustes_pendentes, name='reajustes_pendentes'),
-    path('contrato/<int:contrato_id>/reajuste/aplicar/', views.aplicar_reajuste_contrato, name='aplicar_reajuste'),
+    path('contrato/<int:contrato_id>/reajuste/', views.aplicar_reajuste_pagina, name='aplicar_reajuste'),
+    path('contrato/<int:contrato_id>/reajuste/api/', views.aplicar_reajuste_contrato, name='aplicar_reajuste_api'),
     path('contrato/<int:contrato_id>/reajuste/preview/', views.preview_reajuste_contrato, name='preview_reajuste'),
     path('contrato/<int:contrato_id>/reajuste/calcular/', views.calcular_reajuste_proporcional, name='calcular_reajuste'),
     path('reajuste/<int:pk>/excluir/', views.excluir_reajuste, name='excluir_reajuste'),
+    path('reajustes/aplicar-lote/', views.aplicar_reajuste_lote, name='aplicar_reajuste_lote'),
     path('api/indice-reajuste/', views.obter_indice_reajuste, name='api_indice_reajuste'),
     path('api/calcular-indice-acumulado/', views.api_calcular_indice_acumulado, name='api_calcular_indice_acumulado'),
 
@@ -107,6 +109,7 @@ urlpatterns = [
     path('api/boletos/<int:parcela_id>/gerar/', views.api_boleto_gerar, name='api_boleto_gerar'),
     path('api/boletos/<int:parcela_id>/cancelar/', views.api_boleto_cancelar, name='api_boleto_cancelar'),
     path('api/boletos/lote/', views.api_boletos_lote, name='api_boletos_lote'),
+    path('api/boletos/revalidar/', views.api_boletos_revalidar, name='api_boletos_revalidar'),
 
     # ==========================================================================
     # APIs REST - CNAB REMESSA
@@ -127,4 +130,17 @@ urlpatterns = [
     # API - CONTAS BANCÁRIAS
     # ==========================================================================
     path('api/contas-bancarias/', views.api_contas_bancarias, name='api_contas_bancarias'),
+
+    # ==========================================================================
+    # API - NOTIFICAÇÕES
+    # ==========================================================================
+    path('api/reajustes-pendentes/count/', views.api_reajustes_pendentes_count, name='api_reajustes_pendentes_count'),
+
+    # ==========================================================================
+    # FASE 9 — APIs P2 (Contabilidade + Imobiliária)
+    # ==========================================================================
+    path('api/contabilidade/vencimentos/', views.api_contabilidade_vencimentos, name='api_contabilidade_vencimentos'),
+    path('api/contabilidade/boletos/gerar/massa/', views.api_contabilidade_boletos_massa, name='api_contabilidade_boletos_massa'),
+    path('api/imobiliaria/<int:imobiliaria_id>/vencimentos/', views.api_imobiliaria_vencimentos, name='api_imobiliaria_vencimentos'),
+    path('api/imobiliaria/<int:imobiliaria_id>/fluxo-caixa/', views.api_imobiliaria_fluxo_caixa, name='api_imobiliaria_fluxo_caixa'),
 ]
