@@ -247,7 +247,7 @@
                 <p class="phase-title">Fase 2 — AG Grid</p>
                 <p class="phase-subtitle">Grade de dados avançada para todas as listagens</p>
             </div>
-            <span class="ms-auto status-badge status-next">Próximo</span>
+            <span class="ms-auto status-badge status-done">Concluído</span>
         </div>
         <div class="roadmap-items">
 
@@ -257,18 +257,18 @@
                     <div class="flex-grow-1">
                         <div class="item-title">Integração AG Grid Community</div>
                     </div>
-                    <span class="status-badge status-next">Próximo</span>
+                    <span class="status-badge status-done">Concluído</span>
                 </div>
                 <div class="item-body">
                     <p class="item-desc">
-                        Substituir todas as tabelas HTML estáticas pelo <strong>AG Grid Community</strong>
-                        (versão gratuita). Grade de alto desempenho com virtualização de linhas,
-                        ideal para grandes volumes de dados.
+                        Todas as tabelas HTML substituídas pelo <strong>AG Grid Community 31.3.4</strong>
+                        (versão gratuita). Páginas convertidas: Parcelas, Compradores, Contratos (view tabela),
+                        Reajustes, Parcelas do Mês, Índices de Reajuste.
                     </p>
                     <div class="item-tags">
-                        <span class="tag bg-light text-dark border">AG Grid 31+</span>
-                        <span class="tag bg-light text-dark border">JavaScript</span>
-                        <span class="tag bg-light text-dark border">REST API</span>
+                        <span class="tag bg-light text-dark border">AG Grid 31.3.4</span>
+                        <span class="tag bg-light text-dark border">ag-theme-material</span>
+                        <span class="tag" style="background:#d1e7dd;color:#0f5132;">Concluído</span>
                     </div>
                 </div>
             </div>
@@ -279,18 +279,17 @@
                     <div class="flex-grow-1">
                         <div class="item-title">Filtros por coluna nativos</div>
                     </div>
-                    <span class="status-badge status-next">Próximo</span>
+                    <span class="status-badge status-done">Concluído</span>
                 </div>
                 <div class="item-body">
                     <p class="item-desc">
-                        Cada coluna terá filtro embutido (texto, número, data, seleção).
-                        Filtros combinados aplicados via API com debounce para
-                        não sobrecarregar o servidor.
+                        Filtros flutuantes (<em>floating filters</em>) em todas as colunas — texto, número
+                        e data. Filtros combinados client-side sem recarregar a página.
                     </p>
                     <div class="item-tags">
-                        <span class="tag bg-light text-dark border">Column Filters</span>
-                        <span class="tag bg-light text-dark border">Debounce</span>
-                        <span class="tag bg-light text-dark border">Server-side</span>
+                        <span class="tag bg-light text-dark border">Floating Filters</span>
+                        <span class="tag bg-light text-dark border">Text / Number / Date</span>
+                        <span class="tag" style="background:#d1e7dd;color:#0f5132;">Concluído</span>
                     </div>
                 </div>
             </div>
@@ -301,17 +300,17 @@
                     <div class="flex-grow-1">
                         <div class="item-title">Busca global por listagem</div>
                     </div>
-                    <span class="status-badge status-next">Próximo</span>
+                    <span class="status-badge status-done">Concluído</span>
                 </div>
                 <div class="item-body">
                     <p class="item-desc">
-                        Campo de busca rápida sobre todas as colunas visíveis da grade.
-                        Realce de termos encontrados, busca case-insensitive e suporte a
-                        múltiplos termos separados por espaço.
+                        Campo de busca rápida (<em>Quick Filter</em>) no cabeçalho de cada grade,
+                        filtrando simultaneamente em todas as colunas visíveis, case-insensitive.
                     </p>
                     <div class="item-tags">
                         <span class="tag bg-light text-dark border">Quick Filter</span>
-                        <span class="tag bg-light text-dark border">Highlight</span>
+                        <span class="tag bg-light text-dark border">All columns</span>
+                        <span class="tag" style="background:#d1e7dd;color:#0f5132;">Concluído</span>
                     </div>
                 </div>
             </div>
@@ -322,18 +321,18 @@
                     <div class="flex-grow-1">
                         <div class="item-title">Paginação configurável (5, 10, 15, 25…100)</div>
                     </div>
-                    <span class="status-badge status-progress">Em progresso</span>
+                    <span class="status-badge status-done">Concluído</span>
                 </div>
                 <div class="item-body">
                     <p class="item-desc">
-                        Todas as listagens com seletor de registros por página: 5, 10, 15, 25, 50
-                        e 100. AG Grid fornece paginação client-side e server-side com API de
-                        blocos infinitos (<em>infinite row model</em>).
+                        Seletor de registros por página (5, 10, 15, 25, 50, 100) em todas as listagens,
+                        persistido na URL via <code>per_page</code>. Django <code>Paginator</code>
+                        controla o page server-side enquanto AG Grid exibe a página.
                     </p>
                     <div class="item-tags">
-                        <span class="tag bg-light text-dark border">Pagination</span>
-                        <span class="tag bg-light text-dark border">Per-page selector</span>
-                        <span class="tag" style="background:#fff3cd;color:#856404;">Em progresso</span>
+                        <span class="tag bg-light text-dark border">Django Paginator</span>
+                        <span class="tag bg-light text-dark border">per_page param</span>
+                        <span class="tag" style="background:#d1e7dd;color:#0f5132;">Concluído</span>
                     </div>
                 </div>
             </div>
@@ -344,17 +343,18 @@
                     <div class="flex-grow-1">
                         <div class="item-title">Ordenação multi-coluna</div>
                     </div>
-                    <span class="status-badge status-planned">Planejado</span>
+                    <span class="status-badge status-done">Concluído</span>
                 </div>
                 <div class="item-body">
                     <p class="item-desc">
-                        Ordenar por múltiplas colunas simultaneamente (shift+clique).
-                        Indicador visual da ordem de prioridade. Persistência da ordenação
-                        preferida no localStorage por listagem.
+                        Ordenação client-side por clique no cabeçalho das colunas (asc/desc).
+                        Todas as colunas de dados têm <code>sortable: true</code>.
+                        Colunas de ação têm <code>sortable: false</code>.
                     </p>
                     <div class="item-tags">
-                        <span class="tag bg-light text-dark border">Multi-sort</span>
-                        <span class="tag bg-light text-dark border">localStorage</span>
+                        <span class="tag bg-light text-dark border">Column sort</span>
+                        <span class="tag bg-light text-dark border">Client-side</span>
+                        <span class="tag" style="background:#d1e7dd;color:#0f5132;">Concluído</span>
                     </div>
                 </div>
             </div>
