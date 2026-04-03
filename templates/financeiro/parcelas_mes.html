@@ -160,6 +160,10 @@
                 <input type="text" class="form-control form-control-sm" style="width: 180px;"
                        placeholder="Busca rápida..."
                        oninput="if(window.parcelasMesGridApi) window.parcelasMesGridApi.setGridOption('quickFilterText', this.value)">
+                <button type="button" class="btn btn-sm btn-outline-success" title="Exportar CSV"
+                        onclick="window.parcelasMesGridApi && window.parcelasMesGridApi.exportDataAsCsv({fileName:'parcelas_mes.csv', processCellCallback: cleanCsvCell})">
+                    <i class="fas fa-file-csv me-1"></i>CSV
+                </button>
             </div>
         </div>
         <div class="card-body p-0">
@@ -174,6 +178,16 @@
 
 {% block extra_js %}
 <script>
+function cleanCsvCell(params) {
+    const v = params.value;
+    if (v == null) return '';
+    if (typeof v === 'string' && v.includes('<')) {
+        const d = document.createElement('div'); d.innerHTML = v;
+        return (d.textContent || d.innerText || '').trim();
+    }
+    return v;
+}
+
 const parcelasMesRowData = [
 {% for parcela in parcelas %}
 {
