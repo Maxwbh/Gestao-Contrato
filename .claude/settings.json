@@ -2,20 +2,5 @@
   "attribution": {
     "commit": "",
     "pr": ""
-  },
-  "hooks": {
-    "PostToolUse": [
-      {
-        "matcher": "Bash",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "CMD=$(jq -r '.tool_input.command'); if echo \"$CMD\" | grep -q 'git push' && echo \"$CMD\" | grep -q 'V3\\.1'; then cd /home/user/Gestao-Contrato && BACK=$(git rev-parse --abbrev-ref HEAD) && git checkout claude/fix-boleto-generation-error-tuqwA && git merge V3.1 --no-ff -m 'Sync: merge V3.1 into claude/fix-boleto-generation-error-tuqwA' && git push -u origin claude/fix-boleto-generation-error-tuqwA && git checkout \"$BACK\"; fi 2>/dev/null || true",
-            "timeout": 60,
-            "statusMessage": "Sincronizando claude/fix-boleto-generation-error-tuqwA com V3.1..."
-          }
-        ]
-      }
-    ]
   }
 }
