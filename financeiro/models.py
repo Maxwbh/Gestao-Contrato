@@ -98,6 +98,23 @@ class Parcela(TimeStampedModel):
         verbose_name='Valor de Desconto',
         help_text='Desconto concedido na parcela'
     )
+    # Breakdown amortização/juros embutidos (Tabela Price e SAC)
+    amortizacao = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        verbose_name='Amortização',
+        help_text='Parcela de amortização do principal embutida nesta prestação'
+    )
+    juros_embutido = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        verbose_name='Juros Embutidos',
+        help_text='Parcela de juros do financiamento embutida nesta prestação'
+    )
 
     # Status de Pagamento
     pago = models.BooleanField(
@@ -306,38 +323,61 @@ class Parcela(TimeStampedModel):
     def pode_gerar_boleto(self):
         """
         Verifica se é possível gerar boleto para esta parcela.
-        Considera regras de reajuste pendente.
 
-        Excecao: tipo_correcao='FIXO' permite gerar todos os boletos
-                 sem necessidade de reajuste.
+        Regra de cascata: se QUALQUER ciclo entre 2 e o ciclo desta parcela
+        já venceu (hoje >= data_prevista) e ainda não foi aplicado, todos os
+        boletos desse ciclo em diante ficam bloqueados.
+
+        Índice FIXO nunca bloqueia.
 
         Returns:
             tuple: (pode_gerar: bool, motivo: str)
         """
         if self.pago:
-            return False, "Parcela ja esta paga."
+            return False, "Parcela já está paga."
 
         if self.status_boleto == StatusBoleto.PAGO:
-            return False, "Boleto ja foi pago."
+            return False, "Boleto já foi pago."
 
-        # Correcao FIXO: sempre pode gerar (nao precisa de reajuste)
+        # Índice FIXO: sempre pode gerar
         from contratos.models import TipoCorrecao
         if self.contrato.tipo_correcao == TipoCorrecao.FIXO:
-            return True, "Indice FIXO - sem necessidade de reajuste"
+            return True, "Índice FIXO — sem necessidade de reajuste."
 
-        # Verificar se o reajuste do ciclo foi aplicado
-        if self.ciclo_reajuste and self.ciclo_reajuste > 1:
-            from financeiro.models import Reajuste
+        prazo = self.contrato.prazo_reajuste_meses or 12
+        ciclo_da_parcela = (self.numero_parcela - 1) // prazo + 1
+
+        if ciclo_da_parcela <= 1:
+            return True, "Primeiro ciclo — liberado."
+
+        from dateutil.relativedelta import relativedelta
+        from django.utils import timezone as tz
+
+        hoje = tz.now().date()
+
+        # Verifica em cascata do ciclo 2 até o ciclo desta parcela
+        for ciclo_check in range(2, ciclo_da_parcela + 1):
+            data_reajuste = (
+                self.contrato.data_contrato
+                + relativedelta(months=(ciclo_check - 1) * prazo)
+            )
+            if hoje < data_reajuste:
+                # Ciclo ainda não venceu — os subsequentes também não
+                break
+
             reajuste_aplicado = Reajuste.objects.filter(
                 contrato=self.contrato,
-                ciclo=self.ciclo_reajuste,
+                ciclo=ciclo_check,
                 aplicado=True
             ).exists()
-
             if not reajuste_aplicado:
-                return False, f"Reajuste pendente para o ciclo {self.ciclo_reajuste}. Aplique o reajuste antes de gerar boletos."
+                return False, (
+                    f"Reajuste do ciclo {ciclo_check} pendente desde "
+                    f"{data_reajuste.strftime('%d/%m/%Y')}. "
+                    f"Execute o reajuste antes de gerar boletos."
+                )
 
-        return True, "Liberado para geracao."
+        return True, "Liberado para geração."
 
     @property
     def valor_total(self):
@@ -779,6 +819,52 @@ class Reajuste(TimeStampedModel):
         help_text='Desconto fixo em reais subtraído de cada parcela após o percentual'
     )
 
+    # Spread aplicado (snapshot do contrato no momento do reajuste)
+    spread_aplicado = models.DecimalField(
+        max_digits=8,
+        decimal_places=4,
+        null=True,
+        blank=True,
+        default=Decimal('0'),
+        verbose_name='Spread Aplicado (p.p.)',
+        help_text='Pontos percentuais de spread adicionados ao índice bruto'
+    )
+
+    # Controle de teto/piso aplicados no momento do reajuste
+    piso_aplicado = models.DecimalField(
+        max_digits=8,
+        decimal_places=4,
+        null=True,
+        blank=True,
+        verbose_name='Piso Aplicado (%)',
+        help_text='Piso de reajuste vigente no contrato no momento da aplicação'
+    )
+    teto_aplicado = models.DecimalField(
+        max_digits=8,
+        decimal_places=4,
+        null=True,
+        blank=True,
+        verbose_name='Teto Aplicado (%)',
+        help_text='Teto de reajuste vigente no contrato no momento da aplicação'
+    )
+
+    # Audit log
+    usuario = models.ForeignKey(
+        'auth.User',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='reajustes_aplicados',
+        verbose_name='Usuário',
+        help_text='Usuário que aplicou o reajuste'
+    )
+    ip_address = models.GenericIPAddressField(
+        null=True,
+        blank=True,
+        verbose_name='Endereço IP',
+        help_text='IP do usuário que aplicou o reajuste'
+    )
+
     aplicado_manual = models.BooleanField(
         default=False,
         verbose_name='Aplicado Manualmente',
@@ -891,22 +977,104 @@ class Reajuste(TimeStampedModel):
         fim = contrato.data_contrato + relativedelta(months=(ciclo - 1) * prazo) - relativedelta(days=1)
         return inicio, fim
 
+    @staticmethod
+    def _calcular_pmt(saldo, taxa_mensal_pct, n_parcelas):
+        """
+        Calcula o valor da prestação pela fórmula da Tabela Price.
+
+        PMT = PV × i / (1 − (1+i)^−n)
+
+        Se taxa = 0, retorna amortização linear (saldo / n), sem juros.
+        Se n = 0, retorna 0.
+        """
+        if n_parcelas <= 0:
+            return Decimal('0')
+        i = taxa_mensal_pct / Decimal('100')
+        if i == 0:
+            return (saldo / Decimal(n_parcelas)).quantize(Decimal('0.01'))
+        fator = i / (1 - (1 + i) ** (-n_parcelas))
+        return (saldo * fator).quantize(Decimal('0.01'))
+
+    @staticmethod
+    def _calcular_price_tabela(pv, taxa_mensal_pct, n):
+        """
+        Gera tabela completa de Tabela Price: lista de (pmt, amort, juros) para n períodos.
+
+        pmt constante, amort crescente, juros decrescentes.
+        Se taxa=0, degenera em linear (amort=pmt=PV/n, juros=0).
+        """
+        if n <= 0:
+            return []
+        i = taxa_mensal_pct / Decimal('100')
+        pmt = Parcela._calcular_pmt(pv, taxa_mensal_pct, n)
+        tabela = []
+        saldo = pv
+        for k in range(n):
+            juros_k = (saldo * i).quantize(Decimal('0.01'))
+            if k == n - 1:
+                # última parcela: amort = saldo restante (corrige arredondamentos)
+                amort_k = saldo
+                pmt_k = amort_k + juros_k
+            else:
+                amort_k = (pmt - juros_k).quantize(Decimal('0.01'))
+                pmt_k = pmt
+            saldo = (saldo - amort_k).quantize(Decimal('0.01'))
+            tabela.append((pmt_k, amort_k, juros_k))
+        return tabela
+
+    @staticmethod
+    def _calcular_sac_tabela(pv, taxa_mensal_pct, n):
+        """
+        Gera tabela completa de SAC: lista de (pmt, amort, juros) para n períodos.
+
+        amort constante = PV/n, juros decrescentes, pmt decrescente.
+        """
+        if n <= 0:
+            return []
+        i = taxa_mensal_pct / Decimal('100')
+        amort = (pv / Decimal(n)).quantize(Decimal('0.01'))
+        tabela = []
+        saldo = pv
+        for k in range(n):
+            juros_k = (saldo * i).quantize(Decimal('0.01'))
+            if k == n - 1:
+                amort_k = saldo  # última parcela: zera o saldo
+            else:
+                amort_k = amort
+            pmt_k = amort_k + juros_k
+            saldo = (saldo - amort_k).quantize(Decimal('0.01'))
+            tabela.append((pmt_k, amort_k, juros_k))
+        return tabela
+
     @classmethod
     def preview_reajuste(cls, contrato, ciclo,
                          desconto_percentual=None, desconto_valor=None):
         """
         Simula o reajuste sem persistir nada (dry-run).
 
+        Dois modos de cálculo, determinados pela presença de TabelaJurosContrato:
+
+        MODO SIMPLES (padrão):
+          novo_valor = valor_atual × (1 + percentual_final/100)
+          Afeta apenas as parcelas do ciclo (parcela_inicial..parcela_final).
+
+        MODO TABELA PRICE (quando TabelaJurosContrato está configurada):
+          1. Saldo = soma valor_atual de TODAS as parcelas NORMAL não pagas
+          2. Saldo atualizado = saldo × (1 + IGPM/100)
+          3. Novo PMT = PMT(saldo_atualizado, juros_mensal, n_restantes)
+          4. Aplica o mesmo PMT a TODAS as parcelas restantes (todos os ciclos futuros)
+          A taxa mensal da tabela é a taxa de financiamento embutida, não um spread no índice.
+
         Retorna dict com:
           - ciclo, indice_tipo, periodo_referencia_inicio/fim
-          - percentual_bruto, desconto_percentual, desconto_valor, percentual_liquido
+          - percentual_bruto, spread, percentual_bruto_com_spread, percentual_liquido, percentual_final
+          - tipo_calculo ('TABELA_PRICE' | 'SIMPLES')
           - parcela_inicial, parcela_final, parcelas (lista detalhada)
           - total_parcelas, valor_anterior_total, valor_novo_total, diferenca_total
-          - boletos_emitidos (lista de parcelas com boleto já gerado)
-          - erro (str) se não for possível calcular
+          - boletos_emitidos, erro
         """
-        from contratos.models import IndiceReajuste
-        from dateutil.relativedelta import relativedelta
+        from contratos.models import IndiceReajuste, TabelaJurosContrato
+        from django.db.models import Sum
 
         prazo = contrato.prazo_reajuste_meses
         indice_tipo = contrato.tipo_correcao
@@ -922,62 +1090,193 @@ class Reajuste(TimeStampedModel):
             inicio_ref.year, inicio_ref.month,
             fim_ref.year, fim_ref.month,
         )
+
+        # TabelaJurosContrato tem precedência: taxa de financiamento por ciclo
+        # Quando presente → MODO TABELA PRICE; senão → spread fixo / MODO SIMPLES
+        taxa_tabela = TabelaJurosContrato.get_juros_para_ciclo(contrato, ciclo)
+        usa_tabela_price = taxa_tabela is not None
+        spread = taxa_tabela if usa_tabela_price else (contrato.spread_reajuste or Decimal('0'))
+
         if percentual_bruto is None:
-            return {
-                'erro': f'Índice {indice_tipo} não disponível para {inicio_ref.strftime("%b/%Y")} '
-                        f'a {fim_ref.strftime("%b/%Y")}. Importe os dados do índice primeiro.',
-                'periodo_referencia_inicio': inicio_ref,
-                'periodo_referencia_fim': fim_ref,
-                'indice_tipo': indice_tipo,
-                'ciclo': ciclo,
-                'parcela_inicial': parcela_inicial,
-                'parcela_final': parcela_final,
-            }
+            fallback = contrato.tipo_correcao_fallback
+            if fallback:
+                percentual_bruto = IndiceReajuste.get_acumulado_periodo(
+                    fallback,
+                    inicio_ref.year, inicio_ref.month,
+                    fim_ref.year, fim_ref.month,
+                )
+                if percentual_bruto is not None:
+                    indice_tipo = fallback
+            if percentual_bruto is None:
+                return {
+                    'erro': f'Índice {indice_tipo} não disponível para {inicio_ref.strftime("%b/%Y")} '
+                            f'a {fim_ref.strftime("%b/%Y")}. Importe os dados do índice primeiro.',
+                    'periodo_referencia_inicio': inicio_ref,
+                    'periodo_referencia_fim': fim_ref,
+                    'indice_tipo': indice_tipo,
+                    'ciclo': ciclo,
+                    'parcela_inicial': parcela_inicial,
+                    'parcela_final': parcela_final,
+                    'spread': spread,
+                }
 
         desc_perc = Decimal(str(desconto_percentual)) if desconto_percentual else Decimal('0')
         desc_val = Decimal(str(desconto_valor)) if desconto_valor else Decimal('0')
-        percentual_liquido = max(Decimal('0'), percentual_bruto - desc_perc)
-        fator = 1 + (percentual_liquido / 100)
 
-        parcelas_qs = contrato.parcelas.filter(
-            numero_parcela__gte=parcela_inicial,
-            numero_parcela__lte=parcela_final,
-            pago=False,
-        ).order_by('numero_parcela')
+        # Para TABELA PRICE: spread é a taxa de financiamento — NÃO é adicionado ao índice
+        # Para MODO SIMPLES: spread é adicionado ao índice como pontos percentuais
+        if usa_tabela_price:
+            percentual_bruto_com_spread = percentual_bruto  # índice puro; taxa separada
+        else:
+            percentual_bruto_com_spread = percentual_bruto + spread
+
+        percentual_liquido = percentual_bruto_com_spread - desc_perc
+
+        piso = contrato.reajuste_piso
+        teto = contrato.reajuste_teto
+        percentual_com_caps = percentual_liquido
+        if piso is not None:
+            percentual_com_caps = max(piso, percentual_com_caps)
+        if teto is not None:
+            percentual_com_caps = min(teto, percentual_com_caps)
 
         detalhes = []
         valor_anterior_total = Decimal('0')
         valor_novo_total = Decimal('0')
         boletos_emitidos = []
 
-        for p in parcelas_qs:
-            novo_valor = p.valor_atual * fator
-            if desc_val:
-                novo_valor = max(p.valor_atual, novo_valor - desc_val)
-            novo_valor = novo_valor.quantize(Decimal('0.01'))
+        from contratos.models import TipoAmortizacao
+        usa_sac = usa_tabela_price and contrato.tipo_amortizacao == TipoAmortizacao.SAC
 
-            detalhes.append({
-                'numero_parcela': p.numero_parcela,
-                'data_vencimento': p.data_vencimento,
-                'valor_atual': p.valor_atual,
-                'valor_novo': novo_valor,
-                'diferenca': novo_valor - p.valor_atual,
-                'tem_boleto': p.tem_boleto,
-            })
-            valor_anterior_total += p.valor_atual
-            valor_novo_total += novo_valor
-            if p.tem_boleto:
-                boletos_emitidos.append(p.numero_parcela)
+        if usa_tabela_price and not usa_sac:
+            # MODO TABELA PRICE
+            # Todas as parcelas NORMAL não pagas (todos os ciclos futuros)
+            todas_restantes = contrato.parcelas.filter(
+                pago=False,
+                tipo_parcela='NORMAL',
+            ).order_by('numero_parcela')
+
+            n_restantes = todas_restantes.count()
+            saldo_atual = todas_restantes.aggregate(
+                total=Sum('valor_atual')
+            )['total'] or Decimal('0')
+
+            # Aplica o índice ao saldo total
+            saldo_atualizado = saldo_atual * (1 + percentual_com_caps / 100)
+
+            # Novo PMT pela fórmula Price com a taxa do ciclo
+            novo_pmt = cls._calcular_pmt(saldo_atualizado, taxa_tabela, n_restantes)
+            if desc_val and novo_pmt > desc_val:
+                novo_pmt = (novo_pmt - desc_val).quantize(Decimal('0.01'))
+
+            # parcela_final cobrindo todas as restantes (todos os ciclos)
+            parcela_final = contrato.numero_parcelas
+            parcelas_qs = todas_restantes
+
+            for p in parcelas_qs:
+                detalhes.append({
+                    'numero_parcela': p.numero_parcela,
+                    'data_vencimento': p.data_vencimento,
+                    'valor_atual': p.valor_atual,
+                    'valor_novo': novo_pmt,
+                    'diferenca': novo_pmt - p.valor_atual,
+                    'tem_boleto': p.tem_boleto,
+                    'amortizacao_nova': None,
+                    'juros_novo': None,
+                })
+                valor_anterior_total += p.valor_atual
+                valor_novo_total += novo_pmt
+                if p.tem_boleto:
+                    boletos_emitidos.append(p.numero_parcela)
+
+        elif usa_sac:
+            # MODO SAC — amortização constante recalculada sobre o saldo corrigido
+            todas_restantes = contrato.parcelas.filter(
+                pago=False,
+                tipo_parcela='NORMAL',
+            ).order_by('numero_parcela')
+
+            n_restantes = todas_restantes.count()
+
+            # Saldo SAC = soma das amortizações pendentes (principal real)
+            saldo_atual = todas_restantes.aggregate(
+                total=Sum('amortizacao')
+            )['total']
+            if saldo_atual is None:
+                # fallback se amortizacao não preenchida
+                saldo_atual = todas_restantes.aggregate(
+                    total=Sum('valor_atual')
+                )['total'] or Decimal('0')
+
+            saldo_atualizado = (saldo_atual * (1 + percentual_com_caps / 100)).quantize(Decimal('0.01'))
+
+            # Recalcula tabela SAC com nova taxa do ciclo
+            tabela_sac = cls._calcular_sac_tabela(saldo_atualizado, taxa_tabela, n_restantes)
+
+            parcela_final = contrato.numero_parcelas
+            for p, (pmt_k, amort_k, juros_k) in zip(todas_restantes, tabela_sac):
+                if desc_val and pmt_k > desc_val:
+                    pmt_k = (pmt_k - desc_val).quantize(Decimal('0.01'))
+                detalhes.append({
+                    'numero_parcela': p.numero_parcela,
+                    'data_vencimento': p.data_vencimento,
+                    'valor_atual': p.valor_atual,
+                    'valor_novo': pmt_k,
+                    'diferenca': pmt_k - p.valor_atual,
+                    'tem_boleto': p.tem_boleto,
+                    'amortizacao_nova': amort_k,
+                    'juros_novo': juros_k,
+                })
+                valor_anterior_total += p.valor_atual
+                valor_novo_total += pmt_k
+                if p.tem_boleto:
+                    boletos_emitidos.append(p.numero_parcela)
+
+        else:
+            # MODO SIMPLES: multiplica valor_atual pelo fator dentro do ciclo
+            fator = 1 + (percentual_com_caps / 100)
+            parcelas_qs = contrato.parcelas.filter(
+                numero_parcela__gte=parcela_inicial,
+                numero_parcela__lte=parcela_final,
+                pago=False,
+            ).order_by('numero_parcela')
+
+            for p in parcelas_qs:
+                novo_valor = p.valor_atual * fator
+                if desc_val:
+                    novo_valor = max(p.valor_atual, novo_valor - desc_val)
+                novo_valor = novo_valor.quantize(Decimal('0.01'))
+
+                detalhes.append({
+                    'numero_parcela': p.numero_parcela,
+                    'data_vencimento': p.data_vencimento,
+                    'valor_atual': p.valor_atual,
+                    'valor_novo': novo_valor,
+                    'diferenca': novo_valor - p.valor_atual,
+                    'tem_boleto': p.tem_boleto,
+                })
+                valor_anterior_total += p.valor_atual
+                valor_novo_total += novo_valor
+                if p.tem_boleto:
+                    boletos_emitidos.append(p.numero_parcela)
 
         return {
             'ciclo': ciclo,
             'indice_tipo': indice_tipo,
+            'tipo_calculo': 'SAC' if usa_sac else ('TABELA_PRICE' if usa_tabela_price else 'SIMPLES'),
             'periodo_referencia_inicio': inicio_ref,
             'periodo_referencia_fim': fim_ref,
             'percentual_bruto': percentual_bruto,
+            'spread': spread,
+            'percentual_bruto_com_spread': percentual_bruto_com_spread,
             'desconto_percentual': desc_perc,
             'desconto_valor': desc_val,
             'percentual_liquido': percentual_liquido,
+            'percentual_final': percentual_com_caps,
+            'piso': piso,
+            'teto': teto,
+            'piso_ativado': piso is not None and percentual_liquido < piso,
+            'teto_ativado': teto is not None and percentual_liquido > teto,
             'parcela_inicial': parcela_inicial,
             'parcela_final': parcela_final,
             'parcelas': detalhes,
@@ -1055,36 +1354,106 @@ class Reajuste(TimeStampedModel):
                 'erro': 'Reajuste já foi aplicado anteriormente'
             }
 
-        parcelas = self.contrato.parcelas.filter(
-            numero_parcela__gte=self.parcela_inicial,
-            numero_parcela__lte=self.parcela_final,
-            pago=False  # Só reajusta parcelas não pagas
-        )
+        from django.db.models import Sum
+        from contratos.models import TabelaJurosContrato
 
         perc_liquido = self.percentual_liquido
-        fator_reajuste = 1 + (perc_liquido / 100)
+        # Aplicar teto/piso registrados no momento da criação do reajuste
+        perc_final = perc_liquido
+        if self.piso_aplicado is not None:
+            perc_final = max(self.piso_aplicado, perc_final)
+        if self.teto_aplicado is not None:
+            perc_final = min(self.teto_aplicado, perc_final)
+
         desc_val = self.desconto_valor or Decimal('0')
         parcelas_reajustadas = 0
         valor_anterior_total = Decimal('0.00')
         valor_novo_total = Decimal('0.00')
 
-        for parcela in parcelas:
-            valor_anterior = parcela.valor_atual
-            novo_valor = parcela.valor_atual * fator_reajuste
-            if desc_val:
-                novo_valor = max(parcela.valor_atual, novo_valor - desc_val)
-            parcela.valor_atual = novo_valor.quantize(Decimal('0.01'))
-            parcela.save(update_fields=['valor_atual'])
+        # Determina modo de cálculo
+        from contratos.models import TipoAmortizacao
+        taxa_tabela = TabelaJurosContrato.get_juros_para_ciclo(self.contrato, self.ciclo)
+        usa_tabela_price = taxa_tabela is not None
+        usa_sac = usa_tabela_price and self.contrato.tipo_amortizacao == TipoAmortizacao.SAC
 
-            valor_anterior_total += valor_anterior
-            valor_novo_total += parcela.valor_atual
-            parcelas_reajustadas += 1
+        if usa_tabela_price and not usa_sac:
+            # MODO TABELA PRICE
+            # Atualiza TODAS as parcelas normais restantes com o novo PMT
+            parcelas = self.contrato.parcelas.filter(
+                pago=False,
+                tipo_parcela='NORMAL',
+            ).order_by('numero_parcela')
 
-        # Item 2.4: Reajustar automaticamente as intermediarias do ciclo
+            n_restantes = parcelas.count()
+            saldo_atual = parcelas.aggregate(
+                total=Sum('valor_atual')
+            )['total'] or Decimal('0')
+
+            saldo_atualizado = saldo_atual * (1 + perc_final / 100)
+            novo_pmt = self._calcular_pmt(saldo_atualizado, taxa_tabela, n_restantes)
+            if desc_val and novo_pmt > desc_val:
+                novo_pmt = (novo_pmt - desc_val).quantize(Decimal('0.01'))
+
+            for parcela in parcelas:
+                valor_anterior = parcela.valor_atual
+                parcela.valor_atual = novo_pmt
+                parcela.save(update_fields=['valor_atual'])
+                valor_anterior_total += valor_anterior
+                valor_novo_total += novo_pmt
+                parcelas_reajustadas += 1
+
+        elif usa_sac:
+            # MODO SAC — recalcula amortização constante sobre saldo corrigido
+            parcelas = list(self.contrato.parcelas.filter(
+                pago=False,
+                tipo_parcela='NORMAL',
+            ).order_by('numero_parcela'))
+
+            n_restantes = len(parcelas)
+            saldo_atual = sum(
+                (p.amortizacao or p.valor_atual) for p in parcelas
+            )
+
+            saldo_atualizado = (saldo_atual * (1 + perc_final / 100)).quantize(Decimal('0.01'))
+            tabela_sac = self._calcular_sac_tabela(saldo_atualizado, taxa_tabela, n_restantes)
+
+            for parcela, (pmt_k, amort_k, juros_k) in zip(parcelas, tabela_sac):
+                if desc_val and pmt_k > desc_val:
+                    pmt_k = (pmt_k - desc_val).quantize(Decimal('0.01'))
+                valor_anterior = parcela.valor_atual
+                parcela.valor_atual = pmt_k
+                parcela.amortizacao = amort_k
+                parcela.juros_embutido = juros_k
+                parcela.save(update_fields=['valor_atual', 'amortizacao', 'juros_embutido'])
+                valor_anterior_total += valor_anterior
+                valor_novo_total += pmt_k
+                parcelas_reajustadas += 1
+
+        else:
+            # MODO SIMPLES: multiplica valor_atual dentro do intervalo do ciclo
+            parcelas = self.contrato.parcelas.filter(
+                numero_parcela__gte=self.parcela_inicial,
+                numero_parcela__lte=self.parcela_final,
+                pago=False,
+            )
+            fator_reajuste = 1 + (perc_final / 100)
+
+            for parcela in parcelas:
+                valor_anterior = parcela.valor_atual
+                novo_valor = parcela.valor_atual * fator_reajuste
+                if desc_val:
+                    novo_valor = max(parcela.valor_atual, novo_valor - desc_val)
+                parcela.valor_atual = novo_valor.quantize(Decimal('0.01'))
+                parcela.save(update_fields=['valor_atual'])
+                valor_anterior_total += valor_anterior
+                valor_novo_total += parcela.valor_atual
+                parcelas_reajustadas += 1
+
+        # Reajustar intermediárias do ciclo com perc_final (corrigido: era self.percentual)
         intermediarias = self.contrato.intermediarias.filter(
             paga=False,
             mes_vencimento__gte=self.parcela_inicial,
-            mes_vencimento__lte=self.parcela_final
+            mes_vencimento__lte=self.parcela_final,
         )
         intermediarias_reajustadas = 0
         valor_intermediarias_anterior = Decimal('0.00')
@@ -1092,7 +1461,7 @@ class Reajuste(TimeStampedModel):
 
         for inter in intermediarias:
             valor_anterior_inter = inter.valor_atual
-            inter.aplicar_reajuste(self.percentual)
+            inter.aplicar_reajuste(perc_final)  # era self.percentual — corrigido
             valor_intermediarias_anterior += valor_anterior_inter
             valor_intermediarias_novo += inter.valor_atual
             intermediarias_reajustadas += 1
@@ -1128,17 +1497,19 @@ class Reajuste(TimeStampedModel):
     @classmethod
     def criar_reajuste_ciclo(cls, contrato, ciclo, indice_tipo=None, percentual=None):
         """
-        Cria um reajuste para um ciclo específico do contrato.
+        DEPRECIADO — use preview_reajuste() + Reajuste.objects.create() + aplicar_reajuste().
 
-        Args:
-            contrato: Contrato a ser reajustado
-            ciclo: Número do ciclo (2, 3, 4, ...)
-            indice_tipo: Tipo do índice (opcional, usa o do contrato)
-            percentual: Percentual do reajuste (opcional, busca automático)
-
-        Returns:
-            Reajuste: Objeto de reajuste criado
+        Este método não considera spread_reajuste, TabelaJurosContrato, piso/teto,
+        desconto, fallback de índice nem modo Tabela Price. Mantido apenas para
+        compatibilidade com testes legados.
         """
+        import warnings
+        warnings.warn(
+            'criar_reajuste_ciclo() está depreciado. '
+            'Use preview_reajuste() + Reajuste.objects.create() + aplicar_reajuste().',
+            DeprecationWarning,
+            stacklevel=2,
+        )
         from contratos.models import IndiceReajuste
         from dateutil.relativedelta import relativedelta
 

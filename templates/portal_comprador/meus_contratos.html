@@ -1,0 +1,10 @@
+{% extends 'base.html' %}
+{% block title %}Meus Contratos{% endblock %}
+{% block content %}
+<div class="container">
+    <h1>Meus Contratos</h1>
+    {% for contrato in contratos %}
+    <div>{{ contrato.numero_contrato }}</div>
+    {% endfor %}
+</div>
+{% endblock %}
