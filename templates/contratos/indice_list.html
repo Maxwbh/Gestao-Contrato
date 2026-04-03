@@ -149,6 +149,10 @@
                     <input type="text" class="form-control form-control-sm" style="width: 200px;"
                            placeholder="Busca rápida na página..."
                            oninput="if(window.indicesGridApi) window.indicesGridApi.setGridOption('quickFilterText', this.value)">
+                    <button type="button" class="btn btn-sm btn-outline-success" title="Exportar CSV"
+                            onclick="window.indicesGridApi && window.indicesGridApi.exportDataAsCsv({fileName:'indices_reajuste.csv', processCellCallback: cleanCsvCell})">
+                        <i class="fas fa-file-csv me-1"></i>CSV
+                    </button>
                 </div>
                 <div id="indicesGrid" class="ag-theme-material" style="width: 100%;"></div>
 
@@ -284,6 +288,16 @@
 
 {% block extra_js %}
 <script>
+    function cleanCsvCell(params) {
+        const v = params.value;
+        if (v == null) return '';
+        if (typeof v === 'string' && v.includes('<')) {
+            const d = document.createElement('div'); d.innerHTML = v;
+            return (d.textContent || d.innerText || '').trim();
+        }
+        return v;
+    }
+
     // ===== AG GRID - INDICES =====
     const indicesRowData = [
     {% for indice in indices %}
