@@ -285,6 +285,26 @@
         </div>
     </footer>
 
+    <!-- Global JS error catcher (debug) -->
+    <script>
+    window.onerror = function(msg, src, line, col, err) {
+        var info = (src ? src.split('/').pop() : '?') + ':' + line;
+        console.error('[JS ERROR] ' + msg + ' @ ' + info, err);
+        var banner = document.getElementById('_jserrorbanner');
+        if (!banner) {
+            banner = document.createElement('div');
+            banner.id = '_jserrorbanner';
+            banner.style.cssText = 'position:fixed;bottom:0;left:0;right:0;z-index:99999;background:#c0392b;color:#fff;padding:8px 16px;font-size:13px;font-family:monospace;max-height:120px;overflow:auto;';
+            document.body.appendChild(banner);
+        }
+        banner.innerHTML += '<div>&#9888; <strong>' + info + '</strong>: ' + msg + '</div>';
+        return false;
+    };
+    window.addEventListener('unhandledrejection', function(e) {
+        window.onerror('Promise rejeitada: ' + (e.reason && e.reason.message || e.reason), location.href, 0, 0, e.reason);
+    });
+    </script>
+
     <!-- Materialize JS -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/materialize/1.0.0/js/materialize.min.js"></script>
     <!-- AG Grid Community -->
