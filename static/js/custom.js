@@ -723,41 +723,10 @@
         });
 
         // ====================================================================
-        // ANIMATE ELEMENTS ON SCROLL
-        // Só anima elementos que entram no viewport após o carregamento inicial.
-        // Elementos já visíveis na carga da página NÃO recebem o fade-in
-        // (evita flash de conteúdo invisível no carregamento).
+        // ANIMATE ELEMENTS ON SCROLL — desabilitado
+        // A animação de fade-in via IntersectionObserver causava flash de
+        // conteúdo invisível (opacity:0) ao fazer scroll. Removido.
         // ====================================================================
-        const observerOptions = {
-            threshold: 0.1,
-            rootMargin: '0px 0px -50px 0px'
-        };
-
-        // Aguarda o próximo frame para capturar o estado inicial do viewport
-        requestAnimationFrame(function() {
-            const initiallyVisible = new Set();
-            document.querySelectorAll('.card, .table, .alert').forEach(function(el) {
-                const rect = el.getBoundingClientRect();
-                if (rect.top < window.innerHeight && rect.bottom > 0) {
-                    initiallyVisible.add(el);
-                }
-            });
-
-            const observer = new IntersectionObserver(function(entries) {
-                entries.forEach(function(entry) {
-                    if (entry.isIntersecting && !initiallyVisible.has(entry.target)) {
-                        entry.target.classList.add('fade-in');
-                        observer.unobserve(entry.target);
-                    } else if (entry.isIntersecting) {
-                        observer.unobserve(entry.target);
-                    }
-                });
-            }, observerOptions);
-
-            document.querySelectorAll('.card, .table, .alert').forEach(function(el) {
-                observer.observe(el);
-            });
-        });
 
         // ====================================================================
         // AUTO-DISMISS ALERTS
