@@ -732,12 +732,11 @@
         // AUTO-DISMISS ALERTS
         // ====================================================================
         const alerts = document.querySelectorAll('.alert:not(.alert-permanent)');
-        alerts.forEach(alert => {
-            setTimeout(() => {
-                if (typeof bootstrap !== 'undefined') {
-                    const bsAlert = new bootstrap.Alert(alert);
-                    bsAlert.close();
-                }
+        alerts.forEach(function(alert) {
+            setTimeout(function() {
+                alert.style.transition = 'opacity 0.4s ease';
+                alert.style.opacity = '0';
+                setTimeout(function() { if (alert.parentNode) alert.parentNode.removeChild(alert); }, 400);
             }, 5000);
         });
 
