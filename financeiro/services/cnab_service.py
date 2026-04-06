@@ -979,14 +979,21 @@ class CNABService:
         from financeiro.models import Parcela, StatusBoleto
         from collections import defaultdict
 
-        # Buscar parcelas válidas
+        # Buscar parcelas válidas — exclui apenas as já em remessas ativas
+        # (inclui parcelas em remessas com ERRO, que podem ser re-incluídas)
+        from financeiro.models import StatusArquivoRemessa
         parcelas = list(
             Parcela.objects.filter(
                 pk__in=parcela_ids,
                 status_boleto=StatusBoleto.GERADO,
                 pago=False,
-                itens_remessa__isnull=True
-            ).select_related('conta_bancaria', 'contrato')
+            ).exclude(
+                itens_remessa__arquivo_remessa__status__in=[
+                    StatusArquivoRemessa.GERADO,
+                    StatusArquivoRemessa.ENVIADO,
+                    StatusArquivoRemessa.PROCESSADO,
+                ]
+            ).select_related('conta_bancaria', 'contrato').distinct()
         )
 
         if not parcelas:
