@@ -129,6 +129,14 @@ from django.db import connection
 
 def add_column_if_not_exists(cursor, table, column, column_def):
     """Adiciona coluna se não existir (verifica apenas no schema atual)"""
+    # Verificar se a tabela existe antes de tentar ALTER TABLE
+    cursor.execute(f"""
+        SELECT 1 FROM information_schema.tables
+        WHERE table_schema = current_schema() AND table_name = '{table}'
+    """)
+    if not cursor.fetchone():
+        print(f"  ! Tabela {table} nao existe, pulando coluna {column}...")
+        return
     cursor.execute(f"""
         SELECT 1 FROM information_schema.columns
         WHERE table_schema = current_schema()
