@@ -2301,6 +2301,8 @@ def aplicar_reajuste_pagina(request, contrato_id):
 
         try:
             if not ciclo_param:
+                if is_modal:
+                    return JsonResponse({'sucesso': False, 'erro': 'Ciclo de reajuste não informado.'}, status=400)
                 messages.error(request, 'Ciclo de reajuste não informado.')
                 return redirect('financeiro:aplicar_reajuste', contrato_id=contrato_id)
 
@@ -2312,6 +2314,8 @@ def aplicar_reajuste_pagina(request, contrato_id):
             )
 
             if 'erro' in preview:
+                if is_modal:
+                    return JsonResponse({'sucesso': False, 'erro': preview['erro']}, status=400)
                 messages.error(request, preview['erro'])
                 return redirect('financeiro:aplicar_reajuste', contrato_id=contrato_id)
 
@@ -2320,6 +2324,8 @@ def aplicar_reajuste_pagina(request, contrato_id):
                 numero_parcela__lte=preview['parcela_final'],
                 pago=False,
             ).exists():
+                if is_modal:
+                    return JsonResponse({'sucesso': False, 'erro': 'Nenhuma parcela pendente no intervalo selecionado.'}, status=400)
                 messages.error(request, 'Nenhuma parcela pendente no intervalo selecionado.')
                 return redirect('financeiro:aplicar_reajuste', contrato_id=contrato_id)
 
