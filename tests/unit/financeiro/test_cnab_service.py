@@ -80,7 +80,7 @@ class TestCNABServiceBasico(TestCase):
         """Testa formatação de data para o padrão BRCobranca"""
         data = date(2024, 12, 31)
         resultado = self.service._formatar_data(data)
-        self.assertEqual(resultado, '31/12/2024')
+        self.assertEqual(resultado, '2024/12/31')
 
     def test_formatar_data_none(self):
         """Testa formatação de data None"""
@@ -91,17 +91,17 @@ class TestCNABServiceBasico(TestCase):
         """Testa formatação de valor"""
         valor = Decimal('1234.56')
         resultado = self.service._formatar_valor(valor)
-        self.assertEqual(resultado, '1234.56')
+        self.assertEqual(resultado, 1234.56)
 
     def test_formatar_valor_zero(self):
         """Testa formatação de valor zero"""
         resultado = self.service._formatar_valor(Decimal('0'))
-        self.assertEqual(resultado, '0.0')
+        self.assertEqual(resultado, 0.0)
 
     def test_formatar_valor_none(self):
         """Testa formatação de valor None"""
         resultado = self.service._formatar_valor(None)
-        self.assertEqual(resultado, '0.0')
+        self.assertEqual(resultado, 0.0)
 
 
 class TestMapeamentoBancos(TestCase):

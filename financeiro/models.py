@@ -306,7 +306,7 @@ class Parcela(TimeStampedModel):
             errors['valor_atual'] = 'O valor atual deve ser maior que zero.'
 
         # Validar data de pagamento não pode ser futura
-        if self.data_pagamento and self.data_pagamento > timezone.now().date():
+        if self.data_pagamento and self.data_pagamento > timezone.localdate():
             errors['data_pagamento'] = 'A data de pagamento não pode ser no futuro.'
 
         # Validar que valor pago é informado quando pago=True
@@ -390,7 +390,7 @@ class Parcela(TimeStampedModel):
         if self.pago:
             return 0
 
-        hoje = timezone.now().date()
+        hoje = timezone.localdate()
         if hoje > self.data_vencimento:
             return (hoje - self.data_vencimento).days
         return 0
@@ -398,7 +398,7 @@ class Parcela(TimeStampedModel):
     @property
     def esta_vencida(self):
         """Verifica se a parcela está vencida"""
-        return not self.pago and timezone.now().date() > self.data_vencimento
+        return not self.pago and timezone.localdate() > self.data_vencimento
 
     def calcular_juros_multa(self, data_referencia=None):
         """
@@ -409,7 +409,7 @@ class Parcela(TimeStampedModel):
             return Decimal('0.00'), Decimal('0.00')
 
         if data_referencia is None:
-            data_referencia = timezone.now().date()
+            data_referencia = timezone.localdate()
 
         if data_referencia <= self.data_vencimento:
             return Decimal('0.00'), Decimal('0.00')
@@ -451,7 +451,7 @@ class Parcela(TimeStampedModel):
         Item 2.6 do Roadmap: Nao permitir pagamento menor que valor minimo.
         """
         if data_pagamento is None:
-            data_pagamento = timezone.now().date()
+            data_pagamento = timezone.localdate()
 
         # Item 2.6: Validar valor minimo de pagamento
         if validar_minimo:
