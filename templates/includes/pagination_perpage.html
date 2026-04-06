@@ -106,8 +106,8 @@ Requires: page_obj, paginator, is_paginated in context (standard Django ListView
   var next  = document.getElementById('pgNext');
   var last  = document.getElementById('pgLast');
   if (first) first.href = buildUrl({ page: 1 });
-  if (prev)  prev.href  = buildUrl({ page: {{ page_obj.previous_page_number|default:1 }} });
-  if (next)  next.href  = buildUrl({ page: {{ page_obj.next_page_number|default:1 }} });
+  if (prev)  prev.href  = buildUrl({ page: {% if page_obj.has_previous %}{{ page_obj.number|add:"-1" }}{% else %}1{% endif %} });
+  if (next)  next.href  = buildUrl({ page: {% if page_obj.has_next %}{{ page_obj.number|add:"1" }}{% else %}{{ page_obj.paginator.num_pages }}{% endif %} });
   if (last)  last.href  = buildUrl({ page: {{ page_obj.paginator.num_pages }} });
 
   // Numbered page links
