@@ -40,6 +40,8 @@
         <li><a href="{% url 'financeiro:parcelas_mes' %}"><i class="fas fa-calendar-alt left"></i> Parcelas do Mês</a></li>
         <li><a href="{% url 'financeiro:listar_remessas' %}"><i class="fas fa-file-export left"></i> Arquivos de Remessa</a></li>
         <li><a href="{% url 'financeiro:listar_retornos' %}"><i class="fas fa-file-import left"></i> Arquivos de Retorno</a></li>
+        <li><a href="{% url 'financeiro:reajustes_pendentes' %}"><i class="fas fa-exclamation-triangle left"></i> Reajustes Pendentes</a></li>
+        <li><a href="{% url 'financeiro:listar_reajustes' %}"><i class="fas fa-history left"></i> Histórico de Reajustes</a></li>
         <li><div class="divider"></div></li>
         <!-- Contratos -->
         <li><a class="subheader">Contratos</a></li>
@@ -178,6 +180,10 @@
         <li><a class="dropdown-header-item disabled"><i class="fas fa-barcode"></i> Boletos</a></li>
         <li><a href="{% url 'financeiro:listar_parcelas' %}?status_boleto=NAO_GERADO"><i class="fas fa-exclamation-circle orange-text"></i> Pendentes de Geração</a></li>
         <li><a href="{% url 'financeiro:listar_parcelas' %}?status_boleto=GERADO"><i class="fas fa-check-circle green-text"></i> Boletos Gerados</a></li>
+        <li class="divider" tabindex="-1"></li>
+        <li><a class="dropdown-header-item disabled"><i class="fas fa-chart-bar"></i> Reajustes</a></li>
+        <li><a href="{% url 'financeiro:reajustes_pendentes' %}"><i class="fas fa-exclamation-triangle orange-text"></i> Pendentes</a></li>
+        <li><a href="{% url 'financeiro:listar_reajustes' %}"><i class="fas fa-history"></i> Histórico</a></li>
         <li class="divider" tabindex="-1"></li>
         <li><a class="dropdown-header-item disabled"><i class="fas fa-file-alt"></i> CNAB</a></li>
         <li><a href="{% url 'financeiro:listar_remessas' %}"><i class="fas fa-file-export"></i> Arquivos de Remessa</a></li>
