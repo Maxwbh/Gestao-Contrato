@@ -547,9 +547,9 @@
                 <div class="card mb-3">
                     <div class="card-header bg-secondary text-white d-flex justify-content-between align-items-center">
                         <span><i class="fas fa-chart-line"></i> Reajustes</span>
-                        <a href="{% url 'financeiro:aplicar_reajuste' contrato_id=contrato.pk %}" class="btn btn-sm btn-light">
+                        <button type="button" class="btn btn-sm btn-light" onclick="abrirModalReajuste({{ contrato.pk }})">
                             <i class="fas fa-plus"></i> Aplicar Reajuste
-                        </a>
+                        </button>
                     </div>
                     <div class="card-body p-0">
                         {% if reajustes %}
@@ -2530,5 +2530,110 @@ document.addEventListener('DOMContentLoaded', function() {
         tabelaBoletos.classList.add('d-none');
     }
 });
+
+// ── Modal de Reajuste ───────────────────────────────────────────────────────
+function abrirModalReajuste(contratoId) {
+    var modal = document.getElementById('modalReajuste');
+    var body  = document.getElementById('modalReajusteBody');
+    var inst  = M.Modal.getInstance(modal) || M.Modal.init(modal, {dismissible: true});
+
+    body.innerHTML = '<div class="text-center py-4"><div class="preloader-wrapper small active"><div class="spinner-layer spinner-blue-only"><div class="circle-clipper left"><div class="circle"></div></div><div class="gap-patch"><div class="circle"></div></div><div class="circle-clipper right"><div class="circle"></div></div></div></div></div>';
+    inst.open();
+
+    fetch('/financeiro/contrato/' + contratoId + '/reajuste/?modal=1', {
+        headers: {'X-Requested-With': 'XMLHttpRequest'}
+    })
+    .then(function(r) { return r.text(); })
+    .then(function(html) {
+        body.innerHTML = html;
+        _bindReajusteModal(contratoId);
+    })
+    .catch(function() {
+        body.innerHTML = '<div class="alert alert-danger">Erro ao carregar formulário de reajuste.</div>';
+    });
+}
+
+function _bindReajusteModal(contratoId) {
+    // Recalcular com desconto (submete GET e recarrega o conteúdo do modal)
+    var formDesc = document.getElementById('formDescontoModal');
+    if (formDesc) {
+        formDesc.addEventListener('submit', function(e) {
+            e.preventDefault();
+            var params = new URLSearchParams(new FormData(formDesc));
+            var body = document.getElementById('modalReajusteBody');
+            body.innerHTML = '<div class="text-center py-4 text-muted"><i class="fas fa-sync fa-spin fa-2x"></i></div>';
+            fetch('/financeiro/contrato/' + contratoId + '/reajuste/?' + params.toString(), {
+                headers: {'X-Requested-With': 'XMLHttpRequest'}
+            })
+            .then(function(r) { return r.text(); })
+            .then(function(html) {
+                body.innerHTML = html;
+                _bindReajusteModal(contratoId);
+            })
+            .catch(function() {
+                body.innerHTML = '<div class="alert alert-danger">Erro ao recalcular prévia.</div>';
+            });
+        });
+    }
+
+    // Aplicar reajuste (POST AJAX)
+    var formApl = document.getElementById('formAplicarModal');
+    if (formApl) {
+        formApl.addEventListener('submit', function(e) {
+            e.preventDefault();
+            var btn = document.getElementById('btnAplicarModal');
+            if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Aplicando...'; }
+
+            fetch(formApl.action, {
+                method: 'POST',
+                headers: {'X-Requested-With': 'XMLHttpRequest'},
+                body: new FormData(formApl)
+            })
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                if (data.sucesso) {
+                    var inst = M.Modal.getInstance(document.getElementById('modalReajuste'));
+                    if (inst) inst.close();
+                    // Exibir mensagem de sucesso e recarregar a página
+                    if (window.showToast) {
+                        showToast(data.mensagem || 'Reajuste aplicado!', 'success', 3000);
+                    }
+                    setTimeout(function() { location.reload(); }, 1500);
+                } else {
+                    if (window.showErrorModal) {
+                        showErrorModal(data.erro || 'Erro ao aplicar reajuste.');
+                    }
+                    if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-check me-1"></i>Aplicar Reajuste'; }
+                }
+            })
+            .catch(function() {
+                if (window.showErrorModal) showErrorModal('Erro de conexão.');
+                if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-check me-1"></i>Aplicar Reajuste'; }
+            });
+        });
+    }
+}
 </script>
+
+<!-- Modal Reajuste -->
+<div id="modalReajuste" class="modal modal-fixed-footer" style="width:min(96vw,900px); max-height:90vh;">
+    <div class="modal-content" style="padding:1.25rem;">
+        <h5 style="margin-bottom:1rem;">
+            <i class="fas fa-chart-line me-2 text-secondary"></i>
+            Aplicar Reajuste — Contrato {{ contrato.numero_contrato }}
+        </h5>
+        <div id="modalReajusteBody">
+            <div class="text-center py-4 text-muted">Carregando...</div>
+        </div>
+    </div>
+    <div class="modal-footer">
+        <a href="{% url 'financeiro:aplicar_reajuste' contrato_id=contrato.pk %}" target="_blank"
+           class="modal-action waves-effect waves-green btn-flat left" style="margin-left:0;">
+            <i class="fas fa-external-link-alt me-1"></i>Abrir página completa
+        </a>
+        <a href="#!" class="modal-action modal-close waves-effect waves-red btn-flat">
+            <i class="fas fa-times me-1"></i>Fechar
+        </a>
+    </div>
+</div>
 {% endblock %}
