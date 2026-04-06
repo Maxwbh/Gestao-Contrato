@@ -1132,6 +1132,7 @@ def api_status_boleto(request, pk):
 def listar_arquivos_remessa(request):
     """Lista todos os arquivos de remessa"""
     from .models import ArquivoRemessa
+    from .services.cnab_service import CNABService
 
     arquivos = ArquivoRemessa.objects.select_related(
         'conta_bancaria', 'conta_bancaria__imobiliaria'
@@ -1161,6 +1162,9 @@ def listar_arquivos_remessa(request):
     paginator = Paginator(arquivos, per_page)
     page_obj = paginator.get_page(request.GET.get('page', 1))
 
+    # Contador de boletos disponíveis para nova remessa
+    boletos_pendentes_count = len(CNABService().obter_boletos_sem_remessa())
+
     context = {
         'arquivos': page_obj,
         'page_obj': page_obj,
@@ -1171,6 +1175,7 @@ def listar_arquivos_remessa(request):
         'filtro_conta': conta_id,
         'filtro_status': status,
         'filtro_imobiliaria': imobiliaria_id,
+        'boletos_pendentes_count': boletos_pendentes_count,
     }
     return render(request, 'financeiro/cnab/listar_remessas.html', context)
 
@@ -1311,7 +1316,7 @@ def gerar_arquivo_remessa(request):
         'boletos_disponiveis': boletos_disponiveis,
         'boletos_pendentes': boletos_pendentes,
         'total_disponivel': len(boletos_disponiveis),
-        'today': timezone.now().date(),
+        'today': timezone.localdate(),
     }
     return render(request, 'financeiro/cnab/gerar_remessa.html', context)
 
@@ -4651,6 +4656,19 @@ def api_cnab_remessa_gerar(request):
 
 
 @login_required
+@require_GET
+def api_cnab_boletos_pendentes_count(request):
+    """Contagem rápida de boletos disponíveis para nova remessa (badge navbar)."""
+    try:
+        from .services.cnab_service import CNABService
+        count = len(CNABService().obter_boletos_sem_remessa())
+        return JsonResponse({'count': count})
+    except Exception as e:
+        logger.exception("Erro em api_cnab_boletos_pendentes_count: %s", e)
+        return JsonResponse({'count': 0})
+
+
+@login_required
 def api_cnab_boletos_disponiveis(request):
     """
     API para listar boletos disponíveis para remessa.
@@ -4799,38 +4817,46 @@ def api_reajustes_pendentes_count(request):
     Usa prefetch_related para evitar N×M queries: 2 queries no total
     em vez de uma por ciclo por contrato.
     """
-    from contratos.models import TipoCorrecao
-    from django.db.models import Prefetch
+    try:
+        from contratos.models import TipoCorrecao
+        from django.db.models import Prefetch
 
-    hoje = timezone.now().date()
+        hoje = timezone.localdate()
 
-    contratos_ativos = Contrato.objects.filter(
-        status=StatusContrato.ATIVO
-    ).exclude(tipo_correcao=TipoCorrecao.FIXO).only(
-        'pk', 'data_contrato', 'numero_parcelas', 'prazo_reajuste_meses', 'tipo_correcao'
-    ).prefetch_related(
-        Prefetch(
-            'historico_reajustes',
-            queryset=Reajuste.objects.filter(aplicado=True).only('contrato_id', 'ciclo'),
-            to_attr='reajustes_aplicados_cache',
+        contratos_ativos = Contrato.objects.filter(
+            status=StatusContrato.ATIVO
+        ).exclude(tipo_correcao=TipoCorrecao.FIXO).only(
+            'pk', 'data_contrato', 'numero_parcelas', 'prazo_reajuste_meses', 'tipo_correcao'
+        ).prefetch_related(
+            Prefetch(
+                'historico_reajustes',
+                queryset=Reajuste.objects.filter(aplicado=True).only('contrato_id', 'ciclo'),
+                to_attr='reajustes_aplicados_cache',
+            )
         )
-    )
 
-    count = 0
-    for contrato in contratos_ativos:
-        ciclos_aplicados = {r.ciclo for r in contrato.reajustes_aplicados_cache}
-        prazo = contrato.prazo_reajuste_meses or 12
-        total_ciclos = (contrato.numero_parcelas - 1) // prazo + 1
+        count = 0
+        for contrato in contratos_ativos:
+            # Pular contratos com dados incompletos
+            if not contrato.data_contrato or not contrato.numero_parcelas:
+                continue
 
-        for ciclo in range(2, total_ciclos + 1):
-            data_reajuste = contrato.data_contrato + relativedelta(months=(ciclo - 1) * prazo)
-            if hoje < data_reajuste:
-                break
-            if ciclo not in ciclos_aplicados:
-                count += 1
-                break
+            ciclos_aplicados = {r.ciclo for r in contrato.reajustes_aplicados_cache}
+            prazo = contrato.prazo_reajuste_meses or 12
+            total_ciclos = (contrato.numero_parcelas - 1) // prazo + 1
 
-    return JsonResponse({'count': count})
+            for ciclo in range(2, total_ciclos + 1):
+                data_reajuste = contrato.data_contrato + relativedelta(months=(ciclo - 1) * prazo)
+                if hoje < data_reajuste:
+                    break
+                if ciclo not in ciclos_aplicados:
+                    count += 1
+                    break
+
+        return JsonResponse({'count': count})
+    except Exception as e:
+        logger.exception("Erro em api_reajustes_pendentes_count: %s", e)
+        return JsonResponse({'count': 0})
 
 
 # ==========================================================================
