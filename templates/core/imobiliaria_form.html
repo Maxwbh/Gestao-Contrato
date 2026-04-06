@@ -440,7 +440,7 @@
                     </div>
 
                     <!-- Campos específicos por banco -->
-                    <div class="row" id="campos-banco-especificos" style="display:none!important;">
+                    <div class="row d-none" id="campos-banco-especificos">
                         <!-- Sicredi: posto + byte_idt -->
                         <div class="col-md-4 mb-3 campo-sicredi d-none">
                             <label class="form-label">Posto * <span class="badge bg-warning text-dark">Sicredi</span></label>
@@ -559,12 +559,17 @@
 {% block extra_js %}
 <script>
 const IMOBILIARIA_ID = {{ object.pk|default:'null' }};
-let modalContaBancaria;
 let contasLocais = []; // Para armazenar contas no modo criação
 let bancosLista = {}; // Cache dos bancos para exibir nome
 
+function _getModalContaBancaria() {
+    const el = document.getElementById('modalContaBancaria');
+    return el ? (M.Modal.getInstance(el) || M.Modal.init(el)) : null;
+}
+
 document.addEventListener('DOMContentLoaded', function() {
-    modalContaBancaria = new bootstrap.Modal(document.getElementById('modalContaBancaria'));
+    // Modal é inicializado pelo base.html via M.Modal.init(querySelectorAll('.modal'))
+    // Apenas garantimos que está disponível aqui.
 
     // Carregar lista de bancos
     carregarBancos();
@@ -599,9 +604,11 @@ function atualizarCamposBanco(bancoCodigo) {
     const contaHelp = document.getElementById('conta-help');
     const camposEspecificos = document.getElementById('campos-banco-especificos');
 
+    // Null-guard: modal pode não estar no DOM ainda
+    if (!camposEspecificos || !alertEl || !convenioHelp || !agenciaHelp || !contaHelp || !labelConvenio) return;
+
     // Ocultar tudo primeiro
     document.querySelectorAll('.campo-sicredi, .campo-caixa').forEach(el => el.classList.add('d-none'));
-    camposEspecificos.style.removeProperty('display');
     camposEspecificos.classList.add('d-none');
     alertEl.classList.add('d-none');
     convenioHelp.classList.add('d-none');
@@ -784,7 +791,7 @@ function abrirModalConta() {
     document.getElementById('cobranca_registrada').checked = true;
     editandoIndex = -1;
     atualizarCamposBanco('');
-    modalContaBancaria.show();
+    _getModalContaBancaria()?.open();
 }
 
 function editarContaLocal(index) {
@@ -806,7 +813,7 @@ function editarContaLocal(index) {
     atualizarCamposBanco(conta.banco);
 
     document.getElementById('modalContaTitle').innerHTML = '<i class="fas fa-edit me-2"></i>Editar Conta Bancária';
-    modalContaBancaria.show();
+    _getModalContaBancaria()?.open();
 }
 
 function excluirContaLocal(index) {
@@ -851,7 +858,7 @@ function salvarContaLocal() {
         contasLocais.push(contaData);
     }
 
-    modalContaBancaria.hide();
+    _getModalContaBancaria()?.close();
     atualizarTabelaLocal();
 }
 
@@ -912,7 +919,7 @@ async function editarConta(contaId) {
             atualizarCamposBanco(conta.banco);
 
             document.getElementById('modalContaTitle').innerHTML = '<i class="fas fa-edit me-2"></i>Editar Conta Bancária';
-            modalContaBancaria.show();
+            _getModalContaBancaria()?.open();
         }
     } catch (error) {
         window.showErrorModal('Erro ao carregar dados da conta');
@@ -978,7 +985,7 @@ async function salvarConta() {
         const data = await response.json();
 
         if (data.status === 'success') {
-            modalContaBancaria.hide();
+            _getModalContaBancaria()?.close();
             carregarContas();
             window.showToast(data.message, 'success');
         } else {
