@@ -4754,7 +4754,7 @@ def api_cnab_remessa_gerar(request):
                 'remessa': {'id': arq.id, 'numero_remessa': arq.numero_remessa, 'nome_arquivo': arq.nome_arquivo,
                            'quantidade_boletos': resultado.get('quantidade_boletos'), 'valor_total': float(resultado.get('valor_total', 0))}
             })
-        return JsonResponse({'sucesso': False, 'erro': resultado.get('erro')}, status=500)
+        return JsonResponse({'sucesso': False, 'erro': resultado.get('erro')}, status=400)
 
     except json.JSONDecodeError:
         return JsonResponse({'sucesso': False, 'erro': 'JSON inválido.'}, status=400)
@@ -4889,7 +4889,7 @@ def api_cnab_retorno_processar(request, retorno_id):
                 'sucesso': True, 'total_registros': resultado.get('total_registros', 0),
                 'processados': resultado.get('processados', 0), 'liquidacoes': resultado.get('liquidacoes', 0),
             })
-        return JsonResponse({'sucesso': False, 'erro': resultado.get('erro')}, status=500)
+        return JsonResponse({'sucesso': False, 'erro': resultado.get('erro')}, status=400)
 
     except Exception as e:
         logger.exception(f"Erro ao processar retorno: {e}")
