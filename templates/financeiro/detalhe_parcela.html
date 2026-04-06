@@ -179,16 +179,62 @@
 
     <!-- Ações -->
     <div class="row">
-        <div class="col-12">
+        <div class="col-12 d-flex flex-wrap gap-2">
             <a href="{% url 'financeiro:listar_parcelas' %}" class="btn btn-secondary">
                 <i class="fas fa-arrow-left me-2"></i>Voltar
             </a>
             {% if not parcela.pago %}
-            <button class="btn btn-success" disabled title="Em desenvolvimento">
+                {% if not parcela.tem_boleto %}
+                <button type="button" class="btn btn-outline-primary" id="btnGerarBoleto" onclick="gerarBoletoDetalhe()">
+                    <i class="fas fa-barcode me-2"></i>Gerar Boleto
+                </button>
+                {% else %}
+                <a href="{% url 'financeiro:download_boleto' parcela.pk %}" class="btn btn-outline-primary" target="_blank">
+                    <i class="fas fa-barcode me-2"></i>Ver Boleto
+                </a>
+                {% endif %}
+            <a href="{% url 'financeiro:registrar_pagamento' parcela.pk %}" class="btn btn-success">
                 <i class="fas fa-dollar-sign me-2"></i>Registrar Pagamento
-            </button>
+            </a>
             {% endif %}
+            <a href="{% url 'contratos:detalhe' parcela.contrato.pk %}" class="btn btn-outline-secondary">
+                <i class="fas fa-file-contract me-2"></i>Ver Contrato
+            </a>
         </div>
     </div>
 </div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+{% if not parcela.pago and not parcela.tem_boleto %}
+function gerarBoletoDetalhe() {
+    const btn = document.getElementById('btnGerarBoleto');
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Gerando...';
+
+    const fd = new FormData();
+    fd.append('csrfmiddlewaretoken', '{{ csrf_token }}');
+
+    fetch('{% url "financeiro:gerar_boleto" parcela.pk %}', {method: 'POST', body: fd})
+        .then(r => r.json())
+        .then(data => {
+            if (data.sucesso) {
+                btn.className = 'btn btn-success';
+                btn.innerHTML = '<i class="fas fa-check me-2"></i>Boleto Gerado';
+                setTimeout(() => location.reload(), 1000);
+            } else {
+                btn.disabled = false;
+                btn.innerHTML = '<i class="fas fa-barcode me-2"></i>Gerar Boleto';
+                alert('Erro: ' + (data.erro || 'Erro ao gerar boleto.'));
+            }
+        })
+        .catch(err => {
+            btn.disabled = false;
+            btn.innerHTML = '<i class="fas fa-barcode me-2"></i>Gerar Boleto';
+            alert('Erro: ' + err.message);
+        });
+}
+{% endif %}
+</script>
 {% endblock %}
