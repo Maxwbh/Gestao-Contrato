@@ -118,6 +118,7 @@ urlpatterns = [
     path('api/cnab/remessas/<int:remessa_id>/', views.api_cnab_remessa_detalhe, name='api_cnab_remessa_detalhe'),
     path('api/cnab/remessas/gerar/', views.api_cnab_remessa_gerar, name='api_cnab_remessa_gerar'),
     path('api/cnab/boletos-disponiveis/', views.api_cnab_boletos_disponiveis, name='api_cnab_boletos_disponiveis'),
+    path('api/cnab/boletos-pendentes/count/', views.api_cnab_boletos_pendentes_count, name='api_cnab_boletos_pendentes_count'),
 
     # ==========================================================================
     # APIs REST - CNAB RETORNO
