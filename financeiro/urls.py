@@ -37,6 +37,8 @@ urlpatterns = [
 
     # Geracao de boletos em lote (multiplos contratos)
     path('api/boletos/gerar-lote/', views.api_gerar_boletos_lote, name='api_gerar_boletos_lote'),
+    # Geracao de boletos por parcelas selecionadas
+    path('api/boletos/gerar-parcelas/', views.api_gerar_boletos_parcelas, name='api_gerar_boletos_parcelas'),
 
     # Boletos
     path('parcelas/<int:pk>/boleto/gerar/', views.gerar_boleto_parcela, name='gerar_boleto'),
