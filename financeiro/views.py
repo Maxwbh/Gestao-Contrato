@@ -1132,6 +1132,7 @@ def api_status_boleto(request, pk):
 def listar_arquivos_remessa(request):
     """Lista todos os arquivos de remessa"""
     from .models import ArquivoRemessa
+    from .services.cnab_service import CNABService
 
     arquivos = ArquivoRemessa.objects.select_related(
         'conta_bancaria', 'conta_bancaria__imobiliaria'
@@ -1161,6 +1162,9 @@ def listar_arquivos_remessa(request):
     paginator = Paginator(arquivos, per_page)
     page_obj = paginator.get_page(request.GET.get('page', 1))
 
+    # Contador de boletos disponíveis para nova remessa
+    boletos_pendentes_count = len(CNABService().obter_boletos_sem_remessa())
+
     context = {
         'arquivos': page_obj,
         'page_obj': page_obj,
@@ -1171,6 +1175,7 @@ def listar_arquivos_remessa(request):
         'filtro_conta': conta_id,
         'filtro_status': status,
         'filtro_imobiliaria': imobiliaria_id,
+        'boletos_pendentes_count': boletos_pendentes_count,
     }
     return render(request, 'financeiro/cnab/listar_remessas.html', context)
 
@@ -1311,7 +1316,7 @@ def gerar_arquivo_remessa(request):
         'boletos_disponiveis': boletos_disponiveis,
         'boletos_pendentes': boletos_pendentes,
         'total_disponivel': len(boletos_disponiveis),
-        'today': timezone.now().date(),
+        'today': timezone.localdate(),
     }
     return render(request, 'financeiro/cnab/gerar_remessa.html', context)
 
