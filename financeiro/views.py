@@ -4787,16 +4787,42 @@ def api_contas_bancarias(request):
 @login_required
 @require_GET
 def api_reajustes_pendentes_count(request):
-    """Retorna contagem de contratos ativos com reajuste pendente (badge navbar)."""
+    """Retorna contagem de contratos ativos com reajuste pendente (badge navbar).
+
+    Usa prefetch_related para evitar N×M queries: 2 queries no total
+    em vez de uma por ciclo por contrato.
+    """
     from contratos.models import TipoCorrecao
+    from django.db.models import Prefetch
+
+    hoje = timezone.now().date()
+
     contratos_ativos = Contrato.objects.filter(
         status=StatusContrato.ATIVO
-    ).exclude(tipo_correcao=TipoCorrecao.FIXO).select_related()
-
-    count = sum(
-        1 for c in contratos_ativos
-        if c.get_primeiro_ciclo_bloqueado() is not None
+    ).exclude(tipo_correcao=TipoCorrecao.FIXO).only(
+        'pk', 'data_contrato', 'numero_parcelas', 'prazo_reajuste_meses', 'tipo_correcao'
+    ).prefetch_related(
+        Prefetch(
+            'reajuste_set',
+            queryset=Reajuste.objects.filter(aplicado=True).only('contrato_id', 'ciclo'),
+            to_attr='reajustes_aplicados_cache',
+        )
     )
+
+    count = 0
+    for contrato in contratos_ativos:
+        ciclos_aplicados = {r.ciclo for r in contrato.reajustes_aplicados_cache}
+        prazo = contrato.prazo_reajuste_meses or 12
+        total_ciclos = (contrato.numero_parcelas - 1) // prazo + 1
+
+        for ciclo in range(2, total_ciclos + 1):
+            data_reajuste = contrato.data_contrato + relativedelta(months=(ciclo - 1) * prazo)
+            if hoje < data_reajuste:
+                break
+            if ciclo not in ciclos_aplicados:
+                count += 1
+                break
+
     return JsonResponse({'count': count})
 
 
