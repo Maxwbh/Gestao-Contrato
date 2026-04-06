@@ -1936,6 +1936,93 @@ def api_parcelas_elegibilidade(request, contrato_id):
 
 @login_required
 @require_POST
+@login_required
+@require_POST
+def api_gerar_boletos_parcelas(request):
+    """
+    Gera boletos para uma lista de parcelas selecionadas individualmente.
+
+    POST JSON: {"parcela_ids": [1, 2, 3], "force": false}
+    """
+    import json
+    try:
+        data = json.loads(request.body)
+        parcela_ids = [int(x) for x in data.get('parcela_ids', []) if str(x).isdigit()]
+        force = bool(data.get('force', False))
+    except (ValueError, json.JSONDecodeError) as e:
+        return JsonResponse({'sucesso': False, 'erro': str(e)}, status=400)
+
+    if not parcela_ids:
+        return JsonResponse({'sucesso': False, 'erro': 'Nenhuma parcela selecionada'}, status=400)
+
+    gerados, bloqueados, erros = 0, 0, 0
+    detalhes = []
+
+    for parcela_id in parcela_ids:
+        try:
+            parcela = Parcela.objects.select_related(
+                'contrato', 'contrato__imovel', 'contrato__imovel__imobiliaria'
+            ).get(pk=parcela_id)
+        except Parcela.DoesNotExist:
+            erros += 1
+            detalhes.append({'parcela_id': parcela_id, 'sucesso': False, 'erro': 'Parcela não encontrada'})
+            continue
+
+        if parcela.pago:
+            detalhes.append({'parcela_id': parcela_id, 'sucesso': False, 'erro': 'Parcela já paga'})
+            erros += 1
+            continue
+
+        contrato = parcela.contrato
+        if not force and hasattr(contrato, 'pode_gerar_boleto'):
+            pode_gerar, motivo = contrato.pode_gerar_boleto(parcela.numero_parcela)
+            if not pode_gerar:
+                bloqueados += 1
+                detalhes.append({'parcela_id': parcela_id, 'sucesso': False, 'bloqueado': True, 'erro': motivo})
+                continue
+
+        # Obter conta bancária
+        conta_bancaria = None
+        try:
+            imobiliaria = contrato.imovel.imobiliaria
+            conta_bancaria = imobiliaria.contas_bancarias.filter(principal=True, ativo=True).first()
+        except Exception:
+            pass
+
+        if not conta_bancaria:
+            erros += 1
+            detalhes.append({'parcela_id': parcela_id, 'sucesso': False, 'erro': 'Nenhuma conta bancária principal configurada'})
+            continue
+
+        try:
+            resultado = parcela.gerar_boleto(conta_bancaria, force=force, enviar_email=False)
+            if resultado and resultado.get('sucesso'):
+                gerados += 1
+                detalhes.append({
+                    'parcela_id': parcela_id,
+                    'sucesso': True,
+                    'nosso_numero': resultado.get('nosso_numero', ''),
+                })
+            else:
+                erros += 1
+                detalhes.append({'parcela_id': parcela_id, 'sucesso': False,
+                                  'erro': resultado.get('erro', 'Erro desconhecido') if resultado else 'Sem resposta'})
+        except Exception as e:
+            erros += 1
+            logger.exception("Erro ao gerar boleto parcela %s: %s", parcela_id, e)
+            detalhes.append({'parcela_id': parcela_id, 'sucesso': False, 'erro': str(e)})
+
+    return JsonResponse({
+        'sucesso': True,
+        'gerados': gerados,
+        'bloqueados': bloqueados,
+        'erros': erros,
+        'detalhes': detalhes,
+    })
+
+
+@login_required
+@require_POST
 def api_gerar_boletos_lote(request):
     """
     Gera boletos em lote para multiplos contratos.
