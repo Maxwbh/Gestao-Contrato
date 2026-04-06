@@ -255,19 +255,22 @@
                 <div class="item-header">
                     <span class="item-icon"><i class="fas fa-table text-primary"></i></span>
                     <div class="flex-grow-1">
-                        <div class="item-title">Integração AG Grid Community</div>
+                        <div class="item-title">Integração AG Grid Community — todas as listagens</div>
                     </div>
                     <span class="status-badge status-done">Concluído</span>
                 </div>
                 <div class="item-body">
                     <p class="item-desc">
                         Todas as tabelas HTML substituídas pelo <strong>AG Grid Community 31.3.4</strong>
-                        (versão gratuita). Páginas convertidas: Parcelas, Compradores, Contratos (view tabela),
-                        Reajustes, Parcelas do Mês, Índices de Reajuste.
+                        (versão gratuita). Páginas convertidas: Parcelas, Parcelas do Mês, Compradores,
+                        Contratos, Reajustes, Índices de Reajuste, Remessas CNAB, Retornos CNAB,
+                        Histórico de Notificações, Servidores de E-mail, Templates de Mensagens,
+                        Acessos de Usuários.
                     </p>
                     <div class="item-tags">
                         <span class="tag bg-light text-dark border">AG Grid 31.3.4</span>
                         <span class="tag bg-light text-dark border">ag-theme-material</span>
+                        <span class="tag bg-light text-dark border">12 listagens</span>
                         <span class="tag" style="background:#d1e7dd;color:#0f5132;">Concluído</span>
                     </div>
                 </div>
@@ -516,9 +519,34 @@
                 <p class="phase-title">Fase 4 — Infraestrutura &amp; Performance</p>
                 <p class="phase-subtitle">Robustez, velocidade e escalabilidade</p>
             </div>
-            <span class="ms-auto status-badge status-planned">Planejado</span>
+            <span class="ms-auto status-badge status-progress">Em progresso</span>
         </div>
         <div class="roadmap-items">
+
+            <div class="roadmap-item">
+                <div class="item-header">
+                    <span class="item-icon"><i class="fas fa-tachometer-alt text-success"></i></span>
+                    <div class="flex-grow-1">
+                        <div class="item-title">Otimização de queries N+1</div>
+                    </div>
+                    <span class="status-badge status-done">Concluído</span>
+                </div>
+                <div class="item-body">
+                    <p class="item-desc">
+                        Eliminados dois pontos críticos de N+1 queries que afetavam todas as páginas:
+                        <code>api_reajustes_pendentes_count</code> (badge do navbar — reduzido de N×M para
+                        2 queries via <code>prefetch_related</code>) e
+                        <code>_get_contratos_mais_atraso</code> no dashboard financeiro
+                        (reduzido de ~3N para 1 query via <code>annotate</code>).
+                    </p>
+                    <div class="item-tags">
+                        <span class="tag bg-light text-dark border">prefetch_related</span>
+                        <span class="tag bg-light text-dark border">annotate</span>
+                        <span class="tag bg-light text-dark border">Django ORM</span>
+                        <span class="tag" style="background:#d1e7dd;color:#0f5132;">Concluído</span>
+                    </div>
+                </div>
+            </div>
 
             <div class="roadmap-item">
                 <div class="item-header">
@@ -595,18 +623,14 @@
                 <div class="item-body">
                     <p class="item-desc">
                         Exportação de contratos, extratos de pagamento e posição de inadimplência
-                        em PDF com layout profissional. <strong>Não é nativo do AG Grid</strong> —
-                        requer implementação server-side via <strong>WeasyPrint</strong> ou
-                        <strong>ReportLab</strong> (renderiza templates HTML → PDF) ou
-                        client-side via <strong>jsPDF</strong>.
-                        As páginas de relatório já existem como stubs em
-                        <code>templates/financeiro/relatorios/</code>.
+                        em PDF com layout profissional. Requer implementação server-side via
+                        <strong>WeasyPrint</strong> ou <strong>ReportLab</strong> (renderiza
+                        templates HTML → PDF) ou client-side via <strong>jsPDF</strong>.
                     </p>
                     <div class="item-tags">
                         <span class="tag bg-light text-dark border">WeasyPrint</span>
                         <span class="tag bg-light text-dark border">ReportLab</span>
                         <span class="tag bg-light text-dark border">jsPDF</span>
-                        <span class="tag bg-light text-dark border">Server-side</span>
                     </div>
                 </div>
             </div>
