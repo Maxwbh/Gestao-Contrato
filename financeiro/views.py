@@ -10,7 +10,7 @@ from django.contrib.auth.mixins import LoginRequiredMixin
 from django.contrib import messages
 from django.http import JsonResponse, HttpResponse, FileResponse
 from django.utils import timezone
-from django.db.models import Sum, Count, Q, F
+from django.db.models import Sum, Count, Q, F, Min
 from django.views.generic import TemplateView
 from django.views.decorators.http import require_POST, require_GET
 from django.core.paginator import Paginator
@@ -149,29 +149,36 @@ class DashboardFinanceiroView(LoginRequiredMixin, TemplateView):
         }
 
     def _get_contratos_mais_atraso(self, contratos_qs, limite=10):
-        """Retorna contratos com mais parcelas em atraso"""
+        """Retorna contratos com mais parcelas em atraso.
+
+        Usa annotate para calcular tudo em 1 query em vez de N+1.
+        """
         hoje = timezone.now().date()
-        contratos_atraso = []
+        filtro_atraso = Q(parcelas__pago=False, parcelas__data_vencimento__lt=hoje)
 
-        for contrato in contratos_qs.filter(status=StatusContrato.ATIVO):
-            parcelas_atraso = contrato.parcelas.filter(
-                pago=False, data_vencimento__lt=hoje
+        qs = (
+            contratos_qs
+            .filter(status=StatusContrato.ATIVO)
+            .filter(filtro_atraso)
+            .annotate(
+                parcelas_atraso_count=Count('parcelas', filter=filtro_atraso),
+                valor_atraso_total=Sum('parcelas__valor_atual', filter=filtro_atraso),
+                primeira_vencida=Min('parcelas__data_vencimento', filter=filtro_atraso),
             )
-            if parcelas_atraso.exists():
-                total_atraso = parcelas_atraso.aggregate(
-                    total=Sum('valor_atual')
-                )['total'] or Decimal('0.00')
-                dias_atraso = (hoje - parcelas_atraso.order_by('data_vencimento').first().data_vencimento).days
-                contratos_atraso.append({
-                    'contrato': contrato,
-                    'parcelas_atraso': parcelas_atraso.count(),
-                    'valor_atraso': total_atraso,
-                    'dias_atraso': dias_atraso,
-                })
+            .filter(parcelas_atraso_count__gt=0)
+            .select_related('comprador', 'imovel')
+            .order_by('-valor_atraso_total')[:limite]
+        )
 
-        # Ordenar por valor em atraso (decrescente)
-        contratos_atraso.sort(key=lambda x: x['valor_atraso'], reverse=True)
-        return contratos_atraso[:limite]
+        result = []
+        for contrato in qs:
+            result.append({
+                'contrato': contrato,
+                'parcelas_atraso': contrato.parcelas_atraso_count,
+                'valor_atraso': contrato.valor_atraso_total or Decimal('0.00'),
+                'dias_atraso': (hoje - contrato.primeira_vencida).days,
+            })
+        return result
 
 
 @login_required
