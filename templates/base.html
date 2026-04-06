@@ -564,5 +564,26 @@
     </script>
 
     {% block extra_js %}{% endblock %}
+
+    <!-- hint_id_ tooltips: converte help_text do crispy-forms em tooltip no label -->
+    <script>
+    document.addEventListener('DOMContentLoaded', function() {
+        document.querySelectorAll('[id^="hint_id_"]').forEach(function(hint) {
+            var text = (hint.textContent || hint.innerText || '').trim();
+            if (!text) return;
+            var fieldName = hint.id.replace('hint_id_', '');
+            var label = document.querySelector('label[for="id_' + fieldName + '"]');
+            if (label) {
+                // Ocultar o help text inline e passar para o tooltip do label
+                hint.style.display = 'none';
+                label.classList.add('tooltipped');
+                label.setAttribute('data-position', 'top');
+                label.setAttribute('data-tooltip', text);
+                label.style.cursor = 'help';
+                M.Tooltip.init(label);
+            }
+        });
+    });
+    </script>
 </body>
 </html>
