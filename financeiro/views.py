@@ -879,7 +879,7 @@ def gerar_boleto_parcela(request, pk):
             return JsonResponse({
                 'sucesso': False,
                 'erro': resultado.get('erro', 'Erro ao gerar boleto') if resultado else 'Erro desconhecido'
-            }, status=500)
+            }, status=400)
 
     except Exception as e:
         logger.exception(f"Erro ao gerar boleto: {e}")
@@ -4929,7 +4929,7 @@ def api_reajustes_pendentes_count(request):
             'pk', 'data_contrato', 'numero_parcelas', 'prazo_reajuste_meses', 'tipo_correcao'
         ).prefetch_related(
             Prefetch(
-                'historico_reajustes',
+                'reajustes',
                 queryset=Reajuste.objects.filter(aplicado=True).only('contrato_id', 'ciclo'),
                 to_attr='reajustes_aplicados_cache',
             )
