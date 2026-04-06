@@ -516,10 +516,11 @@
     });
 
     // ================================================================
-    // BADGE: Reajustes pendentes
+    // BADGES: Reajustes pendentes + Boletos aguardando remessa
     // ================================================================
     {% if user.is_authenticated %}
     document.addEventListener('DOMContentLoaded', function() {
+        // Badge: reajustes pendentes
         fetch('{% url "financeiro:api_reajustes_pendentes_count" %}')
             .then(function(r) { return r.ok ? r.json() : null; })
             .then(function(data) {
@@ -534,6 +535,27 @@
                         badge.title = data.count + ' reajuste(s) pendente(s)';
                         link.appendChild(badge);
                     }
+                }
+            })
+            .catch(function() {});
+
+        // Badge: boletos aguardando remessa CNAB
+        fetch('{% url "financeiro:api_cnab_boletos_pendentes_count" %}')
+            .then(function(r) { return r.ok ? r.json() : null; })
+            .then(function(data) {
+                if (data && data.count > 0) {
+                    // Badge no link "Arquivos de Remessa" no dropdown
+                    var links = document.querySelectorAll('a[href*="cnab/remessa"]');
+                    links.forEach(function(link) {
+                        if (!link.querySelector('.badge-remessa')) {
+                            var badge = document.createElement('span');
+                            badge.className = 'new badge orange badge-notify badge-remessa ms-1';
+                            badge.setAttribute('data-badge-caption', '');
+                            badge.textContent = data.count;
+                            badge.title = data.count + ' boleto(s) aguardando remessa';
+                            link.appendChild(badge);
+                        }
+                    });
                 }
             })
             .catch(function() {});
