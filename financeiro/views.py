@@ -1936,6 +1936,93 @@ def api_parcelas_elegibilidade(request, contrato_id):
 
 @login_required
 @require_POST
+@login_required
+@require_POST
+def api_gerar_boletos_parcelas(request):
+    """
+    Gera boletos para uma lista de parcelas selecionadas individualmente.
+
+    POST JSON: {"parcela_ids": [1, 2, 3], "force": false}
+    """
+    import json
+    try:
+        data = json.loads(request.body)
+        parcela_ids = [int(x) for x in data.get('parcela_ids', []) if str(x).isdigit()]
+        force = bool(data.get('force', False))
+    except (ValueError, json.JSONDecodeError) as e:
+        return JsonResponse({'sucesso': False, 'erro': str(e)}, status=400)
+
+    if not parcela_ids:
+        return JsonResponse({'sucesso': False, 'erro': 'Nenhuma parcela selecionada'}, status=400)
+
+    gerados, bloqueados, erros = 0, 0, 0
+    detalhes = []
+
+    for parcela_id in parcela_ids:
+        try:
+            parcela = Parcela.objects.select_related(
+                'contrato', 'contrato__imovel', 'contrato__imovel__imobiliaria'
+            ).get(pk=parcela_id)
+        except Parcela.DoesNotExist:
+            erros += 1
+            detalhes.append({'parcela_id': parcela_id, 'sucesso': False, 'erro': 'Parcela não encontrada'})
+            continue
+
+        if parcela.pago:
+            detalhes.append({'parcela_id': parcela_id, 'sucesso': False, 'erro': 'Parcela já paga'})
+            erros += 1
+            continue
+
+        contrato = parcela.contrato
+        if not force and hasattr(contrato, 'pode_gerar_boleto'):
+            pode_gerar, motivo = contrato.pode_gerar_boleto(parcela.numero_parcela)
+            if not pode_gerar:
+                bloqueados += 1
+                detalhes.append({'parcela_id': parcela_id, 'sucesso': False, 'bloqueado': True, 'erro': motivo})
+                continue
+
+        # Obter conta bancária
+        conta_bancaria = None
+        try:
+            imobiliaria = contrato.imovel.imobiliaria
+            conta_bancaria = imobiliaria.contas_bancarias.filter(principal=True, ativo=True).first()
+        except Exception:
+            pass
+
+        if not conta_bancaria:
+            erros += 1
+            detalhes.append({'parcela_id': parcela_id, 'sucesso': False, 'erro': 'Nenhuma conta bancária principal configurada'})
+            continue
+
+        try:
+            resultado = parcela.gerar_boleto(conta_bancaria, force=force, enviar_email=False)
+            if resultado and resultado.get('sucesso'):
+                gerados += 1
+                detalhes.append({
+                    'parcela_id': parcela_id,
+                    'sucesso': True,
+                    'nosso_numero': resultado.get('nosso_numero', ''),
+                })
+            else:
+                erros += 1
+                detalhes.append({'parcela_id': parcela_id, 'sucesso': False,
+                                  'erro': resultado.get('erro', 'Erro desconhecido') if resultado else 'Sem resposta'})
+        except Exception as e:
+            erros += 1
+            logger.exception("Erro ao gerar boleto parcela %s: %s", parcela_id, e)
+            detalhes.append({'parcela_id': parcela_id, 'sucesso': False, 'erro': str(e)})
+
+    return JsonResponse({
+        'sucesso': True,
+        'gerados': gerados,
+        'bloqueados': bloqueados,
+        'erros': erros,
+        'detalhes': detalhes,
+    })
+
+
+@login_required
+@require_POST
 def api_gerar_boletos_lote(request):
     """
     Gera boletos em lote para multiplos contratos.
@@ -2187,10 +2274,16 @@ def aplicar_reajuste_pagina(request, contrato_id):
     Página dedicada para aplicar reajuste em um contrato.
 
     GET  → calcula o preview server-side e exibe o formulário.
-           Query params opcionais: desconto_percentual, desconto_valor
+           Query params opcionais: desconto_percentual, desconto_valor, modal=1
     POST → aplica o reajuste e redireciona para o detalhe do contrato.
+           Se modal=1 ou X-Requested-With=XMLHttpRequest → retorna JSON.
     """
     contrato = get_object_or_404(Contrato, pk=contrato_id)
+    is_modal = (
+        request.GET.get('modal') == '1'
+        or request.POST.get('modal') == '1'
+        or request.headers.get('X-Requested-With') == 'XMLHttpRequest'
+    )
 
     def get_client_ip(req):
         x_forwarded = req.META.get('HTTP_X_FORWARDED_FOR')
@@ -2251,15 +2344,19 @@ def aplicar_reajuste_pagina(request, contrato_id):
             )
 
             resultado = reajuste.aplicar_reajuste()
-            messages.success(
-                request,
+            msg = (
                 f'Reajuste do ciclo {ciclo} ({preview["percentual_final"]:,.4f}%) '
                 f'aplicado em {resultado["parcelas_reajustadas"]} parcela(s).'
             )
+            if is_modal:
+                return JsonResponse({'sucesso': True, 'mensagem': msg})
+            messages.success(request, msg)
             return redirect('contratos:detalhe', pk=contrato_id)
 
         except Exception as e:
             logger.exception(f'Erro ao aplicar reajuste: {e}')
+            if is_modal:
+                return JsonResponse({'sucesso': False, 'erro': str(e)}, status=400)
             messages.error(request, f'Erro ao aplicar reajuste: {e}')
             return redirect('financeiro:aplicar_reajuste', contrato_id=contrato_id)
 
@@ -2272,7 +2369,8 @@ def aplicar_reajuste_pagina(request, contrato_id):
             'sem_pendente': True,
             'proximo_reajuste': contrato.data_proximo_reajuste,
         }
-        return render(request, 'financeiro/aplicar_reajuste.html', context)
+        tpl = 'financeiro/aplicar_reajuste_partial.html' if is_modal else 'financeiro/aplicar_reajuste.html'
+        return render(request, tpl, context)
 
     desconto_percentual = request.GET.get('desconto_percentual') or None
     desconto_valor = request.GET.get('desconto_valor') or None
@@ -2297,8 +2395,10 @@ def aplicar_reajuste_pagina(request, contrato_id):
         'reajustes_anteriores': reajustes_anteriores,
         'sem_pendente': False,
         'tem_erro': 'erro' in preview,
+        'is_modal': is_modal,
     }
-    return render(request, 'financeiro/aplicar_reajuste.html', context)
+    tpl = 'financeiro/aplicar_reajuste_partial.html' if is_modal else 'financeiro/aplicar_reajuste.html'
+    return render(request, tpl, context)
 
 
 @login_required
