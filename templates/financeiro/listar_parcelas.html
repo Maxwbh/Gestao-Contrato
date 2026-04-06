@@ -52,7 +52,7 @@
             </a>
             <a href="{% url 'financeiro:listar_parcelas' %}?status=pendentes{% if filtro_status_boleto %}&status_boleto={{ filtro_status_boleto }}{% endif %}"
                class="btn btn-outline-warning btn-filter {% if filtro_status == 'pendentes' %}active{% endif %}">
-                <i class="fas fa-clock"></i> Pendentes
+                <i class="fas fa-clock"></i> Em aberto
             </a>
             <a href="{% url 'financeiro:listar_parcelas' %}?status=vencidas{% if filtro_status_boleto %}&status_boleto={{ filtro_status_boleto }}{% endif %}"
                class="btn btn-outline-danger btn-filter {% if filtro_status == 'vencidas' %}active{% endif %}">
