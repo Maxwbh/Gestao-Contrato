@@ -4810,7 +4810,7 @@ def api_reajustes_pendentes_count(request):
         'pk', 'data_contrato', 'numero_parcelas', 'prazo_reajuste_meses', 'tipo_correcao'
     ).prefetch_related(
         Prefetch(
-            'reajuste_set',
+            'historico_reajustes',
             queryset=Reajuste.objects.filter(aplicado=True).only('contrato_id', 'ciclo'),
             to_attr='reajustes_aplicados_cache',
         )
