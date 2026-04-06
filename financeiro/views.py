@@ -323,6 +323,7 @@ def listar_parcelas(request):
     # Dados para os filtros
     imobiliarias = Imobiliaria.objects.filter(ativo=True).order_by('nome')
     compradores = Comprador.objects.filter(ativo=True).order_by('nome')
+    contas_bancarias = ContaBancaria.objects.filter(ativo=True).select_related('imobiliaria').order_by('imobiliaria__nome', 'banco')
 
     # Filtro por Status de Pagamento
     status = request.GET.get('status', '')
@@ -416,6 +417,7 @@ def listar_parcelas(request):
         'is_paginated': paginator.num_pages > 1,
         'imobiliarias': imobiliarias,
         'compradores': compradores,
+        'contas_bancarias': contas_bancarias,
         # Valores atuais dos filtros
         'filtro_status': status,
         'filtro_status_boleto': status_boleto_filtro,

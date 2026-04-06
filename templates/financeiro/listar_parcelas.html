@@ -217,14 +217,34 @@
 
     <!-- Barra de Ação em Massa (oculta até selecionar) -->
     <div id="barraBulk" class="card mb-3 border-primary d-none">
-        <div class="card-body py-2 d-flex align-items-center gap-3 flex-wrap">
-            <span class="fw-bold text-primary"><i class="fas fa-check-square me-1"></i><span id="bulkContador">0</span> selecionada(s)</span>
-            <button type="button" class="btn btn-primary btn-sm" onclick="gerarBoletosSelecionados(false)">
+        <div class="card-body py-2 d-flex align-items-center gap-2 flex-wrap">
+            <span class="fw-bold text-primary me-1"><i class="fas fa-check-square me-1"></i><span id="bulkContador">0</span> selecionada(s)</span>
+            <div class="vr d-none d-sm-block"></div>
+            <!-- Geração de Boletos -->
+            <button type="button" class="btn btn-primary btn-sm" onclick="gerarBoletosSelecionados(false)"
+                    title="Gera boletos para parcelas sem boleto">
                 <i class="fas fa-barcode me-1"></i> Gerar Boletos
             </button>
             <button type="button" class="btn btn-outline-warning btn-sm" onclick="gerarBoletosSelecionados(true)"
                     title="Regenera mesmo que já exista boleto">
                 <i class="fas fa-redo me-1"></i> Forçar Regeneração
+            </button>
+            <div class="vr d-none d-sm-block"></div>
+            <!-- Carnê -->
+            <button type="button" class="btn btn-outline-info btn-sm" onclick="gerarCarneSelecionados()"
+                    title="Gera carnê para parcelas selecionadas (mesmo contrato)">
+                <i class="fas fa-book me-1"></i> Gerar Carnê
+            </button>
+            <!-- Remessa CNAB -->
+            <button type="button" class="btn btn-outline-dark btn-sm" onclick="abrirModalCnab()"
+                    title="Inclui boletos selecionados em arquivo de remessa CNAB">
+                <i class="fas fa-file-code me-1"></i> Gerar Remessa CNAB
+            </button>
+            <div class="vr d-none d-sm-block"></div>
+            <!-- Pagamento em Massa -->
+            <button type="button" class="btn btn-outline-success btn-sm" onclick="abrirModalPagamentoMassa()"
+                    title="Registra pagamento para múltiplas parcelas de uma vez">
+                <i class="fas fa-dollar-sign me-1"></i> Pagamento em Massa
             </button>
             <button type="button" class="btn btn-outline-secondary btn-sm ms-auto" onclick="limparSelecao()">
                 <i class="fas fa-times me-1"></i> Desmarcar
@@ -272,7 +292,7 @@
         <div class="modal-content">
             <div class="modal-header bg-primary text-white">
                 <h5 class="modal-title"><i class="fas fa-barcode me-2"></i>Gerar Boleto</h5>
-                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                <button type="button" class="btn-close btn-close-white modal-close"></button>
             </div>
             <div class="modal-body">
                 <p id="modalBoletoInfo"></p>
@@ -290,7 +310,7 @@
                 </div>
             </div>
             <div class="modal-footer" id="modalBoletoFooter">
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Fechar</button>
+                <button type="button" class="btn btn-secondary modal-close">Fechar</button>
                 <button type="button" class="btn btn-primary" id="btnConfirmarBoleto" onclick="confirmarGerarBoleto()">
                     <i class="fas fa-barcode me-1"></i> Gerar Boleto
                 </button>
@@ -305,7 +325,7 @@
         <div class="modal-content">
             <div class="modal-header bg-success text-white">
                 <h5 class="modal-title"><i class="fas fa-dollar-sign me-2"></i>Registrar Pagamento</h5>
-                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                <button type="button" class="btn-close btn-close-white modal-close"></button>
             </div>
             <div class="modal-body">
                 <p id="modalPagarInfo" class="mb-3"></p>
@@ -351,9 +371,103 @@
                 </form>
             </div>
             <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-secondary modal-close">Cancelar</button>
                 <button type="button" class="btn btn-success" id="btnConfirmarPagar" onclick="confirmarPagar()">
                     <i class="fas fa-check me-1"></i> Confirmar Pagamento
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ===== MODAL: GERAR REMESSA CNAB ===== -->
+<div class="modal" id="modalGerarCnab" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-dark text-white">
+                <h5 class="modal-title"><i class="fas fa-file-code me-2"></i>Gerar Remessa CNAB</h5>
+                <button type="button" class="btn-close btn-close-white modal-close"></button>
+            </div>
+            <div class="modal-body">
+                <p class="mb-3">
+                    <i class="fas fa-info-circle text-info me-1"></i>
+                    Serão incluídas apenas parcelas com status <strong>Boleto Gerado</strong> e não pagas.
+                    <span id="cnabContador" class="badge bg-dark ms-1">0 selecionada(s)</span>
+                </p>
+                <div class="mb-3">
+                    <label class="form-label fw-bold">Conta Bancária <span class="text-danger">*</span></label>
+                    <select id="cnabContaBancaria" class="form-select">
+                        <option value="">Selecione...</option>
+                        {% for conta in contas_bancarias %}
+                        <option value="{{ conta.pk }}">{{ conta.imobiliaria.nome }} — {{ conta.banco }} Ag. {{ conta.agencia }}/{{ conta.conta }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label fw-bold">Layout CNAB</label>
+                    <select id="cnabLayout" class="form-select">
+                        <option value="CNAB_240">CNAB 240</option>
+                        <option value="CNAB_400">CNAB 400</option>
+                    </select>
+                </div>
+                <div id="cnabResultado" class="d-none"></div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary modal-close">Cancelar</button>
+                <button type="button" class="btn btn-dark" id="btnConfirmarCnab" onclick="confirmarGerarCnab()">
+                    <i class="fas fa-file-code me-1"></i> Gerar Remessa
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ===== MODAL: PAGAMENTO EM MASSA ===== -->
+<div class="modal" id="modalPagamentoMassa" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header bg-success text-white">
+                <h5 class="modal-title"><i class="fas fa-dollar-sign me-2"></i>Pagamento em Massa</h5>
+                <button type="button" class="btn-close btn-close-white modal-close"></button>
+            </div>
+            <div class="modal-body">
+                <p class="text-muted mb-3">
+                    Registra pagamento para <strong><span id="massaContador">0</span> parcela(s)</strong> selecionada(s).
+                    Serão consideradas apenas parcelas não pagas.
+                </p>
+                <div class="row g-3">
+                    <div class="col-md-6">
+                        <label class="form-label fw-bold">Data do Pagamento <span class="text-danger">*</span></label>
+                        <input type="date" class="form-control" id="massaData" required>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label fw-bold">Valor</label>
+                        <div class="form-check mt-2">
+                            <input class="form-check-input" type="checkbox" id="massaUsarValorOriginal" checked
+                                   onchange="document.getElementById('massaValorContainer').classList.toggle('d-none', this.checked)">
+                            <label class="form-check-label" for="massaUsarValorOriginal">
+                                Usar valor original de cada parcela
+                            </label>
+                        </div>
+                    </div>
+                    <div class="col-md-6 d-none" id="massaValorContainer">
+                        <label class="form-label fw-bold">Valor Fixo (R$) <span class="text-danger">*</span></label>
+                        <div class="input-group">
+                            <span class="input-group-text">R$</span>
+                            <input type="number" class="form-control" id="massaValor" step="0.01" min="0" placeholder="0,00">
+                        </div>
+                    </div>
+                    <div class="col-12">
+                        <label class="form-label">Observações</label>
+                        <textarea class="form-control" id="massaObs" rows="2" placeholder="Ex: Pagamento em lote — PIX..."></textarea>
+                    </div>
+                </div>
+                <div id="massaResultado" class="d-none mt-3"></div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary modal-close">Cancelar</button>
+                <button type="button" class="btn btn-success" id="btnConfirmarMassa" onclick="confirmarPagamentoMassa()">
+                    <i class="fas fa-check me-1"></i> Confirmar Pagamentos
                 </button>
             </div>
         </div>
@@ -368,6 +482,13 @@
 <script>
 const CSRF_TOKEN = '{{ csrf_token }}';
 let parcelaAtualId = null;
+
+// Helper: abre/fecha modal Materialize (compatível com HTML Bootstrap)
+function getMModal(id) {
+    const el = document.getElementById(id);
+    if (!el) return null;
+    return M.Modal.getInstance(el) || M.Modal.init(el, {dismissible: true});
+}
 
 // ===== FLATPICKR DATE RANGE =====
 let fpInstance;
@@ -475,7 +596,7 @@ function statusRenderer(params) {
     const data = params.data;
     if (data.pago) return '<span class="badge badge-pago">Pago</span>';
     if (data.esta_vencida) return '<span class="badge badge-vencida">Vencida</span>';
-    return '<span class="badge badge-pendente">Pendente</span>';
+    return '<span class="badge badge-pendente">Em aberto</span>';
 }
 
 function boletoRenderer(params) {
@@ -485,6 +606,8 @@ function boletoRenderer(params) {
     if (s === 'PAGO')       return '<span class="badge bg-success">Pago</span>';
     if (s === 'CANCELADO')  return '<span class="badge bg-dark">Cancelado</span>';
     if (s === 'VENCIDO')    return '<span class="badge bg-warning text-dark">Vencido</span>';
+    if (s === 'BAIXADO')    return '<span class="badge bg-warning text-dark">Baixado</span>';
+    if (s === 'PROTESTADO') return '<span class="badge bg-danger">Protestado</span>';
     return '<span class="badge bg-light text-muted">—</span>';
 }
 
@@ -692,7 +815,7 @@ function abrirModalBoleto(parcelaId, contrato, numParcela) {
     document.getElementById('modalBoletoResultado').innerHTML = '';
     document.getElementById('modalBoletoForm').classList.remove('d-none');
     document.getElementById('btnConfirmarBoleto').classList.remove('d-none');
-    new bootstrap.Modal(document.getElementById('modalGerarBoleto')).show();
+    getMModal('modalGerarBoleto').open();
 }
 
 function confirmarGerarBoleto() {
@@ -750,7 +873,7 @@ function abrirModalPagar(parcelaId, contrato, numParcela, valorTotal, valorJuros
     document.getElementById('pagarObs').value = '';
     document.getElementById('btnConfirmarPagar').disabled = false;
     document.getElementById('btnConfirmarPagar').innerHTML = '<i class="fas fa-check me-1"></i> Confirmar Pagamento';
-    new bootstrap.Modal(document.getElementById('modalPagar')).show();
+    getMModal('modalPagar').open();
 }
 
 function confirmarPagar() {
@@ -780,7 +903,7 @@ function confirmarPagar() {
     .then(r => r.json())
     .then(resp => {
         if (resp.sucesso) {
-            bootstrap.Modal.getInstance(document.getElementById('modalPagar')).hide();
+            getMModal('modalPagar').close();
             window.location.reload();
         } else {
             btn.disabled = false;
@@ -792,6 +915,201 @@ function confirmarPagar() {
         btn.disabled = false;
         btn.innerHTML = '<i class="fas fa-check me-1"></i> Confirmar Pagamento';
         alert('Erro: ' + err.message);
+    });
+}
+
+// ===== GERAR CARNÊ =====
+function gerarCarneSelecionados() {
+    const selecionados = window.parcelasGridApi ? window.parcelasGridApi.getSelectedRows() : [];
+    const naoPagas = selecionados.filter(r => !r.pago);
+    if (!naoPagas.length) {
+        alert('Nenhuma parcela não-paga selecionada.');
+        return;
+    }
+
+    // Validar que todas são do mesmo contrato
+    const contratoIds = [...new Set(naoPagas.map(r => r.contrato_pk))];
+    if (contratoIds.length > 1) {
+        alert('Para gerar Carnê, selecione parcelas de apenas um contrato.\nForam selecionados ' + contratoIds.length + ' contratos diferentes.');
+        return;
+    }
+
+    const contratoId = contratoIds[0];
+    const ids = naoPagas.map(r => r.pk);
+    const resultado = document.getElementById('bulkResultado');
+
+    resultado.className = 'alert alert-info';
+    resultado.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i> Gerando carnê (' + ids.length + ' parcela(s))...';
+    resultado.classList.remove('d-none');
+
+    fetch('/financeiro/contrato/' + contratoId + '/gerar-carne/', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json', 'X-CSRFToken': CSRF_TOKEN},
+        body: JSON.stringify({parcelas: ids, force: false}),
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.sucesso || data.gerados >= 0) {
+            const gerados = data.gerados || 0;
+            const bloqueados = data.bloqueados || 0;
+            const erros = data.erros || 0;
+            let cls = erros > 0 ? 'alert-warning' : 'alert-success';
+            let msg = '<strong><i class="fas fa-book me-1"></i>' + gerados + ' boleto(s) do carnê gerado(s)</strong>';
+            if (bloqueados) msg += ' &nbsp; <span class="text-warning">' + bloqueados + ' bloqueado(s)</span>';
+            if (erros) msg += ' &nbsp; <span class="text-danger">' + erros + ' erro(s)</span>';
+            resultado.className = 'alert ' + cls;
+            resultado.innerHTML = msg + '<br><small class="text-muted">Recarregue para ver os status atualizados.</small>' +
+                ' <button class="btn btn-sm btn-outline-secondary ms-2" onclick="location.reload()">Recarregar</button>';
+        } else {
+            resultado.className = 'alert alert-danger';
+            resultado.innerHTML = '<i class="fas fa-exclamation-triangle me-1"></i> ' + (data.erro || 'Erro ao gerar carnê.');
+        }
+        window.parcelasGridApi.deselectAll();
+    })
+    .catch(err => {
+        resultado.className = 'alert alert-danger';
+        resultado.innerHTML = '<i class="fas fa-exclamation-triangle me-1"></i> Erro: ' + err.message;
+    });
+}
+
+// ===== GERAR REMESSA CNAB =====
+function abrirModalCnab() {
+    const selecionados = window.parcelasGridApi ? window.parcelasGridApi.getSelectedRows() : [];
+    document.getElementById('cnabContador').textContent = selecionados.length + ' selecionada(s)';
+    document.getElementById('cnabResultado').className = 'd-none';
+    document.getElementById('cnabResultado').innerHTML = '';
+    const btn = document.getElementById('btnConfirmarCnab');
+    btn.disabled = false;
+    btn.innerHTML = '<i class="fas fa-file-code me-1"></i> Gerar Remessa';
+    getMModal('modalGerarCnab').open();
+}
+
+function confirmarGerarCnab() {
+    const selecionados = window.parcelasGridApi ? window.parcelasGridApi.getSelectedRows() : [];
+    const ids = selecionados.filter(r => !r.pago).map(r => r.pk);
+    if (!ids.length) {
+        alert('Nenhuma parcela não-paga selecionada.');
+        return;
+    }
+    const contaId = document.getElementById('cnabContaBancaria').value;
+    if (!contaId) {
+        alert('Selecione uma conta bancária.');
+        return;
+    }
+    const layout = document.getElementById('cnabLayout').value;
+    const btn = document.getElementById('btnConfirmarCnab');
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i> Gerando...';
+
+    fetch('/financeiro/api/cnab/remessas/gerar/', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json', 'X-CSRFToken': CSRF_TOKEN},
+        body: JSON.stringify({conta_bancaria_id: parseInt(contaId), parcela_ids: ids, layout: layout}),
+    })
+    .then(r => r.json())
+    .then(data => {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fas fa-file-code me-1"></i> Gerar Remessa';
+        const res = document.getElementById('cnabResultado');
+        res.classList.remove('d-none');
+        if (data.sucesso) {
+            res.className = 'alert alert-success';
+            res.innerHTML = '<i class="fas fa-check-circle me-1"></i> Remessa gerada com sucesso!' +
+                (data.arquivo ? '<br><small>Arquivo: <strong>' + data.arquivo + '</strong></small>' : '') +
+                (data.total_titulos ? '<br><small>' + data.total_titulos + ' título(s) incluído(s)</small>' : '');
+        } else {
+            res.className = 'alert alert-danger';
+            res.innerHTML = '<i class="fas fa-exclamation-triangle me-1"></i> ' + (data.erro || 'Erro ao gerar remessa.');
+        }
+    })
+    .catch(err => {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fas fa-file-code me-1"></i> Gerar Remessa';
+        const res = document.getElementById('cnabResultado');
+        res.className = 'alert alert-danger';
+        res.innerHTML = '<i class="fas fa-exclamation-triangle me-1"></i> Erro: ' + err.message;
+        res.classList.remove('d-none');
+    });
+}
+
+// ===== PAGAMENTO EM MASSA =====
+function abrirModalPagamentoMassa() {
+    const selecionados = window.parcelasGridApi ? window.parcelasGridApi.getSelectedRows() : [];
+    const naoPagas = selecionados.filter(r => !r.pago);
+    if (!naoPagas.length) {
+        alert('Nenhuma parcela não-paga selecionada.');
+        return;
+    }
+    document.getElementById('massaContador').textContent = naoPagas.length;
+    const hoje = new Date().toISOString().split('T')[0];
+    document.getElementById('massaData').value = hoje;
+    document.getElementById('massaUsarValorOriginal').checked = true;
+    document.getElementById('massaValorContainer').classList.add('d-none');
+    document.getElementById('massaValor').value = '';
+    document.getElementById('massaObs').value = '';
+    document.getElementById('massaResultado').className = 'd-none';
+    document.getElementById('massaResultado').innerHTML = '';
+    const btn = document.getElementById('btnConfirmarMassa');
+    btn.disabled = false;
+    btn.innerHTML = '<i class="fas fa-check me-1"></i> Confirmar Pagamentos';
+    getMModal('modalPagamentoMassa').open();
+}
+
+function confirmarPagamentoMassa() {
+    const selecionados = window.parcelasGridApi ? window.parcelasGridApi.getSelectedRows() : [];
+    const naoPagas = selecionados.filter(r => !r.pago);
+    if (!naoPagas.length) return;
+
+    const dataVal = document.getElementById('massaData').value;
+    if (!dataVal) {
+        alert('Informe a data do pagamento.');
+        return;
+    }
+    const usarOriginal = document.getElementById('massaUsarValorOriginal').checked;
+    const valorFixo = document.getElementById('massaValor').value;
+    if (!usarOriginal && !valorFixo) {
+        alert('Informe o valor fixo ou marque "usar valor original".');
+        return;
+    }
+
+    const btn = document.getElementById('btnConfirmarMassa');
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i> Registrando...';
+
+    const obs = document.getElementById('massaObs').value || '';
+    const promessas = naoPagas.map(r => {
+        const fd = new FormData();
+        fd.append('csrfmiddlewaretoken', CSRF_TOKEN);
+        fd.append('data_pagamento', dataVal);
+        fd.append('valor_pago', usarOriginal ? r.valor_total : valorFixo);
+        fd.append('valor_juros', '0');
+        fd.append('valor_multa', '0');
+        fd.append('valor_desconto', '0');
+        fd.append('observacoes', obs);
+        return fetch('/financeiro/parcelas/' + r.pk + '/pagar-ajax/', {method: 'POST', body: fd})
+            .then(res => res.json())
+            .then(data => ({pk: r.pk, sucesso: data.sucesso, erro: data.erro}))
+            .catch(err => ({pk: r.pk, sucesso: false, erro: err.message}));
+    });
+
+    Promise.all(promessas).then(resultados => {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fas fa-check me-1"></i> Confirmar Pagamentos';
+        const ok = resultados.filter(r => r.sucesso).length;
+        const falhas = resultados.filter(r => !r.sucesso);
+        const res = document.getElementById('massaResultado');
+        res.classList.remove('d-none');
+        if (falhas.length === 0) {
+            res.className = 'alert alert-success';
+            res.innerHTML = '<i class="fas fa-check-circle me-1"></i> ' + ok + ' pagamento(s) registrado(s) com sucesso!' +
+                ' <button class="btn btn-sm btn-outline-success ms-2" onclick="location.reload()">Recarregar</button>';
+        } else {
+            res.className = 'alert alert-warning';
+            res.innerHTML = '<strong>' + ok + ' registrado(s), ' + falhas.length + ' erro(s):</strong><ul class="mb-0 mt-1">' +
+                falhas.map(f => '<li>Parcela #' + f.pk + ': ' + (f.erro || 'Erro desconhecido') + '</li>').join('') + '</ul>' +
+                (ok > 0 ? ' <button class="btn btn-sm btn-outline-secondary ms-2 mt-2" onclick="location.reload()">Recarregar</button>' : '');
+        }
+        if (ok > 0) window.parcelasGridApi.deselectAll();
     });
 }
 
