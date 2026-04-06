@@ -889,23 +889,29 @@ class CNABService:
         contrato_id=None
     ) -> List:
         """
-        Retorna parcelas com boleto gerado mas sem arquivo de remessa.
+        Retorna parcelas com boleto gerado mas sem arquivo de remessa ativo.
 
-        Args:
-            conta_bancaria: Filtrar por ContaBancaria específica
-            imobiliaria_id: Filtrar por Imobiliaria (via contrato)
-            contrato_id: Filtrar por Contrato específico
+        Inclui parcelas que:
+        - Não estão em nenhuma remessa (itens_remessa__isnull=True)
+        - Estão apenas em remessas com status ERRO (podem ser re-incluídas)
+
+        Exclui parcelas em remessas ativas (GERADO, ENVIADO, PROCESSADO).
         """
-        from financeiro.models import Parcela, StatusBoleto
+        from financeiro.models import Parcela, StatusBoleto, StatusArquivoRemessa
 
         queryset = Parcela.objects.filter(
             status_boleto=StatusBoleto.GERADO,
             pago=False,
-            itens_remessa__isnull=True
+        ).exclude(
+            itens_remessa__arquivo_remessa__status__in=[
+                StatusArquivoRemessa.GERADO,
+                StatusArquivoRemessa.ENVIADO,
+                StatusArquivoRemessa.PROCESSADO,
+            ]
         ).select_related(
             'contrato', 'contrato__comprador', 'contrato__imovel',
             'contrato__imobiliaria', 'conta_bancaria', 'conta_bancaria__imobiliaria'
-        )
+        ).distinct()
 
         if conta_bancaria:
             queryset = queryset.filter(conta_bancaria=conta_bancaria)
