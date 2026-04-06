@@ -1352,7 +1352,7 @@ def regenerar_arquivo_remessa(request, pk):
             return JsonResponse({
                 'sucesso': False,
                 'erro': resultado.get('erro')
-            }, status=500)
+            }, status=400)
 
     except Exception as e:
         logger.exception(f"Erro ao regenerar remessa: {e}")
