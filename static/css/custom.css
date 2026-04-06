@@ -1394,6 +1394,16 @@ label.form-label,
 .form-check { display: flex; align-items: center; gap: 8px; margin-bottom: 0.5rem; }
 .form-check-input { width: 1rem; height: 1rem; cursor: pointer; }
 .form-check-label { cursor: pointer; margin-bottom: 0; font-weight: 400; }
+/* Override Materialize which sets opacity:0 / pointer-events:none on ALL checkboxes/radios.
+   Restore native behaviour for Bootstrap-style .form-check-input elements. */
+.form-check .form-check-input[type="checkbox"],
+.form-check .form-check-input[type="radio"] {
+    position: static !important;
+    opacity: 1 !important;
+    pointer-events: auto !important;
+    float: none !important;
+    margin: 0 !important;
+}
 .input-group { display: flex; align-items: stretch; }
 .input-group .form-control { border-radius: 0; flex: 1 1 auto; }
 .input-group .form-control:first-child { border-radius: 8px 0 0 8px; }
