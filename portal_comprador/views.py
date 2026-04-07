@@ -676,8 +676,11 @@ def api_portal_vencimentos(request):
     qs = qs.order_by('data_vencimento', 'numero_parcela')
 
     # Paginação
-    page = max(1, int(request.GET.get('page', 1)))
-    per_page = min(max(1, int(request.GET.get('per_page', 50))), 100)
+    try:
+        page = max(1, int(request.GET.get('page', 1)))
+        per_page = min(max(1, int(request.GET.get('per_page', 50))), 100)
+    except (ValueError, TypeError):
+        page, per_page = 1, 50
     total = qs.count()
     offset = (page - 1) * per_page
     parcelas_page = qs[offset:offset + per_page]
@@ -755,8 +758,11 @@ def api_portal_boletos(request):
     qs = qs.order_by('-data_vencimento', 'numero_parcela')
 
     # Paginação
-    page = max(1, int(request.GET.get('page', 1)))
-    per_page = min(max(1, int(request.GET.get('per_page', 50))), 100)
+    try:
+        page = max(1, int(request.GET.get('page', 1)))
+        per_page = min(max(1, int(request.GET.get('per_page', 50))), 100)
+    except (ValueError, TypeError):
+        page, per_page = 1, 50
     total = qs.count()
     offset = (page - 1) * per_page
     boletos_page = qs[offset:offset + per_page]
