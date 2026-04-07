@@ -1563,7 +1563,7 @@ def processar_arquivo_retorno(request, pk):
             return JsonResponse({
                 'sucesso': False,
                 'erro': resultado.get('erro')
-            }, status=500)
+            }, status=400)
 
     except Exception as e:
         logger.exception(f"Erro ao processar retorno: {e}")
@@ -4376,7 +4376,7 @@ def api_boleto_gerar(request, parcela_id):
             return JsonResponse({
                 'sucesso': False,
                 'erro': resultado.get('erro') if resultado else 'Erro ao gerar boleto.'
-            }, status=500)
+            }, status=400)
 
     except json.JSONDecodeError:
         return JsonResponse({'sucesso': False, 'erro': 'JSON inválido.'}, status=400)
