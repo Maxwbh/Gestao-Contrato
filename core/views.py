@@ -29,6 +29,9 @@ from .models import (
 from .forms import ContabilidadeForm, CompradorForm, ImovelForm, ImobiliariaForm, ContaBancariaForm, AcessoUsuarioForm
 import io
 import json
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 # =============================================================================
