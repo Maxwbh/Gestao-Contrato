@@ -375,7 +375,7 @@ class IndicesEconomicosService:
             except Exception as e:
                 erros_import += 1
                 self.erros.append(f"Erro ao importar {item}: {e}")
-                logger.error(f"Erro importacao indice: {e}")
+                logger.exception("Erro importacao indice: %s", e)
 
         return {
             'sucesso': erros_import == 0,
