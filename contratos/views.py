@@ -602,7 +602,7 @@ def importar_indices_ibge(request):
         elif tipo_indice == 'SELIC':
             indices = _buscar_selic_bcb(ano_inicio, mes_inicio)
         else:
-            return JsonResponse({'success': False, 'error': 'Tipo de índice inválido'})
+            return JsonResponse({'success': False, 'error': 'Tipo de índice inválido'}, status=400)
 
         # Salvar índices no banco usando bulk operations para melhor performance
         count_created = 0
