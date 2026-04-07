@@ -607,12 +607,12 @@
             });
         });
 
-        // Handle alert dismissal (data-bs-dismiss="alert")
-        document.querySelectorAll('[data-bs-dismiss="alert"]').forEach(function(btn) {
-            btn.addEventListener('click', function() {
-                var alert = btn.closest('.alert');
-                if (alert) alert.remove();
-            });
+        // Handle alert dismissal (data-bs-dismiss="alert") — event delegation covers dynamic alerts
+        document.body.addEventListener('click', function(e) {
+            var btn = e.target.closest('[data-bs-dismiss="alert"]');
+            if (!btn) return;
+            var alert = btn.closest('.alert');
+            if (alert) alert.remove();
         });
 
         // Show Django error messages as modal
