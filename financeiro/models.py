@@ -10,6 +10,9 @@ from django.core.validators import MinValueValidator
 from django.core.exceptions import ValidationError
 from django.utils import timezone
 from decimal import Decimal
+import logging
+
+logger = logging.getLogger(__name__)
 from datetime import timedelta
 from core.models import TimeStampedModel, ContaBancaria
 
@@ -695,6 +698,7 @@ class Parcela(TimeStampedModel):
                     resultado['email_erro'] = email_result.get('erro', '')
                 except Exception as e:
                     # Não falhar a geração do boleto por erro de email
+                    logger.exception("Erro ao enviar email após geração de boleto parcela pk=%s: %s", self.pk, e)
                     resultado['email_enviado'] = False
                     resultado['email_erro'] = str(e)
 
@@ -2127,6 +2131,7 @@ class ItemRetorno(TimeStampedModel):
             return True
 
         except Exception as e:
+            logger.exception("Erro ao processar registro CNAB pk=%s: %s", self.pk, e)
             self.erro_processamento = str(e)
             self.save()
             return False
