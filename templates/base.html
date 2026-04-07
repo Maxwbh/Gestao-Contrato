@@ -494,6 +494,50 @@
             });
         });
 
+        // Handle data-bs-toggle="collapse" (Bootstrap collapse, sem Bootstrap JS)
+        document.querySelectorAll('[data-bs-toggle="collapse"]').forEach(function(trigger) {
+            trigger.addEventListener('click', function(e) {
+                e.preventDefault();
+                var target = trigger.getAttribute('data-bs-target') || trigger.getAttribute('href');
+                if (target) {
+                    var el = document.querySelector(target);
+                    if (el) {
+                        el.classList.toggle('show');
+                        var expanded = el.classList.contains('show');
+                        trigger.setAttribute('aria-expanded', expanded ? 'true' : 'false');
+                    }
+                }
+            });
+        });
+
+        // Handle data-bs-toggle="tab" / "pill" (Bootstrap tabs, sem Bootstrap JS)
+        document.querySelectorAll('[data-bs-toggle="tab"], [data-bs-toggle="pill"]').forEach(function(trigger) {
+            trigger.addEventListener('click', function(e) {
+                e.preventDefault();
+                var target = trigger.getAttribute('data-bs-target') || trigger.getAttribute('href');
+                if (!target) return;
+                var pane = document.querySelector(target);
+                if (!pane) return;
+                // Desativar todos os panes e triggers dentro do mesmo container
+                var tabContent = pane.closest('.tab-content');
+                if (tabContent) {
+                    tabContent.querySelectorAll('.tab-pane').forEach(function(p) {
+                        p.classList.remove('show', 'active');
+                    });
+                }
+                var navList = trigger.closest('[role="tablist"]') || trigger.closest('.nav');
+                if (navList) {
+                    navList.querySelectorAll('[data-bs-toggle="tab"], [data-bs-toggle="pill"]').forEach(function(t) {
+                        t.classList.remove('active');
+                        t.setAttribute('aria-selected', 'false');
+                    });
+                }
+                pane.classList.add('show', 'active');
+                trigger.classList.add('active');
+                trigger.setAttribute('aria-selected', 'true');
+            });
+        });
+
         // Handle alert dismissal (data-bs-dismiss="alert")
         document.querySelectorAll('[data-bs-dismiss="alert"]').forEach(function(btn) {
             btn.addEventListener('click', function() {
