@@ -455,8 +455,14 @@
             }
         });
 
-        // Modals
-        M.Modal.init(document.querySelectorAll('.modal'));
+        // Modals — respeitar data-bs-backdrop="static" (dismissible: false)
+        document.querySelectorAll('.modal').forEach(function(modal) {
+            var opts = {};
+            if (modal.getAttribute('data-bs-backdrop') === 'static') {
+                opts.dismissible = false;
+            }
+            M.Modal.init(modal, opts);
+        });
 
         // Select fields: inicializar apenas selects que pedem estilo Materialize
         // (excluindo form-select do Bootstrap que têm estilo nativo próprio)
