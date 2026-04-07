@@ -1315,6 +1315,21 @@ class TabelaJurosContrato(TimeStampedModel):
         if self.ciclo_fim is not None and self.ciclo_fim < self.ciclo_inicio:
             raise ValidationError({'ciclo_fim': 'Ciclo Fim deve ser maior ou igual ao Ciclo Início.'})
 
+        # Detectar sobreposição com faixas existentes do mesmo contrato
+        if self.contrato_id:
+            fim_self = self.ciclo_fim if self.ciclo_fim is not None else 999999
+            outras = TabelaJurosContrato.objects.filter(
+                contrato_id=self.contrato_id
+            ).exclude(pk=self.pk or None)
+            for outra in outras:
+                fim_outra = outra.ciclo_fim if outra.ciclo_fim is not None else 999999
+                if self.ciclo_inicio <= fim_outra and outra.ciclo_inicio <= fim_self:
+                    raise ValidationError(
+                        f'A faixa de ciclos {self.ciclo_inicio}–{self.ciclo_fim or "∞"} '
+                        f'sobrepõe a faixa existente {outra.ciclo_inicio}–{outra.ciclo_fim or "∞"}. '
+                        'Ajuste os ciclos para que não haja sobreposição.'
+                    )
+
     @classmethod
     def get_juros_para_ciclo(cls, contrato, ciclo):
         """
