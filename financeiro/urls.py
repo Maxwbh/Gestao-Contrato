@@ -31,6 +31,8 @@ urlpatterns = [
 
     # Carne (multiplos boletos)
     path('contrato/<int:contrato_id>/gerar-carne/', views.gerar_carne, name='gerar_carne'),
+    path('contrato/<int:contrato_id>/carne/pdf/', views.download_carne_pdf, name='download_carne_pdf'),
+    path('api/carne/multiplos/', views.download_carne_pdf_multiplos, name='download_carne_multiplos'),
 
     # Elegibilidade de parcelas para geracao de boletos
     path('api/contrato/<int:contrato_id>/parcelas-elegibilidade/', views.api_parcelas_elegibilidade, name='api_parcelas_elegibilidade'),
