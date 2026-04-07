@@ -2850,7 +2850,7 @@ def obter_indice_reajuste(request):
             return JsonResponse({
                 'sucesso': False,
                 'erro': f'Indice {tipo_indice} nao encontrado para {mes}/{ano}'
-            })
+            }, status=404)
 
     except Exception as e:
         logger.exception("Erro ao obter indice reajuste: %s", e)
