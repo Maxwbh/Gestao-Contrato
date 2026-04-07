@@ -154,7 +154,7 @@ class IndiceEconomicoService:
             response.raise_for_status()
             return response.json()
         except requests.RequestException as e:
-            logger.error(f"Erro ao buscar índice do BCB: {e}")
+            logger.exception(f"Erro ao buscar índice do BCB: {e}")
             return []
 
     @classmethod
