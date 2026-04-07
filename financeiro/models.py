@@ -1296,6 +1296,14 @@ class Reajuste(TimeStampedModel):
         super().clean()
         errors = {}
 
+        # V-08: Contratos FIXO não têm reajuste periódico
+        if hasattr(self, 'contrato') and self.contrato:
+            if self.contrato.tipo_correcao == 'FIXO':
+                errors['contrato'] = (
+                    'Contratos com índice FIXO são pré-fixados e não possuem reajuste periódico. '
+                    'O valor das parcelas é definido na TabelaJurosContrato no momento da criação.'
+                )
+
         # Validar que o ciclo é sequencial (não pular ciclos)
         if self.ciclo and self.ciclo > 1 and hasattr(self, 'contrato') and self.contrato:
             # Verificar se existe reajuste aplicado para o ciclo anterior
