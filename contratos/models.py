@@ -737,7 +737,7 @@ class Contrato(TimeStampedModel):
         Args:
             base_pv: Valor presente base. Se None, usa valor_financiado.
         """
-        from financeiro.models import Parcela as ParcelaModel
+        from financeiro.models import Parcela as ParcelaModel, Reajuste
         from django.db.models import Sum
 
         pv = base_pv if base_pv is not None else self.valor_financiado
@@ -756,10 +756,10 @@ class Contrato(TimeStampedModel):
 
         if self.tipo_amortizacao == TipoAmortizacao.SAC:
             # SAC: amortização constante = PV / n; juros_k = saldo_k × taxa/100
-            tabela = ParcelaModel._calcular_sac_tabela(pv, taxa, n)
+            tabela = Reajuste._calcular_sac_tabela(pv, taxa, n)
         else:
             # Tabela Price: PMT constante = PV × i / (1-(1+i)^-n)
-            tabela = ParcelaModel._calcular_price_tabela(pv, taxa, n)
+            tabela = Reajuste._calcular_price_tabela(pv, taxa, n)
 
         updates = []
         for parcela, (pmt_k, amort_k, juros_k) in zip(parcelas_qs, tabela):
