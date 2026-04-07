@@ -1664,6 +1664,27 @@ function regenerarBoleto(parcelaId, btn) {
     });
 }
 
+// ============ CANCELAR BOLETO ============
+
+function cancelarBoleto(parcelaId) {
+    if (!confirm('Confirmar cancelamento do boleto da parcela #' + parcelaId + '?\n\nEsta ação não pode ser desfeita.')) return;
+
+    var fd = new FormData();
+    fd.append('csrfmiddlewaretoken', '{{ csrf_token }}');
+
+    fetch('/financeiro/parcelas/' + parcelaId + '/boleto/cancelar/', {method: 'POST', body: fd})
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            if (data.sucesso) {
+                showToast('Boleto cancelado com sucesso', 'success');
+                setTimeout(function() { location.reload(); }, 1200);
+            } else {
+                showErrorModal(data.erro || 'Erro ao cancelar boleto');
+            }
+        })
+        .catch(function(err) { showErrorModal('Erro de conexão: ' + err.message); });
+}
+
 // ============ FUNCOES DE PAGAMENTO ============
 
 function abrirModalPagamento(parcelaId, vencimento, valorOriginal, taxaJuros, taxaMulta) {
