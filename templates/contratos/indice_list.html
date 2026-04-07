@@ -615,12 +615,20 @@
         document.getElementById('btnImportar').onclick = importarIndices;
     }
 
-    // Resetar modal quando fechar
-    document.getElementById('modalImportar').addEventListener('hidden.bs.modal', function () {
+    // Resetar modal quando fechar (Materialize usa onCloseEnd; também escuta evento Bootstrap para compatibilidade)
+    function _onModalImportarClose() {
         resetarModal();
         document.getElementById('btnImportar').disabled = false;
         document.getElementById('btnCancelar').disabled = false;
         document.getElementById('btnFecharModal').disabled = false;
+    }
+    document.getElementById('modalImportar').addEventListener('hidden.bs.modal', _onModalImportarClose);
+    // Reinit com onCloseEnd para Materialize
+    document.addEventListener('DOMContentLoaded', function() {
+        var el = document.getElementById('modalImportar');
+        var inst = M.Modal.getInstance(el) || M.Modal.init(el);
+        // Sobrescrever opções para incluir callback
+        M.Modal.init(el, {dismissible: false, onCloseEnd: _onModalImportarClose});
     });
 </script>
 {% endblock %}
