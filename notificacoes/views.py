@@ -14,6 +14,10 @@ from django.http import JsonResponse
 from django.db.models import Q
 from django.core.paginator import Paginator
 from core.mixins import PaginacaoMixin
+import logging
+
+logger = logging.getLogger(__name__)
+
 from .models import (
     Notificacao, TemplateNotificacao,
     ConfiguracaoEmail, ConfiguracaoSMS, ConfiguracaoWhatsApp
@@ -182,6 +186,7 @@ def testar_conexao_email(request, pk):
         })
 
     except Exception as e:
+        logger.exception("Erro ao testar conexao email pk=%s: %s", pk, e)
         return JsonResponse({
             'status': 'error',
             'message': f'Erro na conexao: {str(e)}'
