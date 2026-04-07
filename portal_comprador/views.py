@@ -21,6 +21,9 @@ from django.db.models import Sum, Count, Q
 from decimal import Decimal
 from datetime import timedelta
 import re
+import logging
+
+logger = logging.getLogger(__name__)
 
 from core.models import Comprador
 from contratos.models import Contrato
@@ -427,12 +430,17 @@ def download_boleto(request, parcela_id):
         registrar_log_acesso(request, request.user.acesso_comprador, f'download_boleto_{parcela_id}')
 
     # Retornar arquivo
-    response = FileResponse(
-        parcela.boleto_pdf.open('rb'),
-        content_type='application/pdf'
-    )
-    response['Content-Disposition'] = f'attachment; filename="boleto_{parcela.contrato.numero_contrato}_{parcela.numero_parcela}.pdf"'
-    return response
+    try:
+        response = FileResponse(
+            parcela.boleto_pdf.open('rb'),
+            content_type='application/pdf'
+        )
+        response['Content-Disposition'] = f'attachment; filename="boleto_{parcela.contrato.numero_contrato}_{parcela.numero_parcela}.pdf"'
+        return response
+    except Exception as e:
+        logger.exception("Erro ao abrir PDF do boleto parcela pk=%s: %s", parcela_id, e)
+        messages.error(request, 'Erro ao acessar o arquivo do boleto.')
+        return redirect('portal_comprador:meus_boletos')
 
 
 @login_required(login_url='portal_comprador:login')
@@ -455,12 +463,16 @@ def visualizar_boleto(request, parcela_id):
     if hasattr(request.user, 'acesso_comprador'):
         registrar_log_acesso(request, request.user.acesso_comprador, f'visualizar_boleto_{parcela_id}')
 
-    response = FileResponse(
-        parcela.boleto_pdf.open('rb'),
-        content_type='application/pdf'
-    )
-    response['Content-Disposition'] = 'inline'
-    return response
+    try:
+        response = FileResponse(
+            parcela.boleto_pdf.open('rb'),
+            content_type='application/pdf'
+        )
+        response['Content-Disposition'] = 'inline'
+        return response
+    except Exception as e:
+        logger.exception("Erro ao abrir PDF do boleto para visualização parcela pk=%s: %s", parcela_id, e)
+        return HttpResponse('Erro ao acessar o arquivo do boleto.', status=500)
 
 
 # =============================================================================
