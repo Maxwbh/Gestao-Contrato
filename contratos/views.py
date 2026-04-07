@@ -20,8 +20,11 @@ import requests
 from django.http import JsonResponse
 from django.views.decorators.http import require_http_methods
 import json
+import logging
 from datetime import datetime
 from decimal import Decimal
+
+logger = logging.getLogger(__name__)
 
 
 class ContratoListView(LoginRequiredMixin, PaginacaoMixin, ListView):
@@ -282,29 +285,79 @@ class ContratoDetailView(LoginRequiredMixin, DetailView):
         # =====================================================================
         # CONTROLE DE BLOQUEIO DE BOLETO POR REAJUSTE
         # =====================================================================
-        if hasattr(contrato, 'verificar_bloqueio_reajuste'):
-            bloqueio_info = contrato.verificar_bloqueio_reajuste()
-            context['bloqueio_reajuste'] = bloqueio_info
-        else:
-            context['bloqueio_reajuste'] = {
-                'bloqueado': False,
-                'motivo': '',
-                'ciclo_atual': 1,
-                'ciclo_pendente': None,
-            }
+        # verificar_bloqueio_reajuste() retorna bool (True = bloqueado)
+        _bloqueado = (
+            contrato.verificar_bloqueio_reajuste()
+            if hasattr(contrato, 'verificar_bloqueio_reajuste')
+            else False
+        )
+        context['bloqueio_reajuste'] = {
+            'bloqueado': bool(_bloqueado),
+            'motivo': '',
+            'ciclo_atual': 1,
+            'ciclo_pendente': None,
+        }
 
         # Verificar status de cada parcela para geração de boleto
+        # Batch: prefetch applied reajuste cycles once to avoid N+1 queries
         parcelas_status_boleto = []
-        for parcela in context['parcelas']:
-            if hasattr(contrato, 'pode_gerar_boleto'):
-                pode_gerar, motivo = contrato.pode_gerar_boleto(parcela.numero_parcela)
-            else:
-                pode_gerar, motivo = True, "Liberado"
-            parcelas_status_boleto.append({
-                'parcela': parcela,
-                'pode_gerar_boleto': pode_gerar,
-                'motivo_bloqueio': motivo if not pode_gerar else '',
-            })
+        if hasattr(contrato, 'pode_gerar_boleto'):
+            from financeiro.models import Reajuste as ReajusteModel
+            from django.utils import timezone as _tz
+            from dateutil.relativedelta import relativedelta as _rdelta
+            from contratos.models import TipoCorrecao as _TC
+
+            _hoje = _tz.now().date()
+            _prazo = contrato.prazo_reajuste_meses or 12
+            _fixo = contrato.tipo_correcao == _TC.FIXO
+
+            # Single query: all applied cycles for this contract
+            _applied_cycles = set(
+                ReajusteModel.objects.filter(contrato=contrato, aplicado=True)
+                .values_list('ciclo', flat=True)
+            )
+
+            # Find first blocked cycle (done once, not per parcela)
+            _blocked_cycle = None
+            _blocked_msg = ''
+            if not _fixo:
+                for _c in range(2, 9999):
+                    _data = contrato.data_contrato + _rdelta(months=(_c - 1) * _prazo)
+                    if _hoje < _data:
+                        break  # future cycle — stop
+                    if _c not in _applied_cycles:
+                        _blocked_cycle = _c
+                        _blocked_msg = (
+                            f"Reajuste do ciclo {_c} pendente desde "
+                            f"{_data.strftime('%d/%m/%Y')}. "
+                            f"Execute o reajuste antes de gerar boletos."
+                        )
+                        break
+
+            for parcela in context['parcelas']:
+                if _fixo:
+                    pode_gerar, motivo = True, "Índice FIXO — sem necessidade de reajuste."
+                else:
+                    _ciclo_parcela = (parcela.numero_parcela - 1) // _prazo + 1
+                    if _ciclo_parcela <= 1:
+                        pode_gerar, motivo = True, "Primeiro ciclo — liberado."
+                    elif _blocked_cycle is not None and _blocked_cycle <= _ciclo_parcela:
+                        pode_gerar, motivo = False, _blocked_msg
+                    else:
+                        pode_gerar = True
+                        motivo = f"Reajuste do ciclo {_ciclo_parcela} aplicado."
+                parcelas_status_boleto.append({
+                    'parcela': parcela,
+                    'pode_gerar_boleto': pode_gerar,
+                    'motivo_bloqueio': motivo if not pode_gerar else '',
+                })
+        else:
+            for parcela in context['parcelas']:
+                parcelas_status_boleto.append({
+                    'parcela': parcela,
+                    'pode_gerar_boleto': True,
+                    'motivo_bloqueio': '',
+                })
         context['parcelas_status_boleto'] = parcelas_status_boleto
 
         # =====================================================================
@@ -549,7 +602,7 @@ def importar_indices_ibge(request):
         elif tipo_indice == 'SELIC':
             indices = _buscar_selic_bcb(ano_inicio, mes_inicio)
         else:
-            return JsonResponse({'success': False, 'error': 'Tipo de índice inválido'})
+            return JsonResponse({'success': False, 'error': 'Tipo de índice inválido'}, status=400)
 
         # Salvar índices no banco usando bulk operations para melhor performance
         count_created = 0
@@ -613,7 +666,8 @@ def importar_indices_ibge(request):
         })
 
     except Exception as e:
-        return JsonResponse({'success': False, 'error': str(e)})
+        logger.exception("Erro ao importar indices: %s", e)
+        return JsonResponse({'success': False, 'error': str(e)}, status=500)
 
 
 def _buscar_ipca_ibge(ano_inicio, mes_inicio):
@@ -663,7 +717,7 @@ def _buscar_ipca_ibge(ano_inicio, mes_inicio):
             })
 
     except Exception as e:
-        print(f"Erro ao buscar IPCA: {e}")
+        logger.exception("Erro ao buscar IPCA: %s", e)
 
     return indices
 
@@ -703,7 +757,7 @@ def _buscar_igpm_bcb(ano_inicio, mes_inicio):
             })
 
     except Exception as e:
-        print(f"Erro ao buscar IGP-M: {e}")
+        logger.exception("Erro ao buscar IGP-M: %s", e)
 
     return indices
 
@@ -743,7 +797,7 @@ def _buscar_selic_bcb(ano_inicio, mes_inicio):
             })
 
     except Exception as e:
-        print(f"Erro ao buscar SELIC: {e}")
+        logger.exception("Erro ao buscar SELIC: %s", e)
 
     return indices
 
@@ -778,7 +832,7 @@ def _buscar_incc_bcb(ano_inicio, mes_inicio):
             })
 
     except Exception as e:
-        print(f"Erro ao buscar INCC: {e}")
+        logger.exception("Erro ao buscar INCC: %s", e)
 
     return indices
 
@@ -813,7 +867,7 @@ def _buscar_igpdi_bcb(ano_inicio, mes_inicio):
             })
 
     except Exception as e:
-        print(f"Erro ao buscar IGP-DI: {e}")
+        logger.exception("Erro ao buscar IGP-DI: %s", e)
 
     return indices
 
@@ -858,7 +912,7 @@ def _buscar_inpc_ibge(ano_inicio, mes_inicio):
             })
 
     except Exception as e:
-        print(f"Erro ao buscar INPC: {e}")
+        logger.exception("Erro ao buscar INPC: %s", e)
 
     return indices
 
@@ -893,7 +947,7 @@ def _buscar_tr_bcb(ano_inicio, mes_inicio):
             })
 
     except Exception as e:
-        print(f"Erro ao buscar TR: {e}")
+        logger.exception("Erro ao buscar TR: %s", e)
 
     return indices
 
@@ -1020,6 +1074,7 @@ def criar_intermediaria(request, contrato_id):
             'erro': f'Valor inválido: {str(e)}'
         }, status=400)
     except Exception as e:
+        logger.exception("Erro ao criar intermediaria: %s", e)
         return JsonResponse({
             'sucesso': False,
             'erro': str(e)
@@ -1056,6 +1111,7 @@ def atualizar_intermediaria(request, pk):
         })
 
     except Exception as e:
+        logger.exception("Erro ao atualizar intermediaria pk=%s: %s", pk, e)
         return JsonResponse({
             'sucesso': False,
             'erro': str(e)
@@ -1092,6 +1148,7 @@ def excluir_intermediaria(request, pk):
         })
 
     except Exception as e:
+        logger.exception("Erro ao excluir intermediaria pk=%s: %s", pk, e)
         return JsonResponse({
             'sucesso': False,
             'erro': str(e)
@@ -1138,6 +1195,7 @@ def pagar_intermediaria(request, pk):
         })
 
     except Exception as e:
+        logger.exception("Erro ao processar intermediaria pk=%s: %s", pk, e)
         return JsonResponse({
             'sucesso': False,
             'erro': str(e)
@@ -1234,7 +1292,7 @@ def gerar_boleto_intermediaria(request, pk):
                 return JsonResponse({
                     'sucesso': False,
                     'erro': resultado.get('erro') if resultado else 'Erro ao gerar boleto'
-                }, status=500)
+                }, status=400)
         else:
             return JsonResponse({
                 'sucesso': True,
@@ -1243,6 +1301,7 @@ def gerar_boleto_intermediaria(request, pk):
             })
 
     except Exception as e:
+        logger.exception("Erro ao gerar boleto intermediaria pk=%s: %s", pk, e)
         return JsonResponse({
             'sucesso': False,
             'erro': str(e)
@@ -1442,7 +1501,8 @@ def api_preview_parcelas(request):
         })
 
     except Exception as e:
-        return JsonResponse({'sucesso': False, 'erro': str(e)}, status=400)
+        logger.exception("Erro ao calcular preview de parcelas: %s", e)
+        return JsonResponse({'sucesso': False, 'erro': str(e)}, status=500)
 
 
 # =============================================================================
@@ -1565,7 +1625,10 @@ class ContratoWizardView(LoginRequiredMixin, View):
             # Parse juros rows from POST
             juros_rows = []
             errors = []
-            count = int(request.POST.get('juros_count', 0))
+            try:
+                count = max(0, int(request.POST.get('juros_count', 0)))
+            except (ValueError, TypeError):
+                count = 0
             for i in range(count):
                 f = TabelaJurosForm({
                     'ciclo_inicio': request.POST.get(f'juros_{i}_ciclo_inicio'),
@@ -1619,7 +1682,10 @@ class ContratoWizardView(LoginRequiredMixin, View):
                 })
 
             elif modo == 'manual':
-                count = int(request.POST.get('inter_count', 0))
+                try:
+                    count = max(0, int(request.POST.get('inter_count', 0)))
+                except (ValueError, TypeError):
+                    count = 0
                 lista = []
                 errors = []
                 for i in range(count):
@@ -1665,8 +1731,7 @@ class ContratoWizardView(LoginRequiredMixin, View):
                 )
                 return redirect('contratos:detalhe', pk=contrato.pk)
             except Exception as e:
-                import logging
-                logging.getLogger(__name__).exception('Erro ao salvar wizard')
+                logger.exception('Erro ao salvar wizard: %s', e)
                 messages.error(request, f'Erro ao criar contrato: {e}')
                 return redirect('contratos:wizard', step='preview')
 
