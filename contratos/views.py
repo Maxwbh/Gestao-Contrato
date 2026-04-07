@@ -20,8 +20,11 @@ import requests
 from django.http import JsonResponse
 from django.views.decorators.http import require_http_methods
 import json
+import logging
 from datetime import datetime
 from decimal import Decimal
+
+logger = logging.getLogger(__name__)
 
 
 class ContratoListView(LoginRequiredMixin, PaginacaoMixin, ListView):
@@ -1070,6 +1073,7 @@ def criar_intermediaria(request, contrato_id):
             'erro': f'Valor inválido: {str(e)}'
         }, status=400)
     except Exception as e:
+        logger.exception("Erro ao criar intermediaria: %s", e)
         return JsonResponse({
             'sucesso': False,
             'erro': str(e)
@@ -1106,6 +1110,7 @@ def atualizar_intermediaria(request, pk):
         })
 
     except Exception as e:
+        logger.exception("Erro ao atualizar intermediaria pk=%s: %s", pk, e)
         return JsonResponse({
             'sucesso': False,
             'erro': str(e)
@@ -1142,6 +1147,7 @@ def excluir_intermediaria(request, pk):
         })
 
     except Exception as e:
+        logger.exception("Erro ao excluir intermediaria pk=%s: %s", pk, e)
         return JsonResponse({
             'sucesso': False,
             'erro': str(e)
@@ -1188,6 +1194,7 @@ def pagar_intermediaria(request, pk):
         })
 
     except Exception as e:
+        logger.exception("Erro ao processar intermediaria pk=%s: %s", pk, e)
         return JsonResponse({
             'sucesso': False,
             'erro': str(e)
@@ -1293,6 +1300,7 @@ def gerar_boleto_intermediaria(request, pk):
             })
 
     except Exception as e:
+        logger.exception("Erro ao gerar boleto intermediaria pk=%s: %s", pk, e)
         return JsonResponse({
             'sucesso': False,
             'erro': str(e)
