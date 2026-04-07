@@ -3582,7 +3582,10 @@ def exportar_relatorio(request, tipo):
     elif tipo == 'posicao_contratos':
         relatorio = service.gerar_relatorio_posicao_contratos(filtro)
     elif tipo == 'previsao_reajustes':
-        dias = int(request.GET.get('dias', 60))
+        try:
+            dias = max(1, int(request.GET.get('dias', 60)))
+        except (ValueError, TypeError):
+            dias = 60
         relatorio = service.gerar_relatorio_previsao_reajustes(dias)
     else:
         return HttpResponse('Tipo de relatório inválido', status=400)
@@ -3843,8 +3846,11 @@ def api_contratos_lista(request):
     imobiliaria_id = request.GET.get('imobiliaria')
     status = request.GET.get('status')
     comprador_id = request.GET.get('comprador')
-    page = int(request.GET.get('page', 1))
-    per_page = min(int(request.GET.get('per_page', 20)), 100)
+    try:
+        page = max(1, int(request.GET.get('page', 1)))
+        per_page = min(max(1, int(request.GET.get('per_page', 20))), 100)
+    except (ValueError, TypeError):
+        page, per_page = 1, 20
 
     queryset = Contrato.objects.all().select_related(
         'imobiliaria', 'comprador', 'imovel'
@@ -3994,8 +4000,11 @@ def api_contrato_parcelas(request, contrato_id):
     contrato = get_object_or_404(Contrato, pk=contrato_id)
 
     status_filter = request.GET.get('status')
-    page = int(request.GET.get('page', 1))
-    per_page = min(int(request.GET.get('per_page', 50)), 100)
+    try:
+        page = max(1, int(request.GET.get('page', 1)))
+        per_page = min(max(1, int(request.GET.get('per_page', 50))), 100)
+    except (ValueError, TypeError):
+        page, per_page = 1, 50
     hoje = timezone.now().date()
 
     queryset = contrato.parcelas.all()
@@ -4118,8 +4127,11 @@ def api_parcelas_lista(request):
     status_filter = request.GET.get('status')
     data_inicio = request.GET.get('data_inicio')
     data_fim = request.GET.get('data_fim')
-    page = int(request.GET.get('page', 1))
-    per_page = min(int(request.GET.get('per_page', 50)), 100)
+    try:
+        page = max(1, int(request.GET.get('page', 1)))
+        per_page = min(max(1, int(request.GET.get('per_page', 50))), 100)
+    except (ValueError, TypeError):
+        page, per_page = 1, 50
 
     hoje = timezone.now().date()
     queryset = Parcela.objects.all().select_related(
@@ -4673,8 +4685,11 @@ def api_cnab_remessa_listar(request):
     if request.GET.get('status'):
         qs = qs.filter(status=request.GET['status'])
 
-    page = int(request.GET.get('page', 1))
-    per_page = min(int(request.GET.get('per_page', 20)), 100)
+    try:
+        page = max(1, int(request.GET.get('page', 1)))
+        per_page = min(max(1, int(request.GET.get('per_page', 20))), 100)
+    except (ValueError, TypeError):
+        page, per_page = 1, 20
     total = qs.count()
     arquivos = qs[(page-1)*per_page:page*per_page]
 
@@ -4834,8 +4849,11 @@ def api_cnab_retorno_listar(request):
     if request.GET.get('status'):
         qs = qs.filter(status=request.GET['status'])
 
-    page = int(request.GET.get('page', 1))
-    per_page = min(int(request.GET.get('per_page', 20)), 100)
+    try:
+        page = max(1, int(request.GET.get('page', 1)))
+        per_page = min(max(1, int(request.GET.get('per_page', 20))), 100)
+    except (ValueError, TypeError):
+        page, per_page = 1, 20
     total = qs.count()
     arquivos = qs[(page-1)*per_page:page*per_page]
 
@@ -5026,8 +5044,11 @@ def _filtrar_parcelas_periodo(qs, request, hoje):
 
 def _paginar(qs, request):
     """Retorna (items, total, page, per_page)."""
-    page = max(1, int(request.GET.get('page', 1)))
-    per_page = min(max(1, int(request.GET.get('per_page', 50))), 200)
+    try:
+        page = max(1, int(request.GET.get('page', 1)))
+        per_page = min(max(1, int(request.GET.get('per_page', 50))), 200)
+    except (ValueError, TypeError):
+        page, per_page = 1, 50
     total = qs.count()
     offset = (page - 1) * per_page
     return qs[offset:offset + per_page], total, page, per_page
