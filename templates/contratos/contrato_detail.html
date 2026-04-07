@@ -2120,6 +2120,37 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 });
 
+// ── Gerar Boleto Intermediária (botões na tabela de preview) ─────────────────
+document.querySelectorAll('.btn-gerar-boleto-inter').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+        var interId = this.dataset.interId;
+        if (!confirm('Gerar boleto para esta intermediária?')) return;
+        var self = this;
+        self.disabled = true;
+        self.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+        fetch('/contratos/intermediarias/' + interId + '/gerar-boleto/', {
+            method: 'POST',
+            headers: { 'X-CSRFToken': '{{ csrf_token }}', 'Content-Type': 'application/x-www-form-urlencoded' }
+        })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            if (data.sucesso) {
+                showToast('Boleto gerado com sucesso!', 'success');
+                setTimeout(function() { location.reload(); }, 1000);
+            } else {
+                showErrorModal(data.erro || 'Erro ao gerar boleto');
+                self.disabled = false;
+                self.innerHTML = '<i class="fas fa-barcode"></i>';
+            }
+        })
+        .catch(function() {
+            showErrorModal('Erro de comunicação com o servidor.');
+            self.disabled = false;
+            self.innerHTML = '<i class="fas fa-barcode"></i>';
+        });
+    });
+});
+
 // ── Modal de Reajuste ───────────────────────────────────────────────────────
 function abrirModalReajuste(contratoId) {
     var modal = document.getElementById('modalReajuste');
