@@ -10,6 +10,7 @@ from django.contrib.auth.mixins import LoginRequiredMixin
 from django.contrib import messages
 from django.http import JsonResponse, HttpResponse, FileResponse
 from django.utils import timezone
+from django.db import transaction
 from django.db.models import Sum, Count, Q, F, Min
 from django.views.generic import TemplateView
 from django.views.decorators.http import require_POST, require_GET
@@ -2768,42 +2769,43 @@ def excluir_reajuste(request, pk):
     reajuste = get_object_or_404(Reajuste, pk=pk)
 
     try:
-        contrato = reajuste.contrato
+        with transaction.atomic():
+            contrato = reajuste.contrato
 
-        # Calcular o fator efetivamente aplicado (percentual já inclui teto/piso)
-        perc_aplicado = reajuste.percentual
-        fator_reajuste = 1 + (perc_aplicado / 100)
+            # Calcular o fator efetivamente aplicado (percentual já inclui teto/piso)
+            perc_aplicado = reajuste.percentual
+            fator_reajuste = 1 + (perc_aplicado / 100)
 
-        parcelas = contrato.parcelas.filter(
-            numero_parcela__gte=reajuste.parcela_inicial,
-            numero_parcela__lte=reajuste.parcela_final,
-            pago=False
-        )
+            parcelas = contrato.parcelas.filter(
+                numero_parcela__gte=reajuste.parcela_inicial,
+                numero_parcela__lte=reajuste.parcela_final,
+                pago=False
+            )
 
-        for parcela in parcelas:
-            # Reverter o valor (dividir pelo fator aplicado)
-            if fator_reajuste != 0:
-                parcela.valor_atual = (parcela.valor_atual / fator_reajuste).quantize(Decimal('0.01'))
-            parcela.save(update_fields=['valor_atual'])
+            for parcela in parcelas:
+                # Reverter o valor (dividir pelo fator aplicado)
+                if fator_reajuste != 0:
+                    parcela.valor_atual = (parcela.valor_atual / fator_reajuste).quantize(Decimal('0.01'))
+                parcela.save(update_fields=['valor_atual'])
 
-        # Reverter intermediárias
-        intermediarias = contrato.intermediarias.filter(
-            paga=False,
-            mes_vencimento__gte=reajuste.parcela_inicial,
-            mes_vencimento__lte=reajuste.parcela_final,
-        )
-        for inter in intermediarias:
-            if fator_reajuste != 0:
-                inter.valor_atual = (inter.valor_atual / fator_reajuste).quantize(Decimal('0.01'))
-            inter.save(update_fields=['valor_atual'])
+            # Reverter intermediárias
+            intermediarias = contrato.intermediarias.filter(
+                paga=False,
+                mes_vencimento__gte=reajuste.parcela_inicial,
+                mes_vencimento__lte=reajuste.parcela_final,
+            )
+            for inter in intermediarias:
+                if fator_reajuste != 0:
+                    inter.valor_atual = (inter.valor_atual / fator_reajuste).quantize(Decimal('0.01'))
+                inter.save(update_fields=['valor_atual'])
 
-        # Restaurar ciclo_reajuste_atual do contrato
-        if contrato.ciclo_reajuste_atual >= reajuste.ciclo:
-            contrato.ciclo_reajuste_atual = reajuste.ciclo - 1
-            contrato.save(update_fields=['ciclo_reajuste_atual'])
+            # Restaurar ciclo_reajuste_atual do contrato
+            if contrato.ciclo_reajuste_atual >= reajuste.ciclo:
+                contrato.ciclo_reajuste_atual = reajuste.ciclo - 1
+                contrato.save(update_fields=['ciclo_reajuste_atual'])
 
-        # Excluir o registro de reajuste
-        reajuste.delete()
+            # Excluir o registro de reajuste
+            reajuste.delete()
 
         return JsonResponse({
             'sucesso': True,

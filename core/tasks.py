@@ -26,6 +26,7 @@ from functools import wraps
 from django.http import JsonResponse
 from django.views.decorators.http import require_http_methods
 from django.conf import settings
+from django.db import transaction
 
 logger = logging.getLogger(__name__)
 
@@ -143,22 +144,23 @@ def processar_reajustes_sync():
 
                 if indice:
                     # Aplicar reajuste às parcelas pendentes
-                    parcelas_pendentes = contrato.parcelas.filter(
+                    parcelas_pendentes = list(contrato.parcelas.filter(
                         pago=False,
                         data_vencimento__gte=hoje
-                    )
+                    ))
 
-                    for parcela in parcelas_pendentes:
-                        percentual = Decimal(str(indice.get('valor', 0)))
-                        novo_valor = ReajusteService.calcular_reajuste(
-                            parcela.valor_atual, percentual
-                        )
-                        parcela.valor_atual = novo_valor
-                        parcela.save(update_fields=['valor_atual', 'atualizado_em'])
-                        result.items_processed += 1
+                    with transaction.atomic():
+                        for parcela in parcelas_pendentes:
+                            percentual = Decimal(str(indice.get('valor', 0)))
+                            novo_valor = ReajusteService.calcular_reajuste(
+                                parcela.valor_atual, percentual
+                            )
+                            parcela.valor_atual = novo_valor
+                            parcela.save(update_fields=['valor_atual', 'atualizado_em'])
+                            result.items_processed += 1
 
                     result.add_message(
-                        f"Contrato {contrato.numero_contrato}: {parcelas_pendentes.count()} parcelas reajustadas"
+                        f"Contrato {contrato.numero_contrato}: {len(parcelas_pendentes)} parcelas reajustadas"
                     )
 
             except Exception as e:
