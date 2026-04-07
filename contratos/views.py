@@ -1027,6 +1027,23 @@ class IntermediariasDetailView(LoginRequiredMixin, DetailView):
         return context
 
 
+def _recalcular_se_necessario(contrato):
+    """
+    Recalcula amortização das parcelas NORMAL quando intermediarias_reduzem_pmt=True.
+
+    Replica a lógica do wizard: base_pv = valor_financiado − Σ(valor de todas as
+    intermediárias, pagas ou não), garantindo que mudanças posteriores nas
+    intermediárias se reflitam nas parcelas mensais.
+    """
+    if not contrato.intermediarias_reduzem_pmt:
+        return
+    soma = contrato.intermediarias.aggregate(
+        total=Sum('valor')
+    )['total'] or Decimal('0')
+    base_pv = max(contrato.valor_financiado - soma, Decimal('0.01'))
+    contrato.recalcular_amortizacao(base_pv=base_pv)
+
+
 @login_required
 @require_http_methods(["POST"])
 def criar_intermediaria(request, contrato_id):
@@ -1060,6 +1077,9 @@ def criar_intermediaria(request, contrato_id):
             valor=Decimal(str(data.get('valor', 0))),
             observacoes=data.get('observacoes', '')
         )
+
+        # Recalcular PMT das parcelas se a flag intermediarias_reduzem_pmt estiver ativa
+        _recalcular_se_necessario(contrato)
 
         return JsonResponse({
             'sucesso': True,
@@ -1098,12 +1118,24 @@ def atualizar_intermediaria(request, pk):
 
         if 'mes_vencimento' in data:
             intermediaria.mes_vencimento = int(data['mes_vencimento'])
+        valor_alterado = False
         if 'valor' in data:
-            intermediaria.valor = Decimal(str(data['valor']))
+            novo_valor = Decimal(str(data['valor']))
+            if novo_valor != intermediaria.valor:
+                intermediaria.valor = novo_valor
+                valor_alterado = True
         if 'observacoes' in data:
             intermediaria.observacoes = data['observacoes']
 
         intermediaria.save()
+
+        # Sincronizar parcela vinculada se o valor foi alterado e existe parcela
+        if valor_alterado and intermediaria.parcela_vinculada:
+            intermediaria.parcela_vinculada.valor_atual = intermediaria.valor_atual
+            intermediaria.parcela_vinculada.save(update_fields=['valor_atual'])
+
+        # Recalcular PMT das parcelas se a flag intermediarias_reduzem_pmt estiver ativa
+        _recalcular_se_necessario(intermediaria.contrato)
 
         return JsonResponse({
             'sucesso': True,
@@ -1137,14 +1169,17 @@ def excluir_intermediaria(request, pk):
         }, status=400)
 
     try:
-        contrato_id = intermediaria.contrato_id
+        contrato = intermediaria.contrato
         numero = intermediaria.numero_sequencial
         intermediaria.delete()
+
+        # Recalcular PMT das parcelas se a flag intermediarias_reduzem_pmt estiver ativa
+        _recalcular_se_necessario(contrato)
 
         return JsonResponse({
             'sucesso': True,
             'mensagem': f'Prestação intermediária #{numero} excluída com sucesso',
-            'redirect': f'/contratos/{contrato_id}/intermediarias/'
+            'redirect': f'/contratos/{contrato.pk}/intermediarias/'
         })
 
     except Exception as e:
