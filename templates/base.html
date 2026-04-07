@@ -422,6 +422,40 @@
         };
     };
 
+    // Bootstrap.Tooltip stub → usa M.Tooltip ou no-op (title nativo do browser)
+    bootstrap.Tooltip = function(el, opts) {
+        if (!el) return { show: function(){}, hide: function(){}, dispose: function(){} };
+        // Usar Materialize Tooltip se disponível
+        var content = (opts && opts.title) || (el.getAttribute('data-bs-original-title')) || el.getAttribute('title') || '';
+        var position = (opts && opts.placement) || 'top';
+        try {
+            var inst = M.Tooltip.getInstance(el) || M.Tooltip.init(el, {
+                html: false,
+                margin: 5,
+                inDuration: 200,
+                outDuration: 150,
+                position: position,
+                transitionMovement: 10
+            });
+            return {
+                show: function() { if (inst) inst.open(); },
+                hide: function() { if (inst) inst.close(); },
+                dispose: function() { if (inst) inst.destroy(); }
+            };
+        } catch(e) {
+            return { show: function(){}, hide: function(){}, dispose: function(){} };
+        }
+    };
+    // Aliases comuns
+    bootstrap.Collapse = function(el, opts) {
+        if (!el) return { show: function(){}, hide: function(){}, toggle: function(){} };
+        return {
+            show: function() { el.classList.add('show'); },
+            hide: function() { el.classList.remove('show'); },
+            toggle: function() { el.classList.toggle('show'); }
+        };
+    };
+
     // ================================================================
     // GLOBAL TOAST & ERROR MODAL
     // ================================================================
