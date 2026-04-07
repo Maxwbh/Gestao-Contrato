@@ -5480,3 +5480,90 @@ def api_imobiliaria_fluxo_caixa(request, imobiliaria_id):
         },
         'meses': meses,
     })
+
+
+# =============================================================================
+# OFX — Importação de Extrato Bancário para Quitação de Parcelas
+# =============================================================================
+
+@login_required
+def upload_ofx(request):
+    """
+    GET  → página de upload do extrato OFX
+    POST → processa o arquivo OFX e retorna JSON com resultado da reconciliação
+    """
+    from financeiro.services.ofx_service import processar_ofx_upload
+
+    if request.method == 'GET':
+        # Listar imobiliárias disponíveis para o filtro
+        from core.models import Imobiliaria
+        imobiliarias = Imobiliaria.objects.filter(ativo=True).order_by('razao_social')
+        return render(request, 'financeiro/ofx_upload.html', {
+            'imobiliarias': imobiliarias,
+        })
+
+    # POST — processa arquivo
+    arquivo = request.FILES.get('arquivo_ofx')
+    if not arquivo:
+        return JsonResponse({'sucesso': False, 'erro': 'Nenhum arquivo enviado'}, status=400)
+
+    if not arquivo.name.lower().endswith('.ofx'):
+        return JsonResponse({'sucesso': False, 'erro': 'Arquivo deve ter extensão .ofx'}, status=400)
+
+    # Limite de tamanho: 5 MB
+    if arquivo.size > 5 * 1024 * 1024:
+        return JsonResponse({'sucesso': False, 'erro': 'Arquivo muito grande (máximo 5 MB)'}, status=400)
+
+    imobiliaria_id = request.POST.get('imobiliaria_id')
+    imobiliaria = None
+    if imobiliaria_id:
+        from core.models import Imobiliaria
+        imobiliaria = get_object_or_404(Imobiliaria, pk=imobiliaria_id)
+
+    dry_run = request.POST.get('dry_run', '').lower() in ('1', 'true', 'yes')
+
+    try:
+        conteudo = arquivo.read()
+        resultado = processar_ofx_upload(
+            conteudo,
+            imobiliaria=imobiliaria,
+            dry_run=dry_run,
+        )
+    except Exception as e:
+        logger.exception('OFX upload: erro ao processar arquivo')
+        return JsonResponse({'sucesso': False, 'erro': f'Erro ao processar arquivo: {e}'}, status=500)
+
+    if dry_run:
+        return JsonResponse({'sucesso': True, **resultado})
+
+    # Serializar resultados para JSON
+    resultados_json = []
+    for rec in resultado.get('resultados', []):
+        tx = rec.transacao
+        item = {
+            'fitid': tx.fitid,
+            'data': str(tx.data) if tx.data else None,
+            'valor': str(tx.valor),
+            'memo': tx.memo,
+            'reconciliada': rec.reconciliada,
+            'confianca': rec.confianca,
+            'motivo': rec.motivo,
+        }
+        if rec.parcela:
+            item['parcela'] = {
+                'id': rec.parcela.pk,
+                'numero_parcela': rec.parcela.numero_parcela,
+                'nosso_numero': rec.parcela.nosso_numero,
+                'contrato_id': rec.parcela.contrato_id,
+                'numero_contrato': rec.parcela.contrato.numero_contrato,
+            }
+        resultados_json.append(item)
+
+    return JsonResponse({
+        'sucesso': True,
+        'total_transacoes': resultado['total_transacoes'],
+        'reconciliadas': resultado['reconciliadas'],
+        'nao_reconciliadas': resultado['nao_reconciliadas'],
+        'parcelas_quitadas': [p.pk for p in resultado.get('parcelas_quitadas', [])],
+        'resultados': resultados_json,
+    })

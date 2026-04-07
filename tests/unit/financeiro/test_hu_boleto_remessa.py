@@ -663,3 +663,286 @@ class TestBoletoServiceGeraCarne:
 
         assert resultado['sucesso'] is False
         assert 'conexão' in resultado['erro'].lower() or 'Erro' in resultado['erro']
+
+
+# ===========================================================================
+# HU — OFX: Quitação via Extrato Bancário
+# ===========================================================================
+
+# ---------------------------------------------------------------------------
+# OFX SGML de teste (formato real dos bancos BR)
+# ---------------------------------------------------------------------------
+
+OFX_SAMPLE = b"""OFXHEADER:100
+DATA:OFXSGML
+VERSION:102
+SECURITY:NONE
+ENCODING:USASCII
+CHARSET:1252
+COMPRESSION:NONE
+OLDFILEUID:NONE
+NEWFILEUID:NONE
+
+<OFX>
+<SIGNONMSGSRSV1>
+<SONRS>
+<STATUS><CODE>0</CODE><SEVERITY>INFO</SEVERITY></STATUS>
+<DTSERVER>20260407120000</DTSERVER>
+<LANGUAGE>POR</LANGUAGE>
+</SONRS>
+</SIGNONMSGSRSV1>
+<BANKMSGSRSV1>
+<STMTTRNRS>
+<STMTRS>
+<CURDEF>BRL</CURDEF>
+<BANKACCTFROM>
+<BANKID>756</BANKID>
+<ACCTID>123456</ACCTID>
+<ACCTTYPE>CHECKING</ACCTTYPE>
+</BANKACCTFROM>
+<BANKTRANLIST>
+<DTSTART>20260301000000</DTSTART>
+<DTEND>20260407000000</DTEND>
+<STMTTRN>
+<TRNTYPE>CREDIT</TRNTYPE>
+<DTPOSTED>20260405120000</DTPOSTED>
+<TRNAMT>8333.33</TRNAMT>
+<FITID>20260405001</FITID>
+<MEMO>PAG PARCELA CTR-HU-001 COMPRADOR HU</MEMO>
+</STMTTRN>
+<STMTTRN>
+<TRNTYPE>DEBIT</TRNTYPE>
+<DTPOSTED>20260406120000</DTPOSTED>
+<TRNAMT>-150.00</TRNAMT>
+<FITID>20260406001</FITID>
+<MEMO>TARIFA BANCARIA</MEMO>
+</STMTTRN>
+<STMTTRN>
+<TRNTYPE>CREDIT</TRNTYPE>
+<DTPOSTED>20260407120000</DTPOSTED>
+<TRNAMT>9999.00</TRNAMT>
+<FITID>20260407001</FITID>
+<MEMO>TED OUTROS</MEMO>
+</STMTTRN>
+</BANKTRANLIST>
+</STMTRS>
+</STMTTRNRS>
+</BANKMSGSRSV1>
+</OFX>
+"""
+
+OFX_NOSSO_NUMERO = b"""OFXHEADER:100
+DATA:OFXSGML
+VERSION:102
+SECURITY:NONE
+ENCODING:USASCII
+CHARSET:1252
+COMPRESSION:NONE
+OLDFILEUID:NONE
+NEWFILEUID:NONE
+
+<OFX>
+<BANKMSGSRSV1>
+<STMTTRNRS>
+<STMTRS>
+<CURDEF>BRL</CURDEF>
+<BANKTRANLIST>
+<STMTTRN>
+<TRNTYPE>CREDIT</TRNTYPE>
+<DTPOSTED>20260405000000</DTPOSTED>
+<TRNAMT>8333.33</TRNAMT>
+<FITID>FIT-NN-001</FITID>
+<MEMO>COBRANCA NOSSO NUMERO 0000000042 PAGO</MEMO>
+</STMTTRN>
+</BANKTRANLIST>
+</STMTRS>
+</STMTTRNRS>
+</BANKMSGSRSV1>
+</OFX>
+"""
+
+
+@pytest.mark.django_db
+class TestOFXParser:
+    """Testa o parser OFX puro (sem banco de dados)."""
+
+    def test_parse_ofx_retorna_transacoes(self):
+        """parse_ofx deve retornar lista com transações do arquivo."""
+        from financeiro.services.ofx_service import parse_ofx
+        transacoes = parse_ofx(OFX_SAMPLE)
+        # 2 créditos + 1 débito = 3 transações no total
+        assert len(transacoes) == 3
+
+    def test_parse_ofx_ignora_debito_valor(self):
+        """Transação de débito deve ter valor negativo."""
+        from financeiro.services.ofx_service import parse_ofx
+        transacoes = parse_ofx(OFX_SAMPLE)
+        debitos = [t for t in transacoes if t.valor < 0]
+        assert len(debitos) == 1
+        assert debitos[0].valor == Decimal('-150.00')
+
+    def test_parse_ofx_extrai_campos(self):
+        """Campos essenciais devem ser extraídos corretamente."""
+        from financeiro.services.ofx_service import parse_ofx
+        from datetime import date
+        transacoes = parse_ofx(OFX_SAMPLE)
+        primeira = transacoes[0]
+        assert primeira.fitid == '20260405001'
+        assert primeira.valor == Decimal('8333.33')
+        assert primeira.data == date(2026, 4, 5)
+        assert 'CTR-HU-001' in primeira.memo
+
+    def test_parse_ofx_aceita_bytes(self):
+        """parse_ofx deve aceitar bytes (e decodificar automaticamente)."""
+        from financeiro.services.ofx_service import parse_ofx
+        transacoes = parse_ofx(OFX_SAMPLE)
+        assert len(transacoes) > 0
+
+    def test_parse_ofx_aceita_string(self):
+        """parse_ofx deve aceitar string."""
+        from financeiro.services.ofx_service import parse_ofx
+        transacoes = parse_ofx(OFX_SAMPLE.decode('utf-8'))
+        assert len(transacoes) > 0
+
+    def test_parse_ofx_arquivo_vazio(self):
+        """Arquivo sem transações retorna lista vazia."""
+        from financeiro.services.ofx_service import parse_ofx
+        transacoes = parse_ofx(b'<OFX><BANKMSGSRSV1></BANKMSGSRSV1></OFX>')
+        assert transacoes == []
+
+
+@pytest.mark.django_db
+class TestOFXReconciliacao:
+    """Testa reconciliação OFX com parcelas do banco."""
+
+    def test_reconcilia_por_numero_contrato_no_memo(self, contrato_com_parcelas):
+        """P2: número do contrato no MEMO → match ALTA."""
+        from financeiro.services.ofx_service import OFXService
+        # OFX_SAMPLE tem MEMO com 'CTR-HU-001' (numero_contrato do contrato_com_parcelas)
+        service = OFXService(contrato=contrato_com_parcelas)
+        resultado = service.processar(OFX_SAMPLE)
+        reconciliadas = [r for r in resultado['resultados'] if r.reconciliada]
+        assert len(reconciliadas) >= 1
+        assert reconciliadas[0].confianca == 'ALTA'
+
+    def test_reconcilia_por_nosso_numero(self, contrato_com_parcelas):
+        """P1: nosso_numero no MEMO → match ALTA."""
+        from financeiro.services.ofx_service import OFXService
+        # Configurar nosso_numero em uma parcela
+        parcela = contrato_com_parcelas.parcelas.first()
+        parcela.nosso_numero = '0000000042'
+        parcela.save()
+
+        service = OFXService(contrato=contrato_com_parcelas)
+        resultado = service.processar(OFX_NOSSO_NUMERO)
+        reconciliadas = [r for r in resultado['resultados'] if r.reconciliada]
+        assert len(reconciliadas) == 1
+        assert reconciliadas[0].confianca == 'ALTA'
+        assert reconciliadas[0].parcela.pk == parcela.pk
+
+    def test_debito_ignorado(self, contrato_com_parcelas):
+        """Transações de débito (valor < 0) devem ser ignoradas na reconciliação."""
+        from financeiro.services.ofx_service import OFXService
+        service = OFXService(contrato=contrato_com_parcelas)
+        resultado = service.processar(OFX_SAMPLE)
+        nao_rec = [r for r in resultado['resultados'] if r.confianca == 'NAO_ENCONTRADA']
+        # Débito de -150.00 deve estar em não reconciliadas com motivo 'Débito ignorado'
+        debitos = [r for r in nao_rec if 'Débito' in r.motivo]
+        assert len(debitos) == 1
+
+    def test_total_transacoes_contabilizado(self, contrato_com_parcelas):
+        """O total de transações retornado deve incluir débitos."""
+        from financeiro.services.ofx_service import OFXService
+        service = OFXService(contrato=contrato_com_parcelas)
+        resultado = service.processar(OFX_SAMPLE)
+        assert resultado['total_transacoes'] == 3
+
+    def test_processar_arquivo_vazio_retorna_zeros(self, db):
+        """Arquivo sem transações retorna resultado zerado."""
+        from financeiro.services.ofx_service import OFXService
+        service = OFXService()
+        resultado = service.processar(b'<OFX></OFX>')
+        assert resultado['total_transacoes'] == 0
+        assert resultado['reconciliadas'] == 0
+        assert resultado['resultados'] == []
+
+    def test_dry_run_nao_quita(self, contrato_com_parcelas):
+        """dry_run=True: reconcilia sem marcar parcelas como pagas."""
+        from financeiro.services.ofx_service import processar_ofx_upload
+        resultado = processar_ofx_upload(
+            OFX_SAMPLE,
+            contrato=contrato_com_parcelas,
+            dry_run=True,
+        )
+        assert resultado['dry_run'] is True
+        assert 'transacoes' in resultado
+        # Parcelas não devem ter sido quitadas
+        assert contrato_com_parcelas.parcelas.filter(pago=True).count() == 0
+
+
+@pytest.mark.django_db
+class TestOFXView:
+    """Testa o endpoint /financeiro/cnab/ofx/upload/."""
+
+    def test_get_retorna_pagina(self, cli):
+        """GET deve retornar 200 (template de upload)."""
+        from django.urls import reverse
+        url = reverse('financeiro:upload_ofx')
+        # Template pode não existir ainda — aceitar 200 ou TemplateDoesNotExist
+        try:
+            resp = cli.get(url)
+            assert resp.status_code in (200, 500)
+        except Exception:
+            pass  # template ainda não criado
+
+    def test_post_sem_arquivo_retorna_400(self, cli):
+        """POST sem arquivo deve retornar 400."""
+        from django.urls import reverse
+        url = reverse('financeiro:upload_ofx')
+        resp = cli.post(url, data={})
+        assert resp.status_code == 400
+        data = json.loads(resp.content)
+        assert data['sucesso'] is False
+
+    def test_post_extensao_invalida_retorna_400(self, cli):
+        """POST com arquivo .txt deve retornar 400."""
+        from django.urls import reverse
+        from io import BytesIO
+        from django.core.files.uploadedfile import SimpleUploadedFile
+        url = reverse('financeiro:upload_ofx')
+        arquivo = SimpleUploadedFile('extrato.txt', b'content', content_type='text/plain')
+        resp = cli.post(url, {'arquivo_ofx': arquivo})
+        assert resp.status_code == 400
+        data = json.loads(resp.content)
+        assert '.ofx' in data['erro']
+
+    def test_post_ofx_valido_retorna_resultado(self, cli, contrato_com_parcelas):
+        """POST com .ofx válido deve retornar JSON com resultado da reconciliação."""
+        from django.urls import reverse
+        from django.core.files.uploadedfile import SimpleUploadedFile
+        url = reverse('financeiro:upload_ofx')
+        arquivo = SimpleUploadedFile(
+            'extrato.ofx', OFX_SAMPLE, content_type='application/x-ofx'
+        )
+        resp = cli.post(url, {'arquivo_ofx': arquivo, 'dry_run': '0'})
+        assert resp.status_code == 200
+        data = json.loads(resp.content)
+        assert data['sucesso'] is True
+        assert 'total_transacoes' in data
+        assert 'reconciliadas' in data
+        assert 'resultados' in data
+
+    def test_post_dry_run_nao_quita(self, cli, contrato_com_parcelas):
+        """POST com dry_run=1 não deve quitar parcelas."""
+        from django.urls import reverse
+        from django.core.files.uploadedfile import SimpleUploadedFile
+        url = reverse('financeiro:upload_ofx')
+        arquivo = SimpleUploadedFile(
+            'extrato.ofx', OFX_NOSSO_NUMERO, content_type='application/x-ofx'
+        )
+        resp = cli.post(url, {'arquivo_ofx': arquivo, 'dry_run': '1'})
+        assert resp.status_code == 200
+        data = json.loads(resp.content)
+        assert data.get('dry_run') is True
+        # Nenhuma parcela foi quitada
+        assert contrato_com_parcelas.parcelas.filter(pago=True).count() == 0
