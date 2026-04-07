@@ -1188,6 +1188,14 @@ def pagar_intermediaria(request, pk):
 
         intermediaria.save()
 
+        # Sincronizar parcela vinculada (se existir) como paga
+        if intermediaria.parcela_vinculada:
+            parcela_vinc = intermediaria.parcela_vinculada
+            parcela_vinc.pago = True
+            parcela_vinc.valor_pago = valor_pago
+            parcela_vinc.data_pagamento = data_pagamento
+            parcela_vinc.save(update_fields=['pago', 'valor_pago', 'data_pagamento'])
+
         return JsonResponse({
             'sucesso': True,
             'mensagem': f'Pagamento de R$ {valor_pago:,.2f} registrado com sucesso',
