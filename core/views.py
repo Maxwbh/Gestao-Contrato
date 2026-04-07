@@ -105,6 +105,7 @@ def health_check(request):
             'latency_ms': round(db_latency, 2)
         }
     except Exception as e:
+        logger.exception("Health check: falha no banco de dados: %s", e)
         status['status'] = 'unhealthy'
         status['checks']['database'] = {
             'status': 'unhealthy',
@@ -419,6 +420,7 @@ def setup(request):
         })
 
     except Exception as e:
+        logger.exception("Setup: erro na execução: %s", e)
         return JsonResponse({
             'status': 'error',
             'message': f'Erro no setup: {str(e)}'
@@ -1037,6 +1039,7 @@ class ImobiliariaCreateView(LoginRequiredMixin, CreateView):
                         principal=conta_data.get('principal', False),
                     )
             except (json.JSONDecodeError, Exception) as e:
+                logger.exception("Erro ao salvar contas bancárias na criação da imobiliária: %s", e)
                 messages.warning(self.request, f'Imobiliária criada, mas houve erro ao salvar contas bancárias: {e}')
 
         return redirect(self.success_url)
