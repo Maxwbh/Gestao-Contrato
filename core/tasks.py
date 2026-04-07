@@ -162,11 +162,13 @@ def processar_reajustes_sync():
                     )
 
             except Exception as e:
+                logger.exception("Erro no contrato %s: %s", contrato.numero_contrato, e)
                 result.add_error(f"Erro no contrato {contrato.numero_contrato}: {str(e)}")
 
         result.finish()
 
     except Exception as e:
+        logger.exception("Erro geral em processar_reajustes: %s", e)
         result.add_error(f"Erro geral: {str(e)}")
         result.finish(success=False)
 
@@ -231,11 +233,13 @@ Atenciosamente,
                     result.add_message(f"Notificação enviada para {comprador.email}")
 
             except Exception as e:
+                logger.exception("Erro ao notificar parcela %s: %s", parcela.id, e)
                 result.add_error(f"Erro ao notificar parcela {parcela.id}: {str(e)}")
 
         result.finish()
 
     except Exception as e:
+        logger.exception("Erro geral em notificar_vencimentos: %s", e)
         result.add_error(f"Erro geral: {str(e)}")
         result.finish(success=False)
 
@@ -267,6 +271,7 @@ def atualizar_status_parcelas_sync():
         result.finish()
 
     except Exception as e:
+        logger.exception("Erro em atualizar_status_parcelas: %s", e)
         result.add_error(f"Erro: {str(e)}")
         result.finish(success=False)
 
