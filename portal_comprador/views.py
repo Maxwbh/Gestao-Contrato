@@ -379,18 +379,18 @@ def meus_boletos(request):
     # Lista de contratos para o filtro
     contratos = Contrato.objects.filter(comprador=comprador)
 
-    # Estatísticas
+    # Estatísticas — single aggregate instead of 4 separate count() queries
+    _stats_qs = Parcela.objects.filter(contrato__comprador=comprador).aggregate(
+        total=Count('id'),
+        a_pagar=Count('id', filter=Q(pago=False, data_vencimento__gte=hoje)),
+        vencidos=Count('id', filter=Q(pago=False, data_vencimento__lt=hoje)),
+        pagos=Count('id', filter=Q(pago=True)),
+    )
     stats = {
-        'total': Parcela.objects.filter(contrato__comprador=comprador).count(),
-        'a_pagar': Parcela.objects.filter(
-            contrato__comprador=comprador, pago=False, data_vencimento__gte=hoje
-        ).count(),
-        'vencidos': Parcela.objects.filter(
-            contrato__comprador=comprador, pago=False, data_vencimento__lt=hoje
-        ).count(),
-        'pagos': Parcela.objects.filter(
-            contrato__comprador=comprador, pago=True
-        ).count(),
+        'total':  _stats_qs['total'] or 0,
+        'a_pagar': _stats_qs['a_pagar'] or 0,
+        'vencidos': _stats_qs['vencidos'] or 0,
+        'pagos':  _stats_qs['pagos'] or 0,
     }
 
     context = {
