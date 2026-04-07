@@ -788,7 +788,7 @@ function gerarBoletosSelecionados(force) {
     })
     .then(r => r.json())
     .then(data => {
-        if (btn) { btn.disabled = false; btn.innerHTML = btn.title ? '<i class="fas fa-redo me-1"></i> Forçar Regeneração' : '<i class="fas fa-barcode me-1"></i> Gerar Boletos'; }
+        if (btn) { btn.disabled = false; btn.innerHTML = force ? '<i class="fas fa-redo me-1"></i> Forçar Regeneração' : '<i class="fas fa-barcode me-1"></i> Gerar Boletos'; }
         let cls = data.erros > 0 ? 'alert-warning' : 'alert-success';
         let msg = `<strong><i class="fas fa-check-circle me-1"></i>${data.gerados} gerado(s)</strong>`;
         if (data.bloqueados) msg += ` &nbsp; <span class="text-warning">${data.bloqueados} bloqueado(s) por reajuste</span>`;
@@ -799,7 +799,7 @@ function gerarBoletosSelecionados(force) {
         window.parcelasGridApi.deselectAll();
     })
     .catch(err => {
-        if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-barcode me-1"></i> Gerar Boletos'; }
+        if (btn) { btn.disabled = false; btn.innerHTML = force ? '<i class="fas fa-redo me-1"></i> Forçar Regeneração' : '<i class="fas fa-barcode me-1"></i> Gerar Boletos'; }
         resultado.className = 'alert alert-danger';
         resultado.innerHTML = '<i class="fas fa-exclamation-triangle me-1"></i> Erro: ' + err.message;
     });
