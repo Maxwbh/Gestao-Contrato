@@ -1502,9 +1502,12 @@ class PrestacaoIntermediaria(TimeStampedModel):
 
         from financeiro.models import Parcela
 
+        # numero_parcela usa offset além das NORMAL para não conflitar com
+        # unique_together = [['contrato', 'numero_parcela']] da model Parcela.
+        numero_inter = self.contrato.numero_parcelas + self.numero_sequencial
         parcela = Parcela.objects.create(
             contrato=self.contrato,
-            numero_parcela=0,  # Intermediárias usam número 0 ou negativo
+            numero_parcela=numero_inter,
             data_vencimento=self.data_vencimento,
             valor_original=self.valor,
             valor_atual=self.valor_atual,
