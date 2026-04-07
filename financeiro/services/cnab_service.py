@@ -418,7 +418,7 @@ class CNABService:
                 parcelas_validas, conta_bancaria, numero_remessa, layout, valor_total
             )
         except Exception as e:
-            logger.error(f"Erro ao gerar remessa: {str(e)}")
+            logger.exception("Erro ao gerar remessa: %s", e)
             return {
                 'sucesso': False,
                 'erro': str(e)
@@ -638,7 +638,7 @@ class CNABService:
             arquivo_retorno.status = StatusArquivoRetorno.ERRO
             arquivo_retorno.erro_mensagem = str(e)
             arquivo_retorno.save()
-            logger.error(f"Erro ao processar retorno: {str(e)}")
+            logger.exception("Erro ao processar retorno: %s", e)
             return {
                 'sucesso': False,
                 'erro': str(e)
@@ -728,7 +728,7 @@ class CNABService:
 
                     except Exception as e:
                         registros_erro += 1
-                        logger.error(f"Erro ao processar linha de retorno: {str(e)}")
+                        logger.exception("Erro ao processar linha de retorno: %s", e)
 
             # Atualizar arquivo
             arquivo_retorno.total_registros = total_registros
@@ -855,7 +855,7 @@ class CNABService:
 
                     except Exception as e:
                         registros_erro += 1
-                        logger.error(f"Erro ao processar linha de retorno CNAB240: {str(e)}")
+                        logger.exception("Erro ao processar linha de retorno CNAB240: %s", e)
 
             # Atualizar arquivo
             arquivo_retorno.total_registros = total_registros
