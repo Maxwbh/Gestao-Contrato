@@ -71,6 +71,12 @@
             <td>Parcelas pagas</td>
             <td class="text-end fw-bold">R$ {{ resultado.valor_pago_parcelas|floatformat:2 }}</td>
           </tr>
+          {% if resultado.valor_pago_intermediarias %}
+          <tr>
+            <td>Intermediárias pagas</td>
+            <td class="text-end fw-bold">R$ {{ resultado.valor_pago_intermediarias|floatformat:2 }}</td>
+          </tr>
+          {% endif %}
           <tr class="table-success">
             <td><strong>Total pago</strong></td>
             <td class="text-end fw-bold">R$ {{ resultado.valor_pago_total|floatformat:2 }}</td>
