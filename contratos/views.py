@@ -1625,7 +1625,10 @@ class ContratoWizardView(LoginRequiredMixin, View):
             # Parse juros rows from POST
             juros_rows = []
             errors = []
-            count = int(request.POST.get('juros_count', 0))
+            try:
+                count = max(0, int(request.POST.get('juros_count', 0)))
+            except (ValueError, TypeError):
+                count = 0
             for i in range(count):
                 f = TabelaJurosForm({
                     'ciclo_inicio': request.POST.get(f'juros_{i}_ciclo_inicio'),
@@ -1679,7 +1682,10 @@ class ContratoWizardView(LoginRequiredMixin, View):
                 })
 
             elif modo == 'manual':
-                count = int(request.POST.get('inter_count', 0))
+                try:
+                    count = max(0, int(request.POST.get('inter_count', 0)))
+                except (ValueError, TypeError):
+                    count = 0
                 lista = []
                 errors = []
                 for i in range(count):
