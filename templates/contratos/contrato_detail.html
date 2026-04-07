@@ -2039,7 +2039,7 @@ function excluirReajuste(reajusteId, ciclo, percentual) {
 
 // ============ Q-04: TABELA DE JUROS ESCALANTES ============
 var urlTabelaJuros = "{% url 'contratos:api_tabela_juros' contrato.pk %}";
-var urlTabelaJurosDeleteBase = "{% url 'contratos:api_tabela_juros_delete' 9999999 %}".replace('/9999999/', '/');
+var urlTabelaJurosDeleteBase = "{% url 'contratos:api_tabela_juros_delete' 9999999 %}".replace('9999999/excluir/', '');
 
 function salvarFaixaJuros() {
     var cicloInicio = parseInt(document.getElementById('juros_ciclo_inicio').value) || 0;
