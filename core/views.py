@@ -424,7 +424,7 @@ def setup(request):
         return JsonResponse({
             'status': 'error',
             'message': f'Erro no setup: {str(e)}'
-        })
+        }, status=500)
 
 
 @require_http_methods(["GET", "POST"])
@@ -517,13 +517,14 @@ def gerar_dados_teste(request):
         })
 
     except Exception as e:
+        logger.exception("Erro ao gerar dados de teste: %s", e)
         import traceback
         return JsonResponse({
             'status': 'error',
             'message': 'Erro ao gerar dados',
             'error': str(e),
             'traceback': traceback.format_exc()
-        })
+        }, status=500)
 
 
 @require_http_methods(["GET", "POST", "DELETE"])
