@@ -1234,7 +1234,7 @@ def gerar_boleto_intermediaria(request, pk):
                 return JsonResponse({
                     'sucesso': False,
                     'erro': resultado.get('erro') if resultado else 'Erro ao gerar boleto'
-                }, status=500)
+                }, status=400)
         else:
             return JsonResponse({
                 'sucesso': True,
