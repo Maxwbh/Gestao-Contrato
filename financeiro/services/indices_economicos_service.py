@@ -57,13 +57,13 @@ class IBGEService:
             return response.json()
         except requests.Timeout:
             self.erros.append(f'Timeout ao acessar IBGE: {url}')
-            logger.error(f'Timeout IBGE: {url}')
+            logger.exception(f'Timeout IBGE: {url}')
         except requests.RequestException as e:
             self.erros.append(f'Erro ao acessar IBGE: {e}')
-            logger.error(f'Erro IBGE: {e}')
+            logger.exception(f'Erro IBGE: {e}')
         except ValueError as e:
             self.erros.append(f'Erro ao processar resposta IBGE: {e}')
-            logger.error(f'Erro JSON IBGE: {e}')
+            logger.exception(f'Erro JSON IBGE: {e}')
         return None
 
     def buscar_ipca_periodo(
@@ -117,7 +117,7 @@ class IBGEService:
                         })
         except (KeyError, ValueError, TypeError) as e:
             self.erros.append(f'Erro ao processar IPCA: {e}')
-            logger.error(f'Erro processamento IPCA: {e}')
+            logger.exception(f'Erro processamento IPCA: {e}')
 
         return sorted(resultados, key=lambda x: (x['ano'], x['mes']))
 
@@ -168,7 +168,7 @@ class IBGEService:
                         })
         except (KeyError, ValueError, TypeError) as e:
             self.erros.append(f'Erro ao processar INPC: {e}')
-            logger.error(f'Erro processamento INPC: {e}')
+            logger.exception(f'Erro processamento INPC: {e}')
 
         return sorted(resultados, key=lambda x: (x['ano'], x['mes']))
 
@@ -210,13 +210,13 @@ class BCBService:
             return response.json()
         except requests.Timeout:
             self.erros.append(f'Timeout ao acessar BCB: {url}')
-            logger.error(f'Timeout BCB: {url}')
+            logger.exception(f'Timeout BCB: {url}')
         except requests.RequestException as e:
             self.erros.append(f'Erro ao acessar BCB: {e}')
-            logger.error(f'Erro BCB: {e}')
+            logger.exception(f'Erro BCB: {e}')
         except ValueError as e:
             self.erros.append(f'Erro ao processar resposta BCB: {e}')
-            logger.error(f'Erro JSON BCB: {e}')
+            logger.exception(f'Erro JSON BCB: {e}')
         return None
 
     def buscar_indice_periodo(
@@ -274,7 +274,7 @@ class BCBService:
                         })
         except (KeyError, ValueError, TypeError) as e:
             self.erros.append(f'Erro ao processar {tipo_indice}: {e}')
-            logger.error(f'Erro processamento {tipo_indice}: {e}')
+            logger.exception(f'Erro processamento {tipo_indice}: {e}')
 
         return sorted(resultados, key=lambda x: (x['ano'], x['mes']))
 
