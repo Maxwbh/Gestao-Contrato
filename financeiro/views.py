@@ -1911,6 +1911,143 @@ def gerar_carne(request, contrato_id):
 
 
 @login_required
+def download_carne_pdf(request, contrato_id):
+    """
+    Gera e baixa o carnê em PDF para um contrato.
+
+    POST body JSON:
+        parcela_ids: list[int]  — IDs das parcelas a incluir no carnê
+        apenas_com_boleto: bool — se True, inclui só parcelas com boleto gerado (padrão False)
+
+    GET:  retorna JSON com parcelas disponíveis para carnê
+
+    Retorna: application/pdf (Content-Disposition: attachment)
+    """
+    import json as _json
+    from financeiro.services.carne_service import gerar_carne_pdf
+
+    contrato = get_object_or_404(Contrato, pk=contrato_id)
+
+    if request.method == 'GET':
+        # Lista parcelas elegíveis
+        parcelas = (
+            Parcela.objects.filter(contrato=contrato, pago=False, tipo_parcela='NORMAL')
+            .order_by('numero_parcela')
+            .values('id', 'numero_parcela', 'data_vencimento', 'valor_atual',
+                    'nosso_numero', 'linha_digitavel', 'status_boleto')
+        )
+        return JsonResponse({
+            'parcelas': [
+                {
+                    **p,
+                    'data_vencimento': str(p['data_vencimento']),
+                    'valor_atual': str(p['valor_atual']),
+                    'tem_boleto': bool(p['nosso_numero']),
+                }
+                for p in parcelas
+            ]
+        })
+
+    # POST — gerar PDF
+    try:
+        body = _json.loads(request.body)
+    except _json.JSONDecodeError:
+        return JsonResponse({'sucesso': False, 'erro': 'JSON inválido'}, status=400)
+
+    parcela_ids = body.get('parcela_ids', [])
+    apenas_com_boleto = body.get('apenas_com_boleto', False)
+
+    if not parcela_ids:
+        return JsonResponse({'sucesso': False, 'erro': 'Nenhuma parcela selecionada'}, status=400)
+
+    if len(parcela_ids) > 60:
+        return JsonResponse({'sucesso': False, 'erro': 'Máximo de 60 parcelas por carnê'}, status=400)
+
+    qs = Parcela.objects.filter(
+        pk__in=parcela_ids,
+        contrato=contrato,
+        tipo_parcela='NORMAL',
+    ).select_related('contrato__comprador', 'contrato__imovel', 'contrato__imobiliaria').order_by('numero_parcela')
+
+    if apenas_com_boleto:
+        qs = qs.exclude(nosso_numero='')
+
+    parcelas = list(qs)
+    if not parcelas:
+        return JsonResponse({'sucesso': False, 'erro': 'Nenhuma parcela válida encontrada'}, status=400)
+
+    try:
+        pdf_bytes = gerar_carne_pdf(parcelas, contrato)
+    except Exception as e:
+        logger.exception('Erro ao gerar carnê PDF contrato %s: %s', contrato_id, e)
+        return JsonResponse({'sucesso': False, 'erro': f'Erro ao gerar PDF: {e}'}, status=500)
+
+    filename = f"carne_{contrato.numero_contrato}_{len(parcelas)}parcelas.pdf"
+    response = HttpResponse(pdf_bytes, content_type='application/pdf')
+    response['Content-Disposition'] = f'attachment; filename="{filename}"'
+    return response
+
+
+@login_required
+@require_POST
+def download_carne_pdf_multiplos(request):
+    """
+    Gera carnê PDF consolidado para múltiplos contratos.
+
+    POST body JSON:
+        contratos: list[{contrato_id: int, parcela_ids: list[int]}]
+
+    Retorna: application/pdf com todos os carnês concatenados.
+    """
+    import json as _json
+    from financeiro.services.carne_service import gerar_carne_multiplos_contratos
+
+    try:
+        body = _json.loads(request.body)
+    except _json.JSONDecodeError:
+        return JsonResponse({'sucesso': False, 'erro': 'JSON inválido'}, status=400)
+
+    contratos_data = body.get('contratos', [])
+    if not contratos_data:
+        return JsonResponse({'sucesso': False, 'erro': 'Nenhum contrato informado'}, status=400)
+
+    if len(contratos_data) > 50:
+        return JsonResponse({'sucesso': False, 'erro': 'Máximo de 50 contratos por vez'}, status=400)
+
+    contratos_parcelas = []
+    for item in contratos_data:
+        cid = item.get('contrato_id')
+        pids = item.get('parcela_ids', [])
+        if not cid or not pids:
+            continue
+        try:
+            contrato = Contrato.objects.select_related(
+                'comprador', 'imovel', 'imobiliaria'
+            ).get(pk=cid)
+        except Contrato.DoesNotExist:
+            continue
+        parcelas = Parcela.objects.filter(
+            pk__in=pids, contrato=contrato, tipo_parcela='NORMAL'
+        ).order_by('numero_parcela')
+        contratos_parcelas.append({'contrato': contrato, 'parcelas': parcelas})
+
+    if not contratos_parcelas:
+        return JsonResponse({'sucesso': False, 'erro': 'Nenhum dado válido encontrado'}, status=400)
+
+    try:
+        pdf_bytes = gerar_carne_multiplos_contratos(contratos_parcelas)
+    except Exception as e:
+        logger.exception('Erro ao gerar carnê multiplos: %s', e)
+        return JsonResponse({'sucesso': False, 'erro': f'Erro ao gerar PDF: {e}'}, status=500)
+
+    total = sum(len(list(c['parcelas'])) for c in contratos_parcelas)
+    filename = f"carnes_{len(contratos_parcelas)}contratos_{total}parcelas.pdf"
+    response = HttpResponse(pdf_bytes, content_type='application/pdf')
+    response['Content-Disposition'] = f'attachment; filename="{filename}"'
+    return response
+
+
+@login_required
 @require_GET
 def api_parcelas_elegibilidade(request, contrato_id):
     """
