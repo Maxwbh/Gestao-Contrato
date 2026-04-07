@@ -666,7 +666,8 @@ def importar_indices_ibge(request):
         })
 
     except Exception as e:
-        return JsonResponse({'success': False, 'error': str(e)})
+        logger.exception("Erro ao importar indices: %s", e)
+        return JsonResponse({'success': False, 'error': str(e)}, status=500)
 
 
 def _buscar_ipca_ibge(ano_inicio, mes_inicio):
@@ -716,7 +717,7 @@ def _buscar_ipca_ibge(ano_inicio, mes_inicio):
             })
 
     except Exception as e:
-        print(f"Erro ao buscar IPCA: {e}")
+        logger.exception("Erro ao buscar IPCA: %s", e)
 
     return indices
 
@@ -756,7 +757,7 @@ def _buscar_igpm_bcb(ano_inicio, mes_inicio):
             })
 
     except Exception as e:
-        print(f"Erro ao buscar IGP-M: {e}")
+        logger.exception("Erro ao buscar IGP-M: %s", e)
 
     return indices
 
@@ -796,7 +797,7 @@ def _buscar_selic_bcb(ano_inicio, mes_inicio):
             })
 
     except Exception as e:
-        print(f"Erro ao buscar SELIC: {e}")
+        logger.exception("Erro ao buscar SELIC: %s", e)
 
     return indices
 
@@ -831,7 +832,7 @@ def _buscar_incc_bcb(ano_inicio, mes_inicio):
             })
 
     except Exception as e:
-        print(f"Erro ao buscar INCC: {e}")
+        logger.exception("Erro ao buscar INCC: %s", e)
 
     return indices
 
@@ -866,7 +867,7 @@ def _buscar_igpdi_bcb(ano_inicio, mes_inicio):
             })
 
     except Exception as e:
-        print(f"Erro ao buscar IGP-DI: {e}")
+        logger.exception("Erro ao buscar IGP-DI: %s", e)
 
     return indices
 
@@ -911,7 +912,7 @@ def _buscar_inpc_ibge(ano_inicio, mes_inicio):
             })
 
     except Exception as e:
-        print(f"Erro ao buscar INPC: {e}")
+        logger.exception("Erro ao buscar INPC: %s", e)
 
     return indices
 
@@ -946,7 +947,7 @@ def _buscar_tr_bcb(ano_inicio, mes_inicio):
             })
 
     except Exception as e:
-        print(f"Erro ao buscar TR: {e}")
+        logger.exception("Erro ao buscar TR: %s", e)
 
     return indices
 
