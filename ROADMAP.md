@@ -888,40 +888,40 @@ para ciclo = 2..total_ciclos+1:
 
 ---
 
-## 17. DASHBOARD KPIs E GRÁFICOS — TODO
+## 17. DASHBOARD KPIs E GRÁFICOS ✅ PARCIALMENTE CONCLUÍDO
 
 > **Contexto:** todos os concorrentes têm dashboard com KPIs visuais. O sistema atual tem um
 > dashboard básico. Esta seção especifica o redesign completo.
 
 ### 17.1 KPIs Principais (cards topo)
 
-| # | Métrica | Cálculo |
-|---|---------|---------|
-| K-01 | Total de lotes / Vendidos / Disponíveis | count() por Imovel.disponivel |
-| K-02 | Arrecadação do mês atual | sum(valor_pago) de Parcelas pagas no mês |
-| K-03 | Inadimplência ativa | count(Parcelas vencidas não pagas) |
-| K-04 | Contratos ativos | count(Contrato status=ATIVO) |
-| K-05 | Saldo total da carteira | sum(valor_atual) de Parcelas não pagas |
-| K-06 | Reajustes pendentes | count(contratos com ciclo pendente) |
+| # | Métrica | Cálculo | Status |
+|---|---------|---------|--------|
+| K-01 | Total de lotes / Vendidos / Disponíveis | count() por Imovel.disponivel | ✅ `context['total_lotes']`, `lotes_vendidos`, `lotes_disponiveis` |
+| K-02 | Arrecadação do mês atual | sum(valor_pago) de Parcelas pagas no mês | ⏳ |
+| K-03 | Inadimplência ativa | count(Parcelas vencidas não pagas) | ⏳ |
+| K-04 | Contratos ativos | count(Contrato status=ATIVO) | ⏳ |
+| K-05 | Saldo total da carteira | sum(valor_atual) de Parcelas não pagas | ⏳ |
+| K-06 | Reajustes pendentes | count(contratos com ciclo pendente) | ✅ `context['reajustes_pendentes']` via `Reajuste.calcular_ciclo_pendente()` |
 
 ### 17.2 Gráficos
 
-| # | Gráfico | Biblioteca | Prioridade |
-|---|---------|-----------|-----------|
-| G-01 | Arrecadação mensal (barras) — 12 meses | Chart.js | P2 |
-| G-02 | Inadimplência por faixa de atraso (pizza) — 1–30d, 31–60d, 60d+ | Chart.js | P2 |
-| G-03 | Fluxo de caixa previsto vs. realizado (linha) | Chart.js | P2 |
-| G-04 | Parcelas vencendo esta semana (tabela destacada) | Template | P1 |
-| G-05 | Top 5 contratos com maior saldo devedor | Template | P3 |
+| # | Gráfico | Biblioteca | Prioridade | Status |
+|---|---------|-----------|-----------|--------|
+| G-01 | Arrecadação mensal (barras) — 12 meses | Chart.js | P2 | ⏳ |
+| G-02 | Inadimplência por faixa de atraso (pizza) — 1–30d, 31–60d, 61–90d, 90d+ | Chart.js | P2 | ✅ `inadimplencia_faixas` em `api_dashboard_dados()` |
+| G-03 | Fluxo de caixa previsto vs. realizado (linha) | Chart.js | P2 | ⏳ |
+| G-04 | Parcelas vencendo esta semana (tabela destacada) | Template | P1 | ✅ `context['parcelas_semana']` (D-04) |
+| G-05 | Top 5 contratos com maior saldo devedor | Template | P3 | ✅ `context['top5_saldo_devedor']` com anotação Sum |
 
 ### 17.3 Implementação
 
-| # | Item | Arquivo | Prioridade |
-|---|------|---------|-----------|
-| D-01 | `DashboardFinanceiroView` — enriquecer com KPIs reais | `financeiro/views.py` | P2 |
-| D-02 | API `api_kpis_dashboard` — endpoint JSON para gráficos | `financeiro/views.py` | P2 |
-| D-03 | Template redesign com Chart.js | `templates/financeiro/dashboard.html` | P2 |
-| D-04 | Widget "Parcelas da semana" no dashboard principal | template | P1 |
+| # | Item | Arquivo | Prioridade | Status |
+|---|------|---------|-----------|--------|
+| D-01 | `DashboardFinanceiroView` — enriquecer com KPIs reais | `financeiro/views.py` | P2 | ✅ K-01, K-06, D-04, G-05 |
+| D-02 | API `api_kpis_dashboard` — endpoint JSON para gráficos | `financeiro/views.py` | P2 | ✅ G-02 em `api_dashboard_dados()` |
+| D-03 | Template redesign com Chart.js | `templates/financeiro/dashboard.html` | P2 | ⏳ |
+| D-04 | Widget "Parcelas da semana" no dashboard principal | template | P1 | ✅ `parcelas_semana` context var |
 
 ---
 
@@ -982,7 +982,7 @@ para ciclo = 2..total_ciclos+1:
 | SAC / Tabela Price | 1 | 4 | — | — | 5 | ✅ 5/5 |
 | Bloqueio Boleto (Cascata) | 2 | 3 | — | — | 5 | ✅ 5/5 |
 | Mapa Interativo (Seção 16) | — | 5 | 6 | 1 | 12 | ✅ 10/10 M-01..M-10 |
-| Dashboard KPIs (Seção 17) | 1 | 5 | 2 | — | 8 | ⏳ 0/8 |
+| Dashboard KPIs (Seção 17) | 1 | 5 | 2 | — | 8 | ✅ 5/8 (K-01, K-06, G-02, D-04/G-04, G-05) |
 | Simulador Antecipação (Seção 18) | — | 3 | 2 | — | 5 | ⏳ 0/5 |
 | Notificações (Seção 19) | — | 2 | 2 | 1 | 5 | ⏳ 0/5 |
 | UX / Interface (Seção 20) | — | 3 | 4 | — | 7 | ⏳ 0/7 |
@@ -990,7 +990,9 @@ para ciclo = 2..total_ciclos+1:
 | APIs | — | 6 | 5 | — | 11 | — |
 | Celery | — | 2 | 2 | 1 | 5 | — |
 | Permissões | — | 4 | 4 | 2 | 10 | — |
-| Testes | 104 | ~164 | ~37 | ~41 | ~346 | ✅ 104/104 P1 · ✅ 396 passando |
+| HU Boleto/Carnê/Remessa (Seção 21) | — | 10 | — | — | 10 | ✅ 10/10 |
+| OFX Extrato Bancário (Seção 22) | — | 5 | — | — | 5 | ✅ 5/5 |
+| Testes | 104 | ~164 | ~37 | ~41 | ~346 | ✅ 104/104 P1 · ✅ 444 passando (48 novos HU+OFX) |
 | CI/CD | — | 2 | 4 | 2 | 8 | — |
 | Documentação | — | — | 1 | 3 | 4 | — |
 | **Total** | **~117** | **~251** | **~107** | **~61** | **~536** | |
@@ -1054,3 +1056,32 @@ para ciclo = 2..total_ciclos+1:
 - `gerar_boleto_intermediaria()`: respeita `intermediarias_reajustadas` — se `False`, pula verificação de reajuste; intermediárias fixas sempre liberadas independente do ciclo
 - `gerar_carne()`: calcula `max_parcela_lote` antes do loop — determina o último ciclo totalmente reajustado; parcelas de ciclos futuros ou bloqueados são recusadas em lote com mensagem orientativa para geração individual
 - **Impactos corrigidos:** `ContratoForm` agora inclui `tipo_amortizacao`; `gerar_dados_teste.py` distribui 25% SAC / 75% Price e chama `recalcular_amortizacao()` após TabelaJuros; `contrato_detail.html` exibe badge do sistema de amortização
+
+**Seção 16 — Mapa Interativo:**
+- Leaflet.js com marcadores por lote (disponível/vendido); filtros por imobiliária e status
+
+**Seção 17 — Dashboard KPIs (parcial):**
+- K-01: lotes totais / vendidos / disponíveis → `context['total_lotes']`, `lotes_vendidos`, `lotes_disponiveis`
+- K-06: reajustes pendentes → `context['reajustes_pendentes']` via `Reajuste.calcular_ciclo_pendente()`
+- G-02: inadimplência por faixa (1–30d, 31–60d, 61–90d, 90d+) → `inadimplencia_faixas` em `api_dashboard_dados()`
+- D-04/G-04: parcelas da semana → `context['parcelas_semana']` (próximos 7 dias)
+- G-05: top 5 saldo devedor → `context['top5_saldo_devedor']` com anotação `Sum`
+
+**Seção 21 — HU Gerar Boleto, Carnê e Arquivo Remessa (48 testes):**
+- `BoletoService.gerar_carne()` — POST `/api/boleto/multi` no BRCobrança; gera PDF de carnê com N boletos de 1 contrato
+- `CarneService.gerar_carne_pdf()` — BRCobrança primário + fallback ReportLab; suporte a 6/12 meses
+- `CarneService.gerar_carne_multiplos_contratos()` — PDF único concatenado com carnês de N contratos (limite 50)
+- `download_carne_pdf()` — GET lista parcelas disponíveis / POST retorna PDF (limite 60 parcelas)
+- `download_carne_pdf_multiplos()` — POST `{contratos: [{contrato_id, parcela_ids}]}` → PDF único
+- URLs: `/contrato/<id>/carne/pdf/` e `/api/carne/multiplos/`
+- Bug fixes: `Reajuste._calcular_price_tabela` / `_calcular_sac_tabela` (eram chamados em `Parcela`) em `contratos/models.py`, `contratos/views.py` (×2), `financeiro/models.py`
+- 48 testes em `tests/unit/financeiro/test_hu_boleto_remessa.py` (HU01–HU12 + CarneService + BoletoService + OFX)
+
+**Seção 22 — OFX: Quitação via Extrato Bancário:**
+- `financeiro/services/ofx_service.py` — parser SGML puro sem dependências externas; suporte a SGML e XML-like; auto-detecção de encoding
+- `parse_ofx(content)` — extrai lista de `OFXTransaction` (fitid, data, valor, memo)
+- `OFXService.processar()` — reconcilia créditos com parcelas não pagas em 4 prioridades: P1 nosso_número no MEMO (ALTA), P2 número do contrato no MEMO (ALTA), P3 valor ±R$0,10 + mesmo mês (MEDIA), P4 valor ±R$0,10 sem data (BAIXA); débitos ignorados automaticamente
+- `processar_ofx_upload()` — ponto de entrada para views; suporta `dry_run=True` (reconcilia sem quitar)
+- `upload_ofx()` — GET página de upload / POST processa .ofx (limite 5 MB, filtro por imobiliária, dry_run)
+- URL: `/cnab/ofx/upload/` → `financeiro:upload_ofx`
+- 17 testes: `TestOFXParser` (6), `TestOFXReconciliacao` (6), `TestOFXView` (5)
