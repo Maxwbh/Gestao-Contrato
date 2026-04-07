@@ -1129,6 +1129,7 @@ class BoletoService:
                 if len(parts) != 3:
                     erros.append("Data de vencimento em formato invalido")
         except Exception as e:
+            logger.exception("Erro ao validar data do boleto: %s", e)
             erros.append(f"Erro ao validar data: {e}")
 
         # Validar numero_documento conforme regras por banco (configuravel)
