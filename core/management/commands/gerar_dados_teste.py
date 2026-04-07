@@ -1399,7 +1399,7 @@ class Command(BaseCommand):
           aleatório realista para não bloquear os dados de teste.
         """
         from dateutil.relativedelta import relativedelta
-        from contratos.models import IndiceReajuste
+        from contratos.models import IndiceReajuste, TabelaJurosContrato
 
         count = 0
         hoje = timezone.now().date()
@@ -1445,8 +1445,11 @@ class Command(BaseCommand):
                 if percentual_bruto is None:
                     percentual_bruto = Decimal(str(round(random.uniform(3.5, 6.5), 4)))
 
-                # Aplicar spread do contrato (índice composto)
-                spread = contrato.spread_reajuste or Decimal('0')
+                # Aplicar spread do contrato (índice composto).
+                # Em modo TABELA PRICE (TabelaJurosContrato presente), spread NÃO é adicionado
+                # ao índice — a taxa de financiamento vem da tabela, não do spread_reajuste.
+                tem_tabela = TabelaJurosContrato.objects.filter(contrato=contrato).exists()
+                spread = Decimal('0') if tem_tabela else (contrato.spread_reajuste or Decimal('0'))
                 percentual_com_spread = percentual_bruto + spread
 
                 # Aplicar teto e piso configurados no contrato
