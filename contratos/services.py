@@ -72,7 +72,7 @@ class IndiceEconomicoService:
                 logger.info(f"Índice {tipo} cacheado com sucesso")
                 return resultado
         except Exception as e:
-            logger.error(f"Erro ao buscar índice {tipo}: {e}")
+            logger.exception("Erro ao buscar índice %s: %s", tipo, e)
 
         return None
 
@@ -121,7 +121,7 @@ class IndiceEconomicoService:
             cache.set(cache_key, resultado, CACHE_TIMEOUT)
             return resultado
         except Exception as e:
-            logger.error(f"Erro ao buscar índices do período: {e}")
+            logger.exception("Erro ao buscar índices do período: %s", e)
             return []
 
     @classmethod
