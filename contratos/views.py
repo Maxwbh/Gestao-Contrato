@@ -294,17 +294,65 @@ class ContratoDetailView(LoginRequiredMixin, DetailView):
             }
 
         # Verificar status de cada parcela para geração de boleto
+        # Batch: prefetch applied reajuste cycles once to avoid N+1 queries
         parcelas_status_boleto = []
-        for parcela in context['parcelas']:
-            if hasattr(contrato, 'pode_gerar_boleto'):
-                pode_gerar, motivo = contrato.pode_gerar_boleto(parcela.numero_parcela)
-            else:
-                pode_gerar, motivo = True, "Liberado"
-            parcelas_status_boleto.append({
-                'parcela': parcela,
-                'pode_gerar_boleto': pode_gerar,
-                'motivo_bloqueio': motivo if not pode_gerar else '',
-            })
+        if hasattr(contrato, 'pode_gerar_boleto'):
+            from financeiro.models import Reajuste as ReajusteModel
+            from django.utils import timezone as _tz
+            from dateutil.relativedelta import relativedelta as _rdelta
+            from contratos.models import TipoCorrecao as _TC
+
+            _hoje = _tz.now().date()
+            _prazo = contrato.prazo_reajuste_meses or 12
+            _fixo = contrato.tipo_correcao == _TC.FIXO
+
+            # Single query: all applied cycles for this contract
+            _applied_cycles = set(
+                ReajusteModel.objects.filter(contrato=contrato, aplicado=True)
+                .values_list('ciclo', flat=True)
+            )
+
+            # Find first blocked cycle (done once, not per parcela)
+            _blocked_cycle = None
+            _blocked_msg = ''
+            if not _fixo:
+                for _c in range(2, 9999):
+                    _data = contrato.data_contrato + _rdelta(months=(_c - 1) * _prazo)
+                    if _hoje < _data:
+                        break  # future cycle — stop
+                    if _c not in _applied_cycles:
+                        _blocked_cycle = _c
+                        _blocked_msg = (
+                            f"Reajuste do ciclo {_c} pendente desde "
+                            f"{_data.strftime('%d/%m/%Y')}. "
+                            f"Execute o reajuste antes de gerar boletos."
+                        )
+                        break
+
+            for parcela in context['parcelas']:
+                if _fixo:
+                    pode_gerar, motivo = True, "Índice FIXO — sem necessidade de reajuste."
+                else:
+                    _ciclo_parcela = (parcela.numero_parcela - 1) // _prazo + 1
+                    if _ciclo_parcela <= 1:
+                        pode_gerar, motivo = True, "Primeiro ciclo — liberado."
+                    elif _blocked_cycle is not None and _blocked_cycle <= _ciclo_parcela:
+                        pode_gerar, motivo = False, _blocked_msg
+                    else:
+                        pode_gerar = True
+                        motivo = f"Reajuste do ciclo {_ciclo_parcela} aplicado."
+                parcelas_status_boleto.append({
+                    'parcela': parcela,
+                    'pode_gerar_boleto': pode_gerar,
+                    'motivo_bloqueio': motivo if not pode_gerar else '',
+                })
+        else:
+            for parcela in context['parcelas']:
+                parcelas_status_boleto.append({
+                    'parcela': parcela,
+                    'pode_gerar_boleto': True,
+                    'motivo_bloqueio': '',
+                })
         context['parcelas_status_boleto'] = parcelas_status_boleto
 
         # =====================================================================
