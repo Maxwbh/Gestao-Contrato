@@ -5,7 +5,7 @@ Desenvolvedor: Maxwell da Silva Oliveira
 Email: maxwbh@gmail.com
 Empresa: M&S do Brasil LTDA
 """
-from django.db import models
+from django.db import models, transaction
 from django.core.validators import MinValueValidator
 from django.core.exceptions import ValidationError
 from django.utils import timezone
@@ -1342,6 +1342,7 @@ class Reajuste(TimeStampedModel):
         if errors:
             raise ValidationError(errors)
 
+    @transaction.atomic
     def aplicar_reajuste(self):
         """
         Aplica o reajuste nas parcelas especificadas.
