@@ -537,96 +537,134 @@ blockquote { border-left: 5px solid var(--secondary-color); margin: 1rem 0; padd
 /* ========================================================================
    MATERIALIZE — NAVBAR & SIDENAV CUSTOMIZAÇÃO
    ======================================================================== */
+/* ── Navbar principal ───────────────────────────────────────────────────── */
 nav.app-navbar {
-    background-color: var(--primary-color);
-    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-    height: 60px;
-    line-height: 60px;
+    background: linear-gradient(135deg, #1a252f 0%, #2c3e50 100%);
+    box-shadow: 0 3px 14px rgba(0,0,0,0.25);
+    height: 62px;
+    line-height: 62px;
 }
 nav.app-navbar .brand-logo {
     color: #fff;
     font-weight: 700;
-    font-size: 1.3rem;
+    font-size: 1.25rem;
     padding-left: 1rem;
+    letter-spacing: -0.2px;
 }
+/* Links do 1º nível (itens do menu principal) */
 nav.app-navbar ul a {
-    color: rgba(255,255,255,0.9);
-    font-weight: 500;
-    font-size: 0.92rem;
-    transition: background 0.2s ease;
+    color: rgba(255,255,255,0.88);
+    font-weight: 600;
+    font-size: 0.88rem;
+    letter-spacing: 0.2px;
+    transition: background 0.18s ease, color 0.18s ease;
+    border-bottom: 3px solid transparent;
 }
 nav.app-navbar ul a:hover {
-    background: rgba(255,255,255,0.12);
+    background: rgba(255,255,255,0.10);
     color: #fff;
+    border-bottom-color: rgba(52,152,219,0.7);
 }
 nav.app-navbar .sidenav-trigger {
     color: #fff;
 }
+
+/* ── Dropdown (sub-menus) ───────────────────────────────────────────────── */
 .app-dropdown {
     min-width: 240px;
-    border-radius: 8px;
-    box-shadow: 0 4px 16px rgba(0,0,0,0.18);
+    border-radius: 0 0 10px 10px;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.16);
     overflow: hidden;
     background-color: #fff !important;
+    border-top: 3px solid var(--secondary-color);
 }
-/* Specificity boost: uses element selector to beat nav.app-navbar ul a (0-1-3) */
+
+/* Itens clicáveis do sub-menu — visualmente distintos do menu principal */
 ul.app-dropdown li > a,
 ul.dropdown-content.app-dropdown li > a {
-    color: #2c3e50 !important;
-    font-size: 0.9rem;
-    padding: 10px 18px;
-    transition: background 0.15s;
+    color: #34495e !important;
+    font-size: 0.88rem;
+    font-weight: 400;
+    padding: 9px 18px 9px 22px;   /* indent para separar de headers */
+    transition: background 0.13s, color 0.13s;
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: 9px;
     background-color: transparent;
+    border-left: 3px solid transparent;
 }
 ul.app-dropdown li > a:hover,
 ul.dropdown-content.app-dropdown li > a:hover {
-    background: #ecf0f1 !important;
-    color: #3498db !important;
-}
-.app-dropdown .dropdown-header-item {
-    color: #888 !important;
-    font-size: 0.78rem !important;
-    font-weight: 600 !important;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-    cursor: default;
-    pointer-events: none;
-    background: transparent !important;
-}
-.app-dropdown .divider {
-    background: #eee;
-    height: 1px;
-    margin: 4px 0;
+    background: #eaf4fb !important;
+    color: var(--secondary-color) !important;
+    border-left-color: var(--secondary-color);
 }
 
-.sidenav {
-    background: #fff;
-    width: 280px;
-}
-.sidenav .subheader {
-    color: #888;
-    font-size: 0.75rem;
-    font-weight: 700;
+/* Cabeçalhos de grupo dentro do dropdown (não clicáveis) */
+.app-dropdown .dropdown-header-item {
+    color: #fff !important;
+    background: #34495e !important;
+    font-size: 0.72rem !important;
+    font-weight: 700 !important;
     text-transform: uppercase;
     letter-spacing: 0.8px;
-    padding: 12px 16px 4px;
+    padding: 6px 16px !important;
     cursor: default;
     pointer-events: none;
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    border-left: 3px solid var(--secondary-color) !important;
 }
+/* Itens sob um header ficam levemente indentados */
+.app-dropdown li + li:has(.dropdown-header-item) {
+    margin-top: 0;
+}
+.app-dropdown .divider {
+    background: #e8edf0;
+    height: 1px;
+    margin: 3px 0;
+}
+
+/* ── Sidenav (mobile) ───────────────────────────────────────────────────── */
+.sidenav {
+    background: #fff;
+    width: 285px;
+    box-shadow: 3px 0 16px rgba(0,0,0,0.18);
+}
+/* Cabeçalhos de seção — visivelmente diferentes dos itens */
+.sidenav .subheader {
+    background: #f0f3f6;
+    color: #5d6d7e;
+    font-size: 0.70rem;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    padding: 8px 16px 6px;
+    margin-top: 4px;
+    cursor: default;
+    pointer-events: none;
+    border-left: 4px solid var(--secondary-color);
+}
+/* Itens normais do sidenav */
 .sidenav li > a {
-    color: var(--dark-text);
-    font-size: 0.92rem;
-    padding: 0 16px;
-    height: 44px;
-    line-height: 44px;
-    transition: background 0.15s;
+    color: #2c3e50;
+    font-size: 0.9rem;
+    font-weight: 400;
+    padding: 0 16px 0 20px;
+    height: 42px;
+    line-height: 42px;
+    transition: background 0.15s, color 0.15s, border-left 0.15s;
+    border-left: 3px solid transparent;
 }
 .sidenav li > a:hover {
-    background: var(--light-bg);
+    background: #eaf4fb;
     color: var(--secondary-color);
+    border-left-color: var(--secondary-color);
+}
+.sidenav .divider {
+    margin: 4px 0;
+    background: #e8edf0;
 }
 .sidenav .brand-logo-text {
     font-size: 1.1rem;
