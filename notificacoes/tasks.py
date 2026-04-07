@@ -100,7 +100,7 @@ def criar_notificacao_vencimento(parcela, tipo_notificacao):
 
     # Renderizar template ou usar mensagem padrão
     if template:
-        assunto, mensagem = template.renderizar(contexto)
+        assunto, mensagem, _ = template.renderizar(contexto)
     else:
         assunto = f"Parcela {parcela.numero_parcela}/{parcela.contrato.numero_parcelas} a vencer"
         mensagem = (
@@ -170,7 +170,7 @@ def processar_notificacoes_pendentes():
                 erros += 1
 
         except Exception as e:
-            logger.error(f"Erro ao processar notificação {notificacao.id}: {str(e)}")
+            logger.exception("Erro ao processar notificação %s: %s", notificacao.id, e)
             notificacao.marcar_erro(str(e))
             erros += 1
 
@@ -213,5 +213,5 @@ def reenviar_notificacao(notificacao_id):
         logger.error(f"Notificação {notificacao_id} não encontrada")
         return False
     except Exception as e:
-        logger.error(f"Erro ao reenviar notificação {notificacao_id}: {str(e)}")
+        logger.exception("Erro ao reenviar notificação %s: %s", notificacao_id, e)
         return False
