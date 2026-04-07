@@ -72,6 +72,11 @@ urlpatterns = [
     path('cnab/remessa/<int:pk>/marcar-enviada/', views.marcar_remessa_enviada, name='marcar_remessa_enviada'),
     path('cnab/remessa/<int:pk>/download/', views.download_arquivo_remessa, name='download_remessa'),
 
+    # ==========================================================================
+    # OFX — Importação de Extrato Bancário
+    # ==========================================================================
+    path('cnab/ofx/upload/', views.upload_ofx, name='upload_ofx'),
+
     # CNAB - Arquivos de Retorno
     path('cnab/retorno/', views.listar_arquivos_retorno, name='listar_retornos'),
     path('cnab/retorno/upload/', views.upload_arquivo_retorno, name='upload_retorno'),
