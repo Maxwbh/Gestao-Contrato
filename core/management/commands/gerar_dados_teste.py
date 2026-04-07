@@ -1052,23 +1052,10 @@ class Command(BaseCommand):
         # Usar compradores disponíveis (últimos da lista, não usados nos contratos aleatórios)
         pool = list(compradores[-5:]) if len(compradores) >= 5 else list(compradores)
 
-        # Criar um imóvel dedicado para cada cenário
-        imovel_base_args = dict(
-            imobiliaria=imob,
-            tipo=TipoImovel.objects.filter(imobiliaria=imob).first(),
-            area=Decimal('300.00'),
-            cidade='Sete Lagoas',
-            estado='MG',
-            status='DISPONIVEL',
-        )
-
-        from core.models import TipoImovel as TI
-
         def _imovel(sufixo, area='300.00'):
-            tipo_imovel = TI.objects.filter(imobiliaria=imob).first()
             return Imovel.objects.create(
                 imobiliaria=imob,
-                tipo=tipo_imovel,
+                tipo=TipoImovel.LOTE,
                 codigo=f'CENARIO-{sufixo}',
                 area=Decimal(area),
                 logradouro='Rua dos Cenários',
