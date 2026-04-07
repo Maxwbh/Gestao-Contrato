@@ -912,6 +912,7 @@ class IndiceEconomicoService:
                         atualizados += 1
 
             except Exception as e:
+                logger.exception("Erro ao salvar indice no banco: %s", e)
                 erros += 1
                 self.erros.append(str(e))
 
