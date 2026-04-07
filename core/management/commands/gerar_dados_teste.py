@@ -1056,15 +1056,15 @@ class Command(BaseCommand):
             return Imovel.objects.create(
                 imobiliaria=imob,
                 tipo=TipoImovel.LOTE,
-                codigo=f'CENARIO-{sufixo}',
+                identificacao=f'Cenário {sufixo}',
                 area=Decimal(area),
                 logradouro='Rua dos Cenários',
                 numero=sufixo,
                 bairro='Distrito de Testes',
                 cidade='Sete Lagoas',
                 estado='MG',
-                status='VENDIDO',
-                descricao=f'Imóvel de cenário de teste {sufixo}',
+                disponivel=False,
+                observacoes=f'Imóvel de cenário de teste HU {sufixo}',
             )
 
         def _comprador(idx):
