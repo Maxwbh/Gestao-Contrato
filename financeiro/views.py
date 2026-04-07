@@ -3380,11 +3380,17 @@ class RelatorioPrestacoesAPagarView(LoginRequiredMixin, TemplateView):
         if imobiliaria_id:
             filtro.imobiliaria_id = int(imobiliaria_id)
         if data_inicio:
-            from datetime import datetime
-            filtro.data_inicio = datetime.strptime(data_inicio, '%Y-%m-%d').date()
+            try:
+                from datetime import datetime
+                filtro.data_inicio = datetime.strptime(data_inicio, '%Y-%m-%d').date()
+            except ValueError:
+                pass
         if data_fim:
-            from datetime import datetime
-            filtro.data_fim = datetime.strptime(data_fim, '%Y-%m-%d').date()
+            try:
+                from datetime import datetime
+                filtro.data_fim = datetime.strptime(data_fim, '%Y-%m-%d').date()
+            except ValueError:
+                pass
 
         # Gerar relatório
         service = RelatorioService()
@@ -3430,11 +3436,17 @@ class RelatorioPrestacoesPageasView(LoginRequiredMixin, TemplateView):
         if imobiliaria_id:
             filtro.imobiliaria_id = int(imobiliaria_id)
         if data_inicio:
-            from datetime import datetime
-            filtro.data_inicio = datetime.strptime(data_inicio, '%Y-%m-%d').date()
+            try:
+                from datetime import datetime
+                filtro.data_inicio = datetime.strptime(data_inicio, '%Y-%m-%d').date()
+            except ValueError:
+                pass
         if data_fim:
-            from datetime import datetime
-            filtro.data_fim = datetime.strptime(data_fim, '%Y-%m-%d').date()
+            try:
+                from datetime import datetime
+                filtro.data_fim = datetime.strptime(data_fim, '%Y-%m-%d').date()
+            except ValueError:
+                pass
 
         # Gerar relatório
         service = RelatorioService()
@@ -3566,11 +3578,17 @@ def exportar_relatorio(request, tipo):
     if imobiliaria_id:
         filtro.imobiliaria_id = int(imobiliaria_id)
     if data_inicio:
-        from datetime import datetime
-        filtro.data_inicio = datetime.strptime(data_inicio, '%Y-%m-%d').date()
+        try:
+            from datetime import datetime
+            filtro.data_inicio = datetime.strptime(data_inicio, '%Y-%m-%d').date()
+        except ValueError:
+            pass
     if data_fim:
-        from datetime import datetime
-        filtro.data_fim = datetime.strptime(data_fim, '%Y-%m-%d').date()
+        try:
+            from datetime import datetime
+            filtro.data_fim = datetime.strptime(data_fim, '%Y-%m-%d').date()
+        except ValueError:
+            pass
 
     # Gerar relatório
     service = RelatorioService()
@@ -4151,15 +4169,21 @@ def api_parcelas_lista(request):
         queryset = queryset.filter(pago=False, data_vencimento__lt=hoje)
 
     if data_inicio:
-        from datetime import datetime
-        queryset = queryset.filter(
-            data_vencimento__gte=datetime.strptime(data_inicio, '%Y-%m-%d').date()
-        )
+        try:
+            from datetime import datetime
+            queryset = queryset.filter(
+                data_vencimento__gte=datetime.strptime(data_inicio, '%Y-%m-%d').date()
+            )
+        except ValueError:
+            pass
     if data_fim:
-        from datetime import datetime
-        queryset = queryset.filter(
-            data_vencimento__lte=datetime.strptime(data_fim, '%Y-%m-%d').date()
-        )
+        try:
+            from datetime import datetime
+            queryset = queryset.filter(
+                data_vencimento__lte=datetime.strptime(data_fim, '%Y-%m-%d').date()
+            )
+        except ValueError:
+            pass
 
     total = queryset.count()
     offset = (page - 1) * per_page
@@ -5034,11 +5058,17 @@ def _filtrar_parcelas_periodo(qs, request, hoje):
         qs = qs.filter(pago=False, data_vencimento__gte=hoje)
 
     if data_inicio:
-        from datetime import datetime as dt
-        qs = qs.filter(data_vencimento__gte=dt.strptime(data_inicio, '%Y-%m-%d').date())
+        try:
+            from datetime import datetime as dt
+            qs = qs.filter(data_vencimento__gte=dt.strptime(data_inicio, '%Y-%m-%d').date())
+        except ValueError:
+            pass  # Invalid date format — ignore filter
     if data_fim:
-        from datetime import datetime as dt
-        qs = qs.filter(data_vencimento__lte=dt.strptime(data_fim, '%Y-%m-%d').date())
+        try:
+            from datetime import datetime as dt
+            qs = qs.filter(data_vencimento__lte=dt.strptime(data_fim, '%Y-%m-%d').date())
+        except ValueError:
+            pass  # Invalid date format — ignore filter
     return qs
 
 
