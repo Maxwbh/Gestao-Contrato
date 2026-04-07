@@ -10,6 +10,9 @@ from django.core.validators import MinValueValidator, MaxValueValidator
 from django.core.exceptions import ValidationError
 from django.utils import timezone
 from decimal import Decimal
+import logging
+
+logger = logging.getLogger(__name__)
 from dateutil.relativedelta import relativedelta
 from core.models import TimeStampedModel, Imovel, Comprador, Imobiliaria
 
@@ -809,6 +812,7 @@ class Contrato(TimeStampedModel):
                     'nosso_numero': resultado.get('nosso_numero', '') if resultado else '',
                 })
             except Exception as e:
+                logger.exception("Erro ao gerar boleto parcela %s: %s", parcela.numero_parcela, e)
                 resultados.append({
                     'parcela': parcela.numero_parcela,
                     'sucesso': False,

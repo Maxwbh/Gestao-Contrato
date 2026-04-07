@@ -47,7 +47,7 @@ def processar_reajustes_pendentes():
                 reajustados += 1
         except Exception as e:
             erros += 1
-            logger.error(f"Erro no reajuste automático do contrato {contrato.numero_contrato}: {e}")
+            logger.exception("Erro no reajuste automático do contrato %s: %s", contrato.numero_contrato, e)
 
     logger.info(
         f"Reajustes automáticos: {processados} contratos verificados, "
@@ -74,7 +74,7 @@ def aplicar_reajuste_automatico(contrato_id, ciclo=None):
     try:
         contrato = Contrato.objects.select_related('comprador', 'imobiliaria').get(id=contrato_id)
     except Contrato.DoesNotExist:
-        logger.error(f"Contrato {contrato_id} não encontrado para reajuste automático.")
+        logger.exception(f"Contrato {contrato_id} não encontrado para reajuste automático.")
         return False
 
     if contrato.tipo_correcao == TipoCorrecao.FIXO:
@@ -91,7 +91,7 @@ def aplicar_reajuste_automatico(contrato_id, ciclo=None):
     try:
         preview = Reajuste.preview_reajuste(contrato, ciclo)
     except Exception as e:
-        logger.error(f"Contrato {contrato.numero_contrato}: erro ao calcular preview ciclo {ciclo}: {e}")
+        logger.exception("Contrato %s: erro ao calcular preview ciclo %s: %s", contrato.numero_contrato, ciclo, e)
         return False
 
     if 'erro' in preview:
@@ -221,7 +221,7 @@ def buscar_indices_economicos():
             else:
                 resultados['erro'].append({'tipo': tipo, 'erro': 'Nenhum dado retornado'})
         except Exception as e:
-            logger.error(f"Erro ao buscar índice {tipo}: {e}")
+            logger.exception("Erro ao buscar índice %s: %s", tipo, e)
             resultados['erro'].append({'tipo': tipo, 'erro': str(e)})
 
     logger.info(f"Busca de índices concluída. Sucesso: {len(resultados['sucesso'])}, Erros: {len(resultados['erro'])}")
@@ -270,7 +270,7 @@ def verificar_alertas_reajuste():
             )
             alertas_enviados += 1
         except Exception as e:
-            logger.error(f"Erro ao enviar alerta para contrato {contrato.numero_contrato}: {e}")
+            logger.exception("Erro ao enviar alerta para contrato %s: %s", contrato.numero_contrato, e)
 
     resultado = {
         'total_pendentes': len(contratos_pendentes),
@@ -331,7 +331,7 @@ Por favor, aplique o reajuste para liberar a geração de boletos.
             return True
 
     except Exception as e:
-        logger.error(f"Erro ao enviar alerta de reajuste: {e}")
+        logger.exception("Erro ao enviar alerta de reajuste: %s", e)
         return False
 
 
@@ -409,7 +409,7 @@ def gerar_boletos_automaticos():
                 'status': 'erro',
                 'motivo': str(e)
             })
-            logger.error(f"Erro ao gerar boleto da parcela {parcela.id}: {e}")
+            logger.exception(f"Erro ao gerar boleto da parcela {parcela.id}: {e}")
 
     logger.info(
         f"Geração automática concluída: {resultados['gerados']} gerados, "
@@ -453,7 +453,7 @@ def enviar_lembretes_vencimento():
                 enviar_lembrete_parcela.delay(parcela.id, dias)
                 lembretes_enviados += 1
             except Exception as e:
-                logger.error(f"Erro ao agendar lembrete para parcela {parcela.id}: {e}")
+                logger.exception("Erro ao agendar lembrete para parcela %s: %s", parcela.id, e)
 
     logger.info(f"Lembretes agendados: {lembretes_enviados}")
 
@@ -515,9 +515,9 @@ Atenciosamente,
             return True
 
     except Parcela.DoesNotExist:
-        logger.error(f"Parcela {parcela_id} não encontrada")
+        logger.exception(f"Parcela {parcela_id} não encontrada")
     except Exception as e:
-        logger.error(f"Erro ao enviar lembrete: {e}")
+        logger.exception("Erro ao enviar lembrete: %s", e)
 
     return False
 
@@ -553,7 +553,7 @@ def processar_arquivos_retorno_pendentes():
 
         except Exception as e:
             erros += 1
-            logger.error(f"Erro ao processar arquivo de retorno {arquivo.id}: {e}")
+            logger.exception(f"Erro ao processar arquivo de retorno {arquivo.id}: {e}")
 
     logger.info(f"Retornos processados: {processados}, Erros: {erros}")
 

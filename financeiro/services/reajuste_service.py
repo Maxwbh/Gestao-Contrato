@@ -620,7 +620,7 @@ class ReajusteService:
                 return resultado
 
         except Exception as e:
-            logger.error(f"Erro ao aplicar reajuste: {e}")
+            logger.exception("Erro ao aplicar reajuste: %s", e)
             return {
                 'sucesso': False,
                 'erro': str(e)
@@ -832,6 +832,7 @@ class IndiceEconomicoService:
             return resultado
 
         except Exception as e:
+            logger.exception("Erro ao buscar BCB: %s", e)
             self.erros.append(f"Erro ao buscar BCB: {e}")
             return []
 
@@ -911,6 +912,7 @@ class IndiceEconomicoService:
                         atualizados += 1
 
             except Exception as e:
+                logger.exception("Erro ao salvar indice no banco: %s", e)
                 erros += 1
                 self.erros.append(str(e))
 
