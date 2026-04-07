@@ -393,6 +393,35 @@
         };
     };
 
+    // Bootstrap.Tab shim → ativa aba via data-bs-toggle="tab"
+    bootstrap.Tab = function(el) {
+        return {
+            show: function() {
+                if (!el) return;
+                var target = el.getAttribute('data-bs-target') || el.getAttribute('href');
+                if (!target) return;
+                var pane = document.querySelector(target);
+                if (!pane) return;
+                var tabContent = pane.closest('.tab-content');
+                if (tabContent) {
+                    tabContent.querySelectorAll('.tab-pane').forEach(function(p) {
+                        p.classList.remove('show', 'active');
+                    });
+                }
+                var navList = el.closest('[role="tablist"]') || el.closest('.nav');
+                if (navList) {
+                    navList.querySelectorAll('[data-bs-toggle="tab"], [data-bs-toggle="pill"]').forEach(function(t) {
+                        t.classList.remove('active');
+                        t.setAttribute('aria-selected', 'false');
+                    });
+                }
+                pane.classList.add('show', 'active');
+                el.classList.add('active');
+                el.setAttribute('aria-selected', 'true');
+            }
+        };
+    };
+
     // ================================================================
     // GLOBAL TOAST & ERROR MODAL
     // ================================================================
