@@ -2432,6 +2432,13 @@ def aplicar_reajuste_contrato(request, contrato_id):
     """
     contrato = get_object_or_404(Contrato, pk=contrato_id)
 
+    # V-08: Contratos FIXO não têm reajuste periódico
+    if contrato.tipo_correcao == 'FIXO':
+        return JsonResponse({
+            'sucesso': False,
+            'erro': 'Contratos com índice FIXO são pré-fixados e não possuem reajuste periódico.'
+        }, status=400)
+
     # Capturar IP do usuário
     def get_client_ip(req):
         x_forwarded = req.META.get('HTTP_X_FORWARDED_FOR')
