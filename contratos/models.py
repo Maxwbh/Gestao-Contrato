@@ -1190,11 +1190,14 @@ class Contrato(TimeStampedModel):
         )
         meses_ocupados = max(0, meses_ocupados)
 
-        # Valores pagos
+        # Valores pagos (entrada + parcelas normais + intermediárias quitadas)
         total_pago_parcelas = self.parcelas.filter(pago=True).aggregate(
             total=Sum('valor_pago')
         )['total'] or Decimal('0.00')
-        total_pago = (self.valor_entrada or Decimal('0.00')) + total_pago_parcelas
+        total_pago_intermediarias = self.intermediarias.filter(paga=True).aggregate(
+            total=Sum('valor_pago')
+        )['total'] or Decimal('0.00')
+        total_pago = (self.valor_entrada or Decimal('0.00')) + total_pago_parcelas + total_pago_intermediarias
 
         # Encargos de rescisão calculados sobre o saldo atualizado
         pct_fruicao = (self.percentual_fruicao or Decimal('0.5000')) / Decimal('100')
@@ -1215,6 +1218,7 @@ class Contrato(TimeStampedModel):
             'valor_pago_total': total_pago,
             'valor_entrada': self.valor_entrada or Decimal('0.00'),
             'valor_pago_parcelas': total_pago_parcelas,
+            'valor_pago_intermediarias': total_pago_intermediarias,
             'percentual_fruicao': self.percentual_fruicao or Decimal('0.5000'),
             'fruicao': fruicao,
             'percentual_multa_penal': self.percentual_multa_rescisao_penal or Decimal('10.0000'),
