@@ -210,7 +210,7 @@ def reenviar_notificacao(notificacao_id):
             return False
 
     except Notificacao.DoesNotExist:
-        logger.error(f"Notificação {notificacao_id} não encontrada")
+        logger.exception(f"Notificação {notificacao_id} não encontrada")
         return False
     except Exception as e:
         logger.exception("Erro ao reenviar notificação %s: %s", notificacao_id, e)
