@@ -1010,7 +1010,7 @@ class Reajuste(TimeStampedModel):
         if n <= 0:
             return []
         i = taxa_mensal_pct / Decimal('100')
-        pmt = Parcela._calcular_pmt(pv, taxa_mensal_pct, n)
+        pmt = Reajuste._calcular_pmt(pv, taxa_mensal_pct, n)
         tabela = []
         saldo = pv
         for k in range(n):
@@ -1264,6 +1264,30 @@ class Reajuste(TimeStampedModel):
                 if p.tem_boleto:
                     boletos_emitidos.append(p.numero_parcela)
 
+        # Preview das intermediárias do ciclo (se contrato.intermediarias_reajustadas)
+        detalhes_intermediarias = []
+        valor_inter_anterior_total = Decimal('0')
+        valor_inter_novo_total = Decimal('0')
+        if contrato.intermediarias_reajustadas:
+            fator_inter = 1 + (percentual_com_caps / 100)
+            intermediarias_qs = contrato.intermediarias.filter(
+                paga=False,
+                mes_vencimento__gte=parcela_inicial,
+                mes_vencimento__lte=parcela_final,
+            ).order_by('mes_vencimento')
+            for inter in intermediarias_qs:
+                novo_valor_inter = (inter.valor_atual * fator_inter).quantize(Decimal('0.01'))
+                detalhes_intermediarias.append({
+                    'numero_sequencial': inter.numero_sequencial,
+                    'mes_vencimento': inter.mes_vencimento,
+                    'data_vencimento': inter.data_vencimento,
+                    'valor_atual': inter.valor_atual,
+                    'valor_novo': novo_valor_inter,
+                    'diferenca': novo_valor_inter - inter.valor_atual,
+                })
+                valor_inter_anterior_total += inter.valor_atual
+                valor_inter_novo_total += novo_valor_inter
+
         return {
             'ciclo': ciclo,
             'indice_tipo': indice_tipo,
@@ -1289,6 +1313,12 @@ class Reajuste(TimeStampedModel):
             'valor_novo_total': valor_novo_total,
             'diferenca_total': valor_novo_total - valor_anterior_total,
             'boletos_emitidos': boletos_emitidos,
+            # Intermediárias afetadas pelo reajuste deste ciclo
+            'intermediarias': detalhes_intermediarias,
+            'total_intermediarias': len(detalhes_intermediarias),
+            'valor_inter_anterior_total': valor_inter_anterior_total,
+            'valor_inter_novo_total': valor_inter_novo_total,
+            'diferenca_inter_total': valor_inter_novo_total - valor_inter_anterior_total,
         }
 
     def clean(self):

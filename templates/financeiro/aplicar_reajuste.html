@@ -343,6 +343,45 @@
                     </div>
                 </div>
 
+                {% if preview.total_intermediarias %}
+                <div class="card-footer border-top pt-3">
+                    <details open>
+                        <summary class="small fw-semibold mb-2" style="cursor:pointer;">
+                            <i class="fas fa-layer-group me-1"></i>
+                            Intermediárias afetadas ({{ preview.total_intermediarias }})
+                            — impacto total:
+                            <span class="text-primary">
+                                {% if preview.diferenca_inter_total >= 0 %}+{% endif %}R$ {{ preview.diferenca_inter_total|floatformat:2 }}
+                            </span>
+                        </summary>
+                        <table class="table table-sm mb-0" style="font-size:0.82rem;">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>#</th>
+                                    <th>Mês</th>
+                                    <th>Vencimento</th>
+                                    <th class="text-end">Valor Atual</th>
+                                    <th class="text-end text-success">Valor Novo</th>
+                                    <th class="text-end">Diferença</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for inter in preview.intermediarias %}
+                                <tr>
+                                    <td class="font-monospace">{{ inter.numero_sequencial }}</td>
+                                    <td class="font-monospace">{{ inter.mes_vencimento }}</td>
+                                    <td>{{ inter.data_vencimento|date:"d/m/Y" }}</td>
+                                    <td class="text-end font-monospace">R$ {{ inter.valor_atual|floatformat:2 }}</td>
+                                    <td class="text-end font-monospace text-success fw-bold">R$ {{ inter.valor_novo|floatformat:2 }}</td>
+                                    <td class="text-end font-monospace text-primary">+R$ {{ inter.diferenca|floatformat:2 }}</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </details>
+                </div>
+                {% endif %}
+
                 {% if reajustes_anteriores %}
                 <div class="card-footer">
                     <details>

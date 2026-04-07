@@ -1489,7 +1489,7 @@ def api_preview_parcelas(request):
         inter_mes = {int(r['mes_vencimento']): D(str(r['valor'])) for r in inter_list}
 
         # Gerar tabela de amortização para primeiros 24 períodos
-        from financeiro.models import Parcela as _P
+        from financeiro.models import Reajuste as _P
         juros_ciclo1 = get_juros_ciclo(1)
         preview_count = min(numero_parcelas, 24)
 
@@ -1822,7 +1822,7 @@ class ContratoWizardView(LoginRequiredMixin, View):
                 break
 
         if numero_parcelas > 0:
-            from financeiro.models import Parcela as _P
+            from financeiro.models import Reajuste as _P
             if tipo_amortizacao == 'SAC':
                 # PMT do primeiro período SAC (o maior)
                 tabela = _P._calcular_sac_tabela(base_pmt, taxa_ciclo1, numero_parcelas)
@@ -2088,7 +2088,40 @@ def api_tabela_juros_contrato(request, pk):
 @login_required
 @require_http_methods(["DELETE"])
 def api_tabela_juros_delete(request, pk):
-    """DELETE → remove uma faixa de juros pelo ID."""
+    """DELETE → remove uma faixa de juros pelo ID.
+
+    Recalcula amortização das parcelas após a remoção para manter
+    consistência entre TabelaJurosContrato e valores das parcelas.
+    Bloqueia se o contrato já possui reajustes aplicados (parcelas
+    reajustadas não devem ser recalculadas retroativamente).
+    """
+    from financeiro.models import Reajuste
     entry = get_object_or_404(TabelaJurosContrato, pk=pk)
+    contrato = entry.contrato
+
+    # Guard: impede exclusão se reajuste já foi aplicado no contrato.
+    # Recalcular amortização após reajustes aplicados corromperia os valores.
+    if Reajuste.objects.filter(contrato=contrato, aplicado=True).exists():
+        return JsonResponse({
+            'sucesso': False,
+            'erro': (
+                'Não é possível excluir faixas de juros após reajustes terem sido aplicados. '
+                'Os valores das parcelas já foram corrigidos e não podem ser recalculados retroativamente.'
+            )
+        }, status=400)
+
     entry.delete()
+
+    # Recalcula amortização: se ainda há faixas, aplica PMT pela nova tabela;
+    # se removeu todas as faixas, `get_juros_para_ciclo` retorna None e
+    # recalcular_amortizacao() usa taxa=0 (amortização linear).
+    if contrato.parcelas.exists():
+        base_pv = contrato.valor_financiado
+        if contrato.intermediarias_reduzem_pmt:
+            soma = contrato.intermediarias.aggregate(
+                total=Sum('valor')
+            )['total'] or Decimal('0')
+            base_pv = max(base_pv - soma, Decimal('0.01'))
+        contrato.recalcular_amortizacao(base_pv=base_pv)
+
     return JsonResponse({'sucesso': True})
