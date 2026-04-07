@@ -1255,10 +1255,13 @@ def gerar_boleto_intermediaria(request, pk):
             ultimo_dia = calendar.monthrange(data_vencimento.year, data_vencimento.month)[1]
             data_vencimento = data_vencimento.replace(day=min(dia_vencimento, ultimo_dia))
 
-        # Criar parcela vinculada
+        # Criar parcela vinculada.
+        # numero_parcela usa offset além das NORMAL para não conflitar com
+        # unique_together = [['contrato', 'numero_parcela']] na model Parcela.
+        numero_inter = contrato.numero_parcelas + intermediaria.numero_sequencial
         parcela = Parcela.objects.create(
             contrato=contrato,
-            numero_parcela=intermediaria.mes_vencimento,
+            numero_parcela=numero_inter,
             data_vencimento=data_vencimento,
             valor_original=intermediaria.valor,
             valor_atual=intermediaria.valor_reajustado or intermediaria.valor,
