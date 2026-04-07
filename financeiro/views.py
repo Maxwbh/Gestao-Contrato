@@ -1937,8 +1937,6 @@ def api_parcelas_elegibilidade(request, contrato_id):
 
 @login_required
 @require_POST
-@login_required
-@require_POST
 def api_gerar_boletos_parcelas(request):
     """
     Gera boletos para uma lista de parcelas selecionadas individualmente.
@@ -4606,7 +4604,7 @@ def api_boletos_revalidar(request):
             # Agência e conta corrente básicos
             if not (conta.agencia or '').strip():
                 erros_parcela.append('Agência bancária ausente')
-            if not (conta.conta_corrente or '').strip():
+            if not (conta.conta or '').strip():
                 erros_parcela.append('Conta corrente ausente')
 
             # CNPJ da imobiliária
