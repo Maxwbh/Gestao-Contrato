@@ -74,7 +74,7 @@ def aplicar_reajuste_automatico(contrato_id, ciclo=None):
     try:
         contrato = Contrato.objects.select_related('comprador', 'imobiliaria').get(id=contrato_id)
     except Contrato.DoesNotExist:
-        logger.error(f"Contrato {contrato_id} não encontrado para reajuste automático.")
+        logger.exception(f"Contrato {contrato_id} não encontrado para reajuste automático.")
         return False
 
     if contrato.tipo_correcao == TipoCorrecao.FIXO:
@@ -409,7 +409,7 @@ def gerar_boletos_automaticos():
                 'status': 'erro',
                 'motivo': str(e)
             })
-            logger.error(f"Erro ao gerar boleto da parcela {parcela.id}: {e}")
+            logger.exception(f"Erro ao gerar boleto da parcela {parcela.id}: {e}")
 
     logger.info(
         f"Geração automática concluída: {resultados['gerados']} gerados, "
@@ -515,7 +515,7 @@ Atenciosamente,
             return True
 
     except Parcela.DoesNotExist:
-        logger.error(f"Parcela {parcela_id} não encontrada")
+        logger.exception(f"Parcela {parcela_id} não encontrada")
     except Exception as e:
         logger.exception("Erro ao enviar lembrete: %s", e)
 
@@ -553,7 +553,7 @@ def processar_arquivos_retorno_pendentes():
 
         except Exception as e:
             erros += 1
-            logger.error(f"Erro ao processar arquivo de retorno {arquivo.id}: {e}")
+            logger.exception(f"Erro ao processar arquivo de retorno {arquivo.id}: {e}")
 
     logger.info(f"Retornos processados: {processados}, Erros: {erros}")
 
