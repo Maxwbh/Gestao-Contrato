@@ -57,6 +57,27 @@ class DashboardFinanceiroView(LoginRequiredMixin, TemplateView):
         if imobiliaria_selecionada:
             parcelas_qs = parcelas_qs.filter(contrato__imobiliaria=imobiliaria_selecionada)
 
+        # K-01: Lotes
+        from core.models import Imovel
+        imoveis_qs = Imovel.objects.all()
+        if imobiliaria_selecionada:
+            imoveis_qs = imoveis_qs.filter(imobiliaria=imobiliaria_selecionada)
+        context['total_lotes'] = imoveis_qs.count()
+        context['lotes_disponiveis'] = imoveis_qs.filter(disponivel=True).count()
+        context['lotes_vendidos'] = imoveis_qs.filter(disponivel=False).count()
+
+        # K-06: Reajustes pendentes
+        contratos_nao_fixo = contratos_qs.filter(
+            status=StatusContrato.ATIVO
+        ).exclude(tipo_correcao='FIXO').only(
+            'tipo_correcao', 'prazo_reajuste_meses', 'data_contrato', 'ciclo_reajuste_atual'
+        )
+        reajustes_pendentes = sum(
+            1 for c in contratos_nao_fixo
+            if Reajuste.calcular_ciclo_pendente(c) is not None
+        )
+        context['reajustes_pendentes'] = reajustes_pendentes
+
         # Estatísticas de Contratos
         context['total_contratos'] = contratos_qs.count()
         context['contratos_ativos'] = contratos_qs.filter(status=StatusContrato.ATIVO).count()
@@ -119,6 +140,33 @@ class DashboardFinanceiroView(LoginRequiredMixin, TemplateView):
         # Top 10 contratos com mais atraso
         context['contratos_mais_atraso'] = self._get_contratos_mais_atraso(
             contratos_qs, limite=10
+        )
+
+        # D-04: Parcelas vencendo esta semana
+        fim_semana = hoje + timedelta(days=7)
+        context['parcelas_semana'] = (
+            parcelas_qs.filter(
+                pago=False,
+                data_vencimento__gte=hoje,
+                data_vencimento__lte=fim_semana,
+                tipo_parcela='NORMAL',
+            )
+            .select_related('contrato__comprador', 'contrato__imovel')
+            .order_by('data_vencimento')[:20]
+        )
+
+        # G-05: Top 5 contratos com maior saldo devedor estimado (soma valor_atual parcelas NORMAL não pagas)
+        context['top5_saldo_devedor'] = (
+            contratos_qs.filter(status=StatusContrato.ATIVO)
+            .annotate(
+                saldo_est=Sum(
+                    'parcelas__valor_atual',
+                    filter=Q(parcelas__pago=False, parcelas__tipo_parcela='NORMAL')
+                )
+            )
+            .filter(saldo_est__isnull=False)
+            .select_related('comprador', 'imovel')
+            .order_by('-saldo_est')[:5]
         )
 
         # Imobiliárias e selecionada
@@ -289,11 +337,39 @@ def api_dashboard_dados(request):
             'valor_total': float(agg['total_valor'] or 0),
         })
 
+    # G-02: Inadimplência por faixa de atraso
+    inadimplencia_faixas = {
+        'labels': ['1–30 dias', '31–60 dias', '61–90 dias', '90+ dias'],
+        'data': [
+            parcelas_qs.filter(
+                pago=False,
+                data_vencimento__gte=hoje - timedelta(days=30),
+                data_vencimento__lt=hoje
+            ).count(),
+            parcelas_qs.filter(
+                pago=False,
+                data_vencimento__gte=hoje - timedelta(days=60),
+                data_vencimento__lt=hoje - timedelta(days=30)
+            ).count(),
+            parcelas_qs.filter(
+                pago=False,
+                data_vencimento__gte=hoje - timedelta(days=90),
+                data_vencimento__lt=hoje - timedelta(days=60)
+            ).count(),
+            parcelas_qs.filter(
+                pago=False,
+                data_vencimento__lt=hoje - timedelta(days=90)
+            ).count(),
+        ],
+        'colors': ['#ffc107', '#fd7e14', '#dc3545', '#6f1212'],
+    }
+
     return JsonResponse({
         'status_parcelas': status_parcelas,
         'status_contratos': status_contratos,
         'recebimentos_mensais': recebimentos_mensais,
         'inadimplencia_mensal': inadimplencia_mensal,
+        'inadimplencia_faixas': inadimplencia_faixas,
         'vencimentos_proximos': vencimentos_proximos,
     })
 
