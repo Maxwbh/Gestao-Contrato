@@ -487,6 +487,7 @@ def registrar_pagamento(request, pk):
             messages.success(request, 'Pagamento registrado com sucesso!')
             return redirect('financeiro:detalhe_parcela', pk=pk)
         except Exception as e:
+            logger.exception("Erro ao registrar pagamento parcela pk=%s: %s", pk, e)
             messages.error(request, f'Erro ao registrar pagamento: {str(e)}')
 
     context = {
@@ -976,6 +977,7 @@ def gerar_boletos_contrato(request, contrato_id):
                         'erro': resultado.get('erro') if resultado else 'Erro desconhecido'
                     })
             except Exception as e:
+                logger.exception('Erro ao gerar boleto parcela pk=%s: %s', parcela.id, e)
                 erros += 1
                 resultados.append({
                     'parcela_id': parcela.id,
@@ -1795,6 +1797,7 @@ def gerar_carne(request, contrato_id):
                         'erro': resultado.get('erro') if resultado else 'Erro desconhecido'
                     })
             except Exception as e:
+                logger.exception('Erro ao gerar boleto parcela pk=%s: %s', parcela.id, e)
                 erros += 1
                 resultados.append({
                     'parcela_id': parcela.id,
@@ -2123,6 +2126,7 @@ def api_gerar_boletos_lote(request):
                             'erro': resultado.get('erro') if resultado else 'Erro desconhecido'
                         })
                 except Exception as e:
+                    logger.exception('Erro ao gerar boleto parcela pk=%s em lote: %s', parcela.id, e)
                     total_erros += 1
                     parcelas_resultado.append({
                         'parcela_id': parcela.id,
@@ -2670,6 +2674,7 @@ def aplicar_reajuste_lote(request):
                 desconto_valor=desconto_valor,
             )
         except Exception as e:
+            logger.exception('Erro no preview reajuste contrato %s: %s', contrato_id, e)
             resultados.append({
                 'contrato_id': contrato_id,
                 'numero_contrato': contrato.numero_contrato,
@@ -4511,6 +4516,7 @@ def api_boletos_lote(request):
                     erros += 1
                     resultados.append({'parcela_id': parcela.id, 'sucesso': False, 'erro': res.get('erro') if res else 'Erro'})
             except Exception as e:
+                logger.exception('Erro ao gerar boleto parcela pk=%s: %s', parcela.id, e)
                 erros += 1
                 resultados.append({'parcela_id': parcela.id, 'sucesso': False, 'erro': str(e)})
 

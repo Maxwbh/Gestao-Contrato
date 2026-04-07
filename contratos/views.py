@@ -1501,7 +1501,8 @@ def api_preview_parcelas(request):
         })
 
     except Exception as e:
-        return JsonResponse({'sucesso': False, 'erro': str(e)}, status=400)
+        logger.exception("Erro ao calcular preview de parcelas: %s", e)
+        return JsonResponse({'sucesso': False, 'erro': str(e)}, status=500)
 
 
 # =============================================================================
@@ -1724,8 +1725,7 @@ class ContratoWizardView(LoginRequiredMixin, View):
                 )
                 return redirect('contratos:detalhe', pk=contrato.pk)
             except Exception as e:
-                import logging
-                logging.getLogger(__name__).exception('Erro ao salvar wizard')
+                logger.exception('Erro ao salvar wizard: %s', e)
                 messages.error(request, f'Erro ao criar contrato: {e}')
                 return redirect('contratos:wizard', step='preview')
 
