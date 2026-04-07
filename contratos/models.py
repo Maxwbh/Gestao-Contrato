@@ -5,7 +5,7 @@ Desenvolvedor: Maxwell da Silva Oliveira
 Email: maxwbh@gmail.com
 Empresa: M&S do Brasil LTDA
 """
-from django.db import models
+from django.db import models, transaction
 from django.core.validators import MinValueValidator, MaxValueValidator
 from django.core.exceptions import ValidationError
 from django.utils import timezone
@@ -675,6 +675,7 @@ class Contrato(TimeStampedModel):
         if not self.parcelas.exists():
             self.gerar_parcelas()
 
+    @transaction.atomic
     def gerar_parcelas(self, ate_mes_atual=False):
         """
         Gera as parcelas do contrato
@@ -724,6 +725,7 @@ class Contrato(TimeStampedModel):
 
         return parcelas_criadas
 
+    @transaction.atomic
     def recalcular_amortizacao(self, base_pv=None):
         """
         Recalcula valor_original, valor_atual, amortizacao e juros_embutido
