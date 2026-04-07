@@ -715,15 +715,14 @@ def dashboard_imobiliaria(request, imobiliaria_id):
 
     for contrato in contratos.filter(status=StatusContrato.ATIVO):
         # Verificar se tem bloqueio de reajuste
-        if hasattr(contrato, 'verificar_bloqueio_reajuste'):
-            bloqueio_info = contrato.verificar_bloqueio_reajuste()
-            if bloqueio_info.get('bloqueado'):
-                contratos_com_boleto_bloqueado.append({
-                    'contrato': contrato,
-                    'ciclo_atual': bloqueio_info.get('ciclo_atual', 1),
-                    'ciclo_pendente': bloqueio_info.get('ciclo_pendente'),
-                    'motivo': bloqueio_info.get('motivo', ''),
-                })
+        # verificar_bloqueio_reajuste() retorna bool (True = bloqueado)
+        if hasattr(contrato, 'verificar_bloqueio_reajuste') and contrato.verificar_bloqueio_reajuste():
+            contratos_com_boleto_bloqueado.append({
+                'contrato': contrato,
+                'ciclo_atual': 1,
+                'ciclo_pendente': None,
+                'motivo': '',
+            })
 
         # Verificar reajuste pendente
         if hasattr(contrato, 'data_ultimo_reajuste') and hasattr(contrato, 'prazo_reajuste_meses'):
@@ -3150,12 +3149,11 @@ class DashboardContabilidadeView(LoginRequiredMixin, TemplateView):
             contratos_imob = contratos_qs.filter(imobiliaria=imob)
 
             # Contar contratos com bloqueio por reajuste
-            contratos_bloqueados = 0
-            for contrato in contratos_imob.filter(status=StatusContrato.ATIVO):
-                if hasattr(contrato, 'verificar_bloqueio_reajuste'):
-                    bloqueio_info = contrato.verificar_bloqueio_reajuste()
-                    if bloqueio_info.get('bloqueado'):
-                        contratos_bloqueados += 1
+            # verificar_bloqueio_reajuste() retorna bool (True = bloqueado)
+            contratos_bloqueados = sum(
+                1 for contrato in contratos_imob.filter(status=StatusContrato.ATIVO)
+                if hasattr(contrato, 'verificar_bloqueio_reajuste') and contrato.verificar_bloqueio_reajuste()
+            )
 
             stats = {
                 'imobiliaria': imob,

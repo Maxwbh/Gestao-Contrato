@@ -282,16 +282,18 @@ class ContratoDetailView(LoginRequiredMixin, DetailView):
         # =====================================================================
         # CONTROLE DE BLOQUEIO DE BOLETO POR REAJUSTE
         # =====================================================================
-        if hasattr(contrato, 'verificar_bloqueio_reajuste'):
-            bloqueio_info = contrato.verificar_bloqueio_reajuste()
-            context['bloqueio_reajuste'] = bloqueio_info
-        else:
-            context['bloqueio_reajuste'] = {
-                'bloqueado': False,
-                'motivo': '',
-                'ciclo_atual': 1,
-                'ciclo_pendente': None,
-            }
+        # verificar_bloqueio_reajuste() retorna bool (True = bloqueado)
+        _bloqueado = (
+            contrato.verificar_bloqueio_reajuste()
+            if hasattr(contrato, 'verificar_bloqueio_reajuste')
+            else False
+        )
+        context['bloqueio_reajuste'] = {
+            'bloqueado': bool(_bloqueado),
+            'motivo': '',
+            'ciclo_atual': 1,
+            'ciclo_pendente': None,
+        }
 
         # Verificar status de cada parcela para geração de boleto
         # Batch: prefetch applied reajuste cycles once to avoid N+1 queries
