@@ -2853,6 +2853,7 @@ def obter_indice_reajuste(request):
             })
 
     except Exception as e:
+        logger.exception("Erro ao obter indice reajuste: %s", e)
         return JsonResponse({
             'sucesso': False,
             'erro': str(e)
