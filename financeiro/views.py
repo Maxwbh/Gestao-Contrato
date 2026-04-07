@@ -3622,6 +3622,7 @@ def exportar_relatorio(request, tipo):
             content_type = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
             extensao = 'xlsx'
         except ImportError as e:
+            logger.exception("Biblioteca openpyxl não disponível para exportação Excel: %s", e)
             return HttpResponse(str(e), status=500)
     elif formato == 'pdf':
         try:
@@ -3629,6 +3630,7 @@ def exportar_relatorio(request, tipo):
             content_type = 'application/pdf'
             extensao = 'pdf'
         except ImportError as e:
+            logger.exception("Biblioteca reportlab não disponível para exportação PDF: %s", e)
             return HttpResponse(str(e), status=500)
     else:
         conteudo = service.exportar_para_csv(relatorio)
