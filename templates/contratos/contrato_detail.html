@@ -1849,34 +1849,41 @@ function gerarBoleto(parcelaId, btn) {
 
     // Mostrar loading no botao
     var originalHtml = btn.innerHTML;
-    btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
+    var restoreBtn = function() {
+        btn.innerHTML = originalHtml;
+        btn.classList.remove('btn-loading');
+        btn.disabled = false;
+    };
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Gerando...';
     btn.classList.add('btn-loading');
     btn.disabled = true;
+
+    // Timeout de 120s — BRCobrança pode estar em cold start no Render
+    var controller = new AbortController();
+    var timeoutId = setTimeout(function() { controller.abort(); }, 120000);
 
     fetch('/financeiro/parcelas/' + parcelaId + '/boleto/gerar/', {
         method: 'POST',
         headers: {
             'X-CSRFToken': '{{ csrf_token }}',
             'Content-Type': 'application/json'
-        }
+        },
+        signal: controller.signal
     })
-    .then(response => response.json())
-    .then(data => {
+    .then(function(response) { clearTimeout(timeoutId); return response.json(); })
+    .then(function(data) {
+        restoreBtn();
         if (data.sucesso) {
-            showToast('Boleto gerado com sucesso! Nosso Numero: ' + data.nosso_numero, 'success');
+            showToast('Boleto gerado! Nosso Número: ' + data.nosso_numero, 'success');
 
             // Atualizar a linha da parcela
             var row = btn.closest('tr');
             if (row) {
                 row.classList.add('boleto-gerado');
-
-                // Atualizar coluna de boleto
                 var boletoCol = row.querySelector('td:nth-child(4)');
                 if (boletoCol) {
                     boletoCol.innerHTML = '<span class="badge bg-success" title="Boleto gerado"><i class="fas fa-barcode"></i></span>';
                 }
-
-                // Atualizar botoes de acao
                 var acoesCol = row.querySelector('td:last-child .btn-group');
                 if (acoesCol) {
                     var linhaDigResp = data.linha_digitavel || '';
@@ -1887,25 +1894,20 @@ function gerarBoleto(parcelaId, btn) {
                         '<button type="button" class="btn btn-outline-success" onclick="abrirModalPagamento(' + parcelaId + ')" title="Registrar Pagamento"><i class="fas fa-dollar-sign"></i></button>';
                 }
             }
-
-            // Abrir boleto em nova aba apos um pequeno delay
             setTimeout(function() {
                 window.open('/financeiro/parcelas/' + parcelaId + '/boleto/visualizar/?popup=true', '_blank');
             }, 500);
-
         } else {
             showToast('Erro ao gerar boleto: ' + data.erro, 'error', 6000);
-            // Restaurar botao
-            btn.innerHTML = originalHtml;
-            btn.classList.remove('btn-loading');
-            btn.disabled = false;
         }
     })
-    .catch(error => {
-        showToast('Erro de conexao: ' + error, 'error', 6000);
-        btn.innerHTML = originalHtml;
-        btn.classList.remove('btn-loading');
-        btn.disabled = false;
+    .catch(function(error) {
+        clearTimeout(timeoutId);
+        restoreBtn();
+        var msg = error.name === 'AbortError'
+            ? 'Tempo esgotado (120s). O serviço BRCobrança pode estar iniciando. Tente novamente.'
+            : 'Erro de conexão: ' + error;
+        showToast(msg, 'error', 8000);
     });
 }
 
