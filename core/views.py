@@ -27,6 +27,7 @@ from .models import (
     usuario_tem_permissao_total
 )
 from .forms import ContabilidadeForm, CompradorForm, ImovelForm, ImobiliariaForm, ContaBancariaForm, AcessoUsuarioForm
+from django.core.cache import cache
 import io
 import json
 import logging
@@ -193,83 +194,93 @@ def dashboard(request):
     inicio_mes = hoje.replace(day=1)
     fim_mes = (inicio_mes + timedelta(days=32)).replace(day=1) - timedelta(days=1)
 
-    # Estatísticas básicas
-    total_contabilidades = Contabilidade.objects.filter(ativo=True).count()
-    total_imobiliarias = Imobiliaria.objects.filter(ativo=True).count()
-    total_imoveis = Imovel.objects.filter(ativo=True).count()
-    total_compradores = Comprador.objects.filter(ativo=True).count()
+    # -------------------------------------------------------------------------
+    # Agregados com cache de 5 minutos (contagens e somas que não mudam por segundo)
+    # -------------------------------------------------------------------------
+    cache_key = f'dashboard:stats:{hoje.isoformat()}'
+    stats = cache.get(cache_key)
 
-    # Contratos ativos
-    total_contratos = Contrato.objects.filter(status=StatusContrato.ATIVO).count()
+    if stats is None:
+        total_contabilidades = Contabilidade.objects.filter(ativo=True).count()
+        total_imobiliarias = Imobiliaria.objects.filter(ativo=True).count()
+        total_imoveis = Imovel.objects.filter(ativo=True).count()
+        imoveis_disponiveis = Imovel.objects.filter(ativo=True, disponivel=True).count()
+        total_compradores = Comprador.objects.filter(ativo=True).count()
+        total_contratos = Contrato.objects.filter(status=StatusContrato.ATIVO).count()
 
-    # Parcelas vencidas (não pagas e vencimento < hoje)
-    parcelas_vencidas_qs = Parcela.objects.filter(
-        pago=False,
-        data_vencimento__lt=hoje
-    ).select_related('contrato', 'contrato__comprador')
-    parcelas_vencidas = parcelas_vencidas_qs.count()
-    parcelas_vencidas_lista = list(parcelas_vencidas_qs.order_by('-data_vencimento')[:10])
+        parcelas_vencidas = Parcela.objects.filter(
+            pago=False, data_vencimento__lt=hoje
+        ).count()
 
-    # Parcelas do mês (não pagas, vencem este mês)
-    parcelas_mes = Parcela.objects.filter(
-        pago=False,
-        data_vencimento__gte=inicio_mes,
-        data_vencimento__lte=fim_mes
-    ).count()
+        parcelas_mes = Parcela.objects.filter(
+            pago=False,
+            data_vencimento__gte=inicio_mes,
+            data_vencimento__lte=fim_mes,
+        ).count()
 
-    # Valor recebido no mês
-    valor_recebido = Parcela.objects.filter(
-        pago=True,
-        data_pagamento__gte=inicio_mes,
-        data_pagamento__lte=fim_mes
-    ).aggregate(total=Sum('valor_pago'))['total'] or 0
+        valor_recebido = Parcela.objects.filter(
+            pago=True,
+            data_pagamento__gte=inicio_mes,
+            data_pagamento__lte=fim_mes,
+        ).aggregate(total=Sum('valor_pago'))['total'] or 0
 
-    # Próximas parcelas a vencer (próximos 15 dias)
-    proximas_parcelas = Parcela.objects.filter(
-        pago=False,
-        data_vencimento__gte=hoje,
-        data_vencimento__lte=hoje + timedelta(days=15)
-    ).select_related(
-        'contrato', 'contrato__comprador'
-    ).order_by('data_vencimento')[:10]
+        boletos_pendentes = Parcela.objects.filter(
+            pago=False, status_boleto='NAO_GERADO'
+        ).count()
+        boletos_gerados = Parcela.objects.filter(
+            pago=False, status_boleto__in=['GERADO', 'REGISTRADO']
+        ).count()
+        boletos_vencidos = Parcela.objects.filter(
+            pago=False,
+            status_boleto__in=['GERADO', 'REGISTRADO', 'VENCIDO'],
+            data_vencimento__lt=hoje,
+        ).count()
 
-    # Adicionar dias para vencer em cada parcela
+        valor_recebido_formatado = (
+            f"{valor_recebido:,.2f}".replace(',', 'X').replace('.', ',').replace('X', '.')
+        )
+
+        stats = {
+            'total_contabilidades': total_contabilidades,
+            'total_imobiliarias': total_imobiliarias,
+            'total_imoveis': total_imoveis,
+            'imoveis_disponiveis': imoveis_disponiveis,
+            'total_compradores': total_compradores,
+            'total_contratos': total_contratos,
+            'parcelas_vencidas': parcelas_vencidas,
+            'parcelas_mes': parcelas_mes,
+            'valor_recebido_mes': valor_recebido_formatado,
+            'boletos_pendentes': boletos_pendentes,
+            'boletos_gerados': boletos_gerados,
+            'boletos_vencidos': boletos_vencidos,
+        }
+        cache.set(cache_key, stats, timeout=300)  # 5 minutos
+
+    # -------------------------------------------------------------------------
+    # Listas detalhadas — consultadas a cada request (pequenas, com .select_related)
+    # -------------------------------------------------------------------------
+    parcelas_vencidas_lista = list(
+        Parcela.objects.filter(pago=False, data_vencimento__lt=hoje)
+        .select_related('contrato', 'contrato__comprador')
+        .order_by('-data_vencimento')[:10]
+    )
+
+    proximas_parcelas = list(
+        Parcela.objects.filter(
+            pago=False,
+            data_vencimento__gte=hoje,
+            data_vencimento__lte=hoje + timedelta(days=15),
+        )
+        .select_related('contrato', 'contrato__comprador')
+        .order_by('data_vencimento')[:10]
+    )
     for parcela in proximas_parcelas:
         parcela.dias_para_vencer = (parcela.data_vencimento - hoje).days
 
-    # Status dos boletos
-    boletos_pendentes = Parcela.objects.filter(
-        pago=False,
-        status_boleto='NAO_GERADO'
-    ).count()
-    boletos_gerados = Parcela.objects.filter(
-        pago=False,
-        status_boleto__in=['GERADO', 'REGISTRADO']
-    ).count()
-    boletos_vencidos = Parcela.objects.filter(
-        pago=False,
-        status_boleto__in=['GERADO', 'REGISTRADO', 'VENCIDO'],
-        data_vencimento__lt=hoje
-    ).count()
-
-    # Formatar valor recebido
-    valor_recebido_formatado = f"{valor_recebido:,.2f}".replace(',', 'X').replace('.', ',').replace('X', '.')
-
     context = {
-        'total_contabilidades': total_contabilidades,
-        'total_imobiliarias': total_imobiliarias,
-        'total_imoveis': total_imoveis,
-        'imoveis_disponiveis': Imovel.objects.filter(ativo=True, disponivel=True).count(),
-        'total_compradores': total_compradores,
-        'total_contratos': total_contratos,
-        'parcelas_vencidas': parcelas_vencidas,
+        **stats,
         'parcelas_vencidas_lista': parcelas_vencidas_lista,
-        'parcelas_mes': parcelas_mes,
-        'valor_recebido_mes': valor_recebido_formatado,
         'proximas_parcelas': proximas_parcelas,
-        'boletos_pendentes': boletos_pendentes,
-        'boletos_gerados': boletos_gerados,
-        'boletos_vencidos': boletos_vencidos,
     }
     return render(request, 'core/dashboard.html', context)
 
