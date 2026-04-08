@@ -97,6 +97,7 @@ urlpatterns = [
     path('relatorios/posicao-contratos/', views.RelatorioPosicaoContratosView.as_view(), name='relatorio_posicao_contratos'),
     path('relatorios/previsao-reajustes/', views.RelatorioPrevisaoReajustesView.as_view(), name='relatorio_previsao_reajustes'),
     path('relatorios/exportar/<str:tipo>/', views.exportar_relatorio, name='exportar_relatorio'),
+    path('relatorios/exportar-consolidado/', views.exportar_relatorio_consolidado, name='exportar_relatorio_consolidado'),
     path('api/relatorios/resumo/', views.api_relatorio_resumo, name='api_relatorio_resumo'),
 
     # ==========================================================================
