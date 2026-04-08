@@ -647,6 +647,19 @@ Atenciosamente,
             'corpo_html': ''
         },
         {
+            'codigo': TipoTemplate.BOLETO_5_DIAS,
+            'nome': 'SMS - Lembrete 5 dias para vencimento',
+            'tipo': TipoNotificacao.SMS,
+            'assunto': 'SMS Boleto vence em 5 dias',
+            'corpo': (
+                '%%NOMEIMOBILIARIA%%: Lembrete %%NOMECOMPRADOR%%, '
+                'seu boleto parcela %%PARCELA%% vence em 5 dias '
+                'valor %%VALORBOLETO%% data %%DATAVENCIMENTO%%. '
+                'Linha: %%LINHADIGITAVEL%%'
+            ),
+            'corpo_html': ''
+        },
+        {
             'codigo': TipoTemplate.BOLETO_VENCEU_ONTEM,
             'nome': 'SMS - Boleto vencido',
             'tipo': TipoNotificacao.SMS,
