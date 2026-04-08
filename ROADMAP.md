@@ -82,7 +82,7 @@
 ### P3 — Médio
 | # | Tela/Componente |
 |---|-----------------|
-| 3.18 | Aba Relatórios do Contrato |
+| 3.18 | Aba Relatórios do Contrato | ✅ Seção colapsável "Relatórios & Exportações" em `contrato_detail.html`: KPIs financeiros (valor total, pago, saldo, progresso); botões CSV (parcelas a pagar, pagas, posição); botão Imprimir; usa `exportar_relatorio` existente filtrado por contrato |
 | 3.19 | Aba Histórico de Pagamentos (comprovantes) | ✅ Card "Histórico de Pagamentos" em `contrato_detail.html` — tabela com data, valor, juros, multa, forma de pagamento, link para comprovante; `ContratoDetailView.get_context_data` passa `historico_pagamentos` via queryset |
 | 3.20 | Configurações Contabilidade (dados, usuários, imobiliárias) |
 | 3.21 | Exportar relatório consolidado (PDF, Excel) |
