@@ -328,41 +328,62 @@
                 <button type="button" class="btn-close btn-close-white modal-close"></button>
             </div>
             <div class="modal-body">
-                <p id="modalPagarInfo" class="mb-3"></p>
+                <p id="modalPagarInfo" class="mb-2 text-muted small"></p>
                 <form id="formPagar">
                     <div class="row g-3">
+                        <!-- Info: somente leitura -->
+                        <div class="col-md-6">
+                            <label class="form-label text-muted small">Vencimento</label>
+                            <input type="text" class="form-control form-control-sm bg-light" id="pagarVencimento" readonly tabindex="-1">
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label text-muted small">Valor Original</label>
+                            <div class="input-group input-group-sm">
+                                <span class="input-group-text bg-light">R$</span>
+                                <input type="text" class="form-control bg-light" id="pagarValorOriginal" readonly tabindex="-1">
+                            </div>
+                        </div>
+
+                        <!-- Editável: Data do Pagamento -->
                         <div class="col-md-6">
                             <label class="form-label fw-bold">Data do Pagamento <span class="text-danger">*</span></label>
-                            <input type="date" class="form-control" id="pagarData" required>
+                            <input type="date" class="form-control" id="pagarData" required oninput="recalcularEncargos()">
                         </div>
-                        <div class="col-md-6">
-                            <label class="form-label fw-bold">Valor Pago <span class="text-danger">*</span></label>
-                            <div class="input-group">
-                                <span class="input-group-text">R$</span>
-                                <input type="number" class="form-control" id="pagarValor" step="0.01" min="0" required>
+
+                        <!-- Somente leitura: Juros / Multa calculados -->
+                        <div class="col-md-3">
+                            <label class="form-label text-muted small">Juros</label>
+                            <div class="input-group input-group-sm">
+                                <span class="input-group-text bg-light">R$</span>
+                                <input type="text" class="form-control bg-light" id="pagarJuros" readonly tabindex="-1">
                             </div>
                         </div>
-                        <div class="col-md-6">
-                            <label class="form-label">Juros</label>
-                            <div class="input-group">
-                                <span class="input-group-text">R$</span>
-                                <input type="number" class="form-control" id="pagarJuros" step="0.01" min="0" value="0">
+                        <div class="col-md-3">
+                            <label class="form-label text-muted small">Multa</label>
+                            <div class="input-group input-group-sm">
+                                <span class="input-group-text bg-light">R$</span>
+                                <input type="text" class="form-control bg-light" id="pagarMulta" readonly tabindex="-1">
                             </div>
                         </div>
+
+                        <!-- Editável: Desconto -->
                         <div class="col-md-6">
-                            <label class="form-label">Multa</label>
+                            <label class="form-label fw-bold">Desconto</label>
                             <div class="input-group">
                                 <span class="input-group-text">R$</span>
-                                <input type="number" class="form-control" id="pagarMulta" step="0.01" min="0" value="0">
+                                <input type="number" class="form-control" id="pagarDesconto" step="0.01" min="0" value="0.00" oninput="atualizarValorPagar()">
                             </div>
                         </div>
+
+                        <!-- Somente leitura: Valor a Pagar -->
                         <div class="col-md-6">
-                            <label class="form-label">Desconto</label>
+                            <label class="form-label fw-bold text-success">Valor a Pagar</label>
                             <div class="input-group">
-                                <span class="input-group-text">R$</span>
-                                <input type="number" class="form-control" id="pagarDesconto" step="0.01" min="0" value="0">
+                                <span class="input-group-text bg-success text-white">R$</span>
+                                <input type="text" class="form-control fw-bold" id="pagarValorTotal" readonly tabindex="-1" style="font-size:1.1rem;">
                             </div>
                         </div>
+
                         <div class="col-12">
                             <label class="form-label">Observações</label>
                             <textarea class="form-control" id="pagarObs" rows="2"></textarea>
@@ -618,7 +639,7 @@ function acoesRenderer(params) {
     html += `<a href="/contratos/${d.contrato_pk}/" class="btn btn-sm btn-outline-info" title="Ver contrato"><i class="fas fa-file-contract"></i></a>`;
     if (!d.pago) {
         html += `<button class="btn btn-sm btn-outline-primary" title="Gerar boleto" onclick="abrirModalBoleto(${d.pk}, '${d.contrato.replace(/'/g,"\\'")}', ${d.numero_parcela})"><i class="fas fa-barcode"></i></button>`;
-        html += `<button class="btn btn-sm btn-outline-success" title="Registrar pagamento" onclick="abrirModalPagar(${d.pk}, '${d.contrato.replace(/'/g,"\\'")}', ${d.numero_parcela}, ${d.valor_total}, ${d.juros}, ${d.multa})"><i class="fas fa-dollar-sign"></i></button>`;
+        html += `<button class="btn btn-sm btn-outline-success" title="Registrar pagamento" onclick="abrirModalPagar(${d.pk}, '${d.contrato.replace(/'/g,"\\'")}', ${d.numero_parcela}, ${d.vencimento_fmt}, ${d.valor_original})"><i class="fas fa-dollar-sign"></i></button>`;
     }
     html += '</div>';
     return html;
@@ -781,14 +802,23 @@ function gerarBoletosSelecionados(force) {
     resultado.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i> Gerando ' + ids.length + ' boleto(s)...';
     resultado.classList.remove('d-none');
 
+    const btnLabel = force ? '<i class="fas fa-redo me-1"></i> Forçar Regeneração' : '<i class="fas fa-barcode me-1"></i> Gerar Boletos';
+    const restoreBtn = () => { if (btn) { btn.disabled = false; btn.innerHTML = btnLabel; } };
+
+    // Timeout proporcional: 60s base + 10s por boleto, máximo 300s
+    const timeoutMs = Math.min(300000, 60000 + ids.length * 10000);
+    const controller = new AbortController();
+    const tid = setTimeout(() => controller.abort(), timeoutMs);
+
     fetch('/financeiro/api/boletos/gerar-parcelas/', {
         method: 'POST',
         headers: {'Content-Type': 'application/json', 'X-CSRFToken': CSRF_TOKEN},
         body: JSON.stringify({parcela_ids: ids, force: force}),
+        signal: controller.signal,
     })
-    .then(r => r.json())
+    .then(r => { clearTimeout(tid); return r.json(); })
     .then(data => {
-        if (btn) { btn.disabled = false; btn.innerHTML = force ? '<i class="fas fa-redo me-1"></i> Forçar Regeneração' : '<i class="fas fa-barcode me-1"></i> Gerar Boletos'; }
+        restoreBtn();
         let cls = data.erros > 0 ? 'alert-warning' : 'alert-success';
         let msg = `<strong><i class="fas fa-check-circle me-1"></i>${data.gerados} gerado(s)</strong>`;
         if (data.bloqueados) msg += ` &nbsp; <span class="text-warning">${data.bloqueados} bloqueado(s) por reajuste</span>`;
@@ -799,9 +829,12 @@ function gerarBoletosSelecionados(force) {
         window.parcelasGridApi.deselectAll();
     })
     .catch(err => {
-        if (btn) { btn.disabled = false; btn.innerHTML = force ? '<i class="fas fa-redo me-1"></i> Forçar Regeneração' : '<i class="fas fa-barcode me-1"></i> Gerar Boletos'; }
+        clearTimeout(tid);
+        restoreBtn();
         resultado.className = 'alert alert-danger';
-        resultado.innerHTML = '<i class="fas fa-exclamation-triangle me-1"></i> Erro: ' + err.message;
+        resultado.innerHTML = err.name === 'AbortError'
+            ? `<i class="fas fa-clock me-1"></i> Tempo esgotado. BRCobrança pode estar iniciando. Tente novamente em alguns segundos.`
+            : '<i class="fas fa-exclamation-triangle me-1"></i> Erro: ' + err.message;
     });
 }
 
@@ -828,11 +861,16 @@ function confirmarGerarBoleto() {
     formData.append('csrfmiddlewaretoken', CSRF_TOKEN);
     if (force) formData.append('force', 'true');
 
+    // Timeout 120s — BRCobrança pode estar em cold start no Render
+    const controller = new AbortController();
+    const tid = setTimeout(() => controller.abort(), 120000);
+
     fetch('/financeiro/parcelas/' + parcelaAtualId + '/boleto/gerar/', {
         method: 'POST',
         body: formData,
+        signal: controller.signal,
     })
-    .then(r => r.json())
+    .then(r => { clearTimeout(tid); return r.json(); })
     .then(data => {
         btn.disabled = false;
         btn.innerHTML = '<i class="fas fa-barcode me-1"></i> Gerar Boleto';
@@ -850,38 +888,75 @@ function confirmarGerarBoleto() {
         }
     })
     .catch(err => {
+        clearTimeout(tid);
         btn.disabled = false;
         btn.innerHTML = '<i class="fas fa-barcode me-1"></i> Gerar Boleto';
         const res = document.getElementById('modalBoletoResultado');
         res.className = 'alert alert-danger';
-        res.innerHTML = 'Erro: ' + err.message;
+        res.innerHTML = err.name === 'AbortError'
+            ? '<i class="fas fa-clock me-1"></i> Tempo esgotado (120s). BRCobrança pode estar iniciando. Tente novamente.'
+            : '<i class="fas fa-exclamation-triangle me-1"></i> Erro: ' + err.message;
         res.classList.remove('d-none');
     });
 }
 
 // ===== PAGAR =====
-function abrirModalPagar(parcelaId, contrato, numParcela, valorTotal, valorJuros, valorMulta) {
+// Estado interno do modal de pagamento
+let _pagarJuros = 0, _pagarMulta = 0, _pagarValorAtual = 0;
+
+function abrirModalPagar(parcelaId, contrato, numParcela, vencimentoFmt, valorOriginal) {
     parcelaAtualId = parcelaId;
     document.getElementById('modalPagarInfo').textContent =
-        'Contrato: ' + contrato + ' — Parcela ' + numParcela + ' — Total: R$ ' + parseFloat(valorTotal).toFixed(2);
+        'Contrato: ' + contrato + ' — Parcela ' + numParcela;
     const hoje = new Date().toISOString().split('T')[0];
+    document.getElementById('pagarVencimento').value = vencimentoFmt || '';
+    document.getElementById('pagarValorOriginal').value = parseFloat(valorOriginal || 0).toFixed(2);
     document.getElementById('pagarData').value = hoje;
-    document.getElementById('pagarValor').value = parseFloat(valorTotal).toFixed(2);
-    document.getElementById('pagarJuros').value = parseFloat(valorJuros || 0).toFixed(2);
-    document.getElementById('pagarMulta').value = parseFloat(valorMulta || 0).toFixed(2);
+    document.getElementById('pagarJuros').value = '0.00';
+    document.getElementById('pagarMulta').value = '0.00';
     document.getElementById('pagarDesconto').value = '0.00';
+    document.getElementById('pagarValorTotal').value = '';
     document.getElementById('pagarObs').value = '';
     document.getElementById('btnConfirmarPagar').disabled = false;
     document.getElementById('btnConfirmarPagar').innerHTML = '<i class="fas fa-check me-1"></i> Confirmar Pagamento';
     getMModal('modalPagar').open();
+    // Calcular encargos para hoje
+    recalcularEncargos();
+}
+
+function recalcularEncargos() {
+    const data = document.getElementById('pagarData').value;
+    if (!data || !parcelaAtualId) return;
+    fetch('/financeiro/parcelas/' + parcelaAtualId + '/calcular-encargos/?data=' + data)
+        .then(r => r.ok ? r.json() : null)
+        .then(d => {
+            if (!d) return;
+            _pagarJuros = d.juros;
+            _pagarMulta = d.multa;
+            _pagarValorAtual = d.valor_atual;
+            document.getElementById('pagarJuros').value = d.juros.toFixed(2);
+            document.getElementById('pagarMulta').value = d.multa.toFixed(2);
+            atualizarValorPagar();
+        })
+        .catch(() => {});
+}
+
+function atualizarValorPagar() {
+    const desconto = parseFloat(document.getElementById('pagarDesconto').value) || 0;
+    const total = _pagarValorAtual + _pagarJuros + _pagarMulta - desconto;
+    document.getElementById('pagarValorTotal').value = Math.max(0, total).toFixed(2);
 }
 
 function confirmarPagar() {
     const btn = document.getElementById('btnConfirmarPagar');
     const data = document.getElementById('pagarData').value;
-    const valor = document.getElementById('pagarValor').value;
-    if (!data || !valor) {
-        alert('Preencha a data e o valor pago.');
+    if (!data) {
+        alert('Preencha a data do pagamento.');
+        return;
+    }
+    const valorTotal = parseFloat(document.getElementById('pagarValorTotal').value) || 0;
+    if (valorTotal <= 0) {
+        alert('Valor a pagar inválido. Verifique a data e o desconto.');
         return;
     }
     btn.disabled = true;
@@ -890,10 +965,10 @@ function confirmarPagar() {
     const formData = new FormData();
     formData.append('csrfmiddlewaretoken', CSRF_TOKEN);
     formData.append('data_pagamento', data);
-    formData.append('valor_pago', valor);
-    formData.append('valor_juros', document.getElementById('pagarJuros').value || '0');
-    formData.append('valor_multa', document.getElementById('pagarMulta').value || '0');
-    formData.append('valor_desconto', document.getElementById('pagarDesconto').value || '0');
+    formData.append('valor_pago', valorTotal.toFixed(2));
+    formData.append('valor_juros', _pagarJuros.toFixed(2));
+    formData.append('valor_multa', _pagarMulta.toFixed(2));
+    formData.append('valor_desconto', (parseFloat(document.getElementById('pagarDesconto').value) || 0).toFixed(2));
     formData.append('observacoes', document.getElementById('pagarObs').value || '');
 
     fetch('/financeiro/parcelas/' + parcelaAtualId + '/pagar-ajax/', {
