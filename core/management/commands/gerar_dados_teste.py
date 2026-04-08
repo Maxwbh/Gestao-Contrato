@@ -179,10 +179,33 @@ class Command(BaseCommand):
             raise
 
     def limpar_dados(self):
-        """Limpa todos os dados de teste"""
+        """Limpa todos os dados de teste (tolerante a tabelas ausentes)."""
+        from django.db import transaction as _tx, ProgrammingError, OperationalError
+
+        def _safe_delete(model_class, label=''):
+            """Apaga todos os registros usando savepoint — ignora tabela inexistente."""
+            try:
+                with _tx.atomic():  # savepoint: rollback só desta operação se falhar
+                    model_class.objects.all().delete()
+            except (ProgrammingError, OperationalError) as exc:
+                if 'does not exist' in str(exc) or 'no such table' in str(exc):
+                    self.stdout.write(
+                        self.style.WARNING(f'  ⚠ Tabela {label or model_class.__name__} não existe — pulando.')
+                    )
+                else:
+                    raise
+
+        # CNAB (tabelas criadas por migration 0006 — podem não existir ainda)
         from financeiro.models import ArquivoRemessa, ArquivoRetorno
-        ArquivoRemessa.objects.all().delete()
-        ArquivoRetorno.objects.all().delete()
+        _safe_delete(ArquivoRemessa, 'financeiro_arquivoremessa')
+        _safe_delete(ArquivoRetorno, 'financeiro_arquivoretorno')
+
+        # Notificações
+        try:
+            from notificacoes.models import Notificacao
+            _safe_delete(Notificacao, 'notificacoes_notificacao')
+        except ImportError:
+            pass
 
         # Portal do Comprador
         AcessoComprador.objects.all().delete()
