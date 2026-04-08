@@ -6768,3 +6768,175 @@ def renegociar_parcelas(request, contrato_id):
         'parcelas': parcelas_em_atraso,
         'hoje': hoje,
     })
+
+
+# =============================================================================
+# SECTION 4 P3 — APIs Pendentes
+# =============================================================================
+
+@login_required
+@require_GET
+def api_contabilidade_relatorios_vencimentos(request):
+    """
+    4-P3-1 : GET /financeiro/api/contabilidade/relatorios/vencimentos/
+
+    Retorna relatório de vencimentos agrupado por período
+    (semanal, mensal ou trimestral).
+
+    Parâmetros GET:
+      periodo  : semanal | mensal | trimestral (default: mensal)
+      meses    : quantidade de meses a projetar (default: 3)
+      imobiliaria: ID da imobiliária (opcional)
+    """
+    from datetime import date
+    from dateutil.relativedelta import relativedelta
+
+    hoje = timezone.now().date()
+    periodo = request.GET.get('periodo', 'mensal')
+    imobiliaria_id = request.GET.get('imobiliaria')
+
+    try:
+        meses = max(1, min(int(request.GET.get('meses', 3)), 12))
+    except (ValueError, TypeError):
+        meses = 3
+
+    qs = Parcela.objects.filter(pago=False).select_related(
+        'contrato', 'contrato__imobiliaria'
+    )
+    if imobiliaria_id:
+        qs = qs.filter(contrato__imobiliaria_id=imobiliaria_id)
+
+    grupos = []
+
+    if periodo == 'semanal':
+        # Próximas 4 semanas
+        for i in range(4):
+            inicio = hoje + timedelta(weeks=i)
+            fim = inicio + timedelta(days=6)
+            parcelas_periodo = qs.filter(
+                data_vencimento__gte=inicio,
+                data_vencimento__lte=fim,
+            )
+            total = parcelas_periodo.aggregate(
+                valor=Sum('valor_atual'), qtd=Count('id')
+            )
+            grupos.append({
+                'periodo': f'Semana {i + 1} ({inicio.strftime("%d/%m")}–{fim.strftime("%d/%m")})',
+                'data_inicio': inicio.isoformat(),
+                'data_fim': fim.isoformat(),
+                'quantidade': total['qtd'] or 0,
+                'valor': float(total['valor'] or 0),
+            })
+    elif periodo == 'trimestral':
+        # Próximos trimestres
+        for i in range(2):
+            inicio = hoje + relativedelta(months=i * 3)
+            fim = inicio + relativedelta(months=3) - timedelta(days=1)
+            parcelas_periodo = qs.filter(
+                data_vencimento__gte=inicio,
+                data_vencimento__lte=fim,
+            )
+            total = parcelas_periodo.aggregate(
+                valor=Sum('valor_atual'), qtd=Count('id')
+            )
+            grupos.append({
+                'periodo': f'T{i + 1} ({inicio.strftime("%m/%Y")}–{fim.strftime("%m/%Y")})',
+                'data_inicio': inicio.isoformat(),
+                'data_fim': fim.isoformat(),
+                'quantidade': total['qtd'] or 0,
+                'valor': float(total['valor'] or 0),
+            })
+    else:
+        # Mensal (default)
+        for i in range(meses):
+            inicio = hoje.replace(day=1) + relativedelta(months=i)
+            fim = inicio + relativedelta(months=1) - timedelta(days=1)
+            parcelas_periodo = qs.filter(
+                data_vencimento__gte=inicio,
+                data_vencimento__lte=fim,
+            )
+            total = parcelas_periodo.aggregate(
+                valor=Sum('valor_atual'), qtd=Count('id')
+            )
+            grupos.append({
+                'periodo': inicio.strftime('%B/%Y'),
+                'data_inicio': inicio.isoformat(),
+                'data_fim': fim.isoformat(),
+                'quantidade': total['qtd'] or 0,
+                'valor': float(total['valor'] or 0),
+            })
+
+    vencidas = qs.filter(data_vencimento__lt=hoje).aggregate(
+        valor=Sum('valor_atual'), qtd=Count('id')
+    )
+
+    return JsonResponse({
+        'sucesso': True,
+        'periodo': periodo,
+        'grupos': grupos,
+        'vencidas': {
+            'quantidade': vencidas['qtd'] or 0,
+            'valor': float(vencidas['valor'] or 0),
+        },
+    })
+
+
+@login_required
+@require_GET
+def api_imobiliaria_pendencias(request, imobiliaria_id):
+    """
+    4-P3-3 : GET /financeiro/api/imobiliaria/<id>/pendencias/
+
+    Retorna parcelas vencidas com encargos calculados para uma imobiliária.
+    """
+    imobiliaria = get_object_or_404(Imobiliaria, pk=imobiliaria_id)
+    hoje = timezone.now().date()
+
+    qs = Parcela.objects.filter(
+        contrato__imobiliaria=imobiliaria,
+        pago=False,
+        data_vencimento__lt=hoje,
+    ).select_related(
+        'contrato', 'contrato__comprador'
+    ).order_by('data_vencimento')
+
+    pendencias = []
+    for p in qs[:200]:  # limita a 200 registros
+        dias_atraso = (hoje - p.data_vencimento).days
+
+        # Calcula encargos se o contrato tiver configuração
+        try:
+            valor_juros = p.calcular_juros_mora()
+            valor_multa = p.calcular_multa()
+        except Exception:
+            valor_juros = p.valor_juros or Decimal('0.00')
+            valor_multa = p.valor_multa or Decimal('0.00')
+
+        total = p.valor_atual + valor_juros + valor_multa
+
+        pendencias.append({
+            'parcela_id': p.pk,
+            'contrato': p.contrato.numero_contrato,
+            'comprador': p.contrato.comprador.nome,
+            'numero_parcela': p.numero_parcela,
+            'data_vencimento': p.data_vencimento.isoformat(),
+            'dias_atraso': dias_atraso,
+            'valor_original': float(p.valor_atual),
+            'valor_juros': float(valor_juros),
+            'valor_multa': float(valor_multa),
+            'valor_total': float(total),
+            'nosso_numero': p.nosso_numero or '',
+        })
+
+    totais = {
+        'quantidade': len(pendencias),
+        'valor_total': sum(p['valor_total'] for p in pendencias),
+        'valor_original': sum(p['valor_original'] for p in pendencias),
+    }
+
+    return JsonResponse({
+        'sucesso': True,
+        'imobiliaria': {'id': imobiliaria.pk, 'nome': imobiliaria.nome},
+        'pendencias': pendencias,
+        'totais': totais,
+    })
