@@ -5,14 +5,14 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
     <title>{% block title %}Portal do Comprador{% endblock %} | Gestão de Contratos</title>
 
-    <!-- Materialize CSS -->
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/materialize/1.0.0/css/materialize.min.css">
-    <!-- Material Icons -->
-    <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
-    <!-- Font Awesome -->
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-
     {% load static %}
+    <!-- Materialize CSS (local) -->
+    <link rel="stylesheet" href="{% static 'vendor/materialize/css/materialize.min.css' %}">
+    <!-- Material Icons (Google Fonts CDN — required for icon font) -->
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+    <!-- Font Awesome (local) -->
+    <link rel="stylesheet" href="{% static 'vendor/fontawesome/css/all.min.css' %}">
+
     {% block extra_css %}{% endblock %}
 
     <style>
@@ -313,8 +313,8 @@
     </a>
 </nav>
 
-<!-- Materialize JS -->
-<script src="https://cdnjs.cloudflare.com/ajax/libs/materialize/1.0.0/js/materialize.min.js"></script>
+<!-- Materialize JS (local) -->
+<script src="{% static 'vendor/materialize/js/materialize.min.js' %}"></script>
 {% block extra_js %}{% endblock %}
 </body>
 </html>
