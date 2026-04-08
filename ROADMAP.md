@@ -86,12 +86,12 @@
 | 3.19 | Aba Histórico de Pagamentos (comprovantes) | ✅ Card "Histórico de Pagamentos" em `contrato_detail.html` — tabela com data, valor, juros, multa, forma de pagamento, link para comprovante; `ContratoDetailView.get_context_data` passa `historico_pagamentos` via queryset |
 | 3.20 | Configurações Contabilidade (dados, usuários, imobiliárias) |
 | 3.21 | Exportar relatório consolidado (PDF, Excel) |
-| 3.22 | Tela de reajuste pendente (índice, prévia, aplicar lote) |
+| 3.22 | Tela de reajuste pendente (índice, prévia, aplicar lote) | ✅ `reajustes_pendentes` view + template: lista agrupada por imobiliária, paginada; seleção em lote com checkbox; botão "Aplicar Selecionados" abre modal com preview; bulk apply via `aplicar_reajuste_lote` |
 | 3.23 | Histórico de reajustes aplicados |
 | 3.24 | Upload de comprovante de pagamento | ✅ `registrar_pagamento` aceita `multipart/form-data`; cria `HistoricoPagamento` com `forma_pagamento` e `comprovante` (FileField já existia no model); template atualizado com campos forma_pagamento e comprovante |
 | 3.25 | Notificar comprador inadimplente | ✅ View `notificar_inadimplente` (POST) envia e-mail + WhatsApp para comprador de parcela vencida; botão "Notificar Comprador" em `detalhe_parcela.html` (visível apenas para parcelas vencidas não pagas); registra `Notificacao` com status ENVIADO; URL `parcelas/<pk>/notificar/` |
-| 3.26 | Configurações de boleto por imobiliária |
-| 3.27 | Configurações de notificação (dias, canais) |
+| 3.26 | Configurações de boleto por imobiliária | ✅ Já implementado: campos `percentual_multa_padrao`, `percentual_juros_padrao`, `instrucao_padrao`, etc. no model `Imobiliaria`; `ImobiliariaForm` inclui todos os campos; `Contrato.get_config_boleto()` usa configuração da imobiliária quando `usar_config_boleto_imobiliaria=True` |
+| 3.27 | Configurações de notificação (dias, canais) | ✅ CRUD completo para `RegraNotificacao`: view `listar_regras_notificacao`, `criar_regra_notificacao`, `editar_regra_notificacao`, `excluir_regra_notificacao`, `toggle_regra_notificacao`; template com tabela + modais; link no dropdown "Notificações" da navbar; URLs sob `/notificacoes/regras/` |
 | 3.28 | Gerenciamento de usuários por imobiliária |
 | 3.29 | Card de resumo reutilizável |
 | 3.30 | Tabela paginada com filtros (componente genérico) |
