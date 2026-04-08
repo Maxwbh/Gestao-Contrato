@@ -2682,6 +2682,31 @@ def aplicar_reajuste_pagina(request, contrato_id):
                 return redirect('financeiro:aplicar_reajuste', contrato_id=contrato_id)
 
             ciclo = int(ciclo_param)
+
+            # V-09: Validar sequência obrigatória de ciclos (2.9 — não pular ciclos)
+            ciclo_esperado = Reajuste.calcular_ciclo_pendente(contrato)
+            if ciclo_esperado is None:
+                erro_seq = 'Não há ciclos de reajuste pendentes para este contrato.'
+                if is_modal:
+                    return JsonResponse({'sucesso': False, 'erro': erro_seq}, status=400)
+                messages.error(request, erro_seq)
+                return redirect('financeiro:aplicar_reajuste', contrato_id=contrato_id)
+            if ciclo > ciclo_esperado:
+                erro_seq = (
+                    f'Sequência incorreta: o ciclo {ciclo_esperado} ainda não foi aplicado. '
+                    f'Execute os reajustes em ordem — aplique o ciclo {ciclo_esperado} antes do {ciclo}.'
+                )
+                if is_modal:
+                    return JsonResponse({'sucesso': False, 'erro': erro_seq}, status=400)
+                messages.error(request, erro_seq)
+                return redirect('financeiro:aplicar_reajuste', contrato_id=contrato_id)
+            if ciclo < ciclo_esperado:
+                erro_seq = f'Ciclo {ciclo} já foi aplicado anteriormente.'
+                if is_modal:
+                    return JsonResponse({'sucesso': False, 'erro': erro_seq}, status=400)
+                messages.error(request, erro_seq)
+                return redirect('financeiro:aplicar_reajuste', contrato_id=contrato_id)
+
             preview = Reajuste.preview_reajuste(
                 contrato, ciclo,
                 desconto_percentual=desconto_percentual,
@@ -2837,6 +2862,31 @@ def aplicar_reajuste_contrato(request, contrato_id):
                 return redirect('financeiro:aplicar_reajuste', contrato_id=contrato_id)
 
             ciclo = int(ciclo_param)
+
+            # V-09: Validar sequência obrigatória de ciclos (2.9 — não pular ciclos)
+            ciclo_esperado = Reajuste.calcular_ciclo_pendente(contrato)
+            if ciclo_esperado is None:
+                erro_seq = 'Não há ciclos de reajuste pendentes para este contrato.'
+                if is_modal:
+                    return JsonResponse({'sucesso': False, 'erro': erro_seq}, status=400)
+                messages.error(request, erro_seq)
+                return redirect('financeiro:aplicar_reajuste', contrato_id=contrato_id)
+            if ciclo > ciclo_esperado:
+                erro_seq = (
+                    f'Sequência incorreta: o ciclo {ciclo_esperado} ainda não foi aplicado. '
+                    f'Execute os reajustes em ordem — aplique o ciclo {ciclo_esperado} antes do {ciclo}.'
+                )
+                if is_modal:
+                    return JsonResponse({'sucesso': False, 'erro': erro_seq}, status=400)
+                messages.error(request, erro_seq)
+                return redirect('financeiro:aplicar_reajuste', contrato_id=contrato_id)
+            if ciclo < ciclo_esperado:
+                erro_seq = f'Ciclo {ciclo} já foi aplicado anteriormente.'
+                if is_modal:
+                    return JsonResponse({'sucesso': False, 'erro': erro_seq}, status=400)
+                messages.error(request, erro_seq)
+                return redirect('financeiro:aplicar_reajuste', contrato_id=contrato_id)
+
             preview = Reajuste.preview_reajuste(
                 contrato, ciclo,
                 desconto_percentual=desconto_percentual,
