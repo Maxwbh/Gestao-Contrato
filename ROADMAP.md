@@ -46,7 +46,7 @@
 | # | Item |
 |---|------|
 | 2.9 | Validar sequência de ciclos de reajuste (não pular) |
-| 2.10 | Segunda via de boleto com juros/multa calculados |
+| 2.10 | Segunda via de boleto com juros/multa calculados | ✅ `BoletoService.gerar_segunda_via()` reutiliza nosso_número existente, sobrepõe valor com juros/multa do dia; view `segunda_via_boleto` GET=preview com totais atualizados, GET?download=1=PDF fresco via BRCobrança; botão "Segunda Via" em `detalhe_parcela.html` |
 | 2.11 | WhatsApp/SMS — testes end-to-end com Twilio |
 
 ### P4 — Baixo
@@ -70,7 +70,7 @@
 | 3.7 | Dashboard Imobiliária: filtros na lista de contratos | ✅ Status + imobiliária em `contrato_list.html` |
 | 3.8 | Dashboard Imobiliária: busca rápida por contrato/comprador | ✅ Busca textual em `contrato_list.html` |
 | 3.9 | Dashboard Imobiliária: ações em lote (gerar boletos) | ✅ `abrirModalGerarLote()` em `contrato_list.html` |
-| 3.10 | Dashboard Imobiliária: fluxo de caixa previsto vs realizado | — |
+| 3.10 | Dashboard Imobiliária: fluxo de caixa previsto vs realizado | ✅ Chart.js bar chart em `dashboard_imobiliaria.html` consome `api_imobiliaria_fluxo_caixa` — 3 séries: Previsto/Realizado/Pendente, 12 meses (-5 a +6), tooltip em R$, mês corrente destacado |
 | 3.11 | Gestão de Boletos: interface geração em lote com progresso | ✅ `gerar_carne` + templates |
 | 3.12 | Gestão de Boletos: download ZIP de vários boletos | ✅ `download_zip_boletos` em `financeiro/views.py` + URL `contrato/<id>/boletos/zip/` + botão ZIP na aba Parcelas de `contrato_detail.html` |
 | 3.13 | Gestão de Parcelas: seleção múltipla para ações em lote | ✅ Seleção múltipla implementada |
@@ -83,7 +83,7 @@
 | # | Tela/Componente |
 |---|-----------------|
 | 3.18 | Aba Relatórios do Contrato |
-| 3.19 | Aba Histórico de Pagamentos (comprovantes) |
+| 3.19 | Aba Histórico de Pagamentos (comprovantes) | ✅ Card "Histórico de Pagamentos" em `contrato_detail.html` — tabela com data, valor, juros, multa, forma de pagamento, link para comprovante; `ContratoDetailView.get_context_data` passa `historico_pagamentos` via queryset |
 | 3.20 | Configurações Contabilidade (dados, usuários, imobiliárias) |
 | 3.21 | Exportar relatório consolidado (PDF, Excel) |
 | 3.22 | Tela de reajuste pendente (índice, prévia, aplicar lote) |
