@@ -103,7 +103,7 @@
 |---|-----------------|
 | 3.33 | Aba Documentos (upload contrato assinado) |
 | 3.34 | Upload de logo da imobiliária | ✅ `ImageField logo` em `Imobiliaria`; migration `0005_add_logo_imobiliaria`; card de upload no form; exibição no card da lista |
-| 3.35 | Seletor de período reutilizável |
+| 3.35 | Seletor de período reutilizável | ✅ `templates/components/period_selector.html` — campos De/Até com Flatpickr, parâmetros via `with`: `action`, `inicio_name/fim_name`, `inicio_val/fim_val`, `btn_label`, `compact`; limpa filtro se valores presentes |
 
 ---
 
@@ -885,7 +885,7 @@ para ciclo = 2..total_ciclos+1:
 | M-13 | Polígonos de lote (boundaries) com `lat/lng` de cada vértice — modelo `LotePoligono` | P3 |
 | M-14 | Upload de planta baixa (imagem) como overlay no mapa | P3 |
 | M-15 | Link direto "Ver no Google Maps / Waze" no popup do marcador | P3 | ✅ Links Maps e Waze exibidos no popup quando lat/lng disponíveis |
-| M-16 | Geolocalização do usuário para mostrar lotes próximos | P4 |
+| M-16 | Geolocalização do usuário para mostrar lotes próximos | P4 | ✅ Botão "Perto de mim" na toolbar do mapa; `navigator.geolocation` → centraliza mapa na posição do usuário + marcador azul "Você está aqui" + conta lotes num raio de 50 km |
 
 ---
 
