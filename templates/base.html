@@ -74,6 +74,7 @@
         <li><div class="divider"></div></li>
         <li><a href="{% url 'accounts:perfil' %}"><i class="fas fa-user left"></i> Meu Perfil</a></li>
         <li><a href="{% url 'accounts:alterar_senha' %}"><i class="fas fa-key left"></i> Alterar Senha</a></li>
+        <li><a href="#!" id="dark-mode-toggle-mobile"><i class="fas fa-moon left" id="dm-icon-mobile"></i> Modo Escuro</a></li>
         <li><a href="{% url 'accounts:logout' %}"><i class="fas fa-sign-out-alt left"></i> Sair</a></li>
         {% else %}
         <li><a href="{% url 'accounts:login' %}"><i class="fas fa-sign-in-alt left"></i> Entrar</a></li>
@@ -152,6 +153,20 @@
                 {% endif %}
 
                 {% if user.is_authenticated %}
+                <!-- U-01: Dark mode toggle -->
+                <li>
+                    <a href="#!" id="dark-mode-toggle" title="Alternar modo escuro">
+                        <i class="dm-icon fas fa-moon" id="dm-icon"></i>
+                    </a>
+                </li>
+                <!-- U-06: Busca Global -->
+                <li>
+                    <a href="#!" id="global-search-btn" title="Busca global (Ctrl+K)"
+                       style="display:flex;align-items:center;gap:4px;opacity:.85;">
+                        <i class="fas fa-search"></i>
+                        <span class="hide-on-med-and-down" style="font-size:.78rem;border:1px solid rgba(255,255,255,.4);border-radius:4px;padding:2px 6px;letter-spacing:.5px;">Ctrl+K</span>
+                    </a>
+                </li>
                 <!-- User dropdown -->
                 <li>
                     <a class="dropdown-trigger" href="#!" data-target="dd-user">
@@ -671,6 +686,223 @@
     </script>
 
     {% block extra_js %}{% endblock %}
+
+    <!-- U-06: Modal de Busca Global -->
+    <div id="busca-global-overlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:9000;align-items:flex-start;justify-content:center;padding-top:80px;">
+        <div style="background:#fff;border-radius:12px;width:min(600px,92vw);box-shadow:0 20px 60px rgba(0,0,0,.3);overflow:hidden;">
+            <!-- Input -->
+            <div style="display:flex;align-items:center;padding:12px 16px;border-bottom:1px solid #f0f0f0;gap:10px;">
+                <i class="fas fa-search" style="color:#9e9e9e;font-size:1rem;"></i>
+                <input id="busca-input" type="text" placeholder="Buscar contrato, comprador, imóvel…"
+                       autocomplete="off"
+                       style="flex:1;border:none;outline:none;font-size:1rem;color:#212121;">
+                <kbd style="font-size:.72rem;color:#9e9e9e;background:#f5f5f5;border:1px solid #e0e0e0;border-radius:4px;padding:2px 6px;">Esc</kbd>
+            </div>
+            <!-- Results -->
+            <div id="busca-results" style="max-height:400px;overflow-y:auto;">
+                <div id="busca-placeholder" style="padding:32px;text-align:center;color:#9e9e9e;">
+                    <i class="fas fa-search" style="font-size:2rem;opacity:.3;margin-bottom:8px;display:block;"></i>
+                    Digite para buscar
+                </div>
+            </div>
+            <div style="padding:8px 16px;border-top:1px solid #f0f0f0;display:flex;gap:16px;font-size:.72rem;color:#9e9e9e;">
+                <span><kbd style="background:#f5f5f5;border:1px solid #e0e0e0;border-radius:3px;padding:1px 5px;">↑↓</kbd> navegar</span>
+                <span><kbd style="background:#f5f5f5;border:1px solid #e0e0e0;border-radius:3px;padding:1px 5px;">Enter</kbd> abrir</span>
+                <span><kbd style="background:#f5f5f5;border:1px solid #e0e0e0;border-radius:3px;padding:1px 5px;">Esc</kbd> fechar</span>
+            </div>
+        </div>
+    </div>
+    <script>
+    (function() {
+        var overlay   = document.getElementById('busca-global-overlay');
+        var input     = document.getElementById('busca-input');
+        var results   = document.getElementById('busca-results');
+        var placeholder = document.getElementById('busca-placeholder');
+        var searchUrl = '{% url "core:api_busca_global" %}';
+        var debounceT = null;
+        var activeIdx = -1;
+
+        var ICONS = {contrato:'description', comprador:'person', imovel:'home'};
+        var COLORS = {contrato:'#1565c0', comprador:'#2e7d32', imovel:'#6a1b9a'};
+
+        function open() {
+            overlay.style.display = 'flex';
+            input.value = '';
+            results.innerHTML = '';
+            results.appendChild(placeholder);
+            placeholder.style.display = '';
+            activeIdx = -1;
+            setTimeout(function(){ input.focus(); }, 50);
+        }
+        function close() {
+            overlay.style.display = 'none';
+            input.value = '';
+        }
+
+        document.getElementById('global-search-btn').addEventListener('click', function(e){
+            e.preventDefault(); open();
+        });
+
+        document.addEventListener('keydown', function(e) {
+            if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+                e.preventDefault();
+                if (overlay.style.display === 'flex') close(); else open();
+                return;
+            }
+            if (overlay.style.display !== 'flex') return;
+            if (e.key === 'Escape') { close(); return; }
+            var items = results.querySelectorAll('.busca-item');
+            if (!items.length) return;
+            if (e.key === 'ArrowDown') {
+                e.preventDefault();
+                activeIdx = Math.min(activeIdx + 1, items.length - 1);
+                setActive(items);
+            } else if (e.key === 'ArrowUp') {
+                e.preventDefault();
+                activeIdx = Math.max(activeIdx - 1, 0);
+                setActive(items);
+            } else if (e.key === 'Enter') {
+                if (activeIdx >= 0 && items[activeIdx]) {
+                    var url = items[activeIdx].getAttribute('data-url');
+                    if (url) window.location.href = url;
+                }
+            }
+        });
+
+        overlay.addEventListener('click', function(e) {
+            if (e.target === overlay) close();
+        });
+
+        function setActive(items) {
+            items.forEach(function(el, i) {
+                el.style.background = i === activeIdx ? '#e3f2fd' : '';
+            });
+            if (items[activeIdx]) {
+                items[activeIdx].scrollIntoView({block:'nearest'});
+            }
+        }
+
+        input.addEventListener('input', function() {
+            clearTimeout(debounceT);
+            var q = input.value.trim();
+            if (q.length < 2) {
+                results.innerHTML = '';
+                results.appendChild(placeholder);
+                placeholder.style.display = '';
+                activeIdx = -1;
+                return;
+            }
+            placeholder.style.display = 'none';
+            results.innerHTML = '<div style="padding:20px;text-align:center;color:#9e9e9e;"><i class="fas fa-spinner fa-spin"></i></div>';
+            debounceT = setTimeout(function() {
+                fetch(searchUrl + '?q=' + encodeURIComponent(q))
+                    .then(function(r){ return r.json(); })
+                    .then(function(data) {
+                        renderResults(data.results, q);
+                    })
+                    .catch(function() {
+                        results.innerHTML = '<div style="padding:20px;text-align:center;color:#f44336;">Erro na busca</div>';
+                    });
+            }, 220);
+        });
+
+        function renderResults(items, q) {
+            activeIdx = -1;
+            if (!items || !items.length) {
+                results.innerHTML = '<div style="padding:32px;text-align:center;color:#9e9e9e;"><i class="fas fa-search" style="display:block;font-size:2rem;opacity:.3;margin-bottom:8px;"></i>Nenhum resultado para <strong>' + escHtml(q) + '</strong></div>';
+                return;
+            }
+            var html = '';
+            var lastTipo = null;
+            items.forEach(function(item, idx) {
+                if (item.tipo !== lastTipo) {
+                    var label = {contrato:'Contratos', comprador:'Compradores', imovel:'Imóveis'}[item.tipo] || item.tipo;
+                    html += '<div style="padding:6px 16px 2px;font-size:.7rem;font-weight:700;color:#9e9e9e;text-transform:uppercase;letter-spacing:.8px;background:#fafafa;">' + label + '</div>';
+                    lastTipo = item.tipo;
+                }
+                var color = COLORS[item.tipo] || '#616161';
+                var statusHtml = item.status ? '<span style="font-size:.68rem;padding:2px 7px;background:#f5f5f5;border-radius:10px;color:#757575;margin-left:6px;">' + escHtml(item.status) + '</span>' : '';
+                html += '<div class="busca-item" data-url="' + escHtml(item.url) + '" data-idx="' + idx + '"'
+                    + ' style="display:flex;align-items:center;padding:10px 16px;cursor:pointer;gap:12px;border-bottom:1px solid #fafafa;"'
+                    + ' onclick="window.location.href=\'' + escHtml(item.url) + '\'"'
+                    + ' onmouseenter="this.style.background=\'#e3f2fd\'" onmouseleave="this.style.background=\'\'">'
+                    + '<span class="material-icons" style="color:' + color + ';font-size:1.1rem;">' + (ICONS[item.tipo]||'search') + '</span>'
+                    + '<div style="flex:1;min-width:0;">'
+                    +   '<div style="font-weight:600;font-size:.875rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + highlightQ(item.titulo, q) + statusHtml + '</div>'
+                    +   (item.subtitulo ? '<div style="font-size:.75rem;color:#757575;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + escHtml(item.subtitulo) + '</div>' : '')
+                    + '</div>'
+                    + '</div>';
+            });
+            results.innerHTML = html;
+        }
+
+        function escHtml(s) {
+            return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+        }
+        function highlightQ(text, q) {
+            var escaped = escHtml(text);
+            var escapedQ = escHtml(q).replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
+            return escaped.replace(new RegExp('(' + escapedQ + ')', 'gi'), '<mark style="background:#fff176;padding:0;">$1</mark>');
+        }
+    })();
+    </script>
+
+    <!-- U-01: Dark mode — persistido em localStorage -->
+    <script>
+    (function() {
+        var STORAGE_KEY = 'gc_dark_mode';
+        var body = document.body;
+        var icon = document.getElementById('dm-icon');
+
+        function applyTheme(dark) {
+            if (dark) {
+                body.classList.add('dark-mode');
+                if (icon) { icon.classList.remove('fa-moon'); icon.classList.add('fa-sun'); }
+            } else {
+                body.classList.remove('dark-mode');
+                if (icon) { icon.classList.remove('fa-sun'); icon.classList.add('fa-moon'); }
+            }
+        }
+
+        // Restore on load
+        var saved = localStorage.getItem(STORAGE_KEY);
+        if (saved === '1') applyTheme(true);
+
+        document.addEventListener('DOMContentLoaded', function() {
+            var btn  = document.getElementById('dark-mode-toggle');
+            var btnM = document.getElementById('dark-mode-toggle-mobile');
+            var icon2  = document.getElementById('dm-icon');
+            var icon2M = document.getElementById('dm-icon-mobile');
+
+            // Re-apply (icon may not exist yet when the IIFE ran)
+            var initDark = localStorage.getItem(STORAGE_KEY) === '1';
+            if (initDark) applyTheme(true);
+            syncMobileLabel(initDark);
+
+            function syncMobileLabel(dark) {
+                if (!icon2M) return;
+                icon2M.classList.toggle('fa-moon', !dark);
+                icon2M.classList.toggle('fa-sun', dark);
+                var li = btnM && btnM.parentElement;
+                if (li) li.querySelector('a').childNodes[1].textContent = dark ? ' Modo Claro' : ' Modo Escuro';
+            }
+
+            function toggle(e) {
+                e.preventDefault();
+                var isDark = body.classList.toggle('dark-mode');
+                localStorage.setItem(STORAGE_KEY, isDark ? '1' : '0');
+                if (icon2) {
+                    icon2.classList.toggle('fa-moon', !isDark);
+                    icon2.classList.toggle('fa-sun',  isDark);
+                }
+                syncMobileLabel(isDark);
+            }
+
+            if (btn)  btn.addEventListener('click', toggle);
+            if (btnM) btnM.addEventListener('click', toggle);
+        });
+    })();
+    </script>
 
     <!-- hint_id_ tooltips: converte help_text do crispy-forms em tooltip no label -->
     <script>
