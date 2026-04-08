@@ -1265,12 +1265,12 @@ def download_boleto(request, pk):
             response['Content-Disposition'] = f'attachment; filename="{filename}"'
             return response
 
-        # Sem cópia em DB: tenta regenerar via BRCobrança
+        # Sem cópia em DB: tenta regenerar via BRCobrança (usa Parcela.gerar_boleto para
+        # resolver conta_bancaria automaticamente e não exigir parâmetro extra)
         logger.warning("Sem cópia em DB para pk=%s, tentando regenerar...", pk)
         try:
-            from financeiro.services.boleto_service import BoletoService
-            resultado = BoletoService().gerar_boleto(parcela)
-            if resultado.get('sucesso'):
+            resultado = parcela.gerar_boleto(force=True, enviar_email=False)
+            if resultado and resultado.get('sucesso'):
                 parcela.refresh_from_db()
                 logger.info("Boleto regenerado com sucesso para parcela pk=%s", pk)
             else:
