@@ -193,6 +193,11 @@
                     <i class="fas fa-barcode me-2"></i>Ver Boleto
                 </a>
                 {% endif %}
+            {% if not parcela.pago %}
+            <a href="{% url 'financeiro:segunda_via_boleto' parcela.pk %}" class="btn btn-outline-warning">
+                <i class="fas fa-file-invoice me-2"></i>Segunda Via
+            </a>
+            {% endif %}
             <a href="{% url 'financeiro:registrar_pagamento' parcela.pk %}" class="btn btn-success">
                 <i class="fas fa-dollar-sign me-2"></i>Registrar Pagamento
             </a>

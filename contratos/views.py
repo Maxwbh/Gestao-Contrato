@@ -380,6 +380,17 @@ class ContratoDetailView(LoginRequiredMixin, DetailView):
         # =====================================================================
         context['tabela_juros'] = contrato.tabela_juros.all().order_by('ciclo_inicio')
 
+        # =====================================================================
+        # HISTÓRICO DE PAGAMENTOS (3.19)
+        # =====================================================================
+        from financeiro.models import HistoricoPagamento
+        context['historico_pagamentos'] = (
+            HistoricoPagamento.objects
+            .filter(parcela__contrato=contrato)
+            .select_related('parcela')
+            .order_by('-data_pagamento')
+        )
+
         return context
 
 
