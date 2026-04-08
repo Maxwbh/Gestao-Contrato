@@ -1482,6 +1482,86 @@ def pagina_dados_teste(request):
 
 
 # =============================================================================
+# U-06: BUSCA GLOBAL (Ctrl+K)
+# =============================================================================
+
+@login_required
+def api_busca_global(request):
+    """
+    Busca rápida global — retorna resultados agrupados por tipo.
+    GET ?q=<query>  (mín. 2 chars)
+    """
+    q = request.GET.get('q', '').strip()
+    if len(q) < 2:
+        return JsonResponse({'results': [], 'q': q})
+
+    from django.db.models import Q as _Q
+    from contratos.models import Contrato as _Contrato
+    from core.models import Comprador as _Comprador, Imovel as _Imovel
+
+    resultados = []
+
+    # Contratos
+    contratos = _Contrato.objects.filter(
+        _Q(numero_contrato__icontains=q) |
+        _Q(comprador__nome__icontains=q) |
+        _Q(imovel__identificacao__icontains=q) |
+        _Q(imovel__loteamento__icontains=q)
+    ).select_related('comprador', 'imovel', 'imobiliaria').order_by('-data_contrato')[:8]
+
+    for c in contratos:
+        imovel_label = ''
+        if c.imovel:
+            imovel_label = c.imovel.identificacao or c.imovel.loteamento or ''
+        resultados.append({
+            'tipo': 'contrato',
+            'icon': 'description',
+            'titulo': c.numero_contrato,
+            'subtitulo': f"{c.comprador.nome if c.comprador else '—'} · {imovel_label}",
+            'status': c.get_status_display(),
+            'url': f'/contratos/{c.pk}/',
+        })
+
+    # Compradores
+    compradores = _Comprador.objects.filter(
+        _Q(nome__icontains=q) |
+        _Q(cpf__icontains=q) |
+        _Q(cnpj__icontains=q) |
+        _Q(email__icontains=q)
+    ).order_by('nome')[:6]
+
+    for cp in compradores:
+        doc = cp.cpf or cp.cnpj or ''
+        resultados.append({
+            'tipo': 'comprador',
+            'icon': 'person',
+            'titulo': cp.nome,
+            'subtitulo': doc,
+            'status': cp.get_tipo_pessoa_display() if hasattr(cp, 'get_tipo_pessoa_display') else '',
+            'url': f'/compradores/{cp.pk}/editar/',
+        })
+
+    # Imóveis
+    imoveis = _Imovel.objects.filter(
+        _Q(identificacao__icontains=q) |
+        _Q(loteamento__icontains=q) |
+        _Q(cidade__icontains=q)
+    ).order_by('identificacao')[:6]
+
+    for im in imoveis:
+        resultados.append({
+            'tipo': 'imovel',
+            'icon': 'home',
+            'titulo': im.identificacao or im.loteamento or f'Imóvel #{im.pk}',
+            'subtitulo': f"{im.cidade or ''}{'/' + im.estado if im.estado else ''}" if (im.cidade or im.estado) else '',
+            'status': 'Disponível' if im.disponivel else 'Vendido',
+            'url': f'/imoveis/{im.pk}/editar/',
+        })
+
+    return JsonResponse({'results': resultados, 'q': q, 'total': len(resultados)})
+
+
+# =============================================================================
 # API - BRASILAPI (CEP e CNPJ)
 # =============================================================================
 
