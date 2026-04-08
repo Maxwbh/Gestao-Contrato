@@ -88,16 +88,45 @@ class ConfiguracaoWhatsApp(TimeStampedModel):
         choices=[
             ('TWILIO', 'Twilio'),
             ('META', 'Meta (WhatsApp Business API)'),
+            ('EVOLUTION', 'Evolution API (self-hosted)'),
+            ('ZAPI', 'Z-API'),
         ],
         default='TWILIO',
         verbose_name='Provedor'
     )
-    account_sid = models.CharField(max_length=255, verbose_name='Account SID')
-    auth_token = models.CharField(max_length=255, verbose_name='Auth Token')
+    # Twilio / Meta fields
+    account_sid = models.CharField(max_length=255, blank=True, verbose_name='Account SID')
+    auth_token = models.CharField(max_length=255, blank=True, verbose_name='Auth Token')
     numero_remetente = models.CharField(
-        max_length=20,
+        max_length=30,
+        blank=True,
         verbose_name='Número WhatsApp Remetente',
-        help_text='Número de WhatsApp do remetente (formato: whatsapp:+5511999999999)'
+        help_text='Twilio/Meta: whatsapp:+5511999999999 | Z-API: número sem prefixo'
+    )
+    # Evolution API / Z-API fields
+    api_url = models.URLField(
+        blank=True,
+        verbose_name='URL da API',
+        help_text='Evolution: http://seu-servidor:8080 | Z-API: https://api.z-api.io'
+    )
+    api_key = models.CharField(
+        max_length=255,
+        blank=True,
+        verbose_name='API Key / Token',
+        help_text='Evolution: apikey do cabeçalho | Z-API: token da instância'
+    )
+    instancia = models.CharField(
+        max_length=100,
+        blank=True,
+        verbose_name='Instância / Instance',
+        help_text='Evolution: nome da instância | Z-API: instance ID'
+    )
+    # Z-API additional field
+    client_token = models.CharField(
+        max_length=255,
+        blank=True,
+        verbose_name='Client-Token (Z-API)',
+        help_text='Cabeçalho Client-Token exigido pela Z-API'
     )
     ativo = models.BooleanField(default=True, verbose_name='Ativo')
 
@@ -106,7 +135,7 @@ class ConfiguracaoWhatsApp(TimeStampedModel):
         verbose_name_plural = 'Configurações de WhatsApp'
 
     def __str__(self):
-        return self.nome
+        return f"{self.nome} ({self.get_provedor_display()})"
 
 
 class Notificacao(TimeStampedModel):
