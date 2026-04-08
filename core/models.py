@@ -195,6 +195,14 @@ class Imobiliaria(TimeStampedModel):
         ]
     )
 
+    logo = models.ImageField(
+        upload_to='imobiliarias/logos/',
+        blank=True,
+        null=True,
+        verbose_name='Logo',
+        help_text='PNG ou JPG, máx. 2 MB. Recomendado: fundo transparente.'
+    )
+
     # Dados de Contato (mantido para compatibilidade)
     endereco = models.TextField(
         blank=True,

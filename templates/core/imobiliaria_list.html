@@ -53,6 +53,12 @@
                                         </h5>
                                     </div>
                                     <div class="card-body">
+                                        {% if imobiliaria.logo %}
+                                        <div class="text-center mb-3">
+                                            <img src="{{ imobiliaria.logo.url }}" alt="Logo {{ imobiliaria.nome }}"
+                                                 style="max-width:140px; max-height:80px; object-fit:contain;">
+                                        </div>
+                                        {% endif %}
                                         <h6 class="card-subtitle mb-3 text-muted">
                                             {{ imobiliaria.razao_social }}
                                         </h6>
