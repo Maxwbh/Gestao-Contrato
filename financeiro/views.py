@@ -21,6 +21,7 @@ from dateutil.relativedelta import relativedelta
 from decimal import Decimal
 import logging
 
+from django.core.cache import cache
 from .models import Parcela, Reajuste, StatusBoleto, HistoricoPagamento
 from core.models import Imobiliaria, ContaBancaria
 from contratos.models import Contrato, StatusContrato
@@ -236,7 +237,14 @@ def api_dashboard_dados(request):
     hoje = timezone.now().date()
 
     # Filtro por imobiliária
-    imobiliaria_id = request.GET.get('imobiliaria')
+    imobiliaria_id = request.GET.get('imobiliaria') or ''
+
+    # Cache por data + imobiliária (5 minutos) — evita múltiplas queries pesadas
+    cache_key = f'dashboard:dados:{hoje.isoformat()}:{imobiliaria_id}'
+    cached = cache.get(cache_key)
+    if cached is not None:
+        return JsonResponse(cached)
+
     parcelas_qs = Parcela.objects.all()
     contratos_qs = Contrato.objects.all()
 
@@ -382,7 +390,7 @@ def api_dashboard_dados(request):
         fluxo_caixa['realizado'].append(float(agg['realizado'] or 0) if i <= 0 else None)
         fluxo_caixa['is_future'].append(i > 0)
 
-    return JsonResponse({
+    data = {
         'status_parcelas': status_parcelas,
         'status_contratos': status_contratos,
         'recebimentos_mensais': recebimentos_mensais,
@@ -390,7 +398,9 @@ def api_dashboard_dados(request):
         'inadimplencia_faixas': inadimplencia_faixas,
         'vencimentos_proximos': vencimentos_proximos,
         'fluxo_caixa': fluxo_caixa,
-    })
+    }
+    cache.set(cache_key, data, timeout=300)  # 5 minutos
+    return JsonResponse(data)
 
 
 @login_required
