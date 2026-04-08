@@ -1027,6 +1027,23 @@ class IntermediariasDetailView(LoginRequiredMixin, DetailView):
         return context
 
 
+def _recalcular_se_necessario(contrato):
+    """
+    Recalcula amortização das parcelas NORMAL quando intermediarias_reduzem_pmt=True.
+
+    Replica a lógica do wizard: base_pv = valor_financiado − Σ(valor de todas as
+    intermediárias, pagas ou não), garantindo que mudanças posteriores nas
+    intermediárias se reflitam nas parcelas mensais.
+    """
+    if not contrato.intermediarias_reduzem_pmt:
+        return
+    soma = contrato.intermediarias.aggregate(
+        total=Sum('valor')
+    )['total'] or Decimal('0')
+    base_pv = max(contrato.valor_financiado - soma, Decimal('0.01'))
+    contrato.recalcular_amortizacao(base_pv=base_pv)
+
+
 @login_required
 @require_http_methods(["POST"])
 def criar_intermediaria(request, contrato_id):
@@ -1060,6 +1077,9 @@ def criar_intermediaria(request, contrato_id):
             valor=Decimal(str(data.get('valor', 0))),
             observacoes=data.get('observacoes', '')
         )
+
+        # Recalcular PMT das parcelas se a flag intermediarias_reduzem_pmt estiver ativa
+        _recalcular_se_necessario(contrato)
 
         return JsonResponse({
             'sucesso': True,
@@ -1098,12 +1118,24 @@ def atualizar_intermediaria(request, pk):
 
         if 'mes_vencimento' in data:
             intermediaria.mes_vencimento = int(data['mes_vencimento'])
+        valor_alterado = False
         if 'valor' in data:
-            intermediaria.valor = Decimal(str(data['valor']))
+            novo_valor = Decimal(str(data['valor']))
+            if novo_valor != intermediaria.valor:
+                intermediaria.valor = novo_valor
+                valor_alterado = True
         if 'observacoes' in data:
             intermediaria.observacoes = data['observacoes']
 
         intermediaria.save()
+
+        # Sincronizar parcela vinculada se o valor foi alterado e existe parcela
+        if valor_alterado and intermediaria.parcela_vinculada:
+            intermediaria.parcela_vinculada.valor_atual = intermediaria.valor_atual
+            intermediaria.parcela_vinculada.save(update_fields=['valor_atual'])
+
+        # Recalcular PMT das parcelas se a flag intermediarias_reduzem_pmt estiver ativa
+        _recalcular_se_necessario(intermediaria.contrato)
 
         return JsonResponse({
             'sucesso': True,
@@ -1137,14 +1169,17 @@ def excluir_intermediaria(request, pk):
         }, status=400)
 
     try:
-        contrato_id = intermediaria.contrato_id
+        contrato = intermediaria.contrato
         numero = intermediaria.numero_sequencial
         intermediaria.delete()
+
+        # Recalcular PMT das parcelas se a flag intermediarias_reduzem_pmt estiver ativa
+        _recalcular_se_necessario(contrato)
 
         return JsonResponse({
             'sucesso': True,
             'mensagem': f'Prestação intermediária #{numero} excluída com sucesso',
-            'redirect': f'/contratos/{contrato_id}/intermediarias/'
+            'redirect': f'/contratos/{contrato.pk}/intermediarias/'
         })
 
     except Exception as e:
@@ -1187,6 +1222,14 @@ def pagar_intermediaria(request, pk):
             intermediaria.observacoes = data['observacoes']
 
         intermediaria.save()
+
+        # Sincronizar parcela vinculada (se existir) como paga
+        if intermediaria.parcela_vinculada:
+            parcela_vinc = intermediaria.parcela_vinculada
+            parcela_vinc.pago = True
+            parcela_vinc.valor_pago = valor_pago
+            parcela_vinc.data_pagamento = data_pagamento
+            parcela_vinc.save(update_fields=['pago', 'valor_pago', 'data_pagamento'])
 
         return JsonResponse({
             'sucesso': True,
@@ -1255,10 +1298,13 @@ def gerar_boleto_intermediaria(request, pk):
             ultimo_dia = calendar.monthrange(data_vencimento.year, data_vencimento.month)[1]
             data_vencimento = data_vencimento.replace(day=min(dia_vencimento, ultimo_dia))
 
-        # Criar parcela vinculada
+        # Criar parcela vinculada.
+        # numero_parcela usa offset além das NORMAL para não conflitar com
+        # unique_together = [['contrato', 'numero_parcela']] na model Parcela.
+        numero_inter = contrato.numero_parcelas + intermediaria.numero_sequencial
         parcela = Parcela.objects.create(
             contrato=contrato,
-            numero_parcela=intermediaria.mes_vencimento,
+            numero_parcela=numero_inter,
             data_vencimento=data_vencimento,
             valor_original=intermediaria.valor,
             valor_atual=intermediaria.valor_reajustado or intermediaria.valor,
@@ -1443,7 +1489,7 @@ def api_preview_parcelas(request):
         inter_mes = {int(r['mes_vencimento']): D(str(r['valor'])) for r in inter_list}
 
         # Gerar tabela de amortização para primeiros 24 períodos
-        from financeiro.models import Parcela as _P
+        from financeiro.models import Reajuste as _P
         juros_ciclo1 = get_juros_ciclo(1)
         preview_count = min(numero_parcelas, 24)
 
@@ -1776,7 +1822,7 @@ class ContratoWizardView(LoginRequiredMixin, View):
                 break
 
         if numero_parcelas > 0:
-            from financeiro.models import Parcela as _P
+            from financeiro.models import Reajuste as _P
             if tipo_amortizacao == 'SAC':
                 # PMT do primeiro período SAC (o maior)
                 tabela = _P._calcular_sac_tabela(base_pmt, taxa_ciclo1, numero_parcelas)
@@ -2042,7 +2088,40 @@ def api_tabela_juros_contrato(request, pk):
 @login_required
 @require_http_methods(["DELETE"])
 def api_tabela_juros_delete(request, pk):
-    """DELETE → remove uma faixa de juros pelo ID."""
+    """DELETE → remove uma faixa de juros pelo ID.
+
+    Recalcula amortização das parcelas após a remoção para manter
+    consistência entre TabelaJurosContrato e valores das parcelas.
+    Bloqueia se o contrato já possui reajustes aplicados (parcelas
+    reajustadas não devem ser recalculadas retroativamente).
+    """
+    from financeiro.models import Reajuste
     entry = get_object_or_404(TabelaJurosContrato, pk=pk)
+    contrato = entry.contrato
+
+    # Guard: impede exclusão se reajuste já foi aplicado no contrato.
+    # Recalcular amortização após reajustes aplicados corromperia os valores.
+    if Reajuste.objects.filter(contrato=contrato, aplicado=True).exists():
+        return JsonResponse({
+            'sucesso': False,
+            'erro': (
+                'Não é possível excluir faixas de juros após reajustes terem sido aplicados. '
+                'Os valores das parcelas já foram corrigidos e não podem ser recalculados retroativamente.'
+            )
+        }, status=400)
+
     entry.delete()
+
+    # Recalcula amortização: se ainda há faixas, aplica PMT pela nova tabela;
+    # se removeu todas as faixas, `get_juros_para_ciclo` retorna None e
+    # recalcular_amortizacao() usa taxa=0 (amortização linear).
+    if contrato.parcelas.exists():
+        base_pv = contrato.valor_financiado
+        if contrato.intermediarias_reduzem_pmt:
+            soma = contrato.intermediarias.aggregate(
+                total=Sum('valor')
+            )['total'] or Decimal('0')
+            base_pv = max(base_pv - soma, Decimal('0.01'))
+        contrato.recalcular_amortizacao(base_pv=base_pv)
+
     return JsonResponse({'sucesso': True})

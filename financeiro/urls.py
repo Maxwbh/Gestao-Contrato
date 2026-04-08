@@ -31,6 +31,8 @@ urlpatterns = [
 
     # Carne (multiplos boletos)
     path('contrato/<int:contrato_id>/gerar-carne/', views.gerar_carne, name='gerar_carne'),
+    path('contrato/<int:contrato_id>/carne/pdf/', views.download_carne_pdf, name='download_carne_pdf'),
+    path('api/carne/multiplos/', views.download_carne_pdf_multiplos, name='download_carne_multiplos'),
 
     # Elegibilidade de parcelas para geracao de boletos
     path('api/contrato/<int:contrato_id>/parcelas-elegibilidade/', views.api_parcelas_elegibilidade, name='api_parcelas_elegibilidade'),
@@ -46,6 +48,8 @@ urlpatterns = [
     path('parcelas/<int:pk>/boleto/visualizar/', views.visualizar_boleto, name='visualizar_boleto'),
     path('parcelas/<int:pk>/boleto/cancelar/', views.cancelar_boleto, name='cancelar_boleto'),
     path('parcelas/<int:pk>/boleto/status/', views.api_status_boleto, name='api_status_boleto'),
+    path('parcelas/<int:pk>/boleto/whatsapp/', views.enviar_boleto_whatsapp, name='boleto_whatsapp'),
+    path('parcelas/<int:pk>/boleto/sms/', views.enviar_boleto_sms, name='boleto_sms'),
     path('contrato/<int:contrato_id>/boletos/gerar/', views.gerar_boletos_contrato, name='gerar_boletos_contrato'),
 
     # Reajustes
@@ -69,6 +73,11 @@ urlpatterns = [
     path('cnab/remessa/<int:pk>/regenerar/', views.regenerar_arquivo_remessa, name='regenerar_remessa'),
     path('cnab/remessa/<int:pk>/marcar-enviada/', views.marcar_remessa_enviada, name='marcar_remessa_enviada'),
     path('cnab/remessa/<int:pk>/download/', views.download_arquivo_remessa, name='download_remessa'),
+
+    # ==========================================================================
+    # OFX — Importação de Extrato Bancário
+    # ==========================================================================
+    path('cnab/ofx/upload/', views.upload_ofx, name='upload_ofx'),
 
     # CNAB - Arquivos de Retorno
     path('cnab/retorno/', views.listar_arquivos_retorno, name='listar_retornos'),
