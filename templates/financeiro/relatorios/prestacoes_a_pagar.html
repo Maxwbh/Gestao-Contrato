@@ -18,6 +18,8 @@
            class="btn btn-sm btn-outline-success"><i class="fas fa-file-excel me-1"></i>Excel</a>
         <a href="{% url 'financeiro:exportar_relatorio' 'prestacoes_a_pagar' %}?formato=pdf{% if filtros.contrato_id %}&contrato={{ filtros.contrato_id }}{% endif %}{% if filtros.imobiliaria_id %}&imobiliaria={{ filtros.imobiliaria_id }}{% endif %}{% if filtros.data_inicio %}&data_inicio={{ filtros.data_inicio }}{% endif %}{% if filtros.data_fim %}&data_fim={{ filtros.data_fim }}{% endif %}"
            class="btn btn-sm btn-outline-danger"><i class="fas fa-file-pdf me-1"></i>PDF</a>
+        <a href="{% url 'financeiro:exportar_relatorio_consolidado' %}?formato=xlsx{% if filtros.imobiliaria_id %}&imobiliaria={{ filtros.imobiliaria_id }}{% endif %}"
+           class="btn btn-sm btn-outline-primary" title="Baixar Excel consolidado com todas as abas"><i class="fas fa-layer-group me-1"></i>Consolidado</a>
       </div>
     </div>
   </div>

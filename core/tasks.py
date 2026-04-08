@@ -27,6 +27,8 @@ from django.http import JsonResponse
 from django.views.decorators.http import require_http_methods
 from django.conf import settings
 from django.db import transaction
+from core.permissions import task_api_rate_limit
+from notificacoes.services import _destinatario_email_teste
 
 logger = logging.getLogger(__name__)
 
@@ -568,6 +570,7 @@ def atualizar_status_parcelas_sync():
 # =============================================================================
 
 @require_http_methods(["POST"])
+@task_api_rate_limit
 @task_auth_required
 def task_processar_reajustes(request):
     """Endpoint para processar reajustes."""
@@ -577,6 +580,7 @@ def task_processar_reajustes(request):
 
 
 @require_http_methods(["POST"])
+@task_api_rate_limit
 @task_auth_required
 def task_enviar_notificacoes(request):
     """Endpoint para enviar notificações de vencimento (N-01: D-5)."""
@@ -586,6 +590,7 @@ def task_enviar_notificacoes(request):
 
 
 @require_http_methods(["POST"])
+@task_api_rate_limit
 @task_auth_required
 def task_enviar_inadimplentes(request):
     """Endpoint para enviar notificações de inadimplência (N-02: D+3)."""
@@ -595,6 +600,7 @@ def task_enviar_inadimplentes(request):
 
 
 @require_http_methods(["POST"])
+@task_api_rate_limit
 @task_auth_required
 def task_atualizar_parcelas(request):
     """Endpoint para atualizar status de parcelas."""
@@ -604,6 +610,7 @@ def task_atualizar_parcelas(request):
 
 
 @require_http_methods(["POST"])
+@task_api_rate_limit
 @task_auth_required
 def task_run_all(request):
     """
@@ -661,6 +668,16 @@ def task_status(request):
                 'name': 'run_all',
                 'endpoint': '/api/tasks/run-all/',
                 'description': 'Executa todas as tarefas'
+            },
+            {
+                'name': 'relatorio_semanal',
+                'endpoint': '/api/tasks/relatorio-semanal/',
+                'description': 'Envia relatório semanal para cada imobiliária'
+            },
+            {
+                'name': 'relatorio_mensal',
+                'endpoint': '/api/tasks/relatorio-mensal/',
+                'description': 'Envia relatório mensal consolidado para contabilidades'
             }
         ],
         'cron_setup': {
@@ -671,3 +688,291 @@ def task_status(request):
             'header': 'X-Task-Token: <seu-token>'
         }
     })
+
+
+# =============================================================================
+# RELATÓRIOS PERIÓDICOS (P3)
+# =============================================================================
+
+def relatorio_semanal_incorporadoras_sync():
+    """
+    Gera e envia relatório semanal para cada imobiliária.
+
+    Conteúdo: inadimplência, reajustes pendentes, boletos emitidos,
+    recebimentos da semana. Enviado por e-mail via Django mail.
+    """
+    from django.core.mail import send_mail
+    from django.db.models import Sum, Count
+    from financeiro.models import Parcela
+    from contratos.models import Contrato
+
+    result = TaskResult('relatorio_semanal_incorporadoras')
+
+    try:
+        from core.models import Imobiliaria
+        from django.utils import timezone
+
+        hoje = timezone.now().date()
+        inicio_semana = hoje - timedelta(days=hoje.weekday())  # segunda-feira
+
+        imobiliarias = Imobiliaria.objects.filter(ativo=True)
+        relatorios_gerados = 0
+
+        for imobiliaria in imobiliarias:
+            parcelas_qs = Parcela.objects.filter(
+                contrato__imobiliaria=imobiliaria,
+                contrato__status='ATIVO',
+            )
+
+            # Recebimentos da semana
+            recebimentos = parcelas_qs.filter(
+                pago=True,
+                data_pagamento__gte=inicio_semana,
+                data_pagamento__lte=hoje,
+            ).aggregate(
+                quantidade=Count('id'),
+                valor=Sum('valor_pago'),
+            )
+
+            # Inadimplência atual
+            vencidas = parcelas_qs.filter(
+                pago=False,
+                data_vencimento__lt=hoje,
+            ).aggregate(
+                quantidade=Count('id'),
+                valor=Sum('valor_atual'),
+            )
+
+            # Vencendo na próxima semana
+            prox_semana = hoje + timedelta(days=7)
+            a_vencer = parcelas_qs.filter(
+                pago=False,
+                data_vencimento__gte=hoje,
+                data_vencimento__lte=prox_semana,
+            ).aggregate(
+                quantidade=Count('id'),
+                valor=Sum('valor_atual'),
+            )
+
+            relatorio = {
+                'imobiliaria': imobiliaria.nome,
+                'periodo': f'{inicio_semana} a {hoje}',
+                'recebimentos': {
+                    'quantidade': recebimentos['quantidade'] or 0,
+                    'valor': float(recebimentos['valor'] or 0),
+                },
+                'inadimplencia': {
+                    'quantidade': vencidas['quantidade'] or 0,
+                    'valor': float(vencidas['valor'] or 0),
+                },
+                'a_vencer_7_dias': {
+                    'quantidade': a_vencer['quantidade'] or 0,
+                    'valor': float(a_vencer['valor'] or 0),
+                },
+            }
+
+            # Enviar por e-mail se imobiliária tiver e-mail configurado
+            if imobiliaria.email:
+                try:
+                    corpo = (
+                        f"Relatório Semanal — {imobiliaria.nome}\n"
+                        f"Período: {relatorio['periodo']}\n\n"
+                        f"Recebimentos: {relatorio['recebimentos']['quantidade']} "
+                        f"(R$ {relatorio['recebimentos']['valor']:.2f})\n"
+                        f"Inadimplência: {relatorio['inadimplencia']['quantidade']} "
+                        f"(R$ {relatorio['inadimplencia']['valor']:.2f})\n"
+                        f"A vencer (7d): {relatorio['a_vencer_7_dias']['quantidade']} "
+                        f"(R$ {relatorio['a_vencer_7_dias']['valor']:.2f})\n"
+                    )
+                    send_mail(
+                        subject=f'Relatório Semanal — {imobiliaria.nome}',
+                        message=corpo,
+                        from_email=None,  # usa DEFAULT_FROM_EMAIL
+                        recipient_list=[_destinatario_email_teste(imobiliaria.email)],
+                        fail_silently=True,
+                    )
+                except Exception as e:
+                    logger.warning("Erro ao enviar e-mail para %s: %s", imobiliaria.email, e)
+
+            relatorios_gerados += 1
+            result.add_message(
+                f'{imobiliaria.nome}: {relatorio["recebimentos"]["quantidade"]} recebimentos, '
+                f'{relatorio["inadimplencia"]["quantidade"]} inadimplentes'
+            )
+
+        result.items_processed = relatorios_gerados
+        result.finish()
+        logger.info("Relatório semanal gerado para %d imobiliárias", relatorios_gerados)
+
+    except Exception as e:
+        logger.exception("Erro em relatorio_semanal_incorporadoras: %s", e)
+        result.add_error(f"Erro: {str(e)}")
+        result.finish(success=False)
+
+    return result
+
+
+def relatorio_mensal_consolidado_sync():
+    """
+    Gera relatório mensal consolidado de todas as imobiliárias
+    para a contabilidade.
+
+    Executar no 1º dia útil do mês.
+    Conteúdo: totais por imobiliária, contratos ativos/encerrados,
+    recebimentos, inadimplência, reajustes aplicados.
+    """
+    from django.core.mail import send_mail
+    from django.db.models import Sum, Count
+    from financeiro.models import Parcela, Reajuste
+    from contratos.models import Contrato
+
+    result = TaskResult('relatorio_mensal_consolidado')
+
+    try:
+        from core.models import Contabilidade
+        from django.utils import timezone
+
+        hoje = timezone.now().date()
+        primeiro_dia_mes_atual = hoje.replace(day=1)
+        ultimo_dia_mes_anterior = primeiro_dia_mes_atual - timedelta(days=1)
+        primeiro_dia_mes_anterior = ultimo_dia_mes_anterior.replace(day=1)
+
+        contabilidades = Contabilidade.objects.filter(ativo=True)
+        relatorios_gerados = 0
+
+        for contabilidade in contabilidades:
+            imobiliarias = contabilidade.imobiliarias.filter(ativo=True)
+            dados_contabilidade = {
+                'contabilidade': contabilidade.nome,
+                'mes_referencia': primeiro_dia_mes_anterior.strftime('%B/%Y'),
+                'imobiliarias': [],
+                'totais': {
+                    'contratos_ativos': 0,
+                    'recebimentos': 0,
+                    'valor_recebido': 0,
+                    'inadimplentes': 0,
+                    'valor_inadimplente': 0,
+                    'reajustes_aplicados': 0,
+                },
+            }
+
+            for imobiliaria in imobiliarias:
+                parcelas_qs = Parcela.objects.filter(
+                    contrato__imobiliaria=imobiliaria,
+                )
+
+                contratos_ativos = Contrato.objects.filter(
+                    imobiliaria=imobiliaria,
+                    status='ATIVO',
+                ).count()
+
+                recebimentos = parcelas_qs.filter(
+                    pago=True,
+                    data_pagamento__gte=primeiro_dia_mes_anterior,
+                    data_pagamento__lte=ultimo_dia_mes_anterior,
+                ).aggregate(
+                    quantidade=Count('id'),
+                    valor=Sum('valor_pago'),
+                )
+
+                inadimplentes = parcelas_qs.filter(
+                    pago=False,
+                    data_vencimento__lt=hoje,
+                ).aggregate(
+                    quantidade=Count('id'),
+                    valor=Sum('valor_atual'),
+                )
+
+                reajustes = Reajuste.objects.filter(
+                    contrato__imobiliaria=imobiliaria,
+                    data_reajuste__gte=primeiro_dia_mes_anterior,
+                    data_reajuste__lte=ultimo_dia_mes_anterior,
+                ).count()
+
+                dados_imob = {
+                    'nome': imobiliaria.nome,
+                    'contratos_ativos': contratos_ativos,
+                    'recebimentos': recebimentos['quantidade'] or 0,
+                    'valor_recebido': float(recebimentos['valor'] or 0),
+                    'inadimplentes': inadimplentes['quantidade'] or 0,
+                    'valor_inadimplente': float(inadimplentes['valor'] or 0),
+                    'reajustes_aplicados': reajustes,
+                }
+
+                dados_contabilidade['imobiliarias'].append(dados_imob)
+                totais = dados_contabilidade['totais']
+                totais['contratos_ativos'] += contratos_ativos
+                totais['recebimentos'] += dados_imob['recebimentos']
+                totais['valor_recebido'] += dados_imob['valor_recebido']
+                totais['inadimplentes'] += dados_imob['inadimplentes']
+                totais['valor_inadimplente'] += dados_imob['valor_inadimplente']
+                totais['reajustes_aplicados'] += reajustes
+
+            # Enviar e-mail para contabilidade
+            if contabilidade.email:
+                try:
+                    totais = dados_contabilidade['totais']
+                    linhas = [
+                        f"Relatório Mensal Consolidado — {contabilidade.nome}",
+                        f"Referência: {dados_contabilidade['mes_referencia']}",
+                        "",
+                        f"Contratos ativos: {totais['contratos_ativos']}",
+                        f"Recebimentos: {totais['recebimentos']} (R$ {totais['valor_recebido']:.2f})",
+                        f"Inadimplência: {totais['inadimplentes']} (R$ {totais['valor_inadimplente']:.2f})",
+                        f"Reajustes aplicados: {totais['reajustes_aplicados']}",
+                        "",
+                        "Por imobiliária:",
+                    ]
+                    for imob in dados_contabilidade['imobiliarias']:
+                        linhas.append(
+                            f"  {imob['nome']}: "
+                            f"{imob['contratos_ativos']} contratos, "
+                            f"R$ {imob['valor_recebido']:.2f} recebido, "
+                            f"{imob['inadimplentes']} inadimplentes"
+                        )
+                    send_mail(
+                        subject=f'Relatório Mensal — {contabilidade.nome} — {dados_contabilidade["mes_referencia"]}',
+                        message='\n'.join(linhas),
+                        from_email=None,
+                        recipient_list=[_destinatario_email_teste(contabilidade.email)],
+                        fail_silently=True,
+                    )
+                except Exception as e:
+                    logger.warning("Erro ao enviar e-mail para %s: %s", contabilidade.email, e)
+
+            relatorios_gerados += 1
+            result.add_message(
+                f'{contabilidade.nome}: {dados_contabilidade["totais"]["contratos_ativos"]} '
+                f'contratos, R$ {dados_contabilidade["totais"]["valor_recebido"]:.2f} recebido'
+            )
+
+        result.items_processed = relatorios_gerados
+        result.finish()
+        logger.info("Relatório mensal consolidado gerado para %d contabilidades", relatorios_gerados)
+
+    except Exception as e:
+        logger.exception("Erro em relatorio_mensal_consolidado: %s", e)
+        result.add_error(f"Erro: {str(e)}")
+        result.finish(success=False)
+
+    return result
+
+
+@require_http_methods(["POST"])
+@task_api_rate_limit
+@task_auth_required
+def task_relatorio_semanal(request):
+    """Endpoint para gerar relatório semanal de incorporadoras."""
+    result = relatorio_semanal_incorporadoras_sync()
+    status_code = 200 if result.success else 500
+    return JsonResponse(result.to_dict(), status=status_code)
+
+
+@require_http_methods(["POST"])
+@task_api_rate_limit
+@task_auth_required
+def task_relatorio_mensal(request):
+    """Endpoint para gerar relatório mensal consolidado."""
+    result = relatorio_mensal_consolidado_sync()
+    status_code = 200 if result.success else 500
+    return JsonResponse(result.to_dict(), status=status_code)

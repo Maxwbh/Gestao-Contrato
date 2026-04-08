@@ -20,7 +20,8 @@ logger = logging.getLogger(__name__)
 
 from .models import (
     Notificacao, TemplateNotificacao,
-    ConfiguracaoEmail, ConfiguracaoSMS, ConfiguracaoWhatsApp
+    ConfiguracaoEmail, ConfiguracaoSMS, ConfiguracaoWhatsApp,
+    RegraNotificacao, TipoGatilho, TipoNotificacao,
 )
 from .forms import ConfiguracaoEmailForm, TemplateNotificacaoForm
 
@@ -358,3 +359,107 @@ def preview_template(request, pk):
         'corpo': corpo,
         'corpo_html': corpo_html,
     })
+
+
+# ==========================================================================
+# 3.27 — Configurações de Notificação: Régua (RegraNotificacao) CRUD
+# ==========================================================================
+
+@login_required
+def listar_regras_notificacao(request):
+    """Lista e gerencia as regras de notificação (régua de cobrança)."""
+    regras = RegraNotificacao.objects.select_related('template').order_by('tipo_gatilho', 'dias_offset')
+    templates = TemplateNotificacao.objects.all().order_by('nome')
+
+    context = {
+        'regras': regras,
+        'templates': templates,
+        'tipos_gatilho': TipoGatilho.choices,
+        'tipos_notificacao': TipoNotificacao.choices,
+    }
+    return render(request, 'notificacoes/regras_notificacao.html', context)
+
+
+@login_required
+def criar_regra_notificacao(request):
+    """Cria uma nova regra de notificação."""
+    if request.method != 'POST':
+        return redirect('notificacoes:listar_regras')
+
+    nome = request.POST.get('nome', '').strip()
+    tipo_gatilho = request.POST.get('tipo_gatilho', '')
+    dias_offset = request.POST.get('dias_offset', '0')
+    tipo_notificacao = request.POST.get('tipo_notificacao', TipoNotificacao.EMAIL)
+    template_id = request.POST.get('template') or None
+    ativo = request.POST.get('ativo') == 'on'
+
+    try:
+        dias_offset = int(dias_offset)
+    except (ValueError, TypeError):
+        dias_offset = 0
+
+    try:
+        template = TemplateNotificacao.objects.get(pk=template_id) if template_id else None
+        regra = RegraNotificacao.objects.create(
+            nome=nome,
+            tipo_gatilho=tipo_gatilho,
+            dias_offset=dias_offset,
+            tipo_notificacao=tipo_notificacao,
+            template=template,
+            ativo=ativo,
+        )
+        messages.success(request, f'Regra "{regra.nome}" criada com sucesso.')
+    except Exception as e:
+        messages.error(request, f'Erro ao criar regra: {e}')
+
+    return redirect('notificacoes:listar_regras')
+
+
+@login_required
+def editar_regra_notificacao(request, pk):
+    """Edita uma regra de notificação existente."""
+    regra = get_object_or_404(RegraNotificacao, pk=pk)
+
+    if request.method != 'POST':
+        return redirect('notificacoes:listar_regras')
+
+    regra.nome = request.POST.get('nome', regra.nome).strip()
+    regra.tipo_gatilho = request.POST.get('tipo_gatilho', regra.tipo_gatilho)
+    try:
+        regra.dias_offset = int(request.POST.get('dias_offset', regra.dias_offset))
+    except (ValueError, TypeError):
+        pass
+    regra.tipo_notificacao = request.POST.get('tipo_notificacao', regra.tipo_notificacao)
+    template_id = request.POST.get('template') or None
+    regra.template = TemplateNotificacao.objects.filter(pk=template_id).first() if template_id else None
+    regra.ativo = request.POST.get('ativo') == 'on'
+
+    try:
+        regra.save()
+        messages.success(request, f'Regra "{regra.nome}" atualizada.')
+    except Exception as e:
+        messages.error(request, f'Erro ao atualizar: {e}')
+
+    return redirect('notificacoes:listar_regras')
+
+
+@login_required
+def excluir_regra_notificacao(request, pk):
+    """Exclui uma regra de notificação."""
+    regra = get_object_or_404(RegraNotificacao, pk=pk)
+    if request.method == 'POST':
+        nome = regra.nome
+        regra.delete()
+        messages.success(request, f'Regra "{nome}" excluída.')
+    return redirect('notificacoes:listar_regras')
+
+
+@login_required
+def toggle_regra_notificacao(request, pk):
+    """Ativa/desativa uma regra via AJAX (POST)."""
+    regra = get_object_or_404(RegraNotificacao, pk=pk)
+    if request.method == 'POST':
+        regra.ativo = not regra.ativo
+        regra.save(update_fields=['ativo'])
+        return JsonResponse({'sucesso': True, 'ativo': regra.ativo})
+    return JsonResponse({'sucesso': False}, status=405)
