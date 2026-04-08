@@ -207,6 +207,7 @@ EMAIL_BACKEND = config('EMAIL_BACKEND', default='django.core.mail.backends.conso
 EMAIL_HOST = config('EMAIL_HOST', default='localhost')
 EMAIL_PORT = config('EMAIL_PORT', default=587, cast=int)
 EMAIL_USE_TLS = config('EMAIL_USE_TLS', default=True, cast=bool)
+EMAIL_USE_SSL = config('EMAIL_USE_SSL', default=False, cast=bool)
 EMAIL_HOST_USER = config('EMAIL_HOST_USER', default='')
 EMAIL_HOST_PASSWORD = config('EMAIL_HOST_PASSWORD', default='')
 DEFAULT_FROM_EMAIL = config('DEFAULT_FROM_EMAIL', default='noreply@gestaocontrato.com.br')
@@ -216,6 +217,15 @@ TWILIO_ACCOUNT_SID = config('TWILIO_ACCOUNT_SID', default='')
 TWILIO_AUTH_TOKEN = config('TWILIO_AUTH_TOKEN', default='')
 TWILIO_PHONE_NUMBER = config('TWILIO_PHONE_NUMBER', default='')
 TWILIO_WHATSAPP_NUMBER = config('TWILIO_WHATSAPP_NUMBER', default='')
+
+# =============================================================================
+# MODO DE TESTE — Safeguard para ambiente de desenvolvimento
+# Quando TEST_MODE=True, TODOS os e-mails e SMS/WhatsApp são redirecionados
+# para os endereços de teste abaixo, independente do destinatário real.
+# =============================================================================
+TEST_MODE = config('TEST_MODE', default=False, cast=bool)
+TEST_RECIPIENT_EMAIL = config('TEST_RECIPIENT_EMAIL', default='receber@msbrasil.inf.br')
+TEST_RECIPIENT_PHONE = config('TEST_RECIPIENT_PHONE', default='+5531993257479')
 
 # =============================================================================
 # REST FRAMEWORK (DRF) + drf-spectacular (Swagger/OpenAPI)
