@@ -756,6 +756,61 @@ class ContabilidadeDeleteView(LoginRequiredMixin, DeleteView):
 
 
 # =============================================================================
+# 3.20 — CONFIGURAÇÕES DA CONTABILIDADE
+# =============================================================================
+
+@login_required
+def contabilidade_configuracoes(request, pk):
+    """
+    3.20 — Página de configurações da Contabilidade.
+
+    Consolida em uma única view:
+    - Dados cadastrais (editar inline)
+    - Imobiliárias vinculadas
+    - Usuários com acesso (via AcessoUsuario)
+    """
+    from .models import AcessoUsuario
+
+    contabilidade = get_object_or_404(Contabilidade, pk=pk, ativo=True)
+
+    if request.method == 'POST':
+        form = ContabilidadeForm(request.POST, instance=contabilidade)
+        if form.is_valid():
+            form.save()
+            messages.success(request, 'Configurações da contabilidade atualizadas com sucesso!')
+            return redirect('core:contabilidade_configuracoes', pk=pk)
+        else:
+            messages.error(request, 'Erro ao salvar. Verifique os campos.')
+    else:
+        form = ContabilidadeForm(instance=contabilidade)
+
+    imobiliarias = contabilidade.imobiliarias.filter(ativo=True).order_by('nome')
+    acessos = AcessoUsuario.objects.filter(
+        contabilidade=contabilidade
+    ).select_related('usuario', 'imobiliaria').order_by('usuario__username')
+
+    # Estatísticas rápidas
+    from contratos.models import Contrato
+    total_contratos = Contrato.objects.filter(
+        imobiliaria__in=imobiliarias
+    ).count()
+    total_ativos = Contrato.objects.filter(
+        imobiliaria__in=imobiliarias, status='ATIVO'
+    ).count()
+
+    context = {
+        'contabilidade': contabilidade,
+        'form': form,
+        'imobiliarias': imobiliarias,
+        'acessos': acessos,
+        'total_imobiliarias': imobiliarias.count(),
+        'total_contratos': total_contratos,
+        'total_contratos_ativos': total_ativos,
+    }
+    return render(request, 'core/contabilidade_configuracoes.html', context)
+
+
+# =============================================================================
 # CRUD VIEWS - COMPRADOR
 # =============================================================================
 
