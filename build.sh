@@ -148,7 +148,16 @@ def add_column_if_not_exists(cursor, table, column, column_def):
     else:
         print(f"  - {table}.{column} already exists")
 
-with connection.cursor() as cursor:
+from django.db import transaction as _tx
+
+# Usar transaction.atomic() para que o pgBouncer em transaction-mode pooling
+# mantenha o MESMO backend PostgreSQL durante todo o bloco DDL. Sem isso,
+# cada cursor.execute() pode ir para um backend diferente, perdendo o SET search_path.
+with _tx.atomic(), connection.cursor() as cursor:
+    # Garantir search_path correto antes de qualquer DDL.
+    # PGOPTIONS no startup packet pode não ser honrado pelo pgBouncer (Supabase).
+    cursor.execute("SET search_path TO gestao_contrato, public")
+
     # =========================================================================
     # CAMPOS TIMESTAMP (criado_em, atualizado_em) - TimeStampedModel
     # Também verifica created_at/updated_at para compatibilidade
@@ -399,35 +408,43 @@ with connection.cursor() as cursor:
           AND table_name = 'core_contabancaria'
     """)
     if not cursor.fetchone():
+        # Só cria se core_imobiliaria já existe (migration já rodou)
         cursor.execute("""
-            CREATE TABLE core_contabancaria (
-                id SERIAL PRIMARY KEY,
-                criado_em TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-                atualizado_em TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-                imobiliaria_id INTEGER NOT NULL REFERENCES core_imobiliaria(id) ON DELETE CASCADE,
-                banco VARCHAR(3) NOT NULL,
-                descricao VARCHAR(150) NOT NULL,
-                agencia VARCHAR(10) NOT NULL,
-                agencia_dv VARCHAR(2) DEFAULT '',
-                conta VARCHAR(15) NOT NULL,
-                conta_dv VARCHAR(2) DEFAULT '',
-                tipo_conta VARCHAR(20) DEFAULT 'corrente',
-                convenio VARCHAR(20) DEFAULT '',
-                carteira VARCHAR(10) DEFAULT '',
-                variacao_carteira VARCHAR(10) DEFAULT '',
-                nosso_numero_inicio BIGINT DEFAULT 1,
-                nosso_numero_atual BIGINT DEFAULT 1,
-                percentual_multa DECIMAL(10,2) DEFAULT 0,
-                percentual_juros DECIMAL(10,4) DEFAULT 0,
-                dias_baixa_automatica INTEGER DEFAULT 0,
-                instrucao1 VARCHAR(255) DEFAULT '',
-                instrucao2 VARCHAR(255) DEFAULT '',
-                instrucao3 VARCHAR(255) DEFAULT '',
-                conta_padrao BOOLEAN DEFAULT FALSE,
-                ativo BOOLEAN DEFAULT TRUE
-            )
+            SELECT 1 FROM information_schema.tables
+            WHERE table_schema = current_schema() AND table_name = 'core_imobiliaria'
         """)
-        print("  + Created table core_contabancaria")
+        if not cursor.fetchone():
+            print("  ! core_imobiliaria nao existe — pulando criacao de core_contabancaria (migration pendente)")
+        else:
+            cursor.execute("""
+                CREATE TABLE core_contabancaria (
+                    id SERIAL PRIMARY KEY,
+                    criado_em TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+                    atualizado_em TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+                    imobiliaria_id INTEGER NOT NULL REFERENCES core_imobiliaria(id) ON DELETE CASCADE,
+                    banco VARCHAR(3) NOT NULL,
+                    descricao VARCHAR(150) NOT NULL,
+                    agencia VARCHAR(10) NOT NULL,
+                    agencia_dv VARCHAR(2) DEFAULT '',
+                    conta VARCHAR(15) NOT NULL,
+                    conta_dv VARCHAR(2) DEFAULT '',
+                    tipo_conta VARCHAR(20) DEFAULT 'corrente',
+                    convenio VARCHAR(20) DEFAULT '',
+                    carteira VARCHAR(10) DEFAULT '',
+                    variacao_carteira VARCHAR(10) DEFAULT '',
+                    nosso_numero_inicio BIGINT DEFAULT 1,
+                    nosso_numero_atual BIGINT DEFAULT 1,
+                    percentual_multa DECIMAL(10,2) DEFAULT 0,
+                    percentual_juros DECIMAL(10,4) DEFAULT 0,
+                    dias_baixa_automatica INTEGER DEFAULT 0,
+                    instrucao1 VARCHAR(255) DEFAULT '',
+                    instrucao2 VARCHAR(255) DEFAULT '',
+                    instrucao3 VARCHAR(255) DEFAULT '',
+                    conta_padrao BOOLEAN DEFAULT FALSE,
+                    ativo BOOLEAN DEFAULT TRUE
+                )
+            """)
+            print("  + Created table core_contabancaria")
     else:
         print("  - core_contabancaria already exists")
 
