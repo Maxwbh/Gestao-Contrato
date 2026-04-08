@@ -47,6 +47,8 @@ INSTALLED_APPS = [
     'crispy_forms',
     'crispy_bootstrap5',
     'django_celery_beat',
+    'rest_framework',
+    'drf_spectacular',
 
     # Local apps
     'accounts',
@@ -205,6 +207,7 @@ EMAIL_BACKEND = config('EMAIL_BACKEND', default='django.core.mail.backends.conso
 EMAIL_HOST = config('EMAIL_HOST', default='localhost')
 EMAIL_PORT = config('EMAIL_PORT', default=587, cast=int)
 EMAIL_USE_TLS = config('EMAIL_USE_TLS', default=True, cast=bool)
+EMAIL_USE_SSL = config('EMAIL_USE_SSL', default=False, cast=bool)
 EMAIL_HOST_USER = config('EMAIL_HOST_USER', default='')
 EMAIL_HOST_PASSWORD = config('EMAIL_HOST_PASSWORD', default='')
 DEFAULT_FROM_EMAIL = config('DEFAULT_FROM_EMAIL', default='noreply@gestaocontrato.com.br')
@@ -214,6 +217,62 @@ TWILIO_ACCOUNT_SID = config('TWILIO_ACCOUNT_SID', default='')
 TWILIO_AUTH_TOKEN = config('TWILIO_AUTH_TOKEN', default='')
 TWILIO_PHONE_NUMBER = config('TWILIO_PHONE_NUMBER', default='')
 TWILIO_WHATSAPP_NUMBER = config('TWILIO_WHATSAPP_NUMBER', default='')
+
+# =============================================================================
+# MODO DE TESTE — Safeguard para ambiente de desenvolvimento
+# Quando TEST_MODE=True, TODOS os e-mails e SMS/WhatsApp são redirecionados
+# para os endereços de teste abaixo, independente do destinatário real.
+# =============================================================================
+TEST_MODE = config('TEST_MODE', default=False, cast=bool)
+TEST_RECIPIENT_EMAIL = config('TEST_RECIPIENT_EMAIL', default='receber@msbrasil.inf.br')
+TEST_RECIPIENT_PHONE = config('TEST_RECIPIENT_PHONE', default='+5531993257479')
+
+# =============================================================================
+# REST FRAMEWORK (DRF) + drf-spectacular (Swagger/OpenAPI)
+# =============================================================================
+
+REST_FRAMEWORK = {
+    'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
+    'DEFAULT_AUTHENTICATION_CLASSES': [
+        'rest_framework.authentication.SessionAuthentication',
+    ],
+    'DEFAULT_PERMISSION_CLASSES': [
+        'rest_framework.permissions.IsAuthenticated',
+    ],
+    'DEFAULT_RENDERER_CLASSES': [
+        'rest_framework.renderers.JSONRenderer',
+    ],
+    'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
+    'PAGE_SIZE': 25,
+}
+
+SPECTACULAR_SETTINGS = {
+    'TITLE': 'Gestão de Contratos API',
+    'DESCRIPTION': (
+        'API REST para o sistema de Gestão de Contratos Imobiliários.\n\n'
+        '## Autenticação\n'
+        'Todas as rotas requerem autenticação via sessão Django (`/accounts/login/`).\n\n'
+        '## Módulos\n'
+        '- **Financeiro**: parcelas, boletos, CNAB, reajustes, dashboards\n'
+        '- **Core**: contabilidades, imobiliárias, compradores, CEP/CNPJ\n'
+        '- **Portal Comprador**: contratos, boletos e segunda via\n'
+        '- **Tasks**: cron jobs para reajustes, notificações e relatórios\n'
+    ),
+    'VERSION': '3.1.0',
+    'SERVE_INCLUDE_SCHEMA': False,
+    'CONTACT': {
+        'name': 'Maxwell da Silva Oliveira',
+        'email': 'maxwbh@gmail.com',
+    },
+    'LICENSE': {'name': 'Proprietário — M&S do Brasil LTDA'},
+    'SWAGGER_UI_SETTINGS': {
+        'deepLinking': True,
+        'persistAuthorization': True,
+        'displayOperationId': False,
+    },
+    'COMPONENT_SPLIT_REQUEST': True,
+    'SORT_OPERATIONS': False,
+}
 
 # Configurações de Notificação
 NOTIFICACAO_DIAS_ANTECEDENCIA = config('NOTIFICACAO_DIAS_ANTECEDENCIA', default=5, cast=int)
@@ -251,8 +310,20 @@ LOGGING = {
     'disable_existing_loggers': False,
     'formatters': {
         'verbose': {
-            'format': '{levelname} {asctime} {module} {message}',
+            'format': '{levelname} {asctime} {module} {process:d} {thread:d} {message}',
             'style': '{',
+        },
+        'simple': {
+            'format': '{levelname} {asctime} {message}',
+            'style': '{',
+        },
+    },
+    'filters': {
+        'require_debug_false': {
+            '()': 'django.utils.log.RequireDebugFalse',
+        },
+        'require_debug_true': {
+            '()': 'django.utils.log.RequireDebugTrue',
         },
     },
     'handlers': {
@@ -260,13 +331,54 @@ LOGGING = {
             'class': 'logging.StreamHandler',
             'formatter': 'verbose',
         },
+        'console_simple': {
+            'class': 'logging.StreamHandler',
+            'formatter': 'simple',
+            'filters': ['require_debug_true'],
+        },
+        'mail_admins': {
+            'level': 'ERROR',
+            'class': 'django.utils.log.AdminEmailHandler',
+            'filters': ['require_debug_false'],
+        },
     },
     'root': {
         'handlers': ['console'],
-        'level': 'INFO',
+        'level': 'WARNING',
     },
     'loggers': {
         'django': {
+            'handlers': ['console'],
+            'level': 'INFO',
+            'propagate': False,
+        },
+        'django.request': {
+            'handlers': ['console', 'mail_admins'],
+            'level': 'ERROR',
+            'propagate': False,
+        },
+        'django.security': {
+            'handlers': ['console', 'mail_admins'],
+            'level': 'ERROR',
+            'propagate': False,
+        },
+        # App-level loggers
+        'financeiro': {
+            'handlers': ['console'],
+            'level': 'INFO',
+            'propagate': False,
+        },
+        'contratos': {
+            'handlers': ['console'],
+            'level': 'INFO',
+            'propagate': False,
+        },
+        'core': {
+            'handlers': ['console'],
+            'level': 'INFO',
+            'propagate': False,
+        },
+        'notificacoes': {
             'handlers': ['console'],
             'level': 'INFO',
             'propagate': False,

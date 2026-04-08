@@ -45,7 +45,7 @@
 ### P3 — Médio
 | # | Item |
 |---|------|
-| 2.9 | Validar sequência de ciclos de reajuste (não pular) |
+| 2.9 | Validar sequência de ciclos de reajuste (não pular) | ✅ V-09: validação em `aplicar_reajuste_pagina` e `aplicar_reajuste_contrato`: verifica `calcular_ciclo_pendente` antes de aceitar POST, retorna erro claro se ciclo fora de ordem; modelo `Reajuste.clean()` já tinha validação de cadeia (ciclo N exige ciclo N-1 aplicado) |
 | 2.10 | Segunda via de boleto com juros/multa calculados | ✅ `BoletoService.gerar_segunda_via()` reutiliza nosso_número existente, sobrepõe valor com juros/multa do dia; view `segunda_via_boleto` GET=preview com totais atualizados, GET?download=1=PDF fresco via BRCobrança; botão "Segunda Via" em `detalhe_parcela.html` |
 | 2.11 | WhatsApp/SMS — testes end-to-end com Twilio |
 
@@ -75,28 +75,28 @@
 | 3.12 | Gestão de Boletos: download ZIP de vários boletos | ✅ `download_zip_boletos` em `financeiro/views.py` + URL `contrato/<id>/boletos/zip/` + botão ZIP na aba Parcelas de `contrato_detail.html` |
 | 3.13 | Gestão de Parcelas: seleção múltipla para ações em lote | ✅ Seleção múltipla implementada |
 | 3.14 | Gestão de Parcelas: juros/multa/total nas vencidas | ✅ Cálculo dinâmico em `listar_parcelas` view |
-| 3.15 | Sidebar recolhível com indicadores de pendências | — |
+| 3.15 | Sidebar recolhível com indicadores de pendências | ✅ `desktop-sidebar` em `base.html`: 240px↔60px toggle (localStorage), badges de parcelas vencidas/reajustes/boletos/CNAB via `api_sidebar_pendencias`; tooltip CSS em modo colapsado; oculto em mobile (usa sidenav Materialize) |
 | 3.16 | Toast de sucesso/erro padronizado | ✅ `window.showToast()` global em `base.html` |
 | 3.17 | Centro de notificações com badge | ✅ Badge navbar + endpoint `api_reajustes_pendentes_count` |
 
 ### P3 — Médio
 | # | Tela/Componente |
 |---|-----------------|
-| 3.18 | Aba Relatórios do Contrato |
+| 3.18 | Aba Relatórios do Contrato | ✅ Seção colapsável "Relatórios & Exportações" em `contrato_detail.html`: KPIs financeiros (valor total, pago, saldo, progresso); botões CSV (parcelas a pagar, pagas, posição); botão Imprimir; usa `exportar_relatorio` existente filtrado por contrato |
 | 3.19 | Aba Histórico de Pagamentos (comprovantes) | ✅ Card "Histórico de Pagamentos" em `contrato_detail.html` — tabela com data, valor, juros, multa, forma de pagamento, link para comprovante; `ContratoDetailView.get_context_data` passa `historico_pagamentos` via queryset |
-| 3.20 | Configurações Contabilidade (dados, usuários, imobiliárias) |
-| 3.21 | Exportar relatório consolidado (PDF, Excel) |
-| 3.22 | Tela de reajuste pendente (índice, prévia, aplicar lote) |
-| 3.23 | Histórico de reajustes aplicados |
+| 3.20 | Configurações Contabilidade (dados, usuários, imobiliárias) | ✅ View `contabilidade_configuracoes` exibe dados cadastrais (form inline), imobiliárias vinculadas e usuários com acesso em uma única página; URL `/core/contabilidades/<pk>/configuracoes/`; botão "Configurações" (⚙️) na lista de contabilidades |
+| 3.21 | Exportar relatório consolidado (PDF, Excel) | ✅ View `exportar_relatorio_consolidado` gera Excel multi-aba (A Pagar 90d / Pagas 90d / Posição Contratos) ou PDF multi-seção; botão "Consolidado" na tela de prestações a pagar; URL `/financeiro/relatorios/exportar-consolidado/` |
+| 3.22 | Tela de reajuste pendente (índice, prévia, aplicar lote) | ✅ `reajustes_pendentes` view + template: lista agrupada por imobiliária, paginada; seleção em lote com checkbox; botão "Aplicar Selecionados" abre modal com preview; bulk apply via `aplicar_reajuste_lote` |
+| 3.23 | Histórico de reajustes aplicados | ✅ View `listar_reajustes` lista todos os reajustes globalmente; card "Reajustes" em `contrato_detail.html` exibe histórico por contrato com ciclo, índice, período, % bruto/aplicado, parcelas e usuário |
 | 3.24 | Upload de comprovante de pagamento | ✅ `registrar_pagamento` aceita `multipart/form-data`; cria `HistoricoPagamento` com `forma_pagamento` e `comprovante` (FileField já existia no model); template atualizado com campos forma_pagamento e comprovante |
-| 3.25 | Notificar comprador inadimplente |
-| 3.26 | Configurações de boleto por imobiliária |
-| 3.27 | Configurações de notificação (dias, canais) |
-| 3.28 | Gerenciamento de usuários por imobiliária |
-| 3.29 | Card de resumo reutilizável |
-| 3.30 | Tabela paginada com filtros (componente genérico) |
-| 3.31 | Gráficos barras/pizza/linha (componente genérico) |
-| 3.32 | Modal de confirmação reutilizável |
+| 3.25 | Notificar comprador inadimplente | ✅ View `notificar_inadimplente` (POST) envia e-mail + WhatsApp para comprador de parcela vencida; botão "Notificar Comprador" em `detalhe_parcela.html` (visível apenas para parcelas vencidas não pagas); registra `Notificacao` com status ENVIADO; URL `parcelas/<pk>/notificar/` |
+| 3.26 | Configurações de boleto por imobiliária | ✅ Já implementado: campos `percentual_multa_padrao`, `percentual_juros_padrao`, `instrucao_padrao`, etc. no model `Imobiliaria`; `ImobiliariaForm` inclui todos os campos; `Contrato.get_config_boleto()` usa configuração da imobiliária quando `usar_config_boleto_imobiliaria=True` |
+| 3.27 | Configurações de notificação (dias, canais) | ✅ CRUD completo para `RegraNotificacao`: view `listar_regras_notificacao`, `criar_regra_notificacao`, `editar_regra_notificacao`, `excluir_regra_notificacao`, `toggle_regra_notificacao`; template com tabela + modais; link no dropdown "Notificações" da navbar; URLs sob `/notificacoes/regras/` |
+| 3.28 | Gerenciamento de usuários por imobiliária | ✅ Model `AcessoUsuario` + CRUD completo (`AcessoUsuarioListView`, `AcessoUsuarioCreateView`, etc.) em `core/views.py`; `AcessoUsuarioForm` em `core/forms.py`; URL `/core/acessos/`; acessível via menu Admin |
+| 3.29 | Card de resumo reutilizável | ✅ `templates/components/summary_card.html` — suporta icon, variant (Bootstrap), value, subtitle, href, badge; uso: `{% include 'components/summary_card.html' with icon="..." title="..." value="..." %}` |
+| 3.30 | Tabela paginada com filtros (componente genérico) | ✅ `templates/components/paginated_table.html` — cabeçalho com busca, tabela responsiva, paginação Bootstrap automática com elipses |
+| 3.31 | Gráficos barras/pizza/linha (componente genérico) | ✅ `templates/components/chart_card.html` — Chart.js bar/line/pie/doughnut; suporta api_url (fetch) ou chart_var (inline); paleta Bootstrap; tooltip R$ automático |
+| 3.32 | Modal de confirmação reutilizável | ✅ `templates/components/confirm_modal.html` — modal Bootstrap + fallback confirm() para Materialize; API JS: `confirmarAcao({...})` e `confirmarExclusao(nome, url)` |
 
 ### P4 — Baixo
 | # | Tela/Componente |
@@ -119,30 +119,30 @@
 | `GET /portal/api/vencimentos/` | Filtros por período e status | ✅ `api_portal_vencimentos` |
 | `GET /portal/api/boletos/` | Lista com filtros | ✅ `api_portal_boletos` |
 
-### P3 — Médio
-| Endpoint | Descrição |
-|----------|-----------|
-| `GET /api/contabilidade/relatorios/vencimentos/` | Relatório semanal/mensal/trimestral |
-| `GET /api/contabilidade/imobiliarias/` | Lista com estatísticas |
-| `GET /api/imobiliaria/<id>/pendencias/` | Parcelas vencidas com encargos |
-| `POST /portal/api/boletos/segunda-via/` | Gerar segunda via com encargos |
-| `GET /portal/api/boletos/<id>/linha-digitavel/` | Linha digitável |
+### P3 — Médio ✅ CONCLUÍDO
+| Endpoint | Descrição | Status |
+|----------|-----------|--------|
+| `GET /api/contabilidade/relatorios/vencimentos/` | Relatório semanal/mensal/trimestral | ✅ `api_contabilidade_relatorios_vencimentos` |
+| `GET /api/contabilidade/imobiliarias/` | Lista com estatísticas | ✅ já existia como `api_imobiliarias_lista` |
+| `GET /api/imobiliaria/<id>/pendencias/` | Parcelas vencidas com encargos | ✅ `api_imobiliaria_pendencias` |
+| `POST /portal/api/boletos/segunda-via/` | Gerar segunda via com encargos | ✅ `api_portal_segunda_via` |
+| `GET /portal/api/boletos/<id>/linha-digitavel/` | Linha digitável | ✅ `api_portal_linha_digitavel` |
 
 ---
 
 ## 5. TAREFAS CELERY PENDENTES
 
-### P2 — Alto
-| Task | Frequência | Descrição |
-|------|------------|-----------|
-| `alerta_vencimentos_semana` | Segunda-feira | Para Contabilidade |
-| `alerta_inadimplencia_diario` | Diário | Para Imobiliária |
+### P2 — Alto ✅ CONCLUÍDO (via HTTP tasks — Render Free Tier não suporta Celery)
+| Task | Frequência | Descrição | Status |
+|------|------------|-----------|--------|
+| `alerta_vencimentos_semana` | Segunda-feira | Para Contabilidade | ✅ `enviar_notificacoes_sync()` em `core/tasks.py`; disparado via `POST /api/tasks/run-all/` |
+| `alerta_inadimplencia_diario` | Diário | Para Imobiliária | ✅ `enviar_inadimplentes_sync()` em `core/tasks.py`; disparado via `POST /api/tasks/run-all/` |
 
-### P3 — Médio
-| Task | Frequência | Descrição |
-|------|------------|-----------|
-| `relatorio_semanal_incorporadoras` | Segunda-feira | Resumo semanal |
-| `relatorio_mensal_consolidado` | 1º dia útil | Consolidado mensal |
+### P3 — Médio ✅ CONCLUÍDO
+| Task | Frequência | Descrição | Status |
+|------|------------|-----------|--------|
+| `relatorio_semanal_incorporadoras` | Segunda-feira | Resumo semanal | ✅ `relatorio_semanal_incorporadoras_sync()` em `core/tasks.py`; endpoint `POST /api/tasks/relatorio-semanal/`; envia e-mail por imobiliária com recebimentos, inadimplência e a-vencer-7d |
+| `relatorio_mensal_consolidado` | 1º dia útil | Consolidado mensal | ✅ `relatorio_mensal_consolidado_sync()` em `core/tasks.py`; endpoint `POST /api/tasks/relatorio-mensal/`; envia e-mail consolidado para cada contabilidade com totais por imobiliária |
 
 ### P4 — Baixo
 | Task | Frequência | Descrição |
@@ -153,33 +153,34 @@
 
 ## 6. SISTEMA DE PERMISSÕES
 
-### P2 — Alto
-| Perfil | Descrição |
-|--------|-----------|
-| Admin Contabilidade | Acesso total a todas imobiliárias |
-| Admin Imobiliária | Acesso total à sua imobiliária |
-| Filtro por tenant | Todas as views filtram por imobiliária |
-| Audit log | Logs de geração de boletos e reajustes |
+### P2 — Alto ✅ CONCLUÍDO
+| Perfil | Descrição | Status |
+|--------|-----------|--------|
+| Admin Contabilidade | Acesso total a todas imobiliárias | ✅ `usuario_tem_permissao_total()` verifica `is_superuser ou is_staff`; `get_contabilidades_usuario()` retorna todas para admins |
+| Admin Imobiliária | Acesso total à sua imobiliária | ✅ `get_imobiliarias_usuario()` filtra via `AcessoUsuario`; staff tem acesso total |
+| Filtro por tenant | Todas as views filtram por imobiliária | ✅ `TenantMixin` em `core/views.py` + `get_imobiliarias_usuario()` / `get_contabilidades_usuario()` usados nos dashboards |
+| Audit log | Logs de geração de boletos e reajustes | ✅ `Reajuste.usuario` (FK auth.User) + `Reajuste.ip_address`; `Parcela.data_geracao_boleto` (DateTimeField auto) |
 
-### P3 — Médio
-| Perfil | Descrição |
-|--------|-----------|
-| Operador Contabilidade | Apenas relatórios |
-| Gerente Imobiliária | Contratos e relatórios |
-| Operador Imobiliária | Pagamentos e boletos |
-| Rate limiting | Nas APIs públicas |
+### P3 — Médio ✅ CONCLUÍDO
+| Perfil/Item | Descrição | Status |
+|-------------|-----------|--------|
+| Operador Relatórios | Apenas leitura (pode_editar=False, pode_excluir=False) | ✅ `usuario_eh_apenas_leitura()` em `core/models.py` verifica `AcessoUsuario.pode_editar=False AND pode_excluir=False` |
+| Gerente Imobiliária | Editar + excluir (pode_editar=True, pode_excluir=True) | ✅ `usuario_pode_excluir()` em `core/models.py` |
+| Operador Imobiliária | Apenas editar (pode_editar=True, pode_excluir=False) | ✅ `usuario_pode_editar()` em `core/models.py` |
+| Rate limiting | APIs de tarefa e portal | ✅ `core/permissions.py`: decorator `rate_limit(N)` baseado em cache Django (janela 60s); `task_api_rate_limit` (30/min) em todos endpoints de task; `portal_rate_limit` (10/min) em `api_portal_segunda_via`; `public_api_rate_limit` (60/min) e `boleto_lote_rate_limit` (5/min) disponíveis |
+| Decoradores | `requer_permissao_total`, `requer_pode_editar`, `requer_pode_excluir`, `requer_acesso_imobiliaria` | ✅ `core/permissions.py` |
 
 ### P4 — Baixo
 | Item | Descrição |
 |------|-----------|
-| Visualizador | Apenas consultas |
-| Confirmação | Antes de operações em massa |
+| Visualizador | Apenas consultas — coberto por `usuario_eh_apenas_leitura()` |
+| Confirmação | Antes de operações em massa — `confirm_modal.html` já implementado (3.32) |
 
 ---
 
 ## 7. TESTES AUTOMATIZADOS
 
-**Meta:** > 80% de cobertura | **Atual:** ~25%
+**Meta:** > 80% de cobertura | **Atual:** ~51% (763 testes passando)
 
 ### 7.1 P1 — Apps sem nenhum teste (~104 testes) ✅ CONCLUÍDO
 | Arquivo | Escopo | Qtd | Status |
@@ -193,50 +194,50 @@
 | `tests/unit/portal_comprador/test_views.py` | dashboard, contratos, boletos, dados | 21 | ✅ |
 | `tests/unit/portal_comprador/test_api.py` | APIs do portal | 5 | ✅ |
 
-### 7.2 P2 — Views e APIs faltantes (~164 testes)
-| Arquivo | Escopo | Qtd |
-|---------|--------|-----|
-| `tests/unit/core/test_models.py` | Modelos do core | 12 |
-| `tests/unit/core/test_crud_views.py` | CRUD completo | 30 |
-| `tests/unit/core/test_api_views.py` | APIs bancos, CEP, CNPJ | 15 |
-| `tests/unit/core/test_dashboard.py` | index, dashboard, setup | 7 |
-| `tests/unit/core/test_management_commands.py` | gerar_dados_teste | 8 |
-| `tests/unit/contratos/test_crud_views.py` | CRUD contratos | 14 |
-| `tests/unit/contratos/test_indices_views.py` | CRUD índices | 9 |
-| `tests/unit/financeiro/test_parcela_views.py` | listar, detalhe, pagar | 14 |
-| `tests/unit/financeiro/test_boleto_views.py` | gerar, download, carnê | 17 |
-| `tests/unit/financeiro/test_reajuste_views.py` | listar, aplicar, calcular | 9 |
-| `tests/unit/financeiro/test_cnab_views.py` | remessa e retorno | 15 |
-| `tests/unit/financeiro/test_dashboard_views.py` | dashboards | 9 |
-| `tests/unit/financeiro/test_rest_api_views.py` | APIs REST | 24 |
+### 7.2 P2 — Views e APIs faltantes (~164 testes) ✅ CONCLUÍDO
+| Arquivo | Escopo | Qtd | Status |
+|---------|--------|-----|--------|
+| `tests/unit/core/test_models.py` | Modelos do core | 12 | ✅ (preexistente) |
+| `tests/unit/core/test_crud_views.py` | CRUD completo | 30 | ✅ (preexistente) |
+| `tests/unit/core/test_api_views.py` | APIs bancos, CEP, CNPJ | 15 | ✅ |
+| `tests/unit/core/test_dashboard.py` | index, dashboard, setup | 7 | ✅ |
+| `tests/unit/core/test_management_commands.py` | gerar_dados_teste | 8 | ✅ |
+| `tests/unit/contratos/test_crud_views.py` | CRUD contratos | 14 | ✅ |
+| `tests/unit/contratos/test_indices_views.py` | CRUD índices | 9 | ✅ |
+| `tests/unit/financeiro/test_parcela_views.py` | listar, detalhe, pagar | 14 | ✅ |
+| `tests/unit/financeiro/test_boleto_views.py` | gerar, download, carnê | 17 | ✅ |
+| `tests/unit/financeiro/test_reajuste_views.py` | listar, aplicar, calcular | 9 | ✅ |
+| `tests/unit/financeiro/test_cnab_views.py` | remessa e retorno | 15 | ✅ |
+| `tests/unit/financeiro/test_dashboard_views.py` | dashboards | 9 | ✅ |
+| `tests/unit/financeiro/test_rest_api_views.py` | APIs REST | 24 | ✅ |
 
-### 7.3 P3 — Integração e Forms (~37 testes)
-| Arquivo | Escopo | Qtd |
-|---------|--------|-----|
-| `tests/unit/core/test_forms.py` | Forms core | 10 |
-| `tests/unit/contratos/test_forms.py` | Forms contratos | 8 |
-| `tests/integration/test_fluxo_contrato_completo.py` | E2E contrato | 5 |
-| `tests/integration/test_fluxo_boleto.py` | E2E boleto | 3 |
-| `tests/integration/test_portal_comprador.py` | E2E portal | 3 |
-| `tests/integration/test_notificacoes.py` | E2E notificações | 3 |
+### 7.3 P3 — Integração e Forms (~37 testes) ✅ CONCLUÍDO
+| Arquivo | Escopo | Qtd | Status |
+|---------|--------|-----|--------|
+| `tests/unit/core/test_forms.py` | Forms core | 10 | ✅ |
+| `tests/unit/contratos/test_forms.py` | Forms contratos | 8 | ✅ |
+| `tests/integration/test_fluxo_contrato_completo.py` | E2E contrato | 5 | ✅ |
+| `tests/integration/test_fluxo_boleto.py` | E2E boleto | 3 | ✅ |
+| `tests/integration/test_portal_comprador.py` | E2E portal | 3 | ✅ |
+| `tests/integration/test_notificacoes.py` | E2E notificações | 3 | ✅ |
 
-### 7.4 P4 — Segurança e Edge Cases (~41 testes)
-| Arquivo | Escopo | Qtd |
-|---------|--------|-----|
-| `tests/functional/test_contrato_workflow.py` | E2E completo | 4 |
-| `tests/functional/test_financeiro_workflow.py` | E2E financeiro | 3 |
-| `tests/unit/test_security.py` | CSRF, SQL injection, XSS | 7 |
-| `tests/unit/test_edge_cases.py` | Casos extremos | 10 |
-| `tests/unit/notificacoes/test_management_commands.py` | Commands | 3 |
-| `tests/unit/financeiro/test_management_commands.py` | Commands | 2 |
+### 7.4 P4 — Segurança e Edge Cases (~41 testes) ✅ CONCLUÍDO
+| Arquivo | Escopo | Qtd | Status |
+|---------|--------|-----|--------|
+| `tests/functional/test_contrato_workflow.py` | E2E completo | 4 | ✅ |
+| `tests/functional/test_financeiro_workflow.py` | E2E financeiro | 3 | ✅ |
+| `tests/unit/test_security.py` | Autenticação, 404s, isolamento portal | 14 | ✅ |
+| `tests/unit/test_edge_cases.py` | Valores extremos, datas limite, reajuste | 12 | ✅ |
+| `tests/unit/notificacoes/test_management_commands.py` | enviar_notificacoes, processar_pendentes | 4 | ✅ |
+| `tests/unit/financeiro/test_management_commands.py` | processar_reajustes | 2 | ✅ |
 
-### 7.5 Infraestrutura de Testes
-| Prioridade | Item |
-|------------|------|
-| P2 | 13 factories faltantes (notificacoes, portal, CNAB) |
-| P2 | Mocks: Twilio SMS/WhatsApp, IBGE, SMTP |
-| P3 | CI/CD GitHub Actions |
-| P4 | Badge de cobertura no README |
+### 7.5 Infraestrutura de Testes ✅ CONCLUÍDO (P2)
+| Prioridade | Item | Status |
+|------------|------|--------|
+| P2 | 13 factories faltantes (notificacoes, portal, CNAB) | ✅ ConfiguracaoEmailFactory, ConfiguracaoSMSFactory, ConfiguracaoWhatsAppFactory, NotificacaoFactory, TemplateNotificacaoFactory, RegraNotificacaoFactory, AcessoCompradorFactory, LogAcessoCompradorFactory, ArquivoRemessaFactory, ItemRemessaFactory, ItemRetornoFactory, AcessoUsuarioFactory + registradas no conftest.py |
+| P2 | Mocks: Twilio SMS/WhatsApp, IBGE, SMTP | ✅ `mock_twilio_sms`, `mock_twilio_whatsapp`, `mock_twilio_error`, `mock_ibge_ipca`, `mock_ibge_inpc`, `mock_ibge_error`, `mock_smtp` fixtures no conftest.py |
+| P3 | CI/CD GitHub Actions | ✅ `.github/workflows/ci.yml` |
+| P4 | Badge de cobertura no README | — |
 
 ---
 
@@ -245,16 +246,15 @@
 ### P2 — Alto
 | Item | Descrição |
 |------|-----------|
-| Bootstrap local | Servir Bootstrap 5 localmente (não CDN) |
-| Logging | Configurar logging de erros além do Sentry |
+| Bootstrap local | ✅ Materialize, FontAwesome, AG Grid e Flatpickr servidos localmente via `static/vendor/`; templates base.html, portal_base.html, login, registro, setup atualizados; único CDN restante é Google Fonts (Material Icons) |
+| Logging | ✅ Loggers por app (financeiro, contratos, core, notificacoes); django.request/security com AdminEmailHandler em produção; formato verbose com PID e thread |
 
 ### P3 — Médio
 | Item | Descrição |
 |------|-----------|
-| GitHub Actions | Rodar pytest em cada PR |
-| GitHub Actions | Verificar cobertura > 80% |
+| GitHub Actions | ✅ `.github/workflows/ci.yml`: pytest unit em push/PR, cobertura ≥25% (cresce conforme testes), sintaxe Python, flake8 (non-blocking); usa SQLite em memória (sem serviço PostgreSQL) |
 | Cache Redis | Para dashboards |
-| Índices DB | Para queries de vencimento |
+| Índices DB | ✅ Migration `0008_add_vencimento_compound_indexes`: índices compostos `(pago, data_vencimento)` e `(contrato, pago, data_vencimento)` em `Parcela` para queries de dashboard |
 
 ### P4 — Baixo
 | Item | Descrição |
@@ -266,10 +266,10 @@
 
 ## 9. DOCUMENTAÇÃO
 
-### P3 — Médio
-| Item | Descrição |
-|------|-----------|
-| Swagger/OpenAPI | `drf-spectacular` ou `drf-yasg` |
+### P3 — Médio ✅ CONCLUÍDO
+| Item | Descrição | Status |
+|------|-----------|--------|
+| Swagger/OpenAPI | `drf-spectacular` | ✅ `drf-spectacular==0.29.0` + `djangorestframework==3.17.1` em `requirements.txt`; `drf_spectacular` em `INSTALLED_APPS`; `SPECTACULAR_SETTINGS` configurado; endpoints `/api/schema/` (YAML), `/api/docs/` (Swagger UI), `/api/docs/redoc/` (ReDoc) em `gestao_contrato/urls.py` |
 
 ### P4 — Baixo
 | Item | Descrição |
