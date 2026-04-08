@@ -362,10 +362,16 @@
                             <div class="info-label">Prazo Reajuste</div>
                             <div class="info-value">{{ contrato.prazo_reajuste_meses }} meses</div>
                         </div>
-                        {% if contrato.data_proximo_reajuste %}
+                        {% if contrato.tipo_correcao != 'FIXO' %}
                         <div class="info-item">
                             <div class="info-label">Proximo Reajuste</div>
+                            {% if contrato.data_proximo_reajuste %}
                             <div class="info-value text-warning">{{ contrato.data_proximo_reajuste|date:"d/m/Y" }}</div>
+                            {% elif contrato.numero_parcelas <= contrato.prazo_reajuste_meses %}
+                            <div class="info-value text-muted"><small>N/A — contrato no ciclo 1</small></div>
+                            {% else %}
+                            <div class="info-value text-muted">—</div>
+                            {% endif %}
                         </div>
                         {% endif %}
                         {% if contrato.spread_reajuste %}
@@ -2011,6 +2017,8 @@ function atualizarPreviewCarne() {
     var btnGerar = document.getElementById('btnGerarCarne');
     var btnGerarQtd = document.getElementById('btnGerarQtd');
 
+    if (!previewDiv || !btnGerar || !btnGerarQtd) return;
+
     // Filtrar parcelas que podem ser geradas (sem boleto e elegiveis)
     var parcelasDisponiveis = dadosElegibilidade.parcelas.filter(function(p) {
         return p.pode_gerar && !p.tem_boleto;
@@ -2071,11 +2079,13 @@ function atualizarPreviewCarne() {
     btnGerarQtd.textContent = parcelasParaGerar.length;
 
     // Alerta se houver bloqueio
-    if (parcelasBloqueadas.length > 0 && qtd > parcelasDisponiveis.length) {
-        alertaDiv.classList.remove('d-none');
-        alertaTexto.textContent = 'Algumas parcelas estao bloqueadas aguardando reajuste. Aplique o reajuste do ciclo ' + parcelasBloqueadas[0].ciclo + ' para libera-las.';
-    } else {
-        alertaDiv.classList.add('d-none');
+    if (alertaDiv && alertaTexto) {
+        if (parcelasBloqueadas.length > 0 && qtd > parcelasDisponiveis.length) {
+            alertaDiv.classList.remove('d-none');
+            alertaTexto.textContent = 'Algumas parcelas estao bloqueadas aguardando reajuste. Aplique o reajuste do ciclo ' + parcelasBloqueadas[0].ciclo + ' para libera-las.';
+        } else {
+            alertaDiv.classList.add('d-none');
+        }
     }
 }
 
