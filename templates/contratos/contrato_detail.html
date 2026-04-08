@@ -1114,6 +1114,94 @@
         </div>
         {% endif %}
 
+        <!-- 3.18 Aba Relatórios do Contrato -->
+        <div class="card mt-4" id="card-relatorios">
+            <div class="card-header d-flex justify-content-between align-items-center"
+                 style="background:linear-gradient(135deg,#1565c0,#1976d2);color:#fff;cursor:pointer;"
+                 data-bs-toggle="collapse" data-bs-target="#relatorios-body" aria-expanded="false">
+                <span><i class="fas fa-chart-bar me-2"></i> Relatórios &amp; Exportações</span>
+                <i class="fas fa-chevron-down" id="relatorios-chevron"
+                   style="transition:transform 0.25s;"></i>
+            </div>
+            <div class="collapse" id="relatorios-body">
+                <div class="card-body">
+
+                    <!-- KPIs financeiros -->
+                    <div class="row mb-4 g-3">
+                        <div class="col-6 col-md-3">
+                            <div class="text-center p-3 rounded" style="background:#e8f5e9;">
+                                <div class="fs-5 fw-bold text-success">
+                                    R$ {{ contrato.valor_total_contrato|floatformat:2|default:"—" }}
+                                </div>
+                                <div class="small text-muted mt-1">Valor Total do Contrato</div>
+                            </div>
+                        </div>
+                        <div class="col-6 col-md-3">
+                            <div class="text-center p-3 rounded" style="background:#e3f2fd;">
+                                <div class="fs-5 fw-bold text-primary">
+                                    R$ {{ valor_pago|floatformat:2|default:"—" }}
+                                </div>
+                                <div class="small text-muted mt-1">Total Pago</div>
+                            </div>
+                        </div>
+                        <div class="col-6 col-md-3">
+                            <div class="text-center p-3 rounded" style="background:#fff3e0;">
+                                <div class="fs-5 fw-bold text-warning">
+                                    R$ {{ saldo_devedor|floatformat:2|default:"—" }}
+                                </div>
+                                <div class="small text-muted mt-1">Saldo Devedor</div>
+                            </div>
+                        </div>
+                        <div class="col-6 col-md-3">
+                            <div class="text-center p-3 rounded" style="background:#f3e5f5;">
+                                <div class="fs-5 fw-bold" style="color:#7b1fa2;">
+                                    {{ progresso|floatformat:0|default:"0" }}%
+                                </div>
+                                <div class="small text-muted mt-1">Progresso</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Export buttons -->
+                    <div class="row g-2">
+                        <div class="col-12">
+                            <p class="text-muted small mb-2">
+                                <i class="fas fa-info-circle me-1"></i>
+                                Exportações filtradas por este contrato ({{ contrato.numero_contrato }})
+                            </p>
+                        </div>
+                        <div class="col-auto">
+                            <a href="{% url 'financeiro:exportar_relatorio' 'prestacoes_a_pagar' %}?contrato={{ contrato.pk }}&formato=csv"
+                               class="btn btn-sm btn-outline-primary">
+                                <i class="fas fa-file-csv me-1"></i>
+                                Parcelas a Pagar (CSV)
+                            </a>
+                        </div>
+                        <div class="col-auto">
+                            <a href="{% url 'financeiro:exportar_relatorio' 'prestacoes_pagas' %}?contrato={{ contrato.pk }}&formato=csv"
+                               class="btn btn-sm btn-outline-success">
+                                <i class="fas fa-file-csv me-1"></i>
+                                Parcelas Pagas (CSV)
+                            </a>
+                        </div>
+                        <div class="col-auto">
+                            <a href="{% url 'financeiro:exportar_relatorio' 'posicao_contratos' %}?contrato={{ contrato.pk }}&formato=csv"
+                               class="btn btn-sm btn-outline-secondary">
+                                <i class="fas fa-file-csv me-1"></i>
+                                Posição do Contrato (CSV)
+                            </a>
+                        </div>
+                        <div class="col-auto">
+                            <button type="button" class="btn btn-sm btn-outline-dark" onclick="window.print()">
+                                <i class="fas fa-print me-1"></i>
+                                Imprimir Página
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
         <!-- Botoes de Acao -->
         <div class="card mt-4">
             <div class="card-body d-flex justify-content-between">
@@ -2534,4 +2622,27 @@ function _bindReajusteModal(contratoId) {
         </a>
     </div>
 </div>
+
+<script>
+// 3.18 — Relatórios: chevron toggle
+(function() {
+    var body = document.getElementById('relatorios-body');
+    var chevron = document.getElementById('relatorios-chevron');
+    if (!body || !chevron) return;
+    body.addEventListener('show.bs.collapse', function() {
+        chevron.style.transform = 'rotate(180deg)';
+    });
+    body.addEventListener('hide.bs.collapse', function() {
+        chevron.style.transform = 'rotate(0deg)';
+    });
+    // Fallback for our custom collapse (data-bs-toggle)
+    var header = document.querySelector('[data-bs-target="#relatorios-body"]');
+    if (header) {
+        header.addEventListener('click', function() {
+            var expanded = body.classList.contains('show');
+            chevron.style.transform = expanded ? 'rotate(0deg)' : 'rotate(180deg)';
+        });
+    }
+})();
+</script>
 {% endblock %}
