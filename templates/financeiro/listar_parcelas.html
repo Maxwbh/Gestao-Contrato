@@ -384,7 +384,21 @@
                             </div>
                         </div>
 
-                        <div class="col-12">
+                        <!-- Forma de Pagamento -->
+                        <div class="col-md-6">
+                            <label class="form-label fw-bold">Forma de Pagamento</label>
+                            <select class="form-select" id="pagarForma">
+                                <option value="DINHEIRO">Dinheiro</option>
+                                <option value="PIX">PIX</option>
+                                <option value="TRANSFERENCIA">Transferência Bancária</option>
+                                <option value="BOLETO">Boleto</option>
+                                <option value="CARTAO_CREDITO">Cartão de Crédito</option>
+                                <option value="CARTAO_DEBITO">Cartão de Débito</option>
+                                <option value="CHEQUE">Cheque</option>
+                            </select>
+                        </div>
+
+                        <div class="col-md-6">
                             <label class="form-label">Observações</label>
                             <textarea class="form-control" id="pagarObs" rows="2"></textarea>
                         </div>
@@ -916,6 +930,7 @@ function abrirModalPagar(parcelaId, contrato, numParcela, vencimentoFmt, valorOr
     document.getElementById('pagarMulta').value = '0.00';
     document.getElementById('pagarDesconto').value = '0.00';
     document.getElementById('pagarValorTotal').value = '';
+    document.getElementById('pagarForma').value = 'DINHEIRO';
     document.getElementById('pagarObs').value = '';
     document.getElementById('btnConfirmarPagar').disabled = false;
     document.getElementById('btnConfirmarPagar').innerHTML = '<i class="fas fa-check me-1"></i> Confirmar Pagamento';
@@ -969,6 +984,7 @@ function confirmarPagar() {
     formData.append('valor_juros', _pagarJuros.toFixed(2));
     formData.append('valor_multa', _pagarMulta.toFixed(2));
     formData.append('valor_desconto', (parseFloat(document.getElementById('pagarDesconto').value) || 0).toFixed(2));
+    formData.append('forma_pagamento', document.getElementById('pagarForma').value || 'DINHEIRO');
     formData.append('observacoes', document.getElementById('pagarObs').value || '');
 
     fetch('/financeiro/parcelas/' + parcelaAtualId + '/pagar-ajax/', {
