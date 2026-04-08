@@ -1,10 +1,105 @@
-{% extends 'base.html' %}
+{% extends 'portal_comprador/portal_base.html' %}
+
 {% block title %}Meus Boletos{% endblock %}
+{% block nav_boletos %}active{% endblock %}
+
 {% block content %}
-<div class="container">
-    <h1>Meus Boletos</h1>
+<h6 style="font-weight:700;margin:12px 0 12px;color:#212121;">
+    <span class="material-icons" style="vertical-align:middle;color:var(--portal-primary);font-size:1.2rem;">receipt_long</span>
+    Meus Boletos
+</h6>
+
+<!-- Stats -->
+<div class="stat-row" style="grid-template-columns:repeat(4,1fr);">
+    <div class="stat-chip blue">
+        <div class="val">{{ stats.total }}</div>
+        <div class="lbl">Total</div>
+    </div>
+    <div class="stat-chip amber">
+        <div class="val">{{ stats.a_pagar }}</div>
+        <div class="lbl">A pagar</div>
+    </div>
+    <div class="stat-chip red">
+        <div class="val">{{ stats.vencidos }}</div>
+        <div class="lbl">Vencidos</div>
+    </div>
+    <div class="stat-chip green">
+        <div class="val">{{ stats.pagos }}</div>
+        <div class="lbl">Pagos</div>
+    </div>
+</div>
+
+<!-- Filtros -->
+<div style="display:flex;gap:8px;margin-bottom:16px;overflow-x:auto;padding-bottom:4px;">
+    <a href="{% url 'portal_comprador:meus_boletos' %}"
+       style="white-space:nowrap;padding:6px 16px;border-radius:20px;font-size:.8rem;text-decoration:none;
+              {% if status_filtro == 'todos' %}background:var(--portal-primary);color:#fff;{% else %}background:#fff;color:var(--portal-primary);border:1px solid var(--portal-primary);{% endif %}">
+        Todos
+    </a>
+    <a href="{% url 'portal_comprador:meus_boletos' %}?status=a_pagar"
+       style="white-space:nowrap;padding:6px 16px;border-radius:20px;font-size:.8rem;text-decoration:none;
+              {% if status_filtro == 'a_pagar' %}background:#ff9800;color:#fff;{% else %}background:#fff;color:#ff9800;border:1px solid #ff9800;{% endif %}">
+        A pagar
+    </a>
+    <a href="{% url 'portal_comprador:meus_boletos' %}?status=vencidos"
+       style="white-space:nowrap;padding:6px 16px;border-radius:20px;font-size:.8rem;text-decoration:none;
+              {% if status_filtro == 'vencidos' %}background:#f44336;color:#fff;{% else %}background:#fff;color:#f44336;border:1px solid #f44336;{% endif %}">
+        Vencidos
+    </a>
+    <a href="{% url 'portal_comprador:meus_boletos' %}?status=pagos"
+       style="white-space:nowrap;padding:6px 16px;border-radius:20px;font-size:.8rem;text-decoration:none;
+              {% if status_filtro == 'pagos' %}background:#4caf50;color:#fff;{% else %}background:#fff;color:#4caf50;border:1px solid #4caf50;{% endif %}">
+        Pagos
+    </a>
+</div>
+
+<!-- Lista -->
+{% if parcelas %}
+<div class="portal-card">
     {% for parcela in parcelas %}
-    <div>Parcela {{ parcela.numero_parcela }}</div>
+    <div class="parcela-item">
+        {% if parcela.pago %}
+        <div class="parcela-icon pago"><i class="fas fa-check"></i></div>
+        {% elif parcela.data_vencimento < hoje %}
+        <div class="parcela-icon vencida"><i class="fas fa-exclamation"></i></div>
+        {% else %}
+        <div class="parcela-icon pendente"><i class="fas fa-clock"></i></div>
+        {% endif %}
+
+        <div class="parcela-info">
+            <div class="contrato">{{ parcela.contrato.numero_contrato }} — {{ parcela.contrato.imovel.identificacao|default:parcela.contrato.imovel.loteamento|truncatechars:30 }}</div>
+            <div class="desc">Parcela {{ parcela.numero_parcela }}</div>
+            <div class="data">
+                {% if parcela.pago %}
+                <span style="color:#4caf50;">Pago em {{ parcela.data_pagamento|date:"d/m/Y"|default:"—" }}</span>
+                {% elif parcela.data_vencimento < hoje %}
+                <span style="color:#f44336;">Venceu {{ parcela.data_vencimento|date:"d/m/Y" }}</span>
+                {% else %}
+                Vence {{ parcela.data_vencimento|date:"d/m/Y" }}
+                {% endif %}
+            </div>
+        </div>
+
+        <div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px;">
+            <div class="parcela-valor {% if not parcela.pago and parcela.data_vencimento < hoje %}vencida{% endif %}">
+                R$ {{ parcela.valor_atual|floatformat:2 }}
+            </div>
+            {% if parcela.status_boleto == 'GERADO' and not parcela.pago %}
+            <a href="{% url 'portal_comprador:download_boleto' parcela.pk %}"
+               style="font-size:.72rem;background:var(--portal-primary);color:#fff;padding:3px 10px;border-radius:12px;text-decoration:none;white-space:nowrap;">
+                <i class="fas fa-download" style="font-size:.65rem;"></i> Boleto
+            </a>
+            {% elif parcela.status_boleto == 'PAGO' or parcela.pago %}
+            <span style="font-size:.72rem;color:#4caf50;"><i class="fas fa-check"></i> Quitado</span>
+            {% endif %}
+        </div>
+    </div>
     {% endfor %}
 </div>
+{% else %}
+<div style="text-align:center;padding:48px 16px;color:#9e9e9e;">
+    <span class="material-icons" style="font-size:4rem;color:#e0e0e0;display:block;margin-bottom:12px;">receipt_long</span>
+    <p style="margin:0;">Nenhum boleto encontrado.</p>
+</div>
+{% endif %}
 {% endblock %}
