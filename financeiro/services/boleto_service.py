@@ -541,13 +541,70 @@ class BoletoService:
         # Numero do documento
         numero_documento = parcela.gerar_numero_documento()
 
-        # Instrucoes (usando configuracoes do contrato)
+        # Instrucoes impressas no boleto
+        # Prioridade: financeiras (multa/juros/desconto) vem PRIMEIRO — são informações
+        # legalmente obrigatórias para o pagador. Referências (Doc/Parcela/Contrato)
+        # e instruções personalizadas preenchem os slots restantes.
         instrucoes = []
 
-        # Adicionar numero do documento nas instrucoes para referencia
-        instrucoes.append(f"Doc: {numero_documento}")
+        # ── 1. Desconto (antes do vencimento) ─────────────────────────────────
+        valor_desconto_config = config_boleto.get('valor_desconto', 0) or 0
+        if valor_desconto_config > 0:
+            dias_desconto = config_boleto.get('dias_desconto', 0) or 0
+            tipo_desconto = config_boleto.get('tipo_valor_desconto', 'PERCENTUAL')
+            data_limite_desc = self._calcular_data_limite_desconto(parcela.data_vencimento, dias_desconto)
+            if data_limite_desc and data_limite_desc >= date.today():
+                if tipo_desconto == 'PERCENTUAL':
+                    valor_desc_r = float(parcela.valor_atual) * float(valor_desconto_config) / 100
+                    instrucoes.append(
+                        f"Desconto de R$ {valor_desc_r:.2f} ({valor_desconto_config}%) ate {data_limite_desc.strftime('%d/%m/%Y')}"
+                    )
+                else:
+                    instrucoes.append(
+                        f"Desconto de R$ {valor_desconto_config:.2f} ate {data_limite_desc.strftime('%d/%m/%Y')}"
+                    )
 
-        # Adicionar instrucoes personalizadas
+        # ── 2. Multa (apos vencimento) ─────────────────────────────────────────
+        valor_multa_config = config_boleto.get('valor_multa', 0) or 0
+        if valor_multa_config > 0:
+            tipo_multa = config_boleto.get('tipo_valor_multa', 'PERCENTUAL')
+            dias_carencia = config_boleto.get('dias_carencia', 0) or 0
+            if tipo_multa == 'PERCENTUAL':
+                instrucoes.append(
+                    f"Multa de {valor_multa_config}% apos {dias_carencia} dia(s) do vencimento"
+                )
+            else:
+                instrucoes.append(
+                    f"Multa de R$ {valor_multa_config:.2f} apos {dias_carencia} dia(s) do vencimento"
+                )
+
+        # ── 3. Juros / Mora ────────────────────────────────────────────────────
+        valor_juros_config = config_boleto.get('valor_juros', 0) or 0
+        if valor_juros_config > 0:
+            tipo_juros = config_boleto.get('tipo_valor_juros', 'PERCENTUAL')
+            if tipo_juros == 'PERCENTUAL':
+                juros_diario = valor_juros_config / 30
+                instrucoes.append(
+                    f"Juros de {valor_juros_config}% ao mes ({juros_diario:.4f}% ao dia) apos vencimento"
+                )
+            else:
+                instrucoes.append(
+                    f"Juros de R$ {valor_juros_config:.2f} por dia apos vencimento"
+                )
+
+        # ── 4. Acréscimos contrato (juros mora + multa do contrato, se configurados) ──
+        pct_juros_mora = getattr(contrato, 'percentual_juros_mora', None)
+        pct_multa_contrato = getattr(contrato, 'percentual_multa', None)
+        if pct_juros_mora and float(pct_juros_mora) > 0 and valor_juros_config == 0:
+            instrucoes.append(
+                f"Juros de mora: {pct_juros_mora}% ao mes apos vencimento"
+            )
+        if pct_multa_contrato and float(pct_multa_contrato) > 0 and valor_multa_config == 0:
+            instrucoes.append(
+                f"Multa por atraso: {pct_multa_contrato}%"
+            )
+
+        # ── 5. Instruções personalizadas do config ─────────────────────────────
         if config_boleto.get('instrucao_1'):
             instrucoes.append(config_boleto['instrucao_1'])
         if config_boleto.get('instrucao_2'):
@@ -555,43 +612,11 @@ class BoletoService:
         if config_boleto.get('instrucao_3'):
             instrucoes.append(config_boleto['instrucao_3'])
 
-        # Adicionar instrucoes de multa se configurada
-        valor_multa_config = config_boleto.get('valor_multa', 0) or 0
-        if valor_multa_config > 0:
-            tipo_multa = config_boleto.get('tipo_valor_multa', 'PERCENTUAL')
-            dias_carencia = config_boleto.get('dias_carencia', 0) or 0
-            if tipo_multa == 'PERCENTUAL':
-                instrucoes.append(f"Multa de {valor_multa_config}% apos {dias_carencia} dias do vencimento")
-            else:
-                instrucoes.append(f"Multa de R$ {valor_multa_config:.2f} apos {dias_carencia} dias do vencimento")
-
-        # Adicionar instrucoes de juros se configurada
-        valor_juros_config = config_boleto.get('valor_juros', 0) or 0
-        if valor_juros_config > 0:
-            tipo_juros = config_boleto.get('tipo_valor_juros', 'PERCENTUAL')
-            if tipo_juros == 'PERCENTUAL':
-                # Calcular juros diario a partir do mensal
-                juros_diario = valor_juros_config / 30
-                instrucoes.append(f"Juros de {juros_diario:.4f}% ao dia ({valor_juros_config}% ao mes)")
-            else:
-                instrucoes.append(f"Juros de R$ {valor_juros_config:.2f} ao dia")
-
-        # Adicionar instrucoes de desconto se configurada
-        valor_desconto_config = config_boleto.get('valor_desconto', 0) or 0
-        if valor_desconto_config > 0:
-            tipo_desconto = config_boleto.get('tipo_valor_desconto', 'PERCENTUAL')
-            dias_desconto = config_boleto.get('dias_desconto', 0) or 0
-            if tipo_desconto == 'PERCENTUAL':
-                valor_desc = float(parcela.valor_atual) * float(valor_desconto_config) / 100
-                instrucoes.append(f"Desconto de R$ {valor_desc:.2f} ate {dias_desconto} dias antes do vencimento")
-            else:
-                instrucoes.append(f"Desconto de R$ {valor_desconto_config:.2f} ate {dias_desconto} dias antes do vencimento")
-
-        # Adicionar informacoes padrao
-        instrucoes.append(f"Parcela {parcela.numero_parcela} de {contrato.numero_parcelas}")
-        instrucoes.append(f"Contrato: {contrato.numero_contrato}")
+        # ── 6. Referências (parcela / contrato / imóvel / doc) ─────────────────
+        instrucoes.append(f"Parcela {parcela.numero_parcela}/{contrato.numero_parcelas} | Contrato: {contrato.numero_contrato}")
         if contrato.imovel and contrato.imovel.identificacao:
             instrucoes.append(f"Imovel: {contrato.imovel.identificacao}")
+        instrucoes.append(f"Doc: {numero_documento}")
 
         # Dados do boleto no formato BRCobranca
         dados = {
@@ -624,11 +649,14 @@ class BoletoService:
              'sacado_documento': documento_pagador,
              'sacado_endereco': endereco_pagador[:80] if endereco_pagador else '',
 
-             # Instrucoes
+             # Instrucoes (ate 7 slots — financeiras primeiro, depois referências)
              'instrucao1': instrucoes[0] if len(instrucoes) > 0 else '',
              'instrucao2': instrucoes[1] if len(instrucoes) > 1 else '',
              'instrucao3': instrucoes[2] if len(instrucoes) > 2 else '',
              'instrucao4': instrucoes[3] if len(instrucoes) > 3 else '',
+             'instrucao5': instrucoes[4] if len(instrucoes) > 4 else '',
+             'instrucao6': instrucoes[5] if len(instrucoes) > 5 else '',
+             'instrucao7': instrucoes[6] if len(instrucoes) > 6 else '',
 
              # Local de Pagamento
              'local_pagamento': 'Pagavel em qualquer banco ate o vencimento',
