@@ -953,19 +953,19 @@ para ciclo = 2..total_ciclos+1:
 
 ---
 
-## 20. MELHORIAS DE UX / INTERFACE — TODO
+## 20. MELHORIAS DE UX / INTERFACE ✅ PARCIALMENTE CONCLUÍDO
 
 > **Referência:** pesquisa de concorrentes e inspeção de sistemas líderes (2026-04-02).
 
-| # | Item | Descrição | Prioridade |
-|---|------|-----------|-----------|
-| U-01 | Dark mode toggle (persistido em localStorage) | Carto dark já disponível no mapa | P3 |
-| U-02 | Timeline visual de ciclos na tela de parcelas | Linha do tempo horizontal com ciclos | P2 |
-| U-03 | Simulador inline de parcelas no cadastro de contrato | Preview em tempo real enquanto preenche | P2 |
-| U-04 | Exportar relatórios em Excel (openpyxl) | Complementar ao PDF | P3 |
-| U-05 | Portal do comprador — redesign mobile-first | Compradores acessam via celular | P2 |
-| U-06 | Busca global (Ctrl+K) — busca rápida por contrato, comprador, lote | P3 |
-| U-07 | Impressão de carnê de pagamento (PDF multi-página) | P3 |
+| # | Item | Descrição | Prioridade | Status |
+|---|------|-----------|-----------|--------|
+| U-01 | Dark mode toggle (persistido em localStorage) | Carto dark já disponível no mapa | P3 | ⏳ |
+| U-02 | Timeline visual de ciclos na tela de parcelas | Linha do tempo horizontal com ciclos | P2 | ✅ JS inline em `contrato_detail.html` — ciclos coloridos por estado (concluído/ativo/atraso/bloqueado) + % reajuste aplicado |
+| U-03 | Simulador inline de parcelas no cadastro de contrato | Preview em tempo real enquanto preenche | P2 | ✅ Painel "Simulação Rápida" em `step1_basico.html` — PMT Price/SAC em tempo real + taxa editável |
+| U-04 | Exportar relatórios em Excel (openpyxl) | Complementar ao PDF | P3 | ⏳ |
+| U-05 | Portal do comprador — redesign mobile-first | Compradores acessam via celular | P2 | ✅ `portal_base.html` + todos os templates — nav bottom, stat chips, cards mobile |
+| U-06 | Busca global (Ctrl+K) — busca rápida por contrato, comprador, lote | P3 | ⏳ |
+| U-07 | Impressão de carnê de pagamento (PDF multi-página) | P3 | ⏳ |
 
 ---
 
@@ -985,7 +985,7 @@ para ciclo = 2..total_ciclos+1:
 | Dashboard KPIs (Seção 17) | 1 | 5 | 2 | — | 8 | ✅ 8/8 (K-01..K-06, G-01..G-05, D-01..D-04) |
 | Simulador Antecipação (Seção 18) | — | 3 | 2 | — | 5 | ✅ 3/3 P2 (R-01..R-03) · ⏳ 2 P3 |
 | Notificações (Seção 19) | — | 2 | 2 | 1 | 5 | ✅ 2/2 P2 (N-01, N-02) · ⏳ 3 P3/P4 |
-| UX / Interface (Seção 20) | — | 3 | 4 | — | 7 | ⏳ 0/7 |
+| UX / Interface (Seção 20) | — | 3 | 4 | — | 7 | ✅ 3/3 P2 (U-02, U-03, U-05) · ⏳ 4 P3 |
 | Frontend | — | 17 | 15 | 3 | 35 | ⚠️ ~4/17 P2 |
 | APIs | — | 6 | 5 | — | 11 | — |
 | Celery | — | 2 | 2 | 1 | 5 | — |
