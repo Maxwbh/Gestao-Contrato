@@ -69,6 +69,52 @@ services:
       - key: SUPABASE_KEY
         value: "sb_publishable_aswPuvIXjzcejBTyYWObdQ_BpC5l903"
 
+      # ==========================================================================
+      # MODO DE TESTE — Safeguard de ambiente
+      # TEST_MODE=True: todos os e-mails e SMS/WhatsApp vão para os endereços abaixo
+      # Alterar para False em produção
+      # ==========================================================================
+      - key: TEST_MODE
+        value: "True"
+      - key: TEST_RECIPIENT_EMAIL
+        value: "receber@msbrasil.inf.br"
+      - key: TEST_RECIPIENT_PHONE
+        value: "+5531993257479"
+
+      # ==========================================================================
+      # EMAIL — Zoho SMTP
+      # ==========================================================================
+      - key: EMAIL_BACKEND
+        value: "django.core.mail.backends.smtp.EmailBackend"
+      - key: EMAIL_HOST
+        value: "smtp.zoho.com"
+      - key: EMAIL_PORT
+        value: "465"
+      - key: EMAIL_USE_SSL
+        value: "True"
+      - key: EMAIL_USE_TLS
+        value: "False"
+      - key: EMAIL_HOST_USER
+        value: "teste@msbrasil.inf.br"
+      - key: DEFAULT_FROM_EMAIL
+        value: "teste@msbrasil.inf.br"
+      # EMAIL_HOST_PASSWORD: definir manualmente no painel do Render
+      - key: EMAIL_HOST_PASSWORD
+        sync: false
+
+      # ==========================================================================
+      # TWILIO — SMS e WhatsApp
+      # ==========================================================================
+      - key: TWILIO_PHONE_NUMBER
+        value: "+16067334990"
+      - key: TWILIO_WHATSAPP_NUMBER
+        value: "whatsapp:+16067334990"
+      # Credenciais Twilio: definir manualmente no painel do Render
+      - key: TWILIO_ACCOUNT_SID
+        sync: false
+      - key: TWILIO_AUTH_TOKEN
+        sync: false
+
   # =============================================================================
   # BRCobranca API (Geracao de Boletos)
   # =============================================================================
