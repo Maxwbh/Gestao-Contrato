@@ -337,46 +337,30 @@ class BoletoNotificacaoService:
 
     def notificar_boleto_criado(self, parcela, anexar_pdf=True):
         """Envia notificações de boleto criado (email + SMS conforme preferências do comprador)"""
-        resultado_email = self.enviar_email_boleto(
-            parcela,
-            TipoTemplate.BOLETO_CRIADO,
-            anexar_pdf=anexar_pdf
-        )
+        return self._notificar(parcela, TipoTemplate.BOLETO_CRIADO, anexar_pdf=anexar_pdf)
 
-        resultado_sms = {'sucesso': False, 'erro': 'SMS não solicitado'}
+    def _notificar(self, parcela, tipo_template, anexar_pdf=True):
+        """Helper interno: envia email + SMS (se comprador optar) para um tipo de template."""
+        resultado = self.enviar_email_boleto(parcela, tipo_template, anexar_pdf=anexar_pdf)
         comprador = parcela.contrato.comprador
         if comprador.notificar_sms:
-            resultado_sms = self.enviar_sms_boleto(parcela, TipoTemplate.BOLETO_CRIADO)
-            if not resultado_sms.get('sucesso'):
-                logger.warning(f"SMS não enviado para parcela {parcela.pk}: {resultado_sms.get('erro')}")
-
-        # Retorna resultado do email (compatibilidade com chamadas existentes)
-        resultado_email['sms'] = resultado_sms
-        return resultado_email
+            res_sms = self.enviar_sms_boleto(parcela, tipo_template)
+            if not res_sms.get('sucesso'):
+                logger.warning("SMS não enviado parcela %s: %s", parcela.pk, res_sms.get('erro'))
+            resultado['sms'] = res_sms
+        return resultado
 
     def notificar_boleto_5_dias(self, parcela):
         """Envia notificação de boleto com 5 dias para vencer"""
-        return self.enviar_email_boleto(
-            parcela,
-            TipoTemplate.BOLETO_5_DIAS,
-            anexar_pdf=True
-        )
+        return self._notificar(parcela, TipoTemplate.BOLETO_5_DIAS, anexar_pdf=True)
 
     def notificar_boleto_vence_amanha(self, parcela):
         """Envia notificação de boleto que vence amanhã"""
-        return self.enviar_email_boleto(
-            parcela,
-            TipoTemplate.BOLETO_VENCE_AMANHA,
-            anexar_pdf=True
-        )
+        return self._notificar(parcela, TipoTemplate.BOLETO_VENCE_AMANHA, anexar_pdf=True)
 
     def notificar_boleto_venceu_ontem(self, parcela):
         """Envia notificação de boleto que venceu ontem"""
-        return self.enviar_email_boleto(
-            parcela,
-            TipoTemplate.BOLETO_VENCEU_ONTEM,
-            anexar_pdf=False
-        )
+        return self._notificar(parcela, TipoTemplate.BOLETO_VENCEU_ONTEM, anexar_pdf=False)
 
     def processar_notificacoes_automaticas(self):
         """
