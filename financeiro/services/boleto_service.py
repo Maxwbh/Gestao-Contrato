@@ -541,57 +541,67 @@ class BoletoService:
         # Numero do documento
         numero_documento = parcela.gerar_numero_documento()
 
-        # Instrucoes (usando configuracoes do contrato)
-        instrucoes = []
+        # ── Slot 1: Identificação ──────────────────────────────────────────────
+        if parcela.tipo_parcela == 'INTERMEDIARIA':
+            try:
+                num_seq = parcela.intermediaria_origem.numero_sequencial
+                id_label = f"Intermediaria {num_seq}"
+            except Exception:
+                id_label = "Intermediaria"
+        else:
+            id_label = f"Parcela {parcela.numero_parcela}/{contrato.numero_parcelas}"
+        instr1 = f"{id_label} | Contrato: {contrato.numero_contrato} | 1a Via"
 
-        # Adicionar numero do documento nas instrucoes para referencia
-        instrucoes.append(f"Doc: {numero_documento}")
-
-        # Adicionar instrucoes personalizadas
-        if config_boleto.get('instrucao_1'):
-            instrucoes.append(config_boleto['instrucao_1'])
-        if config_boleto.get('instrucao_2'):
-            instrucoes.append(config_boleto['instrucao_2'])
-        if config_boleto.get('instrucao_3'):
-            instrucoes.append(config_boleto['instrucao_3'])
-
-        # Adicionar instrucoes de multa se configurada
+        # ── Slot 2: Encargos pós-vencimento (Multa | Juros) — 1 linha ─────────
+        partes_encargo = []
         valor_multa_config = config_boleto.get('valor_multa', 0) or 0
         if valor_multa_config > 0:
             tipo_multa = config_boleto.get('tipo_valor_multa', 'PERCENTUAL')
             dias_carencia = config_boleto.get('dias_carencia', 0) or 0
+            prefixo = f"apos {dias_carencia}d" if dias_carencia else "apos venc."
             if tipo_multa == 'PERCENTUAL':
-                instrucoes.append(f"Multa de {valor_multa_config}% apos {dias_carencia} dias do vencimento")
+                partes_encargo.append(f"Multa {valor_multa_config}% {prefixo}")
             else:
-                instrucoes.append(f"Multa de R$ {valor_multa_config:.2f} apos {dias_carencia} dias do vencimento")
+                partes_encargo.append(f"Multa R$ {valor_multa_config:.2f} {prefixo}")
+        else:
+            pct_multa = getattr(contrato, 'percentual_multa', None)
+            if pct_multa and float(pct_multa) > 0:
+                partes_encargo.append(f"Multa {pct_multa}% apos venc.")
 
-        # Adicionar instrucoes de juros se configurada
         valor_juros_config = config_boleto.get('valor_juros', 0) or 0
         if valor_juros_config > 0:
             tipo_juros = config_boleto.get('tipo_valor_juros', 'PERCENTUAL')
             if tipo_juros == 'PERCENTUAL':
-                # Calcular juros diario a partir do mensal
-                juros_diario = valor_juros_config / 30
-                instrucoes.append(f"Juros de {juros_diario:.4f}% ao dia ({valor_juros_config}% ao mes)")
+                partes_encargo.append(f"Juros {valor_juros_config}%/mes ({valor_juros_config/30:.4f}%/dia)")
             else:
-                instrucoes.append(f"Juros de R$ {valor_juros_config:.2f} ao dia")
+                partes_encargo.append(f"Juros R$ {valor_juros_config:.2f}/dia")
+        else:
+            pct_juros = getattr(contrato, 'percentual_juros_mora', None)
+            if pct_juros and float(pct_juros) > 0:
+                partes_encargo.append(f"Juros {pct_juros}%/mes apos venc.")
+        instr2 = ("Apos vencimento: " + " | ".join(partes_encargo)) if partes_encargo else ''
 
-        # Adicionar instrucoes de desconto se configurada
+        # ── Slot 3: Desconto (só se ainda vigente na data de emissão) ──────────
+        instr3 = ''
         valor_desconto_config = config_boleto.get('valor_desconto', 0) or 0
         if valor_desconto_config > 0:
-            tipo_desconto = config_boleto.get('tipo_valor_desconto', 'PERCENTUAL')
             dias_desconto = config_boleto.get('dias_desconto', 0) or 0
-            if tipo_desconto == 'PERCENTUAL':
-                valor_desc = float(parcela.valor_atual) * float(valor_desconto_config) / 100
-                instrucoes.append(f"Desconto de R$ {valor_desc:.2f} ate {dias_desconto} dias antes do vencimento")
-            else:
-                instrucoes.append(f"Desconto de R$ {valor_desconto_config:.2f} ate {dias_desconto} dias antes do vencimento")
+            tipo_desconto = config_boleto.get('tipo_valor_desconto', 'PERCENTUAL')
+            data_limite_desc = self._calcular_data_limite_desconto(parcela.data_vencimento, dias_desconto)
+            if data_limite_desc and data_limite_desc >= date.today():
+                if tipo_desconto == 'PERCENTUAL':
+                    valor_desc_r = float(parcela.valor_atual) * float(valor_desconto_config) / 100
+                    instr3 = f"Desconto: R$ {valor_desc_r:.2f} ({valor_desconto_config}%) ate {data_limite_desc.strftime('%d/%m/%Y')}"
+                else:
+                    instr3 = f"Desconto: R$ {valor_desconto_config:.2f} ate {data_limite_desc.strftime('%d/%m/%Y')}"
 
-        # Adicionar informacoes padrao
-        instrucoes.append(f"Parcela {parcela.numero_parcela} de {contrato.numero_parcelas}")
-        instrucoes.append(f"Contrato: {contrato.numero_contrato}")
-        if contrato.imovel and contrato.imovel.identificacao:
-            instrucoes.append(f"Imovel: {contrato.imovel.identificacao}")
+        # ── Slot 4: reservado para 2ª Via com valor atualizado (preenchido em gerar_segunda_via) ──
+        instr4 = ''
+
+        # ── Slots 5-7: instruções configuráveis ────────────────────────────────
+        instr5 = config_boleto.get('instrucao_1', '') or ''
+        instr6 = config_boleto.get('instrucao_2', '') or ''
+        instr7 = config_boleto.get('instrucao_3', '') or ''
 
         # Dados do boleto no formato BRCobranca
         dados = {
@@ -624,11 +634,14 @@ class BoletoService:
              'sacado_documento': documento_pagador,
              'sacado_endereco': endereco_pagador[:80] if endereco_pagador else '',
 
-             # Instrucoes
-             'instrucao1': instrucoes[0] if len(instrucoes) > 0 else '',
-             'instrucao2': instrucoes[1] if len(instrucoes) > 1 else '',
-             'instrucao3': instrucoes[2] if len(instrucoes) > 2 else '',
-             'instrucao4': instrucoes[3] if len(instrucoes) > 3 else '',
+             # Instrucoes — slots fixos (1ª via; slot 4 preenchido pela 2ª via)
+             'instrucao1': instr1,   # Identificação: Parcela/Intermediária | Contrato | 1a/2a Via
+             'instrucao2': instr2,   # Encargos pós-vencimento: Multa | Juros
+             'instrucao3': instr3,   # Desconto (se vigente)
+             'instrucao4': instr4,   # Reservado: valor atualizado na 2ª via vencida
+             'instrucao5': instr5,   # Configurável: instrucao_1 do config
+             'instrucao6': instr6,   # Configurável: instrucao_2 do config
+             'instrucao7': instr7,   # Configurável: instrucao_3 do config
 
              # Local de Pagamento
              'local_pagamento': 'Pagavel em qualquer banco ate o vencimento',
@@ -893,7 +906,7 @@ class BoletoService:
 
             valor_total = parcela.valor_atual + valor_juros + valor_multa
 
-            # Montar dados base do boleto
+            # Montar dados base do boleto (instrucao1 já tem "1a Via")
             dados_boleto, _ = self._montar_dados_boleto(parcela, conta_bancaria)
 
             # Sobrepor valor com total atualizado
@@ -903,16 +916,17 @@ class BoletoService:
             if parcela.nosso_numero:
                 dados_boleto['nosso_numero'] = str(parcela.nosso_numero)
 
-            # Acrescentar instruções de "segunda via"
-            instrucoes_extra = [f'SEGUNDA VIA — Valores atualizados em {data_referencia.strftime("%d/%m/%Y")}']
-            if valor_juros > 0 or valor_multa > 0:
-                instrucoes_extra.append(
-                    f'Juros: R$ {valor_juros:.2f} | Multa: R$ {valor_multa:.2f}'
+            # ── Slot 1: trocar "1a Via" por "2a Via" ──────────────────────────
+            dados_boleto['instrucao1'] = dados_boleto.get('instrucao1', '').replace('1a Via', '2a Via')
+
+            # ── Slot 4: valor atualizado — APENAS se vencida (vencimento < hoje) ──
+            if data_referencia > parcela.data_vencimento:
+                vt_str = f"{float(valor_total):,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+                dados_boleto['instrucao4'] = (
+                    f"Valor atualizado p/ pagamento em "
+                    f"{data_referencia.strftime('%d/%m/%Y')}   R$ {vt_str}"
                 )
-            dados_existentes = dados_boleto.get('instrucoes', [])
-            dados_boleto['instrucoes'] = instrucoes_extra + (
-                dados_existentes if isinstance(dados_existentes, list) else [dados_existentes]
-            )
+            # (se em dia, instrucao4 permanece vazio — reservado mas não impresso)
 
             banco_nome = self._get_banco_brcobranca(getattr(conta_bancaria, 'banco', ''))
             if not banco_nome:
