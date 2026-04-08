@@ -19,7 +19,7 @@ from .models import (
     TemplateNotificacao, TipoTemplate, TipoNotificacao,
     Notificacao, StatusNotificacao
 )
-from .services import ServicoEmail
+from .services import ServicoEmail, _destinatario_email_teste, _destinatario_telefone_teste
 
 logger = logging.getLogger(__name__)
 
@@ -189,11 +189,14 @@ class BoletoNotificacaoService:
             contexto = self.montar_contexto(parcela)
             assunto, corpo_texto, corpo_html = template.renderizar(contexto)
 
+            # Aplicar safeguard TEST_MODE
+            destinatario_final = _destinatario_email_teste(comprador.email)
+
             # Criar registro de notificação
             notificacao = Notificacao.objects.create(
                 parcela=parcela,
                 tipo=TipoNotificacao.EMAIL,
-                destinatario=comprador.email,
+                destinatario=destinatario_final,
                 assunto=assunto,
                 mensagem=corpo_texto,
                 status=StatusNotificacao.PENDENTE
@@ -205,7 +208,7 @@ class BoletoNotificacaoService:
                     subject=assunto,
                     body=corpo_texto,
                     from_email=settings.DEFAULT_FROM_EMAIL,
-                    to=[comprador.email]
+                    to=[destinatario_final]
                 )
 
                 # Adicionar versão HTML se disponível
@@ -213,21 +216,37 @@ class BoletoNotificacaoService:
                     email.attach_alternative(corpo_html, "text/html")
 
                 # Anexar PDF do boleto se disponível e solicitado
-                if anexar_pdf and parcela.boleto_pdf:
+                # Tenta disco primeiro, depois boleto_pdf_db (banco de dados)
+                if anexar_pdf:
+                    pdf_bytes = None
                     try:
-                        nome_arquivo = f"boleto_{contrato.numero_contrato}_{parcela.numero_parcela}.pdf"
-                        email.attach(nome_arquivo, parcela.boleto_pdf.read(), 'application/pdf')
+                        if parcela.boleto_pdf and parcela.boleto_pdf.name:
+                            from django.core.files.storage import default_storage
+                            if default_storage.exists(parcela.boleto_pdf.name):
+                                pdf_bytes = parcela.boleto_pdf.read()
                     except Exception as e:
-                        logger.warning(f"Não foi possível anexar PDF: {e}")
+                        logger.warning(f"Não foi possível ler PDF do disco: {e}")
+
+                    if not pdf_bytes and getattr(parcela, 'boleto_pdf_db', None):
+                        try:
+                            pdf_bytes = bytes(parcela.boleto_pdf_db)
+                        except Exception as e:
+                            logger.warning(f"Não foi possível ler PDF do banco: {e}")
+
+                    if pdf_bytes:
+                        nome_arquivo = f"boleto_{contrato.numero_contrato}_{parcela.numero_parcela}.pdf"
+                        email.attach(nome_arquivo, pdf_bytes, 'application/pdf')
+                    else:
+                        logger.warning(f"PDF do boleto não disponível para parcela {parcela.pk}")
 
                 email.send()
                 notificacao.marcar_como_enviada()
 
-                logger.info(f"Email de boleto enviado para {comprador.email} - Parcela {parcela.pk}")
+                logger.info(f"Email de boleto enviado para {destinatario_final} - Parcela {parcela.pk}")
                 return {
                     'sucesso': True,
                     'notificacao_id': notificacao.pk,
-                    'destinatario': comprador.email
+                    'destinatario': destinatario_final
                 }
 
             except Exception as e:
