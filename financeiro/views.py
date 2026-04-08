@@ -1245,12 +1245,41 @@ def gerar_boletos_contrato(request, contrato_id):
 def download_boleto(request, pk):
     """
     Download do PDF do boleto.
+    Regenera automaticamente se o arquivo não existir (storage efêmero no Render).
     """
     parcela = get_object_or_404(Parcela, pk=pk)
 
     if not parcela.boleto_pdf:
         messages.error(request, 'Boleto não disponível para download.')
         return redirect('financeiro:detalhe_parcela', pk=pk)
+
+    # Se o arquivo não existir no disco (storage efêmero), tenta regenerar
+    if not parcela.boleto_pdf.storage.exists(parcela.boleto_pdf.name):
+        logger.warning(
+            "Arquivo de boleto ausente no storage (%s), tentando regenerar...",
+            parcela.boleto_pdf.name
+        )
+        try:
+            from financeiro.services.boleto_service import BoletoService
+            resultado = BoletoService().gerar_boleto(parcela)
+            if resultado.get('sucesso'):
+                parcela.refresh_from_db()
+                logger.info("Boleto regenerado com sucesso para parcela pk=%s", pk)
+            else:
+                logger.error("Falha ao regenerar boleto pk=%s: %s", pk, resultado.get('erro'))
+                messages.error(
+                    request,
+                    'O arquivo do boleto foi perdido (storage efêmero). '
+                    'Clique em "Gerar Boleto" para criar um novo.'
+                )
+                return redirect('financeiro:detalhe_parcela', pk=pk)
+        except Exception as e:
+            logger.exception("Erro ao regenerar boleto pk=%s: %s", pk, e)
+            messages.error(
+                request,
+                'Não foi possível recuperar o boleto. Gere novamente.'
+            )
+            return redirect('financeiro:detalhe_parcela', pk=pk)
 
     try:
         response = FileResponse(
