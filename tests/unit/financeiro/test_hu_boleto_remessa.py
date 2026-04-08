@@ -1114,3 +1114,164 @@ class TestOFXBRCobranca:
         assert reconciliadas[0].confianca == 'ALTA'
         assert 'BRCobrança' in reconciliadas[0].motivo
         assert reconciliadas[0].parcela.pk == parcela.pk
+
+
+# ===========================================================================
+# HU 13 — Enviar boleto por WhatsApp
+# HU 14 — Enviar boleto por SMS
+# ===========================================================================
+
+@pytest.mark.django_db
+class TestHU13_EnvioWhatsApp:
+    """Envio de boleto via WhatsApp (Twilio mock)."""
+
+    def _parcela_com_boleto(self, contrato):
+        """Retorna primeira parcela simulando tem_boleto=True."""
+        p = contrato.parcelas.order_by('numero_parcela').first()
+        # Simular boleto gerado
+        p.linha_digitavel = '10492.33128 00005.780142 00000.010000 1 10000000833333'
+        p.nosso_numero = '0000000001'
+        p.save()
+        return p
+
+    def test_whatsapp_envia_com_telefone_no_body(self, cli, contrato_com_parcelas):
+        """POST com telefone no body envia WhatsApp e retorna sucesso."""
+        from django.urls import reverse
+        from unittest.mock import patch
+        p = self._parcela_com_boleto(contrato_com_parcelas)
+        url = reverse('financeiro:boleto_whatsapp', args=[p.pk])
+
+        with patch('financeiro.views.Parcela.tem_boleto', new_callable=lambda: property(lambda self: True)):
+            with patch('notificacoes.services.ServicoWhatsApp.enviar', return_value=True) as mock_wa:
+                resp = cli.post(
+                    url,
+                    data='{"telefone": "+5511999999999"}',
+                    content_type='application/json',
+                )
+
+        assert resp.status_code == 200
+        data = json.loads(resp.content)
+        assert data['sucesso'] is True
+        mock_wa.assert_called_once()
+        args = mock_wa.call_args[0]
+        assert args[0] == '+5511999999999'
+        assert p.linha_digitavel in args[1]
+
+    def test_whatsapp_sem_boleto_retorna_400(self, cli, contrato_com_parcelas):
+        """Parcela sem boleto retorna 400."""
+        from django.urls import reverse
+        p = contrato_com_parcelas.parcelas.first()
+        url = reverse('financeiro:boleto_whatsapp', args=[p.pk])
+
+        with patch('financeiro.views.Parcela.tem_boleto', new_callable=lambda: property(lambda self: False)):
+            resp = cli.post(url, data='{"telefone": "+5511999999999"}',
+                            content_type='application/json')
+
+        assert resp.status_code == 400
+        assert json.loads(resp.content)['sucesso'] is False
+
+    def test_whatsapp_sem_telefone_retorna_400(self, cli, contrato_com_parcelas):
+        """POST sem telefone e comprador sem telefone retorna 400."""
+        from django.urls import reverse
+        from unittest.mock import PropertyMock
+        p = self._parcela_com_boleto(contrato_com_parcelas)
+        url = reverse('financeiro:boleto_whatsapp', args=[p.pk])
+
+        # Patch tem_boleto=True e comprador.telefone=None
+        with patch('financeiro.views.Parcela.tem_boleto',
+                   new_callable=lambda: property(lambda self: True)):
+            with patch.object(
+                type(contrato_com_parcelas.comprador), 'telefone',
+                new_callable=PropertyMock, return_value=None
+            ):
+                resp = cli.post(url, data='{}', content_type='application/json')
+
+        assert resp.status_code == 400
+
+    def test_whatsapp_erro_twilio_retorna_500(self, cli, contrato_com_parcelas):
+        """Erro na chamada Twilio retorna 500."""
+        from django.urls import reverse
+        p = self._parcela_com_boleto(contrato_com_parcelas)
+        url = reverse('financeiro:boleto_whatsapp', args=[p.pk])
+
+        with patch('financeiro.views.Parcela.tem_boleto', new_callable=lambda: property(lambda self: True)):
+            with patch('notificacoes.services.ServicoWhatsApp.enviar',
+                       side_effect=Exception('Twilio error')):
+                resp = cli.post(url, data='{"telefone": "+5511999999999"}',
+                                content_type='application/json')
+
+        assert resp.status_code == 500
+        assert json.loads(resp.content)['sucesso'] is False
+
+
+@pytest.mark.django_db
+class TestHU14_EnvioSMS:
+    """Envio de boleto via SMS (Twilio mock)."""
+
+    def _parcela_com_boleto(self, contrato):
+        p = contrato.parcelas.order_by('numero_parcela').first()
+        p.linha_digitavel = '10492.33128 00005.780142 00000.010000 1 10000000833333'
+        p.nosso_numero = '0000000001'
+        p.save()
+        return p
+
+    def test_sms_envia_com_telefone_no_body(self, cli, contrato_com_parcelas):
+        """POST com telefone no body envia SMS e retorna sucesso."""
+        from django.urls import reverse
+        p = self._parcela_com_boleto(contrato_com_parcelas)
+        url = reverse('financeiro:boleto_sms', args=[p.pk])
+
+        with patch('financeiro.views.Parcela.tem_boleto', new_callable=lambda: property(lambda self: True)):
+            with patch('notificacoes.services.ServicoSMS.enviar', return_value=True) as mock_sms:
+                resp = cli.post(
+                    url,
+                    data='{"telefone": "+5511999999999"}',
+                    content_type='application/json',
+                )
+
+        assert resp.status_code == 200
+        data = json.loads(resp.content)
+        assert data['sucesso'] is True
+        mock_sms.assert_called_once()
+        _, msg = mock_sms.call_args[0]
+        assert len(msg) <= 160  # limite SMS
+
+    def test_sms_mensagem_contem_linha_digitavel(self, cli, contrato_com_parcelas):
+        """Mensagem SMS inclui a linha digitável do boleto."""
+        from django.urls import reverse
+        p = self._parcela_com_boleto(contrato_com_parcelas)
+        url = reverse('financeiro:boleto_sms', args=[p.pk])
+
+        with patch('financeiro.views.Parcela.tem_boleto', new_callable=lambda: property(lambda self: True)):
+            with patch('notificacoes.services.ServicoSMS.enviar', return_value=True) as mock_sms:
+                cli.post(url, data='{"telefone": "+5511999999999"}',
+                         content_type='application/json')
+
+        _, msg = mock_sms.call_args[0]
+        assert p.linha_digitavel in msg
+
+    def test_sms_sem_boleto_retorna_400(self, cli, contrato_com_parcelas):
+        """Parcela sem boleto retorna 400."""
+        from django.urls import reverse
+        p = contrato_com_parcelas.parcelas.first()
+        url = reverse('financeiro:boleto_sms', args=[p.pk])
+
+        with patch('financeiro.views.Parcela.tem_boleto', new_callable=lambda: property(lambda self: False)):
+            resp = cli.post(url, data='{"telefone": "+5511999999999"}',
+                            content_type='application/json')
+
+        assert resp.status_code == 400
+
+    def test_sms_telefone_via_form_post(self, cli, contrato_com_parcelas):
+        """Telefone pode ser enviado como form data (não JSON)."""
+        from django.urls import reverse
+        p = self._parcela_com_boleto(contrato_com_parcelas)
+        url = reverse('financeiro:boleto_sms', args=[p.pk])
+
+        with patch('financeiro.views.Parcela.tem_boleto', new_callable=lambda: property(lambda self: True)):
+            with patch('notificacoes.services.ServicoSMS.enviar', return_value=True) as mock_sms:
+                resp = cli.post(url, data={'telefone': '+5511999999999'})
+
+        assert resp.status_code == 200
+        assert json.loads(resp.content)['sucesso'] is True
+        mock_sms.assert_called_once()
