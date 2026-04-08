@@ -33,6 +33,7 @@ urlpatterns = [
     path('contrato/<int:contrato_id>/gerar-carne/', views.gerar_carne, name='gerar_carne'),
     path('contrato/<int:contrato_id>/carne/pdf/', views.download_carne_pdf, name='download_carne_pdf'),
     path('api/carne/multiplos/', views.download_carne_pdf_multiplos, name='download_carne_multiplos'),
+    path('contrato/<int:contrato_id>/boletos/zip/', views.download_zip_boletos, name='download_zip_boletos'),
 
     # Elegibilidade de parcelas para geracao de boletos
     path('api/contrato/<int:contrato_id>/parcelas-elegibilidade/', views.api_parcelas_elegibilidade, name='api_parcelas_elegibilidade'),
@@ -45,6 +46,7 @@ urlpatterns = [
     # Boletos
     path('parcelas/<int:pk>/boleto/gerar/', views.gerar_boleto_parcela, name='gerar_boleto'),
     path('parcelas/<int:pk>/boleto/download/', views.download_boleto, name='download_boleto'),
+    path('parcelas/<int:pk>/boleto/segunda-via/', views.segunda_via_boleto, name='segunda_via_boleto'),
     path('parcelas/<int:pk>/boleto/visualizar/', views.visualizar_boleto, name='visualizar_boleto'),
     path('parcelas/<int:pk>/boleto/cancelar/', views.cancelar_boleto, name='cancelar_boleto'),
     path('parcelas/<int:pk>/boleto/status/', views.api_status_boleto, name='api_status_boleto'),
@@ -160,4 +162,11 @@ urlpatterns = [
     # SEÇÃO 18 — SIMULADOR DE ANTECIPAÇÃO
     # ==========================================================================
     path('contrato/<int:contrato_id>/simulador/', views.simulador_antecipacao, name='simulador_antecipacao'),
+    # R-05: Recibo PDF de quitação antecipada
+    path('contrato/<int:contrato_id>/recibo-antecipacao.pdf', views.download_recibo_antecipacao, name='recibo_antecipacao'),
+
+    # ==========================================================================
+    # R-04 — RENEGOCIAÇÃO DE PARCELAS
+    # ==========================================================================
+    path('contrato/<int:contrato_id>/renegociar/', views.renegociar_parcelas, name='renegociar_parcelas'),
 ]
