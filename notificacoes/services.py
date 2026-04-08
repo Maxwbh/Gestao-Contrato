@@ -74,7 +74,7 @@ class ServicoEmail:
             return True
 
         except Exception as e:
-            logger.error(f"Erro ao enviar e-mail para {destinatario}: {str(e)}")
+            logger.exception("Erro ao enviar e-mail para %s: %s", destinatario, e)
             raise
 
 
@@ -123,7 +123,7 @@ class ServicoSMS:
             return True
 
         except Exception as e:
-            logger.error(f"Erro ao enviar SMS para {destinatario}: {str(e)}")
+            logger.exception("Erro ao enviar SMS para %s: %s", destinatario, e)
             raise
 
 
@@ -180,7 +180,7 @@ class ServicoWhatsApp:
             return True
 
         except Exception as e:
-            logger.error(f"Erro ao enviar WhatsApp para {destinatario}: {str(e)}")
+            logger.exception("Erro ao enviar WhatsApp para %s: %s", destinatario, e)
             raise
 
 
@@ -208,5 +208,5 @@ def enviar_notificacao(tipo, destinatario, assunto, mensagem):
             raise ValueError(f"Tipo de notificação inválido: {tipo}")
 
     except Exception as e:
-        logger.error(f"Erro ao enviar notificação {tipo} para {destinatario}: {str(e)}")
+        logger.exception("Erro ao enviar notificação %s para %s: %s", tipo, destinatario, e)
         return False

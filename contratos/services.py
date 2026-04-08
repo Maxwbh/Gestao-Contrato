@@ -57,22 +57,22 @@ class IndiceEconomicoService:
         try:
             from contratos.models import IndiceReajuste
             indice = IndiceReajuste.objects.filter(
-                tipo=tipo
-            ).order_by('-data_referencia').first()
+                tipo_indice=tipo
+            ).order_by('-ano', '-mes').first()
 
             if indice:
                 resultado = {
-                    'tipo': indice.tipo,
-                    'data_referencia': indice.data_referencia.isoformat(),
+                    'tipo': indice.tipo_indice,
+                    'data_referencia': f"{indice.ano}-{indice.mes:02d}",
                     'valor': float(indice.valor),
                     'valor_acumulado_ano': float(indice.valor_acumulado_ano) if indice.valor_acumulado_ano else None,
-                    'valor_acumulado_12_meses': float(indice.valor_acumulado_12_meses) if indice.valor_acumulado_12_meses else None,
+                    'valor_acumulado_12_meses': float(indice.valor_acumulado_12m) if indice.valor_acumulado_12m else None,
                 }
                 cache.set(cache_key, resultado, CACHE_TIMEOUT)
                 logger.info(f"Índice {tipo} cacheado com sucesso")
                 return resultado
         except Exception as e:
-            logger.error(f"Erro ao buscar índice {tipo}: {e}")
+            logger.exception("Erro ao buscar índice %s: %s", tipo, e)
 
         return None
 
@@ -102,19 +102,26 @@ class IndiceEconomicoService:
 
         try:
             from contratos.models import IndiceReajuste
+            from django.db.models import Q
             indices = IndiceReajuste.objects.filter(
-                tipo=tipo,
-                data_referencia__gte=data_inicio,
-                data_referencia__lte=data_fim
-            ).order_by('data_referencia').values(
-                'data_referencia', 'valor', 'valor_acumulado_ano'
+                tipo_indice=tipo
+            ).filter(
+                # (ano, mes) >= (data_inicio.year, data_inicio.month)
+                Q(ano__gt=data_inicio.year)
+                | Q(ano=data_inicio.year, mes__gte=data_inicio.month)
+            ).filter(
+                # (ano, mes) <= (data_fim.year, data_fim.month)
+                Q(ano__lt=data_fim.year)
+                | Q(ano=data_fim.year, mes__lte=data_fim.month)
+            ).order_by('ano', 'mes').values(
+                'ano', 'mes', 'valor', 'valor_acumulado_ano'
             )
 
             resultado = list(indices)
             cache.set(cache_key, resultado, CACHE_TIMEOUT)
             return resultado
         except Exception as e:
-            logger.error(f"Erro ao buscar índices do período: {e}")
+            logger.exception("Erro ao buscar índices do período: %s", e)
             return []
 
     @classmethod
@@ -147,7 +154,7 @@ class IndiceEconomicoService:
             response.raise_for_status()
             return response.json()
         except requests.RequestException as e:
-            logger.error(f"Erro ao buscar índice do BCB: {e}")
+            logger.exception(f"Erro ao buscar índice do BCB: {e}")
             return []
 
     @classmethod
