@@ -27,4 +27,11 @@ urlpatterns = [
     path('templates/<int:pk>/excluir/', views.TemplateNotificacaoDeleteView.as_view(), name='excluir_template'),
     path('templates/<int:pk>/duplicar/', views.duplicar_template, name='duplicar_template'),
     path('templates/<int:pk>/preview/', views.preview_template, name='preview_template'),
+
+    # 3.27 — Régua de Cobrança (RegraNotificacao) CRUD
+    path('regras/', views.listar_regras_notificacao, name='listar_regras'),
+    path('regras/novo/', views.criar_regra_notificacao, name='criar_regra'),
+    path('regras/<int:pk>/editar/', views.editar_regra_notificacao, name='editar_regra'),
+    path('regras/<int:pk>/excluir/', views.excluir_regra_notificacao, name='excluir_regra'),
+    path('regras/<int:pk>/toggle/', views.toggle_regra_notificacao, name='toggle_regra'),
 ]
