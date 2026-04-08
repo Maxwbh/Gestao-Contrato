@@ -1283,7 +1283,7 @@ def download_zip_boletos(request, contrato_id):
 
     if not parcelas:
         messages.error(request, 'Nenhum boleto disponível para download neste contrato.')
-        return redirect('contratos:detalhe_contrato', pk=contrato_id)
+        return redirect('contratos:detalhe', pk=contrato_id)
 
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, 'w', zipfile.ZIP_DEFLATED) as zf:
