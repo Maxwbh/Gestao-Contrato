@@ -1063,6 +1063,10 @@
                        title="Baixar recibo das últimas antecipações">
                         <i class="fas fa-file-pdf me-1"></i> Recibo Antecipação
                     </a>
+                    <a href="{% url 'financeiro:renegociar_parcelas' contrato.pk %}" class="btn btn-outline-warning"
+                       title="Renegociar parcelas em atraso">
+                        <i class="fas fa-handshake me-1"></i> Renegociar
+                    </a>
                     <a href="{% url 'contratos:calcular_rescisao' contrato.pk %}" class="btn btn-outline-danger">
                         <i class="fas fa-file-contract me-1"></i> Calcular Rescisão
                     </a>

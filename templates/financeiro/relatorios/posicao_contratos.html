@@ -1,10 +1,127 @@
 {% extends 'base.html' %}
-{% block title %}Relatório{% endblock %}
+{% block title %}Relatório — Posição de Contratos{% endblock %}
+
 {% block content %}
-<div class="container">
-    <h1>Relatório</h1>
-    {% if relatorio %}
-    <div>{{ relatorio }}</div>
-    {% endif %}
+<div class="container-fluid" style="padding:16px">
+
+  <div class="row mb-3 align-items-center">
+    <div class="col">
+      <h4 class="mb-0"><i class="fas fa-file-contract me-2 text-info"></i>Posição de Contratos</h4>
+      <small class="text-muted">Resumo financeiro de todos os contratos ativos</small>
+    </div>
+    <div class="col-auto">
+      <div class="btn-group">
+        <a href="{% url 'financeiro:exportar_relatorio' 'posicao_contratos' %}?formato=csv{% if filtros.imobiliaria_id %}&imobiliaria={{ filtros.imobiliaria_id }}{% endif %}"
+           class="btn btn-sm btn-outline-secondary"><i class="fas fa-file-csv me-1"></i>CSV</a>
+        <a href="{% url 'financeiro:exportar_relatorio' 'posicao_contratos' %}?formato=xlsx{% if filtros.imobiliaria_id %}&imobiliaria={{ filtros.imobiliaria_id }}{% endif %}"
+           class="btn btn-sm btn-outline-success"><i class="fas fa-file-excel me-1"></i>Excel</a>
+      </div>
+    </div>
+  </div>
+
+  <!-- Filtros -->
+  <div class="card mb-3">
+    <div class="card-body py-2">
+      <form method="get" class="row g-2 align-items-end">
+        <div class="col-md-4">
+          <label class="form-label form-label-sm mb-0">Imobiliária</label>
+          <select name="imobiliaria" class="form-select form-select-sm">
+            <option value="">Todas</option>
+            {% for imob in imobiliarias %}
+            <option value="{{ imob.id }}" {% if filtros.imobiliaria_id == imob.id|stringformat:"s" %}selected{% endif %}>{{ imob.nome }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="col-md-3">
+          <label class="form-label form-label-sm mb-0">Status</label>
+          <select name="status" class="form-select form-select-sm">
+            <option value="">Todos</option>
+            {% for val, label in status_choices %}
+            <option value="{{ val }}" {% if filtros.status == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="col-md-2">
+          <button type="submit" class="btn btn-sm btn-primary w-100"><i class="fas fa-filter me-1"></i>Filtrar</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  {% if relatorio %}
+  {% with tot=relatorio.totalizadores %}
+  <div class="row g-2 mb-3">
+    <div class="col-6 col-md-3">
+      <div class="card border-0 bg-primary text-white text-center py-2">
+        <div class="fs-5 fw-bold">{{ tot.total_contratos }}</div>
+        <small>Contratos Ativos</small>
+      </div>
+    </div>
+    <div class="col-6 col-md-3">
+      <div class="card border-0 bg-info text-white text-center py-2">
+        <div class="fs-5 fw-bold">R$&nbsp;{{ tot.valor_total_contratos|floatformat:2 }}</div>
+        <small>Valor Total</small>
+      </div>
+    </div>
+    <div class="col-6 col-md-3">
+      <div class="card border-0 bg-success text-white text-center py-2">
+        <div class="fs-5 fw-bold">R$&nbsp;{{ tot.total_pago|floatformat:2 }}</div>
+        <small>Total Recebido</small>
+      </div>
+    </div>
+    <div class="col-6 col-md-3">
+      <div class="card border-0 bg-warning text-dark text-center py-2">
+        <div class="fs-5 fw-bold">R$&nbsp;{{ tot.total_saldo_devedor|floatformat:2 }}</div>
+        <small>Saldo Devedor</small>
+      </div>
+    </div>
+  </div>
+  {% endwith %}
+
+  <div class="card">
+    <div class="card-body p-0">
+      <div class="table-responsive">
+        <table class="table table-sm table-hover mb-0">
+          <thead class="table-dark">
+            <tr>
+              <th>Contrato</th><th>Comprador</th><th>Imóvel</th>
+              <th class="text-center">Progresso</th>
+              <th class="text-center">Pagas</th><th class="text-center">Pendentes</th><th class="text-center">Vencidas</th>
+              <th class="text-end">Total Pago</th><th class="text-end">Saldo Devedor</th>
+              <th>Próx. Parc.</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for item in relatorio.itens %}
+            <tr {% if item.parcelas_vencidas > 0 %}class="table-warning"{% endif %}>
+              <td><small><a href="{% url 'contratos:detalhe_contrato' item.contrato_numero %}">{{ item.contrato_numero }}</a></small></td>
+              <td><small>{{ item.comprador_nome }}</small></td>
+              <td><small>{{ item.imovel }}</small></td>
+              <td class="text-center" style="min-width:100px">
+                <div class="progress" style="height:8px">
+                  <div class="progress-bar bg-success" style="width:{{ item.progresso_percentual }}%"></div>
+                </div>
+                <small class="text-muted">{{ item.progresso_percentual|floatformat:1 }}%</small>
+              </td>
+              <td class="text-center"><span class="badge bg-success">{{ item.parcelas_pagas }}</span></td>
+              <td class="text-center"><span class="badge bg-secondary">{{ item.parcelas_a_pagar }}</span></td>
+              <td class="text-center">
+                {% if item.parcelas_vencidas > 0 %}
+                <span class="badge bg-danger">{{ item.parcelas_vencidas }}</span>
+                {% else %}<span class="badge bg-light text-muted">0</span>{% endif %}
+              </td>
+              <td class="text-end"><small>R$&nbsp;{{ item.total_pago|floatformat:2 }}</small></td>
+              <td class="text-end fw-bold"><small>R$&nbsp;{{ item.saldo_devedor|floatformat:2 }}</small></td>
+              <td><small>{{ item.proxima_parcela_vencimento|date:"d/m/Y"|default:"—" }}</small></td>
+            </tr>
+            {% empty %}
+            <tr><td colspan="10" class="text-center text-muted py-4">Nenhum contrato encontrado.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+  {% endif %}
 </div>
 {% endblock %}
