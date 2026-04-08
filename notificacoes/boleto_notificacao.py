@@ -19,7 +19,7 @@ from .models import (
     TemplateNotificacao, TipoTemplate, TipoNotificacao,
     Notificacao, StatusNotificacao
 )
-from .services import ServicoEmail, _destinatario_email_teste, _destinatario_telefone_teste
+from .services import ServicoEmail, ServicoSMS, _destinatario_email_teste, _destinatario_telefone_teste
 
 logger = logging.getLogger(__name__)
 
@@ -260,37 +260,121 @@ class BoletoNotificacaoService:
                 'erro': str(e)
             }
 
+    def enviar_sms_boleto(self, parcela, tipo_template):
+        """
+        Envia SMS de notificação de boleto.
+
+        Args:
+            parcela: Instância de Parcela
+            tipo_template: TipoTemplate (ex: TipoTemplate.BOLETO_CRIADO)
+
+        Returns:
+            dict: Resultado do envio
+        """
+        try:
+            contrato = parcela.contrato
+            comprador = contrato.comprador
+            imobiliaria = contrato.imovel.imobiliaria
+
+            # Verificar preferência de SMS
+            if not comprador.notificar_sms:
+                return {'sucesso': False, 'erro': 'Comprador optou por não receber SMS'}
+
+            # Número de celular — preferência: celular, fallback: telefone
+            numero_raw = (comprador.celular or comprador.telefone or '').strip()
+            if not numero_raw:
+                return {'sucesso': False, 'erro': 'Comprador não possui celular/telefone cadastrado'}
+
+            # Normalizar para E.164 (+55DDNNNNNNNNN) exigido pelo Twilio
+            import re as _re
+            numero = _re.sub(r'\D', '', numero_raw)  # só dígitos
+            if len(numero) == 11:          # 31999999999 → +5531999999999
+                numero = '+55' + numero
+            elif len(numero) == 10:        # 3199999999 → +55319999999 (fixo)
+                numero = '+55' + numero
+            elif len(numero) == 13 and numero.startswith('55'):
+                numero = '+' + numero      # 5531999999999 → +5531999999999
+            elif not numero.startswith('+'):
+                numero = '+' + numero      # mantém se já tiver código país
+            if len(numero) < 12:           # inválido após normalização
+                return {'sucesso': False, 'erro': f'Número de telefone inválido: {numero_raw}'}
+
+            # Tentar template SMS no banco de dados
+            template = TemplateNotificacao.get_template(
+                codigo=tipo_template,
+                imobiliaria=imobiliaria,
+                tipo=TipoNotificacao.SMS
+            )
+
+            if template:
+                contexto = self.montar_contexto(parcela)
+                _, mensagem, _ = template.renderizar(contexto)
+            else:
+                # Mensagem padrão quando não há template SMS configurado
+                mensagem = (
+                    f"Ola {comprador.nome.split()[0]}, "
+                    f"seu boleto parcela {parcela.numero_parcela} "
+                    f"valor {self._formatar_valor(parcela.valor_atual)} "
+                    f"vence {self._formatar_data(parcela.data_vencimento)}. "
+                    f"{imobiliaria.nome}"
+                )
+
+            # Safeguard TEST_MODE
+            numero_final = _destinatario_telefone_teste(numero)
+
+            # Criar registro de notificação
+            notificacao = Notificacao.objects.create(
+                parcela=parcela,
+                tipo=TipoNotificacao.SMS,
+                destinatario=numero_final,
+                assunto=f'SMS Boleto Parcela {parcela.numero_parcela}',
+                mensagem=mensagem,
+                status=StatusNotificacao.PENDENTE
+            )
+
+            try:
+                ServicoSMS.enviar(destinatario=numero, mensagem=mensagem)
+                notificacao.marcar_como_enviada()
+                logger.info(f"SMS de boleto enviado para {numero_final} - Parcela {parcela.pk}")
+                return {
+                    'sucesso': True,
+                    'notificacao_id': notificacao.pk,
+                    'destinatario': numero_final,
+                }
+            except Exception as e:
+                notificacao.marcar_erro(str(e))
+                raise
+
+        except Exception as e:
+            logger.exception(f"Erro ao enviar SMS de boleto: {e}")
+            return {'sucesso': False, 'erro': str(e)}
+
     def notificar_boleto_criado(self, parcela, anexar_pdf=True):
-        """Envia notificação de boleto criado"""
-        return self.enviar_email_boleto(
-            parcela,
-            TipoTemplate.BOLETO_CRIADO,
-            anexar_pdf=anexar_pdf
-        )
+        """Envia notificações de boleto criado (email + SMS conforme preferências do comprador)"""
+        return self._notificar(parcela, TipoTemplate.BOLETO_CRIADO, anexar_pdf=anexar_pdf)
+
+    def _notificar(self, parcela, tipo_template, anexar_pdf=True):
+        """Helper interno: envia email + SMS (se comprador optar) para um tipo de template."""
+        resultado = self.enviar_email_boleto(parcela, tipo_template, anexar_pdf=anexar_pdf)
+        comprador = parcela.contrato.comprador
+        if comprador.notificar_sms:
+            res_sms = self.enviar_sms_boleto(parcela, tipo_template)
+            if not res_sms.get('sucesso'):
+                logger.warning("SMS não enviado parcela %s: %s", parcela.pk, res_sms.get('erro'))
+            resultado['sms'] = res_sms
+        return resultado
 
     def notificar_boleto_5_dias(self, parcela):
         """Envia notificação de boleto com 5 dias para vencer"""
-        return self.enviar_email_boleto(
-            parcela,
-            TipoTemplate.BOLETO_5_DIAS,
-            anexar_pdf=True
-        )
+        return self._notificar(parcela, TipoTemplate.BOLETO_5_DIAS, anexar_pdf=True)
 
     def notificar_boleto_vence_amanha(self, parcela):
         """Envia notificação de boleto que vence amanhã"""
-        return self.enviar_email_boleto(
-            parcela,
-            TipoTemplate.BOLETO_VENCE_AMANHA,
-            anexar_pdf=True
-        )
+        return self._notificar(parcela, TipoTemplate.BOLETO_VENCE_AMANHA, anexar_pdf=True)
 
     def notificar_boleto_venceu_ontem(self, parcela):
         """Envia notificação de boleto que venceu ontem"""
-        return self.enviar_email_boleto(
-            parcela,
-            TipoTemplate.BOLETO_VENCEU_ONTEM,
-            anexar_pdf=False
-        )
+        return self._notificar(parcela, TipoTemplate.BOLETO_VENCEU_ONTEM, anexar_pdf=False)
 
     def processar_notificacoes_automaticas(self):
         """
@@ -533,6 +617,58 @@ Atenciosamente,
 %%TELEFONEIMOBILIARIA%%
 %%EMAILIMOBILIARIA%%
 """,
+            'corpo_html': ''
+        },
+        # ── Templates SMS ──────────────────────────────────────────────────
+        {
+            'codigo': TipoTemplate.BOLETO_CRIADO,
+            'nome': 'SMS - Boleto Gerado',
+            'tipo': TipoNotificacao.SMS,
+            'assunto': 'SMS Boleto Gerado',
+            'corpo': (
+                '%%NOMEIMOBILIARIA%%: Olá %%NOMECOMPRADOR%%, '
+                'seu boleto parcela %%PARCELA%% '
+                'valor %%VALORBOLETO%% vence %%DATAVENCIMENTO%%. '
+                'Linha: %%LINHADIGITAVEL%%'
+            ),
+            'corpo_html': ''
+        },
+        {
+            'codigo': TipoTemplate.BOLETO_VENCE_AMANHA,
+            'nome': 'SMS - Boleto vence amanhã',
+            'tipo': TipoNotificacao.SMS,
+            'assunto': 'SMS Boleto vence amanhã',
+            'corpo': (
+                '%%NOMEIMOBILIARIA%%: ATENÇÃO %%NOMECOMPRADOR%%, '
+                'seu boleto parcela %%PARCELA%% vence AMANHÃ '
+                'valor %%VALORBOLETO%%. '
+                'Linha: %%LINHADIGITAVEL%%'
+            ),
+            'corpo_html': ''
+        },
+        {
+            'codigo': TipoTemplate.BOLETO_5_DIAS,
+            'nome': 'SMS - Lembrete 5 dias para vencimento',
+            'tipo': TipoNotificacao.SMS,
+            'assunto': 'SMS Boleto vence em 5 dias',
+            'corpo': (
+                '%%NOMEIMOBILIARIA%%: Lembrete %%NOMECOMPRADOR%%, '
+                'seu boleto parcela %%PARCELA%% vence em 5 dias '
+                'valor %%VALORBOLETO%% data %%DATAVENCIMENTO%%. '
+                'Linha: %%LINHADIGITAVEL%%'
+            ),
+            'corpo_html': ''
+        },
+        {
+            'codigo': TipoTemplate.BOLETO_VENCEU_ONTEM,
+            'nome': 'SMS - Boleto vencido',
+            'tipo': TipoNotificacao.SMS,
+            'assunto': 'SMS Boleto vencido',
+            'corpo': (
+                '%%NOMEIMOBILIARIA%%: Olá %%NOMECOMPRADOR%%, '
+                'boleto parcela %%PARCELA%% venceu em %%DATAVENCIMENTO%%. '
+                'Entre em contato: %%TELEFONEIMOBILIARIA%%'
+            ),
             'corpo_html': ''
         },
     ]

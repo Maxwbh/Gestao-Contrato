@@ -129,24 +129,39 @@ class Command(BaseCommand):
         self._secao('3. Templates de Notificação')
         try:
             from notificacoes.models import TemplateNotificacao, TipoTemplate, TipoNotificacao
-            codigos = [
+            codigos_email = [
                 TipoTemplate.BOLETO_CRIADO,
                 TipoTemplate.BOLETO_5_DIAS,
                 TipoTemplate.BOLETO_VENCE_AMANHA,
                 TipoTemplate.BOLETO_VENCEU_ONTEM,
             ]
-            for codigo in codigos:
+            codigos_sms = [
+                TipoTemplate.BOLETO_CRIADO,
+                TipoTemplate.BOLETO_5_DIAS,
+                TipoTemplate.BOLETO_VENCE_AMANHA,
+                TipoTemplate.BOLETO_VENCEU_ONTEM,
+            ]
+            self._info('E-mail', '')
+            for codigo in codigos_email:
                 t = TemplateNotificacao.objects.filter(
                     codigo=codigo, tipo=TipoNotificacao.EMAIL
                 ).first()
                 if t:
-                    status = 'ATIVO' if t.ativo else 'inativo'
-                    self._ok(f'{codigo} [{status}]')
+                    self._ok(f'[EMAIL] {codigo} ({("ATIVO" if t.ativo else "inativo")})')
                 else:
                     self._err(
-                        f'{codigo} NÃO encontrado — notificações deste tipo vão falhar silenciosamente!\n'
-                        '  → Execute: python manage.py shell -c "from notificacoes.boleto_notificacao import criar_templates_padrao; criar_templates_padrao()"'
+                        f'[EMAIL] {codigo} NÃO encontrado — notificações falharão silenciosamente!\n'
+                        '  → python manage.py shell -c "from notificacoes.boleto_notificacao import criar_templates_padrao; criar_templates_padrao()"'
                     )
+            self._info('SMS', '')
+            for codigo in codigos_sms:
+                t = TemplateNotificacao.objects.filter(
+                    codigo=codigo, tipo=TipoNotificacao.SMS
+                ).first()
+                if t:
+                    self._ok(f'[SMS]   {codigo} ({("ATIVO" if t.ativo else "inativo")})')
+                else:
+                    self._info(f'  [SMS]   {codigo}', 'não configurado (usará mensagem padrão)')
         except Exception as e:
             self._err(f'Erro ao verificar templates: {e}')
 
