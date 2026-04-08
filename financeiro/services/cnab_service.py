@@ -98,11 +98,23 @@ class CNABService:
             return documento.replace('.', '').replace('-', '').replace('/', '')
         return ''
 
-    def _formatar_data(self, data: date) -> str:
-        """Formata data para o padrao BRCobranca (YYYY/MM/DD)"""
-        if data:
-            return data.strftime('%Y/%m/%d')
-        return ''
+    def _formatar_data(self, data) -> str:
+        """
+        Formata data para o padrao BRCobranca (YYYY/MM/DD).
+        Aceita date, datetime (naive ou aware). Para datetime aware, converte
+        para hora local antes de extrair a data (evita problema de fuso UTC-3).
+        """
+        if data is None:
+            return ''
+        if hasattr(data, 'tzinfo') and data.tzinfo is not None:
+            # datetime timezone-aware: converter para local antes de .date()
+            from django.utils import timezone as _tz
+            data = _tz.localtime(data).date()
+        elif hasattr(data, 'date') and callable(data.date):
+            # datetime naive: extrair date
+            data = data.date()
+        # agora é um objeto date
+        return data.strftime('%Y/%m/%d')
 
     def _formatar_valor(self, valor) -> float:
         """Formata valor para float"""
@@ -159,8 +171,9 @@ class CNABService:
             # Valores e datas
             'valor': self._formatar_valor(parcela.valor_boleto or parcela.valor_atual),
             'data_vencimento': self._formatar_data(parcela.data_vencimento),
+            # _formatar_data lida corretamente com datetime aware (UTC→local)
             'data_documento': self._formatar_data(
-                parcela.data_geracao_boleto.date() if parcela.data_geracao_boleto else timezone.now().date()
+                parcela.data_geracao_boleto if parcela.data_geracao_boleto else timezone.now()
             ),
 
             # Campos obrigatórios da classe Base BRCobranca
@@ -339,6 +352,19 @@ class CNABService:
             }
 
             logger.info(f"Gerando remessa CNAB: banco={banco}, layout={layout}, boletos={len(pagamentos)}")
+
+            # DEBUG: logar payload completo para diagnosticar erros de validação
+            if logger.isEnabledFor(logging.DEBUG):
+                import json as _json
+                logger.debug("Payload CNAB remessa:\n%s", _json.dumps(dados_remessa, indent=2, default=str))
+            else:
+                # Sempre logar campos de data do primeiro boleto para diagnóstico
+                if pagamentos:
+                    p0 = pagamentos[0]
+                    logger.info(
+                        "CNAB payload[0] datas: data_vencimento=%r data_documento=%r",
+                        p0.get('data_vencimento'), p0.get('data_documento')
+                    )
 
             response = requests.post(
                 f'{self.brcobranca_url}/api/remessa',
