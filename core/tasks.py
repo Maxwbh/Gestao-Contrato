@@ -976,3 +976,185 @@ def task_relatorio_mensal(request):
     result = relatorio_mensal_consolidado_sync()
     status_code = 200 if result.success else 500
     return JsonResponse(result.to_dict(), status=status_code)
+
+
+def testar_notificacoes_sync(email_destino=None, sms_destino=None, skip_sms=False):
+    """
+    Diagnóstico completo de e-mail e SMS.
+    Retorna dict com resultados de cada etapa.
+    """
+    import traceback as tb
+    from django.core.mail import send_mail
+
+    resultado = {
+        'configuracoes': {},
+        'templates': {},
+        'email_direto': None,
+        'servico_email': None,
+        'sms': None,
+        'avisos': [],
+    }
+
+    # 1. Configurações
+    backend = getattr(settings, 'EMAIL_BACKEND', '')
+    host = getattr(settings, 'EMAIL_HOST', '')
+    port = getattr(settings, 'EMAIL_PORT', '')
+    use_tls = getattr(settings, 'EMAIL_USE_TLS', False)
+    use_ssl = getattr(settings, 'EMAIL_USE_SSL', False)
+    user = getattr(settings, 'EMAIL_HOST_USER', '')
+    from_email = getattr(settings, 'DEFAULT_FROM_EMAIL', '')
+    test_mode = getattr(settings, 'TEST_MODE', False)
+    test_email = getattr(settings, 'TEST_RECIPIENT_EMAIL', '')
+    test_phone = getattr(settings, 'TEST_RECIPIENT_PHONE', '')
+    account_sid = getattr(settings, 'TWILIO_ACCOUNT_SID', '')
+    auth_token_twilio = getattr(settings, 'TWILIO_AUTH_TOKEN', '')
+    numero_twilio = getattr(settings, 'TWILIO_PHONE_NUMBER', '')
+
+    resultado['configuracoes'] = {
+        'EMAIL_BACKEND': backend,
+        'EMAIL_HOST': host,
+        'EMAIL_PORT': port,
+        'EMAIL_USE_TLS': use_tls,
+        'EMAIL_USE_SSL': use_ssl,
+        'EMAIL_HOST_USER': user,
+        'DEFAULT_FROM_EMAIL': from_email,
+        'TEST_MODE': test_mode,
+        'TEST_RECIPIENT_EMAIL': test_email,
+        'TEST_RECIPIENT_PHONE': test_phone,
+        'TWILIO_CONFIGURADO': bool(account_sid and auth_token_twilio and numero_twilio),
+    }
+
+    if 'console' in backend.lower():
+        resultado['avisos'].append(
+            'EMAIL_BACKEND=console — e-mails vão para o log, NÃO são entregues. '
+            'Defina EMAIL_BACKEND=django.core.mail.backends.smtp.EmailBackend no .env/Render.'
+        )
+
+    # 2. Templates
+    try:
+        from notificacoes.models import TemplateNotificacao, TipoTemplate, TipoNotificacao
+        for codigo in [TipoTemplate.BOLETO_CRIADO, TipoTemplate.BOLETO_5_DIAS,
+                       TipoTemplate.BOLETO_VENCE_AMANHA, TipoTemplate.BOLETO_VENCEU_ONTEM]:
+            t = TemplateNotificacao.objects.filter(codigo=codigo, tipo=TipoNotificacao.EMAIL).first()
+            resultado['templates'][codigo] = {
+                'existe': bool(t),
+                'ativo': t.ativo if t else False,
+            }
+            if not t:
+                resultado['avisos'].append(
+                    f'Template {codigo} não encontrado — notificações falharão silenciosamente.'
+                )
+    except Exception as e:
+        resultado['templates']['erro'] = str(e)
+
+    # 3. E-mail direto (send_mail)
+    destino_email = email_destino or test_email or from_email or 'receber@msbrasil.inf.br'
+    try:
+        enviados = send_mail(
+            subject='[TESTE] Diagnóstico de E-mail — Gestão de Contratos',
+            message=(
+                f'Teste de diagnóstico de e-mail.\n'
+                f'TEST_MODE: {test_mode}\n'
+                f'EMAIL_BACKEND: {backend}\n'
+                f'EMAIL_HOST: {host}:{port}\n'
+            ),
+            from_email=from_email,
+            recipient_list=[destino_email],
+            fail_silently=False,
+        )
+        resultado['email_direto'] = {
+            'sucesso': bool(enviados),
+            'destinatario': destino_email,
+            'mensagem': 'E-mail enviado com sucesso' if enviados else 'send_mail retornou 0',
+        }
+    except Exception as e:
+        resultado['email_direto'] = {
+            'sucesso': False,
+            'destinatario': destino_email,
+            'erro': str(e),
+            'traceback': tb.format_exc(),
+        }
+
+    # 4. ServicoEmail.enviar()
+    try:
+        from notificacoes.services import ServicoEmail, _destinatario_email_teste
+        destino_final = _destinatario_email_teste(destino_email)
+        ServicoEmail.enviar(
+            destinatario=destino_email,
+            assunto='[TESTE] ServicoEmail — Gestão de Contratos',
+            mensagem=f'Teste via ServicoEmail.enviar(). TEST_MODE: {test_mode}. Destinatário final: {destino_final}.',
+        )
+        resultado['servico_email'] = {
+            'sucesso': True,
+            'destinatario_original': destino_email,
+            'destinatario_final': destino_final,
+        }
+    except Exception as e:
+        resultado['servico_email'] = {
+            'sucesso': False,
+            'erro': str(e),
+            'traceback': tb.format_exc(),
+        }
+
+    # 5. SMS
+    if not skip_sms and all([account_sid, auth_token_twilio, numero_twilio]):
+        destino_sms = sms_destino or test_phone or '+5531993257479'
+        try:
+            from notificacoes.services import ServicoSMS, _destinatario_telefone_teste
+            destino_final_sms = _destinatario_telefone_teste(destino_sms)
+            ServicoSMS.enviar(
+                destinatario=destino_sms,
+                mensagem='[TESTE] SMS de diagnóstico — Gestão de Contratos. Pode ignorar.',
+            )
+            resultado['sms'] = {
+                'sucesso': True,
+                'destinatario_original': destino_sms,
+                'destinatario_final': destino_final_sms,
+            }
+        except Exception as e:
+            resultado['sms'] = {
+                'sucesso': False,
+                'erro': str(e),
+                'traceback': tb.format_exc(),
+            }
+    elif skip_sms:
+        resultado['sms'] = {'pulado': True}
+    else:
+        resultado['sms'] = {'pulado': True, 'motivo': 'Credenciais Twilio não configuradas'}
+
+    return resultado
+
+
+@require_http_methods(["POST"])
+@task_api_rate_limit
+@task_auth_required
+def task_testar_notificacoes(request):
+    """
+    Endpoint de diagnóstico: testa e-mail e SMS, retorna JSON detalhado.
+
+    Parâmetros opcionais (query string ou body JSON):
+        email   — e-mail destino (padrão: TEST_RECIPIENT_EMAIL)
+        sms     — telefone destino (padrão: TEST_RECIPIENT_PHONE)
+        skip_sms — se '1' ou 'true', pula teste de SMS
+    """
+    import json as json_mod
+    email = request.GET.get('email')
+    sms = request.GET.get('sms')
+    skip_sms_param = request.GET.get('skip_sms', '').lower() in ('1', 'true', 'yes')
+
+    if request.content_type and 'json' in request.content_type:
+        try:
+            body = json_mod.loads(request.body)
+            email = email or body.get('email')
+            sms = sms or body.get('sms')
+            skip_sms_param = skip_sms_param or body.get('skip_sms', False)
+        except Exception:
+            pass
+
+    resultado = testar_notificacoes_sync(
+        email_destino=email,
+        sms_destino=sms,
+        skip_sms=skip_sms_param,
+    )
+    status_code = 200
+    return JsonResponse(resultado, status=status_code)
