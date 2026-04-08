@@ -1,36 +1,287 @@
 {% extends 'base.html' %}
-{% load crispy_forms_tags %}
+{% load static %}
 
 {% block title %}
     {% if object %}Editar Template{% else %}Novo Template{% endif %} - Gestao de Contratos
 {% endblock %}
 
+{% block extra_css %}
+<style>
+    .template-form-wrap { max-width: 95%; margin: 0 auto; }
+    .channel-card { border-left: 4px solid; }
+    .channel-card.email  { border-left-color: #0d6efd; }
+    .channel-card.sms    { border-left-color: #0dcaf0; }
+    .channel-card.whats  { border-left-color: #25D366; }
+    .channel-badge { font-size: .8rem; padding: 4px 10px; border-radius: 12px; }
+    .sms-counter { font-size: .8rem; }
+    .sms-counter.over { color: #dc3545; font-weight: 600; }
+    .sms-counter.ok   { color: #6c757d; }
+    .tox-tinymce { border-radius: 0.375rem !important; }
+    /* TAGs reference */
+    .tags-ref code { font-size: .75rem; background: #f8f9fa; padding: 1px 4px; border-radius: 3px; }
+</style>
+{% endblock %}
+
 {% block content %}
 <div class="container-fluid py-4">
-    <div class="row justify-content-center">
-        <div class="col-xl-10">
-            <!-- Header -->
-            <div class="d-flex justify-content-between align-items-center mb-4">
-                <div>
-                    <h4 class="mb-0 text-dark">
-                        <i class="fas fa-file-alt me-2 text-success"></i>
-                        {% if object %}Editar: {{ object.nome }}{% else %}Novo Template de Mensagem{% endif %}
-                    </h4>
-                    <small class="text-muted">
-                        {% if object %}Atualize o template de notificacao{% else %}Crie um novo template de mensagem{% endif %}
-                    </small>
-                </div>
-                <a href="{% url 'notificacoes:listar_templates' %}" class="btn btn-outline-secondary btn-sm">
-                    <i class="fas fa-list me-1"></i>Ver Lista
-                </a>
-            </div>
+<div class="template-form-wrap">
 
-            <!-- Formulario -->
-            <form method="post" novalidate>
-                {% csrf_token %}
-                {% crispy form %}
-            </form>
+    <!-- Header -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h4 class="mb-0 text-dark">
+                <i class="fas fa-file-alt me-2 text-success"></i>
+                {% if object %}Editar: {{ object.nome }}{% else %}Novo Template de Mensagem{% endif %}
+            </h4>
+            <small class="text-muted">
+                {% if object %}Atualize o template de notificação{% else %}Crie um novo template de mensagem{% endif %}
+                — preencha apenas os canais que deseja ativar
+            </small>
         </div>
+        <a href="{% url 'notificacoes:listar_templates' %}" class="btn btn-outline-secondary btn-sm">
+            <i class="fas fa-list me-1"></i>Ver Lista
+        </a>
     </div>
+
+    <form method="post" novalidate id="formTemplate">
+        {% csrf_token %}
+
+        <!-- Erros globais -->
+        {% if form.non_field_errors %}
+        <div class="alert alert-danger">
+            {% for error in form.non_field_errors %}{{ error }}{% endfor %}
+        </div>
+        {% endif %}
+
+        <!-- ── CARD 1: Identificação ─────────────────────────────────── -->
+        <div class="card mb-4 shadow-sm">
+            <div class="card-header py-2 bg-success text-white">
+                <i class="fas fa-file-alt me-2"></i><strong>Identificação do Template</strong>
+            </div>
+            <div class="card-body py-3">
+                <div class="row g-3">
+                    <div class="col-md-5">
+                        <label class="form-label fw-semibold">Nome do Template <span class="text-danger">*</span></label>
+                        {{ form.nome }}
+                        {% if form.nome.errors %}<div class="text-danger small mt-1">{{ form.nome.errors.0 }}</div>{% endif %}
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label fw-semibold">Tipo do Template <span class="text-danger">*</span></label>
+                        {{ form.codigo }}
+                        {% if form.codigo.errors %}<div class="text-danger small mt-1">{{ form.codigo.errors.0 }}</div>{% endif %}
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label fw-semibold">Imobiliária</label>
+                        {{ form.imobiliaria }}
+                        <div class="form-text">Vazio = global</div>
+                    </div>
+                    <div class="col-md-1 d-flex align-items-end pb-2">
+                        <div class="form-check">
+                            {{ form.ativo }}
+                            <label class="form-check-label" for="{{ form.ativo.id_for_label }}">Ativo</label>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ── CARD 2: E-mail ────────────────────────────────────────── -->
+        <div class="card mb-4 shadow-sm channel-card email">
+            <div class="card-header py-2 d-flex align-items-center gap-2">
+                <i class="fas fa-envelope text-primary"></i>
+                <strong>E-mail</strong>
+                <span class="channel-badge bg-primary text-white">Assunto + HTML</span>
+                <small class="text-muted ms-auto">Deixe em branco para não enviar e-mail</small>
+            </div>
+            <div class="card-body py-3">
+                <div class="mb-3">
+                    <label class="form-label fw-semibold">
+                        <i class="fas fa-heading me-1 text-primary"></i>Assunto
+                    </label>
+                    {{ form.assunto }}
+                    {% if form.assunto.errors %}<div class="text-danger small mt-1">{{ form.assunto.errors.0 }}</div>{% endif %}
+                </div>
+                <div class="mb-0">
+                    <label class="form-label fw-semibold">
+                        <i class="fas fa-code me-1 text-primary"></i>Corpo HTML
+                        <span class="badge bg-primary ms-1">Editor Avançado</span>
+                    </label>
+                    {{ form.corpo_html }}
+                    {% if form.corpo_html.errors %}<div class="text-danger small mt-1">{{ form.corpo_html.errors.0 }}</div>{% endif %}
+                </div>
+            </div>
+        </div>
+
+        <!-- ── CARD 3: SMS ───────────────────────────────────────────── -->
+        <div class="card mb-4 shadow-sm channel-card sms">
+            <div class="card-header py-2 d-flex align-items-center gap-2">
+                <i class="fas fa-sms text-info"></i>
+                <strong>SMS</strong>
+                <span class="channel-badge bg-info text-white">Texto simples</span>
+                <span class="ms-auto sms-counter ok" id="smsCounter">0 / 255</span>
+            </div>
+            <div class="card-body py-3">
+                <label class="form-label fw-semibold">
+                    <i class="fas fa-align-left me-1 text-info"></i>Corpo Texto (SMS)
+                    <small class="text-muted fw-normal">— máx. 255 caracteres</small>
+                </label>
+                {{ form.corpo }}
+                {% if form.corpo.errors %}<div class="text-danger small mt-1">{{ form.corpo.errors.0 }}</div>{% endif %}
+                <div class="form-text">Deixe em branco para não enviar SMS.</div>
+            </div>
+        </div>
+
+        <!-- ── CARD 4: WhatsApp ──────────────────────────────────────── -->
+        <div class="card mb-4 shadow-sm channel-card whats">
+            <div class="card-header py-2 d-flex align-items-center gap-2">
+                <i class="fab fa-whatsapp text-success"></i>
+                <strong>WhatsApp</strong>
+                <span class="channel-badge text-white" style="background:#25D366;">Texto / Markdown</span>
+                <small class="text-muted ms-auto">Deixe em branco para não enviar WhatsApp</small>
+            </div>
+            <div class="card-body py-3">
+                <label class="form-label fw-semibold">
+                    <i class="fas fa-comment-alt me-1" style="color:#25D366;"></i>Corpo Mensagem (WhatsApp)
+                </label>
+                {{ form.corpo_whatsapp }}
+                {% if form.corpo_whatsapp.errors %}<div class="text-danger small mt-1">{{ form.corpo_whatsapp.errors.0 }}</div>{% endif %}
+                <div class="form-text">Suporta *negrito*, _itálico_ (markdown WhatsApp). Deixe em branco para não enviar.</div>
+            </div>
+        </div>
+
+        <!-- ── CARD 5: TAGs disponíveis ──────────────────────────────── -->
+        <div class="card mb-4 border-info tags-ref">
+            <div class="card-header py-2 bg-info text-white d-flex justify-content-between align-items-center">
+                <span><i class="fas fa-tags me-2"></i><strong>TAGs Disponíveis</strong></span>
+                <button type="button" class="btn btn-sm btn-light" data-bs-toggle="collapse" data-bs-target="#collapseTags">
+                    <i class="fas fa-chevron-down"></i>
+                </button>
+            </div>
+            <div id="collapseTags" class="collapse">
+                <div class="card-body py-3">
+                    <div class="row">
+                        <div class="col-md-4">
+                            <h6 class="text-primary"><i class="fas fa-user me-1"></i>Comprador</h6>
+                            <ul class="list-unstyled small mb-3">
+                                <li><code>%%NOMECOMPRADOR%%</code> — Nome completo</li>
+                                <li><code>%%CPFCOMPRADOR%%</code> — CPF</li>
+                                <li><code>%%EMAILCOMPRADOR%%</code> — E-mail</li>
+                                <li><code>%%CELULARCOMPRADOR%%</code> — Celular</li>
+                                <li><code>%%TELEFONECOMPRADOR%%</code> — Telefone</li>
+                            </ul>
+                            <h6 class="text-primary"><i class="fas fa-building me-1"></i>Imobiliária</h6>
+                            <ul class="list-unstyled small">
+                                <li><code>%%NOMEIMOBILIARIA%%</code> — Nome</li>
+                                <li><code>%%TELEFONEIMOBILIARIA%%</code> — Telefone</li>
+                                <li><code>%%EMAILIMOBILIARIA%%</code> — E-mail</li>
+                            </ul>
+                        </div>
+                        <div class="col-md-4">
+                            <h6 class="text-primary"><i class="fas fa-file-contract me-1"></i>Contrato / Parcela</h6>
+                            <ul class="list-unstyled small mb-3">
+                                <li><code>%%NUMEROCONTRATO%%</code> — Nº contrato</li>
+                                <li><code>%%PARCELA%%</code> — Parcela (ex: 5/24)</li>
+                                <li><code>%%NUMEROPARCELA%%</code> — Nº parcela</li>
+                                <li><code>%%VALORPARCELA%%</code> — Valor parcela</li>
+                                <li><code>%%DATAVENCIMENTO%%</code> — Vencimento</li>
+                                <li><code>%%DIASATRASO%%</code> — Dias de atraso</li>
+                                <li><code>%%VALORJUROS%%</code> — Juros</li>
+                                <li><code>%%VALORMULTA%%</code> — Multa</li>
+                            </ul>
+                        </div>
+                        <div class="col-md-4">
+                            <h6 class="text-primary"><i class="fas fa-barcode me-1"></i>Boleto</h6>
+                            <ul class="list-unstyled small mb-3">
+                                <li><code>%%NOSSONUMERO%%</code> — Nosso número</li>
+                                <li><code>%%LINHADIGITAVEL%%</code> — Linha digitável</li>
+                                <li><code>%%CODIGOBARRAS%%</code> — Cód. barras</li>
+                                <li><code>%%VALORBOLETO%%</code> — Valor boleto</li>
+                                <li><code>%%LINKBOLETO%%</code> — Link download</li>
+                            </ul>
+                            <h6 class="text-primary"><i class="fas fa-clock me-1"></i>Sistema</h6>
+                            <ul class="list-unstyled small">
+                                <li><code>%%DATAATUAL%%</code> — Data atual</li>
+                                <li><code>%%HORAATUAL%%</code> — Hora atual</li>
+                                <li><code>%%IMOVEL%%</code> — Imóvel</li>
+                                <li><code>%%LOTEAMENTO%%</code> — Loteamento</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ── Botões ────────────────────────────────────────────────── -->
+        <div class="d-flex justify-content-between align-items-center pb-4">
+            <a href="{% url 'notificacoes:listar_templates' %}" class="btn btn-outline-secondary">
+                <i class="fas fa-arrow-left me-2"></i>Voltar
+            </a>
+            <button type="submit" class="btn btn-success btn-lg px-5" id="btnSalvar">
+                <i class="fas fa-save me-2"></i>Salvar Template
+            </button>
+        </div>
+
+    </form>
 </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<!-- TinyMCE 5 (self-hosted via cdnjs — sem API key) -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/tinymce/5.10.9/tinymce.min.js" integrity="sha512-+8U/aaRWBCeTGhF2lGl5gDkTWOhFnKpPWQFnQkJ/MBnIl7LZ0BTTKY7oPQ4GN+h0x91I9j5Qfn4K7b1E/gXw==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+<script>
+(function () {
+    'use strict';
+
+    // ── TinyMCE ──────────────────────────────────────────────────────────
+    tinymce.init({
+        selector: '#id_corpo_html',
+        language: 'pt_BR',
+        height: 420,
+        menubar: true,
+        branding: false,
+        plugins: [
+            'advlist autolink lists link image charmap preview anchor',
+            'searchreplace visualblocks code fullscreen',
+            'insertdatetime table paste wordcount',
+        ],
+        toolbar:
+            'undo redo | formatselect | bold italic underline forecolor backcolor | ' +
+            'alignleft aligncenter alignright alignjustify | ' +
+            'bullist numlist outdent indent | link image table | code fullscreen',
+        content_style: 'body { font-family: Arial, Helvetica, sans-serif; font-size: 14px; }',
+        setup: function (editor) {
+            // Sync TinyMCE content back to the hidden textarea before form submit
+            editor.on('change', function () { editor.save(); });
+        },
+    });
+
+    // Before submit: flush TinyMCE to textarea
+    document.getElementById('formTemplate').addEventListener('submit', function () {
+        if (tinymce.get('id_corpo_html')) {
+            tinymce.get('id_corpo_html').save();
+        }
+    });
+
+    // ── SMS counter ──────────────────────────────────────────────────────
+    var smsField   = document.getElementById('id_corpo');
+    var smsCounter = document.getElementById('smsCounter');
+    var SMS_MAX    = 255;
+
+    function updateSmsCounter() {
+        var len = (smsField.value || '').length;
+        smsCounter.textContent = len + ' / ' + SMS_MAX;
+        if (len > SMS_MAX) {
+            smsCounter.className = 'ms-auto sms-counter over';
+        } else {
+            smsCounter.className = 'ms-auto sms-counter ok';
+        }
+    }
+
+    if (smsField) {
+        smsField.addEventListener('input', updateSmsCounter);
+        updateSmsCounter();
+    }
+})();
+</script>
 {% endblock %}
