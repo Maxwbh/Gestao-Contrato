@@ -295,6 +295,7 @@ TASK_TOKEN = config('TASK_TOKEN', default=None)
 # Rode o container Docker: docker run -p 9292:9292 kivanio/brcobranca
 # Documentação: https://github.com/kivanio/brcobranca
 BRCOBRANCA_URL = config('BRCOBRANCA_URL', default='http://localhost:9292')
+SITE_URL = config('SITE_URL', default='http://localhost:8000')
 BRCOBRANCA_TIMEOUT = config('BRCOBRANCA_TIMEOUT', default=30, cast=int)
 BRCOBRANCA_MAX_TENTATIVAS = 3
 BRCOBRANCA_DELAY_INICIAL = 2  # segundos
