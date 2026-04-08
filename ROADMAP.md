@@ -939,17 +939,17 @@ para ciclo = 2..total_ciclos+1:
 
 ---
 
-## 19. NOTIFICAÇÕES E COBRANÇA AUTOMÁTICA — TODO
+## 19. NOTIFICAÇÕES E COBRANÇA AUTOMÁTICA ✅ PARCIALMENTE CONCLUÍDO
 
 > **Referência:** GELOT, SGL e LoteWin enviam alertas por WhatsApp/e-mail automaticamente.
 
-| # | Item | Prioridade |
-|---|------|-----------|
-| N-01 | E-mail automático D-5 antes do vencimento da parcela | P2 |
-| N-02 | E-mail de inadimplência após D+3 | P2 |
-| N-03 | Régua de cobrança configurável (D-5, D+3, D+10, D+30) | P3 |
-| N-04 | Integração WhatsApp (Evolution API / Z-API) | P3 |
-| N-05 | Push notification portal comprador | P4 |
+| # | Item | Prioridade | Status |
+|---|------|-----------|--------|
+| N-01 | E-mail automático D-5 antes do vencimento da parcela | P2 | ✅ `enviar_notificacoes_sync()` em `core/tasks.py` + deduplicação via `Notificacao` model + POST `/api/tasks/enviar-notificacoes/` |
+| N-02 | E-mail de inadimplência após D+3 | P2 | ✅ `enviar_inadimplentes_sync()` em `core/tasks.py` + `task_run_all` inclui N-02 + POST `/api/tasks/enviar-inadimplentes/` + `NOTIFICACAO_DIAS_INADIMPLENCIA=3` |
+| N-03 | Régua de cobrança configurável (D-5, D+3, D+10, D+30) | P3 | ⏳ |
+| N-04 | Integração WhatsApp (Evolution API / Z-API) | P3 | ⏳ |
+| N-05 | Push notification portal comprador | P4 | ⏳ |
 
 ---
 
@@ -984,7 +984,7 @@ para ciclo = 2..total_ciclos+1:
 | Mapa Interativo (Seção 16) | — | 5 | 6 | 1 | 12 | ✅ 10/10 M-01..M-10 |
 | Dashboard KPIs (Seção 17) | 1 | 5 | 2 | — | 8 | ✅ 8/8 (K-01..K-06, G-01..G-05, D-01..D-04) |
 | Simulador Antecipação (Seção 18) | — | 3 | 2 | — | 5 | ✅ 3/3 P2 (R-01..R-03) · ⏳ 2 P3 |
-| Notificações (Seção 19) | — | 2 | 2 | 1 | 5 | ⏳ 0/5 |
+| Notificações (Seção 19) | — | 2 | 2 | 1 | 5 | ✅ 2/2 P2 (N-01, N-02) · ⏳ 3 P3/P4 |
 | UX / Interface (Seção 20) | — | 3 | 4 | — | 7 | ⏳ 0/7 |
 | Frontend | — | 17 | 15 | 3 | 35 | ⚠️ ~4/17 P2 |
 | APIs | — | 6 | 5 | — | 11 | — |
@@ -992,7 +992,7 @@ para ciclo = 2..total_ciclos+1:
 | Permissões | — | 4 | 4 | 2 | 10 | — |
 | HU Boleto/Carnê/Remessa (Seção 21) | — | 10 | — | — | 10 | ✅ 10/10 |
 | OFX Extrato Bancário (Seção 22) | — | 5 | — | — | 5 | ✅ 5/5 |
-| Testes | 104 | ~164 | ~37 | ~41 | ~346 | ✅ 104/104 P1 · ✅ 496 passando (12 novos Simulador) |
+| Testes | 104 | ~164 | ~37 | ~41 | ~346 | ✅ 104/104 P1 · ✅ 508 passando (12 Simulador + 12 Notificações) |
 | CI/CD | — | 2 | 4 | 2 | 8 | — |
 | Documentação | — | — | 1 | 3 | 4 | — |
 | **Total** | **~117** | **~251** | **~107** | **~61** | **~536** | |
