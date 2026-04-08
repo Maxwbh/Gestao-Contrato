@@ -145,20 +145,6 @@ def health_check(request):
     return JsonResponse(status, status=http_status)
 
 
-def roadmap(request):
-    """Página de Roadmap do sistema — renderiza ROADMAP.md"""
-    import markdown
-    from pathlib import Path
-    from django.conf import settings
-    md_path = Path(settings.BASE_DIR) / 'ROADMAP.md'
-    md_text = md_path.read_text(encoding='utf-8')
-    content_html = markdown.markdown(
-        md_text,
-        extensions=['tables', 'fenced_code', 'nl2br'],
-    )
-    return render(request, 'core/roadmap.html', {'content_html': content_html})
-
-
 def index(request):
     """Página inicial do sistema"""
     from django.contrib.auth import get_user_model
