@@ -155,4 +155,9 @@ urlpatterns = [
     path('api/contabilidade/boletos/gerar/massa/', views.api_contabilidade_boletos_massa, name='api_contabilidade_boletos_massa'),
     path('api/imobiliaria/<int:imobiliaria_id>/vencimentos/', views.api_imobiliaria_vencimentos, name='api_imobiliaria_vencimentos'),
     path('api/imobiliaria/<int:imobiliaria_id>/fluxo-caixa/', views.api_imobiliaria_fluxo_caixa, name='api_imobiliaria_fluxo_caixa'),
+
+    # ==========================================================================
+    # SEÇÃO 18 — SIMULADOR DE ANTECIPAÇÃO
+    # ==========================================================================
+    path('contrato/<int:contrato_id>/simulador/', views.simulador_antecipacao, name='simulador_antecipacao'),
 ]
