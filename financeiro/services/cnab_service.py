@@ -14,6 +14,7 @@ Desenvolvedor: Maxwell da Silva Oliveira
 Email: maxwbh@gmail.com
 Empresa: M&S do Brasil LTDA
 """
+import io
 import logging
 import requests
 import json
@@ -342,33 +343,34 @@ class CNABService:
             valor_total += parcela.valor_boleto or parcela.valor_atual
 
         try:
-            # Chamar API BRCobranca com parâmetros corretos
-            # A API espera: bank, type, data (array de boletos)
-            import json
-            dados_remessa = {
-                'bank': banco,
-                'type': 'cnab240' if layout == 'CNAB_240' else 'cnab400',
-                'data': pagamentos
-            }
+            # A API /api/remessa espera multipart/form-data:
+            #   bank  → campo de texto
+            #   type  → campo de texto (cnab240 | cnab400)
+            #   data  → arquivo JSON com a lista de boletos (type: File no Grape)
+            # Refs: params[:data][:tempfile].read  → JSON.parse(...)
+            import io
+            tipo_cnab = 'cnab240' if layout == 'CNAB_240' else 'cnab400'
+            data_json = json.dumps(pagamentos, ensure_ascii=False).encode('utf-8')
 
-            logger.info(f"Gerando remessa CNAB: banco={banco}, layout={layout}, boletos={len(pagamentos)}")
+            logger.info(f"Gerando remessa CNAB: banco={banco}, layout={tipo_cnab}, boletos={len(pagamentos)}")
 
-            # DEBUG: logar payload completo para diagnosticar erros de validação
-            if logger.isEnabledFor(logging.DEBUG):
-                import json as _json
-                logger.debug("Payload CNAB remessa:\n%s", _json.dumps(dados_remessa, indent=2, default=str))
-            else:
-                # Sempre logar campos de data do primeiro boleto para diagnóstico
-                if pagamentos:
-                    p0 = pagamentos[0]
-                    logger.info(
-                        "CNAB payload[0] datas: data_vencimento=%r data_documento=%r",
-                        p0.get('data_vencimento'), p0.get('data_documento')
-                    )
+            # DEBUG: logar campos de data do primeiro boleto para diagnóstico
+            if pagamentos:
+                p0 = pagamentos[0]
+                logger.info(
+                    "CNAB payload[0] datas: data_vencimento=%r data_documento=%r",
+                    p0.get('data_vencimento'), p0.get('data_documento')
+                )
 
             response = requests.post(
                 f'{self.brcobranca_url}/api/remessa',
-                json=dados_remessa,
+                data={
+                    'bank': banco,
+                    'type': tipo_cnab,
+                },
+                files={
+                    'data': ('remessa.json', io.BytesIO(data_json), 'application/json'),
+                },
                 headers={'Accept': 'application/vnd.BoletoApi-v1+json'},
                 timeout=60
             )
