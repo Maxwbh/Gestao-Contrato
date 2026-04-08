@@ -268,13 +268,75 @@
     var smsCounter = document.getElementById('smsCounter');
     var SMS_MAX    = 255;
 
+    // Valores de exemplo para substituição de TAGs (para estimar comprimento real)
+    var TAG_EXAMPLES = {
+        'NOMECOMPRADOR':        'João da Silva',
+        'CPFCOMPRADOR':         '123.456.789-00',
+        'CNPJCOMPRADOR':        '12.345.678/0001-00',
+        'EMAILCOMPRADOR':       'joao@exemplo.com',
+        'TELEFONECOMPRADOR':    '(11) 3333-4444',
+        'CELULARCOMPRADOR':     '(31) 99999-8888',
+        'ENDERECOCOMPRADOR':    'Rua das Flores, 123 - Centro',
+        'NOMEIMOBILIARIA':      'Imobiliária Exemplo',
+        'CNPJIMOBILIARIA':      '98.765.432/0001-00',
+        'TELEFONEIMOBILIARIA':  '(11) 2222-3333',
+        'EMAILIMOBILIARIA':     'contato@imob.com',
+        'NUMEROCONTRATO':       'CTR-2024-0001',
+        'DATACONTRATO':         '01/01/2024',
+        'VALORTOTAL':           'R$ 150.000,00',
+        'TOTALPARCELAS':        '120',
+        'IMOVEL':               'Lote 15, Qd. 3',
+        'LOTEAMENTO':           'Res. Primavera',
+        'ENDERECOIMOVEL':       'Rua das Acácias, Lote 15',
+        'PARCELA':              '5/120',
+        'NUMEROPARCELA':        '5',
+        'VALORPARCELA':         'R$ 1.250,00',
+        'DATAVENCIMENTO':       '15/06/2026',
+        'DIASATRASO':           '5',
+        'VALORJUROS':           'R$ 12,50',
+        'VALORMULTA':           'R$ 25,00',
+        'VALORTOTALPARCELA':    'R$ 1.287,50',
+        'NOSSONUMERO':          '12345678901',
+        'LINHADIGITAVEL':       '23793.38128 60000.000003 12345.678901 1 92350000125000',
+        'CODIGOBARRAS':         '23791923500001250003381286000000001234567890',
+        'STATUSBOLETO':         'Registrado',
+        'VALORBOLETO':          'R$ 1.287,50',
+        'DATAATUAL':            '08/04/2026',
+        'HORAATUAL':            '14:30',
+        'LINKBOLETO':           'https://sit.br/b/12345',
+    };
+
+    function substituirTags(texto) {
+        var result = texto;
+        for (var tag in TAG_EXAMPLES) {
+            result = result.split('%%' + tag + '%%').join(TAG_EXAMPLES[tag]);
+        }
+        return result;
+    }
+
     function updateSmsCounter() {
-        var len = (smsField.value || '').length;
-        smsCounter.textContent = len + ' / ' + SMS_MAX;
-        if (len > SMS_MAX) {
+        var template = smsField.value || '';
+        var templateLen = template.length;
+        var realText = substituirTags(template);
+        var realLen = realText.length;
+
+        if (templateLen === realLen) {
+            // Nenhuma tag — mostrar só o comprimento direto
+            smsCounter.textContent = templateLen + ' / ' + SMS_MAX;
+        } else {
+            // Há tags — mostrar template e estimativa real
+            smsCounter.textContent =
+                'template: ' + templateLen + ' | real (est.): ' + realLen + ' / ' + SMS_MAX;
+        }
+
+        if (realLen > SMS_MAX) {
             smsCounter.className = 'ms-auto sms-counter over';
+        } else if (realLen > Math.floor(SMS_MAX * 0.9)) {
+            smsCounter.className = 'ms-auto sms-counter over';
+            smsCounter.style.color = '#fd7e14';  // laranja — atenção
         } else {
             smsCounter.className = 'ms-auto sms-counter ok';
+            smsCounter.style.color = '';
         }
     }
 
