@@ -189,6 +189,12 @@ class Notificacao(TimeStampedModel):
         self.save()
 
 
+class TipoGatilho(models.TextChoices):
+    """Momento de disparo em relação ao vencimento da parcela"""
+    ANTES_VENCIMENTO = 'ANTES', 'Dias antes do vencimento'
+    APOS_VENCIMENTO  = 'APOS',  'Dias após o vencimento (inadimplência)'
+
+
 class TipoTemplate(models.TextChoices):
     """Tipos de templates disponíveis"""
     BOLETO_CRIADO = 'BOLETO_CRIADO', 'Boleto Criado'
@@ -354,3 +360,51 @@ class TemplateNotificacao(TimeStampedModel):
             tipo=tipo,
             ativo=True
         ).first()
+
+
+class RegraNotificacao(TimeStampedModel):
+    """
+    N-03: Régua de cobrança configurável.
+
+    Cada regra define um gatilho (X dias antes/após o vencimento), o canal
+    (e-mail, SMS ou WhatsApp) e, opcionalmente, um template customizado.
+    Quando existem regras ativas, as tarefas de notificação usam a régua
+    em vez dos valores padrão de settings.
+    """
+    nome = models.CharField(max_length=100, verbose_name='Nome da Regra')
+    ativo = models.BooleanField(default=True, verbose_name='Ativa')
+    tipo_gatilho = models.CharField(
+        max_length=5,
+        choices=TipoGatilho.choices,
+        verbose_name='Gatilho',
+        help_text='Momento de envio em relação ao vencimento da parcela',
+    )
+    dias_offset = models.PositiveIntegerField(
+        verbose_name='Dias',
+        help_text='Número de dias antes/após o vencimento para disparar',
+    )
+    tipo_notificacao = models.CharField(
+        max_length=10,
+        choices=TipoNotificacao.choices,
+        default=TipoNotificacao.EMAIL,
+        verbose_name='Canal',
+    )
+    template = models.ForeignKey(
+        TemplateNotificacao,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name='regras',
+        verbose_name='Template',
+        help_text='Deixe vazio para usar a mensagem padrão do sistema',
+    )
+
+    class Meta:
+        verbose_name = 'Regra de Notificação'
+        verbose_name_plural = 'Régua de Notificação'
+        ordering = ['tipo_gatilho', 'dias_offset']
+        unique_together = [['tipo_gatilho', 'dias_offset', 'tipo_notificacao']]
+
+    def __str__(self):
+        sinal = '−' if self.tipo_gatilho == TipoGatilho.ANTES_VENCIMENTO else '+'
+        return f"{self.nome} (D{sinal}{self.dias_offset} · {self.get_tipo_notificacao_display()})"

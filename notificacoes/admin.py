@@ -8,7 +8,7 @@ from django.contrib import admin
 from django.utils.html import format_html
 from .models import (
     ConfiguracaoEmail, ConfiguracaoSMS, ConfiguracaoWhatsApp,
-    Notificacao, TemplateNotificacao
+    Notificacao, TemplateNotificacao, RegraNotificacao
 )
 from .tasks import reenviar_notificacao
 
@@ -146,6 +146,28 @@ class NotificacaoAdmin(admin.ModelAdmin):
         updated = queryset.update(status='CANCELADA')
         self.message_user(request, f'{updated} notificação(ões) cancelada(s).')
     cancelar_notificacoes.short_description = 'Cancelar Notificações'
+
+
+@admin.register(RegraNotificacao)
+class RegraNotificacaoAdmin(admin.ModelAdmin):
+    list_display = ['nome', 'tipo_gatilho', 'dias_offset', 'tipo_notificacao', 'template', 'ativo']
+    list_filter = ['tipo_gatilho', 'tipo_notificacao', 'ativo']
+    search_fields = ['nome']
+    list_editable = ['ativo']
+    readonly_fields = ['criado_em', 'atualizado_em']
+
+    fieldsets = (
+        ('Gatilho', {
+            'fields': ('nome', 'tipo_gatilho', 'dias_offset', 'ativo'),
+        }),
+        ('Canal e Conteúdo', {
+            'fields': ('tipo_notificacao', 'template'),
+        }),
+        ('Metadados', {
+            'fields': ('criado_em', 'atualizado_em'),
+            'classes': ('collapse',),
+        }),
+    )
 
 
 @admin.register(TemplateNotificacao)
