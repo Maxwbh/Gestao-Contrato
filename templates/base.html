@@ -74,6 +74,7 @@
         <li><div class="divider"></div></li>
         <li><a href="{% url 'accounts:perfil' %}"><i class="fas fa-user left"></i> Meu Perfil</a></li>
         <li><a href="{% url 'accounts:alterar_senha' %}"><i class="fas fa-key left"></i> Alterar Senha</a></li>
+        <li><a href="#!" id="dark-mode-toggle-mobile"><i class="fas fa-moon left" id="dm-icon-mobile"></i> Modo Escuro</a></li>
         <li><a href="{% url 'accounts:logout' %}"><i class="fas fa-sign-out-alt left"></i> Sair</a></li>
         {% else %}
         <li><a href="{% url 'accounts:login' %}"><i class="fas fa-sign-in-alt left"></i> Entrar</a></li>
@@ -152,6 +153,12 @@
                 {% endif %}
 
                 {% if user.is_authenticated %}
+                <!-- U-01: Dark mode toggle -->
+                <li>
+                    <a href="#!" id="dark-mode-toggle" title="Alternar modo escuro">
+                        <i class="dm-icon fas fa-moon" id="dm-icon"></i>
+                    </a>
+                </li>
                 <!-- U-06: Busca Global -->
                 <li>
                     <a href="#!" id="global-search-btn" title="Busca global (Ctrl+K)"
@@ -837,6 +844,63 @@
             var escapedQ = escHtml(q).replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
             return escaped.replace(new RegExp('(' + escapedQ + ')', 'gi'), '<mark style="background:#fff176;padding:0;">$1</mark>');
         }
+    })();
+    </script>
+
+    <!-- U-01: Dark mode — persistido em localStorage -->
+    <script>
+    (function() {
+        var STORAGE_KEY = 'gc_dark_mode';
+        var body = document.body;
+        var icon = document.getElementById('dm-icon');
+
+        function applyTheme(dark) {
+            if (dark) {
+                body.classList.add('dark-mode');
+                if (icon) { icon.classList.remove('fa-moon'); icon.classList.add('fa-sun'); }
+            } else {
+                body.classList.remove('dark-mode');
+                if (icon) { icon.classList.remove('fa-sun'); icon.classList.add('fa-moon'); }
+            }
+        }
+
+        // Restore on load
+        var saved = localStorage.getItem(STORAGE_KEY);
+        if (saved === '1') applyTheme(true);
+
+        document.addEventListener('DOMContentLoaded', function() {
+            var btn  = document.getElementById('dark-mode-toggle');
+            var btnM = document.getElementById('dark-mode-toggle-mobile');
+            var icon2  = document.getElementById('dm-icon');
+            var icon2M = document.getElementById('dm-icon-mobile');
+
+            // Re-apply (icon may not exist yet when the IIFE ran)
+            var initDark = localStorage.getItem(STORAGE_KEY) === '1';
+            if (initDark) applyTheme(true);
+            syncMobileLabel(initDark);
+
+            function syncMobileLabel(dark) {
+                if (!icon2M) return;
+                icon2M.classList.toggle('fa-moon', !dark);
+                icon2M.classList.toggle('fa-sun', dark);
+                var li = btnM && btnM.parentElement;
+                if (li) li.querySelector('a').childNodes[1].textContent = dark ? ' Modo Claro' : ' Modo Escuro';
+            }
+
+            function toggle(e) {
+                e.preventDefault();
+                var isDark = body.classList.toggle('dark-mode');
+                localStorage.setItem(STORAGE_KEY, isDark ? '1' : '0');
+                if (icon2) {
+                    icon2.classList.toggle('fa-moon', !isDark);
+                    icon2.classList.toggle('fa-sun',  isDark);
+                }
+                syncMobileLabel(isDark);
+            }
+
+            if (btn)  btn.addEventListener('click', toggle);
+            if (btnM) btnM.addEventListener('click', toggle);
+        });
     })();
     </script>
 
