@@ -46,62 +46,74 @@ class ContratoForm(forms.ModelForm):
                 attrs={'type': 'date'},
                 format='%Y-%m-%d'
             ),
-            'valor_total': forms.NumberInput(attrs={
-                'step': '0.01', 'min': '0.01', 'placeholder': '350000,00'
+            'valor_total': forms.TextInput(attrs={
+                'data-mask': 'moeda', 'placeholder': 'R$ 350.000,00'
             }),
-            'valor_entrada': forms.NumberInput(attrs={
-                'step': '0.01', 'min': '0', 'placeholder': '100000,00'
+            'valor_entrada': forms.TextInput(attrs={
+                'data-mask': 'moeda', 'placeholder': 'R$ 100.000,00'
             }),
-            'numero_parcelas': forms.NumberInput(attrs={
-                'min': '1', 'max': '600', 'placeholder': 'Ex: 120'
+            'numero_parcelas': forms.TextInput(attrs={
+                'data-mask': 'inteiro', 'placeholder': 'Ex: 120'
             }),
-            'dia_vencimento': forms.NumberInput(attrs={
-                'min': '1', 'max': '31', 'placeholder': 'Ex: 10'
+            'dia_vencimento': forms.TextInput(attrs={
+                'data-mask': 'inteiro', 'placeholder': 'Ex: 10'
             }),
-            'percentual_juros_mora': forms.NumberInput(attrs={
-                'step': '0.01', 'min': '0', 'max': '100', 'placeholder': '1,00'
+            'percentual_juros_mora': forms.TextInput(attrs={
+                'data-mask': 'pct2', 'placeholder': '1,00 %'
             }),
-            'percentual_multa': forms.NumberInput(attrs={
-                'step': '0.01', 'min': '0', 'max': '100', 'placeholder': '2,00'
+            'percentual_multa': forms.TextInput(attrs={
+                'data-mask': 'pct2', 'placeholder': '2,00 %'
             }),
-            'prazo_reajuste_meses': forms.NumberInput(attrs={
-                'min': '1', 'max': '120', 'placeholder': '12'
+            'prazo_reajuste_meses': forms.TextInput(attrs={
+                'data-mask': 'inteiro', 'placeholder': '12'
             }),
-            'spread_reajuste': forms.NumberInput(attrs={
-                'step': '0.0001', 'placeholder': '0,0000'
+            'spread_reajuste': forms.TextInput(attrs={
+                'data-mask': 'pct4', 'placeholder': '0,0000 %'
             }),
-            'reajuste_piso': forms.NumberInput(attrs={
-                'step': '0.0001', 'placeholder': 'Ex: 0,0000'
+            'reajuste_piso': forms.TextInput(attrs={
+                'data-mask': 'pct4', 'placeholder': '0,0000 %'
             }),
-            'reajuste_teto': forms.NumberInput(attrs={
-                'step': '0.0001', 'placeholder': 'Ex: 15,0000'
+            'reajuste_teto': forms.TextInput(attrs={
+                'data-mask': 'pct4', 'placeholder': '15,0000 %'
             }),
-            'percentual_fruicao': forms.NumberInput(attrs={
-                'step': '0.0001', 'placeholder': '0,5000'
+            'percentual_fruicao': forms.TextInput(attrs={
+                'data-mask': 'pct4', 'placeholder': '0,5000 %'
             }),
-            'percentual_multa_rescisao_penal': forms.NumberInput(attrs={
-                'step': '0.0001', 'placeholder': '10,0000'
+            'percentual_multa_rescisao_penal': forms.TextInput(attrs={
+                'data-mask': 'pct4', 'placeholder': '10,0000 %'
             }),
-            'percentual_multa_rescisao_adm': forms.NumberInput(attrs={
-                'step': '0.0001', 'placeholder': '12,0000'
+            'percentual_multa_rescisao_adm': forms.TextInput(attrs={
+                'data-mask': 'pct4', 'placeholder': '12,0000 %'
             }),
-            'percentual_cessao': forms.NumberInput(attrs={
-                'step': '0.0001', 'placeholder': '3,0000'
+            'percentual_cessao': forms.TextInput(attrs={
+                'data-mask': 'pct4', 'placeholder': '3,0000 %'
             }),
-            'valor_multa_boleto': forms.NumberInput(attrs={
-                'step': '0.01', 'min': '0', 'placeholder': '2,00'
+            'valor_multa_boleto': forms.TextInput(attrs={
+                'data-mask': 'pct2',
+                'data-mask-switch': 'id_tipo_valor_multa',
+                'data-mask-moeda': 'moeda',
+                'data-mask-pct': 'pct2',
+                'placeholder': '2,00'
             }),
-            'valor_juros_boleto': forms.NumberInput(attrs={
-                'step': '0.0001', 'min': '0', 'placeholder': '0,0333'
+            'valor_juros_boleto': forms.TextInput(attrs={
+                'data-mask': 'pct4',
+                'data-mask-switch': 'id_tipo_valor_juros',
+                'data-mask-moeda': 'decimal4',
+                'data-mask-pct': 'pct4',
+                'placeholder': '0,0333'
             }),
-            'dias_carencia_boleto': forms.NumberInput(attrs={
-                'min': '0', 'placeholder': '0'
+            'dias_carencia_boleto': forms.TextInput(attrs={
+                'data-mask': 'inteiro', 'placeholder': '0'
             }),
-            'valor_desconto_boleto': forms.NumberInput(attrs={
-                'step': '0.01', 'min': '0', 'placeholder': '0,00'
+            'valor_desconto_boleto': forms.TextInput(attrs={
+                'data-mask': 'pct2',
+                'data-mask-switch': 'id_tipo_valor_desconto',
+                'data-mask-moeda': 'moeda',
+                'data-mask-pct': 'pct2',
+                'placeholder': '0,00'
             }),
-            'dias_desconto_boleto': forms.NumberInput(attrs={
-                'min': '0', 'placeholder': '0'
+            'dias_desconto_boleto': forms.TextInput(attrs={
+                'data-mask': 'inteiro', 'placeholder': '0'
             }),
             'instrucao_boleto_1': forms.TextInput(attrs={
                 'placeholder': 'Ex: Após vencimento cobrar multa e juros'
@@ -387,10 +399,8 @@ class IndiceReajusteForm(forms.ModelForm):
         fields = ['tipo_indice', 'ano', 'mes', 'valor', 'valor_acumulado_ano',
                   'valor_acumulado_12m', 'fonte']
         widgets = {
-            'ano': forms.NumberInput(attrs={
-                'min': '1990',
-                'max': '2100',
-                'placeholder': 'Ex: 2024'
+            'ano': forms.TextInput(attrs={
+                'data-mask': 'inteiro', 'placeholder': 'Ex: 2024'
             }),
             'tipo_indice': forms.Select(choices=[
                 ('IPCA', 'IPCA - Índice de Preços ao Consumidor Amplo'),
@@ -407,17 +417,14 @@ class IndiceReajusteForm(forms.ModelForm):
                 (7, 'Julho'), (8, 'Agosto'), (9, 'Setembro'),
                 (10, 'Outubro'), (11, 'Novembro'), (12, 'Dezembro'),
             ]),
-            'valor': forms.NumberInput(attrs={
-                'step': '0.0001',
-                'placeholder': 'Ex: 0.5200'
+            'valor': forms.TextInput(attrs={
+                'data-mask': 'pct4', 'placeholder': '0,5200 %'
             }),
-            'valor_acumulado_ano': forms.NumberInput(attrs={
-                'step': '0.0001',
-                'placeholder': 'Ex: 3.2100'
+            'valor_acumulado_ano': forms.TextInput(attrs={
+                'data-mask': 'pct4', 'placeholder': '3,2100 %'
             }),
-            'valor_acumulado_12m': forms.NumberInput(attrs={
-                'step': '0.0001',
-                'placeholder': 'Ex: 4.6200'
+            'valor_acumulado_12m': forms.TextInput(attrs={
+                'data-mask': 'pct4', 'placeholder': '4,6200 %'
             }),
             'fonte': forms.TextInput(attrs={
                 'placeholder': 'Ex: IBGE, BCB, FGV'
@@ -541,21 +548,21 @@ class ContratoWizardBasicoForm(forms.ModelForm):
                          'Você pode alterar para qualquer valor único.',
                 'autocomplete': 'off',
             }),
-            'valor_total': forms.NumberInput(attrs={
-                'step': '0.01', 'min': '0.01',
+            'valor_total': forms.TextInput(attrs={
+                'data-mask': 'moeda', 'placeholder': 'R$ 350.000,00',
                 'title': 'Valor total de venda do imóvel (em R$)',
             }),
-            'valor_entrada': forms.NumberInput(attrs={
-                'step': '0.01', 'min': '0',
+            'valor_entrada': forms.TextInput(attrs={
+                'data-mask': 'moeda', 'placeholder': 'R$ 100.000,00',
                 'title': 'Valor pago à vista no ato da assinatura. '
                          'Será descontado do valor financiado.',
             }),
-            'numero_parcelas': forms.NumberInput(attrs={
-                'min': '1', 'max': '360',
+            'numero_parcelas': forms.TextInput(attrs={
+                'data-mask': 'inteiro', 'placeholder': 'Ex: 120',
                 'title': 'Quantidade total de parcelas mensais (máximo 360 = 30 anos)',
             }),
-            'dia_vencimento': forms.NumberInput(attrs={
-                'min': '1', 'max': '28',
+            'dia_vencimento': forms.TextInput(attrs={
+                'data-mask': 'inteiro', 'placeholder': 'Ex: 10',
                 'title': 'Dia do mês em que as parcelas vencem. '
                          'Use até o dia 28 para evitar problemas em fevereiro.',
             }),
@@ -564,13 +571,13 @@ class ContratoWizardBasicoForm(forms.ModelForm):
                          'Price = parcela fixa por ciclo; '
                          'SAC = amortização constante, parcela decrescente.',
             }),
-            'percentual_juros_mora': forms.NumberInput(attrs={
-                'step': '0.01',
+            'percentual_juros_mora': forms.TextInput(attrs={
+                'data-mask': 'pct2', 'placeholder': '1,00 %',
                 'title': 'Percentual de juros cobrado ao mês sobre o valor das parcelas em atraso. '
                          'Limite legal: 2% a.m.',
             }),
-            'percentual_multa': forms.NumberInput(attrs={
-                'step': '0.01',
+            'percentual_multa': forms.TextInput(attrs={
+                'data-mask': 'pct2', 'placeholder': '2,00 %',
                 'title': 'Multa aplicada sobre o valor da parcela no primeiro dia de atraso. '
                          'Limite legal: 2%.',
             }),
@@ -578,8 +585,8 @@ class ContratoWizardBasicoForm(forms.ModelForm):
                 'title': 'Índice econômico utilizado para reajustar as parcelas periodicamente '
                          '(ex.: IPCA = inflação ao consumidor, IGP-M = índice geral de preços).',
             }),
-            'prazo_reajuste_meses': forms.NumberInput(attrs={
-                'min': '1', 'max': '120',
+            'prazo_reajuste_meses': forms.TextInput(attrs={
+                'data-mask': 'inteiro', 'placeholder': '12',
                 'title': 'Intervalo em meses entre cada reajuste das parcelas. '
                          'Valor 12 = reajuste anual.',
             }),
@@ -587,18 +594,18 @@ class ContratoWizardBasicoForm(forms.ModelForm):
                 'title': 'Índice substituto usado quando o índice principal não está disponível '
                          'para o período de reajuste.',
             }),
-            'spread_reajuste': forms.NumberInput(attrs={
-                'step': '0.0001',
+            'spread_reajuste': forms.TextInput(attrs={
+                'data-mask': 'pct4', 'placeholder': '0,0000 %',
                 'title': 'Percentual adicional somado ao índice de correção a cada reajuste '
                          '(ex.: IPCA + 0,5% a.a.). Deixe 0 para não aplicar.',
             }),
-            'reajuste_piso': forms.NumberInput(attrs={
-                'step': '0.0001',
+            'reajuste_piso': forms.TextInput(attrs={
+                'data-mask': 'pct4', 'placeholder': '0,0000 %',
                 'title': 'Variação mínima garantida no reajuste, mesmo que o índice fique abaixo. '
                          'Deixe em branco para não ter piso.',
             }),
-            'reajuste_teto': forms.NumberInput(attrs={
-                'step': '0.0001',
+            'reajuste_teto': forms.TextInput(attrs={
+                'data-mask': 'pct4', 'placeholder': '15,0000 %',
                 'title': 'Variação máxima aplicada no reajuste, limitando o índice. '
                          'Deixe em branco para não ter teto.',
             }),
@@ -649,18 +656,18 @@ class TabelaJurosForm(forms.Form):
     """Linha de TabelaJurosContrato no wizard step 2"""
     ciclo_inicio = forms.IntegerField(
         min_value=1, max_value=100,
-        widget=forms.NumberInput(attrs={'class': 'form-control form-control-sm', 'min': '1'}),
+        widget=forms.TextInput(attrs={'class': 'form-control form-control-sm', 'data-mask': 'inteiro', 'placeholder': '1'}),
         label='Ciclo Início'
     )
     ciclo_fim = forms.IntegerField(
         min_value=1, max_value=100, required=False,
-        widget=forms.NumberInput(attrs={'class': 'form-control form-control-sm', 'min': '1', 'placeholder': '(em aberto)'}),
+        widget=forms.TextInput(attrs={'class': 'form-control form-control-sm', 'data-mask': 'inteiro', 'placeholder': '(em aberto)'}),
         label='Ciclo Fim'
     )
     juros_mensal = forms.DecimalField(
         max_digits=8, decimal_places=4,
         min_value=0, max_value=100,
-        widget=forms.NumberInput(attrs={'class': 'form-control form-control-sm', 'step': '0.0001', 'placeholder': '0,6000'}),
+        widget=forms.TextInput(attrs={'class': 'form-control form-control-sm', 'data-mask': 'pct4', 'placeholder': '0,6000 %'}),
         label='Taxa Mensal (%)'
     )
     observacoes = forms.CharField(
@@ -682,24 +689,24 @@ class IntermediariaPadraoForm(forms.Form):
     """Criação de intermediárias por padrão (valor + intervalo + count)"""
     valor = forms.DecimalField(
         max_digits=12, decimal_places=2, min_value=Decimal('0.01'),
-        widget=forms.NumberInput(attrs={'class': 'form-control', 'step': '0.01', 'title': 'Valor em reais de cada prestação intermediária'}),
+        widget=forms.TextInput(attrs={'class': 'form-control', 'data-mask': 'moeda', 'placeholder': 'R$ 0,00', 'title': 'Valor em reais de cada prestação intermediária'}),
         label='Valor (R$)'
     )
     intervalo_meses = forms.IntegerField(
         min_value=1, max_value=360,
         initial=6,
-        widget=forms.NumberInput(attrs={'class': 'form-control', 'min': '1', 'title': 'Número de meses entre cada ocorrência (ex: 6 = semestral, 12 = anual)'}),
+        widget=forms.TextInput(attrs={'class': 'form-control', 'data-mask': 'inteiro', 'placeholder': '6', 'title': 'Número de meses entre cada ocorrência (ex: 6 = semestral, 12 = anual)'}),
         label='Intervalo (meses)'
     )
     numero_ocorrencias = forms.IntegerField(
         min_value=1, max_value=60,
-        widget=forms.NumberInput(attrs={'class': 'form-control', 'min': '1', 'title': 'Quantas vezes essa prestação intermediária ocorrerá'}),
+        widget=forms.TextInput(attrs={'class': 'form-control', 'data-mask': 'inteiro', 'placeholder': '1', 'title': 'Quantas vezes essa prestação intermediária ocorrerá'}),
         label='Número de Ocorrências'
     )
     mes_inicio = forms.IntegerField(
         min_value=1, max_value=360,
         initial=6,
-        widget=forms.NumberInput(attrs={'class': 'form-control', 'min': '1', 'title': 'Número do mês do contrato em que ocorre a primeira intermediária (ex: 6 = no 6º mês)'}),
+        widget=forms.TextInput(attrs={'class': 'form-control', 'data-mask': 'inteiro', 'placeholder': '6', 'title': 'Número do mês do contrato em que ocorre a primeira intermediária (ex: 6 = no 6º mês)'}),
         label='Mês do Primeiro Vencimento'
     )
 
@@ -734,16 +741,16 @@ class IntermediariaManualForm(forms.Form):
     """Linha individual de intermediária (modo manual)"""
     numero_sequencial = forms.IntegerField(
         min_value=1, max_value=60,
-        widget=forms.NumberInput(attrs={'class': 'form-control form-control-sm', 'min': '1'}),
+        widget=forms.TextInput(attrs={'class': 'form-control form-control-sm', 'data-mask': 'inteiro', 'placeholder': '1'}),
         label='Seq.'
     )
     mes_vencimento = forms.IntegerField(
         min_value=1, max_value=360,
-        widget=forms.NumberInput(attrs={'class': 'form-control form-control-sm', 'min': '1'}),
+        widget=forms.TextInput(attrs={'class': 'form-control form-control-sm', 'data-mask': 'inteiro', 'placeholder': '1'}),
         label='Mês'
     )
     valor = forms.DecimalField(
         max_digits=12, decimal_places=2, min_value=Decimal('0.01'),
-        widget=forms.NumberInput(attrs={'class': 'form-control form-control-sm', 'step': '0.01'}),
+        widget=forms.TextInput(attrs={'class': 'form-control form-control-sm', 'data-mask': 'moeda', 'placeholder': 'R$ 0,00'}),
         label='Valor (R$)'
     )

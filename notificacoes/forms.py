@@ -23,7 +23,7 @@ class ConfiguracaoEmailForm(forms.ModelForm):
         widgets = {
             'nome': forms.TextInput(attrs={'placeholder': 'Ex: Servidor Principal'}),
             'host': forms.TextInput(attrs={'placeholder': 'smtp.gmail.com'}),
-            'porta': forms.NumberInput(attrs={'placeholder': '587'}),
+            'porta': forms.TextInput(attrs={'data-mask': 'inteiro', 'placeholder': '587'}),
             'usuario': forms.TextInput(attrs={'placeholder': 'usuario@gmail.com'}),
             'senha': forms.PasswordInput(attrs={'placeholder': '********', 'autocomplete': 'new-password'}),
             'email_remetente': forms.EmailInput(attrs={'placeholder': 'noreply@empresa.com'}),

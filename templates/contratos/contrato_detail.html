@@ -348,11 +348,11 @@
                     <div class="card-body">
                         <div class="info-item">
                             <div class="info-label">Juros de Mora</div>
-                            <div class="info-value">{{ contrato.percentual_juros_mora }}% a.m.</div>
+                            <div class="info-value">{{ contrato.percentual_juros_mora|numero_br:2 }}% a.m.</div>
                         </div>
                         <div class="info-item">
                             <div class="info-label">Multa</div>
-                            <div class="info-value">{{ contrato.percentual_multa }}%</div>
+                            <div class="info-value">{{ contrato.percentual_multa|numero_br:2 }}%</div>
                         </div>
                         <div class="info-item">
                             <div class="info-label">Correcao Monetaria</div>
@@ -377,19 +377,19 @@
                         {% if contrato.spread_reajuste %}
                         <div class="info-item">
                             <div class="info-label">Spread</div>
-                            <div class="info-value text-info">+{{ contrato.spread_reajuste|floatformat:2 }} p.p.</div>
+                            <div class="info-value text-info">+{{ contrato.spread_reajuste|numero_br:4 }} p.p.</div>
                         </div>
                         {% endif %}
                         {% if contrato.reajuste_piso is not None %}
                         <div class="info-item">
                             <div class="info-label">Piso Reajuste</div>
-                            <div class="info-value text-info">{{ contrato.reajuste_piso|floatformat:2 }}%</div>
+                            <div class="info-value text-info">{{ contrato.reajuste_piso|numero_br:4 }}%</div>
                         </div>
                         {% endif %}
                         {% if contrato.reajuste_teto is not None %}
                         <div class="info-item">
                             <div class="info-label">Teto Reajuste</div>
-                            <div class="info-value text-warning">{{ contrato.reajuste_teto|floatformat:2 }}%</div>
+                            <div class="info-value text-warning">{{ contrato.reajuste_teto|numero_br:4 }}%</div>
                         </div>
                         {% endif %}
                         {% if contrato.tipo_correcao_fallback %}
@@ -409,19 +409,19 @@
                     <div class="card-body">
                         <div class="info-item">
                             <div class="info-label">% Fruição</div>
-                            <div class="info-value">{{ contrato.percentual_fruicao|default:"0.00" }}% a.m.</div>
+                            <div class="info-value">{{ contrato.percentual_fruicao|numero_br:4 }}% a.m.</div>
                         </div>
                         <div class="info-item">
                             <div class="info-label">Multa Rescisão Penal</div>
-                            <div class="info-value">{{ contrato.percentual_multa_rescisao_penal|default:"0.00" }}%</div>
+                            <div class="info-value">{{ contrato.percentual_multa_rescisao_penal|numero_br:4 }}%</div>
                         </div>
                         <div class="info-item">
                             <div class="info-label">Desp. Adm. Rescisão</div>
-                            <div class="info-value">{{ contrato.percentual_multa_rescisao_adm|default:"0.00" }}%</div>
+                            <div class="info-value">{{ contrato.percentual_multa_rescisao_adm|numero_br:4 }}%</div>
                         </div>
                         <div class="info-item">
                             <div class="info-label">% Cessão de Direitos</div>
-                            <div class="info-value">{{ contrato.percentual_cessao|default:"0.00" }}%</div>
+                            <div class="info-value">{{ contrato.percentual_cessao|numero_br:4 }}%</div>
                         </div>
                     </div>
                 </div>
