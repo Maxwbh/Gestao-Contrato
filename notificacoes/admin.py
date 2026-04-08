@@ -31,10 +31,34 @@ class ConfiguracaoSMSAdmin(admin.ModelAdmin):
 
 @admin.register(ConfiguracaoWhatsApp)
 class ConfiguracaoWhatsAppAdmin(admin.ModelAdmin):
-    list_display = ['nome', 'provedor', 'numero_remetente', 'ativo']
+    list_display = ['nome', 'provedor', 'numero_remetente', 'instancia', 'ativo']
     list_filter = ['provedor', 'ativo']
-    search_fields = ['nome', 'numero_remetente']
+    search_fields = ['nome', 'numero_remetente', 'instancia']
+    list_editable = ['ativo']
     readonly_fields = ['criado_em', 'atualizado_em']
+
+    fieldsets = (
+        ('Identificação', {
+            'fields': ('nome', 'provedor', 'ativo'),
+        }),
+        ('Twilio / Meta', {
+            'fields': ('account_sid', 'auth_token', 'numero_remetente'),
+            'description': 'Preencha apenas para provedores Twilio ou Meta.',
+            'classes': ('collapse',),
+        }),
+        ('Evolution API / Z-API', {
+            'fields': ('api_url', 'api_key', 'instancia', 'client_token'),
+            'description': (
+                'Evolution API v2: api_url = http://servidor:8080, api_key = apikey do servidor, instancia = nome da instância. '
+                'Z-API: api_url = https://api.z-api.io, api_key = token, instancia = instance ID, client_token = Client-Token header.'
+            ),
+            'classes': ('collapse',),
+        }),
+        ('Metadados', {
+            'fields': ('criado_em', 'atualizado_em'),
+            'classes': ('collapse',),
+        }),
+    )
 
 
 @admin.register(Notificacao)
