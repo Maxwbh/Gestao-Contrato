@@ -753,6 +753,12 @@
                             <button type="button" class="btn btn-sm btn-success" onclick="abrirModalCarne()">
                                 <i class="fas fa-file-invoice-dollar"></i> Gerar Carne
                             </button>
+                            <form method="post" action="{% url 'financeiro:download_zip_boletos' contrato.pk %}" style="display:inline;">
+                                {% csrf_token %}
+                                <button type="submit" class="btn btn-sm btn-outline-secondary" title="Baixar todos os boletos em ZIP">
+                                    <i class="fas fa-file-archive"></i> ZIP
+                                </button>
+                            </form>
                         </div>
                     </div>
                     <div class="card-body p-0">

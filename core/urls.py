@@ -50,6 +50,7 @@ urlpatterns = [
     path('imoveis/novo/', views.ImovelCreateView.as_view(), name='criar_imovel'),
     path('imoveis/<int:pk>/editar/', views.ImovelUpdateView.as_view(), name='editar_imovel'),
     path('imoveis/<int:pk>/excluir/', views.ImovelDeleteView.as_view(), name='excluir_imovel'),
+    path('imoveis/loteamento/<str:nome>/', views.loteamento_detalhe, name='loteamento_detalhe'),
 
     # CRUD Imobiliária
     path('imobiliarias/', views.ImobiliariaListView.as_view(), name='listar_imobiliarias'),
