@@ -327,6 +327,34 @@
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/materialize/1.0.0/js/materialize.min.js"></script>
 <script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Inicializar modais Materialize
+    M.Modal.init(document.querySelectorAll('.modal'));
+    // Suporte a data-bs-toggle="modal"
+    document.querySelectorAll('[data-bs-toggle="modal"]').forEach(function(btn) {
+        btn.addEventListener('click', function(e) {
+            e.preventDefault();
+            var target = btn.getAttribute('data-bs-target') || btn.getAttribute('href');
+            if (target) {
+                var el = document.querySelector(target);
+                if (el) { (M.Modal.getInstance(el) || M.Modal.init(el)).open(); }
+            }
+        });
+    });
+    // Suporte a data-bs-dismiss="modal"
+    document.querySelectorAll('[data-bs-dismiss="modal"]').forEach(function(btn) {
+        btn.addEventListener('click', function() {
+            var modal = btn.closest('.modal');
+            if (modal) { var inst = M.Modal.getInstance(modal); if (inst) inst.close(); }
+        });
+    });
+    // Ajustar largura de modais com modal-dialog
+    document.querySelectorAll('.modal').forEach(function(modal) {
+        var dialog = modal.querySelector('.modal-dialog');
+        if (dialog) modal.style.width = 'min(95vw, 600px)';
+    });
+});
+
 function copiarTexto(elementId) {
     const elemento = document.getElementById(elementId);
     elemento.select();

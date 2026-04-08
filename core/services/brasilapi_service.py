@@ -167,7 +167,7 @@ class BrasilAPIService:
                 return {'sucesso': False, 'erro': f'Erro na API: {response.status_code}'}
 
         except requests.Timeout:
-            logger.error(f"Timeout ao buscar CEP {cep_limpo}")
+            logger.exception(f"Timeout ao buscar CEP {cep_limpo}")
             return {'sucesso': False, 'erro': 'Tempo limite excedido'}
 
         except requests.RequestException as e:
@@ -268,7 +268,7 @@ class BrasilAPIService:
                 return {'sucesso': False, 'erro': f'Erro na API: {response.status_code}'}
 
         except requests.Timeout:
-            logger.error(f"Timeout ao buscar CNPJ {cnpj_limpo}")
+            logger.exception(f"Timeout ao buscar CNPJ {cnpj_limpo}")
             return {'sucesso': False, 'erro': 'Tempo limite excedido'}
 
         except requests.RequestException as e:
