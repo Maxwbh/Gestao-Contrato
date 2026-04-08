@@ -1,0 +1,182 @@
+{% extends 'base.html' %}
+{% load humanize %}
+{% load financeiro_tags %}
+
+{% block title %}Intermediárias — {{ contrato.numero_contrato }}{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+
+    <!-- Header -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h4 class="mb-1">
+                <i class="fas fa-hand-holding-usd text-warning"></i>
+                Prestações Intermediárias
+            </h4>
+            <p class="text-muted mb-0">
+                Contrato <strong>{{ contrato.numero_contrato }}</strong>
+                &mdash; {{ contrato.comprador.nome }}
+            </p>
+        </div>
+        <a href="{% url 'contratos:detalhe' contrato.pk %}" class="btn btn-outline-secondary">
+            <i class="fas fa-arrow-left"></i> Voltar ao Contrato
+        </a>
+    </div>
+
+    <!-- Resumo -->
+    <div class="row mb-4">
+        <div class="col-md-3">
+            <div class="card text-center border-primary">
+                <div class="card-body py-3">
+                    <div class="fs-4 fw-bold text-primary">{{ total_intermediarias }}</div>
+                    <div class="text-muted small">Total</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card text-center border-success">
+                <div class="card-body py-3">
+                    <div class="fs-4 fw-bold text-success">{{ intermediarias_pagas }}</div>
+                    <div class="text-muted small">Pagas</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card text-center border-secondary">
+                <div class="card-body py-3">
+                    <div class="fs-4 fw-bold text-secondary">{{ intermediarias_pendentes }}</div>
+                    <div class="text-muted small">Pendentes</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card text-center border-warning">
+                <div class="card-body py-3">
+                    <div class="fs-4 fw-bold text-warning">{{ valor_pendente|moeda }}</div>
+                    <div class="text-muted small">Valor Pendente</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Tabela -->
+    <div class="card">
+        <div class="card-header bg-warning text-dark">
+            <i class="fas fa-list"></i> Lista de Intermediárias
+        </div>
+        <div class="table-responsive" style="overflow-x: auto;">
+            <table class="table table-sm table-hover mb-0" style="font-size: 0.875rem;">
+                <thead class="table-light">
+                    <tr>
+                        <th>#</th>
+                        <th>Mês</th>
+                        <th>Valor Original</th>
+                        <th>Valor Reajustado</th>
+                        <th>Situação</th>
+                        <th>Boleto</th>
+                        <th>Pago em</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for inter in intermediarias %}
+                    <tr>
+                        <td>{{ inter.numero_sequencial }}</td>
+                        <td>Mês {{ inter.mes_vencimento }}</td>
+                        <td>{{ inter.valor|moeda }}</td>
+                        <td>
+                            {% if inter.valor_reajustado %}
+                                {{ inter.valor_reajustado|moeda }}
+                            {% else %}
+                                <span class="text-muted">—</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if inter.paga %}
+                                <span class="badge bg-success">Paga</span>
+                            {% elif inter.parcela_vinculada %}
+                                <span class="badge bg-info">Boleto gerado</span>
+                            {% else %}
+                                <span class="badge bg-secondary">Pendente</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if inter.parcela_vinculada %}
+                                <a href="{% url 'contratos:detalhe' contrato.pk %}" class="text-muted small">
+                                    Parcela #{{ inter.parcela_vinculada.numero_parcela }}
+                                </a>
+                            {% else %}
+                                <span class="text-muted">—</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if inter.data_pagamento %}
+                                {{ inter.data_pagamento|date:"d/m/Y" }}
+                            {% else %}
+                                <span class="text-muted">—</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if not inter.paga and not inter.parcela_vinculada %}
+                            <button class="btn btn-sm btn-outline-primary btn-gerar-boleto-inter"
+                                    data-inter-id="{{ inter.pk }}"
+                                    title="Gerar boleto">
+                                <i class="fas fa-barcode"></i> Gerar Boleto
+                            </button>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="8" class="text-center text-muted py-4">
+                            <i class="fas fa-info-circle"></i> Nenhuma prestação intermediária cadastrada.
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        <div class="card-footer">
+            {% include "includes/pagination_perpage.html" %}
+        </div>
+    </div>
+
+</div>
+
+<script>
+document.querySelectorAll('.btn-gerar-boleto-inter').forEach(btn => {
+    btn.addEventListener('click', function() {
+        const interId = this.dataset.interId;
+        if (!confirm('Gerar boleto para esta intermediária?')) return;
+
+        this.disabled = true;
+        this.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+
+        fetch(`/contratos/intermediarias/${interId}/gerar-boleto/`, {
+            method: 'POST',
+            headers: {
+                'X-CSRFToken': document.cookie.match(/csrftoken=([^;]+)/)?.[1] || '',
+                'Content-Type': 'application/x-www-form-urlencoded',
+            }
+        })
+        .then(r => r.json())
+        .then(data => {
+            if (data.sucesso) {
+                alert('Boleto gerado com sucesso!');
+                location.reload();
+            } else {
+                alert('Erro: ' + (data.erro || 'Erro desconhecido'));
+                this.disabled = false;
+                this.innerHTML = '<i class="fas fa-barcode"></i> Gerar Boleto';
+            }
+        })
+        .catch(() => {
+            alert('Erro de comunicação com o servidor.');
+            this.disabled = false;
+            this.innerHTML = '<i class="fas fa-barcode"></i> Gerar Boleto';
+        });
+    });
+});
+</script>
+{% endblock %}

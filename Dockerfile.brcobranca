@@ -1,0 +1,92 @@
+# Dockerfile para BRCobranca API (Render Free Tier + Gestao-Contrato)
+#
+# Clona o repositório boleto_cnab_api e builda a imagem de runtime.
+# O Gemfile desse repo já aponta para: github.com/maxwbh/brcobranca branch master
+#
+# Repos usados:
+#   API REST : https://github.com/Maxwbh/boleto_cnab_api
+#   Gem      : https://github.com/maxwbh/brcobranca  (dependência via Gemfile)
+#
+# Para forçar re-clone no build:
+#   docker build --build-arg CACHE_BUST=$(date +%s) -f Dockerfile.brcobranca .
+
+# =============================================================================
+# Stage 1: Builder
+# =============================================================================
+FROM ruby:3.3-slim AS builder
+
+RUN apt-get update && apt-get upgrade -y && apt-get install -y --no-install-recommends \
+    build-essential \
+    git \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+# Garantir que o builder usa o mesmo BUNDLE_PATH que o runtime para consistência
+# nas gems de git (ex: brcobranca). Sem isso, o COPY pode não restaurar os caminhos
+# corretamente e o puma falha com "not yet checked out".
+ENV BUNDLE_PATH=/usr/local/bundle \
+    GEM_HOME=/usr/local/bundle \
+    PATH="/usr/local/bundle/bin:$PATH"
+
+# ARG antes do git clone para invalidar o cache Docker quando o repo for atualizado.
+# Render: incremente CACHE_BUST para forçar novo clone + bundle install do zero.
+ARG CACHE_BUST=2
+
+# Clonar repositório da API (shallow clone da branch master)
+RUN git clone --depth 1 --branch master \
+    https://github.com/Maxwbh/boleto_cnab_api.git .
+
+# bundle install resolve gems do Gemfile.lock (incluindo brcobranca via git).
+# NÃO usar "bundle clean --force" pois pode remover checkouts de gems git
+# causando erro "not yet checked out" no runtime.
+RUN bundle config set --local without 'development test' && \
+    bundle install --jobs $(nproc) --retry 3 && \
+    rm -rf /usr/local/bundle/cache/*.gem && \
+    find /usr/local/bundle/gems/ -name "*.c" -delete 2>/dev/null || true && \
+    find /usr/local/bundle/gems/ -name "*.o" -delete 2>/dev/null || true
+
+# =============================================================================
+# Stage 2: Runtime
+# =============================================================================
+FROM ruby:3.3-slim
+
+RUN apt-get update && apt-get upgrade -y && apt-get install -y --no-install-recommends \
+    ghostscript \
+    wget \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+# Copiar gems compiladas do builder
+COPY --from=builder /usr/local/bundle /usr/local/bundle
+
+# Copiar aplicação clonada
+COPY --from=builder /app /app
+
+# Remover artefatos desnecessários
+RUN rm -rf .git spec test tmp/* log/* \
+    && find . -name "*.md" -not -name "README.md" -delete 2>/dev/null || true
+
+# Criar diretórios e usuário não-root
+RUN mkdir -p tmp log \
+    && useradd -m -u 1000 app \
+    && chown -R app:app /app /usr/local/bundle
+
+USER app
+
+ENV RACK_ENV=production \
+    PORT=9292 \
+    MALLOC_ARENA_MAX=2 \
+    RUBY_GC_HEAP_GROWTH_FACTOR=1.1 \
+    BUNDLE_PATH=/usr/local/bundle \
+    GEM_HOME=/usr/local/bundle \
+    PATH="/usr/local/bundle/bin:$PATH"
+
+EXPOSE 9292
+
+# Health check via wget (instalado na imagem)
+HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
+    CMD wget --quiet --tries=1 --spider http://localhost:9292/api/health || exit 1
+
+CMD ["bundle", "exec", "puma", "-C", "config/puma.rb", "config.ru"]

@@ -1,0 +1,131 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Configuracoes de Notificacoes - Gestao de Contratos{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <!-- Header -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h2 class="mb-1">
+                <i class="fas fa-cogs text-secondary me-2"></i>
+                Configuracoes de Notificacoes
+            </h2>
+            <p class="text-muted mb-0">Gerencie as configuracoes de envio de notificacoes</p>
+        </div>
+        <a href="{% url 'notificacoes:listar' %}" class="btn btn-outline-secondary">
+            <i class="fas fa-arrow-left me-1"></i> Voltar
+        </a>
+    </div>
+
+    <div class="row">
+        <!-- E-mail -->
+        <div class="col-md-4 mb-4">
+            <div class="card h-100 shadow-sm border-primary">
+                <div class="card-header bg-primary text-white">
+                    <i class="fas fa-envelope me-2"></i>E-mail
+                </div>
+                <div class="card-body">
+                    {% if config_email %}
+                        <p class="mb-2"><strong>{{ config_email.nome }}</strong></p>
+                        <p class="small text-muted mb-1">Host: {{ config_email.host }}:{{ config_email.porta }}</p>
+                        <p class="small text-muted mb-1">Remetente: {{ config_email.email_remetente }}</p>
+                        <p class="mb-0">
+                            {% if config_email.usar_tls %}
+                                <span class="badge bg-success">TLS</span>
+                            {% elif config_email.usar_ssl %}
+                                <span class="badge bg-info">SSL</span>
+                            {% endif %}
+                            <span class="badge bg-success">Configurado</span>
+                        </p>
+                    {% else %}
+                        <p class="text-muted mb-0">
+                            <i class="fas fa-exclamation-circle text-warning me-1"></i>
+                            Nenhuma configuracao ativa
+                        </p>
+                    {% endif %}
+                </div>
+                <div class="card-footer bg-transparent">
+                    <a href="{% url 'notificacoes:listar_config_email' %}" class="btn btn-primary btn-sm w-100">
+                        <i class="fas fa-cog me-1"></i> Gerenciar
+                    </a>
+                </div>
+            </div>
+        </div>
+
+        <!-- SMS -->
+        <div class="col-md-4 mb-4">
+            <div class="card h-100 shadow-sm border-info">
+                <div class="card-header bg-info text-white">
+                    <i class="fas fa-sms me-2"></i>SMS
+                </div>
+                <div class="card-body">
+                    {% if config_sms %}
+                        <p class="mb-2"><strong>{{ config_sms.nome }}</strong></p>
+                        <p class="small text-muted mb-1">Provedor: {{ config_sms.get_provedor_display }}</p>
+                        <p class="small text-muted mb-1">Numero: {{ config_sms.numero_remetente }}</p>
+                        <span class="badge bg-success">Configurado</span>
+                    {% else %}
+                        <p class="text-muted mb-0">
+                            <i class="fas fa-exclamation-circle text-warning me-1"></i>
+                            Nenhuma configuracao ativa
+                        </p>
+                    {% endif %}
+                </div>
+                <div class="card-footer bg-transparent">
+                    <button class="btn btn-info btn-sm w-100" disabled>
+                        <i class="fas fa-cog me-1"></i> Em breve
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- WhatsApp -->
+        <div class="col-md-4 mb-4">
+            <div class="card h-100 shadow-sm border-success">
+                <div class="card-header bg-success text-white">
+                    <i class="fab fa-whatsapp me-2"></i>WhatsApp
+                </div>
+                <div class="card-body">
+                    {% if config_whatsapp %}
+                        <p class="mb-2"><strong>{{ config_whatsapp.nome }}</strong></p>
+                        <p class="small text-muted mb-1">Provedor: {{ config_whatsapp.get_provedor_display }}</p>
+                        <p class="small text-muted mb-1">Numero: {{ config_whatsapp.numero_remetente }}</p>
+                        <span class="badge bg-success">Configurado</span>
+                    {% else %}
+                        <p class="text-muted mb-0">
+                            <i class="fas fa-exclamation-circle text-warning me-1"></i>
+                            Nenhuma configuracao ativa
+                        </p>
+                    {% endif %}
+                </div>
+                <div class="card-footer bg-transparent">
+                    <button class="btn btn-success btn-sm w-100" disabled>
+                        <i class="fas fa-cog me-1"></i> Em breve
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Templates -->
+    <div class="card shadow-sm mt-4">
+        <div class="card-header bg-white d-flex justify-content-between align-items-center">
+            <span>
+                <i class="fas fa-file-alt me-2"></i>
+                Templates de Mensagens
+            </span>
+            <a href="{% url 'notificacoes:listar_templates' %}" class="btn btn-success btn-sm">
+                <i class="fas fa-external-link-alt me-1"></i> Gerenciar Templates
+            </a>
+        </div>
+        <div class="card-body">
+            <p class="text-muted mb-0">
+                Configure os templates de mensagens que serao enviados nas notificacoes.
+                Use TAGs como <code>%%NOMECOMPRADOR%%</code> para personalizar as mensagens.
+            </p>
+        </div>
+    </div>
+</div>
+{% endblock %}

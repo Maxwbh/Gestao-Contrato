@@ -1,0 +1,202 @@
+# Render Blueprint para deployment automatico
+# Desenvolvedor: Maxwell da Silva Oliveira
+# M&S do Brasil LTDA
+#
+# VERSAO FREE TIER (Otimizada) + SUPABASE
+# Esta configuracao e otimizada para o plano gratuito do Render
+# usando Supabase como banco de dados PostgreSQL
+#
+# BANCO DE DADOS: SUPABASE
+# - Plano gratuito mais generoso (500MB, sem expiracao de 90 dias)
+# - Melhor performance e uptime
+# - Painel de administracao integrado
+# - Backup automatico
+#
+# LIMITACOES DO FREE TIER RENDER:
+# - Sem Background Workers (Celery nao disponivel)
+# - Servico pode "adormecer" apos 15 min de inatividade
+# - Redis: 25MB memoria
+#
+# SOLUCOES IMPLEMENTADAS:
+# - API de tarefas via HTTP (/api/tasks/run-all/)
+# - Health check otimizado (/health/)
+# - Cron externo via cron-job.org (gratuito)
+# - BRCobranca API para geracao de boletos
+
+# =============================================================================
+# BANCO DE DADOS: SUPABASE POSTGRESQL (Pooler)
+# =============================================================================
+# Usando connection pooler (porta 6543) para melhor compatibilidade
+# Projeto: szyouijmxhlbavkzibxa
+
+services:
+  # =============================================================================
+  # Web Service (Django)
+  # =============================================================================
+  - type: web
+    name: gestao-contrato-web
+    runtime: python
+    plan: free
+    buildCommand: chmod +x build.sh && ./build.sh
+    startCommand: gunicorn gestao_contrato.wsgi:application --bind 0.0.0.0:$PORT --timeout 120 --workers 2 --threads 2 --worker-class gthread
+    healthCheckPath: /health/
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.11.0"
+      - key: SECRET_KEY
+        generateValue: true
+      - key: DEBUG
+        value: "False"
+      - key: ALLOWED_HOSTS
+        value: ".onrender.com,localhost,127.0.0.1"
+      # DATABASE_URL - Supabase PostgreSQL (usando Pooler porta 6543)
+      - key: DATABASE_URL
+        value: "postgresql://postgres.szyouijmxhlbavkzibxa:123ewqasdcxz%21%40%23@aws-1-us-east-2.pooler.supabase.com:6543/postgres"
+      - key: REDIS_URL
+        fromService:
+          name: gestao-contrato-redis
+          type: redis
+          property: connectionString
+      # Token para API de tarefas
+      - key: TASK_TOKEN
+        generateValue: true
+      # URL base do app (usada em links de boleto nos emails)
+      - key: SITE_URL
+        value: "https://gestao-contrato-web-mt6j.onrender.com"
+      # URL do servico BRCobranca
+      - key: BRCOBRANCA_URL
+        value: "https://brcobranca-api-m4q9.onrender.com"
+      # Supabase API
+      - key: SUPABASE_URL
+        value: "https://szyouijmxhlbavkzibxa.supabase.co"
+      - key: SUPABASE_KEY
+        value: "sb_publishable_aswPuvIXjzcejBTyYWObdQ_BpC5l903"
+
+      # ==========================================================================
+      # MODO DE TESTE — Safeguard de ambiente
+      # TEST_MODE=True: todos os e-mails e SMS/WhatsApp vão para os endereços abaixo
+      # Alterar para False em produção
+      # ==========================================================================
+      - key: TEST_MODE
+        value: "True"
+      - key: TEST_RECIPIENT_EMAIL
+        value: "receber@msbrasil.inf.br"
+      - key: TEST_RECIPIENT_PHONE
+        value: "+5531993257479"
+
+      # ==========================================================================
+      # EMAIL — Zoho SMTP
+      # ==========================================================================
+      - key: EMAIL_BACKEND
+        value: "django.core.mail.backends.smtp.EmailBackend"
+      - key: EMAIL_HOST
+        value: "smtp.zoho.com"
+      - key: EMAIL_PORT
+        value: "465"
+      - key: EMAIL_USE_SSL
+        value: "True"
+      - key: EMAIL_USE_TLS
+        value: "False"
+      - key: EMAIL_HOST_USER
+        value: "teste@msbrasil.inf.br"
+      - key: DEFAULT_FROM_EMAIL
+        value: "teste@msbrasil.inf.br"
+      # EMAIL_HOST_PASSWORD: definir manualmente no painel do Render
+      - key: EMAIL_HOST_PASSWORD
+        sync: false
+
+      # ==========================================================================
+      # TWILIO — SMS e WhatsApp
+      # ==========================================================================
+      - key: TWILIO_PHONE_NUMBER
+        value: "+16067334990"
+      - key: TWILIO_WHATSAPP_NUMBER
+        value: "whatsapp:+16067334990"
+      # Credenciais Twilio: definir manualmente no painel do Render
+      - key: TWILIO_ACCOUNT_SID
+        sync: false
+      - key: TWILIO_AUTH_TOKEN
+        sync: false
+
+  # =============================================================================
+  # BRCobranca API (Geracao de Boletos)
+  # =============================================================================
+  # Servico Docker para geracao de boletos bancarios
+  # Usa repositorios customizados:
+  #   - API REST: https://github.com/Maxwbh/boleto_cnab_api
+  #   - Biblioteca: https://github.com/maxwbh/brcobranca
+  # Build a partir do Dockerfile.brcobranca
+  - type: web
+    name: brcobranca-api
+    runtime: docker
+    plan: free
+    dockerfilePath: ./Dockerfile.brcobranca
+    dockerContext: .
+    # Render injeta PORT automaticamente em servicos Docker
+    healthCheckPath: /api/health
+    autoDeploy: true
+    envVars:
+      - key: RACK_ENV
+        value: "production"
+      # MALLOC e GC otimizados para Free Tier (512MB RAM)
+      - key: MALLOC_ARENA_MAX
+        value: "2"
+      - key: RUBY_GC_HEAP_GROWTH_FACTOR
+        value: "1.1"
+      # Puma: 1 worker para economizar memória no Free Tier
+      - key: PUMA_WORKERS
+        value: "1"
+      - key: PUMA_MIN_THREADS
+        value: "0"
+      - key: PUMA_MAX_THREADS
+        value: "5"
+      # Para forçar re-clone do boleto_cnab_api: incremente ARG CACHE_BUST
+      # no Dockerfile.brcobranca e faça push — o Render reconstruirá do zero.
+
+  # =============================================================================
+  # Redis (para cache e sessoes - Free: 25MB)
+  # =============================================================================
+  - type: redis
+    name: gestao-contrato-redis
+    plan: free
+    maxmemoryPolicy: allkeys-lru
+    ipAllowList: []
+
+# =============================================================================
+# CONFIGURACAO DE TAREFAS AGENDADAS (Alternativa ao Celery)
+# =============================================================================
+#
+# O plano gratuito do Render nao suporta Background Workers (Celery).
+# Implementamos uma API de tarefas que pode ser chamada por cron externos.
+#
+# OPCAO 1: CRON EXTERNO (Recomendado - Gratuito)
+# ----------------------------------------------
+# 1. Acesse https://cron-job.org e crie uma conta gratuita
+# 2. Apos o deploy, acesse seu app no Render e copie o valor de TASK_TOKEN
+# 3. Crie um novo cron job com:
+#    - URL: https://seu-app.onrender.com/api/tasks/run-all/
+#    - Metodo: POST
+#    - Header: X-Task-Token: <seu-token>
+#    - Agenda: Diariamente as 08:00
+#
+# Tarefas executadas:
+#   - Atualizar status de parcelas vencidas
+#   - Processar reajustes pendentes (IPCA/IGP-M/SELIC)
+#   - Enviar notificacoes de vencimento
+#
+# =============================================================================
+# KEEP-ALIVE (Evitar que o servico adormeca)
+# =============================================================================
+# O Free tier "adormece" apos 15 min de inatividade. Para manter ativo:
+#
+# 1. Configure um cron job adicional em cron-job.org:
+#    - URL: https://seu-app.onrender.com/health/
+#    - Metodo: GET
+#    - Agenda: A cada 10 minutos
+#
+# 2. Para o BRCobranca tambem:
+#    - URL: https://brcobranca-api-m4q9.onrender.com/
+#    - Metodo: GET
+#    - Agenda: A cada 10 minutos
+#
+# 3. Ou use https://uptimerobot.com (gratuito, 5 min interval)

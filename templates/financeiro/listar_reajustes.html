@@ -1,0 +1,208 @@
+{% extends 'base.html' %}
+{% load static %}
+{% load format_filters %}
+
+{% block title %}Histórico de Reajustes{% endblock %}
+
+{% block extra_css %}
+<style>
+    .ag-theme-material .ag-root-wrapper { border-radius: 0; border: none; }
+    .ag-theme-material .ag-header { background-color: #343a40; }
+    .ag-theme-material .ag-header-cell-text { color: #fff; font-weight: 600; }
+    .ag-theme-material .ag-header-icon { color: #fff; }
+    .ag-theme-material .ag-row-even { background-color: #fff; }
+    .ag-theme-material .ag-row-odd  { background-color: #f8f9fa; }
+    .ag-theme-material .ag-row:hover { background-color: #e8f4fd !important; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+
+    <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
+        <div>
+            <h2 class="mb-1"><i class="fas fa-history me-2"></i>Histórico de Reajustes</h2>
+            <p class="text-muted mb-0">Todos os reajustes aplicados nos contratos</p>
+        </div>
+        <div class="d-flex align-items-center gap-2">
+            <i class="fas fa-search text-muted"></i>
+            <input type="text" id="gridQuickFilter" class="form-control form-control-sm"
+                   placeholder="Busca rápida..." style="width: 200px;"
+                   oninput="if(window.reajustesGridApi) window.reajustesGridApi.setGridOption('quickFilterText', this.value)">
+            <button type="button" class="btn btn-sm btn-outline-success" title="Exportar CSV"
+                    onclick="window.reajustesGridApi && window.reajustesGridApi.exportDataAsCsv({fileName:'reajustes.csv', processCellCallback: cleanCsvCell})">
+                <i class="fas fa-file-csv me-1"></i>CSV
+            </button>
+            <a href="{% url 'financeiro:reajustes_pendentes' %}" class="btn btn-warning">
+                <i class="fas fa-exclamation-triangle me-1"></i>Ver Pendentes
+            </a>
+        </div>
+    </div>
+
+    <div class="card">
+        <div id="reajustesGrid" class="ag-theme-material" style="width: 100%;"></div>
+        <div class="card-footer">
+            {% include "includes/pagination_perpage.html" %}
+        </div>
+    </div>
+
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+function cleanCsvCell(params) {
+    const v = params.value;
+    if (v == null) return '';
+    if (typeof v === 'string' && v.includes('<')) {
+        const d = document.createElement('div'); d.innerHTML = v;
+        return (d.textContent || d.innerText || '').trim();
+    }
+    return v;
+}
+
+const reajustesRowData = [
+{% for r in reajustes %}
+{
+    pk: {{ r.pk }},
+    contrato: "{{ r.contrato.numero_contrato|escapejs }}",
+    contrato_pk: {{ r.contrato.pk }},
+    data_reajuste: "{{ r.data_reajuste|date:'d/m/Y' }}",
+    ciclo: {{ r.ciclo }},
+    indice_tipo: "{{ r.indice_tipo|escapejs }}",
+    periodo: "{% if r.periodo_referencia_inicio %}{{ r.periodo_referencia_inicio|date:'m/Y' }} → {{ r.periodo_referencia_fim|date:'m/Y' }}{% endif %}",
+    percentual_bruto: {% if r.percentual_bruto %}parseFloat("{{ r.percentual_bruto|floatformat:4 }}") || 0{% else %}null{% endif %},
+    percentual: parseFloat("{{ r.percentual|floatformat:4 }}") || 0,
+    aplicado: {{ r.aplicado|yesno:"true,false" }},
+    aplicado_manual: {{ r.aplicado_manual|yesno:"true,false" }},
+    usuario: "{% if r.usuario %}{{ r.usuario.get_short_name|default:r.usuario.username|escapejs }}{% else %}—{% endif %}",
+    parcela_inicial: {{ r.parcela_inicial }},
+    parcela_final: {{ r.parcela_final }},
+},
+{% endfor %}
+];
+
+function indiceBadge(tipo) {
+    const colors = { IPCA: 'bg-primary', IGPM: 'bg-success', INCC: 'bg-info text-dark', INPC: 'bg-danger', TR: 'bg-dark', SELIC: 'bg-warning text-dark' };
+    return `<span class="badge ${colors[tipo] || 'bg-secondary'}">${tipo}</span>`;
+}
+
+function statusRenderer(params) {
+    const d = params.data;
+    if (d.aplicado) {
+        let s = '<span class="badge bg-success">Aplicado</span>';
+        if (d.aplicado_manual) s += ' <span class="badge bg-secondary">Manual</span>';
+        return s;
+    }
+    return '<span class="badge bg-warning text-dark">Pendente</span>';
+}
+
+const reajustesColumnDefs = [
+    {
+        headerName: 'Contrato',
+        field: 'contrato',
+        filter: 'agTextColumnFilter',
+       
+        minWidth: 120,
+        cellRenderer: params => `<a href="/contratos/${params.data.contrato_pk}/">${params.value}</a>`,
+    },
+    {
+        headerName: 'Data',
+        field: 'data_reajuste',
+        filter: 'agTextColumnFilter',
+       
+        minWidth: 105,
+        sort: 'desc',
+    },
+    {
+        headerName: 'Ciclo',
+        field: 'ciclo',
+        filter: 'agNumberColumnFilter',
+       
+        minWidth: 80,
+        cellRenderer: params => `<span class="badge bg-secondary">${params.value}</span>`,
+    },
+    {
+        headerName: 'Índice',
+        field: 'indice_tipo',
+        filter: 'agTextColumnFilter',
+       
+        minWidth: 90,
+        cellRenderer: params => indiceBadge(params.value),
+    },
+    {
+        headerName: 'Período Ref.',
+        field: 'periodo',
+        filter: 'agTextColumnFilter',
+       
+        minWidth: 140,
+        cellRenderer: params => params.value ? `<small class="font-monospace">${params.value}</small>` : '<span class="text-muted">—</span>',
+    },
+    {
+        headerName: '% Bruto',
+        field: 'percentual_bruto',
+        filter: 'agNumberColumnFilter',
+       
+        minWidth: 100,
+        type: 'numericColumn',
+        cellRenderer: params => params.value != null ? `${parseFloat(params.value).toFixed(2)}%` : '<span class="text-muted">—</span>',
+    },
+    {
+        headerName: '% Aplicado',
+        field: 'percentual',
+        filter: 'agNumberColumnFilter',
+       
+        minWidth: 110,
+        type: 'numericColumn',
+        cellRenderer: params => {
+            const v = parseFloat(params.value);
+            const cls = v < 0 ? 'text-danger' : 'text-success';
+            const sign = v >= 0 ? '+' : '';
+            return `<strong class="${cls}">${sign}${v.toFixed(2)}%</strong>`;
+        },
+    },
+    {
+        headerName: 'Parcelas',
+        field: 'parcela_inicial',
+        filter: 'agNumberColumnFilter',
+       
+        minWidth: 100,
+        cellRenderer: params => `<small>${params.value}–${params.data.parcela_final}</small>`,
+    },
+    {
+        headerName: 'Por',
+        field: 'usuario',
+        filter: 'agTextColumnFilter',
+       
+        minWidth: 100,
+        cellRenderer: params => `<small class="text-muted">${params.value}</small>`,
+    },
+    {
+        headerName: 'Status',
+        field: 'aplicado',
+        filter: 'agTextColumnFilter',
+       
+        minWidth: 120,
+        cellRenderer: statusRenderer,
+    },
+];
+
+document.addEventListener('DOMContentLoaded', function() {
+    window.reajustesGridApi = agGrid.createGrid(
+        document.getElementById('reajustesGrid'),
+        {
+            columnDefs: reajustesColumnDefs,
+            rowData: reajustesRowData,
+            domLayout: 'autoHeight',
+            defaultColDef: { sortable: true, resizable: true },
+            rowHeight: 42,
+            headerHeight: 48,
+           
+            suppressCellFocus: true,
+            enableCellTextSelection: true,
+            overlayNoRowsTemplate: '<div class="text-center py-4 text-muted"><i class="fas fa-inbox fa-2x mb-2 d-block"></i>Nenhum reajuste registrado ainda.</div>',
+        }
+    );
+});
+</script>
+{% endblock %}

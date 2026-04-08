@@ -1,0 +1,2668 @@
+{% extends 'base.html' %}
+{% load format_filters %}
+
+{% block title %}Contrato {{ contrato.numero_contrato }} - Gestao de Contratos{% endblock %}
+
+{% block extra_css %}
+<style>
+    .info-card {
+        border-left: 4px solid;
+    }
+    .info-card.primary { border-left-color: #0d6efd; }
+    .info-card.success { border-left-color: #198754; }
+    .info-card.warning { border-left-color: #ffc107; }
+    .info-card.danger { border-left-color: #dc3545; }
+    .info-card.info { border-left-color: #0dcaf0; }
+
+    .info-item {
+        padding: 0.5rem 0;
+        border-bottom: 1px solid #eee;
+    }
+    .info-item:last-child {
+        border-bottom: none;
+    }
+    .info-label {
+        font-weight: 500;
+        color: #6c757d;
+        font-size: 0.85rem;
+    }
+    .info-value {
+        font-weight: 600;
+        color: #2c3e50;
+    }
+
+    .progress-lg {
+        height: 25px;
+        border-radius: 12px;
+    }
+    .progress-lg .progress-bar {
+        font-size: 0.9rem;
+        font-weight: 600;
+    }
+
+    .parcela-row.paga {
+        background-color: #d1e7dd;
+    }
+    .parcela-row.atrasada {
+        background-color: #f8d7da;
+    }
+    .parcela-row.proxima {
+        background-color: #fff3cd;
+    }
+
+    .stat-card {
+        text-align: center;
+        padding: 1rem;
+    }
+    .stat-value {
+        font-size: 1.5rem;
+        font-weight: 700;
+    }
+    .stat-label {
+        font-size: 0.8rem;
+        color: #6c757d;
+    }
+
+    /* Toast Notifications */
+    .toast-container {
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        z-index: 9999;
+    }
+    .toast-notification {
+        min-width: 300px;
+        padding: 15px 20px;
+        margin-bottom: 10px;
+        border-radius: 8px;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+        display: flex;
+        align-items: center;
+        animation: slideIn 0.3s ease-out;
+    }
+    .toast-notification.success {
+        background: linear-gradient(135deg, #28a745, #20c997);
+        color: white;
+    }
+    .toast-notification.error {
+        background: linear-gradient(135deg, #dc3545, #e74c3c);
+        color: white;
+    }
+    .toast-notification.info {
+        background: linear-gradient(135deg, #17a2b8, #0dcaf0);
+        color: white;
+    }
+    .toast-notification i {
+        font-size: 1.2rem;
+        margin-right: 12px;
+    }
+    .toast-notification .toast-close {
+        margin-left: auto;
+        cursor: pointer;
+        opacity: 0.7;
+    }
+    .toast-notification .toast-close:hover {
+        opacity: 1;
+    }
+    @keyframes slideIn {
+        from { transform: translateX(100%); opacity: 0; }
+        to { transform: translateX(0); opacity: 1; }
+    }
+    @keyframes slideOut {
+        from { transform: translateX(0); opacity: 1; }
+        to { transform: translateX(100%); opacity: 0; }
+    }
+
+    /* Botao Loading */
+    .btn-loading {
+        position: relative;
+        pointer-events: none;
+    }
+    .btn-loading .spinner-border {
+        width: 1rem;
+        height: 1rem;
+        border-width: 2px;
+    }
+
+    /* Efeito de sucesso na linha */
+    .parcela-row.boleto-gerado {
+        animation: highlightSuccess 2s ease-out;
+    }
+    @keyframes highlightSuccess {
+        0% { background-color: #d4edda; }
+        100% { background-color: transparent; }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<!-- Toast Container -->
+<div id="toastContainer" class="toast-container"></div>
+
+<div class="row">
+    <div class="col-12">
+        <!-- Cabecalho -->
+        <div class="card mb-4">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <h3 class="mb-1">
+                            <i class="fas fa-file-contract text-primary"></i>
+                            Contrato {{ contrato.numero_contrato }}
+                        </h3>
+                        <p class="text-muted mb-0">
+                            {{ contrato.comprador.nome }} | {{ contrato.imovel.identificacao }}
+                        </p>
+                    </div>
+                    <div>
+                        <span class="badge fs-5 {% if contrato.status == 'ATIVO' %}bg-success{% elif contrato.status == 'QUITADO' %}bg-primary{% elif contrato.status == 'CANCELADO' %}bg-danger{% else %}bg-warning text-dark{% endif %}">
+                            {{ contrato.get_status_display }}
+                        </span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Alerta: Intermediárias Vencidas sem Boleto (HU-13) -->
+        {% if intermediarias_vencidas_sem_boleto %}
+        <div class="alert alert-warning d-flex align-items-center mb-3" role="alert">
+            <i class="fas fa-exclamation-triangle me-2 fs-5"></i>
+            <div>
+                <strong>{{ intermediarias_vencidas_sem_boleto|length }} prestação(ões) intermediária(s) vencida(s)</strong> sem boleto gerado.
+                <a href="{% url 'contratos:intermediarias_listar' contrato.pk %}" class="alert-link ms-2">
+                    Ver intermediárias &rarr;
+                </a>
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- Estatisticas Rapidas -->
+        <div class="row mb-4">
+            <div class="col-md-3">
+                <div class="card stat-card border-primary">
+                    <div class="stat-value text-primary">{{ contrato.valor_total|moeda }}</div>
+                    <div class="stat-label">Valor Total</div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card stat-card border-success">
+                    <div class="stat-value text-success">{{ valor_pago|moeda }}</div>
+                    <div class="stat-label">Valor Pago</div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card stat-card border-warning">
+                    <div class="stat-value text-warning">{{ saldo_devedor|moeda }}</div>
+                    <div class="stat-label">Saldo Devedor</div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card stat-card border-info">
+                    <div class="stat-value text-info">{{ parcelas_pagas }}/{{ contrato.numero_parcelas }}</div>
+                    <div class="stat-label">Parcelas Pagas</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Barra de Progresso -->
+        <div class="card mb-4">
+            <div class="card-body">
+                <h6 class="mb-3">Progresso do Pagamento</h6>
+                <div class="progress progress-lg">
+                    <div class="progress-bar {% if progresso >= 100 %}bg-success{% elif progresso >= 50 %}bg-info{% else %}bg-warning{% endif %}"
+                         role="progressbar"
+                         style="width: {{ progresso|stringformat:'f' }}%"
+                         aria-valuenow="{{ progresso|stringformat:'f' }}"
+                         aria-valuemin="0"
+                         aria-valuemax="100">
+                        {{ progresso|floatformat:1 }}%
+                    </div>
+                </div>
+                <div class="d-flex justify-content-between mt-2 small text-muted">
+                    <span>{{ parcelas_pagas }} parcelas pagas</span>
+                    <span>{{ parcelas_pendentes }} parcelas pendentes</span>
+                    {% if parcelas_atrasadas > 0 %}
+                    <span class="text-danger fw-bold">{{ parcelas_atrasadas }} em atraso!</span>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <!-- U-02: Timeline Visual de Ciclos de Reajuste -->
+        {% if parcelas %}
+        <div class="card mb-3">
+            <div class="card-header d-flex justify-content-between align-items-center py-2">
+                <span><i class="fas fa-stream me-2"></i><strong>Timeline de Ciclos</strong></span>
+                <small class="text-muted">
+                    {{ prazo_reajuste }} meses / ciclo
+                    {% if contrato.tipo_correcao != 'FIXO' %} · {{ contrato.get_tipo_correcao_display }}{% endif %}
+                </small>
+            </div>
+            <div class="card-body py-3" style="overflow-x:auto;">
+                <div id="ciclos-timeline" style="min-width:320px;"></div>
+            </div>
+        </div>
+        {% endif %}
+
+        <div class="row">
+            <!-- Coluna Esquerda: Informacoes -->
+            <div class="col-lg-5">
+                <!-- Comprador -->
+                <div class="card info-card primary mb-3">
+                    <div class="card-header bg-primary text-white">
+                        <i class="fas fa-user"></i> Comprador
+                    </div>
+                    <div class="card-body">
+                        <div class="info-item">
+                            <div class="info-label">Nome</div>
+                            <div class="info-value">{{ contrato.comprador.nome }}</div>
+                        </div>
+                        <div class="info-item">
+                            <div class="info-label">CPF/CNPJ</div>
+                            <div class="info-value">{{ contrato.comprador.cpf_cnpj }}</div>
+                        </div>
+                        {% if contrato.comprador.telefone %}
+                        <div class="info-item">
+                            <div class="info-label">Telefone</div>
+                            <div class="info-value">{{ contrato.comprador.telefone }}</div>
+                        </div>
+                        {% endif %}
+                        {% if contrato.comprador.email %}
+                        <div class="info-item">
+                            <div class="info-label">E-mail</div>
+                            <div class="info-value">{{ contrato.comprador.email }}</div>
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>
+
+                <!-- Imovel -->
+                <div class="card info-card success mb-3">
+                    <div class="card-header bg-success text-white">
+                        <i class="fas fa-home"></i> Imovel
+                    </div>
+                    <div class="card-body">
+                        <div class="info-item">
+                            <div class="info-label">Identificacao</div>
+                            <div class="info-value">{{ contrato.imovel.identificacao }}</div>
+                        </div>
+                        {% if contrato.imovel.loteamento %}
+                        <div class="info-item">
+                            <div class="info-label">Loteamento</div>
+                            <div class="info-value">{{ contrato.imovel.loteamento }}</div>
+                        </div>
+                        {% endif %}
+                        <div class="info-item">
+                            <div class="info-label">Tipo</div>
+                            <div class="info-value">{{ contrato.imovel.get_tipo_display }}</div>
+                        </div>
+                        {% if contrato.imovel.area %}
+                        <div class="info-item">
+                            <div class="info-label">Area</div>
+                            <div class="info-value">{{ contrato.imovel.area }} m2</div>
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>
+
+                <!-- Valores -->
+                <div class="card info-card warning mb-3">
+                    <div class="card-header bg-warning text-dark">
+                        <i class="fas fa-dollar-sign"></i> Valores
+                    </div>
+                    <div class="card-body">
+                        <div class="info-item">
+                            <div class="info-label">Valor Total</div>
+                            <div class="info-value">{{ contrato.valor_total|moeda }}</div>
+                        </div>
+                        <div class="info-item">
+                            <div class="info-label">Entrada</div>
+                            <div class="info-value">{{ contrato.valor_entrada|moeda }}</div>
+                        </div>
+                        <div class="info-item">
+                            <div class="info-label">Valor Financiado</div>
+                            <div class="info-value">{{ contrato.valor_financiado|moeda }}</div>
+                        </div>
+                        <div class="info-item">
+                            <div class="info-label">Valor Original Parcela</div>
+                            <div class="info-value">{{ contrato.valor_parcela_original|moeda }}</div>
+                        </div>
+                        <div class="info-item">
+                            <div class="info-label">Sistema de Amortização</div>
+                            <div class="info-value">
+                                {% if contrato.tipo_amortizacao == 'SAC' %}
+                                <span class="badge bg-warning text-dark">SAC — Amortização Constante</span>
+                                {% else %}
+                                <span class="badge bg-info text-dark">Tabela Price</span>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Configuracoes -->
+                <div class="card info-card info mb-3">
+                    <div class="card-header bg-info text-white">
+                        <i class="fas fa-cog"></i> Configuracoes
+                    </div>
+                    <div class="card-body">
+                        <div class="info-item">
+                            <div class="info-label">Juros de Mora</div>
+                            <div class="info-value">{{ contrato.percentual_juros_mora }}% a.m.</div>
+                        </div>
+                        <div class="info-item">
+                            <div class="info-label">Multa</div>
+                            <div class="info-value">{{ contrato.percentual_multa }}%</div>
+                        </div>
+                        <div class="info-item">
+                            <div class="info-label">Correcao Monetaria</div>
+                            <div class="info-value">{{ contrato.get_tipo_correcao_display }}</div>
+                        </div>
+                        <div class="info-item">
+                            <div class="info-label">Prazo Reajuste</div>
+                            <div class="info-value">{{ contrato.prazo_reajuste_meses }} meses</div>
+                        </div>
+                        {% if contrato.tipo_correcao != 'FIXO' %}
+                        <div class="info-item">
+                            <div class="info-label">Proximo Reajuste</div>
+                            {% if contrato.data_proximo_reajuste %}
+                            <div class="info-value text-warning">{{ contrato.data_proximo_reajuste|date:"d/m/Y" }}</div>
+                            {% elif contrato.numero_parcelas <= contrato.prazo_reajuste_meses %}
+                            <div class="info-value text-muted"><small>N/A — contrato no ciclo 1</small></div>
+                            {% else %}
+                            <div class="info-value text-muted">—</div>
+                            {% endif %}
+                        </div>
+                        {% endif %}
+                        {% if contrato.spread_reajuste %}
+                        <div class="info-item">
+                            <div class="info-label">Spread</div>
+                            <div class="info-value text-info">+{{ contrato.spread_reajuste|floatformat:2 }} p.p.</div>
+                        </div>
+                        {% endif %}
+                        {% if contrato.reajuste_piso is not None %}
+                        <div class="info-item">
+                            <div class="info-label">Piso Reajuste</div>
+                            <div class="info-value text-info">{{ contrato.reajuste_piso|floatformat:2 }}%</div>
+                        </div>
+                        {% endif %}
+                        {% if contrato.reajuste_teto is not None %}
+                        <div class="info-item">
+                            <div class="info-label">Teto Reajuste</div>
+                            <div class="info-value text-warning">{{ contrato.reajuste_teto|floatformat:2 }}%</div>
+                        </div>
+                        {% endif %}
+                        {% if contrato.tipo_correcao_fallback %}
+                        <div class="info-item">
+                            <div class="info-label">Índice Fallback</div>
+                            <div class="info-value text-muted">{{ contrato.get_tipo_correcao_fallback_display }}</div>
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>
+
+                <!-- Cláusulas Contratuais -->
+                <div class="card info-card mb-3" style="border-left:4px solid #6f42c1;">
+                    <div class="card-header text-white" style="background-color:#6f42c1;">
+                        <i class="fas fa-file-alt"></i> Cláusulas Contratuais
+                    </div>
+                    <div class="card-body">
+                        <div class="info-item">
+                            <div class="info-label">% Fruição</div>
+                            <div class="info-value">{{ contrato.percentual_fruicao|default:"0.00" }}% a.m.</div>
+                        </div>
+                        <div class="info-item">
+                            <div class="info-label">Multa Rescisão Penal</div>
+                            <div class="info-value">{{ contrato.percentual_multa_rescisao_penal|default:"0.00" }}%</div>
+                        </div>
+                        <div class="info-item">
+                            <div class="info-label">Desp. Adm. Rescisão</div>
+                            <div class="info-value">{{ contrato.percentual_multa_rescisao_adm|default:"0.00" }}%</div>
+                        </div>
+                        <div class="info-item">
+                            <div class="info-label">% Cessão de Direitos</div>
+                            <div class="info-value">{{ contrato.percentual_cessao|default:"0.00" }}%</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Parâmetros de Intermediárias -->
+                <div class="card info-card mb-3" style="border-left:4px solid #fd7e14;">
+                    <div class="card-header text-white" style="background-color:#fd7e14;">
+                        <i class="fas fa-sliders-h"></i> Parâmetros de Intermediárias
+                    </div>
+                    <div class="card-body">
+                        <div class="info-item">
+                            <div class="info-label">Reduzem PMT</div>
+                            <div class="info-value">
+                                {% if contrato.intermediarias_reduzem_pmt %}
+                                <span class="badge bg-success">Sim</span>
+                                {% else %}
+                                <span class="badge bg-secondary">Não</span>
+                                {% endif %}
+                            </div>
+                        </div>
+                        <div class="info-item">
+                            <div class="info-label">Reajustadas</div>
+                            <div class="info-value">
+                                {% if contrato.intermediarias_reajustadas %}
+                                <span class="badge bg-success">Sim</span>
+                                {% else %}
+                                <span class="badge bg-secondary">Não</span>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Configuração de Boleto -->
+                <div class="card info-card mb-3" style="border-left:4px solid #20c997;">
+                    <div class="card-header text-white" style="background-color:#20c997;">
+                        <i class="fas fa-barcode"></i> Configuração de Boleto
+                    </div>
+                    <div class="card-body">
+                        <div class="info-item">
+                            <div class="info-label">Config. Boleto</div>
+                            <div class="info-value">
+                                {% if contrato.usar_config_boleto_imobiliaria %}
+                                <span class="badge bg-info">Padrão da Imobiliária</span>
+                                {% else %}
+                                <span class="badge bg-warning text-dark">Personalizada</span>
+                                {% endif %}
+                            </div>
+                        </div>
+                        {% if not contrato.usar_config_boleto_imobiliaria %}
+                        {% if contrato.tipo_valor_multa %}
+                        <div class="info-item">
+                            <div class="info-label">Multa (boleto)</div>
+                            <div class="info-value">
+                                {{ contrato.valor_multa_boleto|default:"0.00" }}
+                                {% if contrato.tipo_valor_multa == 'PERCENTUAL' %}%{% else %}R${% endif %}
+                            </div>
+                        </div>
+                        {% endif %}
+                        {% if contrato.tipo_valor_juros %}
+                        <div class="info-item">
+                            <div class="info-label">Juros (boleto)</div>
+                            <div class="info-value">
+                                {{ contrato.valor_juros_boleto|default:"0.00" }}
+                                {% if contrato.tipo_valor_juros == 'PERCENTUAL' %}% a.m.{% else %}R$ a.m.{% endif %}
+                            </div>
+                        </div>
+                        {% endif %}
+                        {% if contrato.dias_carencia_boleto %}
+                        <div class="info-item">
+                            <div class="info-label">Carência</div>
+                            <div class="info-value">{{ contrato.dias_carencia_boleto }} dias</div>
+                        </div>
+                        {% endif %}
+                        {% if contrato.tipo_valor_desconto %}
+                        <div class="info-item">
+                            <div class="info-label">Desconto (boleto)</div>
+                            <div class="info-value">
+                                {{ contrato.valor_desconto_boleto|default:"0.00" }}
+                                {% if contrato.tipo_valor_desconto == 'PERCENTUAL' %}%{% else %}R${% endif %}
+                                {% if contrato.dias_desconto_boleto %} — {{ contrato.dias_desconto_boleto }}d antes{% endif %}
+                            </div>
+                        </div>
+                        {% endif %}
+                        {% if contrato.instrucao_boleto_1 %}
+                        <div class="info-item">
+                            <div class="info-label">Instrução 1</div>
+                            <div class="info-value small">{{ contrato.instrucao_boleto_1 }}</div>
+                        </div>
+                        {% endif %}
+                        {% if contrato.instrucao_boleto_2 %}
+                        <div class="info-item">
+                            <div class="info-label">Instrução 2</div>
+                            <div class="info-value small">{{ contrato.instrucao_boleto_2 }}</div>
+                        </div>
+                        {% endif %}
+                        {% if contrato.instrucao_boleto_3 %}
+                        <div class="info-item">
+                            <div class="info-label">Instrução 3</div>
+                            <div class="info-value small">{{ contrato.instrucao_boleto_3 }}</div>
+                        </div>
+                        {% endif %}
+                        {% endif %}
+                    </div>
+                </div>
+
+                <!-- Conta Bancaria da Imobiliaria -->
+                <div class="card info-card success mb-3">
+                    <div class="card-header bg-success text-white">
+                        <i class="fas fa-university"></i> Conta Bancaria
+                    </div>
+                    <div class="card-body">
+                        {% if conta_bancaria %}
+                        <div class="info-item">
+                            <div class="info-label">Banco</div>
+                            <div class="info-value">{{ conta_bancaria.get_banco_display }}</div>
+                        </div>
+                        <div class="info-item">
+                            <div class="info-label">Agencia</div>
+                            <div class="info-value">{{ conta_bancaria.agencia }}{% if conta_bancaria.agencia_dv %}-{{ conta_bancaria.agencia_dv }}{% endif %}</div>
+                        </div>
+                        <div class="info-item">
+                            <div class="info-label">Conta</div>
+                            <div class="info-value">{{ conta_bancaria.conta }}{% if conta_bancaria.conta_dv %}-{{ conta_bancaria.conta_dv }}{% endif %}</div>
+                        </div>
+                        {% if conta_bancaria.convenio %}
+                        <div class="info-item">
+                            <div class="info-label">Convenio</div>
+                            <div class="info-value">{{ conta_bancaria.convenio }}</div>
+                        </div>
+                        {% endif %}
+                        <div class="info-item">
+                            <div class="info-label">Carteira</div>
+                            <div class="info-value">{{ conta_bancaria.carteira }}</div>
+                        </div>
+                        {% else %}
+                        <div class="text-muted text-center py-2">
+                            <i class="fas fa-exclamation-circle"></i> Nenhuma conta bancaria configurada
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>
+
+                <!-- Historico de Reajustes -->
+                <div class="card mb-3">
+                    <div class="card-header bg-secondary text-white d-flex justify-content-between align-items-center">
+                        <span><i class="fas fa-chart-line"></i> Reajustes</span>
+                        <button type="button" class="btn btn-sm btn-light" onclick="abrirModalReajuste({{ contrato.pk }})">
+                            <i class="fas fa-plus"></i> Aplicar Reajuste
+                        </button>
+                    </div>
+                    <div class="card-body p-0">
+                        {% if reajustes %}
+                        <div class="table-responsive" style="max-height: 320px; overflow-y: auto;">
+                            <table class="table table-sm table-hover mb-0" style="font-size:0.78rem;">
+                                <thead class="table-light sticky-top">
+                                    <tr>
+                                        <th class="text-center">Ciclo</th>
+                                        <th>Índice</th>
+                                        <th class="text-center">Ref.</th>
+                                        <th class="text-end">% Bruto</th>
+                                        <th class="text-end text-success">% Aplicado</th>
+                                        <th>Parcelas</th>
+                                        <th>Data</th>
+                                        <th>Por</th>
+                                        <th></th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for reajuste in reajustes %}
+                                    <tr>
+                                        <td class="text-center">
+                                            <span class="badge bg-secondary">{{ reajuste.ciclo }}</span>
+                                        </td>
+                                        <td>
+                                            <span class="badge {% if reajuste.aplicado_manual %}bg-warning text-dark{% else %}bg-info text-dark{% endif %}">
+                                                {{ reajuste.indice_tipo }}
+                                            </span>
+                                        </td>
+                                        <td class="text-center font-monospace small text-muted">
+                                            {% if reajuste.periodo_referencia_inicio %}
+                                                {{ reajuste.periodo_referencia_inicio|date:"m/Y" }}–{{ reajuste.periodo_referencia_fim|date:"m/Y" }}
+                                            {% else %}—{% endif %}
+                                        </td>
+                                        <td class="text-end text-muted">
+                                            {% if reajuste.percentual_bruto %}{{ reajuste.percentual_bruto|floatformat:2 }}%{% else %}—{% endif %}
+                                        </td>
+                                        <td class="text-end fw-bold">
+                                            {% if reajuste.percentual >= 0 %}
+                                            <span class="text-success">+{{ reajuste.percentual|floatformat:2 }}%</span>
+                                            {% else %}
+                                            <span class="text-danger">{{ reajuste.percentual|floatformat:2 }}%</span>
+                                            {% endif %}
+                                            {% if reajuste.desconto_percentual %}
+                                            <br><small class="text-danger fw-normal">−{{ reajuste.desconto_percentual|floatformat:2 }} p.p.</small>
+                                            {% endif %}
+                                            {% if reajuste.desconto_valor %}
+                                            <br><small class="text-danger fw-normal">−R${{ reajuste.desconto_valor|floatformat:2 }}</small>
+                                            {% endif %}
+                                            {% if reajuste.teto_aplicado and reajuste.percentual_bruto and reajuste.percentual < reajuste.percentual_bruto %}
+                                            <br><small class="text-warning fw-normal" title="Teto de {{ reajuste.teto_aplicado }}% aplicado"><i class="fas fa-arrow-down"></i> teto</small>
+                                            {% endif %}
+                                            {% if reajuste.piso_aplicado and reajuste.percentual_bruto and reajuste.percentual > reajuste.percentual_bruto %}
+                                            <br><small class="text-info fw-normal" title="Piso de {{ reajuste.piso_aplicado }}% aplicado"><i class="fas fa-arrow-up"></i> piso</small>
+                                            {% endif %}
+                                        </td>
+                                        <td class="font-monospace small">{{ reajuste.parcela_inicial }}–{{ reajuste.parcela_final }}</td>
+                                        <td class="small">{{ reajuste.data_reajuste|date:"d/m/Y" }}</td>
+                                        <td class="small text-muted">
+                                            {% if reajuste.usuario %}{{ reajuste.usuario.get_short_name|default:reajuste.usuario.username }}{% else %}—{% endif %}
+                                        </td>
+                                        <td>
+                                            <button type="button" class="btn btn-sm btn-outline-danger"
+                                                    onclick="excluirReajuste({{ reajuste.pk }}, '{{ reajuste.ciclo }}', '{{ reajuste.percentual|floatformat:2 }}')"
+                                                    title="Desfazer reajuste e reverter parcelas">
+                                                <i class="fas fa-undo"></i>
+                                            </button>
+                                        </td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                        {% else %}
+                        <div class="p-3 text-center text-muted">
+                            <i class="fas fa-info-circle"></i> Nenhum reajuste aplicado
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>
+
+                <!-- Q-04: Tabela de Juros Escalantes -->
+                <div class="card mb-3" style="border-left:4px solid #0dcaf0;">
+                    <div class="card-header bg-dark text-white d-flex justify-content-between align-items-center">
+                        <span><i class="fas fa-percentage"></i> Juros Escalantes</span>
+                        <button type="button" class="btn btn-sm btn-light" data-bs-toggle="collapse" data-bs-target="#formAddJuros">
+                            <i class="fas fa-plus"></i> Adicionar Faixa
+                        </button>
+                    </div>
+                    <!-- Formulário inline (colapsável) -->
+                    <div id="formAddJuros" class="collapse border-bottom">
+                        <div class="card-body bg-light">
+                            <div class="row g-2 align-items-end">
+                                <div class="col">
+                                    <label class="form-label form-label-sm mb-1">Ciclo Início</label>
+                                    <input type="number" id="juros_ciclo_inicio" class="form-control form-control-sm" min="1" placeholder="1">
+                                </div>
+                                <div class="col">
+                                    <label class="form-label form-label-sm mb-1">Ciclo Fim</label>
+                                    <input type="number" id="juros_ciclo_fim" class="form-control form-control-sm" min="1" placeholder="∞">
+                                </div>
+                                <div class="col">
+                                    <label class="form-label form-label-sm mb-1">Juros % a.m.</label>
+                                    <input type="number" id="juros_mensal" class="form-control form-control-sm" step="0.0001" min="0" placeholder="0.5">
+                                </div>
+                                <div class="col-12 col-sm-auto">
+                                    <label class="form-label form-label-sm mb-1">Observações</label>
+                                    <input type="text" id="juros_observacoes" class="form-control form-control-sm" maxlength="200" placeholder="Opcional">
+                                </div>
+                                <div class="col-auto">
+                                    <button type="button" class="btn btn-sm btn-primary" onclick="salvarFaixaJuros()">
+                                        <i class="fas fa-save"></i> Salvar
+                                    </button>
+                                </div>
+                            </div>
+                            <div id="juros_erro" class="text-danger small mt-1 d-none"></div>
+                        </div>
+                    </div>
+                    <div class="card-body p-0">
+                        <div id="tabela-juros-container">
+                            {% if tabela_juros %}
+                            <table class="table table-sm table-hover mb-0" style="font-size:0.80rem;">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th class="text-center">Ciclo Início</th>
+                                        <th class="text-center">Ciclo Fim</th>
+                                        <th class="text-end">Juros % a.m.</th>
+                                        <th>Observações</th>
+                                        <th></th>
+                                    </tr>
+                                </thead>
+                                <tbody id="tabela-juros-body">
+                                    {% for faixa in tabela_juros %}
+                                    <tr id="juros-row-{{ faixa.pk }}">
+                                        <td class="text-center">{{ faixa.ciclo_inicio }}</td>
+                                        <td class="text-center">{% if faixa.ciclo_fim %}{{ faixa.ciclo_fim }}{% else %}&infin;{% endif %}</td>
+                                        <td class="text-end">{{ faixa.juros_mensal|floatformat:4 }}%</td>
+                                        <td class="text-muted small">{{ faixa.observacoes|default:"—" }}</td>
+                                        <td class="text-center">
+                                            <button type="button" class="btn btn-xs btn-outline-danger"
+                                                    onclick="excluirFaixaJuros({{ faixa.pk }})"
+                                                    title="Remover faixa">
+                                                <i class="fas fa-trash"></i>
+                                            </button>
+                                        </td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                            {% else %}
+                            <div class="p-3 text-center text-muted" id="juros-vazio">
+                                <i class="fas fa-info-circle"></i> Nenhuma faixa de juros configurada (usa juros padrão do contrato)
+                            </div>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Coluna Direita: Parcelas -->
+            <div class="col-lg-7">
+                <div class="card">
+                    <div class="card-header bg-dark text-white d-flex justify-content-between align-items-center">
+                        <span><i class="fas fa-list"></i> Parcelas</span>
+                        <div class="d-flex align-items-center gap-2">
+                            {% if proxima_parcela %}
+                            <span class="badge bg-warning text-dark">
+                                Proxima: {{ proxima_parcela.data_vencimento|date:"d/m/Y" }}
+                            </span>
+                            {% endif %}
+                            {% if tabela_juros %}
+                            <button type="button" class="btn btn-sm btn-outline-light"
+                                    id="btn-toggle-amort"
+                                    onclick="toggleColunaAmort()"
+                                    title="Exibir/ocultar breakdown de amortização e juros">
+                                <i class="fas fa-calculator"></i> Amort/Juros
+                            </button>
+                            {% endif %}
+                            <button type="button" class="btn btn-sm btn-success" onclick="abrirModalCarne()">
+                                <i class="fas fa-file-invoice-dollar"></i> Gerar Carne
+                            </button>
+                            <form method="post" action="{% url 'financeiro:download_zip_boletos' contrato.pk %}" style="display:inline;">
+                                {% csrf_token %}
+                                <button type="submit" class="btn btn-sm btn-outline-secondary" title="Baixar todos os boletos em ZIP">
+                                    <i class="fas fa-file-archive"></i> ZIP
+                                </button>
+                            </form>
+                        </div>
+                    </div>
+                    <div class="card-body p-0">
+                        <div class="table-responsive" style="max-height: 600px; overflow-y: auto;">
+                            <table class="table table-sm table-hover mb-0">
+                                <thead class="table-light sticky-top">
+                                    <tr>
+                                        <th class="text-center">#</th>
+                                        <th>Vencimento</th>
+                                        <th class="text-end">Valor</th>
+                                        <th class="text-end col-amort d-none" title="Amortização do principal">Amort.</th>
+                                        <th class="text-end col-amort d-none" title="Juros embutidos na parcela">Juros</th>
+                                        <th class="text-center">Boleto</th>
+                                        <th class="text-center">Status</th>
+                                        <th class="text-center">Acoes</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for parcela in parcelas %}
+                                    <tr class="parcela-row {% if parcela.pago %}paga{% elif parcela.esta_atrasada %}atrasada{% elif parcela == proxima_parcela %}proxima{% endif %}">
+                                        <td class="text-center">
+                                            <strong>{{ parcela.numero_parcela }}</strong>
+                                        </td>
+                                        <td>{{ parcela.data_vencimento|date:"d/m/Y" }}</td>
+                                        <td class="text-end">
+                                            {{ parcela.valor_atual|moeda }}
+                                            {% if parcela.pago %}
+                                            <br><small class="text-muted">Pago: {{ parcela.valor_pago|moeda }}</small>
+                                            {% endif %}
+                                        </td>
+                                        <td class="text-end font-monospace col-amort d-none" style="font-size:0.8rem;">
+                                            {% if parcela.amortizacao %}{{ parcela.amortizacao|floatformat:2 }}{% else %}—{% endif %}
+                                        </td>
+                                        <td class="text-end font-monospace col-amort d-none" style="font-size:0.8rem;color:#6c757d;">
+                                            {% if parcela.juros_embutido %}{{ parcela.juros_embutido|floatformat:2 }}{% else %}—{% endif %}
+                                        </td>
+                                        <td class="text-center">
+                                            {% if parcela.tem_boleto %}
+                                                <span class="badge bg-success" title="Boleto gerado"><i class="fas fa-barcode"></i></span>
+                                                {% if parcela.linha_digitavel %}
+                                                <div class="mt-1 d-flex align-items-center justify-content-center gap-1">
+                                                    <span class="font-monospace text-muted" style="font-size:0.65rem;max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="{{ parcela.linha_digitavel }}">{{ parcela.linha_digitavel }}</span>
+                                                    <button type="button" class="btn btn-link btn-sm p-0 text-secondary"
+                                                            onclick="copiarLinhaDigitavel('{{ parcela.linha_digitavel|escapejs }}')"
+                                                            title="Copiar linha digitável">
+                                                        <i class="fas fa-copy" style="font-size:0.75rem;"></i>
+                                                    </button>
+                                                </div>
+                                                {% endif %}
+                                            {% else %}
+                                                <span class="badge bg-secondary" title="Sem boleto">
+                                                    <i class="fas fa-minus"></i>
+                                                </span>
+                                            {% endif %}
+                                        </td>
+                                        <td class="text-center">
+                                            {% if parcela.pago %}
+                                                <span class="badge bg-success">
+                                                    <i class="fas fa-check"></i> Pago
+                                                </span>
+                                                <br><small>{{ parcela.data_pagamento|date:"d/m/Y" }}</small>
+                                            {% elif parcela.esta_atrasada %}
+                                                <span class="badge bg-danger">
+                                                    <i class="fas fa-exclamation-triangle"></i> {{ parcela.dias_atraso }}d
+                                                </span>
+                                            {% else %}
+                                                <span class="badge bg-secondary">
+                                                    <i class="fas fa-clock"></i> Pendente
+                                                </span>
+                                            {% endif %}
+                                        </td>
+                                        <td class="text-center">
+                                            <div class="btn-group btn-group-sm">
+                                                {% if not parcela.pago %}
+                                                    {% if parcela.tem_boleto %}
+                                                        <button type="button" class="btn btn-outline-primary"
+                                                                onclick="abrirModalBoleto({{ parcela.pk }})" title="Ver Boleto">
+                                                            <i class="fas fa-eye"></i>
+                                                        </button>
+                                                        <button type="button" class="btn btn-outline-info"
+                                                                onclick="abrirModalCompartilhar({{ parcela.pk }}, '{{ parcela.linha_digitavel|escapejs }}', {{ parcela.numero_parcela }}, '{{ parcela.data_vencimento|date:"d/m/Y" }}', '{{ parcela.valor_atual|stringformat:"f" }}')"
+                                                                title="Compartilhar Boleto">
+                                                            <i class="fas fa-share-alt"></i>
+                                                        </button>
+                                                        <button type="button" class="btn btn-outline-warning"
+                                                                onclick="regenerarBoleto({{ parcela.pk }}, this)" title="Atualizar Boleto">
+                                                            <i class="fas fa-sync"></i>
+                                                        </button>
+                                                    {% else %}
+                                                        <button type="button" class="btn btn-outline-success"
+                                                                onclick="gerarBoleto({{ parcela.pk }}, this)" title="Gerar Boleto">
+                                                            <i class="fas fa-barcode"></i>
+                                                        </button>
+                                                    {% endif %}
+                                                    <button type="button" class="btn btn-outline-success"
+                                                            onclick="abrirModalPagamento({{ parcela.pk }}, '{{ parcela.data_vencimento|date:"Y-m-d" }}', '{{ parcela.valor_atual|stringformat:"f" }}', '{{ contrato.percentual_juros_mora|stringformat:"f" }}', '{{ contrato.percentual_multa|stringformat:"f" }}')"
+                                                            title="Registrar Pagamento">
+                                                        <i class="fas fa-dollar-sign"></i>
+                                                    </button>
+                                                {% else %}
+                                                    <span class="text-success" title="Parcela quitada">
+                                                        <i class="fas fa-check-circle"></i>
+                                                    </span>
+                                                {% endif %}
+                                            </div>
+                                        </td>
+                                    </tr>
+                                    {% empty %}
+                                    <tr>
+                                        <td colspan="8" class="text-center text-muted py-4">
+                                            <i class="fas fa-info-circle"></i> Nenhuma parcela gerada
+                                        </td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Prestações Intermediárias (HU-13) -->
+                {% if total_intermediarias > 0 %}
+                <div class="card mt-3">
+                    <div class="card-header bg-warning text-dark d-flex justify-content-between align-items-center">
+                        <span><i class="fas fa-hand-holding-usd"></i> Prestações Intermediárias</span>
+                        <div>
+                            <span class="badge bg-success me-1">{{ intermediarias_pagas }} pagas</span>
+                            <span class="badge bg-secondary me-1">{{ intermediarias_pendentes }} pendentes</span>
+                            {% if intermediarias_vencidas_sem_boleto %}
+                            <span class="badge bg-danger">{{ intermediarias_vencidas_sem_boleto|length }} vencidas</span>
+                            {% endif %}
+                            <a href="{% url 'contratos:intermediarias_listar' contrato.pk %}" class="btn btn-sm btn-outline-dark ms-2">
+                                <i class="fas fa-list"></i> Ver todas
+                            </a>
+                        </div>
+                    </div>
+                    <div class="table-responsive">
+                        <table class="table table-sm mb-0">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>#</th>
+                                    <th>Mês</th>
+                                    <th>Valor</th>
+                                    <th>Situação</th>
+                                    <th></th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for inter in intermediarias|slice:":10" %}
+                                <tr class="{% if not inter.paga and intermediarias_vencidas_sem_boleto and inter in intermediarias_vencidas_sem_boleto %}table-danger{% endif %}">
+                                    <td>{{ inter.numero_sequencial }}</td>
+                                    <td>Mês {{ inter.mes_vencimento }}</td>
+                                    <td>{{ inter.valor|moeda }}</td>
+                                    <td>
+                                        {% if inter.paga %}
+                                        <span class="badge bg-success">Paga</span>
+                                        {% elif inter.parcela_vinculada %}
+                                        <span class="badge bg-info">Boleto gerado</span>
+                                        {% else %}
+                                        <span class="badge bg-secondary">Pendente</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        {% if not inter.paga and not inter.parcela_vinculada %}
+                                        <button class="btn btn-xs btn-outline-primary btn-gerar-boleto-inter"
+                                                data-inter-id="{{ inter.pk }}"
+                                                title="Gerar boleto">
+                                            <i class="fas fa-barcode"></i>
+                                        </button>
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                                {% if total_intermediarias > 10 %}
+                                <tr>
+                                    <td colspan="5" class="text-center text-muted small py-2">
+                                        <a href="{% url 'contratos:intermediarias_listar' contrato.pk %}">
+                                            + {{ total_intermediarias|add:"-10" }} mais &rarr;
+                                        </a>
+                                    </td>
+                                </tr>
+                                {% endif %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+                {% endif %}
+
+                <!-- Observacoes -->
+                {% if contrato.observacoes %}
+                <div class="card mt-3">
+                    <div class="card-header bg-light">
+                        <i class="fas fa-sticky-note"></i> Observacoes
+                    </div>
+                    <div class="card-body">
+                        <p class="mb-0">{{ contrato.observacoes|linebreaks }}</p>
+                    </div>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- 3.2 Aba Boletos Gerados -->
+        {% with boletos=parcelas|dictsort:"numero_parcela" %}
+        {% if parcelas %}
+        <div class="card mt-4">
+            <div class="card-header bg-success text-white d-flex justify-content-between align-items-center">
+                <span><i class="fas fa-barcode"></i> Boletos Gerados</span>
+                <span class="badge bg-light text-dark" id="badgeTotalBoletos">—</span>
+            </div>
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-sm table-hover mb-0" id="tabelaBoletos">
+                        <thead class="table-light">
+                            <tr>
+                                <th class="text-center">#</th>
+                                <th>Vencimento</th>
+                                <th class="text-end">Valor</th>
+                                <th>Nosso Número</th>
+                                <th>Linha Digitável</th>
+                                <th class="text-center">Status</th>
+                                <th class="text-center">Ações</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for parcela in parcelas %}
+                            {% if parcela.tem_boleto %}
+                            <tr>
+                                <td class="text-center"><strong>{{ parcela.numero_parcela }}</strong></td>
+                                <td>{{ parcela.data_vencimento|date:"d/m/Y" }}</td>
+                                <td class="text-end">{{ parcela.valor_atual|moeda }}</td>
+                                <td>
+                                    {% if parcela.nosso_numero %}
+                                    <span class="font-monospace small text-muted">{{ parcela.get_nosso_numero_formatado }}</span>
+                                    {% else %}-{% endif %}
+                                </td>
+                                <td>
+                                    {% if parcela.linha_digitavel %}
+                                    <div class="d-flex align-items-center gap-1">
+                                        <span class="font-monospace text-muted" style="font-size:0.7rem;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="{{ parcela.linha_digitavel }}">{{ parcela.linha_digitavel }}</span>
+                                        <button type="button" class="btn btn-link btn-sm p-0 text-secondary"
+                                                onclick="copiarLinhaDigitavel('{{ parcela.linha_digitavel|escapejs }}')"
+                                                title="Copiar linha digitável">
+                                            <i class="fas fa-copy" style="font-size:0.75rem;"></i>
+                                        </button>
+                                    </div>
+                                    {% else %}-{% endif %}
+                                </td>
+                                <td class="text-center">
+                                    {% if parcela.status_boleto == 'PAGO' %}
+                                        <span class="badge bg-success">Pago</span>
+                                    {% elif parcela.status_boleto == 'GERADO' %}
+                                        <span class="badge bg-primary">Gerado</span>
+                                    {% elif parcela.status_boleto == 'REGISTRADO' %}
+                                        <span class="badge bg-info text-dark">Registrado</span>
+                                    {% elif parcela.status_boleto == 'VENCIDO' %}
+                                        <span class="badge bg-warning text-dark">Vencido</span>
+                                    {% elif parcela.status_boleto == 'CANCELADO' %}
+                                        <span class="badge bg-secondary">Cancelado</span>
+                                    {% elif parcela.status_boleto == 'PROTESTADO' %}
+                                        <span class="badge bg-danger">Protestado</span>
+                                    {% else %}
+                                        <span class="badge bg-secondary">{{ parcela.status_boleto }}</span>
+                                    {% endif %}
+                                </td>
+                                <td class="text-center">
+                                    <div class="btn-group btn-group-sm">
+                                        <a href="{% url 'financeiro:visualizar_boleto' parcela.pk %}"
+                                           class="btn btn-outline-primary" title="Visualizar" target="_blank">
+                                            <i class="fas fa-eye"></i>
+                                        </a>
+                                        <a href="{% url 'financeiro:download_boleto' parcela.pk %}"
+                                           class="btn btn-outline-success" title="Download PDF">
+                                            <i class="fas fa-download"></i>
+                                        </a>
+                                        {% if parcela.status_boleto != 'CANCELADO' and parcela.status_boleto != 'PAGO' %}
+                                        <button type="button" class="btn btn-outline-danger"
+                                                onclick="cancelarBoleto({{ parcela.pk }})" title="Cancelar Boleto">
+                                            <i class="fas fa-times"></i>
+                                        </button>
+                                        {% endif %}
+                                    </div>
+                                </td>
+                            </tr>
+                            {% endif %}
+                            {% endfor %}
+                            {% comment %}If no boleto rows were rendered{% endcomment %}
+                        </tbody>
+                    </table>
+                </div>
+                <div id="semBoletos" class="p-3 text-center text-muted d-none">
+                    <i class="fas fa-info-circle"></i> Nenhum boleto gerado para este contrato.
+                </div>
+            </div>
+        </div>
+        {% endif %}
+        {% endwith %}
+
+        <!-- 3.19 Histórico de Pagamentos -->
+        {% if historico_pagamentos %}
+        <div class="card mt-4">
+            <div class="card-header bg-dark text-white d-flex justify-content-between align-items-center">
+                <span><i class="fas fa-history me-1"></i> Histórico de Pagamentos</span>
+                <span class="badge bg-light text-dark">{{ historico_pagamentos|length }} registro(s)</span>
+            </div>
+            <div class="card-body p-0">
+                <div class="table-responsive" style="max-height:400px;overflow-y:auto;">
+                    <table class="table table-sm table-hover mb-0">
+                        <thead class="table-light sticky-top">
+                            <tr>
+                                <th class="text-center">#</th>
+                                <th>Data Pgto</th>
+                                <th class="text-end">Valor Pago</th>
+                                <th class="text-end">Juros</th>
+                                <th class="text-end">Multa</th>
+                                <th>Forma</th>
+                                <th class="text-center">Comprovante</th>
+                                <th>Obs.</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for h in historico_pagamentos %}
+                            <tr>
+                                <td class="text-center text-muted">{{ h.parcela.numero_parcela }}</td>
+                                <td>{{ h.data_pagamento|date:"d/m/Y" }}</td>
+                                <td class="text-end fw-semibold text-success">R$ {{ h.valor_pago|floatformat:2 }}</td>
+                                <td class="text-end {% if h.valor_juros %}text-danger{% else %}text-muted{% endif %}">
+                                    {% if h.valor_juros %}R$ {{ h.valor_juros|floatformat:2 }}{% else %}—{% endif %}
+                                </td>
+                                <td class="text-end {% if h.valor_multa %}text-danger{% else %}text-muted{% endif %}">
+                                    {% if h.valor_multa %}R$ {{ h.valor_multa|floatformat:2 }}{% else %}—{% endif %}
+                                </td>
+                                <td>
+                                    <span class="badge bg-secondary">{{ h.get_forma_pagamento_display }}</span>
+                                </td>
+                                <td class="text-center">
+                                    {% if h.comprovante %}
+                                    <a href="{{ h.comprovante.url }}" target="_blank" class="btn btn-xs btn-outline-primary"
+                                       style="font-size:.75rem;padding:2px 7px;" title="Ver comprovante">
+                                        <i class="fas fa-paperclip"></i>
+                                    </a>
+                                    {% else %}
+                                    <span class="text-muted small">—</span>
+                                    {% endif %}
+                                </td>
+                                <td class="text-muted small">{{ h.observacoes|truncatechars:40 }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- 3.18 Aba Relatórios do Contrato -->
+        <div class="card mt-4" id="card-relatorios">
+            <div class="card-header d-flex justify-content-between align-items-center"
+                 style="background:linear-gradient(135deg,#1565c0,#1976d2);color:#fff;cursor:pointer;"
+                 data-bs-toggle="collapse" data-bs-target="#relatorios-body" aria-expanded="false">
+                <span><i class="fas fa-chart-bar me-2"></i> Relatórios &amp; Exportações</span>
+                <i class="fas fa-chevron-down" id="relatorios-chevron"
+                   style="transition:transform 0.25s;"></i>
+            </div>
+            <div class="collapse" id="relatorios-body">
+                <div class="card-body">
+
+                    <!-- KPIs financeiros -->
+                    <div class="row mb-4 g-3">
+                        <div class="col-6 col-md-3">
+                            <div class="text-center p-3 rounded" style="background:#e8f5e9;">
+                                <div class="fs-5 fw-bold text-success">
+                                    R$ {{ contrato.valor_total_contrato|floatformat:2|default:"—" }}
+                                </div>
+                                <div class="small text-muted mt-1">Valor Total do Contrato</div>
+                            </div>
+                        </div>
+                        <div class="col-6 col-md-3">
+                            <div class="text-center p-3 rounded" style="background:#e3f2fd;">
+                                <div class="fs-5 fw-bold text-primary">
+                                    R$ {{ valor_pago|floatformat:2|default:"—" }}
+                                </div>
+                                <div class="small text-muted mt-1">Total Pago</div>
+                            </div>
+                        </div>
+                        <div class="col-6 col-md-3">
+                            <div class="text-center p-3 rounded" style="background:#fff3e0;">
+                                <div class="fs-5 fw-bold text-warning">
+                                    R$ {{ saldo_devedor|floatformat:2|default:"—" }}
+                                </div>
+                                <div class="small text-muted mt-1">Saldo Devedor</div>
+                            </div>
+                        </div>
+                        <div class="col-6 col-md-3">
+                            <div class="text-center p-3 rounded" style="background:#f3e5f5;">
+                                <div class="fs-5 fw-bold" style="color:#7b1fa2;">
+                                    {{ progresso|floatformat:0|default:"0" }}%
+                                </div>
+                                <div class="small text-muted mt-1">Progresso</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Export buttons -->
+                    <div class="row g-2">
+                        <div class="col-12">
+                            <p class="text-muted small mb-2">
+                                <i class="fas fa-info-circle me-1"></i>
+                                Exportações filtradas por este contrato ({{ contrato.numero_contrato }})
+                            </p>
+                        </div>
+                        <div class="col-auto">
+                            <a href="{% url 'financeiro:exportar_relatorio' 'prestacoes_a_pagar' %}?contrato={{ contrato.pk }}&formato=csv"
+                               class="btn btn-sm btn-outline-primary">
+                                <i class="fas fa-file-csv me-1"></i>
+                                Parcelas a Pagar (CSV)
+                            </a>
+                        </div>
+                        <div class="col-auto">
+                            <a href="{% url 'financeiro:exportar_relatorio' 'prestacoes_pagas' %}?contrato={{ contrato.pk }}&formato=csv"
+                               class="btn btn-sm btn-outline-success">
+                                <i class="fas fa-file-csv me-1"></i>
+                                Parcelas Pagas (CSV)
+                            </a>
+                        </div>
+                        <div class="col-auto">
+                            <a href="{% url 'financeiro:exportar_relatorio' 'posicao_contratos' %}?contrato={{ contrato.pk }}&formato=csv"
+                               class="btn btn-sm btn-outline-secondary">
+                                <i class="fas fa-file-csv me-1"></i>
+                                Posição do Contrato (CSV)
+                            </a>
+                        </div>
+                        <div class="col-auto">
+                            <button type="button" class="btn btn-sm btn-outline-dark" onclick="window.print()">
+                                <i class="fas fa-print me-1"></i>
+                                Imprimir Página
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Botoes de Acao -->
+        <div class="card mt-4">
+            <div class="card-body d-flex justify-content-between">
+                <a href="{% url 'contratos:listar' %}" class="btn btn-secondary">
+                    <i class="fas fa-arrow-left"></i> Voltar para Lista
+                </a>
+                <div class="d-flex flex-wrap gap-2">
+                    <a href="{% url 'contratos:editar' contrato.pk %}" class="btn btn-primary">
+                        <i class="fas fa-edit"></i> Editar Contrato
+                    </a>
+                    {% if contrato.status != 'CANCELADO' %}
+                    <a href="{% url 'financeiro:simulador_antecipacao' contrato.pk %}" class="btn btn-outline-success">
+                        <i class="fas fa-forward me-1"></i> Simular Antecipação
+                    </a>
+                    <a href="{% url 'financeiro:recibo_antecipacao' contrato.pk %}" class="btn btn-outline-info"
+                       title="Baixar recibo das últimas antecipações">
+                        <i class="fas fa-file-pdf me-1"></i> Recibo Antecipação
+                    </a>
+                    <a href="{% url 'financeiro:renegociar_parcelas' contrato.pk %}" class="btn btn-outline-warning"
+                       title="Renegociar parcelas em atraso">
+                        <i class="fas fa-handshake me-1"></i> Renegociar
+                    </a>
+                    <a href="{% url 'contratos:calcular_rescisao' contrato.pk %}" class="btn btn-outline-danger">
+                        <i class="fas fa-file-contract me-1"></i> Calcular Rescisão
+                    </a>
+                    <a href="{% url 'contratos:calcular_cessao' contrato.pk %}" class="btn btn-outline-warning">
+                        <i class="fas fa-exchange-alt me-1"></i> Calcular Cessão
+                    </a>
+                    <button type="button" class="btn btn-danger" onclick="confirmarCancelamento()">
+                        <i class="fas fa-ban"></i> Cancelar Contrato
+                    </button>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Compartilhar Boleto -->
+<div class="modal fade" id="modalCompartilhar" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header bg-info text-white">
+                <h5 class="modal-title">
+                    <i class="fas fa-share-alt me-2"></i>Compartilhar Boleto
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <!-- Linha Digitável -->
+                <div class="mb-4">
+                    <label class="form-label fw-bold">Linha Digitável</label>
+                    <div class="input-group">
+                        <input type="text" class="form-control font-monospace" id="compartilharLinhaDigitavel" readonly>
+                        <button class="btn btn-outline-secondary" type="button" onclick="copiarCampo('compartilharLinhaDigitavel', this)">
+                            <i class="fas fa-copy"></i> Copiar
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Compartilhar via WhatsApp -->
+                <div class="mb-3">
+                    <label class="form-label fw-bold">Enviar por WhatsApp</label>
+                    <div class="d-flex gap-2 flex-wrap">
+                        <a id="btnWhatsAppComprador" href="#" target="_blank" rel="noopener"
+                           class="btn btn-success flex-fill">
+                            <i class="fab fa-whatsapp me-2"></i>Enviar ao Comprador
+                        </a>
+                        <a id="btnWhatsAppLink" href="#" target="_blank" rel="noopener"
+                           class="btn btn-outline-success flex-fill">
+                            <i class="fab fa-whatsapp me-2"></i>Outro número
+                        </a>
+                    </div>
+                    <small class="text-muted mt-1 d-block" id="infoWhatsApp"></small>
+                </div>
+
+                <!-- Compartilhar via E-mail -->
+                <div class="mb-2">
+                    <label class="form-label fw-bold">Enviar por E-mail</label>
+                    <div class="d-flex gap-2 flex-wrap">
+                        <a id="btnEmailComprador" href="#"
+                           class="btn btn-primary flex-fill">
+                            <i class="fas fa-envelope me-2"></i>Enviar ao Comprador
+                        </a>
+                        <button type="button" class="btn btn-outline-primary flex-fill"
+                                onclick="copiarMensagemEmail()">
+                            <i class="fas fa-copy me-2"></i>Copiar mensagem
+                        </button>
+                    </div>
+                    <small class="text-muted mt-1 d-block" id="infoEmail"></small>
+                </div>
+
+                <!-- Link do Boleto -->
+                <div class="mt-3 pt-3 border-top">
+                    <label class="form-label fw-bold">Link do Boleto</label>
+                    <div class="input-group">
+                        <input type="text" class="form-control" id="compartilharLinkBoleto" readonly>
+                        <button class="btn btn-outline-secondary" type="button" onclick="copiarCampo('compartilharLinkBoleto', this)">
+                            <i class="fas fa-copy"></i>
+                        </button>
+                        <a id="btnAbrirBoleto" href="#" target="_blank" class="btn btn-outline-info">
+                            <i class="fas fa-external-link-alt"></i>
+                        </a>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Fechar</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal de Cancelamento -->
+<div class="modal fade" id="modalCancelamento" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-danger text-white">
+                <h5 class="modal-title">
+                    <i class="fas fa-exclamation-triangle"></i> Confirmar Cancelamento
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p>Tem certeza que deseja cancelar o contrato <strong>{{ contrato.numero_contrato }}</strong>?</p>
+                {% if parcelas_pagas > 0 %}
+                <div class="alert alert-danger">
+                    <i class="fas fa-exclamation-circle"></i>
+                    <strong>Atencao:</strong> Este contrato possui {{ parcelas_pagas }} parcela(s) paga(s).
+                    O cancelamento NAO sera permitido.
+                </div>
+                {% else %}
+                <p class="text-warning">
+                    <i class="fas fa-info-circle"></i> O imovel sera liberado para novas vendas.
+                </p>
+                {% endif %}
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                    Voltar
+                </button>
+                {% if parcelas_pagas == 0 %}
+                <form action="{% url 'contratos:excluir' contrato.pk %}" method="post" style="display: inline;">
+                    {% csrf_token %}
+                    <button type="submit" class="btn btn-danger">
+                        <i class="fas fa-ban"></i> Confirmar Cancelamento
+                    </button>
+                </form>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal de Pagamento -->
+<div class="modal fade" id="modalPagamento" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header bg-success text-white">
+                <h5 class="modal-title">
+                    <i class="fas fa-dollar-sign"></i> Registrar Pagamento
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <form id="formPagamento" method="post">
+                {% csrf_token %}
+                <input type="hidden" id="pagamento_parcela_id" name="parcela_id">
+                <div class="modal-body">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label class="form-label">Data de Vencimento</label>
+                                <input type="date" class="form-control" id="pagamento_vencimento" readonly>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label class="form-label">Data de Pagamento <span class="text-danger">*</span></label>
+                                <input type="date" class="form-control" id="pagamento_data" name="data_pagamento" required onchange="calcularEncargos()">
+                            </div>
+                        </div>
+                    </div>
+                    <div class="row">
+                        <div class="col-md-4">
+                            <div class="mb-3">
+                                <label class="form-label">Valor Original</label>
+                                <div class="input-group">
+                                    <span class="input-group-text">R$</span>
+                                    <input type="text" class="form-control" id="pagamento_valor_original" readonly>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="mb-3">
+                                <label class="form-label">Juros (editavel)</label>
+                                <div class="input-group">
+                                    <span class="input-group-text">R$</span>
+                                    <input type="number" step="0.01" class="form-control" id="pagamento_juros" name="valor_juros" value="0" onchange="calcularTotal()">
+                                </div>
+                                <small class="text-muted" id="juros_info"></small>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="mb-3">
+                                <label class="form-label">Multa (editavel)</label>
+                                <div class="input-group">
+                                    <span class="input-group-text">R$</span>
+                                    <input type="number" step="0.01" class="form-control" id="pagamento_multa" name="valor_multa" value="0" onchange="calcularTotal()">
+                                </div>
+                                <small class="text-muted" id="multa_info"></small>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label class="form-label">Desconto (editavel)</label>
+                                <div class="input-group">
+                                    <span class="input-group-text">R$</span>
+                                    <input type="number" step="0.01" class="form-control" id="pagamento_desconto" name="valor_desconto" value="0" onchange="calcularTotal()">
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label class="form-label fw-bold">Valor a Pagar</label>
+                                <div class="input-group">
+                                    <span class="input-group-text">R$</span>
+                                    <input type="number" step="0.01" class="form-control fw-bold fs-5" id="pagamento_valor_pagar" name="valor_pago" required>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label class="form-label">Forma de Pagamento</label>
+                                <select class="form-select" name="forma_pagamento">
+                                    <option value="DINHEIRO">Dinheiro</option>
+                                    <option value="PIX">PIX</option>
+                                    <option value="TRANSFERENCIA">Transferência Bancária</option>
+                                    <option value="BOLETO">Boleto</option>
+                                    <option value="CARTAO_CREDITO">Cartão de Crédito</option>
+                                    <option value="CARTAO_DEBITO">Cartão de Débito</option>
+                                    <option value="CHEQUE">Cheque</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label class="form-label">Observações</label>
+                                <textarea class="form-control" name="observacoes" rows="2"></textarea>
+                            </div>
+                        </div>
+                    </div>
+                    <div id="alertaAtraso" class="alert alert-warning d-none">
+                        <i class="fas fa-exclamation-triangle"></i>
+                        <span id="alertaAtrasoTexto"></span>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-success">
+                        <i class="fas fa-check"></i> Confirmar Pagamento
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Modal de Gerar Carne -->
+<div class="modal fade" id="modalCarne" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header bg-primary text-white">
+                <h5 class="modal-title">
+                    <i class="fas fa-file-invoice-dollar"></i> Gerar Boletos
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <form id="formCarne" method="post">
+                {% csrf_token %}
+                <div class="modal-body">
+                    <!-- Informacoes do Ciclo de Reajuste -->
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <div class="card bg-light">
+                                <div class="card-body py-2">
+                                    <small class="text-muted d-block">Tipo de Correcao</small>
+                                    <strong>{{ contrato.get_tipo_correcao_display }}</strong>
+                                    {% if contrato.tipo_correcao == 'FIXO' %}
+                                    <span class="badge bg-success ms-2">Sem reajuste</span>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="card bg-light">
+                                <div class="card-body py-2">
+                                    <small class="text-muted d-block">Prazo de Reajuste</small>
+                                    <strong>{{ contrato.prazo_reajuste_meses }} meses</strong>
+                                    {% if contrato.tipo_correcao != 'FIXO' %}
+                                    <small class="text-muted">(Ciclo atual: {{ contrato.ciclo_reajuste_atual|default:1 }})</small>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Alerta de Reajuste Necessario -->
+                    <div id="alertaReajusteInfo" class="alert alert-warning d-none">
+                        <div class="d-flex align-items-center">
+                            <i class="fas fa-sync-alt fa-2x me-3"></i>
+                            <div>
+                                <strong>Reajuste Necessario</strong>
+                                <p class="mb-0" id="alertaReajusteInfoTexto"></p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Resumo de Parcelas -->
+                    <div class="row mb-3">
+                        <div class="col-md-4">
+                            <div class="text-center p-2 border rounded bg-success bg-opacity-10">
+                                <div class="fs-4 fw-bold text-success" id="totalDisponiveis">-</div>
+                                <small>Disponiveis</small>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="text-center p-2 border rounded bg-warning bg-opacity-10">
+                                <div class="fs-4 fw-bold text-warning" id="totalBloqueadas">-</div>
+                                <small>Bloqueadas (reajuste)</small>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="text-center p-2 border rounded bg-info bg-opacity-10">
+                                <div class="fs-4 fw-bold text-info" id="totalJaGeradas">-</div>
+                                <small>Ja com boleto</small>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Selecao de Quantidade -->
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">Quantidade de Boletos a Gerar</label>
+                        <div class="input-group">
+                            <button type="button" class="btn btn-outline-secondary" onclick="setQuantidade(1)">1</button>
+                            <button type="button" class="btn btn-outline-secondary" onclick="setQuantidade(6)">6</button>
+                            <button type="button" class="btn btn-outline-secondary" onclick="setQuantidade(12)">12</button>
+                            <input type="number" class="form-control text-center" id="carne_quantidade" name="quantidade" min="1" value="1" required style="max-width: 100px;">
+                            <button type="button" class="btn btn-outline-primary" id="btnMaxDisponiveis" onclick="setQuantidadeMax()">Max</button>
+                        </div>
+                        <small class="text-muted" id="quantidadeInfo"></small>
+                    </div>
+
+                    <!-- Preview das Parcelas -->
+                    <div class="mb-3">
+                        <label class="form-label">Parcelas que serao geradas:</label>
+                        <div id="preview_parcelas" class="border rounded" style="max-height: 250px; overflow-y: auto;">
+                            <div class="text-center py-3 text-muted">
+                                <i class="fas fa-spinner fa-spin"></i> Carregando...
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Alerta de Bloqueio -->
+                    <div id="alertaReajuste" class="alert alert-danger d-none">
+                        <i class="fas fa-exclamation-triangle"></i>
+                        <span id="alertaReajusteTexto"></span>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-primary" id="btnGerarCarne" disabled>
+                        <i class="fas fa-barcode"></i> Gerar <span id="btnGerarQtd">0</span> Boleto(s)
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Modal de Visualizacao do Boleto -->
+<div class="modal fade" id="modalBoleto" tabindex="-1">
+    <div class="modal-dialog modal-xl">
+        <div class="modal-content">
+            <div class="modal-header bg-primary text-white">
+                <h5 class="modal-title">
+                    <i class="fas fa-barcode"></i> Dados do Boleto
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body p-0">
+                <iframe id="iframeBoleto" style="width: 100%; height: 70vh; border: none;"></iframe>
+            </div>
+            <div class="modal-footer">
+                <a id="btnDownloadBoleto" href="#" class="btn btn-primary" target="_blank">
+                    <i class="fas fa-download"></i> Download PDF
+                </a>
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Fechar</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script>
+// ── U-02: Timeline Visual de Ciclos ──────────────────────────────────────────
+(function() {
+    var container = document.getElementById('ciclos-timeline');
+    if (!container) return;
+
+    var prazo  = {{ prazo_reajuste|default:12 }};
+    var fixo   = '{{ contrato.tipo_correcao }}' === 'FIXO';
+    var hoje   = new Date().toISOString().slice(0,10);
+
+    // Build cycle map from reajustes context
+    var reajustesMap = {};
+    {% for r in reajustes %}
+    reajustesMap[{{ r.ciclo }}] = {
+        pct: {{ r.percentual|default:0|floatformat:4 }},
+        aplicado: {{ r.aplicado|yesno:"true,false" }},
+        data: '{{ r.data_reajuste|date:"d/m/Y"|default:"" }}'
+    };
+    {% endfor %}
+
+    // Collect parcelas per cycle
+    var cicloParcelas = {};
+    {% for ps in parcelas_status_boleto %}
+    var n = {{ ps.parcela.numero_parcela }};
+    var ciclo = Math.floor((n - 1) / prazo) + 1;
+    if (!cicloParcelas[ciclo]) cicloParcelas[ciclo] = {total:0, pagas:0, vencidas:0, pendentes:0, bloqueadas:0, primeiraNum:n, ultimaNum:n};
+    var c = cicloParcelas[ciclo];
+    c.total++;
+    c.ultimaNum = n;
+    {% if ps.parcela.pago %}c.pagas++;{% elif ps.parcela.data_vencimento|date:"Y-m-d" < "today" %}c.vencidas++;{% else %}c.pendentes++;{% endif %}
+    if (!{{ ps.pode_gerar_boleto|yesno:"true,false" }}) c.bloqueadas++;
+    {% endfor %}
+
+    var ciclos = Object.keys(cicloParcelas).map(Number).sort(function(a,b){return a-b;});
+    if (!ciclos.length) return;
+
+    // Render
+    var html = '<div style="display:flex;align-items:stretch;gap:0;position:relative;">';
+
+    ciclos.forEach(function(ciclo, idx) {
+        var c = cicloParcelas[ciclo];
+        var r = reajustesMap[ciclo] || null;
+
+        // Determine state
+        var allPagas   = c.pagas  === c.total;
+        var haVencidas = c.vencidas > 0;
+        var bloqueado  = c.bloqueadas > 0 && !allPagas;
+        var ativo      = !allPagas && !haVencidas && c.pendentes > 0;
+
+        // Colors
+        var bg, border, textColor;
+        if (allPagas)        { bg='#e8f5e9'; border='#4caf50'; textColor='#2e7d32'; }
+        else if (bloqueado)  { bg='#fff3e0'; border='#ff9800'; textColor='#e65100'; }
+        else if (haVencidas) { bg='#ffebee'; border='#f44336'; textColor='#c62828'; }
+        else if (ativo)      { bg='#e3f2fd'; border='#2196f3'; textColor='#1565c0'; }
+        else                 { bg='#f5f5f5'; border='#9e9e9e'; textColor='#616161'; }
+
+        var icon = allPagas ? '✓' : (bloqueado ? '⚠' : (haVencidas ? '!' : (ativo ? '▶' : '○')));
+        var labelCiclo = fixo ? '' : (r ? (r.pct >= 0 ? '+' : '') + r.pct.toFixed(2) + '%' : (ciclo === 1 ? '—' : 'Pendente'));
+
+        var connector = idx < ciclos.length - 1
+            ? '<div style="width:24px;flex-shrink:0;display:flex;align-items:center;justify-content:center;"><div style="height:2px;width:100%;background:' + border + ';opacity:.5;"></div></div>'
+            : '';
+
+        html += '<div style="flex:1;min-width:80px;max-width:160px;">' +
+            '<div style="background:' + bg + ';border:2px solid ' + border + ';border-radius:8px;padding:10px 8px;text-align:center;position:relative;">' +
+                '<div style="font-size:.65rem;color:' + textColor + ';font-weight:600;text-transform:uppercase;letter-spacing:.5px;">Ciclo ' + ciclo + '</div>' +
+                '<div style="font-size:1.3rem;font-weight:700;color:' + textColor + ';margin:2px 0;">' + icon + '</div>' +
+                '<div style="font-size:.7rem;color:#757575;margin-top:2px;">' + c.primeiraNum + '–' + c.ultimaNum + '</div>' +
+                (labelCiclo ? '<div style="font-size:.7rem;font-weight:600;color:' + textColor + ';margin-top:3px;">' + labelCiclo + '</div>' : '') +
+                '<div style="font-size:.65rem;color:#9e9e9e;margin-top:2px;">' + c.pagas + '/' + c.total + ' pagas</div>' +
+            '</div>' +
+        '</div>' + connector;
+    });
+
+    html += '</div>';
+
+    // Legend
+    html += '<div style="display:flex;gap:16px;flex-wrap:wrap;margin-top:10px;font-size:.72rem;color:#757575;">' +
+        '<span style="display:inline-flex;align-items:center;gap:4px;"><span style="width:10px;height:10px;border-radius:2px;background:#e8f5e9;border:1px solid #4caf50;display:inline-block;"></span>Concluído</span>' +
+        '<span style="display:inline-flex;align-items:center;gap:4px;"><span style="width:10px;height:10px;border-radius:2px;background:#e3f2fd;border:1px solid #2196f3;display:inline-block;"></span>Em andamento</span>' +
+        '<span style="display:inline-flex;align-items:center;gap:4px;"><span style="width:10px;height:10px;border-radius:2px;background:#ffebee;border:1px solid #f44336;display:inline-block;"></span>Com atraso</span>' +
+        '<span style="display:inline-flex;align-items:center;gap:4px;"><span style="width:10px;height:10px;border-radius:2px;background:#fff3e0;border:1px solid #ff9800;display:inline-block;"></span>Bloqueado (reajuste pendente)</span>' +
+    '</div>';
+
+    container.innerHTML = html;
+})();
+
+// ── Toggle das colunas de amortização / juros na tabela de parcelas
+function toggleColunaAmort() {
+    var cols = document.querySelectorAll('.col-amort');
+    var btn  = document.getElementById('btn-toggle-amort');
+    var hidden = cols.length > 0 && cols[0].classList.contains('d-none');
+    cols.forEach(function(el) {
+        el.classList.toggle('d-none', !hidden);
+    });
+    if (btn) {
+        btn.classList.toggle('btn-outline-light', !hidden);
+        btn.classList.toggle('btn-light', hidden);
+    }
+}
+
+// Dados das parcelas para o modal de carne
+var parcelasPendentes = [
+    {% for parcela in parcelas %}{% if not parcela.pago and not parcela.tem_boleto %}
+    {id: {{ parcela.pk }}, numero: {{ parcela.numero_parcela }}, vencimento: '{{ parcela.data_vencimento|date:"d/m/Y" }}', valor: parseFloat('{{ parcela.valor_atual|stringformat:"f" }}'.replace(',', '.')) || 0},
+    {% endif %}{% endfor %}
+];
+
+var dataReajuste = '{{ contrato.data_proximo_reajuste|date:"Y-m-d"|default:"" }}';
+
+// Variaveis para calculo de pagamento
+var pagamentoValorOriginal = 0;
+var pagamentoTaxaJuros = 0;
+var pagamentoTaxaMulta = 0;
+var pagamentoVencimento = null;
+
+function confirmarCancelamento() {
+    new bootstrap.Modal(document.getElementById('modalCancelamento')).show();
+}
+
+// ============ FUNCOES DE BOLETO ============
+
+function abrirModalBoleto(parcelaId) {
+    var iframe = document.getElementById('iframeBoleto');
+    var btnDownload = document.getElementById('btnDownloadBoleto');
+
+    // Configurar URLs - popup=true evita extends condicional no template
+    var urlVisualizar = '/financeiro/parcelas/' + parcelaId + '/boleto/visualizar/?popup=true';
+    var urlDownload = '/financeiro/parcelas/' + parcelaId + '/boleto/download/';
+
+    // Carregar no iframe
+    iframe.src = urlVisualizar;
+    btnDownload.href = urlDownload;
+
+    // Abrir modal
+    new bootstrap.Modal(document.getElementById('modalBoleto')).show();
+}
+
+// ============ COMPARTILHAR BOLETO ============
+
+var _compartilharDados = {};
+
+function abrirModalCompartilhar(parcelaId, linhaDigitavel, numeroParcela, vencimento, valor) {
+    var baseUrl = window.location.origin;
+    var urlBoleto = baseUrl + '/financeiro/parcelas/' + parcelaId + '/boleto/visualizar/?popup=true';
+    var compradorEmail = '{{ contrato.comprador.email|escapejs }}';
+    var compradorCelular = '{{ contrato.comprador.celular|escapejs }}';
+    var compradorNome = '{{ contrato.comprador.nome|escapejs }}';
+    var numeroContrato = '{{ contrato.numero_contrato|escapejs }}';
+
+    // Formatar valor
+    var valorNum = parseFloat(String(valor).replace(',', '.')) || 0;
+    var valorFmt = valorNum.toLocaleString('pt-BR', {style: 'currency', currency: 'BRL'});
+
+    // Montar mensagem
+    var mensagem = 'Olá, ' + compradorNome + '!\n\n'
+        + 'Segue o boleto referente ao seu contrato:\n'
+        + 'Contrato: ' + numeroContrato + '\n'
+        + 'Parcela: ' + numeroParcela + '\n'
+        + 'Vencimento: ' + vencimento + '\n'
+        + 'Valor: ' + valorFmt + '\n';
+    if (linhaDigitavel) {
+        mensagem += 'Linha Digitável: ' + linhaDigitavel + '\n';
+    }
+    mensagem += '\nVisualizar boleto: ' + urlBoleto;
+
+    var assunto = 'Boleto - Contrato ' + numeroContrato + ' - Parcela ' + numeroParcela;
+
+    // Guardar para uso do botão copiar mensagem
+    _compartilharDados.mensagem = mensagem;
+    _compartilharDados.assunto = assunto;
+
+    // Preencher campos
+    document.getElementById('compartilharLinhaDigitavel').value = linhaDigitavel || '(não disponível)';
+    document.getElementById('compartilharLinkBoleto').value = urlBoleto;
+    document.getElementById('btnAbrirBoleto').href = urlBoleto;
+
+    // WhatsApp
+    var celularLimpo = compradorCelular.replace(/\D/g, '');
+    if (celularLimpo.length >= 10 && !celularLimpo.startsWith('55')) {
+        celularLimpo = '55' + celularLimpo;
+    }
+    var msgWa = encodeURIComponent(mensagem);
+    if (celularLimpo) {
+        document.getElementById('btnWhatsAppComprador').href = 'https://wa.me/' + celularLimpo + '?text=' + msgWa;
+        document.getElementById('infoWhatsApp').textContent = 'Celular do comprador: ' + compradorCelular;
+    } else {
+        document.getElementById('btnWhatsAppComprador').href = 'https://wa.me/?text=' + msgWa;
+        document.getElementById('infoWhatsApp').textContent = 'Celular não cadastrado — abrirá o WhatsApp para você escolher o contato.';
+    }
+    document.getElementById('btnWhatsAppLink').href = 'https://wa.me/?text=' + msgWa;
+
+    // E-mail
+    var mailtoUrl = 'mailto:' + encodeURIComponent(compradorEmail)
+        + '?subject=' + encodeURIComponent(assunto)
+        + '&body=' + encodeURIComponent(mensagem);
+    document.getElementById('btnEmailComprador').href = mailtoUrl;
+    document.getElementById('infoEmail').textContent = 'E-mail do comprador: ' + compradorEmail;
+
+    new bootstrap.Modal(document.getElementById('modalCompartilhar')).show();
+}
+
+function copiarLinhaDigitavel(texto) {
+    navigator.clipboard.writeText(texto).then(function() {
+        showToast('Linha digitável copiada!', 'success', 2500);
+    }).catch(function() {
+        // fallback
+        var el = document.createElement('textarea');
+        el.value = texto;
+        document.body.appendChild(el);
+        el.select();
+        document.execCommand('copy');
+        document.body.removeChild(el);
+        showToast('Linha digitável copiada!', 'success', 2500);
+    });
+}
+
+function copiarCampo(elementId, btn) {
+    var el = document.getElementById(elementId);
+    navigator.clipboard.writeText(el.value).then(function() {
+        if (btn) {
+            var orig = btn.innerHTML;
+            btn.innerHTML = '<i class="fas fa-check"></i> Copiado!';
+            btn.classList.add('btn-success');
+            btn.classList.remove('btn-outline-secondary');
+            setTimeout(function() {
+                btn.innerHTML = orig;
+                btn.classList.remove('btn-success');
+                btn.classList.add('btn-outline-secondary');
+            }, 2000);
+        }
+    });
+}
+
+function copiarMensagemEmail() {
+    if (_compartilharDados.mensagem) {
+        navigator.clipboard.writeText(_compartilharDados.mensagem).then(function() {
+            showToast('Mensagem copiada! Cole no seu e-mail.', 'success', 3000);
+        });
+    }
+}
+
+// ============ FUNCOES DE TOAST ============
+// Usa o showToast/showErrorModal globais definidos no base.html
+
+// ============ FUNCOES DE BOLETO ============
+
+function gerarBoleto(parcelaId, btn) {
+    // Encontrar o botao se nao foi passado
+    if (!btn) {
+        btn = document.querySelector('button[onclick*="gerarBoleto(' + parcelaId + ')"]');
+    }
+
+    // Mostrar loading no botao
+    var originalHtml = btn.innerHTML;
+    var restoreBtn = function() {
+        btn.innerHTML = originalHtml;
+        btn.classList.remove('btn-loading');
+        btn.disabled = false;
+    };
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Gerando...';
+    btn.classList.add('btn-loading');
+    btn.disabled = true;
+
+    // Timeout de 120s — BRCobrança pode estar em cold start no Render
+    var controller = new AbortController();
+    var timeoutId = setTimeout(function() { controller.abort(); }, 120000);
+
+    fetch('/financeiro/parcelas/' + parcelaId + '/boleto/gerar/', {
+        method: 'POST',
+        headers: {
+            'X-CSRFToken': '{{ csrf_token }}',
+            'Content-Type': 'application/json'
+        },
+        signal: controller.signal
+    })
+    .then(function(response) { clearTimeout(timeoutId); return response.json(); })
+    .then(function(data) {
+        restoreBtn();
+        if (data.sucesso) {
+            showToast('Boleto gerado! Nosso Número: ' + data.nosso_numero, 'success');
+
+            // Atualizar a linha da parcela
+            var row = btn.closest('tr');
+            if (row) {
+                row.classList.add('boleto-gerado');
+                var boletoCol = row.querySelector('td:nth-child(4)');
+                if (boletoCol) {
+                    boletoCol.innerHTML = '<span class="badge bg-success" title="Boleto gerado"><i class="fas fa-barcode"></i></span>';
+                }
+                var acoesCol = row.querySelector('td:last-child .btn-group');
+                if (acoesCol) {
+                    var linhaDigResp = data.linha_digitavel || '';
+                    acoesCol.innerHTML =
+                        '<button type="button" class="btn btn-outline-primary" onclick="abrirModalBoleto(' + parcelaId + ')" title="Ver Boleto"><i class="fas fa-eye"></i></button>' +
+                        '<button type="button" class="btn btn-outline-info" onclick="abrirModalCompartilhar(' + parcelaId + ', \'' + linhaDigResp + '\', \'\', \'\', \'\')" title="Compartilhar Boleto"><i class="fas fa-share-alt"></i></button>' +
+                        '<button type="button" class="btn btn-outline-warning" onclick="regenerarBoleto(' + parcelaId + ', this)" title="Atualizar Boleto"><i class="fas fa-sync"></i></button>' +
+                        '<button type="button" class="btn btn-outline-success" onclick="abrirModalPagamento(' + parcelaId + ')" title="Registrar Pagamento"><i class="fas fa-dollar-sign"></i></button>';
+                }
+            }
+            setTimeout(function() {
+                window.open('/financeiro/parcelas/' + parcelaId + '/boleto/visualizar/?popup=true', '_blank');
+            }, 500);
+        } else {
+            showToast('Erro ao gerar boleto: ' + data.erro, 'error', 6000);
+        }
+    })
+    .catch(function(error) {
+        clearTimeout(timeoutId);
+        restoreBtn();
+        var msg = error.name === 'AbortError'
+            ? 'Tempo esgotado (120s). O serviço BRCobrança pode estar iniciando. Tente novamente.'
+            : 'Erro de conexão: ' + error;
+        showToast(msg, 'error', 8000);
+    });
+}
+
+function regenerarBoleto(parcelaId, btn) {
+    // Encontrar o botao se nao foi passado
+    if (!btn) {
+        btn = document.querySelector('button[onclick*="regenerarBoleto(' + parcelaId + ')"]');
+    }
+
+    // Mostrar loading no botao
+    var originalHtml = btn.innerHTML;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
+    btn.classList.add('btn-loading');
+    btn.disabled = true;
+
+    fetch('/financeiro/parcelas/' + parcelaId + '/boleto/gerar/', {
+        method: 'POST',
+        headers: {
+            'X-CSRFToken': '{{ csrf_token }}',
+            'Content-Type': 'application/x-www-form-urlencoded'
+        },
+        body: 'force=true'
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.sucesso) {
+            showToast('Boleto atualizado com sucesso!', 'success');
+
+            // Efeito visual na linha
+            var row = btn.closest('tr');
+            if (row) {
+                row.classList.add('boleto-gerado');
+            }
+
+            // Restaurar botao
+            btn.innerHTML = originalHtml;
+            btn.classList.remove('btn-loading');
+            btn.disabled = false;
+
+            // Abrir boleto em popup modal
+            setTimeout(function() {
+                abrirModalBoleto(parcelaId);
+            }, 500);
+
+        } else {
+            showToast('Erro ao atualizar boleto: ' + data.erro, 'error', 6000);
+            btn.innerHTML = originalHtml;
+            btn.classList.remove('btn-loading');
+            btn.disabled = false;
+        }
+    })
+    .catch(error => {
+        showToast('Erro de conexao: ' + error, 'error', 6000);
+        btn.innerHTML = originalHtml;
+        btn.classList.remove('btn-loading');
+        btn.disabled = false;
+    });
+}
+
+// ============ CANCELAR BOLETO ============
+
+function cancelarBoleto(parcelaId) {
+    if (!confirm('Confirmar cancelamento do boleto da parcela #' + parcelaId + '?\n\nEsta ação não pode ser desfeita.')) return;
+
+    var fd = new FormData();
+    fd.append('csrfmiddlewaretoken', '{{ csrf_token }}');
+
+    fetch('/financeiro/parcelas/' + parcelaId + '/boleto/cancelar/', {method: 'POST', body: fd})
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            if (data.sucesso) {
+                showToast('Boleto cancelado com sucesso', 'success');
+                setTimeout(function() { location.reload(); }, 1200);
+            } else {
+                showErrorModal(data.erro || 'Erro ao cancelar boleto');
+            }
+        })
+        .catch(function(err) { showErrorModal('Erro de conexão: ' + err.message); });
+}
+
+// ============ FUNCOES DE PAGAMENTO ============
+
+function abrirModalPagamento(parcelaId, vencimento, valorOriginal, taxaJuros, taxaMulta) {
+    // Converter strings para números (tratando possíveis vírgulas)
+    var valorOriginalStr = String(valorOriginal).replace(',', '.');
+    var taxaJurosStr = String(taxaJuros).replace(',', '.');
+    var taxaMultaStr = String(taxaMulta).replace(',', '.');
+
+    pagamentoValorOriginal = parseFloat(valorOriginalStr) || 0;
+    pagamentoTaxaJuros = parseFloat(taxaJurosStr) || 0;
+    pagamentoTaxaMulta = parseFloat(taxaMultaStr) || 0;
+    pagamentoVencimento = new Date(vencimento + 'T00:00:00');
+
+    document.getElementById('pagamento_parcela_id').value = parcelaId;
+    document.getElementById('pagamento_vencimento').value = vencimento;
+    document.getElementById('pagamento_valor_original').value = pagamentoValorOriginal.toFixed(2);
+    document.getElementById('pagamento_data').value = new Date().toISOString().split('T')[0];
+    document.getElementById('pagamento_juros').value = '0';
+    document.getElementById('pagamento_multa').value = '0';
+    document.getElementById('pagamento_desconto').value = '0';
+
+    document.getElementById('juros_info').textContent = pagamentoTaxaJuros + '% a.m.';
+    document.getElementById('multa_info').textContent = pagamentoTaxaMulta + '%';
+
+    calcularEncargos();
+    new bootstrap.Modal(document.getElementById('modalPagamento')).show();
+}
+
+function calcularEncargos() {
+    var dataPagamento = new Date(document.getElementById('pagamento_data').value + 'T00:00:00');
+    var diasAtraso = Math.floor((dataPagamento - pagamentoVencimento) / (1000 * 60 * 60 * 24));
+
+    var alertaDiv = document.getElementById('alertaAtraso');
+    var alertaTexto = document.getElementById('alertaAtrasoTexto');
+
+    if (diasAtraso > 0) {
+        // Calcular juros (proporcional aos dias)
+        var juros = pagamentoValorOriginal * (pagamentoTaxaJuros / 100) * (diasAtraso / 30);
+        // Calcular multa (valor fixo)
+        var multa = pagamentoValorOriginal * (pagamentoTaxaMulta / 100);
+
+        document.getElementById('pagamento_juros').value = juros.toFixed(2);
+        document.getElementById('pagamento_multa').value = multa.toFixed(2);
+
+        if (alertaDiv) alertaDiv.classList.remove('d-none');
+        if (alertaTexto) alertaTexto.textContent = 'Parcela em atraso ha ' + diasAtraso + ' dia(s). Juros e multa calculados automaticamente.';
+    } else {
+        document.getElementById('pagamento_juros').value = '0';
+        document.getElementById('pagamento_multa').value = '0';
+        if (alertaDiv) alertaDiv.classList.add('d-none');
+    }
+
+    calcularTotal();
+}
+
+function calcularTotal() {
+    var valorOriginal = parseFloat(document.getElementById('pagamento_valor_original').value) || 0;
+    var juros = parseFloat(document.getElementById('pagamento_juros').value) || 0;
+    var multa = parseFloat(document.getElementById('pagamento_multa').value) || 0;
+    var desconto = parseFloat(document.getElementById('pagamento_desconto').value) || 0;
+
+    var total = valorOriginal + juros + multa - desconto;
+    document.getElementById('pagamento_valor_pagar').value = total.toFixed(2);
+}
+
+document.getElementById('formPagamento').addEventListener('submit', function(e) {
+    e.preventDefault();
+
+    var parcelaId = document.getElementById('pagamento_parcela_id').value;
+    var formData = new FormData(this);
+
+    fetch('/financeiro/parcelas/' + parcelaId + '/pagar-ajax/', {
+        method: 'POST',
+        headers: {
+            'X-CSRFToken': '{{ csrf_token }}'
+        },
+        body: formData
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.sucesso) {
+            showToast('Pagamento registrado com sucesso!', 'success');
+            location.reload();
+        } else {
+            showErrorModal('Erro ao registrar pagamento: ' + data.erro);
+        }
+    })
+    .catch(error => showErrorModal('Erro de conexão: ' + error));
+});
+
+// ============ FUNCOES DE CARNE ============
+
+// Dados de elegibilidade de parcelas (carregados via API)
+var dadosElegibilidade = null;
+
+function abrirModalCarne() {
+    // Reset estado
+    document.getElementById('carne_quantidade').value = 1;
+    document.getElementById('preview_parcelas').innerHTML = '<div class="text-center py-3 text-muted"><i class="fas fa-spinner fa-spin"></i> Carregando...</div>';
+    document.getElementById('btnGerarCarne').disabled = true;
+
+    // Abrir modal
+    new bootstrap.Modal(document.getElementById('modalCarne')).show();
+
+    // Carregar dados de elegibilidade via API
+    carregarElegibilidade();
+}
+
+function carregarElegibilidade() {
+    fetch('/financeiro/api/contrato/{{ contrato.pk }}/parcelas-elegibilidade/')
+    .then(response => response.json())
+    .then(data => {
+        if (data.sucesso) {
+            dadosElegibilidade = data;
+            atualizarResumoElegibilidade();
+            atualizarPreviewCarne();
+        } else {
+            document.getElementById('preview_parcelas').innerHTML = '<div class="text-center py-3 text-danger"><i class="fas fa-exclamation-circle"></i> Erro ao carregar: ' + data.erro + '</div>';
+        }
+    })
+    .catch(error => {
+        document.getElementById('preview_parcelas').innerHTML = '<div class="text-center py-3 text-danger"><i class="fas fa-exclamation-circle"></i> Erro de conexao</div>';
+    });
+}
+
+function atualizarResumoElegibilidade() {
+    if (!dadosElegibilidade) return;
+
+    var totalDisponiveis = dadosElegibilidade.total_disponiveis || 0;
+    var totalBloqueadas = dadosElegibilidade.total_bloqueadas || 0;
+    var totalJaGeradas = dadosElegibilidade.parcelas.filter(function(p) { return p.tem_boleto && p.pode_gerar; }).length;
+
+    document.getElementById('totalDisponiveis').textContent = totalDisponiveis;
+    document.getElementById('totalBloqueadas').textContent = totalBloqueadas;
+    document.getElementById('totalJaGeradas').textContent = totalJaGeradas;
+
+    // Atualizar max do input
+    var parcelasParaGerar = dadosElegibilidade.parcelas.filter(function(p) { return p.pode_gerar && !p.tem_boleto; }).length;
+    document.getElementById('carne_quantidade').max = parcelasParaGerar;
+    document.getElementById('quantidadeInfo').textContent = parcelasParaGerar + ' parcela(s) disponivel(eis) para geracao';
+
+    // Mostrar alerta de reajuste se necessario
+    var alertaInfo = document.getElementById('alertaReajusteInfo');
+    var alertaInfoTexto = document.getElementById('alertaReajusteInfoTexto');
+
+    if (dadosElegibilidade.proximo_ciclo_reajuste && !dadosElegibilidade.tipo_correcao_fixo) {
+        alertaInfo.classList.remove('d-none');
+        alertaInfoTexto.textContent = dadosElegibilidade.proximo_ciclo_reajuste.mensagem;
+    } else {
+        alertaInfo.classList.add('d-none');
+    }
+
+    // Atualizar botao max
+    document.getElementById('btnMaxDisponiveis').textContent = 'Max (' + parcelasParaGerar + ')';
+}
+
+function setQuantidade(qtd) {
+    var input = document.getElementById('carne_quantidade');
+    var max = parseInt(input.max) || 1;
+    input.value = Math.min(qtd, max);
+    atualizarPreviewCarne();
+}
+
+function setQuantidadeMax() {
+    var input = document.getElementById('carne_quantidade');
+    input.value = input.max;
+    atualizarPreviewCarne();
+}
+
+document.getElementById('carne_quantidade').addEventListener('change', atualizarPreviewCarne);
+document.getElementById('carne_quantidade').addEventListener('input', atualizarPreviewCarne);
+
+function atualizarPreviewCarne() {
+    if (!dadosElegibilidade) return;
+
+    var qtd = parseInt(document.getElementById('carne_quantidade').value) || 0;
+    var previewDiv = document.getElementById('preview_parcelas');
+    var alertaDiv = document.getElementById('alertaReajuste');
+    var alertaTexto = document.getElementById('alertaReajusteTexto');
+    var btnGerar = document.getElementById('btnGerarCarne');
+    var btnGerarQtd = document.getElementById('btnGerarQtd');
+
+    if (!previewDiv || !btnGerar || !btnGerarQtd) return;
+
+    // Filtrar parcelas que podem ser geradas (sem boleto e elegiveis)
+    var parcelasDisponiveis = dadosElegibilidade.parcelas.filter(function(p) {
+        return p.pode_gerar && !p.tem_boleto;
+    });
+
+    var parcelasBloqueadas = dadosElegibilidade.parcelas.filter(function(p) {
+        return !p.pode_gerar && !p.tem_boleto;
+    });
+
+    if (qtd < 1 || parcelasDisponiveis.length === 0) {
+        previewDiv.innerHTML = '<div class="text-center py-3 text-muted"><i class="fas fa-info-circle"></i> Nenhuma parcela disponivel para geracao</div>';
+        btnGerar.disabled = true;
+        btnGerarQtd.textContent = '0';
+        return;
+    }
+
+    var html = '<table class="table table-sm table-hover mb-0">';
+    html += '<thead class="table-light"><tr><th>#</th><th>Vencimento</th><th class="text-end">Valor</th><th>Ciclo</th><th>Status</th></tr></thead><tbody>';
+
+    var parcelasParaGerar = [];
+
+    // Primeiro as disponiveis (ate a quantidade solicitada)
+    for (var i = 0; i < Math.min(qtd, parcelasDisponiveis.length); i++) {
+        var p = parcelasDisponiveis[i];
+        parcelasParaGerar.push(p.id);
+        html += '<tr class="table-success">';
+        html += '<td><strong>' + p.numero_parcela + '</strong></td>';
+        html += '<td>' + p.data_vencimento + '</td>';
+        html += '<td class="text-end">R$ ' + p.valor_atual.toFixed(2) + '</td>';
+        html += '<td><span class="badge bg-info">' + p.ciclo + '</span></td>';
+        html += '<td><i class="fas fa-check text-success"></i> Sera gerado</td>';
+        html += '</tr>';
+    }
+
+    // Mostrar algumas bloqueadas (se houver)
+    if (parcelasBloqueadas.length > 0) {
+        html += '<tr class="table-secondary"><td colspan="5" class="text-center fw-bold py-2"><i class="fas fa-lock"></i> Bloqueadas (aguardando reajuste)</td></tr>';
+        for (var j = 0; j < Math.min(3, parcelasBloqueadas.length); j++) {
+            var pb = parcelasBloqueadas[j];
+            html += '<tr class="text-muted">';
+            html += '<td>' + pb.numero_parcela + '</td>';
+            html += '<td>' + pb.data_vencimento + '</td>';
+            html += '<td class="text-end">R$ ' + pb.valor_atual.toFixed(2) + '</td>';
+            html += '<td><span class="badge bg-warning text-dark">' + pb.ciclo + '</span></td>';
+            html += '<td><small>' + pb.motivo + '</small></td>';
+            html += '</tr>';
+        }
+        if (parcelasBloqueadas.length > 3) {
+            html += '<tr class="text-muted"><td colspan="5" class="text-center">... e mais ' + (parcelasBloqueadas.length - 3) + ' parcela(s) bloqueada(s)</td></tr>';
+        }
+    }
+
+    html += '</tbody></table>';
+    previewDiv.innerHTML = html;
+
+    // Atualizar botao
+    btnGerar.disabled = parcelasParaGerar.length === 0;
+    btnGerarQtd.textContent = parcelasParaGerar.length;
+
+    // Alerta se houver bloqueio
+    if (alertaDiv && alertaTexto) {
+        if (parcelasBloqueadas.length > 0 && qtd > parcelasDisponiveis.length) {
+            alertaDiv.classList.remove('d-none');
+            alertaTexto.textContent = 'Algumas parcelas estao bloqueadas aguardando reajuste. Aplique o reajuste do ciclo ' + parcelasBloqueadas[0].ciclo + ' para libera-las.';
+        } else {
+            alertaDiv.classList.add('d-none');
+        }
+    }
+}
+
+document.getElementById('formCarne').addEventListener('submit', function(e) {
+    e.preventDefault();
+
+    if (!dadosElegibilidade) {
+        showErrorModal('Dados de elegibilidade não carregados. Recarregue a página.');
+        return;
+    }
+
+    var qtd = parseInt(document.getElementById('carne_quantidade').value) || 0;
+    if (qtd < 1) {
+        showErrorModal('Selecione pelo menos 1 parcela.');
+        return;
+    }
+
+    // Coletar IDs das parcelas disponiveis
+    var parcelasDisponiveis = dadosElegibilidade.parcelas.filter(function(p) {
+        return p.pode_gerar && !p.tem_boleto;
+    });
+
+    var parcelaIds = [];
+    for (var i = 0; i < Math.min(qtd, parcelasDisponiveis.length); i++) {
+        parcelaIds.push(parcelasDisponiveis[i].id);
+    }
+
+    if (parcelaIds.length === 0) {
+        showErrorModal('Nenhuma parcela disponível para gerar boleto.');
+        return;
+    }
+
+    var btn = document.getElementById('btnGerarCarne');
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Gerando ' + parcelaIds.length + ' boleto(s)...';
+
+    fetch('/financeiro/contrato/{{ contrato.pk }}/gerar-carne/', {
+        method: 'POST',
+        headers: {
+            'X-CSRFToken': '{{ csrf_token }}',
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({parcelas: parcelaIds})
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.sucesso) {
+            var msg = data.gerados + ' boleto(s) gerado(s) com sucesso!';
+            if (data.bloqueados > 0) {
+                msg += '\n' + data.bloqueados + ' parcela(s) bloqueada(s) por reajuste.';
+            }
+            showToast(msg, 'success');
+            setTimeout(function() { location.reload(); }, 1500);
+        } else {
+            showToast('Erro ao gerar boletos: ' + data.erro, 'error');
+            btn.disabled = false;
+            btn.innerHTML = '<i class="fas fa-barcode"></i> Gerar <span id="btnGerarQtd">' + parcelaIds.length + '</span> Boleto(s)';
+        }
+    })
+    .catch(error => {
+        showToast('Erro de conexao: ' + error, 'error');
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fas fa-barcode"></i> Gerar <span id="btnGerarQtd">' + parcelaIds.length + '</span> Boleto(s)';
+    });
+});
+
+// ============ FUNCOES DE REAJUSTE ============
+
+// Dados das parcelas para calculo de reajuste
+var todasParcelas = [
+    {% for parcela in parcelas %}
+    {id: {{ parcela.pk }}, numero: {{ parcela.numero_parcela }}, valor: parseFloat('{{ parcela.valor_atual|stringformat:"f" }}'.replace(',', '.')) || 0, pago: {% if parcela.pago %}true{% else %}false{% endif %}},
+    {% endfor %}
+];
+
+// ──────────────────────────────────────────────────────────────────────────────
+// REAJUSTE — modal AJAX popup (abrirModalReajuste definida abaixo)
+// ──────────────────────────────────────────────────────────────────────────────
+
+function excluirReajuste(reajusteId, ciclo, percentual) {
+    var msg = 'Desfazer reajuste do ciclo ' + ciclo + ' (' + percentual + '%)?\n\n' +
+              'Os valores das parcelas não pagas serão revertidos.';
+    if (!confirm(msg)) { return; }
+
+    fetch('/financeiro/reajuste/' + reajusteId + '/excluir/', {
+        method: 'POST',
+        headers: {
+            'X-CSRFToken': '{{ csrf_token }}',
+            'Content-Type': 'application/json'
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.sucesso) {
+            showToast(data.mensagem, 'success', 4000);
+            setTimeout(() => location.reload(), 1000);
+        } else {
+            showErrorModal('Erro ao desfazer reajuste: ' + data.erro);
+        }
+    })
+    .catch(error => {
+        showErrorModal('Erro de conexão: ' + error);
+    });
+}
+
+// ============ Q-04: TABELA DE JUROS ESCALANTES ============
+var urlTabelaJuros = "{% url 'contratos:api_tabela_juros' contrato.pk %}";
+var urlTabelaJurosDeleteBase = "{% url 'contratos:api_tabela_juros_delete' 9999999 %}".replace('9999999/excluir/', '');
+
+function salvarFaixaJuros() {
+    var cicloInicio = parseInt(document.getElementById('juros_ciclo_inicio').value) || 0;
+    var cicloFim = document.getElementById('juros_ciclo_fim').value;
+    var jurosMensal = document.getElementById('juros_mensal').value;
+    var observacoes = document.getElementById('juros_observacoes').value;
+    var erroEl = document.getElementById('juros_erro');
+    erroEl.classList.add('d-none');
+
+    if (cicloInicio < 1) {
+        erroEl.textContent = 'Ciclo Início deve ser >= 1.';
+        erroEl.classList.remove('d-none');
+        return;
+    }
+    if (!jurosMensal || isNaN(parseFloat(jurosMensal))) {
+        erroEl.textContent = 'Informe o percentual de juros.';
+        erroEl.classList.remove('d-none');
+        return;
+    }
+
+    fetch(urlTabelaJuros, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': '{{ csrf_token }}'
+        },
+        body: JSON.stringify({
+            ciclo_inicio: cicloInicio,
+            ciclo_fim: cicloFim || null,
+            juros_mensal: jurosMensal,
+            observacoes: observacoes
+        })
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.sucesso) {
+            showToast('Faixa de juros adicionada!', 'success', 3000);
+            setTimeout(() => location.reload(), 700);
+        } else {
+            erroEl.textContent = data.erro || 'Erro ao salvar.';
+            erroEl.classList.remove('d-none');
+        }
+    })
+    .catch(() => { erroEl.textContent = 'Erro de conexão.'; erroEl.classList.remove('d-none'); });
+}
+
+function excluirFaixaJuros(entryId) {
+    if (!confirm('Remover esta faixa de juros?')) return;
+    fetch(urlTabelaJurosDeleteBase + entryId + '/excluir/', {
+        method: 'DELETE',
+        headers: { 'X-CSRFToken': '{{ csrf_token }}' }
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.sucesso) {
+            var row = document.getElementById('juros-row-' + entryId);
+            if (row) row.remove();
+            showToast('Faixa removida.', 'success', 2000);
+        } else {
+            showErrorModal('Erro: ' + (data.erro || 'Erro desconhecido'));
+        }
+    })
+    .catch(() => showErrorModal('Erro de conexão.'));
+}
+
+// 3.2 — Badge "Boletos Gerados"
+document.addEventListener('DOMContentLoaded', function() {
+    var tabelaBoletos = document.getElementById('tabelaBoletos');
+    if (!tabelaBoletos) return;
+    var linhas = tabelaBoletos.querySelectorAll('tbody tr');
+    var count = linhas.length;
+    var badge = document.getElementById('badgeTotalBoletos');
+    if (badge) badge.textContent = count + ' boleto(s)';
+    if (count === 0) {
+        var semBoletos = document.getElementById('semBoletos');
+        if (semBoletos) semBoletos.classList.remove('d-none');
+        tabelaBoletos.classList.add('d-none');
+    }
+});
+
+// ── Gerar Boleto Intermediária (botões na tabela de preview) ─────────────────
+document.querySelectorAll('.btn-gerar-boleto-inter').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+        var interId = this.dataset.interId;
+        if (!confirm('Gerar boleto para esta intermediária?')) return;
+        var self = this;
+        self.disabled = true;
+        self.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+        fetch('/contratos/intermediarias/' + interId + '/gerar-boleto/', {
+            method: 'POST',
+            headers: { 'X-CSRFToken': '{{ csrf_token }}', 'Content-Type': 'application/x-www-form-urlencoded' }
+        })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            if (data.sucesso) {
+                showToast('Boleto gerado com sucesso!', 'success');
+                setTimeout(function() { location.reload(); }, 1000);
+            } else {
+                showErrorModal(data.erro || 'Erro ao gerar boleto');
+                self.disabled = false;
+                self.innerHTML = '<i class="fas fa-barcode"></i>';
+            }
+        })
+        .catch(function() {
+            showErrorModal('Erro de comunicação com o servidor.');
+            self.disabled = false;
+            self.innerHTML = '<i class="fas fa-barcode"></i>';
+        });
+    });
+});
+
+// ── Modal de Reajuste ───────────────────────────────────────────────────────
+function abrirModalReajuste(contratoId) {
+    var modal = document.getElementById('modalReajuste');
+    var body  = document.getElementById('modalReajusteBody');
+    var inst  = M.Modal.getInstance(modal) || M.Modal.init(modal, {dismissible: true});
+
+    body.innerHTML = '<div class="text-center py-4"><div class="preloader-wrapper small active"><div class="spinner-layer spinner-blue-only"><div class="circle-clipper left"><div class="circle"></div></div><div class="gap-patch"><div class="circle"></div></div><div class="circle-clipper right"><div class="circle"></div></div></div></div></div>';
+    inst.open();
+
+    fetch('/financeiro/contrato/' + contratoId + '/reajuste/?modal=1', {
+        headers: {'X-Requested-With': 'XMLHttpRequest'}
+    })
+    .then(function(r) { return r.text(); })
+    .then(function(html) {
+        body.innerHTML = html;
+        _bindReajusteModal(contratoId);
+    })
+    .catch(function() {
+        body.innerHTML = '<div class="alert alert-danger">Erro ao carregar formulário de reajuste.</div>';
+    });
+}
+
+function _bindReajusteModal(contratoId) {
+    // Recalcular com desconto (submete GET e recarrega o conteúdo do modal)
+    var formDesc = document.getElementById('formDescontoModal');
+    if (formDesc) {
+        formDesc.addEventListener('submit', function(e) {
+            e.preventDefault();
+            var params = new URLSearchParams(new FormData(formDesc));
+            var body = document.getElementById('modalReajusteBody');
+            body.innerHTML = '<div class="text-center py-4 text-muted"><i class="fas fa-sync fa-spin fa-2x"></i></div>';
+            fetch('/financeiro/contrato/' + contratoId + '/reajuste/?' + params.toString(), {
+                headers: {'X-Requested-With': 'XMLHttpRequest'}
+            })
+            .then(function(r) { return r.text(); })
+            .then(function(html) {
+                body.innerHTML = html;
+                _bindReajusteModal(contratoId);
+            })
+            .catch(function() {
+                body.innerHTML = '<div class="alert alert-danger">Erro ao recalcular prévia.</div>';
+            });
+        });
+    }
+
+    // Aplicar reajuste (POST AJAX)
+    var formApl = document.getElementById('formAplicarModal');
+    if (formApl) {
+        formApl.addEventListener('submit', function(e) {
+            e.preventDefault();
+            var btn = document.getElementById('btnAplicarModal');
+            if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Aplicando...'; }
+
+            fetch(formApl.action, {
+                method: 'POST',
+                headers: {'X-Requested-With': 'XMLHttpRequest'},
+                body: new FormData(formApl)
+            })
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                if (data.sucesso) {
+                    var inst = M.Modal.getInstance(document.getElementById('modalReajuste'));
+                    if (inst) inst.close();
+                    // Exibir mensagem de sucesso e recarregar a página
+                    if (window.showToast) {
+                        showToast(data.mensagem || 'Reajuste aplicado!', 'success', 3000);
+                    }
+                    setTimeout(function() { location.reload(); }, 1500);
+                } else {
+                    if (window.showErrorModal) {
+                        showErrorModal(data.erro || 'Erro ao aplicar reajuste.');
+                    }
+                    if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-check me-1"></i>Aplicar Reajuste'; }
+                }
+            })
+            .catch(function() {
+                if (window.showErrorModal) showErrorModal('Erro de conexão.');
+                if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-check me-1"></i>Aplicar Reajuste'; }
+            });
+        });
+    }
+}
+
+function _bindReajusteModal(contratoId) {
+    // Recalcular com desconto (submete GET e recarrega o conteúdo do modal)
+    var formDesc = document.getElementById('formDescontoModal');
+    if (formDesc) {
+        formDesc.addEventListener('submit', function(e) {
+            e.preventDefault();
+            var params = new URLSearchParams(new FormData(formDesc));
+            var body = document.getElementById('modalReajusteBody');
+            body.innerHTML = '<div class="text-center py-4 text-muted"><i class="fas fa-sync fa-spin fa-2x"></i></div>';
+            fetch('/financeiro/contrato/' + contratoId + '/reajuste/?' + params.toString(), {
+                headers: {'X-Requested-With': 'XMLHttpRequest'}
+            })
+            .then(function(r) { return r.text(); })
+            .then(function(html) {
+                body.innerHTML = html;
+                _bindReajusteModal(contratoId);
+            })
+            .catch(function() {
+                body.innerHTML = '<div class="alert alert-danger">Erro ao recalcular prévia.</div>';
+            });
+        });
+    }
+
+    // Aplicar reajuste (POST AJAX)
+    var formApl = document.getElementById('formAplicarModal');
+    if (formApl) {
+        formApl.addEventListener('submit', function(e) {
+            e.preventDefault();
+            var btn = document.getElementById('btnAplicarModal');
+            if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Aplicando...'; }
+
+            fetch(formApl.action, {
+                method: 'POST',
+                headers: {'X-Requested-With': 'XMLHttpRequest'},
+                body: new FormData(formApl)
+            })
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                if (data.sucesso) {
+                    var inst = M.Modal.getInstance(document.getElementById('modalReajuste'));
+                    if (inst) inst.close();
+                    // Exibir mensagem de sucesso e recarregar a página
+                    if (window.showToast) {
+                        showToast(data.mensagem || 'Reajuste aplicado!', 'success', 3000);
+                    }
+                    setTimeout(function() { location.reload(); }, 1500);
+                } else {
+                    if (window.showErrorModal) {
+                        showErrorModal(data.erro || 'Erro ao aplicar reajuste.');
+                    }
+                    if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-check me-1"></i>Aplicar Reajuste'; }
+                }
+            })
+            .catch(function() {
+                if (window.showErrorModal) showErrorModal('Erro de conexão.');
+                if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-check me-1"></i>Aplicar Reajuste'; }
+            });
+        });
+    }
+}
+</script>
+
+<!-- Modal Reajuste -->
+<div id="modalReajuste" class="modal modal-fixed-footer" style="width:min(96vw,900px); max-height:90vh;">
+    <div class="modal-content" style="padding:1.25rem;">
+        <h5 style="margin-bottom:1rem;">
+            <i class="fas fa-chart-line me-2 text-secondary"></i>
+            Aplicar Reajuste — Contrato {{ contrato.numero_contrato }}
+        </h5>
+        <div id="modalReajusteBody">
+            <div class="text-center py-4 text-muted">Carregando...</div>
+        </div>
+    </div>
+    <div class="modal-footer">
+        <a href="{% url 'financeiro:aplicar_reajuste' contrato_id=contrato.pk %}" target="_blank"
+           class="modal-action waves-effect waves-green btn-flat left" style="margin-left:0;">
+            <i class="fas fa-external-link-alt me-1"></i>Abrir página completa
+        </a>
+        <a href="#!" class="modal-action modal-close waves-effect waves-red btn-flat">
+            <i class="fas fa-times me-1"></i>Fechar
+        </a>
+    </div>
+</div>
+
+<script>
+// 3.18 — Relatórios: chevron toggle
+(function() {
+    var body = document.getElementById('relatorios-body');
+    var chevron = document.getElementById('relatorios-chevron');
+    if (!body || !chevron) return;
+    body.addEventListener('show.bs.collapse', function() {
+        chevron.style.transform = 'rotate(180deg)';
+    });
+    body.addEventListener('hide.bs.collapse', function() {
+        chevron.style.transform = 'rotate(0deg)';
+    });
+    // Fallback for our custom collapse (data-bs-toggle)
+    var header = document.querySelector('[data-bs-target="#relatorios-body"]');
+    if (header) {
+        header.addEventListener('click', function() {
+            var expanded = body.classList.contains('show');
+            chevron.style.transform = expanded ? 'rotate(0deg)' : 'rotate(180deg)';
+        });
+    }
+})();
+</script>
+{% endblock %}

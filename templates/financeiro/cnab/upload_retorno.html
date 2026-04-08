@@ -1,0 +1,71 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Upload de Arquivo de Retorno{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2><i class="fas fa-file-import"></i> Upload de Arquivo de Retorno</h2>
+        <a href="{% url 'financeiro:listar_retornos' %}" class="btn btn-secondary">
+            <i class="fas fa-arrow-left"></i> Voltar
+        </a>
+    </div>
+
+    <div class="row justify-content-center">
+        <div class="col-md-8">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0"><i class="fas fa-upload"></i> Enviar Arquivo de Retorno CNAB</h5>
+                </div>
+                <div class="card-body">
+                    <form method="post" enctype="multipart/form-data">
+                        {% csrf_token %}
+
+                        <div class="mb-4">
+                            <label class="form-label">Conta Bancaria <span class="text-danger">*</span></label>
+                            <select name="conta_bancaria" class="form-select" required>
+                                <option value="">Selecione uma conta...</option>
+                                {% for conta in contas_bancarias %}
+                                <option value="{{ conta.pk }}">
+                                    {{ conta.descricao }} - {{ conta.get_codigo_banco_display }} ({{ conta.imobiliaria.nome }})
+                                </option>
+                                {% endfor %}
+                            </select>
+                            <div class="form-text">Selecione a conta bancaria correspondente ao arquivo de retorno.</div>
+                        </div>
+
+                        <div class="mb-4">
+                            <label class="form-label">Arquivo de Retorno <span class="text-danger">*</span></label>
+                            <input type="file" name="arquivo" class="form-control" required accept=".ret,.txt,.RET,.TXT">
+                            <div class="form-text">
+                                Selecione o arquivo de retorno recebido do banco (extensao .RET ou .TXT).
+                                <br>Formatos suportados: CNAB 240 e CNAB 400.
+                            </div>
+                        </div>
+
+                        <div class="alert alert-info">
+                            <h6><i class="fas fa-info-circle"></i> Como funciona?</h6>
+                            <ol class="mb-0">
+                                <li>Faca o upload do arquivo de retorno recebido do banco</li>
+                                <li>O sistema identificara o formato (CNAB 240 ou 400)</li>
+                                <li>Revise os registros encontrados</li>
+                                <li>Clique em "Processar" para realizar as baixas automaticamente</li>
+                            </ol>
+                        </div>
+
+                        <div class="d-flex justify-content-end gap-2">
+                            <a href="{% url 'financeiro:listar_retornos' %}" class="btn btn-secondary">
+                                <i class="fas fa-times"></i> Cancelar
+                            </a>
+                            <button type="submit" class="btn btn-primary">
+                                <i class="fas fa-upload"></i> Enviar Arquivo
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

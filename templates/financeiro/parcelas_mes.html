@@ -1,0 +1,322 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Parcelas do Mes - {{ mes_atual }}{% endblock %}
+
+{% block extra_css %}
+<style>
+    .card-stats { border-left: 4px solid; }
+    .card-stats.primary { border-color: #007bff; }
+    .card-stats.success { border-color: #28a745; }
+    .card-stats.warning { border-color: #ffc107; }
+    .card-stats.danger { border-color: #dc3545; }
+    .stat-value { font-size: 1.4rem; font-weight: bold; }
+    .stat-label { color: #6c757d; font-size: 0.85rem; }
+    .imob-card { transition: transform 0.2s; cursor: pointer; }
+    .imob-card:hover { transform: translateY(-3px); box-shadow: 0 4px 12px rgba(0,0,0,0.15); }
+    .parcela-vencida { background-color: #fff3cd !important; }
+    .parcela-paga { background-color: #d4edda !important; }
+    .progress { height: 8px; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <!-- Header -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h2 class="mb-0"><i class="fas fa-calendar-alt me-2"></i>Parcelas do Mes</h2>
+            <small class="text-muted">{{ primeiro_dia|date:"d/m/Y" }} a {{ ultimo_dia|date:"d/m/Y" }}</small>
+        </div>
+        <div>
+            <a href="{% url 'financeiro:listar_parcelas' %}" class="btn btn-outline-secondary">
+                <i class="fas fa-list me-1"></i> Todas Parcelas
+            </a>
+            <a href="{% url 'financeiro:dashboard' %}" class="btn btn-outline-primary">
+                <i class="fas fa-chart-line me-1"></i> Dashboard
+            </a>
+        </div>
+    </div>
+
+    <!-- Estatisticas do Mes -->
+    <div class="row mb-4">
+        <div class="col-md-3">
+            <div class="card card-stats primary">
+                <div class="card-body text-center">
+                    <div class="stat-value text-primary">{{ stats.total|default:0 }}</div>
+                    <div class="stat-label">Total Parcelas</div>
+                    <small class="text-muted">R$ {{ stats.valor_total|floatformat:2|default:"0,00" }}</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card card-stats success">
+                <div class="card-body text-center">
+                    <div class="stat-value text-success">{{ stats.pagas|default:0 }}</div>
+                    <div class="stat-label">Pagas</div>
+                    <small class="text-muted">R$ {{ stats.valor_pago|floatformat:2|default:"0,00" }}</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card card-stats warning">
+                <div class="card-body text-center">
+                    <div class="stat-value text-warning">{{ stats.pendentes|default:0 }}</div>
+                    <div class="stat-label">Em aberto</div>
+                    <small class="text-muted">R$ {{ stats.valor_pendente|floatformat:2|default:"0,00" }}</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card card-stats danger">
+                <div class="card-body text-center">
+                    <div class="stat-value text-danger">{{ stats.vencidas|default:0 }}</div>
+                    <div class="stat-label">Vencidas</div>
+                    <small class="text-muted">R$ {{ stats.valor_vencido|floatformat:2|default:"0,00" }}</small>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Filtros -->
+    <div class="card mb-4">
+        <div class="card-body">
+            <form method="get" class="row g-3">
+                <div class="col-md-4">
+                    <label class="form-label">Imobiliaria</label>
+                    <select name="imobiliaria" class="form-select" onchange="this.form.submit()">
+                        <option value="">Todas</option>
+                        {% for imob in imobiliarias %}
+                        <option value="{{ imob.id }}" {% if filtro_imobiliaria == imob.id|stringformat:"s" %}selected{% endif %}>
+                            {{ imob.nome }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label">Status</label>
+                    <select name="status" class="form-select" onchange="this.form.submit()">
+                        <option value="">Todos</option>
+                        <option value="pendentes" {% if filtro_status == 'pendentes' %}selected{% endif %}>Em aberto</option>
+                        <option value="pagas" {% if filtro_status == 'pagas' %}selected{% endif %}>Pagas</option>
+                        <option value="vencidas" {% if filtro_status == 'vencidas' %}selected{% endif %}>Vencidas</option>
+                    </select>
+                </div>
+                <div class="col-md-4 d-flex align-items-end">
+                    <a href="{% url 'financeiro:parcelas_mes' %}" class="btn btn-outline-secondary">
+                        <i class="fas fa-times me-1"></i> Limpar Filtros
+                    </a>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Resumo por Imobiliaria -->
+    {% if parcelas_por_imobiliaria %}
+    <div class="card mb-4">
+        <div class="card-header">
+            <h5 class="mb-0"><i class="fas fa-building me-2"></i>Resumo por Imobiliaria</h5>
+        </div>
+        <div class="card-body">
+            <div class="row">
+                {% for nome, dados in parcelas_por_imobiliaria.items %}
+                <div class="col-md-4 mb-3">
+                    <div class="card imob-card h-100">
+                        <div class="card-body">
+                            <h6 class="card-title">{{ nome }}</h6>
+                            <div class="d-flex justify-content-between mb-2">
+                                <span class="text-muted">Total:</span>
+                                <strong>{{ dados.total }} parcelas</strong>
+                            </div>
+                            <div class="progress mb-2">
+                                {% widthratio dados.pagas dados.total 100 as pct_pagas %}
+                                <div class="progress-bar bg-success" style="width: {{ pct_pagas|stringformat:'f' }}%"></div>
+                            </div>
+                            <div class="d-flex justify-content-between small">
+                                <span class="text-success">{{ dados.pagas }} pagas</span>
+                                <span class="text-warning">{{ dados.pendentes }} pendentes</span>
+                            </div>
+                            <hr>
+                            <div class="d-flex justify-content-between small">
+                                <span>A Receber:</span>
+                                <strong class="text-primary">R$ {{ dados.valor_pendente|floatformat:2 }}</strong>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Tabela de Parcelas -->
+    <div class="card">
+        <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
+            <h5 class="mb-0"><i class="fas fa-list me-2"></i>Parcelas do Mes</h5>
+            <div class="d-flex align-items-center gap-2">
+                <span class="badge bg-primary">{{ parcelas|length }} parcelas</span>
+                <i class="fas fa-search text-muted"></i>
+                <input type="text" class="form-control form-control-sm" style="width: 180px;"
+                       placeholder="Busca rápida..."
+                       oninput="if(window.parcelasMesGridApi) window.parcelasMesGridApi.setGridOption('quickFilterText', this.value)">
+                <button type="button" class="btn btn-sm btn-outline-success" title="Exportar CSV"
+                        onclick="window.parcelasMesGridApi && window.parcelasMesGridApi.exportDataAsCsv({fileName:'parcelas_mes.csv', processCellCallback: cleanCsvCell})">
+                    <i class="fas fa-file-csv me-1"></i>CSV
+                </button>
+            </div>
+        </div>
+        <div class="card-body p-0">
+            <div id="parcelasMesGrid" class="ag-theme-material" style="width: 100%;"></div>
+        </div>
+        <div class="card-footer">
+            {% include "includes/pagination_perpage.html" %}
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+function cleanCsvCell(params) {
+    const v = params.value;
+    if (v == null) return '';
+    if (typeof v === 'string' && v.includes('<')) {
+        const d = document.createElement('div'); d.innerHTML = v;
+        return (d.textContent || d.innerText || '').trim();
+    }
+    return v;
+}
+
+const parcelasMesRowData = [
+{% for parcela in parcelas %}
+{
+    pk: {{ parcela.pk }},
+    vencimento: "{{ parcela.data_vencimento|date:'d/m' }}",
+    vencimento_full: "{{ parcela.data_vencimento|date:'Y-m-d' }}",
+    dias_atraso: {{ parcela.dias_atraso|default:0 }},
+    numero_parcela: {{ parcela.numero_parcela }},
+    total_parcelas: {{ parcela.contrato.numero_parcelas }},
+    imobiliaria: "{{ parcela.contrato.imovel.imobiliaria.nome|default:'-'|escapejs }}",
+    comprador: "{{ parcela.contrato.comprador.nome|escapejs }}",
+    comprador_pk: {{ parcela.contrato.comprador.pk }},
+    valor_atual: parseFloat("{{ parcela.valor_atual|default:'0' }}") || 0,
+    pago: {{ parcela.pago|yesno:"true,false" }},
+    esta_vencida: {{ parcela.esta_vencida|yesno:"true,false" }},
+    detalhe_url: "{% url 'financeiro:detalhe_parcela' parcela.pk %}",
+    {% if not parcela.pago %}pagar_url: "{% url 'financeiro:registrar_pagamento' parcela.pk %}",{% else %}pagar_url: null,{% endif %}
+},
+{% endfor %}
+];
+
+function vencimentoRenderer(params) {
+    const d = params.data;
+    let html = `<strong>${d.vencimento}</strong>`;
+    if (d.esta_vencida && !d.pago) {
+        html += `<br><small class="text-danger">${d.dias_atraso}d atraso</small>`;
+    }
+    return html;
+}
+
+function statusMesRenderer(params) {
+    const d = params.data;
+    if (d.pago)         return '<span class="badge bg-success">Pago</span>';
+    if (d.esta_vencida) return '<span class="badge bg-danger">Vencida</span>';
+    return '<span class="badge bg-warning text-dark">Em aberto</span>';
+}
+
+function acoesMesRenderer(params) {
+    const d = params.data;
+    let html = `<div class="d-flex gap-1">
+        <a href="${d.detalhe_url}" class="btn btn-sm btn-outline-primary" title="Detalhes"><i class="fas fa-eye"></i></a>`;
+    if (d.pagar_url) {
+        html += `<a href="${d.pagar_url}" class="btn btn-sm btn-outline-success" title="Pagar"><i class="fas fa-dollar-sign"></i></a>`;
+    }
+    html += '</div>';
+    return html;
+}
+
+const parcelasMesColumnDefs = [
+    {
+        headerName: 'Vencimento',
+        field: 'vencimento',
+        filter: 'agTextColumnFilter',
+       
+        minWidth: 110,
+        cellRenderer: vencimentoRenderer,
+        sort: 'asc',
+    },
+    {
+        headerName: 'Parcela',
+        field: 'numero_parcela',
+        filter: 'agNumberColumnFilter',
+       
+        minWidth: 90,
+        cellRenderer: params => `${params.value}/${params.data.total_parcelas}`,
+    },
+    {
+        headerName: 'Imobiliária',
+        field: 'imobiliaria',
+        filter: 'agTextColumnFilter',
+       
+        minWidth: 140,
+    },
+    {
+        headerName: 'Comprador',
+        field: 'comprador',
+        filter: 'agTextColumnFilter',
+       
+        minWidth: 160,
+        cellRenderer: params => `<a href="/core/compradores/${params.data.comprador_pk}/editar/">${params.value}</a>`,
+    },
+    {
+        headerName: 'Valor',
+        field: 'valor_atual',
+        filter: 'agNumberColumnFilter',
+       
+        minWidth: 120,
+        type: 'numericColumn',
+        cellRenderer: params => '<strong>R$ ' + parseFloat(params.value).toLocaleString('pt-BR', {minimumFractionDigits: 2}) + '</strong>',
+    },
+    {
+        headerName: 'Status',
+        field: 'pago',
+        filter: 'agTextColumnFilter',
+       
+        minWidth: 100,
+        cellRenderer: statusMesRenderer,
+    },
+    {
+        headerName: 'Ações',
+        field: 'pk',
+        sortable: false,
+        filter: false,
+        minWidth: 100,
+        cellRenderer: acoesMesRenderer,
+    },
+];
+
+document.addEventListener('DOMContentLoaded', function() {
+    window.parcelasMesGridApi = agGrid.createGrid(
+        document.getElementById('parcelasMesGrid'),
+        {
+            columnDefs: parcelasMesColumnDefs,
+            rowData: parcelasMesRowData,
+            domLayout: 'autoHeight',
+            defaultColDef: { sortable: true, resizable: true },
+            rowHeight: 42,
+            headerHeight: 48,
+           
+            suppressCellFocus: true,
+            enableCellTextSelection: true,
+            getRowStyle: params => {
+                if (params.data.pago)         return { backgroundColor: '#d4edda' };
+                if (params.data.esta_vencida) return { backgroundColor: '#fff3cd' };
+                return null;
+            },
+            overlayNoRowsTemplate: '<div class="text-center py-4 text-muted"><i class="fas fa-inbox fa-2x mb-2 d-block"></i>Nenhuma parcela encontrada para este mes.</div>',
+        }
+    );
+});
+</script>
+{% endblock %}

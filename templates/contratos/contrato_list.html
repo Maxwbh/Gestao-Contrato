@@ -1,0 +1,961 @@
+{% extends 'base.html' %}
+{% load crispy_forms_tags %}
+
+{% block title %}Contratos - Gestao de Contratos{% endblock %}
+
+{% block extra_css %}
+<style>
+    .progress {
+        height: 8px;
+        border-radius: 4px;
+    }
+    .status-badge {
+        font-size: 0.75rem;
+        padding: 0.35em 0.65em;
+    }
+    .contrato-card {
+        transition: transform 0.2s, box-shadow 0.2s;
+    }
+    .contrato-card:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    }
+    /* ===== CARD VIEW ===== */
+    #sortable-cards {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 12px;
+        align-items: flex-start;
+    }
+    .card-item-wrapper {
+        box-sizing: border-box;
+        transition: width 0.2s ease;
+        min-width: 0;
+    }
+    .card-item-wrapper .card {
+        height: 100%;
+    }
+    .card-item-wrapper.sortable-ghost {
+        opacity: 0.4;
+        background: #d0e8ff;
+        border: 2px dashed #0d6efd;
+    }
+    .card-item-wrapper.sortable-chosen {
+        box-shadow: 0 8px 24px rgba(0,0,0,0.2);
+        z-index: 9999;
+    }
+    .card-drag-handle {
+        cursor: grab;
+        padding: 0 6px;
+        color: #adb5bd;
+        transition: color 0.2s;
+    }
+    .card-drag-handle:hover { color: #0d6efd; }
+    .card-drag-handle:active { cursor: grabbing; }
+    .card-size-btns .btn {
+        padding: 1px 5px;
+        font-size: 0.7rem;
+        line-height: 1.3;
+    }
+    .card-size-btns .btn.active {
+        background-color: #0d6efd;
+        color: white;
+        border-color: #0d6efd;
+    }
+    .btn-toggle-view.active i { color: #0d6efd; }
+    .card-reajuste {
+        border-left: 4px solid #ffc107;
+    }
+    .card-reajuste .badge-atraso {
+        animation: pulse 2s infinite;
+    }
+    @keyframes pulse {
+        0%, 100% { opacity: 1; }
+        50% { opacity: 0.6; }
+    }
+    /* Selecao de contratos */
+    .contrato-selecionado {
+        background-color: #e7f3ff !important;
+    }
+    /* AG Grid overrides */
+    .ag-theme-material .ag-root-wrapper { border-radius: 0; border: none; }
+    .ag-theme-material .ag-header { background-color: #f8f9fa; }
+    .ag-theme-material .ag-header-cell-text { color: #212529; font-weight: 600; }
+    .ag-theme-material .ag-row-even { background-color: #fff; }
+    .ag-theme-material .ag-row-odd  { background-color: #f8f9fa; }
+    .ag-theme-material .ag-row:hover { background-color: #e8f4fd !important; }
+    .ag-theme-material .ag-row-selected { background-color: #cfe2ff !important; }
+    .ag-grid-actions .btn { padding: 1px 6px; font-size: 0.75rem; margin: 1px; }
+    .acoes-lote {
+        position: sticky;
+        bottom: 0;
+        background: linear-gradient(135deg, #f8f9fa, #e9ecef);
+        border-top: 2px solid #dee2e6;
+        padding: 1rem;
+        margin-top: 1rem;
+        border-radius: 8px;
+        box-shadow: 0 -2px 10px rgba(0,0,0,0.1);
+    }
+    /* Toast Notifications */
+    .toast-container {
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        z-index: 9999;
+    }
+    .toast-notification {
+        min-width: 300px;
+        padding: 15px 20px;
+        margin-bottom: 10px;
+        border-radius: 8px;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+        display: flex;
+        align-items: center;
+        animation: slideIn 0.3s ease-out;
+    }
+    .toast-notification.success {
+        background: linear-gradient(135deg, #28a745, #20c997);
+        color: white;
+    }
+    .toast-notification.error {
+        background: linear-gradient(135deg, #dc3545, #e74c3c);
+        color: white;
+    }
+    .toast-notification i {
+        font-size: 1.2rem;
+        margin-right: 12px;
+    }
+    .toast-notification .toast-close {
+        margin-left: auto;
+        cursor: pointer;
+        opacity: 0.7;
+    }
+    @keyframes slideIn {
+        from { transform: translateX(100%); opacity: 0; }
+        to { transform: translateX(0); opacity: 1; }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<!-- Toast Container -->
+<div id="toastContainer" class="toast-container"></div>
+
+<div class="row">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h4 class="mb-0">
+                    <i class="fas fa-file-contract"></i> Gerenciar Contratos
+                </h4>
+                <div class="d-flex align-items-center gap-2">
+                    <button type="button" class="btn btn-outline-secondary btn-toggle-view" id="btnToggleView"
+                            onclick="toggleCardView()" title="Alternar visualização em cards">
+                        <i class="fas fa-th-large"></i>
+                    </button>
+                    <button type="button" class="btn btn-success me-2" id="btnGerarLote" style="display: none;" onclick="abrirModalGerarLote()">
+                        <i class="fas fa-barcode"></i> Gerar Boletos (<span id="qtdSelecionados">0</span>)
+                    </button>
+                    <a href="{% url 'contratos:wizard' %}" class="btn btn-primary me-2">
+                        <i class="fas fa-magic"></i> Novo Contrato (Wizard)
+                    </a>
+                    <a href="{% url 'contratos:criar' %}" class="btn btn-light">
+                        <i class="fas fa-plus"></i> Novo Contrato (Simples)
+                    </a>
+                </div>
+            </div>
+            <div class="card-body">
+                <!-- Barra de Busca e Filtros -->
+                <div class="row mb-4">
+                    <div class="col-md-4">
+                        <form method="get" class="d-flex">
+                            <input type="text" name="search" class="form-control me-2"
+                                   placeholder="Buscar por numero, comprador, imovel..."
+                                   value="{{ search }}">
+                            <button type="submit" class="btn btn-primary">
+                                <i class="fas fa-search"></i>
+                            </button>
+                            {% if search %}
+                                <a href="{% url 'contratos:listar' %}" class="btn btn-secondary ms-2">
+                                    <i class="fas fa-times"></i>
+                                </a>
+                            {% endif %}
+                        </form>
+                    </div>
+                    <div class="col-md-2">
+                        <select class="form-select" onchange="window.location.href='?status=' + this.value + '{% if search %}&search={{ search }}{% endif %}{% if imobiliaria_filter %}&imobiliaria={{ imobiliaria_filter }}{% endif %}'">
+                            <option value="">Todos os Status</option>
+                            {% for status_val, status_label in status_choices %}
+                                <option value="{{ status_val }}" {% if status_filter == status_val %}selected{% endif %}>
+                                    {{ status_label }}
+                                </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-md-3">
+                        <select class="form-select" onchange="window.location.href='?imobiliaria=' + this.value + '{% if search %}&search={{ search }}{% endif %}{% if status_filter %}&status={{ status_filter }}{% endif %}'">
+                            <option value="">Todas as Imobiliarias</option>
+                            {% for imob in imobiliarias %}
+                                <option value="{{ imob.id }}" {% if imobiliaria_filter == imob.id|stringformat:"s" %}selected{% endif %}>
+                                    {{ imob.nome }}
+                                </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-md-3 text-end">
+                        <div class="badge bg-info text-dark fs-6 me-1">
+                            <i class="fas fa-file-contract"></i> Total: {{ total_contratos }}
+                        </div>
+                        <div class="badge bg-success fs-6 me-1">
+                            <i class="fas fa-check-circle"></i> Ativos: {{ contratos_ativos }}
+                        </div>
+                        <div class="badge bg-primary fs-6">
+                            <i class="fas fa-flag-checkered"></i> Quitados: {{ contratos_quitados }}
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Card de Contratos que Precisam de Reajuste -->
+                {% if contratos_reajuste %}
+                <div class="card card-reajuste mb-4">
+                    <div class="card-header bg-warning text-dark d-flex justify-content-between align-items-center">
+                        <h5 class="mb-0">
+                            <i class="fas fa-sync-alt"></i> Contratos que Precisam de Reajuste
+                            <span class="badge bg-danger badge-atraso ms-2">{{ contratos_reajuste|length }}</span>
+                        </h5>
+                        <a href="{% url 'contratos:indices_listar' %}" class="btn btn-sm btn-outline-dark">
+                            <i class="fas fa-chart-line"></i> Ver Indices
+                        </a>
+                    </div>
+                    <div class="card-body p-0">
+                        <div class="table-responsive">
+                            <table class="table table-sm table-hover mb-0">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th>Contrato</th>
+                                        <th>Comprador</th>
+                                        <th>Tipo Correcao</th>
+                                        <th>Ultimo Reajuste</th>
+                                        <th>Data Prevista</th>
+                                        <th>Atraso</th>
+                                        <th class="text-center">Acao</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for item in contratos_reajuste %}
+                                    <tr>
+                                        <td>
+                                            <strong>{{ item.contrato.numero_contrato }}</strong>
+                                        </td>
+                                        <td>{{ item.contrato.comprador.nome|truncatechars:25 }}</td>
+                                        <td>
+                                            <span class="badge {% if item.contrato.tipo_correcao == 'IPCA' %}bg-primary{% elif item.contrato.tipo_correcao == 'IGPM' %}bg-success{% else %}bg-info{% endif %}">
+                                                {{ item.contrato.tipo_correcao }}
+                                            </span>
+                                        </td>
+                                        <td>
+                                            {% if item.data_ultimo_reajuste %}
+                                                {{ item.data_ultimo_reajuste|date:"d/m/Y" }}
+                                            {% else %}
+                                                <span class="text-muted">Nunca</span>
+                                            {% endif %}
+                                        </td>
+                                        <td>{{ item.proxima_data_reajuste|date:"d/m/Y" }}</td>
+                                        <td>
+                                            {% if item.meses_atraso == 0 %}
+                                                <span class="badge bg-warning text-dark">Este mes</span>
+                                            {% elif item.meses_atraso == 1 %}
+                                                <span class="badge bg-danger">1 mes</span>
+                                            {% else %}
+                                                <span class="badge bg-danger">{{ item.meses_atraso }} meses</span>
+                                            {% endif %}
+                                        </td>
+                                        <td class="text-center">
+                                            <a href="{% url 'contratos:detalhe' item.contrato.pk %}" class="btn btn-sm btn-outline-primary" title="Ver Detalhes">
+                                                <i class="fas fa-eye"></i>
+                                            </a>
+                                        </td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+                {% endif %}
+
+                <!-- ===== CARD VIEW ===== -->
+                <div id="card-view-container" class="d-none mb-3">
+                    <div id="sortable-cards">
+                        {% for contrato in contratos %}
+                        <div class="card-item-wrapper"
+                             data-id="{{ contrato.pk }}"
+                             data-cols="6"
+                             data-min-cols="{% if contrato.status == 'ATIVO' %}3{% else %}2{% endif %}"
+                             style="width: calc(50% - 6px);">
+                            <div class="card border {% if contrato.status == 'ATIVO' %}border-success{% elif contrato.status == 'CANCELADO' %}border-danger{% else %}border-primary{% endif %} h-100">
+                                <div class="card-header d-flex align-items-center py-1 px-2" style="gap:4px;">
+                                    <span class="card-drag-handle" title="Arrastar para reposicionar">
+                                        <i class="fas fa-grip-vertical"></i>
+                                    </span>
+                                    <strong class="flex-grow-1 text-truncate" style="font-size:0.9rem;">
+                                        {{ contrato.numero_contrato }}
+                                    </strong>
+                                    <span class="badge status-badge {% if contrato.status == 'ATIVO' %}bg-success{% elif contrato.status == 'QUITADO' %}bg-primary{% elif contrato.status == 'CANCELADO' %}bg-danger{% else %}bg-warning text-dark{% endif %} me-1">
+                                        {{ contrato.get_status_display }}
+                                    </span>
+                                    <!-- Size controls -->
+                                    <div class="card-size-btns btn-group btn-group-sm" role="group">
+                                        <button type="button" class="btn btn-outline-secondary" data-size="2" onclick="setCardSize(this,2)" title="2 cols">2</button>
+                                        <button type="button" class="btn btn-outline-secondary" data-size="3" onclick="setCardSize(this,3)" title="3 cols">3</button>
+                                        <button type="button" class="btn btn-outline-secondary active" data-size="6" onclick="setCardSize(this,6)" title="6 cols">6</button>
+                                        <button type="button" class="btn btn-outline-secondary" data-size="9" onclick="setCardSize(this,9)" title="9 cols">9</button>
+                                        <button type="button" class="btn btn-outline-secondary" data-size="12" onclick="setCardSize(this,12)" title="12 cols">12</button>
+                                    </div>
+                                </div>
+                                <div class="card-body py-2 px-3" style="font-size:0.85rem;">
+                                    <div class="d-flex gap-2 mb-1 flex-wrap">
+                                        <span><i class="fas fa-user text-primary me-1"></i>{{ contrato.comprador.nome|truncatechars:25 }}</span>
+                                    </div>
+                                    <div class="d-flex gap-2 mb-1 flex-wrap">
+                                        <span><i class="fas fa-home text-success me-1"></i>{{ contrato.imovel.identificacao }}</span>
+                                    </div>
+                                    <div class="d-flex gap-3 mb-2 flex-wrap">
+                                        <span class="text-muted"><i class="fas fa-calendar me-1"></i>{{ contrato.data_contrato|date:"d/m/Y" }}</span>
+                                        <strong>R$ {{ contrato.valor_total|floatformat:2 }}</strong>
+                                        <span class="badge bg-secondary">{{ contrato.numero_parcelas }}x</span>
+                                    </div>
+                                    {% with progresso=contrato.calcular_progresso %}
+                                    <div class="progress mb-1" style="height:6px;">
+                                        <div class="progress-bar {% if progresso >= 100 %}bg-success{% elif progresso >= 50 %}bg-info{% else %}bg-warning{% endif %}"
+                                             style="width: {{ progresso|stringformat:'f' }}%"></div>
+                                    </div>
+                                    <small class="text-muted">{{ progresso|floatformat:1 }}% pago</small>
+                                    {% endwith %}
+                                </div>
+                                <div class="card-footer py-1 px-2 d-flex justify-content-end" style="gap:4px;">
+                                    <a href="{% url 'contratos:detalhe' contrato.pk %}" class="btn btn-sm btn-outline-info" title="Ver detalhes">
+                                        <i class="fas fa-eye"></i>
+                                    </a>
+                                    <a href="{% url 'contratos:editar' contrato.pk %}" class="btn btn-sm btn-outline-primary" title="Editar">
+                                        <i class="fas fa-edit"></i>
+                                    </a>
+                                </div>
+                            </div>
+                        </div>
+                        {% empty %}
+                        <p class="text-muted">Nenhum contrato para exibir.</p>
+                        {% endfor %}
+                    </div>
+                    {% include "includes/pagination_perpage.html" %}
+                </div>
+
+                <!-- ===== TABLE VIEW (AG Grid) ===== -->
+                <div id="table-view-container">
+                    <div class="px-3 pt-3 pb-2 border-bottom bg-light d-flex align-items-center gap-2">
+                        <i class="fas fa-search text-muted"></i>
+                        <input type="text" id="contratosQuickFilter" class="form-control form-control-sm"
+                               placeholder="Busca rápida na página..." style="width: 220px;"
+                               oninput="if(window.contratosGridApi) window.contratosGridApi.setGridOption('quickFilterText', this.value)">
+                        <button type="button" class="btn btn-sm btn-outline-success" title="Exportar CSV"
+                                onclick="window.contratosGridApi && window.contratosGridApi.exportDataAsCsv({fileName:'contratos.csv', processCellCallback: cleanCsvCellContratos})">
+                            <i class="fas fa-file-csv me-1"></i>CSV
+                        </button>
+                    </div>
+                    <!-- Dados para AG Grid -->
+                    <script>
+                    var contratosRowData = [
+                    {% for contrato in contratos %}
+                    {
+                        pk: {{ contrato.pk }},
+                        numero: "{{ contrato.numero_contrato|escapejs }}",
+                        data_contrato: "{{ contrato.data_contrato|date:'d/m/Y' }}",
+                        comprador: "{{ contrato.comprador.nome|escapejs }}",
+                        imovel: "{{ contrato.imovel.identificacao|escapejs }}",
+                        loteamento: "{{ contrato.imovel.loteamento|default:''|escapejs }}",
+                        valor_total: parseFloat("{{ contrato.valor_total|default:'0' }}") || 0,
+                        valor_entrada: parseFloat("{{ contrato.valor_entrada|default:'0' }}") || 0,
+                        numero_parcelas: {{ contrato.numero_parcelas }},
+                        valor_parcela: parseFloat("{{ contrato.valor_parcela_original|default:'0' }}") || 0,
+                        progresso: parseFloat("{{ contrato.calcular_progresso|floatformat:1 }}") || 0,
+                        status: "{{ contrato.status }}",
+                        status_display: "{{ contrato.get_status_display|escapejs }}",
+                        is_ativo: {% if contrato.status == 'ATIVO' %}true{% else %}false{% endif %},
+                        detalhe_url: "{% url 'contratos:detalhe' contrato.pk %}",
+                        editar_url: "{% url 'contratos:editar' contrato.pk %}",
+                        cancelar_url: "{% url 'contratos:excluir' contrato.pk %}",
+                    },
+                    {% endfor %}
+                    ];
+                    </script>
+                    <div id="contratosGrid" class="ag-theme-material" style="width: 100%;"></div>
+                    <div class="p-3">
+                        {% include "includes/pagination_perpage.html" %}
+                    </div>
+                    {% if not contratos %}
+                    <div class="alert alert-info text-center m-3">
+                        <i class="fas fa-info-circle fa-3x mb-3"></i>
+                        <h5>Nenhum contrato encontrado</h5>
+                        <p>
+                            {% if search %}
+                                Sua busca por "{{ search }}" nao retornou resultados.
+                            {% else %}
+                                Comece cadastrando um novo contrato.
+                            {% endif %}
+                        </p>
+                        <a href="{% url 'contratos:criar' %}" class="btn btn-primary">
+                            <i class="fas fa-plus"></i> Cadastrar Primeiro Contrato
+                        </a>
+                    </div>
+                    {% endif %}
+                </div><!-- /table-view-container -->
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal de Confirmacao de Cancelamento -->
+<div class="modal fade" id="modalCancelamento" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-danger text-white">
+                <h5 class="modal-title">
+                    <i class="fas fa-exclamation-triangle"></i> Confirmar Cancelamento
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p>Tem certeza que deseja cancelar o contrato <strong id="nomeContrato"></strong>?</p>
+                <p class="text-warning">
+                    <i class="fas fa-info-circle"></i> O cancelamento nao pode ser desfeito e o imovel sera liberado para novas vendas.
+                </p>
+                <p class="text-danger">
+                    <i class="fas fa-exclamation-circle"></i> Se houver parcelas pagas, o cancelamento nao sera permitido.
+                </p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                    Voltar
+                </button>
+                <form id="formCancelamento" method="post" style="display: inline;">
+                    {% csrf_token %}
+                    <button type="submit" class="btn btn-danger">
+                        <i class="fas fa-ban"></i> Cancelar Contrato
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal de Geracao em Lote -->
+<div class="modal fade" id="modalGerarLote" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header bg-success text-white">
+                <h5 class="modal-title">
+                    <i class="fas fa-barcode"></i> Gerar Boletos em Lote
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="alert alert-info">
+                    <i class="fas fa-info-circle"></i>
+                    <strong>Regras de geracao:</strong>
+                    <ul class="mb-0 mt-2">
+                        <li>Contratos com indice <strong>FIXO</strong>: Todas as parcelas podem ser geradas</li>
+                        <li>Demais indices: Apenas parcelas do ciclo atual (ate reajuste pendente)</li>
+                        <li>Parcelas ja com boleto serao ignoradas</li>
+                    </ul>
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label fw-bold">Quantidade de Boletos por Contrato</label>
+                    <div class="input-group" style="max-width: 300px;">
+                        <button type="button" class="btn btn-outline-secondary" onclick="setQtdLote(1)">1</button>
+                        <button type="button" class="btn btn-outline-secondary" onclick="setQtdLote(6)">6</button>
+                        <button type="button" class="btn btn-outline-secondary" onclick="setQtdLote(12)">12</button>
+                        <input type="number" class="form-control text-center" id="qtdBoletosLote" min="1" max="120" value="1">
+                    </div>
+                    <small class="text-muted">Maximo de boletos a gerar por contrato (respeitando restricoes de reajuste)</small>
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label fw-bold">Contratos Selecionados</label>
+                    <div id="listaContratosSelecionados" class="border rounded p-2" style="max-height: 250px; overflow-y: auto;">
+                        <!-- Lista sera preenchida via JS -->
+                    </div>
+                </div>
+
+                <div id="resultadoGeracaoLote" class="d-none">
+                    <h6 class="mb-2">Resultado da Geracao</h6>
+                    <div id="resultadoConteudo" class="border rounded p-2" style="max-height: 200px; overflow-y: auto;"></div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Fechar</button>
+                <button type="button" class="btn btn-success" id="btnConfirmarGerarLote" onclick="confirmarGerarLote()">
+                    <i class="fas fa-barcode"></i> Gerar Boletos
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    function confirmarCancelamento(numero, url) {
+        document.getElementById('nomeContrato').textContent = numero;
+        document.getElementById('formCancelamento').action = url;
+        new bootstrap.Modal(document.getElementById('modalCancelamento')).show();
+    }
+
+    // ============ FUNCOES DE TOAST ============
+
+    function showToast(message, type, duration) {
+        type = type || 'success';
+        duration = duration || 4000;
+        var container = document.getElementById('toastContainer');
+        var toast = document.createElement('div');
+        toast.className = 'toast-notification ' + type;
+
+        var icon = type === 'success' ? 'fa-check-circle' :
+                   type === 'error' ? 'fa-exclamation-circle' : 'fa-info-circle';
+
+        toast.innerHTML = '<i class="fas ' + icon + '"></i>' +
+                          '<span>' + message + '</span>' +
+                          '<span class="toast-close" onclick="this.parentElement.remove()"><i class="fas fa-times"></i></span>';
+
+        container.appendChild(toast);
+
+        setTimeout(function() {
+            toast.style.animation = 'slideOut 0.3s ease-out forwards';
+            setTimeout(function() { toast.remove(); }, 300);
+        }, duration);
+    }
+
+    function cleanCsvCellContratos(params) {
+        const v = params.value;
+        if (v == null) return '';
+        if (typeof v === 'string' && v.includes('<')) {
+            const d = document.createElement('div'); d.innerHTML = v;
+            return (d.textContent || d.innerText || '').trim();
+        }
+        return v;
+    }
+
+    // ============ AG GRID - CONTRATOS ============
+
+    function formatBRL(value) {
+        if (value == null) return '—';
+        return 'R$ ' + parseFloat(value).toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+    }
+
+    function progressoRenderer(params) {
+        const p = parseFloat(params.value) || 0;
+        const cls = p >= 100 ? 'bg-success' : p >= 50 ? 'bg-info' : 'bg-warning';
+        return `<div style="min-width:100px;">
+            <div class="progress mb-1" style="height:6px;">
+                <div class="progress-bar ${cls}" style="width:${Math.min(p,100)}%"></div>
+            </div>
+            <small class="text-muted">${p.toFixed(1)}% pago</small>
+        </div>`;
+    }
+
+    function statusRenderer(params) {
+        const s = params.data.status;
+        const label = params.data.status_display;
+        if (s === 'ATIVO')     return `<span class="badge bg-success">${label}</span>`;
+        if (s === 'QUITADO')   return `<span class="badge bg-primary">${label}</span>`;
+        if (s === 'CANCELADO') return `<span class="badge bg-danger">${label}</span>`;
+        return `<span class="badge bg-warning text-dark">${label}</span>`;
+    }
+
+    function acoesContratoRenderer(params) {
+        const d = params.data;
+        let html = `<div class="ag-grid-actions">
+            <a href="${d.detalhe_url}" class="btn btn-sm btn-outline-info" title="Ver Detalhes"><i class="fas fa-eye"></i></a>
+            <a href="${d.editar_url}" class="btn btn-sm btn-outline-primary" title="Editar"><i class="fas fa-edit"></i></a>`;
+        if (d.status !== 'CANCELADO') {
+            html += `<button class="btn btn-sm btn-outline-danger" title="Cancelar"
+                onclick="confirmarCancelamento('${d.numero.replace(/'/g,"\\'")}', '${d.cancelar_url}')">
+                <i class="fas fa-ban"></i></button>`;
+        }
+        html += '</div>';
+        return html;
+    }
+
+    const contratosColumnDefs = [
+        {
+            headerName: '',
+            field: 'pk',
+            checkboxSelection: params => params.data.is_ativo,
+            headerCheckboxSelection: true,
+            headerCheckboxSelectionFilteredOnly: true,
+            width: 50,
+            minWidth: 50,
+            maxWidth: 50,
+            sortable: false,
+            filter: false,
+            resizable: false,
+        },
+        {
+            headerName: 'Contrato',
+            field: 'numero',
+            filter: 'agTextColumnFilter',
+           
+            minWidth: 130,
+            cellRenderer: params => `<strong>${params.value}</strong><br><small class="text-muted">${params.data.data_contrato}</small>`,
+        },
+        {
+            headerName: 'Comprador',
+            field: 'comprador',
+            filter: 'agTextColumnFilter',
+           
+            minWidth: 160,
+            cellRenderer: params => `<i class="fas fa-user text-primary me-1"></i>${params.value}`,
+        },
+        {
+            headerName: 'Imóvel',
+            field: 'imovel',
+            filter: 'agTextColumnFilter',
+           
+            minWidth: 150,
+            cellRenderer: params => `<i class="fas fa-home text-success me-1"></i>${params.value}<br><small class="text-muted">${params.data.loteamento}</small>`,
+        },
+        {
+            headerName: 'Valor Total',
+            field: 'valor_total',
+            filter: 'agNumberColumnFilter',
+           
+            minWidth: 130,
+            type: 'numericColumn',
+            cellRenderer: params => `<strong>${formatBRL(params.value)}</strong>`,
+        },
+        {
+            headerName: 'Parcelas',
+            field: 'numero_parcelas',
+            filter: 'agNumberColumnFilter',
+           
+            minWidth: 100,
+            type: 'numericColumn',
+            cellRenderer: params => `<span class="badge bg-secondary">${params.value}x</span><br><small class="text-muted">${formatBRL(params.data.valor_parcela)}</small>`,
+        },
+        {
+            headerName: 'Progresso',
+            field: 'progresso',
+            filter: 'agNumberColumnFilter',
+           
+            minWidth: 140,
+            cellRenderer: progressoRenderer,
+        },
+        {
+            headerName: 'Status',
+            field: 'status',
+            filter: 'agTextColumnFilter',
+           
+            minWidth: 110,
+            cellRenderer: statusRenderer,
+        },
+        {
+            headerName: 'Ações',
+            field: 'pk',
+            sortable: false,
+            filter: false,
+            minWidth: 145,
+            cellRenderer: acoesContratoRenderer,
+        },
+    ];
+
+    document.addEventListener('DOMContentLoaded', function() {
+        window.contratosGridApi = agGrid.createGrid(
+            document.getElementById('contratosGrid'),
+            {
+                columnDefs: contratosColumnDefs,
+                rowData: typeof contratosRowData !== 'undefined' ? contratosRowData : [],
+                domLayout: 'autoHeight',
+                rowSelection: 'multiple',
+                suppressRowClickSelection: true,
+                defaultColDef: {
+                    sortable: true,
+                    resizable: true,
+                },
+                rowHeight: 52,
+                headerHeight: 48,
+               
+                suppressCellFocus: true,
+                enableCellTextSelection: true,
+                onSelectionChanged: function() {
+                    const rows = window.contratosGridApi.getSelectedRows();
+                    const qtd = rows.length;
+                    document.getElementById('qtdSelecionados').textContent = qtd;
+                    document.getElementById('btnGerarLote').style.display = qtd > 0 ? 'inline-block' : 'none';
+                },
+                overlayNoRowsTemplate: '<div class="text-center py-4 text-muted"><i class="fas fa-inbox fa-2x mb-2 d-block"></i>Nenhum contrato encontrado</div>',
+            }
+        );
+    });
+
+    // ============ FUNCOES DE GERACAO EM LOTE ============
+
+    function setQtdLote(qtd) {
+        document.getElementById('qtdBoletosLote').value = qtd;
+    }
+
+    function abrirModalGerarLote() {
+        var selectedRows = window.contratosGridApi ? window.contratosGridApi.getSelectedRows() : [];
+        if (selectedRows.length === 0) {
+            showErrorModal('Selecione pelo menos um contrato.');
+            return;
+        }
+
+        var lista = document.getElementById('listaContratosSelecionados');
+        var html = '<table class="table table-sm mb-0"><thead class="table-light"><tr><th>Contrato</th><th>Status</th></tr></thead><tbody>';
+        selectedRows.forEach(function(row) {
+            html += '<tr><td><strong>' + row.numero + '</strong></td><td><span class="badge bg-success">Ativo</span></td></tr>';
+        });
+        html += '</tbody></table>';
+        lista.innerHTML = html;
+
+        document.getElementById('resultadoGeracaoLote').classList.add('d-none');
+        document.getElementById('btnConfirmarGerarLote').disabled = false;
+        document.getElementById('btnConfirmarGerarLote').innerHTML = '<i class="fas fa-barcode"></i> Gerar Boletos';
+
+        new bootstrap.Modal(document.getElementById('modalGerarLote')).show();
+    }
+
+    function confirmarGerarLote() {
+        var selectedRows = window.contratosGridApi ? window.contratosGridApi.getSelectedRows() : [];
+        var contratoIds = selectedRows.map(function(row) { return row.pk; });
+        var quantidade = parseInt(document.getElementById('qtdBoletosLote').value) || 1;
+
+        if (contratoIds.length === 0) {
+            showErrorModal('Nenhum contrato selecionado.');
+            return;
+        }
+
+        var btn = document.getElementById('btnConfirmarGerarLote');
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Gerando boletos...';
+
+        fetch('/financeiro/api/boletos/gerar-lote/', {
+            method: 'POST',
+            headers: {
+                'X-CSRFToken': '{{ csrf_token }}',
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                contratos: contratoIds,
+                quantidade: quantidade
+            })
+        })
+        .then(response => response.json())
+        .then(data => {
+            var resultadoDiv = document.getElementById('resultadoGeracaoLote');
+            var conteudoDiv = document.getElementById('resultadoConteudo');
+
+            if (data.sucesso) {
+                var html = '<div class="alert alert-success mb-2">';
+                html += '<strong>' + data.total_gerados + '</strong> boleto(s) gerado(s) em <strong>' + data.total_contratos + '</strong> contrato(s)';
+                if (data.total_bloqueados > 0) {
+                    html += '<br><small>' + data.total_bloqueados + ' parcela(s) bloqueada(s) por reajuste</small>';
+                }
+                html += '</div>';
+
+                // Detalhes por contrato
+                html += '<table class="table table-sm"><thead class="table-light"><tr><th>Contrato</th><th>Gerados</th><th>Bloqueados</th></tr></thead><tbody>';
+
+                data.resultados.forEach(function(r) {
+                    var trClass = r.sucesso ? '' : 'table-danger';
+                    html += '<tr class="' + trClass + '">';
+                    html += '<td>' + r.numero_contrato + '</td>';
+                    html += '<td><span class="badge bg-success">' + r.gerados + '</span></td>';
+                    html += '<td>';
+                    if (r.bloqueados > 0) {
+                        html += '<span class="badge bg-warning text-dark">' + r.bloqueados + '</span>';
+                    } else {
+                        html += '-';
+                    }
+                    html += '</td>';
+                    html += '</tr>';
+                });
+
+                html += '</tbody></table>';
+
+                conteudoDiv.innerHTML = html;
+                resultadoDiv.classList.remove('d-none');
+
+                showToast(data.mensagem, 'success');
+
+                btn.innerHTML = '<i class="fas fa-check"></i> Concluido';
+                btn.classList.remove('btn-success');
+                btn.classList.add('btn-secondary');
+
+                // Recarregar pagina apos 2 segundos
+                setTimeout(function() {
+                    location.reload();
+                }, 2000);
+
+            } else {
+                showToast('Erro: ' + data.erro, 'error');
+                btn.disabled = false;
+                btn.innerHTML = '<i class="fas fa-barcode"></i> Gerar Boletos';
+            }
+        })
+        .catch(function(error) {
+            showToast('Erro de conexao: ' + error, 'error');
+            btn.disabled = false;
+            btn.innerHTML = '<i class="fas fa-barcode"></i> Gerar Boletos';
+        });
+    }
+
+    // ============ CARD VIEW ============
+    const STORAGE_KEY_VIEW  = 'contratos_view_mode';
+    const STORAGE_KEY_CARDS = 'contratos_cards_layout';
+
+    let sortableInstance = null;
+
+    function colsToWidth(cols) {
+        // Bootstrap 12-col grid → percentage, accounting for 12px gap
+        return 'calc(' + (cols / 12 * 100) + '% - 12px)';
+    }
+
+    function saveLayout() {
+        const items = document.querySelectorAll('#sortable-cards .card-item-wrapper');
+        const layout = [];
+        items.forEach(function(el) {
+            layout.push({ id: el.dataset.id, cols: parseInt(el.dataset.cols) });
+        });
+        localStorage.setItem(STORAGE_KEY_CARDS, JSON.stringify(layout));
+    }
+
+    function applyAutoExpand() {
+        // For each "visual row", if a card is the only one, set it to col-12
+        const container = document.getElementById('sortable-cards');
+        const items = Array.from(container.children);
+        const containerW = container.getBoundingClientRect().width;
+        if (!containerW) return;
+
+        let rowStart = 0;
+        let rowCols  = 0;
+        for (let i = 0; i < items.length; i++) {
+            const cols = parseInt(items[i].dataset.cols) || 6;
+            rowCols += cols;
+            const isLast = (i === items.length - 1);
+            const nextCols = isLast ? 0 : (parseInt(items[i + 1]?.dataset.cols) || 6);
+            const rowWouldOverflow = (rowCols + nextCols) > 12;
+
+            if (rowWouldOverflow || isLast) {
+                // If this card is alone in the row, give it col-12
+                if (i === rowStart) {
+                    const minCols = parseInt(items[i].dataset.minCols) || 2;
+                    const targetCols = Math.max(12, minCols);
+                    items[i].style.width = colsToWidth(targetCols);
+                }
+                rowStart = i + 1;
+                rowCols  = 0;
+            }
+        }
+    }
+
+    function applyLayout(layout) {
+        const container = document.getElementById('sortable-cards');
+        if (!container || !layout.length) return;
+
+        // Re-order DOM nodes
+        const itemMap = {};
+        container.querySelectorAll('.card-item-wrapper').forEach(function(el) {
+            itemMap[el.dataset.id] = el;
+        });
+
+        layout.forEach(function(item) {
+            const el = itemMap[item.id];
+            if (!el) return;
+            el.dataset.cols = item.cols;
+            el.style.width = colsToWidth(item.cols);
+            // Update active size button
+            el.querySelectorAll('.card-size-btns .btn').forEach(function(btn) {
+                btn.classList.toggle('active', parseInt(btn.dataset.size) === item.cols);
+            });
+            container.appendChild(el);
+        });
+
+        applyAutoExpand();
+    }
+
+    function setCardSize(btn, cols) {
+        const wrapper = btn.closest('.card-item-wrapper');
+        const minCols = parseInt(wrapper.dataset.minCols) || 2;
+        const actualCols = Math.max(cols, minCols);
+
+        wrapper.dataset.cols = actualCols;
+        wrapper.style.width = colsToWidth(actualCols);
+
+        // Update active button
+        wrapper.querySelectorAll('.card-size-btns .btn').forEach(function(b) {
+            b.classList.toggle('active', parseInt(b.dataset.size) === cols);
+        });
+
+        applyAutoExpand();
+        saveLayout();
+    }
+
+    function toggleCardView() {
+        const cardView  = document.getElementById('card-view-container');
+        const tableView = document.getElementById('table-view-container');
+        const btn       = document.getElementById('btnToggleView');
+        const isCard    = !cardView.classList.contains('d-none');
+
+        if (isCard) {
+            cardView.classList.add('d-none');
+            tableView.classList.remove('d-none');
+            btn.classList.remove('active');
+            localStorage.setItem(STORAGE_KEY_VIEW, 'table');
+        } else {
+            tableView.classList.add('d-none');
+            cardView.classList.remove('d-none');
+            btn.classList.add('active');
+            localStorage.setItem(STORAGE_KEY_VIEW, 'cards');
+            initSortable();
+            applyAutoExpand();
+        }
+    }
+
+    function initSortable() {
+        if (sortableInstance) return;
+        const el = document.getElementById('sortable-cards');
+        if (!el || typeof Sortable === 'undefined') return;
+
+        sortableInstance = Sortable.create(el, {
+            handle: '.card-drag-handle',
+            animation: 150,
+            ghostClass: 'sortable-ghost',
+            chosenClass: 'sortable-chosen',
+            onEnd: function() {
+                applyAutoExpand();
+                saveLayout();
+            }
+        });
+    }
+
+    // Init on page load
+    document.addEventListener('DOMContentLoaded', function() {
+        const savedView = localStorage.getItem(STORAGE_KEY_VIEW);
+        if (savedView === 'cards') {
+            document.getElementById('card-view-container').classList.remove('d-none');
+            document.getElementById('table-view-container').classList.add('d-none');
+            document.getElementById('btnToggleView').classList.add('active');
+            initSortable();
+
+            const savedLayout = localStorage.getItem(STORAGE_KEY_CARDS);
+            if (savedLayout) {
+                try { applyLayout(JSON.parse(savedLayout)); } catch(e) {}
+            } else {
+                applyAutoExpand();
+            }
+        }
+    });
+</script>
+<script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
+{% endblock %}

@@ -1,0 +1,298 @@
+{% extends 'base.html' %}
+
+{% block title %}Wizard — Etapa 3: Intermediárias{% endblock %}
+
+{% block content %}
+<div class="row">
+  <div class="col-12 col-lg-10 mx-auto">
+
+    <!-- Progress bar -->
+    <div class="card mb-3">
+      <div class="card-body py-2">
+        <div class="d-flex justify-content-between align-items-center mb-1">
+          <small class="text-muted">Etapa {{ step_num }} de 4</small>
+          <small class="text-muted">Prestações Intermediárias</small>
+        </div>
+        <div class="progress" style="height: 8px;">
+          <div class="progress-bar bg-primary" style="width: 75%;"></div>
+        </div>
+        <div class="d-flex justify-content-between mt-2">
+          <span class="badge bg-success">1. Dados Básicos</span>
+          <span class="badge bg-success">2. Juros</span>
+          <span class="badge bg-primary">3. Intermediárias</span>
+          <span class="badge bg-secondary">4. Confirmar</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <h5 class="mb-0">
+          <i class="fas fa-layer-group me-2"></i>Etapa 3: Prestações Intermediárias
+        </h5>
+      </div>
+      <div class="card-body">
+
+        {% if messages %}
+          {% for msg in messages %}
+            <div class="alert alert-{{ msg.tags }} alert-dismissible fade show" role="alert">
+              {{ msg }}
+              <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+            </div>
+          {% endfor %}
+        {% endif %}
+
+        <!-- Configuração de Intermediárias -->
+        <div class="card mb-4 border-primary">
+          <div class="card-header bg-primary bg-opacity-10">
+            <i class="fas fa-cog me-2"></i><strong>Configuração de Intermediárias</strong>
+          </div>
+          <div class="card-body">
+            <div class="row">
+              <div class="col-md-6 mb-2">
+                <div class="form-check form-switch">
+                  <input class="form-check-input" type="checkbox" name="intermediarias_reduzem_pmt"
+                         id="id_intermediarias_reduzem_pmt"
+                         {% if basico.intermediarias_reduzem_pmt %}checked{% endif %}>
+                  <label class="form-check-label ms-2" for="id_intermediarias_reduzem_pmt">
+                    Intermediárias reduzem o valor da parcela (PMT)
+                  </label>
+                </div>
+              </div>
+              <div class="col-md-6 mb-2">
+                <div class="form-check form-switch">
+                  <input class="form-check-input" type="checkbox" name="intermediarias_reajustadas"
+                         id="id_intermediarias_reajustadas"
+                         {% if basico.intermediarias_reajustadas is not False %}checked{% endif %}>
+                  <label class="form-check-label ms-2" for="id_intermediarias_reajustadas">
+                    Intermediárias são reajustadas junto com as parcelas
+                  </label>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Mode selector -->
+        <div class="btn-group mb-4" role="group">
+          <input type="radio" class="btn-check" name="modo-ui" id="modo-padrao" value="padrao" {% if modo == 'padrao' %}checked{% endif %}>
+          <label class="btn btn-outline-primary" for="modo-padrao">
+            <i class="fas fa-sliders-h me-1"></i>Padrão (por intervalo)
+          </label>
+
+          <input type="radio" class="btn-check" name="modo-ui" id="modo-manual" value="manual" {% if modo == 'manual' %}checked{% endif %}>
+          <label class="btn btn-outline-primary" for="modo-manual">
+            <i class="fas fa-list me-1"></i>Manual
+          </label>
+
+          <input type="radio" class="btn-check" name="modo-ui" id="modo-nenhuma" value="nenhuma" {% if modo == 'nenhuma' %}checked{% endif %}>
+          <label class="btn btn-outline-secondary" for="modo-nenhuma">
+            <i class="fas fa-ban me-1"></i>Sem Intermediárias
+          </label>
+        </div>
+
+        <!-- Padrão form -->
+        <div id="panel-padrao" {% if modo != 'padrao' %}style="display:none"{% endif %}>
+          <form method="post" action="{% url 'contratos:wizard' step='intermediarias' %}" id="form-padrao">
+            {% csrf_token %}
+            <input type="hidden" name="modo" value="padrao">
+
+            <div class="row g-3 mb-3">
+              <div class="col-md-3">
+                <label class="form-label">{{ padrao_form.valor.label }} *</label>
+                {{ padrao_form.valor }}
+                {% if padrao_form.valor.errors %}<div class="text-danger small">{{ padrao_form.valor.errors }}</div>{% endif %}
+              </div>
+              <div class="col-md-3">
+                <label class="form-label">{{ padrao_form.mes_inicio.label }} *</label>
+                {{ padrao_form.mes_inicio }}
+                {% if padrao_form.mes_inicio.errors %}<div class="text-danger small">{{ padrao_form.mes_inicio.errors }}</div>{% endif %}
+              </div>
+              <div class="col-md-3">
+                <label class="form-label">{{ padrao_form.intervalo_meses.label }} *</label>
+                {{ padrao_form.intervalo_meses }}
+                {% if padrao_form.intervalo_meses.errors %}<div class="text-danger small">{{ padrao_form.intervalo_meses.errors }}</div>{% endif %}
+              </div>
+              <div class="col-md-3">
+                <label class="form-label">{{ padrao_form.numero_ocorrencias.label }} *</label>
+                {{ padrao_form.numero_ocorrencias }}
+                {% if padrao_form.numero_ocorrencias.errors %}<div class="text-danger small">{{ padrao_form.numero_ocorrencias.errors }}</div>{% endif %}
+              </div>
+            </div>
+
+            <div class="d-flex justify-content-between">
+              <a href="{% url 'contratos:wizard' step='juros' %}" class="btn btn-outline-secondary">
+                <i class="fas fa-arrow-left me-2"></i>Voltar
+              </a>
+              <button type="submit" class="btn btn-primary">
+                Próximo: Confirmar <i class="fas fa-arrow-right ms-2"></i>
+              </button>
+            </div>
+          </form>
+        </div>
+
+        <!-- Manual form -->
+        <div id="panel-manual" {% if modo != 'manual' %}style="display:none"{% endif %}>
+          <form method="post" action="{% url 'contratos:wizard' step='intermediarias' %}" id="form-manual">
+            {% csrf_token %}
+            <input type="hidden" name="modo" value="manual">
+            <input type="hidden" name="inter_count" id="inter-count" value="{{ manual_rows|length|default:0 }}">
+
+            <div class="table-responsive mb-3">
+              <table class="table table-bordered table-sm align-middle" id="inter-table">
+                <thead class="table-light">
+                  <tr>
+                    <th style="width: 80px;">Seq. *</th>
+                    <th style="width: 100px;">Mês *</th>
+                    <th style="width: 160px;">Valor (R$) *</th>
+                    <th style="width: 50px;"></th>
+                  </tr>
+                </thead>
+                <tbody id="inter-tbody">
+                  {% for row in manual_rows %}
+                  <tr>
+                    <td>
+                      <input type="number" class="form-control form-control-sm"
+                             name="inter_{{ forloop.counter0 }}_seq"
+                             value="{{ row.numero_sequencial }}" min="1" required>
+                    </td>
+                    <td>
+                      <input type="number" class="form-control form-control-sm"
+                             name="inter_{{ forloop.counter0 }}_mes"
+                             value="{{ row.mes_vencimento }}" min="1" required>
+                    </td>
+                    <td>
+                      <input type="number" class="form-control form-control-sm"
+                             name="inter_{{ forloop.counter0 }}_valor"
+                             value="{{ row.valor }}" step="0.01" min="0.01" required>
+                    </td>
+                    <td class="text-center">
+                      <button type="button" class="btn btn-sm btn-outline-danger remove-inter"><i class="fas fa-trash"></i></button>
+                    </td>
+                  </tr>
+                  {% empty %}
+                  <tr>
+                    <td><input type="number" class="form-control form-control-sm" name="inter_0_seq" value="1" min="1" required></td>
+                    <td><input type="number" class="form-control form-control-sm" name="inter_0_mes" min="1" title="Número do mês do contrato em que esta parcela vence" required></td>
+                    <td><input type="number" class="form-control form-control-sm" name="inter_0_valor" step="0.01" min="0.01" title="Valor em reais desta prestação intermediária" required></td>
+                    <td class="text-center"><button type="button" class="btn btn-sm btn-outline-danger remove-inter"><i class="fas fa-trash"></i></button></td>
+                  </tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            </div>
+
+            <button type="button" class="btn btn-outline-success btn-sm mb-3" id="add-inter">
+              <i class="fas fa-plus me-1"></i>Adicionar Linha
+            </button>
+
+            <div class="d-flex justify-content-between">
+              <a href="{% url 'contratos:wizard' step='juros' %}" class="btn btn-outline-secondary">
+                <i class="fas fa-arrow-left me-2"></i>Voltar
+              </a>
+              <button type="submit" class="btn btn-primary">
+                Próximo: Confirmar <i class="fas fa-arrow-right ms-2"></i>
+              </button>
+            </div>
+          </form>
+        </div>
+
+        <!-- Sem intermediárias -->
+        <div id="panel-nenhuma" {% if modo != 'nenhuma' %}style="display:none"{% endif %}>
+          <form method="post" action="{% url 'contratos:wizard' step='intermediarias' %}" id="form-nenhuma">
+            {% csrf_token %}
+            <input type="hidden" name="modo" value="nenhuma">
+            <p class="text-muted">Nenhuma prestação intermediária será criada.</p>
+            <div class="d-flex justify-content-between">
+              <a href="{% url 'contratos:wizard' step='juros' %}" class="btn btn-outline-secondary">
+                <i class="fas fa-arrow-left me-2"></i>Voltar
+              </a>
+              <button type="submit" class="btn btn-primary">
+                Próximo: Confirmar <i class="fas fa-arrow-right ms-2"></i>
+              </button>
+            </div>
+          </form>
+        </div>
+
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function () {
+  // Injeta valores dos checkboxes de configuração no formulário que for submetido
+  function injetarConfigEmFormulario(form) {
+    ['intermediarias_reduzem_pmt', 'intermediarias_reajustadas'].forEach(function (nome) {
+      var chk = document.getElementById('id_' + nome);
+      var hidden = form.querySelector('input[type="hidden"][name="' + nome + '"]');
+      if (!hidden) {
+        hidden = document.createElement('input');
+        hidden.type = 'hidden';
+        hidden.name = nome;
+        form.appendChild(hidden);
+      }
+      hidden.value = (chk && chk.checked) ? 'on' : '';
+    });
+  }
+  document.querySelectorAll('form').forEach(function (form) {
+    form.addEventListener('submit', function () { injetarConfigEmFormulario(form); });
+  });
+
+  // Toggle panels by radio button
+  const panels = {
+    padrao: document.getElementById('panel-padrao'),
+    manual: document.getElementById('panel-manual'),
+    nenhuma: document.getElementById('panel-nenhuma'),
+  };
+
+  document.querySelectorAll('input[name="modo-ui"]').forEach(function (radio) {
+    radio.addEventListener('change', function () {
+      Object.entries(panels).forEach(function ([key, el]) {
+        el.style.display = (key === radio.value) ? '' : 'none';
+      });
+    });
+  });
+
+  // Manual rows dynamic add/remove
+  const tbody = document.getElementById('inter-tbody');
+  const countInput = document.getElementById('inter-count');
+
+  function reindexInter() {
+    const rows = tbody.querySelectorAll('tr');
+    rows.forEach(function (tr, i) {
+      tr.querySelectorAll('input[type="number"], input[type="text"]').forEach(function (inp) {
+        inp.name = inp.name.replace(/inter_\d+_/, `inter_${i}_`);
+      });
+    });
+    countInput.value = rows.length;
+  }
+
+  document.getElementById('add-inter').addEventListener('click', function () {
+    const idx = tbody.querySelectorAll('tr').length;
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td><input type="number" class="form-control form-control-sm" name="inter_${idx}_seq" value="${idx + 1}" min="1" required></td>
+      <td><input type="number" class="form-control form-control-sm" name="inter_${idx}_mes" min="1" required></td>
+      <td><input type="number" class="form-control form-control-sm" name="inter_${idx}_valor" step="0.01" min="0.01" required></td>
+      <td class="text-center"><button type="button" class="btn btn-sm btn-outline-danger remove-inter"><i class="fas fa-trash"></i></button></td>
+    `;
+    tbody.appendChild(tr);
+    reindexInter();
+  });
+
+  tbody.addEventListener('click', function (e) {
+    const btn = e.target.closest('.remove-inter');
+    if (btn) {
+      const rows = tbody.querySelectorAll('tr');
+      if (rows.length > 1) {
+        btn.closest('tr').remove();
+        reindexInter();
+      }
+    }
+  });
+})();
+</script>
+{% endblock %}

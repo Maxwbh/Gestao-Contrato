@@ -1,0 +1,252 @@
+{% extends 'base.html' %}
+{% load crispy_forms_tags %}
+
+{% block title %}Compradores - Gestão de Contratos{% endblock %}
+
+{% block extra_css %}
+<style>
+    .ag-theme-material .ag-root-wrapper { border-radius: 0; border: none; }
+    .ag-theme-material .ag-header { background-color: #343a40; }
+    .ag-theme-material .ag-header-cell-text { color: #fff; font-weight: 600; }
+    .ag-theme-material .ag-header-icon { color: #fff; }
+    .ag-theme-material .ag-row-even { background-color: #fff; }
+    .ag-theme-material .ag-row-odd  { background-color: #f8f9fa; }
+    .ag-theme-material .ag-row:hover { background-color: #e8f4fd !important; }
+    .ag-grid-actions .btn { padding: 1px 6px; font-size: 0.75rem; margin: 1px; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
+                <h4 class="mb-0">
+                    <i class="fas fa-users"></i> Gerenciar Compradores
+                    <span class="badge bg-info text-dark ms-2">{{ total_compradores }}</span>
+                </h4>
+                <div class="d-flex align-items-center gap-2">
+                    <i class="fas fa-search text-muted"></i>
+                    <input type="text" id="gridQuickFilter" class="form-control form-control-sm"
+                           placeholder="Busca rápida..." style="width: 200px;"
+                           oninput="if(window.compradoresGridApi) window.compradoresGridApi.setGridOption('quickFilterText', this.value)">
+                    <button type="button" class="btn btn-sm btn-outline-success" title="Exportar CSV"
+                            onclick="window.compradoresGridApi && window.compradoresGridApi.exportDataAsCsv({fileName:'compradores.csv', processCellCallback: cleanCsvCell})">
+                        <i class="fas fa-file-csv me-1"></i>CSV
+                    </button>
+                    <a href="{% url 'core:criar_comprador' %}" class="btn btn-primary btn-sm">
+                        <i class="fas fa-plus"></i> Novo Comprador
+                    </a>
+                </div>
+            </div>
+            <div class="card-body p-0">
+                <!-- Barra de Busca server-side (para busca em todas as páginas) -->
+                <div class="px-3 pt-3 pb-2 border-bottom bg-light d-flex align-items-center gap-2 flex-wrap">
+                    <form method="get" class="d-flex gap-2 align-items-center">
+                        <small class="text-muted">Busca server-side (todas as páginas):</small>
+                        <input type="text" name="search" class="form-control form-control-sm"
+                               placeholder="Nome, CPF ou email..." value="{{ search }}" style="width: 260px;">
+                        <button type="submit" class="btn btn-primary btn-sm">
+                            <i class="fas fa-search"></i>
+                        </button>
+                        {% if search %}
+                            <a href="{% url 'core:listar_compradores' %}" class="btn btn-secondary btn-sm">
+                                <i class="fas fa-times"></i> Limpar
+                            </a>
+                        {% endif %}
+                    </form>
+                </div>
+
+                <!-- AG Grid -->
+                <div id="compradoresGrid" class="ag-theme-material" style="width: 100%;"></div>
+            </div>
+            <div class="card-footer">
+                {% include "includes/pagination_perpage.html" %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal de Confirmação de Exclusão -->
+<div class="modal fade" id="modalExclusao" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-danger text-white">
+                <h5 class="modal-title">
+                    <i class="fas fa-exclamation-triangle"></i> Confirmar Exclusão
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p>Tem certeza que deseja excluir o comprador <strong id="nomeComprador"></strong>?</p>
+                <p class="text-danger">
+                    <i class="fas fa-info-circle"></i> Esta ação não pode ser desfeita.
+                </p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                    Cancelar
+                </button>
+                <form id="formExclusao" method="post" style="display: inline;">
+                    {% csrf_token %}
+                    <button type="submit" class="btn btn-danger">
+                        <i class="fas fa-trash"></i> Excluir
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+function cleanCsvCell(params) {
+    const v = params.value;
+    if (v == null) return '';
+    if (typeof v === 'string' && v.includes('<')) {
+        const d = document.createElement('div'); d.innerHTML = v;
+        return (d.textContent || d.innerText || '').trim();
+    }
+    return v;
+}
+
+function confirmarExclusao(nome, url) {
+    document.getElementById('nomeComprador').textContent = nome;
+    document.getElementById('formExclusao').action = url;
+    new bootstrap.Modal(document.getElementById('modalExclusao')).show();
+}
+
+const compradoresRowData = [
+{% for comprador in compradores %}
+{
+    pk: {{ comprador.pk }},
+    nome: "{{ comprador.nome|escapejs }}",
+    cpf: "{{ comprador.cpf|escapejs }}",
+    email: "{{ comprador.email|default:''|escapejs }}",
+    celular: "{{ comprador.celular|default:''|escapejs }}",
+    telefone: "{{ comprador.telefone|default:''|escapejs }}",
+    notif_email: {{ comprador.notificar_email|yesno:"true,false" }},
+    notif_sms: {{ comprador.notificar_sms|yesno:"true,false" }},
+    notif_whatsapp: {{ comprador.notificar_whatsapp|yesno:"true,false" }},
+    cadastro: "{{ comprador.criado_em|date:'d/m/Y' }}",
+    edit_url: "{% url 'core:editar_comprador' comprador.pk %}",
+    del_url: "{% url 'core:excluir_comprador' comprador.pk %}",
+},
+{% endfor %}
+];
+
+function notifRenderer(params) {
+    const d = params.data;
+    let html = '';
+    if (d.notif_email)    html += '<span class="badge bg-primary me-1" title="Email"><i class="fas fa-envelope"></i></span>';
+    if (d.notif_sms)      html += '<span class="badge bg-success me-1" title="SMS"><i class="fas fa-sms"></i></span>';
+    if (d.notif_whatsapp) html += '<span class="badge bg-success me-1" title="WhatsApp"><i class="fab fa-whatsapp"></i></span>';
+    return html || '<span class="text-muted">—</span>';
+}
+
+function telefoneRenderer(params) {
+    const d = params.data;
+    if (d.celular)   return `<i class="fas fa-mobile-alt"></i> ${d.celular}`;
+    if (d.telefone)  return `<i class="fas fa-phone"></i> ${d.telefone}`;
+    return '<small class="text-muted">Não informado</small>';
+}
+
+function emailRenderer(params) {
+    const v = params.value;
+    if (v) return `<i class="fas fa-envelope"></i> ${v}`;
+    return '<small class="text-muted">Não informado</small>';
+}
+
+function acoesRenderer(params) {
+    const d = params.data;
+    return `<div class="ag-grid-actions">
+        <a href="${d.edit_url}" class="btn btn-sm btn-outline-primary" title="Editar"><i class="fas fa-edit"></i></a>
+        <button class="btn btn-sm btn-outline-danger" title="Excluir"
+            onclick="confirmarExclusao('${d.nome.replace(/'/g,"\\'")}', '${d.del_url}')">
+            <i class="fas fa-trash"></i>
+        </button>
+    </div>`;
+}
+
+const compradoresColumnDefs = [
+    {
+        headerName: 'Nome',
+        field: 'nome',
+        filter: 'agTextColumnFilter',
+       
+        minWidth: 180,
+        cellRenderer: params => `<strong>${params.value}</strong>`,
+        sort: 'asc',
+    },
+    {
+        headerName: 'CPF',
+        field: 'cpf',
+        filter: 'agTextColumnFilter',
+       
+        minWidth: 130,
+    },
+    {
+        headerName: 'Email',
+        field: 'email',
+        filter: 'agTextColumnFilter',
+       
+        minWidth: 180,
+        cellRenderer: emailRenderer,
+    },
+    {
+        headerName: 'Telefone',
+        field: 'celular',
+        filter: 'agTextColumnFilter',
+       
+        minWidth: 140,
+        cellRenderer: telefoneRenderer,
+    },
+    {
+        headerName: 'Notificações',
+        field: 'notif_email',
+        filter: false,
+        sortable: false,
+        minWidth: 120,
+        cellRenderer: notifRenderer,
+    },
+    {
+        headerName: 'Cadastro',
+        field: 'cadastro',
+        filter: 'agTextColumnFilter',
+       
+        minWidth: 110,
+        cellRenderer: params => `<small class="text-muted">${params.value}</small>`,
+    },
+    {
+        headerName: 'Ações',
+        field: 'pk',
+        sortable: false,
+        filter: false,
+        minWidth: 110,
+        cellRenderer: acoesRenderer,
+    },
+];
+
+document.addEventListener('DOMContentLoaded', function() {
+    window.compradoresGridApi = agGrid.createGrid(
+        document.getElementById('compradoresGrid'),
+        {
+            columnDefs: compradoresColumnDefs,
+            rowData: compradoresRowData,
+            domLayout: 'autoHeight',
+            defaultColDef: {
+                sortable: true,
+                resizable: true,
+            },
+            rowHeight: 42,
+            headerHeight: 48,
+           
+            suppressCellFocus: true,
+            enableCellTextSelection: true,
+            overlayNoRowsTemplate: '<div class="text-center py-4 text-muted"><i class="fas fa-inbox fa-2x mb-2 d-block"></i>Nenhum comprador encontrado</div>',
+        }
+    );
+});
+</script>
+{% endblock %}

@@ -1,0 +1,47 @@
+{% comment %}
+3.29 — Card de resumo reutilizável
+
+Uso:
+  {% include 'components/summary_card.html' with
+      icon="fas fa-dollar-sign"
+      icon_color="success"
+      title="Valor Total"
+      value="R$ 1.200,00"
+      subtitle="12 parcelas"
+      href="/financeiro/parcelas/"  (opcional)
+      variant="success"             (opcional: primary|success|warning|danger|info|secondary)
+  %}
+
+Variáveis:
+  icon        - Classe FontAwesome (ex: "fas fa-file-contract")
+  icon_color  - Cor do ícone (Bootstrap: primary, success, warning, danger, info, secondary)
+  title       - Título do card
+  value       - Valor principal (grande)
+  subtitle    - Texto secundário (opcional)
+  href        - Link do card (opcional, torna o card clicável)
+  variant     - Variante de cor da borda (opcional, default: primary)
+  badge_text  - Texto do badge (opcional)
+  badge_color - Cor do badge (opcional, default: primary)
+{% endcomment %}
+
+{% with card_variant=variant|default:"primary" %}
+<div class="card border-{{ card_variant }} border-start border-4 shadow-sm h-100
+     {% if href %}summary-card-link{% endif %}"
+     {% if href %}style="cursor:pointer;" onclick="window.location='{{ href }}';"{% endif %}>
+  <div class="card-body d-flex align-items-center gap-3 py-3">
+    <div class="rounded-circle bg-{{ card_variant }} bg-opacity-10 p-3 flex-shrink-0">
+      <i class="{{ icon|default:'fas fa-chart-bar' }} text-{{ icon_color|default:card_variant }} fa-lg"></i>
+    </div>
+    <div class="flex-grow-1 min-w-0">
+      <div class="text-muted small text-truncate">{{ title }}</div>
+      <div class="fs-4 fw-bold text-{{ card_variant }} text-truncate">{{ value }}</div>
+      {% if subtitle %}
+      <div class="text-muted small text-truncate">{{ subtitle }}</div>
+      {% endif %}
+    </div>
+    {% if badge_text %}
+    <span class="badge bg-{{ badge_color|default:'primary' }} ms-auto">{{ badge_text }}</span>
+    {% endif %}
+  </div>
+</div>
+{% endwith %}

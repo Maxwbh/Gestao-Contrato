@@ -1,0 +1,1277 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Parcelas{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{% static 'vendor/flatpickr/css/flatpickr.min.css' %}">
+<style>
+    .badge-pago { background-color: #28a745; }
+    .badge-pendente { background-color: #ffc107; color: #212529; }
+    .badge-vencida { background-color: #dc3545; }
+    .badge-boleto-gerado { background-color: #0d6efd; }
+    .btn-filter { margin-right: 5px; margin-bottom: 5px; }
+    .btn-filter.active { box-shadow: 0 0 0 0.2rem rgba(0,123,255,.5); }
+    #revalidar-resultado .invalido { color: #dc3545; }
+    #revalidar-resultado .valido { color: #28a745; }
+    /* AG Grid overrides */
+    .ag-theme-material .ag-root-wrapper { border-radius: 0; border: none; }
+    .ag-theme-material .ag-header { background-color: #343a40; }
+    .ag-theme-material .ag-header-cell-text { color: #fff; font-weight: 600; }
+    .ag-theme-material .ag-header-icon { color: #fff; }
+    .ag-theme-material .ag-row-even { background-color: #fff; }
+    .ag-theme-material .ag-row-odd  { background-color: #f8f9fa; }
+    .ag-theme-material .ag-row:hover { background-color: #e8f4fd !important; }
+    .ag-grid-actions .btn { padding: 1px 6px; font-size: 0.75rem; margin: 1px; }
+    /* Flatpickr */
+    .flatpickr-input[readonly] { background-color: #fff; }
+    .btn-date-shortcut { font-size: 0.78rem; padding: 2px 8px; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <div class="row mb-4">
+        <div class="col">
+            <h2><i class="fas fa-file-invoice-dollar me-2"></i>Parcelas</h2>
+            <p class="text-muted">Gerenciamento de parcelas dos contratos</p>
+        </div>
+    </div>
+
+    <!-- Filtros por Status de Pagamento -->
+    <div class="card mb-3">
+        <div class="card-body">
+            <strong class="me-3">Status pagamento:</strong>
+            <a href="{% url 'financeiro:listar_parcelas' %}{% if filtro_status_boleto %}?status_boleto={{ filtro_status_boleto }}{% endif %}"
+               class="btn btn-outline-secondary btn-filter {% if not filtro_status %}active{% endif %}">
+                Todas
+            </a>
+            <a href="{% url 'financeiro:listar_parcelas' %}?status=pagas{% if filtro_status_boleto %}&status_boleto={{ filtro_status_boleto }}{% endif %}"
+               class="btn btn-outline-success btn-filter {% if filtro_status == 'pagas' %}active{% endif %}">
+                <i class="fas fa-check-circle"></i> Pagas
+            </a>
+            <a href="{% url 'financeiro:listar_parcelas' %}?status=pendentes{% if filtro_status_boleto %}&status_boleto={{ filtro_status_boleto }}{% endif %}"
+               class="btn btn-outline-warning btn-filter {% if filtro_status == 'pendentes' %}active{% endif %}">
+                <i class="fas fa-clock"></i> Em aberto
+            </a>
+            <a href="{% url 'financeiro:listar_parcelas' %}?status=vencidas{% if filtro_status_boleto %}&status_boleto={{ filtro_status_boleto }}{% endif %}"
+               class="btn btn-outline-danger btn-filter {% if filtro_status == 'vencidas' %}active{% endif %}">
+                <i class="fas fa-exclamation-triangle"></i> Vencidas
+            </a>
+        </div>
+    </div>
+
+    <!-- Filtros por Status do Boleto -->
+    <div class="card mb-3">
+        <div class="card-body">
+            <strong class="me-3">Status boleto:</strong>
+            <a href="{% url 'financeiro:listar_parcelas' %}{% if filtro_status %}?status={{ filtro_status }}{% endif %}"
+               class="btn btn-outline-secondary btn-filter {% if not filtro_status_boleto %}active{% endif %}">
+                Todos
+            </a>
+            <a href="{% url 'financeiro:listar_parcelas' %}?status_boleto=NAO_GERADO{% if filtro_status %}&status={{ filtro_status }}{% endif %}"
+               class="btn btn-outline-secondary btn-filter {% if filtro_status_boleto == 'NAO_GERADO' %}active{% endif %}"
+               title="Boleto ainda não gerado — pode ser gerado agora">
+                <i class="fas fa-minus-circle text-muted"></i> Não Gerado
+            </a>
+            <a href="{% url 'financeiro:listar_parcelas' %}?status_boleto=GERADO{% if filtro_status %}&status={{ filtro_status }}{% endif %}"
+               class="btn btn-outline-primary btn-filter {% if filtro_status_boleto == 'GERADO' %}active{% endif %}"
+               title="Boleto gerado localmente — aguardando envio CNAB ao banco">
+                <i class="fas fa-file-invoice"></i> Gerado
+            </a>
+            <a href="{% url 'financeiro:listar_parcelas' %}?status_boleto=REGISTRADO{% if filtro_status %}&status={{ filtro_status }}{% endif %}"
+               class="btn btn-outline-info btn-filter {% if filtro_status_boleto == 'REGISTRADO' %}active{% endif %}"
+               title="Banco confirmou o registro via CNAB retorno">
+                <i class="fas fa-university"></i> Registrado
+            </a>
+            <a href="{% url 'financeiro:listar_parcelas' %}?status_boleto=CANCELADO{% if filtro_status %}&status={{ filtro_status }}{% endif %}"
+               class="btn btn-outline-dark btn-filter {% if filtro_status_boleto == 'CANCELADO' %}active{% endif %}"
+               title="Boleto cancelado — pode ser regenerado">
+                <i class="fas fa-times-circle"></i> Cancelado
+            </a>
+            <a href="{% url 'financeiro:listar_parcelas' %}?status_boleto=BAIXADO{% if filtro_status %}&status={{ filtro_status }}{% endif %}"
+               class="btn btn-outline-warning btn-filter {% if filtro_status_boleto == 'BAIXADO' %}active{% endif %}"
+               title="Boleto baixado/cancelado pelo banco">
+                <i class="fas fa-arrow-down"></i> Baixado
+            </a>
+            <a href="{% url 'financeiro:listar_parcelas' %}?status_boleto=PROTESTADO{% if filtro_status %}&status={{ filtro_status }}{% endif %}"
+               class="btn btn-outline-danger btn-filter {% if filtro_status_boleto == 'PROTESTADO' %}active{% endif %}"
+               title="Boleto encaminhado a cartório de protesto">
+                <i class="fas fa-gavel"></i> Protestado
+            </a>
+        </div>
+    </div>
+
+    <!-- Legenda dos Status -->
+    <div class="card mb-4">
+        <div class="card-header py-2" style="cursor:pointer" onclick="this.nextElementSibling.classList.toggle('d-none')">
+            <small><i class="fas fa-info-circle me-1 text-info"></i><strong>O que significa cada status?</strong> <i class="fas fa-chevron-down float-end mt-1"></i></small>
+        </div>
+        <div class="card-body d-none py-2">
+            <div class="row g-2">
+                <div class="col-md-3"><span class="badge bg-secondary">Não Gerado</span> <small class="text-muted">— Parcela existe mas o boleto ainda não foi criado. Selecione e clique em <em>Gerar Boletos</em>.</small></div>
+                <div class="col-md-3"><span class="badge" style="background:#0d6efd">Gerado</span> <small class="text-muted">— Boleto criado com nosso número e linha digitável. Inclua em Arquivo de Remessa para registrar no banco.</small></div>
+                <div class="col-md-3"><span class="badge bg-info">Registrado</span> <small class="text-muted">— Banco confirmou o registro via CNAB retorno. Boleto válido para pagamento.</small></div>
+                <div class="col-md-3"><span class="badge bg-success">Pago</span> <small class="text-muted">— Pagamento confirmado pelo banco (CNAB retorno ou lançamento manual).</small></div>
+                <div class="col-md-3"><span class="badge bg-warning text-dark">Vencido</span> <small class="text-muted">— Boleto vencido sem pagamento registrado.</small></div>
+                <div class="col-md-3"><span class="badge bg-dark">Cancelado</span> <small class="text-muted">— Boleto cancelado. Um novo boleto pode ser gerado para a mesma parcela.</small></div>
+                <div class="col-md-3"><span class="badge bg-warning text-dark">Baixado</span> <small class="text-muted">— Banco baixou (cancelou) o boleto. Geralmente após prazo de vencimento.</small></div>
+                <div class="col-md-3"><span class="badge bg-danger">Protestado</span> <small class="text-muted">— Boleto encaminhado a cartório de protesto por inadimplência.</small></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Filtros Avançados -->
+    <div class="card mb-4">
+        <div class="card-header">
+            <h6 class="mb-0"><i class="fas fa-filter me-2"></i>Filtros Avançados</h6>
+        </div>
+        <div class="card-body">
+            <form method="get" id="formFiltrosAvancados">
+                <!-- Preservar filtros de status e boleto como hidden -->
+                {% if filtro_status %}<input type="hidden" name="status" value="{{ filtro_status }}">{% endif %}
+                {% if filtro_status_boleto %}<input type="hidden" name="status_boleto" value="{{ filtro_status_boleto }}">{% endif %}
+
+                <div class="row g-3">
+                    <!-- Período de Vencimento -->
+                    <div class="col-md-5">
+                        <label class="form-label fw-semibold">Período de Vencimento</label>
+                        <input type="text" id="dateRangePicker" class="form-control"
+                               placeholder="Selecione o intervalo de datas..."
+                               autocomplete="off">
+                        <input type="hidden" name="data_inicio" id="inputDataInicio" value="{{ filtro_data_inicio }}">
+                        <input type="hidden" name="data_fim" id="inputDataFim" value="{{ filtro_data_fim }}">
+                        <div class="mt-2 d-flex flex-wrap gap-1">
+                            <button type="button" class="btn btn-outline-secondary btn-date-shortcut"
+                                    onclick="setDateRange('today')">Hoje</button>
+                            <button type="button" class="btn btn-outline-secondary btn-date-shortcut"
+                                    onclick="setDateRange('week')">Esta semana</button>
+                            <button type="button" class="btn btn-outline-secondary btn-date-shortcut"
+                                    onclick="setDateRange('month')">Este mês</button>
+                            <button type="button" class="btn btn-outline-secondary btn-date-shortcut"
+                                    onclick="setDateRange('90days')">Próx. 90 dias</button>
+                            <button type="button" class="btn btn-outline-secondary btn-date-shortcut"
+                                    onclick="clearDateRange()">
+                                <i class="fas fa-times"></i> Limpar data
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Imobiliária -->
+                    <div class="col-md-3">
+                        <label class="form-label fw-semibold">Imobiliária</label>
+                        <select name="imobiliaria" class="form-select">
+                            <option value="">Todas</option>
+                            {% for imob in imobiliarias %}
+                            <option value="{{ imob.id }}"
+                                {% if filtro_imobiliaria == imob.id|stringformat:"s" %}selected{% endif %}>
+                                {{ imob.nome }}
+                            </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+
+                    <!-- Busca textual -->
+                    <div class="col-md-4">
+                        <label class="form-label fw-semibold">Busca (comprador / contrato)</label>
+                        <input type="text" name="q" class="form-control"
+                               placeholder="Nome do comprador ou nº contrato..."
+                               value="{{ filtro_busca }}">
+                    </div>
+                </div>
+
+                <div class="mt-3 d-flex gap-2">
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-search me-1"></i> Filtrar
+                    </button>
+                    <a href="{% url 'financeiro:listar_parcelas' %}" class="btn btn-outline-secondary">
+                        <i class="fas fa-times me-1"></i> Limpar Filtros
+                    </a>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Painel Re-validar (só aparece quando filtro status_boleto=GERADO) -->
+    {% if filtro_status_boleto == 'GERADO' %}
+    <div class="card mb-4 border-primary">
+        <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
+            <span><i class="fas fa-shield-alt me-2"></i>Re-validar Boletos Gerados</span>
+            <button class="btn btn-light btn-sm" id="btn-revalidar" onclick="revalidarBoletos()">
+                <i class="fas fa-sync-alt me-1"></i> Executar Re-validação
+            </button>
+        </div>
+        <div class="card-body">
+            <p class="text-muted mb-2">
+                Verifica se todos os boletos com status <strong>Gerado</strong> ainda possuem os dados necessários
+                (nosso número, conta bancária, campos obrigatórios por banco, CPF/CNPJ do comprador).
+            </p>
+            <div id="revalidar-resultado" class="d-none">
+                <hr>
+                <div id="revalidar-resumo" class="mb-3"></div>
+                <div id="revalidar-detalhes"></div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Barra de Ação em Massa (oculta até selecionar) -->
+    <div id="barraBulk" class="card mb-3 border-primary d-none">
+        <div class="card-body py-2 d-flex align-items-center gap-2 flex-wrap">
+            <span class="fw-bold text-primary me-1"><i class="fas fa-check-square me-1"></i><span id="bulkContador">0</span> selecionada(s)</span>
+            <div class="vr d-none d-sm-block"></div>
+            <!-- Geração de Boletos -->
+            <button type="button" class="btn btn-primary btn-sm" onclick="gerarBoletosSelecionados(false)"
+                    title="Gera boletos para parcelas sem boleto">
+                <i class="fas fa-barcode me-1"></i> Gerar Boletos
+            </button>
+            <button type="button" class="btn btn-outline-warning btn-sm" onclick="gerarBoletosSelecionados(true)"
+                    title="Regenera mesmo que já exista boleto">
+                <i class="fas fa-redo me-1"></i> Forçar Regeneração
+            </button>
+            <div class="vr d-none d-sm-block"></div>
+            <!-- Carnê -->
+            <button type="button" class="btn btn-outline-info btn-sm" onclick="gerarCarneSelecionados()"
+                    title="Gera carnê para parcelas selecionadas (mesmo contrato)">
+                <i class="fas fa-book me-1"></i> Gerar Carnê
+            </button>
+            <!-- Remessa CNAB -->
+            <button type="button" class="btn btn-outline-dark btn-sm" onclick="abrirModalCnab()"
+                    title="Inclui boletos selecionados em arquivo de remessa CNAB">
+                <i class="fas fa-file-code me-1"></i> Gerar Remessa CNAB
+            </button>
+            <div class="vr d-none d-sm-block"></div>
+            <!-- Pagamento em Massa -->
+            <button type="button" class="btn btn-outline-success btn-sm" onclick="abrirModalPagamentoMassa()"
+                    title="Registra pagamento para múltiplas parcelas de uma vez">
+                <i class="fas fa-dollar-sign me-1"></i> Pagamento em Massa
+            </button>
+            <button type="button" class="btn btn-outline-secondary btn-sm ms-auto" onclick="limparSelecao()">
+                <i class="fas fa-times me-1"></i> Desmarcar
+            </button>
+        </div>
+    </div>
+
+    <!-- Resultado da geração em massa -->
+    <div id="bulkResultado" class="d-none mb-3"></div>
+
+    <!-- Tabela de Parcelas -->
+    <div class="card">
+        <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
+            <div>
+                <strong>Lista de Parcelas</strong>
+                <span class="badge bg-secondary ms-2">{{ total_parcelas }} registro(s)</span>
+                {% if filtro_status_boleto %}
+                <span class="badge bg-primary ms-1">Boleto: {{ filtro_status_boleto }}</span>
+                {% endif %}
+            </div>
+            <div class="d-flex align-items-center gap-2">
+                <i class="fas fa-search text-muted"></i>
+                <input type="text" id="gridQuickFilter" class="form-control form-control-sm"
+                       placeholder="Busca rápida na página..." style="width: 220px;"
+                       oninput="if(window.parcelasGridApi) window.parcelasGridApi.setGridOption('quickFilterText', this.value)">
+                <button type="button" class="btn btn-sm btn-outline-success" title="Exportar CSV"
+                        onclick="window.parcelasGridApi && window.parcelasGridApi.exportDataAsCsv({fileName:'parcelas.csv', processCellCallback: cleanCsvCell})">
+                    <i class="fas fa-file-csv me-1"></i>CSV
+                </button>
+            </div>
+        </div>
+        <div class="card-body p-0">
+            <!-- AG Grid -->
+            <div id="parcelasGrid" class="ag-theme-material" style="width: 100%;"></div>
+        </div>
+        <div class="card-footer">
+            {% include "includes/pagination_perpage.html" %}
+        </div>
+    </div>
+</div>
+
+<!-- ===== MODAL: GERAR BOLETO ===== -->
+<div class="modal fade" id="modalGerarBoleto" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-primary text-white">
+                <h5 class="modal-title"><i class="fas fa-barcode me-2"></i>Gerar Boleto</h5>
+                <button type="button" class="btn-close btn-close-white modal-close"></button>
+            </div>
+            <div class="modal-body">
+                <p id="modalBoletoInfo"></p>
+                <div id="modalBoletoResultado" class="d-none"></div>
+                <div id="modalBoletoForm">
+                    <div class="mb-3">
+                        <label class="form-label">Forçar regeneração?</label>
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="boletoForce">
+                            <label class="form-check-label" for="boletoForce">
+                                Sim — regenerar mesmo se já existe boleto
+                            </label>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer" id="modalBoletoFooter">
+                <button type="button" class="btn btn-secondary modal-close">Fechar</button>
+                <button type="button" class="btn btn-primary" id="btnConfirmarBoleto" onclick="confirmarGerarBoleto()">
+                    <i class="fas fa-barcode me-1"></i> Gerar Boleto
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ===== MODAL: PAGAR ===== -->
+<div class="modal fade" id="modalPagar" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-success text-white">
+                <h5 class="modal-title"><i class="fas fa-dollar-sign me-2"></i>Registrar Pagamento</h5>
+                <button type="button" class="btn-close btn-close-white modal-close"></button>
+            </div>
+            <div class="modal-body">
+                <p id="modalPagarInfo" class="mb-2 text-muted small"></p>
+                <form id="formPagar">
+                    <div class="row g-3">
+                        <!-- Info: somente leitura -->
+                        <div class="col-md-6">
+                            <label class="form-label text-muted small">Vencimento</label>
+                            <input type="text" class="form-control form-control-sm bg-light" id="pagarVencimento" readonly tabindex="-1">
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label text-muted small">Valor Original</label>
+                            <div class="input-group input-group-sm">
+                                <span class="input-group-text bg-light">R$</span>
+                                <input type="text" class="form-control bg-light" id="pagarValorOriginal" readonly tabindex="-1">
+                            </div>
+                        </div>
+
+                        <!-- Editável: Data do Pagamento -->
+                        <div class="col-md-6">
+                            <label class="form-label fw-bold">Data do Pagamento <span class="text-danger">*</span></label>
+                            <input type="date" class="form-control" id="pagarData" required oninput="recalcularEncargos()">
+                        </div>
+
+                        <!-- Somente leitura: Juros / Multa calculados -->
+                        <div class="col-md-3">
+                            <label class="form-label text-muted small">Juros</label>
+                            <div class="input-group input-group-sm">
+                                <span class="input-group-text bg-light">R$</span>
+                                <input type="text" class="form-control bg-light" id="pagarJuros" readonly tabindex="-1">
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label text-muted small">Multa</label>
+                            <div class="input-group input-group-sm">
+                                <span class="input-group-text bg-light">R$</span>
+                                <input type="text" class="form-control bg-light" id="pagarMulta" readonly tabindex="-1">
+                            </div>
+                        </div>
+
+                        <!-- Editável: Desconto -->
+                        <div class="col-md-6">
+                            <label class="form-label fw-bold">Desconto</label>
+                            <div class="input-group">
+                                <span class="input-group-text">R$</span>
+                                <input type="number" class="form-control" id="pagarDesconto" step="0.01" min="0" value="0.00" oninput="atualizarValorPagar()">
+                            </div>
+                        </div>
+
+                        <!-- Somente leitura: Valor a Pagar -->
+                        <div class="col-md-6">
+                            <label class="form-label fw-bold text-success">Valor a Pagar</label>
+                            <div class="input-group">
+                                <span class="input-group-text bg-success text-white">R$</span>
+                                <input type="text" class="form-control fw-bold" id="pagarValorTotal" readonly tabindex="-1" style="font-size:1.1rem;">
+                            </div>
+                        </div>
+
+                        <!-- Forma de Pagamento -->
+                        <div class="col-md-6">
+                            <label class="form-label fw-bold">Forma de Pagamento</label>
+                            <select class="form-select" id="pagarForma">
+                                <option value="DINHEIRO">Dinheiro</option>
+                                <option value="PIX">PIX</option>
+                                <option value="TRANSFERENCIA">Transferência Bancária</option>
+                                <option value="BOLETO">Boleto</option>
+                                <option value="CARTAO_CREDITO">Cartão de Crédito</option>
+                                <option value="CARTAO_DEBITO">Cartão de Débito</option>
+                                <option value="CHEQUE">Cheque</option>
+                            </select>
+                        </div>
+
+                        <div class="col-md-6">
+                            <label class="form-label">Observações</label>
+                            <textarea class="form-control" id="pagarObs" rows="2"></textarea>
+                        </div>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary modal-close">Cancelar</button>
+                <button type="button" class="btn btn-success" id="btnConfirmarPagar" onclick="confirmarPagar()">
+                    <i class="fas fa-check me-1"></i> Confirmar Pagamento
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ===== MODAL: GERAR REMESSA CNAB ===== -->
+<div class="modal" id="modalGerarCnab" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-dark text-white">
+                <h5 class="modal-title"><i class="fas fa-file-code me-2"></i>Gerar Remessa CNAB</h5>
+                <button type="button" class="btn-close btn-close-white modal-close"></button>
+            </div>
+            <div class="modal-body">
+                <p class="mb-3">
+                    <i class="fas fa-info-circle text-info me-1"></i>
+                    Serão incluídas apenas parcelas com status <strong>Boleto Gerado</strong> e não pagas.
+                    <span id="cnabContador" class="badge bg-dark ms-1">0 selecionada(s)</span>
+                </p>
+                <div class="mb-3">
+                    <label class="form-label fw-bold">Conta Bancária <span class="text-danger">*</span></label>
+                    <select id="cnabContaBancaria" class="form-select">
+                        <option value="">Selecione...</option>
+                        {% for conta in contas_bancarias %}
+                        <option value="{{ conta.pk }}">{{ conta.imobiliaria.nome }} — {{ conta.banco }} Ag. {{ conta.agencia }}/{{ conta.conta }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label fw-bold">Layout CNAB</label>
+                    <select id="cnabLayout" class="form-select">
+                        <option value="CNAB_240">CNAB 240</option>
+                        <option value="CNAB_400">CNAB 400</option>
+                    </select>
+                </div>
+                <div id="cnabResultado" class="d-none"></div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary modal-close">Cancelar</button>
+                <button type="button" class="btn btn-dark" id="btnConfirmarCnab" onclick="confirmarGerarCnab()">
+                    <i class="fas fa-file-code me-1"></i> Gerar Remessa
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ===== MODAL: PAGAMENTO EM MASSA ===== -->
+<div class="modal" id="modalPagamentoMassa" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header bg-success text-white">
+                <h5 class="modal-title"><i class="fas fa-dollar-sign me-2"></i>Pagamento em Massa</h5>
+                <button type="button" class="btn-close btn-close-white modal-close"></button>
+            </div>
+            <div class="modal-body">
+                <p class="text-muted mb-3">
+                    Registra pagamento para <strong><span id="massaContador">0</span> parcela(s)</strong> selecionada(s).
+                    Serão consideradas apenas parcelas não pagas.
+                </p>
+                <div class="row g-3">
+                    <div class="col-md-6">
+                        <label class="form-label fw-bold">Data do Pagamento <span class="text-danger">*</span></label>
+                        <input type="date" class="form-control" id="massaData" required>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label fw-bold">Valor</label>
+                        <div class="form-check mt-2">
+                            <input class="form-check-input" type="checkbox" id="massaUsarValorOriginal" checked
+                                   onchange="document.getElementById('massaValorContainer').classList.toggle('d-none', this.checked)">
+                            <label class="form-check-label" for="massaUsarValorOriginal">
+                                Usar valor original de cada parcela
+                            </label>
+                        </div>
+                    </div>
+                    <div class="col-md-6 d-none" id="massaValorContainer">
+                        <label class="form-label fw-bold">Valor Fixo (R$) <span class="text-danger">*</span></label>
+                        <div class="input-group">
+                            <span class="input-group-text">R$</span>
+                            <input type="number" class="form-control" id="massaValor" step="0.01" min="0" placeholder="0,00">
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label fw-bold">Forma de Pagamento</label>
+                        <select class="form-select" id="massaForma">
+                            <option value="DINHEIRO">Dinheiro</option>
+                            <option value="PIX">PIX</option>
+                            <option value="TRANSFERENCIA">Transferência Bancária</option>
+                            <option value="BOLETO">Boleto</option>
+                            <option value="CARTAO_CREDITO">Cartão de Crédito</option>
+                            <option value="CARTAO_DEBITO">Cartão de Débito</option>
+                            <option value="CHEQUE">Cheque</option>
+                        </select>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">Observações</label>
+                        <textarea class="form-control" id="massaObs" rows="2" placeholder="Ex: Pagamento em lote — PIX..."></textarea>
+                    </div>
+                </div>
+                <div id="massaResultado" class="d-none mt-3"></div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary modal-close">Cancelar</button>
+                <button type="button" class="btn btn-success" id="btnConfirmarMassa" onclick="confirmarPagamentoMassa()">
+                    <i class="fas fa-check me-1"></i> Confirmar Pagamentos
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script src="{% static 'vendor/flatpickr/js/flatpickr.min.js' %}"></script>
+<script src="{% static 'vendor/flatpickr/js/flatpickr-pt.js' %}"></script>
+<script>
+const CSRF_TOKEN = '{{ csrf_token }}';
+let parcelaAtualId = null;
+
+// Helper: abre/fecha modal Materialize (compatível com HTML Bootstrap)
+function getMModal(id) {
+    const el = document.getElementById(id);
+    if (!el) return null;
+    return M.Modal.getInstance(el) || M.Modal.init(el, {dismissible: true});
+}
+
+// ===== FLATPICKR DATE RANGE =====
+let fpInstance;
+
+document.addEventListener('DOMContentLoaded', function() {
+    const dataInicio = document.getElementById('inputDataInicio').value;
+    const dataFim    = document.getElementById('inputDataFim').value;
+    const defaultDate = (dataInicio && dataFim) ? [dataInicio, dataFim]
+                      : dataInicio ? [dataInicio] : [];
+
+    fpInstance = flatpickr('#dateRangePicker', {
+        mode: 'range',
+        locale: 'pt',
+        dateFormat: 'Y-m-d',
+        altInput: true,
+        altFormat: 'd/m/Y',
+        defaultDate: defaultDate,
+        onChange: function(selectedDates) {
+            if (selectedDates.length === 2) {
+                const fmt = d => d.toISOString().split('T')[0];
+                document.getElementById('inputDataInicio').value = fmt(selectedDates[0]);
+                document.getElementById('inputDataFim').value   = fmt(selectedDates[1]);
+            } else if (selectedDates.length === 0) {
+                document.getElementById('inputDataInicio').value = '';
+                document.getElementById('inputDataFim').value   = '';
+            }
+        },
+    });
+});
+
+function setDateRange(preset) {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    let start, end;
+    if (preset === 'today') {
+        start = end = new Date(today);
+    } else if (preset === 'week') {
+        start = new Date(today);
+        start.setDate(today.getDate() - today.getDay() + (today.getDay() === 0 ? -6 : 1));
+        end = new Date(start);
+        end.setDate(start.getDate() + 6);
+    } else if (preset === 'month') {
+        start = new Date(today.getFullYear(), today.getMonth(), 1);
+        end   = new Date(today.getFullYear(), today.getMonth() + 1, 0);
+    } else if (preset === '90days') {
+        start = new Date(today);
+        end   = new Date(today);
+        end.setDate(today.getDate() + 90);
+    }
+    fpInstance.setDate([start, end]);
+    const fmt = d => d.toISOString().split('T')[0];
+    document.getElementById('inputDataInicio').value = fmt(start);
+    document.getElementById('inputDataFim').value   = fmt(end);
+}
+
+function clearDateRange() {
+    fpInstance.clear();
+    document.getElementById('inputDataInicio').value = '';
+    document.getElementById('inputDataFim').value   = '';
+}
+
+// ===== UTILITÁRIO CSV =====
+function cleanCsvCell(params) {
+    const v = params.value;
+    if (v == null) return '';
+    if (typeof v === 'string' && v.includes('<')) {
+        const d = document.createElement('div'); d.innerHTML = v;
+        return (d.textContent || d.innerText || '').trim();
+    }
+    return v;
+}
+
+// ===== DADOS DA PÁGINA ATUAL =====
+const parcelasRowData = [
+{% for parcela in parcelas %}
+{
+    pk: {{ parcela.pk }},
+    contrato: "{{ parcela.contrato.numero_contrato|escapejs }}",
+    contrato_pk: {{ parcela.contrato.pk }},
+    comprador: "{{ parcela.contrato.comprador.nome|escapejs }}",
+    numero_parcela: {{ parcela.numero_parcela }},
+    total_parcelas: {{ parcela.contrato.numero_parcelas }},
+    vencimento: "{{ parcela.data_vencimento|date:'Y-m-d' }}",
+    vencimento_fmt: "{{ parcela.data_vencimento|date:'d/m/Y' }}",
+    valor_original: parseFloat("{{ parcela.valor_original|default:'0' }}") || 0,
+    valor_atual: parseFloat("{{ parcela.valor_atual|default:'0' }}") || 0,
+    valor_total: parseFloat("{{ parcela.valor_total|default:'0' }}") || 0,
+    pago: {{ parcela.pago|yesno:"true,false" }},
+    esta_vencida: {{ parcela.esta_vencida|yesno:"true,false" }},
+    status_boleto: "{{ parcela.status_boleto|default:'' }}",
+    data_pagamento: "{{ parcela.data_pagamento|date:'d/m/Y'|default:'' }}",
+    juros: parseFloat("{{ parcela.juros_dinamico|default:'0' }}") || 0,
+    multa: parseFloat("{{ parcela.multa_dinamico|default:'0' }}") || 0,
+},
+{% endfor %}
+];
+
+// ===== AG GRID =====
+function formatBRL(value) {
+    if (value == null || value === '') return '—';
+    return 'R$ ' + parseFloat(value).toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+}
+
+function statusRenderer(params) {
+    const data = params.data;
+    if (data.pago) return '<span class="badge badge-pago">Pago</span>';
+    if (data.esta_vencida) return '<span class="badge badge-vencida">Vencida</span>';
+    return '<span class="badge badge-pendente">Em aberto</span>';
+}
+
+function boletoRenderer(params) {
+    const s = params.value;
+    if (s === 'GERADO')     return '<span class="badge badge-boleto-gerado">Gerado</span>';
+    if (s === 'REGISTRADO') return '<span class="badge bg-info">Registrado</span>';
+    if (s === 'PAGO')       return '<span class="badge bg-success">Pago</span>';
+    if (s === 'CANCELADO')  return '<span class="badge bg-dark">Cancelado</span>';
+    if (s === 'VENCIDO')    return '<span class="badge bg-warning text-dark">Vencido</span>';
+    if (s === 'BAIXADO')    return '<span class="badge bg-warning text-dark">Baixado</span>';
+    if (s === 'PROTESTADO') return '<span class="badge bg-danger">Protestado</span>';
+    return '<span class="badge bg-light text-muted">—</span>';
+}
+
+function acoesRenderer(params) {
+    const d = params.data;
+    let html = '<div class="ag-grid-actions">';
+    html += `<a href="/financeiro/parcelas/${d.pk}/" class="btn btn-sm btn-outline-secondary" title="Ver detalhes"><i class="fas fa-eye"></i></a>`;
+    html += `<a href="/contratos/${d.contrato_pk}/" class="btn btn-sm btn-outline-info" title="Ver contrato"><i class="fas fa-file-contract"></i></a>`;
+    if (!d.pago) {
+        html += `<button class="btn btn-sm btn-outline-primary" title="Gerar boleto" onclick="abrirModalBoleto(${d.pk}, '${d.contrato.replace(/'/g,"\\'")}', ${d.numero_parcela})"><i class="fas fa-barcode"></i></button>`;
+        html += `<button class="btn btn-sm btn-outline-success" title="Registrar pagamento" onclick="abrirModalPagar(${d.pk}, '${d.contrato.replace(/'/g,"\\'")}', ${d.numero_parcela}, '${d.vencimento_fmt}', ${d.valor_original})"><i class="fas fa-dollar-sign"></i></button>`;
+    }
+    html += '</div>';
+    return html;
+}
+
+const parcelasColumnDefs = [
+    {
+        headerName: '',
+        field: 'pk',
+        checkboxSelection: true,
+        headerCheckboxSelection: true,
+        headerCheckboxSelectionFilteredOnly: true,
+        sortable: false,
+        filter: false,
+        resizable: false,
+        width: 44,
+        minWidth: 44,
+        maxWidth: 44,
+        pinned: 'left',
+    },
+    {
+        headerName: 'Contrato',
+        field: 'contrato',
+        filter: 'agTextColumnFilter',
+       
+        minWidth: 120,
+        cellRenderer: params => `<strong>${params.value}</strong>`,
+    },
+    {
+        headerName: 'Comprador',
+        field: 'comprador',
+        filter: 'agTextColumnFilter',
+       
+        minWidth: 160,
+    },
+    {
+        headerName: 'Parcela',
+        field: 'numero_parcela',
+        filter: 'agNumberColumnFilter',
+       
+        minWidth: 90,
+        cellRenderer: params => `${params.value}/${params.data.total_parcelas}`,
+    },
+    {
+        headerName: 'Vencimento',
+        field: 'vencimento',
+        filter: 'agDateColumnFilter',
+       
+        minWidth: 120,
+        cellRenderer: params => params.data.vencimento_fmt,
+        sort: 'desc',
+    },
+    {
+        headerName: 'Valor Original',
+        field: 'valor_original',
+        filter: 'agNumberColumnFilter',
+       
+        minWidth: 130,
+        type: 'numericColumn',
+        cellRenderer: params => formatBRL(params.value),
+    },
+    {
+        headerName: 'Valor Atual',
+        field: 'valor_atual',
+        filter: 'agNumberColumnFilter',
+       
+        minWidth: 120,
+        type: 'numericColumn',
+        cellRenderer: params => formatBRL(params.value),
+    },
+    {
+        headerName: 'Status',
+        field: 'pago',
+        filter: 'agTextColumnFilter',
+       
+        minWidth: 110,
+        cellRenderer: statusRenderer,
+    },
+    {
+        headerName: 'Boleto',
+        field: 'status_boleto',
+        filter: 'agTextColumnFilter',
+       
+        minWidth: 110,
+        cellRenderer: boletoRenderer,
+    },
+    {
+        headerName: 'Data Pgto',
+        field: 'data_pagamento',
+        filter: 'agTextColumnFilter',
+       
+        minWidth: 110,
+    },
+    {
+        headerName: 'Ações',
+        field: 'pk',
+        sortable: false,
+        filter: false,
+        minWidth: 155,
+        cellRenderer: acoesRenderer,
+    },
+];
+
+document.addEventListener('DOMContentLoaded', function() {
+    window.parcelasGridApi = agGrid.createGrid(
+        document.getElementById('parcelasGrid'),
+        {
+            columnDefs: parcelasColumnDefs,
+            rowData: parcelasRowData,
+            domLayout: 'autoHeight',
+            defaultColDef: {
+                sortable: true,
+                resizable: true,
+                suppressMovable: false,
+            },
+            rowSelection: 'multiple',
+            suppressRowClickSelection: true,
+            rowHeight: 42,
+            headerHeight: 48,
+           
+            suppressCellFocus: true,
+            enableCellTextSelection: true,
+            onSelectionChanged: function() {
+                const selecionados = window.parcelasGridApi.getSelectedRows();
+                const barra = document.getElementById('barraBulk');
+                const contador = document.getElementById('bulkContador');
+                if (selecionados.length > 0) {
+                    barra.classList.remove('d-none');
+                    contador.textContent = selecionados.length;
+                } else {
+                    barra.classList.add('d-none');
+                }
+            },
+        }
+    );
+});
+
+function limparSelecao() {
+    window.parcelasGridApi && window.parcelasGridApi.deselectAll();
+}
+
+function gerarBoletosSelecionados(force) {
+    const selecionados = window.parcelasGridApi ? window.parcelasGridApi.getSelectedRows() : [];
+    if (!selecionados.length) return;
+
+    // Filtrar apenas não pagas
+    const ids = selecionados.filter(r => !r.pago).map(r => r.pk);
+    if (!ids.length) {
+        alert('Nenhuma parcela não-paga selecionada.');
+        return;
+    }
+
+    const btn = force
+        ? document.querySelector('[onclick="gerarBoletosSelecionados(true)"]')
+        : document.querySelector('[onclick="gerarBoletosSelecionados(false)"]');
+    if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i> Gerando...'; }
+
+    const resultado = document.getElementById('bulkResultado');
+    resultado.className = 'alert alert-info';
+    resultado.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i> Gerando ' + ids.length + ' boleto(s)...';
+    resultado.classList.remove('d-none');
+
+    const btnLabel = force ? '<i class="fas fa-redo me-1"></i> Forçar Regeneração' : '<i class="fas fa-barcode me-1"></i> Gerar Boletos';
+    const restoreBtn = () => { if (btn) { btn.disabled = false; btn.innerHTML = btnLabel; } };
+
+    // Timeout proporcional: 60s base + 10s por boleto, máximo 300s
+    const timeoutMs = Math.min(300000, 60000 + ids.length * 10000);
+    const controller = new AbortController();
+    const tid = setTimeout(() => controller.abort(), timeoutMs);
+
+    fetch('/financeiro/api/boletos/gerar-parcelas/', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json', 'X-CSRFToken': CSRF_TOKEN},
+        body: JSON.stringify({parcela_ids: ids, force: force}),
+        signal: controller.signal,
+    })
+    .then(r => { clearTimeout(tid); return r.json(); })
+    .then(data => {
+        restoreBtn();
+        let cls = data.erros > 0 ? 'alert-warning' : 'alert-success';
+        let msg = `<strong><i class="fas fa-check-circle me-1"></i>${data.gerados} gerado(s)</strong>`;
+        if (data.bloqueados) msg += ` &nbsp; <span class="text-warning">${data.bloqueados} bloqueado(s) por reajuste</span>`;
+        if (data.erros) msg += ` &nbsp; <span class="text-danger">${data.erros} erro(s)</span>`;
+        resultado.className = 'alert ' + cls;
+        resultado.innerHTML = msg + '<br><small class="text-muted">Recarregue a página para ver os status atualizados.</small>' +
+            ' <button class="btn btn-sm btn-outline-secondary ms-2" onclick="location.reload()">Recarregar</button>';
+        window.parcelasGridApi.deselectAll();
+    })
+    .catch(err => {
+        clearTimeout(tid);
+        restoreBtn();
+        resultado.className = 'alert alert-danger';
+        resultado.innerHTML = err.name === 'AbortError'
+            ? `<i class="fas fa-clock me-1"></i> Tempo esgotado. BRCobrança pode estar iniciando. Tente novamente em alguns segundos.`
+            : '<i class="fas fa-exclamation-triangle me-1"></i> Erro: ' + err.message;
+    });
+}
+
+// ===== GERAR BOLETO =====
+function abrirModalBoleto(parcelaId, contrato, numParcela) {
+    parcelaAtualId = parcelaId;
+    document.getElementById('modalBoletoInfo').textContent =
+        'Contrato: ' + contrato + ' — Parcela ' + numParcela;
+    document.getElementById('boletoForce').checked = false;
+    document.getElementById('modalBoletoResultado').className = 'd-none';
+    document.getElementById('modalBoletoResultado').innerHTML = '';
+    document.getElementById('modalBoletoForm').classList.remove('d-none');
+    document.getElementById('btnConfirmarBoleto').classList.remove('d-none');
+    getMModal('modalGerarBoleto').open();
+}
+
+function confirmarGerarBoleto() {
+    const btn = document.getElementById('btnConfirmarBoleto');
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i> Gerando...';
+
+    const force = document.getElementById('boletoForce').checked;
+    const formData = new FormData();
+    formData.append('csrfmiddlewaretoken', CSRF_TOKEN);
+    if (force) formData.append('force', 'true');
+
+    // Timeout 120s — BRCobrança pode estar em cold start no Render
+    const controller = new AbortController();
+    const tid = setTimeout(() => controller.abort(), 120000);
+
+    fetch('/financeiro/parcelas/' + parcelaAtualId + '/boleto/gerar/', {
+        method: 'POST',
+        body: formData,
+        signal: controller.signal,
+    })
+    .then(r => { clearTimeout(tid); return r.json(); })
+    .then(data => {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fas fa-barcode me-1"></i> Gerar Boleto';
+        const res = document.getElementById('modalBoletoResultado');
+        res.classList.remove('d-none');
+        if (data.sucesso) {
+            res.className = 'alert alert-success';
+            res.innerHTML = '<i class="fas fa-check-circle me-1"></i> Boleto gerado com sucesso!' +
+                (data.nosso_numero ? '<br><small>Nosso número: <strong>' + data.nosso_numero + '</strong></small>' : '');
+            document.getElementById('modalBoletoForm').classList.add('d-none');
+            btn.classList.add('d-none');
+        } else {
+            res.className = 'alert alert-danger';
+            res.innerHTML = '<i class="fas fa-exclamation-triangle me-1"></i> ' + (data.erro || 'Erro ao gerar boleto.');
+        }
+    })
+    .catch(err => {
+        clearTimeout(tid);
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fas fa-barcode me-1"></i> Gerar Boleto';
+        const res = document.getElementById('modalBoletoResultado');
+        res.className = 'alert alert-danger';
+        res.innerHTML = err.name === 'AbortError'
+            ? '<i class="fas fa-clock me-1"></i> Tempo esgotado (120s). BRCobrança pode estar iniciando. Tente novamente.'
+            : '<i class="fas fa-exclamation-triangle me-1"></i> Erro: ' + err.message;
+        res.classList.remove('d-none');
+    });
+}
+
+// ===== PAGAR =====
+// Estado interno do modal de pagamento
+let _pagarJuros = 0, _pagarMulta = 0, _pagarValorAtual = 0;
+
+function abrirModalPagar(parcelaId, contrato, numParcela, vencimentoFmt, valorOriginal) {
+    parcelaAtualId = parcelaId;
+    document.getElementById('modalPagarInfo').textContent =
+        'Contrato: ' + contrato + ' — Parcela ' + numParcela;
+    const hoje = new Date().toISOString().split('T')[0];
+    document.getElementById('pagarVencimento').value = vencimentoFmt || '';
+    document.getElementById('pagarValorOriginal').value = parseFloat(valorOriginal || 0).toFixed(2);
+    document.getElementById('pagarData').value = hoje;
+    document.getElementById('pagarJuros').value = '0.00';
+    document.getElementById('pagarMulta').value = '0.00';
+    document.getElementById('pagarDesconto').value = '0.00';
+    document.getElementById('pagarValorTotal').value = '';
+    document.getElementById('pagarForma').value = 'DINHEIRO';
+    document.getElementById('pagarObs').value = '';
+    document.getElementById('btnConfirmarPagar').disabled = false;
+    document.getElementById('btnConfirmarPagar').innerHTML = '<i class="fas fa-check me-1"></i> Confirmar Pagamento';
+    getMModal('modalPagar').open();
+    // Calcular encargos para hoje
+    recalcularEncargos();
+}
+
+function recalcularEncargos() {
+    const data = document.getElementById('pagarData').value;
+    if (!data || !parcelaAtualId) return;
+    fetch('/financeiro/parcelas/' + parcelaAtualId + '/calcular-encargos/?data=' + data)
+        .then(r => r.ok ? r.json() : null)
+        .then(d => {
+            if (!d) return;
+            _pagarJuros = d.juros;
+            _pagarMulta = d.multa;
+            _pagarValorAtual = d.valor_atual;
+            document.getElementById('pagarJuros').value = d.juros.toFixed(2);
+            document.getElementById('pagarMulta').value = d.multa.toFixed(2);
+            atualizarValorPagar();
+        })
+        .catch(() => {});
+}
+
+function atualizarValorPagar() {
+    const desconto = parseFloat(document.getElementById('pagarDesconto').value) || 0;
+    const total = _pagarValorAtual + _pagarJuros + _pagarMulta - desconto;
+    document.getElementById('pagarValorTotal').value = Math.max(0, total).toFixed(2);
+}
+
+function confirmarPagar() {
+    const btn = document.getElementById('btnConfirmarPagar');
+    const data = document.getElementById('pagarData').value;
+    if (!data) {
+        alert('Preencha a data do pagamento.');
+        return;
+    }
+    const valorTotal = parseFloat(document.getElementById('pagarValorTotal').value) || 0;
+    if (valorTotal <= 0) {
+        alert('Valor a pagar inválido. Verifique a data e o desconto.');
+        return;
+    }
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i> Registrando...';
+
+    const formData = new FormData();
+    formData.append('csrfmiddlewaretoken', CSRF_TOKEN);
+    formData.append('data_pagamento', data);
+    formData.append('valor_pago', valorTotal.toFixed(2));
+    formData.append('valor_juros', _pagarJuros.toFixed(2));
+    formData.append('valor_multa', _pagarMulta.toFixed(2));
+    formData.append('valor_desconto', (parseFloat(document.getElementById('pagarDesconto').value) || 0).toFixed(2));
+    formData.append('forma_pagamento', document.getElementById('pagarForma').value || 'DINHEIRO');
+    formData.append('observacoes', document.getElementById('pagarObs').value || '');
+
+    fetch('/financeiro/parcelas/' + parcelaAtualId + '/pagar-ajax/', {
+        method: 'POST',
+        body: formData,
+    })
+    .then(r => r.json())
+    .then(resp => {
+        if (resp.sucesso) {
+            getMModal('modalPagar').close();
+            window.location.reload();
+        } else {
+            btn.disabled = false;
+            btn.innerHTML = '<i class="fas fa-check me-1"></i> Confirmar Pagamento';
+            alert('Erro: ' + (resp.erro || 'Erro ao registrar pagamento.'));
+        }
+    })
+    .catch(err => {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fas fa-check me-1"></i> Confirmar Pagamento';
+        alert('Erro: ' + err.message);
+    });
+}
+
+// ===== GERAR CARNÊ =====
+function gerarCarneSelecionados() {
+    const selecionados = window.parcelasGridApi ? window.parcelasGridApi.getSelectedRows() : [];
+    const naoPagas = selecionados.filter(r => !r.pago);
+    if (!naoPagas.length) {
+        alert('Nenhuma parcela não-paga selecionada.');
+        return;
+    }
+
+    // Validar que todas são do mesmo contrato
+    const contratoIds = [...new Set(naoPagas.map(r => r.contrato_pk))];
+    if (contratoIds.length > 1) {
+        alert('Para gerar Carnê, selecione parcelas de apenas um contrato.\nForam selecionados ' + contratoIds.length + ' contratos diferentes.');
+        return;
+    }
+
+    const contratoId = contratoIds[0];
+    const ids = naoPagas.map(r => r.pk);
+    const resultado = document.getElementById('bulkResultado');
+
+    resultado.className = 'alert alert-info';
+    resultado.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i> Gerando carnê (' + ids.length + ' parcela(s))...';
+    resultado.classList.remove('d-none');
+
+    fetch('/financeiro/contrato/' + contratoId + '/gerar-carne/', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json', 'X-CSRFToken': CSRF_TOKEN},
+        body: JSON.stringify({parcelas: ids, force: false}),
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.sucesso || data.gerados >= 0) {
+            const gerados = data.gerados || 0;
+            const bloqueados = data.bloqueados || 0;
+            const erros = data.erros || 0;
+            let cls = erros > 0 ? 'alert-warning' : 'alert-success';
+            let msg = '<strong><i class="fas fa-book me-1"></i>' + gerados + ' boleto(s) do carnê gerado(s)</strong>';
+            if (bloqueados) msg += ' &nbsp; <span class="text-warning">' + bloqueados + ' bloqueado(s)</span>';
+            if (erros) msg += ' &nbsp; <span class="text-danger">' + erros + ' erro(s)</span>';
+            resultado.className = 'alert ' + cls;
+            resultado.innerHTML = msg + '<br><small class="text-muted">Recarregue para ver os status atualizados.</small>' +
+                ' <button class="btn btn-sm btn-outline-secondary ms-2" onclick="location.reload()">Recarregar</button>';
+        } else {
+            resultado.className = 'alert alert-danger';
+            resultado.innerHTML = '<i class="fas fa-exclamation-triangle me-1"></i> ' + (data.erro || 'Erro ao gerar carnê.');
+        }
+        window.parcelasGridApi.deselectAll();
+    })
+    .catch(err => {
+        resultado.className = 'alert alert-danger';
+        resultado.innerHTML = '<i class="fas fa-exclamation-triangle me-1"></i> Erro: ' + err.message;
+    });
+}
+
+// ===== GERAR REMESSA CNAB =====
+function abrirModalCnab() {
+    const selecionados = window.parcelasGridApi ? window.parcelasGridApi.getSelectedRows() : [];
+    document.getElementById('cnabContador').textContent = selecionados.length + ' selecionada(s)';
+    document.getElementById('cnabResultado').className = 'd-none';
+    document.getElementById('cnabResultado').innerHTML = '';
+    const btn = document.getElementById('btnConfirmarCnab');
+    btn.disabled = false;
+    btn.innerHTML = '<i class="fas fa-file-code me-1"></i> Gerar Remessa';
+    getMModal('modalGerarCnab').open();
+}
+
+function confirmarGerarCnab() {
+    const selecionados = window.parcelasGridApi ? window.parcelasGridApi.getSelectedRows() : [];
+    const ids = selecionados.filter(r => !r.pago).map(r => r.pk);
+    if (!ids.length) {
+        alert('Nenhuma parcela não-paga selecionada.');
+        return;
+    }
+    const contaId = document.getElementById('cnabContaBancaria').value;
+    if (!contaId) {
+        alert('Selecione uma conta bancária.');
+        return;
+    }
+    const layout = document.getElementById('cnabLayout').value;
+    const btn = document.getElementById('btnConfirmarCnab');
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i> Gerando...';
+
+    fetch('/financeiro/api/cnab/remessas/gerar/', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json', 'X-CSRFToken': CSRF_TOKEN},
+        body: JSON.stringify({conta_bancaria_id: parseInt(contaId), parcela_ids: ids, layout: layout}),
+    })
+    .then(r => r.json())
+    .then(data => {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fas fa-file-code me-1"></i> Gerar Remessa';
+        const res = document.getElementById('cnabResultado');
+        res.classList.remove('d-none');
+        if (data.sucesso) {
+            res.className = 'alert alert-success';
+            res.innerHTML = '<i class="fas fa-check-circle me-1"></i> Remessa gerada com sucesso!' +
+                (data.arquivo ? '<br><small>Arquivo: <strong>' + data.arquivo + '</strong></small>' : '') +
+                (data.total_titulos ? '<br><small>' + data.total_titulos + ' título(s) incluído(s)</small>' : '');
+        } else {
+            res.className = 'alert alert-danger';
+            res.innerHTML = '<i class="fas fa-exclamation-triangle me-1"></i> ' + (data.erro || 'Erro ao gerar remessa.');
+        }
+    })
+    .catch(err => {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fas fa-file-code me-1"></i> Gerar Remessa';
+        const res = document.getElementById('cnabResultado');
+        res.className = 'alert alert-danger';
+        res.innerHTML = '<i class="fas fa-exclamation-triangle me-1"></i> Erro: ' + err.message;
+        res.classList.remove('d-none');
+    });
+}
+
+// ===== PAGAMENTO EM MASSA =====
+function abrirModalPagamentoMassa() {
+    const selecionados = window.parcelasGridApi ? window.parcelasGridApi.getSelectedRows() : [];
+    const naoPagas = selecionados.filter(r => !r.pago);
+    if (!naoPagas.length) {
+        alert('Nenhuma parcela não-paga selecionada.');
+        return;
+    }
+    document.getElementById('massaContador').textContent = naoPagas.length;
+    const hoje = new Date().toISOString().split('T')[0];
+    document.getElementById('massaData').value = hoje;
+    document.getElementById('massaUsarValorOriginal').checked = true;
+    document.getElementById('massaValorContainer').classList.add('d-none');
+    document.getElementById('massaValor').value = '';
+    document.getElementById('massaObs').value = '';
+    document.getElementById('massaResultado').className = 'd-none';
+    document.getElementById('massaResultado').innerHTML = '';
+    const btn = document.getElementById('btnConfirmarMassa');
+    btn.disabled = false;
+    btn.innerHTML = '<i class="fas fa-check me-1"></i> Confirmar Pagamentos';
+    getMModal('modalPagamentoMassa').open();
+}
+
+function confirmarPagamentoMassa() {
+    const selecionados = window.parcelasGridApi ? window.parcelasGridApi.getSelectedRows() : [];
+    const naoPagas = selecionados.filter(r => !r.pago);
+    if (!naoPagas.length) return;
+
+    const dataVal = document.getElementById('massaData').value;
+    if (!dataVal) {
+        alert('Informe a data do pagamento.');
+        return;
+    }
+    const usarOriginal = document.getElementById('massaUsarValorOriginal').checked;
+    const valorFixo = document.getElementById('massaValor').value;
+    if (!usarOriginal && !valorFixo) {
+        alert('Informe o valor fixo ou marque "usar valor original".');
+        return;
+    }
+
+    const btn = document.getElementById('btnConfirmarMassa');
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i> Registrando...';
+
+    const obs = document.getElementById('massaObs').value || '';
+    const promessas = naoPagas.map(r => {
+        const fd = new FormData();
+        fd.append('csrfmiddlewaretoken', CSRF_TOKEN);
+        fd.append('data_pagamento', dataVal);
+        fd.append('valor_pago', usarOriginal ? r.valor_total : valorFixo);
+        fd.append('valor_juros', '0');
+        fd.append('valor_multa', '0');
+        fd.append('valor_desconto', '0');
+        fd.append('forma_pagamento', document.getElementById('massaForma').value || 'DINHEIRO');
+        fd.append('observacoes', obs);
+        return fetch('/financeiro/parcelas/' + r.pk + '/pagar-ajax/', {method: 'POST', body: fd})
+            .then(res => res.json())
+            .then(data => ({pk: r.pk, sucesso: data.sucesso, erro: data.erro}))
+            .catch(err => ({pk: r.pk, sucesso: false, erro: err.message}));
+    });
+
+    Promise.all(promessas).then(resultados => {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fas fa-check me-1"></i> Confirmar Pagamentos';
+        const ok = resultados.filter(r => r.sucesso).length;
+        const falhas = resultados.filter(r => !r.sucesso);
+        const res = document.getElementById('massaResultado');
+        res.classList.remove('d-none');
+        if (falhas.length === 0) {
+            res.className = 'alert alert-success';
+            res.innerHTML = '<i class="fas fa-check-circle me-1"></i> ' + ok + ' pagamento(s) registrado(s) com sucesso!' +
+                ' <button class="btn btn-sm btn-outline-success ms-2" onclick="location.reload()">Recarregar</button>';
+        } else {
+            res.className = 'alert alert-warning';
+            res.innerHTML = '<strong>' + ok + ' registrado(s), ' + falhas.length + ' erro(s):</strong><ul class="mb-0 mt-1">' +
+                falhas.map(f => '<li>Parcela #' + f.pk + ': ' + (f.erro || 'Erro desconhecido') + '</li>').join('') + '</ul>' +
+                (ok > 0 ? ' <button class="btn btn-sm btn-outline-secondary ms-2 mt-2" onclick="location.reload()">Recarregar</button>' : '');
+        }
+        if (ok > 0) window.parcelasGridApi.deselectAll();
+    });
+}
+
+{% if filtro_status_boleto == 'GERADO' %}
+// ===== REVALIDAR =====
+function revalidarBoletos() {
+    const btn = document.getElementById('btn-revalidar');
+    const resultadoDiv = document.getElementById('revalidar-resultado');
+    const resumoDiv = document.getElementById('revalidar-resumo');
+    const detalhesDiv = document.getElementById('revalidar-detalhes');
+
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i> Validando...';
+
+    // Obter IDs visíveis do AG Grid
+    const parcela_ids = parcelasRowData.map(r => r.pk);
+
+    fetch('{% url "financeiro:api_boletos_revalidar" %}', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-CSRFToken': CSRF_TOKEN },
+        body: JSON.stringify({ parcela_ids: parcela_ids }),
+    })
+    .then(resp => resp.json())
+    .then(data => {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fas fa-sync-alt me-1"></i> Executar Re-validação';
+        resultadoDiv.classList.remove('d-none');
+        if (!data.sucesso) {
+            resumoDiv.innerHTML = '<div class="alert alert-danger">' + data.erro + '</div>';
+            detalhesDiv.innerHTML = '';
+            return;
+        }
+        const cor = data.invalidos > 0 ? 'warning' : 'success';
+        resumoDiv.innerHTML = '<div class="alert alert-' + cor + ' mb-0"><strong>Resultado:</strong> ' +
+            data.total + ' boleto(s) verificado(s) — <span class="text-success"><strong>' + data.validos +
+            '</strong> válido(s)</span>, <span class="text-danger"><strong>' + data.invalidos +
+            '</strong> com problema(s)</span></div>';
+        if (data.invalidos === 0) { detalhesDiv.innerHTML = ''; return; }
+        const invalidos = data.resultados.filter(r => !r.valido);
+        let html = '<div class="mt-3"><strong class="text-danger">Boletos com problema:</strong><ul class="list-group mt-2">';
+        invalidos.forEach(r => {
+            html += '<li class="list-group-item list-group-item-danger"><strong>Parcela #' + r.parcela_id +
+                '</strong> — Contrato: ' + r.contrato + ' — Nosso Nº: ' + r.nosso_numero +
+                '<ul class="mb-0 mt-1">';
+            r.erros.forEach(e => { html += '<li>' + e + '</li>'; });
+            html += '</ul></li>';
+        });
+        html += '</ul></div>';
+        detalhesDiv.innerHTML = html;
+    })
+    .catch(err => {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fas fa-sync-alt me-1"></i> Executar Re-validação';
+        resumoDiv.innerHTML = '<div class="alert alert-danger">Erro: ' + err.message + '</div>';
+        resultadoDiv.classList.remove('d-none');
+        detalhesDiv.innerHTML = '';
+    });
+}
+{% endif %}
+</script>
+{% endblock %}

@@ -1,0 +1,79 @@
+name: CI
+
+on:
+  push:
+    branches: ["claude/**", "V3.1", "master"]
+  pull_request:
+    branches: ["V3.1", "master"]
+
+jobs:
+  test:
+    name: Testes (Python ${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+
+    strategy:
+      matrix:
+        python-version: ["3.11"]
+
+    # Sem serviço PostgreSQL — testes usam SQLite em memória via pytest --no-migrations
+    env:
+      SECRET_KEY: ci-test-secret-key-not-for-production-use
+      DEBUG: "True"
+      ALLOWED_HOSTS: "localhost,127.0.0.1"
+      # DATABASE_URL não definido → settings.py usa SQLite (modo dev/test)
+
+    steps:
+      - name: Checkout do código
+        uses: actions/checkout@v4
+
+      - name: Configurar Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+
+      - name: Instalar dependências
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Verificar sintaxe Python
+        run: |
+          python -m py_compile financeiro/views.py
+          python -m py_compile contratos/views.py
+          python -m py_compile core/views.py
+          echo "Sintaxe OK"
+
+      - name: Executar testes (unit)
+        run: |
+          python -m pytest tests/unit/ \
+            --tb=short \
+            -q \
+            --cov=financeiro \
+            --cov=contratos \
+            --cov=core \
+            --cov=notificacoes \
+            --cov=portal_comprador \
+            --cov-report=term-missing \
+            --cov-fail-under=25
+
+  lint:
+    name: Lint (flake8)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - name: Instalar flake8
+        run: pip install flake8
+      - name: Executar flake8
+        run: |
+          flake8 . \
+            --max-line-length=120 \
+            --exclude=migrations,staticfiles,media,venv,.venv,static/vendor \
+            --per-file-ignores="*/migrations/*.py:E501,F401" \
+            --count \
+            --statistics \
+            || true  # Não falha o CI por lint ainda (apenas reporta)

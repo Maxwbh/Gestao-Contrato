@@ -1,0 +1,15 @@
+{% load crispy_forms_field %}
+
+<div class="btn-group" role="group" aria-label="Tipo de Pessoa">
+    {% for choice in field.field.choices %}
+    <input type="radio" class="btn-check" name="{{ field.name }}" id="{{ field.auto_id }}_{{ forloop.counter0 }}" value="{{ choice.0 }}"{% if field.value == choice.0 or field.value|stringformat:"s" == choice.0|stringformat:"s" %} checked{% endif %} autocomplete="off">
+    <label class="btn btn-outline-primary btn-lg px-5" for="{{ field.auto_id }}_{{ forloop.counter0 }}">
+        {% if choice.0 == 'PF' %}
+        <i class="fas fa-user me-2"></i>
+        {% else %}
+        <i class="fas fa-building me-2"></i>
+        {% endif %}
+        {{ choice.1 }}
+    </label>
+    {% endfor %}
+</div>

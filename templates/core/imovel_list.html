@@ -1,0 +1,576 @@
+{% extends 'base.html' %}
+{% load crispy_forms_tags %}
+
+{% block title %}Imóveis - Gestão de Contratos{% endblock %}
+
+{% block extra_css %}
+<!-- Leaflet CSS -->
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<!-- Leaflet MarkerCluster CSS -->
+<link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css" />
+<link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css" />
+<style>
+    #mapa-imoveis {
+        height: 560px;
+        border-radius: 8px;
+        border: 1px solid #dee2e6;
+        z-index: 1;
+    }
+    /* Marcadores custom por status */
+    .lote-marker {
+        display: flex; align-items: center; justify-content: center;
+        border-radius: 50%; border: 2px solid rgba(0,0,0,0.25);
+        font-size: 10px; font-weight: 700; color: #fff;
+        box-shadow: 0 2px 6px rgba(0,0,0,0.35);
+    }
+    .lote-disponivel  { background: #28a745; }
+    .lote-vendido     { background: #dc3545; }
+    .lote-reservado   { background: #fd7e14; }
+    /* Popup */
+    .lote-popup { min-width: 220px; font-size: 0.85rem; }
+    .lote-popup .popup-title { font-size: 1rem; font-weight: 700; margin-bottom: 6px; color: #1a1a2e; }
+    /* Mapa controls */
+    .mapa-toolbar { background: #fff; border: 1px solid #dee2e6; border-radius: 6px; padding: 8px 12px; margin-bottom: 10px; }
+    /* Legenda */
+    .mapa-legenda { background: rgba(255,255,255,0.92); border-radius: 6px; padding: 8px 12px; font-size: 0.8rem; box-shadow: 0 1px 5px rgba(0,0,0,0.2); }
+    .legenda-dot { display: inline-block; width: 12px; height: 12px; border-radius: 50%; margin-right: 4px; vertical-align: middle; }
+    /* Tabs */
+    .nav-tabs .nav-link.active { background-color: #0d6efd; color: #fff; border-color: #0d6efd; }
+    .nav-tabs .nav-link { color: #495057; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h4 class="mb-0">
+                    <i class="fas fa-home"></i> Gerenciar Imóveis
+                </h4>
+                <a href="{% url 'core:criar_imovel' %}" class="btn btn-light">
+                    <i class="fas fa-plus"></i> Novo Imóvel
+                </a>
+            </div>
+            <div class="card-body">
+                <!-- Barra de Busca e Filtros -->
+                <div class="row mb-4">
+                    <div class="col-md-5">
+                        <form method="get" class="d-flex">
+                            <input type="text" name="search" class="form-control me-2"
+                                   placeholder="Buscar por identificação, loteamento..."
+                                   value="{{ search }}">
+                            <button type="submit" class="btn btn-primary">
+                                <i class="fas fa-search"></i>
+                            </button>
+                            {% if search %}
+                                <a href="{% url 'core:listar_imoveis' %}" class="btn btn-secondary ms-2">
+                                    <i class="fas fa-times"></i>
+                                </a>
+                            {% endif %}
+                        </form>
+                    </div>
+                    <div class="col-md-3">
+                        <select class="form-select" onchange="window.location.href='?imobiliaria=' + this.value">
+                            <option value="">Todas as Imobiliárias</option>
+                            {% for imob in imobiliarias %}
+                                <option value="{{ imob.id }}" {% if request.GET.imobiliaria == imob.id|stringformat:"s" %}selected{% endif %}>
+                                    {{ imob.nome }}
+                                </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-md-4 text-end">
+                        <div class="badge bg-info text-dark fs-6 me-2">
+                            <i class="fas fa-home"></i> Total: {{ total_imoveis }}
+                        </div>
+                        <div class="badge bg-success fs-6 me-2">
+                            <i class="fas fa-check-circle"></i> Disponíveis: {{ imoveis_disponiveis }}
+                        </div>
+                        <div class="badge bg-primary fs-6">
+                            <i class="fas fa-map-marker-alt"></i> No Mapa: {{ imoveis_com_coordenadas }}
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Tabs: Lista / Mapa -->
+                <ul class="nav nav-tabs mb-3" id="viewTabs" role="tablist">
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link active" id="lista-tab" data-bs-toggle="tab" data-bs-target="#lista" type="button">
+                            <i class="fas fa-th-large me-1"></i> Lista
+                        </button>
+                    </li>
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link" id="mapa-tab" data-bs-toggle="tab" data-bs-target="#mapa" type="button" onclick="setTimeout(function(){map.invalidateSize();}, 100);">
+                            <i class="fas fa-map me-1"></i> Mapa
+                        </button>
+                    </li>
+                </ul>
+
+                <div class="tab-content" id="viewTabsContent">
+                    <!-- Tab: Lista -->
+                    <div class="tab-pane fade show active" id="lista" role="tabpanel">
+                        {% if imoveis %}
+                            <div class="row">
+                                {% for imovel in imoveis %}
+                                    <div class="col-md-6 col-lg-4 mb-4">
+                                        <div class="card h-100 {% if not imovel.disponivel %}border-secondary{% else %}border-success{% endif %}">
+                                            <div class="card-header {% if not imovel.disponivel %}bg-secondary{% else %}bg-success{% endif %} text-white">
+                                                <div class="d-flex justify-content-between align-items-center">
+                                                    <h6 class="mb-0">
+                                                        <i class="fas fa-{% if imovel.tipo == 'LOTE' %}map-marked-alt{% elif imovel.tipo == 'CASA' %}house-user{% elif imovel.tipo == 'APARTAMENTO' %}building{% else %}store{% endif %}"></i>
+                                                        {{ imovel.get_tipo_display }}
+                                                    </h6>
+                                                    <span class="badge {% if imovel.disponivel %}bg-light text-success{% else %}bg-dark{% endif %}">
+                                                        {% if imovel.disponivel %}
+                                                            <i class="fas fa-check"></i> Disponível
+                                                        {% else %}
+                                                            <i class="fas fa-times"></i> Vendido
+                                                        {% endif %}
+                                                    </span>
+                                                </div>
+                                            </div>
+                                            <div class="card-body">
+                                                <h5 class="card-title">{{ imovel.identificacao }}</h5>
+
+                                                <p class="card-text">
+                                                    <i class="fas fa-building text-primary"></i>
+                                                    <strong>Imobiliária:</strong>
+                                                    {{ imovel.imobiliaria.nome }}<br>
+
+                                                    {% if imovel.loteamento %}
+                                                        <i class="fas fa-map text-success"></i>
+                                                        <strong>Loteamento:</strong>
+                                                        <a href="{% url 'core:loteamento_detalhe' imovel.loteamento %}" class="text-decoration-none">{{ imovel.loteamento }}</a><br>
+                                                    {% endif %}
+
+                                                    {% if imovel.area %}
+                                                        <i class="fas fa-ruler-combined text-warning"></i>
+                                                        <strong>Área:</strong>
+                                                        {{ imovel.area }} m²<br>
+                                                    {% endif %}
+
+                                                    {% if imovel.valor %}
+                                                        <i class="fas fa-dollar-sign text-success"></i>
+                                                        <strong>Valor:</strong>
+                                                        R$ {{ imovel.valor|floatformat:2 }}<br>
+                                                    {% endif %}
+
+                                                    {% if imovel.cidade %}
+                                                        <i class="fas fa-map-marker-alt text-danger"></i>
+                                                        <strong>Local:</strong>
+                                                        {{ imovel.cidade }}/{{ imovel.estado }}
+                                                    {% endif %}
+                                                </p>
+
+                                                {% if imovel.tem_coordenadas %}
+                                                    <span class="badge bg-success">
+                                                        <i class="fas fa-map-marker-alt"></i> Geolocalizado
+                                                    </span>
+                                                {% endif %}
+                                            </div>
+                                            <div class="card-footer bg-transparent">
+                                                <div class="d-flex justify-content-between align-items-center">
+                                                    <small class="text-muted">
+                                                        <i class="fas fa-calendar"></i>
+                                                        {{ imovel.criado_em|date:"d/m/Y" }}
+                                                    </small>
+                                                    <div class="btn-group btn-group-sm" role="group">
+                                                        {% if imovel.tem_coordenadas %}
+                                                        <button type="button" class="btn btn-outline-success" title="Ver no Mapa"
+                                                                onclick="verNoMapa({{ imovel.latitude }}, {{ imovel.longitude }}, '{{ imovel.identificacao }}')">
+                                                            <i class="fas fa-map-marker-alt"></i>
+                                                        </button>
+                                                        {% endif %}
+                                                        {% if not imovel.disponivel %}{% with contrato=imovel.contratos.first %}{% if contrato %}<a href="{% url 'contratos:detalhe' contrato.pk %}" class="btn btn-outline-secondary btn-sm" title="Ver Contrato {{ contrato.numero_contrato }}"><i class="fas fa-file-contract"></i></a>{% endif %}{% endwith %}{% endif %}
+                                                        <a href="{% url 'core:editar_imovel' imovel.pk %}"
+                                                           class="btn btn-outline-primary"
+                                                           title="Editar">
+                                                            <i class="fas fa-edit"></i>
+                                                        </a>
+                                                        <button type="button"
+                                                                class="btn btn-outline-danger"
+                                                                title="Excluir"
+                                                                onclick="confirmarExclusao('{{ imovel.identificacao }}', '{% url 'core:excluir_imovel' imovel.pk %}')">
+                                                            <i class="fas fa-trash"></i>
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                {% endfor %}
+                            </div>
+
+                            {% include "includes/pagination_perpage.html" %}
+                        {% else %}
+                            <div class="alert alert-info text-center">
+                                <i class="fas fa-info-circle fa-3x mb-3"></i>
+                                <h5>Nenhum imóvel encontrado</h5>
+                                <p>
+                                    {% if search %}
+                                        Sua busca por "{{ search }}" não retornou resultados.
+                                    {% else %}
+                                        Comece cadastrando um novo imóvel.
+                                    {% endif %}
+                                </p>
+                                <a href="{% url 'core:criar_imovel' %}" class="btn btn-primary">
+                                    <i class="fas fa-plus"></i> Cadastrar Primeiro Imóvel
+                                </a>
+                            </div>
+                        {% endif %}
+                    </div>
+
+                    <!-- Tab: Mapa -->
+                    <div class="tab-pane fade" id="mapa" role="tabpanel">
+
+                        <!-- Barra de controles do mapa -->
+                        <div class="mapa-toolbar d-flex flex-wrap gap-2 align-items-center">
+                            <!-- Filtro por loteamento -->
+                            <select id="filtroLoteamento" class="form-select form-select-sm" style="max-width:220px;"
+                                    onchange="filtrarPorLoteamento(this.value)">
+                                <option value="">Todos os loteamentos</option>
+                                {% for lot in loteamentos %}
+                                <option value="{{ lot|escapejs }}">{{ lot }}</option>
+                                {% endfor %}
+                            </select>
+                            <a id="btnVerLoteamento" href="#" class="btn btn-sm btn-outline-primary d-none" target="_blank">
+                                <i class="fas fa-external-link-alt me-1"></i>Ver Loteamento
+                            </a>
+
+                            <!-- Filtro por status -->
+                            <select id="filtroStatus" class="form-select form-select-sm" style="max-width:160px;"
+                                    onchange="filtrarPorStatus(this.value)">
+                                <option value="">Todos os status</option>
+                                <option value="disponivel">Disponível</option>
+                                <option value="vendido">Vendido</option>
+                            </select>
+
+                            <!-- Tipo de mapa -->
+                            <div class="btn-group btn-group-sm ms-auto" id="btnTileGroup">
+                                <button class="btn btn-outline-secondary active" onclick="mudarTiles('voyager', this)">
+                                    <i class="fas fa-map me-1"></i>Mapa
+                                </button>
+                                <button class="btn btn-outline-secondary" onclick="mudarTiles('satellite', this)">
+                                    <i class="fas fa-satellite me-1"></i>Satélite
+                                </button>
+                                <button class="btn btn-outline-secondary" onclick="mudarTiles('dark', this)">
+                                    <i class="fas fa-moon me-1"></i>Dark
+                                </button>
+                            </div>
+
+                            <!-- Geolocalização -->
+                            <button id="btnGeolocalizacao" class="btn btn-sm btn-outline-success" title="Mostrar lotes perto de mim"
+                                    onclick="mostrarPertoDeMim()">
+                                <i class="fas fa-location-arrow me-1"></i>Perto de mim
+                            </button>
+
+                            <!-- Contador dinâmico -->
+                            <span id="mapaContador" class="badge bg-light text-dark border fs-6 ms-2">
+                                {{ imoveis_com_coordenadas }} no mapa
+                            </span>
+                        </div>
+
+                        <!-- Mapa principal -->
+                        <div id="mapa-imoveis"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal de Confirmação de Exclusão -->
+<div class="modal fade" id="modalExclusao" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-danger text-white">
+                <h5 class="modal-title">
+                    <i class="fas fa-exclamation-triangle"></i> Confirmar Exclusão
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p>Tem certeza que deseja excluir o imóvel <strong id="nomeImovel"></strong>?</p>
+                <p class="text-danger">
+                    <i class="fas fa-info-circle"></i> Esta ação não pode ser desfeita.
+                </p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                    Cancelar
+                </button>
+                <form id="formExclusao" method="post" style="display: inline;">
+                    {% csrf_token %}
+                    <button type="submit" class="btn btn-danger">
+                        <i class="fas fa-trash"></i> Excluir
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
+<script>
+// ─── Modal de exclusão ───────────────────────────────────────────────────────
+function confirmarExclusao(nome, url) {
+    document.getElementById('nomeImovel').textContent = nome;
+    document.getElementById('formExclusao').action = url;
+    new bootstrap.Modal(document.getElementById('modalExclusao')).show();
+}
+
+// ─── Dados de todos os imóveis com coordenadas (não paginado) ────────────────
+const imoveisData = [
+    {% for imovel in todos_imoveis_mapa %}
+    {
+        id: {{ imovel.pk }},
+        lat: {{ imovel.latitude }},
+        lng: {{ imovel.longitude }},
+        nome: "{{ imovel.identificacao|escapejs }}",
+        loteamento: "{{ imovel.loteamento|default:''|escapejs }}",
+        tipo: "{{ imovel.get_tipo_display|escapejs }}",
+        area: "{{ imovel.area|stringformat:'f' }}",
+        valor: "{{ imovel.valor|default:'0'|stringformat:'f' }}",
+        disponivel: {{ imovel.disponivel|yesno:"true,false" }},
+        cidade: "{{ imovel.cidade|default:''|escapejs }}",
+        estado: "{{ imovel.estado|default:''|escapejs }}",
+        editUrl: "{% url 'core:editar_imovel' imovel.pk %}"
+    },
+    {% endfor %}
+];
+
+// ─── Tile layers (100% gratuitos, sem API key) ───────────────────────────────
+const TILES = {
+    voyager: L.tileLayer(
+        'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',
+        { attribution: '&copy; <a href="https://carto.com/">CARTO</a> | &copy; <a href="https://www.openstreetmap.org/">OSM</a>', maxZoom: 19 }
+    ),
+    satellite: L.tileLayer(
+        'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+        { attribution: '&copy; Esri &mdash; Source: Esri, Maxar, Earthstar Geographics', maxZoom: 19 }
+    ),
+    dark: L.tileLayer(
+        'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
+        { attribution: '&copy; <a href="https://carto.com/">CARTO</a> | &copy; <a href="https://www.openstreetmap.org/">OSM</a>', maxZoom: 19 }
+    )
+};
+
+let map, clusterGroup, tileAtivo = 'voyager';
+let filtroLot = '', filtroSt = '';
+
+// Criar ícone customizado DivIcon por status
+function criarIcone(disponivel, nome) {
+    const cls  = disponivel ? 'lote-disponivel' : 'lote-vendido';
+    const icn  = disponivel ? '✓' : '✗';
+    return L.divIcon({
+        className: '',
+        html: `<div class="lote-marker ${cls}" style="width:28px;height:28px;" title="${nome}">${icn}</div>`,
+        iconSize: [28, 28],
+        iconAnchor: [14, 14],
+        popupAnchor: [0, -16]
+    });
+}
+
+function formatarMoeda(v) {
+    const n = parseFloat(v);
+    if (!n) return '—';
+    return 'R$ ' + n.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+}
+
+function popupHtml(d) {
+    const statusClass = d.disponivel ? 'bg-success' : 'bg-danger';
+    const statusText  = d.disponivel ? 'Disponível' : 'Vendido';
+    const local = d.cidade ? `${d.cidade}/${d.estado}` : '—';
+    const temCoord = d.lat && d.lng;
+    const mapsUrl  = `https://www.google.com/maps?q=${d.lat},${d.lng}`;
+    const wazeUrl  = `https://waze.com/ul?ll=${d.lat},${d.lng}&navigate=yes`;
+    return `
+    <div class="lote-popup">
+        <div class="popup-title"><i class="fas fa-map-marker-alt me-1"></i>${d.nome}</div>
+        ${d.loteamento ? `<div><strong>Loteamento:</strong> ${d.loteamento}</div>` : ''}
+        <div><strong>Tipo:</strong> ${d.tipo}</div>
+        <div><strong>Área:</strong> ${d.area} m²</div>
+        <div><strong>Valor:</strong> ${formatarMoeda(d.valor)}</div>
+        <div><strong>Local:</strong> ${local}</div>
+        <div class="mt-2 d-flex align-items-center flex-wrap gap-1">
+            <span class="badge ${statusClass}">${statusText}</span>
+            <a href="${d.editUrl}" class="btn btn-sm btn-outline-primary py-0 px-2">
+                <i class="fas fa-edit"></i> Editar
+            </a>
+            ${temCoord ? `
+            <a href="${mapsUrl}" target="_blank" rel="noopener" class="btn btn-sm btn-outline-success py-0 px-2" title="Ver no Google Maps">
+                <i class="fas fa-map me-1"></i>Maps
+            </a>
+            <a href="${wazeUrl}" target="_blank" rel="noopener" class="btn btn-sm btn-outline-info py-0 px-2" title="Navegar com Waze">
+                <i class="fas fa-route me-1"></i>Waze
+            </a>` : ''}
+        </div>
+    </div>`;
+}
+
+function adicionarMarcadores(dados) {
+    clusterGroup.clearLayers();
+    let visible = 0;
+    dados.forEach(d => {
+        if (filtroLot && d.loteamento !== filtroLot) return;
+        if (filtroSt === 'disponivel' && !d.disponivel) return;
+        if (filtroSt === 'vendido'    &&  d.disponivel) return;
+        const m = L.marker([d.lat, d.lng], {icon: criarIcone(d.disponivel, d.nome)});
+        m.bindPopup(popupHtml(d), {maxWidth: 260});
+        m.on('mouseover', function() { this.openPopup(); });
+        clusterGroup.addLayer(m);
+        visible++;
+    });
+    document.getElementById('mapaContador').textContent = visible + ' no mapa';
+    return visible;
+}
+
+document.addEventListener('DOMContentLoaded', function () {
+    map = L.map('mapa-imoveis').setView([-15.7801, -47.9292], 4);
+    TILES.voyager.addTo(map);
+
+    clusterGroup = L.markerClusterGroup({
+        showCoverageOnHover: false,
+        maxClusterRadius: 50,
+        iconCreateFunction: function(cluster) {
+            const n = cluster.getChildCount();
+            return L.divIcon({
+                html: `<div style="background:#0d6efd;color:#fff;border-radius:50%;width:36px;height:36px;
+                              display:flex;align-items:center;justify-content:center;
+                              font-weight:700;font-size:13px;border:2px solid #fff;
+                              box-shadow:0 2px 6px rgba(0,0,0,0.3);">${n}</div>`,
+                className: '', iconSize: [36, 36]
+            });
+        }
+    });
+    map.addLayer(clusterGroup);
+
+    // Legenda
+    const legenda = L.control({ position: 'bottomright' });
+    legenda.onAdd = function() {
+        const d = L.DomUtil.create('div', 'mapa-legenda');
+        d.innerHTML = `
+            <div class="fw-bold mb-1">Legenda</div>
+            <div><span class="legenda-dot" style="background:#28a745;"></span> Disponível</div>
+            <div><span class="legenda-dot" style="background:#dc3545;"></span> Vendido</div>
+            <div><span class="legenda-dot" style="background:#0d6efd;"></span> Cluster</div>`;
+        return d;
+    };
+    legenda.addTo(map);
+
+    // Adicionar marcadores
+    const n = adicionarMarcadores(imoveisData);
+    if (n > 0) {
+        map.fitBounds(clusterGroup.getBounds(), { padding: [30, 30] });
+    }
+});
+
+// ─── Troca de tiles ──────────────────────────────────────────────────────────
+function mudarTiles(nome, btn) {
+    if (tileAtivo === nome) return;
+    map.removeLayer(TILES[tileAtivo]);
+    TILES[nome].addTo(map);
+    tileAtivo = nome;
+    document.querySelectorAll('#btnTileGroup .btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+}
+
+// ─── Filtros ─────────────────────────────────────────────────────────────────
+function filtrarPorLoteamento(v) {
+    filtroLot = v;
+    const n = adicionarMarcadores(imoveisData);
+    if (n > 0 && clusterGroup.getLayers().length > 0) {
+        map.fitBounds(clusterGroup.getBounds(), { padding: [30, 30] });
+    }
+    // Botão "Ver Loteamento"
+    const btn = document.getElementById('btnVerLoteamento');
+    if (v) {
+        btn.href = '/imoveis/loteamento/' + encodeURIComponent(v) + '/';
+        btn.classList.remove('d-none');
+    } else {
+        btn.classList.add('d-none');
+    }
+}
+function filtrarPorStatus(v) {
+    filtroSt = v;
+    adicionarMarcadores(imoveisData);
+}
+
+// ─── M-16: Geolocalização do usuário ─────────────────────────────────────────
+let markerUsuario = null;
+
+function mostrarPertoDeMim() {
+    const btn = document.getElementById('btnGeolocalizacao');
+    if (!navigator.geolocation) {
+        alert('Seu navegador não suporta geolocalização.');
+        return;
+    }
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Localizando...';
+
+    navigator.geolocation.getCurrentPosition(
+        function(pos) {
+            const lat = pos.coords.latitude;
+            const lng = pos.coords.longitude;
+
+            // Ativar aba do mapa se necessário
+            const mapaTab = document.getElementById('mapa-tab');
+            if (mapaTab) new bootstrap.Tab(mapaTab).show();
+
+            setTimeout(function() {
+                map.invalidateSize();
+                map.setView([lat, lng], 14);
+
+                // Marcador do usuário
+                if (markerUsuario) map.removeLayer(markerUsuario);
+                markerUsuario = L.circleMarker([lat, lng], {
+                    radius: 10, color: '#0d6efd', fillColor: '#0d6efd',
+                    fillOpacity: 0.7, weight: 3
+                }).addTo(map);
+                markerUsuario.bindPopup('<strong><i class="fas fa-user me-1"></i>Você está aqui</strong>').openPopup();
+
+                // Destacar lotes próximos (raio 50 km)
+                let proximos = 0;
+                clusterGroup.eachLayer(function(layer) {
+                    const ll = layer.getLatLng();
+                    const distKm = map.distance([lat, lng], [ll.lat, ll.lng]) / 1000;
+                    if (distKm <= 50) proximos++;
+                });
+
+                btn.disabled = false;
+                btn.innerHTML = '<i class="fas fa-location-arrow me-1"></i>' +
+                    (proximos > 0 ? proximos + ' lote(s) próximo(s)' : 'Perto de mim');
+            }, 300);
+        },
+        function(err) {
+            btn.disabled = false;
+            btn.innerHTML = '<i class="fas fa-location-arrow me-1"></i>Perto de mim';
+            const msgs = {1: 'Permissão negada.', 2: 'Posição indisponível.', 3: 'Tempo esgotado.'};
+            alert('Erro de geolocalização: ' + (msgs[err.code] || err.message));
+        },
+        {enableHighAccuracy: false, timeout: 10000, maximumAge: 60000}
+    );
+}
+
+// ─── Ver imóvel no mapa (botão da lista) ─────────────────────────────────────
+function verNoMapa(lat, lng, nome) {
+    const mapaTab = new bootstrap.Tab(document.getElementById('mapa-tab'));
+    mapaTab.show();
+    setTimeout(function() {
+        map.invalidateSize();
+        map.setView([lat, lng], 18);
+        // Abrir popup do marcador mais próximo
+        clusterGroup.eachLayer(function(layer) {
+            const ll = layer.getLatLng();
+            if (Math.abs(ll.lat - lat) < 0.0001 && Math.abs(ll.lng - lng) < 0.0001) {
+                layer.openPopup();
+            }
+        });
+    }, 250);
+}
+</script>
+{% endblock %}
