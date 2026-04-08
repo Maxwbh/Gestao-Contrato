@@ -302,22 +302,31 @@ class TemplateNotificacao(TimeStampedModel):
     tipo = models.CharField(
         max_length=20,
         choices=TipoNotificacao.choices,
-        verbose_name='Canal de Envio'
+        null=True,
+        blank=True,
+        verbose_name='Canal de Envio',
+        help_text='Legado — canal determinado automaticamente pelos campos preenchidos'
     )
     assunto = models.CharField(
         max_length=255,
         blank=True,
-        verbose_name='Assunto',
-        help_text='Para e-mails. Suporta TAGs como %%NOMECOMPRADOR%%'
+        verbose_name='Assunto (E-mail)',
+        help_text='Assunto do e-mail. Suporta TAGs como %%NOMECOMPRADOR%%'
     )
     corpo = models.TextField(
-        verbose_name='Corpo da Mensagem',
-        help_text='Use TAGs como %%NOMECOMPRADOR%%, %%DATAVENCIMENTO%%, etc.'
+        blank=True,
+        verbose_name='Corpo SMS',
+        help_text='Texto para SMS (máx. 255 caracteres). Use TAGs como %%NOMECOMPRADOR%%.'
     )
     corpo_html = models.TextField(
         blank=True,
-        verbose_name='Corpo HTML',
-        help_text='Versão HTML do e-mail (opcional)'
+        verbose_name='Corpo E-mail (HTML)',
+        help_text='Conteúdo HTML do e-mail. Suporta TAGs %%TAG%%.'
+    )
+    corpo_whatsapp = models.TextField(
+        blank=True,
+        verbose_name='Corpo WhatsApp',
+        help_text='Texto para mensagem WhatsApp. Suporta TAGs %%TAG%%.'
     )
 
     # Configurações
@@ -336,47 +345,67 @@ class TemplateNotificacao(TimeStampedModel):
         verbose_name = 'Template de Notificação'
         verbose_name_plural = 'Templates de Notificação'
         ordering = ['codigo', 'nome']
-        unique_together = [['codigo', 'imobiliaria', 'tipo']]
+        unique_together = [['codigo', 'imobiliaria']]
 
     def __str__(self):
-        return f"{self.nome} ({self.get_tipo_display()})"
+        canais = []
+        if self.tem_email:
+            canais.append('Email')
+        if self.tem_sms:
+            canais.append('SMS')
+        if self.tem_whatsapp:
+            canais.append('WA')
+        canal_str = '+'.join(canais) if canais else 'sem canal'
+        return f"{self.nome} ({canal_str})"
+
+    @property
+    def tem_email(self):
+        return bool(self.corpo_html or self.assunto)
+
+    @property
+    def tem_sms(self):
+        return bool(self.corpo)
+
+    @property
+    def tem_whatsapp(self):
+        return bool(self.corpo_whatsapp)
 
     def renderizar(self, contexto):
         """
-        Renderiza o template substituindo TAGs pelo contexto
-
-        Args:
-            contexto (dict): Dicionário com valores para as TAGs
+        Renderiza o template substituindo TAGs pelo contexto.
 
         Returns:
-            tuple: (assunto_renderizado, corpo_renderizado, corpo_html_renderizado)
+            tuple: (assunto, corpo_sms, corpo_html, corpo_whatsapp) — todos renderizados
         """
-        assunto_renderizado = self.assunto
-        corpo_renderizado = self.corpo
-        corpo_html_renderizado = self.corpo_html
+        assunto_r = self.assunto or ''
+        corpo_r = self.corpo or ''
+        corpo_html_r = self.corpo_html or ''
+        corpo_whatsapp_r = self.corpo_whatsapp or ''
 
         for tag, valor in contexto.items():
             placeholder = f"%%{tag}%%"
             valor_str = str(valor) if valor is not None else ''
-            assunto_renderizado = assunto_renderizado.replace(placeholder, valor_str)
-            corpo_renderizado = corpo_renderizado.replace(placeholder, valor_str)
-            if corpo_html_renderizado:
-                corpo_html_renderizado = corpo_html_renderizado.replace(placeholder, valor_str)
+            assunto_r = assunto_r.replace(placeholder, valor_str)
+            corpo_r = corpo_r.replace(placeholder, valor_str)
+            if corpo_html_r:
+                corpo_html_r = corpo_html_r.replace(placeholder, valor_str)
+            if corpo_whatsapp_r:
+                corpo_whatsapp_r = corpo_whatsapp_r.replace(placeholder, valor_str)
 
-        return assunto_renderizado, corpo_renderizado, corpo_html_renderizado
+        return assunto_r, corpo_r, corpo_html_r, corpo_whatsapp_r
 
     @classmethod
-    def get_template(cls, codigo, imobiliaria=None, tipo=TipoNotificacao.EMAIL):
+    def get_template(cls, codigo, imobiliaria=None, tipo=None):
         """
         Busca o template mais específico disponível.
         Prioriza template da imobiliária, depois template global.
+        O parâmetro `tipo` é mantido apenas para compatibilidade — é ignorado.
         """
         # Primeiro tenta template específico da imobiliária
         if imobiliaria:
             template = cls.objects.filter(
                 codigo=codigo,
                 imobiliaria=imobiliaria,
-                tipo=tipo,
                 ativo=True
             ).first()
             if template:
@@ -386,7 +415,6 @@ class TemplateNotificacao(TimeStampedModel):
         return cls.objects.filter(
             codigo=codigo,
             imobiliaria__isnull=True,
-            tipo=tipo,
             ativo=True
         ).first()
 
