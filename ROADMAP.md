@@ -153,33 +153,34 @@
 
 ## 6. SISTEMA DE PERMISSÕES
 
-### P2 — Alto
-| Perfil | Descrição |
-|--------|-----------|
-| Admin Contabilidade | Acesso total a todas imobiliárias |
-| Admin Imobiliária | Acesso total à sua imobiliária |
-| Filtro por tenant | Todas as views filtram por imobiliária |
-| Audit log | Logs de geração de boletos e reajustes |
+### P2 — Alto ✅ CONCLUÍDO
+| Perfil | Descrição | Status |
+|--------|-----------|--------|
+| Admin Contabilidade | Acesso total a todas imobiliárias | ✅ `usuario_tem_permissao_total()` verifica `is_superuser ou is_staff`; `get_contabilidades_usuario()` retorna todas para admins |
+| Admin Imobiliária | Acesso total à sua imobiliária | ✅ `get_imobiliarias_usuario()` filtra via `AcessoUsuario`; staff tem acesso total |
+| Filtro por tenant | Todas as views filtram por imobiliária | ✅ `TenantMixin` em `core/views.py` + `get_imobiliarias_usuario()` / `get_contabilidades_usuario()` usados nos dashboards |
+| Audit log | Logs de geração de boletos e reajustes | ✅ `Reajuste.usuario` (FK auth.User) + `Reajuste.ip_address`; `Parcela.data_geracao_boleto` (DateTimeField auto) |
 
-### P3 — Médio
-| Perfil | Descrição |
-|--------|-----------|
-| Operador Contabilidade | Apenas relatórios |
-| Gerente Imobiliária | Contratos e relatórios |
-| Operador Imobiliária | Pagamentos e boletos |
-| Rate limiting | Nas APIs públicas |
+### P3 — Médio ✅ CONCLUÍDO
+| Perfil/Item | Descrição | Status |
+|-------------|-----------|--------|
+| Operador Relatórios | Apenas leitura (pode_editar=False, pode_excluir=False) | ✅ `usuario_eh_apenas_leitura()` em `core/models.py` verifica `AcessoUsuario.pode_editar=False AND pode_excluir=False` |
+| Gerente Imobiliária | Editar + excluir (pode_editar=True, pode_excluir=True) | ✅ `usuario_pode_excluir()` em `core/models.py` |
+| Operador Imobiliária | Apenas editar (pode_editar=True, pode_excluir=False) | ✅ `usuario_pode_editar()` em `core/models.py` |
+| Rate limiting | APIs de tarefa e portal | ✅ `core/permissions.py`: decorator `rate_limit(N)` baseado em cache Django (janela 60s); `task_api_rate_limit` (30/min) em todos endpoints de task; `portal_rate_limit` (10/min) em `api_portal_segunda_via`; `public_api_rate_limit` (60/min) e `boleto_lote_rate_limit` (5/min) disponíveis |
+| Decoradores | `requer_permissao_total`, `requer_pode_editar`, `requer_pode_excluir`, `requer_acesso_imobiliaria` | ✅ `core/permissions.py` |
 
 ### P4 — Baixo
 | Item | Descrição |
 |------|-----------|
-| Visualizador | Apenas consultas |
-| Confirmação | Antes de operações em massa |
+| Visualizador | Apenas consultas — coberto por `usuario_eh_apenas_leitura()` |
+| Confirmação | Antes de operações em massa — `confirm_modal.html` já implementado (3.32) |
 
 ---
 
 ## 7. TESTES AUTOMATIZADOS
 
-**Meta:** > 80% de cobertura | **Atual:** ~45% (744 testes passando)
+**Meta:** > 80% de cobertura | **Atual:** ~51% (763 testes passando)
 
 ### 7.1 P1 — Apps sem nenhum teste (~104 testes) ✅ CONCLUÍDO
 | Arquivo | Escopo | Qtd | Status |

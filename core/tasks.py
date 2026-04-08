@@ -27,6 +27,7 @@ from django.http import JsonResponse
 from django.views.decorators.http import require_http_methods
 from django.conf import settings
 from django.db import transaction
+from core.permissions import task_api_rate_limit
 
 logger = logging.getLogger(__name__)
 
@@ -568,6 +569,7 @@ def atualizar_status_parcelas_sync():
 # =============================================================================
 
 @require_http_methods(["POST"])
+@task_api_rate_limit
 @task_auth_required
 def task_processar_reajustes(request):
     """Endpoint para processar reajustes."""
@@ -577,6 +579,7 @@ def task_processar_reajustes(request):
 
 
 @require_http_methods(["POST"])
+@task_api_rate_limit
 @task_auth_required
 def task_enviar_notificacoes(request):
     """Endpoint para enviar notificações de vencimento (N-01: D-5)."""
@@ -586,6 +589,7 @@ def task_enviar_notificacoes(request):
 
 
 @require_http_methods(["POST"])
+@task_api_rate_limit
 @task_auth_required
 def task_enviar_inadimplentes(request):
     """Endpoint para enviar notificações de inadimplência (N-02: D+3)."""
@@ -595,6 +599,7 @@ def task_enviar_inadimplentes(request):
 
 
 @require_http_methods(["POST"])
+@task_api_rate_limit
 @task_auth_required
 def task_atualizar_parcelas(request):
     """Endpoint para atualizar status de parcelas."""
@@ -604,6 +609,7 @@ def task_atualizar_parcelas(request):
 
 
 @require_http_methods(["POST"])
+@task_api_rate_limit
 @task_auth_required
 def task_run_all(request):
     """
@@ -952,6 +958,7 @@ def relatorio_mensal_consolidado_sync():
 
 
 @require_http_methods(["POST"])
+@task_api_rate_limit
 @task_auth_required
 def task_relatorio_semanal(request):
     """Endpoint para gerar relatório semanal de incorporadoras."""
@@ -961,6 +968,7 @@ def task_relatorio_semanal(request):
 
 
 @require_http_methods(["POST"])
+@task_api_rate_limit
 @task_auth_required
 def task_relatorio_mensal(request):
     """Endpoint para gerar relatório mensal consolidado."""

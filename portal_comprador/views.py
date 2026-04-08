@@ -28,6 +28,7 @@ logger = logging.getLogger(__name__)
 
 from core.models import Comprador
 from contratos.models import Contrato
+from core.permissions import portal_rate_limit
 from financeiro.models import Parcela
 
 from .models import AcessoComprador, LogAcessoComprador
@@ -788,6 +789,7 @@ def api_portal_boletos(request):
 # =============================================================================
 
 @login_required
+@portal_rate_limit
 @require_POST
 def api_portal_segunda_via(request, parcela_id):
     """
