@@ -280,18 +280,21 @@
                 <div class="item-header">
                     <span class="item-icon"><i class="fas fa-filter text-info"></i></span>
                     <div class="flex-grow-1">
-                        <div class="item-title">Filtros por coluna nativos</div>
+                        <div class="item-title">Filtros por coluna + Quick Filter global</div>
                     </div>
                     <span class="status-badge status-done">Concluído</span>
                 </div>
                 <div class="item-body">
                     <p class="item-desc">
-                        Filtros flutuantes (<em>floating filters</em>) em todas as colunas — texto, número
-                        e data. Filtros combinados client-side sem recarregar a página.
+                        Filtros por coluna via menu nativo do AG Grid (texto, número e data)
+                        em todas as listagens. Linha de cabeçalho única (sem filtros inline
+                        flutuantes) para layout limpo. Quick Filter global no cabeçalho do card
+                        faz busca simultânea em todas as colunas visíveis.
                     </p>
                     <div class="item-tags">
-                        <span class="tag bg-light text-dark border">Floating Filters</span>
-                        <span class="tag bg-light text-dark border">Text / Number / Date</span>
+                        <span class="tag bg-light text-dark border">Column Filter</span>
+                        <span class="tag bg-light text-dark border">Quick Filter</span>
+                        <span class="tag bg-light text-dark border">Single header row</span>
                         <span class="tag" style="background:#d1e7dd;color:#0f5132;">Concluído</span>
                     </div>
                 </div>
@@ -631,6 +634,187 @@
                         <span class="tag bg-light text-dark border">WeasyPrint</span>
                         <span class="tag bg-light text-dark border">ReportLab</span>
                         <span class="tag bg-light text-dark border">jsPDF</span>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <hr class="phase-separator">
+
+    <!-- ===== FASE 5 — Notificações & Templates ===== -->
+    <div class="roadmap-phase phase-ux">
+        <div class="phase-header">
+            <div class="phase-icon"><i class="fas fa-bell"></i></div>
+            <div>
+                <p class="phase-title">Fase 5 — Notificações &amp; Templates</p>
+                <p class="phase-subtitle">Sistema de envio de mensagens multicanal</p>
+            </div>
+            <span class="ms-auto status-badge status-done">Concluído</span>
+        </div>
+        <div class="roadmap-items">
+
+            <div class="roadmap-item">
+                <div class="item-header">
+                    <span class="item-icon"><i class="fas fa-layer-group text-success"></i></span>
+                    <div class="flex-grow-1">
+                        <div class="item-title">Template Unificado Email + SMS + WhatsApp</div>
+                    </div>
+                    <span class="status-badge status-done">Concluído</span>
+                </div>
+                <div class="item-body">
+                    <p class="item-desc">
+                        Um único registro de template por tipo de evento (Boleto Criado, Vence amanhã, etc.),
+                        com campos separados para cada canal: <strong>corpo_html</strong> (e-mail HTML),
+                        <strong>corpo</strong> (SMS, máx. 255 chars) e <strong>corpo_whatsapp</strong> (WA markdown).
+                        Canal determinado automaticamente pelos campos preenchidos — sem campo "Canal de Envio".
+                        Migration de dados mescla registros separados existentes automaticamente.
+                    </p>
+                    <div class="item-tags">
+                        <span class="tag bg-light text-dark border">Migration 0005</span>
+                        <span class="tag bg-light text-dark border">3 canais / 1 registro</span>
+                        <span class="tag" style="background:#d1e7dd;color:#0f5132;">Concluído</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="roadmap-item">
+                <div class="item-header">
+                    <span class="item-icon"><i class="fas fa-edit text-primary"></i></span>
+                    <div class="flex-grow-1">
+                        <div class="item-title">Editor HTML Avançado (TinyMCE 5)</div>
+                    </div>
+                    <span class="status-badge status-done">Concluído</span>
+                </div>
+                <div class="item-body">
+                    <p class="item-desc">
+                        Formulário de templates reescrito com <strong>TinyMCE 5</strong> (self-hosted, sem API key)
+                        para edição WYSIWYG do corpo HTML do e-mail. Contador de caracteres SMS em tempo real
+                        com substituição de <code>%%TAGs%%</code> por valores de exemplo para estimar
+                        o comprimento real da mensagem antes do envio.
+                    </p>
+                    <div class="item-tags">
+                        <span class="tag bg-light text-dark border">TinyMCE 5</span>
+                        <span class="tag bg-light text-dark border">SMS ≤ 255</span>
+                        <span class="tag bg-light text-dark border">Tag substitution counter</span>
+                        <span class="tag" style="background:#d1e7dd;color:#0f5132;">Concluído</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="roadmap-item">
+                <div class="item-header">
+                    <span class="item-icon"><i class="fas fa-shield-alt text-warning"></i></span>
+                    <div class="flex-grow-1">
+                        <div class="item-title">TEST_MODE Safeguard + Phone Normalization</div>
+                    </div>
+                    <span class="status-badge status-done">Concluído</span>
+                </div>
+                <div class="item-body">
+                    <p class="item-desc">
+                        Em <code>TEST_MODE=True</code>, todos os e-mails e SMS são redirecionados para
+                        endereços de teste configuráveis — nunca chegam ao comprador real.
+                        Celular no formato <code>(31) 99999-8888</code> normalizado automaticamente
+                        para E.164 (<code>+5531999998888</code>) exigido pelo Twilio.
+                    </p>
+                    <div class="item-tags">
+                        <span class="tag bg-light text-dark border">TEST_MODE</span>
+                        <span class="tag bg-light text-dark border">E.164 normalization</span>
+                        <span class="tag bg-light text-dark border">Twilio SMS</span>
+                        <span class="tag" style="background:#d1e7dd;color:#0f5132;">Concluído</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="roadmap-item">
+                <div class="item-header">
+                    <span class="item-icon"><i class="fas fa-file-pdf text-danger"></i></span>
+                    <div class="flex-grow-1">
+                        <div class="item-title">PDF Boleto Persistido no Banco de Dados</div>
+                    </div>
+                    <span class="status-badge status-done">Concluído</span>
+                </div>
+                <div class="item-body">
+                    <p class="item-desc">
+                        Campo <code>boleto_pdf_db</code> (<code>BinaryField</code>) armazena o PDF
+                        do boleto no PostgreSQL, garantindo disponibilidade após redeploy no Render
+                        (que usa armazenamento efêmero). Fallback em 3 camadas: disco → banco → regeneração.
+                    </p>
+                    <div class="item-tags">
+                        <span class="tag bg-light text-dark border">BinaryField</span>
+                        <span class="tag bg-light text-dark border">PostgreSQL</span>
+                        <span class="tag bg-light text-dark border">Render ephemeral fix</span>
+                        <span class="tag" style="background:#d1e7dd;color:#0f5132;">Concluído</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="roadmap-item">
+                <div class="item-header">
+                    <span class="item-icon"><i class="fas fa-money-bill-wave text-success"></i></span>
+                    <div class="flex-grow-1">
+                        <div class="item-title">Forma de Pagamento em Todos os Modais</div>
+                    </div>
+                    <span class="status-badge status-done">Concluído</span>
+                </div>
+                <div class="item-body">
+                    <p class="item-desc">
+                        Seleção de <strong>Forma de Pagamento</strong> (PIX, Boleto, Dinheiro, TED, etc.)
+                        adicionada aos 3 modais de pagamento: parcela individual, pagamento em massa e
+                        detalhe do contrato. Campo lido do POST e gravado na parcela — antes era sempre
+                        "DINHEIRO" independente do método real.
+                    </p>
+                    <div class="item-tags">
+                        <span class="tag bg-light text-dark border">3 modais corrigidos</span>
+                        <span class="tag bg-light text-dark border">forma_pagamento POST</span>
+                        <span class="tag" style="background:#d1e7dd;color:#0f5132;">Concluído</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="roadmap-item">
+                <div class="item-header">
+                    <span class="item-icon"><i class="fas fa-ruler-horizontal text-info"></i></span>
+                    <div class="flex-grow-1">
+                        <div class="item-title">Régua de Cobrança Configurável (N-03)</div>
+                    </div>
+                    <span class="status-badge status-next">Próximo</span>
+                </div>
+                <div class="item-body">
+                    <p class="item-desc">
+                        CRUD de <strong>RegraNotificacao</strong> já implementado no banco. Próximo passo:
+                        a task diária de notificações deve consultar as regras ativas e disparar
+                        os canais configurados (email/SMS/WhatsApp) nos dias corretos — substituindo
+                        a lógica hardcoded de 1/5/D-1/D+1 dias.
+                    </p>
+                    <div class="item-tags">
+                        <span class="tag bg-light text-dark border">RegraNotificacao</span>
+                        <span class="tag bg-light text-dark border">Dias antes/após</span>
+                        <span class="tag" style="background:#cfe2ff;color:#084298;">Próximo</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="roadmap-item">
+                <div class="item-header">
+                    <span class="item-icon"><i class="fab fa-whatsapp" style="color:#25D366;"></i></span>
+                    <div class="flex-grow-1">
+                        <div class="item-title">Envio WhatsApp via Twilio / Evolution API</div>
+                    </div>
+                    <span class="status-badge status-planned">Planejado</span>
+                </div>
+                <div class="item-body">
+                    <p class="item-desc">
+                        Modelo <code>ConfiguracaoWhatsApp</code> e campo <code>corpo_whatsapp</code>
+                        no template já estão prontos. Falta implementar o <code>ServicoWhatsApp.enviar()</code>
+                        e chamar em <code>BoletoNotificacaoService._notificar()</code> para compradores
+                        com <code>notificar_whatsapp=True</code>.
+                    </p>
+                    <div class="item-tags">
+                        <span class="tag bg-light text-dark border">Twilio WhatsApp</span>
+                        <span class="tag bg-light text-dark border">Evolution API</span>
+                        <span class="tag bg-light text-dark border">Z-API</span>
                     </div>
                 </div>
             </div>
