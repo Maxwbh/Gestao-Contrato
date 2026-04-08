@@ -179,7 +179,7 @@
 
 ## 7. TESTES AUTOMATIZADOS
 
-**Meta:** > 80% de cobertura | **Atual:** ~25%
+**Meta:** > 80% de cobertura | **Atual:** ~40% (705 testes passando)
 
 ### 7.1 P1 — Apps sem nenhum teste (~104 testes) ✅ CONCLUÍDO
 | Arquivo | Escopo | Qtd | Status |
@@ -193,32 +193,32 @@
 | `tests/unit/portal_comprador/test_views.py` | dashboard, contratos, boletos, dados | 21 | ✅ |
 | `tests/unit/portal_comprador/test_api.py` | APIs do portal | 5 | ✅ |
 
-### 7.2 P2 — Views e APIs faltantes (~164 testes)
-| Arquivo | Escopo | Qtd |
-|---------|--------|-----|
-| `tests/unit/core/test_models.py` | Modelos do core | 12 |
-| `tests/unit/core/test_crud_views.py` | CRUD completo | 30 |
-| `tests/unit/core/test_api_views.py` | APIs bancos, CEP, CNPJ | 15 |
-| `tests/unit/core/test_dashboard.py` | index, dashboard, setup | 7 |
-| `tests/unit/core/test_management_commands.py` | gerar_dados_teste | 8 |
-| `tests/unit/contratos/test_crud_views.py` | CRUD contratos | 14 |
-| `tests/unit/contratos/test_indices_views.py` | CRUD índices | 9 |
-| `tests/unit/financeiro/test_parcela_views.py` | listar, detalhe, pagar | 14 |
-| `tests/unit/financeiro/test_boleto_views.py` | gerar, download, carnê | 17 |
-| `tests/unit/financeiro/test_reajuste_views.py` | listar, aplicar, calcular | 9 |
-| `tests/unit/financeiro/test_cnab_views.py` | remessa e retorno | 15 |
-| `tests/unit/financeiro/test_dashboard_views.py` | dashboards | 9 |
-| `tests/unit/financeiro/test_rest_api_views.py` | APIs REST | 24 |
+### 7.2 P2 — Views e APIs faltantes (~164 testes) ✅ CONCLUÍDO
+| Arquivo | Escopo | Qtd | Status |
+|---------|--------|-----|--------|
+| `tests/unit/core/test_models.py` | Modelos do core | 12 | ✅ (preexistente) |
+| `tests/unit/core/test_crud_views.py` | CRUD completo | 30 | ✅ (preexistente) |
+| `tests/unit/core/test_api_views.py` | APIs bancos, CEP, CNPJ | 15 | ✅ |
+| `tests/unit/core/test_dashboard.py` | index, dashboard, setup | 7 | ✅ |
+| `tests/unit/core/test_management_commands.py` | gerar_dados_teste | 8 | ✅ |
+| `tests/unit/contratos/test_crud_views.py` | CRUD contratos | 14 | ✅ |
+| `tests/unit/contratos/test_indices_views.py` | CRUD índices | 9 | ✅ |
+| `tests/unit/financeiro/test_parcela_views.py` | listar, detalhe, pagar | 14 | ✅ |
+| `tests/unit/financeiro/test_boleto_views.py` | gerar, download, carnê | 17 | ✅ |
+| `tests/unit/financeiro/test_reajuste_views.py` | listar, aplicar, calcular | 9 | ✅ |
+| `tests/unit/financeiro/test_cnab_views.py` | remessa e retorno | 15 | ✅ |
+| `tests/unit/financeiro/test_dashboard_views.py` | dashboards | 9 | ✅ |
+| `tests/unit/financeiro/test_rest_api_views.py` | APIs REST | 24 | ✅ |
 
-### 7.3 P3 — Integração e Forms (~37 testes)
-| Arquivo | Escopo | Qtd |
-|---------|--------|-----|
-| `tests/unit/core/test_forms.py` | Forms core | 10 |
-| `tests/unit/contratos/test_forms.py` | Forms contratos | 8 |
-| `tests/integration/test_fluxo_contrato_completo.py` | E2E contrato | 5 |
-| `tests/integration/test_fluxo_boleto.py` | E2E boleto | 3 |
-| `tests/integration/test_portal_comprador.py` | E2E portal | 3 |
-| `tests/integration/test_notificacoes.py` | E2E notificações | 3 |
+### 7.3 P3 — Integração e Forms (~37 testes) ✅ CONCLUÍDO
+| Arquivo | Escopo | Qtd | Status |
+|---------|--------|-----|--------|
+| `tests/unit/core/test_forms.py` | Forms core | 10 | ✅ |
+| `tests/unit/contratos/test_forms.py` | Forms contratos | 8 | ✅ |
+| `tests/integration/test_fluxo_contrato_completo.py` | E2E contrato | 5 | ✅ |
+| `tests/integration/test_fluxo_boleto.py` | E2E boleto | 3 | ✅ |
+| `tests/integration/test_portal_comprador.py` | E2E portal | 3 | ✅ |
+| `tests/integration/test_notificacoes.py` | E2E notificações | 3 | ✅ |
 
 ### 7.4 P4 — Segurança e Edge Cases (~41 testes)
 | Arquivo | Escopo | Qtd |
@@ -235,7 +235,7 @@
 |------------|------|
 | P2 | 13 factories faltantes (notificacoes, portal, CNAB) |
 | P2 | Mocks: Twilio SMS/WhatsApp, IBGE, SMTP |
-| P3 | CI/CD GitHub Actions |
+| P3 | CI/CD GitHub Actions | ✅ `.github/workflows/ci.yml` |
 | P4 | Badge de cobertura no README |
 
 ---
