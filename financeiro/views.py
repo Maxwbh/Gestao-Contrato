@@ -1253,12 +1253,20 @@ def download_boleto(request, pk):
         messages.error(request, 'Boleto não disponível para download.')
         return redirect('financeiro:detalhe_parcela', pk=pk)
 
-    # Se o arquivo não existir no disco (storage efêmero), tenta regenerar
+    # Se o arquivo não existir no disco (storage efêmero do Render), serve do banco de dados
     if not parcela.boleto_pdf.storage.exists(parcela.boleto_pdf.name):
         logger.warning(
-            "Arquivo de boleto ausente no storage (%s), tentando regenerar...",
+            "Arquivo de boleto ausente no storage (%s), buscando do banco de dados...",
             parcela.boleto_pdf.name
         )
+        if parcela.boleto_pdf_db:
+            filename = f'boleto_{parcela.contrato.numero_contrato}_{parcela.numero_parcela}.pdf'
+            response = HttpResponse(bytes(parcela.boleto_pdf_db), content_type='application/pdf')
+            response['Content-Disposition'] = f'attachment; filename="{filename}"'
+            return response
+
+        # Sem cópia em DB: tenta regenerar via BRCobrança
+        logger.warning("Sem cópia em DB para pk=%s, tentando regenerar...", pk)
         try:
             from financeiro.services.boleto_service import BoletoService
             resultado = BoletoService().gerar_boleto(parcela)
@@ -1269,16 +1277,12 @@ def download_boleto(request, pk):
                 logger.error("Falha ao regenerar boleto pk=%s: %s", pk, resultado.get('erro'))
                 messages.error(
                     request,
-                    'O arquivo do boleto foi perdido (storage efêmero). '
-                    'Clique em "Gerar Boleto" para criar um novo.'
+                    'O arquivo do boleto foi perdido. Clique em "Gerar Boleto" para criar um novo.'
                 )
                 return redirect('financeiro:detalhe_parcela', pk=pk)
         except Exception as e:
             logger.exception("Erro ao regenerar boleto pk=%s: %s", pk, e)
-            messages.error(
-                request,
-                'Não foi possível recuperar o boleto. Gere novamente.'
-            )
+            messages.error(request, 'Não foi possível recuperar o boleto. Gere novamente.')
             return redirect('financeiro:detalhe_parcela', pk=pk)
 
     try:
@@ -2042,6 +2046,36 @@ def pagar_parcela_ajax(request, pk):
             'sucesso': False,
             'erro': str(e)
         }, status=500)
+
+
+@login_required
+@require_GET
+def api_calcular_encargos(request, pk):
+    """
+    Retorna juros, multa e valor total calculados para uma parcela em uma data de pagamento.
+    GET /financeiro/parcelas/<pk>/calcular-encargos/?data=YYYY-MM-DD
+    """
+    parcela = get_object_or_404(Parcela, pk=pk)
+    data_str = request.GET.get('data', '')
+    try:
+        from datetime import date as _date
+        if data_str:
+            data_ref = _date.fromisoformat(data_str)
+        else:
+            data_ref = timezone.localdate()
+    except ValueError:
+        return JsonResponse({'erro': 'Data inválida. Use YYYY-MM-DD.'}, status=400)
+
+    juros, multa = parcela.calcular_juros_multa(data_ref)
+    valor_total = parcela.valor_atual + juros + multa
+    return JsonResponse({
+        'valor_original': float(parcela.valor_original),
+        'valor_atual': float(parcela.valor_atual),
+        'data_vencimento': parcela.data_vencimento.isoformat(),
+        'juros': float(juros),
+        'multa': float(multa),
+        'valor_total': float(valor_total),
+    })
 
 
 @login_required
