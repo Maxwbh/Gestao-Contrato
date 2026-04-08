@@ -281,9 +281,23 @@ class BoletoNotificacaoService:
                 return {'sucesso': False, 'erro': 'Comprador optou por não receber SMS'}
 
             # Número de celular — preferência: celular, fallback: telefone
-            numero = (comprador.celular or comprador.telefone or '').strip()
-            if not numero:
+            numero_raw = (comprador.celular or comprador.telefone or '').strip()
+            if not numero_raw:
                 return {'sucesso': False, 'erro': 'Comprador não possui celular/telefone cadastrado'}
+
+            # Normalizar para E.164 (+55DDNNNNNNNNN) exigido pelo Twilio
+            import re as _re
+            numero = _re.sub(r'\D', '', numero_raw)  # só dígitos
+            if len(numero) == 11:          # 31999999999 → +5531999999999
+                numero = '+55' + numero
+            elif len(numero) == 10:        # 3199999999 → +55319999999 (fixo)
+                numero = '+55' + numero
+            elif len(numero) == 13 and numero.startswith('55'):
+                numero = '+' + numero      # 5531999999999 → +5531999999999
+            elif not numero.startswith('+'):
+                numero = '+' + numero      # mantém se já tiver código país
+            if len(numero) < 12:           # inválido após normalização
+                return {'sucesso': False, 'erro': f'Número de telefone inválido: {numero_raw}'}
 
             # Tentar template SMS no banco de dados
             template = TemplateNotificacao.get_template(
