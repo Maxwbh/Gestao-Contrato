@@ -25,6 +25,7 @@ urlpatterns = [
     path('api/tasks/run-all/', tasks.task_run_all, name='task_run_all'),
     path('api/tasks/relatorio-semanal/', tasks.task_relatorio_semanal, name='task_relatorio_semanal'),
     path('api/tasks/relatorio-mensal/', tasks.task_relatorio_mensal, name='task_relatorio_mensal'),
+    path('api/tasks/testar-notificacoes/', tasks.task_testar_notificacoes, name='task_testar_notificacoes'),
 
     # Páginas principais
     path('', views.index, name='index'),
