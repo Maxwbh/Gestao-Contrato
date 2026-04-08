@@ -267,23 +267,9 @@ def meus_contratos(request):
         comprador=comprador
     ).select_related('imovel', 'imobiliaria').order_by('-data_contrato')
 
-    # Adicionar resumo a cada contrato
-    contratos_lista = []
-    for contrato in contratos:
-        parcelas = contrato.parcelas.all()
-        resumo = {
-            'contrato': contrato,
-            'total_parcelas': parcelas.count(),
-            'parcelas_pagas': parcelas.filter(pago=True).count(),
-            'parcelas_pendentes': parcelas.filter(pago=False).count(),
-            'progresso': contrato.calcular_progresso() if hasattr(contrato, 'calcular_progresso') else 0,
-            'saldo_devedor': contrato.calcular_saldo_devedor() if hasattr(contrato, 'calcular_saldo_devedor') else 0,
-        }
-        contratos_lista.append(resumo)
-
     context = {
         'comprador': comprador,
-        'contratos': contratos_lista,
+        'contratos': contratos,
     }
     return render(request, 'portal_comprador/meus_contratos.html', context)
 
