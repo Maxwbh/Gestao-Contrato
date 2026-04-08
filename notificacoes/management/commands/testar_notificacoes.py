@@ -137,6 +137,7 @@ class Command(BaseCommand):
             ]
             codigos_sms = [
                 TipoTemplate.BOLETO_CRIADO,
+                TipoTemplate.BOLETO_5_DIAS,
                 TipoTemplate.BOLETO_VENCE_AMANHA,
                 TipoTemplate.BOLETO_VENCEU_ONTEM,
             ]
