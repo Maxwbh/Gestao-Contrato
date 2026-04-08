@@ -38,6 +38,7 @@ urlpatterns = [
     path('contabilidades/novo/', views.ContabilidadeCreateView.as_view(), name='criar_contabilidade'),
     path('contabilidades/<int:pk>/editar/', views.ContabilidadeUpdateView.as_view(), name='editar_contabilidade'),
     path('contabilidades/<int:pk>/excluir/', views.ContabilidadeDeleteView.as_view(), name='excluir_contabilidade'),
+    path('contabilidades/<int:pk>/configuracoes/', views.contabilidade_configuracoes, name='contabilidade_configuracoes'),
 
     # CRUD Comprador
     path('compradores/', views.CompradorListView.as_view(), name='listar_compradores'),
