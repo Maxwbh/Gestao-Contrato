@@ -128,60 +128,165 @@ class ServicoSMS:
 
 
 class ServicoWhatsApp:
-    """Serviço para envio de mensagens via WhatsApp"""
+    """Serviço para envio de mensagens via WhatsApp (Twilio, Meta, Evolution API, Z-API)"""
 
     @staticmethod
     def enviar(destinatario, mensagem):
         """
-        Envia uma mensagem via WhatsApp
+        Envia mensagem via WhatsApp usando o provedor configurado.
 
         Args:
-            destinatario (str): Número WhatsApp do destinatário (formato: whatsapp:+5511999999999)
-            mensagem (str): Mensagem a ser enviada
+            destinatario (str): Número do destinatário (com ou sem prefixo whatsapp:).
+                                Evolution/Z-API: somente dígitos ou +55... aceitos.
+            mensagem (str): Texto da mensagem.
 
         Returns:
-            bool: True se enviado com sucesso, False caso contrário
+            bool: True se enviado com sucesso.
         """
         try:
-            # Buscar configuração ativa
             config = ConfiguracaoWhatsApp.objects.filter(ativo=True).first()
 
             if not config:
-                # Tentar usar configurações do settings
-                account_sid = settings.TWILIO_ACCOUNT_SID
-                auth_token = settings.TWILIO_AUTH_TOKEN
-                numero_remetente = settings.TWILIO_WHATSAPP_NUMBER
+                # Fallback para Twilio via settings
+                return ServicoWhatsApp._enviar_twilio(
+                    destinatario, mensagem,
+                    account_sid=getattr(settings, 'TWILIO_ACCOUNT_SID', ''),
+                    auth_token=getattr(settings, 'TWILIO_AUTH_TOKEN', ''),
+                    numero_remetente=getattr(settings, 'TWILIO_WHATSAPP_NUMBER', ''),
+                )
 
-                if not all([account_sid, auth_token, numero_remetente]):
-                    raise ValueError("Configuração de WhatsApp não encontrada")
+            provedor = config.provedor
+
+            if provedor == 'TWILIO':
+                return ServicoWhatsApp._enviar_twilio(
+                    destinatario, mensagem,
+                    account_sid=config.account_sid,
+                    auth_token=config.auth_token,
+                    numero_remetente=config.numero_remetente,
+                )
+            elif provedor == 'META':
+                return ServicoWhatsApp._enviar_meta(destinatario, mensagem, config)
+            elif provedor == 'EVOLUTION':
+                return ServicoWhatsApp._enviar_evolution(destinatario, mensagem, config)
+            elif provedor == 'ZAPI':
+                return ServicoWhatsApp._enviar_zapi(destinatario, mensagem, config)
             else:
-                account_sid = config.account_sid
-                auth_token = config.auth_token
-                numero_remetente = config.numero_remetente
-
-            # Garantir formato correto do destinatário
-            if not destinatario.startswith('whatsapp:'):
-                destinatario = f'whatsapp:{destinatario}'
-
-            # Garantir formato correto do remetente
-            if not numero_remetente.startswith('whatsapp:'):
-                numero_remetente = f'whatsapp:{numero_remetente}'
-
-            # Enviar via Twilio
-            client = Client(account_sid, auth_token)
-
-            message = client.messages.create(
-                body=mensagem,
-                from_=numero_remetente,
-                to=destinatario
-            )
-
-            logger.info(f"WhatsApp enviado com sucesso para {destinatario}. SID: {message.sid}")
-            return True
+                raise ValueError(f"Provedor WhatsApp desconhecido: {provedor}")
 
         except Exception as e:
             logger.exception("Erro ao enviar WhatsApp para %s: %s", destinatario, e)
             raise
+
+    @staticmethod
+    def _normalizar_numero(numero):
+        """Remove tudo exceto dígitos e o '+' inicial."""
+        import re
+        # Remove prefixo whatsapp: se presente
+        numero = re.sub(r'^whatsapp:', '', numero.strip())
+        return numero
+
+    @staticmethod
+    def _enviar_twilio(destinatario, mensagem, account_sid, auth_token, numero_remetente):
+        if not all([account_sid, auth_token, numero_remetente]):
+            raise ValueError("Configuração Twilio incompleta (account_sid/auth_token/numero_remetente)")
+
+        if not destinatario.startswith('whatsapp:'):
+            destinatario = f'whatsapp:{destinatario}'
+        if not numero_remetente.startswith('whatsapp:'):
+            numero_remetente = f'whatsapp:{numero_remetente}'
+
+        client = Client(account_sid, auth_token)
+        message = client.messages.create(body=mensagem, from_=numero_remetente, to=destinatario)
+        logger.info("WhatsApp (Twilio) enviado para %s. SID: %s", destinatario, message.sid)
+        return True
+
+    @staticmethod
+    def _enviar_meta(destinatario, mensagem, config):
+        """Meta (Cloud API) — envia texto simples via /messages."""
+        import urllib.request, json as _json
+        numero = ServicoWhatsApp._normalizar_numero(destinatario).lstrip('+')
+        payload = {
+            "messaging_product": "whatsapp",
+            "to": numero,
+            "type": "text",
+            "text": {"body": mensagem},
+        }
+        url = f"{config.api_url.rstrip('/')}/messages"
+        req = urllib.request.Request(
+            url,
+            data=_json.dumps(payload).encode(),
+            headers={
+                "Content-Type": "application/json",
+                "Authorization": f"Bearer {config.api_key}",
+            },
+            method="POST",
+        )
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            body = _json.loads(resp.read())
+        logger.info("WhatsApp (Meta) enviado para %s. Response: %s", numero, body)
+        return True
+
+    @staticmethod
+    def _enviar_evolution(destinatario, mensagem, config):
+        """
+        Evolution API v2 — POST /message/sendText/{instancia}
+        Headers: apikey: <config.api_key>
+        Body: {"number": "<numero>", "text": "<mensagem>"}
+        """
+        import urllib.request, json as _json
+        if not all([config.api_url, config.api_key, config.instancia]):
+            raise ValueError("Evolution API: api_url, api_key e instancia são obrigatórios")
+
+        numero = ServicoWhatsApp._normalizar_numero(destinatario)
+        # Evolution aceita formato: 5511999999999 (sem +)
+        numero = numero.lstrip('+')
+
+        url = f"{config.api_url.rstrip('/')}/message/sendText/{config.instancia}"
+        payload = {"number": numero, "text": mensagem}
+        req = urllib.request.Request(
+            url,
+            data=_json.dumps(payload).encode(),
+            headers={
+                "Content-Type": "application/json",
+                "apikey": config.api_key,
+            },
+            method="POST",
+        )
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            body = _json.loads(resp.read())
+        logger.info("WhatsApp (Evolution) enviado para %s. Response: %s", numero, body)
+        return True
+
+    @staticmethod
+    def _enviar_zapi(destinatario, mensagem, config):
+        """
+        Z-API — POST /instances/{instancia}/token/{api_key}/send-text
+        Header: Client-Token: <config.client_token>
+        Body: {"phone": "<numero>", "message": "<mensagem>"}
+        """
+        import urllib.request, json as _json
+        if not all([config.api_url, config.api_key, config.instancia]):
+            raise ValueError("Z-API: api_url, api_key e instancia são obrigatórios")
+
+        numero = ServicoWhatsApp._normalizar_numero(destinatario).lstrip('+')
+
+        base = config.api_url.rstrip('/')
+        url = f"{base}/instances/{config.instancia}/token/{config.api_key}/send-text"
+        payload = {"phone": numero, "message": mensagem}
+        headers = {"Content-Type": "application/json"}
+        if config.client_token:
+            headers["Client-Token"] = config.client_token
+
+        req = urllib.request.Request(
+            url,
+            data=_json.dumps(payload).encode(),
+            headers=headers,
+            method="POST",
+        )
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            body = _json.loads(resp.read())
+        logger.info("WhatsApp (Z-API) enviado para %s. Response: %s", numero, body)
+        return True
 
 
 def enviar_notificacao(tipo, destinatario, assunto, mensagem):
