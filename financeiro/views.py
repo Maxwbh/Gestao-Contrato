@@ -2823,10 +2823,6 @@ def aplicar_reajuste_contrato(request, contrato_id):
             return x_forwarded.split(',')[0].strip()
         return req.META.get('REMOTE_ADDR')
 
-    try:
-        import json
-        data = json.loads(request.body) if request.content_type == 'application/json' else request.POST
-
     if request.method == 'POST':
         ciclo_param = request.POST.get('ciclo')
         desconto_percentual = request.POST.get('desconto_percentual') or None
