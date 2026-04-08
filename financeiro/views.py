@@ -21,7 +21,7 @@ from dateutil.relativedelta import relativedelta
 from decimal import Decimal
 import logging
 
-from .models import Parcela, Reajuste, StatusBoleto
+from .models import Parcela, Reajuste, StatusBoleto, HistoricoPagamento
 from core.models import Imobiliaria, ContaBancaria
 from contratos.models import Contrato, StatusContrato
 
@@ -560,26 +560,58 @@ def registrar_pagamento(request, pk):
 
     parcela = get_object_or_404(Parcela, pk=pk)
 
+    FORMAS_PAGAMENTO = [
+        ('DINHEIRO', 'Dinheiro'),
+        ('PIX', 'PIX'),
+        ('TRANSFERENCIA', 'Transferência Bancária'),
+        ('BOLETO', 'Boleto'),
+        ('CARTAO_CREDITO', 'Cartão de Crédito'),
+        ('CARTAO_DEBITO', 'Cartão de Débito'),
+        ('CHEQUE', 'Cheque'),
+    ]
+
     if request.method == 'POST':
         valor_pago_str = request.POST.get('valor_pago', '0')
         data_pagamento_str = request.POST.get('data_pagamento', '')
         observacoes = request.POST.get('observacoes', '')
+        forma_pagamento = request.POST.get('forma_pagamento', 'DINHEIRO')
+        comprovante = request.FILES.get('comprovante')
 
         try:
-            # Converter valor para Decimal
             valor_pago = Decimal(valor_pago_str.replace(',', '.'))
 
-            # Converter data
             if data_pagamento_str:
                 data_pagamento = datetime.strptime(data_pagamento_str, '%Y-%m-%d').date()
             else:
                 data_pagamento = timezone.now().date()
+
+            # Calcular juros/multa para o HistoricoPagamento
+            valor_juros = Decimal('0.00')
+            valor_multa = Decimal('0.00')
+            if data_pagamento > parcela.data_vencimento:
+                valor_juros, valor_multa = parcela.calcular_juros_multa(data_pagamento)
 
             parcela.registrar_pagamento(
                 valor_pago=valor_pago,
                 data_pagamento=data_pagamento,
                 observacoes=observacoes
             )
+
+            # Criar registro no histórico com comprovante e forma de pagamento
+            historico = HistoricoPagamento.objects.create(
+                parcela=parcela,
+                data_pagamento=data_pagamento,
+                valor_pago=valor_pago,
+                valor_parcela=parcela.valor_atual,
+                valor_juros=valor_juros,
+                valor_multa=valor_multa,
+                forma_pagamento=forma_pagamento,
+                observacoes=observacoes,
+            )
+            if comprovante:
+                historico.comprovante = comprovante
+                historico.save(update_fields=['comprovante'])
+
             messages.success(request, 'Pagamento registrado com sucesso!')
             return redirect('financeiro:detalhe_parcela', pk=pk)
         except Exception as e:
@@ -588,6 +620,7 @@ def registrar_pagamento(request, pk):
 
     context = {
         'parcela': parcela,
+        'formas_pagamento': FORMAS_PAGAMENTO,
     }
     return render(request, 'financeiro/registrar_pagamento.html', context)
 
@@ -1130,6 +1163,52 @@ def download_boleto(request, pk):
         logger.exception(f"Erro ao fazer download do boleto: {e}")
         messages.error(request, 'Erro ao baixar o boleto.')
         return redirect('financeiro:detalhe_parcela', pk=pk)
+
+
+@login_required
+def download_zip_boletos(request, contrato_id):
+    """
+    Download em ZIP de todos os boletos com PDF de um contrato.
+    POST opcionalmente com lista de parcela_ids para filtrar.
+    """
+    import io, zipfile
+
+    from contratos.models import Contrato
+    contrato = get_object_or_404(Contrato, pk=contrato_id)
+
+    if request.method == 'POST':
+        ids_raw = request.POST.getlist('parcela_ids')
+        if ids_raw:
+            parcelas = Parcela.objects.filter(
+                contrato=contrato,
+                id__in=[int(i) for i in ids_raw if i.isdigit()],
+            ).exclude(boleto_pdf='')
+        else:
+            parcelas = Parcela.objects.filter(contrato=contrato).exclude(boleto_pdf='')
+    else:
+        parcelas = Parcela.objects.filter(contrato=contrato).exclude(boleto_pdf='')
+
+    parcelas = [p for p in parcelas if p.boleto_pdf]
+
+    if not parcelas:
+        messages.error(request, 'Nenhum boleto disponível para download neste contrato.')
+        return redirect('contratos:detalhe_contrato', pk=contrato_id)
+
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, 'w', zipfile.ZIP_DEFLATED) as zf:
+        for p in parcelas:
+            try:
+                fname = f'boleto_{contrato.numero_contrato}_parcela_{p.numero_parcela:03d}.pdf'
+                with p.boleto_pdf.open('rb') as f:
+                    zf.writestr(fname, f.read())
+            except Exception as e:
+                logger.warning("Erro ao incluir boleto parcela %s no ZIP: %s", p.pk, e)
+
+    buf.seek(0)
+    zip_name = f'boletos_{contrato.numero_contrato}.zip'
+    response = HttpResponse(buf.read(), content_type='application/zip')
+    response['Content-Disposition'] = f'attachment; filename="{zip_name}"'
+    return response
 
 
 @login_required

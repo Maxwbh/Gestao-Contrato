@@ -943,6 +943,76 @@ class ImovelDeleteView(LoginRequiredMixin, DeleteView):
 
 
 # =============================================================================
+# LOTEAMENTO DEDICATED PAGE — M-11 / M-12
+# =============================================================================
+
+@login_required
+def loteamento_detalhe(request, nome):
+    """
+    Página dedicada de um loteamento/empreendimento.
+    M-11: mapa e lista de lotes.
+    M-12: estatísticas (total, disponíveis %, valor médio).
+    """
+    from django.db.models import Avg, Min, Max
+    import urllib.parse
+
+    # Resolve nome (URL pode ter + ou %20 para espaços)
+    nome = urllib.parse.unquote(nome)
+
+    imoveis = (
+        Imovel.objects.filter(ativo=True, loteamento__iexact=nome)
+        .select_related('imobiliaria')
+        .prefetch_related('contratos')
+        .order_by('identificacao')
+    )
+
+    if not imoveis.exists():
+        messages.error(request, f'Loteamento "{nome}" não encontrado.')
+        return redirect('core:listar_imoveis')
+
+    total = imoveis.count()
+    disponiveis = imoveis.filter(disponivel=True).count()
+    vendidos = total - disponiveis
+    pct_disponivel = round(disponiveis / total * 100) if total else 0
+    pct_vendido = 100 - pct_disponivel
+
+    stats_valor = imoveis.filter(valor__isnull=False).aggregate(
+        media=Avg('valor'),
+        minimo=Min('valor'),
+        maximo=Max('valor'),
+    )
+
+    imoveis_mapa = imoveis.filter(
+        latitude__isnull=False,
+        longitude__isnull=False,
+    )
+
+    # Filtro de disponibilidade
+    filtro_disp = request.GET.get('disponivel', '')
+    lista_imoveis = imoveis
+    if filtro_disp == 'true':
+        lista_imoveis = imoveis.filter(disponivel=True)
+    elif filtro_disp == 'false':
+        lista_imoveis = imoveis.filter(disponivel=False)
+
+    context = {
+        'nome_loteamento': nome,
+        'imoveis': lista_imoveis,
+        'imoveis_mapa': imoveis_mapa,
+        'total': total,
+        'disponiveis': disponiveis,
+        'vendidos': vendidos,
+        'pct_disponivel': pct_disponivel,
+        'pct_vendido': pct_vendido,
+        'valor_medio': stats_valor['media'],
+        'valor_minimo': stats_valor['minimo'],
+        'valor_maximo': stats_valor['maximo'],
+        'filtro_disp': filtro_disp,
+    }
+    return render(request, 'core/loteamento_detalhe.html', context)
+
+
+# =============================================================================
 # CRUD VIEWS - IMOBILIARIA
 # =============================================================================
 
