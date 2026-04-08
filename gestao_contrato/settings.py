@@ -95,8 +95,11 @@ if config('DATABASE_URL', default=None):
     DATABASES = {
         'default': dj_database_url.config(
             default=config('DATABASE_URL'),
-            conn_max_age=600,
-            conn_health_checks=True,
+            # pgBouncer transaction mode: manter conn_max_age=0 para que Django
+            # nao tente reutilizar conexoes entre requests (cada transacao pode
+            # ir para um backend diferente no pool).
+            conn_max_age=0,
+            conn_health_checks=False,
         )
     }
     # Usar schema separado para esta aplicacao (compartilhamento de banco)
@@ -105,6 +108,13 @@ if config('DATABASE_URL', default=None):
     DATABASES['default']['OPTIONS'] = {
         'options': '-c search_path=gestao_contrato'
     }
+
+    # pgBouncer transaction mode: desabilitar cursores nomeados server-side.
+    # Django usa cursores nomeados para iterar querysets grandes (fetchmany),
+    # mas pgBouncer pode rotear fetchmany() para um backend diferente do cursor,
+    # causando "cursor X does not exist". DISABLE_SERVER_SIDE_CURSORS=True faz
+    # Django buscar todas as linhas de uma vez (sem cursor nomeado).
+    DATABASES['default']['DISABLE_SERVER_SIDE_CURSORS'] = True
 
     # Signal para garantir search_path em cada conexao
     from django.db.backends.signals import connection_created
