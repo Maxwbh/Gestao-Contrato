@@ -379,6 +379,9 @@ function popupHtml(d) {
     const statusClass = d.disponivel ? 'bg-success' : 'bg-danger';
     const statusText  = d.disponivel ? 'Disponível' : 'Vendido';
     const local = d.cidade ? `${d.cidade}/${d.estado}` : '—';
+    const temCoord = d.lat && d.lng;
+    const mapsUrl  = `https://www.google.com/maps?q=${d.lat},${d.lng}`;
+    const wazeUrl  = `https://waze.com/ul?ll=${d.lat},${d.lng}&navigate=yes`;
     return `
     <div class="lote-popup">
         <div class="popup-title"><i class="fas fa-map-marker-alt me-1"></i>${d.nome}</div>
@@ -387,11 +390,18 @@ function popupHtml(d) {
         <div><strong>Área:</strong> ${d.area} m²</div>
         <div><strong>Valor:</strong> ${formatarMoeda(d.valor)}</div>
         <div><strong>Local:</strong> ${local}</div>
-        <div class="mt-2 d-flex align-items-center gap-2">
+        <div class="mt-2 d-flex align-items-center flex-wrap gap-1">
             <span class="badge ${statusClass}">${statusText}</span>
             <a href="${d.editUrl}" class="btn btn-sm btn-outline-primary py-0 px-2">
                 <i class="fas fa-edit"></i> Editar
             </a>
+            ${temCoord ? `
+            <a href="${mapsUrl}" target="_blank" rel="noopener" class="btn btn-sm btn-outline-success py-0 px-2" title="Ver no Google Maps">
+                <i class="fas fa-map me-1"></i>Maps
+            </a>
+            <a href="${wazeUrl}" target="_blank" rel="noopener" class="btn btn-sm btn-outline-info py-0 px-2" title="Navegar com Waze">
+                <i class="fas fa-route me-1"></i>Waze
+            </a>` : ''}
         </div>
     </div>`;
 }

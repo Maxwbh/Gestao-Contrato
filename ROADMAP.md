@@ -102,7 +102,7 @@
 | # | Tela/Componente |
 |---|-----------------|
 | 3.33 | Aba Documentos (upload contrato assinado) |
-| 3.34 | Upload de logo da imobiliária |
+| 3.34 | Upload de logo da imobiliária | ✅ `ImageField logo` em `Imobiliaria`; migration `0005_add_logo_imobiliaria`; card de upload no form; exibição no card da lista |
 | 3.35 | Seletor de período reutilizável |
 
 ---
@@ -883,7 +883,7 @@ para ciclo = 2..total_ciclos+1:
 | M-12 | Estatísticas do loteamento: total, disponíveis %, valor médio por lote | P2 | ✅ KPI cards (total, disponíveis, vendidos, valor médio/min/max) + barra de progresso proporcional na página do loteamento |
 | M-13 | Polígonos de lote (boundaries) com `lat/lng` de cada vértice — modelo `LotePoligono` | P3 |
 | M-14 | Upload de planta baixa (imagem) como overlay no mapa | P3 |
-| M-15 | Link direto "Ver no Google Maps / Waze" no popup do marcador | P3 |
+| M-15 | Link direto "Ver no Google Maps / Waze" no popup do marcador | P3 | ✅ Links Maps e Waze exibidos no popup quando lat/lng disponíveis |
 | M-16 | Geolocalização do usuário para mostrar lotes próximos | P4 |
 
 ---
