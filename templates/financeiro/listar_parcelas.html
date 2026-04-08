@@ -4,7 +4,7 @@
 {% block title %}Parcelas{% endblock %}
 
 {% block extra_css %}
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr@4.6.13/dist/flatpickr.min.css">
+<link rel="stylesheet" href="{% static 'vendor/flatpickr/css/flatpickr.min.css' %}">
 <style>
     .badge-pago { background-color: #28a745; }
     .badge-pendente { background-color: #ffc107; color: #212529; }
@@ -477,8 +477,8 @@
 {% endblock %}
 
 {% block extra_js %}
-<script src="https://cdn.jsdelivr.net/npm/flatpickr@4.6.13/dist/flatpickr.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/flatpickr@4.6.13/dist/l10n/pt.js"></script>
+<script src="{% static 'vendor/flatpickr/js/flatpickr.min.js' %}"></script>
+<script src="{% static 'vendor/flatpickr/js/flatpickr-pt.js' %}"></script>
 <script>
 const CSRF_TOKEN = '{{ csrf_token }}';
 let parcelaAtualId = null;
