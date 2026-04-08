@@ -93,10 +93,10 @@
 | 3.26 | Configurações de boleto por imobiliária | ✅ Já implementado: campos `percentual_multa_padrao`, `percentual_juros_padrao`, `instrucao_padrao`, etc. no model `Imobiliaria`; `ImobiliariaForm` inclui todos os campos; `Contrato.get_config_boleto()` usa configuração da imobiliária quando `usar_config_boleto_imobiliaria=True` |
 | 3.27 | Configurações de notificação (dias, canais) | ✅ CRUD completo para `RegraNotificacao`: view `listar_regras_notificacao`, `criar_regra_notificacao`, `editar_regra_notificacao`, `excluir_regra_notificacao`, `toggle_regra_notificacao`; template com tabela + modais; link no dropdown "Notificações" da navbar; URLs sob `/notificacoes/regras/` |
 | 3.28 | Gerenciamento de usuários por imobiliária | ✅ Model `AcessoUsuario` + CRUD completo (`AcessoUsuarioListView`, `AcessoUsuarioCreateView`, etc.) em `core/views.py`; `AcessoUsuarioForm` em `core/forms.py`; URL `/core/acessos/`; acessível via menu Admin |
-| 3.29 | Card de resumo reutilizável |
-| 3.30 | Tabela paginada com filtros (componente genérico) |
-| 3.31 | Gráficos barras/pizza/linha (componente genérico) |
-| 3.32 | Modal de confirmação reutilizável |
+| 3.29 | Card de resumo reutilizável | ✅ `templates/components/summary_card.html` — suporta icon, variant (Bootstrap), value, subtitle, href, badge; uso: `{% include 'components/summary_card.html' with icon="..." title="..." value="..." %}` |
+| 3.30 | Tabela paginada com filtros (componente genérico) | ✅ `templates/components/paginated_table.html` — cabeçalho com busca, tabela responsiva, paginação Bootstrap automática com elipses |
+| 3.31 | Gráficos barras/pizza/linha (componente genérico) | ✅ `templates/components/chart_card.html` — Chart.js bar/line/pie/doughnut; suporta api_url (fetch) ou chart_var (inline); paleta Bootstrap; tooltip R$ automático |
+| 3.32 | Modal de confirmação reutilizável | ✅ `templates/components/confirm_modal.html` — modal Bootstrap + fallback confirm() para Materialize; API JS: `confirmarAcao({...})` e `confirmarExclusao(nome, url)` |
 
 ### P4 — Baixo
 | # | Tela/Componente |
