@@ -60,6 +60,9 @@ services:
       # Token para API de tarefas
       - key: TASK_TOKEN
         generateValue: true
+      # URL base do app (usada em links de boleto nos emails)
+      - key: SITE_URL
+        value: "https://gestao-contrato-web-mt6j.onrender.com"
       # URL do servico BRCobranca
       - key: BRCOBRANCA_URL
         value: "https://brcobranca-api-m4q9.onrender.com"
