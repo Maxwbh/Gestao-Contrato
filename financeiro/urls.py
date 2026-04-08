@@ -31,12 +31,16 @@ urlpatterns = [
 
     # Carne (multiplos boletos)
     path('contrato/<int:contrato_id>/gerar-carne/', views.gerar_carne, name='gerar_carne'),
+    path('contrato/<int:contrato_id>/carne/pdf/', views.download_carne_pdf, name='download_carne_pdf'),
+    path('api/carne/multiplos/', views.download_carne_pdf_multiplos, name='download_carne_multiplos'),
 
     # Elegibilidade de parcelas para geracao de boletos
     path('api/contrato/<int:contrato_id>/parcelas-elegibilidade/', views.api_parcelas_elegibilidade, name='api_parcelas_elegibilidade'),
 
     # Geracao de boletos em lote (multiplos contratos)
     path('api/boletos/gerar-lote/', views.api_gerar_boletos_lote, name='api_gerar_boletos_lote'),
+    # Geracao de boletos por parcelas selecionadas
+    path('api/boletos/gerar-parcelas/', views.api_gerar_boletos_parcelas, name='api_gerar_boletos_parcelas'),
 
     # Boletos
     path('parcelas/<int:pk>/boleto/gerar/', views.gerar_boleto_parcela, name='gerar_boleto'),
@@ -67,6 +71,11 @@ urlpatterns = [
     path('cnab/remessa/<int:pk>/regenerar/', views.regenerar_arquivo_remessa, name='regenerar_remessa'),
     path('cnab/remessa/<int:pk>/marcar-enviada/', views.marcar_remessa_enviada, name='marcar_remessa_enviada'),
     path('cnab/remessa/<int:pk>/download/', views.download_arquivo_remessa, name='download_remessa'),
+
+    # ==========================================================================
+    # OFX — Importação de Extrato Bancário
+    # ==========================================================================
+    path('cnab/ofx/upload/', views.upload_ofx, name='upload_ofx'),
 
     # CNAB - Arquivos de Retorno
     path('cnab/retorno/', views.listar_arquivos_retorno, name='listar_retornos'),
@@ -118,6 +127,7 @@ urlpatterns = [
     path('api/cnab/remessas/<int:remessa_id>/', views.api_cnab_remessa_detalhe, name='api_cnab_remessa_detalhe'),
     path('api/cnab/remessas/gerar/', views.api_cnab_remessa_gerar, name='api_cnab_remessa_gerar'),
     path('api/cnab/boletos-disponiveis/', views.api_cnab_boletos_disponiveis, name='api_cnab_boletos_disponiveis'),
+    path('api/cnab/boletos-pendentes/count/', views.api_cnab_boletos_pendentes_count, name='api_cnab_boletos_pendentes_count'),
 
     # ==========================================================================
     # APIs REST - CNAB RETORNO
