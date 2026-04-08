@@ -872,6 +872,71 @@ class BoletoService:
             logger.exception("Erro ao gerar boleto: %s", e)
             return {'sucesso': False, 'erro': 'Erro interno ao gerar boleto. Tente novamente em alguns minutos.'}
 
+    def gerar_carne(self, parcelas, conta_bancaria):
+        """
+        Gera carnê (múltiplos boletos em um único PDF) via POST /api/boleto/multi.
+
+        Args:
+            parcelas: lista/queryset de Parcela
+            conta_bancaria: ContaBancaria a usar para todos os boletos
+
+        Returns:
+            dict: {
+                'sucesso': bool,
+                'pdf_content': bytes | None,
+                'total': int,
+                'erro': str | None,
+            }
+        """
+        banco_nome = self._get_banco_brcobranca(getattr(conta_bancaria, 'banco', ''))
+        if not banco_nome:
+            return {'sucesso': False, 'erro': 'Banco não suportado pelo BRCobrança'}
+
+        boletos_data = []
+        for parcela in parcelas:
+            try:
+                dados = self._montar_dados_boleto(parcela, conta_bancaria)
+                dados.pop('codigo_banco', None)
+                boletos_data.append(dados)
+            except Exception as e:
+                logger.warning('gerar_carne: erro ao montar dados parcela pk=%s: %s', parcela.pk, e)
+
+        if not boletos_data:
+            return {'sucesso': False, 'erro': 'Nenhum boleto pôde ser preparado'}
+
+        payload = {
+            'bank': banco_nome,
+            'type': 'pdf',
+            'data': boletos_data,
+        }
+
+        url = f"{self.brcobranca_url}/api/boleto/multi"
+        try:
+            response = requests.post(
+                url,
+                json=payload,
+                headers={'Accept': 'application/vnd.BoletoApi-v1+json'},
+                timeout=max(self.timeout, 60),
+            )
+        except requests.exceptions.RequestException as e:
+            logger.exception('gerar_carne: erro de conexão com BRCobrança: %s', e)
+            return {'sucesso': False, 'erro': f'Erro de conexão: {e}'}
+
+        if response.status_code == 200:
+            pdf_content = response.content
+            if not pdf_content:
+                return {'sucesso': False, 'erro': 'BRCobrança retornou PDF vazio'}
+            logger.info('Carnê PDF gerado (%d boletos, %d bytes)', len(boletos_data), len(pdf_content))
+            return {
+                'sucesso': True,
+                'pdf_content': pdf_content,
+                'total': len(boletos_data),
+            }
+
+        error_msg = self._extrair_mensagem_erro(response)
+        logger.error('gerar_carne: erro HTTP %s — %s', response.status_code, error_msg)
+        return {'sucesso': False, 'erro': error_msg}
+
     def _chamar_api_boleto(self, banco_nome, dados_boleto):
         """
         Chama a API BRCobranca para gerar o boleto com retry e backoff.
@@ -1129,6 +1194,7 @@ class BoletoService:
                 if len(parts) != 3:
                     erros.append("Data de vencimento em formato invalido")
         except Exception as e:
+            logger.exception("Erro ao validar data do boleto: %s", e)
             erros.append(f"Erro ao validar data: {e}")
 
         # Validar numero_documento conforme regras por banco (configuravel)

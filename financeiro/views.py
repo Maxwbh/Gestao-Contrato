@@ -10,6 +10,7 @@ from django.contrib.auth.mixins import LoginRequiredMixin
 from django.contrib import messages
 from django.http import JsonResponse, HttpResponse, FileResponse
 from django.utils import timezone
+from django.db import transaction
 from django.db.models import Sum, Count, Q, F, Min
 from django.views.generic import TemplateView
 from django.views.decorators.http import require_POST, require_GET
@@ -55,6 +56,27 @@ class DashboardFinanceiroView(LoginRequiredMixin, TemplateView):
         parcelas_qs = Parcela.objects.all()
         if imobiliaria_selecionada:
             parcelas_qs = parcelas_qs.filter(contrato__imobiliaria=imobiliaria_selecionada)
+
+        # K-01: Lotes
+        from core.models import Imovel
+        imoveis_qs = Imovel.objects.all()
+        if imobiliaria_selecionada:
+            imoveis_qs = imoveis_qs.filter(imobiliaria=imobiliaria_selecionada)
+        context['total_lotes'] = imoveis_qs.count()
+        context['lotes_disponiveis'] = imoveis_qs.filter(disponivel=True).count()
+        context['lotes_vendidos'] = imoveis_qs.filter(disponivel=False).count()
+
+        # K-06: Reajustes pendentes
+        contratos_nao_fixo = contratos_qs.filter(
+            status=StatusContrato.ATIVO
+        ).exclude(tipo_correcao='FIXO').only(
+            'tipo_correcao', 'prazo_reajuste_meses', 'data_contrato', 'ciclo_reajuste_atual'
+        )
+        reajustes_pendentes = sum(
+            1 for c in contratos_nao_fixo
+            if Reajuste.calcular_ciclo_pendente(c) is not None
+        )
+        context['reajustes_pendentes'] = reajustes_pendentes
 
         # Estatísticas de Contratos
         context['total_contratos'] = contratos_qs.count()
@@ -118,6 +140,33 @@ class DashboardFinanceiroView(LoginRequiredMixin, TemplateView):
         # Top 10 contratos com mais atraso
         context['contratos_mais_atraso'] = self._get_contratos_mais_atraso(
             contratos_qs, limite=10
+        )
+
+        # D-04: Parcelas vencendo esta semana
+        fim_semana = hoje + timedelta(days=7)
+        context['parcelas_semana'] = (
+            parcelas_qs.filter(
+                pago=False,
+                data_vencimento__gte=hoje,
+                data_vencimento__lte=fim_semana,
+                tipo_parcela='NORMAL',
+            )
+            .select_related('contrato__comprador', 'contrato__imovel')
+            .order_by('data_vencimento')[:20]
+        )
+
+        # G-05: Top 5 contratos com maior saldo devedor estimado (soma valor_atual parcelas NORMAL não pagas)
+        context['top5_saldo_devedor'] = (
+            contratos_qs.filter(status=StatusContrato.ATIVO)
+            .annotate(
+                saldo_est=Sum(
+                    'parcelas__valor_atual',
+                    filter=Q(parcelas__pago=False, parcelas__tipo_parcela='NORMAL')
+                )
+            )
+            .filter(saldo_est__isnull=False)
+            .select_related('comprador', 'imovel')
+            .order_by('-saldo_est')[:5]
         )
 
         # Imobiliárias e selecionada
@@ -288,11 +337,39 @@ def api_dashboard_dados(request):
             'valor_total': float(agg['total_valor'] or 0),
         })
 
+    # G-02: Inadimplência por faixa de atraso
+    inadimplencia_faixas = {
+        'labels': ['1–30 dias', '31–60 dias', '61–90 dias', '90+ dias'],
+        'data': [
+            parcelas_qs.filter(
+                pago=False,
+                data_vencimento__gte=hoje - timedelta(days=30),
+                data_vencimento__lt=hoje
+            ).count(),
+            parcelas_qs.filter(
+                pago=False,
+                data_vencimento__gte=hoje - timedelta(days=60),
+                data_vencimento__lt=hoje - timedelta(days=30)
+            ).count(),
+            parcelas_qs.filter(
+                pago=False,
+                data_vencimento__gte=hoje - timedelta(days=90),
+                data_vencimento__lt=hoje - timedelta(days=60)
+            ).count(),
+            parcelas_qs.filter(
+                pago=False,
+                data_vencimento__lt=hoje - timedelta(days=90)
+            ).count(),
+        ],
+        'colors': ['#ffc107', '#fd7e14', '#dc3545', '#6f1212'],
+    }
+
     return JsonResponse({
         'status_parcelas': status_parcelas,
         'status_contratos': status_contratos,
         'recebimentos_mensais': recebimentos_mensais,
         'inadimplencia_mensal': inadimplencia_mensal,
+        'inadimplencia_faixas': inadimplencia_faixas,
         'vencimentos_proximos': vencimentos_proximos,
     })
 
@@ -323,6 +400,7 @@ def listar_parcelas(request):
     # Dados para os filtros
     imobiliarias = Imobiliaria.objects.filter(ativo=True).order_by('nome')
     compradores = Comprador.objects.filter(ativo=True).order_by('nome')
+    contas_bancarias = ContaBancaria.objects.filter(ativo=True).select_related('imobiliaria').order_by('imobiliaria__nome', 'banco')
 
     # Filtro por Status de Pagamento
     status = request.GET.get('status', '')
@@ -416,6 +494,7 @@ def listar_parcelas(request):
         'is_paginated': paginator.num_pages > 1,
         'imobiliarias': imobiliarias,
         'compradores': compradores,
+        'contas_bancarias': contas_bancarias,
         # Valores atuais dos filtros
         'filtro_status': status,
         'filtro_status_boleto': status_boleto_filtro,
@@ -485,6 +564,7 @@ def registrar_pagamento(request, pk):
             messages.success(request, 'Pagamento registrado com sucesso!')
             return redirect('financeiro:detalhe_parcela', pk=pk)
         except Exception as e:
+            logger.exception("Erro ao registrar pagamento parcela pk=%s: %s", pk, e)
             messages.error(request, f'Erro ao registrar pagamento: {str(e)}')
 
     context = {
@@ -713,15 +793,14 @@ def dashboard_imobiliaria(request, imobiliaria_id):
 
     for contrato in contratos.filter(status=StatusContrato.ATIVO):
         # Verificar se tem bloqueio de reajuste
-        if hasattr(contrato, 'verificar_bloqueio_reajuste'):
-            bloqueio_info = contrato.verificar_bloqueio_reajuste()
-            if bloqueio_info.get('bloqueado'):
-                contratos_com_boleto_bloqueado.append({
-                    'contrato': contrato,
-                    'ciclo_atual': bloqueio_info.get('ciclo_atual', 1),
-                    'ciclo_pendente': bloqueio_info.get('ciclo_pendente'),
-                    'motivo': bloqueio_info.get('motivo', ''),
-                })
+        # verificar_bloqueio_reajuste() retorna bool (True = bloqueado)
+        if hasattr(contrato, 'verificar_bloqueio_reajuste') and contrato.verificar_bloqueio_reajuste():
+            contratos_com_boleto_bloqueado.append({
+                'contrato': contrato,
+                'ciclo_atual': 1,
+                'ciclo_pendente': None,
+                'motivo': '',
+            })
 
         # Verificar reajuste pendente
         if hasattr(contrato, 'data_ultimo_reajuste') and hasattr(contrato, 'prazo_reajuste_meses'):
@@ -879,7 +958,7 @@ def gerar_boleto_parcela(request, pk):
             return JsonResponse({
                 'sucesso': False,
                 'erro': resultado.get('erro', 'Erro ao gerar boleto') if resultado else 'Erro desconhecido'
-            }, status=500)
+            }, status=400)
 
     except Exception as e:
         logger.exception(f"Erro ao gerar boleto: {e}")
@@ -975,6 +1054,7 @@ def gerar_boletos_contrato(request, contrato_id):
                         'erro': resultado.get('erro') if resultado else 'Erro desconhecido'
                     })
             except Exception as e:
+                logger.exception('Erro ao gerar boleto parcela pk=%s: %s', parcela.id, e)
                 erros += 1
                 resultados.append({
                     'parcela_id': parcela.id,
@@ -1132,6 +1212,7 @@ def api_status_boleto(request, pk):
 def listar_arquivos_remessa(request):
     """Lista todos os arquivos de remessa"""
     from .models import ArquivoRemessa
+    from .services.cnab_service import CNABService
 
     arquivos = ArquivoRemessa.objects.select_related(
         'conta_bancaria', 'conta_bancaria__imobiliaria'
@@ -1161,6 +1242,9 @@ def listar_arquivos_remessa(request):
     paginator = Paginator(arquivos, per_page)
     page_obj = paginator.get_page(request.GET.get('page', 1))
 
+    # Contador de boletos disponíveis para nova remessa
+    boletos_pendentes_count = len(CNABService().obter_boletos_sem_remessa())
+
     context = {
         'arquivos': page_obj,
         'page_obj': page_obj,
@@ -1171,6 +1255,7 @@ def listar_arquivos_remessa(request):
         'filtro_conta': conta_id,
         'filtro_status': status,
         'filtro_imobiliaria': imobiliaria_id,
+        'boletos_pendentes_count': boletos_pendentes_count,
     }
     return render(request, 'financeiro/cnab/listar_remessas.html', context)
 
@@ -1311,7 +1396,7 @@ def gerar_arquivo_remessa(request):
         'boletos_disponiveis': boletos_disponiveis,
         'boletos_pendentes': boletos_pendentes,
         'total_disponivel': len(boletos_disponiveis),
-        'today': timezone.now().date(),
+        'today': timezone.localdate(),
     }
     return render(request, 'financeiro/cnab/gerar_remessa.html', context)
 
@@ -1345,7 +1430,7 @@ def regenerar_arquivo_remessa(request, pk):
             return JsonResponse({
                 'sucesso': False,
                 'erro': resultado.get('erro')
-            }, status=500)
+            }, status=400)
 
     except Exception as e:
         logger.exception(f"Erro ao regenerar remessa: {e}")
@@ -1556,7 +1641,7 @@ def processar_arquivo_retorno(request, pk):
             return JsonResponse({
                 'sucesso': False,
                 'erro': resultado.get('erro')
-            }, status=500)
+            }, status=400)
 
     except Exception as e:
         logger.exception(f"Erro ao processar retorno: {e}")
@@ -1789,6 +1874,7 @@ def gerar_carne(request, contrato_id):
                         'erro': resultado.get('erro') if resultado else 'Erro desconhecido'
                     })
             except Exception as e:
+                logger.exception('Erro ao gerar boleto parcela pk=%s: %s', parcela.id, e)
                 erros += 1
                 resultados.append({
                     'parcela_id': parcela.id,
@@ -1822,6 +1908,143 @@ def gerar_carne(request, contrato_id):
             'sucesso': False,
             'erro': str(e)
         }, status=500)
+
+
+@login_required
+def download_carne_pdf(request, contrato_id):
+    """
+    Gera e baixa o carnê em PDF para um contrato.
+
+    POST body JSON:
+        parcela_ids: list[int]  — IDs das parcelas a incluir no carnê
+        apenas_com_boleto: bool — se True, inclui só parcelas com boleto gerado (padrão False)
+
+    GET:  retorna JSON com parcelas disponíveis para carnê
+
+    Retorna: application/pdf (Content-Disposition: attachment)
+    """
+    import json as _json
+    from financeiro.services.carne_service import gerar_carne_pdf
+
+    contrato = get_object_or_404(Contrato, pk=contrato_id)
+
+    if request.method == 'GET':
+        # Lista parcelas elegíveis
+        parcelas = (
+            Parcela.objects.filter(contrato=contrato, pago=False, tipo_parcela='NORMAL')
+            .order_by('numero_parcela')
+            .values('id', 'numero_parcela', 'data_vencimento', 'valor_atual',
+                    'nosso_numero', 'linha_digitavel', 'status_boleto')
+        )
+        return JsonResponse({
+            'parcelas': [
+                {
+                    **p,
+                    'data_vencimento': str(p['data_vencimento']),
+                    'valor_atual': str(p['valor_atual']),
+                    'tem_boleto': bool(p['nosso_numero']),
+                }
+                for p in parcelas
+            ]
+        })
+
+    # POST — gerar PDF
+    try:
+        body = _json.loads(request.body)
+    except _json.JSONDecodeError:
+        return JsonResponse({'sucesso': False, 'erro': 'JSON inválido'}, status=400)
+
+    parcela_ids = body.get('parcela_ids', [])
+    apenas_com_boleto = body.get('apenas_com_boleto', False)
+
+    if not parcela_ids:
+        return JsonResponse({'sucesso': False, 'erro': 'Nenhuma parcela selecionada'}, status=400)
+
+    if len(parcela_ids) > 60:
+        return JsonResponse({'sucesso': False, 'erro': 'Máximo de 60 parcelas por carnê'}, status=400)
+
+    qs = Parcela.objects.filter(
+        pk__in=parcela_ids,
+        contrato=contrato,
+        tipo_parcela='NORMAL',
+    ).select_related('contrato__comprador', 'contrato__imovel', 'contrato__imobiliaria').order_by('numero_parcela')
+
+    if apenas_com_boleto:
+        qs = qs.exclude(nosso_numero='')
+
+    parcelas = list(qs)
+    if not parcelas:
+        return JsonResponse({'sucesso': False, 'erro': 'Nenhuma parcela válida encontrada'}, status=400)
+
+    try:
+        pdf_bytes = gerar_carne_pdf(parcelas, contrato)
+    except Exception as e:
+        logger.exception('Erro ao gerar carnê PDF contrato %s: %s', contrato_id, e)
+        return JsonResponse({'sucesso': False, 'erro': f'Erro ao gerar PDF: {e}'}, status=500)
+
+    filename = f"carne_{contrato.numero_contrato}_{len(parcelas)}parcelas.pdf"
+    response = HttpResponse(pdf_bytes, content_type='application/pdf')
+    response['Content-Disposition'] = f'attachment; filename="{filename}"'
+    return response
+
+
+@login_required
+@require_POST
+def download_carne_pdf_multiplos(request):
+    """
+    Gera carnê PDF consolidado para múltiplos contratos.
+
+    POST body JSON:
+        contratos: list[{contrato_id: int, parcela_ids: list[int]}]
+
+    Retorna: application/pdf com todos os carnês concatenados.
+    """
+    import json as _json
+    from financeiro.services.carne_service import gerar_carne_multiplos_contratos
+
+    try:
+        body = _json.loads(request.body)
+    except _json.JSONDecodeError:
+        return JsonResponse({'sucesso': False, 'erro': 'JSON inválido'}, status=400)
+
+    contratos_data = body.get('contratos', [])
+    if not contratos_data:
+        return JsonResponse({'sucesso': False, 'erro': 'Nenhum contrato informado'}, status=400)
+
+    if len(contratos_data) > 50:
+        return JsonResponse({'sucesso': False, 'erro': 'Máximo de 50 contratos por vez'}, status=400)
+
+    contratos_parcelas = []
+    for item in contratos_data:
+        cid = item.get('contrato_id')
+        pids = item.get('parcela_ids', [])
+        if not cid or not pids:
+            continue
+        try:
+            contrato = Contrato.objects.select_related(
+                'comprador', 'imovel', 'imobiliaria'
+            ).get(pk=cid)
+        except Contrato.DoesNotExist:
+            continue
+        parcelas = Parcela.objects.filter(
+            pk__in=pids, contrato=contrato, tipo_parcela='NORMAL'
+        ).order_by('numero_parcela')
+        contratos_parcelas.append({'contrato': contrato, 'parcelas': parcelas})
+
+    if not contratos_parcelas:
+        return JsonResponse({'sucesso': False, 'erro': 'Nenhum dado válido encontrado'}, status=400)
+
+    try:
+        pdf_bytes = gerar_carne_multiplos_contratos(contratos_parcelas)
+    except Exception as e:
+        logger.exception('Erro ao gerar carnê multiplos: %s', e)
+        return JsonResponse({'sucesso': False, 'erro': f'Erro ao gerar PDF: {e}'}, status=500)
+
+    total = sum(len(list(c['parcelas'])) for c in contratos_parcelas)
+    filename = f"carnes_{len(contratos_parcelas)}contratos_{total}parcelas.pdf"
+    response = HttpResponse(pdf_bytes, content_type='application/pdf')
+    response['Content-Disposition'] = f'attachment; filename="{filename}"'
+    return response
 
 
 @login_required
@@ -1931,6 +2154,91 @@ def api_parcelas_elegibilidade(request, contrato_id):
 
 @login_required
 @require_POST
+def api_gerar_boletos_parcelas(request):
+    """
+    Gera boletos para uma lista de parcelas selecionadas individualmente.
+
+    POST JSON: {"parcela_ids": [1, 2, 3], "force": false}
+    """
+    import json
+    try:
+        data = json.loads(request.body)
+        parcela_ids = [int(x) for x in data.get('parcela_ids', []) if str(x).isdigit()]
+        force = bool(data.get('force', False))
+    except (ValueError, json.JSONDecodeError) as e:
+        return JsonResponse({'sucesso': False, 'erro': str(e)}, status=400)
+
+    if not parcela_ids:
+        return JsonResponse({'sucesso': False, 'erro': 'Nenhuma parcela selecionada'}, status=400)
+
+    gerados, bloqueados, erros = 0, 0, 0
+    detalhes = []
+
+    for parcela_id in parcela_ids:
+        try:
+            parcela = Parcela.objects.select_related(
+                'contrato', 'contrato__imovel', 'contrato__imovel__imobiliaria'
+            ).get(pk=parcela_id)
+        except Parcela.DoesNotExist:
+            erros += 1
+            detalhes.append({'parcela_id': parcela_id, 'sucesso': False, 'erro': 'Parcela não encontrada'})
+            continue
+
+        if parcela.pago:
+            detalhes.append({'parcela_id': parcela_id, 'sucesso': False, 'erro': 'Parcela já paga'})
+            erros += 1
+            continue
+
+        contrato = parcela.contrato
+        if not force and hasattr(contrato, 'pode_gerar_boleto'):
+            pode_gerar, motivo = contrato.pode_gerar_boleto(parcela.numero_parcela)
+            if not pode_gerar:
+                bloqueados += 1
+                detalhes.append({'parcela_id': parcela_id, 'sucesso': False, 'bloqueado': True, 'erro': motivo})
+                continue
+
+        # Obter conta bancária
+        conta_bancaria = None
+        try:
+            imobiliaria = contrato.imovel.imobiliaria
+            conta_bancaria = imobiliaria.contas_bancarias.filter(principal=True, ativo=True).first()
+        except Exception:
+            pass
+
+        if not conta_bancaria:
+            erros += 1
+            detalhes.append({'parcela_id': parcela_id, 'sucesso': False, 'erro': 'Nenhuma conta bancária principal configurada'})
+            continue
+
+        try:
+            resultado = parcela.gerar_boleto(conta_bancaria, force=force, enviar_email=False)
+            if resultado and resultado.get('sucesso'):
+                gerados += 1
+                detalhes.append({
+                    'parcela_id': parcela_id,
+                    'sucesso': True,
+                    'nosso_numero': resultado.get('nosso_numero', ''),
+                })
+            else:
+                erros += 1
+                detalhes.append({'parcela_id': parcela_id, 'sucesso': False,
+                                  'erro': resultado.get('erro', 'Erro desconhecido') if resultado else 'Sem resposta'})
+        except Exception as e:
+            erros += 1
+            logger.exception("Erro ao gerar boleto parcela %s: %s", parcela_id, e)
+            detalhes.append({'parcela_id': parcela_id, 'sucesso': False, 'erro': str(e)})
+
+    return JsonResponse({
+        'sucesso': True,
+        'gerados': gerados,
+        'bloqueados': bloqueados,
+        'erros': erros,
+        'detalhes': detalhes,
+    })
+
+
+@login_required
+@require_POST
 def api_gerar_boletos_lote(request):
     """
     Gera boletos em lote para multiplos contratos.
@@ -2032,6 +2340,7 @@ def api_gerar_boletos_lote(request):
                             'erro': resultado.get('erro') if resultado else 'Erro desconhecido'
                         })
                 except Exception as e:
+                    logger.exception('Erro ao gerar boleto parcela pk=%s em lote: %s', parcela.id, e)
                     total_erros += 1
                     parcelas_resultado.append({
                         'parcela_id': parcela.id,
@@ -2182,10 +2491,16 @@ def aplicar_reajuste_pagina(request, contrato_id):
     Página dedicada para aplicar reajuste em um contrato.
 
     GET  → calcula o preview server-side e exibe o formulário.
-           Query params opcionais: desconto_percentual, desconto_valor
+           Query params opcionais: desconto_percentual, desconto_valor, modal=1
     POST → aplica o reajuste e redireciona para o detalhe do contrato.
+           Se modal=1 ou X-Requested-With=XMLHttpRequest → retorna JSON.
     """
     contrato = get_object_or_404(Contrato, pk=contrato_id)
+    is_modal = (
+        request.GET.get('modal') == '1'
+        or request.POST.get('modal') == '1'
+        or request.headers.get('X-Requested-With') == 'XMLHttpRequest'
+    )
 
     def get_client_ip(req):
         x_forwarded = req.META.get('HTTP_X_FORWARDED_FOR')
@@ -2201,6 +2516,8 @@ def aplicar_reajuste_pagina(request, contrato_id):
 
         try:
             if not ciclo_param:
+                if is_modal:
+                    return JsonResponse({'sucesso': False, 'erro': 'Ciclo de reajuste não informado.'}, status=400)
                 messages.error(request, 'Ciclo de reajuste não informado.')
                 return redirect('financeiro:aplicar_reajuste', contrato_id=contrato_id)
 
@@ -2212,6 +2529,8 @@ def aplicar_reajuste_pagina(request, contrato_id):
             )
 
             if 'erro' in preview:
+                if is_modal:
+                    return JsonResponse({'sucesso': False, 'erro': preview['erro']}, status=400)
                 messages.error(request, preview['erro'])
                 return redirect('financeiro:aplicar_reajuste', contrato_id=contrato_id)
 
@@ -2220,6 +2539,8 @@ def aplicar_reajuste_pagina(request, contrato_id):
                 numero_parcela__lte=preview['parcela_final'],
                 pago=False,
             ).exists():
+                if is_modal:
+                    return JsonResponse({'sucesso': False, 'erro': 'Nenhuma parcela pendente no intervalo selecionado.'}, status=400)
                 messages.error(request, 'Nenhuma parcela pendente no intervalo selecionado.')
                 return redirect('financeiro:aplicar_reajuste', contrato_id=contrato_id)
 
@@ -2246,15 +2567,19 @@ def aplicar_reajuste_pagina(request, contrato_id):
             )
 
             resultado = reajuste.aplicar_reajuste()
-            messages.success(
-                request,
+            msg = (
                 f'Reajuste do ciclo {ciclo} ({preview["percentual_final"]:,.4f}%) '
                 f'aplicado em {resultado["parcelas_reajustadas"]} parcela(s).'
             )
+            if is_modal:
+                return JsonResponse({'sucesso': True, 'mensagem': msg})
+            messages.success(request, msg)
             return redirect('contratos:detalhe', pk=contrato_id)
 
         except Exception as e:
             logger.exception(f'Erro ao aplicar reajuste: {e}')
+            if is_modal:
+                return JsonResponse({'sucesso': False, 'erro': str(e)}, status=400)
             messages.error(request, f'Erro ao aplicar reajuste: {e}')
             return redirect('financeiro:aplicar_reajuste', contrato_id=contrato_id)
 
@@ -2267,7 +2592,8 @@ def aplicar_reajuste_pagina(request, contrato_id):
             'sem_pendente': True,
             'proximo_reajuste': contrato.data_proximo_reajuste,
         }
-        return render(request, 'financeiro/aplicar_reajuste.html', context)
+        tpl = 'financeiro/aplicar_reajuste_partial.html' if is_modal else 'financeiro/aplicar_reajuste.html'
+        return render(request, tpl, context)
 
     desconto_percentual = request.GET.get('desconto_percentual') or None
     desconto_valor = request.GET.get('desconto_valor') or None
@@ -2292,8 +2618,10 @@ def aplicar_reajuste_pagina(request, contrato_id):
         'reajustes_anteriores': reajustes_anteriores,
         'sem_pendente': False,
         'tem_erro': 'erro' in preview,
+        'is_modal': is_modal,
     }
-    return render(request, 'financeiro/aplicar_reajuste.html', context)
+    tpl = 'financeiro/aplicar_reajuste_partial.html' if is_modal else 'financeiro/aplicar_reajuste.html'
+    return render(request, tpl, context)
 
 
 @login_required
@@ -2316,6 +2644,13 @@ def aplicar_reajuste_contrato(request, contrato_id):
       - indice_tipo, percentual, parcela_inicial, parcela_final
     """
     contrato = get_object_or_404(Contrato, pk=contrato_id)
+
+    # V-08: Contratos FIXO não têm reajuste periódico
+    if contrato.tipo_correcao == 'FIXO':
+        return JsonResponse({
+            'sucesso': False,
+            'erro': 'Contratos com índice FIXO são pré-fixados e não possuem reajuste periódico.'
+        }, status=400)
 
     # Capturar IP do usuário
     def get_client_ip(req):
@@ -2560,6 +2895,7 @@ def aplicar_reajuste_lote(request):
                 desconto_valor=desconto_valor,
             )
         except Exception as e:
+            logger.exception('Erro no preview reajuste contrato %s: %s', contrato_id, e)
             resultados.append({
                 'contrato_id': contrato_id,
                 'numero_contrato': contrato.numero_contrato,
@@ -2653,42 +2989,43 @@ def excluir_reajuste(request, pk):
     reajuste = get_object_or_404(Reajuste, pk=pk)
 
     try:
-        contrato = reajuste.contrato
+        with transaction.atomic():
+            contrato = reajuste.contrato
 
-        # Calcular o fator efetivamente aplicado (percentual já inclui teto/piso)
-        perc_aplicado = reajuste.percentual
-        fator_reajuste = 1 + (perc_aplicado / 100)
+            # Calcular o fator efetivamente aplicado (percentual já inclui teto/piso)
+            perc_aplicado = reajuste.percentual
+            fator_reajuste = 1 + (perc_aplicado / 100)
 
-        parcelas = contrato.parcelas.filter(
-            numero_parcela__gte=reajuste.parcela_inicial,
-            numero_parcela__lte=reajuste.parcela_final,
-            pago=False
-        )
+            parcelas = contrato.parcelas.filter(
+                numero_parcela__gte=reajuste.parcela_inicial,
+                numero_parcela__lte=reajuste.parcela_final,
+                pago=False
+            )
 
-        for parcela in parcelas:
-            # Reverter o valor (dividir pelo fator aplicado)
-            if fator_reajuste != 0:
-                parcela.valor_atual = (parcela.valor_atual / fator_reajuste).quantize(Decimal('0.01'))
-            parcela.save(update_fields=['valor_atual'])
+            for parcela in parcelas:
+                # Reverter o valor (dividir pelo fator aplicado)
+                if fator_reajuste != 0:
+                    parcela.valor_atual = (parcela.valor_atual / fator_reajuste).quantize(Decimal('0.01'))
+                parcela.save(update_fields=['valor_atual'])
 
-        # Reverter intermediárias
-        intermediarias = contrato.intermediarias.filter(
-            paga=False,
-            mes_vencimento__gte=reajuste.parcela_inicial,
-            mes_vencimento__lte=reajuste.parcela_final,
-        )
-        for inter in intermediarias:
-            if fator_reajuste != 0:
-                inter.valor_atual = (inter.valor_atual / fator_reajuste).quantize(Decimal('0.01'))
-            inter.save(update_fields=['valor_atual'])
+            # Reverter intermediárias
+            intermediarias = contrato.intermediarias.filter(
+                paga=False,
+                mes_vencimento__gte=reajuste.parcela_inicial,
+                mes_vencimento__lte=reajuste.parcela_final,
+            )
+            for inter in intermediarias:
+                if fator_reajuste != 0:
+                    inter.valor_atual = (inter.valor_atual / fator_reajuste).quantize(Decimal('0.01'))
+                inter.save(update_fields=['valor_atual'])
 
-        # Restaurar ciclo_reajuste_atual do contrato
-        if contrato.ciclo_reajuste_atual >= reajuste.ciclo:
-            contrato.ciclo_reajuste_atual = reajuste.ciclo - 1
-            contrato.save(update_fields=['ciclo_reajuste_atual'])
+            # Restaurar ciclo_reajuste_atual do contrato
+            if contrato.ciclo_reajuste_atual >= reajuste.ciclo:
+                contrato.ciclo_reajuste_atual = reajuste.ciclo - 1
+                contrato.save(update_fields=['ciclo_reajuste_atual'])
 
-        # Excluir o registro de reajuste
-        reajuste.delete()
+            # Excluir o registro de reajuste
+            reajuste.delete()
 
         return JsonResponse({
             'sucesso': True,
@@ -2740,9 +3077,10 @@ def obter_indice_reajuste(request):
             return JsonResponse({
                 'sucesso': False,
                 'erro': f'Indice {tipo_indice} nao encontrado para {mes}/{ano}'
-            })
+            }, status=404)
 
     except Exception as e:
+        logger.exception("Erro ao obter indice reajuste: %s", e)
         return JsonResponse({
             'sucesso': False,
             'erro': str(e)
@@ -3037,12 +3375,11 @@ class DashboardContabilidadeView(LoginRequiredMixin, TemplateView):
             contratos_imob = contratos_qs.filter(imobiliaria=imob)
 
             # Contar contratos com bloqueio por reajuste
-            contratos_bloqueados = 0
-            for contrato in contratos_imob.filter(status=StatusContrato.ATIVO):
-                if hasattr(contrato, 'verificar_bloqueio_reajuste'):
-                    bloqueio_info = contrato.verificar_bloqueio_reajuste()
-                    if bloqueio_info.get('bloqueado'):
-                        contratos_bloqueados += 1
+            # verificar_bloqueio_reajuste() retorna bool (True = bloqueado)
+            contratos_bloqueados = sum(
+                1 for contrato in contratos_imob.filter(status=StatusContrato.ATIVO)
+                if hasattr(contrato, 'verificar_bloqueio_reajuste') and contrato.verificar_bloqueio_reajuste()
+            )
 
             stats = {
                 'imobiliaria': imob,
@@ -3265,11 +3602,17 @@ class RelatorioPrestacoesAPagarView(LoginRequiredMixin, TemplateView):
         if imobiliaria_id:
             filtro.imobiliaria_id = int(imobiliaria_id)
         if data_inicio:
-            from datetime import datetime
-            filtro.data_inicio = datetime.strptime(data_inicio, '%Y-%m-%d').date()
+            try:
+                from datetime import datetime
+                filtro.data_inicio = datetime.strptime(data_inicio, '%Y-%m-%d').date()
+            except ValueError:
+                pass
         if data_fim:
-            from datetime import datetime
-            filtro.data_fim = datetime.strptime(data_fim, '%Y-%m-%d').date()
+            try:
+                from datetime import datetime
+                filtro.data_fim = datetime.strptime(data_fim, '%Y-%m-%d').date()
+            except ValueError:
+                pass
 
         # Gerar relatório
         service = RelatorioService()
@@ -3315,11 +3658,17 @@ class RelatorioPrestacoesPageasView(LoginRequiredMixin, TemplateView):
         if imobiliaria_id:
             filtro.imobiliaria_id = int(imobiliaria_id)
         if data_inicio:
-            from datetime import datetime
-            filtro.data_inicio = datetime.strptime(data_inicio, '%Y-%m-%d').date()
+            try:
+                from datetime import datetime
+                filtro.data_inicio = datetime.strptime(data_inicio, '%Y-%m-%d').date()
+            except ValueError:
+                pass
         if data_fim:
-            from datetime import datetime
-            filtro.data_fim = datetime.strptime(data_fim, '%Y-%m-%d').date()
+            try:
+                from datetime import datetime
+                filtro.data_fim = datetime.strptime(data_fim, '%Y-%m-%d').date()
+            except ValueError:
+                pass
 
         # Gerar relatório
         service = RelatorioService()
@@ -3451,11 +3800,17 @@ def exportar_relatorio(request, tipo):
     if imobiliaria_id:
         filtro.imobiliaria_id = int(imobiliaria_id)
     if data_inicio:
-        from datetime import datetime
-        filtro.data_inicio = datetime.strptime(data_inicio, '%Y-%m-%d').date()
+        try:
+            from datetime import datetime
+            filtro.data_inicio = datetime.strptime(data_inicio, '%Y-%m-%d').date()
+        except ValueError:
+            pass
     if data_fim:
-        from datetime import datetime
-        filtro.data_fim = datetime.strptime(data_fim, '%Y-%m-%d').date()
+        try:
+            from datetime import datetime
+            filtro.data_fim = datetime.strptime(data_fim, '%Y-%m-%d').date()
+        except ValueError:
+            pass
 
     # Gerar relatório
     service = RelatorioService()
@@ -3467,7 +3822,10 @@ def exportar_relatorio(request, tipo):
     elif tipo == 'posicao_contratos':
         relatorio = service.gerar_relatorio_posicao_contratos(filtro)
     elif tipo == 'previsao_reajustes':
-        dias = int(request.GET.get('dias', 60))
+        try:
+            dias = max(1, int(request.GET.get('dias', 60)))
+        except (ValueError, TypeError):
+            dias = 60
         relatorio = service.gerar_relatorio_previsao_reajustes(dias)
     else:
         return HttpResponse('Tipo de relatório inválido', status=400)
@@ -3486,6 +3844,7 @@ def exportar_relatorio(request, tipo):
             content_type = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
             extensao = 'xlsx'
         except ImportError as e:
+            logger.exception("Biblioteca openpyxl não disponível para exportação Excel: %s", e)
             return HttpResponse(str(e), status=500)
     elif formato == 'pdf':
         try:
@@ -3493,6 +3852,7 @@ def exportar_relatorio(request, tipo):
             content_type = 'application/pdf'
             extensao = 'pdf'
         except ImportError as e:
+            logger.exception("Biblioteca reportlab não disponível para exportação PDF: %s", e)
             return HttpResponse(str(e), status=500)
     else:
         conteudo = service.exportar_para_csv(relatorio)
@@ -3728,8 +4088,11 @@ def api_contratos_lista(request):
     imobiliaria_id = request.GET.get('imobiliaria')
     status = request.GET.get('status')
     comprador_id = request.GET.get('comprador')
-    page = int(request.GET.get('page', 1))
-    per_page = min(int(request.GET.get('per_page', 20)), 100)
+    try:
+        page = max(1, int(request.GET.get('page', 1)))
+        per_page = min(max(1, int(request.GET.get('per_page', 20))), 100)
+    except (ValueError, TypeError):
+        page, per_page = 1, 20
 
     queryset = Contrato.objects.all().select_related(
         'imobiliaria', 'comprador', 'imovel'
@@ -3879,8 +4242,11 @@ def api_contrato_parcelas(request, contrato_id):
     contrato = get_object_or_404(Contrato, pk=contrato_id)
 
     status_filter = request.GET.get('status')
-    page = int(request.GET.get('page', 1))
-    per_page = min(int(request.GET.get('per_page', 50)), 100)
+    try:
+        page = max(1, int(request.GET.get('page', 1)))
+        per_page = min(max(1, int(request.GET.get('per_page', 50))), 100)
+    except (ValueError, TypeError):
+        page, per_page = 1, 50
     hoje = timezone.now().date()
 
     queryset = contrato.parcelas.all()
@@ -4003,8 +4369,11 @@ def api_parcelas_lista(request):
     status_filter = request.GET.get('status')
     data_inicio = request.GET.get('data_inicio')
     data_fim = request.GET.get('data_fim')
-    page = int(request.GET.get('page', 1))
-    per_page = min(int(request.GET.get('per_page', 50)), 100)
+    try:
+        page = max(1, int(request.GET.get('page', 1)))
+        per_page = min(max(1, int(request.GET.get('per_page', 50))), 100)
+    except (ValueError, TypeError):
+        page, per_page = 1, 50
 
     hoje = timezone.now().date()
     queryset = Parcela.objects.all().select_related(
@@ -4024,15 +4393,21 @@ def api_parcelas_lista(request):
         queryset = queryset.filter(pago=False, data_vencimento__lt=hoje)
 
     if data_inicio:
-        from datetime import datetime
-        queryset = queryset.filter(
-            data_vencimento__gte=datetime.strptime(data_inicio, '%Y-%m-%d').date()
-        )
+        try:
+            from datetime import datetime
+            queryset = queryset.filter(
+                data_vencimento__gte=datetime.strptime(data_inicio, '%Y-%m-%d').date()
+            )
+        except ValueError:
+            pass
     if data_fim:
-        from datetime import datetime
-        queryset = queryset.filter(
-            data_vencimento__lte=datetime.strptime(data_fim, '%Y-%m-%d').date()
-        )
+        try:
+            from datetime import datetime
+            queryset = queryset.filter(
+                data_vencimento__lte=datetime.strptime(data_fim, '%Y-%m-%d').date()
+            )
+        except ValueError:
+            pass
 
     total = queryset.count()
     offset = (page - 1) * per_page
@@ -4263,7 +4638,7 @@ def api_boleto_gerar(request, parcela_id):
             return JsonResponse({
                 'sucesso': False,
                 'erro': resultado.get('erro') if resultado else 'Erro ao gerar boleto.'
-            }, status=500)
+            }, status=400)
 
     except json.JSONDecodeError:
         return JsonResponse({'sucesso': False, 'erro': 'JSON inválido.'}, status=400)
@@ -4401,6 +4776,7 @@ def api_boletos_lote(request):
                     erros += 1
                     resultados.append({'parcela_id': parcela.id, 'sucesso': False, 'erro': res.get('erro') if res else 'Erro'})
             except Exception as e:
+                logger.exception('Erro ao gerar boleto parcela pk=%s: %s', parcela.id, e)
                 erros += 1
                 resultados.append({'parcela_id': parcela.id, 'sucesso': False, 'erro': str(e)})
 
@@ -4495,7 +4871,7 @@ def api_boletos_revalidar(request):
             # Agência e conta corrente básicos
             if not (conta.agencia or '').strip():
                 erros_parcela.append('Agência bancária ausente')
-            if not (conta.conta_corrente or '').strip():
+            if not (conta.conta or '').strip():
                 erros_parcela.append('Conta corrente ausente')
 
             # CNPJ da imobiliária
@@ -4557,8 +4933,11 @@ def api_cnab_remessa_listar(request):
     if request.GET.get('status'):
         qs = qs.filter(status=request.GET['status'])
 
-    page = int(request.GET.get('page', 1))
-    per_page = min(int(request.GET.get('per_page', 20)), 100)
+    try:
+        page = max(1, int(request.GET.get('page', 1)))
+        per_page = min(max(1, int(request.GET.get('per_page', 20))), 100)
+    except (ValueError, TypeError):
+        page, per_page = 1, 20
     total = qs.count()
     arquivos = qs[(page-1)*per_page:page*per_page]
 
@@ -4641,13 +5020,26 @@ def api_cnab_remessa_gerar(request):
                 'remessa': {'id': arq.id, 'numero_remessa': arq.numero_remessa, 'nome_arquivo': arq.nome_arquivo,
                            'quantidade_boletos': resultado.get('quantidade_boletos'), 'valor_total': float(resultado.get('valor_total', 0))}
             })
-        return JsonResponse({'sucesso': False, 'erro': resultado.get('erro')}, status=500)
+        return JsonResponse({'sucesso': False, 'erro': resultado.get('erro')}, status=400)
 
     except json.JSONDecodeError:
         return JsonResponse({'sucesso': False, 'erro': 'JSON inválido.'}, status=400)
     except Exception as e:
         logger.exception(f"Erro ao gerar remessa: {e}")
         return JsonResponse({'sucesso': False, 'erro': str(e)}, status=500)
+
+
+@login_required
+@require_GET
+def api_cnab_boletos_pendentes_count(request):
+    """Contagem rápida de boletos disponíveis para nova remessa (badge navbar)."""
+    try:
+        from .services.cnab_service import CNABService
+        count = len(CNABService().obter_boletos_sem_remessa())
+        return JsonResponse({'count': count})
+    except Exception as e:
+        logger.exception("Erro em api_cnab_boletos_pendentes_count: %s", e)
+        return JsonResponse({'count': 0})
 
 
 @login_required
@@ -4705,8 +5097,11 @@ def api_cnab_retorno_listar(request):
     if request.GET.get('status'):
         qs = qs.filter(status=request.GET['status'])
 
-    page = int(request.GET.get('page', 1))
-    per_page = min(int(request.GET.get('per_page', 20)), 100)
+    try:
+        page = max(1, int(request.GET.get('page', 1)))
+        per_page = min(max(1, int(request.GET.get('per_page', 20))), 100)
+    except (ValueError, TypeError):
+        page, per_page = 1, 20
     total = qs.count()
     arquivos = qs[(page-1)*per_page:page*per_page]
 
@@ -4763,7 +5158,7 @@ def api_cnab_retorno_processar(request, retorno_id):
                 'sucesso': True, 'total_registros': resultado.get('total_registros', 0),
                 'processados': resultado.get('processados', 0), 'liquidacoes': resultado.get('liquidacoes', 0),
             })
-        return JsonResponse({'sucesso': False, 'erro': resultado.get('erro')}, status=500)
+        return JsonResponse({'sucesso': False, 'erro': resultado.get('erro')}, status=400)
 
     except Exception as e:
         logger.exception(f"Erro ao processar retorno: {e}")
@@ -4799,38 +5194,46 @@ def api_reajustes_pendentes_count(request):
     Usa prefetch_related para evitar N×M queries: 2 queries no total
     em vez de uma por ciclo por contrato.
     """
-    from contratos.models import TipoCorrecao
-    from django.db.models import Prefetch
+    try:
+        from contratos.models import TipoCorrecao
+        from django.db.models import Prefetch
 
-    hoje = timezone.now().date()
+        hoje = timezone.localdate()
 
-    contratos_ativos = Contrato.objects.filter(
-        status=StatusContrato.ATIVO
-    ).exclude(tipo_correcao=TipoCorrecao.FIXO).only(
-        'pk', 'data_contrato', 'numero_parcelas', 'prazo_reajuste_meses', 'tipo_correcao'
-    ).prefetch_related(
-        Prefetch(
-            'historico_reajustes',
-            queryset=Reajuste.objects.filter(aplicado=True).only('contrato_id', 'ciclo'),
-            to_attr='reajustes_aplicados_cache',
+        contratos_ativos = Contrato.objects.filter(
+            status=StatusContrato.ATIVO
+        ).exclude(tipo_correcao=TipoCorrecao.FIXO).only(
+            'pk', 'data_contrato', 'numero_parcelas', 'prazo_reajuste_meses', 'tipo_correcao'
+        ).prefetch_related(
+            Prefetch(
+                'reajustes',
+                queryset=Reajuste.objects.filter(aplicado=True).only('contrato_id', 'ciclo'),
+                to_attr='reajustes_aplicados_cache',
+            )
         )
-    )
 
-    count = 0
-    for contrato in contratos_ativos:
-        ciclos_aplicados = {r.ciclo for r in contrato.reajustes_aplicados_cache}
-        prazo = contrato.prazo_reajuste_meses or 12
-        total_ciclos = (contrato.numero_parcelas - 1) // prazo + 1
+        count = 0
+        for contrato in contratos_ativos:
+            # Pular contratos com dados incompletos
+            if not contrato.data_contrato or not contrato.numero_parcelas:
+                continue
 
-        for ciclo in range(2, total_ciclos + 1):
-            data_reajuste = contrato.data_contrato + relativedelta(months=(ciclo - 1) * prazo)
-            if hoje < data_reajuste:
-                break
-            if ciclo not in ciclos_aplicados:
-                count += 1
-                break
+            ciclos_aplicados = {r.ciclo for r in contrato.reajustes_aplicados_cache}
+            prazo = contrato.prazo_reajuste_meses or 12
+            total_ciclos = (contrato.numero_parcelas - 1) // prazo + 1
 
-    return JsonResponse({'count': count})
+            for ciclo in range(2, total_ciclos + 1):
+                data_reajuste = contrato.data_contrato + relativedelta(months=(ciclo - 1) * prazo)
+                if hoje < data_reajuste:
+                    break
+                if ciclo not in ciclos_aplicados:
+                    count += 1
+                    break
+
+        return JsonResponse({'count': count})
+    except Exception as e:
+        logger.exception("Erro em api_reajustes_pendentes_count: %s", e)
+        return JsonResponse({'count': 0})
 
 
 # ==========================================================================
@@ -4879,18 +5282,27 @@ def _filtrar_parcelas_periodo(qs, request, hoje):
         qs = qs.filter(pago=False, data_vencimento__gte=hoje)
 
     if data_inicio:
-        from datetime import datetime as dt
-        qs = qs.filter(data_vencimento__gte=dt.strptime(data_inicio, '%Y-%m-%d').date())
+        try:
+            from datetime import datetime as dt
+            qs = qs.filter(data_vencimento__gte=dt.strptime(data_inicio, '%Y-%m-%d').date())
+        except ValueError:
+            pass  # Invalid date format — ignore filter
     if data_fim:
-        from datetime import datetime as dt
-        qs = qs.filter(data_vencimento__lte=dt.strptime(data_fim, '%Y-%m-%d').date())
+        try:
+            from datetime import datetime as dt
+            qs = qs.filter(data_vencimento__lte=dt.strptime(data_fim, '%Y-%m-%d').date())
+        except ValueError:
+            pass  # Invalid date format — ignore filter
     return qs
 
 
 def _paginar(qs, request):
     """Retorna (items, total, page, per_page)."""
-    page = max(1, int(request.GET.get('page', 1)))
-    per_page = min(max(1, int(request.GET.get('per_page', 50))), 200)
+    try:
+        page = max(1, int(request.GET.get('page', 1)))
+        per_page = min(max(1, int(request.GET.get('per_page', 50))), 200)
+    except (ValueError, TypeError):
+        page, per_page = 1, 50
     total = qs.count()
     offset = (page - 1) * per_page
     return qs[offset:offset + per_page], total, page, per_page
@@ -5067,4 +5479,91 @@ def api_imobiliaria_fluxo_caixa(request, imobiliaria_id):
             'nome': imobiliaria.nome_fantasia or imobiliaria.razao_social,
         },
         'meses': meses,
+    })
+
+
+# =============================================================================
+# OFX — Importação de Extrato Bancário para Quitação de Parcelas
+# =============================================================================
+
+@login_required
+def upload_ofx(request):
+    """
+    GET  → página de upload do extrato OFX
+    POST → processa o arquivo OFX e retorna JSON com resultado da reconciliação
+    """
+    from financeiro.services.ofx_service import processar_ofx_upload
+
+    if request.method == 'GET':
+        # Listar imobiliárias disponíveis para o filtro
+        from core.models import Imobiliaria
+        imobiliarias = Imobiliaria.objects.filter(ativo=True).order_by('razao_social')
+        return render(request, 'financeiro/ofx_upload.html', {
+            'imobiliarias': imobiliarias,
+        })
+
+    # POST — processa arquivo
+    arquivo = request.FILES.get('arquivo_ofx')
+    if not arquivo:
+        return JsonResponse({'sucesso': False, 'erro': 'Nenhum arquivo enviado'}, status=400)
+
+    if not arquivo.name.lower().endswith('.ofx'):
+        return JsonResponse({'sucesso': False, 'erro': 'Arquivo deve ter extensão .ofx'}, status=400)
+
+    # Limite de tamanho: 5 MB
+    if arquivo.size > 5 * 1024 * 1024:
+        return JsonResponse({'sucesso': False, 'erro': 'Arquivo muito grande (máximo 5 MB)'}, status=400)
+
+    imobiliaria_id = request.POST.get('imobiliaria_id')
+    imobiliaria = None
+    if imobiliaria_id:
+        from core.models import Imobiliaria
+        imobiliaria = get_object_or_404(Imobiliaria, pk=imobiliaria_id)
+
+    dry_run = request.POST.get('dry_run', '').lower() in ('1', 'true', 'yes')
+
+    try:
+        conteudo = arquivo.read()
+        resultado = processar_ofx_upload(
+            conteudo,
+            imobiliaria=imobiliaria,
+            dry_run=dry_run,
+        )
+    except Exception as e:
+        logger.exception('OFX upload: erro ao processar arquivo')
+        return JsonResponse({'sucesso': False, 'erro': f'Erro ao processar arquivo: {e}'}, status=500)
+
+    if dry_run:
+        return JsonResponse({'sucesso': True, **resultado})
+
+    # Serializar resultados para JSON
+    resultados_json = []
+    for rec in resultado.get('resultados', []):
+        tx = rec.transacao
+        item = {
+            'fitid': tx.fitid,
+            'data': str(tx.data) if tx.data else None,
+            'valor': str(tx.valor),
+            'memo': tx.memo,
+            'reconciliada': rec.reconciliada,
+            'confianca': rec.confianca,
+            'motivo': rec.motivo,
+        }
+        if rec.parcela:
+            item['parcela'] = {
+                'id': rec.parcela.pk,
+                'numero_parcela': rec.parcela.numero_parcela,
+                'nosso_numero': rec.parcela.nosso_numero,
+                'contrato_id': rec.parcela.contrato_id,
+                'numero_contrato': rec.parcela.contrato.numero_contrato,
+            }
+        resultados_json.append(item)
+
+    return JsonResponse({
+        'sucesso': True,
+        'total_transacoes': resultado['total_transacoes'],
+        'reconciliadas': resultado['reconciliadas'],
+        'nao_reconciliadas': resultado['nao_reconciliadas'],
+        'parcelas_quitadas': [p.pk for p in resultado.get('parcelas_quitadas', [])],
+        'resultados': resultados_json,
     })

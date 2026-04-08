@@ -5,11 +5,14 @@ Desenvolvedor: Maxwell da Silva Oliveira
 Email: maxwbh@gmail.com
 Empresa: M&S do Brasil LTDA
 """
-from django.db import models
+from django.db import models, transaction
 from django.core.validators import MinValueValidator
 from django.core.exceptions import ValidationError
 from django.utils import timezone
 from decimal import Decimal
+import logging
+
+logger = logging.getLogger(__name__)
 from datetime import timedelta
 from core.models import TimeStampedModel, ContaBancaria
 
@@ -695,6 +698,7 @@ class Parcela(TimeStampedModel):
                     resultado['email_erro'] = email_result.get('erro', '')
                 except Exception as e:
                     # Não falhar a geração do boleto por erro de email
+                    logger.exception("Erro ao enviar email após geração de boleto parcela pk=%s: %s", self.pk, e)
                     resultado['email_enviado'] = False
                     resultado['email_erro'] = str(e)
 
@@ -1006,7 +1010,7 @@ class Reajuste(TimeStampedModel):
         if n <= 0:
             return []
         i = taxa_mensal_pct / Decimal('100')
-        pmt = Parcela._calcular_pmt(pv, taxa_mensal_pct, n)
+        pmt = Reajuste._calcular_pmt(pv, taxa_mensal_pct, n)
         tabela = []
         saldo = pv
         for k in range(n):
@@ -1260,6 +1264,30 @@ class Reajuste(TimeStampedModel):
                 if p.tem_boleto:
                     boletos_emitidos.append(p.numero_parcela)
 
+        # Preview das intermediárias do ciclo (se contrato.intermediarias_reajustadas)
+        detalhes_intermediarias = []
+        valor_inter_anterior_total = Decimal('0')
+        valor_inter_novo_total = Decimal('0')
+        if contrato.intermediarias_reajustadas:
+            fator_inter = 1 + (percentual_com_caps / 100)
+            intermediarias_qs = contrato.intermediarias.filter(
+                paga=False,
+                mes_vencimento__gte=parcela_inicial,
+                mes_vencimento__lte=parcela_final,
+            ).order_by('mes_vencimento')
+            for inter in intermediarias_qs:
+                novo_valor_inter = (inter.valor_atual * fator_inter).quantize(Decimal('0.01'))
+                detalhes_intermediarias.append({
+                    'numero_sequencial': inter.numero_sequencial,
+                    'mes_vencimento': inter.mes_vencimento,
+                    'data_vencimento': inter.data_vencimento,
+                    'valor_atual': inter.valor_atual,
+                    'valor_novo': novo_valor_inter,
+                    'diferenca': novo_valor_inter - inter.valor_atual,
+                })
+                valor_inter_anterior_total += inter.valor_atual
+                valor_inter_novo_total += novo_valor_inter
+
         return {
             'ciclo': ciclo,
             'indice_tipo': indice_tipo,
@@ -1285,12 +1313,26 @@ class Reajuste(TimeStampedModel):
             'valor_novo_total': valor_novo_total,
             'diferenca_total': valor_novo_total - valor_anterior_total,
             'boletos_emitidos': boletos_emitidos,
+            # Intermediárias afetadas pelo reajuste deste ciclo
+            'intermediarias': detalhes_intermediarias,
+            'total_intermediarias': len(detalhes_intermediarias),
+            'valor_inter_anterior_total': valor_inter_anterior_total,
+            'valor_inter_novo_total': valor_inter_novo_total,
+            'diferenca_inter_total': valor_inter_novo_total - valor_inter_anterior_total,
         }
 
     def clean(self):
         """Validações de negócio do reajuste"""
         super().clean()
         errors = {}
+
+        # V-08: Contratos FIXO não têm reajuste periódico
+        if hasattr(self, 'contrato') and self.contrato:
+            if self.contrato.tipo_correcao == 'FIXO':
+                errors['contrato'] = (
+                    'Contratos com índice FIXO são pré-fixados e não possuem reajuste periódico. '
+                    'O valor das parcelas é definido na TabelaJurosContrato no momento da criação.'
+                )
 
         # Validar que o ciclo é sequencial (não pular ciclos)
         if self.ciclo and self.ciclo > 1 and hasattr(self, 'contrato') and self.contrato:
@@ -1338,6 +1380,7 @@ class Reajuste(TimeStampedModel):
         if errors:
             raise ValidationError(errors)
 
+    @transaction.atomic
     def aplicar_reajuste(self):
         """
         Aplica o reajuste nas parcelas especificadas.
@@ -2127,6 +2170,7 @@ class ItemRetorno(TimeStampedModel):
             return True
 
         except Exception as e:
+            logger.exception("Erro ao processar registro CNAB pk=%s: %s", self.pk, e)
             self.erro_processamento = str(e)
             self.save()
             return False

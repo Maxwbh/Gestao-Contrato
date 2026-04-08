@@ -62,7 +62,7 @@
             <div class="card card-stats warning">
                 <div class="card-body text-center">
                     <div class="stat-value text-warning">{{ stats.pendentes|default:0 }}</div>
-                    <div class="stat-label">Pendentes</div>
+                    <div class="stat-label">Em aberto</div>
                     <small class="text-muted">R$ {{ stats.valor_pendente|floatformat:2|default:"0,00" }}</small>
                 </div>
             </div>
@@ -97,7 +97,7 @@
                     <label class="form-label">Status</label>
                     <select name="status" class="form-select" onchange="this.form.submit()">
                         <option value="">Todos</option>
-                        <option value="pendentes" {% if filtro_status == 'pendentes' %}selected{% endif %}>Pendentes</option>
+                        <option value="pendentes" {% if filtro_status == 'pendentes' %}selected{% endif %}>Em aberto</option>
                         <option value="pagas" {% if filtro_status == 'pagas' %}selected{% endif %}>Pagas</option>
                         <option value="vencidas" {% if filtro_status == 'vencidas' %}selected{% endif %}>Vencidas</option>
                     </select>
@@ -200,7 +200,7 @@ const parcelasMesRowData = [
     imobiliaria: "{{ parcela.contrato.imovel.imobiliaria.nome|default:'-'|escapejs }}",
     comprador: "{{ parcela.contrato.comprador.nome|escapejs }}",
     comprador_pk: {{ parcela.contrato.comprador.pk }},
-    valor_atual: {{ parcela.valor_atual|default:0 }},
+    valor_atual: parseFloat("{{ parcela.valor_atual|default:'0' }}") || 0,
     pago: {{ parcela.pago|yesno:"true,false" }},
     esta_vencida: {{ parcela.esta_vencida|yesno:"true,false" }},
     detalhe_url: "{% url 'financeiro:detalhe_parcela' parcela.pk %}",
@@ -222,7 +222,7 @@ function statusMesRenderer(params) {
     const d = params.data;
     if (d.pago)         return '<span class="badge bg-success">Pago</span>';
     if (d.esta_vencida) return '<span class="badge bg-danger">Vencida</span>';
-    return '<span class="badge bg-warning text-dark">Pendente</span>';
+    return '<span class="badge bg-warning text-dark">Em aberto</span>';
 }
 
 function acoesMesRenderer(params) {

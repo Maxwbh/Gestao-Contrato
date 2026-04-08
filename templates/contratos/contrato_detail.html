@@ -547,9 +547,9 @@
                 <div class="card mb-3">
                     <div class="card-header bg-secondary text-white d-flex justify-content-between align-items-center">
                         <span><i class="fas fa-chart-line"></i> Reajustes</span>
-                        <a href="{% url 'financeiro:aplicar_reajuste' contrato_id=contrato.pk %}" class="btn btn-sm btn-light">
+                        <button type="button" class="btn btn-sm btn-light" onclick="abrirModalReajuste({{ contrato.pk }})">
                             <i class="fas fa-plus"></i> Aplicar Reajuste
-                        </a>
+                        </button>
                     </div>
                     <div class="card-body p-0">
                         {% if reajustes %}
@@ -714,11 +714,19 @@
                 <div class="card">
                     <div class="card-header bg-dark text-white d-flex justify-content-between align-items-center">
                         <span><i class="fas fa-list"></i> Parcelas</span>
-                        <div>
+                        <div class="d-flex align-items-center gap-2">
                             {% if proxima_parcela %}
-                            <span class="badge bg-warning text-dark me-2">
+                            <span class="badge bg-warning text-dark">
                                 Proxima: {{ proxima_parcela.data_vencimento|date:"d/m/Y" }}
                             </span>
+                            {% endif %}
+                            {% if tabela_juros %}
+                            <button type="button" class="btn btn-sm btn-outline-light"
+                                    id="btn-toggle-amort"
+                                    onclick="toggleColunaAmort()"
+                                    title="Exibir/ocultar breakdown de amortização e juros">
+                                <i class="fas fa-calculator"></i> Amort/Juros
+                            </button>
                             {% endif %}
                             <button type="button" class="btn btn-sm btn-success" onclick="abrirModalCarne()">
                                 <i class="fas fa-file-invoice-dollar"></i> Gerar Carne
@@ -733,6 +741,8 @@
                                         <th class="text-center">#</th>
                                         <th>Vencimento</th>
                                         <th class="text-end">Valor</th>
+                                        <th class="text-end col-amort d-none" title="Amortização do principal">Amort.</th>
+                                        <th class="text-end col-amort d-none" title="Juros embutidos na parcela">Juros</th>
                                         <th class="text-center">Boleto</th>
                                         <th class="text-center">Status</th>
                                         <th class="text-center">Acoes</th>
@@ -750,6 +760,12 @@
                                             {% if parcela.pago %}
                                             <br><small class="text-muted">Pago: {{ parcela.valor_pago|moeda }}</small>
                                             {% endif %}
+                                        </td>
+                                        <td class="text-end font-monospace col-amort d-none" style="font-size:0.8rem;">
+                                            {% if parcela.amortizacao %}{{ parcela.amortizacao|floatformat:2 }}{% else %}—{% endif %}
+                                        </td>
+                                        <td class="text-end font-monospace col-amort d-none" style="font-size:0.8rem;color:#6c757d;">
+                                            {% if parcela.juros_embutido %}{{ parcela.juros_embutido|floatformat:2 }}{% else %}—{% endif %}
                                         </td>
                                         <td class="text-center">
                                             {% if parcela.tem_boleto %}
@@ -824,7 +840,7 @@
                                     </tr>
                                     {% empty %}
                                     <tr>
-                                        <td colspan="6" class="text-center text-muted py-4">
+                                        <td colspan="8" class="text-center text-muted py-4">
                                             <i class="fas fa-info-circle"></i> Nenhuma parcela gerada
                                         </td>
                                     </tr>
@@ -1390,177 +1406,24 @@
     </div>
 </div>
 
-<!-- Modal de Reajuste Manual -->
-<div class="modal fade" id="modalReajuste" tabindex="-1">
-    <div class="modal-dialog modal-lg">
-        <div class="modal-content">
-            <div class="modal-header bg-secondary text-white">
-                <h5 class="modal-title">
-                    <i class="fas fa-chart-line"></i> Aplicar Reajuste
-                </h5>
-                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
-            </div>
-            <form id="formReajuste" method="post">
-                {% csrf_token %}
-                <div class="modal-body">
-
-                    <!-- Loading spinner -->
-                    <div id="reajuste_loading" class="text-center py-4">
-                        <div class="spinner-border text-secondary" role="status"></div>
-                        <p class="mt-2 text-muted">Calculando reajuste pendente...</p>
-                    </div>
-
-                    <!-- Sem reajuste pendente -->
-                    <div id="reajuste_sem_pendente" class="alert alert-success d-none">
-                        <i class="fas fa-check-circle"></i> Nenhum reajuste pendente para este contrato.
-                    </div>
-
-                    <!-- Erro ao buscar índice -->
-                    <div id="reajuste_erro_indice" class="alert alert-warning d-none">
-                        <i class="fas fa-exclamation-triangle"></i>
-                        <span id="reajuste_erro_indice_msg"></span>
-                        <br><small>Importe os índices em <a href="{% url 'contratos:indices_listar' %}" target="_blank">Gestão → Índices de Reajuste</a>.</small>
-                    </div>
-
-                    <!-- Formulário principal -->
-                    <div id="reajuste_form_area" class="d-none">
-
-                        <!-- Cabeçalho calculado automaticamente -->
-                        <div class="card bg-light mb-3">
-                            <div class="card-body py-2">
-                                <div class="row g-2 align-items-center">
-                                    <div class="col-sm-3">
-                                        <small class="text-muted d-block">Ciclo</small>
-                                        <strong id="r_ciclo">—</strong>
-                                    </div>
-                                    <div class="col-sm-3">
-                                        <small class="text-muted d-block">Índice</small>
-                                        <strong id="r_indice">—</strong>
-                                    </div>
-                                    <div class="col-sm-3">
-                                        <small class="text-muted d-block">Período de referência</small>
-                                        <strong id="r_periodo">—</strong>
-                                    </div>
-                                    <div class="col-sm-3">
-                                        <small class="text-muted d-block">Parcelas afetadas</small>
-                                        <strong id="r_parcelas_range">—</strong>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-
-                        <!-- % Bruto calculado -->
-                        <div class="row g-3 mb-3">
-                            <div class="col-md-4">
-                                <label class="form-label fw-bold">% Acumulado (índice)</label>
-                                <div class="input-group">
-                                    <input type="text" class="form-control fw-bold text-primary" id="r_pct_bruto" readonly>
-                                    <span class="input-group-text">%</span>
-                                </div>
-                                <!-- Spread info (hidden when spread=0) -->
-                                <div id="r_spread_row" class="d-none mt-1">
-                                    <small class="text-muted">
-                                        Spread: <span class="text-info fw-bold" id="r_spread_val"></span> p.p.
-                                        → <span class="text-primary fw-bold" id="r_pct_com_spread"></span>%
-                                    </small>
-                                </div>
-                            </div>
-                            <div class="col-md-4">
-                                <label class="form-label">Desconto em p.p. <small class="text-muted">(opcional)</small></label>
-                                <div class="input-group">
-                                    <input type="number" step="0.0001" min="0" class="form-control" id="r_desconto_pct" name="desconto_percentual" placeholder="0.0000" oninput="aplicarDesconto()">
-                                    <span class="input-group-text">p.p.</span>
-                                </div>
-                                <small class="text-muted">Ex: IPCA 5,4% − 1 p.p. = 4,4%</small>
-                            </div>
-                            <div class="col-md-4">
-                                <label class="form-label">Desconto em R$ / parcela <small class="text-muted">(opcional)</small></label>
-                                <div class="input-group">
-                                    <span class="input-group-text">R$</span>
-                                    <input type="number" step="0.01" min="0" class="form-control" id="r_desconto_val" name="desconto_valor" placeholder="0,00" oninput="aplicarDesconto()">
-                                </div>
-                            </div>
-                        </div>
-
-                        <!-- Aviso de teto/piso do contrato -->
-                        <div id="reajuste_alerta_caps" class="alert alert-info py-2 mb-3 d-none">
-                            <i class="fas fa-sliders-h me-1"></i>
-                            <span id="reajuste_alerta_caps_msg"></span>
-                        </div>
-
-                        <!-- Aviso de deflação (índice negativo) -->
-                        <div id="reajuste_alerta_deflacao" class="alert alert-danger py-2 mb-3 d-none">
-                            <i class="fas fa-exclamation-triangle me-1"></i>
-                            <strong>Atenção — deflação!</strong> O percentual final é negativo
-                            (<span id="r_pct_deflacao"></span>%), o que <strong>reduzirá</strong> o valor das parcelas.
-                            Confirme se deseja prosseguir.
-                        </div>
-
-                        <!-- % Líquido final -->
-                        <div class="alert alert-primary py-2 mb-3">
-                            <div class="row align-items-center">
-                                <div class="col">
-                                    <strong>% aplicado às parcelas:</strong>
-                                    <span class="h5 ms-2" id="r_pct_liquido">—</span>%
-                                </div>
-                                <div class="col-auto">
-                                    <small class="text-muted">Variação total estimada: <strong id="r_diferenca_total">R$ —</strong></small>
-                                </div>
-                            </div>
-                        </div>
-
-                        <!-- Alerta boletos emitidos -->
-                        <div id="reajuste_alerta_boletos" class="alert alert-warning d-none">
-                            <i class="fas fa-exclamation-triangle"></i>
-                            <strong>Atenção:</strong> <span id="reajuste_alerta_boletos_msg"></span>
-                            Os boletos dessas parcelas precisarão ser regenerados após o reajuste.
-                        </div>
-
-                        <!-- Tabela de prévia por parcela -->
-                        <div class="mb-3">
-                            <label class="form-label fw-bold">Prévia por parcela</label>
-                            <div style="max-height: 240px; overflow-y: auto;">
-                                <table class="table table-sm table-bordered mb-0" style="font-size:0.82rem;">
-                                    <thead class="table-light sticky-top">
-                                        <tr>
-                                            <th class="text-center">#</th>
-                                            <th>Vencimento</th>
-                                            <th class="text-end">Valor Atual</th>
-                                            <th class="text-end">% Aplicado</th>
-                                            <th class="text-end text-success fw-bold">Valor Novo</th>
-                                            <th class="text-end">Diferença</th>
-                                            <th class="text-center">Boleto</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody id="reajuste_preview_tbody"></tbody>
-                                </table>
-                            </div>
-                        </div>
-
-                        <div class="mb-3">
-                            <label class="form-label">Observações</label>
-                            <textarea class="form-control" name="observacoes" rows="2" placeholder="Motivo do reajuste..."></textarea>
-                        </div>
-
-                        <!-- campos hidden para envio -->
-                        <input type="hidden" name="ciclo" id="r_ciclo_hidden">
-                    </div>
-
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
-                    <button type="submit" class="btn btn-primary d-none" id="btnAplicarReajuste">
-                        <i class="fas fa-check"></i> Aplicar Reajuste
-                    </button>
-                </div>
-            </form>
-        </div>
-    </div>
-</div>
 {% endblock %}
 
 {% block extra_js %}
 <script>
+// Toggle das colunas de amortização / juros na tabela de parcelas
+function toggleColunaAmort() {
+    var cols = document.querySelectorAll('.col-amort');
+    var btn  = document.getElementById('btn-toggle-amort');
+    var hidden = cols.length > 0 && cols[0].classList.contains('d-none');
+    cols.forEach(function(el) {
+        el.classList.toggle('d-none', !hidden);
+    });
+    if (btn) {
+        btn.classList.toggle('btn-outline-light', !hidden);
+        btn.classList.toggle('btn-light', hidden);
+    }
+}
+
 // Dados das parcelas para o modal de carne
 var parcelasPendentes = [
     {% for parcela in parcelas %}{% if not parcela.pago and not parcela.tem_boleto %}
@@ -1829,6 +1692,27 @@ function regenerarBoleto(parcelaId, btn) {
         btn.classList.remove('btn-loading');
         btn.disabled = false;
     });
+}
+
+// ============ CANCELAR BOLETO ============
+
+function cancelarBoleto(parcelaId) {
+    if (!confirm('Confirmar cancelamento do boleto da parcela #' + parcelaId + '?\n\nEsta ação não pode ser desfeita.')) return;
+
+    var fd = new FormData();
+    fd.append('csrfmiddlewaretoken', '{{ csrf_token }}');
+
+    fetch('/financeiro/parcelas/' + parcelaId + '/boleto/cancelar/', {method: 'POST', body: fd})
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            if (data.sucesso) {
+                showToast('Boleto cancelado com sucesso', 'success');
+                setTimeout(function() { location.reload(); }, 1200);
+            } else {
+                showErrorModal(data.erro || 'Erro ao cancelar boleto');
+            }
+        })
+        .catch(function(err) { showErrorModal('Erro de conexão: ' + err.message); });
 }
 
 // ============ FUNCOES DE PAGAMENTO ============
@@ -2154,273 +2038,8 @@ var todasParcelas = [
 ];
 
 // ──────────────────────────────────────────────────────────────────────────────
-// REAJUSTE — variáveis de estado
+// REAJUSTE — modal AJAX popup (abrirModalReajuste definida abaixo)
 // ──────────────────────────────────────────────────────────────────────────────
-var _reajustePreview = null;  // último preview carregado do servidor
-
-function abrirModalReajuste() {
-    var elModal    = document.getElementById('modalReajuste');
-    if (!elModal) {
-        console.error('[Reajuste] Modal #modalReajuste não encontrado no DOM.');
-        showErrorModal('Erro interno: recarregue a página e tente novamente.');
-        return;
-    }
-
-    // Reset UI (com null-safe)
-    _reajustePreview = null;
-    var elLoading   = document.getElementById('reajuste_loading');
-    var elSemPend   = document.getElementById('reajuste_sem_pendente');
-    var elErrInd    = document.getElementById('reajuste_erro_indice');
-    var elForm      = document.getElementById('reajuste_form_area');
-    var elBtnApl    = document.getElementById('btnAplicarReajuste');
-    var elDesctPct  = document.getElementById('r_desconto_pct');
-    var elDesctVal  = document.getElementById('r_desconto_val');
-
-    if (elLoading)  elLoading.classList.remove('d-none');
-    if (elSemPend)  elSemPend.classList.add('d-none');
-    if (elErrInd)   elErrInd.classList.add('d-none');
-    if (elForm)     elForm.classList.add('d-none');
-    if (elBtnApl)   elBtnApl.classList.add('d-none');
-    if (elDesctPct) elDesctPct.value = '';
-    if (elDesctVal) elDesctVal.value = '';
-
-    new bootstrap.Modal(elModal).show();
-
-    // Buscar preview do ciclo pendente
-    fetch('/financeiro/contrato/{{ contrato.pk }}/reajuste/preview/')
-        .then(r => r.json())
-        .then(data => {
-            var l = document.getElementById('reajuste_loading');
-            if (l) l.classList.add('d-none');
-
-            if (!data.sucesso && !data.ciclo_pendente) {
-                var sp = document.getElementById('reajuste_sem_pendente');
-                if (sp) sp.classList.remove('d-none');
-                return;
-            }
-
-            if (!data.sucesso && data.erro) {
-                var msg = document.getElementById('reajuste_erro_indice_msg');
-                var err = document.getElementById('reajuste_erro_indice');
-                if (msg) msg.textContent = data.erro;
-                if (err) err.classList.remove('d-none');
-                preencherCabecalhoReajuste(data);
-                var fa = document.getElementById('reajuste_form_area');
-                if (fa) fa.classList.remove('d-none');
-                return;
-            }
-
-            _reajustePreview = data;
-            renderizarPreviewReajuste(data);
-        })
-        .catch(err => {
-            var l2 = document.getElementById('reajuste_loading');
-            var m2 = document.getElementById('reajuste_erro_indice_msg');
-            var e2 = document.getElementById('reajuste_erro_indice');
-            if (l2) l2.classList.add('d-none');
-            if (m2) m2.textContent = 'Erro ao conectar: ' + err;
-            if (e2) e2.classList.remove('d-none');
-        });
-}
-
-function preencherCabecalhoReajuste(data) {
-    document.getElementById('r_ciclo').textContent = data.ciclo_pendente || '—';
-    document.getElementById('r_indice').textContent = data.indice_tipo || '—';
-    document.getElementById('r_periodo').textContent =
-        (data.periodo_referencia_inicio || '') + ' a ' + (data.periodo_referencia_fim || '');
-    document.getElementById('r_parcelas_range').textContent =
-        (data.parcela_inicial || '—') + ' a ' + (data.parcela_final || '—');
-    document.getElementById('r_ciclo_hidden').value = data.ciclo_pendente || '';
-}
-
-function renderizarPreviewReajuste(data) {
-    preencherCabecalhoReajuste(data);
-
-    document.getElementById('r_pct_bruto').value = parseFloat(data.percentual_bruto).toFixed(4);
-    // Mostrar spread se configurado no contrato
-    if (data.spread && data.spread !== 0) {
-        document.getElementById('r_spread_val').textContent = parseFloat(data.spread).toFixed(4);
-        document.getElementById('r_pct_com_spread').textContent = parseFloat(data.percentual_bruto_com_spread).toFixed(4);
-        document.getElementById('r_spread_row').classList.remove('d-none');
-    } else {
-        document.getElementById('r_spread_row').classList.add('d-none');
-    }
-    atualizarPercentualLiquidoUI(data.percentual_final, data.diferenca_total);
-    renderizarTabelaPreview(data.parcelas, data.percentual_final);
-
-    // Alerta de teto/piso
-    var capsMsgs = [];
-    if (data.teto_ativado) capsMsgs.push('Teto de ' + data.teto.toFixed(4) + '% aplicado — índice bruto era ' + parseFloat(data.percentual_bruto).toFixed(4) + '%.');
-    if (data.piso_ativado) capsMsgs.push('Piso de ' + data.piso.toFixed(4) + '% aplicado — índice bruto era ' + parseFloat(data.percentual_bruto).toFixed(4) + '%.');
-    if (capsMsgs.length > 0) {
-        document.getElementById('reajuste_alerta_caps_msg').textContent = capsMsgs.join(' ');
-        document.getElementById('reajuste_alerta_caps').classList.remove('d-none');
-    } else if (data.piso !== null || data.teto !== null) {
-        var info = [];
-        if (data.piso !== null) info.push('Piso: ' + data.piso.toFixed(4) + '%');
-        if (data.teto !== null) info.push('Teto: ' + data.teto.toFixed(4) + '%');
-        document.getElementById('reajuste_alerta_caps_msg').textContent = 'Limites configurados neste contrato — ' + info.join(', ') + '.';
-        document.getElementById('reajuste_alerta_caps').classList.remove('d-none');
-    } else {
-        document.getElementById('reajuste_alerta_caps').classList.add('d-none');
-    }
-
-    // Alerta de deflação
-    atualizarAlertaDeflacao(data.percentual_final);
-
-    // Alerta de boletos emitidos
-    if (data.boletos_emitidos && data.boletos_emitidos.length > 0) {
-        document.getElementById('reajuste_alerta_boletos_msg').textContent =
-            'As parcelas ' + data.boletos_emitidos.join(', ') + ' já possuem boleto emitido. ';
-        document.getElementById('reajuste_alerta_boletos').classList.remove('d-none');
-    } else {
-        document.getElementById('reajuste_alerta_boletos').classList.add('d-none');
-    }
-
-    document.getElementById('reajuste_form_area').classList.remove('d-none');
-    document.getElementById('btnAplicarReajuste').classList.remove('d-none');
-}
-
-function atualizarAlertaDeflacao(pctFinal) {
-    if (pctFinal < 0) {
-        document.getElementById('r_pct_deflacao').textContent = parseFloat(pctFinal).toFixed(4);
-        document.getElementById('reajuste_alerta_deflacao').classList.remove('d-none');
-    } else {
-        document.getElementById('reajuste_alerta_deflacao').classList.add('d-none');
-    }
-}
-
-function renderizarTabelaPreview(parcelas, pctLiquido) {
-    var tbody = document.getElementById('reajuste_preview_tbody');
-    if (!parcelas || parcelas.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted">Nenhuma parcela pendente no intervalo.</td></tr>';
-        return;
-    }
-    var html = '';
-    parcelas.forEach(function(p) {
-        var boletoIcon = p.tem_boleto
-            ? '<span class="badge bg-warning" title="Boleto emitido — precisará ser regenerado"><i class="fas fa-barcode"></i></span>'
-            : '<span class="badge bg-secondary"><i class="fas fa-minus"></i></span>';
-        html += '<tr>';
-        html += '<td class="text-center">' + p.numero_parcela + '</td>';
-        html += '<td>' + p.data_vencimento + '</td>';
-        html += '<td class="text-end">R$ ' + p.valor_atual.toLocaleString('pt-BR', {minimumFractionDigits:2}) + '</td>';
-        html += '<td class="text-end">' + parseFloat(pctLiquido).toFixed(4) + '%</td>';
-        html += '<td class="text-end text-success fw-bold">R$ ' + p.valor_novo.toLocaleString('pt-BR', {minimumFractionDigits:2}) + '</td>';
-        html += '<td class="text-end text-primary">+ R$ ' + p.diferenca.toLocaleString('pt-BR', {minimumFractionDigits:2}) + '</td>';
-        html += '<td class="text-center">' + boletoIcon + '</td>';
-        html += '</tr>';
-    });
-    tbody.innerHTML = html;
-}
-
-function atualizarPercentualLiquidoUI(pctLiquido, diferencaTotal) {
-    document.getElementById('r_pct_liquido').textContent = parseFloat(pctLiquido).toFixed(4);
-    document.getElementById('r_diferenca_total').textContent =
-        'R$ ' + parseFloat(diferencaTotal).toLocaleString('pt-BR', {minimumFractionDigits:2});
-}
-
-function aplicarDesconto() {
-    if (!_reajustePreview) return;
-
-    var descPct = parseFloat(document.getElementById('r_desconto_pct').value) || 0;
-    var descVal = parseFloat(document.getElementById('r_desconto_val').value) || 0;
-    var pctBruto = parseFloat(_reajustePreview.percentual_bruto);
-    var pctLiquido = pctBruto - descPct;
-
-    // Aplicar teto/piso localmente
-    var piso = _reajustePreview.piso;
-    var teto = _reajustePreview.teto;
-    var pctFinal = pctLiquido;
-    if (piso !== null) pctFinal = Math.max(piso, pctFinal);
-    if (teto !== null) pctFinal = Math.min(teto, pctFinal);
-
-    var fator = 1 + pctFinal / 100;
-
-    // Recalcular por parcela localmente (sem nova chamada ao servidor)
-    var diferencaTotal = 0;
-    var parcelasAtualizadas = _reajustePreview.parcelas.map(function(p) {
-        var novoValor = p.valor_atual * fator;
-        if (descVal) novoValor = Math.max(p.valor_atual, novoValor - descVal);
-        novoValor = Math.round(novoValor * 100) / 100;
-        diferencaTotal += novoValor - p.valor_atual;
-        return Object.assign({}, p, {valor_novo: novoValor, diferenca: novoValor - p.valor_atual});
-    });
-
-    atualizarAlertaDeflacao(pctFinal);
-    atualizarPercentualLiquidoUI(pctFinal, diferencaTotal);
-    renderizarTabelaPreview(parcelasAtualizadas, pctFinal);
-}
-
-
-document.getElementById('formReajuste').addEventListener('submit', function(e) {
-    e.preventDefault();
-
-    var ciclo = document.getElementById('r_ciclo_hidden').value;
-    if (!ciclo) {
-        showErrorModal('Nenhum ciclo de reajuste pendente identificado.');
-        return;
-    }
-
-    var descPct = document.getElementById('r_desconto_pct').value;
-    var descVal = document.getElementById('r_desconto_val').value;
-    var pctFinal = parseFloat(document.getElementById('r_pct_liquido').textContent) || 0;
-
-    // Confirmação dupla para deflação
-    if (pctFinal < 0) {
-        if (!confirm(
-            '⚠️ DEFLAÇÃO: O percentual final é ' + pctFinal.toFixed(4) + '%.\n\n' +
-            'Isso irá REDUZIR o valor das parcelas.\n\n' +
-            'Tem certeza que deseja aplicar um reajuste negativo?'
-        )) { return; }
-        if (!confirm(
-            'Confirmação final: Aplicar deflação de ' + pctFinal.toFixed(4) + '% ' +
-            'nas parcelas ' + (document.getElementById('r_parcelas_range').textContent) + '?\n\n' +
-            'Esta ação NÃO pode ser desfeita automaticamente para parcelas já pagas.'
-        )) { return; }
-    } else if (!confirm(
-        'Confirma a aplicação do reajuste de ' + pctFinal.toFixed(4) + '% ' +
-        '(ciclo ' + ciclo + ', parcelas ' +
-        (document.getElementById('r_parcelas_range').textContent) + ')?\n\n' +
-        'Esta ação alterará os valores das parcelas não pagas.'
-    )) { return; }
-
-    var btn = document.getElementById('btnAplicarReajuste');
-    btn.disabled = true;
-    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Aplicando...';
-
-    var payload = {
-        ciclo: parseInt(ciclo),
-        observacoes: document.querySelector('#formReajuste textarea[name="observacoes"]').value,
-    };
-    if (descPct) payload.desconto_percentual = parseFloat(descPct);
-    if (descVal) payload.desconto_valor = parseFloat(descVal);
-
-    fetch('/financeiro/contrato/{{ contrato.pk }}/reajuste/aplicar/', {
-        method: 'POST',
-        headers: {
-            'X-CSRFToken': '{{ csrf_token }}',
-            'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(payload)
-    })
-    .then(r => r.json())
-    .then(data => {
-        if (data.sucesso) {
-            showToast(data.mensagem, 'success', 5000);
-            setTimeout(() => location.reload(), 1200);
-        } else {
-            showErrorModal('Erro ao aplicar reajuste: ' + data.erro);
-            btn.disabled = false;
-            btn.innerHTML = '<i class="fas fa-check"></i> Aplicar Reajuste';
-        }
-    })
-    .catch(err => {
-        showErrorModal('Erro de conexão: ' + err);
-        btn.disabled = false;
-        btn.innerHTML = '<i class="fas fa-check"></i> Aplicar Reajuste';
-    });
-});
 
 function excluirReajuste(reajusteId, ciclo, percentual) {
     var msg = 'Desfazer reajuste do ciclo ' + ciclo + ' (' + percentual + '%)?\n\n' +
@@ -2450,7 +2069,7 @@ function excluirReajuste(reajusteId, ciclo, percentual) {
 
 // ============ Q-04: TABELA DE JUROS ESCALANTES ============
 var urlTabelaJuros = "{% url 'contratos:api_tabela_juros' contrato.pk %}";
-var urlTabelaJurosDeleteBase = "{% url 'contratos:api_tabela_juros_delete' 9999999 %}".replace('/9999999/', '/');
+var urlTabelaJurosDeleteBase = "{% url 'contratos:api_tabela_juros_delete' 9999999 %}".replace('9999999/excluir/', '');
 
 function salvarFaixaJuros() {
     var cicloInicio = parseInt(document.getElementById('juros_ciclo_inicio').value) || 0;
@@ -2530,5 +2149,141 @@ document.addEventListener('DOMContentLoaded', function() {
         tabelaBoletos.classList.add('d-none');
     }
 });
+
+// ── Gerar Boleto Intermediária (botões na tabela de preview) ─────────────────
+document.querySelectorAll('.btn-gerar-boleto-inter').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+        var interId = this.dataset.interId;
+        if (!confirm('Gerar boleto para esta intermediária?')) return;
+        var self = this;
+        self.disabled = true;
+        self.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+        fetch('/contratos/intermediarias/' + interId + '/gerar-boleto/', {
+            method: 'POST',
+            headers: { 'X-CSRFToken': '{{ csrf_token }}', 'Content-Type': 'application/x-www-form-urlencoded' }
+        })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            if (data.sucesso) {
+                showToast('Boleto gerado com sucesso!', 'success');
+                setTimeout(function() { location.reload(); }, 1000);
+            } else {
+                showErrorModal(data.erro || 'Erro ao gerar boleto');
+                self.disabled = false;
+                self.innerHTML = '<i class="fas fa-barcode"></i>';
+            }
+        })
+        .catch(function() {
+            showErrorModal('Erro de comunicação com o servidor.');
+            self.disabled = false;
+            self.innerHTML = '<i class="fas fa-barcode"></i>';
+        });
+    });
+});
+
+// ── Modal de Reajuste ───────────────────────────────────────────────────────
+function abrirModalReajuste(contratoId) {
+    var modal = document.getElementById('modalReajuste');
+    var body  = document.getElementById('modalReajusteBody');
+    var inst  = M.Modal.getInstance(modal) || M.Modal.init(modal, {dismissible: true});
+
+    body.innerHTML = '<div class="text-center py-4"><div class="preloader-wrapper small active"><div class="spinner-layer spinner-blue-only"><div class="circle-clipper left"><div class="circle"></div></div><div class="gap-patch"><div class="circle"></div></div><div class="circle-clipper right"><div class="circle"></div></div></div></div></div>';
+    inst.open();
+
+    fetch('/financeiro/contrato/' + contratoId + '/reajuste/?modal=1', {
+        headers: {'X-Requested-With': 'XMLHttpRequest'}
+    })
+    .then(function(r) { return r.text(); })
+    .then(function(html) {
+        body.innerHTML = html;
+        _bindReajusteModal(contratoId);
+    })
+    .catch(function() {
+        body.innerHTML = '<div class="alert alert-danger">Erro ao carregar formulário de reajuste.</div>';
+    });
+}
+
+function _bindReajusteModal(contratoId) {
+    // Recalcular com desconto (submete GET e recarrega o conteúdo do modal)
+    var formDesc = document.getElementById('formDescontoModal');
+    if (formDesc) {
+        formDesc.addEventListener('submit', function(e) {
+            e.preventDefault();
+            var params = new URLSearchParams(new FormData(formDesc));
+            var body = document.getElementById('modalReajusteBody');
+            body.innerHTML = '<div class="text-center py-4 text-muted"><i class="fas fa-sync fa-spin fa-2x"></i></div>';
+            fetch('/financeiro/contrato/' + contratoId + '/reajuste/?' + params.toString(), {
+                headers: {'X-Requested-With': 'XMLHttpRequest'}
+            })
+            .then(function(r) { return r.text(); })
+            .then(function(html) {
+                body.innerHTML = html;
+                _bindReajusteModal(contratoId);
+            })
+            .catch(function() {
+                body.innerHTML = '<div class="alert alert-danger">Erro ao recalcular prévia.</div>';
+            });
+        });
+    }
+
+    // Aplicar reajuste (POST AJAX)
+    var formApl = document.getElementById('formAplicarModal');
+    if (formApl) {
+        formApl.addEventListener('submit', function(e) {
+            e.preventDefault();
+            var btn = document.getElementById('btnAplicarModal');
+            if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Aplicando...'; }
+
+            fetch(formApl.action, {
+                method: 'POST',
+                headers: {'X-Requested-With': 'XMLHttpRequest'},
+                body: new FormData(formApl)
+            })
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                if (data.sucesso) {
+                    var inst = M.Modal.getInstance(document.getElementById('modalReajuste'));
+                    if (inst) inst.close();
+                    // Exibir mensagem de sucesso e recarregar a página
+                    if (window.showToast) {
+                        showToast(data.mensagem || 'Reajuste aplicado!', 'success', 3000);
+                    }
+                    setTimeout(function() { location.reload(); }, 1500);
+                } else {
+                    if (window.showErrorModal) {
+                        showErrorModal(data.erro || 'Erro ao aplicar reajuste.');
+                    }
+                    if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-check me-1"></i>Aplicar Reajuste'; }
+                }
+            })
+            .catch(function() {
+                if (window.showErrorModal) showErrorModal('Erro de conexão.');
+                if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-check me-1"></i>Aplicar Reajuste'; }
+            });
+        });
+    }
+}
 </script>
+
+<!-- Modal Reajuste -->
+<div id="modalReajuste" class="modal modal-fixed-footer" style="width:min(96vw,900px); max-height:90vh;">
+    <div class="modal-content" style="padding:1.25rem;">
+        <h5 style="margin-bottom:1rem;">
+            <i class="fas fa-chart-line me-2 text-secondary"></i>
+            Aplicar Reajuste — Contrato {{ contrato.numero_contrato }}
+        </h5>
+        <div id="modalReajusteBody">
+            <div class="text-center py-4 text-muted">Carregando...</div>
+        </div>
+    </div>
+    <div class="modal-footer">
+        <a href="{% url 'financeiro:aplicar_reajuste' contrato_id=contrato.pk %}" target="_blank"
+           class="modal-action waves-effect waves-green btn-flat left" style="margin-left:0;">
+            <i class="fas fa-external-link-alt me-1"></i>Abrir página completa
+        </a>
+        <a href="#!" class="modal-action modal-close waves-effect waves-red btn-flat">
+            <i class="fas fa-times me-1"></i>Fechar
+        </a>
+    </div>
+</div>
 {% endblock %}
