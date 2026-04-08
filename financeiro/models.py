@@ -286,6 +286,9 @@ class Parcela(TimeStampedModel):
             models.Index(fields=['pago']),
             models.Index(fields=['status_boleto']),
             models.Index(fields=['nosso_numero']),
+            # Compound indexes for common dashboard/vencimento queries
+            models.Index(fields=['pago', 'data_vencimento'], name='fin_parcela_pago_venc_idx'),
+            models.Index(fields=['contrato', 'pago', 'data_vencimento'], name='fin_parcela_ctrt_pago_venc_idx'),
         ]
 
     def __str__(self):
