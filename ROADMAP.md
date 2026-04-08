@@ -138,11 +138,11 @@
 | `alerta_vencimentos_semana` | Segunda-feira | Para Contabilidade | ✅ `enviar_notificacoes_sync()` em `core/tasks.py`; disparado via `POST /api/tasks/run-all/` |
 | `alerta_inadimplencia_diario` | Diário | Para Imobiliária | ✅ `enviar_inadimplentes_sync()` em `core/tasks.py`; disparado via `POST /api/tasks/run-all/` |
 
-### P3 — Médio
-| Task | Frequência | Descrição |
-|------|------------|-----------|
-| `relatorio_semanal_incorporadoras` | Segunda-feira | Resumo semanal |
-| `relatorio_mensal_consolidado` | 1º dia útil | Consolidado mensal |
+### P3 — Médio ✅ CONCLUÍDO
+| Task | Frequência | Descrição | Status |
+|------|------------|-----------|--------|
+| `relatorio_semanal_incorporadoras` | Segunda-feira | Resumo semanal | ✅ `relatorio_semanal_incorporadoras_sync()` em `core/tasks.py`; endpoint `POST /api/tasks/relatorio-semanal/`; envia e-mail por imobiliária com recebimentos, inadimplência e a-vencer-7d |
+| `relatorio_mensal_consolidado` | 1º dia útil | Consolidado mensal | ✅ `relatorio_mensal_consolidado_sync()` em `core/tasks.py`; endpoint `POST /api/tasks/relatorio-mensal/`; envia e-mail consolidado para cada contabilidade com totais por imobiliária |
 
 ### P4 — Baixo
 | Task | Frequência | Descrição |
@@ -253,7 +253,7 @@
 |------|-----------|
 | GitHub Actions | ✅ `.github/workflows/ci.yml`: pytest unit em push/PR, cobertura ≥25% (cresce conforme testes), sintaxe Python, flake8 (non-blocking); usa SQLite em memória (sem serviço PostgreSQL) |
 | Cache Redis | Para dashboards |
-| Índices DB | Para queries de vencimento |
+| Índices DB | ✅ Migration `0008_add_vencimento_compound_indexes`: índices compostos `(pago, data_vencimento)` e `(contrato, pago, data_vencimento)` em `Parcela` para queries de dashboard |
 
 ### P4 — Baixo
 | Item | Descrição |
@@ -265,10 +265,10 @@
 
 ## 9. DOCUMENTAÇÃO
 
-### P3 — Médio
-| Item | Descrição |
-|------|-----------|
-| Swagger/OpenAPI | `drf-spectacular` ou `drf-yasg` |
+### P3 — Médio ✅ CONCLUÍDO
+| Item | Descrição | Status |
+|------|-----------|--------|
+| Swagger/OpenAPI | `drf-spectacular` | ✅ `drf-spectacular==0.29.0` + `djangorestframework==3.17.1` em `requirements.txt`; `drf_spectacular` em `INSTALLED_APPS`; `SPECTACULAR_SETTINGS` configurado; endpoints `/api/schema/` (YAML), `/api/docs/` (Swagger UI), `/api/docs/redoc/` (ReDoc) em `gestao_contrato/urls.py` |
 
 ### P4 — Baixo
 | Item | Descrição |
