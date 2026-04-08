@@ -7,22 +7,28 @@ dos principais bancos brasileiros (BB, Bradesco, Itaú, Caixa, Santander, etc.).
 Fluxo:
   1. Usuário exporta extrato OFX do internet banking
   2. Faz upload via /financeiro/cnab/ofx/upload/
-  3. Sistema parses o arquivo e tenta reconciliar transações com parcelas
+  3. Sistema parseia o arquivo e tenta reconciliar transações com parcelas
   4. Parcelas identificadas são marcadas como pagas
   5. Relatório exibido: reconciliadas / não reconciliadas
 
 Estratégia de reconciliação (em ordem de prioridade):
-  P1 — nosso_número mencionado no MEMO
-  P2 — número do contrato mencionado no MEMO
-  P3 — valor exato + data de vencimento no mesmo mês
-  P4 — valor exato (com tolerância de ±R$0,05) + mês/ano
+  P1a — nosso_número extraído via BRCobrança (bank-specific) na parcela
+  P1b — nosso_número da parcela encontrado no MEMO (regex simples)
+  P2  — número do contrato mencionado no MEMO
+  P3  — valor ±R$0,10 + data de vencimento no mesmo mês
+  P4  — valor ±R$0,10 sem restrição de data
 
-Este serviço não usa bibliotecas externas — parse manual do SGML OFX.
+Parse:
+  Primário   — POST /api/ofx/parse no boleto_cnab_api (gem Ruby `ofx`, OFX v1/v2)
+  Fallback   — parse manual SGML Python (sem dependências externas)
 """
+import io
 import re
 import logging
-from datetime import date, datetime
+from datetime import date
 from decimal import Decimal, InvalidOperation
+
+import requests
 
 logger = logging.getLogger(__name__)
 
@@ -42,6 +48,8 @@ class OFXTransaction:
         self.numero_cheque: str = ''
         self.memo: str = ''
         self.banco_pagador: str = ''
+        # Preenchido quando o parse é feito via BRCobrança (extração bank-specific)
+        self.nosso_numero_extraido: str | None = None
 
     def __repr__(self):
         return f"<OFXTransaction {self.fitid} {self.data} {self.valor} '{self.memo[:30]}'>"
@@ -143,6 +151,87 @@ def parse_ofx(content: str | bytes) -> list[OFXTransaction]:
 
 
 # ---------------------------------------------------------------------------
+# Parse via BRCobrança API (primário — usa gem Ruby `ofx`)
+# ---------------------------------------------------------------------------
+
+def _parse_via_brcobranca(content: bytes, brcobranca_url: str) -> list[OFXTransaction] | None:
+    """
+    Parseia arquivo OFX usando POST /api/ofx/parse no boleto_cnab_api.
+
+    Vantagens vs parser Python:
+    - Suporte completo a OFX v1 (SGML) e v2 (XML)
+    - Detecção de encoding robusta (UTF-8 e Latin-1)
+    - `nosso_numero_extraido`: extração bank-specific por banco (Sicoob, Itaú, BB...)
+
+    Retorna lista de OFXTransaction (com nosso_numero_extraido preenchido) ou
+    None em caso de falha (timeout, API indisponível, resposta inválida).
+    """
+    url = f'{brcobranca_url}/api/ofx/parse'
+    try:
+        resp = requests.post(
+            url,
+            files={'file': ('extrato.ofx', io.BytesIO(content), 'application/octet-stream')},
+            data={'somente_creditos': 'false'},
+            timeout=15,
+        )
+    except requests.exceptions.ConnectionError:
+        logger.debug('OFX BRCobrança: serviço indisponível em %s — usando parser Python', brcobranca_url)
+        return None
+    except requests.exceptions.Timeout:
+        logger.warning('OFX BRCobrança: timeout em %s — usando parser Python', brcobranca_url)
+        return None
+    except Exception as e:
+        logger.warning('OFX BRCobrança: erro inesperado (%s) — usando parser Python', e)
+        return None
+
+    if resp.status_code != 200:
+        logger.warning('OFX BRCobrança: status %s — usando parser Python', resp.status_code)
+        return None
+
+    try:
+        dados = resp.json()
+    except Exception:
+        logger.warning('OFX BRCobrança: resposta não é JSON — usando parser Python')
+        return None
+
+    transacoes_raw = dados.get('transacoes') or []
+    transacoes: list[OFXTransaction] = []
+    for item in transacoes_raw:
+        tx = OFXTransaction()
+        tx.fitid = str(item.get('fitid') or '')
+        tx.tipo = str(item.get('tipo') or '').upper()
+        tx.memo = str(item.get('memo') or item.get('name') or '')
+        tx.numero_cheque = str(item.get('checknum') or '')
+        tx.nosso_numero_extraido = item.get('nosso_numero_extraido') or None
+
+        data_str = item.get('data') or ''
+        if data_str:
+            try:
+                parts = data_str.split('-')
+                tx.data = date(int(parts[0]), int(parts[1]), int(parts[2]))
+            except (ValueError, IndexError):
+                pass
+
+        valor_raw = item.get('valor')
+        try:
+            tx.valor = Decimal(str(valor_raw)) if valor_raw is not None else Decimal('0')
+        except InvalidOperation:
+            tx.valor = Decimal('0')
+
+        # Débitos ficam negativos internamente (BRCobrança retorna valor absoluto + tipo)
+        if tx.tipo == 'DEBIT':
+            tx.valor = -abs(tx.valor)
+
+        if tx.valor == Decimal('0') and tx.data is None:
+            continue  # pular transação sem dados essenciais
+
+        transacoes.append(tx)
+
+    logger.info('OFX BRCobrança: %d transações parseadas', len(transacoes))
+    return transacoes
+
+
+# ---------------------------------------------------------------------------
 # Reconciliação OFX → Parcelas
 # ---------------------------------------------------------------------------
 
@@ -167,23 +256,34 @@ class OFXService:
 
     Recebe conteúdo do arquivo OFX e tenta casar cada crédito
     com uma parcela não paga do sistema.
+
+    Parse: tenta primeiro via BRCobrança (gem Ruby `ofx`); se indisponível,
+    usa o parser Python puro como fallback.
     """
 
     # Tolerância em R$ para match de valor
     TOLERANCIA_VALOR = Decimal('0.10')
 
-    def __init__(self, imobiliaria=None, contrato=None):
+    def __init__(self, imobiliaria=None, contrato=None, brcobranca_url=None):
         """
         Args:
             imobiliaria: filtrar parcelas por imobiliária (opcional)
             contrato: filtrar parcelas de um contrato específico (opcional)
+            brcobranca_url: URL da API BRCobrança (padrão: settings.BRCOBRANCA_URL)
         """
+        from django.conf import settings
         self.imobiliaria = imobiliaria
         self.contrato = contrato
+        self.brcobranca_url = brcobranca_url or getattr(
+            settings, 'BRCOBRANCA_URL', 'http://localhost:9292'
+        )
 
     def processar(self, ofx_content: str | bytes) -> dict:
         """
         Parseia OFX e reconcilia transações com parcelas não pagas.
+
+        Tenta parse via BRCobrança primeiro (gem Ruby `ofx`, suporta OFX v1/v2,
+        com extração bank-specific de nosso_número). Fallback para parser Python.
 
         Returns:
             {
@@ -191,12 +291,24 @@ class OFXService:
                 'reconciliadas': int,
                 'nao_reconciliadas': int,
                 'resultados': list[OFXReconciliacao],
-                'parcelas_quitadas': list[Parcela],  # as que foram marcadas como pagas
+                'parcelas_quitadas': list[Parcela],
+                'parser': 'brcobranca' | 'python',
             }
         """
         from financeiro.models import Parcela
 
-        transacoes = parse_ofx(ofx_content)
+        # Garantir bytes para BRCobrança (multipart upload)
+        content_bytes = (
+            ofx_content if isinstance(ofx_content, bytes)
+            else ofx_content.encode('utf-8')
+        )
+
+        # Tentar BRCobrança primeiro
+        transacoes = _parse_via_brcobranca(content_bytes, self.brcobranca_url)
+        parser_usado = 'brcobranca'
+        if transacoes is None:
+            transacoes = parse_ofx(ofx_content)
+            parser_usado = 'python'
         if not transacoes:
             return {
                 'total_transacoes': 0,
@@ -204,6 +316,7 @@ class OFXService:
                 'nao_reconciliadas': 0,
                 'resultados': [],
                 'parcelas_quitadas': [],
+                'parser': parser_usado,
             }
 
         # Carregar parcelas não pagas em memória (para evitar N+1)
@@ -245,6 +358,7 @@ class OFXService:
             'nao_reconciliadas': len(transacoes) - rec_count,
             'resultados': resultados,
             'parcelas_quitadas': parcelas_quitadas,
+            'parser': parser_usado,
         }
 
     def _reconciliar(self, tx: OFXTransaction, parcelas: list,
@@ -255,9 +369,17 @@ class OFXService:
         """
         disponiveis = [p for p in parcelas if p.pk not in usadas]
 
-        # P1 — nosso_número no MEMO
+        # P1a — nosso_número extraído via BRCobrança (bank-specific, mais preciso)
+        if tx.nosso_numero_extraido:
+            for p in disponiveis:
+                if p.nosso_numero and p.nosso_numero == tx.nosso_numero_extraido:
+                    return OFXReconciliacao(
+                        tx, p, 'ALTA',
+                        f'nosso_número {p.nosso_numero} extraído via BRCobrança'
+                    )
+
+        # P1b — nosso_número da parcela encontrado literalmente no MEMO
         if tx.memo:
-            memo_upper = tx.memo.upper()
             for p in disponiveis:
                 if p.nosso_numero and p.nosso_numero in tx.memo:
                     return OFXReconciliacao(tx, p, 'ALTA',
