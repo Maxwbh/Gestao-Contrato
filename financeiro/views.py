@@ -5679,6 +5679,79 @@ def api_reajustes_pendentes_count(request):
         return JsonResponse({'count': 0})
 
 
+@login_required
+@require_GET
+def api_sidebar_pendencias(request):
+    """Retorna todos os contadores de pendências para a sidebar em uma única chamada."""
+    from django.db.models import Q
+    from contratos.models import TipoCorrecao
+    from django.db.models import Prefetch
+    from .services.cnab_service import CNABService
+
+    hoje = timezone.localdate()
+
+    # 1. Parcelas vencidas não pagas
+    try:
+        parcelas_vencidas = Parcela.objects.filter(
+            pago=False, data_vencimento__lt=hoje
+        ).count()
+    except Exception:
+        parcelas_vencidas = 0
+
+    # 2. Boletos não gerados (parcelas em aberto, vencimento nos próximos 30 dias)
+    try:
+        boletos_nao_gerados = Parcela.objects.filter(
+            pago=False,
+            boleto_gerado=False,
+            data_vencimento__lte=hoje + relativedelta(days=30),
+        ).count()
+    except Exception:
+        boletos_nao_gerados = 0
+
+    # 3. Boletos aguardando remessa CNAB
+    try:
+        boletos_sem_remessa = len(CNABService().obter_boletos_sem_remessa())
+    except Exception:
+        boletos_sem_remessa = 0
+
+    # 4. Reajustes pendentes
+    try:
+        contratos_ativos = Contrato.objects.filter(
+            status=StatusContrato.ATIVO
+        ).exclude(tipo_correcao=TipoCorrecao.FIXO).only(
+            'pk', 'data_contrato', 'numero_parcelas', 'prazo_reajuste_meses', 'tipo_correcao'
+        ).prefetch_related(
+            Prefetch(
+                'reajustes',
+                queryset=Reajuste.objects.filter(aplicado=True).only('contrato_id', 'ciclo'),
+                to_attr='_reaj_cache',
+            )
+        )
+        reajustes_pendentes = 0
+        for contrato in contratos_ativos:
+            if not contrato.data_contrato or not contrato.numero_parcelas:
+                continue
+            ciclos_aplicados = {r.ciclo for r in contrato._reaj_cache}
+            prazo = contrato.prazo_reajuste_meses or 12
+            total_ciclos = (contrato.numero_parcelas - 1) // prazo + 1
+            for ciclo in range(2, total_ciclos + 1):
+                data_reajuste = contrato.data_contrato + relativedelta(months=(ciclo - 1) * prazo)
+                if hoje < data_reajuste:
+                    break
+                if ciclo not in ciclos_aplicados:
+                    reajustes_pendentes += 1
+                    break
+    except Exception:
+        reajustes_pendentes = 0
+
+    return JsonResponse({
+        'parcelas_vencidas': parcelas_vencidas,
+        'boletos_nao_gerados': boletos_nao_gerados,
+        'boletos_sem_remessa': boletos_sem_remessa,
+        'reajustes_pendentes': reajustes_pendentes,
+    })
+
+
 # ==========================================================================
 # FASE 9 — APIs P2
 # ==========================================================================
