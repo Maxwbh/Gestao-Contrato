@@ -943,6 +943,76 @@ class ImovelDeleteView(LoginRequiredMixin, DeleteView):
 
 
 # =============================================================================
+# LOTEAMENTO DEDICATED PAGE — M-11 / M-12
+# =============================================================================
+
+@login_required
+def loteamento_detalhe(request, nome):
+    """
+    Página dedicada de um loteamento/empreendimento.
+    M-11: mapa e lista de lotes.
+    M-12: estatísticas (total, disponíveis %, valor médio).
+    """
+    from django.db.models import Avg, Min, Max
+    import urllib.parse
+
+    # Resolve nome (URL pode ter + ou %20 para espaços)
+    nome = urllib.parse.unquote(nome)
+
+    imoveis = (
+        Imovel.objects.filter(ativo=True, loteamento__iexact=nome)
+        .select_related('imobiliaria')
+        .prefetch_related('contratos')
+        .order_by('identificacao')
+    )
+
+    if not imoveis.exists():
+        messages.error(request, f'Loteamento "{nome}" não encontrado.')
+        return redirect('core:listar_imoveis')
+
+    total = imoveis.count()
+    disponiveis = imoveis.filter(disponivel=True).count()
+    vendidos = total - disponiveis
+    pct_disponivel = round(disponiveis / total * 100) if total else 0
+    pct_vendido = 100 - pct_disponivel
+
+    stats_valor = imoveis.filter(valor__isnull=False).aggregate(
+        media=Avg('valor'),
+        minimo=Min('valor'),
+        maximo=Max('valor'),
+    )
+
+    imoveis_mapa = imoveis.filter(
+        latitude__isnull=False,
+        longitude__isnull=False,
+    )
+
+    # Filtro de disponibilidade
+    filtro_disp = request.GET.get('disponivel', '')
+    lista_imoveis = imoveis
+    if filtro_disp == 'true':
+        lista_imoveis = imoveis.filter(disponivel=True)
+    elif filtro_disp == 'false':
+        lista_imoveis = imoveis.filter(disponivel=False)
+
+    context = {
+        'nome_loteamento': nome,
+        'imoveis': lista_imoveis,
+        'imoveis_mapa': imoveis_mapa,
+        'total': total,
+        'disponiveis': disponiveis,
+        'vendidos': vendidos,
+        'pct_disponivel': pct_disponivel,
+        'pct_vendido': pct_vendido,
+        'valor_medio': stats_valor['media'],
+        'valor_minimo': stats_valor['minimo'],
+        'valor_maximo': stats_valor['maximo'],
+        'filtro_disp': filtro_disp,
+    }
+    return render(request, 'core/loteamento_detalhe.html', context)
+
+
+# =============================================================================
 # CRUD VIEWS - IMOBILIARIA
 # =============================================================================
 
@@ -1479,6 +1549,86 @@ def pagina_dados_teste(request):
     }
 
     return render(request, 'core/dados_teste.html', {'stats': stats})
+
+
+# =============================================================================
+# U-06: BUSCA GLOBAL (Ctrl+K)
+# =============================================================================
+
+@login_required
+def api_busca_global(request):
+    """
+    Busca rápida global — retorna resultados agrupados por tipo.
+    GET ?q=<query>  (mín. 2 chars)
+    """
+    q = request.GET.get('q', '').strip()
+    if len(q) < 2:
+        return JsonResponse({'results': [], 'q': q})
+
+    from django.db.models import Q as _Q
+    from contratos.models import Contrato as _Contrato
+    from core.models import Comprador as _Comprador, Imovel as _Imovel
+
+    resultados = []
+
+    # Contratos
+    contratos = _Contrato.objects.filter(
+        _Q(numero_contrato__icontains=q) |
+        _Q(comprador__nome__icontains=q) |
+        _Q(imovel__identificacao__icontains=q) |
+        _Q(imovel__loteamento__icontains=q)
+    ).select_related('comprador', 'imovel', 'imobiliaria').order_by('-data_contrato')[:8]
+
+    for c in contratos:
+        imovel_label = ''
+        if c.imovel:
+            imovel_label = c.imovel.identificacao or c.imovel.loteamento or ''
+        resultados.append({
+            'tipo': 'contrato',
+            'icon': 'description',
+            'titulo': c.numero_contrato,
+            'subtitulo': f"{c.comprador.nome if c.comprador else '—'} · {imovel_label}",
+            'status': c.get_status_display(),
+            'url': f'/contratos/{c.pk}/',
+        })
+
+    # Compradores
+    compradores = _Comprador.objects.filter(
+        _Q(nome__icontains=q) |
+        _Q(cpf__icontains=q) |
+        _Q(cnpj__icontains=q) |
+        _Q(email__icontains=q)
+    ).order_by('nome')[:6]
+
+    for cp in compradores:
+        doc = cp.cpf or cp.cnpj or ''
+        resultados.append({
+            'tipo': 'comprador',
+            'icon': 'person',
+            'titulo': cp.nome,
+            'subtitulo': doc,
+            'status': cp.get_tipo_pessoa_display() if hasattr(cp, 'get_tipo_pessoa_display') else '',
+            'url': f'/compradores/{cp.pk}/editar/',
+        })
+
+    # Imóveis
+    imoveis = _Imovel.objects.filter(
+        _Q(identificacao__icontains=q) |
+        _Q(loteamento__icontains=q) |
+        _Q(cidade__icontains=q)
+    ).order_by('identificacao')[:6]
+
+    for im in imoveis:
+        resultados.append({
+            'tipo': 'imovel',
+            'icon': 'home',
+            'titulo': im.identificacao or im.loteamento or f'Imóvel #{im.pk}',
+            'subtitulo': f"{im.cidade or ''}{'/' + im.estado if im.estado else ''}" if (im.cidade or im.estado) else '',
+            'status': 'Disponível' if im.disponivel else 'Vendido',
+            'url': f'/imoveis/{im.pk}/editar/',
+        })
+
+    return JsonResponse({'results': resultados, 'q': q, 'total': len(resultados)})
 
 
 # =============================================================================
