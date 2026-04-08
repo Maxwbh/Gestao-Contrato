@@ -177,71 +177,199 @@ def processar_reajustes_sync():
     return result
 
 
+def _notificacao_ja_enviada_hoje(parcela, motivo_prefixo):
+    """
+    Verifica se já existe Notificacao registrada para esta parcela hoje
+    com o dado motivo (verificado pelo prefixo do assunto).
+    Evita duplicatas quando a task roda múltiplas vezes no mesmo dia.
+    """
+    from notificacoes.models import Notificacao, StatusNotificacao
+    from datetime import date
+    return Notificacao.objects.filter(
+        parcela=parcela,
+        assunto__startswith=motivo_prefixo,
+        status__in=[StatusNotificacao.PENDENTE, StatusNotificacao.ENVIADA],
+        data_agendamento__date=date.today(),
+    ).exists()
+
+
+def _registrar_notificacao(parcela, tipo, destinatario, assunto, mensagem):
+    """Cria registro Notificacao e retorna o objeto criado."""
+    from notificacoes.models import Notificacao, TipoNotificacao, StatusNotificacao
+    return Notificacao.objects.create(
+        parcela=parcela,
+        tipo=tipo,
+        destinatario=destinatario,
+        assunto=assunto,
+        mensagem=mensagem,
+        status=StatusNotificacao.PENDENTE,
+    )
+
+
 def enviar_notificacoes_sync():
     """
-    Envia notificações de vencimento de forma síncrona.
-    Alternativa à task Celery para o Free tier.
+    N-01: Envia notificações de vencimento D-5 de forma síncrona.
+    Registra em Notificacao para deduplicação (não envia 2x no mesmo dia).
     """
     from financeiro.models import Parcela
+    from notificacoes.models import TipoNotificacao, StatusNotificacao
     from notificacoes.services import ServicoEmail
     from datetime import date, timedelta
 
-    result = TaskResult('enviar_notificacoes')
+    result = TaskResult('enviar_notificacoes_vencimento')
+    PREFIXO = '[VENCIMENTO]'
 
     try:
         dias_antecedencia = getattr(settings, 'NOTIFICACAO_DIAS_ANTECEDENCIA', 5)
-        data_limite = date.today() + timedelta(days=dias_antecedencia)
+        hoje = date.today()
+        data_limite = hoje + timedelta(days=dias_antecedencia)
 
-        # Buscar parcelas próximas do vencimento (não pagas)
         parcelas = Parcela.objects.filter(
             pago=False,
+            tipo_parcela='NORMAL',
+            data_vencimento__gte=hoje,
             data_vencimento__lte=data_limite,
-            data_vencimento__gte=date.today()
-        ).select_related(
-            'contrato',
-            'contrato__comprador',
-            'contrato__imobiliaria'
-        )
+        ).select_related('contrato', 'contrato__comprador', 'contrato__imobiliaria')
 
-        result.add_message(f"Encontradas {parcelas.count()} parcelas próximas do vencimento")
+        result.add_message(f"Encontradas {parcelas.count()} parcelas próximas do vencimento (D-{dias_antecedencia})")
 
         for parcela in parcelas:
             try:
                 comprador = parcela.contrato.comprador
 
-                # Verificar preferências de notificação
-                if comprador.notificar_email and comprador.email:
-                    # Criar mensagem
-                    assunto = f"Lembrete: Parcela {parcela.numero_parcela} vence em {parcela.data_vencimento.strftime('%d/%m/%Y')}"
-                    mensagem = f"""
-Olá {comprador.nome},
+                if not (getattr(comprador, 'notificar_email', True) and comprador.email):
+                    continue
 
-Lembramos que a parcela {parcela.numero_parcela} do seu contrato {parcela.contrato.numero_contrato}
-vence em {parcela.data_vencimento.strftime('%d/%m/%Y')}.
+                if _notificacao_ja_enviada_hoje(parcela, PREFIXO):
+                    continue
 
-Valor: R$ {parcela.valor_atual:,.2f}
+                dias_para_vencer = (parcela.data_vencimento - hoje).days
+                assunto = f"{PREFIXO} Parcela {parcela.numero_parcela} vence em {dias_para_vencer} dia(s) — {parcela.data_vencimento.strftime('%d/%m/%Y')}"
+                imob_nome = getattr(parcela.contrato.imobiliaria, 'nome', 'Gestão de Contratos')
+                mensagem = (
+                    f"Olá {comprador.nome},\n\n"
+                    f"Lembramos que a parcela {parcela.numero_parcela}/{parcela.contrato.numero_parcelas} "
+                    f"do contrato {parcela.contrato.numero_contrato} vence em "
+                    f"{parcela.data_vencimento.strftime('%d/%m/%Y')}.\n\n"
+                    f"Valor: R$ {parcela.valor_atual:,.2f}\n\n"
+                    f"Por favor, efetue o pagamento até a data de vencimento.\n\n"
+                    f"Atenciosamente,\n{imob_nome}"
+                )
 
-Atenciosamente,
-{parcela.contrato.imobiliaria.nome}
-                    """.strip()
-
-                    # Enviar email
+                notif = _registrar_notificacao(
+                    parcela, TipoNotificacao.EMAIL, comprador.email, assunto, mensagem
+                )
+                try:
                     ServicoEmail.enviar(
                         destinatario=comprador.email,
                         assunto=assunto,
-                        mensagem=mensagem
+                        mensagem=mensagem,
                     )
+                    notif.marcar_como_enviada()
                     result.items_processed += 1
-                    result.add_message(f"Notificação enviada para {comprador.email}")
+                    result.add_message(f"Vencimento enviado → {comprador.email} (parcela {parcela.id})")
+                except Exception as e_send:
+                    notif.marcar_erro(str(e_send))
+                    result.add_error(f"Erro ao enviar vencimento parcela {parcela.id}: {e_send}")
 
             except Exception as e:
-                logger.exception("Erro ao notificar parcela %s: %s", parcela.id, e)
-                result.add_error(f"Erro ao notificar parcela {parcela.id}: {str(e)}")
+                logger.exception("Erro ao processar parcela %s: %s", parcela.id, e)
+                result.add_error(f"Erro parcela {parcela.id}: {str(e)}")
 
         result.finish()
 
     except Exception as e:
-        logger.exception("Erro geral em notificar_vencimentos: %s", e)
+        logger.exception("Erro geral em enviar_notificacoes_sync: %s", e)
+        result.add_error(f"Erro geral: {str(e)}")
+        result.finish(success=False)
+
+    return result
+
+
+def enviar_inadimplentes_sync():
+    """
+    N-02: Envia notificações de inadimplência para parcelas vencidas há >= D+3.
+    Registra em Notificacao para deduplicação (não envia 2x no mesmo dia).
+    """
+    from financeiro.models import Parcela
+    from notificacoes.models import TipoNotificacao, StatusNotificacao
+    from notificacoes.services import ServicoEmail
+    from datetime import date, timedelta
+
+    result = TaskResult('enviar_inadimplentes')
+    PREFIXO = '[INADIMPLENCIA]'
+    dias_carencia = getattr(settings, 'NOTIFICACAO_DIAS_INADIMPLENCIA', 3)
+
+    try:
+        hoje = date.today()
+        data_corte = hoje - timedelta(days=dias_carencia)
+
+        # Parcelas vencidas há >= dias_carencia, não pagas
+        parcelas = Parcela.objects.filter(
+            pago=False,
+            tipo_parcela='NORMAL',
+            data_vencimento__lte=data_corte,
+        ).select_related('contrato', 'contrato__comprador', 'contrato__imobiliaria')
+
+        result.add_message(
+            f"Encontradas {parcelas.count()} parcelas em atraso (>= D+{dias_carencia})"
+        )
+
+        for parcela in parcelas:
+            try:
+                comprador = parcela.contrato.comprador
+
+                if not (getattr(comprador, 'notificar_email', True) and comprador.email):
+                    continue
+
+                if _notificacao_ja_enviada_hoje(parcela, PREFIXO):
+                    continue
+
+                dias_atraso = (hoje - parcela.data_vencimento).days
+                assunto = (
+                    f"{PREFIXO} Parcela {parcela.numero_parcela} em atraso há {dias_atraso} dia(s) "
+                    f"— {parcela.data_vencimento.strftime('%d/%m/%Y')}"
+                )
+                imob_nome = getattr(parcela.contrato.imobiliaria, 'nome', 'Gestão de Contratos')
+                mensagem = (
+                    f"Olá {comprador.nome},\n\n"
+                    f"Verificamos que a parcela {parcela.numero_parcela}/{parcela.contrato.numero_parcelas} "
+                    f"do contrato {parcela.contrato.numero_contrato} encontra-se em atraso.\n\n"
+                    f"Vencimento: {parcela.data_vencimento.strftime('%d/%m/%Y')} "
+                    f"({dias_atraso} dia(s) em atraso)\n"
+                    f"Valor original: R$ {parcela.valor_atual:,.2f}\n\n"
+                    f"Por favor, regularize sua situação o quanto antes para evitar "
+                    f"acréscimo de juros e multa.\n\n"
+                    f"Em caso de dúvidas, entre em contato conosco.\n\n"
+                    f"Atenciosamente,\n{imob_nome}"
+                )
+
+                notif = _registrar_notificacao(
+                    parcela, TipoNotificacao.EMAIL, comprador.email, assunto, mensagem
+                )
+                try:
+                    ServicoEmail.enviar(
+                        destinatario=comprador.email,
+                        assunto=assunto,
+                        mensagem=mensagem,
+                    )
+                    notif.marcar_como_enviada()
+                    result.items_processed += 1
+                    result.add_message(
+                        f"Inadimplência enviada → {comprador.email} (parcela {parcela.id}, {dias_atraso}d)"
+                    )
+                except Exception as e_send:
+                    notif.marcar_erro(str(e_send))
+                    result.add_error(f"Erro ao enviar inadimplência parcela {parcela.id}: {e_send}")
+
+            except Exception as e:
+                logger.exception("Erro ao processar parcela inadimplente %s: %s", parcela.id, e)
+                result.add_error(f"Erro parcela {parcela.id}: {str(e)}")
+
+        result.finish()
+
+    except Exception as e:
+        logger.exception("Erro geral em enviar_inadimplentes_sync: %s", e)
         result.add_error(f"Erro geral: {str(e)}")
         result.finish(success=False)
 
@@ -296,8 +424,17 @@ def task_processar_reajustes(request):
 @require_http_methods(["POST"])
 @task_auth_required
 def task_enviar_notificacoes(request):
-    """Endpoint para enviar notificações."""
+    """Endpoint para enviar notificações de vencimento (N-01: D-5)."""
     result = enviar_notificacoes_sync()
+    status_code = 200 if result.success else 500
+    return JsonResponse(result.to_dict(), status=status_code)
+
+
+@require_http_methods(["POST"])
+@task_auth_required
+def task_enviar_inadimplentes(request):
+    """Endpoint para enviar notificações de inadimplência (N-02: D+3)."""
+    result = enviar_inadimplentes_sync()
     status_code = 200 if result.success else 500
     return JsonResponse(result.to_dict(), status=status_code)
 
@@ -326,8 +463,11 @@ def task_run_all(request):
     # 2. Processar reajustes
     results.append(processar_reajustes_sync().to_dict())
 
-    # 3. Enviar notificações
+    # 3. Enviar notificações de vencimento (N-01)
     results.append(enviar_notificacoes_sync().to_dict())
+
+    # 4. Enviar notificações de inadimplência (N-02)
+    results.append(enviar_inadimplentes_sync().to_dict())
 
     all_success = all(r['success'] for r in results)
 
