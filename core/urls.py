@@ -20,6 +20,7 @@ urlpatterns = [
     path('api/tasks/status/', tasks.task_status, name='task_status'),
     path('api/tasks/processar-reajustes/', tasks.task_processar_reajustes, name='task_reajustes'),
     path('api/tasks/enviar-notificacoes/', tasks.task_enviar_notificacoes, name='task_notificacoes'),
+    path('api/tasks/enviar-inadimplentes/', tasks.task_enviar_inadimplentes, name='task_inadimplentes'),
     path('api/tasks/atualizar-parcelas/', tasks.task_atualizar_parcelas, name='task_parcelas'),
     path('api/tasks/run-all/', tasks.task_run_all, name='task_run_all'),
 

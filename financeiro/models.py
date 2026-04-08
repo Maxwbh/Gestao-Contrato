@@ -1673,6 +1673,11 @@ class HistoricoPagamento(TimeStampedModel):
         blank=True,
         verbose_name='Observações'
     )
+    antecipado = models.BooleanField(
+        default=False,
+        verbose_name='Antecipado',
+        help_text='Pagamento de antecipação de parcelas com desconto'
+    )
 
     class Meta:
         verbose_name = 'Histórico de Pagamento'
