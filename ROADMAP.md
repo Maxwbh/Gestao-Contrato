@@ -85,9 +85,9 @@
 | 3.18 | Aba Relatórios do Contrato | ✅ Seção colapsável "Relatórios & Exportações" em `contrato_detail.html`: KPIs financeiros (valor total, pago, saldo, progresso); botões CSV (parcelas a pagar, pagas, posição); botão Imprimir; usa `exportar_relatorio` existente filtrado por contrato |
 | 3.19 | Aba Histórico de Pagamentos (comprovantes) | ✅ Card "Histórico de Pagamentos" em `contrato_detail.html` — tabela com data, valor, juros, multa, forma de pagamento, link para comprovante; `ContratoDetailView.get_context_data` passa `historico_pagamentos` via queryset |
 | 3.20 | Configurações Contabilidade (dados, usuários, imobiliárias) |
-| 3.21 | Exportar relatório consolidado (PDF, Excel) |
+| 3.21 | Exportar relatório consolidado (PDF, Excel) | ✅ View `exportar_relatorio_consolidado` gera Excel multi-aba (A Pagar 90d / Pagas 90d / Posição Contratos) ou PDF multi-seção; botão "Consolidado" na tela de prestações a pagar; URL `/financeiro/relatorios/exportar-consolidado/` |
 | 3.22 | Tela de reajuste pendente (índice, prévia, aplicar lote) | ✅ `reajustes_pendentes` view + template: lista agrupada por imobiliária, paginada; seleção em lote com checkbox; botão "Aplicar Selecionados" abre modal com preview; bulk apply via `aplicar_reajuste_lote` |
-| 3.23 | Histórico de reajustes aplicados |
+| 3.23 | Histórico de reajustes aplicados | ✅ View `listar_reajustes` lista todos os reajustes globalmente; card "Reajustes" em `contrato_detail.html` exibe histórico por contrato com ciclo, índice, período, % bruto/aplicado, parcelas e usuário |
 | 3.24 | Upload de comprovante de pagamento | ✅ `registrar_pagamento` aceita `multipart/form-data`; cria `HistoricoPagamento` com `forma_pagamento` e `comprovante` (FileField já existia no model); template atualizado com campos forma_pagamento e comprovante |
 | 3.25 | Notificar comprador inadimplente | ✅ View `notificar_inadimplente` (POST) envia e-mail + WhatsApp para comprador de parcela vencida; botão "Notificar Comprador" em `detalhe_parcela.html` (visível apenas para parcelas vencidas não pagas); registra `Notificacao` com status ENVIADO; URL `parcelas/<pk>/notificar/` |
 | 3.26 | Configurações de boleto por imobiliária | ✅ Já implementado: campos `percentual_multa_padrao`, `percentual_juros_padrao`, `instrucao_padrao`, etc. no model `Imobiliaria`; `ImobiliariaForm` inclui todos os campos; `Contrato.get_config_boleto()` usa configuração da imobiliária quando `usar_config_boleto_imobiliaria=True` |
@@ -245,8 +245,8 @@
 ### P2 — Alto
 | Item | Descrição |
 |------|-----------|
-| Bootstrap local | Servir Bootstrap 5 localmente (não CDN) |
-| Logging | Configurar logging de erros além do Sentry |
+| Bootstrap local | ✅ Materialize, FontAwesome, AG Grid e Flatpickr servidos localmente via `static/vendor/`; templates base.html, portal_base.html, login, registro, setup atualizados; único CDN restante é Google Fonts (Material Icons) |
+| Logging | ✅ Loggers por app (financeiro, contratos, core, notificacoes); django.request/security com AdminEmailHandler em produção; formato verbose com PID e thread |
 
 ### P3 — Médio
 | Item | Descrição |
