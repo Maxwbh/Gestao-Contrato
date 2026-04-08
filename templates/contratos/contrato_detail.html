@@ -2450,6 +2450,67 @@ function _bindReajusteModal(contratoId) {
         });
     }
 }
+
+function _bindReajusteModal(contratoId) {
+    // Recalcular com desconto (submete GET e recarrega o conteúdo do modal)
+    var formDesc = document.getElementById('formDescontoModal');
+    if (formDesc) {
+        formDesc.addEventListener('submit', function(e) {
+            e.preventDefault();
+            var params = new URLSearchParams(new FormData(formDesc));
+            var body = document.getElementById('modalReajusteBody');
+            body.innerHTML = '<div class="text-center py-4 text-muted"><i class="fas fa-sync fa-spin fa-2x"></i></div>';
+            fetch('/financeiro/contrato/' + contratoId + '/reajuste/?' + params.toString(), {
+                headers: {'X-Requested-With': 'XMLHttpRequest'}
+            })
+            .then(function(r) { return r.text(); })
+            .then(function(html) {
+                body.innerHTML = html;
+                _bindReajusteModal(contratoId);
+            })
+            .catch(function() {
+                body.innerHTML = '<div class="alert alert-danger">Erro ao recalcular prévia.</div>';
+            });
+        });
+    }
+
+    // Aplicar reajuste (POST AJAX)
+    var formApl = document.getElementById('formAplicarModal');
+    if (formApl) {
+        formApl.addEventListener('submit', function(e) {
+            e.preventDefault();
+            var btn = document.getElementById('btnAplicarModal');
+            if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Aplicando...'; }
+
+            fetch(formApl.action, {
+                method: 'POST',
+                headers: {'X-Requested-With': 'XMLHttpRequest'},
+                body: new FormData(formApl)
+            })
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                if (data.sucesso) {
+                    var inst = M.Modal.getInstance(document.getElementById('modalReajuste'));
+                    if (inst) inst.close();
+                    // Exibir mensagem de sucesso e recarregar a página
+                    if (window.showToast) {
+                        showToast(data.mensagem || 'Reajuste aplicado!', 'success', 3000);
+                    }
+                    setTimeout(function() { location.reload(); }, 1500);
+                } else {
+                    if (window.showErrorModal) {
+                        showErrorModal(data.erro || 'Erro ao aplicar reajuste.');
+                    }
+                    if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-check me-1"></i>Aplicar Reajuste'; }
+                }
+            })
+            .catch(function() {
+                if (window.showErrorModal) showErrorModal('Erro de conexão.');
+                if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-check me-1"></i>Aplicar Reajuste'; }
+            });
+        });
+    }
+}
 </script>
 
 <!-- Modal Reajuste -->

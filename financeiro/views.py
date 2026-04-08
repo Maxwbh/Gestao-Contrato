@@ -2795,6 +2795,158 @@ def aplicar_reajuste_pagina(request, contrato_id):
 @require_POST
 def aplicar_reajuste_contrato(request, contrato_id):
     """
+    Página dedicada para aplicar reajuste em um contrato.
+
+    GET  → calcula o preview server-side e exibe o formulário.
+           Query params opcionais: desconto_percentual, desconto_valor, modal=1
+    POST → aplica o reajuste e redireciona para o detalhe do contrato.
+           Se modal=1 ou X-Requested-With=XMLHttpRequest → retorna JSON.
+    """
+    contrato = get_object_or_404(Contrato, pk=contrato_id)
+    is_modal = (
+        request.GET.get('modal') == '1'
+        or request.POST.get('modal') == '1'
+        or request.headers.get('X-Requested-With') == 'XMLHttpRequest'
+    )
+
+    # V-08: Contratos FIXO não têm reajuste periódico
+    if contrato.tipo_correcao == 'FIXO':
+        return JsonResponse({
+            'sucesso': False,
+            'erro': 'Contratos com índice FIXO são pré-fixados e não possuem reajuste periódico.'
+        }, status=400)
+
+    # Capturar IP do usuário
+    def get_client_ip(req):
+        x_forwarded = req.META.get('HTTP_X_FORWARDED_FOR')
+        if x_forwarded:
+            return x_forwarded.split(',')[0].strip()
+        return req.META.get('REMOTE_ADDR')
+
+    try:
+        import json
+        data = json.loads(request.body) if request.content_type == 'application/json' else request.POST
+
+    if request.method == 'POST':
+        ciclo_param = request.POST.get('ciclo')
+        desconto_percentual = request.POST.get('desconto_percentual') or None
+        desconto_valor = request.POST.get('desconto_valor') or None
+        observacoes = request.POST.get('observacoes', '')
+
+        try:
+            if not ciclo_param:
+                if is_modal:
+                    return JsonResponse({'sucesso': False, 'erro': 'Ciclo de reajuste não informado.'}, status=400)
+                messages.error(request, 'Ciclo de reajuste não informado.')
+                return redirect('financeiro:aplicar_reajuste', contrato_id=contrato_id)
+
+            ciclo = int(ciclo_param)
+            preview = Reajuste.preview_reajuste(
+                contrato, ciclo,
+                desconto_percentual=desconto_percentual,
+                desconto_valor=desconto_valor,
+            )
+
+            if 'erro' in preview:
+                if is_modal:
+                    return JsonResponse({'sucesso': False, 'erro': preview['erro']}, status=400)
+                messages.error(request, preview['erro'])
+                return redirect('financeiro:aplicar_reajuste', contrato_id=contrato_id)
+
+            if not contrato.parcelas.filter(
+                numero_parcela__gte=preview['parcela_inicial'],
+                numero_parcela__lte=preview['parcela_final'],
+                pago=False,
+            ).exists():
+                if is_modal:
+                    return JsonResponse({'sucesso': False, 'erro': 'Nenhuma parcela pendente no intervalo selecionado.'}, status=400)
+                messages.error(request, 'Nenhuma parcela pendente no intervalo selecionado.')
+                return redirect('financeiro:aplicar_reajuste', contrato_id=contrato_id)
+
+            reajuste = Reajuste.objects.create(
+                contrato=contrato,
+                data_reajuste=timezone.now().date(),
+                indice_tipo=preview['indice_tipo'],
+                percentual=preview['percentual_final'],
+                percentual_bruto=preview['percentual_bruto'],
+                spread_aplicado=preview['spread'] if preview.get('spread') else None,
+                desconto_percentual=Decimal(str(desconto_percentual)) if desconto_percentual else None,
+                desconto_valor=Decimal(str(desconto_valor)) if desconto_valor else None,
+                piso_aplicado=preview.get('piso'),
+                teto_aplicado=preview.get('teto'),
+                parcela_inicial=preview['parcela_inicial'],
+                parcela_final=preview['parcela_final'],
+                ciclo=ciclo,
+                periodo_referencia_inicio=preview['periodo_referencia_inicio'],
+                periodo_referencia_fim=preview['periodo_referencia_fim'],
+                aplicado_manual=True,
+                usuario=request.user,
+                ip_address=get_client_ip(request),
+                observacoes=observacoes,
+            )
+
+            resultado = reajuste.aplicar_reajuste()
+            msg = (
+                f'Reajuste do ciclo {ciclo} ({preview["percentual_final"]:,.4f}%) '
+                f'aplicado em {resultado["parcelas_reajustadas"]} parcela(s).'
+            )
+            if is_modal:
+                return JsonResponse({'sucesso': True, 'mensagem': msg})
+            messages.success(request, msg)
+            return redirect('contratos:detalhe', pk=contrato_id)
+
+        except Exception as e:
+            logger.exception(f'Erro ao aplicar reajuste: {e}')
+            if is_modal:
+                return JsonResponse({'sucesso': False, 'erro': str(e)}, status=400)
+            messages.error(request, f'Erro ao aplicar reajuste: {e}')
+            return redirect('financeiro:aplicar_reajuste', contrato_id=contrato_id)
+
+    # ── GET ──────────────────────────────────────────────────────────────────
+    ciclo = Reajuste.calcular_ciclo_pendente(contrato)
+
+    if not ciclo:
+        context = {
+            'contrato': contrato,
+            'sem_pendente': True,
+            'proximo_reajuste': contrato.data_proximo_reajuste,
+        }
+        tpl = 'financeiro/aplicar_reajuste_partial.html' if is_modal else 'financeiro/aplicar_reajuste.html'
+        return render(request, tpl, context)
+
+    desconto_percentual = request.GET.get('desconto_percentual') or None
+    desconto_valor = request.GET.get('desconto_valor') or None
+
+    preview = Reajuste.preview_reajuste(
+        contrato, ciclo,
+        desconto_percentual=desconto_percentual,
+        desconto_valor=desconto_valor,
+    )
+
+    # Calcular histórico de reajustes já aplicados
+    reajustes_anteriores = Reajuste.objects.filter(
+        contrato=contrato, aplicado=True
+    ).order_by('ciclo')
+
+    context = {
+        'contrato': contrato,
+        'ciclo': ciclo,
+        'preview': preview,
+        'desconto_percentual': desconto_percentual or '',
+        'desconto_valor': desconto_valor or '',
+        'reajustes_anteriores': reajustes_anteriores,
+        'sem_pendente': False,
+        'tem_erro': 'erro' in preview,
+        'is_modal': is_modal,
+    }
+    tpl = 'financeiro/aplicar_reajuste_partial.html' if is_modal else 'financeiro/aplicar_reajuste.html'
+    return render(request, tpl, context)
+
+
+@login_required
+@require_POST
+def aplicar_reajuste_contrato(request, contrato_id):
+    """
     Aplica o reajuste nas parcelas de um contrato.
 
     Modo automático (recomendado): passa apenas ciclo + desconto opcionais.
@@ -4979,6 +5131,134 @@ def api_boletos_revalidar(request):
         '748': ['posto', 'byte_idt'],
         '756': [],
     }
+
+    NOMES_BANCO = {
+        '001': 'Banco do Brasil',
+        '033': 'Santander',
+        '104': 'Caixa Econômica',
+        '237': 'Bradesco',
+        '341': 'Itaú',
+        '748': 'Sicredi',
+        '756': 'Sicoob',
+    }
+
+    try:
+        data = json.loads(request.body) if request.body else {}
+    except json.JSONDecodeError:
+        return JsonResponse({'sucesso': False, 'erro': 'JSON inválido.'}, status=400)
+
+    parcela_ids = data.get('parcela_ids', [])
+
+    qs = Parcela.objects.filter(
+        status_boleto=StatusBoleto.GERADO
+    ).select_related(
+        'conta_bancaria',
+        'contrato',
+        'contrato__comprador',
+        'contrato__imovel',
+        'contrato__imovel__imobiliaria',
+    )
+
+    if parcela_ids:
+        qs = qs.filter(pk__in=parcela_ids)
+
+    resultados = []
+    validos = invalidos = 0
+
+    for parcela in qs:
+        erros_parcela = []
+
+        # 1. Nosso número
+        if not parcela.nosso_numero:
+            erros_parcela.append('Sem nosso_numero')
+
+        # 2. Conta bancária
+        conta = parcela.conta_bancaria
+        if not conta:
+            erros_parcela.append('Sem conta bancária associada')
+        else:
+            banco = conta.banco
+            nome_banco = NOMES_BANCO.get(banco, f'Banco {banco}')
+
+            # Campos obrigatórios por banco
+            campos_obrig = CAMPOS_OBRIG_BANCO.get(banco, [])
+            for campo in campos_obrig:
+                valor = getattr(conta, campo, '') or ''
+                if not valor.strip():
+                    erros_parcela.append(f'{nome_banco}: campo "{campo}" obrigatório ausente na conta bancária')
+
+            # Agência e conta corrente básicos
+            if not (conta.agencia or '').strip():
+                erros_parcela.append('Agência bancária ausente')
+            if not (conta.conta or '').strip():
+                erros_parcela.append('Conta corrente ausente')
+
+            # CNPJ da imobiliária
+            imobiliaria = getattr(conta, 'imobiliaria', None)
+            if imobiliaria and not (imobiliaria.cnpj or '').strip():
+                erros_parcela.append('CNPJ da imobiliária ausente')
+
+        # 3. Dados do comprador
+        comprador = parcela.contrato.comprador if parcela.contrato_id else None
+        if comprador:
+            doc = (comprador.cpf or '') or (getattr(comprador, 'cnpj', '') or '')
+            if not doc.strip():
+                erros_parcela.append('Comprador sem CPF/CNPJ')
+        else:
+            erros_parcela.append('Sem comprador no contrato')
+
+        if erros_parcela:
+            invalidos += 1
+            resultados.append({
+                'parcela_id': parcela.id,
+                'valido': False,
+                'erros': erros_parcela,
+                'contrato': parcela.contrato.numero_contrato if parcela.contrato_id else '-',
+                'nosso_numero': parcela.nosso_numero or '-',
+            })
+        else:
+            validos += 1
+            resultados.append({
+                'parcela_id': parcela.id,
+                'valido': True,
+                'erros': [],
+                'contrato': parcela.contrato.numero_contrato if parcela.contrato_id else '-',
+                'nosso_numero': parcela.nosso_numero,
+            })
+
+    total = validos + invalidos
+    return JsonResponse({
+        'sucesso': True,
+        'total': total,
+        'validos': validos,
+        'invalidos': invalidos,
+        'resultados': resultados,
+    })
+
+
+# =============================================================================
+# APIs REST - CNAB REMESSA
+# =============================================================================
+
+@login_required
+def api_cnab_remessa_listar(request):
+    """API para listar remessas CNAB. GET /api/cnab/remessas/"""
+    from .models import ArquivoRemessa
+
+    qs = ArquivoRemessa.objects.select_related('conta_bancaria', 'conta_bancaria__imobiliaria').order_by('-data_geracao')
+
+    if request.GET.get('conta_bancaria_id'):
+        qs = qs.filter(conta_bancaria_id=request.GET['conta_bancaria_id'])
+    if request.GET.get('status'):
+        qs = qs.filter(status=request.GET['status'])
+
+    try:
+        page = max(1, int(request.GET.get('page', 1)))
+        per_page = min(max(1, int(request.GET.get('per_page', 20))), 100)
+    except (ValueError, TypeError):
+        page, per_page = 1, 20
+    total = qs.count()
+    arquivos = qs[(page-1)*per_page:page*per_page]
 
     NOMES_BANCO = {
         '001': 'Banco do Brasil',
