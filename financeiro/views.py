@@ -1992,15 +1992,18 @@ def pagar_parcela_ajax(request, pk):
         }, status=400)
 
     try:
-        data_pagamento = request.POST.get('data_pagamento')
+        from datetime import date as _date
+        data_pagamento_str = request.POST.get('data_pagamento', '').strip()
+        try:
+            data_pagamento = _date.fromisoformat(data_pagamento_str) if data_pagamento_str else timezone.localdate()
+        except ValueError:
+            data_pagamento = timezone.localdate()
         valor_pago = Decimal(request.POST.get('valor_pago', 0))
         valor_juros = Decimal(request.POST.get('valor_juros', 0))
         valor_multa = Decimal(request.POST.get('valor_multa', 0))
         valor_desconto = Decimal(request.POST.get('valor_desconto', 0))
+        forma_pagamento = request.POST.get('forma_pagamento', 'DINHEIRO')
         observacoes = request.POST.get('observacoes', '')
-
-        if not data_pagamento:
-            data_pagamento = timezone.now().date()
 
         # Atualizar parcela
         parcela.valor_juros = valor_juros
@@ -2030,7 +2033,7 @@ def pagar_parcela_ajax(request, pk):
             valor_juros=valor_juros,
             valor_multa=valor_multa,
             valor_desconto=valor_desconto,
-            forma_pagamento='DINHEIRO',
+            forma_pagamento=forma_pagamento,
             observacoes=observacoes
         )
 
