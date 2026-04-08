@@ -1176,3 +1176,77 @@ def usuario_tem_acesso_contabilidade(user, contabilidade):
         contabilidade=contabilidade,
         ativo=True
     ).exists()
+
+
+# =============================================================================
+# HELPERS DE PAPEL / ROLE — Section 6 P3
+# =============================================================================
+
+def usuario_pode_editar(user, imobiliaria):
+    """
+    Verifica se o usuário pode criar/editar registros na imobiliária.
+    Superuser/staff sempre podem. Demais precisam de AcessoUsuario com pode_editar=True.
+    """
+    if not user.is_authenticated:
+        return False
+    if usuario_tem_permissao_total(user):
+        return True
+    return AcessoUsuario.objects.filter(
+        usuario=user,
+        imobiliaria=imobiliaria,
+        ativo=True,
+        pode_editar=True,
+    ).exists()
+
+
+def usuario_pode_excluir(user, imobiliaria):
+    """
+    Verifica se o usuário pode excluir registros na imobiliária.
+    Superuser/staff sempre podem. Demais precisam de AcessoUsuario com pode_excluir=True.
+    """
+    if not user.is_authenticated:
+        return False
+    if usuario_tem_permissao_total(user):
+        return True
+    return AcessoUsuario.objects.filter(
+        usuario=user,
+        imobiliaria=imobiliaria,
+        ativo=True,
+        pode_excluir=True,
+    ).exists()
+
+
+def usuario_eh_apenas_leitura(user, imobiliaria):
+    """
+    Verifica se o usuário é somente-leitura para a imobiliária
+    (tem acesso mas pode_editar=False e pode_excluir=False).
+    Perfil: Operador de Relatórios / Visualizador.
+    """
+    if not user.is_authenticated:
+        return False
+    if usuario_tem_permissao_total(user):
+        return False  # admin sempre tem permissão total
+    return AcessoUsuario.objects.filter(
+        usuario=user,
+        imobiliaria=imobiliaria,
+        ativo=True,
+        pode_editar=False,
+        pode_excluir=False,
+    ).exists()
+
+
+def get_acesso_usuario(user, imobiliaria):
+    """
+    Retorna o registro AcessoUsuario para (user, imobiliaria) ou None.
+    Útil para verificar permissões granulares.
+    """
+    if not user.is_authenticated:
+        return None
+    try:
+        return AcessoUsuario.objects.get(
+            usuario=user,
+            imobiliaria=imobiliaria,
+            ativo=True,
+        )
+    except AcessoUsuario.DoesNotExist:
+        return None
