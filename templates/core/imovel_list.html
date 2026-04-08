@@ -141,7 +141,7 @@
                                                     {% if imovel.loteamento %}
                                                         <i class="fas fa-map text-success"></i>
                                                         <strong>Loteamento:</strong>
-                                                        {{ imovel.loteamento }}<br>
+                                                        <a href="{% url 'core:loteamento_detalhe' imovel.loteamento %}" class="text-decoration-none">{{ imovel.loteamento }}</a><br>
                                                     {% endif %}
 
                                                     {% if imovel.area %}
@@ -234,6 +234,9 @@
                                 <option value="{{ lot|escapejs }}">{{ lot }}</option>
                                 {% endfor %}
                             </select>
+                            <a id="btnVerLoteamento" href="#" class="btn btn-sm btn-outline-primary d-none" target="_blank">
+                                <i class="fas fa-external-link-alt me-1"></i>Ver Loteamento
+                            </a>
 
                             <!-- Filtro por status -->
                             <select id="filtroStatus" class="form-select form-select-sm" style="max-width:160px;"
@@ -466,6 +469,14 @@ function filtrarPorLoteamento(v) {
     const n = adicionarMarcadores(imoveisData);
     if (n > 0 && clusterGroup.getLayers().length > 0) {
         map.fitBounds(clusterGroup.getBounds(), { padding: [30, 30] });
+    }
+    // Botão "Ver Loteamento"
+    const btn = document.getElementById('btnVerLoteamento');
+    if (v) {
+        btn.href = '/imoveis/loteamento/' + encodeURIComponent(v) + '/';
+        btn.classList.remove('d-none');
+    } else {
+        btn.classList.add('d-none');
     }
 }
 function filtrarPorStatus(v) {
