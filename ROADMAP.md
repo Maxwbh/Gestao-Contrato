@@ -888,7 +888,7 @@ para ciclo = 2..total_ciclos+1:
 
 ---
 
-## 17. DASHBOARD KPIs E GRÁFICOS ✅ PARCIALMENTE CONCLUÍDO
+## 17. DASHBOARD KPIs E GRÁFICOS ✅ CONCLUÍDO
 
 > **Contexto:** todos os concorrentes têm dashboard com KPIs visuais. O sistema atual tem um
 > dashboard básico. Esta seção especifica o redesign completo.
@@ -898,19 +898,19 @@ para ciclo = 2..total_ciclos+1:
 | # | Métrica | Cálculo | Status |
 |---|---------|---------|--------|
 | K-01 | Total de lotes / Vendidos / Disponíveis | count() por Imovel.disponivel | ✅ `context['total_lotes']`, `lotes_vendidos`, `lotes_disponiveis` |
-| K-02 | Arrecadação do mês atual | sum(valor_pago) de Parcelas pagas no mês | ⏳ |
-| K-03 | Inadimplência ativa | count(Parcelas vencidas não pagas) | ⏳ |
-| K-04 | Contratos ativos | count(Contrato status=ATIVO) | ⏳ |
-| K-05 | Saldo total da carteira | sum(valor_atual) de Parcelas não pagas | ⏳ |
+| K-02 | Arrecadação do mês atual | sum(valor_pago) de Parcelas pagas no mês | ✅ `parcelas_mes_atual.valor_recebido` em `dashboard.html` |
+| K-03 | Inadimplência ativa | count(Parcelas vencidas não pagas) | ✅ `parcelas_vencidas` + `valor_em_atraso` em `dashboard.html` |
+| K-04 | Contratos ativos | count(Contrato status=ATIVO) | ✅ `context['contratos_ativos']` em `DashboardFinanceiroView` |
+| K-05 | Saldo total da carteira | sum(valor_atual) de Parcelas não pagas | ✅ `valor_a_receber` em `dashboard.html` |
 | K-06 | Reajustes pendentes | count(contratos com ciclo pendente) | ✅ `context['reajustes_pendentes']` via `Reajuste.calcular_ciclo_pendente()` |
 
 ### 17.2 Gráficos
 
 | # | Gráfico | Biblioteca | Prioridade | Status |
 |---|---------|-----------|-----------|--------|
-| G-01 | Arrecadação mensal (barras) — 12 meses | Chart.js | P2 | ⏳ |
+| G-01 | Arrecadação mensal (barras) — 12 meses | Chart.js | P2 | ✅ `chartRecebimentos` — barras Recebido vs Esperado 12 meses |
 | G-02 | Inadimplência por faixa de atraso (pizza) — 1–30d, 31–60d, 61–90d, 90d+ | Chart.js | P2 | ✅ `inadimplencia_faixas` em `api_dashboard_dados()` |
-| G-03 | Fluxo de caixa previsto vs. realizado (linha) | Chart.js | P2 | ⏳ |
+| G-03 | Fluxo de caixa previsto vs. realizado (linha) | Chart.js | P2 | ✅ `chartFluxoCaixa` — linha 6 meses passados + 6 futuros em `api_dashboard_dados()` |
 | G-04 | Parcelas vencendo esta semana (tabela destacada) | Template | P1 | ✅ `context['parcelas_semana']` (D-04) |
 | G-05 | Top 5 contratos com maior saldo devedor | Template | P3 | ✅ `context['top5_saldo_devedor']` com anotação Sum |
 
@@ -918,24 +918,24 @@ para ciclo = 2..total_ciclos+1:
 
 | # | Item | Arquivo | Prioridade | Status |
 |---|------|---------|-----------|--------|
-| D-01 | `DashboardFinanceiroView` — enriquecer com KPIs reais | `financeiro/views.py` | P2 | ✅ K-01, K-06, D-04, G-05 |
-| D-02 | API `api_kpis_dashboard` — endpoint JSON para gráficos | `financeiro/views.py` | P2 | ✅ G-02 em `api_dashboard_dados()` |
-| D-03 | Template redesign com Chart.js | `templates/financeiro/dashboard.html` | P2 | ⏳ |
+| D-01 | `DashboardFinanceiroView` — enriquecer com KPIs reais | `financeiro/views.py` | P2 | ✅ K-01..K-06, D-04, G-05 |
+| D-02 | API `api_kpis_dashboard` — endpoint JSON para gráficos | `financeiro/views.py` | P2 | ✅ G-01, G-02, G-03 em `api_dashboard_dados()` |
+| D-03 | Template redesign com Chart.js | `templates/financeiro/dashboard.html` | P2 | ✅ Cards KPI + Chart.js + tabelas D-04 + G-05 |
 | D-04 | Widget "Parcelas da semana" no dashboard principal | template | P1 | ✅ `parcelas_semana` context var |
 
 ---
 
-## 18. SIMULADOR DE RENEGOCIAÇÃO / ANTECIPAÇÃO — TODO
+## 18. SIMULADOR DE RENEGOCIAÇÃO / ANTECIPAÇÃO ✅ PARCIALMENTE CONCLUÍDO
 
 > **Referência:** LoteWin, SGL e SIVI oferecem simulação de antecipação de parcelas com desconto.
 
-| # | Item | Descrição | Prioridade |
-|---|------|-----------|-----------|
-| R-01 | Tela simulador: quantas parcelas antecipar + % desconto | GET view, sem persistir | P2 |
-| R-02 | Preview: valor original vs. valor antecipado (economia total) | render server-side | P2 |
-| R-03 | Aplicar antecipação: cria HistoricoPagamento com flag `antecipado=True` | POST view | P2 |
-| R-04 | Renegociação: alterar prazo/valor de parcelas em atraso | P3 |
-| R-05 | Recibo de quitação antecipada (PDF) | P3 |
+| # | Item | Descrição | Prioridade | Status |
+|---|------|-----------|-----------|--------|
+| R-01 | Tela simulador: quantas parcelas antecipar + % desconto | GET view, sem persistir | P2 | ✅ `simulador_antecipacao` GET — `/financeiro/contrato/<id>/simulador/` |
+| R-02 | Preview: valor original vs. valor antecipado (economia total) | render server-side | P2 | ✅ POST `action=preview` — tabela com economia sem persistir |
+| R-03 | Aplicar antecipação: cria HistoricoPagamento com flag `antecipado=True` | POST view | P2 | ✅ POST `action=aplicar` — quita + `HistoricoPagamento(antecipado=True)` + migration 0007 |
+| R-04 | Renegociação: alterar prazo/valor de parcelas em atraso | — | P3 | ⏳ |
+| R-05 | Recibo de quitação antecipada (PDF) | — | P3 | ⏳ |
 
 ---
 
@@ -982,8 +982,8 @@ para ciclo = 2..total_ciclos+1:
 | SAC / Tabela Price | 1 | 4 | — | — | 5 | ✅ 5/5 |
 | Bloqueio Boleto (Cascata) | 2 | 3 | — | — | 5 | ✅ 5/5 |
 | Mapa Interativo (Seção 16) | — | 5 | 6 | 1 | 12 | ✅ 10/10 M-01..M-10 |
-| Dashboard KPIs (Seção 17) | 1 | 5 | 2 | — | 8 | ✅ 5/8 (K-01, K-06, G-02, D-04/G-04, G-05) |
-| Simulador Antecipação (Seção 18) | — | 3 | 2 | — | 5 | ⏳ 0/5 |
+| Dashboard KPIs (Seção 17) | 1 | 5 | 2 | — | 8 | ✅ 8/8 (K-01..K-06, G-01..G-05, D-01..D-04) |
+| Simulador Antecipação (Seção 18) | — | 3 | 2 | — | 5 | ✅ 3/3 P2 (R-01..R-03) · ⏳ 2 P3 |
 | Notificações (Seção 19) | — | 2 | 2 | 1 | 5 | ⏳ 0/5 |
 | UX / Interface (Seção 20) | — | 3 | 4 | — | 7 | ⏳ 0/7 |
 | Frontend | — | 17 | 15 | 3 | 35 | ⚠️ ~4/17 P2 |
@@ -992,7 +992,7 @@ para ciclo = 2..total_ciclos+1:
 | Permissões | — | 4 | 4 | 2 | 10 | — |
 | HU Boleto/Carnê/Remessa (Seção 21) | — | 10 | — | — | 10 | ✅ 10/10 |
 | OFX Extrato Bancário (Seção 22) | — | 5 | — | — | 5 | ✅ 5/5 |
-| Testes | 104 | ~164 | ~37 | ~41 | ~346 | ✅ 104/104 P1 · ✅ 444 passando (48 novos HU+OFX) |
+| Testes | 104 | ~164 | ~37 | ~41 | ~346 | ✅ 104/104 P1 · ✅ 496 passando (12 novos Simulador) |
 | CI/CD | — | 2 | 4 | 2 | 8 | — |
 | Documentação | — | — | 1 | 3 | 4 | — |
 | **Total** | **~117** | **~251** | **~107** | **~61** | **~536** | |
