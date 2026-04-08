@@ -125,15 +125,15 @@ document.addEventListener('DOMContentLoaded', function() {
         document.getElementById('smtpGrid'),
         {
             columnDefs: [
-                { headerName: 'Nome', field: 'nome', filter: 'agTextColumnFilter', floatingFilter: true, minWidth: 160,
+                { headerName: 'Nome', field: 'nome', filter: 'agTextColumnFilter', minWidth: 160,
                   cellRenderer: p => `<strong>${p.value}</strong>` },
-                { headerName: 'Servidor SMTP', field: 'host', filter: 'agTextColumnFilter', floatingFilter: true, minWidth: 180,
+                { headerName: 'Servidor SMTP', field: 'host', filter: 'agTextColumnFilter', minWidth: 180,
                   cellRenderer: p => `<code>${p.value}</code>` },
-                { headerName: 'Porta', field: 'porta', filter: 'agNumberColumnFilter', floatingFilter: true, minWidth: 80, type: 'numericColumn' },
-                { headerName: 'E-mail Remetente', field: 'email_remetente', filter: 'agTextColumnFilter', floatingFilter: true, minWidth: 200 },
+                { headerName: 'Porta', field: 'porta', filter: 'agNumberColumnFilter', minWidth: 80, type: 'numericColumn' },
+                { headerName: 'E-mail Remetente', field: 'email_remetente', filter: 'agTextColumnFilter', minWidth: 200 },
                 { headerName: 'Segurança', field: 'usar_tls', filter: false, minWidth: 100,
                   cellRenderer: segurancaRenderer },
-                { headerName: 'Status', field: 'ativo', filter: 'agTextColumnFilter', floatingFilter: true, minWidth: 90,
+                { headerName: 'Status', field: 'ativo', filter: 'agTextColumnFilter', minWidth: 90,
                   cellRenderer: ativoRenderer },
                 { headerName: 'Ações', field: 'pk', sortable: false, filter: false, minWidth: 130,
                   cellRenderer: acoesSmtpRenderer },
@@ -141,7 +141,7 @@ document.addEventListener('DOMContentLoaded', function() {
             rowData: smtpRowData,
             domLayout: 'autoHeight',
             defaultColDef: { sortable: true, resizable: true },
-            rowHeight: 44, headerHeight: 48, floatingFiltersHeight: 36,
+            rowHeight: 44, headerHeight: 48,
             suppressCellFocus: true, enableCellTextSelection: true,
         }
     );

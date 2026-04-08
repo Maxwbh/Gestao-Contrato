@@ -241,7 +241,7 @@ const parcelasMesColumnDefs = [
         headerName: 'Vencimento',
         field: 'vencimento',
         filter: 'agTextColumnFilter',
-        floatingFilter: true,
+       
         minWidth: 110,
         cellRenderer: vencimentoRenderer,
         sort: 'asc',
@@ -250,7 +250,7 @@ const parcelasMesColumnDefs = [
         headerName: 'Parcela',
         field: 'numero_parcela',
         filter: 'agNumberColumnFilter',
-        floatingFilter: true,
+       
         minWidth: 90,
         cellRenderer: params => `${params.value}/${params.data.total_parcelas}`,
     },
@@ -258,14 +258,14 @@ const parcelasMesColumnDefs = [
         headerName: 'Imobiliária',
         field: 'imobiliaria',
         filter: 'agTextColumnFilter',
-        floatingFilter: true,
+       
         minWidth: 140,
     },
     {
         headerName: 'Comprador',
         field: 'comprador',
         filter: 'agTextColumnFilter',
-        floatingFilter: true,
+       
         minWidth: 160,
         cellRenderer: params => `<a href="/core/compradores/${params.data.comprador_pk}/editar/">${params.value}</a>`,
     },
@@ -273,7 +273,7 @@ const parcelasMesColumnDefs = [
         headerName: 'Valor',
         field: 'valor_atual',
         filter: 'agNumberColumnFilter',
-        floatingFilter: true,
+       
         minWidth: 120,
         type: 'numericColumn',
         cellRenderer: params => '<strong>R$ ' + parseFloat(params.value).toLocaleString('pt-BR', {minimumFractionDigits: 2}) + '</strong>',
@@ -282,7 +282,7 @@ const parcelasMesColumnDefs = [
         headerName: 'Status',
         field: 'pago',
         filter: 'agTextColumnFilter',
-        floatingFilter: true,
+       
         minWidth: 100,
         cellRenderer: statusMesRenderer,
     },
@@ -306,7 +306,7 @@ document.addEventListener('DOMContentLoaded', function() {
             defaultColDef: { sortable: true, resizable: true },
             rowHeight: 42,
             headerHeight: 48,
-            floatingFiltersHeight: 36,
+           
             suppressCellFocus: true,
             enableCellTextSelection: true,
             getRowStyle: params => {

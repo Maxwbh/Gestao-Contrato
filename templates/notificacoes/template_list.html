@@ -160,15 +160,15 @@ document.addEventListener('DOMContentLoaded', function() {
         document.getElementById('tplGrid'),
         {
             columnDefs: [
-                { headerName: 'Nome', field: 'nome', filter: 'agTextColumnFilter', floatingFilter: true, minWidth: 180,
+                { headerName: 'Nome', field: 'nome', filter: 'agTextColumnFilter', minWidth: 180,
                   cellRenderer: p => `<strong>${p.value}</strong>` },
-                { headerName: 'Tipo', field: 'codigo_display', filter: 'agTextColumnFilter', floatingFilter: true, minWidth: 160,
+                { headerName: 'Tipo', field: 'codigo_display', filter: 'agTextColumnFilter', minWidth: 160,
                   cellRenderer: p => `<span class="badge bg-secondary">${p.value}</span>` },
                 { headerName: 'Canais', field: 'tem_email', sortable: false, filter: false, minWidth: 210,
                   cellRenderer: canaisRenderer },
-                { headerName: 'Imobiliária', field: 'imobiliaria', filter: 'agTextColumnFilter', floatingFilter: true, minWidth: 150,
+                { headerName: 'Imobiliária', field: 'imobiliaria', filter: 'agTextColumnFilter', minWidth: 150,
                   cellRenderer: imobiliariaRenderer },
-                { headerName: 'Assunto (Email)', field: 'assunto', filter: 'agTextColumnFilter', floatingFilter: true, minWidth: 200,
+                { headerName: 'Assunto (Email)', field: 'assunto', filter: 'agTextColumnFilter', minWidth: 200,
                   cellRenderer: p => `<small class="text-muted">${p.value || '—'}</small>` },
                 { headerName: 'Status', field: 'ativo', filter: false, minWidth: 90,
                   cellRenderer: ativoTplRenderer },
@@ -178,7 +178,7 @@ document.addEventListener('DOMContentLoaded', function() {
             rowData: tplRowData,
             domLayout: 'autoHeight',
             defaultColDef: { sortable: true, resizable: true },
-            rowHeight: 44, headerHeight: 48, floatingFiltersHeight: 36,
+            rowHeight: 44, headerHeight: 48,
             suppressCellFocus: true, enableCellTextSelection: true,
         }
     );
