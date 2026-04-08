@@ -21,6 +21,9 @@ from django.db.models import Sum, Count, Q
 from decimal import Decimal
 from datetime import timedelta
 import re
+import logging
+
+logger = logging.getLogger(__name__)
 
 from core.models import Comprador
 from contratos.models import Contrato
@@ -379,18 +382,18 @@ def meus_boletos(request):
     # Lista de contratos para o filtro
     contratos = Contrato.objects.filter(comprador=comprador)
 
-    # Estatísticas
+    # Estatísticas — single aggregate instead of 4 separate count() queries
+    _stats_qs = Parcela.objects.filter(contrato__comprador=comprador).aggregate(
+        total=Count('id'),
+        a_pagar=Count('id', filter=Q(pago=False, data_vencimento__gte=hoje)),
+        vencidos=Count('id', filter=Q(pago=False, data_vencimento__lt=hoje)),
+        pagos=Count('id', filter=Q(pago=True)),
+    )
     stats = {
-        'total': Parcela.objects.filter(contrato__comprador=comprador).count(),
-        'a_pagar': Parcela.objects.filter(
-            contrato__comprador=comprador, pago=False, data_vencimento__gte=hoje
-        ).count(),
-        'vencidos': Parcela.objects.filter(
-            contrato__comprador=comprador, pago=False, data_vencimento__lt=hoje
-        ).count(),
-        'pagos': Parcela.objects.filter(
-            contrato__comprador=comprador, pago=True
-        ).count(),
+        'total':  _stats_qs['total'] or 0,
+        'a_pagar': _stats_qs['a_pagar'] or 0,
+        'vencidos': _stats_qs['vencidos'] or 0,
+        'pagos':  _stats_qs['pagos'] or 0,
     }
 
     context = {
@@ -427,12 +430,17 @@ def download_boleto(request, parcela_id):
         registrar_log_acesso(request, request.user.acesso_comprador, f'download_boleto_{parcela_id}')
 
     # Retornar arquivo
-    response = FileResponse(
-        parcela.boleto_pdf.open('rb'),
-        content_type='application/pdf'
-    )
-    response['Content-Disposition'] = f'attachment; filename="boleto_{parcela.contrato.numero_contrato}_{parcela.numero_parcela}.pdf"'
-    return response
+    try:
+        response = FileResponse(
+            parcela.boleto_pdf.open('rb'),
+            content_type='application/pdf'
+        )
+        response['Content-Disposition'] = f'attachment; filename="boleto_{parcela.contrato.numero_contrato}_{parcela.numero_parcela}.pdf"'
+        return response
+    except Exception as e:
+        logger.exception("Erro ao abrir PDF do boleto parcela pk=%s: %s", parcela_id, e)
+        messages.error(request, 'Erro ao acessar o arquivo do boleto.')
+        return redirect('portal_comprador:meus_boletos')
 
 
 @login_required(login_url='portal_comprador:login')
@@ -455,12 +463,16 @@ def visualizar_boleto(request, parcela_id):
     if hasattr(request.user, 'acesso_comprador'):
         registrar_log_acesso(request, request.user.acesso_comprador, f'visualizar_boleto_{parcela_id}')
 
-    response = FileResponse(
-        parcela.boleto_pdf.open('rb'),
-        content_type='application/pdf'
-    )
-    response['Content-Disposition'] = 'inline'
-    return response
+    try:
+        response = FileResponse(
+            parcela.boleto_pdf.open('rb'),
+            content_type='application/pdf'
+        )
+        response['Content-Disposition'] = 'inline'
+        return response
+    except Exception as e:
+        logger.exception("Erro ao abrir PDF do boleto para visualização parcela pk=%s: %s", parcela_id, e)
+        return HttpResponse('Erro ao acessar o arquivo do boleto.', status=500)
 
 
 # =============================================================================
@@ -664,8 +676,11 @@ def api_portal_vencimentos(request):
     qs = qs.order_by('data_vencimento', 'numero_parcela')
 
     # Paginação
-    page = max(1, int(request.GET.get('page', 1)))
-    per_page = min(max(1, int(request.GET.get('per_page', 50))), 100)
+    try:
+        page = max(1, int(request.GET.get('page', 1)))
+        per_page = min(max(1, int(request.GET.get('per_page', 50))), 100)
+    except (ValueError, TypeError):
+        page, per_page = 1, 50
     total = qs.count()
     offset = (page - 1) * per_page
     parcelas_page = qs[offset:offset + per_page]
@@ -743,8 +758,11 @@ def api_portal_boletos(request):
     qs = qs.order_by('-data_vencimento', 'numero_parcela')
 
     # Paginação
-    page = max(1, int(request.GET.get('page', 1)))
-    per_page = min(max(1, int(request.GET.get('per_page', 50))), 100)
+    try:
+        page = max(1, int(request.GET.get('page', 1)))
+        per_page = min(max(1, int(request.GET.get('per_page', 50))), 100)
+    except (ValueError, TypeError):
+        page, per_page = 1, 50
     total = qs.count()
     offset = (page - 1) * per_page
     boletos_page = qs[offset:offset + per_page]

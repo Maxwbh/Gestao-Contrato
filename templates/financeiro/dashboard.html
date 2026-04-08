@@ -74,48 +74,79 @@
         </div>
     </div>
 
-    <!-- Cards de Resumo Principal -->
-    <div class="row mb-4">
-        <div class="col-md-3">
-            <div class="card card-stats primary">
+    <!-- Cards de Resumo Principal — linha 1 -->
+    <div class="row mb-3">
+        <div class="col-md-2">
+            <div class="card card-stats primary h-100">
                 <div class="card-body">
-                    <div class="stat-value text-primary">{{ total_contratos }}</div>
-                    <div class="stat-label">Total de Contratos</div>
+                    <div class="stat-value text-primary">{{ contratos_ativos }}</div>
+                    <div class="stat-label">Contratos Ativos</div>
                     <hr class="my-2">
                     <small class="text-muted">
-                        <span class="text-success">{{ contratos_ativos }} ativos</span> |
-                        <span class="text-secondary">{{ contratos_quitados }} quitados</span>
+                        {{ total_contratos }} total |
+                        <span class="text-secondary">{{ contratos_quitados }} quit.</span>
                     </small>
                 </div>
             </div>
         </div>
-        <div class="col-md-3">
-            <div class="card card-stats success">
+        <div class="col-md-2">
+            <div class="card card-stats info h-100">
                 <div class="card-body">
-                    <div class="stat-value text-success">R$ {{ valor_recebido|floatformat:2 }}</div>
-                    <div class="stat-label">Total Recebido</div>
+                    <div class="stat-value text-info">{{ total_lotes }}</div>
+                    <div class="stat-label">Total de Lotes</div>
                     <hr class="my-2">
-                    <small class="text-muted">{{ parcelas_pagas }} parcelas pagas</small>
+                    <small class="text-muted">
+                        <span class="text-success">{{ lotes_disponiveis }} disp.</span> |
+                        <span class="text-danger">{{ lotes_vendidos }} vend.</span>
+                    </small>
                 </div>
             </div>
         </div>
-        <div class="col-md-3">
-            <div class="card card-stats warning">
+        <div class="col-md-2">
+            <div class="card card-stats success h-100">
                 <div class="card-body">
-                    <div class="stat-value text-warning">R$ {{ valor_a_receber|floatformat:2 }}</div>
-                    <div class="stat-label">A Receber</div>
+                    <div class="stat-value text-success" style="font-size:1.4rem;">R$ {{ parcelas_mes_atual.valor_recebido|floatformat:2 }}</div>
+                    <div class="stat-label">Arrecadação Mês</div>
+                    <hr class="my-2">
+                    <small class="text-muted">{{ parcelas_mes_atual.pagas }} pagas este mês</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-2">
+            <div class="card card-stats warning h-100">
+                <div class="card-body">
+                    <div class="stat-value text-warning" style="font-size:1.4rem;">R$ {{ valor_a_receber|floatformat:2 }}</div>
+                    <div class="stat-label">Saldo Carteira</div>
                     <hr class="my-2">
                     <small class="text-muted">{{ parcelas_pendentes }} parcelas pendentes</small>
                 </div>
             </div>
         </div>
-        <div class="col-md-3">
-            <div class="card card-stats danger">
+        <div class="col-md-2">
+            <div class="card card-stats danger h-100">
                 <div class="card-body">
-                    <div class="stat-value text-danger">R$ {{ valor_em_atraso|floatformat:2 }}</div>
+                    <div class="stat-value text-danger" style="font-size:1.4rem;">R$ {{ valor_em_atraso|floatformat:2 }}</div>
                     <div class="stat-label">Em Atraso</div>
                     <hr class="my-2">
-                    <small class="text-muted">{{ parcelas_vencidas }} parcelas vencidas</small>
+                    <small class="text-muted">{{ parcelas_vencidas }} vencidas</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-2">
+            <div class="card h-100 {% if reajustes_pendentes > 0 %}border-warning{% else %}border-success{% endif %}">
+                <div class="card-body">
+                    <div class="stat-value {% if reajustes_pendentes > 0 %}text-warning{% else %}text-success{% endif %}">
+                        {{ reajustes_pendentes }}
+                    </div>
+                    <div class="stat-label">Reajustes Pendentes</div>
+                    <hr class="my-2">
+                    <small class="text-muted">
+                        {% if reajustes_pendentes > 0 %}
+                            <a href="{% url 'financeiro:aplicar_reajuste_lote' %}" class="text-warning">Ver reajustes</a>
+                        {% else %}
+                            Em dia
+                        {% endif %}
+                    </small>
                 </div>
             </div>
         </div>
@@ -229,6 +260,105 @@
         </div>
     </div>
 
+    <!-- D-04: Parcelas vencendo esta semana + G-05: Top 5 Saldo Devedor -->
+    <div class="row mb-4">
+        <div class="col-md-7">
+            <div class="card h-100">
+                <div class="card-header bg-warning text-dark">
+                    <i class="fas fa-calendar-week"></i>
+                    Parcelas vencendo esta semana
+                    {% if parcelas_semana %}
+                    <span class="badge bg-dark ms-1">{{ parcelas_semana|length }}</span>
+                    {% endif %}
+                </div>
+                <div class="card-body p-0">
+                    {% if parcelas_semana %}
+                    <div class="table-responsive">
+                        <table class="table table-sm table-hover mb-0">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Vencimento</th>
+                                    <th>Contrato</th>
+                                    <th>Comprador</th>
+                                    <th class="text-end">Valor</th>
+                                    <th class="text-center">Parcela</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for p in parcelas_semana %}
+                                <tr>
+                                    <td>
+                                        <span class="badge bg-warning text-dark font-monospace">
+                                            {{ p.data_vencimento|date:"d/m" }}
+                                        </span>
+                                    </td>
+                                    <td>
+                                        <a href="{% url 'contratos:detalhe' p.contrato.pk %}" class="text-decoration-none fw-semibold">
+                                            {{ p.contrato.numero_contrato }}
+                                        </a>
+                                    </td>
+                                    <td class="text-truncate" style="max-width:140px;">{{ p.contrato.comprador.nome }}</td>
+                                    <td class="text-end font-monospace fw-bold">R$ {{ p.valor_atual|floatformat:2 }}</td>
+                                    <td class="text-center">
+                                        <span class="badge bg-secondary">{{ p.numero_parcela }}/{{ p.contrato.numero_parcelas }}</span>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    {% else %}
+                    <div class="p-4 text-center text-muted">
+                        <i class="fas fa-check-circle fa-2x text-success mb-2"></i><br>
+                        Nenhuma parcela vencendo nos próximos 7 dias.
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        <div class="col-md-5">
+            <div class="card h-100">
+                <div class="card-header bg-dark text-white">
+                    <i class="fas fa-trophy"></i> Top 5 — Maior Saldo Devedor
+                </div>
+                <div class="card-body p-0">
+                    {% if top5_saldo_devedor %}
+                    <div class="table-responsive">
+                        <table class="table table-sm table-hover mb-0">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>#</th>
+                                    <th>Contrato</th>
+                                    <th>Comprador</th>
+                                    <th class="text-end">Saldo Est.</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for c in top5_saldo_devedor %}
+                                <tr>
+                                    <td class="text-muted fw-bold">{{ forloop.counter }}</td>
+                                    <td>
+                                        <a href="{% url 'contratos:detalhe' c.pk %}" class="text-decoration-none">
+                                            {{ c.numero_contrato }}
+                                        </a>
+                                    </td>
+                                    <td class="text-truncate" style="max-width:110px;">{{ c.comprador.nome }}</td>
+                                    <td class="text-end font-monospace fw-bold text-danger">
+                                        R$ {{ c.saldo_est|floatformat:2 }}
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    {% else %}
+                    <div class="p-4 text-center text-muted">Sem contratos ativos.</div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- Graficos -->
     <div class="row mb-4">
         <div class="col-md-6">
@@ -246,11 +376,11 @@
         <div class="col-md-6">
             <div class="card">
                 <div class="card-header">
-                    <i class="fas fa-chart-pie"></i> Status dos Contratos
+                    <i class="fas fa-clock"></i> Inadimplência por Faixa de Atraso
                 </div>
                 <div class="card-body">
                     <div class="chart-container">
-                        <canvas id="chartStatusContratos"></canvas>
+                        <canvas id="chartInadimplenciaFaixas"></canvas>
                     </div>
                 </div>
             </div>
@@ -441,15 +571,15 @@ document.addEventListener('DOMContentLoaded', function() {
             });
             } catch(e) { console.error('[Dashboard] Erro chartStatusParcelas:', e); }
 
-            // Grafico de Status dos Contratos (Pizza)
+            // G-02: Inadimplência por Faixa de Atraso (Pizza)
             try {
-            new Chart(document.getElementById('chartStatusContratos'), {
+            new Chart(document.getElementById('chartInadimplenciaFaixas'), {
                 type: 'doughnut',
                 data: {
-                    labels: data.status_contratos.labels,
+                    labels: data.inadimplencia_faixas.labels,
                     datasets: [{
-                        data: data.status_contratos.data,
-                        backgroundColor: data.status_contratos.colors,
+                        data: data.inadimplencia_faixas.data,
+                        backgroundColor: data.inadimplencia_faixas.colors,
                         borderWidth: 2,
                         borderColor: '#fff'
                     }]
@@ -458,13 +588,18 @@ document.addEventListener('DOMContentLoaded', function() {
                     responsive: true,
                     maintainAspectRatio: false,
                     plugins: {
-                        legend: {
-                            position: 'bottom'
+                        legend: { position: 'bottom' },
+                        tooltip: {
+                            callbacks: {
+                                label: function(ctx) {
+                                    return ` ${ctx.label}: ${ctx.raw} parcela(s)`;
+                                }
+                            }
                         }
                     }
                 }
             });
-            } catch(e) { console.error('[Dashboard] Erro chartStatusContratos:', e); }
+            } catch(e) { console.error('[Dashboard] Erro chartInadimplenciaFaixas:', e); }
 
             // Grafico de Recebimentos Mensais (Barras)
             try {

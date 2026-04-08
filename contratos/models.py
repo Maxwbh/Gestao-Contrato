@@ -5,11 +5,14 @@ Desenvolvedor: Maxwell da Silva Oliveira
 Email: maxwbh@gmail.com
 Empresa: M&S do Brasil LTDA
 """
-from django.db import models
+from django.db import models, transaction
 from django.core.validators import MinValueValidator, MaxValueValidator
 from django.core.exceptions import ValidationError
 from django.utils import timezone
 from decimal import Decimal
+import logging
+
+logger = logging.getLogger(__name__)
 from dateutil.relativedelta import relativedelta
 from core.models import TimeStampedModel, Imovel, Comprador, Imobiliaria
 
@@ -672,6 +675,7 @@ class Contrato(TimeStampedModel):
         if not self.parcelas.exists():
             self.gerar_parcelas()
 
+    @transaction.atomic
     def gerar_parcelas(self, ate_mes_atual=False):
         """
         Gera as parcelas do contrato
@@ -721,6 +725,7 @@ class Contrato(TimeStampedModel):
 
         return parcelas_criadas
 
+    @transaction.atomic
     def recalcular_amortizacao(self, base_pv=None):
         """
         Recalcula valor_original, valor_atual, amortizacao e juros_embutido
@@ -732,7 +737,7 @@ class Contrato(TimeStampedModel):
         Args:
             base_pv: Valor presente base. Se None, usa valor_financiado.
         """
-        from financeiro.models import Parcela as ParcelaModel
+        from financeiro.models import Parcela as ParcelaModel, Reajuste
         from django.db.models import Sum
 
         pv = base_pv if base_pv is not None else self.valor_financiado
@@ -751,10 +756,10 @@ class Contrato(TimeStampedModel):
 
         if self.tipo_amortizacao == TipoAmortizacao.SAC:
             # SAC: amortização constante = PV / n; juros_k = saldo_k × taxa/100
-            tabela = ParcelaModel._calcular_sac_tabela(pv, taxa, n)
+            tabela = Reajuste._calcular_sac_tabela(pv, taxa, n)
         else:
             # Tabela Price: PMT constante = PV × i / (1-(1+i)^-n)
-            tabela = ParcelaModel._calcular_price_tabela(pv, taxa, n)
+            tabela = Reajuste._calcular_price_tabela(pv, taxa, n)
 
         updates = []
         for parcela, (pmt_k, amort_k, juros_k) in zip(parcelas_qs, tabela):
@@ -809,6 +814,7 @@ class Contrato(TimeStampedModel):
                     'nosso_numero': resultado.get('nosso_numero', '') if resultado else '',
                 })
             except Exception as e:
+                logger.exception("Erro ao gerar boleto parcela %s: %s", parcela.numero_parcela, e)
                 resultados.append({
                     'parcela': parcela.numero_parcela,
                     'sucesso': False,
@@ -1184,11 +1190,14 @@ class Contrato(TimeStampedModel):
         )
         meses_ocupados = max(0, meses_ocupados)
 
-        # Valores pagos
+        # Valores pagos (entrada + parcelas normais + intermediárias quitadas)
         total_pago_parcelas = self.parcelas.filter(pago=True).aggregate(
             total=Sum('valor_pago')
         )['total'] or Decimal('0.00')
-        total_pago = (self.valor_entrada or Decimal('0.00')) + total_pago_parcelas
+        total_pago_intermediarias = self.intermediarias.filter(paga=True).aggregate(
+            total=Sum('valor_pago')
+        )['total'] or Decimal('0.00')
+        total_pago = (self.valor_entrada or Decimal('0.00')) + total_pago_parcelas + total_pago_intermediarias
 
         # Encargos de rescisão calculados sobre o saldo atualizado
         pct_fruicao = (self.percentual_fruicao or Decimal('0.5000')) / Decimal('100')
@@ -1209,6 +1218,7 @@ class Contrato(TimeStampedModel):
             'valor_pago_total': total_pago,
             'valor_entrada': self.valor_entrada or Decimal('0.00'),
             'valor_pago_parcelas': total_pago_parcelas,
+            'valor_pago_intermediarias': total_pago_intermediarias,
             'percentual_fruicao': self.percentual_fruicao or Decimal('0.5000'),
             'fruicao': fruicao,
             'percentual_multa_penal': self.percentual_multa_rescisao_penal or Decimal('10.0000'),
@@ -1308,6 +1318,21 @@ class TabelaJurosContrato(TimeStampedModel):
     def clean(self):
         if self.ciclo_fim is not None and self.ciclo_fim < self.ciclo_inicio:
             raise ValidationError({'ciclo_fim': 'Ciclo Fim deve ser maior ou igual ao Ciclo Início.'})
+
+        # Detectar sobreposição com faixas existentes do mesmo contrato
+        if self.contrato_id:
+            fim_self = self.ciclo_fim if self.ciclo_fim is not None else 999999
+            outras = TabelaJurosContrato.objects.filter(
+                contrato_id=self.contrato_id
+            ).exclude(pk=self.pk or None)
+            for outra in outras:
+                fim_outra = outra.ciclo_fim if outra.ciclo_fim is not None else 999999
+                if self.ciclo_inicio <= fim_outra and outra.ciclo_inicio <= fim_self:
+                    raise ValidationError(
+                        f'A faixa de ciclos {self.ciclo_inicio}–{self.ciclo_fim or "∞"} '
+                        f'sobrepõe a faixa existente {outra.ciclo_inicio}–{outra.ciclo_fim or "∞"}. '
+                        'Ajuste os ciclos para que não haja sobreposição.'
+                    )
 
     @classmethod
     def get_juros_para_ciclo(cls, contrato, ciclo):
@@ -1477,9 +1502,12 @@ class PrestacaoIntermediaria(TimeStampedModel):
 
         from financeiro.models import Parcela
 
+        # numero_parcela usa offset além das NORMAL para não conflitar com
+        # unique_together = [['contrato', 'numero_parcela']] da model Parcela.
+        numero_inter = self.contrato.numero_parcelas + self.numero_sequencial
         parcela = Parcela.objects.create(
             contrato=self.contrato,
-            numero_parcela=0,  # Intermediárias usam número 0 ou negativo
+            numero_parcela=numero_inter,
             data_vencimento=self.data_vencimento,
             valor_original=self.valor,
             valor_atual=self.valor_atual,
