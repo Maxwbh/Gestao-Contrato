@@ -32,6 +32,9 @@ Pillow==10.1.0
 # PDF Generation
 reportlab==4.0.7
 
+# Excel Export
+openpyxl==3.1.2
+
 # Geração de dados fake
 Faker==22.0.0
 

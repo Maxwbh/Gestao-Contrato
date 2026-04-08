@@ -934,8 +934,8 @@ para ciclo = 2..total_ciclos+1:
 | R-01 | Tela simulador: quantas parcelas antecipar + % desconto | GET view, sem persistir | P2 | ✅ `simulador_antecipacao` GET — `/financeiro/contrato/<id>/simulador/` |
 | R-02 | Preview: valor original vs. valor antecipado (economia total) | render server-side | P2 | ✅ POST `action=preview` — tabela com economia sem persistir |
 | R-03 | Aplicar antecipação: cria HistoricoPagamento com flag `antecipado=True` | POST view | P2 | ✅ POST `action=aplicar` — quita + `HistoricoPagamento(antecipado=True)` + migration 0007 |
-| R-04 | Renegociação: alterar prazo/valor de parcelas em atraso | — | P3 | ⏳ |
-| R-05 | Recibo de quitação antecipada (PDF) | — | P3 | ⏳ |
+| R-04 | Renegociação: alterar prazo/valor de parcelas em atraso | — | P3 | ✅ `renegociar_parcelas` view em `financeiro/views.py` + template `renegociar_parcelas.html` — seleção múltipla, nova data/valor por parcela, data global para lote, zera juros/multa; botão em `contrato_detail.html` |
+| R-05 | Recibo de quitação antecipada (PDF) | — | P3 | ✅ `financeiro/services/recibo_service.py` ReportLab + `download_recibo_antecipacao` view + URL `recibo_antecipacao` + botões em `contrato_detail.html` |
 
 ---
 
@@ -962,9 +962,9 @@ para ciclo = 2..total_ciclos+1:
 | U-01 | Dark mode toggle (persistido em localStorage) | Carto dark já disponível no mapa | P3 | ⏳ |
 | U-02 | Timeline visual de ciclos na tela de parcelas | Linha do tempo horizontal com ciclos | P2 | ✅ JS inline em `contrato_detail.html` — ciclos coloridos por estado (concluído/ativo/atraso/bloqueado) + % reajuste aplicado |
 | U-03 | Simulador inline de parcelas no cadastro de contrato | Preview em tempo real enquanto preenche | P2 | ✅ Painel "Simulação Rápida" em `step1_basico.html` — PMT Price/SAC em tempo real + taxa editável |
-| U-04 | Exportar relatórios em Excel (openpyxl) | Complementar ao PDF | P3 | ⏳ |
+| U-04 | Exportar relatórios em Excel (openpyxl) | Complementar ao PDF | P3 | ✅ `openpyxl==3.1.2` adicionado em `requirements.txt`; 4 templates de relatório reconstruídos com filtros, totalizadores, botões CSV/Excel/PDF; `exportar_relatorio` view já suportava Excel via `RelatorioService.exportar_para_excel()` |
 | U-05 | Portal do comprador — redesign mobile-first | Compradores acessam via celular | P2 | ✅ `portal_base.html` + todos os templates — nav bottom, stat chips, cards mobile |
-| U-06 | Busca global (Ctrl+K) — busca rápida por contrato, comprador, lote | P3 | ⏳ |
+| U-06 | Busca global (Ctrl+K) — busca rápida por contrato, comprador, lote | P3 | ✅ `api_busca_global` em `core/views.py` + modal overlay em `base.html` — debounce, nav teclado ↑↓/Enter/Esc, highlight `<mark>` |
 | U-07 | Impressão de carnê de pagamento (PDF multi-página) | P3 | ⏳ |
 
 ---
