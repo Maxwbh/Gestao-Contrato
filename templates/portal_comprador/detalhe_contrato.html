@@ -1,7 +1,129 @@
-{% extends 'base.html' %}
-{% block title %}Detalhe do Contrato{% endblock %}
+{% extends 'portal_comprador/portal_base.html' %}
+
+{% block title %}Contrato {{ contrato.numero_contrato }}{% endblock %}
+{% block nav_contratos %}active{% endblock %}
+
 {% block content %}
-<div class="container">
-    <h1>Contrato {{ contrato.numero_contrato }}</h1>
+<!-- Back link -->
+<a href="{% url 'portal_comprador:meus_contratos' %}" style="color:var(--portal-primary);font-size:.85rem;text-decoration:none;display:inline-flex;align-items:center;gap:4px;margin-bottom:12px;">
+    <i class="fas fa-arrow-left"></i> Meus Contratos
+</a>
+
+<!-- Contrato header -->
+<div class="portal-card">
+    <div class="portal-card-header" style="background:var(--portal-dark);">
+        <div style="font-size:.75rem;opacity:.8;">Contrato</div>
+        <div style="font-size:1.1rem;">{{ contrato.numero_contrato }}</div>
+    </div>
+    <div class="portal-card-body">
+        <div style="font-size:1rem;font-weight:600;margin-bottom:4px;">
+            {% if contrato.imovel.identificacao %}{{ contrato.imovel.identificacao }}
+            {% elif contrato.imovel.loteamento %}{{ contrato.imovel.loteamento }}
+            {% else %}Imóvel #{{ contrato.imovel.pk }}{% endif %}
+        </div>
+        <div style="font-size:.82rem;color:#757575;margin-bottom:12px;">{{ contrato.imobiliaria.nome }}</div>
+
+        <!-- Progress -->
+        {% with prog=progresso %}
+        <div style="display:flex;justify-content:space-between;font-size:.75rem;color:#757575;margin-bottom:4px;">
+            <span>Pagamento</span>
+            <span style="font-weight:600;color:var(--portal-primary);">{{ prog|floatformat:0 }}% concluído</span>
+        </div>
+        <div class="progress-portal" style="height:10px;">
+            <div class="fill" style="width:{{ prog|floatformat:0 }}%;"></div>
+        </div>
+        {% endwith %}
+
+        <!-- Stats row -->
+        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:16px;text-align:center;">
+            <div>
+                <div style="font-size:1.3rem;font-weight:700;">{{ stats_parcelas.pagas|default:0 }}</div>
+                <div style="font-size:.68rem;color:#4caf50;">Pagas</div>
+            </div>
+            <div>
+                <div style="font-size:1.3rem;font-weight:700;">{{ stats_parcelas.pendentes|default:0 }}</div>
+                <div style="font-size:.68rem;color:#ff9800;">Pendentes</div>
+            </div>
+            <div>
+                <div style="font-size:1.3rem;font-weight:700;color:{% if stats_parcelas.vencidas %}#f44336{% else %}#212121{% endif %};">{{ stats_parcelas.vencidas|default:0 }}</div>
+                <div style="font-size:.68rem;color:#f44336;">Vencidas</div>
+            </div>
+        </div>
+    </div>
 </div>
+
+<!-- Dados financeiros -->
+<div class="portal-card">
+    <div class="portal-card-header">
+        <i class="fas fa-dollar-sign" style="margin-right:6px;"></i>Resumo Financeiro
+    </div>
+    <div class="portal-card-body" style="padding:0;">
+        {% with r=resumo_financeiro %}
+        <table style="width:100%;font-size:.85rem;border-collapse:collapse;">
+            <tr style="border-bottom:1px solid #f5f5f5;">
+                <td style="padding:10px 16px;color:#757575;">Valor Total</td>
+                <td style="padding:10px 16px;text-align:right;font-weight:600;">R$ {{ contrato.valor_total|floatformat:2 }}</td>
+            </tr>
+            <tr style="border-bottom:1px solid #f5f5f5;">
+                <td style="padding:10px 16px;color:#757575;">Entrada</td>
+                <td style="padding:10px 16px;text-align:right;font-weight:600;">R$ {{ contrato.valor_entrada|floatformat:2 }}</td>
+            </tr>
+            {% if r.valor_pago %}
+            <tr style="border-bottom:1px solid #f5f5f5;">
+                <td style="padding:10px 16px;color:#757575;">Já Pago</td>
+                <td style="padding:10px 16px;text-align:right;font-weight:600;color:#4caf50;">R$ {{ r.valor_pago|floatformat:2 }}</td>
+            </tr>
+            {% endif %}
+            {% if r.saldo_devedor %}
+            <tr>
+                <td style="padding:10px 16px;color:#757575;">Saldo Devedor</td>
+                <td style="padding:10px 16px;text-align:right;font-weight:700;color:var(--portal-primary);">R$ {{ r.saldo_devedor|floatformat:2 }}</td>
+            </tr>
+            {% else %}
+            <tr>
+                <td style="padding:10px 16px;color:#757575;">Contrato desde</td>
+                <td style="padding:10px 16px;text-align:right;">{{ contrato.data_contrato|date:"d/m/Y" }}</td>
+            </tr>
+            {% endif %}
+        </table>
+        {% endwith %}
+    </div>
+</div>
+
+<!-- Próximas parcelas -->
+{% with proximas=parcelas|dictsort:"data_vencimento" %}
+{% if parcelas %}
+<div class="portal-card">
+    <div class="portal-card-header">
+        <i class="fas fa-calendar-alt" style="margin-right:6px;"></i>Parcelas
+    </div>
+    {% for parcela in parcelas %}
+    <div class="parcela-item">
+        {% if parcela.pago %}
+        <div class="parcela-icon pago"><i class="fas fa-check"></i></div>
+        {% elif parcela.data_vencimento < hoje %}
+        <div class="parcela-icon vencida"><i class="fas fa-exclamation"></i></div>
+        {% else %}
+        <div class="parcela-icon pendente"><i class="fas fa-clock"></i></div>
+        {% endif %}
+        <div class="parcela-info">
+            <div class="desc">Parcela {{ parcela.numero_parcela }}</div>
+            <div class="data">
+                {% if parcela.pago %}
+                <span style="color:#4caf50;">Pago em {{ parcela.data_pagamento|date:"d/m/Y"|default:"—" }}</span>
+                {% elif parcela.data_vencimento < hoje %}
+                <span style="color:#f44336;">Venceu {{ parcela.data_vencimento|date:"d/m/Y" }}</span>
+                {% else %}
+                Vence {{ parcela.data_vencimento|date:"d/m/Y" }}
+                {% endif %}
+            </div>
+        </div>
+        <div class="parcela-valor {% if not parcela.pago and parcela.data_vencimento < hoje %}vencida{% endif %}">
+            R$ {{ parcela.valor_atual|floatformat:2 }}
+        </div>
+    </div>
+    {% endfor %}
+</div>
+{% endif %}
+{% endwith %}
 {% endblock %}
