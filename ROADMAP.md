@@ -119,14 +119,14 @@
 | `GET /portal/api/vencimentos/` | Filtros por período e status | ✅ `api_portal_vencimentos` |
 | `GET /portal/api/boletos/` | Lista com filtros | ✅ `api_portal_boletos` |
 
-### P3 — Médio
-| Endpoint | Descrição |
-|----------|-----------|
-| `GET /api/contabilidade/relatorios/vencimentos/` | Relatório semanal/mensal/trimestral |
-| `GET /api/contabilidade/imobiliarias/` | Lista com estatísticas |
-| `GET /api/imobiliaria/<id>/pendencias/` | Parcelas vencidas com encargos |
-| `POST /portal/api/boletos/segunda-via/` | Gerar segunda via com encargos |
-| `GET /portal/api/boletos/<id>/linha-digitavel/` | Linha digitável |
+### P3 — Médio ✅ CONCLUÍDO
+| Endpoint | Descrição | Status |
+|----------|-----------|--------|
+| `GET /api/contabilidade/relatorios/vencimentos/` | Relatório semanal/mensal/trimestral | ✅ `api_contabilidade_relatorios_vencimentos` |
+| `GET /api/contabilidade/imobiliarias/` | Lista com estatísticas | ✅ já existia como `api_imobiliarias_lista` |
+| `GET /api/imobiliaria/<id>/pendencias/` | Parcelas vencidas com encargos | ✅ `api_imobiliaria_pendencias` |
+| `POST /portal/api/boletos/segunda-via/` | Gerar segunda via com encargos | ✅ `api_portal_segunda_via` |
+| `GET /portal/api/boletos/<id>/linha-digitavel/` | Linha digitável | ✅ `api_portal_linha_digitavel` |
 
 ---
 
@@ -179,7 +179,7 @@
 
 ## 7. TESTES AUTOMATIZADOS
 
-**Meta:** > 80% de cobertura | **Atual:** ~40% (705 testes passando)
+**Meta:** > 80% de cobertura | **Atual:** ~45% (744 testes passando)
 
 ### 7.1 P1 — Apps sem nenhum teste (~104 testes) ✅ CONCLUÍDO
 | Arquivo | Escopo | Qtd | Status |
@@ -220,23 +220,23 @@
 | `tests/integration/test_portal_comprador.py` | E2E portal | 3 | ✅ |
 | `tests/integration/test_notificacoes.py` | E2E notificações | 3 | ✅ |
 
-### 7.4 P4 — Segurança e Edge Cases (~41 testes)
-| Arquivo | Escopo | Qtd |
-|---------|--------|-----|
-| `tests/functional/test_contrato_workflow.py` | E2E completo | 4 |
-| `tests/functional/test_financeiro_workflow.py` | E2E financeiro | 3 |
-| `tests/unit/test_security.py` | CSRF, SQL injection, XSS | 7 |
-| `tests/unit/test_edge_cases.py` | Casos extremos | 10 |
-| `tests/unit/notificacoes/test_management_commands.py` | Commands | 3 |
-| `tests/unit/financeiro/test_management_commands.py` | Commands | 2 |
+### 7.4 P4 — Segurança e Edge Cases (~41 testes) ✅ CONCLUÍDO
+| Arquivo | Escopo | Qtd | Status |
+|---------|--------|-----|--------|
+| `tests/functional/test_contrato_workflow.py` | E2E completo | 4 | ✅ |
+| `tests/functional/test_financeiro_workflow.py` | E2E financeiro | 3 | ✅ |
+| `tests/unit/test_security.py` | Autenticação, 404s, isolamento portal | 14 | ✅ |
+| `tests/unit/test_edge_cases.py` | Valores extremos, datas limite, reajuste | 12 | ✅ |
+| `tests/unit/notificacoes/test_management_commands.py` | enviar_notificacoes, processar_pendentes | 4 | ✅ |
+| `tests/unit/financeiro/test_management_commands.py` | processar_reajustes | 2 | ✅ |
 
-### 7.5 Infraestrutura de Testes
-| Prioridade | Item |
-|------------|------|
-| P2 | 13 factories faltantes (notificacoes, portal, CNAB) |
-| P2 | Mocks: Twilio SMS/WhatsApp, IBGE, SMTP |
+### 7.5 Infraestrutura de Testes ✅ CONCLUÍDO (P2)
+| Prioridade | Item | Status |
+|------------|------|--------|
+| P2 | 13 factories faltantes (notificacoes, portal, CNAB) | ✅ ConfiguracaoEmailFactory, ConfiguracaoSMSFactory, ConfiguracaoWhatsAppFactory, NotificacaoFactory, TemplateNotificacaoFactory, RegraNotificacaoFactory, AcessoCompradorFactory, LogAcessoCompradorFactory, ArquivoRemessaFactory, ItemRemessaFactory, ItemRetornoFactory, AcessoUsuarioFactory + registradas no conftest.py |
+| P2 | Mocks: Twilio SMS/WhatsApp, IBGE, SMTP | ✅ `mock_twilio_sms`, `mock_twilio_whatsapp`, `mock_twilio_error`, `mock_ibge_ipca`, `mock_ibge_inpc`, `mock_ibge_error`, `mock_smtp` fixtures no conftest.py |
 | P3 | CI/CD GitHub Actions | ✅ `.github/workflows/ci.yml` |
-| P4 | Badge de cobertura no README |
+| P4 | Badge de cobertura no README | — |
 
 ---
 

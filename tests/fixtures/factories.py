@@ -17,9 +17,30 @@ from core.models import (
     ContaBancaria,
     Imovel,
     Comprador,
+    AcessoUsuario,
 )
 from contratos.models import Contrato
-from financeiro.models import Parcela, Reajuste, HistoricoPagamento, ArquivoRetorno
+from financeiro.models import (
+    Parcela,
+    Reajuste,
+    HistoricoPagamento,
+    ArquivoRemessa,
+    ArquivoRetorno,
+    ItemRemessa,
+    ItemRetorno,
+)
+from notificacoes.models import (
+    ConfiguracaoEmail,
+    ConfiguracaoSMS,
+    ConfiguracaoWhatsApp,
+    Notificacao,
+    TemplateNotificacao,
+    RegraNotificacao,
+    TipoNotificacao,
+    TipoTemplate,
+    TipoGatilho,
+)
+from portal_comprador.models import AcessoComprador, LogAcessoComprador
 
 fake = Faker('pt_BR')
 User = get_user_model()
@@ -263,3 +284,162 @@ class ArquivoRetornoFactory(DjangoModelFactory):
     layout = 'CNAB_240'
     status = 'PENDENTE'
     arquivo = factory.django.FileField(filename='retorno.ret', data=b'HEADER\nDETALHE\nTRAILER')
+
+
+class ArquivoRemessaFactory(DjangoModelFactory):
+    class Meta:
+        model = ArquivoRemessa
+
+    conta_bancaria = factory.SubFactory(ContaBancariaFactory)
+    numero_remessa = factory.Sequence(lambda n: n + 1)
+    layout = 'CNAB_240'
+    nome_arquivo = factory.Sequence(lambda n: f'remessa_{n}.rem')
+    status = 'GERADO'
+    arquivo = factory.django.FileField(filename='remessa.rem', data=b'HEADER\nDETALHE\nTRAILER')
+    quantidade_boletos = 1
+    valor_total = Decimal('7500.00')
+
+
+class ItemRemessaFactory(DjangoModelFactory):
+    class Meta:
+        model = ItemRemessa
+
+    arquivo_remessa = factory.SubFactory(ArquivoRemessaFactory)
+    parcela = factory.SubFactory(ParcelaFactory)
+    nosso_numero = factory.Sequence(lambda n: f'00000{n:010d}')
+    valor = Decimal('7500.00')
+    data_vencimento = factory.LazyFunction(lambda: date.today() + timedelta(days=30))
+    processado = False
+
+
+class ItemRetornoFactory(DjangoModelFactory):
+    class Meta:
+        model = ItemRetorno
+
+    arquivo_retorno = factory.SubFactory(ArquivoRetornoFactory)
+    parcela = factory.SubFactory(ParcelaFactory)
+    nosso_numero = factory.Sequence(lambda n: f'00000{n:010d}')
+    codigo_ocorrencia = '06'
+    tipo_ocorrencia = 'LIQUIDACAO'
+    valor_titulo = Decimal('7500.00')
+
+
+# =============================================================================
+# NOTIFICAÇÕES
+# =============================================================================
+
+class ConfiguracaoEmailFactory(DjangoModelFactory):
+    class Meta:
+        model = ConfiguracaoEmail
+
+    nome = factory.Sequence(lambda n: f'Config Email {n}')
+    host = 'smtp.example.com'
+    porta = 587
+    usuario = factory.Sequence(lambda n: f'email{n}@example.com')
+    senha = 'senha_teste'
+    usar_tls = True
+    usar_ssl = False
+    email_remetente = factory.Sequence(lambda n: f'noreply{n}@example.com')
+    nome_remetente = 'Sistema de Gestão'
+    ativo = True
+
+
+class ConfiguracaoSMSFactory(DjangoModelFactory):
+    class Meta:
+        model = ConfiguracaoSMS
+
+    nome = factory.Sequence(lambda n: f'Config SMS {n}')
+    provedor = 'TWILIO'
+    account_sid = factory.Sequence(lambda n: f'AC{n:032d}')
+    auth_token = factory.Sequence(lambda n: f'token{n:028d}')
+    numero_remetente = '+5511999990000'
+    ativo = True
+
+
+class ConfiguracaoWhatsAppFactory(DjangoModelFactory):
+    class Meta:
+        model = ConfiguracaoWhatsApp
+
+    nome = factory.Sequence(lambda n: f'Config WhatsApp {n}')
+    provedor = 'TWILIO'
+    account_sid = factory.Sequence(lambda n: f'AC{n:032d}')
+    auth_token = factory.Sequence(lambda n: f'token{n:028d}')
+    numero_remetente = 'whatsapp:+5511999990000'
+    ativo = True
+
+
+class NotificacaoFactory(DjangoModelFactory):
+    class Meta:
+        model = Notificacao
+
+    parcela = factory.SubFactory(ParcelaFactory)
+    tipo = TipoNotificacao.EMAIL
+    destinatario = factory.Faker('email', locale='pt_BR')
+    assunto = 'Notificação de Vencimento'
+    mensagem = 'Sua parcela vence em breve.'
+    status = 'PENDENTE'
+
+
+class TemplateNotificacaoFactory(DjangoModelFactory):
+    class Meta:
+        model = TemplateNotificacao
+
+    nome = factory.Sequence(lambda n: f'Template {n}')
+    codigo = TipoTemplate.LEMBRETE_PARCELA
+    tipo = TipoNotificacao.EMAIL
+    assunto = 'Lembrete: parcela %%PARCELA%% vence em %%DATAVENCIMENTO%%'
+    corpo = 'Olá %%NOMECOMPRADOR%%, sua parcela %%PARCELA%% vence em %%DATAVENCIMENTO%%.'
+    ativo = True
+
+
+class RegraNotificacaoFactory(DjangoModelFactory):
+    class Meta:
+        model = RegraNotificacao
+
+    nome = factory.Sequence(lambda n: f'Regra {n}')
+    ativo = True
+    tipo_gatilho = TipoGatilho.ANTES_VENCIMENTO
+    dias_offset = factory.Sequence(lambda n: n + 1)
+    tipo_notificacao = TipoNotificacao.EMAIL
+
+
+# =============================================================================
+# PORTAL DO COMPRADOR
+# =============================================================================
+
+class AcessoCompradorFactory(DjangoModelFactory):
+    class Meta:
+        model = AcessoComprador
+
+    comprador = factory.SubFactory(CompradorFactory)
+    usuario = factory.SubFactory(UserFactory)
+    email_verificado = True
+    ativo = True
+
+
+class LogAcessoCompradorFactory(DjangoModelFactory):
+    class Meta:
+        model = LogAcessoComprador
+
+    acesso_comprador = factory.SubFactory(AcessoCompradorFactory)
+    ip_acesso = '127.0.0.1'
+    user_agent = 'Mozilla/5.0 (Test)'
+    pagina_acessada = '/portal/'
+
+
+# =============================================================================
+# CORE — ACESSO USUÁRIO
+# =============================================================================
+
+class AcessoUsuarioFactory(DjangoModelFactory):
+    class Meta:
+        model = AcessoUsuario
+
+    usuario = factory.SubFactory(UserFactory)
+    contabilidade = factory.SubFactory(ContabilidadeFactory)
+    imobiliaria = factory.LazyAttribute(
+        lambda obj: ImobiliariaFactory(contabilidade=obj.contabilidade)
+    )
+    pode_editar = True
+    pode_excluir = False
+    ativo = True
