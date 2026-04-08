@@ -9,6 +9,8 @@ dj-database-url==2.1.0
 
 # API e Comunicação
 requests==2.31.0
+djangorestframework==3.17.1
+drf-spectacular==0.29.0
 
 # Notificações
 celery==5.3.4
