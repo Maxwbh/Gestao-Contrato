@@ -959,13 +959,13 @@ para ciclo = 2..total_ciclos+1:
 
 | # | Item | Descrição | Prioridade | Status |
 |---|------|-----------|-----------|--------|
-| U-01 | Dark mode toggle (persistido em localStorage) | Carto dark já disponível no mapa | P3 | ⏳ |
+| U-01 | Dark mode toggle (persistido em localStorage) | Carto dark já disponível no mapa | P3 | ✅ Botão lua/sol na navbar desktop e mobile; `body.dark-mode` CSS em `custom.css` cobre cards, tabelas, forms, modals, dropdowns, sidenav; persistido em `localStorage['gc_dark_mode']` |
 | U-02 | Timeline visual de ciclos na tela de parcelas | Linha do tempo horizontal com ciclos | P2 | ✅ JS inline em `contrato_detail.html` — ciclos coloridos por estado (concluído/ativo/atraso/bloqueado) + % reajuste aplicado |
 | U-03 | Simulador inline de parcelas no cadastro de contrato | Preview em tempo real enquanto preenche | P2 | ✅ Painel "Simulação Rápida" em `step1_basico.html` — PMT Price/SAC em tempo real + taxa editável |
 | U-04 | Exportar relatórios em Excel (openpyxl) | Complementar ao PDF | P3 | ✅ `openpyxl==3.1.2` adicionado em `requirements.txt`; 4 templates de relatório reconstruídos com filtros, totalizadores, botões CSV/Excel/PDF; `exportar_relatorio` view já suportava Excel via `RelatorioService.exportar_para_excel()` |
 | U-05 | Portal do comprador — redesign mobile-first | Compradores acessam via celular | P2 | ✅ `portal_base.html` + todos os templates — nav bottom, stat chips, cards mobile |
 | U-06 | Busca global (Ctrl+K) — busca rápida por contrato, comprador, lote | P3 | ✅ `api_busca_global` em `core/views.py` + modal overlay em `base.html` — debounce, nav teclado ↑↓/Enter/Esc, highlight `<mark>` |
-| U-07 | Impressão de carnê de pagamento (PDF multi-página) | P3 | ⏳ |
+| U-07 | Impressão de carnê de pagamento (PDF multi-página) | P3 | ✅ Já implementado — `download_carne_pdf` + `gerar_carne_pdf` em `financeiro/services/carne_service.py` + modal de seleção de parcelas em `contrato_detail.html` |
 
 ---
 
