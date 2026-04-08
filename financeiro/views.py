@@ -2606,9 +2606,16 @@ def aplicar_reajuste_pagina(request, contrato_id):
     ciclo = Reajuste.calcular_ciclo_pendente(contrato)
 
     if not ciclo:
+        # Verificar se o contrato sequer tem parcelas no ciclo 2
+        prazo = contrato.prazo_reajuste_meses or 12
+        reajuste_nao_aplicavel = (
+            contrato.tipo_correcao != 'FIXO'
+            and (contrato.numero_parcelas or 0) <= prazo
+        )
         context = {
             'contrato': contrato,
             'sem_pendente': True,
+            'reajuste_nao_aplicavel': reajuste_nao_aplicavel,
             'proximo_reajuste': contrato.data_proximo_reajuste,
         }
         tpl = 'financeiro/aplicar_reajuste_partial.html' if is_modal else 'financeiro/aplicar_reajuste.html'
