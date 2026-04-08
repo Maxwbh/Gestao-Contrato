@@ -907,9 +907,17 @@ class Contrato(TimeStampedModel):
     def data_proximo_reajuste(self):
         """
         Calcula a data do proximo reajuste.
-        Retorna None se o contrato usa valor fixo (sem reajuste).
+        Retorna None se:
+          - tipo_correcao é FIXO (sem reajuste), ou
+          - numero_parcelas <= prazo_reajuste_meses (todas as parcelas estão no
+            ciclo 1 — não existe ciclo 2 a reajustar).
         """
         if self.tipo_correcao == TipoCorrecao.FIXO:
+            return None
+
+        prazo = self.prazo_reajuste_meses or 12
+        # Contrato sem parcelas no ciclo 2 — reajuste não se aplica
+        if (self.numero_parcelas or 0) <= prazo:
             return None
 
         # Data base para calculo
@@ -919,7 +927,7 @@ class Contrato(TimeStampedModel):
             data_base = self.data_contrato
 
         # Adicionar o prazo de reajuste
-        return data_base + relativedelta(months=self.prazo_reajuste_meses)
+        return data_base + relativedelta(months=prazo)
 
     def calcular_ciclo_parcela(self, numero_parcela):
         """

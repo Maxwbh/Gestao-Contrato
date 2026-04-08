@@ -872,6 +872,69 @@ class BoletoService:
             logger.exception("Erro ao gerar boleto: %s", e)
             return {'sucesso': False, 'erro': 'Erro interno ao gerar boleto. Tente novamente em alguns minutos.'}
 
+    def gerar_segunda_via(self, parcela, conta_bancaria, data_referencia=None):
+        """
+        Gera segunda via do boleto com juros e multa atualizados para data_referencia (padrão: hoje).
+        Reutiliza o nosso_número já atribuído à parcela.
+        Não salva o PDF na parcela — retorna apenas o conteúdo.
+
+        Returns:
+            dict com 'sucesso', 'pdf_content', 'valor_total', 'valor_juros', 'valor_multa', 'erro'
+        """
+        try:
+            if data_referencia is None:
+                data_referencia = timezone.localdate()
+
+            # Calcular juros e multa atualizados
+            valor_juros = Decimal('0.00')
+            valor_multa = Decimal('0.00')
+            if data_referencia > parcela.data_vencimento:
+                valor_juros, valor_multa = parcela.calcular_juros_multa(data_referencia)
+
+            valor_total = parcela.valor_atual + valor_juros + valor_multa
+
+            # Montar dados base do boleto
+            dados_boleto, _ = self._montar_dados_boleto(parcela, conta_bancaria)
+
+            # Sobrepor valor com total atualizado
+            dados_boleto['valor'] = float(valor_total)
+
+            # Reutilizar nosso_número existente se disponível
+            if parcela.nosso_numero:
+                dados_boleto['nosso_numero'] = str(parcela.nosso_numero)
+
+            # Acrescentar instruções de "segunda via"
+            instrucoes_extra = [f'SEGUNDA VIA — Valores atualizados em {data_referencia.strftime("%d/%m/%Y")}']
+            if valor_juros > 0 or valor_multa > 0:
+                instrucoes_extra.append(
+                    f'Juros: R$ {valor_juros:.2f} | Multa: R$ {valor_multa:.2f}'
+                )
+            dados_existentes = dados_boleto.get('instrucoes', [])
+            dados_boleto['instrucoes'] = instrucoes_extra + (
+                dados_existentes if isinstance(dados_existentes, list) else [dados_existentes]
+            )
+
+            banco_nome = self._get_banco_brcobranca(getattr(conta_bancaria, 'banco', ''))
+            if not banco_nome:
+                return {'sucesso': False, 'erro': 'Banco não suportado pelo BRCobrança'}
+
+            resultado = self._chamar_api_boleto(banco_nome, dados_boleto)
+
+            if resultado.get('sucesso'):
+                return {
+                    'sucesso': True,
+                    'pdf_content': resultado.get('pdf_content'),
+                    'valor_total': valor_total,
+                    'valor_juros': valor_juros,
+                    'valor_multa': valor_multa,
+                    'linha_digitavel': resultado.get('linha_digitavel', ''),
+                }
+            return resultado
+
+        except Exception as e:
+            logger.exception("Erro ao gerar segunda via: %s", e)
+            return {'sucesso': False, 'erro': str(e)}
+
     def gerar_carne(self, parcelas, conta_bancaria):
         """
         Gera carnê (múltiplos boletos em um único PDF) via POST /api/boleto/multi.

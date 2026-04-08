@@ -46,7 +46,7 @@
 | # | Item |
 |---|------|
 | 2.9 | Validar sequência de ciclos de reajuste (não pular) |
-| 2.10 | Segunda via de boleto com juros/multa calculados |
+| 2.10 | Segunda via de boleto com juros/multa calculados | ✅ `BoletoService.gerar_segunda_via()` reutiliza nosso_número existente, sobrepõe valor com juros/multa do dia; view `segunda_via_boleto` GET=preview com totais atualizados, GET?download=1=PDF fresco via BRCobrança; botão "Segunda Via" em `detalhe_parcela.html` |
 | 2.11 | WhatsApp/SMS — testes end-to-end com Twilio |
 
 ### P4 — Baixo
@@ -70,9 +70,9 @@
 | 3.7 | Dashboard Imobiliária: filtros na lista de contratos | ✅ Status + imobiliária em `contrato_list.html` |
 | 3.8 | Dashboard Imobiliária: busca rápida por contrato/comprador | ✅ Busca textual em `contrato_list.html` |
 | 3.9 | Dashboard Imobiliária: ações em lote (gerar boletos) | ✅ `abrirModalGerarLote()` em `contrato_list.html` |
-| 3.10 | Dashboard Imobiliária: fluxo de caixa previsto vs realizado | — |
+| 3.10 | Dashboard Imobiliária: fluxo de caixa previsto vs realizado | ✅ Chart.js bar chart em `dashboard_imobiliaria.html` consome `api_imobiliaria_fluxo_caixa` — 3 séries: Previsto/Realizado/Pendente, 12 meses (-5 a +6), tooltip em R$, mês corrente destacado |
 | 3.11 | Gestão de Boletos: interface geração em lote com progresso | ✅ `gerar_carne` + templates |
-| 3.12 | Gestão de Boletos: download ZIP de vários boletos | — |
+| 3.12 | Gestão de Boletos: download ZIP de vários boletos | ✅ `download_zip_boletos` em `financeiro/views.py` + URL `contrato/<id>/boletos/zip/` + botão ZIP na aba Parcelas de `contrato_detail.html` |
 | 3.13 | Gestão de Parcelas: seleção múltipla para ações em lote | ✅ Seleção múltipla implementada |
 | 3.14 | Gestão de Parcelas: juros/multa/total nas vencidas | ✅ Cálculo dinâmico em `listar_parcelas` view |
 | 3.15 | Sidebar recolhível com indicadores de pendências | — |
@@ -83,12 +83,12 @@
 | # | Tela/Componente |
 |---|-----------------|
 | 3.18 | Aba Relatórios do Contrato |
-| 3.19 | Aba Histórico de Pagamentos (comprovantes) |
+| 3.19 | Aba Histórico de Pagamentos (comprovantes) | ✅ Card "Histórico de Pagamentos" em `contrato_detail.html` — tabela com data, valor, juros, multa, forma de pagamento, link para comprovante; `ContratoDetailView.get_context_data` passa `historico_pagamentos` via queryset |
 | 3.20 | Configurações Contabilidade (dados, usuários, imobiliárias) |
 | 3.21 | Exportar relatório consolidado (PDF, Excel) |
 | 3.22 | Tela de reajuste pendente (índice, prévia, aplicar lote) |
 | 3.23 | Histórico de reajustes aplicados |
-| 3.24 | Upload de comprovante de pagamento |
+| 3.24 | Upload de comprovante de pagamento | ✅ `registrar_pagamento` aceita `multipart/form-data`; cria `HistoricoPagamento` com `forma_pagamento` e `comprovante` (FileField já existia no model); template atualizado com campos forma_pagamento e comprovante |
 | 3.25 | Notificar comprador inadimplente |
 | 3.26 | Configurações de boleto por imobiliária |
 | 3.27 | Configurações de notificação (dias, canais) |
@@ -879,8 +879,8 @@ para ciclo = 2..total_ciclos+1:
 
 | # | Item | Prioridade |
 |---|------|-----------|
-| M-11 | Página `/imoveis/loteamento/{slug}/` — mapa dedicado do empreendimento | P2 |
-| M-12 | Estatísticas do loteamento: total, disponíveis %, valor médio por lote | P2 |
+| M-11 | Página `/imoveis/loteamento/{slug}/` — mapa dedicado do empreendimento | P2 | ✅ `loteamento_detalhe` em `core/views.py` + URL `imoveis/loteamento/<str:nome>/` + template `loteamento_detalhe.html` com mapa Leaflet + lista filtrável por status |
+| M-12 | Estatísticas do loteamento: total, disponíveis %, valor médio por lote | P2 | ✅ KPI cards (total, disponíveis, vendidos, valor médio/min/max) + barra de progresso proporcional na página do loteamento |
 | M-13 | Polígonos de lote (boundaries) com `lat/lng` de cada vértice — modelo `LotePoligono` | P3 |
 | M-14 | Upload de planta baixa (imagem) como overlay no mapa | P3 |
 | M-15 | Link direto "Ver no Google Maps / Waze" no popup do marcador | P3 |
@@ -934,8 +934,8 @@ para ciclo = 2..total_ciclos+1:
 | R-01 | Tela simulador: quantas parcelas antecipar + % desconto | GET view, sem persistir | P2 | ✅ `simulador_antecipacao` GET — `/financeiro/contrato/<id>/simulador/` |
 | R-02 | Preview: valor original vs. valor antecipado (economia total) | render server-side | P2 | ✅ POST `action=preview` — tabela com economia sem persistir |
 | R-03 | Aplicar antecipação: cria HistoricoPagamento com flag `antecipado=True` | POST view | P2 | ✅ POST `action=aplicar` — quita + `HistoricoPagamento(antecipado=True)` + migration 0007 |
-| R-04 | Renegociação: alterar prazo/valor de parcelas em atraso | — | P3 | ⏳ |
-| R-05 | Recibo de quitação antecipada (PDF) | — | P3 | ⏳ |
+| R-04 | Renegociação: alterar prazo/valor de parcelas em atraso | — | P3 | ✅ `renegociar_parcelas` view em `financeiro/views.py` + template `renegociar_parcelas.html` — seleção múltipla, nova data/valor por parcela, data global para lote, zera juros/multa; botão em `contrato_detail.html` |
+| R-05 | Recibo de quitação antecipada (PDF) | — | P3 | ✅ `financeiro/services/recibo_service.py` ReportLab + `download_recibo_antecipacao` view + URL `recibo_antecipacao` + botões em `contrato_detail.html` |
 
 ---
 
@@ -947,8 +947,8 @@ para ciclo = 2..total_ciclos+1:
 |---|------|-----------|--------|
 | N-01 | E-mail automático D-5 antes do vencimento da parcela | P2 | ✅ `enviar_notificacoes_sync()` em `core/tasks.py` + deduplicação via `Notificacao` model + POST `/api/tasks/enviar-notificacoes/` |
 | N-02 | E-mail de inadimplência após D+3 | P2 | ✅ `enviar_inadimplentes_sync()` em `core/tasks.py` + `task_run_all` inclui N-02 + POST `/api/tasks/enviar-inadimplentes/` + `NOTIFICACAO_DIAS_INADIMPLENCIA=3` |
-| N-03 | Régua de cobrança configurável (D-5, D+3, D+10, D+30) | P3 | ⏳ |
-| N-04 | Integração WhatsApp (Evolution API / Z-API) | P3 | ⏳ |
+| N-03 | Régua de cobrança configurável (D-5, D+3, D+10, D+30) | P3 | ✅ `RegraNotificacao` model em `notificacoes/models.py` + `TipoGatilho` (ANTES/APOS) + admin com `list_editable` + `_processar_regra()` em `core/tasks.py` — fallback automático para N-01/N-02 quando nenhuma regra configurada |
+| N-04 | Integração WhatsApp (Evolution API / Z-API) | P3 | ✅ `ConfiguracaoWhatsApp` agora suporta 4 provedores: Twilio, Meta (Cloud API), Evolution API v2 (`/message/sendText/{instancia}`), Z-API (`/send-text`). `ServicoWhatsApp` despacha pelo `provedor` do config ativo. Migration `0004_add_whatsapp_providers` adiciona `api_url`, `api_key`, `instancia`, `client_token`. Admin com fieldsets colapsáveis por provedor. |
 | N-05 | Push notification portal comprador | P4 | ⏳ |
 
 ---
@@ -959,13 +959,13 @@ para ciclo = 2..total_ciclos+1:
 
 | # | Item | Descrição | Prioridade | Status |
 |---|------|-----------|-----------|--------|
-| U-01 | Dark mode toggle (persistido em localStorage) | Carto dark já disponível no mapa | P3 | ⏳ |
+| U-01 | Dark mode toggle (persistido em localStorage) | Carto dark já disponível no mapa | P3 | ✅ Botão lua/sol na navbar desktop e mobile; `body.dark-mode` CSS em `custom.css` cobre cards, tabelas, forms, modals, dropdowns, sidenav; persistido em `localStorage['gc_dark_mode']` |
 | U-02 | Timeline visual de ciclos na tela de parcelas | Linha do tempo horizontal com ciclos | P2 | ✅ JS inline em `contrato_detail.html` — ciclos coloridos por estado (concluído/ativo/atraso/bloqueado) + % reajuste aplicado |
 | U-03 | Simulador inline de parcelas no cadastro de contrato | Preview em tempo real enquanto preenche | P2 | ✅ Painel "Simulação Rápida" em `step1_basico.html` — PMT Price/SAC em tempo real + taxa editável |
-| U-04 | Exportar relatórios em Excel (openpyxl) | Complementar ao PDF | P3 | ⏳ |
+| U-04 | Exportar relatórios em Excel (openpyxl) | Complementar ao PDF | P3 | ✅ `openpyxl==3.1.2` adicionado em `requirements.txt`; 4 templates de relatório reconstruídos com filtros, totalizadores, botões CSV/Excel/PDF; `exportar_relatorio` view já suportava Excel via `RelatorioService.exportar_para_excel()` |
 | U-05 | Portal do comprador — redesign mobile-first | Compradores acessam via celular | P2 | ✅ `portal_base.html` + todos os templates — nav bottom, stat chips, cards mobile |
-| U-06 | Busca global (Ctrl+K) — busca rápida por contrato, comprador, lote | P3 | ⏳ |
-| U-07 | Impressão de carnê de pagamento (PDF multi-página) | P3 | ⏳ |
+| U-06 | Busca global (Ctrl+K) — busca rápida por contrato, comprador, lote | P3 | ✅ `api_busca_global` em `core/views.py` + modal overlay em `base.html` — debounce, nav teclado ↑↓/Enter/Esc, highlight `<mark>` |
+| U-07 | Impressão de carnê de pagamento (PDF multi-página) | P3 | ✅ Já implementado — `download_carne_pdf` + `gerar_carne_pdf` em `financeiro/services/carne_service.py` + modal de seleção de parcelas em `contrato_detail.html` |
 
 ---
 
