@@ -251,8 +251,7 @@
 ### P3 — Médio
 | Item | Descrição |
 |------|-----------|
-| GitHub Actions | Rodar pytest em cada PR |
-| GitHub Actions | Verificar cobertura > 80% |
+| GitHub Actions | ✅ `.github/workflows/ci.yml`: pytest unit em push/PR, cobertura ≥25% (cresce conforme testes), sintaxe Python, flake8 (non-blocking); usa SQLite em memória (sem serviço PostgreSQL) |
 | Cache Redis | Para dashboards |
 | Índices DB | Para queries de vencimento |
 
