@@ -160,4 +160,6 @@ urlpatterns = [
     # SEÇÃO 18 — SIMULADOR DE ANTECIPAÇÃO
     # ==========================================================================
     path('contrato/<int:contrato_id>/simulador/', views.simulador_antecipacao, name='simulador_antecipacao'),
+    # R-05: Recibo PDF de quitação antecipada
+    path('contrato/<int:contrato_id>/recibo-antecipacao.pdf', views.download_recibo_antecipacao, name='recibo_antecipacao'),
 ]
