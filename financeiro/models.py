@@ -193,6 +193,13 @@ class Parcela(TimeStampedModel):
         verbose_name='Boleto PDF',
         help_text='Arquivo PDF do boleto gerado'
     )
+    boleto_pdf_db = models.BinaryField(
+        null=True,
+        blank=True,
+        editable=False,
+        verbose_name='PDF do boleto (banco de dados)',
+        help_text='Cópia do PDF em banco de dados — persiste em storage efêmero (Render)'
+    )
     boleto_url = models.URLField(
         max_length=500,
         blank=True,
@@ -680,8 +687,11 @@ class Parcela(TimeStampedModel):
             # Salvar PDF se disponível
             if resultado.get('pdf_content'):
                 from django.core.files.base import ContentFile
+                pdf_content = resultado['pdf_content']
                 nome_arquivo = f"boleto_{self.contrato.numero_contrato}_{self.numero_parcela}.pdf"
-                self.boleto_pdf.save(nome_arquivo, ContentFile(resultado['pdf_content']), save=False)
+                self.boleto_pdf.save(nome_arquivo, ContentFile(pdf_content), save=False)
+                # Cópia em banco de dados — persiste em deploys com storage efêmero
+                self.boleto_pdf_db = pdf_content
 
             # PIX se disponível
             if resultado.get('pix_copia_cola'):
