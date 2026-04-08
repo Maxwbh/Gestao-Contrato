@@ -610,7 +610,7 @@ class ImobiliariaForm(forms.ModelForm):
     class Meta:
         model = Imobiliaria
         fields = [
-            'contabilidade', 'nome', 'razao_social', 'cnpj',
+            'contabilidade', 'nome', 'razao_social', 'cnpj', 'logo',
             'cep', 'logradouro', 'numero', 'complemento', 'bairro', 'cidade', 'estado',
             'telefone', 'email', 'responsavel_financeiro',
             'banco', 'agencia', 'conta', 'pix',
