@@ -362,10 +362,16 @@
                             <div class="info-label">Prazo Reajuste</div>
                             <div class="info-value">{{ contrato.prazo_reajuste_meses }} meses</div>
                         </div>
-                        {% if contrato.data_proximo_reajuste %}
+                        {% if contrato.tipo_correcao != 'FIXO' %}
                         <div class="info-item">
                             <div class="info-label">Proximo Reajuste</div>
+                            {% if contrato.data_proximo_reajuste %}
                             <div class="info-value text-warning">{{ contrato.data_proximo_reajuste|date:"d/m/Y" }}</div>
+                            {% elif contrato.numero_parcelas <= contrato.prazo_reajuste_meses %}
+                            <div class="info-value text-muted"><small>N/A — contrato no ciclo 1</small></div>
+                            {% else %}
+                            <div class="info-value text-muted">—</div>
+                            {% endif %}
                         </div>
                         {% endif %}
                         {% if contrato.spread_reajuste %}
@@ -747,6 +753,12 @@
                             <button type="button" class="btn btn-sm btn-success" onclick="abrirModalCarne()">
                                 <i class="fas fa-file-invoice-dollar"></i> Gerar Carne
                             </button>
+                            <form method="post" action="{% url 'financeiro:download_zip_boletos' contrato.pk %}" style="display:inline;">
+                                {% csrf_token %}
+                                <button type="submit" class="btn btn-sm btn-outline-secondary" title="Baixar todos os boletos em ZIP">
+                                    <i class="fas fa-file-archive"></i> ZIP
+                                </button>
+                            </form>
                         </div>
                     </div>
                     <div class="card-body p-0">
@@ -1045,6 +1057,63 @@
         {% endif %}
         {% endwith %}
 
+        <!-- 3.19 Histórico de Pagamentos -->
+        {% if historico_pagamentos %}
+        <div class="card mt-4">
+            <div class="card-header bg-dark text-white d-flex justify-content-between align-items-center">
+                <span><i class="fas fa-history me-1"></i> Histórico de Pagamentos</span>
+                <span class="badge bg-light text-dark">{{ historico_pagamentos|length }} registro(s)</span>
+            </div>
+            <div class="card-body p-0">
+                <div class="table-responsive" style="max-height:400px;overflow-y:auto;">
+                    <table class="table table-sm table-hover mb-0">
+                        <thead class="table-light sticky-top">
+                            <tr>
+                                <th class="text-center">#</th>
+                                <th>Data Pgto</th>
+                                <th class="text-end">Valor Pago</th>
+                                <th class="text-end">Juros</th>
+                                <th class="text-end">Multa</th>
+                                <th>Forma</th>
+                                <th class="text-center">Comprovante</th>
+                                <th>Obs.</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for h in historico_pagamentos %}
+                            <tr>
+                                <td class="text-center text-muted">{{ h.parcela.numero_parcela }}</td>
+                                <td>{{ h.data_pagamento|date:"d/m/Y" }}</td>
+                                <td class="text-end fw-semibold text-success">R$ {{ h.valor_pago|floatformat:2 }}</td>
+                                <td class="text-end {% if h.valor_juros %}text-danger{% else %}text-muted{% endif %}">
+                                    {% if h.valor_juros %}R$ {{ h.valor_juros|floatformat:2 }}{% else %}—{% endif %}
+                                </td>
+                                <td class="text-end {% if h.valor_multa %}text-danger{% else %}text-muted{% endif %}">
+                                    {% if h.valor_multa %}R$ {{ h.valor_multa|floatformat:2 }}{% else %}—{% endif %}
+                                </td>
+                                <td>
+                                    <span class="badge bg-secondary">{{ h.get_forma_pagamento_display }}</span>
+                                </td>
+                                <td class="text-center">
+                                    {% if h.comprovante %}
+                                    <a href="{{ h.comprovante.url }}" target="_blank" class="btn btn-xs btn-outline-primary"
+                                       style="font-size:.75rem;padding:2px 7px;" title="Ver comprovante">
+                                        <i class="fas fa-paperclip"></i>
+                                    </a>
+                                    {% else %}
+                                    <span class="text-muted small">—</span>
+                                    {% endif %}
+                                </td>
+                                <td class="text-muted small">{{ h.observacoes|truncatechars:40 }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+
         <!-- Botoes de Acao -->
         <div class="card mt-4">
             <div class="card-body d-flex justify-content-between">
@@ -1056,6 +1125,17 @@
                         <i class="fas fa-edit"></i> Editar Contrato
                     </a>
                     {% if contrato.status != 'CANCELADO' %}
+                    <a href="{% url 'financeiro:simulador_antecipacao' contrato.pk %}" class="btn btn-outline-success">
+                        <i class="fas fa-forward me-1"></i> Simular Antecipação
+                    </a>
+                    <a href="{% url 'financeiro:recibo_antecipacao' contrato.pk %}" class="btn btn-outline-info"
+                       title="Baixar recibo das últimas antecipações">
+                        <i class="fas fa-file-pdf me-1"></i> Recibo Antecipação
+                    </a>
+                    <a href="{% url 'financeiro:renegociar_parcelas' contrato.pk %}" class="btn btn-outline-warning"
+                       title="Renegociar parcelas em atraso">
+                        <i class="fas fa-handshake me-1"></i> Renegociar
+                    </a>
                     <a href="{% url 'contratos:calcular_rescisao' contrato.pk %}" class="btn btn-outline-danger">
                         <i class="fas fa-file-contract me-1"></i> Calcular Rescisão
                     </a>
@@ -2000,6 +2080,8 @@ function atualizarPreviewCarne() {
     var btnGerar = document.getElementById('btnGerarCarne');
     var btnGerarQtd = document.getElementById('btnGerarQtd');
 
+    if (!previewDiv || !btnGerar || !btnGerarQtd) return;
+
     // Filtrar parcelas que podem ser geradas (sem boleto e elegiveis)
     var parcelasDisponiveis = dadosElegibilidade.parcelas.filter(function(p) {
         return p.pode_gerar && !p.tem_boleto;
@@ -2060,11 +2142,13 @@ function atualizarPreviewCarne() {
     btnGerarQtd.textContent = parcelasParaGerar.length;
 
     // Alerta se houver bloqueio
-    if (parcelasBloqueadas.length > 0 && qtd > parcelasDisponiveis.length) {
-        alertaDiv.classList.remove('d-none');
-        alertaTexto.textContent = 'Algumas parcelas estao bloqueadas aguardando reajuste. Aplique o reajuste do ciclo ' + parcelasBloqueadas[0].ciclo + ' para libera-las.';
-    } else {
-        alertaDiv.classList.add('d-none');
+    if (alertaDiv && alertaTexto) {
+        if (parcelasBloqueadas.length > 0 && qtd > parcelasDisponiveis.length) {
+            alertaDiv.classList.remove('d-none');
+            alertaTexto.textContent = 'Algumas parcelas estao bloqueadas aguardando reajuste. Aplique o reajuste do ciclo ' + parcelasBloqueadas[0].ciclo + ' para libera-las.';
+        } else {
+            alertaDiv.classList.add('d-none');
+        }
     }
 }
 
@@ -2304,6 +2388,67 @@ function abrirModalReajuste(contratoId) {
     .catch(function() {
         body.innerHTML = '<div class="alert alert-danger">Erro ao carregar formulário de reajuste.</div>';
     });
+}
+
+function _bindReajusteModal(contratoId) {
+    // Recalcular com desconto (submete GET e recarrega o conteúdo do modal)
+    var formDesc = document.getElementById('formDescontoModal');
+    if (formDesc) {
+        formDesc.addEventListener('submit', function(e) {
+            e.preventDefault();
+            var params = new URLSearchParams(new FormData(formDesc));
+            var body = document.getElementById('modalReajusteBody');
+            body.innerHTML = '<div class="text-center py-4 text-muted"><i class="fas fa-sync fa-spin fa-2x"></i></div>';
+            fetch('/financeiro/contrato/' + contratoId + '/reajuste/?' + params.toString(), {
+                headers: {'X-Requested-With': 'XMLHttpRequest'}
+            })
+            .then(function(r) { return r.text(); })
+            .then(function(html) {
+                body.innerHTML = html;
+                _bindReajusteModal(contratoId);
+            })
+            .catch(function() {
+                body.innerHTML = '<div class="alert alert-danger">Erro ao recalcular prévia.</div>';
+            });
+        });
+    }
+
+    // Aplicar reajuste (POST AJAX)
+    var formApl = document.getElementById('formAplicarModal');
+    if (formApl) {
+        formApl.addEventListener('submit', function(e) {
+            e.preventDefault();
+            var btn = document.getElementById('btnAplicarModal');
+            if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Aplicando...'; }
+
+            fetch(formApl.action, {
+                method: 'POST',
+                headers: {'X-Requested-With': 'XMLHttpRequest'},
+                body: new FormData(formApl)
+            })
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                if (data.sucesso) {
+                    var inst = M.Modal.getInstance(document.getElementById('modalReajuste'));
+                    if (inst) inst.close();
+                    // Exibir mensagem de sucesso e recarregar a página
+                    if (window.showToast) {
+                        showToast(data.mensagem || 'Reajuste aplicado!', 'success', 3000);
+                    }
+                    setTimeout(function() { location.reload(); }, 1500);
+                } else {
+                    if (window.showErrorModal) {
+                        showErrorModal(data.erro || 'Erro ao aplicar reajuste.');
+                    }
+                    if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-check me-1"></i>Aplicar Reajuste'; }
+                }
+            })
+            .catch(function() {
+                if (window.showErrorModal) showErrorModal('Erro de conexão.');
+                if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-check me-1"></i>Aplicar Reajuste'; }
+            });
+        });
+    }
 }
 
 function _bindReajusteModal(contratoId) {
