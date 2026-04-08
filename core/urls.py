@@ -50,6 +50,7 @@ urlpatterns = [
     path('imoveis/novo/', views.ImovelCreateView.as_view(), name='criar_imovel'),
     path('imoveis/<int:pk>/editar/', views.ImovelUpdateView.as_view(), name='editar_imovel'),
     path('imoveis/<int:pk>/excluir/', views.ImovelDeleteView.as_view(), name='excluir_imovel'),
+    path('imoveis/loteamento/<str:nome>/', views.loteamento_detalhe, name='loteamento_detalhe'),
 
     # CRUD Imobiliária
     path('imobiliarias/', views.ImobiliariaListView.as_view(), name='listar_imobiliarias'),
@@ -74,6 +75,9 @@ urlpatterns = [
     # API Acesso de Usuários
     path('api/contabilidades/<int:contabilidade_id>/imobiliarias/', views.api_listar_imobiliarias_por_contabilidade, name='api_imobiliarias_contabilidade'),
     path('api/usuarios/<int:usuario_id>/acessos/', views.api_listar_acessos_usuario, name='api_acessos_usuario'),
+
+    # U-06: Busca Global
+    path('api/search/', views.api_busca_global, name='api_busca_global'),
 
     # API BrasilAPI (CEP e CNPJ)
     path('api/cep/<str:cep>/', views.api_buscar_cep, name='api_buscar_cep'),
