@@ -1212,6 +1212,68 @@ def download_zip_boletos(request, contrato_id):
 
 
 @login_required
+def segunda_via_boleto(request, pk):
+    """
+    Segunda via de boleto com juros/multa atualizados para hoje.
+    GET → página de preview com valores atualizados.
+    GET ?download=1 → gera PDF fresco via BRCobrança e retorna download.
+    """
+    from financeiro.services.boleto_service import BoletoService
+
+    parcela = get_object_or_404(Parcela, pk=pk)
+    contrato = parcela.contrato
+    hoje = timezone.localdate()
+
+    if parcela.pago:
+        messages.info(request, f'Parcela {parcela.numero_parcela} já foi paga em {parcela.data_pagamento}.')
+        return redirect('financeiro:detalhe_parcela', pk=pk)
+
+    # Calcular juros/multa atualizados
+    valor_juros = Decimal('0.00')
+    valor_multa = Decimal('0.00')
+    if hoje > parcela.data_vencimento:
+        valor_juros, valor_multa = parcela.calcular_juros_multa(hoje)
+    valor_total = parcela.valor_atual + valor_juros + valor_multa
+
+    if request.GET.get('download') == '1':
+        # Obter conta bancária
+        conta_bancaria = None
+        if hasattr(contrato, 'get_conta_bancaria'):
+            conta_bancaria = contrato.get_conta_bancaria()
+        if not conta_bancaria:
+            conta_bancaria = contrato.imobiliaria.contas_bancarias.filter(principal=True, ativo=True).first()
+        if not conta_bancaria:
+            conta_bancaria = contrato.imobiliaria.contas_bancarias.filter(ativo=True).first()
+
+        if not conta_bancaria:
+            messages.error(request, 'Nenhuma conta bancária configurada para esta imobiliária.')
+            return redirect('financeiro:detalhe_parcela', pk=pk)
+
+        servico = BoletoService()
+        resultado = servico.gerar_segunda_via(parcela, conta_bancaria, data_referencia=hoje)
+
+        if resultado.get('sucesso') and resultado.get('pdf_content'):
+            fname = f'segunda_via_{contrato.numero_contrato}_parcela_{parcela.numero_parcela}.pdf'
+            response = HttpResponse(resultado['pdf_content'], content_type='application/pdf')
+            response['Content-Disposition'] = f'attachment; filename="{fname}"'
+            return response
+        else:
+            messages.error(request, f"Erro ao gerar segunda via: {resultado.get('erro', 'Erro desconhecido')}")
+            return redirect('financeiro:detalhe_parcela', pk=pk)
+
+    context = {
+        'parcela': parcela,
+        'contrato': contrato,
+        'hoje': hoje,
+        'valor_juros': valor_juros,
+        'valor_multa': valor_multa,
+        'valor_total': valor_total,
+        'dias_atraso': (hoje - parcela.data_vencimento).days if hoje > parcela.data_vencimento else 0,
+    }
+    return render(request, 'financeiro/segunda_via_boleto.html', context)
+
+
+@login_required
 @require_GET
 @xframe_options_sameorigin
 def visualizar_boleto(request, pk):

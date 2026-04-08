@@ -1,0 +1,113 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Segunda Via — Parcela {{ parcela.numero_parcela }}{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+
+    <!-- Breadcrumb -->
+    <nav aria-label="breadcrumb" class="mb-3">
+        <ol class="breadcrumb">
+            <li class="breadcrumb-item"><a href="{% url 'financeiro:listar_parcelas' %}">Parcelas</a></li>
+            <li class="breadcrumb-item"><a href="{% url 'financeiro:detalhe_parcela' parcela.pk %}">Parcela {{ parcela.numero_parcela }}</a></li>
+            <li class="breadcrumb-item active">Segunda Via</li>
+        </ol>
+    </nav>
+
+    <div class="row justify-content-center">
+        <div class="col-lg-7">
+
+            <!-- Cabeçalho -->
+            <div class="card shadow-sm mb-4">
+                <div class="card-header bg-warning text-dark d-flex align-items-center gap-2">
+                    <i class="fas fa-file-invoice-dollar fa-lg"></i>
+                    <h5 class="mb-0">Segunda Via de Boleto</h5>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <p class="mb-1"><strong>Contrato:</strong> {{ contrato.numero_contrato }}</p>
+                            <p class="mb-1"><strong>Comprador:</strong> {{ contrato.comprador.nome }}</p>
+                            <p class="mb-1"><strong>Parcela:</strong> {{ parcela.numero_parcela }}/{{ contrato.numero_parcelas }}</p>
+                        </div>
+                        <div class="col-md-6">
+                            <p class="mb-1"><strong>Vencimento original:</strong> {{ parcela.data_vencimento|date:"d/m/Y" }}</p>
+                            <p class="mb-1"><strong>Data de emissão:</strong> {{ hoje|date:"d/m/Y" }}</p>
+                            {% if dias_atraso > 0 %}
+                            <p class="mb-1">
+                                <span class="badge bg-danger">{{ dias_atraso }} dia(s) em atraso</span>
+                            </p>
+                            {% else %}
+                            <p class="mb-1"><span class="badge bg-success">Em dia</span></p>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Valores atualizados -->
+            <div class="card shadow-sm mb-4">
+                <div class="card-header bg-primary text-white">
+                    <h6 class="mb-0"><i class="fas fa-calculator me-2"></i>Valores Atualizados para Hoje</h6>
+                </div>
+                <div class="card-body">
+                    <table class="table table-sm mb-0">
+                        <tbody>
+                            <tr>
+                                <td class="text-muted">Valor da parcela</td>
+                                <td class="text-end">R$ {{ parcela.valor_atual|floatformat:2 }}</td>
+                            </tr>
+                            {% if valor_juros %}
+                            <tr class="text-danger">
+                                <td>Juros de mora</td>
+                                <td class="text-end">R$ {{ valor_juros|floatformat:2 }}</td>
+                            </tr>
+                            {% endif %}
+                            {% if valor_multa %}
+                            <tr class="text-danger">
+                                <td>Multa</td>
+                                <td class="text-end">R$ {{ valor_multa|floatformat:2 }}</td>
+                            </tr>
+                            {% endif %}
+                            <tr class="table-primary fw-bold fs-5">
+                                <td>Total a pagar</td>
+                                <td class="text-end">R$ {{ valor_total|floatformat:2 }}</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Ações -->
+            <div class="card shadow-sm">
+                <div class="card-body d-flex flex-wrap gap-2 justify-content-between">
+                    <a href="{% url 'financeiro:detalhe_parcela' parcela.pk %}" class="btn btn-outline-secondary">
+                        <i class="fas fa-arrow-left me-1"></i> Voltar
+                    </a>
+                    <div class="d-flex flex-wrap gap-2">
+                        {% if parcela.tem_boleto %}
+                        <a href="{% url 'financeiro:download_boleto' parcela.pk %}" class="btn btn-outline-primary">
+                            <i class="fas fa-download me-1"></i> Baixar boleto original
+                        </a>
+                        {% endif %}
+                        <a href="{% url 'financeiro:segunda_via_boleto' parcela.pk %}?download=1"
+                           class="btn btn-warning text-dark fw-semibold">
+                            <i class="fas fa-file-pdf me-1"></i> Gerar Segunda Via (PDF atualizado)
+                        </a>
+                    </div>
+                </div>
+            </div>
+
+            {% if not parcela.tem_boleto %}
+            <div class="alert alert-info mt-3">
+                <i class="fas fa-info-circle me-2"></i>
+                Esta parcela não possui boleto registrado. A segunda via será gerada com os dados atuais
+                e o nosso número será atribuído na emissão.
+            </div>
+            {% endif %}
+
+        </div>
+    </div>
+</div>
+{% endblock %}
