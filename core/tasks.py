@@ -26,6 +26,7 @@ from functools import wraps
 from django.http import JsonResponse
 from django.views.decorators.http import require_http_methods
 from django.conf import settings
+from django.db import transaction
 
 logger = logging.getLogger(__name__)
 
@@ -88,7 +89,7 @@ class TaskResult:
 
     def add_error(self, error: str):
         self.errors.append(error)
-        logger.error(f"[{self.task_name}] {error}")
+        logger.exception(f"[{self.task_name}] {error}")
 
     def finish(self, success: bool = True):
         self.finished_at = datetime.now()
@@ -112,8 +113,8 @@ def processar_reajustes_sync():
     Processa reajustes pendentes de forma síncrona.
     Alternativa à task Celery para o Free tier.
     """
-    from contratos.models import Contrato
-    from financeiro.models import Parcela
+    from contratos.models import Contrato, StatusContrato
+    from financeiro.models import Reajuste
     from contratos.services import IndiceEconomicoService, ReajusteService
     from decimal import Decimal
     from datetime import date
@@ -123,33 +124,32 @@ def processar_reajustes_sync():
     try:
         hoje = date.today()
 
-        # Buscar contratos que precisam de reajuste
+        # Buscar contratos ativos que usam índice econômico para reajuste
         contratos = Contrato.objects.filter(
-            ativo=True,
-            tipo_reajuste__in=['IPCA', 'IGP-M', 'SELIC']
-        ).select_related('imovel', 'comprador')
+            status=StatusContrato.ATIVO,
+            tipo_correcao__in=['IPCA', 'IGPM', 'INCC', 'IGPDI', 'INPC', 'TR', 'SELIC']
+        ).select_related('imobiliaria', 'comprador')
 
         result.add_message(f"Verificando {contratos.count()} contratos ativos")
 
         for contrato in contratos:
             try:
-                # Verificar se é mês de reajuste
-                meses_desde_inicio = (
-                    (hoje.year - contrato.data_contrato.year) * 12 +
-                    (hoje.month - contrato.data_contrato.month)
-                )
+                # Verificar se há ciclo pendente de reajuste
+                ciclo = Reajuste.calcular_ciclo_pendente(contrato)
+                if not ciclo:
+                    continue
 
-                if meses_desde_inicio > 0 and meses_desde_inicio % contrato.periodicidade_reajuste == 0:
-                    # Buscar índice atual
-                    indice = IndiceEconomicoService.get_indice_atual(contrato.tipo_reajuste)
+                # Buscar índice atual para o tipo de correção do contrato
+                indice = IndiceEconomicoService.get_indice_atual(contrato.tipo_correcao)
 
-                    if indice:
-                        # Aplicar reajuste às parcelas pendentes
-                        parcelas_pendentes = contrato.parcelas.filter(
-                            status='PENDENTE',
-                            data_vencimento__gte=hoje
-                        )
+                if indice:
+                    # Aplicar reajuste às parcelas pendentes
+                    parcelas_pendentes = list(contrato.parcelas.filter(
+                        pago=False,
+                        data_vencimento__gte=hoje
+                    ))
 
+                    with transaction.atomic():
                         for parcela in parcelas_pendentes:
                             percentual = Decimal(str(indice.get('valor', 0)))
                             novo_valor = ReajusteService.calcular_reajuste(
@@ -159,16 +159,18 @@ def processar_reajustes_sync():
                             parcela.save(update_fields=['valor_atual', 'atualizado_em'])
                             result.items_processed += 1
 
-                        result.add_message(
-                            f"Contrato {contrato.numero}: {parcelas_pendentes.count()} parcelas reajustadas"
-                        )
+                    result.add_message(
+                        f"Contrato {contrato.numero_contrato}: {len(parcelas_pendentes)} parcelas reajustadas"
+                    )
 
             except Exception as e:
-                result.add_error(f"Erro no contrato {contrato.numero}: {str(e)}")
+                logger.exception("Erro no contrato %s: %s", contrato.numero_contrato, e)
+                result.add_error(f"Erro no contrato {contrato.numero_contrato}: {str(e)}")
 
         result.finish()
 
     except Exception as e:
+        logger.exception("Erro geral em processar_reajustes: %s", e)
         result.add_error(f"Erro geral: {str(e)}")
         result.finish(success=False)
 
@@ -190,15 +192,15 @@ def enviar_notificacoes_sync():
         dias_antecedencia = getattr(settings, 'NOTIFICACAO_DIAS_ANTECEDENCIA', 5)
         data_limite = date.today() + timedelta(days=dias_antecedencia)
 
-        # Buscar parcelas próximas do vencimento
+        # Buscar parcelas próximas do vencimento (não pagas)
         parcelas = Parcela.objects.filter(
-            status='PENDENTE',
+            pago=False,
             data_vencimento__lte=data_limite,
             data_vencimento__gte=date.today()
         ).select_related(
             'contrato',
             'contrato__comprador',
-            'contrato__imovel'
+            'contrato__imobiliaria'
         )
 
         result.add_message(f"Encontradas {parcelas.count()} parcelas próximas do vencimento")
@@ -214,13 +216,13 @@ def enviar_notificacoes_sync():
                     mensagem = f"""
 Olá {comprador.nome},
 
-Lembramos que a parcela {parcela.numero_parcela} do seu contrato {parcela.contrato.numero}
+Lembramos que a parcela {parcela.numero_parcela} do seu contrato {parcela.contrato.numero_contrato}
 vence em {parcela.data_vencimento.strftime('%d/%m/%Y')}.
 
 Valor: R$ {parcela.valor_atual:,.2f}
 
 Atenciosamente,
-{parcela.contrato.imovel.imobiliaria.nome}
+{parcela.contrato.imobiliaria.nome}
                     """.strip()
 
                     # Enviar email
@@ -233,11 +235,13 @@ Atenciosamente,
                     result.add_message(f"Notificação enviada para {comprador.email}")
 
             except Exception as e:
+                logger.exception("Erro ao notificar parcela %s: %s", parcela.id, e)
                 result.add_error(f"Erro ao notificar parcela {parcela.id}: {str(e)}")
 
         result.finish()
 
     except Exception as e:
+        logger.exception("Erro geral em notificar_vencimentos: %s", e)
         result.add_error(f"Erro geral: {str(e)}")
         result.finish(success=False)
 
@@ -246,7 +250,9 @@ Atenciosamente,
 
 def atualizar_status_parcelas_sync():
     """
-    Atualiza status de parcelas vencidas.
+    Verifica parcelas vencidas e não pagas.
+    Parcela usa pago=True/False — não há campo status a actualizar.
+    Esta tarefa apenas emite um relatório de contagem.
     """
     from financeiro.models import Parcela
     from datetime import date
@@ -256,18 +262,18 @@ def atualizar_status_parcelas_sync():
     try:
         hoje = date.today()
 
-        # Marcar parcelas vencidas como ATRASADA
-        parcelas_vencidas = Parcela.objects.filter(
-            status='PENDENTE',
+        # Contar parcelas vencidas e não pagas
+        count = Parcela.objects.filter(
+            pago=False,
             data_vencimento__lt=hoje
-        )
+        ).count()
 
-        count = parcelas_vencidas.update(status='ATRASADA')
         result.items_processed = count
-        result.add_message(f"{count} parcelas marcadas como atrasadas")
+        result.add_message(f"{count} parcelas em atraso (vencidas e não pagas)")
         result.finish()
 
     except Exception as e:
+        logger.exception("Erro em atualizar_status_parcelas: %s", e)
         result.add_error(f"Erro: {str(e)}")
         result.finish(success=False)
 

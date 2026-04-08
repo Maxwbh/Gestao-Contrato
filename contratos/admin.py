@@ -152,6 +152,23 @@ class ContratoAdmin(admin.ModelAdmin):
         }),
     )
 
+    def save_related(self, request, form, formsets, change):
+        """Após salvar inlines (TabelaJurosContrato), recalcula amortização."""
+        super().save_related(request, form, formsets, change)
+        contrato = form.instance
+        # Só recalcula se o contrato já tem parcelas e TabelaJurosContrato definida
+        if not (contrato.pk and contrato.parcelas.exists()):
+            return
+        if not TabelaJurosContrato.objects.filter(contrato=contrato).exists():
+            return
+        from decimal import Decimal
+        from django.db.models import Sum
+        base_pv = contrato.valor_financiado
+        if contrato.intermediarias_reduzem_pmt:
+            soma = contrato.intermediarias.aggregate(total=Sum('valor'))['total'] or Decimal('0')
+            base_pv = max(base_pv - soma, Decimal('0.01'))
+        contrato.recalcular_amortizacao(base_pv=base_pv)
+
     def valor_total_formatado(self, obj):
         """Formata o valor total do contrato"""
         return f"R$ {obj.valor_total:,.2f}".replace(',', 'X').replace('.', ',').replace('X', '.')
