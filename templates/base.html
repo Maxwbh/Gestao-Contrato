@@ -5,17 +5,17 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% block title %}Gestão de Contratos{% endblock %}</title>
 
-    <!-- Materialize CSS -->
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/materialize/1.0.0/css/materialize.min.css">
-    <!-- Material Icons -->
-    <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
-    <!-- Font Awesome -->
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <!-- AG Grid Community -->
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/ag-grid-community@31.3.4/styles/ag-grid.css">
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/ag-grid-community@31.3.4/styles/ag-theme-material.css">
-    <!-- Custom CSS -->
     {% load static %}
+    <!-- Materialize CSS (local) -->
+    <link rel="stylesheet" href="{% static 'vendor/materialize/css/materialize.min.css' %}">
+    <!-- Material Icons (Google Fonts CDN — required for icon font) -->
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+    <!-- Font Awesome (local) -->
+    <link rel="stylesheet" href="{% static 'vendor/fontawesome/css/all.min.css' %}">
+    <!-- AG Grid Community (local) -->
+    <link rel="stylesheet" href="{% static 'vendor/ag-grid/css/ag-grid.css' %}">
+    <link rel="stylesheet" href="{% static 'vendor/ag-grid/css/ag-theme-material.css' %}">
+    <!-- Custom CSS -->
     <link rel="stylesheet" href="{% static 'css/custom.css' %}">
 
     {% block extra_css %}{% endblock %}
@@ -395,10 +395,10 @@
     });
     </script>
 
-    <!-- Materialize JS -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/materialize/1.0.0/js/materialize.min.js"></script>
-    <!-- AG Grid Community -->
-    <script src="https://cdn.jsdelivr.net/npm/ag-grid-community@31.3.4/dist/ag-grid-community.min.js"></script>
+    <!-- Materialize JS (local) -->
+    <script src="{% static 'vendor/materialize/js/materialize.min.js' %}"></script>
+    <!-- AG Grid Community (local) -->
+    <script src="{% static 'vendor/ag-grid/js/ag-grid-community.min.js' %}"></script>
     <!-- Custom JS -->
     <script src="{% static 'js/custom.js' %}"></script>
 
