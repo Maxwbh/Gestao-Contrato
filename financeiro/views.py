@@ -5820,3 +5820,54 @@ def simulador_antecipacao(request, contrato_id):
         'parcelas_selecionadas_ids': [str(x) for x in parcelas_selecionadas_ids],
         'desconto_perc': desconto_perc,
     })
+
+
+@login_required
+def download_recibo_antecipacao(request, contrato_id):
+    """
+    R-05: Gera e baixa o recibo PDF de quitação antecipada.
+
+    GET ?historico_ids=1,2,3  → PDF com os IDs informados
+    GET (sem params)           → PDF com as antecipações mais recentes do contrato
+    """
+    from contratos.models import Contrato
+    from .models import HistoricoPagamento
+    from .services.recibo_service import gerar_recibo_antecipacao_pdf
+
+    contrato = get_object_or_404(Contrato, pk=contrato_id)
+
+    ids_param = request.GET.get('historico_ids', '')
+    if ids_param:
+        try:
+            ids = [int(x) for x in ids_param.split(',') if x.strip()]
+        except ValueError:
+            ids = []
+    else:
+        ids = []
+
+    if ids:
+        historicos = HistoricoPagamento.objects.filter(
+            pk__in=ids,
+            parcela__contrato=contrato,
+            antecipado=True,
+        ).select_related('parcela').order_by('parcela__numero_parcela')
+    else:
+        historicos = HistoricoPagamento.objects.filter(
+            parcela__contrato=contrato,
+            antecipado=True,
+        ).select_related('parcela').order_by('-data_pagamento', 'parcela__numero_parcela')[:20]
+
+    if not historicos.exists():
+        messages.error(request, 'Nenhuma antecipação encontrada para este contrato.')
+        return redirect('contratos:detalhe', pk=contrato_id)
+
+    try:
+        pdf_bytes = gerar_recibo_antecipacao_pdf(contrato, historicos)
+    except Exception as e:
+        messages.error(request, f'Erro ao gerar recibo: {e}')
+        return redirect('contratos:detalhe', pk=contrato_id)
+
+    filename = f'recibo_antecipacao_{contrato.numero_contrato}.pdf'
+    response = HttpResponse(pdf_bytes, content_type='application/pdf')
+    response['Content-Disposition'] = f'attachment; filename="{filename}"'
+    return response
