@@ -5871,3 +5871,110 @@ def download_recibo_antecipacao(request, contrato_id):
     response = HttpResponse(pdf_bytes, content_type='application/pdf')
     response['Content-Disposition'] = f'attachment; filename="{filename}"'
     return response
+
+
+# =============================================================================
+# R-04: Renegociação de Parcelas em Atraso
+# =============================================================================
+
+@login_required
+def renegociar_parcelas(request, contrato_id):
+    """
+    R-04: Tela de renegociação — permite alterar data de vencimento e/ou valor
+    de parcelas em atraso (não pagas e vencidas). Zera juros/multa acumulados
+    ao confirmar a renegociação.
+
+    GET  → exibe lista de parcelas elegíveis com campos editáveis
+    POST → aplica as alterações às parcelas selecionadas
+    """
+    from contratos.models import Contrato
+    from datetime import date
+
+    contrato = get_object_or_404(Contrato, pk=contrato_id)
+    hoje = date.today()
+
+    # Parcelas elegíveis: não pagas e vencidas
+    parcelas_em_atraso = Parcela.objects.filter(
+        contrato=contrato,
+        pago=False,
+        data_vencimento__lt=hoje,
+    ).order_by('numero_parcela')
+
+    if request.method == 'POST':
+        parcelas_ids = request.POST.getlist('parcela_ids')
+        if not parcelas_ids:
+            messages.warning(request, 'Selecione ao menos uma parcela para renegociar.')
+            return redirect('financeiro:renegociar_parcelas', contrato_id=contrato_id)
+
+        alteradas = 0
+        erros = []
+
+        with transaction.atomic():
+            for pk in parcelas_ids:
+                try:
+                    parcela = Parcela.objects.select_for_update().get(
+                        pk=pk, contrato=contrato, pago=False
+                    )
+                except Parcela.DoesNotExist:
+                    continue
+
+                nova_data_str = request.POST.get(f'nova_data_{pk}', '').strip()
+                novo_valor_str = request.POST.get(f'novo_valor_{pk}', '').strip()
+
+                mudou = False
+
+                if nova_data_str:
+                    try:
+                        from datetime import datetime
+                        nova_data = datetime.strptime(nova_data_str, '%Y-%m-%d').date()
+                        if nova_data <= hoje:
+                            erros.append(
+                                f'Parcela {parcela.numero_parcela}: nova data deve ser futura.'
+                            )
+                            continue
+                        parcela.data_vencimento = nova_data
+                        mudou = True
+                    except ValueError:
+                        erros.append(f'Parcela {parcela.numero_parcela}: data inválida.')
+                        continue
+
+                if novo_valor_str:
+                    try:
+                        novo_valor = Decimal(novo_valor_str.replace(',', '.'))
+                        if novo_valor <= 0:
+                            erros.append(
+                                f'Parcela {parcela.numero_parcela}: valor deve ser positivo.'
+                            )
+                            continue
+                        parcela.valor_atual = novo_valor
+                        mudou = True
+                    except Exception:
+                        erros.append(f'Parcela {parcela.numero_parcela}: valor inválido.')
+                        continue
+
+                if mudou:
+                    # Zera juros/multa acumulados — novo prazo começa limpo
+                    parcela.valor_juros = Decimal('0.00')
+                    parcela.valor_multa = Decimal('0.00')
+                    parcela.save(update_fields=[
+                        'data_vencimento', 'valor_atual', 'valor_juros', 'valor_multa'
+                    ])
+                    alteradas += 1
+
+        for erro in erros:
+            messages.warning(request, erro)
+
+        if alteradas:
+            messages.success(
+                request,
+                f'{alteradas} parcela(s) renegociada(s) com sucesso. '
+                f'Juros e multa foram zerados.'
+            )
+        return redirect('contratos:detalhe', pk=contrato_id)
+
+    # GET — renderiza formulário
+    return render(request, 'financeiro/renegociar_parcelas.html', {
+        'contrato': contrato,
+        'parcelas': parcelas_em_atraso,
+        'hoje': hoje,
+    })
