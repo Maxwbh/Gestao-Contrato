@@ -28,6 +28,7 @@ urlpatterns = [
     path('parcelas/<int:pk>/', views.detalhe_parcela, name='detalhe_parcela'),
     path('parcelas/<int:pk>/pagar/', views.registrar_pagamento, name='registrar_pagamento'),
     path('parcelas/<int:pk>/pagar-ajax/', views.pagar_parcela_ajax, name='pagar_parcela_ajax'),
+    path('parcelas/<int:pk>/notificar/', views.notificar_inadimplente, name='notificar_inadimplente'),
 
     # Carne (multiplos boletos)
     path('contrato/<int:contrato_id>/gerar-carne/', views.gerar_carne, name='gerar_carne'),
@@ -96,6 +97,7 @@ urlpatterns = [
     path('relatorios/posicao-contratos/', views.RelatorioPosicaoContratosView.as_view(), name='relatorio_posicao_contratos'),
     path('relatorios/previsao-reajustes/', views.RelatorioPrevisaoReajustesView.as_view(), name='relatorio_previsao_reajustes'),
     path('relatorios/exportar/<str:tipo>/', views.exportar_relatorio, name='exportar_relatorio'),
+    path('relatorios/exportar-consolidado/', views.exportar_relatorio_consolidado, name='exportar_relatorio_consolidado'),
     path('api/relatorios/resumo/', views.api_relatorio_resumo, name='api_relatorio_resumo'),
 
     # ==========================================================================
@@ -104,6 +106,9 @@ urlpatterns = [
     # Imobiliárias
     path('api/imobiliarias/', views.api_imobiliarias_lista, name='api_imobiliarias'),
     path('api/imobiliaria/<int:imobiliaria_id>/dashboard/', views.api_imobiliaria_dashboard, name='api_imobiliaria_dashboard'),
+    # 4-P3: novos endpoints
+    path('api/contabilidade/relatorios/vencimentos/', views.api_contabilidade_relatorios_vencimentos, name='api_contabilidade_relatorios_vencimentos'),
+    path('api/imobiliaria/<int:imobiliaria_id>/pendencias/', views.api_imobiliaria_pendencias, name='api_imobiliaria_pendencias'),
 
     # Contratos
     path('api/contratos/', views.api_contratos_lista, name='api_contratos'),
@@ -149,6 +154,7 @@ urlpatterns = [
     # API - NOTIFICAÇÕES
     # ==========================================================================
     path('api/reajustes-pendentes/count/', views.api_reajustes_pendentes_count, name='api_reajustes_pendentes_count'),
+    path('api/sidebar/pendencias/', views.api_sidebar_pendencias, name='api_sidebar_pendencias'),
 
     # ==========================================================================
     # FASE 9 — APIs P2 (Contabilidade + Imobiliária)

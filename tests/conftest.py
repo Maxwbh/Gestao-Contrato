@@ -23,6 +23,22 @@ from tests.fixtures.factories import (
     ReajusteFactory,
     HistoricoPagamentoFactory,
     ArquivoRetornoFactory,
+    # CNAB
+    ArquivoRemessaFactory,
+    ItemRemessaFactory,
+    ItemRetornoFactory,
+    # Notificações
+    ConfiguracaoEmailFactory,
+    ConfiguracaoSMSFactory,
+    ConfiguracaoWhatsAppFactory,
+    NotificacaoFactory,
+    TemplateNotificacaoFactory,
+    RegraNotificacaoFactory,
+    # Portal do Comprador
+    AcessoCompradorFactory,
+    LogAcessoCompradorFactory,
+    # Core
+    AcessoUsuarioFactory,
 )
 
 # Registrar factories para uso automático nos testes
@@ -39,6 +55,22 @@ register(ParcelaFactory)
 register(ReajusteFactory)
 register(HistoricoPagamentoFactory)
 register(ArquivoRetornoFactory)
+# CNAB
+register(ArquivoRemessaFactory)
+register(ItemRemessaFactory)
+register(ItemRetornoFactory)
+# Notificações
+register(ConfiguracaoEmailFactory)
+register(ConfiguracaoSMSFactory)
+register(ConfiguracaoWhatsAppFactory)
+register(NotificacaoFactory)
+register(TemplateNotificacaoFactory)
+register(RegraNotificacaoFactory)
+# Portal do Comprador
+register(AcessoCompradorFactory)
+register(LogAcessoCompradorFactory)
+# Core
+register(AcessoUsuarioFactory)
 
 
 # =============================================================================
@@ -260,6 +292,97 @@ def mock_viacep_success(requests_mock):
             'uf': 'MG'
         },
         status_code=200
+    )
+    return requests_mock
+
+
+@pytest.fixture
+def mock_twilio_sms(mocker):
+    """Mock do cliente Twilio SMS"""
+    mock_client = mocker.MagicMock()
+    mock_message = mocker.MagicMock()
+    mock_message.sid = 'SM00000000000000000000000000000000'
+    mock_client.messages.create.return_value = mock_message
+    mocker.patch('notificacoes.services.Client', return_value=mock_client)
+    return mock_client
+
+
+@pytest.fixture
+def mock_twilio_whatsapp(mocker):
+    """Mock do cliente Twilio WhatsApp"""
+    mock_client = mocker.MagicMock()
+    mock_message = mocker.MagicMock()
+    mock_message.sid = 'MM00000000000000000000000000000000'
+    mock_client.messages.create.return_value = mock_message
+    mocker.patch('notificacoes.services.Client', return_value=mock_client)
+    return mock_client
+
+
+@pytest.fixture
+def mock_twilio_error(mocker):
+    """Mock do cliente Twilio retornando erro"""
+    from twilio.base.exceptions import TwilioRestException
+    mock_client = mocker.MagicMock()
+    mock_client.messages.create.side_effect = TwilioRestException(
+        status=400, uri='/Messages', msg='Invalid phone number'
+    )
+    mocker.patch('notificacoes.services.Client', return_value=mock_client)
+    return mock_client
+
+
+@pytest.fixture
+def mock_ibge_ipca(requests_mock):
+    """Mock da API IBGE retornando série IPCA (código 433)"""
+    requests_mock.get(
+        'https://servicodados.ibge.gov.br/api/v3/agregados/1737/periodos/202301|202302|202303|202304|202305|202306|202307|202308|202309|202310|202311|202312/variaveis/2266?localidades=N1[all]',
+        json=[{
+            'id': '2266',
+            'resultados': [{
+                'series': [{
+                    'serie': {
+                        '202301': '0.53', '202302': '0.84', '202303': '0.71',
+                        '202304': '0.61', '202305': '0.23', '202306': '-0.08',
+                        '202307': '0.12', '202308': '0.23', '202309': '0.26',
+                        '202310': '0.24', '202311': '0.28', '202312': '0.62',
+                    }
+                }]
+            }]
+        }],
+        status_code=200
+    )
+    # Also mock the BCB fallback URL (SGS série 433)
+    requests_mock.get(
+        'https://api.bcb.gov.br/dados/serie/bcdata.sgs.433/dados',
+        json=[{'data': '01/12/2023', 'valor': '4.62'}],
+        status_code=200
+    )
+    return requests_mock
+
+
+@pytest.fixture
+def mock_ibge_inpc(requests_mock):
+    """Mock da API IBGE retornando série INPC (código 188)"""
+    requests_mock.get(
+        'https://api.bcb.gov.br/dados/serie/bcdata.sgs.188/dados',
+        json=[{'data': '01/12/2023', 'valor': '3.74'}],
+        status_code=200
+    )
+    return requests_mock
+
+
+@pytest.fixture
+def mock_smtp(settings, mailoutbox):
+    """Mock do SMTP — usa o backend locmem do Django"""
+    settings.EMAIL_BACKEND = 'django.core.mail.backends.locmem.EmailBackend'
+    return mailoutbox
+
+
+@pytest.fixture
+def mock_ibge_error(requests_mock):
+    """Mock da API IBGE retornando erro"""
+    requests_mock.get(
+        'https://api.bcb.gov.br/dados/serie/bcdata.sgs.433/dados',
+        status_code=503
     )
     return requests_mock
 

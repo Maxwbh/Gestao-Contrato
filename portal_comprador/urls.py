@@ -47,4 +47,8 @@ urlpatterns = [
     # Fase 9 — APIs P2 do Portal do Comprador
     path('api/vencimentos/', views.api_portal_vencimentos, name='api_portal_vencimentos'),
     path('api/boletos/', views.api_portal_boletos, name='api_portal_boletos'),
+
+    # 4-P3: segunda via e linha digitável
+    path('api/boletos/<int:parcela_id>/segunda-via/', views.api_portal_segunda_via, name='api_portal_segunda_via'),
+    path('api/boletos/<int:parcela_id>/linha-digitavel/', views.api_portal_linha_digitavel, name='api_portal_linha_digitavel'),
 ]

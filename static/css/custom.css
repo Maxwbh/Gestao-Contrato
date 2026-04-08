@@ -817,6 +817,193 @@ ul.dropdown-content.app-dropdown li > a:hover {
 .app-footer a:hover { opacity: 0.8; }
 
 /* ========================================================================
+   3.15 — DESKTOP SIDEBAR RECOLHÍVEL
+   ======================================================================== */
+
+/* ── Layout wrapper ─────────────────────────────────────────── */
+.app-layout {
+    display: flex;
+    align-items: flex-start;
+    min-height: calc(100vh - 64px);
+}
+
+/* ── Sidebar ────────────────────────────────────────────────── */
+.desktop-sidebar {
+    position: sticky;
+    top: 64px;
+    height: calc(100vh - 64px);
+    width: 240px;
+    flex-shrink: 0;
+    background: #1a252f;
+    overflow-y: auto;
+    overflow-x: hidden;
+    transition: width 0.25s ease;
+    z-index: 50;
+    display: flex;
+    flex-direction: column;
+}
+/* Hide on mobile/tablet */
+@media (max-width: 992px) {
+    .desktop-sidebar { display: none; }
+    .sidebar-content-wrapper { margin-left: 0 !important; width: 100% !important; }
+}
+
+.desktop-sidebar.collapsed { width: 60px; }
+
+/* ── Toggle button ──────────────────────────────────────────── */
+.sidebar-toggle-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    height: 48px;
+    background: rgba(255,255,255,0.05);
+    border: none;
+    color: rgba(255,255,255,0.7);
+    cursor: pointer;
+    font-size: 1rem;
+    flex-shrink: 0;
+    transition: background 0.2s;
+}
+.sidebar-toggle-btn:hover { background: rgba(255,255,255,0.12); color: #fff; }
+
+/* ── Nav section titles ─────────────────────────────────────── */
+.sidebar-section { padding: 8px 0; }
+.sidebar-section-title {
+    display: block;
+    font-size: 0.65rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: rgba(255,255,255,0.35);
+    padding: 6px 16px 2px;
+    white-space: nowrap;
+    overflow: hidden;
+    transition: opacity 0.2s;
+}
+.desktop-sidebar.collapsed .sidebar-section-title {
+    opacity: 0;
+    height: 0;
+    padding: 0;
+}
+
+/* ── Nav items ──────────────────────────────────────────────── */
+.sidebar-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 16px;
+    color: rgba(255,255,255,0.75);
+    text-decoration: none;
+    font-size: 0.88rem;
+    font-weight: 500;
+    white-space: nowrap;
+    position: relative;
+    transition: background 0.15s, color 0.15s;
+    border-left: 3px solid transparent;
+}
+.sidebar-item:hover {
+    background: rgba(255,255,255,0.08);
+    color: #fff;
+    opacity: 1;
+}
+.sidebar-item.active {
+    background: rgba(52,152,219,0.2);
+    color: #3498db;
+    border-left-color: #3498db;
+}
+
+/* ── Icon ───────────────────────────────────────────────────── */
+.sidebar-icon {
+    font-size: 1rem;
+    width: 20px;
+    text-align: center;
+    flex-shrink: 0;
+    color: inherit;
+}
+/* Override colour helpers when active/hovered */
+.sidebar-item:hover .sidebar-icon.text-danger,
+.sidebar-item:hover .sidebar-icon.text-warning { color: inherit; }
+
+/* ── Label ──────────────────────────────────────────────────── */
+.sidebar-label {
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    transition: opacity 0.2s, width 0.2s;
+}
+.desktop-sidebar.collapsed .sidebar-label {
+    opacity: 0;
+    width: 0;
+    overflow: hidden;
+}
+
+/* ── Badges ─────────────────────────────────────────────────── */
+.sidebar-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 18px;
+    height: 18px;
+    padding: 0 4px;
+    border-radius: 9px;
+    font-size: 0.65rem;
+    font-weight: 700;
+    background: #e74c3c;
+    color: #fff;
+    flex-shrink: 0;
+    transition: opacity 0.2s;
+}
+.sidebar-badge-warn { background: #f39c12; }
+.sidebar-badge-info { background: #2980b9; }
+
+/* In collapsed mode, move badge to overlay on icon */
+.desktop-sidebar.collapsed .sidebar-badge {
+    position: absolute;
+    top: 6px;
+    right: 6px;
+    min-width: 14px;
+    height: 14px;
+    font-size: 0.55rem;
+    padding: 0 3px;
+}
+
+/* ── Tooltip in collapsed mode ──────────────────────────────── */
+.desktop-sidebar.collapsed .sidebar-item {
+    padding: 10px 0;
+    justify-content: center;
+}
+.desktop-sidebar.collapsed .sidebar-toggle-btn { font-size: 1rem; }
+
+/* Tooltip via data-label using pure CSS */
+.desktop-sidebar.collapsed .sidebar-item::after {
+    content: attr(data-label);
+    position: absolute;
+    left: 64px;
+    top: 50%;
+    transform: translateY(-50%);
+    background: #2c3e50;
+    color: #fff;
+    font-size: 0.78rem;
+    padding: 4px 10px;
+    border-radius: 4px;
+    white-space: nowrap;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.15s;
+    z-index: 200;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+}
+.desktop-sidebar.collapsed .sidebar-item:hover::after { opacity: 1; }
+
+/* ── Content wrapper ────────────────────────────────────────── */
+.sidebar-content-wrapper {
+    flex: 1;
+    min-width: 0;
+    transition: none;
+}
+
+/* ========================================================================
    MATERIALIZE — MAIN CONTAINER
    ======================================================================== */
 .main-container {
