@@ -820,10 +820,9 @@ ul.dropdown-content.app-dropdown li > a:hover {
    3.15 — DESKTOP SIDEBAR RECOLHÍVEL
    ======================================================================== */
 
-/* ── Layout wrapper ─────────────────────────────────────────── */
+/* ── Layout wrapper (sidebar removida — conteúdo ocupa 100%) ── */
 .app-layout {
-    display: flex;
-    align-items: flex-start;
+    display: block;
     min-height: calc(100vh - 64px);
 }
 
@@ -1009,7 +1008,9 @@ ul.dropdown-content.app-dropdown li > a:hover {
 .main-container {
     margin-top: 1.5rem;
     margin-bottom: 2rem;
-    max-width: 1400px;
+    max-width: 1600px;
+    padding-left: 1.5rem;
+    padding-right: 1.5rem;
 }
 
 /* ========================================================================
@@ -1342,7 +1343,7 @@ ul.dropdown-content.app-dropdown li > a:hover {
 .alert-info     { background: #d1ecf1; color: #0c5460; border-left: 4px solid #17a2b8; }
 .alert-primary  { background: #cce5ff; color: #004085; border-left: 4px solid var(--secondary-color); }
 .alert-secondary{ background: #e2e3e5; color: #383d41; border-left: 4px solid #6c757d; }
-.alert-dismissible { padding-right: 3rem; }
+.alert-dismissible { padding-right: 5rem; }
 .alert-dismissible .btn-close {
     position: absolute; top: 50%; right: 1rem; transform: translateY(-50%);
     background: transparent; border: none; cursor: pointer; opacity: 0.6;
@@ -1351,6 +1352,14 @@ ul.dropdown-content.app-dropdown li > a:hover {
 }
 .alert-dismissible .btn-close:hover { opacity: 1; }
 .alert-dismissible .btn-close::before { content: '×'; }
+
+/* Botão copiar mensagem de alerta */
+.btn-copy-msg {
+    position: absolute; top: 50%; right: 2.6rem; transform: translateY(-50%);
+    background: transparent; border: none; cursor: pointer; opacity: 0.55;
+    font-size: 0.85rem; padding: 2px 4px; color: currentColor; line-height: 1;
+}
+.btn-copy-msg:hover { opacity: 1; }
 
 /* ========================================================================
    BOOTSTRAP BUTTON BRIDGE
