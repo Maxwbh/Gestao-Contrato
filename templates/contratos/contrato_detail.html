@@ -228,6 +228,22 @@
             </div>
         </div>
 
+        <!-- U-02: Timeline Visual de Ciclos de Reajuste -->
+        {% if parcelas %}
+        <div class="card mb-3">
+            <div class="card-header d-flex justify-content-between align-items-center py-2">
+                <span><i class="fas fa-stream me-2"></i><strong>Timeline de Ciclos</strong></span>
+                <small class="text-muted">
+                    {{ prazo_reajuste }} meses / ciclo
+                    {% if contrato.tipo_correcao != 'FIXO' %} · {{ contrato.get_tipo_correcao_display }}{% endif %}
+                </small>
+            </div>
+            <div class="card-body py-3" style="overflow-x:auto;">
+                <div id="ciclos-timeline" style="min-width:320px;"></div>
+            </div>
+        </div>
+        {% endif %}
+
         <div class="row">
             <!-- Coluna Esquerda: Informacoes -->
             <div class="col-lg-5">
@@ -1410,7 +1426,94 @@
 
 {% block extra_js %}
 <script>
-// Toggle das colunas de amortização / juros na tabela de parcelas
+// ── U-02: Timeline Visual de Ciclos ──────────────────────────────────────────
+(function() {
+    var container = document.getElementById('ciclos-timeline');
+    if (!container) return;
+
+    var prazo  = {{ prazo_reajuste|default:12 }};
+    var fixo   = '{{ contrato.tipo_correcao }}' === 'FIXO';
+    var hoje   = new Date().toISOString().slice(0,10);
+
+    // Build cycle map from reajustes context
+    var reajustesMap = {};
+    {% for r in reajustes %}
+    reajustesMap[{{ r.ciclo }}] = {
+        pct: {{ r.percentual|default:0|floatformat:4 }},
+        aplicado: {{ r.aplicado|yesno:"true,false" }},
+        data: '{{ r.data_reajuste|date:"d/m/Y"|default:"" }}'
+    };
+    {% endfor %}
+
+    // Collect parcelas per cycle
+    var cicloParcelas = {};
+    {% for ps in parcelas_status_boleto %}
+    var n = {{ ps.parcela.numero_parcela }};
+    var ciclo = Math.floor((n - 1) / prazo) + 1;
+    if (!cicloParcelas[ciclo]) cicloParcelas[ciclo] = {total:0, pagas:0, vencidas:0, pendentes:0, bloqueadas:0, primeiraNum:n, ultimaNum:n};
+    var c = cicloParcelas[ciclo];
+    c.total++;
+    c.ultimaNum = n;
+    {% if ps.parcela.pago %}c.pagas++;{% elif ps.parcela.data_vencimento|date:"Y-m-d" < "today" %}c.vencidas++;{% else %}c.pendentes++;{% endif %}
+    if (!{{ ps.pode_gerar_boleto|yesno:"true,false" }}) c.bloqueadas++;
+    {% endfor %}
+
+    var ciclos = Object.keys(cicloParcelas).map(Number).sort(function(a,b){return a-b;});
+    if (!ciclos.length) return;
+
+    // Render
+    var html = '<div style="display:flex;align-items:stretch;gap:0;position:relative;">';
+
+    ciclos.forEach(function(ciclo, idx) {
+        var c = cicloParcelas[ciclo];
+        var r = reajustesMap[ciclo] || null;
+
+        // Determine state
+        var allPagas   = c.pagas  === c.total;
+        var haVencidas = c.vencidas > 0;
+        var bloqueado  = c.bloqueadas > 0 && !allPagas;
+        var ativo      = !allPagas && !haVencidas && c.pendentes > 0;
+
+        // Colors
+        var bg, border, textColor;
+        if (allPagas)        { bg='#e8f5e9'; border='#4caf50'; textColor='#2e7d32'; }
+        else if (bloqueado)  { bg='#fff3e0'; border='#ff9800'; textColor='#e65100'; }
+        else if (haVencidas) { bg='#ffebee'; border='#f44336'; textColor='#c62828'; }
+        else if (ativo)      { bg='#e3f2fd'; border='#2196f3'; textColor='#1565c0'; }
+        else                 { bg='#f5f5f5'; border='#9e9e9e'; textColor='#616161'; }
+
+        var icon = allPagas ? '✓' : (bloqueado ? '⚠' : (haVencidas ? '!' : (ativo ? '▶' : '○')));
+        var labelCiclo = fixo ? '' : (r ? (r.pct >= 0 ? '+' : '') + r.pct.toFixed(2) + '%' : (ciclo === 1 ? '—' : 'Pendente'));
+
+        var connector = idx < ciclos.length - 1
+            ? '<div style="width:24px;flex-shrink:0;display:flex;align-items:center;justify-content:center;"><div style="height:2px;width:100%;background:' + border + ';opacity:.5;"></div></div>'
+            : '';
+
+        html += '<div style="flex:1;min-width:80px;max-width:160px;">' +
+            '<div style="background:' + bg + ';border:2px solid ' + border + ';border-radius:8px;padding:10px 8px;text-align:center;position:relative;">' +
+                '<div style="font-size:.65rem;color:' + textColor + ';font-weight:600;text-transform:uppercase;letter-spacing:.5px;">Ciclo ' + ciclo + '</div>' +
+                '<div style="font-size:1.3rem;font-weight:700;color:' + textColor + ';margin:2px 0;">' + icon + '</div>' +
+                '<div style="font-size:.7rem;color:#757575;margin-top:2px;">' + c.primeiraNum + '–' + c.ultimaNum + '</div>' +
+                (labelCiclo ? '<div style="font-size:.7rem;font-weight:600;color:' + textColor + ';margin-top:3px;">' + labelCiclo + '</div>' : '') +
+                '<div style="font-size:.65rem;color:#9e9e9e;margin-top:2px;">' + c.pagas + '/' + c.total + ' pagas</div>' +
+            '</div>' +
+        '</div>' + connector;
+    });
+
+    html += '</div>';
+
+    // Legend
+    html += '<div style="display:flex;gap:16px;flex-wrap:wrap;margin-top:10px;font-size:.72rem;color:#757575;">' +
+        '<span style="display:inline-flex;align-items:center;gap:4px;"><span style="width:10px;height:10px;border-radius:2px;background:#e8f5e9;border:1px solid #4caf50;display:inline-block;"></span>Concluído</span>' +
+        '<span style="display:inline-flex;align-items:center;gap:4px;"><span style="width:10px;height:10px;border-radius:2px;background:#e3f2fd;border:1px solid #2196f3;display:inline-block;"></span>Em andamento</span>' +
+        '<span style="display:inline-flex;align-items:center;gap:4px;"><span style="width:10px;height:10px;border-radius:2px;background:#ffebee;border:1px solid #f44336;display:inline-block;"></span>Com atraso</span>' +
+        '<span style="display:inline-flex;align-items:center;gap:4px;"><span style="width:10px;height:10px;border-radius:2px;background:#fff3e0;border:1px solid #ff9800;display:inline-block;"></span>Bloqueado (reajuste pendente)</span>' +
+    '</div>';
+
+    container.innerHTML = html;
+})();
+
+// ── Toggle das colunas de amortização / juros na tabela de parcelas
 function toggleColunaAmort() {
     var cols = document.querySelectorAll('.col-amort');
     var btn  = document.getElementById('btn-toggle-amort');
