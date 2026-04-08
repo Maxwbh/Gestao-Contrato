@@ -1,94 +1,85 @@
-# Dockerfile para BRCobranca API (Otimizado para Render Free Tier)
-# Este Dockerfile faz build usando repositorios customizados:
-# - API REST: https://github.com/Maxwbh/boleto_cnab_api
-# - Biblioteca: https://github.com/maxwbh/brcobranca
+# Dockerfile para BRCobranca API (Render Free Tier + Gestao-Contrato)
 #
-# Desenvolvedor: Maxwell da Silva Oliveira
-# Empresa: M&S do Brasil LTDA
+# Clona o repositório boleto_cnab_api e builda a imagem de runtime.
+# O Gemfile desse repo já aponta para: github.com/maxwbh/brcobranca branch master
 #
-# Otimizacoes para Render Free:
-# - Multi-stage build para reduzir tamanho final
-# - Cache de dependencias para builds mais rapidos
-# - Limpeza agressiva de arquivos desnecessarios
+# Repos usados:
+#   API REST : https://github.com/Maxwbh/boleto_cnab_api
+#   Gem      : https://github.com/maxwbh/brcobranca  (dependência via Gemfile)
+#
+# Para forçar re-clone no build:
+#   docker build --build-arg CACHE_BUST=$(date +%s) -f Dockerfile.brcobranca .
 
 # =============================================================================
-# Stage 1: Builder (instala dependencias de build)
+# Stage 1: Builder
 # =============================================================================
-FROM ruby:3.1-slim AS builder
+FROM ruby:3.3-slim AS builder
 
-# Instalar dependencias de build (temporarias)
-RUN apt-get update -qq && \
-    apt-get install -y --no-install-recommends \
+RUN apt-get update && apt-get upgrade -y && apt-get install -y --no-install-recommends \
     build-essential \
     git \
-    libpq-dev && \
-    rm -rf /var/lib/apt/lists/*
+    && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
-# Clonar repositorio da API
-RUN git clone --depth 1 https://github.com/Maxwbh/boleto_cnab_api.git .
+# ARG antes do git clone para invalidar o cache Docker quando o repo for atualizado.
+# Render: configure "Clear build cache" OU incremente CACHE_BUST no render.yaml.
+ARG CACHE_BUST=1
 
-# Criar Gemfile.local com override das gems customizadas
-# Bundler carrega automaticamente Gemfile.local se existir
-RUN echo "gem 'brcobranca', git: 'https://github.com/maxwbh/brcobranca.git', branch: 'master'" > Gemfile.local && \
-    echo "gem 'rghost', git: 'https://github.com/shairontoledo/rghost.git', branch: 'master'" >> Gemfile.local
+# Clonar repositório da API (shallow clone da branch master)
+RUN git clone --depth 1 --branch master \
+    https://github.com/Maxwbh/boleto_cnab_api.git .
 
-# Instalar dependencias (sem gems de dev/test para reduzir tamanho)
+# O Gemfile já aponta para maxwbh/brcobranca branch master — sem Gemfile.local.
+# Bundler resolve e usa o Gemfile.lock commitado (brcobranca 12.6.1, rev b71882d).
 RUN bundle config set --local without 'development test' && \
-    bundle install --jobs=4 --retry=3 && \
-    bundle clean --force
+    bundle install --jobs $(nproc) --retry 3 && \
+    bundle clean --force && \
+    rm -rf /usr/local/bundle/cache/*.gem && \
+    find /usr/local/bundle/gems/ -name "*.c" -delete 2>/dev/null || true && \
+    find /usr/local/bundle/gems/ -name "*.o" -delete 2>/dev/null || true
 
 # =============================================================================
-# Stage 2: Runtime (imagem final minima)
+# Stage 2: Runtime
 # =============================================================================
-FROM ruby:3.1-slim
+FROM ruby:3.3-slim
 
-# Instalar apenas dependencias de runtime (minimas)
-RUN apt-get update -qq && \
-    apt-get install -y --no-install-recommends \
+RUN apt-get update && apt-get upgrade -y && apt-get install -y --no-install-recommends \
     ghostscript \
-    libpq5 && \
-    rm -rf /var/lib/apt/lists/* && \
-    apt-get clean
+    wget \
+    && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
-# Copiar apenas o necessario do builder
+# Copiar gems compiladas do builder
 COPY --from=builder /usr/local/bundle /usr/local/bundle
+
+# Copiar aplicação clonada
 COPY --from=builder /app /app
 
-# Remover arquivos desnecessarios para reduzir tamanho
-RUN rm -rf .git \
-    test \
-    spec \
-    tmp/* \
-    log/* && \
-    find . -name "*.md" -type f -delete && \
-    find . -name "*.txt" -type f -delete
+# Remover artefatos desnecessários
+RUN rm -rf .git spec test tmp/* log/* \
+    && find . -name "*.md" -not -name "README.md" -delete 2>/dev/null || true
 
-# Criar diretorios necessarios para Puma (PID file, logs, sockets)
-RUN mkdir -p tmp log && \
-    chmod 755 tmp log
+# Criar diretórios e usuário não-root
+RUN mkdir -p tmp log \
+    && useradd -m -u 1000 app \
+    && chown -R app:app /app /usr/local/bundle
 
-# Criar usuario nao-root para seguranca
-RUN useradd -m -u 1000 brcobranca && \
-    chown -R brcobranca:brcobranca /app
-USER brcobranca
+USER app
 
-# Definir variaveis de ambiente
 ENV RACK_ENV=production \
     PORT=9292 \
-    MALLOC_ARENA_MAX=2
+    MALLOC_ARENA_MAX=2 \
+    RUBY_GC_HEAP_GROWTH_FACTOR=1.1 \
+    BUNDLE_PATH=/usr/local/bundle \
+    GEM_HOME=/usr/local/bundle \
+    PATH="/usr/local/bundle/bin:$PATH"
 
-# Expor a porta 9292
 EXPOSE 9292
 
-# Health check
-HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
-    CMD ruby -e "require 'net/http'; exit Net::HTTP.get_response(URI('http://localhost:9292/')).code.to_i < 500 ? 0 : 1"
+# Health check via wget (instalado na imagem)
+HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
+    CMD wget --quiet --tries=1 --spider http://localhost:9292/api/health || exit 1
 
-# Comando para iniciar o servidor
-# Usa config/puma.rb (PORT=ENV, workers=1, threads=0-5) e config.ru (app Rack/Grape)
-# O config.ru deve ser especificado explicitamente para garantir que a aplicacao Grape seja carregada
 CMD ["bundle", "exec", "puma", "-C", "config/puma.rb", "config.ru"]
