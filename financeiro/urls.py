@@ -46,6 +46,7 @@ urlpatterns = [
     # Boletos
     path('parcelas/<int:pk>/boleto/gerar/', views.gerar_boleto_parcela, name='gerar_boleto'),
     path('parcelas/<int:pk>/boleto/download/', views.download_boleto, name='download_boleto'),
+    path('parcelas/<int:pk>/boleto/segunda-via/', views.segunda_via_boleto, name='segunda_via_boleto'),
     path('parcelas/<int:pk>/boleto/visualizar/', views.visualizar_boleto, name='visualizar_boleto'),
     path('parcelas/<int:pk>/boleto/cancelar/', views.cancelar_boleto, name='cancelar_boleto'),
     path('parcelas/<int:pk>/boleto/status/', views.api_status_boleto, name='api_status_boleto'),
