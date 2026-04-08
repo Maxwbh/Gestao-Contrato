@@ -947,7 +947,7 @@ para ciclo = 2..total_ciclos+1:
 |---|------|-----------|--------|
 | N-01 | E-mail automático D-5 antes do vencimento da parcela | P2 | ✅ `enviar_notificacoes_sync()` em `core/tasks.py` + deduplicação via `Notificacao` model + POST `/api/tasks/enviar-notificacoes/` |
 | N-02 | E-mail de inadimplência após D+3 | P2 | ✅ `enviar_inadimplentes_sync()` em `core/tasks.py` + `task_run_all` inclui N-02 + POST `/api/tasks/enviar-inadimplentes/` + `NOTIFICACAO_DIAS_INADIMPLENCIA=3` |
-| N-03 | Régua de cobrança configurável (D-5, D+3, D+10, D+30) | P3 | ⏳ |
+| N-03 | Régua de cobrança configurável (D-5, D+3, D+10, D+30) | P3 | ✅ `RegraNotificacao` model em `notificacoes/models.py` + `TipoGatilho` (ANTES/APOS) + admin com `list_editable` + `_processar_regra()` em `core/tasks.py` — fallback automático para N-01/N-02 quando nenhuma regra configurada |
 | N-04 | Integração WhatsApp (Evolution API / Z-API) | P3 | ⏳ |
 | N-05 | Push notification portal comprador | P4 | ⏳ |
 
