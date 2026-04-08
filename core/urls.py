@@ -23,6 +23,8 @@ urlpatterns = [
     path('api/tasks/enviar-inadimplentes/', tasks.task_enviar_inadimplentes, name='task_inadimplentes'),
     path('api/tasks/atualizar-parcelas/', tasks.task_atualizar_parcelas, name='task_parcelas'),
     path('api/tasks/run-all/', tasks.task_run_all, name='task_run_all'),
+    path('api/tasks/relatorio-semanal/', tasks.task_relatorio_semanal, name='task_relatorio_semanal'),
+    path('api/tasks/relatorio-mensal/', tasks.task_relatorio_mensal, name='task_relatorio_mensal'),
 
     # Páginas principais
     path('', views.index, name='index'),

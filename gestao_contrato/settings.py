@@ -47,6 +47,8 @@ INSTALLED_APPS = [
     'crispy_forms',
     'crispy_bootstrap5',
     'django_celery_beat',
+    'rest_framework',
+    'drf_spectacular',
 
     # Local apps
     'accounts',
@@ -214,6 +216,53 @@ TWILIO_ACCOUNT_SID = config('TWILIO_ACCOUNT_SID', default='')
 TWILIO_AUTH_TOKEN = config('TWILIO_AUTH_TOKEN', default='')
 TWILIO_PHONE_NUMBER = config('TWILIO_PHONE_NUMBER', default='')
 TWILIO_WHATSAPP_NUMBER = config('TWILIO_WHATSAPP_NUMBER', default='')
+
+# =============================================================================
+# REST FRAMEWORK (DRF) + drf-spectacular (Swagger/OpenAPI)
+# =============================================================================
+
+REST_FRAMEWORK = {
+    'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
+    'DEFAULT_AUTHENTICATION_CLASSES': [
+        'rest_framework.authentication.SessionAuthentication',
+    ],
+    'DEFAULT_PERMISSION_CLASSES': [
+        'rest_framework.permissions.IsAuthenticated',
+    ],
+    'DEFAULT_RENDERER_CLASSES': [
+        'rest_framework.renderers.JSONRenderer',
+    ],
+    'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
+    'PAGE_SIZE': 25,
+}
+
+SPECTACULAR_SETTINGS = {
+    'TITLE': 'Gestão de Contratos API',
+    'DESCRIPTION': (
+        'API REST para o sistema de Gestão de Contratos Imobiliários.\n\n'
+        '## Autenticação\n'
+        'Todas as rotas requerem autenticação via sessão Django (`/accounts/login/`).\n\n'
+        '## Módulos\n'
+        '- **Financeiro**: parcelas, boletos, CNAB, reajustes, dashboards\n'
+        '- **Core**: contabilidades, imobiliárias, compradores, CEP/CNPJ\n'
+        '- **Portal Comprador**: contratos, boletos e segunda via\n'
+        '- **Tasks**: cron jobs para reajustes, notificações e relatórios\n'
+    ),
+    'VERSION': '3.1.0',
+    'SERVE_INCLUDE_SCHEMA': False,
+    'CONTACT': {
+        'name': 'Maxwell da Silva Oliveira',
+        'email': 'maxwbh@gmail.com',
+    },
+    'LICENSE': {'name': 'Proprietário — M&S do Brasil LTDA'},
+    'SWAGGER_UI_SETTINGS': {
+        'deepLinking': True,
+        'persistAuthorization': True,
+        'displayOperationId': False,
+    },
+    'COMPONENT_SPLIT_REQUEST': True,
+    'SORT_OPERATIONS': False,
+}
 
 # Configurações de Notificação
 NOTIFICACAO_DIAS_ANTECEDENCIA = config('NOTIFICACAO_DIAS_ANTECEDENCIA', default=5, cast=int)
