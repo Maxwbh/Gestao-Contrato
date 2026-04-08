@@ -89,7 +89,7 @@
 | 3.22 | Tela de reajuste pendente (índice, prévia, aplicar lote) |
 | 3.23 | Histórico de reajustes aplicados |
 | 3.24 | Upload de comprovante de pagamento | ✅ `registrar_pagamento` aceita `multipart/form-data`; cria `HistoricoPagamento` com `forma_pagamento` e `comprovante` (FileField já existia no model); template atualizado com campos forma_pagamento e comprovante |
-| 3.25 | Notificar comprador inadimplente |
+| 3.25 | Notificar comprador inadimplente | ✅ View `notificar_inadimplente` (POST) envia e-mail + WhatsApp para comprador de parcela vencida; botão "Notificar Comprador" em `detalhe_parcela.html` (visível apenas para parcelas vencidas não pagas); registra `Notificacao` com status ENVIADO; URL `parcelas/<pk>/notificar/` |
 | 3.26 | Configurações de boleto por imobiliária |
 | 3.27 | Configurações de notificação (dias, canais) |
 | 3.28 | Gerenciamento de usuários por imobiliária |

@@ -205,6 +205,11 @@
             <a href="{% url 'contratos:detalhe' parcela.contrato.pk %}" class="btn btn-outline-secondary">
                 <i class="fas fa-file-contract me-2"></i>Ver Contrato
             </a>
+            {% if not parcela.pago and parcela.esta_vencida %}
+            <button type="button" class="btn btn-outline-danger" id="btnNotificar" onclick="notificarInadimplente()">
+                <i class="fas fa-bell me-2"></i>Notificar Comprador
+            </button>
+            {% endif %}
         </div>
     </div>
 </div>
@@ -237,6 +242,36 @@ function gerarBoletoDetalhe() {
         .catch(err => {
             btn.disabled = false;
             btn.innerHTML = '<i class="fas fa-barcode me-2"></i>Gerar Boleto';
+            alert('Erro: ' + err.message);
+        });
+}
+{% endif %}
+
+{% if not parcela.pago and parcela.esta_vencida %}
+function notificarInadimplente() {
+    const btn = document.getElementById('btnNotificar');
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Enviando...';
+
+    const fd = new FormData();
+    fd.append('csrfmiddlewaretoken', '{{ csrf_token }}');
+
+    fetch('{% url "financeiro:notificar_inadimplente" parcela.pk %}', {method: 'POST', body: fd})
+        .then(r => r.json())
+        .then(data => {
+            btn.disabled = false;
+            btn.innerHTML = '<i class="fas fa-bell me-2"></i>Notificar Comprador';
+            if (data.sucesso) {
+                if (window.showToast) window.showToast(data.mensagem, 'success');
+                else alert(data.mensagem);
+            } else {
+                if (window.showToast) window.showToast('Erro: ' + (data.erro || 'Falha ao enviar'), 'warning');
+                else alert('Erro: ' + (data.erro || 'Falha ao enviar notificação.'));
+            }
+        })
+        .catch(err => {
+            btn.disabled = false;
+            btn.innerHTML = '<i class="fas fa-bell me-2"></i>Notificar Comprador';
             alert('Erro: ' + err.message);
         });
 }
