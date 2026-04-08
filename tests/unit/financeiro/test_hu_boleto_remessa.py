@@ -946,3 +946,171 @@ class TestOFXView:
         assert data.get('dry_run') is True
         # Nenhuma parcela foi quitada
         assert contrato_com_parcelas.parcelas.filter(pago=True).count() == 0
+
+
+@pytest.mark.django_db
+class TestOFXBRCobranca:
+    """Testa integração OFX → BRCobrança API (parse primário com fallback Python)."""
+
+    # Resposta simulada do endpoint /api/ofx/parse do boleto_cnab_api
+    _BRCOBRANCA_RESPONSE = {
+        "banco": {"org": "Sicoob", "fid": "756"},
+        "conta": {"agencia": "1234", "numero": "56789-0", "tipo": "CHECKING"},
+        "periodo": {"inicio": "2026-04-01", "fim": "2026-04-07"},
+        "saldo": {"valor": 25000.0, "data": "2026-04-07"},
+        "transacoes": [
+            {
+                "fitid": "20260405001",
+                "tipo": "CREDIT",
+                "data": "2026-04-05",
+                "valor": 8333.33,
+                "memo": "PAG PARCELA CTR-HU-001",
+                "name": "",
+                "checknum": "",
+                "refnum": "",
+                "nosso_numero_extraido": "0000042",
+            },
+            {
+                "fitid": "20260406001",
+                "tipo": "DEBIT",
+                "data": "2026-04-06",
+                "valor": 150.0,
+                "memo": "TARIFA BANCARIA",
+                "name": "",
+                "checknum": "",
+                "refnum": "",
+                "nosso_numero_extraido": None,
+            },
+        ],
+        "resumo": {
+            "total_transacoes": 2,
+            "total_creditos": 1,
+            "total_debitos": 1,
+            "soma_creditos": 8333.33,
+            "soma_debitos": 150.0,
+        },
+    }
+
+    def test_parse_via_brcobranca_retorna_transacoes(self):
+        """_parse_via_brcobranca retorna lista quando API responde 200."""
+        from unittest.mock import patch, MagicMock
+        from financeiro.services.ofx_service import _parse_via_brcobranca
+
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.json.return_value = self._BRCOBRANCA_RESPONSE
+
+        with patch('financeiro.services.ofx_service.requests.post', return_value=mock_resp):
+            transacoes = _parse_via_brcobranca(OFX_SAMPLE, 'http://localhost:9292')
+
+        assert transacoes is not None
+        assert len(transacoes) == 2
+
+    def test_parse_via_brcobranca_preenche_nosso_numero_extraido(self):
+        """nosso_numero_extraido é preenchido a partir da resposta BRCobrança."""
+        from unittest.mock import patch, MagicMock
+        from financeiro.services.ofx_service import _parse_via_brcobranca
+
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.json.return_value = self._BRCOBRANCA_RESPONSE
+
+        with patch('financeiro.services.ofx_service.requests.post', return_value=mock_resp):
+            transacoes = _parse_via_brcobranca(OFX_SAMPLE, 'http://localhost:9292')
+
+        credito = next(t for t in transacoes if t.valor > 0)
+        assert credito.nosso_numero_extraido == '0000042'
+
+    def test_parse_via_brcobranca_debito_negativo(self):
+        """Transações DEBIT têm valor negativo internamente."""
+        from unittest.mock import patch, MagicMock
+        from financeiro.services.ofx_service import _parse_via_brcobranca
+
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.json.return_value = self._BRCOBRANCA_RESPONSE
+
+        with patch('financeiro.services.ofx_service.requests.post', return_value=mock_resp):
+            transacoes = _parse_via_brcobranca(OFX_SAMPLE, 'http://localhost:9292')
+
+        debito = next(t for t in transacoes if t.tipo == 'DEBIT')
+        assert debito.valor < 0
+
+    def test_parse_via_brcobranca_retorna_none_em_connection_error(self):
+        """ConnectionError → retorna None (aciona fallback Python)."""
+        import requests as req_lib
+        from unittest.mock import patch
+        from financeiro.services.ofx_service import _parse_via_brcobranca
+
+        with patch('financeiro.services.ofx_service.requests.post',
+                   side_effect=req_lib.exceptions.ConnectionError()):
+            result = _parse_via_brcobranca(OFX_SAMPLE, 'http://localhost:9292')
+
+        assert result is None
+
+    def test_parse_via_brcobranca_retorna_none_em_status_nao_200(self):
+        """Status != 200 → retorna None."""
+        from unittest.mock import patch, MagicMock
+        from financeiro.services.ofx_service import _parse_via_brcobranca
+
+        mock_resp = MagicMock()
+        mock_resp.status_code = 500
+
+        with patch('financeiro.services.ofx_service.requests.post', return_value=mock_resp):
+            result = _parse_via_brcobranca(OFX_SAMPLE, 'http://localhost:9292')
+
+        assert result is None
+
+    def test_ofx_service_usa_brcobranca_quando_disponivel(self, contrato_com_parcelas):
+        """OFXService.processar usa BRCobrança quando disponível (parser='brcobranca')."""
+        from unittest.mock import patch, MagicMock
+        from financeiro.services.ofx_service import OFXService
+
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.json.return_value = self._BRCOBRANCA_RESPONSE
+
+        with patch('financeiro.services.ofx_service.requests.post', return_value=mock_resp):
+            service = OFXService(contrato=contrato_com_parcelas)
+            resultado = service.processar(OFX_SAMPLE)
+
+        assert resultado['parser'] == 'brcobranca'
+        assert resultado['total_transacoes'] == 2
+
+    def test_ofx_service_fallback_python_quando_brcobranca_indisponivel(self, contrato_com_parcelas):
+        """OFXService.processar faz fallback para Python quando BRCobrança falha."""
+        import requests as req_lib
+        from unittest.mock import patch
+        from financeiro.services.ofx_service import OFXService
+
+        with patch('financeiro.services.ofx_service.requests.post',
+                   side_effect=req_lib.exceptions.ConnectionError()):
+            service = OFXService(contrato=contrato_com_parcelas)
+            resultado = service.processar(OFX_SAMPLE)
+
+        assert resultado['parser'] == 'python'
+        assert resultado['total_transacoes'] == 3  # parser Python encontra 3 transações
+
+    def test_reconciliacao_p1a_usa_nosso_numero_extraido(self, contrato_com_parcelas):
+        """P1a: nosso_numero_extraido pelo BRCobrança casa com parcela.nosso_numero."""
+        from unittest.mock import patch, MagicMock
+        from financeiro.services.ofx_service import OFXService
+
+        # Configurar nosso_numero na parcela para 0000042 (mesmo do mock)
+        parcela = contrato_com_parcelas.parcelas.first()
+        parcela.nosso_numero = '0000042'
+        parcela.save()
+
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.json.return_value = self._BRCOBRANCA_RESPONSE
+
+        with patch('financeiro.services.ofx_service.requests.post', return_value=mock_resp):
+            service = OFXService(contrato=contrato_com_parcelas)
+            resultado = service.processar(OFX_SAMPLE)
+
+        reconciliadas = [r for r in resultado['resultados'] if r.reconciliada]
+        assert len(reconciliadas) >= 1
+        assert reconciliadas[0].confianca == 'ALTA'
+        assert 'BRCobrança' in reconciliadas[0].motivo
+        assert reconciliadas[0].parcela.pk == parcela.pk
