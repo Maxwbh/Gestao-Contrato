@@ -606,12 +606,17 @@ class BoletoService:
         if config_boleto.get('instrucao_3'):
             instrucoes.append(config_boleto['instrucao_3'])
 
-        # ── 6-7. Referências ───────────────────────────────────────────────────
-        ref_parcela = f"Parcela {parcela.numero_parcela}/{contrato.numero_parcelas} | Contrato: {contrato.numero_contrato}"
-        if contrato.imovel and contrato.imovel.identificacao:
-            ref_parcela += f" | Imovel: {contrato.imovel.identificacao}"
-        instrucoes.append(ref_parcela)
-        instrucoes.append(f"Doc: {numero_documento}")
+        # ── 6. Referência: tipo de prestação + contrato ────────────────────────
+        if parcela.tipo_parcela == 'INTERMEDIARIA':
+            # Buscar numero_sequencial da intermediaria vinculada
+            try:
+                num_seq = parcela.intermediaria_origem.numero_sequencial
+                ref = f"Intermediaria {num_seq} | Contrato: {contrato.numero_contrato}"
+            except Exception:
+                ref = f"Intermediaria | Contrato: {contrato.numero_contrato}"
+        else:
+            ref = f"Parcela {parcela.numero_parcela}/{contrato.numero_parcelas} | Contrato: {contrato.numero_contrato}"
+        instrucoes.append(ref)
 
         # Dados do boleto no formato BRCobranca
         dados = {
