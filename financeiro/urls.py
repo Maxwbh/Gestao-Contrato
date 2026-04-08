@@ -106,6 +106,9 @@ urlpatterns = [
     # Imobiliárias
     path('api/imobiliarias/', views.api_imobiliarias_lista, name='api_imobiliarias'),
     path('api/imobiliaria/<int:imobiliaria_id>/dashboard/', views.api_imobiliaria_dashboard, name='api_imobiliaria_dashboard'),
+    # 4-P3: novos endpoints
+    path('api/contabilidade/relatorios/vencimentos/', views.api_contabilidade_relatorios_vencimentos, name='api_contabilidade_relatorios_vencimentos'),
+    path('api/imobiliaria/<int:imobiliaria_id>/pendencias/', views.api_imobiliaria_pendencias, name='api_imobiliaria_pendencias'),
 
     # Contratos
     path('api/contratos/', views.api_contratos_lista, name='api_contratos'),

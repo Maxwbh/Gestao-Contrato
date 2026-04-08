@@ -16,6 +16,7 @@ from django.contrib import messages
 from django.http import JsonResponse, HttpResponse, FileResponse
 from django.views.generic import TemplateView
 from django.contrib.auth.mixins import LoginRequiredMixin
+from django.views.decorators.http import require_POST, require_GET
 from django.utils import timezone
 from django.db.models import Sum, Count, Q
 from decimal import Decimal
@@ -779,4 +780,112 @@ def api_portal_boletos(request):
         'total': total,
         'page': page,
         'per_page': per_page,
+    })
+
+
+# =============================================================================
+# 4-P3-4 : POST /portal/api/boletos/segunda-via/
+# =============================================================================
+
+@login_required
+@require_POST
+def api_portal_segunda_via(request, parcela_id):
+    """
+    Gera segunda via do boleto para o comprador autenticado.
+    Recalcula juros/multa do dia antes de enviar para BRCobrança.
+
+    POST /portal/api/boletos/<parcela_id>/segunda-via/
+    """
+    comprador = get_comprador_from_request(request)
+    if not comprador:
+        return JsonResponse(
+            {'sucesso': False, 'erro': 'Acesso não autorizado'},
+            status=403
+        )
+
+    from financeiro.models import Parcela
+    try:
+        parcela = Parcela.objects.select_related(
+            'contrato', 'contrato__comprador'
+        ).get(pk=parcela_id, contrato__comprador=comprador)
+    except Parcela.DoesNotExist:
+        return JsonResponse({'sucesso': False, 'erro': 'Boleto não encontrado'}, status=404)
+
+    if parcela.pago:
+        return JsonResponse({'sucesso': False, 'erro': 'Parcela já paga'}, status=400)
+
+    if not parcela.nosso_numero:
+        return JsonResponse(
+            {'sucesso': False, 'erro': 'Boleto não foi gerado ainda'},
+            status=400
+        )
+
+    try:
+        from financeiro.services.boleto_service import BoletoService
+        service = BoletoService()
+        resultado = service.gerar_segunda_via(parcela)
+
+        if resultado.get('sucesso'):
+            return JsonResponse({
+                'sucesso': True,
+                'nosso_numero': parcela.nosso_numero,
+                'linha_digitavel': resultado.get('linha_digitavel', parcela.linha_digitavel or ''),
+                'valor': float(resultado.get('valor', parcela.valor_atual)),
+                'vencimento': resultado.get('vencimento', parcela.data_vencimento.isoformat()),
+                'url_pdf': resultado.get('url_pdf', ''),
+            })
+        else:
+            return JsonResponse(
+                {'sucesso': False, 'erro': resultado.get('erro', 'Erro ao gerar segunda via')},
+                status=400
+            )
+    except Exception as e:
+        import logging
+        logging.getLogger('portal_comprador').exception("Erro segunda via parcela %s: %s", parcela_id, e)
+        return JsonResponse({'sucesso': False, 'erro': str(e)}, status=500)
+
+
+# =============================================================================
+# 4-P3-5 : GET /portal/api/boletos/<id>/linha-digitavel/
+# =============================================================================
+
+@login_required
+@require_GET
+def api_portal_linha_digitavel(request, parcela_id):
+    """
+    Retorna a linha digitável do boleto para o comprador autenticado.
+
+    GET /portal/api/boletos/<parcela_id>/linha-digitavel/
+    """
+    comprador = get_comprador_from_request(request)
+    if not comprador:
+        return JsonResponse(
+            {'sucesso': False, 'erro': 'Acesso não autorizado'},
+            status=403
+        )
+
+    from financeiro.models import Parcela
+    try:
+        parcela = Parcela.objects.select_related('contrato').get(
+            pk=parcela_id, contrato__comprador=comprador
+        )
+    except Parcela.DoesNotExist:
+        return JsonResponse({'sucesso': False, 'erro': 'Boleto não encontrado'}, status=404)
+
+    if not parcela.nosso_numero:
+        return JsonResponse(
+            {'sucesso': False, 'erro': 'Boleto não gerado'},
+            status=404
+        )
+
+    return JsonResponse({
+        'sucesso': True,
+        'parcela_id': parcela.pk,
+        'numero_parcela': parcela.numero_parcela,
+        'nosso_numero': parcela.nosso_numero,
+        'linha_digitavel': parcela.linha_digitavel or '',
+        'codigo_barras': parcela.codigo_barras or '',
+        'valor': float(parcela.valor_atual),
+        'data_vencimento': parcela.data_vencimento.isoformat(),
+        'pago': parcela.pago,
     })
