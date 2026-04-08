@@ -554,6 +554,97 @@ def detalhe_parcela(request, pk):
 
 
 @login_required
+@require_POST
+def notificar_inadimplente(request, pk):
+    """
+    3.25 — Envia notificação de inadimplência manualmente para o comprador de uma parcela.
+    Retorna JSON {sucesso, mensagem/erro}.
+    """
+    parcela = get_object_or_404(Parcela, pk=pk)
+
+    if parcela.pago:
+        return JsonResponse({'sucesso': False, 'erro': 'Parcela já paga — notificação não aplicável.'}, status=400)
+
+    from datetime import date as _date
+    hoje = _date.today()
+    if parcela.data_vencimento > hoje:
+        return JsonResponse({'sucesso': False, 'erro': 'Parcela ainda não vencida.'}, status=400)
+
+    try:
+        from core.tasks import (
+            _notificacao_ja_enviada_hoje,
+            _registrar_notificacao,
+            _get_destinatario,
+            _enviar_pelo_canal,
+        )
+        from notificacoes.models import TipoNotificacao
+
+        comprador = parcela.contrato.comprador
+        dias_atraso = (hoje - parcela.data_vencimento).days
+        imob_nome = getattr(parcela.contrato.imobiliaria, 'nome', 'Gestão de Contratos')
+
+        PREFIXO = '[INADIMPLENCIA-MANUAL]'
+
+        canais_enviados = []
+
+        # Email
+        email = getattr(comprador, 'email', None)
+        if email:
+            if not _notificacao_ja_enviada_hoje(parcela, PREFIXO):
+                assunto = (
+                    f"{PREFIXO} Parcela {parcela.numero_parcela} em atraso há {dias_atraso} dia(s)"
+                )
+                mensagem = (
+                    f"Olá {comprador.nome},\n\n"
+                    f"Verificamos que a parcela {parcela.numero_parcela}/{parcela.contrato.numero_parcelas} "
+                    f"do contrato {parcela.contrato.numero_contrato} encontra-se em atraso.\n\n"
+                    f"Vencimento: {parcela.data_vencimento.strftime('%d/%m/%Y')} ({dias_atraso} dia(s) em atraso)\n"
+                    f"Valor: R$ {parcela.valor_atual:,.2f}\n\n"
+                    f"Regularize sua situação para evitar acréscimo de juros e multa.\n\n"
+                    f"Atenciosamente,\n{imob_nome}"
+                )
+                notif = _registrar_notificacao(parcela, TipoNotificacao.EMAIL, email, assunto, mensagem)
+                enviado = _enviar_pelo_canal(TipoNotificacao.EMAIL, email, assunto, mensagem)
+                if enviado and notif:
+                    from notificacoes.models import StatusNotificacao
+                    notif.status = StatusNotificacao.ENVIADO
+                    notif.save(update_fields=['status'])
+                    canais_enviados.append('email')
+
+        # WhatsApp
+        celular = getattr(comprador, 'celular', None)
+        if celular:
+            msg_wa = (
+                f"Olá {comprador.nome}! Sua parcela {parcela.numero_parcela} do contrato "
+                f"{parcela.contrato.numero_contrato} está {dias_atraso} dia(s) em atraso "
+                f"(venc. {parcela.data_vencimento.strftime('%d/%m/%Y')}). "
+                f"Valor: R$ {parcela.valor_atual:,.2f}. Entre em contato para regularizar."
+            )
+            notif_wa = _registrar_notificacao(parcela, TipoNotificacao.WHATSAPP, celular, 'Inadimplência', msg_wa)
+            enviado_wa = _enviar_pelo_canal(TipoNotificacao.WHATSAPP, celular, 'Inadimplência', msg_wa)
+            if enviado_wa and notif_wa:
+                from notificacoes.models import StatusNotificacao
+                notif_wa.status = StatusNotificacao.ENVIADO
+                notif_wa.save(update_fields=['status'])
+                canais_enviados.append('WhatsApp')
+
+        if canais_enviados:
+            return JsonResponse({
+                'sucesso': True,
+                'mensagem': f'Notificação enviada via {", ".join(canais_enviados)}.'
+            })
+        else:
+            return JsonResponse({
+                'sucesso': False,
+                'erro': 'Nenhum canal de notificação disponível para este comprador (sem e-mail ou celular configurado).'
+            }, status=400)
+
+    except Exception as e:
+        logger.exception(f'Erro ao notificar inadimplente (parcela {pk}): {e}')
+        return JsonResponse({'sucesso': False, 'erro': str(e)}, status=500)
+
+
+@login_required
 def registrar_pagamento(request, pk):
     """Registra o pagamento de uma parcela"""
     from datetime import datetime
