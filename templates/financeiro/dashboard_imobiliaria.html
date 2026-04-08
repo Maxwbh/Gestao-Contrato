@@ -266,6 +266,17 @@
     </div>
     {% endif %}
 
+    <!-- 3.10 Fluxo de Caixa Previsto vs Realizado -->
+    <div class="card mb-4">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <h6 class="mb-0"><i class="fas fa-chart-bar me-2 text-primary"></i>Fluxo de Caixa — Previsto vs Realizado</h6>
+            <span class="text-muted small" id="fluxoCaixaStatus">Carregando…</span>
+        </div>
+        <div class="card-body">
+            <canvas id="graficoFluxoCaixa" style="max-height:280px;"></canvas>
+        </div>
+    </div>
+
     <!-- Resumo de Contratos -->
     <div class="card">
         <div class="card-header">
@@ -293,4 +304,97 @@
         </div>
     </div>
 </div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script>
+(function() {
+    var apiUrl = "{% url 'financeiro:api_imobiliaria_fluxo_caixa' imobiliaria.id %}";
+    fetch(apiUrl)
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            document.getElementById('fluxoCaixaStatus').textContent = '';
+            if (!data.sucesso) return;
+
+            var meses    = data.meses.map(function(m) { return m.mes; });
+            var previsto = data.meses.map(function(m) { return m.esperado; });
+            var realiz   = data.meses.map(function(m) { return m.recebido; });
+            var pendente = data.meses.map(function(m) { return m.pendente > 0 ? m.pendente : 0; });
+            var corrente = data.meses.findIndex(function(m) { return m.corrente; });
+
+            // Highlight current month with annotation on canvas
+            var ctx = document.getElementById('graficoFluxoCaixa').getContext('2d');
+            new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: meses,
+                    datasets: [
+                        {
+                            label: 'Previsto (R$)',
+                            data: previsto,
+                            backgroundColor: 'rgba(54, 162, 235, 0.5)',
+                            borderColor: 'rgba(54, 162, 235, 1)',
+                            borderWidth: 1,
+                        },
+                        {
+                            label: 'Realizado (R$)',
+                            data: realiz,
+                            backgroundColor: 'rgba(75, 192, 75, 0.6)',
+                            borderColor: 'rgba(75, 192, 75, 1)',
+                            borderWidth: 1,
+                        },
+                        {
+                            label: 'Pendente (R$)',
+                            data: pendente,
+                            backgroundColor: 'rgba(255, 99, 71, 0.45)',
+                            borderColor: 'rgba(255, 99, 71, 0.9)',
+                            borderWidth: 1,
+                        },
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    plugins: {
+                        legend: { position: 'top' },
+                        tooltip: {
+                            callbacks: {
+                                label: function(ctx) {
+                                    return ctx.dataset.label + ': R$ ' +
+                                        ctx.parsed.y.toLocaleString('pt-BR', {minimumFractionDigits: 2});
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        x: {
+                            grid: { display: false },
+                            ticks: {
+                                color: function(ctx) {
+                                    return ctx.index === corrente ? '#007bff' : '#666';
+                                },
+                                font: {
+                                    weight: function(ctx) {
+                                        return ctx.index === corrente ? 'bold' : 'normal';
+                                    }
+                                }
+                            }
+                        },
+                        y: {
+                            beginAtZero: true,
+                            ticks: {
+                                callback: function(v) {
+                                    return 'R$ ' + (v/1000).toFixed(0) + 'k';
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        })
+        .catch(function() {
+            document.getElementById('fluxoCaixaStatus').textContent = 'Erro ao carregar dados.';
+        });
+})();
+</script>
 {% endblock %}
