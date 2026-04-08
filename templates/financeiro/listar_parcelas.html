@@ -384,7 +384,21 @@
                             </div>
                         </div>
 
-                        <div class="col-12">
+                        <!-- Forma de Pagamento -->
+                        <div class="col-md-6">
+                            <label class="form-label fw-bold">Forma de Pagamento</label>
+                            <select class="form-select" id="pagarForma">
+                                <option value="DINHEIRO">Dinheiro</option>
+                                <option value="PIX">PIX</option>
+                                <option value="TRANSFERENCIA">Transferência Bancária</option>
+                                <option value="BOLETO">Boleto</option>
+                                <option value="CARTAO_CREDITO">Cartão de Crédito</option>
+                                <option value="CARTAO_DEBITO">Cartão de Débito</option>
+                                <option value="CHEQUE">Cheque</option>
+                            </select>
+                        </div>
+
+                        <div class="col-md-6">
                             <label class="form-label">Observações</label>
                             <textarea class="form-control" id="pagarObs" rows="2"></textarea>
                         </div>
@@ -478,7 +492,19 @@
                             <input type="number" class="form-control" id="massaValor" step="0.01" min="0" placeholder="0,00">
                         </div>
                     </div>
-                    <div class="col-12">
+                    <div class="col-md-6">
+                        <label class="form-label fw-bold">Forma de Pagamento</label>
+                        <select class="form-select" id="massaForma">
+                            <option value="DINHEIRO">Dinheiro</option>
+                            <option value="PIX">PIX</option>
+                            <option value="TRANSFERENCIA">Transferência Bancária</option>
+                            <option value="BOLETO">Boleto</option>
+                            <option value="CARTAO_CREDITO">Cartão de Crédito</option>
+                            <option value="CARTAO_DEBITO">Cartão de Débito</option>
+                            <option value="CHEQUE">Cheque</option>
+                        </select>
+                    </div>
+                    <div class="col-md-6">
                         <label class="form-label">Observações</label>
                         <textarea class="form-control" id="massaObs" rows="2" placeholder="Ex: Pagamento em lote — PIX..."></textarea>
                     </div>
@@ -639,7 +665,7 @@ function acoesRenderer(params) {
     html += `<a href="/contratos/${d.contrato_pk}/" class="btn btn-sm btn-outline-info" title="Ver contrato"><i class="fas fa-file-contract"></i></a>`;
     if (!d.pago) {
         html += `<button class="btn btn-sm btn-outline-primary" title="Gerar boleto" onclick="abrirModalBoleto(${d.pk}, '${d.contrato.replace(/'/g,"\\'")}', ${d.numero_parcela})"><i class="fas fa-barcode"></i></button>`;
-        html += `<button class="btn btn-sm btn-outline-success" title="Registrar pagamento" onclick="abrirModalPagar(${d.pk}, '${d.contrato.replace(/'/g,"\\'")}', ${d.numero_parcela}, ${d.vencimento_fmt}, ${d.valor_original})"><i class="fas fa-dollar-sign"></i></button>`;
+        html += `<button class="btn btn-sm btn-outline-success" title="Registrar pagamento" onclick="abrirModalPagar(${d.pk}, '${d.contrato.replace(/'/g,"\\'")}', ${d.numero_parcela}, '${d.vencimento_fmt}', ${d.valor_original})"><i class="fas fa-dollar-sign"></i></button>`;
     }
     html += '</div>';
     return html;
@@ -916,6 +942,7 @@ function abrirModalPagar(parcelaId, contrato, numParcela, vencimentoFmt, valorOr
     document.getElementById('pagarMulta').value = '0.00';
     document.getElementById('pagarDesconto').value = '0.00';
     document.getElementById('pagarValorTotal').value = '';
+    document.getElementById('pagarForma').value = 'DINHEIRO';
     document.getElementById('pagarObs').value = '';
     document.getElementById('btnConfirmarPagar').disabled = false;
     document.getElementById('btnConfirmarPagar').innerHTML = '<i class="fas fa-check me-1"></i> Confirmar Pagamento';
@@ -969,6 +996,7 @@ function confirmarPagar() {
     formData.append('valor_juros', _pagarJuros.toFixed(2));
     formData.append('valor_multa', _pagarMulta.toFixed(2));
     formData.append('valor_desconto', (parseFloat(document.getElementById('pagarDesconto').value) || 0).toFixed(2));
+    formData.append('forma_pagamento', document.getElementById('pagarForma').value || 'DINHEIRO');
     formData.append('observacoes', document.getElementById('pagarObs').value || '');
 
     fetch('/financeiro/parcelas/' + parcelaAtualId + '/pagar-ajax/', {
@@ -1160,6 +1188,7 @@ function confirmarPagamentoMassa() {
         fd.append('valor_juros', '0');
         fd.append('valor_multa', '0');
         fd.append('valor_desconto', '0');
+        fd.append('forma_pagamento', document.getElementById('massaForma').value || 'DINHEIRO');
         fd.append('observacoes', obs);
         return fetch('/financeiro/parcelas/' + r.pk + '/pagar-ajax/', {method: 'POST', body: fd})
             .then(res => res.json())
