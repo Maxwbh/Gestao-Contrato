@@ -541,13 +541,15 @@ class BoletoService:
         # Numero do documento
         numero_documento = parcela.gerar_numero_documento()
 
-        # Instrucoes impressas no boleto
-        # Prioridade: financeiras (multa/juros/desconto) vem PRIMEIRO — são informações
-        # legalmente obrigatórias para o pagador. Referências (Doc/Parcela/Contrato)
-        # e instruções personalizadas preenchem os slots restantes.
+        # Instrucoes impressas no boleto — máx. 7 slots.
+        # Estratégia de compactação:
+        #   slot 1  → Desconto (se vigente) — 1 linha
+        #   slot 2  → "Após vencimento: Multa X% | Juros Y%/mês" — TUDO em 1 linha
+        #   slots 3-5 → instruções personalizadas do config
+        #   slots 6-7 → referências (Parcela/Contrato e Imóvel/Doc)
         instrucoes = []
 
-        # ── 1. Desconto (antes do vencimento) ─────────────────────────────────
+        # ── 1. Desconto (antes do vencimento) — 1 slot ────────────────────────
         valor_desconto_config = config_boleto.get('valor_desconto', 0) or 0
         if valor_desconto_config > 0:
             dias_desconto = config_boleto.get('dias_desconto', 0) or 0
@@ -557,54 +559,46 @@ class BoletoService:
                 if tipo_desconto == 'PERCENTUAL':
                     valor_desc_r = float(parcela.valor_atual) * float(valor_desconto_config) / 100
                     instrucoes.append(
-                        f"Desconto de R$ {valor_desc_r:.2f} ({valor_desconto_config}%) ate {data_limite_desc.strftime('%d/%m/%Y')}"
+                        f"Desconto: R$ {valor_desc_r:.2f} ({valor_desconto_config}%) ate {data_limite_desc.strftime('%d/%m/%Y')}"
                     )
                 else:
                     instrucoes.append(
-                        f"Desconto de R$ {valor_desconto_config:.2f} ate {data_limite_desc.strftime('%d/%m/%Y')}"
+                        f"Desconto: R$ {valor_desconto_config:.2f} ate {data_limite_desc.strftime('%d/%m/%Y')}"
                     )
 
-        # ── 2. Multa (apos vencimento) ─────────────────────────────────────────
+        # ── 2. Encargos pós-vencimento — TUDO em 1 slot ───────────────────────
+        partes_encargo = []
+
         valor_multa_config = config_boleto.get('valor_multa', 0) or 0
         if valor_multa_config > 0:
             tipo_multa = config_boleto.get('tipo_valor_multa', 'PERCENTUAL')
             dias_carencia = config_boleto.get('dias_carencia', 0) or 0
+            prefixo = f"apos {dias_carencia}d" if dias_carencia else "apos venc."
             if tipo_multa == 'PERCENTUAL':
-                instrucoes.append(
-                    f"Multa de {valor_multa_config}% apos {dias_carencia} dia(s) do vencimento"
-                )
+                partes_encargo.append(f"Multa {valor_multa_config}% {prefixo}")
             else:
-                instrucoes.append(
-                    f"Multa de R$ {valor_multa_config:.2f} apos {dias_carencia} dia(s) do vencimento"
-                )
+                partes_encargo.append(f"Multa R$ {valor_multa_config:.2f} {prefixo}")
+        else:
+            pct_multa_contrato = getattr(contrato, 'percentual_multa', None)
+            if pct_multa_contrato and float(pct_multa_contrato) > 0:
+                partes_encargo.append(f"Multa {pct_multa_contrato}% apos venc.")
 
-        # ── 3. Juros / Mora ────────────────────────────────────────────────────
         valor_juros_config = config_boleto.get('valor_juros', 0) or 0
         if valor_juros_config > 0:
             tipo_juros = config_boleto.get('tipo_valor_juros', 'PERCENTUAL')
             if tipo_juros == 'PERCENTUAL':
-                juros_diario = valor_juros_config / 30
-                instrucoes.append(
-                    f"Juros de {valor_juros_config}% ao mes ({juros_diario:.4f}% ao dia) apos vencimento"
-                )
+                partes_encargo.append(f"Juros {valor_juros_config}%/mes ({valor_juros_config/30:.4f}%/dia)")
             else:
-                instrucoes.append(
-                    f"Juros de R$ {valor_juros_config:.2f} por dia apos vencimento"
-                )
+                partes_encargo.append(f"Juros R$ {valor_juros_config:.2f}/dia")
+        else:
+            pct_juros_mora = getattr(contrato, 'percentual_juros_mora', None)
+            if pct_juros_mora and float(pct_juros_mora) > 0:
+                partes_encargo.append(f"Juros {pct_juros_mora}%/mes apos venc.")
 
-        # ── 4. Acréscimos contrato (juros mora + multa do contrato, se configurados) ──
-        pct_juros_mora = getattr(contrato, 'percentual_juros_mora', None)
-        pct_multa_contrato = getattr(contrato, 'percentual_multa', None)
-        if pct_juros_mora and float(pct_juros_mora) > 0 and valor_juros_config == 0:
-            instrucoes.append(
-                f"Juros de mora: {pct_juros_mora}% ao mes apos vencimento"
-            )
-        if pct_multa_contrato and float(pct_multa_contrato) > 0 and valor_multa_config == 0:
-            instrucoes.append(
-                f"Multa por atraso: {pct_multa_contrato}%"
-            )
+        if partes_encargo:
+            instrucoes.append("Apos vencimento: " + " | ".join(partes_encargo))
 
-        # ── 5. Instruções personalizadas do config ─────────────────────────────
+        # ── 3-5. Instruções personalizadas do config ───────────────────────────
         if config_boleto.get('instrucao_1'):
             instrucoes.append(config_boleto['instrucao_1'])
         if config_boleto.get('instrucao_2'):
@@ -612,10 +606,11 @@ class BoletoService:
         if config_boleto.get('instrucao_3'):
             instrucoes.append(config_boleto['instrucao_3'])
 
-        # ── 6. Referências (parcela / contrato / imóvel / doc) ─────────────────
-        instrucoes.append(f"Parcela {parcela.numero_parcela}/{contrato.numero_parcelas} | Contrato: {contrato.numero_contrato}")
+        # ── 6-7. Referências ───────────────────────────────────────────────────
+        ref_parcela = f"Parcela {parcela.numero_parcela}/{contrato.numero_parcelas} | Contrato: {contrato.numero_contrato}"
         if contrato.imovel and contrato.imovel.identificacao:
-            instrucoes.append(f"Imovel: {contrato.imovel.identificacao}")
+            ref_parcela += f" | Imovel: {contrato.imovel.identificacao}"
+        instrucoes.append(ref_parcela)
         instrucoes.append(f"Doc: {numero_documento}")
 
         # Dados do boleto no formato BRCobranca
@@ -931,16 +926,21 @@ class BoletoService:
             if parcela.nosso_numero:
                 dados_boleto['nosso_numero'] = str(parcela.nosso_numero)
 
-            # Acrescentar instruções de "segunda via"
-            instrucoes_extra = [f'SEGUNDA VIA — Valores atualizados em {data_referencia.strftime("%d/%m/%Y")}']
-            if valor_juros > 0 or valor_multa > 0:
-                instrucoes_extra.append(
-                    f'Juros: R$ {valor_juros:.2f} | Multa: R$ {valor_multa:.2f}'
-                )
-            dados_existentes = dados_boleto.get('instrucoes', [])
-            dados_boleto['instrucoes'] = instrucoes_extra + (
-                dados_existentes if isinstance(dados_existentes, list) else [dados_existentes]
+            # ── instrucao1 da 2ª via: "Valor Atualizado para pagamento hoje" ──
+            # Formatar em BRL: 1234567.89 → "R$ 1.234.567,89"
+            vt_str = f"{float(valor_total):,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+            linha_valor = (
+                f"Valor atualizado p/ pagamento em "
+                f"{data_referencia.strftime('%d/%m/%Y')}   R$ {vt_str}"
             )
+            # Empurrar instrucoes existentes 1 slot para baixo; instrucao7 é descartada
+            dados_boleto['instrucao7'] = dados_boleto.get('instrucao6', '')
+            dados_boleto['instrucao6'] = dados_boleto.get('instrucao5', '')
+            dados_boleto['instrucao5'] = dados_boleto.get('instrucao4', '')
+            dados_boleto['instrucao4'] = dados_boleto.get('instrucao3', '')
+            dados_boleto['instrucao3'] = dados_boleto.get('instrucao2', '')
+            dados_boleto['instrucao2'] = dados_boleto.get('instrucao1', '')
+            dados_boleto['instrucao1'] = linha_valor
 
             banco_nome = self._get_banco_brcobranca(getattr(conta_bancaria, 'banco', ''))
             if not banco_nome:
