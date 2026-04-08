@@ -22,19 +22,26 @@ RUN apt-get update && apt-get upgrade -y && apt-get install -y --no-install-reco
 
 WORKDIR /app
 
+# Garantir que o builder usa o mesmo BUNDLE_PATH que o runtime para consistência
+# nas gems de git (ex: brcobranca). Sem isso, o COPY pode não restaurar os caminhos
+# corretamente e o puma falha com "not yet checked out".
+ENV BUNDLE_PATH=/usr/local/bundle \
+    GEM_HOME=/usr/local/bundle \
+    PATH="/usr/local/bundle/bin:$PATH"
+
 # ARG antes do git clone para invalidar o cache Docker quando o repo for atualizado.
-# Render: configure "Clear build cache" OU incremente CACHE_BUST no render.yaml.
-ARG CACHE_BUST=1
+# Render: incremente CACHE_BUST para forçar novo clone + bundle install do zero.
+ARG CACHE_BUST=2
 
 # Clonar repositório da API (shallow clone da branch master)
 RUN git clone --depth 1 --branch master \
     https://github.com/Maxwbh/boleto_cnab_api.git .
 
-# O Gemfile já aponta para maxwbh/brcobranca branch master — sem Gemfile.local.
-# Bundler resolve e usa o Gemfile.lock commitado (brcobranca 12.6.1, rev b71882d).
+# bundle install resolve gems do Gemfile.lock (incluindo brcobranca via git).
+# NÃO usar "bundle clean --force" pois pode remover checkouts de gems git
+# causando erro "not yet checked out" no runtime.
 RUN bundle config set --local without 'development test' && \
     bundle install --jobs $(nproc) --retry 3 && \
-    bundle clean --force && \
     rm -rf /usr/local/bundle/cache/*.gem && \
     find /usr/local/bundle/gems/ -name "*.c" -delete 2>/dev/null || true && \
     find /usr/local/bundle/gems/ -name "*.o" -delete 2>/dev/null || true
