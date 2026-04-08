@@ -1056,6 +1056,13 @@
                         <i class="fas fa-edit"></i> Editar Contrato
                     </a>
                     {% if contrato.status != 'CANCELADO' %}
+                    <a href="{% url 'financeiro:simulador_antecipacao' contrato.pk %}" class="btn btn-outline-success">
+                        <i class="fas fa-forward me-1"></i> Simular Antecipação
+                    </a>
+                    <a href="{% url 'financeiro:recibo_antecipacao' contrato.pk %}" class="btn btn-outline-info"
+                       title="Baixar recibo das últimas antecipações">
+                        <i class="fas fa-file-pdf me-1"></i> Recibo Antecipação
+                    </a>
                     <a href="{% url 'contratos:calcular_rescisao' contrato.pk %}" class="btn btn-outline-danger">
                         <i class="fas fa-file-contract me-1"></i> Calcular Rescisão
                     </a>
