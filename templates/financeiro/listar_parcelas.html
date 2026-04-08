@@ -492,7 +492,19 @@
                             <input type="number" class="form-control" id="massaValor" step="0.01" min="0" placeholder="0,00">
                         </div>
                     </div>
-                    <div class="col-12">
+                    <div class="col-md-6">
+                        <label class="form-label fw-bold">Forma de Pagamento</label>
+                        <select class="form-select" id="massaForma">
+                            <option value="DINHEIRO">Dinheiro</option>
+                            <option value="PIX">PIX</option>
+                            <option value="TRANSFERENCIA">Transferência Bancária</option>
+                            <option value="BOLETO">Boleto</option>
+                            <option value="CARTAO_CREDITO">Cartão de Crédito</option>
+                            <option value="CARTAO_DEBITO">Cartão de Débito</option>
+                            <option value="CHEQUE">Cheque</option>
+                        </select>
+                    </div>
+                    <div class="col-md-6">
                         <label class="form-label">Observações</label>
                         <textarea class="form-control" id="massaObs" rows="2" placeholder="Ex: Pagamento em lote — PIX..."></textarea>
                     </div>
@@ -1176,6 +1188,7 @@ function confirmarPagamentoMassa() {
         fd.append('valor_juros', '0');
         fd.append('valor_multa', '0');
         fd.append('valor_desconto', '0');
+        fd.append('forma_pagamento', document.getElementById('massaForma').value || 'DINHEIRO');
         fd.append('observacoes', obs);
         return fetch('/financeiro/parcelas/' + r.pk + '/pagar-ajax/', {method: 'POST', body: fd})
             .then(res => res.json())
