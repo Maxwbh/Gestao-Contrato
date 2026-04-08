@@ -28,6 +28,7 @@ from django.views.decorators.http import require_http_methods
 from django.conf import settings
 from django.db import transaction
 from core.permissions import task_api_rate_limit
+from notificacoes.services import _destinatario_email_teste
 
 logger = logging.getLogger(__name__)
 
@@ -787,7 +788,7 @@ def relatorio_semanal_incorporadoras_sync():
                         subject=f'Relatório Semanal — {imobiliaria.nome}',
                         message=corpo,
                         from_email=None,  # usa DEFAULT_FROM_EMAIL
-                        recipient_list=[imobiliaria.email],
+                        recipient_list=[_destinatario_email_teste(imobiliaria.email)],
                         fail_silently=True,
                     )
                 except Exception as e:
@@ -933,7 +934,7 @@ def relatorio_mensal_consolidado_sync():
                         subject=f'Relatório Mensal — {contabilidade.nome} — {dados_contabilidade["mes_referencia"]}',
                         message='\n'.join(linhas),
                         from_email=None,
-                        recipient_list=[contabilidade.email],
+                        recipient_list=[_destinatario_email_teste(contabilidade.email)],
                         fail_silently=True,
                     )
                 except Exception as e:
