@@ -1,10 +1,64 @@
-{% extends 'base.html' %}
+{% extends 'portal_comprador/portal_base.html' %}
+
 {% block title %}Meus Contratos{% endblock %}
+{% block nav_contratos %}active{% endblock %}
+
 {% block content %}
-<div class="container">
-    <h1>Meus Contratos</h1>
-    {% for contrato in contratos %}
-    <div>{{ contrato.numero_contrato }}</div>
-    {% endfor %}
+<h6 style="font-weight:700;margin:12px 0 16px;color:#212121;">
+    <i class="fas fa-description" style="color:var(--portal-primary);margin-right:6px;"></i>
+    Meus Contratos
+</h6>
+
+{% if contratos %}
+{% for contrato in contratos %}
+{% with total=contrato.parcelas.count pagas=contrato.parcelas.filter.count %}
+<div class="contrato-card">
+    <div class="contrato-card-top">
+        <div class="num">{{ contrato.numero_contrato }}</div>
+        <div class="imovel">
+            {% if contrato.imovel.identificacao %}{{ contrato.imovel.identificacao }}{% elif contrato.imovel.loteamento %}{{ contrato.imovel.loteamento }}{% else %}Imóvel #{{ contrato.imovel.pk }}{% endif %}
+        </div>
+        <div class="valor">Valor total: R$ {{ contrato.valor_total|floatformat:2 }}</div>
+
+        <!-- Progresso -->
+        {% with prog=contrato.calcular_progresso %}
+        <div style="margin-top:10px;">
+            <div style="display:flex;justify-content:space-between;font-size:.72rem;color:#757575;margin-bottom:4px;">
+                <span>Progresso</span>
+                <span>{{ prog|floatformat:0 }}%</span>
+            </div>
+            <div class="progress-portal">
+                <div class="fill" style="width:{{ prog|floatformat:0 }}%"></div>
+            </div>
+        </div>
+        {% endwith %}
+    </div>
+    <div class="contrato-card-footer">
+        <div>
+            {% if contrato.status == 'ATIVO' %}
+            <span class="status-badge ativo"><i class="fas fa-circle" style="font-size:.5rem;"></i> Ativo</span>
+            {% elif contrato.status == 'QUITADO' %}
+            <span class="status-badge quitado"><i class="fas fa-check-circle" style="font-size:.7rem;"></i> Quitado</span>
+            {% else %}
+            <span class="status-badge" style="background:#f5f5f5;color:#757575;">{{ contrato.get_status_display }}</span>
+            {% endif %}
+            <small style="color:#9e9e9e;margin-left:8px;font-size:.72rem;">
+                {{ contrato.imobiliaria.nome|truncatechars:20 }}
+            </small>
+        </div>
+        <a href="{% url 'portal_comprador:detalhe_contrato' contrato.pk %}"
+           style="color:var(--portal-primary);font-size:.82rem;text-decoration:none;font-weight:600;">
+            Detalhes <i class="fas fa-chevron-right"></i>
+        </a>
+    </div>
 </div>
+{% endwith %}
+{% endfor %}
+
+{% else %}
+<div style="text-align:center;padding:48px 16px;color:#9e9e9e;">
+    <span class="material-icons" style="font-size:4rem;color:#e0e0e0;display:block;margin-bottom:12px;">description</span>
+    <p style="margin:0;">Nenhum contrato encontrado.</p>
+</div>
+{% endif %}
 {% endblock %}
