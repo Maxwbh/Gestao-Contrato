@@ -75,7 +75,7 @@
 | 3.12 | Gestão de Boletos: download ZIP de vários boletos | ✅ `download_zip_boletos` em `financeiro/views.py` + URL `contrato/<id>/boletos/zip/` + botão ZIP na aba Parcelas de `contrato_detail.html` |
 | 3.13 | Gestão de Parcelas: seleção múltipla para ações em lote | ✅ Seleção múltipla implementada |
 | 3.14 | Gestão de Parcelas: juros/multa/total nas vencidas | ✅ Cálculo dinâmico em `listar_parcelas` view |
-| 3.15 | Sidebar recolhível com indicadores de pendências | — |
+| 3.15 | Sidebar recolhível com indicadores de pendências | ✅ `desktop-sidebar` em `base.html`: 240px↔60px toggle (localStorage), badges de parcelas vencidas/reajustes/boletos/CNAB via `api_sidebar_pendencias`; tooltip CSS em modo colapsado; oculto em mobile (usa sidenav Materialize) |
 | 3.16 | Toast de sucesso/erro padronizado | ✅ `window.showToast()` global em `base.html` |
 | 3.17 | Centro de notificações com badge | ✅ Badge navbar + endpoint `api_reajustes_pendentes_count` |
 
