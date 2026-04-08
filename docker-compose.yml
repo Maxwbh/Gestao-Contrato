@@ -56,24 +56,28 @@ services:
   # =============================================================================
   # BRCobranca API (Geracao de Boletos)
   # =============================================================================
-  # Usa o Dockerfile customizado com repositorio do Maxwell
+  # Builda a partir do Dockerfile.brcobranca (clona Maxwbh/boleto_cnab_api)
   brcobranca:
     build:
       context: .
       dockerfile: Dockerfile.brcobranca
+      args:
+        # Incremente para forçar re-clone do boleto_cnab_api quando houver atualização.
+        # Ex: docker-compose build --build-arg CACHE_BUST=$(date +%s) brcobranca
+        CACHE_BUST: 1
     container_name: brcobranca-api
     restart: unless-stopped
     environment:
-      RACK_ENV: development
+      RACK_ENV: production
       PORT: "9292"
     ports:
       - "9292:9292"
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:9292/"]
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:9292/api/health"]
       interval: 30s
       timeout: 10s
       retries: 3
-      start_period: 10s
+      start_period: 60s
 
 volumes:
   postgres_data:
