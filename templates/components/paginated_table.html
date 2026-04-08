@@ -1,0 +1,148 @@
+{% comment %}
+3.30 — Tabela paginada com filtros (componente genérico)
+
+Uso:
+  {% include 'components/paginated_table.html' with
+      table_id="parcelas-table"
+      title="Parcelas"
+      icon="fas fa-list"
+      columns=columns_list          (lista de dicts: {key, label, class})
+      rows=page_obj                 (queryset paginado OU lista de dicts)
+      page_obj=page_obj             (objeto de paginação do Django)
+      empty_message="Nenhum registro encontrado."
+      show_search=True              (opcional, default False)
+      search_placeholder="Buscar..."
+      search_param="q"
+  %}
+
+Parâmetros:
+  table_id         - ID único da tabela (para JS)
+  title            - Título do card
+  icon             - Classe FontAwesome para o ícone do cabeçalho
+  page_obj         - Objeto Page do Django (para paginação)
+  empty_message    - Mensagem quando não há registros
+  show_search      - Exibe campo de busca no cabeçalho
+  search_param     - Nome do parâmetro GET de busca (default: q)
+  search_value     - Valor atual da busca
+  extra_buttons    - HTML extra de botões no cabeçalho (opcional)
+{% endcomment %}
+
+<div class="card shadow-sm" id="{{ table_id|default:'paginated-table' }}_card">
+  <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
+    <span class="fw-semibold">
+      <i class="{{ icon|default:'fas fa-table' }} me-2 text-primary"></i>
+      {{ title|default:'Registros' }}
+      {% if page_obj %}
+      <span class="badge bg-secondary ms-1">{{ page_obj.paginator.count }}</span>
+      {% endif %}
+    </span>
+    <div class="d-flex gap-2 align-items-center flex-wrap">
+      {% if show_search %}
+      <form method="get" class="d-flex gap-1">
+        {% if request.GET %}
+          {% for key, val in request.GET.items %}
+            {% if key != search_param and key != 'page' %}
+            <input type="hidden" name="{{ key }}" value="{{ val }}">
+            {% endif %}
+          {% endfor %}
+        {% endif %}
+        <input type="text"
+               name="{{ search_param|default:'q' }}"
+               value="{{ search_value }}"
+               placeholder="{{ search_placeholder|default:'Buscar...' }}"
+               class="form-control form-control-sm"
+               style="width:200px;">
+        <button type="submit" class="btn btn-sm btn-outline-primary">
+          <i class="fas fa-search"></i>
+        </button>
+        {% if search_value %}
+        <a href="?" class="btn btn-sm btn-outline-secondary" title="Limpar busca">
+          <i class="fas fa-times"></i>
+        </a>
+        {% endif %}
+      </form>
+      {% endif %}
+      {% if extra_buttons %}{{ extra_buttons }}{% endif %}
+    </div>
+  </div>
+
+  <div class="card-body p-0">
+    {% block table_content %}
+    <div class="table-responsive">
+      <table class="table table-hover table-sm mb-0" id="{{ table_id|default:'paginated-table' }}">
+        {% if columns %}
+        <thead class="table-light">
+          <tr>
+            {% for col in columns %}
+            <th class="{{ col.class|default:'' }}" {% if col.width %}style="width:{{ col.width }}"{% endif %}>
+              {{ col.label }}
+            </th>
+            {% endfor %}
+          </tr>
+        </thead>
+        {% endif %}
+        <tbody>
+          {% if rows %}
+            {{ rows_html }}
+          {% else %}
+          <tr>
+            <td colspan="{{ columns|length|default:1 }}" class="text-center text-muted py-4">
+              <i class="fas fa-inbox fa-2x mb-2 d-block opacity-25"></i>
+              {{ empty_message|default:'Nenhum registro encontrado.' }}
+            </td>
+          </tr>
+          {% endif %}
+        </tbody>
+      </table>
+    </div>
+    {% endblock %}
+  </div>
+
+  {% if page_obj and page_obj.paginator.num_pages > 1 %}
+  <div class="card-footer d-flex justify-content-between align-items-center flex-wrap gap-2">
+    <small class="text-muted">
+      Página {{ page_obj.number }} de {{ page_obj.paginator.num_pages }}
+      ({{ page_obj.paginator.count }} registros)
+    </small>
+    <nav aria-label="Paginação">
+      <ul class="pagination pagination-sm mb-0">
+        {% if page_obj.has_previous %}
+        <li class="page-item">
+          <a class="page-link" href="?{% for key, val in request.GET.items %}{% if key != 'page' %}{{ key }}={{ val }}&{% endif %}{% endfor %}page={{ page_obj.previous_page_number }}">
+            <i class="fas fa-chevron-left"></i>
+          </a>
+        </li>
+        {% else %}
+        <li class="page-item disabled"><span class="page-link"><i class="fas fa-chevron-left"></i></span></li>
+        {% endif %}
+
+        {% for num in page_obj.paginator.page_range %}
+          {% if page_obj.number == num %}
+          <li class="page-item active"><span class="page-link">{{ num }}</span></li>
+          {% elif num >= page_obj.number|add:"-2" and num <= page_obj.number|add:"2" %}
+          <li class="page-item">
+            <a class="page-link" href="?{% for key, val in request.GET.items %}{% if key != 'page' %}{{ key }}={{ val }}&{% endif %}{% endfor %}page={{ num }}">{{ num }}</a>
+          </li>
+          {% elif num == 1 or num == page_obj.paginator.num_pages %}
+          <li class="page-item">
+            <a class="page-link" href="?{% for key, val in request.GET.items %}{% if key != 'page' %}{{ key }}={{ val }}&{% endif %}{% endfor %}page={{ num }}">{{ num }}</a>
+          </li>
+          {% elif num == page_obj.number|add:"-3" or num == page_obj.number|add:"3" %}
+          <li class="page-item disabled"><span class="page-link">…</span></li>
+          {% endif %}
+        {% endfor %}
+
+        {% if page_obj.has_next %}
+        <li class="page-item">
+          <a class="page-link" href="?{% for key, val in request.GET.items %}{% if key != 'page' %}{{ key }}={{ val }}&{% endif %}{% endfor %}page={{ page_obj.next_page_number }}">
+            <i class="fas fa-chevron-right"></i>
+          </a>
+        </li>
+        {% else %}
+        <li class="page-item disabled"><span class="page-link"><i class="fas fa-chevron-right"></i></span></li>
+        {% endif %}
+      </ul>
+    </nav>
+  </div>
+  {% endif %}
+</div>
