@@ -2,7 +2,7 @@
 
 **Desenvolvedor:** Maxwell da Silva Oliveira (maxwbh@gmail.com)
 **Empresa:** M&S do Brasil LTDA
-**Última atualização:** 2026-04-08 (rev 7)
+**Última atualização:** 2026-04-08 (rev 8)
 
 > Pendentes organizados por prioridade.
 > Para documentação do sistema atual, consulte **[SISTEMA.md](SISTEMA.md)**.
@@ -246,6 +246,7 @@
 ### P2 — Alto
 | Item | Descrição |
 |------|-----------|
+| PDF boleto persistido no banco | ✅ Campo `BinaryField boleto_pdf_db` em `Parcela` (migration `financeiro/0006`); `BoletoService` salva o PDF gerado no campo ao criar/baixar — resolve perda de arquivos no Render.com free tier (storage efêmero); `download_boleto` tenta DB primeiro, regenera via BRCobrança se ausente |
 | Bootstrap local | ✅ Materialize, FontAwesome, AG Grid e Flatpickr servidos localmente via `static/vendor/`; templates base.html, portal_base.html, login, registro, setup atualizados; único CDN restante é Google Fonts (Material Icons) |
 | Logging | ✅ Loggers por app (financeiro, contratos, core, notificacoes); django.request/security com AdminEmailHandler em produção; formato verbose com PID e thread |
 
@@ -950,6 +951,8 @@ para ciclo = 2..total_ciclos+1:
 | N-03 | Régua de cobrança configurável (D-5, D+3, D+10, D+30) | P3 | ✅ `RegraNotificacao` model em `notificacoes/models.py` + `TipoGatilho` (ANTES/APOS) + admin com `list_editable` + `_processar_regra()` em `core/tasks.py` — fallback automático para N-01/N-02 quando nenhuma regra configurada |
 | N-04 | Integração WhatsApp (Evolution API / Z-API) | P3 | ✅ `ConfiguracaoWhatsApp` agora suporta 4 provedores: Twilio, Meta (Cloud API), Evolution API v2 (`/message/sendText/{instancia}`), Z-API (`/send-text`). `ServicoWhatsApp` despacha pelo `provedor` do config ativo. Migration `0004_add_whatsapp_providers` adiciona `api_url`, `api_key`, `instancia`, `client_token`. Admin com fieldsets colapsáveis por provedor. |
 | N-05 | Push notification portal comprador | P4 | ⏳ |
+| N-08 | **TEST_MODE safeguard** — `_destinatario_email_teste()` e `_destinatario_telefone_teste()` em `BoletoNotificacaoService`: em ambiente não-produção, redireciona todos os envios para endereços de teste configurados em `settings.EMAIL_TESTE` e `settings.TELEFONE_TESTE`; evita notificações acidentais para compradores reais durante desenvolvimento | P2 | ✅ `notificacoes/boleto_notificacao.py` |
+| N-09 | **Normalização E.164 para Twilio** — telefones no formato `(31) 99999-8888` são convertidos para `+5531999998888` antes do envio via Twilio SMS/WhatsApp; `_normalizar_telefone_e164()` strip de caracteres não-numéricos + prefixo `+55` | P2 | ✅ `notificacoes/boleto_notificacao.py` |
 | N-06 | **Template unificado** — 1 registro por `(codigo, imobiliaria)` com 3 canais: `corpo_html` (Email HTML via TinyMCE 5), `corpo` (SMS ≤255 chars), `corpo_whatsapp`; campo `tipo` removido do form; badges de canal baseados nos campos preenchidos; `renderizar()` retorna 4-tuple `(assunto, corpo, corpo_html, corpo_whatsapp)` | P2 | ✅ Migration `0005_template_unificado` + forms + views + template_form/list atualizados |
 | N-07 | **SMS máximo 255 caracteres** — validação no `clean_corpo()` do form + contador em tempo real no template com substituição de `%%TAGS%%` por valores de exemplo (31 tags mapeadas) para exibir comprimento real estimado; aviso laranja >90%, vermelho >255 | P2 | ✅ `TemplateNotificacaoForm.clean_corpo()` + JS no `template_form.html` |
 
@@ -968,6 +971,7 @@ para ciclo = 2..total_ciclos+1:
 | U-05 | Portal do comprador — redesign mobile-first | Compradores acessam via celular | P2 | ✅ `portal_base.html` + todos os templates — nav bottom, stat chips, cards mobile |
 | U-06 | Busca global (Ctrl+K) — busca rápida por contrato, comprador, lote | P3 | ✅ `api_busca_global` em `core/views.py` + modal overlay em `base.html` — debounce, nav teclado ↑↓/Enter/Esc, highlight `<mark>` |
 | U-07 | Impressão de carnê de pagamento (PDF multi-página) | P3 | ✅ Já implementado — `download_carne_pdf` + `gerar_carne_pdf` em `financeiro/services/carne_service.py` + modal de seleção de parcelas em `contrato_detail.html` |
+| U-10 | **Forma de pagamento nos 3 modais** — campo `forma_pagamento` (Dinheiro/Boleto/PIX/Transferência/Cartão) adicionado nos modais: pagamento individual (`detalhe_parcela.html`), pagamento em massa (`listar_parcelas.html`) e registro via contrato (`contrato_detail.html`); salvo em `HistoricoPagamento.forma_pagamento` | P2 | ✅ |
 | U-08 | **AG Grid — duplo cabeçalho corrigido** — removido `floatingFilter: true` e `floatingFiltersHeight: 36` de todas as 12 grids do sistema; busca rápida mantida via `quickFilterText` (input no card-header) | P2 | ✅ 12 templates atualizados: `listar_parcelas`, `contrato_list`, `indice_list`, `listar_reajustes`, `parcelas_mes`, `listar_remessas`, `listar_retornos`, `comprador_list`, `acesso_list`, `listar`, `template_list`, `config_email_list` |
 | U-09 | **CSS 95% formulários** — regra global em `custom.css` para `col-xl-*` e `col-lg-*` dentro de `.row.justify-content-center` usa `max-width: 95%`; todos os formulários do sistema aproveitam sem alterar templates individuais | P3 | ✅ `static/css/custom.css` |
 
