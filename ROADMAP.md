@@ -2,7 +2,7 @@
 
 **Desenvolvedor:** Maxwell da Silva Oliveira (maxwbh@gmail.com)
 **Empresa:** M&S do Brasil LTDA
-**Última atualização:** 2026-04-01 (rev 6)
+**Última atualização:** 2026-04-08 (rev 7)
 
 > Pendentes organizados por prioridade.
 > Para documentação do sistema atual, consulte **[SISTEMA.md](SISTEMA.md)**.
@@ -950,6 +950,8 @@ para ciclo = 2..total_ciclos+1:
 | N-03 | Régua de cobrança configurável (D-5, D+3, D+10, D+30) | P3 | ✅ `RegraNotificacao` model em `notificacoes/models.py` + `TipoGatilho` (ANTES/APOS) + admin com `list_editable` + `_processar_regra()` em `core/tasks.py` — fallback automático para N-01/N-02 quando nenhuma regra configurada |
 | N-04 | Integração WhatsApp (Evolution API / Z-API) | P3 | ✅ `ConfiguracaoWhatsApp` agora suporta 4 provedores: Twilio, Meta (Cloud API), Evolution API v2 (`/message/sendText/{instancia}`), Z-API (`/send-text`). `ServicoWhatsApp` despacha pelo `provedor` do config ativo. Migration `0004_add_whatsapp_providers` adiciona `api_url`, `api_key`, `instancia`, `client_token`. Admin com fieldsets colapsáveis por provedor. |
 | N-05 | Push notification portal comprador | P4 | ⏳ |
+| N-06 | **Template unificado** — 1 registro por `(codigo, imobiliaria)` com 3 canais: `corpo_html` (Email HTML via TinyMCE 5), `corpo` (SMS ≤255 chars), `corpo_whatsapp`; campo `tipo` removido do form; badges de canal baseados nos campos preenchidos; `renderizar()` retorna 4-tuple `(assunto, corpo, corpo_html, corpo_whatsapp)` | P2 | ✅ Migration `0005_template_unificado` + forms + views + template_form/list atualizados |
+| N-07 | **SMS máximo 255 caracteres** — validação no `clean_corpo()` do form + contador em tempo real no template com substituição de `%%TAGS%%` por valores de exemplo (31 tags mapeadas) para exibir comprimento real estimado; aviso laranja >90%, vermelho >255 | P2 | ✅ `TemplateNotificacaoForm.clean_corpo()` + JS no `template_form.html` |
 
 ---
 
@@ -966,6 +968,8 @@ para ciclo = 2..total_ciclos+1:
 | U-05 | Portal do comprador — redesign mobile-first | Compradores acessam via celular | P2 | ✅ `portal_base.html` + todos os templates — nav bottom, stat chips, cards mobile |
 | U-06 | Busca global (Ctrl+K) — busca rápida por contrato, comprador, lote | P3 | ✅ `api_busca_global` em `core/views.py` + modal overlay em `base.html` — debounce, nav teclado ↑↓/Enter/Esc, highlight `<mark>` |
 | U-07 | Impressão de carnê de pagamento (PDF multi-página) | P3 | ✅ Já implementado — `download_carne_pdf` + `gerar_carne_pdf` em `financeiro/services/carne_service.py` + modal de seleção de parcelas em `contrato_detail.html` |
+| U-08 | **AG Grid — duplo cabeçalho corrigido** — removido `floatingFilter: true` e `floatingFiltersHeight: 36` de todas as 12 grids do sistema; busca rápida mantida via `quickFilterText` (input no card-header) | P2 | ✅ 12 templates atualizados: `listar_parcelas`, `contrato_list`, `indice_list`, `listar_reajustes`, `parcelas_mes`, `listar_remessas`, `listar_retornos`, `comprador_list`, `acesso_list`, `listar`, `template_list`, `config_email_list` |
+| U-09 | **CSS 95% formulários** — regra global em `custom.css` para `col-xl-*` e `col-lg-*` dentro de `.row.justify-content-center` usa `max-width: 95%`; todos os formulários do sistema aproveitam sem alterar templates individuais | P3 | ✅ `static/css/custom.css` |
 
 ---
 
@@ -984,8 +988,8 @@ para ciclo = 2..total_ciclos+1:
 | Mapa Interativo (Seção 16) | — | 5 | 6 | 1 | 12 | ✅ 10/10 M-01..M-10 |
 | Dashboard KPIs (Seção 17) | 1 | 5 | 2 | — | 8 | ✅ 8/8 (K-01..K-06, G-01..G-05, D-01..D-04) |
 | Simulador Antecipação (Seção 18) | — | 3 | 2 | — | 5 | ✅ 3/3 P2 (R-01..R-03) · ⏳ 2 P3 |
-| Notificações (Seção 19) | — | 2 | 2 | 1 | 5 | ✅ 2/2 P2 (N-01, N-02) · ⏳ 3 P3/P4 |
-| UX / Interface (Seção 20) | — | 3 | 4 | — | 7 | ✅ 3/3 P2 (U-02, U-03, U-05) · ⏳ 4 P3 |
+| Notificações (Seção 19) | — | 4 | 2 | 1 | 7 | ✅ 4/4 P2 (N-01, N-02, N-06, N-07) · ⏳ 3 P3/P4 |
+| UX / Interface (Seção 20) | — | 4 | 5 | — | 9 | ✅ 4/4 P2 (U-02, U-03, U-05, U-08) · ⏳ 5 P3 (incl. U-09 ✅) |
 | Frontend | — | 17 | 15 | 3 | 35 | ⚠️ ~4/17 P2 |
 | APIs | — | 6 | 5 | — | 11 | — |
 | Celery | — | 2 | 2 | 1 | 5 | — |
@@ -1076,6 +1080,18 @@ para ciclo = 2..total_ciclos+1:
 - URLs: `/contrato/<id>/carne/pdf/` e `/api/carne/multiplos/`
 - Bug fixes: `Reajuste._calcular_price_tabela` / `_calcular_sac_tabela` (eram chamados em `Parcela`) em `contratos/models.py`, `contratos/views.py` (×2), `financeiro/models.py`
 - 48 testes em `tests/unit/financeiro/test_hu_boleto_remessa.py` (HU01–HU12 + CarneService + BoletoService + OFX)
+
+**Seção 19 (N-06, N-07) — Template Notificação Unificado + SMS:**
+- `TemplateNotificacao` refatorado: 1 registro por `(codigo, imobiliaria)` com campos `corpo_html`, `corpo`, `corpo_whatsapp` — elimina duplicidade de 3 registros por tipo
+- Migration `0005_template_unificado`: merge de dados existentes, novo `unique_together`
+- `renderizar()` retorna 4-tuple; `tem_email/tem_sms/tem_whatsapp` como properties
+- TinyMCE 5 (self-hosted, sem API key) no campo `corpo_html`
+- SMS máximo 255 chars: `clean_corpo()` valida + contador JS com substituição de `%%TAGS%%` por valores de exemplo
+- `criar_templates_padrao()` e `gerar_dados_teste.py` atualizados
+
+**Seção 20 (U-08, U-09) — AG Grid + CSS:**
+- Duplo cabeçalho corrigido: removido `floatingFilter: true` das 12 grids — busca via `quickFilterText` mantida
+- CSS 95% formulários: regra global em `custom.css` cobre todos os forms sem editar templates individuais
 
 **Seção 22 — OFX: Quitação via Extrato Bancário:**
 - `financeiro/services/ofx_service.py` — parser SGML puro sem dependências externas; suporte a SGML e XML-like; auto-detecção de encoding
