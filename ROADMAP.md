@@ -72,7 +72,7 @@
 | 3.9 | Dashboard Imobiliária: ações em lote (gerar boletos) | ✅ `abrirModalGerarLote()` em `contrato_list.html` |
 | 3.10 | Dashboard Imobiliária: fluxo de caixa previsto vs realizado | — |
 | 3.11 | Gestão de Boletos: interface geração em lote com progresso | ✅ `gerar_carne` + templates |
-| 3.12 | Gestão de Boletos: download ZIP de vários boletos | — |
+| 3.12 | Gestão de Boletos: download ZIP de vários boletos | ✅ `download_zip_boletos` em `financeiro/views.py` + URL `contrato/<id>/boletos/zip/` + botão ZIP na aba Parcelas de `contrato_detail.html` |
 | 3.13 | Gestão de Parcelas: seleção múltipla para ações em lote | ✅ Seleção múltipla implementada |
 | 3.14 | Gestão de Parcelas: juros/multa/total nas vencidas | ✅ Cálculo dinâmico em `listar_parcelas` view |
 | 3.15 | Sidebar recolhível com indicadores de pendências | — |
@@ -88,7 +88,7 @@
 | 3.21 | Exportar relatório consolidado (PDF, Excel) |
 | 3.22 | Tela de reajuste pendente (índice, prévia, aplicar lote) |
 | 3.23 | Histórico de reajustes aplicados |
-| 3.24 | Upload de comprovante de pagamento |
+| 3.24 | Upload de comprovante de pagamento | ✅ `registrar_pagamento` aceita `multipart/form-data`; cria `HistoricoPagamento` com `forma_pagamento` e `comprovante` (FileField já existia no model); template atualizado com campos forma_pagamento e comprovante |
 | 3.25 | Notificar comprador inadimplente |
 | 3.26 | Configurações de boleto por imobiliária |
 | 3.27 | Configurações de notificação (dias, canais) |
@@ -879,8 +879,8 @@ para ciclo = 2..total_ciclos+1:
 
 | # | Item | Prioridade |
 |---|------|-----------|
-| M-11 | Página `/imoveis/loteamento/{slug}/` — mapa dedicado do empreendimento | P2 |
-| M-12 | Estatísticas do loteamento: total, disponíveis %, valor médio por lote | P2 |
+| M-11 | Página `/imoveis/loteamento/{slug}/` — mapa dedicado do empreendimento | P2 | ✅ `loteamento_detalhe` em `core/views.py` + URL `imoveis/loteamento/<str:nome>/` + template `loteamento_detalhe.html` com mapa Leaflet + lista filtrável por status |
+| M-12 | Estatísticas do loteamento: total, disponíveis %, valor médio por lote | P2 | ✅ KPI cards (total, disponíveis, vendidos, valor médio/min/max) + barra de progresso proporcional na página do loteamento |
 | M-13 | Polígonos de lote (boundaries) com `lat/lng` de cada vértice — modelo `LotePoligono` | P3 |
 | M-14 | Upload de planta baixa (imagem) como overlay no mapa | P3 |
 | M-15 | Link direto "Ver no Google Maps / Waze" no popup do marcador | P3 |

@@ -90,14 +90,23 @@
                     </h5>
                 </div>
                 <div class="card-body">
-                    <form method="post">
+                    <form method="post" enctype="multipart/form-data">
                         {% csrf_token %}
 
-                        <div class="mb-3">
-                            <label for="data_pagamento" class="form-label">Data do Pagamento *</label>
-                            <input type="date" class="form-control" id="data_pagamento" name="data_pagamento"
-                                   value="{{ parcela.data_vencimento|date:'Y-m-d' }}" required>
-                            <div class="form-text">Data em que o pagamento foi realizado.</div>
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label for="data_pagamento" class="form-label">Data do Pagamento *</label>
+                                <input type="date" class="form-control" id="data_pagamento" name="data_pagamento"
+                                       value="{{ parcela.data_vencimento|date:'Y-m-d' }}" required>
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label for="forma_pagamento" class="form-label">Forma de Pagamento *</label>
+                                <select class="form-select" id="forma_pagamento" name="forma_pagamento" required>
+                                    {% for valor, label in formas_pagamento %}
+                                    <option value="{{ valor }}">{{ label }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
                         </div>
 
                         <div class="mb-3">
@@ -108,6 +117,13 @@
                                        value="{{ parcela.valor_total|floatformat:2 }}" required>
                             </div>
                             <div class="form-text">Valor efetivamente pago pelo cliente.</div>
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="comprovante" class="form-label">Comprovante de Pagamento</label>
+                            <input type="file" class="form-control" id="comprovante" name="comprovante"
+                                   accept=".pdf,.jpg,.jpeg,.png,.webp">
+                            <div class="form-text">Opcional. Envie o comprovante (PDF ou imagem, max 10 MB).</div>
                         </div>
 
                         <div class="mb-3">
