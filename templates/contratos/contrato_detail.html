@@ -1435,9 +1435,27 @@
                             </div>
                         </div>
                     </div>
-                    <div class="mb-3">
-                        <label class="form-label">Observacoes</label>
-                        <textarea class="form-control" name="observacoes" rows="2"></textarea>
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label class="form-label">Forma de Pagamento</label>
+                                <select class="form-select" name="forma_pagamento">
+                                    <option value="DINHEIRO">Dinheiro</option>
+                                    <option value="PIX">PIX</option>
+                                    <option value="TRANSFERENCIA">Transferência Bancária</option>
+                                    <option value="BOLETO">Boleto</option>
+                                    <option value="CARTAO_CREDITO">Cartão de Crédito</option>
+                                    <option value="CARTAO_DEBITO">Cartão de Débito</option>
+                                    <option value="CHEQUE">Cheque</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label class="form-label">Observações</label>
+                                <textarea class="form-control" name="observacoes" rows="2"></textarea>
+                            </div>
+                        </div>
                     </div>
                     <div id="alertaAtraso" class="alert alert-warning d-none">
                         <i class="fas fa-exclamation-triangle"></i>
