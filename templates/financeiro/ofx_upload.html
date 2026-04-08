@@ -1,0 +1,246 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Upload de Extrato OFX — Quitação de Parcelas{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2><i class="fas fa-file-invoice-dollar"></i> Upload de Extrato OFX</h2>
+        <a href="{% url 'financeiro:listar_retornos' %}" class="btn btn-secondary">
+            <i class="fas fa-arrow-left"></i> Voltar
+        </a>
+    </div>
+
+    {% if messages %}
+    {% for message in messages %}
+    <div class="alert alert-{{ message.tags }} alert-dismissible fade show" role="alert">
+        {{ message }}
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+    {% endfor %}
+    {% endif %}
+
+    <div class="row">
+        <!-- Formulário de Upload -->
+        <div class="col-md-5">
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h5 class="mb-0"><i class="fas fa-upload"></i> Enviar Arquivo OFX</h5>
+                </div>
+                <div class="card-body">
+                    <form id="ofxForm" enctype="multipart/form-data">
+                        {% csrf_token %}
+
+                        {% if imobiliarias %}
+                        <div class="mb-3">
+                            <label class="form-label">Imobiliária <span class="text-muted">(opcional)</span></label>
+                            <select name="imobiliaria_id" class="form-select">
+                                <option value="">Todas as imobiliárias</option>
+                                {% for imob in imobiliarias %}
+                                <option value="{{ imob.pk }}">{{ imob.razao_social }}</option>
+                                {% endfor %}
+                            </select>
+                            <div class="form-text">Restringe a reconciliação às parcelas desta imobiliária.</div>
+                        </div>
+                        {% endif %}
+
+                        <div class="mb-3">
+                            <label class="form-label">Arquivo OFX <span class="text-danger">*</span></label>
+                            <input type="file" name="arquivo_ofx" id="arquivo_ofx"
+                                   class="form-control" required accept=".ofx,.OFX">
+                            <div class="form-text">
+                                Exporte o extrato no formato OFX pelo seu internet banking.<br>
+                                Tamanho máximo: 5 MB.
+                            </div>
+                        </div>
+
+                        <div class="mb-3 form-check">
+                            <input type="checkbox" class="form-check-input" id="dry_run" name="dry_run" value="1">
+                            <label class="form-check-label" for="dry_run">
+                                <strong>Simulação</strong> — reconciliar sem quitar parcelas
+                            </label>
+                        </div>
+
+                        <div class="d-grid gap-2">
+                            <button type="submit" class="btn btn-primary" id="btnProcessar">
+                                <i class="fas fa-sync-alt"></i> Processar Extrato
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+
+            <!-- Ajuda -->
+            <div class="card border-info">
+                <div class="card-header bg-info text-white">
+                    <h6 class="mb-0"><i class="fas fa-question-circle"></i> Como exportar o OFX</h6>
+                </div>
+                <div class="card-body small">
+                    <ul class="mb-0">
+                        <li><strong>Sicoob:</strong> Internet Banking → Extrato → Exportar → OFX</li>
+                        <li><strong>Itaú:</strong> Extrato → Exportar OFX</li>
+                        <li><strong>Banco do Brasil:</strong> Extrato → Exportar → Arquivo OFX</li>
+                        <li><strong>Bradesco:</strong> Extrato → Download → Formato OFX</li>
+                        <li><strong>Caixa:</strong> Extrato → Salvar → Formato OFX</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+
+        <!-- Resultado da Reconciliação -->
+        <div class="col-md-7">
+            <div id="resultado" class="d-none">
+                <!-- Resumo -->
+                <div class="card mb-3" id="cardResumo">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <h5 class="mb-0"><i class="fas fa-chart-bar"></i> Resultado da Reconciliação</h5>
+                        <span id="badgeParser" class="badge bg-secondary"></span>
+                    </div>
+                    <div class="card-body">
+                        <div class="row text-center">
+                            <div class="col-4">
+                                <div class="fs-3 fw-bold text-primary" id="totalTransacoes">—</div>
+                                <div class="text-muted small">Total de transações</div>
+                            </div>
+                            <div class="col-4">
+                                <div class="fs-3 fw-bold text-success" id="totalReconciliadas">—</div>
+                                <div class="text-muted small">Reconciliadas</div>
+                            </div>
+                            <div class="col-4">
+                                <div class="fs-3 fw-bold text-warning" id="totalNaoReconciliadas">—</div>
+                                <div class="text-muted small">Não reconciliadas</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Alerta de simulação -->
+                <div id="alertaDryRun" class="alert alert-warning d-none">
+                    <i class="fas fa-exclamation-triangle"></i>
+                    <strong>Modo simulação</strong> — nenhuma parcela foi quitada.
+                </div>
+
+                <!-- Detalhes das transações -->
+                <div class="card">
+                    <div class="card-header">
+                        <h6 class="mb-0"><i class="fas fa-list"></i> Detalhes das Transações</h6>
+                    </div>
+                    <div class="card-body p-0">
+                        <div class="table-responsive">
+                            <table class="table table-sm table-hover mb-0">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th>Data</th>
+                                        <th>Valor</th>
+                                        <th>MEMO</th>
+                                        <th>Confiança</th>
+                                        <th>Parcela</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="tabelaTransacoes"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Loading -->
+            <div id="loading" class="d-none text-center py-5">
+                <div class="spinner-border text-primary" role="status"></div>
+                <p class="mt-2 text-muted">Processando extrato…</p>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+const CONFIANCA_BADGES = {
+    'ALTA':           'bg-success',
+    'MEDIA':          'bg-warning text-dark',
+    'BAIXA':          'bg-secondary',
+    'NAO_ENCONTRADA': 'bg-danger',
+};
+
+document.getElementById('ofxForm').addEventListener('submit', async function(e) {
+    e.preventDefault();
+    const btn = document.getElementById('btnProcessar');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Processando…';
+
+    document.getElementById('resultado').classList.add('d-none');
+    document.getElementById('loading').classList.remove('d-none');
+
+    const formData = new FormData(this);
+
+    try {
+        const resp = await fetch("{% url 'financeiro:upload_ofx' %}", {
+            method: 'POST',
+            body: formData,
+            headers: {'X-CSRFToken': formData.get('csrfmiddlewaretoken')},
+        });
+        const data = await resp.json();
+
+        document.getElementById('loading').classList.add('d-none');
+
+        if (!data.sucesso) {
+            alert('Erro: ' + (data.erro || 'Falha desconhecida'));
+            return;
+        }
+
+        // Dry-run retorna estrutura diferente
+        if (data.dry_run) {
+            document.getElementById('alertaDryRun').classList.remove('d-none');
+            document.getElementById('totalTransacoes').textContent = data.total_transacoes || 0;
+            document.getElementById('totalReconciliadas').textContent = '—';
+            document.getElementById('totalNaoReconciliadas').textContent = '—';
+            const tbody = document.getElementById('tabelaTransacoes');
+            tbody.innerHTML = (data.transacoes || []).map(t =>
+                `<tr>
+                    <td>${t.data || ''}</td>
+                    <td>R$ ${parseFloat(t.valor).toFixed(2)}</td>
+                    <td class="text-truncate" style="max-width:200px" title="${t.memo}">${t.memo}</td>
+                    <td>—</td>
+                    <td>—</td>
+                </tr>`
+            ).join('');
+        } else {
+            document.getElementById('alertaDryRun').classList.add('d-none');
+            document.getElementById('totalTransacoes').textContent = data.total_transacoes;
+            document.getElementById('totalReconciliadas').textContent = data.reconciliadas;
+            document.getElementById('totalNaoReconciliadas').textContent = data.nao_reconciliadas;
+
+            const parser = data.parser === 'brcobranca' ? 'BRCobrança' : 'Python';
+            document.getElementById('badgeParser').textContent = 'Parser: ' + parser;
+
+            const tbody = document.getElementById('tabelaTransacoes');
+            tbody.innerHTML = (data.resultados || []).map(r => {
+                const conf = r.confianca || 'NAO_ENCONTRADA';
+                const badge = CONFIANCA_BADGES[conf] || 'bg-secondary';
+                const parcela = r.parcela
+                    ? `Contrato ${r.parcela.numero_contrato} — Parcela ${r.parcela.numero_parcela}`
+                    : '—';
+                return `<tr class="${r.reconciliada ? 'table-success' : ''}">
+                    <td>${r.data || ''}</td>
+                    <td>R$ ${parseFloat(r.valor || 0).toFixed(2)}</td>
+                    <td class="text-truncate" style="max-width:180px" title="${r.memo}">${r.memo || ''}</td>
+                    <td><span class="badge ${badge}">${conf}</span></td>
+                    <td class="small">${parcela}</td>
+                </tr>`;
+            }).join('');
+        }
+
+        document.getElementById('resultado').classList.remove('d-none');
+
+    } catch (err) {
+        document.getElementById('loading').classList.add('d-none');
+        alert('Erro de comunicação: ' + err.message);
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fas fa-sync-alt"></i> Processar Extrato';
+    }
+});
+</script>
+{% endblock %}
