@@ -554,6 +554,97 @@ def detalhe_parcela(request, pk):
 
 
 @login_required
+@require_POST
+def notificar_inadimplente(request, pk):
+    """
+    3.25 — Envia notificação de inadimplência manualmente para o comprador de uma parcela.
+    Retorna JSON {sucesso, mensagem/erro}.
+    """
+    parcela = get_object_or_404(Parcela, pk=pk)
+
+    if parcela.pago:
+        return JsonResponse({'sucesso': False, 'erro': 'Parcela já paga — notificação não aplicável.'}, status=400)
+
+    from datetime import date as _date
+    hoje = _date.today()
+    if parcela.data_vencimento > hoje:
+        return JsonResponse({'sucesso': False, 'erro': 'Parcela ainda não vencida.'}, status=400)
+
+    try:
+        from core.tasks import (
+            _notificacao_ja_enviada_hoje,
+            _registrar_notificacao,
+            _get_destinatario,
+            _enviar_pelo_canal,
+        )
+        from notificacoes.models import TipoNotificacao
+
+        comprador = parcela.contrato.comprador
+        dias_atraso = (hoje - parcela.data_vencimento).days
+        imob_nome = getattr(parcela.contrato.imobiliaria, 'nome', 'Gestão de Contratos')
+
+        PREFIXO = '[INADIMPLENCIA-MANUAL]'
+
+        canais_enviados = []
+
+        # Email
+        email = getattr(comprador, 'email', None)
+        if email:
+            if not _notificacao_ja_enviada_hoje(parcela, PREFIXO):
+                assunto = (
+                    f"{PREFIXO} Parcela {parcela.numero_parcela} em atraso há {dias_atraso} dia(s)"
+                )
+                mensagem = (
+                    f"Olá {comprador.nome},\n\n"
+                    f"Verificamos que a parcela {parcela.numero_parcela}/{parcela.contrato.numero_parcelas} "
+                    f"do contrato {parcela.contrato.numero_contrato} encontra-se em atraso.\n\n"
+                    f"Vencimento: {parcela.data_vencimento.strftime('%d/%m/%Y')} ({dias_atraso} dia(s) em atraso)\n"
+                    f"Valor: R$ {parcela.valor_atual:,.2f}\n\n"
+                    f"Regularize sua situação para evitar acréscimo de juros e multa.\n\n"
+                    f"Atenciosamente,\n{imob_nome}"
+                )
+                notif = _registrar_notificacao(parcela, TipoNotificacao.EMAIL, email, assunto, mensagem)
+                enviado = _enviar_pelo_canal(TipoNotificacao.EMAIL, email, assunto, mensagem)
+                if enviado and notif:
+                    from notificacoes.models import StatusNotificacao
+                    notif.status = StatusNotificacao.ENVIADO
+                    notif.save(update_fields=['status'])
+                    canais_enviados.append('email')
+
+        # WhatsApp
+        celular = getattr(comprador, 'celular', None)
+        if celular:
+            msg_wa = (
+                f"Olá {comprador.nome}! Sua parcela {parcela.numero_parcela} do contrato "
+                f"{parcela.contrato.numero_contrato} está {dias_atraso} dia(s) em atraso "
+                f"(venc. {parcela.data_vencimento.strftime('%d/%m/%Y')}). "
+                f"Valor: R$ {parcela.valor_atual:,.2f}. Entre em contato para regularizar."
+            )
+            notif_wa = _registrar_notificacao(parcela, TipoNotificacao.WHATSAPP, celular, 'Inadimplência', msg_wa)
+            enviado_wa = _enviar_pelo_canal(TipoNotificacao.WHATSAPP, celular, 'Inadimplência', msg_wa)
+            if enviado_wa and notif_wa:
+                from notificacoes.models import StatusNotificacao
+                notif_wa.status = StatusNotificacao.ENVIADO
+                notif_wa.save(update_fields=['status'])
+                canais_enviados.append('WhatsApp')
+
+        if canais_enviados:
+            return JsonResponse({
+                'sucesso': True,
+                'mensagem': f'Notificação enviada via {", ".join(canais_enviados)}.'
+            })
+        else:
+            return JsonResponse({
+                'sucesso': False,
+                'erro': 'Nenhum canal de notificação disponível para este comprador (sem e-mail ou celular configurado).'
+            }, status=400)
+
+    except Exception as e:
+        logger.exception(f'Erro ao notificar inadimplente (parcela {pk}): {e}')
+        return JsonResponse({'sucesso': False, 'erro': str(e)}, status=500)
+
+
+@login_required
 def registrar_pagamento(request, pk):
     """Registra o pagamento de uma parcela"""
     from datetime import datetime
@@ -1192,7 +1283,7 @@ def download_zip_boletos(request, contrato_id):
 
     if not parcelas:
         messages.error(request, 'Nenhum boleto disponível para download neste contrato.')
-        return redirect('contratos:detalhe_contrato', pk=contrato_id)
+        return redirect('contratos:detalhe', pk=contrato_id)
 
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, 'w', zipfile.ZIP_DEFLATED) as zf:
@@ -2682,6 +2773,31 @@ def aplicar_reajuste_pagina(request, contrato_id):
                 return redirect('financeiro:aplicar_reajuste', contrato_id=contrato_id)
 
             ciclo = int(ciclo_param)
+
+            # V-09: Validar sequência obrigatória de ciclos (2.9 — não pular ciclos)
+            ciclo_esperado = Reajuste.calcular_ciclo_pendente(contrato)
+            if ciclo_esperado is None:
+                erro_seq = 'Não há ciclos de reajuste pendentes para este contrato.'
+                if is_modal:
+                    return JsonResponse({'sucesso': False, 'erro': erro_seq}, status=400)
+                messages.error(request, erro_seq)
+                return redirect('financeiro:aplicar_reajuste', contrato_id=contrato_id)
+            if ciclo > ciclo_esperado:
+                erro_seq = (
+                    f'Sequência incorreta: o ciclo {ciclo_esperado} ainda não foi aplicado. '
+                    f'Execute os reajustes em ordem — aplique o ciclo {ciclo_esperado} antes do {ciclo}.'
+                )
+                if is_modal:
+                    return JsonResponse({'sucesso': False, 'erro': erro_seq}, status=400)
+                messages.error(request, erro_seq)
+                return redirect('financeiro:aplicar_reajuste', contrato_id=contrato_id)
+            if ciclo < ciclo_esperado:
+                erro_seq = f'Ciclo {ciclo} já foi aplicado anteriormente.'
+                if is_modal:
+                    return JsonResponse({'sucesso': False, 'erro': erro_seq}, status=400)
+                messages.error(request, erro_seq)
+                return redirect('financeiro:aplicar_reajuste', contrato_id=contrato_id)
+
             preview = Reajuste.preview_reajuste(
                 contrato, ciclo,
                 desconto_percentual=desconto_percentual,
@@ -2837,6 +2953,31 @@ def aplicar_reajuste_contrato(request, contrato_id):
                 return redirect('financeiro:aplicar_reajuste', contrato_id=contrato_id)
 
             ciclo = int(ciclo_param)
+
+            # V-09: Validar sequência obrigatória de ciclos (2.9 — não pular ciclos)
+            ciclo_esperado = Reajuste.calcular_ciclo_pendente(contrato)
+            if ciclo_esperado is None:
+                erro_seq = 'Não há ciclos de reajuste pendentes para este contrato.'
+                if is_modal:
+                    return JsonResponse({'sucesso': False, 'erro': erro_seq}, status=400)
+                messages.error(request, erro_seq)
+                return redirect('financeiro:aplicar_reajuste', contrato_id=contrato_id)
+            if ciclo > ciclo_esperado:
+                erro_seq = (
+                    f'Sequência incorreta: o ciclo {ciclo_esperado} ainda não foi aplicado. '
+                    f'Execute os reajustes em ordem — aplique o ciclo {ciclo_esperado} antes do {ciclo}.'
+                )
+                if is_modal:
+                    return JsonResponse({'sucesso': False, 'erro': erro_seq}, status=400)
+                messages.error(request, erro_seq)
+                return redirect('financeiro:aplicar_reajuste', contrato_id=contrato_id)
+            if ciclo < ciclo_esperado:
+                erro_seq = f'Ciclo {ciclo} já foi aplicado anteriormente.'
+                if is_modal:
+                    return JsonResponse({'sucesso': False, 'erro': erro_seq}, status=400)
+                messages.error(request, erro_seq)
+                return redirect('financeiro:aplicar_reajuste', contrato_id=contrato_id)
+
             preview = Reajuste.preview_reajuste(
                 contrato, ciclo,
                 desconto_percentual=desconto_percentual,
@@ -4180,6 +4321,158 @@ def exportar_relatorio(request, tipo):
     response = HttpResponse(conteudo, content_type=content_type)
     response['Content-Disposition'] = f'attachment; filename="{filename}"'
 
+    return response
+
+
+@login_required
+def exportar_relatorio_consolidado(request):
+    """
+    3.21 — Exporta relatório consolidado (multi-abas) em Excel ou PDF.
+
+    Combina em um único arquivo:
+    - Aba 1: Prestações a pagar (próximos 90 dias)
+    - Aba 2: Prestações pagas (últimos 90 dias)
+    - Aba 3: Posição dos contratos
+
+    GET params:
+      formato (xlsx|pdf, default xlsx)
+      imobiliaria (opcional)
+      data_inicio / data_fim (opcional, YYYY-MM-DD)
+    """
+    from .services import RelatorioService, FiltroRelatorio
+    from django.utils import timezone as tz
+
+    formato = request.GET.get('formato', 'xlsx')
+    imobiliaria_id = request.GET.get('imobiliaria')
+    data_inicio_str = request.GET.get('data_inicio')
+    data_fim_str = request.GET.get('data_fim')
+
+    hoje = tz.now().date()
+
+    filtro = FiltroRelatorio()
+    if imobiliaria_id:
+        try:
+            filtro.imobiliaria_id = int(imobiliaria_id)
+        except (ValueError, TypeError):
+            pass
+
+    if data_inicio_str:
+        try:
+            from datetime import datetime
+            filtro.data_inicio = datetime.strptime(data_inicio_str, '%Y-%m-%d').date()
+        except ValueError:
+            filtro.data_inicio = hoje - timedelta(days=90)
+    else:
+        filtro.data_inicio = hoje - timedelta(days=90)
+
+    if data_fim_str:
+        try:
+            from datetime import datetime
+            filtro.data_fim = datetime.strptime(data_fim_str, '%Y-%m-%d').date()
+        except ValueError:
+            filtro.data_fim = hoje + timedelta(days=90)
+    else:
+        filtro.data_fim = hoje + timedelta(days=90)
+
+    service = RelatorioService()
+
+    filtro_pagar = FiltroRelatorio()
+    if imobiliaria_id:
+        try:
+            filtro_pagar.imobiliaria_id = int(imobiliaria_id)
+        except (ValueError, TypeError):
+            pass
+    filtro_pagar.data_inicio = hoje
+    filtro_pagar.data_fim = hoje + timedelta(days=90)
+
+    rel_a_pagar = service.gerar_relatorio_prestacoes_a_pagar(filtro_pagar)
+    rel_pagas = service.gerar_relatorio_prestacoes_pagas(filtro)
+    rel_posicao = service.gerar_relatorio_posicao_contratos(filtro)
+
+    timestamp = tz.now().strftime('%Y%m%d_%H%M%S')
+
+    if formato == 'pdf':
+        try:
+            from reportlab.lib.pagesizes import A4, landscape
+            from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, PageBreak
+            from reportlab.lib.styles import getSampleStyleSheet
+            from reportlab.lib import colors
+            from io import BytesIO
+
+            buf = BytesIO()
+            doc = SimpleDocTemplate(buf, pagesize=landscape(A4), topMargin=40, bottomMargin=40)
+            styles = getSampleStyleSheet()
+            elements = []
+
+            def _relatorio_para_elementos(relatorio, titulo):
+                elements.append(Paragraph(titulo, styles['Heading2']))
+                elements.append(Spacer(1, 6))
+                itens = relatorio.get('itens', [])
+                if not itens:
+                    elements.append(Paragraph('Nenhum item encontrado.', styles['Normal']))
+                    elements.append(PageBreak())
+                    return
+                # Usar exportar_para_csv para extrair dados
+                csv_str = service.exportar_para_csv(relatorio)
+                rows = [line.split(',') for line in csv_str.strip().split('\n')]
+                if rows:
+                    data = [rows[0]] + rows[1:51]  # cabeçalho + até 50 linhas
+                    tbl = Table(data, repeatRows=1)
+                    tbl.setStyle(TableStyle([
+                        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#4472C4')),
+                        ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
+                        ('FONTSIZE', (0, 0), (-1, -1), 7),
+                        ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
+                        ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#F2F2F2')]),
+                    ]))
+                    elements.append(tbl)
+                elements.append(PageBreak())
+
+            _relatorio_para_elementos(rel_a_pagar, 'Prestações a Pagar (próximos 90 dias)')
+            _relatorio_para_elementos(rel_pagas, 'Prestações Pagas (últimos 90 dias)')
+            _relatorio_para_elementos(rel_posicao, 'Posição dos Contratos')
+
+            doc.build(elements)
+            conteudo = buf.getvalue()
+            content_type = 'application/pdf'
+            extensao = 'pdf'
+        except Exception as e:
+            logger.exception("Erro ao gerar relatório consolidado PDF: %s", e)
+            return HttpResponse(f'Erro ao gerar PDF: {e}', status=500)
+    else:
+        # Excel com múltiplas abas
+        try:
+            from openpyxl import Workbook
+            from io import BytesIO
+
+            wb = Workbook()
+            wb.remove(wb.active)  # remove aba padrão
+
+            for relatorio, sheet_title in [
+                (rel_a_pagar, 'A Pagar (90d)'),
+                (rel_pagas, 'Pagas (90d)'),
+                (rel_posicao, 'Posição Contratos'),
+            ]:
+                xlsx_bytes = service.exportar_para_excel(relatorio)
+                import openpyxl
+                wb_tmp = openpyxl.load_workbook(BytesIO(xlsx_bytes))
+                ws_tmp = wb_tmp.active
+                ws_new = wb.create_sheet(title=sheet_title)
+                for row in ws_tmp.iter_rows(values_only=True):
+                    ws_new.append(list(row) if row else [])
+
+            buf = BytesIO()
+            wb.save(buf)
+            conteudo = buf.getvalue()
+            content_type = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+            extensao = 'xlsx'
+        except Exception as e:
+            logger.exception("Erro ao gerar relatório consolidado Excel: %s", e)
+            return HttpResponse(f'Erro ao gerar Excel: {e}', status=500)
+
+    filename = f'relatorio_consolidado_{timestamp}.{extensao}'
+    response = HttpResponse(conteudo, content_type=content_type)
+    response['Content-Disposition'] = f'attachment; filename="{filename}"'
     return response
 
 
@@ -5679,6 +5972,79 @@ def api_reajustes_pendentes_count(request):
         return JsonResponse({'count': 0})
 
 
+@login_required
+@require_GET
+def api_sidebar_pendencias(request):
+    """Retorna todos os contadores de pendências para a sidebar em uma única chamada."""
+    from django.db.models import Q
+    from contratos.models import TipoCorrecao
+    from django.db.models import Prefetch
+    from .services.cnab_service import CNABService
+
+    hoje = timezone.localdate()
+
+    # 1. Parcelas vencidas não pagas
+    try:
+        parcelas_vencidas = Parcela.objects.filter(
+            pago=False, data_vencimento__lt=hoje
+        ).count()
+    except Exception:
+        parcelas_vencidas = 0
+
+    # 2. Boletos não gerados (parcelas em aberto, vencimento nos próximos 30 dias)
+    try:
+        boletos_nao_gerados = Parcela.objects.filter(
+            pago=False,
+            boleto_gerado=False,
+            data_vencimento__lte=hoje + relativedelta(days=30),
+        ).count()
+    except Exception:
+        boletos_nao_gerados = 0
+
+    # 3. Boletos aguardando remessa CNAB
+    try:
+        boletos_sem_remessa = len(CNABService().obter_boletos_sem_remessa())
+    except Exception:
+        boletos_sem_remessa = 0
+
+    # 4. Reajustes pendentes
+    try:
+        contratos_ativos = Contrato.objects.filter(
+            status=StatusContrato.ATIVO
+        ).exclude(tipo_correcao=TipoCorrecao.FIXO).only(
+            'pk', 'data_contrato', 'numero_parcelas', 'prazo_reajuste_meses', 'tipo_correcao'
+        ).prefetch_related(
+            Prefetch(
+                'reajustes',
+                queryset=Reajuste.objects.filter(aplicado=True).only('contrato_id', 'ciclo'),
+                to_attr='_reaj_cache',
+            )
+        )
+        reajustes_pendentes = 0
+        for contrato in contratos_ativos:
+            if not contrato.data_contrato or not contrato.numero_parcelas:
+                continue
+            ciclos_aplicados = {r.ciclo for r in contrato._reaj_cache}
+            prazo = contrato.prazo_reajuste_meses or 12
+            total_ciclos = (contrato.numero_parcelas - 1) // prazo + 1
+            for ciclo in range(2, total_ciclos + 1):
+                data_reajuste = contrato.data_contrato + relativedelta(months=(ciclo - 1) * prazo)
+                if hoje < data_reajuste:
+                    break
+                if ciclo not in ciclos_aplicados:
+                    reajustes_pendentes += 1
+                    break
+    except Exception:
+        reajustes_pendentes = 0
+
+    return JsonResponse({
+        'parcelas_vencidas': parcelas_vencidas,
+        'boletos_nao_gerados': boletos_nao_gerados,
+        'boletos_sem_remessa': boletos_sem_remessa,
+        'reajustes_pendentes': reajustes_pendentes,
+    })
+
+
 # ==========================================================================
 # FASE 9 — APIs P2
 # ==========================================================================
@@ -6401,4 +6767,176 @@ def renegociar_parcelas(request, contrato_id):
         'contrato': contrato,
         'parcelas': parcelas_em_atraso,
         'hoje': hoje,
+    })
+
+
+# =============================================================================
+# SECTION 4 P3 — APIs Pendentes
+# =============================================================================
+
+@login_required
+@require_GET
+def api_contabilidade_relatorios_vencimentos(request):
+    """
+    4-P3-1 : GET /financeiro/api/contabilidade/relatorios/vencimentos/
+
+    Retorna relatório de vencimentos agrupado por período
+    (semanal, mensal ou trimestral).
+
+    Parâmetros GET:
+      periodo  : semanal | mensal | trimestral (default: mensal)
+      meses    : quantidade de meses a projetar (default: 3)
+      imobiliaria: ID da imobiliária (opcional)
+    """
+    from datetime import date
+    from dateutil.relativedelta import relativedelta
+
+    hoje = timezone.now().date()
+    periodo = request.GET.get('periodo', 'mensal')
+    imobiliaria_id = request.GET.get('imobiliaria')
+
+    try:
+        meses = max(1, min(int(request.GET.get('meses', 3)), 12))
+    except (ValueError, TypeError):
+        meses = 3
+
+    qs = Parcela.objects.filter(pago=False).select_related(
+        'contrato', 'contrato__imobiliaria'
+    )
+    if imobiliaria_id:
+        qs = qs.filter(contrato__imobiliaria_id=imobiliaria_id)
+
+    grupos = []
+
+    if periodo == 'semanal':
+        # Próximas 4 semanas
+        for i in range(4):
+            inicio = hoje + timedelta(weeks=i)
+            fim = inicio + timedelta(days=6)
+            parcelas_periodo = qs.filter(
+                data_vencimento__gte=inicio,
+                data_vencimento__lte=fim,
+            )
+            total = parcelas_periodo.aggregate(
+                valor=Sum('valor_atual'), qtd=Count('id')
+            )
+            grupos.append({
+                'periodo': f'Semana {i + 1} ({inicio.strftime("%d/%m")}–{fim.strftime("%d/%m")})',
+                'data_inicio': inicio.isoformat(),
+                'data_fim': fim.isoformat(),
+                'quantidade': total['qtd'] or 0,
+                'valor': float(total['valor'] or 0),
+            })
+    elif periodo == 'trimestral':
+        # Próximos trimestres
+        for i in range(2):
+            inicio = hoje + relativedelta(months=i * 3)
+            fim = inicio + relativedelta(months=3) - timedelta(days=1)
+            parcelas_periodo = qs.filter(
+                data_vencimento__gte=inicio,
+                data_vencimento__lte=fim,
+            )
+            total = parcelas_periodo.aggregate(
+                valor=Sum('valor_atual'), qtd=Count('id')
+            )
+            grupos.append({
+                'periodo': f'T{i + 1} ({inicio.strftime("%m/%Y")}–{fim.strftime("%m/%Y")})',
+                'data_inicio': inicio.isoformat(),
+                'data_fim': fim.isoformat(),
+                'quantidade': total['qtd'] or 0,
+                'valor': float(total['valor'] or 0),
+            })
+    else:
+        # Mensal (default)
+        for i in range(meses):
+            inicio = hoje.replace(day=1) + relativedelta(months=i)
+            fim = inicio + relativedelta(months=1) - timedelta(days=1)
+            parcelas_periodo = qs.filter(
+                data_vencimento__gte=inicio,
+                data_vencimento__lte=fim,
+            )
+            total = parcelas_periodo.aggregate(
+                valor=Sum('valor_atual'), qtd=Count('id')
+            )
+            grupos.append({
+                'periodo': inicio.strftime('%B/%Y'),
+                'data_inicio': inicio.isoformat(),
+                'data_fim': fim.isoformat(),
+                'quantidade': total['qtd'] or 0,
+                'valor': float(total['valor'] or 0),
+            })
+
+    vencidas = qs.filter(data_vencimento__lt=hoje).aggregate(
+        valor=Sum('valor_atual'), qtd=Count('id')
+    )
+
+    return JsonResponse({
+        'sucesso': True,
+        'periodo': periodo,
+        'grupos': grupos,
+        'vencidas': {
+            'quantidade': vencidas['qtd'] or 0,
+            'valor': float(vencidas['valor'] or 0),
+        },
+    })
+
+
+@login_required
+@require_GET
+def api_imobiliaria_pendencias(request, imobiliaria_id):
+    """
+    4-P3-3 : GET /financeiro/api/imobiliaria/<id>/pendencias/
+
+    Retorna parcelas vencidas com encargos calculados para uma imobiliária.
+    """
+    imobiliaria = get_object_or_404(Imobiliaria, pk=imobiliaria_id)
+    hoje = timezone.now().date()
+
+    qs = Parcela.objects.filter(
+        contrato__imobiliaria=imobiliaria,
+        pago=False,
+        data_vencimento__lt=hoje,
+    ).select_related(
+        'contrato', 'contrato__comprador'
+    ).order_by('data_vencimento')
+
+    pendencias = []
+    for p in qs[:200]:  # limita a 200 registros
+        dias_atraso = (hoje - p.data_vencimento).days
+
+        # Calcula encargos se o contrato tiver configuração
+        try:
+            valor_juros = p.calcular_juros_mora()
+            valor_multa = p.calcular_multa()
+        except Exception:
+            valor_juros = p.valor_juros or Decimal('0.00')
+            valor_multa = p.valor_multa or Decimal('0.00')
+
+        total = p.valor_atual + valor_juros + valor_multa
+
+        pendencias.append({
+            'parcela_id': p.pk,
+            'contrato': p.contrato.numero_contrato,
+            'comprador': p.contrato.comprador.nome,
+            'numero_parcela': p.numero_parcela,
+            'data_vencimento': p.data_vencimento.isoformat(),
+            'dias_atraso': dias_atraso,
+            'valor_original': float(p.valor_atual),
+            'valor_juros': float(valor_juros),
+            'valor_multa': float(valor_multa),
+            'valor_total': float(total),
+            'nosso_numero': p.nosso_numero or '',
+        })
+
+    totais = {
+        'quantidade': len(pendencias),
+        'valor_total': sum(p['valor_total'] for p in pendencias),
+        'valor_original': sum(p['valor_original'] for p in pendencias),
+    }
+
+    return JsonResponse({
+        'sucesso': True,
+        'imobiliaria': {'id': imobiliaria.pk, 'nome': imobiliaria.nome},
+        'pendencias': pendencias,
+        'totais': totais,
     })
