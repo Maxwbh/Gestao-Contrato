@@ -259,6 +259,12 @@
                                 </button>
                             </div>
 
+                            <!-- Geolocalização -->
+                            <button id="btnGeolocalizacao" class="btn btn-sm btn-outline-success" title="Mostrar lotes perto de mim"
+                                    onclick="mostrarPertoDeMim()">
+                                <i class="fas fa-location-arrow me-1"></i>Perto de mim
+                            </button>
+
                             <!-- Contador dinâmico -->
                             <span id="mapaContador" class="badge bg-light text-dark border fs-6 ms-2">
                                 {{ imoveis_com_coordenadas }} no mapa
@@ -492,6 +498,62 @@ function filtrarPorLoteamento(v) {
 function filtrarPorStatus(v) {
     filtroSt = v;
     adicionarMarcadores(imoveisData);
+}
+
+// ─── M-16: Geolocalização do usuário ─────────────────────────────────────────
+let markerUsuario = null;
+
+function mostrarPertoDeMim() {
+    const btn = document.getElementById('btnGeolocalizacao');
+    if (!navigator.geolocation) {
+        alert('Seu navegador não suporta geolocalização.');
+        return;
+    }
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Localizando...';
+
+    navigator.geolocation.getCurrentPosition(
+        function(pos) {
+            const lat = pos.coords.latitude;
+            const lng = pos.coords.longitude;
+
+            // Ativar aba do mapa se necessário
+            const mapaTab = document.getElementById('mapa-tab');
+            if (mapaTab) new bootstrap.Tab(mapaTab).show();
+
+            setTimeout(function() {
+                map.invalidateSize();
+                map.setView([lat, lng], 14);
+
+                // Marcador do usuário
+                if (markerUsuario) map.removeLayer(markerUsuario);
+                markerUsuario = L.circleMarker([lat, lng], {
+                    radius: 10, color: '#0d6efd', fillColor: '#0d6efd',
+                    fillOpacity: 0.7, weight: 3
+                }).addTo(map);
+                markerUsuario.bindPopup('<strong><i class="fas fa-user me-1"></i>Você está aqui</strong>').openPopup();
+
+                // Destacar lotes próximos (raio 50 km)
+                let proximos = 0;
+                clusterGroup.eachLayer(function(layer) {
+                    const ll = layer.getLatLng();
+                    const distKm = map.distance([lat, lng], [ll.lat, ll.lng]) / 1000;
+                    if (distKm <= 50) proximos++;
+                });
+
+                btn.disabled = false;
+                btn.innerHTML = '<i class="fas fa-location-arrow me-1"></i>' +
+                    (proximos > 0 ? proximos + ' lote(s) próximo(s)' : 'Perto de mim');
+            }, 300);
+        },
+        function(err) {
+            btn.disabled = false;
+            btn.innerHTML = '<i class="fas fa-location-arrow me-1"></i>Perto de mim';
+            const msgs = {1: 'Permissão negada.', 2: 'Posição indisponível.', 3: 'Tempo esgotado.'};
+            alert('Erro de geolocalização: ' + (msgs[err.code] || err.message));
+        },
+        {enableHighAccuracy: false, timeout: 10000, maximumAge: 60000}
+    );
 }
 
 // ─── Ver imóvel no mapa (botão da lista) ─────────────────────────────────────
