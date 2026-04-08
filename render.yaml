@@ -82,11 +82,27 @@ services:
     runtime: docker
     plan: free
     dockerfilePath: ./Dockerfile.brcobranca
-    # Nao definir healthCheckPath - deixar o Render usar o padrao
+    dockerContext: .
+    # Render injeta PORT automaticamente em servicos Docker
+    healthCheckPath: /api/health
+    autoDeploy: true
     envVars:
       - key: RACK_ENV
         value: "production"
-      # Nao definir PORT - o Render define automaticamente
+      # MALLOC e GC otimizados para Free Tier (512MB RAM)
+      - key: MALLOC_ARENA_MAX
+        value: "2"
+      - key: RUBY_GC_HEAP_GROWTH_FACTOR
+        value: "1.1"
+      # Puma: 1 worker para economizar memória no Free Tier
+      - key: PUMA_WORKERS
+        value: "1"
+      - key: PUMA_MIN_THREADS
+        value: "0"
+      - key: PUMA_MAX_THREADS
+        value: "5"
+      # Para forçar re-clone do boleto_cnab_api: incremente ARG CACHE_BUST
+      # no Dockerfile.brcobranca e faça push — o Render reconstruirá do zero.
 
   # =============================================================================
   # Redis (para cache e sessoes - Free: 25MB)
