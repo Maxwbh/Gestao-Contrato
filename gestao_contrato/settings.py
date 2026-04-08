@@ -207,6 +207,8 @@ TWILIO_WHATSAPP_NUMBER = config('TWILIO_WHATSAPP_NUMBER', default='')
 
 # Configurações de Notificação
 NOTIFICACAO_DIAS_ANTECEDENCIA = config('NOTIFICACAO_DIAS_ANTECEDENCIA', default=5, cast=int)
+# Dias de atraso para disparar notificação de inadimplência (N-02)
+NOTIFICACAO_DIAS_INADIMPLENCIA = config('NOTIFICACAO_DIAS_INADIMPLENCIA', default=3, cast=int)
 
 # =============================================================================
 # RENDER FREE TIER - Configuração de Tarefas Agendadas
