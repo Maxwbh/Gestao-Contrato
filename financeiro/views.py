@@ -5566,4 +5566,121 @@ def upload_ofx(request):
         'nao_reconciliadas': resultado['nao_reconciliadas'],
         'parcelas_quitadas': [p.pk for p in resultado.get('parcelas_quitadas', [])],
         'resultados': resultados_json,
+        'parser': resultado.get('parser', 'python'),
     })
+
+
+# =============================================================================
+# WhatsApp / SMS — Envio de Boleto via Twilio
+# =============================================================================
+
+@login_required
+@require_POST
+def enviar_boleto_whatsapp(request, pk):
+    """
+    POST /financeiro/parcelas/<pk>/boleto/whatsapp/
+
+    Envia dados do boleto (linha digitável + vencimento) por WhatsApp via Twilio.
+    Campos opcionais no body (JSON ou form):
+      - telefone: destinatário (ex: +5511999999999). Se omitido, usa comprador.telefone.
+    """
+    parcela = get_object_or_404(Parcela, pk=pk)
+
+    import json as _json
+
+    if not parcela.tem_boleto:
+        return JsonResponse({'sucesso': False, 'erro': 'Parcela não possui boleto gerado'}, status=400)
+
+    # Determinar destinatário
+    telefone = None
+    try:
+        body = _json.loads(request.body) if request.body else {}
+        telefone = body.get('telefone')
+    except (_json.JSONDecodeError, ValueError):
+        telefone = request.POST.get('telefone')
+
+    if not telefone:
+        try:
+            telefone = parcela.contrato.comprador.telefone
+        except AttributeError:
+            pass
+
+    if not telefone:
+        return JsonResponse({'sucesso': False, 'erro': 'Telefone não informado e comprador sem telefone cadastrado'}, status=400)
+
+    # Montar mensagem
+    vencimento = parcela.data_vencimento.strftime('%d/%m/%Y') if parcela.data_vencimento else '—'
+    valor = f"R$ {parcela.valor_atual:,.2f}".replace(',', 'X').replace('.', ',').replace('X', '.')
+    linha = parcela.linha_digitavel or '(linha digitável não disponível)'
+    nome = getattr(parcela.contrato.comprador, 'nome', 'Cliente')
+    mensagem = (
+        f"Ola, {nome}!\n"
+        f"Seu boleto esta disponivel:\n\n"
+        f"Parcela: {parcela.numero_parcela}\n"
+        f"Valor: {valor}\n"
+        f"Vencimento: {vencimento}\n\n"
+        f"Linha Digitavel:\n{linha}\n\n"
+        f"Em caso de duvidas, entre em contato conosco."
+    )
+
+    try:
+        from notificacoes.services import ServicoWhatsApp
+        ServicoWhatsApp.enviar(telefone, mensagem)
+        logger.info('WhatsApp boleto enviado: parcela pk=%s → %s', pk, telefone)
+        return JsonResponse({'sucesso': True, 'destinatario': telefone})
+    except Exception as e:
+        logger.exception('WhatsApp boleto erro: parcela pk=%s → %s', pk, e)
+        return JsonResponse({'sucesso': False, 'erro': str(e)}, status=500)
+
+
+@login_required
+@require_POST
+def enviar_boleto_sms(request, pk):
+    """
+    POST /financeiro/parcelas/<pk>/boleto/sms/
+
+    Envia dados do boleto (linha digitável + vencimento) por SMS via Twilio.
+    Campos opcionais no body (JSON ou form):
+      - telefone: destinatário (ex: +5511999999999). Se omitido, usa comprador.telefone.
+    """
+    parcela = get_object_or_404(Parcela, pk=pk)
+
+    import json as _json
+
+    if not parcela.tem_boleto:
+        return JsonResponse({'sucesso': False, 'erro': 'Parcela não possui boleto gerado'}, status=400)
+
+    # Determinar destinatário
+    telefone = None
+    try:
+        body = _json.loads(request.body) if request.body else {}
+        telefone = body.get('telefone')
+    except (_json.JSONDecodeError, ValueError):
+        telefone = request.POST.get('telefone')
+
+    if not telefone:
+        try:
+            telefone = parcela.contrato.comprador.telefone
+        except AttributeError:
+            pass
+
+    if not telefone:
+        return JsonResponse({'sucesso': False, 'erro': 'Telefone não informado e comprador sem telefone cadastrado'}, status=400)
+
+    # Montar mensagem SMS (160 chars idealmente)
+    vencimento = parcela.data_vencimento.strftime('%d/%m/%Y') if parcela.data_vencimento else '—'
+    valor = f"R${parcela.valor_atual:.2f}"
+    linha = parcela.linha_digitavel or 'indisponível'
+    mensagem = (
+        f"Boleto parcela {parcela.numero_parcela} - {valor} - venc {vencimento}. "
+        f"Linha: {linha}"
+    )[:160]
+
+    try:
+        from notificacoes.services import ServicoSMS
+        ServicoSMS.enviar(telefone, mensagem)
+        logger.info('SMS boleto enviado: parcela pk=%s → %s', pk, telefone)
+        return JsonResponse({'sucesso': True, 'destinatario': telefone})
+    except Exception as e:
+        logger.exception('SMS boleto erro: parcela pk=%s → %s', pk, e)
+        return JsonResponse({'sucesso': False, 'erro': str(e)}, status=500)
