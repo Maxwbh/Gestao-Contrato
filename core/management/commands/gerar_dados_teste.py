@@ -95,6 +95,13 @@ class Command(BaseCommand):
                 self.stdout.write('Criando Contratos...')
                 imoveis = lotes + terrenos
                 contratos = self.criar_contratos(imoveis, compradores, imobiliarias)
+
+                # 6b. Criar contratos de cenários HU (determinísticos, para testes)
+                self.stdout.write('Criando contratos de cenários HU (parcelas + reajuste + saldo devedor)...')
+                contratos_cenarios = self.criar_contratos_cenarios_hu(imobiliarias, compradores)
+                contratos += contratos_cenarios
+                self.stdout.write(f'   {len(contratos_cenarios)} contratos de cenário criados')
+
                 tabela_juros_count = TabelaJurosContrato.objects.count()
 
                 # 7. Remover parcelas futuras (manter apenas até o mês atual)
@@ -657,26 +664,41 @@ class Command(BaseCommand):
             )
             contratos.append(contrato)
 
-            # 15% dos contratos têm juros escalantes por ciclo (tabela price progressiva)
-            tem_tabela_juros = random.random() < 0.15 and numero_parcelas >= 24
+            # TabelaJurosContrato:
+            # - FIXO: SEMPRE tem tabela com taxa pré-fixada realista (0.3% a 1.2% a.m.)
+            # - Outros: 15% têm juros escalantes por ciclo
+            eh_fixo = contrato.tipo_correcao == TipoCorrecao.FIXO
+            tem_tabela_juros = eh_fixo or (random.random() < 0.15 and numero_parcelas >= 24)
             if tem_tabela_juros:
-                faixas = [
-                    (1, 1, Decimal('0.0000')),    # Ano 1: sem juros adicionais
-                    (2, 2, Decimal('0.6000')),
-                    (3, 3, Decimal('0.6500')),
-                    (4, 4, Decimal('0.7000')),
-                    (5, 5, Decimal('0.7500')),
-                    (6, 6, Decimal('0.8000')),
-                    (7, None, Decimal('0.8500')),  # Ano 7 em diante
-                ]
-                for ciclo_ini, ciclo_fim, juros in faixas:
+                if eh_fixo:
+                    # Contrato pré-fixado: taxa única do início ao fim
+                    taxa_fixa = Decimal(str(round(random.uniform(0.30, 1.20), 4)))
                     TabelaJurosContrato.objects.create(
                         contrato=contrato,
-                        ciclo_inicio=ciclo_ini,
-                        ciclo_fim=ciclo_fim,
-                        juros_mensal=juros,
-                        observacoes='Gerado por dados de teste'
+                        ciclo_inicio=1,
+                        ciclo_fim=None,
+                        juros_mensal=taxa_fixa,
+                        observacoes='Taxa pré-fixada — gerado por dados de teste'
                     )
+                else:
+                    # Pós-fixado com juros escalantes por ciclo
+                    faixas = [
+                        (1, 1, Decimal('0.0000')),    # Ano 1: sem juros adicionais
+                        (2, 2, Decimal('0.6000')),
+                        (3, 3, Decimal('0.6500')),
+                        (4, 4, Decimal('0.7000')),
+                        (5, 5, Decimal('0.7500')),
+                        (6, 6, Decimal('0.8000')),
+                        (7, None, Decimal('0.8500')),  # Ano 7 em diante
+                    ]
+                    for ciclo_ini, ciclo_fim, juros in faixas:
+                        TabelaJurosContrato.objects.create(
+                            contrato=contrato,
+                            ciclo_inicio=ciclo_ini,
+                            ciclo_fim=ciclo_fim,
+                            juros_mensal=juros,
+                            observacoes='Gerado por dados de teste'
+                        )
                 # Recalcula parcelas com sistema correto (Price ou SAC) após TabelaJuros
                 contrato.recalcular_amortizacao()
 
@@ -1006,6 +1028,243 @@ class Command(BaseCommand):
 
         return count
 
+    def criar_contratos_cenarios_hu(self, imobiliarias, compradores):
+        """
+        Cria contratos determinísticos que cobrem todos os cenários da HU:
+        Geração de Parcelas, Correção Monetária e Saldo Devedor.
+
+        Cenários criados:
+          A — FIXO + Price + TabelaJuros (contrato pré-fixado padrão)
+          B — FIXO + SAC + TabelaJuros (pré-fixado amortização constante)
+          C — IPCA + Price + sem TabelaJuros + reajuste aplicado (modo SIMPLES)
+          D — IPCA + Price + TabelaJuros escalante + reajuste aplicado (modo TABELA PRICE)
+          E — IGPM + Price + intermediarias_reduzem_pmt + sem TabelaJuros
+        """
+        from dateutil.relativedelta import relativedelta
+        from contratos.models import IndiceReajuste
+        from django.db.models import Sum
+
+        hoje = timezone.now().date()
+        imob = imobiliarias[0]
+        seq = Contrato.objects.count()
+        contratos_criados = []
+
+        # Usar compradores disponíveis (últimos da lista, não usados nos contratos aleatórios)
+        pool = list(compradores[-5:]) if len(compradores) >= 5 else list(compradores)
+
+        def _imovel(sufixo, area='300.00'):
+            return Imovel.objects.create(
+                imobiliaria=imob,
+                tipo=TipoImovel.LOTE,
+                identificacao=f'Cenário {sufixo}',
+                area=Decimal(area),
+                logradouro='Rua dos Cenários',
+                numero=sufixo,
+                bairro='Distrito de Testes',
+                cidade='Sete Lagoas',
+                estado='MG',
+                disponivel=False,
+                observacoes=f'Imóvel de cenário de teste HU {sufixo}',
+            )
+
+        def _comprador(idx):
+            return pool[idx % len(pool)]
+
+        # ── CENÁRIO A: FIXO + Price + TabelaJuros ────────────────────────────
+        data_a = hoje - relativedelta(months=18)
+        imovel_a = _imovel('HU-A')
+        ctr_a = Contrato.objects.create(
+            imobiliaria=imob,
+            imovel=imovel_a,
+            comprador=_comprador(0),
+            numero_contrato=f'HU-A-{seq+1:04d}',
+            data_contrato=data_a,
+            data_primeiro_vencimento=data_a + relativedelta(months=1),
+            valor_total=Decimal('130000.00'),
+            valor_entrada=Decimal('10000.00'),
+            numero_parcelas=24,
+            dia_vencimento=15,
+            tipo_correcao=TipoCorrecao.FIXO,
+            tipo_amortizacao='PRICE',
+            prazo_reajuste_meses=12,
+            percentual_juros_mora=Decimal('1.00'),
+            percentual_multa=Decimal('2.00'),
+            status=StatusContrato.ATIVO,
+            observacoes='CENÁRIO HU-A: FIXO + Price + TabelaJuros 0.6% a.m.',
+        )
+        TabelaJurosContrato.objects.create(
+            contrato=ctr_a, ciclo_inicio=1, ciclo_fim=None,
+            juros_mensal=Decimal('0.6000'),
+            observacoes='Taxa pré-fixada cenário HU-A'
+        )
+        ctr_a.recalcular_amortizacao()
+        contratos_criados.append(ctr_a)
+
+        # ── CENÁRIO B: FIXO + SAC + TabelaJuros ──────────────────────────────
+        data_b = hoje - relativedelta(months=18)
+        imovel_b = _imovel('HU-B')
+        ctr_b = Contrato.objects.create(
+            imobiliaria=imob,
+            imovel=imovel_b,
+            comprador=_comprador(1),
+            numero_contrato=f'HU-B-{seq+2:04d}',
+            data_contrato=data_b,
+            data_primeiro_vencimento=data_b + relativedelta(months=1),
+            valor_total=Decimal('130000.00'),
+            valor_entrada=Decimal('10000.00'),
+            numero_parcelas=24,
+            dia_vencimento=10,
+            tipo_correcao=TipoCorrecao.FIXO,
+            tipo_amortizacao='SAC',
+            prazo_reajuste_meses=12,
+            percentual_juros_mora=Decimal('1.00'),
+            percentual_multa=Decimal('2.00'),
+            status=StatusContrato.ATIVO,
+            observacoes='CENÁRIO HU-B: FIXO + SAC + TabelaJuros 0.6% a.m.',
+        )
+        TabelaJurosContrato.objects.create(
+            contrato=ctr_b, ciclo_inicio=1, ciclo_fim=None,
+            juros_mensal=Decimal('0.6000'),
+            observacoes='Taxa pré-fixada cenário HU-B'
+        )
+        ctr_b.recalcular_amortizacao()
+        contratos_criados.append(ctr_b)
+
+        # ── CENÁRIO C: IPCA + Price + sem TabelaJuros + reajuste SIMPLES ─────
+        data_c = hoje - relativedelta(months=20)
+        imovel_c = _imovel('HU-C')
+        ctr_c = Contrato.objects.create(
+            imobiliaria=imob,
+            imovel=imovel_c,
+            comprador=_comprador(2),
+            numero_contrato=f'HU-C-{seq+3:04d}',
+            data_contrato=data_c,
+            data_primeiro_vencimento=data_c + relativedelta(months=1),
+            valor_total=Decimal('96000.00'),
+            valor_entrada=Decimal('6000.00'),
+            numero_parcelas=36,
+            dia_vencimento=5,
+            tipo_correcao=TipoCorrecao.IPCA,
+            tipo_amortizacao='PRICE',
+            prazo_reajuste_meses=12,
+            spread_reajuste=Decimal('0.5000'),
+            percentual_juros_mora=Decimal('1.00'),
+            percentual_multa=Decimal('2.00'),
+            status=StatusContrato.ATIVO,
+            observacoes='CENÁRIO HU-C: IPCA + Price + sem TabelaJuros (modo SIMPLES)',
+        )
+        contratos_criados.append(ctr_c)
+        # Aplicar reajuste ciclo 2 se índice disponível
+        periodo_inicio = data_c
+        periodo_fim = data_c + relativedelta(months=12) - relativedelta(days=1)
+        perc_c = IndiceReajuste.get_acumulado_periodo(
+            'IPCA', periodo_inicio.year, periodo_inicio.month,
+            periodo_fim.year, periodo_fim.month
+        )
+        if perc_c is not None:
+            perc_final_c = perc_c + Decimal('0.5000')
+            reajuste_c = Reajuste.objects.create(
+                contrato=ctr_c, ciclo=2, data_reajuste=data_c + relativedelta(months=12),
+                indice_tipo='IPCA', percentual=perc_final_c, percentual_bruto=perc_c,
+                spread_aplicado=Decimal('0.5000'),
+                parcela_inicial=13, parcela_final=min(24, 36),
+                periodo_referencia_inicio=periodo_inicio, periodo_referencia_fim=periodo_fim,
+                aplicado_manual=True,
+            )
+            reajuste_c.aplicar_reajuste()
+
+        # ── CENÁRIO D: IPCA + Price + TabelaJuros + reajuste TABELA PRICE ────
+        data_d = hoje - relativedelta(months=20)
+        imovel_d = _imovel('HU-D')
+        ctr_d = Contrato.objects.create(
+            imobiliaria=imob,
+            imovel=imovel_d,
+            comprador=_comprador(3),
+            numero_contrato=f'HU-D-{seq+4:04d}',
+            data_contrato=data_d,
+            data_primeiro_vencimento=data_d + relativedelta(months=1),
+            valor_total=Decimal('96000.00'),
+            valor_entrada=Decimal('6000.00'),
+            numero_parcelas=36,
+            dia_vencimento=20,
+            tipo_correcao=TipoCorrecao.IPCA,
+            tipo_amortizacao='PRICE',
+            prazo_reajuste_meses=12,
+            percentual_juros_mora=Decimal('1.00'),
+            percentual_multa=Decimal('2.00'),
+            status=StatusContrato.ATIVO,
+            observacoes='CENÁRIO HU-D: IPCA + Price + TabelaJuros (modo TABELA PRICE)',
+        )
+        TabelaJurosContrato.objects.create(
+            contrato=ctr_d, ciclo_inicio=1, ciclo_fim=1, juros_mensal=Decimal('0.0000'),
+            observacoes='Ciclo 1 sem juros HU-D'
+        )
+        TabelaJurosContrato.objects.create(
+            contrato=ctr_d, ciclo_inicio=2, ciclo_fim=None, juros_mensal=Decimal('0.6000'),
+            observacoes='Ciclo 2+ taxa 0.6% HU-D'
+        )
+        ctr_d.recalcular_amortizacao()
+        contratos_criados.append(ctr_d)
+        # Aplicar reajuste ciclo 2 se índice disponível
+        perc_d = IndiceReajuste.get_acumulado_periodo(
+            'IPCA', data_d.year, data_d.month,
+            (data_d + relativedelta(months=12) - relativedelta(days=1)).year,
+            (data_d + relativedelta(months=12) - relativedelta(days=1)).month,
+        )
+        if perc_d is not None:
+            fim_ref_d = data_d + relativedelta(months=12) - relativedelta(days=1)
+            reajuste_d = Reajuste.objects.create(
+                contrato=ctr_d, ciclo=2, data_reajuste=data_d + relativedelta(months=12),
+                indice_tipo='IPCA', percentual=perc_d, percentual_bruto=perc_d,
+                parcela_inicial=13, parcela_final=min(24, 36),
+                periodo_referencia_inicio=data_d, periodo_referencia_fim=fim_ref_d,
+                aplicado_manual=True,
+            )
+            reajuste_d.aplicar_reajuste()
+
+        # ── CENÁRIO E: IGPM + Price + intermediarias_reduzem_pmt ─────────────
+        data_e = hoje - relativedelta(months=15)
+        imovel_e = _imovel('HU-E')
+        ctr_e = Contrato.objects.create(
+            imobiliaria=imob,
+            imovel=imovel_e,
+            comprador=_comprador(4),
+            numero_contrato=f'HU-E-{seq+5:04d}',
+            data_contrato=data_e,
+            data_primeiro_vencimento=data_e + relativedelta(months=1),
+            valor_total=Decimal('100000.00'),
+            valor_entrada=Decimal('10000.00'),
+            numero_parcelas=24,
+            dia_vencimento=25,
+            tipo_correcao=TipoCorrecao.IGPM,
+            tipo_amortizacao='PRICE',
+            prazo_reajuste_meses=12,
+            intermediarias_reduzem_pmt=True,
+            intermediarias_reajustadas=True,
+            percentual_juros_mora=Decimal('1.00'),
+            percentual_multa=Decimal('2.00'),
+            status=StatusContrato.ATIVO,
+            observacoes='CENÁRIO HU-E: IGPM + Price + intermediarias_reduzem_pmt=True',
+        )
+        # Criar intermediárias ANTES do recalcular_amortizacao (correto)
+        PrestacaoIntermediaria.objects.create(
+            contrato=ctr_e, numero_sequencial=1, mes_vencimento=6,
+            valor=Decimal('5000.00'),
+            observacoes='Intermediária cenário HU-E mês 6'
+        )
+        PrestacaoIntermediaria.objects.create(
+            contrato=ctr_e, numero_sequencial=2, mes_vencimento=12,
+            valor=Decimal('5000.00'),
+            observacoes='Intermediária cenário HU-E mês 12'
+        )
+        # base_pv = valor_financiado - soma_intermediarias = 90.000 - 10.000 = 80.000
+        soma_inter_e = ctr_e.intermediarias.aggregate(total=Sum('valor'))['total'] or Decimal('0')
+        base_pv_e = max(ctr_e.valor_financiado - soma_inter_e, Decimal('0.01'))
+        ctr_e.recalcular_amortizacao(base_pv=base_pv_e)
+        contratos_criados.append(ctr_e)
+
+        return contratos_criados
+
     def criar_prestacoes_intermediarias(self, contratos):
         """
         Cria prestações intermediárias para alguns contratos.
@@ -1140,7 +1399,7 @@ class Command(BaseCommand):
           aleatório realista para não bloquear os dados de teste.
         """
         from dateutil.relativedelta import relativedelta
-        from contratos.models import IndiceReajuste
+        from contratos.models import IndiceReajuste, TabelaJurosContrato
 
         count = 0
         hoje = timezone.now().date()
@@ -1186,8 +1445,11 @@ class Command(BaseCommand):
                 if percentual_bruto is None:
                     percentual_bruto = Decimal(str(round(random.uniform(3.5, 6.5), 4)))
 
-                # Aplicar spread do contrato (índice composto)
-                spread = contrato.spread_reajuste or Decimal('0')
+                # Aplicar spread do contrato (índice composto).
+                # Em modo TABELA PRICE (TabelaJurosContrato presente), spread NÃO é adicionado
+                # ao índice — a taxa de financiamento vem da tabela, não do spread_reajuste.
+                tem_tabela = TabelaJurosContrato.objects.filter(contrato=contrato).exists()
+                spread = Decimal('0') if tem_tabela else (contrato.spread_reajuste or Decimal('0'))
                 percentual_com_spread = percentual_bruto + spread
 
                 # Aplicar teto e piso configurados no contrato
