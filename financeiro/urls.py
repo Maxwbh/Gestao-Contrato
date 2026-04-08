@@ -149,6 +149,7 @@ urlpatterns = [
     # API - NOTIFICAÇÕES
     # ==========================================================================
     path('api/reajustes-pendentes/count/', views.api_reajustes_pendentes_count, name='api_reajustes_pendentes_count'),
+    path('api/sidebar/pendencias/', views.api_sidebar_pendencias, name='api_sidebar_pendencias'),
 
     # ==========================================================================
     # FASE 9 — APIs P2 (Contabilidade + Imobiliária)

@@ -261,23 +261,97 @@
         </div>
     </div>
 
-    <!-- Main Content -->
-    <div class="container main-container">
-        {% if messages %}
-            {% for message in messages %}
-                {% if 'error' in message.tags or 'danger' in message.tags %}
-                    <div class="d-none msg-error-popup">{{ message }}</div>
-                {% else %}
-                    <div class="alert alert-{{ message.tags }} alert-dismissible fade show" role="alert">
-                        {{ message }}
-                        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-                    </div>
-                {% endif %}
-            {% endfor %}
+    <!-- App Layout (sidebar + content) -->
+    <div class="app-layout" id="appLayout">
+
+        <!-- Desktop Sidebar (hidden on mobile) -->
+        {% if user.is_authenticated %}
+        <aside class="desktop-sidebar" id="desktopSidebar">
+            <!-- Toggle button -->
+            <button class="sidebar-toggle-btn" id="sidebarToggleBtn" title="Recolher/expandir menu">
+                <i class="fas fa-bars"></i>
+            </button>
+
+            <nav class="sidebar-nav">
+                <!-- Geral -->
+                <div class="sidebar-section">
+                    <span class="sidebar-section-title">Geral</span>
+                    <a href="{% url 'core:dashboard' %}" class="sidebar-item" data-label="Dashboard">
+                        <i class="fas fa-tachometer-alt sidebar-icon"></i>
+                        <span class="sidebar-label">Dashboard</span>
+                    </a>
+                </div>
+
+                <!-- Financeiro -->
+                <div class="sidebar-section">
+                    <span class="sidebar-section-title">Financeiro</span>
+                    <a href="{% url 'financeiro:parcelas_mes' %}" class="sidebar-item" data-label="Parcelas do Mês">
+                        <i class="fas fa-calendar-alt sidebar-icon"></i>
+                        <span class="sidebar-label">Parcelas do Mês</span>
+                    </a>
+                    <a href="{% url 'financeiro:listar_parcelas' %}?status=VENCIDA" class="sidebar-item" data-label="Parcelas Vencidas">
+                        <i class="fas fa-exclamation-circle sidebar-icon text-danger"></i>
+                        <span class="sidebar-label">Parcelas Vencidas</span>
+                        <span class="sidebar-badge" id="sb-vencidas" style="display:none;"></span>
+                    </a>
+                    <a href="{% url 'financeiro:reajustes_pendentes' %}" class="sidebar-item" data-label="Reajustes Pendentes">
+                        <i class="fas fa-sync-alt sidebar-icon text-warning"></i>
+                        <span class="sidebar-label">Reajustes</span>
+                        <span class="sidebar-badge" id="sb-reajustes" style="display:none;"></span>
+                    </a>
+                    <a href="{% url 'financeiro:listar_parcelas' %}?status_boleto=NAO_GERADO" class="sidebar-item" data-label="Boletos Pendentes">
+                        <i class="fas fa-barcode sidebar-icon"></i>
+                        <span class="sidebar-label">Boletos</span>
+                        <span class="sidebar-badge sidebar-badge-warn" id="sb-boletos" style="display:none;"></span>
+                    </a>
+                    <a href="{% url 'financeiro:listar_remessas' %}" class="sidebar-item" data-label="CNAB / Remessa">
+                        <i class="fas fa-file-export sidebar-icon"></i>
+                        <span class="sidebar-label">CNAB</span>
+                        <span class="sidebar-badge sidebar-badge-info" id="sb-remessa" style="display:none;"></span>
+                    </a>
+                </div>
+
+                <!-- Gestão -->
+                <div class="sidebar-section">
+                    <span class="sidebar-section-title">Gestão</span>
+                    <a href="{% url 'contratos:listar' %}" class="sidebar-item" data-label="Contratos">
+                        <i class="fas fa-file-contract sidebar-icon"></i>
+                        <span class="sidebar-label">Contratos</span>
+                    </a>
+                    <a href="{% url 'core:listar_compradores' %}" class="sidebar-item" data-label="Compradores">
+                        <i class="fas fa-user-tie sidebar-icon"></i>
+                        <span class="sidebar-label">Compradores</span>
+                    </a>
+                    <a href="{% url 'core:listar_imoveis' %}" class="sidebar-item" data-label="Imóveis">
+                        <i class="fas fa-home sidebar-icon"></i>
+                        <span class="sidebar-label">Imóveis</span>
+                    </a>
+                </div>
+            </nav>
+        </aside>
         {% endif %}
 
-        {% block content %}{% endblock %}
-    </div>
+        <!-- Main Content -->
+        <div class="sidebar-content-wrapper" id="sidebarContentWrapper">
+            <div class="container main-container">
+                {% if messages %}
+                    {% for message in messages %}
+                        {% if 'error' in message.tags or 'danger' in message.tags %}
+                            <div class="d-none msg-error-popup">{{ message }}</div>
+                        {% else %}
+                            <div class="alert alert-{{ message.tags }} alert-dismissible fade show" role="alert">
+                                {{ message }}
+                                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                            </div>
+                        {% endif %}
+                    {% endfor %}
+                {% endif %}
+
+                {% block content %}{% endblock %}
+            </div>
+        </div>
+
+    </div><!-- /.app-layout -->
 
     <!-- Footer -->
     <footer class="app-footer">
@@ -924,5 +998,71 @@
         });
     });
     </script>
+
+    <!-- ================================================================
+         3.15 — Desktop Sidebar: toggle + pendências
+         ================================================================ -->
+    {% if user.is_authenticated %}
+    <script>
+    (function() {
+        var sidebar  = document.getElementById('desktopSidebar');
+        var wrapper  = document.getElementById('sidebarContentWrapper');
+        var toggleBtn = document.getElementById('sidebarToggleBtn');
+        if (!sidebar || !wrapper) return;
+
+        var STORAGE_KEY = 'sidebarCollapsed';
+        var collapsed = localStorage.getItem(STORAGE_KEY) === '1';
+
+        function applyState() {
+            if (collapsed) {
+                sidebar.classList.add('collapsed');
+                wrapper.classList.add('sidebar-collapsed');
+            } else {
+                sidebar.classList.remove('collapsed');
+                wrapper.classList.remove('sidebar-collapsed');
+            }
+        }
+
+        applyState();
+
+        if (toggleBtn) {
+            toggleBtn.addEventListener('click', function() {
+                collapsed = !collapsed;
+                localStorage.setItem(STORAGE_KEY, collapsed ? '1' : '0');
+                applyState();
+            });
+        }
+
+        // Highlight active link
+        var currentPath = window.location.pathname;
+        sidebar.querySelectorAll('.sidebar-item').forEach(function(a) {
+            var href = a.getAttribute('href');
+            if (href && currentPath.startsWith(href.split('?')[0]) && href.split('?')[0].length > 1) {
+                a.classList.add('active');
+            }
+        });
+
+        // Load pending indicators
+        fetch('{% url "financeiro:api_sidebar_pendencias" %}')
+            .then(function(r) { return r.ok ? r.json() : null; })
+            .then(function(data) {
+                if (!data) return;
+                function setBadge(id, count) {
+                    var el = document.getElementById(id);
+                    if (!el) return;
+                    if (count > 0) {
+                        el.textContent = count > 99 ? '99+' : count;
+                        el.style.display = 'inline-flex';
+                    }
+                }
+                setBadge('sb-vencidas',  data.parcelas_vencidas);
+                setBadge('sb-reajustes', data.reajustes_pendentes);
+                setBadge('sb-boletos',   data.boletos_nao_gerados);
+                setBadge('sb-remessa',   data.boletos_sem_remessa);
+            })
+            .catch(function() {});
+    })();
+    </script>
+    {% endif %}
 </body>
 </html>
