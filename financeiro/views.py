@@ -364,6 +364,24 @@ def api_dashboard_dados(request):
         'colors': ['#ffc107', '#fd7e14', '#dc3545', '#6f1212'],
     }
 
+    # G-03: Fluxo de caixa previsto vs. realizado (6 meses passados + mês atual + 6 futuros)
+    fluxo_caixa = {'labels': [], 'realizado': [], 'previsto': [], 'is_future': []}
+    for i in range(-5, 7):
+        ref = hoje + relativedelta(months=i)
+        primeiro_dia = ref.replace(day=1)
+        ultimo_dia = (primeiro_dia + relativedelta(months=1)) - timedelta(days=1)
+
+        qs_mes = parcelas_qs.filter(data_vencimento__gte=primeiro_dia, data_vencimento__lte=ultimo_dia)
+        agg = qs_mes.aggregate(
+            previsto=Sum('valor_atual'),
+            realizado=Sum('valor_pago', filter=Q(pago=True)),
+        )
+
+        fluxo_caixa['labels'].append(f"{meses[ref.month - 1]}/{ref.year % 100}")
+        fluxo_caixa['previsto'].append(float(agg['previsto'] or 0))
+        fluxo_caixa['realizado'].append(float(agg['realizado'] or 0) if i <= 0 else None)
+        fluxo_caixa['is_future'].append(i > 0)
+
     return JsonResponse({
         'status_parcelas': status_parcelas,
         'status_contratos': status_contratos,
@@ -371,6 +389,7 @@ def api_dashboard_dados(request):
         'inadimplencia_mensal': inadimplencia_mensal,
         'inadimplencia_faixas': inadimplencia_faixas,
         'vencimentos_proximos': vencimentos_proximos,
+        'fluxo_caixa': fluxo_caixa,
     })
 
 
@@ -5684,3 +5703,120 @@ def enviar_boleto_sms(request, pk):
     except Exception as e:
         logger.exception('SMS boleto erro: parcela pk=%s → %s', pk, e)
         return JsonResponse({'sucesso': False, 'erro': str(e)}, status=500)
+
+
+# =============================================================================
+# SEÇÃO 18 — SIMULADOR DE ANTECIPAÇÃO / RENEGOCIAÇÃO
+# =============================================================================
+
+@login_required
+def simulador_antecipacao(request, contrato_id):
+    """
+    R-01: Tela simulador de antecipação de parcelas com desconto.
+    R-02: Preview do valor original vs. antecipado (economia).
+    R-03: Aplicar antecipação — cria HistoricoPagamento com antecipado=True.
+
+    GET  → formulário: lista parcelas NORMAL não pagas + campo % desconto
+    POST action=preview → tabela preview sem persistir
+    POST action=aplicar → quita as parcelas selecionadas com desconto
+    """
+    from django.db import transaction
+    from contratos.models import Contrato
+    from .models import HistoricoPagamento
+
+    contrato = get_object_or_404(Contrato, pk=contrato_id)
+
+    parcelas_disponiveis = (
+        Parcela.objects.filter(
+            contrato=contrato,
+            pago=False,
+            tipo_parcela='NORMAL',
+        )
+        .order_by('numero_parcela')
+    )
+
+    preview = None
+    parcelas_selecionadas_ids = []
+    desconto_perc = Decimal('0')
+
+    if request.method == 'POST':
+        action = request.POST.get('action', 'preview')
+        parcelas_selecionadas_ids = request.POST.getlist('parcelas')
+        desconto_str = request.POST.get('desconto', '0').replace(',', '.')
+        try:
+            desconto_perc = Decimal(desconto_str)
+        except Exception:
+            desconto_perc = Decimal('0')
+        desconto_perc = max(Decimal('0'), min(Decimal('100'), desconto_perc))
+
+        parcelas_sel = list(
+            parcelas_disponiveis.filter(id__in=parcelas_selecionadas_ids).order_by('numero_parcela')
+        )
+
+        preview_itens = []
+        total_original = Decimal('0')
+        total_antecipado = Decimal('0')
+
+        for p in parcelas_sel:
+            valor_original = p.valor_atual
+            desconto_valor = (valor_original * desconto_perc / 100).quantize(Decimal('0.01'))
+            valor_antecipado = valor_original - desconto_valor
+            preview_itens.append({
+                'parcela': p,
+                'valor_original': valor_original,
+                'desconto_valor': desconto_valor,
+                'valor_antecipado': valor_antecipado,
+            })
+            total_original += valor_original
+            total_antecipado += valor_antecipado
+
+        preview = {
+            'itens': preview_itens,
+            'total_original': total_original,
+            'total_antecipado': total_antecipado,
+            'economia': total_original - total_antecipado,
+            'desconto_perc': desconto_perc,
+            'qtd': len(preview_itens),
+        }
+
+        if action == 'aplicar' and preview_itens:
+            data_pagamento = timezone.now().date()
+            obs = f'Antecipação com {desconto_perc}% de desconto'
+            with transaction.atomic():
+                for item in preview_itens:
+                    p = item['parcela']
+                    p.pago = True
+                    p.data_pagamento = data_pagamento
+                    p.valor_pago = item['valor_antecipado']
+                    p.valor_desconto = item['desconto_valor']
+                    if p.tem_boleto:
+                        p.status_boleto = StatusBoleto.PAGO
+                        p.data_pagamento_boleto = timezone.now()
+                        p.valor_pago_boleto = item['valor_antecipado']
+                    p.save()
+
+                    HistoricoPagamento.objects.create(
+                        parcela=p,
+                        data_pagamento=data_pagamento,
+                        valor_pago=item['valor_antecipado'],
+                        valor_parcela=item['valor_original'],
+                        valor_desconto=item['desconto_valor'],
+                        forma_pagamento='DINHEIRO',
+                        antecipado=True,
+                        observacoes=obs,
+                    )
+
+            messages.success(
+                request,
+                f'{len(preview_itens)} parcela(s) antecipada(s) com sucesso. '
+                f'Economia total: R$ {(total_original - total_antecipado):,.2f}.'
+            )
+            return redirect('contratos:detalhe', pk=contrato_id)
+
+    return render(request, 'financeiro/simulador_antecipacao.html', {
+        'contrato': contrato,
+        'parcelas_disponiveis': parcelas_disponiveis,
+        'preview': preview,
+        'parcelas_selecionadas_ids': [str(x) for x in parcelas_selecionadas_ids],
+        'desconto_perc': desconto_perc,
+    })

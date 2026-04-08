@@ -417,6 +417,23 @@
         </div>
     </div>
 
+    <!-- G-03: Fluxo de Caixa Previsto vs. Realizado (Linha) -->
+    <div class="row mb-4">
+        <div class="col-md-12">
+            <div class="card">
+                <div class="card-header">
+                    <i class="fas fa-chart-line"></i> Fluxo de Caixa — Previsto vs. Realizado
+                    <small class="text-muted ms-2">(6 meses passados + 6 meses futuros)</small>
+                </div>
+                <div class="card-body">
+                    <div class="chart-container" style="height: 300px;">
+                        <canvas id="chartFluxoCaixa"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- 3.6 Tabela Vencimentos Consolidados — Próximos 3 Meses -->
     <div class="row mb-4">
         <div class="col-md-12">
@@ -697,6 +714,77 @@ document.addEventListener('DOMContentLoaded', function() {
                 }
             });
             } catch(e) { console.error('[Dashboard] Erro chartInadimplencia:', e); }
+
+            // G-03: Fluxo de Caixa Previsto vs Realizado (Linha)
+            try {
+            const fcLabels = data.fluxo_caixa.labels;
+            const fcPrevisto = data.fluxo_caixa.previsto;
+            const fcRealizado = data.fluxo_caixa.realizado;
+            const fcFuturo = data.fluxo_caixa.is_future;
+
+            // Separar realizado (passado/corrente) de previsto (futuro) para pontilhado
+            new Chart(document.getElementById('chartFluxoCaixa'), {
+                type: 'line',
+                data: {
+                    labels: fcLabels,
+                    datasets: [
+                        {
+                            label: 'Previsto',
+                            data: fcPrevisto,
+                            borderColor: '#007bff',
+                            backgroundColor: 'rgba(0,123,255,0.08)',
+                            borderDash: [5, 5],
+                            pointRadius: 4,
+                            fill: false,
+                            tension: 0.3,
+                            order: 2
+                        },
+                        {
+                            label: 'Realizado',
+                            data: fcRealizado,
+                            borderColor: '#28a745',
+                            backgroundColor: 'rgba(40,167,69,0.12)',
+                            pointRadius: 5,
+                            fill: true,
+                            tension: 0.3,
+                            spanGaps: false,
+                            order: 1
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    interaction: { mode: 'index', intersect: false },
+                    plugins: {
+                        legend: { position: 'top' },
+                        tooltip: {
+                            callbacks: {
+                                label: function(ctx) {
+                                    if (ctx.raw === null) return null;
+                                    return ctx.dataset.label + ': R$ ' + ctx.raw.toLocaleString('pt-BR', {minimumFractionDigits:2});
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            ticks: {
+                                callback: function(v) { return 'R$ ' + v.toLocaleString('pt-BR'); }
+                            }
+                        },
+                        x: {
+                            ticks: {
+                                callback: function(val, idx) {
+                                    return (fcFuturo[idx] ? '▸ ' : '') + fcLabels[idx];
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+            } catch(e) { console.error('[Dashboard] Erro chartFluxoCaixa:', e); }
 
             // 3.6 Tabela vencimentos próximos 3 meses
             try {
