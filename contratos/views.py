@@ -20,8 +20,11 @@ import requests
 from django.http import JsonResponse
 from django.views.decorators.http import require_http_methods
 import json
+import logging
 from datetime import datetime
 from decimal import Decimal
+
+logger = logging.getLogger(__name__)
 
 
 class ContratoListView(LoginRequiredMixin, PaginacaoMixin, ListView):
@@ -282,29 +285,79 @@ class ContratoDetailView(LoginRequiredMixin, DetailView):
         # =====================================================================
         # CONTROLE DE BLOQUEIO DE BOLETO POR REAJUSTE
         # =====================================================================
-        if hasattr(contrato, 'verificar_bloqueio_reajuste'):
-            bloqueio_info = contrato.verificar_bloqueio_reajuste()
-            context['bloqueio_reajuste'] = bloqueio_info
-        else:
-            context['bloqueio_reajuste'] = {
-                'bloqueado': False,
-                'motivo': '',
-                'ciclo_atual': 1,
-                'ciclo_pendente': None,
-            }
+        # verificar_bloqueio_reajuste() retorna bool (True = bloqueado)
+        _bloqueado = (
+            contrato.verificar_bloqueio_reajuste()
+            if hasattr(contrato, 'verificar_bloqueio_reajuste')
+            else False
+        )
+        context['bloqueio_reajuste'] = {
+            'bloqueado': bool(_bloqueado),
+            'motivo': '',
+            'ciclo_atual': 1,
+            'ciclo_pendente': None,
+        }
 
         # Verificar status de cada parcela para geração de boleto
+        # Batch: prefetch applied reajuste cycles once to avoid N+1 queries
         parcelas_status_boleto = []
-        for parcela in context['parcelas']:
-            if hasattr(contrato, 'pode_gerar_boleto'):
-                pode_gerar, motivo = contrato.pode_gerar_boleto(parcela.numero_parcela)
-            else:
-                pode_gerar, motivo = True, "Liberado"
-            parcelas_status_boleto.append({
-                'parcela': parcela,
-                'pode_gerar_boleto': pode_gerar,
-                'motivo_bloqueio': motivo if not pode_gerar else '',
-            })
+        if hasattr(contrato, 'pode_gerar_boleto'):
+            from financeiro.models import Reajuste as ReajusteModel
+            from django.utils import timezone as _tz
+            from dateutil.relativedelta import relativedelta as _rdelta
+            from contratos.models import TipoCorrecao as _TC
+
+            _hoje = _tz.now().date()
+            _prazo = contrato.prazo_reajuste_meses or 12
+            _fixo = contrato.tipo_correcao == _TC.FIXO
+
+            # Single query: all applied cycles for this contract
+            _applied_cycles = set(
+                ReajusteModel.objects.filter(contrato=contrato, aplicado=True)
+                .values_list('ciclo', flat=True)
+            )
+
+            # Find first blocked cycle (done once, not per parcela)
+            _blocked_cycle = None
+            _blocked_msg = ''
+            if not _fixo:
+                for _c in range(2, 9999):
+                    _data = contrato.data_contrato + _rdelta(months=(_c - 1) * _prazo)
+                    if _hoje < _data:
+                        break  # future cycle — stop
+                    if _c not in _applied_cycles:
+                        _blocked_cycle = _c
+                        _blocked_msg = (
+                            f"Reajuste do ciclo {_c} pendente desde "
+                            f"{_data.strftime('%d/%m/%Y')}. "
+                            f"Execute o reajuste antes de gerar boletos."
+                        )
+                        break
+
+            for parcela in context['parcelas']:
+                if _fixo:
+                    pode_gerar, motivo = True, "Índice FIXO — sem necessidade de reajuste."
+                else:
+                    _ciclo_parcela = (parcela.numero_parcela - 1) // _prazo + 1
+                    if _ciclo_parcela <= 1:
+                        pode_gerar, motivo = True, "Primeiro ciclo — liberado."
+                    elif _blocked_cycle is not None and _blocked_cycle <= _ciclo_parcela:
+                        pode_gerar, motivo = False, _blocked_msg
+                    else:
+                        pode_gerar = True
+                        motivo = f"Reajuste do ciclo {_ciclo_parcela} aplicado."
+                parcelas_status_boleto.append({
+                    'parcela': parcela,
+                    'pode_gerar_boleto': pode_gerar,
+                    'motivo_bloqueio': motivo if not pode_gerar else '',
+                })
+        else:
+            for parcela in context['parcelas']:
+                parcelas_status_boleto.append({
+                    'parcela': parcela,
+                    'pode_gerar_boleto': True,
+                    'motivo_bloqueio': '',
+                })
         context['parcelas_status_boleto'] = parcelas_status_boleto
 
         # =====================================================================
@@ -549,7 +602,7 @@ def importar_indices_ibge(request):
         elif tipo_indice == 'SELIC':
             indices = _buscar_selic_bcb(ano_inicio, mes_inicio)
         else:
-            return JsonResponse({'success': False, 'error': 'Tipo de índice inválido'})
+            return JsonResponse({'success': False, 'error': 'Tipo de índice inválido'}, status=400)
 
         # Salvar índices no banco usando bulk operations para melhor performance
         count_created = 0
@@ -613,7 +666,8 @@ def importar_indices_ibge(request):
         })
 
     except Exception as e:
-        return JsonResponse({'success': False, 'error': str(e)})
+        logger.exception("Erro ao importar indices: %s", e)
+        return JsonResponse({'success': False, 'error': str(e)}, status=500)
 
 
 def _buscar_ipca_ibge(ano_inicio, mes_inicio):
@@ -663,7 +717,7 @@ def _buscar_ipca_ibge(ano_inicio, mes_inicio):
             })
 
     except Exception as e:
-        print(f"Erro ao buscar IPCA: {e}")
+        logger.exception("Erro ao buscar IPCA: %s", e)
 
     return indices
 
@@ -703,7 +757,7 @@ def _buscar_igpm_bcb(ano_inicio, mes_inicio):
             })
 
     except Exception as e:
-        print(f"Erro ao buscar IGP-M: {e}")
+        logger.exception("Erro ao buscar IGP-M: %s", e)
 
     return indices
 
@@ -743,7 +797,7 @@ def _buscar_selic_bcb(ano_inicio, mes_inicio):
             })
 
     except Exception as e:
-        print(f"Erro ao buscar SELIC: {e}")
+        logger.exception("Erro ao buscar SELIC: %s", e)
 
     return indices
 
@@ -778,7 +832,7 @@ def _buscar_incc_bcb(ano_inicio, mes_inicio):
             })
 
     except Exception as e:
-        print(f"Erro ao buscar INCC: {e}")
+        logger.exception("Erro ao buscar INCC: %s", e)
 
     return indices
 
@@ -813,7 +867,7 @@ def _buscar_igpdi_bcb(ano_inicio, mes_inicio):
             })
 
     except Exception as e:
-        print(f"Erro ao buscar IGP-DI: {e}")
+        logger.exception("Erro ao buscar IGP-DI: %s", e)
 
     return indices
 
@@ -858,7 +912,7 @@ def _buscar_inpc_ibge(ano_inicio, mes_inicio):
             })
 
     except Exception as e:
-        print(f"Erro ao buscar INPC: {e}")
+        logger.exception("Erro ao buscar INPC: %s", e)
 
     return indices
 
@@ -893,7 +947,7 @@ def _buscar_tr_bcb(ano_inicio, mes_inicio):
             })
 
     except Exception as e:
-        print(f"Erro ao buscar TR: {e}")
+        logger.exception("Erro ao buscar TR: %s", e)
 
     return indices
 
@@ -973,6 +1027,23 @@ class IntermediariasDetailView(LoginRequiredMixin, DetailView):
         return context
 
 
+def _recalcular_se_necessario(contrato):
+    """
+    Recalcula amortização das parcelas NORMAL quando intermediarias_reduzem_pmt=True.
+
+    Replica a lógica do wizard: base_pv = valor_financiado − Σ(valor de todas as
+    intermediárias, pagas ou não), garantindo que mudanças posteriores nas
+    intermediárias se reflitam nas parcelas mensais.
+    """
+    if not contrato.intermediarias_reduzem_pmt:
+        return
+    soma = contrato.intermediarias.aggregate(
+        total=Sum('valor')
+    )['total'] or Decimal('0')
+    base_pv = max(contrato.valor_financiado - soma, Decimal('0.01'))
+    contrato.recalcular_amortizacao(base_pv=base_pv)
+
+
 @login_required
 @require_http_methods(["POST"])
 def criar_intermediaria(request, contrato_id):
@@ -1007,6 +1078,9 @@ def criar_intermediaria(request, contrato_id):
             observacoes=data.get('observacoes', '')
         )
 
+        # Recalcular PMT das parcelas se a flag intermediarias_reduzem_pmt estiver ativa
+        _recalcular_se_necessario(contrato)
+
         return JsonResponse({
             'sucesso': True,
             'mensagem': f'Prestação intermediária #{proximo_numero} criada com sucesso',
@@ -1020,6 +1094,7 @@ def criar_intermediaria(request, contrato_id):
             'erro': f'Valor inválido: {str(e)}'
         }, status=400)
     except Exception as e:
+        logger.exception("Erro ao criar intermediaria: %s", e)
         return JsonResponse({
             'sucesso': False,
             'erro': str(e)
@@ -1043,12 +1118,24 @@ def atualizar_intermediaria(request, pk):
 
         if 'mes_vencimento' in data:
             intermediaria.mes_vencimento = int(data['mes_vencimento'])
+        valor_alterado = False
         if 'valor' in data:
-            intermediaria.valor = Decimal(str(data['valor']))
+            novo_valor = Decimal(str(data['valor']))
+            if novo_valor != intermediaria.valor:
+                intermediaria.valor = novo_valor
+                valor_alterado = True
         if 'observacoes' in data:
             intermediaria.observacoes = data['observacoes']
 
         intermediaria.save()
+
+        # Sincronizar parcela vinculada se o valor foi alterado e existe parcela
+        if valor_alterado and intermediaria.parcela_vinculada:
+            intermediaria.parcela_vinculada.valor_atual = intermediaria.valor_atual
+            intermediaria.parcela_vinculada.save(update_fields=['valor_atual'])
+
+        # Recalcular PMT das parcelas se a flag intermediarias_reduzem_pmt estiver ativa
+        _recalcular_se_necessario(intermediaria.contrato)
 
         return JsonResponse({
             'sucesso': True,
@@ -1056,6 +1143,7 @@ def atualizar_intermediaria(request, pk):
         })
 
     except Exception as e:
+        logger.exception("Erro ao atualizar intermediaria pk=%s: %s", pk, e)
         return JsonResponse({
             'sucesso': False,
             'erro': str(e)
@@ -1081,17 +1169,21 @@ def excluir_intermediaria(request, pk):
         }, status=400)
 
     try:
-        contrato_id = intermediaria.contrato_id
+        contrato = intermediaria.contrato
         numero = intermediaria.numero_sequencial
         intermediaria.delete()
+
+        # Recalcular PMT das parcelas se a flag intermediarias_reduzem_pmt estiver ativa
+        _recalcular_se_necessario(contrato)
 
         return JsonResponse({
             'sucesso': True,
             'mensagem': f'Prestação intermediária #{numero} excluída com sucesso',
-            'redirect': f'/contratos/{contrato_id}/intermediarias/'
+            'redirect': f'/contratos/{contrato.pk}/intermediarias/'
         })
 
     except Exception as e:
+        logger.exception("Erro ao excluir intermediaria pk=%s: %s", pk, e)
         return JsonResponse({
             'sucesso': False,
             'erro': str(e)
@@ -1131,6 +1223,14 @@ def pagar_intermediaria(request, pk):
 
         intermediaria.save()
 
+        # Sincronizar parcela vinculada (se existir) como paga
+        if intermediaria.parcela_vinculada:
+            parcela_vinc = intermediaria.parcela_vinculada
+            parcela_vinc.pago = True
+            parcela_vinc.valor_pago = valor_pago
+            parcela_vinc.data_pagamento = data_pagamento
+            parcela_vinc.save(update_fields=['pago', 'valor_pago', 'data_pagamento'])
+
         return JsonResponse({
             'sucesso': True,
             'mensagem': f'Pagamento de R$ {valor_pago:,.2f} registrado com sucesso',
@@ -1138,6 +1238,7 @@ def pagar_intermediaria(request, pk):
         })
 
     except Exception as e:
+        logger.exception("Erro ao processar intermediaria pk=%s: %s", pk, e)
         return JsonResponse({
             'sucesso': False,
             'erro': str(e)
@@ -1197,10 +1298,13 @@ def gerar_boleto_intermediaria(request, pk):
             ultimo_dia = calendar.monthrange(data_vencimento.year, data_vencimento.month)[1]
             data_vencimento = data_vencimento.replace(day=min(dia_vencimento, ultimo_dia))
 
-        # Criar parcela vinculada
+        # Criar parcela vinculada.
+        # numero_parcela usa offset além das NORMAL para não conflitar com
+        # unique_together = [['contrato', 'numero_parcela']] na model Parcela.
+        numero_inter = contrato.numero_parcelas + intermediaria.numero_sequencial
         parcela = Parcela.objects.create(
             contrato=contrato,
-            numero_parcela=intermediaria.mes_vencimento,
+            numero_parcela=numero_inter,
             data_vencimento=data_vencimento,
             valor_original=intermediaria.valor,
             valor_atual=intermediaria.valor_reajustado or intermediaria.valor,
@@ -1234,7 +1338,7 @@ def gerar_boleto_intermediaria(request, pk):
                 return JsonResponse({
                     'sucesso': False,
                     'erro': resultado.get('erro') if resultado else 'Erro ao gerar boleto'
-                }, status=500)
+                }, status=400)
         else:
             return JsonResponse({
                 'sucesso': True,
@@ -1243,6 +1347,7 @@ def gerar_boleto_intermediaria(request, pk):
             })
 
     except Exception as e:
+        logger.exception("Erro ao gerar boleto intermediaria pk=%s: %s", pk, e)
         return JsonResponse({
             'sucesso': False,
             'erro': str(e)
@@ -1384,7 +1489,7 @@ def api_preview_parcelas(request):
         inter_mes = {int(r['mes_vencimento']): D(str(r['valor'])) for r in inter_list}
 
         # Gerar tabela de amortização para primeiros 24 períodos
-        from financeiro.models import Parcela as _P
+        from financeiro.models import Reajuste as _P
         juros_ciclo1 = get_juros_ciclo(1)
         preview_count = min(numero_parcelas, 24)
 
@@ -1442,7 +1547,8 @@ def api_preview_parcelas(request):
         })
 
     except Exception as e:
-        return JsonResponse({'sucesso': False, 'erro': str(e)}, status=400)
+        logger.exception("Erro ao calcular preview de parcelas: %s", e)
+        return JsonResponse({'sucesso': False, 'erro': str(e)}, status=500)
 
 
 # =============================================================================
@@ -1565,7 +1671,10 @@ class ContratoWizardView(LoginRequiredMixin, View):
             # Parse juros rows from POST
             juros_rows = []
             errors = []
-            count = int(request.POST.get('juros_count', 0))
+            try:
+                count = max(0, int(request.POST.get('juros_count', 0)))
+            except (ValueError, TypeError):
+                count = 0
             for i in range(count):
                 f = TabelaJurosForm({
                     'ciclo_inicio': request.POST.get(f'juros_{i}_ciclo_inicio'),
@@ -1619,7 +1728,10 @@ class ContratoWizardView(LoginRequiredMixin, View):
                 })
 
             elif modo == 'manual':
-                count = int(request.POST.get('inter_count', 0))
+                try:
+                    count = max(0, int(request.POST.get('inter_count', 0)))
+                except (ValueError, TypeError):
+                    count = 0
                 lista = []
                 errors = []
                 for i in range(count):
@@ -1665,8 +1777,7 @@ class ContratoWizardView(LoginRequiredMixin, View):
                 )
                 return redirect('contratos:detalhe', pk=contrato.pk)
             except Exception as e:
-                import logging
-                logging.getLogger(__name__).exception('Erro ao salvar wizard')
+                logger.exception('Erro ao salvar wizard: %s', e)
                 messages.error(request, f'Erro ao criar contrato: {e}')
                 return redirect('contratos:wizard', step='preview')
 
@@ -1711,7 +1822,7 @@ class ContratoWizardView(LoginRequiredMixin, View):
                 break
 
         if numero_parcelas > 0:
-            from financeiro.models import Parcela as _P
+            from financeiro.models import Reajuste as _P
             if tipo_amortizacao == 'SAC':
                 # PMT do primeiro período SAC (o maior)
                 tabela = _P._calcular_sac_tabela(base_pmt, taxa_ciclo1, numero_parcelas)
@@ -1977,7 +2088,40 @@ def api_tabela_juros_contrato(request, pk):
 @login_required
 @require_http_methods(["DELETE"])
 def api_tabela_juros_delete(request, pk):
-    """DELETE → remove uma faixa de juros pelo ID."""
+    """DELETE → remove uma faixa de juros pelo ID.
+
+    Recalcula amortização das parcelas após a remoção para manter
+    consistência entre TabelaJurosContrato e valores das parcelas.
+    Bloqueia se o contrato já possui reajustes aplicados (parcelas
+    reajustadas não devem ser recalculadas retroativamente).
+    """
+    from financeiro.models import Reajuste
     entry = get_object_or_404(TabelaJurosContrato, pk=pk)
+    contrato = entry.contrato
+
+    # Guard: impede exclusão se reajuste já foi aplicado no contrato.
+    # Recalcular amortização após reajustes aplicados corromperia os valores.
+    if Reajuste.objects.filter(contrato=contrato, aplicado=True).exists():
+        return JsonResponse({
+            'sucesso': False,
+            'erro': (
+                'Não é possível excluir faixas de juros após reajustes terem sido aplicados. '
+                'Os valores das parcelas já foram corrigidos e não podem ser recalculados retroativamente.'
+            )
+        }, status=400)
+
     entry.delete()
+
+    # Recalcula amortização: se ainda há faixas, aplica PMT pela nova tabela;
+    # se removeu todas as faixas, `get_juros_para_ciclo` retorna None e
+    # recalcular_amortizacao() usa taxa=0 (amortização linear).
+    if contrato.parcelas.exists():
+        base_pv = contrato.valor_financiado
+        if contrato.intermediarias_reduzem_pmt:
+            soma = contrato.intermediarias.aggregate(
+                total=Sum('valor')
+            )['total'] or Decimal('0')
+            base_pv = max(base_pv - soma, Decimal('0.01'))
+        contrato.recalcular_amortizacao(base_pv=base_pv)
+
     return JsonResponse({'sucesso': True})

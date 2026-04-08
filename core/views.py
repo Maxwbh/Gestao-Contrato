@@ -29,6 +29,9 @@ from .models import (
 from .forms import ContabilidadeForm, CompradorForm, ImovelForm, ImobiliariaForm, ContaBancariaForm, AcessoUsuarioForm
 import io
 import json
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 # =============================================================================
@@ -102,6 +105,7 @@ def health_check(request):
             'latency_ms': round(db_latency, 2)
         }
     except Exception as e:
+        logger.exception("Health check: falha no banco de dados: %s", e)
         status['status'] = 'unhealthy'
         status['checks']['database'] = {
             'status': 'unhealthy',
@@ -416,10 +420,11 @@ def setup(request):
         })
 
     except Exception as e:
+        logger.exception("Setup: erro na execução: %s", e)
         return JsonResponse({
             'status': 'error',
             'message': f'Erro no setup: {str(e)}'
-        })
+        }, status=500)
 
 
 @require_http_methods(["GET", "POST"])
@@ -465,6 +470,7 @@ def gerar_dados_teste(request):
                 }
             })
         except Exception as e:
+            logger.exception("Erro ao verificar status do banco: %s", e)
             return JsonResponse({
                 'status': 'error',
                 'message': 'Banco de dados não configurado. Acesse /setup/ primeiro.',
@@ -511,13 +517,14 @@ def gerar_dados_teste(request):
         })
 
     except Exception as e:
+        logger.exception("Erro ao gerar dados de teste: %s", e)
         import traceback
         return JsonResponse({
             'status': 'error',
             'message': 'Erro ao gerar dados',
             'error': str(e),
             'traceback': traceback.format_exc()
-        })
+        }, status=500)
 
 
 @require_http_methods(["GET", "POST", "DELETE"])
@@ -574,6 +581,7 @@ def limpar_dados_teste(request):
                 }
             })
         except Exception as e:
+            logger.exception("Erro ao verificar status do banco: %s", e)
             return JsonResponse({
                 'status': 'error',
                 'message': 'Banco de dados não configurado.',
@@ -635,6 +643,7 @@ def limpar_dados_teste(request):
 
     except Exception as e:
         import traceback
+        logger.exception("Erro ao limpar dados: %s", e)
         return JsonResponse({
             'status': 'error',
             'message': 'Erro ao limpar dados',
@@ -1031,6 +1040,7 @@ class ImobiliariaCreateView(LoginRequiredMixin, CreateView):
                         principal=conta_data.get('principal', False),
                     )
             except (json.JSONDecodeError, Exception) as e:
+                logger.exception("Erro ao salvar contas bancárias na criação da imobiliária: %s", e)
                 messages.warning(self.request, f'Imobiliária criada, mas houve erro ao salvar contas bancárias: {e}')
 
         return redirect(self.success_url)
@@ -1124,6 +1134,7 @@ def api_listar_contas_bancarias(request, imobiliaria_id):
         return JsonResponse({'status': 'success', 'contas': data})
 
     except Exception as e:
+        logger.exception("Erro ao listar contas bancarias imobiliaria_id=%s: %s", imobiliaria_id, e)
         return JsonResponse({'status': 'error', 'message': str(e)}, status=500)
 
 
@@ -1163,6 +1174,7 @@ def api_obter_conta_bancaria(request, conta_id):
         return JsonResponse({'status': 'success', 'conta': data})
 
     except Exception as e:
+        logger.exception("Erro ao obter conta bancaria conta_id=%s: %s", conta_id, e)
         return JsonResponse({'status': 'error', 'message': str(e)}, status=500)
 
 
@@ -1206,6 +1218,7 @@ def api_criar_conta_bancaria(request):
         })
 
     except Exception as e:
+        logger.exception("Erro ao criar conta bancaria: %s", e)
         return JsonResponse({'status': 'error', 'message': str(e)}, status=500)
 
 
@@ -1245,6 +1258,7 @@ def api_atualizar_conta_bancaria(request, conta_id):
         })
 
     except Exception as e:
+        logger.exception("Erro ao atualizar conta bancaria conta_id=%s: %s", conta_id, e)
         return JsonResponse({'status': 'error', 'message': str(e)}, status=500)
 
 
@@ -1263,6 +1277,7 @@ def api_excluir_conta_bancaria(request, conta_id):
         })
 
     except Exception as e:
+        logger.exception("Erro ao excluir conta bancaria conta_id=%s: %s", conta_id, e)
         return JsonResponse({'status': 'error', 'message': str(e)}, status=500)
 
 
@@ -1397,6 +1412,7 @@ def api_listar_imobiliarias_por_contabilidade(request, contabilidade_id):
 
         return JsonResponse({'status': 'success', 'imobiliarias': data})
     except Exception as e:
+        logger.exception("Erro ao listar imobiliarias contabilidade_id=%s: %s", contabilidade_id, e)
         return JsonResponse({'status': 'error', 'message': str(e)}, status=500)
 
 
@@ -1429,6 +1445,7 @@ def api_listar_acessos_usuario(request, usuario_id):
 
         return JsonResponse({'status': 'success', 'acessos': data})
     except Exception as e:
+        logger.exception("Erro ao listar acessos usuario_id=%s: %s", usuario_id, e)
         return JsonResponse({'status': 'error', 'message': str(e)}, status=500)
 
 
