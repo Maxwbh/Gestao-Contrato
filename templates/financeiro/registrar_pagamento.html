@@ -1,16 +1,70 @@
 {% extends 'base.html' %}
 {% load static %}
+{% load financeiro_tags %}
 
-{% block title %}Registrar Pagamento - Parcela {{ parcela.numero_parcela }}{% endblock %}
+{% block title %}Registrar Pagamento — Parcela {{ parcela.numero_parcela }}{% endblock %}
+
+{% block extra_css %}
+<style>
+    .valor-display {
+        background: #f8f9fa;
+        border: 1px solid #dee2e6;
+        border-radius: 0.375rem;
+        padding: 0.5rem 0.75rem;
+        font-size: 1rem;
+        text-align: right;
+        font-weight: 600;
+        color: #495057;
+        cursor: default;
+        user-select: none;
+        min-height: 2.375rem;
+        display: flex;
+        align-items: center;
+        justify-content: flex-end;
+    }
+    .valor-display.destaque { font-size: 1.15rem; color: #0d6efd; }
+    .valor-display.perigo   { color: #dc3545; }
+    .valor-display.verde    { color: #198754; }
+    .valor-display.zero     { color: #adb5bd; font-weight: 400; }
+
+    .field-label {
+        font-size: .78rem;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: .05em;
+        color: #6c757d;
+        margin-bottom: 4px;
+    }
+    .section-sep {
+        font-size: .72rem;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: .06em;
+        color: #adb5bd;
+        margin: 1.25rem 0 .6rem;
+        display: flex;
+        align-items: center;
+        gap: .5rem;
+    }
+    .section-sep::after { content: ''; flex: 1; height: 1px; background: #dee2e6; }
+
+    #valor_pago_input {
+        font-size: 1.3rem;
+        font-weight: 700;
+        text-align: right;
+        color: #0d6efd;
+    }
+</style>
+{% endblock %}
 
 {% block content %}
 <div class="container-fluid py-4">
+
     <!-- Header -->
     <div class="d-flex justify-content-between align-items-center mb-4">
         <div>
             <h2 class="mb-1">
-                <i class="fas fa-dollar-sign text-success me-2"></i>
-                Registrar Pagamento
+                <i class="fas fa-dollar-sign text-success me-2"></i>Registrar Pagamento
             </h2>
             <nav aria-label="breadcrumb">
                 <ol class="breadcrumb mb-0">
@@ -20,87 +74,63 @@
                 </ol>
             </nav>
         </div>
-        <div>
-            <a href="{% url 'financeiro:detalhe_parcela' parcela.pk %}" class="btn btn-outline-secondary">
-                <i class="fas fa-arrow-left me-1"></i> Voltar
-            </a>
-        </div>
+        <a href="{% url 'financeiro:detalhe_parcela' parcela.pk %}" class="btn btn-outline-secondary">
+            <i class="fas fa-arrow-left me-1"></i> Voltar
+        </a>
     </div>
 
     <div class="row justify-content-center">
-        <div class="col-lg-8">
-            <!-- Informacoes da Parcela -->
-            <div class="card shadow-sm mb-4">
-                <div class="card-header bg-primary text-white">
-                    <h5 class="mb-0">
-                        <i class="fas fa-info-circle me-2"></i>
-                        Informacoes da Parcela
-                    </h5>
-                </div>
-                <div class="card-body">
-                    <div class="row">
-                        <div class="col-md-6">
-                            <p><strong>Contrato:</strong> {{ parcela.contrato.numero_contrato }}</p>
-                            <p><strong>Comprador:</strong> {{ parcela.contrato.comprador.nome }}</p>
-                            <p><strong>Parcela:</strong> {{ parcela.numero_parcela }}/{{ parcela.contrato.numero_parcelas }}</p>
-                        </div>
-                        <div class="col-md-6">
-                            <p><strong>Vencimento:</strong> {{ parcela.data_vencimento|date:"d/m/Y" }}
-                                {% if parcela.esta_vencida %}
-                                    <span class="badge bg-danger">Vencida</span>
-                                {% endif %}
-                            </p>
-                            <p><strong>Valor Original:</strong> R$ {{ parcela.valor_original|floatformat:2 }}</p>
-                            <p><strong>Valor Atual:</strong> R$ {{ parcela.valor_atual|floatformat:2 }}</p>
-                        </div>
-                    </div>
+        <div class="col-lg-7">
 
-                    {% if parcela.esta_vencida %}
-                    <hr>
-                    <div class="row">
-                        <div class="col-md-4">
-                            <p class="mb-1"><strong>Juros:</strong></p>
-                            <p class="text-danger fs-5">R$ {{ parcela.valor_juros|floatformat:2 }}</p>
-                        </div>
-                        <div class="col-md-4">
-                            <p class="mb-1"><strong>Multa:</strong></p>
-                            <p class="text-danger fs-5">R$ {{ parcela.valor_multa|floatformat:2 }}</p>
-                        </div>
-                        <div class="col-md-4">
-                            <p class="mb-1"><strong>Total a Pagar:</strong></p>
-                            <p class="text-primary fs-4 fw-bold">R$ {{ parcela.valor_total|floatformat:2 }}</p>
-                        </div>
-                    </div>
-                    {% else %}
-                    <hr>
-                    <div class="text-center">
-                        <p class="mb-1"><strong>Total a Pagar:</strong></p>
-                        <p class="text-primary fs-3 fw-bold">R$ {{ parcela.valor_total|floatformat:2 }}</p>
-                    </div>
-                    {% endif %}
+            {% if messages %}
+            {% for message in messages %}
+            <div class="alert alert-{{ message.tags }} alert-dismissible fade show mb-3">
+                {{ message }}<button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+            </div>
+            {% endfor %}
+            {% endif %}
+
+            <!-- ── Identificação ─────────────────────────────────────── -->
+            <div class="card shadow-sm mb-3">
+                <div class="card-header bg-primary text-white py-2 d-flex align-items-center flex-wrap gap-2">
+                    <span>
+                        <i class="fas fa-file-contract me-1"></i>
+                        <strong>{{ parcela.contrato.numero_contrato }}</strong>
+                        <span class="opacity-60 mx-1">·</span>
+                        {{ parcela.contrato.comprador.nome }}
+                    </span>
+                    <span class="ms-auto d-flex align-items-center gap-2">
+                        Parcela <strong>{{ parcela.numero_parcela }}/{{ parcela.contrato.numero_parcelas }}</strong>
+                        <span class="opacity-60">·</span>
+                        Vencimento <strong>{{ parcela.data_vencimento|date:"d/m/Y" }}</strong>
+                        {% if valores.vencido %}
+                        <span class="badge bg-danger">
+                            {{ valores.dias_atraso }} dia{{ valores.dias_atraso|pluralize }} em atraso
+                        </span>
+                        {% endif %}
+                    </span>
                 </div>
             </div>
 
-            <!-- Formulario de Pagamento -->
+            <!-- ── Formulário ────────────────────────────────────────── -->
             <div class="card shadow-sm">
-                <div class="card-header bg-success text-white">
-                    <h5 class="mb-0">
-                        <i class="fas fa-credit-card me-2"></i>
-                        Dados do Pagamento
-                    </h5>
+                <div class="card-header bg-success text-white py-2">
+                    <i class="fas fa-credit-card me-2"></i><strong>Dados do Pagamento</strong>
                 </div>
-                <div class="card-body">
-                    <form method="post" enctype="multipart/form-data">
+                <div class="card-body pt-3 pb-4">
+
+                    <form method="post" enctype="multipart/form-data" id="formPagamento">
                         {% csrf_token %}
 
-                        <div class="row">
-                            <div class="col-md-6 mb-3">
-                                <label for="data_pagamento" class="form-label">Data do Pagamento *</label>
+                        <!-- Data + Forma de Pagamento -->
+                        <div class="row g-3 mb-1">
+                            <div class="col-md-5">
+                                <div class="field-label">Data do Pagamento *</div>
                                 <input type="date" class="form-control" id="data_pagamento" name="data_pagamento"
                                        value="{{ parcela.data_vencimento|date:'Y-m-d' }}" required>
                             </div>
-                            <div class="col-md-6 mb-3">
-                                <label for="forma_pagamento" class="form-label">Forma de Pagamento *</label>
+                            <div class="col-md-7">
+                                <div class="field-label">Forma de Pagamento *</div>
                                 <select class="form-select" id="forma_pagamento" name="forma_pagamento" required>
                                     {% for valor, label in formas_pagamento %}
                                     <option value="{{ valor }}">{{ label }}</option>
@@ -109,72 +139,237 @@
                             </div>
                         </div>
 
-                        <div class="mb-3">
-                            <label for="valor_pago" class="form-label">Valor Pago *</label>
-                            <div class="input-group">
-                                <span class="input-group-text">R$</span>
-                                <input type="number" step="0.01" class="form-control" id="valor_pago" name="valor_pago"
-                                       value="{{ parcela.valor_total|floatformat:2 }}" required>
+                        <!-- ── Cálculo (readonly) ──────────────────────── -->
+                        <div class="section-sep">
+                            <i class="fas fa-calculator"></i> Cálculo
+                        </div>
+
+                        <div class="row g-2 mb-1">
+                            <!-- Valor Original -->
+                            <div class="col-6 col-md-3">
+                                <div class="field-label">Valor Original</div>
+                                <div class="valor-display">
+                                    {{ valores.valor_original|moeda }}
+                                </div>
                             </div>
-                            <div class="form-text">Valor efetivamente pago pelo cliente.</div>
+
+                            <!-- Juros -->
+                            <div class="col-6 col-md-3">
+                                <div class="field-label">
+                                    Juros
+                                    {% if valores.config_juros_percentual %}
+                                    <span class="text-muted fw-normal">({{ valores.config_juros_percentual }}% a.m.)</span>
+                                    {% endif %}
+                                </div>
+                                <div class="valor-display {% if valores.juros_hoje %}perigo{% else %}zero{% endif %}"
+                                     id="disp_juros"
+                                     data-value="{{ valores.juros_hoje|floatformat:2 }}">
+                                    {{ valores.juros_hoje|moeda }}
+                                </div>
+                            </div>
+
+                            <!-- Multa -->
+                            <div class="col-6 col-md-3">
+                                <div class="field-label">
+                                    Multa
+                                    {% if valores.config_multa_percentual %}
+                                    <span class="text-muted fw-normal">({{ valores.config_multa_percentual }}%)</span>
+                                    {% endif %}
+                                </div>
+                                <div class="valor-display {% if valores.multa_hoje %}perigo{% else %}zero{% endif %}"
+                                     id="disp_multa"
+                                     data-value="{{ valores.multa_hoje|floatformat:2 }}">
+                                    {{ valores.multa_hoje|moeda }}
+                                </div>
+                            </div>
+
+                            <!-- Valor a Pagar -->
+                            <div class="col-6 col-md-3">
+                                <div class="field-label">Valor a Pagar</div>
+                                <div class="valor-display destaque"
+                                     id="disp_total"
+                                     data-value="{{ valores.valor_total_hoje|floatformat:2 }}">
+                                    {{ valores.valor_total_hoje|moeda }}
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- ── Recebimento ─────────────────────────────── -->
+                        <div class="section-sep">
+                            <i class="fas fa-hand-holding-usd"></i> Recebimento
+                        </div>
+
+                        <div class="row g-3 align-items-end mb-1">
+                            <!-- Valor Pago (editável) -->
+                            <div class="col-md-7">
+                                <div class="field-label">
+                                    Valor Pago *
+                                    <span class="text-success fw-normal text-lowercase">(editável)</span>
+                                </div>
+                                <div class="input-group">
+                                    <span class="input-group-text">R$</span>
+                                    <input type="text"
+                                           class="form-control"
+                                           id="valor_pago_input"
+                                           name="valor_pago"
+                                           data-mask="moeda"
+                                           value="{{ valores.valor_total_hoje|floatformat:2 }}"
+                                           placeholder="0,00"
+                                           required
+                                           autocomplete="off">
+                                </div>
+                                <div class="form-text">
+                                    Valor efetivamente recebido.
+                                    Se menor que <strong>{{ valores.valor_total_hoje|moeda }}</strong>, o desconto é calculado automaticamente.
+                                </div>
+                            </div>
+
+                            <!-- Desconto (readonly, calculado) -->
+                            <div class="col-md-5">
+                                <div class="field-label">Desconto Aplicado</div>
+                                <div class="valor-display zero" id="disp_desconto">
+                                    R$ 0,00
+                                </div>
+                                <input type="hidden" name="desconto" id="desconto_hidden" value="0.00">
+                            </div>
+                        </div>
+
+                        <!-- ── Complemento ─────────────────────────────── -->
+                        <div class="section-sep">
+                            <i class="fas fa-paperclip"></i> Complemento
                         </div>
 
                         <div class="mb-3">
-                            <label for="comprovante" class="form-label">Comprovante de Pagamento</label>
+                            <div class="field-label">Comprovante</div>
                             <input type="file" class="form-control" id="comprovante" name="comprovante"
                                    accept=".pdf,.jpg,.jpeg,.png,.webp">
-                            <div class="form-text">Opcional. Envie o comprovante (PDF ou imagem, max 10 MB).</div>
+                            <div class="form-text">Opcional — PDF ou imagem (máx. 10 MB).</div>
                         </div>
 
-                        <div class="mb-3">
-                            <label for="observacoes" class="form-label">Observacoes</label>
-                            <textarea class="form-control" id="observacoes" name="observacoes" rows="3"
-                                      placeholder="Informacoes adicionais sobre o pagamento..."></textarea>
+                        <div class="mb-4">
+                            <div class="field-label">Observações</div>
+                            <textarea class="form-control" id="observacoes" name="observacoes" rows="2"
+                                      placeholder="Informações adicionais..."></textarea>
                         </div>
 
-                        <hr>
-
-                        <div class="d-flex justify-content-between">
-                            <a href="{% url 'financeiro:detalhe_parcela' parcela.pk %}" class="btn btn-secondary">
+                        <!-- Botões -->
+                        <div class="d-flex justify-content-between align-items-center border-top pt-3">
+                            <a href="{% url 'financeiro:detalhe_parcela' parcela.pk %}"
+                               class="btn btn-outline-secondary">
                                 <i class="fas fa-times me-1"></i> Cancelar
                             </a>
-                            <button type="submit" class="btn btn-success btn-lg">
-                                <i class="fas fa-check me-2"></i>
-                                Confirmar Pagamento
+                            <button type="submit" class="btn btn-success btn-lg px-5" id="btnConfirmar">
+                                <i class="fas fa-check me-2"></i>Confirmar Pagamento
                             </button>
                         </div>
+
                     </form>
                 </div>
             </div>
+
         </div>
     </div>
 </div>
+{% endblock %}
 
+{% block extra_js %}
 <script>
-document.addEventListener('DOMContentLoaded', function() {
-    // Atualizar valor com juros/multa quando data muda
-    const dataInput = document.getElementById('data_pagamento');
-    const valorInput = document.getElementById('valor_pago');
-    const vencimento = new Date('{{ parcela.data_vencimento|date:"Y-m-d" }}');
-    const valorOriginal = parseFloat('{{ parcela.valor_atual|floatformat:2 }}'.replace(',', '.'));
-    const taxaJuros = parseFloat('{{ parcela.contrato.percentual_juros_mora|floatformat:2 }}'.replace(',', '.')) / 100;
-    const taxaMulta = parseFloat('{{ parcela.contrato.percentual_multa|floatformat:2 }}'.replace(',', '.')) / 100;
+(function () {
+    'use strict';
 
-    dataInput.addEventListener('change', function() {
-        const dataPagamento = new Date(this.value);
-        if (dataPagamento > vencimento) {
-            const diffTime = Math.abs(dataPagamento - vencimento);
-            const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+    var URL_ENCARGOS = '/financeiro/parcelas/{{ parcela.pk }}/calcular-encargos/';
 
-            const juros = valorOriginal * taxaJuros * (diffDays / 30);
-            const multa = valorOriginal * taxaMulta;
-            const total = valorOriginal + juros + multa;
-
-            valorInput.value = total.toFixed(2);
-        } else {
-            valorInput.value = valorOriginal.toFixed(2);
+    // ── Parse/format helpers ─────────────────────────────────────────────
+    // Converte "R$ 1.234,56" ou "1234.56" para float
+    function parseBRL(str) {
+        if (!str && str !== 0) return 0;
+        str = String(str).replace(/R\$\s*/g, '').trim();
+        // Formato pt-BR: tem vírgula como decimal
+        if (str.indexOf(',') !== -1) {
+            str = str.replace(/\./g, '').replace(',', '.');
         }
+        return parseFloat(str) || 0;
+    }
+
+    function formatBRL(num) {
+        if (isNaN(num)) num = 0;
+        return 'R$ ' + num.toLocaleString('pt-BR', {
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2
+        });
+    }
+
+    // ── Elementos ────────────────────────────────────────────────────────
+    var dataInput    = document.getElementById('data_pagamento');
+    var valorPagoEl  = document.getElementById('valor_pago_input');
+    var dispJuros    = document.getElementById('disp_juros');
+    var dispMulta    = document.getElementById('disp_multa');
+    var dispTotal    = document.getElementById('disp_total');
+    var dispDesconto = document.getElementById('disp_desconto');
+    var descontoHid  = document.getElementById('desconto_hidden');
+
+    // Valor total atual em float — fonte de verdade para cálculo do desconto
+    var _valorTotal = parseBRL(dispTotal.dataset.value);
+
+    // ── Recalcular desconto ──────────────────────────────────────────────
+    function atualizarDesconto() {
+        // O input pode estar formatado como "R$ 1.234,56" (após aplicação da máscara)
+        // ou como "1234.56" (valor inicial antes da máscara inicializar)
+        var valorPago = parseBRL(valorPagoEl.value);
+        var desconto  = Math.max(0, _valorTotal - valorPago);
+
+        dispDesconto.textContent = formatBRL(desconto);
+        descontoHid.value = desconto.toFixed(2);
+
+        dispDesconto.className = 'valor-display ' + (desconto > 0 ? 'verde' : 'zero');
+    }
+
+    // ── Atualizar encargos após mudança de data ──────────────────────────
+    function aplicarEncargos(juros, multa, total) {
+        _valorTotal = total;
+
+        dispJuros.textContent = formatBRL(juros);
+        dispJuros.className   = 'valor-display ' + (juros > 0 ? 'perigo' : 'zero');
+
+        dispMulta.textContent = formatBRL(multa);
+        dispMulta.className   = 'valor-display ' + (multa > 0 ? 'perigo' : 'zero');
+
+        dispTotal.textContent = formatBRL(total);
+
+        // Resetar Valor Pago para o novo total — deve ser float puro para a máscara
+        valorPagoEl.value = total.toFixed(2);
+        if (window.NumericMasks) {
+            delete valorPagoEl.dataset.maskInit;
+            window.NumericMasks.initCampo(valorPagoEl);
+        }
+
+        atualizarDesconto();
+    }
+
+    // ── Eventos ──────────────────────────────────────────────────────────
+    // Data de pagamento mudou → recalcula encargos via API
+    dataInput.addEventListener('change', function () {
+        var data = this.value;
+        if (!data) return;
+
+        fetch(URL_ENCARGOS + '?data=' + data, {
+            headers: { 'X-Requested-With': 'XMLHttpRequest' }
+        })
+        .then(function (r) { return r.json(); })
+        .then(function (d) {
+            if (!d.erro) aplicarEncargos(d.juros, d.multa, d.valor_total);
+        })
+        .catch(function () { /* mantém valores atuais */ });
     });
-});
+
+    // Valor pago mudou → recalcula desconto
+    valorPagoEl.addEventListener('input', atualizarDesconto);
+
+    // ── Init: desconto inicial ───────────────────────────────────────────
+    // A máscara (numeric-masks.js) já formatou valorPagoEl antes deste script.
+    // Basta calcular o desconto inicial.
+    atualizarDesconto();
+
+}());
 </script>
 {% endblock %}

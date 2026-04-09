@@ -40,7 +40,7 @@
         <div class="card-body py-2">
             <form method="get" class="row g-2 align-items-center">
                 <div class="col-md-3">
-                    <select name="status" class="form-select" onchange="this.form.submit()">
+                    <select name="status" class="form-select form-select-sm" onchange="this.form.submit()">
                         <option value="">Todos os Status</option>
                         <option value="PENDENTE"  {% if request.GET.status == 'PENDENTE' %}selected{% endif %}>Pendente</option>
                         <option value="ENVIADA"   {% if request.GET.status == 'ENVIADA' %}selected{% endif %}>Enviada</option>
@@ -49,15 +49,25 @@
                     </select>
                 </div>
                 <div class="col-md-3">
-                    <select name="tipo" class="form-select" onchange="this.form.submit()">
+                    <select name="tipo" class="form-select form-select-sm" onchange="this.form.submit()">
                         <option value="">Todos os Tipos</option>
                         <option value="EMAIL"    {% if request.GET.tipo == 'EMAIL' %}selected{% endif %}>E-mail</option>
                         <option value="SMS"      {% if request.GET.tipo == 'SMS' %}selected{% endif %}>SMS</option>
                         <option value="WHATSAPP" {% if request.GET.tipo == 'WHATSAPP' %}selected{% endif %}>WhatsApp</option>
                     </select>
                 </div>
-                <div class="col-md-2 d-flex align-items-end">
-                    <a href="{% url 'notificacoes:listar' %}" class="btn btn-secondary w-100">
+                <div class="col-auto">
+                    <select name="per_page" class="form-select form-select-sm" style="width:auto;" onchange="this.form.submit()">
+                        {% with pp=paginator.per_page %}
+                        <option value="10"  {% if pp == 10  %}selected{% endif %}>10/pág</option>
+                        <option value="25"  {% if pp == 25  %}selected{% endif %}>25/pág</option>
+                        <option value="50"  {% if pp == 50  %}selected{% endif %}>50/pág</option>
+                        <option value="100" {% if pp == 100 %}selected{% endif %}>100/pág</option>
+                        {% endwith %}
+                    </select>
+                </div>
+                <div class="col-auto d-flex align-items-end">
+                    <a href="{% url 'notificacoes:listar' %}" class="btn btn-sm btn-secondary">
                         <i class="fas fa-times me-1"></i> Limpar
                     </a>
                 </div>
@@ -71,7 +81,6 @@
             <div>
                 <i class="fas fa-list me-1"></i>
                 <strong>Notificações</strong>
-                <span class="badge bg-secondary ms-2">{{ paginator.count }} registro(s)</span>
             </div>
             <div class="d-flex align-items-center gap-2">
                 <i class="fas fa-search text-muted"></i>
@@ -88,7 +97,7 @@
             <div id="notifGrid" class="ag-theme-material" style="width:100%;"></div>
         </div>
         <div class="card-footer">
-            {% include "includes/pagination_perpage.html" %}
+            {% include "includes/pagination_nav_only.html" %}
         </div>
     </div>
 </div>
