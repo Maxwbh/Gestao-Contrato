@@ -943,7 +943,7 @@ para ciclo = 2..total_ciclos+1:
 
 ---
 
-## 20. MELHORIAS DE UX / INTERFACE ✅ PARCIALMENTE CONCLUÍDO
+## 20. MELHORIAS DE UX / INTERFACE ✅ CONCLUÍDO
 
 > **Referência:** pesquisa de concorrentes e inspeção de sistemas líderes (2026-04-02).
 
@@ -977,13 +977,13 @@ para ciclo = 2..total_ciclos+1:
 | Bloqueio Boleto (Cascata) | 2 | 3 | — | — | 5 | ✅ 5/5 |
 | Mapa Interativo (Seção 16) | — | 5 | 6 | 1 | 12 | ✅ 10/10 M-01..M-10 |
 | Dashboard KPIs (Seção 17) | 1 | 5 | 2 | — | 8 | ✅ 8/8 (K-01..K-06, G-01..G-05, D-01..D-04) |
-| Simulador Antecipação (Seção 18) | — | 3 | 2 | — | 5 | ✅ 3/3 P2 (R-01..R-03) · ⏳ 2 P3 |
-| Notificações (Seção 19) | — | 4 | 2 | 1 | 7 | ✅ 4/4 P2 (N-01, N-02, N-06, N-07) · ⏳ 3 P3/P4 |
-| UX / Interface (Seção 20) | — | 4 | 5 | — | 9 | ✅ 4/4 P2 (U-02, U-03, U-05, U-08) · ⏳ 5 P3 (incl. U-09 ✅) |
-| Frontend | — | 17 | 15 | 3 | 35 | ⚠️ ~4/17 P2 |
-| APIs | — | 6 | 5 | — | 11 | — |
+| Simulador Antecipação (Seção 18) | — | 3 | 2 | — | 5 | ✅ 5/5 (R-01..R-05) |
+| Notificações (Seção 19) | — | 6 | 2 | 1 | 9 | ✅ 8/9 P2+P3 (N-01..N-04, N-06..N-09) · ⏳ N-05 P4 |
+| UX / Interface (Seção 20) | — | 6 | 5 | — | 11 | ✅ 11/11 (U-01..U-11) |
+| Frontend | — | 17 | 15 | 3 | 35 | ✅ 17/17 P2 · ✅ 15/15 P3 · ⏳ 3.33 P4 |
+| APIs | — | 6 | 5 | — | 11 | ✅ 11/11 |
 | Celery (HTTP tasks) | — | 2 | 2 | — | 4 | ✅ 4/4 |
-| Permissões | — | 4 | 4 | 2 | 10 | — |
+| Permissões | — | 4 | 4 | 2 | 10 | ✅ 10/10 |
 | HU Boleto/Carnê/Remessa (Seção 21) | — | 10 | — | — | 10 | ✅ 10/10 |
 | OFX Extrato Bancário (Seção 22) | — | 5 | — | — | 5 | ✅ 5/5 |
 | Testes | 104 | ~164 | ~37 | ~41 | ~346 | ✅ 104/104 P1 · ✅ 508 passando (12 Simulador + 12 Notificações) |
