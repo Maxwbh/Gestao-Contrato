@@ -331,7 +331,7 @@ class BoletoNotificacaoService:
             )
 
             try:
-                ServicoSMS.enviar(destinatario=numero, mensagem=mensagem)
+                ServicoSMS.enviar(destinatario=numero_final, mensagem=mensagem)
                 notificacao.marcar_como_enviada()
                 logger.info(f"SMS de boleto enviado para {numero_final} - Parcela {parcela.pk}")
                 return {
@@ -412,7 +412,7 @@ class BoletoNotificacaoService:
             )
 
             try:
-                ServicoWhatsApp.enviar(destinatario=numero, mensagem=mensagem)
+                ServicoWhatsApp.enviar(destinatario=numero_final, mensagem=mensagem)
                 notificacao.marcar_como_enviada()
                 logger.info(f"WhatsApp de boleto enviado para {numero_final} - Parcela {parcela.pk}")
                 return {
@@ -604,11 +604,12 @@ class BoletoNotificacaoService:
         ).select_related('contrato', 'contrato__comprador')
 
         for parcela in parcelas_5_dias:
-            # Verificar se já enviou notificação hoje
+            # Verificar se já enviou notificação hoje para esta parcela
             ja_enviou = Notificacao.objects.filter(
                 parcela=parcela,
+                tipo=TipoNotificacao.EMAIL,
                 status=StatusNotificacao.ENVIADA,
-                assunto__icontains='5 dias'
+                criado_em__date=hoje,
             ).exists()
 
             if not ja_enviou:
@@ -628,8 +629,9 @@ class BoletoNotificacaoService:
         for parcela in parcelas_amanha:
             ja_enviou = Notificacao.objects.filter(
                 parcela=parcela,
+                tipo=TipoNotificacao.EMAIL,
                 status=StatusNotificacao.ENVIADA,
-                assunto__icontains='amanhã'
+                criado_em__date=hoje,
             ).exists()
 
             if not ja_enviou:
@@ -649,8 +651,9 @@ class BoletoNotificacaoService:
         for parcela in parcelas_ontem:
             ja_enviou = Notificacao.objects.filter(
                 parcela=parcela,
+                tipo=TipoNotificacao.EMAIL,
                 status=StatusNotificacao.ENVIADA,
-                assunto__icontains='venceu'
+                criado_em__date=hoje,
             ).exists()
 
             if not ja_enviou:
