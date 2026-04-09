@@ -81,10 +81,10 @@
     <!-- Filtros -->
     <div class="card mb-4">
         <div class="card-body">
-            <form method="get" class="row g-3">
+            <form method="get" class="row g-2 align-items-end">
                 <div class="col-md-4">
-                    <label class="form-label">Imobiliaria</label>
-                    <select name="imobiliaria" class="form-select" onchange="this.form.submit()">
+                    <label class="form-label form-label-sm">Imobiliária</label>
+                    <select name="imobiliaria" class="form-select form-select-sm" onchange="this.form.submit()">
                         <option value="">Todas</option>
                         {% for imob in imobiliarias %}
                         <option value="{{ imob.id }}" {% if filtro_imobiliaria == imob.id|stringformat:"s" %}selected{% endif %}>
@@ -93,18 +93,29 @@
                         {% endfor %}
                     </select>
                 </div>
-                <div class="col-md-4">
-                    <label class="form-label">Status</label>
-                    <select name="status" class="form-select" onchange="this.form.submit()">
+                <div class="col-md-3">
+                    <label class="form-label form-label-sm">Status</label>
+                    <select name="status" class="form-select form-select-sm" onchange="this.form.submit()">
                         <option value="">Todos</option>
                         <option value="pendentes" {% if filtro_status == 'pendentes' %}selected{% endif %}>Em aberto</option>
                         <option value="pagas" {% if filtro_status == 'pagas' %}selected{% endif %}>Pagas</option>
                         <option value="vencidas" {% if filtro_status == 'vencidas' %}selected{% endif %}>Vencidas</option>
                     </select>
                 </div>
-                <div class="col-md-4 d-flex align-items-end">
-                    <a href="{% url 'financeiro:parcelas_mes' %}" class="btn btn-outline-secondary">
-                        <i class="fas fa-times me-1"></i> Limpar Filtros
+                <div class="col-auto">
+                    <label class="form-label form-label-sm">Por página</label>
+                    <select name="per_page" class="form-select form-select-sm" style="width:auto;" onchange="this.form.submit()">
+                        {% with pp=paginator.per_page %}
+                        <option value="10"  {% if pp == 10  %}selected{% endif %}>10</option>
+                        <option value="25"  {% if pp == 25  %}selected{% endif %}>25</option>
+                        <option value="50"  {% if pp == 50  %}selected{% endif %}>50</option>
+                        <option value="100" {% if pp == 100 %}selected{% endif %}>100</option>
+                        {% endwith %}
+                    </select>
+                </div>
+                <div class="col-auto d-flex align-items-end">
+                    <a href="{% url 'financeiro:parcelas_mes' %}" class="btn btn-sm btn-outline-secondary">
+                        <i class="fas fa-times me-1"></i> Limpar
                     </a>
                 </div>
             </form>
@@ -155,7 +166,6 @@
         <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
             <h5 class="mb-0"><i class="fas fa-list me-2"></i>Parcelas do Mes</h5>
             <div class="d-flex align-items-center gap-2">
-                <span class="badge bg-primary">{{ parcelas|length }} parcelas</span>
                 <i class="fas fa-search text-muted"></i>
                 <input type="text" class="form-control form-control-sm" style="width: 180px;"
                        placeholder="Busca rápida..."
@@ -170,7 +180,7 @@
             <div id="parcelasMesGrid" class="ag-theme-material" style="width: 100%;"></div>
         </div>
         <div class="card-footer">
-            {% include "includes/pagination_perpage.html" %}
+            {% include "includes/pagination_nav_only.html" %}
         </div>
     </div>
 </div>
