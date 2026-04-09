@@ -2232,3 +2232,34 @@ def excluir_documento_contrato(request, pk):
         'documento_assinado_content_type', 'data_assinatura',
     ])
     return JsonResponse({'sucesso': True})
+
+
+# ===========================================================================
+# PDF do Contrato (Promessa de Compra e Venda)
+# ===========================================================================
+
+@login_required
+def download_contrato_pdf(request, pk):
+    """
+    Gera e serve o PDF do contrato de promessa de compra e venda.
+    """
+    from django.http import HttpResponse
+    from .services.contrato_pdf_service import gerar_contrato_pdf
+
+    contrato = get_object_or_404(
+        Contrato.objects.select_related(
+            'imovel', 'comprador', 'imobiliaria', 'conta_bancaria_padrao'
+        ),
+        pk=pk,
+    )
+
+    try:
+        pdf_bytes = gerar_contrato_pdf(contrato)
+    except Exception as e:
+        logger.exception("Erro ao gerar PDF do contrato pk=%s: %s", pk, e)
+        return HttpResponse(f'Erro ao gerar PDF: {e}', status=500, content_type='text/plain')
+
+    nome_arquivo = f'contrato_{contrato.numero_contrato}.pdf'
+    response = HttpResponse(pdf_bytes, content_type='application/pdf')
+    response['Content-Disposition'] = f'attachment; filename="{nome_arquivo}"'
+    return response
