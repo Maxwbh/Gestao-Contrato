@@ -144,7 +144,18 @@
                 </ul>
 
                 {% if indices %}
-                <div class="d-flex align-items-center gap-2 mb-2">
+                <div class="d-flex align-items-center gap-2 mb-2 flex-wrap">
+                    <form method="get" class="d-flex align-items-center gap-2">
+                        {% if request.GET.tipo %}<input type="hidden" name="tipo" value="{{ request.GET.tipo }}">{% endif %}
+                        <select name="per_page" class="form-select form-select-sm" style="width:auto;" onchange="this.form.submit()" title="Registros por página">
+                            {% with pp=paginator.per_page %}
+                            <option value="10"  {% if pp == 10  %}selected{% endif %}>10/pág</option>
+                            <option value="25"  {% if pp == 25  %}selected{% endif %}>25/pág</option>
+                            <option value="50"  {% if pp == 50  %}selected{% endif %}>50/pág</option>
+                            <option value="100" {% if pp == 100 %}selected{% endif %}>100/pág</option>
+                            {% endwith %}
+                        </select>
+                    </form>
                     <i class="fas fa-search text-muted"></i>
                     <input type="text" class="form-control form-control-sm" style="width: 200px;"
                            placeholder="Busca rápida na página..."
@@ -156,7 +167,7 @@
                 </div>
                 <div id="indicesGrid" class="ag-theme-material" style="width: 100%;"></div>
 
-                {% include "includes/pagination_perpage.html" %}
+                {% include "includes/pagination_nav_only.html" %}
 
                 {% else %}
                 <div class="alert alert-info text-center">

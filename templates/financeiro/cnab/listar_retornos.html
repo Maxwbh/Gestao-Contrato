@@ -30,11 +30,11 @@
 
     <!-- Filtros -->
     <div class="card mb-4">
-        <div class="card-body">
-            <form method="get" class="row g-3">
+        <div class="card-body pb-2">
+            <form method="get" class="row g-2 align-items-end">
                 <div class="col-md-4">
-                    <label class="form-label">Conta Bancária</label>
-                    <select name="conta" class="form-select" onchange="this.form.submit()">
+                    <label class="form-label form-label-sm">Conta Bancária</label>
+                    <select name="conta" class="form-select form-select-sm" onchange="this.form.submit()">
                         <option value="">Todas as Contas</option>
                         {% for conta in contas_bancarias %}
                         <option value="{{ conta.pk }}" {% if filtro_conta == conta.pk|stringformat:"s" %}selected{% endif %}>
@@ -44,8 +44,8 @@
                     </select>
                 </div>
                 <div class="col-md-3">
-                    <label class="form-label">Status</label>
-                    <select name="status" class="form-select" onchange="this.form.submit()">
+                    <label class="form-label form-label-sm">Status</label>
+                    <select name="status" class="form-select form-select-sm" onchange="this.form.submit()">
                         <option value="">Todos</option>
                         <option value="PENDENTE"            {% if filtro_status == 'PENDENTE' %}selected{% endif %}>Pendente</option>
                         <option value="PROCESSADO"          {% if filtro_status == 'PROCESSADO' %}selected{% endif %}>Processado</option>
@@ -53,8 +53,19 @@
                         <option value="ERRO"                {% if filtro_status == 'ERRO' %}selected{% endif %}>Erro</option>
                     </select>
                 </div>
-                <div class="col-md-2 d-flex align-items-end">
-                    <a href="{% url 'financeiro:listar_retornos' %}" class="btn btn-secondary w-100">
+                <div class="col-auto">
+                    <label class="form-label form-label-sm">Por página</label>
+                    <select name="per_page" class="form-select form-select-sm" style="width:auto;" onchange="this.form.submit()">
+                        {% with pp=paginator.per_page %}
+                        <option value="10"  {% if pp == 10  %}selected{% endif %}>10</option>
+                        <option value="25"  {% if pp == 25  %}selected{% endif %}>25</option>
+                        <option value="50"  {% if pp == 50  %}selected{% endif %}>50</option>
+                        <option value="100" {% if pp == 100 %}selected{% endif %}>100</option>
+                        {% endwith %}
+                    </select>
+                </div>
+                <div class="col-auto d-flex align-items-end">
+                    <a href="{% url 'financeiro:listar_retornos' %}" class="btn btn-sm btn-secondary">
                         <i class="fas fa-times me-1"></i> Limpar
                     </a>
                 </div>
@@ -67,7 +78,6 @@
         <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
             <div>
                 <strong>Retornos CNAB</strong>
-                <span class="badge bg-secondary ms-2">{{ arquivos|length }} registro(s)</span>
             </div>
             <div class="d-flex align-items-center gap-2">
                 <i class="fas fa-search text-muted"></i>
@@ -84,7 +94,7 @@
             <div id="retornosGrid" class="ag-theme-material" style="width:100%;"></div>
         </div>
         <div class="card-footer">
-            {% include "includes/pagination_perpage.html" %}
+            {% include "includes/pagination_nav_only.html" %}
         </div>
     </div>
 </div>

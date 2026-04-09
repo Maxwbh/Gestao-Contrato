@@ -36,9 +36,18 @@
         <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
             <div>
                 <strong>Configurações SMTP</strong>
-                <span class="badge bg-secondary ms-2">{{ total_configuracoes }} registro(s)</span>
             </div>
             <div class="d-flex align-items-center gap-2">
+                <form method="get" class="d-flex align-items-center gap-2">
+                    <select name="per_page" class="form-select form-select-sm" style="width:auto;" onchange="this.form.submit()" title="Registros por página">
+                        {% with pp=paginator.per_page %}
+                        <option value="10"  {% if pp == 10  %}selected{% endif %}>10/pág</option>
+                        <option value="25"  {% if pp == 25  %}selected{% endif %}>25/pág</option>
+                        <option value="50"  {% if pp == 50  %}selected{% endif %}>50/pág</option>
+                        <option value="100" {% if pp == 100 %}selected{% endif %}>100/pág</option>
+                        {% endwith %}
+                    </select>
+                </form>
                 <i class="fas fa-search text-muted"></i>
                 <input type="text" id="gridQuickFilter" class="form-control form-control-sm"
                        placeholder="Busca rápida..." style="width: 220px;"
@@ -49,7 +58,7 @@
             <div id="smtpGrid" class="ag-theme-material" style="width:100%;"></div>
         </div>
         <div class="card-footer">
-            {% include "includes/pagination_perpage.html" %}
+            {% include "includes/pagination_nav_only.html" %}
         </div>
     </div>
 </div>
