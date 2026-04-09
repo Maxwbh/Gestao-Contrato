@@ -295,23 +295,23 @@
                 <button type="button" class="btn-close btn-close-white modal-close"></button>
             </div>
             <div class="modal-body">
-                <p id="modalBoletoInfo"></p>
-                <div id="modalBoletoResultado" class="d-none"></div>
-                <div id="modalBoletoForm">
-                    <div class="mb-3">
-                        <label class="form-label">Forçar regeneração?</label>
-                        <div class="form-check">
-                            <input class="form-check-input" type="checkbox" id="boletoForce">
-                            <label class="form-check-label" for="boletoForce">
-                                Sim — regenerar mesmo se já existe boleto
-                            </label>
+                <p id="modalBoletoInfo" class="mb-3"></p>
+                <!-- Alerta: boleto já existe -->
+                <div id="boletoAlertaExiste" class="d-none">
+                    <div class="alert alert-warning d-flex align-items-start gap-2 mb-0">
+                        <i class="fas fa-exclamation-triangle mt-1"></i>
+                        <div>
+                            <strong>Boleto já existe</strong><br>
+                            <span class="text-muted small">Deseja emitir a 2ª via? O boleto anterior será substituído.</span>
                         </div>
                     </div>
                 </div>
+                <!-- Área de resultado -->
+                <div id="modalBoletoResultado" class="d-none mt-2"></div>
             </div>
             <div class="modal-footer" id="modalBoletoFooter">
                 <button type="button" class="btn btn-secondary modal-close">Fechar</button>
-                <button type="button" class="btn btn-primary" id="btnConfirmarBoleto" onclick="confirmarGerarBoleto()">
+                <button type="button" class="btn btn-primary" id="btnConfirmarBoleto">
                     <i class="fas fa-barcode me-1"></i> Gerar Boleto
                 </button>
             </div>
@@ -664,7 +664,7 @@ function acoesRenderer(params) {
     html += `<a href="/financeiro/parcelas/${d.pk}/" class="btn btn-sm btn-outline-secondary" title="Ver detalhes"><i class="fas fa-eye"></i></a>`;
     html += `<a href="/contratos/${d.contrato_pk}/" class="btn btn-sm btn-outline-info" title="Ver contrato"><i class="fas fa-file-contract"></i></a>`;
     if (!d.pago) {
-        html += `<button class="btn btn-sm btn-outline-primary" title="Gerar boleto" onclick="abrirModalBoleto(${d.pk}, '${d.contrato.replace(/'/g,"\\'")}', ${d.numero_parcela})"><i class="fas fa-barcode"></i></button>`;
+        html += `<button class="btn btn-sm btn-outline-primary" title="Gerar boleto" onclick="abrirModalBoleto(${d.pk}, '${d.contrato.replace(/'/g,"\\'")}', ${d.numero_parcela}, '${d.status_boleto}')"><i class="fas fa-barcode"></i></button>`;
         html += `<button class="btn btn-sm btn-outline-success" title="Registrar pagamento" onclick="abrirModalPagar(${d.pk}, '${d.contrato.replace(/'/g,"\\'")}', ${d.numero_parcela}, '${d.vencimento_fmt}', ${d.valor_original})"><i class="fas fa-dollar-sign"></i></button>`;
     }
     html += '</div>';
@@ -865,24 +865,42 @@ function gerarBoletosSelecionados(force) {
 }
 
 // ===== GERAR BOLETO =====
-function abrirModalBoleto(parcelaId, contrato, numParcela) {
+// Statuses que indicam boleto já gerado (não está em branco / NAO_GERADO)
+const BOLETO_EXISTE = s => s && s !== '' && s !== 'NAO_GERADO' && s !== 'CANCELADO';
+
+function abrirModalBoleto(parcelaId, contrato, numParcela, statusBoleto) {
     parcelaAtualId = parcelaId;
+    const jaTem = BOLETO_EXISTE(statusBoleto);
+
     document.getElementById('modalBoletoInfo').textContent =
         'Contrato: ' + contrato + ' — Parcela ' + numParcela;
-    document.getElementById('boletoForce').checked = false;
     document.getElementById('modalBoletoResultado').className = 'd-none';
     document.getElementById('modalBoletoResultado').innerHTML = '';
-    document.getElementById('modalBoletoForm').classList.remove('d-none');
-    document.getElementById('btnConfirmarBoleto').classList.remove('d-none');
+
+    const alerta = document.getElementById('boletoAlertaExiste');
+    const btn    = document.getElementById('btnConfirmarBoleto');
+
+    if (jaTem) {
+        alerta.classList.remove('d-none');
+        btn.innerHTML  = '<i class="fas fa-copy me-1"></i> Gerar 2ª Via';
+        btn.className  = 'btn btn-warning';
+        btn.onclick    = () => confirmarGerarBoleto(true);
+    } else {
+        alerta.classList.add('d-none');
+        btn.innerHTML  = '<i class="fas fa-barcode me-1"></i> Gerar Boleto';
+        btn.className  = 'btn btn-primary';
+        btn.onclick    = () => confirmarGerarBoleto(false);
+    }
+    btn.classList.remove('d-none');
+    btn.disabled = false;
     getMModal('modalGerarBoleto').open();
 }
 
-function confirmarGerarBoleto() {
+function confirmarGerarBoleto(force) {
     const btn = document.getElementById('btnConfirmarBoleto');
     btn.disabled = true;
     btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i> Gerando...';
 
-    const force = document.getElementById('boletoForce').checked;
     const formData = new FormData();
     formData.append('csrfmiddlewaretoken', CSRF_TOKEN);
     if (force) formData.append('force', 'true');
@@ -903,13 +921,23 @@ function confirmarGerarBoleto() {
         const res = document.getElementById('modalBoletoResultado');
         res.classList.remove('d-none');
         if (data.sucesso) {
-            res.className = 'alert alert-success';
+            res.className = 'alert alert-success mt-2';
             res.innerHTML = '<i class="fas fa-check-circle me-1"></i> Boleto gerado com sucesso!' +
                 (data.nosso_numero ? '<br><small>Nosso número: <strong>' + data.nosso_numero + '</strong></small>' : '');
-            document.getElementById('modalBoletoForm').classList.add('d-none');
+            document.getElementById('boletoAlertaExiste').classList.add('d-none');
             btn.classList.add('d-none');
+
+            // Atualiza a linha na grid sem precisar recarregar a página
+            const novoStatus = data.status_boleto || 'GERADO';
+            if (window.parcelasGridApi) {
+                window.parcelasGridApi.forEachNode(node => {
+                    if (node.data && node.data.pk === parcelaAtualId) {
+                        node.setData({...node.data, status_boleto: novoStatus});
+                    }
+                });
+            }
         } else {
-            res.className = 'alert alert-danger';
+            res.className = 'alert alert-danger mt-2';
             res.innerHTML = '<i class="fas fa-exclamation-triangle me-1"></i> ' + (data.erro || 'Erro ao gerar boleto.');
         }
     })
@@ -918,7 +946,7 @@ function confirmarGerarBoleto() {
         btn.disabled = false;
         btn.innerHTML = '<i class="fas fa-barcode me-1"></i> Gerar Boleto';
         const res = document.getElementById('modalBoletoResultado');
-        res.className = 'alert alert-danger';
+        res.className = 'alert alert-danger mt-2';
         res.innerHTML = err.name === 'AbortError'
             ? '<i class="fas fa-clock me-1"></i> Tempo esgotado (120s). BRCobrança pode estar iniciando. Tente novamente.'
             : '<i class="fas fa-exclamation-triangle me-1"></i> Erro: ' + err.message;
