@@ -701,19 +701,30 @@ class Parcela(TimeStampedModel):
 
             self.save()
 
-            # Enviar email para o comprador
+            # Agendar notificações (email + SMS + WhatsApp) de forma assíncrona
+            # para não bloquear a resposta ao usuário
             if enviar_email:
                 try:
-                    from notificacoes.boleto_notificacao import BoletoNotificacaoService
-                    notificacao_service = BoletoNotificacaoService()
-                    email_result = notificacao_service.notificar_boleto_criado(self)
-                    resultado['email_enviado'] = email_result.get('sucesso', False)
-                    resultado['email_erro'] = email_result.get('erro', '')
+                    from notificacoes.tasks import enviar_notificacoes_boleto_async
+                    enviar_notificacoes_boleto_async.delay(self.pk)
+                    resultado['notificacao_agendada'] = True
                 except Exception as e:
-                    # Não falhar a geração do boleto por erro de email
-                    logger.exception("Erro ao enviar email após geração de boleto parcela pk=%s: %s", self.pk, e)
-                    resultado['email_enviado'] = False
-                    resultado['email_erro'] = str(e)
+                    # Celery indisponível: tenta envio síncrono como fallback
+                    logger.warning(
+                        "Celery indisponível, tentando envio síncrono (parcela pk=%s): %s", self.pk, e
+                    )
+                    try:
+                        from notificacoes.boleto_notificacao import BoletoNotificacaoService
+                        notificacao_service = BoletoNotificacaoService()
+                        email_result = notificacao_service.notificar_boleto_criado(self)
+                        resultado['email_enviado'] = email_result.get('sucesso', False)
+                        resultado['email_erro'] = email_result.get('erro', '')
+                    except Exception as e2:
+                        logger.exception(
+                            "Erro no envio síncrono de notificações parcela pk=%s: %s", self.pk, e2
+                        )
+                        resultado['email_enviado'] = False
+                        resultado['email_erro'] = str(e2)
 
         return resultado
 
