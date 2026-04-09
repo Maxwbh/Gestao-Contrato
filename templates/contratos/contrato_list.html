@@ -149,6 +149,14 @@
                     <i class="fas fa-file-contract"></i> Gerenciar Contratos
                 </h4>
                 <div class="d-flex align-items-center gap-2">
+                    <!-- Controle global de colunas — visível apenas no modo card -->
+                    <div id="globalCardSizeBtns" class="btn-group btn-group-sm d-none" role="group" title="Número de colunas por card">
+                        <button type="button" class="btn btn-outline-secondary" data-size="2"  onclick="setAllCardsSize(2)"  title="2 por linha">2</button>
+                        <button type="button" class="btn btn-outline-secondary" data-size="3"  onclick="setAllCardsSize(3)"  title="3 por linha">3</button>
+                        <button type="button" class="btn btn-outline-secondary active" data-size="6"  onclick="setAllCardsSize(6)"  title="2 por linha (metade)">6</button>
+                        <button type="button" class="btn btn-outline-secondary" data-size="9"  onclick="setAllCardsSize(9)"  title="~1,3 por linha">9</button>
+                        <button type="button" class="btn btn-outline-secondary" data-size="12" onclick="setAllCardsSize(12)" title="1 por linha">12</button>
+                    </div>
                     <button type="button" class="btn btn-outline-secondary btn-toggle-view" id="btnToggleView"
                             onclick="toggleCardView()" title="Alternar visualização em cards">
                         <i class="fas fa-th-large"></i>
@@ -304,14 +312,6 @@
                                     <span class="badge status-badge {% if contrato.status == 'ATIVO' %}bg-success{% elif contrato.status == 'QUITADO' %}bg-primary{% elif contrato.status == 'CANCELADO' %}bg-danger{% else %}bg-warning text-dark{% endif %} me-1">
                                         {{ contrato.get_status_display }}
                                     </span>
-                                    <!-- Size controls -->
-                                    <div class="card-size-btns btn-group btn-group-sm" role="group">
-                                        <button type="button" class="btn btn-outline-secondary" data-size="2" onclick="setCardSize(this,2)" title="2 cols">2</button>
-                                        <button type="button" class="btn btn-outline-secondary" data-size="3" onclick="setCardSize(this,3)" title="3 cols">3</button>
-                                        <button type="button" class="btn btn-outline-secondary active" data-size="6" onclick="setCardSize(this,6)" title="6 cols">6</button>
-                                        <button type="button" class="btn btn-outline-secondary" data-size="9" onclick="setCardSize(this,9)" title="9 cols">9</button>
-                                        <button type="button" class="btn btn-outline-secondary" data-size="12" onclick="setCardSize(this,12)" title="12 cols">12</button>
-                                    </div>
                                 </div>
                                 <div class="card-body py-2 px-3" style="font-size:0.85rem;">
                                     <div class="d-flex gap-2 mb-1 flex-wrap">
@@ -874,31 +874,35 @@
             if (!el) return;
             el.dataset.cols = item.cols;
             el.style.width = colsToWidth(item.cols);
-            // Update active size button
-            el.querySelectorAll('.card-size-btns .btn').forEach(function(btn) {
-                btn.classList.toggle('active', parseInt(btn.dataset.size) === item.cols);
-            });
             container.appendChild(el);
         });
 
         applyAutoExpand();
     }
 
-    function setCardSize(btn, cols) {
-        const wrapper = btn.closest('.card-item-wrapper');
-        const minCols = parseInt(wrapper.dataset.minCols) || 2;
-        const actualCols = Math.max(cols, minCols);
-
-        wrapper.dataset.cols = actualCols;
-        wrapper.style.width = colsToWidth(actualCols);
-
-        // Update active button
-        wrapper.querySelectorAll('.card-size-btns .btn').forEach(function(b) {
+    function setAllCardsSize(cols) {
+        const container = document.getElementById('sortable-cards');
+        if (!container) return;
+        container.querySelectorAll('.card-item-wrapper').forEach(function(wrapper) {
+            const minCols = parseInt(wrapper.dataset.minCols) || 2;
+            const actualCols = Math.max(cols, minCols);
+            wrapper.dataset.cols = actualCols;
+            wrapper.style.width = colsToWidth(actualCols);
+        });
+        // Update active state in global control
+        document.querySelectorAll('#globalCardSizeBtns .btn').forEach(function(b) {
             b.classList.toggle('active', parseInt(b.dataset.size) === cols);
         });
-
         applyAutoExpand();
         saveLayout();
+    }
+
+    // Kept for applyLayout compatibility (updates individual wrapper width)
+    function setCardSize(wrapper, cols) {
+        const minCols = parseInt(wrapper.dataset.minCols) || 2;
+        const actualCols = Math.max(cols, minCols);
+        wrapper.dataset.cols = actualCols;
+        wrapper.style.width = colsToWidth(actualCols);
     }
 
     function toggleCardView() {
@@ -907,15 +911,18 @@
         const btn       = document.getElementById('btnToggleView');
         const isCard    = !cardView.classList.contains('d-none');
 
+        const globalSizeBtns = document.getElementById('globalCardSizeBtns');
         if (isCard) {
             cardView.classList.add('d-none');
             tableView.classList.remove('d-none');
             btn.classList.remove('active');
+            globalSizeBtns.classList.add('d-none');
             localStorage.setItem(STORAGE_KEY_VIEW, 'table');
         } else {
             tableView.classList.add('d-none');
             cardView.classList.remove('d-none');
             btn.classList.add('active');
+            globalSizeBtns.classList.remove('d-none');
             localStorage.setItem(STORAGE_KEY_VIEW, 'cards');
             initSortable();
             applyAutoExpand();
@@ -946,6 +953,7 @@
             document.getElementById('card-view-container').classList.remove('d-none');
             document.getElementById('table-view-container').classList.add('d-none');
             document.getElementById('btnToggleView').classList.add('active');
+            document.getElementById('globalCardSizeBtns').classList.remove('d-none');
             initSortable();
 
             const savedLayout = localStorage.getItem(STORAGE_KEY_CARDS);
