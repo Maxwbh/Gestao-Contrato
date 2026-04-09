@@ -654,6 +654,26 @@ def notificar_inadimplente(request, pk):
         return JsonResponse({'sucesso': False, 'erro': str(e)}, status=500)
 
 
+def _notificar_pagamento_bg(historico):
+    """
+    Dispara notificar_pagamento_confirmado em daemon thread.
+    Falhas são logadas e nunca propagadas — não bloqueia a resposta HTTP.
+    """
+    import threading
+
+    def _do():
+        try:
+            from notificacoes.boleto_notificacao import BoletoNotificacaoService
+            BoletoNotificacaoService().notificar_pagamento_confirmado(historico)
+        except Exception as exc:
+            logger.exception(
+                'Falha ao notificar pagamento confirmado (historico pk=%s): %s',
+                historico.pk, exc,
+            )
+
+    threading.Thread(target=_do, daemon=True).start()
+
+
 @login_required
 def registrar_pagamento(request, pk):
     """Registra o pagamento de uma parcela"""
@@ -712,6 +732,8 @@ def registrar_pagamento(request, pk):
             if comprovante:
                 historico.comprovante = comprovante
                 historico.save(update_fields=['comprovante'])
+
+            _notificar_pagamento_bg(historico)
 
             messages.success(request, 'Pagamento registrado com sucesso!')
             return redirect('financeiro:detalhe_parcela', pk=pk)
@@ -1105,6 +1127,7 @@ def gerar_boleto_parcela(request, pk):
                 'linha_digitavel': resultado.get('linha_digitavel', ''),
                 'codigo_barras': resultado.get('codigo_barras', ''),
                 'tem_pdf': parcela.boleto_pdf.name if parcela.boleto_pdf else False,
+                'status_boleto': parcela.status_boleto,
                 'mensagem': 'Boleto gerado com sucesso'
             })
         else:
@@ -2025,7 +2048,7 @@ def pagar_parcela_ajax(request, pk):
         parcela.save()
 
         # Registrar historico
-        HistoricoPagamento.objects.create(
+        hist_ajax = HistoricoPagamento.objects.create(
             parcela=parcela,
             data_pagamento=data_pagamento,
             valor_pago=valor_pago,
@@ -2034,8 +2057,9 @@ def pagar_parcela_ajax(request, pk):
             valor_multa=valor_multa,
             valor_desconto=valor_desconto,
             forma_pagamento=forma_pagamento,
-            observacoes=observacoes
+            observacoes=observacoes,
         )
+        _notificar_pagamento_bg(hist_ajax)
 
         return JsonResponse({
             'sucesso': True,
