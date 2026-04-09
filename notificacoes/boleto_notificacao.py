@@ -347,6 +347,104 @@ class BoletoNotificacaoService:
             logger.exception(f"Erro ao enviar SMS de boleto: {e}")
             return {'sucesso': False, 'erro': str(e)}
 
+    def agendar_notificacao_boleto_criado(self, parcela):
+        """
+        Agenda notificação de boleto criado na fila do banco de dados (sem envio imediato).
+        O processamento é feito pelo task `processar_fila_notificacoes` (cron).
+
+        Cria registros Notificacao(status=PENDENTE) para cada canal habilitado
+        pelo comprador, mas NÃO tenta enviar. Falhas de template são capturadas
+        e logadas sem propagar exceção — a chamada sempre retorna.
+
+        Returns:
+            dict: {'agendadas': [<pk>, ...]}
+        """
+        contrato = parcela.contrato
+        comprador = contrato.comprador
+        imobiliaria = contrato.imovel.imobiliaria
+        agendadas = []
+
+        # --- EMAIL ---
+        if comprador.email and getattr(comprador, 'notificar_email', True):
+            try:
+                template = TemplateNotificacao.get_template(
+                    codigo=TipoTemplate.BOLETO_CRIADO,
+                    imobiliaria=imobiliaria,
+                )
+                if template:
+                    contexto = self.montar_contexto(parcela)
+                    assunto, corpo_sms, corpo_html, _ = template.renderizar(contexto)
+                else:
+                    assunto = f"Boleto Gerado - Parcela {parcela.numero_parcela}"
+                    corpo_sms = f"Boleto da parcela {parcela.numero_parcela} gerado."
+                    corpo_html = ''
+
+                destinatario = _destinatario_email_teste(comprador.email)
+                notif = Notificacao.objects.create(
+                    parcela=parcela,
+                    tipo=TipoNotificacao.EMAIL,
+                    destinatario=destinatario,
+                    assunto=assunto,
+                    mensagem=corpo_html or corpo_sms,
+                    status=StatusNotificacao.PENDENTE,
+                )
+                agendadas.append(notif.pk)
+            except Exception as exc:
+                logger.exception(
+                    "Erro ao agendar email boleto para parcela %s: %s", parcela.pk, exc
+                )
+
+        # --- SMS ---
+        if getattr(comprador, 'notificar_sms', False):
+            try:
+                import re as _re
+                numero_raw = (getattr(comprador, 'celular', '') or getattr(comprador, 'telefone', '') or '').strip()
+                if numero_raw:
+                    numero = _re.sub(r'\D', '', numero_raw)
+                    if len(numero) == 11:
+                        numero = '+55' + numero
+                    elif len(numero) == 10:
+                        numero = '+55' + numero
+                    elif len(numero) == 13 and numero.startswith('55'):
+                        numero = '+' + numero
+                    elif not numero.startswith('+'):
+                        numero = '+' + numero
+
+                    if len(numero) >= 12:
+                        template = TemplateNotificacao.get_template(
+                            codigo=TipoTemplate.BOLETO_CRIADO,
+                            imobiliaria=imobiliaria,
+                        )
+                        if template and template.tem_sms:
+                            contexto = self.montar_contexto(parcela)
+                            _, mensagem_sms, _, _ = template.renderizar(contexto)
+                        else:
+                            mensagem_sms = (
+                                f"Ola {comprador.nome.split()[0]}, "
+                                f"seu boleto parcela {parcela.numero_parcela} "
+                                f"valor {self._formatar_valor(parcela.valor_atual)} "
+                                f"vence {self._formatar_data(parcela.data_vencimento)}. "
+                                f"{imobiliaria.nome}"
+                            )
+
+                        numero_final = _destinatario_telefone_teste(numero)
+                        notif = Notificacao.objects.create(
+                            parcela=parcela,
+                            tipo=TipoNotificacao.SMS,
+                            destinatario=numero_final,
+                            assunto=f'SMS Boleto Parcela {parcela.numero_parcela}',
+                            mensagem=mensagem_sms,
+                            status=StatusNotificacao.PENDENTE,
+                        )
+                        agendadas.append(notif.pk)
+            except Exception as exc:
+                logger.exception(
+                    "Erro ao agendar SMS boleto para parcela %s: %s", parcela.pk, exc
+                )
+
+        logger.info("Notificações agendadas para parcela %s: pks=%s", parcela.pk, agendadas)
+        return {'agendadas': agendadas}
+
     def notificar_boleto_criado(self, parcela, anexar_pdf=True):
         """Envia notificações de boleto criado (email + SMS conforme preferências do comprador)"""
         return self._notificar(parcela, TipoTemplate.BOLETO_CRIADO, anexar_pdf=anexar_pdf)
