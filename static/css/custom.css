@@ -2376,3 +2376,21 @@ body.dark-mode code, body.dark-mode pre {
 }
 #dark-mode-toggle:hover { opacity: 1; }
 #dark-mode-toggle .dm-icon { font-size: 1.1rem; }
+
+/* ========================================================================
+   LAYOUT: Formulários — 95% da largura disponível
+   Afeta todas as colunas restritas (col-xl-*, col-lg-*) dentro de linhas
+   centradas, garantindo aproveitamento máximo da tela em formulários.
+   ======================================================================== */
+.container-fluid .row.justify-content-center > [class*="col-xl-"],
+.container-fluid .row.justify-content-center > [class*="col-lg-"] {
+    max-width: 95% !important;
+    flex: 0 0 95% !important;
+}
+
+/* Garante que template_form.html e similares com .template-form-wrap também usem 95% */
+.template-form-wrap {
+    max-width: 95% !important;
+    margin-left: auto !important;
+    margin-right: auto !important;
+}

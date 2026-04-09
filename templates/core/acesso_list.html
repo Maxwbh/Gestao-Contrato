@@ -159,11 +159,11 @@ document.addEventListener('DOMContentLoaded', function() {
         document.getElementById('acessoGrid'),
         {
             columnDefs: [
-                { headerName: 'Usuário', field: 'username', filter: 'agTextColumnFilter', floatingFilter: true, minWidth: 180,
+                { headerName: 'Usuário', field: 'username', filter: 'agTextColumnFilter', minWidth: 180,
                   cellRenderer: usuarioRenderer },
-                { headerName: 'Contabilidade', field: 'contabilidade', filter: 'agTextColumnFilter', floatingFilter: true, minWidth: 160,
+                { headerName: 'Contabilidade', field: 'contabilidade', filter: 'agTextColumnFilter', minWidth: 160,
                   cellRenderer: p => `<i class="fas fa-calculator me-1 text-muted"></i>${p.value}` },
-                { headerName: 'Imobiliária', field: 'imobiliaria', filter: 'agTextColumnFilter', floatingFilter: true, minWidth: 160,
+                { headerName: 'Imobiliária', field: 'imobiliaria', filter: 'agTextColumnFilter', minWidth: 160,
                   cellRenderer: p => `<i class="fas fa-building me-1 text-muted"></i>${p.value}` },
                 { headerName: 'Pode Editar', field: 'pode_editar', filter: false, minWidth: 110,
                   cellStyle: { textAlign: 'center' }, cellRenderer: checkRenderer },
@@ -175,7 +175,7 @@ document.addEventListener('DOMContentLoaded', function() {
             rowData: acessoRowData,
             domLayout: 'autoHeight',
             defaultColDef: { sortable: true, resizable: true },
-            rowHeight: 52, headerHeight: 48, floatingFiltersHeight: 36,
+            rowHeight: 52, headerHeight: 48,
             suppressCellFocus: true, enableCellTextSelection: true,
         }
     );
