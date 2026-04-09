@@ -2290,36 +2290,49 @@ document.getElementById('formCarne').addEventListener('submit', function(e) {
     }
 
     var btn = document.getElementById('btnGerarCarne');
+    var btnOriginalHtml = '<i class="fas fa-barcode"></i> Gerar <span id="btnGerarQtd">' + parcelaIds.length + '</span> Boleto(s)';
     btn.disabled = true;
     btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Gerando ' + parcelaIds.length + ' boleto(s)...';
 
+    function _restaurarBtn() {
+        btn.disabled = false;
+        btn.innerHTML = btnOriginalHtml;
+    }
+
+    var controller = new AbortController();
+    var fetchTimeout = setTimeout(function() { controller.abort(); }, 120000); // 2 min máximo
+
     fetch('/financeiro/contrato/{{ contrato.pk }}/gerar-carne/', {
         method: 'POST',
+        signal: controller.signal,
         headers: {
             'X-CSRFToken': '{{ csrf_token }}',
             'Content-Type': 'application/json'
         },
         body: JSON.stringify({parcelas: parcelaIds})
     })
-    .then(response => response.json())
-    .then(data => {
+    .then(function(response) {
+        clearTimeout(fetchTimeout);
+        return response.json();
+    })
+    .then(function(data) {
         if (data.sucesso) {
             var msg = data.gerados + ' boleto(s) gerado(s) com sucesso!';
             if (data.bloqueados > 0) {
-                msg += '\n' + data.bloqueados + ' parcela(s) bloqueada(s) por reajuste.';
+                msg += ' ' + data.bloqueados + ' parcela(s) bloqueada(s) por reajuste.';
             }
-            showToast(msg, 'success');
+            try { showToast(msg, 'success'); } catch(e) {}
             setTimeout(function() { location.reload(); }, 1500);
         } else {
-            showToast('Erro ao gerar boletos: ' + data.erro, 'error');
-            btn.disabled = false;
-            btn.innerHTML = '<i class="fas fa-barcode"></i> Gerar <span id="btnGerarQtd">' + parcelaIds.length + '</span> Boleto(s)';
+            try { showToast('Erro ao gerar boletos: ' + (data.erro || data.mensagem || ''), 'error'); } catch(e) {}
+            _restaurarBtn();
         }
     })
-    .catch(error => {
-        showToast('Erro de conexao: ' + error, 'error');
-        btn.disabled = false;
-        btn.innerHTML = '<i class="fas fa-barcode"></i> Gerar <span id="btnGerarQtd">' + parcelaIds.length + '</span> Boleto(s)';
+    .catch(function(error) {
+        clearTimeout(fetchTimeout);
+        var msg = controller.signal.aborted ? 'Tempo limite excedido. Recarregue a página para verificar.' : 'Erro de conexão: ' + error;
+        try { showToast(msg, 'error'); } catch(e) {}
+        _restaurarBtn();
     });
 });
 
