@@ -218,6 +218,9 @@ TWILIO_ACCOUNT_SID = config('TWILIO_ACCOUNT_SID', default='')
 TWILIO_AUTH_TOKEN = config('TWILIO_AUTH_TOKEN', default='')
 TWILIO_PHONE_NUMBER = config('TWILIO_PHONE_NUMBER', default='')
 TWILIO_WHATSAPP_NUMBER = config('TWILIO_WHATSAPP_NUMBER', default='')
+# Conta trial do Twilio adiciona "Sent from your Twilio trial account - " (38 chars)
+# no início de todo SMS. Quando True, a mensagem é truncada para caber em 250 chars.
+TWILIO_TRIAL_MODE = config('TWILIO_TRIAL_MODE', default=False, cast=bool)
 
 # =============================================================================
 # MODO DE TESTE — Safeguard para ambiente de desenvolvimento
