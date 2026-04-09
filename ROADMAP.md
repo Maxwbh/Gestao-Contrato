@@ -882,8 +882,8 @@ para ciclo = 2..total_ciclos+1:
 |---|------|-----------|
 | M-11 | Página `/imoveis/loteamento/{slug}/` — mapa dedicado do empreendimento | P2 | ✅ `loteamento_detalhe` em `core/views.py` + URL `imoveis/loteamento/<str:nome>/` + template `loteamento_detalhe.html` com mapa Leaflet + lista filtrável por status |
 | M-12 | Estatísticas do loteamento: total, disponíveis %, valor médio por lote | P2 | ✅ KPI cards (total, disponíveis, vendidos, valor médio/min/max) + barra de progresso proporcional na página do loteamento |
-| M-13 | Polígonos de lote (boundaries) com `lat/lng` de cada vértice — modelo `LotePoligono` | P3 |
-| M-14 | Upload de planta baixa (imagem) como overlay no mapa | P3 |
+| M-13 | Polígonos de lote (boundaries) com `lat/lng` de cada vértice — modelo `LotePoligono` | P3 | ✅ `VerticePoligono` em `core/models.py` + migration `0006_add_vertice_poligono` + `api_poligono_imovel` view (GET/POST staff-only) + editor Leaflet com clique para adicionar vértices, clique em vértice para remover, botão "Salvar Polígono" no popup; polígonos renderizados em todos os imóveis com distinção de cor disponível/vendido |
+| M-14 | Upload de planta baixa (imagem) como overlay no mapa | P3 | ✅ `PlantaBaixaLoteamento` em `core/models.py` (BinaryField backup + ImageField, bounds SW/NE, opacidade); migration `0007_planta_baixa_loteamento`; views `upload_planta_baixa`, `api_planta_baixa_loteamento`, `servir_planta_baixa`; `loteamento_detalhe.html` com `L.imageOverlay`, slider de opacidade, toggle visibilidade, modal de upload staff-only com captura de bounds visíveis do mapa |
 | M-15 | Link direto "Ver no Google Maps / Waze" no popup do marcador | P3 | ✅ Links Maps e Waze exibidos no popup quando lat/lng disponíveis |
 | M-16 | Geolocalização do usuário para mostrar lotes próximos | P4 | ✅ Botão "Perto de mim" na toolbar do mapa; `navigator.geolocation` → centraliza mapa na posição do usuário + marcador azul "Você está aqui" + conta lotes num raio de 50 km |
 
