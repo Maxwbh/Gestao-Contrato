@@ -216,10 +216,6 @@ class TemplateNotificacaoListView(LoginRequiredMixin, PaginacaoMixin, ListView):
                 Q(corpo__icontains=search)
             )
 
-        tipo = self.request.GET.get('tipo')
-        if tipo:
-            queryset = queryset.filter(tipo=tipo)
-
         codigo = self.request.GET.get('codigo')
         if codigo:
             queryset = queryset.filter(codigo=codigo)
@@ -230,12 +226,10 @@ class TemplateNotificacaoListView(LoginRequiredMixin, PaginacaoMixin, ListView):
         context = super().get_context_data(**kwargs)
         context['total_templates'] = TemplateNotificacao.objects.count()
         context['search'] = self.request.GET.get('search', '')
-        context['tipo_selecionado'] = self.request.GET.get('tipo', '')
         context['codigo_selecionado'] = self.request.GET.get('codigo', '')
 
         # Para filtros
-        from .models import TipoNotificacao, TipoTemplate
-        context['tipos_notificacao'] = TipoNotificacao.choices
+        from .models import TipoTemplate
         context['tipos_template'] = TipoTemplate.choices
         return context
 
@@ -295,11 +289,11 @@ def duplicar_template(request, pk):
     template_novo = TemplateNotificacao.objects.create(
         nome=f'{template_original.nome} (Copia)',
         codigo=template_original.codigo,
-        tipo=template_original.tipo,
         imobiliaria=None,  # Template global por padrao
         assunto=template_original.assunto,
         corpo=template_original.corpo,
         corpo_html=template_original.corpo_html,
+        corpo_whatsapp=template_original.corpo_whatsapp,
         ativo=False  # Inativo por padrao
     )
 
@@ -350,14 +344,17 @@ def preview_template(request, pk):
         'LINKBOLETO': 'https://sistema.com/boleto/12345',
     }
 
-    assunto, corpo, corpo_html = template.renderizar(contexto_exemplo)
+    assunto, corpo, corpo_html, corpo_whatsapp = template.renderizar(contexto_exemplo)
 
     return JsonResponse({
         'nome': template.nome,
-        'tipo': template.get_tipo_display(),
+        'tem_email': template.tem_email,
+        'tem_sms': template.tem_sms,
+        'tem_whatsapp': template.tem_whatsapp,
         'assunto': assunto,
         'corpo': corpo,
         'corpo_html': corpo_html,
+        'corpo_whatsapp': corpo_whatsapp,
     })
 
 

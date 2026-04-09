@@ -34,7 +34,6 @@ urlpatterns = [
     path('api/gerar-dados-teste/', views.gerar_dados_teste, name='gerar_dados_teste'),
     path('api/limpar-dados-teste/', views.limpar_dados_teste, name='limpar_dados_teste'),
     path('dados-teste/', views.pagina_dados_teste, name='pagina_dados_teste'),
-    path('roadmap/', views.roadmap, name='roadmap'),
 
     # CRUD Contabilidade
     path('contabilidades/', views.ContabilidadeListView.as_view(), name='listar_contabilidades'),
@@ -55,6 +54,8 @@ urlpatterns = [
     path('imoveis/<int:pk>/editar/', views.ImovelUpdateView.as_view(), name='editar_imovel'),
     path('imoveis/<int:pk>/excluir/', views.ImovelDeleteView.as_view(), name='excluir_imovel'),
     path('imoveis/loteamento/<str:nome>/', views.loteamento_detalhe, name='loteamento_detalhe'),
+    # M-13: Polígonos de lote
+    path('imoveis/<int:pk>/poligono/', views.api_poligono_imovel, name='api_poligono_imovel'),
 
     # CRUD Imobiliária
     path('imobiliarias/', views.ImobiliariaListView.as_view(), name='listar_imobiliarias'),

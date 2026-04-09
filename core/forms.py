@@ -412,7 +412,7 @@ class ImovelForm(forms.ModelForm):
                 'placeholder': '-46.6333094',
                 'id': 'id_longitude'
             }),
-            'valor': forms.NumberInput(attrs={'step': '0.01', 'min': '0'}),
+            'valor': forms.TextInput(attrs={'data-mask': 'moeda', 'placeholder': 'R$ 0,00'}),
         }
 
     def __init__(self, *args, **kwargs):
@@ -610,7 +610,7 @@ class ImobiliariaForm(forms.ModelForm):
     class Meta:
         model = Imobiliaria
         fields = [
-            'contabilidade', 'nome', 'razao_social', 'cnpj',
+            'contabilidade', 'nome', 'razao_social', 'cnpj', 'logo',
             'cep', 'logradouro', 'numero', 'complemento', 'bairro', 'cidade', 'estado',
             'telefone', 'email', 'responsavel_financeiro',
             'banco', 'agencia', 'conta', 'pix',
@@ -634,11 +634,41 @@ class ImobiliariaForm(forms.ModelForm):
                 'maxlength': '9'
             }),
             'cnpj': forms.TextInput(attrs={'placeholder': '00.000.000/0000-00', 'maxlength': '20'}),
-            'percentual_multa_padrao': forms.NumberInput(attrs={'step': '0.01', 'min': '0'}),
-            'percentual_juros_padrao': forms.NumberInput(attrs={'step': '0.0001', 'min': '0'}),
-            'percentual_desconto_padrao': forms.NumberInput(attrs={'step': '0.01', 'min': '0'}),
-            'desconto2_padrao': forms.NumberInput(attrs={'step': '0.01', 'min': '0'}),
-            'desconto3_padrao': forms.NumberInput(attrs={'step': '0.01', 'min': '0'}),
+            'percentual_multa_padrao': forms.TextInput(attrs={
+                'data-mask': 'pct2',
+                'data-mask-switch': 'id_tipo_valor_multa',
+                'data-mask-moeda': 'moeda',
+                'data-mask-pct': 'pct2',
+                'placeholder': '2,00'
+            }),
+            'percentual_juros_padrao': forms.TextInput(attrs={
+                'data-mask': 'pct4',
+                'data-mask-switch': 'id_tipo_valor_juros',
+                'data-mask-moeda': 'decimal4',
+                'data-mask-pct': 'pct4',
+                'placeholder': '0,0333'
+            }),
+            'percentual_desconto_padrao': forms.TextInput(attrs={
+                'data-mask': 'pct2',
+                'data-mask-switch': 'id_tipo_valor_desconto',
+                'data-mask-moeda': 'moeda',
+                'data-mask-pct': 'pct2',
+                'placeholder': '0,00'
+            }),
+            'desconto2_padrao': forms.TextInput(attrs={
+                'data-mask': 'pct2',
+                'data-mask-switch': 'id_tipo_valor_desconto2',
+                'data-mask-moeda': 'moeda',
+                'data-mask-pct': 'pct2',
+                'placeholder': '0,00'
+            }),
+            'desconto3_padrao': forms.TextInput(attrs={
+                'data-mask': 'pct2',
+                'data-mask-switch': 'id_tipo_valor_desconto3',
+                'data-mask-moeda': 'moeda',
+                'data-mask-pct': 'pct2',
+                'placeholder': '0,00'
+            }),
             'instrucao_padrao': forms.TextInput(attrs={'placeholder': 'Uma linha no espaço instrução ao caixa'}),
         }
 

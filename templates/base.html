@@ -56,8 +56,6 @@
         <li><a href="{% url 'core:listar_imoveis' %}"><i class="fas fa-home left"></i> Imóveis</a></li>
         <li><a href="{% url 'core:listar_compradores' %}"><i class="fas fa-user-tie left"></i> Compradores</a></li>
         <li><div class="divider"></div></li>
-        <li><a href="{% url 'core:roadmap' %}"><i class="fas fa-map-marked-alt left"></i> Roadmap</a></li>
-        <li><div class="divider"></div></li>
         <!-- Notificações -->
         <li><a class="subheader">Notificações</a></li>
         <li><a href="{% url 'notificacoes:listar' %}"><i class="fas fa-history left"></i> Histórico de Envios</a></li>
@@ -127,12 +125,6 @@
                     </a>
                 </li>
 
-                <!-- Roadmap -->
-                <li>
-                    <a href="{% url 'core:roadmap' %}">
-                        <i class="fas fa-map-marked-alt"></i> Roadmap
-                    </a>
-                </li>
 
                 <!-- Notificações dropdown -->
                 <li>
@@ -343,6 +335,8 @@
     <script src="{% static 'vendor/ag-grid/js/ag-grid-community.min.js' %}"></script>
     <!-- Custom JS -->
     <script src="{% static 'js/custom.js' %}"></script>
+    <!-- Máscaras de entrada numérica -->
+    <script src="{% static 'js/numeric-masks.js' %}"></script>
 
     <!-- Toast Container (keeping our custom system) -->
     <div id="globalToastContainer" style="
