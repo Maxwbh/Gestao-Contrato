@@ -183,6 +183,8 @@
     .sc-ghost { opacity: .35; }
     .sc-chosen { box-shadow: 0 0 0 2px #0d6efd66; border-radius: .375rem; }
     .sc-dragging { opacity: .9; }
+    /* sticky thead deve ficar abaixo do modal (modal z-index ~1050) */
+    .table-responsive thead.sticky-top { z-index: 1; }
 </style>
 {% endblock %}
 
@@ -1577,21 +1579,21 @@
                     <!-- Resumo de Parcelas -->
                     <div class="row mb-3">
                         <div class="col-md-4">
-                            <div class="text-center p-2 border rounded bg-success bg-opacity-10">
-                                <div class="fs-4 fw-bold text-success" id="totalDisponiveis">-</div>
-                                <small>Disponiveis</small>
+                            <div class="text-center p-2 border rounded" style="background: rgba(25,135,84,.12);">
+                                <div class="fs-4 fw-bold" style="color:#198754;" id="totalDisponiveis">-</div>
+                                <small class="text-muted">Disponiveis</small>
                             </div>
                         </div>
                         <div class="col-md-4">
-                            <div class="text-center p-2 border rounded bg-warning bg-opacity-10">
-                                <div class="fs-4 fw-bold text-warning" id="totalBloqueadas">-</div>
-                                <small>Bloqueadas (reajuste)</small>
+                            <div class="text-center p-2 border rounded" style="background: rgba(255,193,7,.15);">
+                                <div class="fs-4 fw-bold" style="color:#856404;" id="totalBloqueadas">-</div>
+                                <small class="text-muted">Bloqueadas (reajuste)</small>
                             </div>
                         </div>
                         <div class="col-md-4">
-                            <div class="text-center p-2 border rounded bg-info bg-opacity-10">
-                                <div class="fs-4 fw-bold text-info" id="totalJaGeradas">-</div>
-                                <small>Ja com boleto</small>
+                            <div class="text-center p-2 border rounded" style="background: rgba(13,110,253,.1);">
+                                <div class="fs-4 fw-bold" style="color:#0a58ca;" id="totalJaGeradas">-</div>
+                                <small class="text-muted">Ja com boleto</small>
                             </div>
                         </div>
                     </div>
@@ -2167,18 +2169,25 @@ function abrirModalCarne() {
 
 function carregarElegibilidade() {
     fetch('/financeiro/api/contrato/{{ contrato.pk }}/parcelas-elegibilidade/')
-    .then(response => response.json())
+    .then(response => {
+        if (!response.ok && response.status !== 500) {
+            throw new Error('HTTP ' + response.status);
+        }
+        return response.json();
+    })
     .then(data => {
         if (data.sucesso) {
             dadosElegibilidade = data;
             atualizarResumoElegibilidade();
             atualizarPreviewCarne();
         } else {
-            document.getElementById('preview_parcelas').innerHTML = '<div class="text-center py-3 text-danger"><i class="fas fa-exclamation-circle"></i> Erro ao carregar: ' + data.erro + '</div>';
+            document.getElementById('preview_parcelas').innerHTML =
+                '<div class="text-center py-3 text-danger"><i class="fas fa-exclamation-circle me-1"></i> Erro: ' + (data.erro || 'desconhecido') + '</div>';
         }
     })
     .catch(error => {
-        document.getElementById('preview_parcelas').innerHTML = '<div class="text-center py-3 text-danger"><i class="fas fa-exclamation-circle"></i> Erro de conexao</div>';
+        document.getElementById('preview_parcelas').innerHTML =
+            '<div class="text-center py-3 text-danger"><i class="fas fa-exclamation-circle me-1"></i> Falha ao carregar parcelas (' + error.message + ')</div>';
     });
 }
 
