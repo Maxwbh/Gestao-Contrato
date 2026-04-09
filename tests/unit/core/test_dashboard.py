@@ -69,13 +69,10 @@ class TestSetupView:
 
 @pytest.mark.django_db
 class TestRoadmapView:
-    """Testes da view roadmap"""
+    """Roadmap removido do sistema — apenas no repositório (ROADMAP.md)."""
 
-    def test_acesso_roadmap(self, client):
-        """Roadmap pode ser público ou protegido"""
-        response = client.get(reverse('core:roadmap'))
-        assert response.status_code in (200, 302, 403)
-
-    def test_retorna_200_autenticado(self, client_logado):
-        response = client_logado.get(reverse('core:roadmap'))
-        assert response.status_code == 200
+    def test_roadmap_nao_existe_no_sistema(self):
+        """Roadmap foi removido do sistema em 2026-04-08. Nenhuma URL exposta."""
+        from django.urls import reverse as _rev, NoReverseMatch
+        with pytest.raises(NoReverseMatch):
+            _rev('core:roadmap')
