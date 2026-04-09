@@ -2387,6 +2387,15 @@ def api_parcelas_elegibilidade(request, contrato_id):
 
     Retorna lista de parcelas com status de elegibilidade e informacoes do ciclo.
     """
+    try:
+     return _api_parcelas_elegibilidade_logic(request, contrato_id)
+    except Exception as exc:
+        import logging
+        logging.getLogger(__name__).exception('api_parcelas_elegibilidade erro contrato_id=%s', contrato_id)
+        return JsonResponse({'sucesso': False, 'erro': str(exc)}, status=500)
+
+
+def _api_parcelas_elegibilidade_logic(request, contrato_id):
     contrato = get_object_or_404(Contrato, pk=contrato_id)
 
     # Obter todas as parcelas nao pagas
