@@ -701,25 +701,18 @@ class Parcela(TimeStampedModel):
 
             self.save()
 
-            # Enviar email para o comprador em thread background para não bloquear o request.
-            # Falhas de SMTP (timeout, servidor inacessível) não afetam a resposta HTTP.
+            # Agendar notificação na fila do banco (Option B).
+            # Nenhum envio acontece aqui — o cron processar_fila_notificacoes despacha.
+            # Isso evita que timeouts de SMTP bloqueiem o request HTTP.
             if enviar_email:
-                import threading
-                parcela_pk = self.pk
-
-                def _enviar_email_bg(pk):
-                    try:
-                        from notificacoes.boleto_notificacao import BoletoNotificacaoService
-                        from financeiro.models import Parcela as _Parcela
-                        p = _Parcela.objects.get(pk=pk)
-                        BoletoNotificacaoService().notificar_boleto_criado(p)
-                    except Exception as exc:
-                        logger.exception(
-                            "Erro ao enviar email em background (parcela pk=%s): %s", pk, exc
-                        )
-
-                threading.Thread(target=_enviar_email_bg, args=(parcela_pk,), daemon=True).start()
-                resultado['email_enviado'] = 'pendente'
+                try:
+                    from notificacoes.boleto_notificacao import BoletoNotificacaoService
+                    agendado = BoletoNotificacaoService().agendar_notificacao_boleto_criado(self)
+                    resultado['email_enviado'] = 'agendado'
+                    resultado['notificacoes_agendadas'] = agendado.get('agendadas', [])
+                except Exception as exc:
+                    logger.exception("Erro ao agendar notificação boleto (parcela pk=%s): %s", self.pk, exc)
+                    resultado['email_enviado'] = 'erro_agendamento'
 
         return resultado
 

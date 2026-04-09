@@ -565,6 +565,118 @@ def atualizar_status_parcelas_sync():
     return result
 
 
+def _enviar_email_da_fila(notif):
+    """
+    Despacha uma Notificacao do tipo EMAIL.
+    Boleto (notif.parcela set) → EmailMultiAlternatives com HTML + PDF em anexo.
+    Demais → ServicoEmail plain-text.
+    """
+    from notificacoes.services import ServicoEmail
+    from django.core.mail import EmailMultiAlternatives
+    from django.conf import settings as _settings
+
+    mensagem = notif.mensagem
+    is_html = mensagem.strip().startswith('<')
+
+    if notif.parcela and is_html:
+        email_obj = EmailMultiAlternatives(
+            subject=notif.assunto,
+            body='',
+            from_email=_settings.DEFAULT_FROM_EMAIL,
+            to=[notif.destinatario],
+        )
+        email_obj.attach_alternative(mensagem, 'text/html')
+
+        # Tentar anexar PDF do boleto
+        parcela = notif.parcela
+        pdf_bytes = None
+        try:
+            if parcela.boleto_pdf and parcela.boleto_pdf.name:
+                from django.core.files.storage import default_storage
+                if default_storage.exists(parcela.boleto_pdf.name):
+                    pdf_bytes = parcela.boleto_pdf.read()
+        except Exception:
+            pass
+        if not pdf_bytes and getattr(parcela, 'boleto_pdf_db', None):
+            try:
+                pdf_bytes = bytes(parcela.boleto_pdf_db)
+            except Exception:
+                pass
+        if pdf_bytes:
+            contrato = parcela.contrato
+            nome = f"boleto_{contrato.numero_contrato}_{parcela.numero_parcela}.pdf"
+            email_obj.attach(nome, pdf_bytes, 'application/pdf')
+
+        email_obj.send()
+    else:
+        ServicoEmail.enviar(
+            destinatario=notif.destinatario,
+            assunto=notif.assunto,
+            mensagem=mensagem,
+        )
+
+
+def processar_fila_notificacoes():
+    """
+    Processa todas as Notificacao com status=PENDENTE (Option B — fila no banco).
+    Retry automático: mantém PENDENTE até MAX_TENTATIVAS, depois marca ERRO.
+    Deve ser chamado pelo cron (task_run_all) ou endpoint dedicado.
+    """
+    from notificacoes.models import Notificacao, TipoNotificacao, StatusNotificacao
+    from notificacoes.services import ServicoSMS, ServicoWhatsApp
+
+    MAX_TENTATIVAS = 3
+    result = TaskResult('processar_fila_notificacoes')
+
+    try:
+        pendentes = list(
+            Notificacao.objects.filter(status=StatusNotificacao.PENDENTE)
+            .order_by('data_agendamento')
+            .select_related('parcela', 'parcela__contrato')
+        )
+        result.add_message(f"{len(pendentes)} notificação(ões) PENDENTE(s) na fila")
+
+        for notif in pendentes:
+            try:
+                if notif.tipo == TipoNotificacao.EMAIL:
+                    _enviar_email_da_fila(notif)
+                elif notif.tipo == TipoNotificacao.SMS:
+                    ServicoSMS.enviar(destinatario=notif.destinatario, mensagem=notif.mensagem)
+                elif notif.tipo == TipoNotificacao.WHATSAPP:
+                    ServicoWhatsApp.enviar(destinatario=notif.destinatario, mensagem=notif.mensagem)
+                else:
+                    raise ValueError(f"Tipo de notificação desconhecido: {notif.tipo}")
+
+                notif.marcar_como_enviada()
+                result.items_processed += 1
+                result.add_message(
+                    f"  ✓ {notif.get_tipo_display()} → {notif.destinatario} (notif {notif.id})"
+                )
+
+            except Exception as e:
+                proximas_tentativas = notif.tentativas + 1
+                if proximas_tentativas >= MAX_TENTATIVAS:
+                    notif.marcar_erro(str(e))
+                    result.add_error(
+                        f"Notif {notif.id} falhou {proximas_tentativas}x (ERRO definitivo): {e}"
+                    )
+                else:
+                    notif.tentativas = proximas_tentativas
+                    notif.save(update_fields=['tentativas'])
+                    result.add_message(
+                        f"  ↺ Notif {notif.id} tentativa {proximas_tentativas}/{MAX_TENTATIVAS}: {e}"
+                    )
+
+        result.finish()
+
+    except Exception as e:
+        logger.exception("Erro geral em processar_fila_notificacoes: %s", e)
+        result.add_error(f"Erro geral: {str(e)}")
+        result.finish(success=False)
+
+    return result
+
+
 # =============================================================================
 # VIEWS PARA EXECUÇÃO DE TAREFAS VIA HTTP
 # =============================================================================
@@ -612,6 +724,16 @@ def task_atualizar_parcelas(request):
 @require_http_methods(["POST"])
 @task_api_rate_limit
 @task_auth_required
+def task_processar_fila(request):
+    """Endpoint para processar fila de notificações PENDENTE (Option B)."""
+    result = processar_fila_notificacoes()
+    status_code = 200 if result.success else 500
+    return JsonResponse(result.to_dict(), status=status_code)
+
+
+@require_http_methods(["POST"])
+@task_api_rate_limit
+@task_auth_required
 def task_run_all(request):
     """
     Executa todas as tarefas agendadas.
@@ -625,10 +747,13 @@ def task_run_all(request):
     # 2. Processar reajustes
     results.append(processar_reajustes_sync().to_dict())
 
-    # 3. Enviar notificações de vencimento (N-01)
+    # 3. Processar fila de notificações (boletos gerados, Option B)
+    results.append(processar_fila_notificacoes().to_dict())
+
+    # 4. Enviar notificações de vencimento (N-01)
     results.append(enviar_notificacoes_sync().to_dict())
 
-    # 4. Enviar notificações de inadimplência (N-02)
+    # 5. Enviar notificações de inadimplência (N-02)
     results.append(enviar_inadimplentes_sync().to_dict())
 
     all_success = all(r['success'] for r in results)
@@ -663,6 +788,11 @@ def task_status(request):
                 'name': 'atualizar_parcelas',
                 'endpoint': '/api/tasks/atualizar-parcelas/',
                 'description': 'Atualiza status de parcelas vencidas'
+            },
+            {
+                'name': 'processar_fila',
+                'endpoint': '/api/tasks/processar-fila/',
+                'description': 'Processa fila de notificações PENDENTE (boletos gerados, retry automático)'
             },
             {
                 'name': 'run_all',
