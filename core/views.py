@@ -21,7 +21,7 @@ from datetime import datetime, timedelta
 from .mixins import PaginacaoMixin
 from .models import (
     Contabilidade, Imobiliaria, Imovel, Comprador, TipoImovel,
-    ContaBancaria, BancoBrasil, LayoutCNAB, AcessoUsuario,
+    ContaBancaria, BancoBrasil, LayoutCNAB, AcessoUsuario, VerticePoligono,
     get_contabilidades_usuario, get_imobiliarias_usuario,
     usuario_tem_acesso_imobiliaria, usuario_tem_acesso_contabilidade,
     usuario_tem_permissao_total
@@ -940,9 +940,21 @@ class ImovelListView(LoginRequiredMixin, PaginacaoMixin, ListView):
         todos_mapa = ativos.filter(
             latitude__isnull=False,
             longitude__isnull=False
-        ).select_related('imobiliaria').order_by('loteamento', 'identificacao')
+        ).select_related('imobiliaria').prefetch_related('vertices').order_by('loteamento', 'identificacao')
         context['todos_imoveis_mapa'] = todos_mapa
         context['imoveis_com_coordenadas'] = todos_mapa.count()
+
+        # M-13: dados de polígonos serializados para o mapa
+        poligonos = {}
+        for im in todos_mapa:
+            verts = [
+                {'lat': float(v.latitude), 'lng': float(v.longitude)}
+                for v in im.vertices.all()
+            ]
+            if verts:
+                poligonos[im.pk] = verts
+        import json as _json
+        context['poligonos_json'] = _json.dumps(poligonos)
 
         # Lista de loteamentos distintos para o filtro do mapa
         context['loteamentos'] = (
@@ -1775,4 +1787,53 @@ def api_buscar_cnpj(request, cnpj):
             resultado or {'sucesso': False, 'erro': 'Erro ao buscar CNPJ'},
             status=status_code
         )
+
+
+# ==============================================================================
+# M-13: API de Polígonos de Lote
+# ==============================================================================
+
+@login_required
+@require_http_methods(['GET', 'POST'])
+def api_poligono_imovel(request, pk):
+    """
+    GET  → retorna lista de vértices [{ordem, lat, lng}]
+    POST → salva/substitui todos os vértices (JSON body: {vertices: [{lat, lng}, ...]})
+    """
+    imovel = get_object_or_404(Imovel, pk=pk)
+
+    if request.method == 'GET':
+        vertices = imovel.vertices.values('ordem', 'latitude', 'longitude')
+        data = [
+            {'ordem': v['ordem'], 'lat': float(v['latitude']), 'lng': float(v['longitude'])}
+            for v in vertices
+        ]
+        return JsonResponse({'imovel_id': pk, 'vertices': data})
+
+    # POST — substitui vértices
+    if not request.user.is_staff and not request.user.is_superuser:
+        return JsonResponse({'erro': 'Sem permissão para editar polígonos.'}, status=403)
+
+    try:
+        body = json.loads(request.body)
+        vertices = body.get('vertices', [])
+    except (json.JSONDecodeError, ValueError):
+        return JsonResponse({'erro': 'JSON inválido.'}, status=400)
+
+    if not isinstance(vertices, list):
+        return JsonResponse({'erro': 'Campo "vertices" deve ser uma lista.'}, status=400)
+
+    # Valida e salva
+    VerticePoligono.objects.filter(imovel=imovel).delete()
+    novos = []
+    for i, v in enumerate(vertices):
+        try:
+            lat = float(v['lat'])
+            lng = float(v['lng'])
+        except (KeyError, TypeError, ValueError):
+            return JsonResponse({'erro': f'Vértice {i} inválido — precisa de lat e lng numéricos.'}, status=400)
+        novos.append(VerticePoligono(imovel=imovel, ordem=i, latitude=lat, longitude=lng))
+
+    VerticePoligono.objects.bulk_create(novos)
+    return JsonResponse({'ok': True, 'salvos': len(novos)})
 
