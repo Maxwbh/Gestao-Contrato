@@ -1,0 +1,93 @@
+{#
+  Seletor de período reutilizável — components/period_selector.html
+
+  Parâmetros (via {% include ... with ... %}):
+    action       — URL do form         (padrão: "")
+    method       — GET ou POST         (padrão: "GET")
+    inicio_name  — nome campo início   (padrão: "data_inicio")
+    fim_name     — nome campo fim      (padrão: "data_fim")
+    inicio_val   — valor atual início  (padrão: "")
+    fim_val      — valor atual fim     (padrão: "")
+    btn_label    — texto do botão      (padrão: "Filtrar")
+    compact      — se "true" omite labels (padrão: false)
+
+  Exemplo:
+    {% include 'components/period_selector.html' with
+       action=request.path
+       inicio_val=data_inicio fim_val=data_fim %}
+#}
+<form method="{{ method|default:'GET' }}"
+      action="{{ action|default:'' }}"
+      class="row g-2 align-items-end period-selector">
+
+    {% if compact != "true" %}
+    <div class="col-sm-auto">
+        <label class="form-label form-label-sm mb-1 fw-semibold">
+            <i class="fas fa-calendar-alt me-1 text-muted"></i>De
+        </label>
+        <input type="text"
+               name="{{ inicio_name|default:'data_inicio' }}"
+               value="{{ inicio_val|default:'' }}"
+               class="form-control form-control-sm period-picker"
+               placeholder="dd/mm/aaaa"
+               autocomplete="off"
+               style="width:130px">
+    </div>
+    <div class="col-sm-auto">
+        <label class="form-label form-label-sm mb-1 fw-semibold">Até</label>
+        <input type="text"
+               name="{{ fim_name|default:'data_fim' }}"
+               value="{{ fim_val|default:'' }}"
+               class="form-control form-control-sm period-picker"
+               placeholder="dd/mm/aaaa"
+               autocomplete="off"
+               style="width:130px">
+    </div>
+    {% else %}
+    <div class="col-sm-auto">
+        <input type="text"
+               name="{{ inicio_name|default:'data_inicio' }}"
+               value="{{ inicio_val|default:'' }}"
+               class="form-control form-control-sm period-picker"
+               placeholder="De (dd/mm/aaaa)"
+               autocomplete="off"
+               style="width:140px">
+    </div>
+    <div class="col-sm-auto">
+        <input type="text"
+               name="{{ fim_name|default:'data_fim' }}"
+               value="{{ fim_val|default:'' }}"
+               class="form-control form-control-sm period-picker"
+               placeholder="Até (dd/mm/aaaa)"
+               autocomplete="off"
+               style="width:140px">
+    </div>
+    {% endif %}
+
+    <div class="col-sm-auto">
+        <button type="submit" class="btn btn-primary btn-sm">
+            <i class="fas fa-search me-1"></i>{{ btn_label|default:'Filtrar' }}
+        </button>
+        {% if inicio_val or fim_val %}
+        <a href="{{ action|default:'' }}" class="btn btn-outline-secondary btn-sm ms-1" title="Limpar período">
+            <i class="fas fa-times"></i>
+        </a>
+        {% endif %}
+    </div>
+</form>
+
+<script>
+(function() {
+    var els = document.querySelectorAll('.period-picker:not([data-period-init])');
+    els.forEach(function(el) {
+        el.setAttribute('data-period-init', '1');
+        if (window.flatpickr) {
+            flatpickr(el, {
+                dateFormat: 'd/m/Y',
+                locale: typeof flatpickr.l10ns !== 'undefined' && flatpickr.l10ns.pt ? 'pt' : 'default',
+                allowInput: true,
+            });
+        }
+    });
+})();
+</script>

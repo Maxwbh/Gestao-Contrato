@@ -175,7 +175,6 @@ class BoletoNotificacaoService:
             template = TemplateNotificacao.get_template(
                 codigo=tipo_template,
                 imobiliaria=imobiliaria,
-                tipo=TipoNotificacao.EMAIL
             )
 
             if not template:
@@ -187,7 +186,7 @@ class BoletoNotificacaoService:
 
             # Montar contexto e renderizar
             contexto = self.montar_contexto(parcela)
-            assunto, corpo_texto, corpo_html = template.renderizar(contexto)
+            assunto, corpo_texto, corpo_html, _ = template.renderizar(contexto)
 
             # Aplicar safeguard TEST_MODE
             destinatario_final = _destinatario_email_teste(comprador.email)
@@ -303,12 +302,11 @@ class BoletoNotificacaoService:
             template = TemplateNotificacao.get_template(
                 codigo=tipo_template,
                 imobiliaria=imobiliaria,
-                tipo=TipoNotificacao.SMS
             )
 
-            if template:
+            if template and template.tem_sms:
                 contexto = self.montar_contexto(parcela)
-                _, mensagem, _ = template.renderizar(contexto)
+                _, mensagem, _, _ = template.renderizar(contexto)
             else:
                 # Mensagem padrão quando não há template SMS configurado
                 mensagem = (
@@ -467,209 +465,120 @@ class BoletoNotificacaoService:
 
 def criar_templates_padrao():
     """
-    Cria os templates padrão de notificação de boletos.
-    Deve ser executado uma vez na configuração inicial.
+    Cria os templates padrão de notificação de boletos (modelo unificado por canal).
+    Cada registro contém conteúdo para Email (corpo_html), SMS (corpo) e WhatsApp (corpo_whatsapp).
     """
 
     templates = [
         {
             'codigo': TipoTemplate.BOLETO_CRIADO,
             'nome': 'Boleto Gerado',
-            'tipo': TipoNotificacao.EMAIL,
             'assunto': 'Boleto Gerado - Parcela %%PARCELA%% - %%NOMEIMOBILIARIA%%',
-            'corpo': """Prezado(a) %%NOMECOMPRADOR%%,
-
-Informamos que o boleto referente à parcela %%PARCELA%% do seu contrato foi gerado.
-
-DADOS DO BOLETO:
-- Contrato: %%NUMEROCONTRATO%%
-- Imóvel: %%IMOVEL%% - %%LOTEAMENTO%%
-- Parcela: %%PARCELA%%
-- Valor: %%VALORBOLETO%%
-- Vencimento: %%DATAVENCIMENTO%%
-
-LINHA DIGITÁVEL:
-%%LINHADIGITAVEL%%
-
-O boleto segue em anexo para sua comodidade.
-
-Atenciosamente,
-%%NOMEIMOBILIARIA%%
-%%TELEFONEIMOBILIARIA%%
-%%EMAILIMOBILIARIA%%
-""",
-            'corpo_html': """
-<html>
+            'corpo': (
+                '%%NOMEIMOBILIARIA%%: Ola %%NOMECOMPRADOR%%, '
+                'boleto parcela %%PARCELA%% '
+                'R$%%VALORBOLETO%% vence %%DATAVENCIMENTO%%.'
+            ),
+            'corpo_html': """<html>
 <body style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-    <div style="background-color: #2c3e50; color: white; padding: 20px; text-align: center;">
-        <h1 style="margin: 0;">Boleto Gerado</h1>
+  <div style="background:#2c3e50;color:#fff;padding:20px;text-align:center;">
+    <h1 style="margin:0;">Boleto Gerado</h1>
+  </div>
+  <div style="padding:20px;">
+    <p>Prezado(a) <strong>%%NOMECOMPRADOR%%</strong>,</p>
+    <p>O boleto referente à parcela <strong>%%PARCELA%%</strong> do seu contrato foi gerado.</p>
+    <div style="background:#f8f9fa;padding:15px;border-radius:5px;margin:20px 0;">
+      <h3 style="margin-top:0;color:#2c3e50;">Dados do Boleto</h3>
+      <table style="width:100%;">
+        <tr><td><strong>Contrato:</strong></td><td>%%NUMEROCONTRATO%%</td></tr>
+        <tr><td><strong>Imóvel:</strong></td><td>%%IMOVEL%% - %%LOTEAMENTO%%</td></tr>
+        <tr><td><strong>Parcela:</strong></td><td>%%PARCELA%%</td></tr>
+        <tr><td><strong>Valor:</strong></td><td style="font-size:18px;color:#27ae60;"><strong>%%VALORBOLETO%%</strong></td></tr>
+        <tr><td><strong>Vencimento:</strong></td><td>%%DATAVENCIMENTO%%</td></tr>
+      </table>
     </div>
-
-    <div style="padding: 20px;">
-        <p>Prezado(a) <strong>%%NOMECOMPRADOR%%</strong>,</p>
-
-        <p>Informamos que o boleto referente à parcela <strong>%%PARCELA%%</strong> do seu contrato foi gerado.</p>
-
-        <div style="background-color: #f8f9fa; padding: 15px; border-radius: 5px; margin: 20px 0;">
-            <h3 style="margin-top: 0; color: #2c3e50;">Dados do Boleto</h3>
-            <table style="width: 100%;">
-                <tr><td><strong>Contrato:</strong></td><td>%%NUMEROCONTRATO%%</td></tr>
-                <tr><td><strong>Imóvel:</strong></td><td>%%IMOVEL%% - %%LOTEAMENTO%%</td></tr>
-                <tr><td><strong>Parcela:</strong></td><td>%%PARCELA%%</td></tr>
-                <tr><td><strong>Valor:</strong></td><td style="font-size: 18px; color: #27ae60;"><strong>%%VALORBOLETO%%</strong></td></tr>
-                <tr><td><strong>Vencimento:</strong></td><td>%%DATAVENCIMENTO%%</td></tr>
-            </table>
-        </div>
-
-        <div style="background-color: #e8f4f8; padding: 15px; border-radius: 5px; margin: 20px 0;">
-            <h4 style="margin-top: 0;">Linha Digitável:</h4>
-            <code style="font-size: 14px; word-break: break-all;">%%LINHADIGITAVEL%%</code>
-        </div>
-
-        <p style="color: #666;">O boleto segue em anexo para sua comodidade.</p>
+    <div style="background:#e8f4f8;padding:15px;border-radius:5px;margin:20px 0;">
+      <h4 style="margin-top:0;">Linha Digitável:</h4>
+      <code style="font-size:14px;word-break:break-all;">%%LINHADIGITAVEL%%</code>
     </div>
-
-    <div style="background-color: #f1f1f1; padding: 15px; text-align: center; font-size: 12px; color: #666;">
-        <p style="margin: 0;"><strong>%%NOMEIMOBILIARIA%%</strong></p>
-        <p style="margin: 5px 0;">%%TELEFONEIMOBILIARIA%% | %%EMAILIMOBILIARIA%%</p>
-    </div>
+    <p style="color:#666;">O boleto segue em anexo para sua comodidade.</p>
+  </div>
+  <div style="background:#f1f1f1;padding:15px;text-align:center;font-size:12px;color:#666;">
+    <p style="margin:0;"><strong>%%NOMEIMOBILIARIA%%</strong></p>
+    <p style="margin:5px 0;">%%TELEFONEIMOBILIARIA%% | %%EMAILIMOBILIARIA%%</p>
+  </div>
 </body>
-</html>
-"""
+</html>""",
+            'corpo_whatsapp': (
+                '*%%NOMEIMOBILIARIA%%* — Boleto gerado!\n\n'
+                'Olá %%NOMECOMPRADOR%%,\n'
+                'Parcela: %%PARCELA%%\n'
+                'Valor: %%VALORBOLETO%%\n'
+                'Vencimento: %%DATAVENCIMENTO%%\n\n'
+                'Linha digitável:\n%%LINHADIGITAVEL%%\n\n'
+                'Download: %%LINKBOLETO%%'
+            ),
         },
         {
             'codigo': TipoTemplate.BOLETO_5_DIAS,
             'nome': 'Lembrete - 5 dias para vencimento',
-            'tipo': TipoNotificacao.EMAIL,
             'assunto': 'Lembrete: Seu boleto vence em 5 dias - Parcela %%PARCELA%%',
-            'corpo': """Prezado(a) %%NOMECOMPRADOR%%,
-
-Este é um lembrete amigável: seu boleto vence em 5 dias!
-
-DADOS DO BOLETO:
-- Contrato: %%NUMEROCONTRATO%%
-- Parcela: %%PARCELA%%
-- Valor: %%VALORBOLETO%%
-- Vencimento: %%DATAVENCIMENTO%%
-
-LINHA DIGITÁVEL:
-%%LINHADIGITAVEL%%
-
-Evite multas e juros pagando até a data de vencimento.
-
-O boleto segue em anexo.
-
-Atenciosamente,
-%%NOMEIMOBILIARIA%%
-%%TELEFONEIMOBILIARIA%%
-""",
-            'corpo_html': ''
+            'corpo': (
+                '%%NOMEIMOBILIARIA%%: Lembrete %%NOMECOMPRADOR%%, '
+                'boleto parcela %%PARCELA%% vence em 5 dias '
+                'valor %%VALORBOLETO%% data %%DATAVENCIMENTO%%.'
+            ),
+            'corpo_html': '',
+            'corpo_whatsapp': (
+                '*%%NOMEIMOBILIARIA%%* — Lembrete de vencimento\n\n'
+                'Olá %%NOMECOMPRADOR%%,\n'
+                'Seu boleto vence em *5 dias*!\n\n'
+                'Parcela: %%PARCELA%%\n'
+                'Valor: %%VALORBOLETO%%\n'
+                'Vencimento: %%DATAVENCIMENTO%%\n\n'
+                'Evite multas pagando até a data de vencimento.\n'
+                'Download: %%LINKBOLETO%%'
+            ),
         },
         {
             'codigo': TipoTemplate.BOLETO_VENCE_AMANHA,
             'nome': 'Urgente - Boleto vence amanhã',
-            'tipo': TipoNotificacao.EMAIL,
             'assunto': 'URGENTE: Seu boleto vence AMANHÃ - Parcela %%PARCELA%%',
-            'corpo': """Prezado(a) %%NOMECOMPRADOR%%,
-
-ATENÇÃO: Seu boleto vence AMANHÃ!
-
-DADOS DO BOLETO:
-- Contrato: %%NUMEROCONTRATO%%
-- Parcela: %%PARCELA%%
-- Valor: %%VALORBOLETO%%
-- Vencimento: %%DATAVENCIMENTO%%
-
-LINHA DIGITÁVEL:
-%%LINHADIGITAVEL%%
-
-Pague hoje para evitar multas e juros!
-
-O boleto segue em anexo.
-
-Atenciosamente,
-%%NOMEIMOBILIARIA%%
-%%TELEFONEIMOBILIARIA%%
-""",
-            'corpo_html': ''
+            'corpo': (
+                '%%NOMEIMOBILIARIA%%: ATENCAO %%NOMECOMPRADOR%%, '
+                'boleto parcela %%PARCELA%% vence AMANHA '
+                'valor %%VALORBOLETO%%.'
+            ),
+            'corpo_html': '',
+            'corpo_whatsapp': (
+                '*%%NOMEIMOBILIARIA%%* — ATENÇÃO!\n\n'
+                'Olá %%NOMECOMPRADOR%%,\n'
+                'Seu boleto vence *AMANHÃ*!\n\n'
+                'Parcela: %%PARCELA%%\n'
+                'Valor: %%VALORBOLETO%%\n'
+                'Vencimento: %%DATAVENCIMENTO%%\n\n'
+                'Pague hoje para evitar multas e juros!\n'
+                'Download: %%LINKBOLETO%%'
+            ),
         },
         {
             'codigo': TipoTemplate.BOLETO_VENCEU_ONTEM,
             'nome': 'Aviso - Boleto vencido',
-            'tipo': TipoNotificacao.EMAIL,
             'assunto': 'AVISO: Boleto vencido - Parcela %%PARCELA%%',
-            'corpo': """Prezado(a) %%NOMECOMPRADOR%%,
-
-Identificamos que o boleto da parcela %%PARCELA%% venceu ontem.
-
-DADOS DO BOLETO:
-- Contrato: %%NUMEROCONTRATO%%
-- Parcela: %%PARCELA%%
-- Valor original: %%VALORBOLETO%%
-- Vencimento: %%DATAVENCIMENTO%%
-
-A partir de hoje, poderão incidir multa e juros conforme contrato.
-
-Entre em contato conosco para regularização ou emissão de nova via.
-
-Atenciosamente,
-%%NOMEIMOBILIARIA%%
-%%TELEFONEIMOBILIARIA%%
-%%EMAILIMOBILIARIA%%
-""",
-            'corpo_html': ''
-        },
-        # ── Templates SMS ──────────────────────────────────────────────────
-        {
-            'codigo': TipoTemplate.BOLETO_CRIADO,
-            'nome': 'SMS - Boleto Gerado',
-            'tipo': TipoNotificacao.SMS,
-            'assunto': 'SMS Boleto Gerado',
             'corpo': (
-                '%%NOMEIMOBILIARIA%%: Olá %%NOMECOMPRADOR%%, '
-                'seu boleto parcela %%PARCELA%% '
-                'valor %%VALORBOLETO%% vence %%DATAVENCIMENTO%%. '
-                'Linha: %%LINHADIGITAVEL%%'
-            ),
-            'corpo_html': ''
-        },
-        {
-            'codigo': TipoTemplate.BOLETO_VENCE_AMANHA,
-            'nome': 'SMS - Boleto vence amanhã',
-            'tipo': TipoNotificacao.SMS,
-            'assunto': 'SMS Boleto vence amanhã',
-            'corpo': (
-                '%%NOMEIMOBILIARIA%%: ATENÇÃO %%NOMECOMPRADOR%%, '
-                'seu boleto parcela %%PARCELA%% vence AMANHÃ '
-                'valor %%VALORBOLETO%%. '
-                'Linha: %%LINHADIGITAVEL%%'
-            ),
-            'corpo_html': ''
-        },
-        {
-            'codigo': TipoTemplate.BOLETO_5_DIAS,
-            'nome': 'SMS - Lembrete 5 dias para vencimento',
-            'tipo': TipoNotificacao.SMS,
-            'assunto': 'SMS Boleto vence em 5 dias',
-            'corpo': (
-                '%%NOMEIMOBILIARIA%%: Lembrete %%NOMECOMPRADOR%%, '
-                'seu boleto parcela %%PARCELA%% vence em 5 dias '
-                'valor %%VALORBOLETO%% data %%DATAVENCIMENTO%%. '
-                'Linha: %%LINHADIGITAVEL%%'
-            ),
-            'corpo_html': ''
-        },
-        {
-            'codigo': TipoTemplate.BOLETO_VENCEU_ONTEM,
-            'nome': 'SMS - Boleto vencido',
-            'tipo': TipoNotificacao.SMS,
-            'assunto': 'SMS Boleto vencido',
-            'corpo': (
-                '%%NOMEIMOBILIARIA%%: Olá %%NOMECOMPRADOR%%, '
+                '%%NOMEIMOBILIARIA%%: Ola %%NOMECOMPRADOR%%, '
                 'boleto parcela %%PARCELA%% venceu em %%DATAVENCIMENTO%%. '
-                'Entre em contato: %%TELEFONEIMOBILIARIA%%'
+                'Contato: %%TELEFONEIMOBILIARIA%%'
             ),
-            'corpo_html': ''
+            'corpo_html': '',
+            'corpo_whatsapp': (
+                '*%%NOMEIMOBILIARIA%%* — Boleto vencido\n\n'
+                'Olá %%NOMECOMPRADOR%%,\n'
+                'O boleto da parcela %%PARCELA%% venceu em %%DATAVENCIMENTO%%.\n\n'
+                'Poderão incidir multa e juros conforme contrato.\n'
+                'Entre em contato para regularização:\n'
+                '%%TELEFONEIMOBILIARIA%% | %%EMAILIMOBILIARIA%%'
+            ),
         },
     ]
 
@@ -678,13 +587,13 @@ Atenciosamente,
         template, criado = TemplateNotificacao.objects.get_or_create(
             codigo=data['codigo'],
             imobiliaria=None,
-            tipo=data['tipo'],
             defaults={
                 'nome': data['nome'],
                 'assunto': data['assunto'],
                 'corpo': data['corpo'],
                 'corpo_html': data.get('corpo_html', ''),
-                'ativo': True
+                'corpo_whatsapp': data.get('corpo_whatsapp', ''),
+                'ativo': True,
             }
         )
         if criado:
