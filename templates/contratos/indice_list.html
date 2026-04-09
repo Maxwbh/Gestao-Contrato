@@ -305,6 +305,7 @@
         pk: {{ indice.pk }},
         tipo_indice: "{{ indice.tipo_indice|escapejs }}",
         periodo: "{{ indice.mes_nome|escapejs }}/{{ indice.ano }}",
+        periodo_sort: {{ indice.ano }} * 100 + {{ indice.mes }},
         ano: {{ indice.ano }},
         valor: parseFloat("{{ indice.valor|floatformat:4 }}") || 0,
         valor_acum_ano: {% if indice.valor_acumulado_ano %}parseFloat("{{ indice.valor_acumulado_ano|floatformat:4 }}") || 0{% else %}null{% endif %},
@@ -342,10 +343,10 @@
             headerName: 'Período',
             field: 'periodo',
             filter: 'agTextColumnFilter',
-           
             minWidth: 110,
             cellRenderer: params => `<strong>${params.value}</strong>`,
             sort: 'desc',
+            comparator: (a, b, nodeA, nodeB) => nodeA.data.periodo_sort - nodeB.data.periodo_sort,
         },
         {
             headerName: 'Valor (%)',
