@@ -5,7 +5,7 @@ Desenvolvedor: Maxwell da Silva Oliveira
 Email: maxwbh@gmail.com
 """
 from django.contrib import admin
-from .models import Contabilidade, Imobiliaria, Imovel, Comprador, PlantaBaixaLoteamento
+from .models import Contabilidade, Imobiliaria, Imovel, Comprador
 
 
 @admin.register(Contabilidade)
@@ -81,29 +81,6 @@ class ImovelAdmin(admin.ModelAdmin):
         }),
         ('Status', {
             'fields': ('disponivel', 'ativo', 'criado_em', 'atualizado_em')
-        }),
-    )
-
-
-@admin.register(PlantaBaixaLoteamento)
-class PlantaBaixaLoteamentoAdmin(admin.ModelAdmin):
-    list_display = ['loteamento', 'imobiliaria', 'ativo', 'opacidade', 'atualizado_em']
-    list_filter = ['ativo', 'imobiliaria']
-    search_fields = ['loteamento', 'imobiliaria__nome']
-    readonly_fields = ['atualizado_em', 'imagem_content_type']
-    fieldsets = (
-        ('Identificação', {
-            'fields': ('imobiliaria', 'loteamento')
-        }),
-        ('Imagem', {
-            'fields': ('imagem', 'imagem_content_type')
-        }),
-        ('Limites Geográficos', {
-            'fields': ('lat_sw', 'lng_sw', 'lat_ne', 'lng_ne'),
-            'description': 'Coordenadas do canto sudoeste (SW) e nordeste (NE) da imagem.'
-        }),
-        ('Configuração', {
-            'fields': ('opacidade', 'ativo', 'atualizado_em')
         }),
     )
 

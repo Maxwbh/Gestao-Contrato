@@ -102,10 +102,9 @@ class TestServicoSMSEnvio:
         with pytest.raises((ValueError, Exception)):
             ServicoSMS.enviar('+5531999999999', 'Mensagem teste')
 
-    def test_enviar_sms_mensagem_longa_trial(self, mock_twilio_sms, settings):
-        """SMS com mensagem longa é truncado para 212 chars em conta trial (250 - 38 prefixo)."""
+    def test_enviar_sms_mensagem_longa(self, mock_twilio_sms, settings):
+        """SMS com mensagem de 160+ caracteres ainda é enviado"""
         settings.TEST_MODE = False
-        settings.TWILIO_TRIAL_MODE = True
         settings.TWILIO_ACCOUNT_SID = 'ACtest000000000000000000000000000000'
         settings.TWILIO_AUTH_TOKEN = 'test_auth_token_000000000000000000'
         settings.TWILIO_PHONE_NUMBER = '+16067334990'
@@ -115,42 +114,7 @@ class TestServicoSMSEnvio:
 
         assert resultado is True
         call_kwargs = mock_twilio_sms.messages.create.call_args
-        corpo = call_kwargs.kwargs['body']
-        # trial prefix (38) + corpo <= 250
-        assert len(corpo) <= 212
-        assert corpo.endswith('...')
-
-    def test_enviar_sms_mensagem_longa_producao(self, mock_twilio_sms, settings):
-        """SMS com mensagem longa é truncado a 250 chars em conta produção (sem prefixo trial)."""
-        settings.TEST_MODE = False
-        settings.TWILIO_TRIAL_MODE = False
-        settings.TWILIO_ACCOUNT_SID = 'ACtest000000000000000000000000000000'
-        settings.TWILIO_AUTH_TOKEN = 'test_auth_token_000000000000000000'
-        settings.TWILIO_PHONE_NUMBER = '+16067334990'
-
-        mensagem_longa = 'B' * 300
-        resultado = ServicoSMS.enviar('+5531999999999', mensagem_longa)
-
-        assert resultado is True
-        call_kwargs = mock_twilio_sms.messages.create.call_args
-        corpo = call_kwargs.kwargs['body']
-        assert len(corpo) <= 250
-        assert corpo.endswith('...')
-
-    def test_enviar_sms_mensagem_curta_nao_trunca(self, mock_twilio_sms, settings):
-        """Mensagem dentro do limite não é truncada."""
-        settings.TEST_MODE = False
-        settings.TWILIO_TRIAL_MODE = True
-        settings.TWILIO_ACCOUNT_SID = 'ACtest000000000000000000000000000000'
-        settings.TWILIO_AUTH_TOKEN = 'test_auth_token_000000000000000000'
-        settings.TWILIO_PHONE_NUMBER = '+16067334990'
-
-        mensagem = 'Olá comprador, seu boleto vence amanhã.'
-        resultado = ServicoSMS.enviar('+5531999999999', mensagem)
-
-        assert resultado is True
-        call_kwargs = mock_twilio_sms.messages.create.call_args
-        assert call_kwargs.kwargs['body'] == mensagem
+        assert len(call_kwargs.kwargs['body']) == 300
 
 
 # =============================================================================

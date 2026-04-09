@@ -57,11 +57,6 @@ urlpatterns = [
     # M-13: Polígonos de lote
     path('imoveis/<int:pk>/poligono/', views.api_poligono_imovel, name='api_poligono_imovel'),
 
-    # M-14: Planta Baixa de Loteamento
-    path('api/planta-baixa/', views.api_planta_baixa_loteamento, name='api_planta_baixa'),
-    path('api/planta-baixa/upload/', views.upload_planta_baixa, name='upload_planta_baixa'),
-    path('api/planta-baixa/<int:pk>/imagem/', views.servir_planta_baixa, name='servir_planta_baixa'),
-
     # CRUD Imobiliária
     path('imobiliarias/', views.ImobiliariaListView.as_view(), name='listar_imobiliarias'),
     path('imobiliarias/novo/', views.ImobiliariaCreateView.as_view(), name='criar_imobiliaria'),

@@ -103,23 +103,8 @@
         {% if imoveis_mapa %}
         <div class="col-lg-6">
             <div class="card shadow-sm h-100">
-                <div class="card-header bg-white fw-semibold d-flex justify-content-between align-items-center">
-                    <span><i class="fas fa-map me-2 text-primary"></i>Mapa do Empreendimento</span>
-                    <div class="d-flex gap-2 align-items-center">
-                        {% if planta_baixa %}
-                        <button id="btnTogglePlanta" class="btn btn-sm btn-outline-info" onclick="togglePlantaBaixa()" title="Mostrar/ocultar planta baixa">
-                            <i class="fas fa-layer-group me-1"></i> Planta
-                        </button>
-                        <input type="range" id="sliderOpacidade" class="form-range" style="width:80px;"
-                               min="0.1" max="1" step="0.05" value="{{ planta_baixa.opacidade }}"
-                               oninput="ajustarOpacidade(this.value)" title="Opacidade da planta baixa">
-                        {% endif %}
-                        {% if request.user.is_staff %}
-                        <button class="btn btn-sm btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#modalPlantaBaixa" title="Configurar planta baixa">
-                            <i class="fas fa-upload"></i>
-                        </button>
-                        {% endif %}
-                    </div>
+                <div class="card-header bg-white fw-semibold">
+                    <i class="fas fa-map me-2 text-primary"></i>Mapa do Empreendimento
                 </div>
                 <div class="card-body p-2">
                     <div id="mapa-loteamento"></div>
@@ -196,74 +181,6 @@
     </div>
 
 </div>
-
-{% if request.user.is_staff %}
-<!-- Modal: Configurar Planta Baixa -->
-<div class="modal fade" id="modalPlantaBaixa" tabindex="-1">
-    <div class="modal-dialog">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title"><i class="fas fa-layer-group me-2"></i>Planta Baixa do Loteamento</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-            </div>
-            <div class="modal-body">
-                <p class="text-muted small">Faça upload de uma planta baixa ou imagem aérea e defina os limites geográficos para exibição como overlay no mapa.</p>
-                <form id="formPlantaBaixa" enctype="multipart/form-data">
-                    {% csrf_token %}
-                    <div class="mb-3">
-                        <label class="form-label fw-semibold">Imagem (PNG, JPG, GIF)</label>
-                        <input type="file" class="form-control" id="plantaImagem" name="imagem" accept="image/*">
-                        {% if planta_baixa %}<div class="form-text text-success"><i class="fas fa-check me-1"></i>Imagem já configurada. Selecione um novo arquivo para substituir.</div>{% endif %}
-                    </div>
-                    <div class="row g-2 mb-3">
-                        <div class="col-12"><label class="form-label fw-semibold">Limites geográficos</label></div>
-                        <div class="col-6">
-                            <label class="form-label small">Latitude SW (sul)</label>
-                            <input type="number" class="form-control form-control-sm" id="plantaLatSW" name="lat_sw" step="0.0000001"
-                                   value="{{ planta_baixa.lat_sw|default:'' }}" placeholder="-19.7500000" required>
-                        </div>
-                        <div class="col-6">
-                            <label class="form-label small">Longitude SW (oeste)</label>
-                            <input type="number" class="form-control form-control-sm" id="plantaLngSW" name="lng_sw" step="0.0000001"
-                                   value="{{ planta_baixa.lng_sw|default:'' }}" placeholder="-44.2500000" required>
-                        </div>
-                        <div class="col-6">
-                            <label class="form-label small">Latitude NE (norte)</label>
-                            <input type="number" class="form-control form-control-sm" id="plantaLatNE" name="lat_ne" step="0.0000001"
-                                   value="{{ planta_baixa.lat_ne|default:'' }}" placeholder="-19.7400000" required>
-                        </div>
-                        <div class="col-6">
-                            <label class="form-label small">Longitude NE (leste)</label>
-                            <input type="number" class="form-control form-control-sm" id="plantaLngNE" name="lng_ne" step="0.0000001"
-                                   value="{{ planta_baixa.lng_ne|default:'' }}" placeholder="-44.2400000" required>
-                        </div>
-                        <div class="col-12">
-                            <button type="button" class="btn btn-sm btn-outline-info w-100" onclick="capturarBoundsDoMapa()">
-                                <i class="fas fa-crosshairs me-1"></i> Usar bounds visíveis do mapa
-                            </button>
-                        </div>
-                    </div>
-                    <div class="mb-3">
-                        <label class="form-label fw-semibold">Opacidade: <span id="plantaOpacidadeVal">{{ planta_baixa.opacidade|default:'0.7' }}</span></label>
-                        <input type="range" class="form-range" id="plantaOpacidade" name="opacidade"
-                               min="0.1" max="1" step="0.05"
-                               value="{{ planta_baixa.opacidade|default:'0.7' }}"
-                               oninput="document.getElementById('plantaOpacidadeVal').textContent=this.value">
-                    </div>
-                    <div id="plantaResultado" class="d-none"></div>
-                </form>
-            </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Fechar</button>
-                <button type="button" class="btn btn-primary" onclick="salvarPlantaBaixa()">
-                    <i class="fas fa-save me-1"></i> Salvar
-                </button>
-            </div>
-        </div>
-    </div>
-</div>
-{% endif %}
-
 {% endblock %}
 
 {% block extra_js %}
@@ -271,13 +188,8 @@
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
 <script>
-// Variáveis globais do mapa (acessíveis pelos handlers onclick)
-var map = null;
-var plantaBaixa = null;
-var plantaBaixaVisible = true;
-
 (function() {
-    map = L.map('mapa-loteamento');
+    var map = L.map('mapa-loteamento');
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
         attribution: '© OpenStreetMap contributors', maxZoom: 19
     }).addTo(map);
@@ -324,115 +236,7 @@ var plantaBaixaVisible = true;
     if (bounds.length) {
         map.fitBounds(bounds, {padding: [30, 30], maxZoom: 17});
     }
-
-    {% if planta_baixa %}
-    // M-14: Carregar planta baixa como overlay no mapa
-    var pbUrl = '{% url "core:servir_planta_baixa" planta_baixa.pk %}';
-    var pbBounds = [
-        [{{ planta_baixa.lat_sw }}, {{ planta_baixa.lng_sw }}],
-        [{{ planta_baixa.lat_ne }}, {{ planta_baixa.lng_ne }}]
-    ];
-    plantaBaixa = L.imageOverlay(pbUrl, pbBounds, {opacity: {{ planta_baixa.opacidade }}}).addTo(map);
-    {% endif %}
 })();
-
-// M-14: Alternar visibilidade da planta baixa
-function togglePlantaBaixa() {
-    if (!plantaBaixa) return;
-    var btn = document.getElementById('btnTogglePlanta');
-    if (plantaBaixaVisible) {
-        plantaBaixa.setOpacity(0);
-        plantaBaixaVisible = false;
-        if (btn) { btn.classList.remove('btn-outline-info'); btn.classList.add('btn-secondary'); }
-    } else {
-        var slider = document.getElementById('sliderOpacidade');
-        var op = slider ? parseFloat(slider.value) : 0.7;
-        plantaBaixa.setOpacity(op);
-        plantaBaixaVisible = true;
-        if (btn) { btn.classList.remove('btn-secondary'); btn.classList.add('btn-outline-info'); }
-    }
-}
-
-// M-14: Ajustar opacidade via slider
-function ajustarOpacidade(val) {
-    if (!plantaBaixa) return;
-    var op = parseFloat(val);
-    plantaBaixa.setOpacity(op);
-    if (op > 0) plantaBaixaVisible = true;
-}
-
-// M-14: Preencher coordenadas com bounds visíveis do mapa
-function capturarBoundsDoMapa() {
-    if (!map) return;
-    var b = map.getBounds();
-    document.getElementById('plantaLatSW').value = b.getSouth().toFixed(7);
-    document.getElementById('plantaLngSW').value = b.getWest().toFixed(7);
-    document.getElementById('plantaLatNE').value = b.getNorth().toFixed(7);
-    document.getElementById('plantaLngNE').value = b.getEast().toFixed(7);
-}
-
-// M-14: Salvar planta baixa via POST
-function salvarPlantaBaixa() {
-    var form = document.getElementById('formPlantaBaixa');
-    var resultado = document.getElementById('plantaResultado');
-    var modalContent = form.closest('.modal-content');
-    var btn = modalContent ? modalContent.querySelector('.modal-footer .btn-primary') : null;
-
-    {% if not planta_baixa %}
-    if (!document.getElementById('plantaImagem').files.length) {
-        resultado.className = 'alert alert-warning';
-        resultado.textContent = 'Selecione uma imagem para enviar.';
-        return;
-    }
-    {% endif %}
-
-    var fd = new FormData(form);
-    fd.append('loteamento', '{{ nome_loteamento|escapejs }}');
-    fd.append('imobiliaria', '{{ imobiliaria.pk }}');
-
-    if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i> Salvando…'; }
-    resultado.className = 'd-none';
-    resultado.textContent = '';
-
-    fetch('{% url "core:upload_planta_baixa" %}', {
-        method: 'POST',
-        body: fd,
-        headers: {'X-Requested-With': 'XMLHttpRequest'}
-    })
-    .then(function(r) { return r.json(); })
-    .then(function(data) {
-        if (data.sucesso) {
-            resultado.className = 'alert alert-success';
-            resultado.innerHTML = '<i class="fas fa-check me-1"></i>' + (data.mensagem || 'Planta baixa salva!');
-            // Recriar overlay com novos dados
-            var novoUrl = data.url;
-            var novoBounds = [
-                [parseFloat(document.getElementById('plantaLatSW').value), parseFloat(document.getElementById('plantaLngSW').value)],
-                [parseFloat(document.getElementById('plantaLatNE').value), parseFloat(document.getElementById('plantaLngNE').value)]
-            ];
-            var novaOpacidade = parseFloat(document.getElementById('plantaOpacidade').value);
-            if (plantaBaixa && map) { map.removeLayer(plantaBaixa); }
-            if (novoUrl && map) {
-                plantaBaixa = L.imageOverlay(novoUrl, novoBounds, {opacity: novaOpacidade}).addTo(map);
-                plantaBaixaVisible = true;
-            }
-            // Se era o primeiro upload, recarregar para mostrar controles
-            if (!document.getElementById('btnTogglePlanta')) {
-                setTimeout(function() { location.reload(); }, 1500);
-            }
-        } else {
-            resultado.className = 'alert alert-danger';
-            resultado.textContent = data.erro || 'Erro ao salvar a planta baixa.';
-        }
-    })
-    .catch(function(e) {
-        resultado.className = 'alert alert-danger';
-        resultado.textContent = 'Erro de conexão: ' + e.message;
-    })
-    .finally(function() {
-        if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-save me-1"></i> Salvar'; }
-    });
-}
 </script>
 {% endif %}
 {% endblock %}

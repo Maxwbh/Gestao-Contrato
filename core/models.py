@@ -771,65 +771,6 @@ class Imovel(TimeStampedModel):
         return ' '.join(partes) if partes else self.endereco
 
 
-class PlantaBaixaLoteamento(models.Model):
-    """
-    Planta baixa (imagem de satélite ou planta do empreendimento) usada como
-    overlay no mapa Leaflet. Identificada por (imobiliaria, loteamento).
-    A imagem é persistida no banco de dados (imagem_db) para compatibilidade
-    com deploys de storage efêmero (Render free tier).
-    """
-    imobiliaria = models.ForeignKey(
-        'Imobiliaria',
-        on_delete=models.CASCADE,
-        related_name='plantas_baixas',
-        verbose_name='Imobiliária'
-    )
-    loteamento = models.CharField(
-        max_length=200,
-        verbose_name='Loteamento/Empreendimento',
-        help_text='Deve corresponder exatamente ao campo Loteamento dos imóveis.'
-    )
-    imagem = models.ImageField(
-        upload_to='plantas_baixas/',
-        null=True,
-        blank=True,
-        verbose_name='Planta Baixa (arquivo)',
-    )
-    imagem_db = models.BinaryField(
-        null=True,
-        blank=True,
-        editable=False,
-        verbose_name='Planta Baixa (banco de dados)',
-        help_text='Cópia da imagem em banco de dados — persiste em storage efêmero.'
-    )
-    imagem_content_type = models.CharField(
-        max_length=50,
-        default='image/png',
-        verbose_name='Content-Type da imagem'
-    )
-    # Bounds: canto SW (latitude/longitude mínimas) e NE (máximas)
-    lat_sw = models.DecimalField(max_digits=12, decimal_places=7, verbose_name='Latitude SW (sul)')
-    lng_sw = models.DecimalField(max_digits=12, decimal_places=7, verbose_name='Longitude SW (oeste)')
-    lat_ne = models.DecimalField(max_digits=12, decimal_places=7, verbose_name='Latitude NE (norte)')
-    lng_ne = models.DecimalField(max_digits=12, decimal_places=7, verbose_name='Longitude NE (leste)')
-    opacidade = models.FloatField(
-        default=0.7,
-        verbose_name='Opacidade',
-        help_text='Entre 0.0 (transparente) e 1.0 (opaco).'
-    )
-    ativo = models.BooleanField(default=True, verbose_name='Ativo')
-    atualizado_em = models.DateTimeField(auto_now=True)
-
-    class Meta:
-        verbose_name = 'Planta Baixa de Loteamento'
-        verbose_name_plural = 'Plantas Baixas de Loteamentos'
-        unique_together = [['imobiliaria', 'loteamento']]
-        ordering = ['imobiliaria', 'loteamento']
-
-    def __str__(self):
-        return f"{self.imobiliaria} — {self.loteamento}"
-
-
 class VerticePoligono(models.Model):
     """Vértice de polígono de lote — define o contorno georreferenciado do imóvel no mapa."""
     imovel = models.ForeignKey(
