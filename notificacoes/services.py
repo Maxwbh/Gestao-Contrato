@@ -152,6 +152,11 @@ class ServicoSMS:
                 auth_token = config.auth_token
                 numero_remetente = config.numero_remetente
 
+            # Para SMS, o From NÃO deve ter prefixo "whatsapp:"
+            # (erro Twilio 63007 quando From tem prefixo errado)
+            import re as _re
+            numero_remetente = _re.sub(r'^whatsapp:', '', numero_remetente.strip())
+
             # Enviar via Twilio
             client = Client(account_sid, auth_token)
 
