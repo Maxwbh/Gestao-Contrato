@@ -701,19 +701,25 @@ class Parcela(TimeStampedModel):
 
             self.save()
 
-            # Enviar email para o comprador
+            # Enviar email para o comprador em thread background para não bloquear o request.
+            # Falhas de SMTP (timeout, servidor inacessível) não afetam a resposta HTTP.
             if enviar_email:
-                try:
-                    from notificacoes.boleto_notificacao import BoletoNotificacaoService
-                    notificacao_service = BoletoNotificacaoService()
-                    email_result = notificacao_service.notificar_boleto_criado(self)
-                    resultado['email_enviado'] = email_result.get('sucesso', False)
-                    resultado['email_erro'] = email_result.get('erro', '')
-                except Exception as e:
-                    # Não falhar a geração do boleto por erro de email
-                    logger.exception("Erro ao enviar email após geração de boleto parcela pk=%s: %s", self.pk, e)
-                    resultado['email_enviado'] = False
-                    resultado['email_erro'] = str(e)
+                import threading
+                parcela_pk = self.pk
+
+                def _enviar_email_bg(pk):
+                    try:
+                        from notificacoes.boleto_notificacao import BoletoNotificacaoService
+                        from financeiro.models import Parcela as _Parcela
+                        p = _Parcela.objects.get(pk=pk)
+                        BoletoNotificacaoService().notificar_boleto_criado(p)
+                    except Exception as exc:
+                        logger.exception(
+                            "Erro ao enviar email em background (parcela pk=%s): %s", pk, exc
+                        )
+
+                threading.Thread(target=_enviar_email_bg, args=(parcela_pk,), daemon=True).start()
+                resultado['email_enviado'] = 'pendente'
 
         return resultado
 
