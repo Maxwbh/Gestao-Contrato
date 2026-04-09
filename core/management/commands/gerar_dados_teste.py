@@ -138,6 +138,11 @@ class Command(BaseCommand):
                 self.stdout.write('Verificando integridade dos dados para boleto/remessa...')
                 self.verificar_dados_boleto_remessa(contratos, contas_bancarias)
 
+                # 15. Criar templates padrão de notificação (Email + SMS + WhatsApp)
+                self.stdout.write('Criando templates padrão de notificação...')
+                templates_criados = self.criar_templates_notificacao()
+                self.stdout.write(f'   {templates_criados} templates criados/verificados')
+
             # Contagem final
             pf_count = len([c for c in compradores if c.tipo_pessoa == 'PF'])
             pj_count = len([c for c in compradores if c.tipo_pessoa == 'PJ'])
@@ -156,6 +161,7 @@ class Command(BaseCommand):
             self.stdout.write(self.style.SUCCESS(f'   • {acessos} Acessos ao Portal'))
             self.stdout.write(self.style.SUCCESS(f'   • {reajustes} Reajustes Aplicados'))
             self.stdout.write(self.style.SUCCESS(f'   • {indices} Índices de Reajuste'))
+            self.stdout.write(self.style.SUCCESS(f'   • {templates_criados} Templates de Notificação (Email+SMS+WhatsApp)'))
 
         except Exception as e:
             import traceback
@@ -200,10 +206,12 @@ class Command(BaseCommand):
         _safe_delete(ArquivoRemessa, 'financeiro_arquivoremessa')
         _safe_delete(ArquivoRetorno, 'financeiro_arquivoretorno')
 
-        # Notificações
+        # Notificações (registros de envio + templates padrão)
         try:
-            from notificacoes.models import Notificacao
+            from notificacoes.models import Notificacao, TemplateNotificacao
             _safe_delete(Notificacao, 'notificacoes_notificacao')
+            # Remove apenas templates globais (sem imobiliária) para recriar os padrões
+            TemplateNotificacao.objects.filter(imobiliaria__isnull=True).delete()
         except ImportError:
             pass
 
@@ -1503,3 +1511,17 @@ class Command(BaseCommand):
                 count += 1
 
         return count
+
+    def criar_templates_notificacao(self):
+        """
+        Garante que os templates padrão de notificação existam no banco.
+        Usa o modelo unificado Email + SMS + WhatsApp por tipo de evento.
+        Retorna o número de templates criados.
+        """
+        try:
+            from notificacoes.boleto_notificacao import criar_templates_padrao
+            criados = criar_templates_padrao()
+            return criados
+        except Exception as e:
+            self.stdout.write(self.style.WARNING(f'   ⚠ Erro ao criar templates: {e}'))
+            return 0

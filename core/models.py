@@ -195,6 +195,14 @@ class Imobiliaria(TimeStampedModel):
         ]
     )
 
+    logo = models.ImageField(
+        upload_to='imobiliarias/logos/',
+        blank=True,
+        null=True,
+        verbose_name='Logo',
+        help_text='PNG ou JPG, máx. 2 MB. Recomendado: fundo transparente.'
+    )
+
     # Dados de Contato (mantido para compatibilidade)
     endereco = models.TextField(
         blank=True,
@@ -761,6 +769,36 @@ class Imovel(TimeStampedModel):
         if self.cep:
             partes.append(f" - CEP: {self.cep}")
         return ' '.join(partes) if partes else self.endereco
+
+
+class VerticePoligono(models.Model):
+    """Vértice de polígono de lote — define o contorno georreferenciado do imóvel no mapa."""
+    imovel = models.ForeignKey(
+        Imovel,
+        on_delete=models.CASCADE,
+        related_name='vertices',
+        verbose_name='Imóvel'
+    )
+    ordem = models.PositiveSmallIntegerField(verbose_name='Ordem')
+    latitude = models.DecimalField(
+        max_digits=10,
+        decimal_places=7,
+        verbose_name='Latitude'
+    )
+    longitude = models.DecimalField(
+        max_digits=10,
+        decimal_places=7,
+        verbose_name='Longitude'
+    )
+
+    class Meta:
+        verbose_name = 'Vértice de Polígono'
+        verbose_name_plural = 'Vértices de Polígonos'
+        ordering = ['imovel', 'ordem']
+        unique_together = [['imovel', 'ordem']]
+
+    def __str__(self):
+        return f"{self.imovel} — V{self.ordem} ({self.latitude}, {self.longitude})"
 
 
 class Comprador(TimeStampedModel):
