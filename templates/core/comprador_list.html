@@ -23,7 +23,6 @@
             <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
                 <h4 class="mb-0">
                     <i class="fas fa-users"></i> Gerenciar Compradores
-                    <span class="badge bg-info text-dark ms-2">{{ total_compradores }}</span>
                 </h4>
                 <div class="d-flex align-items-center gap-2">
                     <i class="fas fa-search text-muted"></i>
@@ -42,10 +41,18 @@
             <div class="card-body p-0">
                 <!-- Barra de Busca server-side (para busca em todas as páginas) -->
                 <div class="px-3 pt-3 pb-2 border-bottom bg-light d-flex align-items-center gap-2 flex-wrap">
-                    <form method="get" class="d-flex gap-2 align-items-center">
-                        <small class="text-muted">Busca server-side (todas as páginas):</small>
+                    <form method="get" class="d-flex gap-2 align-items-center flex-wrap">
+                        <small class="text-muted fw-semibold">Busca:</small>
                         <input type="text" name="search" class="form-control form-control-sm"
                                placeholder="Nome, CPF ou email..." value="{{ search }}" style="width: 260px;">
+                        <select name="per_page" class="form-select form-select-sm" style="width:auto;" title="Registros por página">
+                            {% with pp=paginator.per_page %}
+                            <option value="10"  {% if pp == 10  %}selected{% endif %}>10/pág</option>
+                            <option value="25"  {% if pp == 25  %}selected{% endif %}>25/pág</option>
+                            <option value="50"  {% if pp == 50  %}selected{% endif %}>50/pág</option>
+                            <option value="100" {% if pp == 100 %}selected{% endif %}>100/pág</option>
+                            {% endwith %}
+                        </select>
                         <button type="submit" class="btn btn-primary btn-sm">
                             <i class="fas fa-search"></i>
                         </button>
@@ -61,7 +68,7 @@
                 <div id="compradoresGrid" class="ag-theme-material" style="width: 100%;"></div>
             </div>
             <div class="card-footer">
-                {% include "includes/pagination_perpage.html" %}
+                {% include "includes/pagination_nav_only.html" %}
             </div>
         </div>
     </div>

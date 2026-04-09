@@ -1,0 +1,90 @@
+{% comment %}
+Include: pagination nav + record count. WITHOUT the per-page selector.
+Use this when the per-page selector has been moved to the filter form.
+Usage: {% include "includes/pagination_nav_only.html" %}
+Requires: page_obj, paginator, is_paginated in context.
+{% endcomment %}
+<div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+
+  <!-- Record count -->
+  <small class="text-muted">
+    {% if paginator.count %}
+      <strong>{{ paginator.count }}</strong> registro{{ paginator.count|pluralize }}
+      {% if is_paginated %}
+        &mdash; página {{ page_obj.number }} de {{ page_obj.paginator.num_pages }}
+      {% endif %}
+    {% endif %}
+  </small>
+
+  <!-- Pagination nav -->
+  {% if is_paginated %}
+  <nav aria-label="Navegação de páginas">
+    <ul class="pagination pagination-sm mb-0">
+
+      {% if page_obj.has_previous %}
+        <li class="page-item">
+          <a class="page-link" id="pgFirst" href="#" title="Primeira página">«</a>
+        </li>
+        <li class="page-item">
+          <a class="page-link" id="pgPrev" href="#" title="Página anterior">‹</a>
+        </li>
+      {% else %}
+        <li class="page-item disabled"><span class="page-link">«</span></li>
+        <li class="page-item disabled"><span class="page-link">‹</span></li>
+      {% endif %}
+
+      {% for i in page_obj.paginator.page_range %}
+        {% if i == page_obj.number %}
+          <li class="page-item active"><span class="page-link">{{ i }}</span></li>
+        {% elif i >= page_obj.number|add:"-2" and i <= page_obj.number|add:"2" %}
+          <li class="page-item"><a class="page-link pgNum" href="#" data-page="{{ i }}">{{ i }}</a></li>
+        {% elif i == 1 or i == page_obj.paginator.num_pages %}
+          {% if i == 1 and page_obj.number > 4 %}
+            <li class="page-item"><a class="page-link pgNum" href="#" data-page="1">1</a></li>
+            <li class="page-item disabled"><span class="page-link">…</span></li>
+          {% elif i == page_obj.paginator.num_pages and page_obj.number < page_obj.paginator.num_pages|add:"-3" %}
+            <li class="page-item disabled"><span class="page-link">…</span></li>
+            <li class="page-item"><a class="page-link pgNum" href="#" data-page="{{ i }}">{{ i }}</a></li>
+          {% endif %}
+        {% endif %}
+      {% endfor %}
+
+      {% if page_obj.has_next %}
+        <li class="page-item">
+          <a class="page-link" id="pgNext" href="#" title="Próxima página">›</a>
+        </li>
+        <li class="page-item">
+          <a class="page-link" id="pgLast" href="#" title="Última página">»</a>
+        </li>
+      {% else %}
+        <li class="page-item disabled"><span class="page-link">›</span></li>
+        <li class="page-item disabled"><span class="page-link">»</span></li>
+      {% endif %}
+
+    </ul>
+  </nav>
+  {% endif %}
+
+</div>
+
+<script>
+(function() {
+  function buildUrl(params) {
+    var url = new URL(window.location.href);
+    for (var k in params) { url.searchParams.set(k, params[k]); }
+    return url.toString();
+  }
+  var first = document.getElementById('pgFirst');
+  var prev  = document.getElementById('pgPrev');
+  var next  = document.getElementById('pgNext');
+  var last  = document.getElementById('pgLast');
+  if (first) first.href = buildUrl({ page: 1 });
+  if (prev)  prev.href  = buildUrl({ page: {% if page_obj.has_previous %}{{ page_obj.number|add:"-1" }}{% else %}1{% endif %} });
+  if (next)  next.href  = buildUrl({ page: {% if page_obj.has_next %}{{ page_obj.number|add:"1" }}{% else %}{{ page_obj.paginator.num_pages }}{% endif %} });
+  if (last)  last.href  = buildUrl({ page: {{ page_obj.paginator.num_pages }} });
+  document.querySelectorAll('.pgNum').forEach(function(a) {
+    var p = a.getAttribute('data-page');
+    if (p) a.href = buildUrl({ page: p });
+  });
+})();
+</script>
