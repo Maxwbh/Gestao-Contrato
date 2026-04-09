@@ -227,48 +227,59 @@
 {% endblock %}
 
 {% block extra_js %}
-<!-- TinyMCE 5 (self-hosted via cdnjs — sem API key) -->
-<script src="https://cdnjs.cloudflare.com/ajax/libs/tinymce/5.10.9/tinymce.min.js" integrity="sha512-+8U/aaRWBCeTGhF2lGl5gDkTWOhFnKpPWQFnQkJ/MBnIl7LZ0BTTKY7oPQ4GN+h0x91I9j5Qfn4K7b1E/gXw==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+<!-- TinyMCE 5 via jsDelivr — sem atributo integrity para evitar bloqueio por hash desatualizado -->
+<script src="https://cdn.jsdelivr.net/npm/tinymce@5.10.9/tinymce.min.js"></script>
 <script>
+// ── TinyMCE ─────────────────────────────────────────────────────────────────
+// Envolvido em try/catch para que um erro aqui não impeça o restante da página.
+try {
+    if (typeof tinymce !== 'undefined') {
+        tinymce.init({
+            selector: '#id_corpo_html',
+            language: 'pt_BR',
+            height: 420,
+            menubar: true,
+            branding: false,
+            plugins: [
+                'advlist autolink lists link image charmap preview anchor',
+                'searchreplace visualblocks code fullscreen',
+                'insertdatetime table paste wordcount',
+            ],
+            toolbar:
+                'undo redo | formatselect | bold italic underline forecolor backcolor | ' +
+                'alignleft aligncenter alignright alignjustify | ' +
+                'bullist numlist outdent indent | link image table | code fullscreen',
+            content_style: 'body { font-family: Arial, Helvetica, sans-serif; font-size: 14px; }',
+            setup: function (editor) {
+                editor.on('change', function () { editor.save(); });
+            },
+        });
+
+        document.getElementById('formTemplate').addEventListener('submit', function () {
+            if (tinymce.get('id_corpo_html')) {
+                tinymce.get('id_corpo_html').save();
+            }
+        });
+    } else {
+        console.warn('TinyMCE não carregado — editor HTML em modo texto simples.');
+    }
+} catch (e) {
+    console.error('Erro ao inicializar TinyMCE:', e);
+}
+</script>
+
+<script>
+// ── Contador de caracteres SMS ───────────────────────────────────────────────
+// Script isolado: funciona independentemente do TinyMCE.
 (function () {
     'use strict';
 
-    // ── TinyMCE ──────────────────────────────────────────────────────────
-    tinymce.init({
-        selector: '#id_corpo_html',
-        language: 'pt_BR',
-        height: 420,
-        menubar: true,
-        branding: false,
-        plugins: [
-            'advlist autolink lists link image charmap preview anchor',
-            'searchreplace visualblocks code fullscreen',
-            'insertdatetime table paste wordcount',
-        ],
-        toolbar:
-            'undo redo | formatselect | bold italic underline forecolor backcolor | ' +
-            'alignleft aligncenter alignright alignjustify | ' +
-            'bullist numlist outdent indent | link image table | code fullscreen',
-        content_style: 'body { font-family: Arial, Helvetica, sans-serif; font-size: 14px; }',
-        setup: function (editor) {
-            // Sync TinyMCE content back to the hidden textarea before form submit
-            editor.on('change', function () { editor.save(); });
-        },
-    });
-
-    // Before submit: flush TinyMCE to textarea
-    document.getElementById('formTemplate').addEventListener('submit', function () {
-        if (tinymce.get('id_corpo_html')) {
-            tinymce.get('id_corpo_html').save();
-        }
-    });
-
-    // ── SMS counter ──────────────────────────────────────────────────────
     var smsField   = document.getElementById('id_corpo');
     var smsCounter = document.getElementById('smsCounter');
     var SMS_MAX    = 255;
 
-    // Valores de exemplo para substituição de TAGs (para estimar comprimento real)
+    if (!smsField || !smsCounter) return;
+
     var TAG_EXAMPLES = {
         'NOMECOMPRADOR':        'João da Silva',
         'CPFCOMPRADOR':         '123.456.789-00',
@@ -315,35 +326,31 @@
     }
 
     function updateSmsCounter() {
-        var template = smsField.value || '';
+        var template    = smsField.value || '';
         var templateLen = template.length;
-        var realText = substituirTags(template);
-        var realLen = realText.length;
+        var realText    = substituirTags(template);
+        var realLen     = realText.length;
 
         if (templateLen === realLen) {
-            // Nenhuma tag — mostrar só o comprimento direto
             smsCounter.textContent = templateLen + ' / ' + SMS_MAX;
         } else {
-            // Há tags — mostrar template e estimativa real
             smsCounter.textContent =
                 'template: ' + templateLen + ' | real (est.): ' + realLen + ' / ' + SMS_MAX;
         }
 
+        smsCounter.style.color = '';
         if (realLen > SMS_MAX) {
             smsCounter.className = 'ms-auto sms-counter over';
         } else if (realLen > Math.floor(SMS_MAX * 0.9)) {
             smsCounter.className = 'ms-auto sms-counter over';
-            smsCounter.style.color = '#fd7e14';  // laranja — atenção
+            smsCounter.style.color = '#fd7e14';
         } else {
             smsCounter.className = 'ms-auto sms-counter ok';
-            smsCounter.style.color = '';
         }
     }
 
-    if (smsField) {
-        smsField.addEventListener('input', updateSmsCounter);
-        updateSmsCounter();
-    }
+    smsField.addEventListener('input', updateSmsCounter);
+    updateSmsCounter();   // inicializa com valor atual do campo
 })();
 </script>
 {% endblock %}
