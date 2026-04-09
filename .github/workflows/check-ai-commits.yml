@@ -1,9 +1,9 @@
 name: Verificar Commits de IA
 
 # Bloqueia commits com marcadores de IA em qualquer branch.
-# Desbloqueio em 'master': @maxwbh aprova o PR (Review → Approve) — o check reroda automaticamente.
-# Em 'V3.1' apenas avisa — commits de IA são esperados na fase de staging/revisão.
-# Em branches 'claude/**': bloqueia push imediatamente.
+# claude/** push    → bloqueia, mostra comando de correção.
+# claude/** → V3.1 → bloqueia, mostra comando de correção, desbloqueável por @maxwbh.
+# V3.1 → master    → bloqueia, desbloqueável por @maxwbh.
 
 on:
   push:
@@ -143,18 +143,22 @@ jobs:
             echo "   Fluxo obrigatório (CLAUDE.md):"
             echo "     claude/branch → PR → V3.1 (revisado por @maxwbh) → master"
             exit 1
-          elif echo "$TARGET" | grep -qE '^claude/'; then
+          elif [ "$TARGET" = "V3.1" ] || echo "$TARGET" | grep -qE '^claude/'; then
             echo "🚫 BLOQUEADO — mensagens de commit não devem conter referências a IA."
             echo ""
-            echo "   Para corrigir:"
+            echo "   Para corrigir os commits listados acima:"
             echo "   1. Reescreva o histórico removendo os marcadores:"
             echo "      git filter-branch -f --msg-filter \\"
             echo "        'sed \"/claude\\.ai/d; /anthropic\\.com/d\"' \\"
             echo "        -- origin/V3.1..HEAD"
-            echo "   2. Force-push: git push --force-with-lease origin $TARGET"
+            echo "   2. Force-push: git push --force-with-lease origin <sua-branch>"
+            echo ""
+            echo "      OU"
+            echo ""
+            echo "   3. @maxwbh aprova este PR (Review → Approve)"
+            echo "      — o check reroda automaticamente e libera o merge."
             exit 1
           else
-            echo "ℹ️  Branch '$TARGET': commits de IA são esperados nesta fase (staging/revisão)."
-            echo "   Serão bloqueados somente se avançarem para 'master' sem aprovação."
+            echo "ℹ️  Branch '$TARGET': nenhuma ação requerida nesta fase."
             exit 0
           fi
