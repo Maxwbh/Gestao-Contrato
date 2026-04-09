@@ -2,7 +2,7 @@
 
 **Desenvolvedor:** Maxwell da Silva Oliveira (maxwbh@gmail.com)
 **Empresa:** M&S do Brasil LTDA
-**Última atualização:** 2026-04-08 (rev 8)
+**Última atualização:** 2026-04-09 (rev 9)
 
 > Pendentes organizados por prioridade.
 > Para documentação do sistema atual, consulte **[SISTEMA.md](SISTEMA.md)**.
@@ -48,11 +48,6 @@
 | 2.9 | Validar sequência de ciclos de reajuste (não pular) | ✅ V-09: validação em `aplicar_reajuste_pagina` e `aplicar_reajuste_contrato`: verifica `calcular_ciclo_pendente` antes de aceitar POST, retorna erro claro se ciclo fora de ordem; modelo `Reajuste.clean()` já tinha validação de cadeia (ciclo N exige ciclo N-1 aplicado) |
 | 2.10 | Segunda via de boleto com juros/multa calculados | ✅ `BoletoService.gerar_segunda_via()` reutiliza nosso_número existente, sobrepõe valor com juros/multa do dia; view `segunda_via_boleto` GET=preview com totais atualizados, GET?download=1=PDF fresco via BRCobrança; botão "Segunda Via" em `detalhe_parcela.html` |
 | 2.11 | WhatsApp/SMS — testes end-to-end com Twilio |
-
-### P4 — Baixo
-| # | Item |
-|---|------|
-| 2.12 | PIX — linha digitável e QR Code no boleto | ⚠️ Prioridade **extremamente baixa** / Alta complexidade — TO_DO 2050 |
 
 ---
 
@@ -143,11 +138,6 @@
 |------|------------|-----------|--------|
 | `relatorio_semanal_incorporadoras` | Segunda-feira | Resumo semanal | ✅ `relatorio_semanal_incorporadoras_sync()` em `core/tasks.py`; endpoint `POST /api/tasks/relatorio-semanal/`; envia e-mail por imobiliária com recebimentos, inadimplência e a-vencer-7d |
 | `relatorio_mensal_consolidado` | 1º dia útil | Consolidado mensal | ✅ `relatorio_mensal_consolidado_sync()` em `core/tasks.py`; endpoint `POST /api/tasks/relatorio-mensal/`; envia e-mail consolidado para cada contabilidade com totais por imobiliária |
-
-### P4 — Baixo
-| Task | Frequência | Descrição |
-|------|------------|-----------|
-| `gerar_boletos_mes_seguinte` | Dia 25 | Automação completa |
 
 ---
 
@@ -254,14 +244,12 @@
 | Item | Descrição |
 |------|-----------|
 | GitHub Actions | ✅ `.github/workflows/ci.yml`: pytest unit em push/PR, cobertura ≥25% (cresce conforme testes), sintaxe Python, flake8 (non-blocking); usa SQLite em memória (sem serviço PostgreSQL) |
-| Cache Redis | Para dashboards |
 | Índices DB | ✅ Migration `0008_add_vencimento_compound_indexes`: índices compostos `(pago, data_vencimento)` e `(contrato, pago, data_vencimento)` em `Parcela` para queries de dashboard |
 
 ### P4 — Baixo
 | Item | Descrição |
 |------|-----------|
 | Deploy automático | Render após merge em main |
-| Async boletos | Processamento assíncrono em massa |
 
 ---
 
@@ -392,9 +380,6 @@
 | G-10 | **`Imobiliaria` PF/PJ** — `tipo_pessoa` (PF/PJ), `cpf` adicionados; `cnpj` e `razao_social` tornados opcionais; `clean()` valida documento conforme tipo; `documento` property; `core migration 0003` idempotente; admin e build.sh atualizados | Média | P2 | ✅ |
 | G-11 | **Cálculo de rescisão** — `Contrato.calcular_rescisao()` (fruição × meses + multa penal + desp. adm.); view `calcular_rescisao_view`; template `calcular_rescisao.html`; URL `<pk>/rescisao/`; botão na tela do contrato | Alta | P3 | ✅ |
 | G-12 | **Cálculo de cessão** — `Contrato.calcular_cessao()`; view `calcular_cessao_view`; template `calcular_cessao.html`; URL `<pk>/cessao/`; botão na tela do contrato | Média | P3 | ✅ |
-| G-13 | **Taxa condominial (APMRPN)** — fora do escopo do sistema | Alta | — | 🚫 Fora do escopo |
-| G-14 | **Testemunhas do contrato** — fora do escopo do sistema | Baixa | — | 🚫 Fora do escopo |
-| G-15 | **Prazo para escritura** — fora do escopo do sistema | Média | — | 🚫 Fora do escopo |
 | G-16 | **Juros de mora pro rata die** — `Contrato.calcular_mora_pro_rata()`: `taxa_diaria = percentual_juros_mora / 30`; usado em `calcular_rescisao()` para base de cálculo correto | Média | P3 | ✅ |
 
 ---
@@ -983,9 +968,9 @@ para ciclo = 2..total_ciclos+1:
 | Categoria | P1 | P2 | P3 | P4 | Total | Concluído |
 |-----------|----|----|----|----|-------|-----------|
 | Infraestrutura | 3 | 2 | 1 | — | 6 | ✅ 3/3 P1 |
-| Backend — Regras | — | 8 | 3 | 1 | 12 | ✅ 8/8 P2 |
+| Backend — Regras | — | 8 | 3 | — | 11 | ✅ 8/8 P2 |
 | Reajuste | 4 | 4 | 7 | — | 15+4=19 | ✅ 19/19 |
-| Contrato Real (gaps) | — | — | 9 | 6 | 15 | ✅ 9/9 implementados · 6 pendentes |
+| Contrato Real (gaps) | — | — | 9 | — | 12 | ✅ 12/12 |
 | CNAB Remessa | — | 8 | — | — | 8 | ✅ 8/8 |
 | HU-360 Tabela Price | 2 | 9 | 2 | — | 13 | ✅ 13/13 |
 | SAC / Tabela Price | 1 | 4 | — | — | 5 | ✅ 5/5 |
@@ -997,7 +982,7 @@ para ciclo = 2..total_ciclos+1:
 | UX / Interface (Seção 20) | — | 4 | 5 | — | 9 | ✅ 4/4 P2 (U-02, U-03, U-05, U-08) · ⏳ 5 P3 (incl. U-09 ✅) |
 | Frontend | — | 17 | 15 | 3 | 35 | ⚠️ ~4/17 P2 |
 | APIs | — | 6 | 5 | — | 11 | — |
-| Celery | — | 2 | 2 | 1 | 5 | — |
+| Celery (HTTP tasks) | — | 2 | 2 | — | 4 | ✅ 4/4 |
 | Permissões | — | 4 | 4 | 2 | 10 | — |
 | HU Boleto/Carnê/Remessa (Seção 21) | — | 10 | — | — | 10 | ✅ 10/10 |
 | OFX Extrato Bancário (Seção 22) | — | 5 | — | — | 5 | ✅ 5/5 |
