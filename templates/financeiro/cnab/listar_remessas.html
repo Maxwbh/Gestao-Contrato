@@ -155,17 +155,17 @@ document.addEventListener('DOMContentLoaded', function() {
         document.getElementById('remessasGrid'),
         {
             columnDefs: [
-                { headerName: 'Remessa', field: 'numero_remessa', filter: 'agTextColumnFilter', floatingFilter: true, minWidth: 120,
+                { headerName: 'Remessa', field: 'numero_remessa', filter: 'agTextColumnFilter', minWidth: 120,
                   cellRenderer: p => `<a href="/financeiro/cnab/remessa/${p.data.pk}/"><strong>${p.value}</strong></a><br><small class="text-muted">${p.data.nome_arquivo}</small>` },
-                { headerName: 'Conta / Imobiliária', field: 'conta', filter: 'agTextColumnFilter', floatingFilter: true, minWidth: 180,
+                { headerName: 'Conta / Imobiliária', field: 'conta', filter: 'agTextColumnFilter', minWidth: 180,
                   cellRenderer: p => `${p.value}<br><small class="text-muted">${p.data.imobiliaria}</small>` },
-                { headerName: 'Layout', field: 'layout', filter: 'agTextColumnFilter', floatingFilter: true, minWidth: 90 },
-                { headerName: 'Boletos', field: 'qtd_boletos', filter: 'agNumberColumnFilter', floatingFilter: true, minWidth: 90, type: 'numericColumn' },
-                { headerName: 'Valor Total', field: 'valor_total', filter: 'agNumberColumnFilter', floatingFilter: true, minWidth: 120, type: 'numericColumn',
+                { headerName: 'Layout', field: 'layout', filter: 'agTextColumnFilter', minWidth: 90 },
+                { headerName: 'Boletos', field: 'qtd_boletos', filter: 'agNumberColumnFilter', minWidth: 90, type: 'numericColumn' },
+                { headerName: 'Valor Total', field: 'valor_total', filter: 'agNumberColumnFilter', minWidth: 120, type: 'numericColumn',
                   cellRenderer: p => 'R$ ' + parseFloat(p.value).toLocaleString('pt-BR', {minimumFractionDigits:2}) },
-                { headerName: 'Data Geração', field: 'data_geracao', filter: 'agDateColumnFilter', floatingFilter: true, minWidth: 140,
+                { headerName: 'Data Geração', field: 'data_geracao', filter: 'agDateColumnFilter', minWidth: 140,
                   cellRenderer: p => p.data.data_geracao_fmt, sort: 'desc' },
-                { headerName: 'Status', field: 'status', filter: 'agTextColumnFilter', floatingFilter: true, minWidth: 110,
+                { headerName: 'Status', field: 'status', filter: 'agTextColumnFilter', minWidth: 110,
                   cellRenderer: statusRemessaRenderer },
                 { headerName: 'Ações', field: 'pk', sortable: false, filter: false, minWidth: 100,
                   cellRenderer: acoesRemessaRenderer },
@@ -173,7 +173,7 @@ document.addEventListener('DOMContentLoaded', function() {
             rowData: remessasRowData,
             domLayout: 'autoHeight',
             defaultColDef: { sortable: true, resizable: true },
-            rowHeight: 48, headerHeight: 48, floatingFiltersHeight: 36,
+            rowHeight: 48, headerHeight: 48,
             suppressCellFocus: true, enableCellTextSelection: true,
         }
     );
