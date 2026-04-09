@@ -9,6 +9,7 @@ from django.db import models, transaction
 from django.core.validators import MinValueValidator
 from django.core.exceptions import ValidationError
 from django.utils import timezone
+from django.db.models import Q
 from decimal import Decimal
 import logging
 
@@ -296,6 +297,14 @@ class Parcela(TimeStampedModel):
             # Compound indexes for common dashboard/vencimento queries
             models.Index(fields=['pago', 'data_vencimento'], name='fin_parcela_pago_venc_idx'),
             models.Index(fields=['contrato', 'pago', 'data_vencimento'], name='fin_parcela_ctrt_pago_venc_idx'),
+        ]
+        constraints = [
+            # Nosso número único quando preenchido — evita baixa duplicada
+            models.UniqueConstraint(
+                fields=['nosso_numero'],
+                condition=~Q(nosso_numero=''),
+                name='unique_nosso_numero_nao_vazio',
+            ),
         ]
 
     def __str__(self):
@@ -1691,12 +1700,44 @@ class HistoricoPagamento(TimeStampedModel):
         help_text='Pagamento de antecipação de parcelas com desconto'
     )
 
+    # ── Conciliação bancária ──────────────────────────────────────────────────
+    ORIGEM_CHOICES = [
+        ('MANUAL',      'Manual'),
+        ('CNAB',        'Retorno CNAB'),
+        ('OFX',         'Extrato OFX'),
+        ('ANTECIPACAO', 'Antecipação'),
+        ('SISTEMA',     'Sistema'),
+    ]
+    origem_pagamento = models.CharField(
+        max_length=20,
+        choices=ORIGEM_CHOICES,
+        default='MANUAL',
+        verbose_name='Origem',
+        help_text='Como o pagamento foi registrado: manual, retorno CNAB, extrato OFX ou antecipação',
+    )
+    item_retorno = models.ForeignKey(
+        'ItemRetorno',
+        null=True, blank=True,
+        on_delete=models.SET_NULL,
+        related_name='historico_pagamentos',
+        verbose_name='Item Retorno CNAB',
+        help_text='Vínculo ao registro do arquivo de retorno CNAB que gerou este pagamento',
+    )
+    fitid_ofx = models.CharField(
+        max_length=255,
+        blank=True,
+        verbose_name='FITID OFX',
+        help_text='ID único da transação no arquivo OFX — usado para deduplicação',
+    )
+
     class Meta:
         verbose_name = 'Histórico de Pagamento'
         verbose_name_plural = 'Histórico de Pagamentos'
         ordering = ['-data_pagamento']
         indexes = [
             models.Index(fields=['parcela', 'data_pagamento']),
+            models.Index(fields=['origem_pagamento']),
+            models.Index(fields=['fitid_ofx']),
         ]
 
     def __str__(self):
@@ -2158,15 +2199,43 @@ class ItemRetorno(TimeStampedModel):
 
         try:
             if self.tipo_ocorrencia == 'LIQUIDACAO':
-                # Registrar pagamento
-                self.parcela.registrar_pagamento_boleto(
-                    valor_pago=self.valor_pago or self.valor_titulo,
-                    data_pagamento=self.data_ocorrencia or timezone.now(),
-                    banco_pagador='',
-                    agencia_pagadora=''
+                valor = self.valor_pago or self.valor_titulo
+                data_pgto = (
+                    self.data_ocorrencia.date()
+                    if hasattr(self.data_ocorrencia, 'date')
+                    else (self.data_ocorrencia or timezone.localdate())
                 )
+                banco = getattr(self.arquivo_retorno.conta_bancaria, 'banco', '') if self.arquivo_retorno_id else ''
+                obs = (
+                    f'Pago via retorno CNAB. '
+                    f'Arquivo: {self.arquivo_retorno.nome_arquivo if self.arquivo_retorno_id else "?"} '
+                    f'Ocorrência: {self.descricao_ocorrencia or self.codigo_ocorrencia}'
+                )
+
+                self.parcela.registrar_pagamento_boleto(
+                    valor_pago=valor,
+                    data_pagamento=data_pgto,
+                    banco_pagador=banco,
+                    agencia_pagadora='',
+                )
+
+                # Criar HistoricoPagamento vinculado a este ItemRetorno
+                HistoricoPagamento.objects.get_or_create(
+                    item_retorno=self,
+                    defaults=dict(
+                        parcela=self.parcela,
+                        data_pagamento=data_pgto,
+                        valor_pago=valor,
+                        valor_parcela=self.parcela.valor_atual,
+                        valor_juros=self.valor_juros or Decimal('0'),
+                        valor_multa=Decimal('0'),
+                        forma_pagamento='BOLETO',
+                        observacoes=obs,
+                        origem_pagamento='CNAB',
+                    ),
+                )
+
             elif self.tipo_ocorrencia == 'ENTRADA':
-                # Confirmar registro no banco
                 self.parcela.status_boleto = StatusBoleto.REGISTRADO
                 self.parcela.data_registro_boleto = timezone.now()
                 self.parcela.save()

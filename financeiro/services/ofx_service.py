@@ -419,13 +419,36 @@ class OFXService:
                                 motivo='Nenhuma parcela correspondente encontrada')
 
     def _quitar(self, parcela, tx: OFXTransaction) -> None:
-        """Marca a parcela como paga com os dados da transação OFX."""
+        """Marca a parcela como paga com os dados da transação OFX e cria HistoricoPagamento."""
+        from financeiro.models import HistoricoPagamento
+
+        # Deduplicação: não quitar se já existe histórico com mesmo FITID
+        if tx.fitid and HistoricoPagamento.objects.filter(fitid_ofx=tx.fitid).exists():
+            logger.warning('OFX: FITID %s já processado — parcela pk=%s ignorada', tx.fitid, parcela.pk)
+            return
+
         try:
+            data_pgto = tx.data or date.today()
+            obs = f'Quitado via OFX — FITID: {tx.fitid} — {tx.memo[:100] if tx.memo else ""}'
+
             parcela.registrar_pagamento(
                 valor_pago=tx.valor,
-                data_pagamento=tx.data or date.today(),
+                data_pagamento=data_pgto,
+                observacoes=obs,
+            )
+
+            # Criar registro de histórico com rastreamento de origem
+            HistoricoPagamento.objects.create(
+                parcela=parcela,
+                data_pagamento=data_pgto,
+                valor_pago=tx.valor,
+                valor_parcela=parcela.valor_atual,
+                valor_juros=parcela.valor_juros or 0,
+                valor_multa=parcela.valor_multa or 0,
                 forma_pagamento='TRANSFERENCIA',
-                observacao=f'Quitado via OFX — FITID: {tx.fitid} — {tx.memo[:100]}',
+                observacoes=obs,
+                origem_pagamento='OFX',
+                fitid_ofx=tx.fitid or '',
             )
         except Exception as e:
             logger.error('OFX: erro ao quitar parcela pk=%s: %s', parcela.pk, e)

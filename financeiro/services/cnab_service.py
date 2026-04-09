@@ -727,24 +727,34 @@ class CNABService:
                         if codigo_ocorrencia in OCORRENCIAS_CNAB:
                             tipo_ocorrencia, descricao = OCORRENCIAS_CNAB[codigo_ocorrencia]
 
-                        # Buscar parcela
-                        parcela = Parcela.objects.filter(
-                            nosso_numero=nosso_numero
-                        ).first()
+                        # Buscar parcela — prioriza conta_bancaria do arquivo para
+                        # evitar match cruzado quando dois clientes têm nosso_numero igual
+                        conta = arquivo_retorno.conta_bancaria
+                        qs = Parcela.objects.filter(nosso_numero=nosso_numero)
+                        if conta:
+                            qs_conta = qs.filter(conta_bancaria_boleto=conta)
+                            parcela = qs_conta.first() or qs.first()
+                        else:
+                            parcela = qs.first()
 
-                        # Criar item de retorno
-                        item = ItemRetorno.objects.create(
+                        # Idempotência: não duplicar ItemRetorno para mesmo nosso_numero
+                        item, criado = ItemRetorno.objects.get_or_create(
                             arquivo_retorno=arquivo_retorno,
-                            parcela=parcela,
                             nosso_numero=nosso_numero,
-                            codigo_ocorrencia=codigo_ocorrencia,
-                            descricao_ocorrencia=descricao,
-                            tipo_ocorrencia=tipo_ocorrencia,
-                            valor_titulo=valor_titulo,
-                            valor_pago=valor_pago if valor_pago > 0 else None,
-                            data_ocorrencia=data_ocorrencia,
-                            data_credito=data_credito,
+                            defaults=dict(
+                                parcela=parcela,
+                                codigo_ocorrencia=codigo_ocorrencia,
+                                descricao_ocorrencia=descricao,
+                                tipo_ocorrencia=tipo_ocorrencia,
+                                valor_titulo=valor_titulo,
+                                valor_pago=valor_pago if valor_pago > 0 else None,
+                                data_ocorrencia=data_ocorrencia,
+                                data_credito=data_credito,
+                            ),
                         )
+                        if not criado:
+                            registros_processados += (1 if item.processado else 0)
+                            continue
 
                         # Processar baixa
                         if item.processar_baixa():
@@ -854,24 +864,34 @@ class CNABService:
                         if codigo_ocorrencia in OCORRENCIAS_CNAB:
                             tipo_ocorrencia, descricao = OCORRENCIAS_CNAB[codigo_ocorrencia]
 
-                        # Buscar parcela
-                        parcela = Parcela.objects.filter(
-                            nosso_numero=nosso_numero
-                        ).first()
+                        # Buscar parcela — prioriza conta_bancaria do arquivo para
+                        # evitar match cruzado quando dois clientes têm nosso_numero igual
+                        conta = arquivo_retorno.conta_bancaria
+                        qs = Parcela.objects.filter(nosso_numero=nosso_numero)
+                        if conta:
+                            qs_conta = qs.filter(conta_bancaria_boleto=conta)
+                            parcela = qs_conta.first() or qs.first()
+                        else:
+                            parcela = qs.first()
 
-                        # Criar item de retorno
-                        item = ItemRetorno.objects.create(
+                        # Idempotência: não duplicar ItemRetorno para mesmo nosso_numero
+                        item, criado = ItemRetorno.objects.get_or_create(
                             arquivo_retorno=arquivo_retorno,
-                            parcela=parcela,
                             nosso_numero=nosso_numero,
-                            codigo_ocorrencia=codigo_ocorrencia,
-                            descricao_ocorrencia=descricao,
-                            tipo_ocorrencia=tipo_ocorrencia,
-                            valor_titulo=valor_titulo,
-                            valor_pago=valor_pago if valor_pago > 0 else None,
-                            data_ocorrencia=data_ocorrencia,
-                            data_credito=data_credito,
+                            defaults=dict(
+                                parcela=parcela,
+                                codigo_ocorrencia=codigo_ocorrencia,
+                                descricao_ocorrencia=descricao,
+                                tipo_ocorrencia=tipo_ocorrencia,
+                                valor_titulo=valor_titulo,
+                                valor_pago=valor_pago if valor_pago > 0 else None,
+                                data_ocorrencia=data_ocorrencia,
+                                data_credito=data_credito,
+                            ),
                         )
+                        if not criado:
+                            registros_processados += (1 if item.processado else 0)
+                            continue
 
                         # Processar baixa
                         if item.processar_baixa():

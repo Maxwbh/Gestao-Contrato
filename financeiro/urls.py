@@ -79,6 +79,11 @@ urlpatterns = [
     path('cnab/remessa/<int:pk>/download/', views.download_arquivo_remessa, name='download_remessa'),
 
     # ==========================================================================
+    # Conciliação Bancária (hub unificado: CNAB Retorno + OFX + Baixa Manual)
+    # ==========================================================================
+    path('conciliacao/', views.dashboard_conciliacao, name='dashboard_conciliacao'),
+
+    # ==========================================================================
     # OFX — Importação de Extrato Bancário
     # ==========================================================================
     path('cnab/ofx/upload/', views.upload_ofx, name='upload_ofx'),
