@@ -9,11 +9,6 @@ por (codigo, imobiliaria) com campos distintos para cada canal:
 
 O campo `tipo` passa a ser nullable (legado).
 O unique_together muda de (codigo, imobiliaria, tipo) para (codigo, imobiliaria).
-
-Nota técnica: `atomic = False` é necessário no PostgreSQL para evitar o erro
-"cannot ALTER TABLE because it has pending trigger events" quando DDL e DML
-(RunPython) coexistem na mesma transação.  Cada bloco RunSQL usa BEGIN/COMMIT
-explícito para garantir isolamento.
 """
 
 from django.db import migrations, models
@@ -52,30 +47,7 @@ def merge_templates(apps, schema_editor):
         primary.save()
 
 
-def add_unique_together(apps, schema_editor):
-    """Aplica o novo unique_together numa transação separada, após os dados estarem limpos."""
-    with schema_editor.connection.cursor() as cursor:
-        # Garante que não existe restrição duplicada antes de criar
-        cursor.execute("""
-            DO $$
-            BEGIN
-                IF NOT EXISTS (
-                    SELECT 1 FROM pg_constraint
-                    WHERE conname = 'notificacoes_templatenotificacao_codigo_imobiliaria_uniq'
-                ) THEN
-                    ALTER TABLE notificacoes_templatenotificacao
-                        ADD CONSTRAINT notificacoes_templatenotificacao_codigo_imobiliaria_uniq
-                        UNIQUE (codigo, imobiliaria_id);
-                END IF;
-            END $$;
-        """)
-
-
 class Migration(migrations.Migration):
-
-    # atomic = False é necessário no PostgreSQL para poder executar
-    # ALTER TABLE após RunPython na mesma migration sem erro de triggers pendentes.
-    atomic = False
 
     dependencies = [
         ('notificacoes', '0004_add_whatsapp_providers'),
@@ -115,16 +87,18 @@ class Migration(migrations.Migration):
             preserve_default=False,
         ),
 
-        # 4. Remover unique_together antigo (DDL separado do DML abaixo)
+        # 4. Remover unique_together antigo
         migrations.AlterUniqueTogether(
             name='templatenotificacao',
             unique_together=set(),
         ),
 
         # 5. Migração de dados: mesclar registros separados por canal
-        #    Roda APÓS o unique_together antigo ser removido.
         migrations.RunPython(merge_templates, migrations.RunPython.noop),
 
-        # 6. Novo unique_together via RunPython com SQL direto (evita o erro de trigger)
-        migrations.RunPython(add_unique_together, migrations.RunPython.noop),
+        # 6. Adicionar novo unique_together
+        migrations.AlterUniqueTogether(
+            name='templatenotificacao',
+            unique_together={('codigo', 'imobiliaria')},
+        ),
     ]

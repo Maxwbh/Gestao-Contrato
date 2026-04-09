@@ -654,26 +654,6 @@ def notificar_inadimplente(request, pk):
         return JsonResponse({'sucesso': False, 'erro': str(e)}, status=500)
 
 
-def _notificar_pagamento_bg(historico):
-    """
-    Dispara notificar_pagamento_confirmado em daemon thread.
-    Falhas são logadas e nunca propagadas — não bloqueia a resposta HTTP.
-    """
-    import threading
-
-    def _do():
-        try:
-            from notificacoes.boleto_notificacao import BoletoNotificacaoService
-            BoletoNotificacaoService().notificar_pagamento_confirmado(historico)
-        except Exception as exc:
-            logger.exception(
-                'Falha ao notificar pagamento confirmado (historico pk=%s): %s',
-                historico.pk, exc,
-            )
-
-    threading.Thread(target=_do, daemon=True).start()
-
-
 @login_required
 def registrar_pagamento(request, pk):
     """Registra o pagamento de uma parcela"""
@@ -712,10 +692,6 @@ def registrar_pagamento(request, pk):
             if data_pagamento > parcela.data_vencimento:
                 valor_juros, valor_multa = parcela.calcular_juros_multa(data_pagamento)
 
-            # Desconto = diferença entre o total a pagar e o que foi efetivamente pago
-            valor_total_devido = parcela.valor_atual + valor_juros + valor_multa
-            valor_desconto = max(Decimal('0.00'), valor_total_devido - valor_pago)
-
             parcela.registrar_pagamento(
                 valor_pago=valor_pago,
                 data_pagamento=data_pagamento,
@@ -730,7 +706,6 @@ def registrar_pagamento(request, pk):
                 valor_parcela=parcela.valor_atual,
                 valor_juros=valor_juros,
                 valor_multa=valor_multa,
-                valor_desconto=valor_desconto,
                 forma_pagamento=forma_pagamento,
                 observacoes=observacoes,
             )
@@ -738,19 +713,15 @@ def registrar_pagamento(request, pk):
                 historico.comprovante = comprovante
                 historico.save(update_fields=['comprovante'])
 
-            _notificar_pagamento_bg(historico)
-
             messages.success(request, 'Pagamento registrado com sucesso!')
             return redirect('financeiro:detalhe_parcela', pk=pk)
         except Exception as e:
             logger.exception("Erro ao registrar pagamento parcela pk=%s: %s", pk, e)
             messages.error(request, f'Erro ao registrar pagamento: {str(e)}')
 
-    valores = parcela.calcular_valores_hoje()
     context = {
         'parcela': parcela,
         'formas_pagamento': FORMAS_PAGAMENTO,
-        'valores': valores,
     }
     return render(request, 'financeiro/registrar_pagamento.html', context)
 
@@ -1134,7 +1105,6 @@ def gerar_boleto_parcela(request, pk):
                 'linha_digitavel': resultado.get('linha_digitavel', ''),
                 'codigo_barras': resultado.get('codigo_barras', ''),
                 'tem_pdf': parcela.boleto_pdf.name if parcela.boleto_pdf else False,
-                'status_boleto': parcela.status_boleto,
                 'mensagem': 'Boleto gerado com sucesso'
             })
         else:
@@ -2055,7 +2025,7 @@ def pagar_parcela_ajax(request, pk):
         parcela.save()
 
         # Registrar historico
-        hist_ajax = HistoricoPagamento.objects.create(
+        HistoricoPagamento.objects.create(
             parcela=parcela,
             data_pagamento=data_pagamento,
             valor_pago=valor_pago,
@@ -2064,9 +2034,8 @@ def pagar_parcela_ajax(request, pk):
             valor_multa=valor_multa,
             valor_desconto=valor_desconto,
             forma_pagamento=forma_pagamento,
-            observacoes=observacoes,
+            observacoes=observacoes
         )
-        _notificar_pagamento_bg(hist_ajax)
 
         return JsonResponse({
             'sucesso': True,
@@ -6765,85 +6734,6 @@ def download_recibo_antecipacao(request, contrato_id):
         return redirect('contratos:detalhe', pk=contrato_id)
 
     filename = f'recibo_antecipacao_{contrato.numero_contrato}.pdf'
-    response = HttpResponse(pdf_bytes, content_type='application/pdf')
-    response['Content-Disposition'] = f'attachment; filename="{filename}"'
-    return response
-
-
-# =============================================================================
-# R-06: Recibo de Pagamento Individual (por HistoricoPagamento)
-# =============================================================================
-
-@login_required
-def download_recibo_pagamento(request, pk):
-    """
-    R-06: Gera e baixa o recibo PDF de um pagamento individual.
-    """
-    from .models import HistoricoPagamento
-    from .services.recibo_service import gerar_recibo_pagamento_pdf
-
-    historico = get_object_or_404(
-        HistoricoPagamento.objects.select_related(
-            'parcela__contrato__imobiliaria',
-            'parcela__contrato__comprador',
-            'parcela__contrato__imovel',
-        ),
-        pk=pk,
-    )
-
-    try:
-        pdf_bytes = gerar_recibo_pagamento_pdf(historico)
-    except Exception as e:
-        logger.error('Erro ao gerar recibo de pagamento pk=%s: %s', pk, e)
-        messages.error(request, f'Erro ao gerar recibo: {e}')
-        return redirect('contratos:detalhe', pk=historico.parcela.contrato_id)
-
-    contrato = historico.parcela.contrato
-    num_parcela = historico.parcela.numero_parcela
-    filename = f'recibo_{contrato.numero_contrato}_p{num_parcela}.pdf'
-    response = HttpResponse(pdf_bytes, content_type='application/pdf')
-    response['Content-Disposition'] = f'attachment; filename="{filename}"'
-    return response
-
-
-# =============================================================================
-# R-07: Declaração Anual de Quitação de Débitos — Lei 12.007/2009
-# =============================================================================
-
-@login_required
-def download_declaracao_quitacao(request, pk):
-    """
-    R-07: Gera e baixa a Declaração Anual de Quitação (Lei 12.007/2009).
-
-    GET ?ano=2025 — ano de referência (padrão: ano anterior)
-    """
-    from contratos.models import Contrato
-    from .services.recibo_service import gerar_declaracao_quitacao_pdf
-    from django.utils import timezone as tz
-
-    contrato = get_object_or_404(
-        Contrato.objects.select_related('imobiliaria', 'comprador', 'imovel'),
-        pk=pk,
-    )
-
-    ano_atual = tz.now().year
-    try:
-        ano = int(request.GET.get('ano', ano_atual - 1))
-    except (TypeError, ValueError):
-        ano = ano_atual - 1
-
-    # Ano deve estar num intervalo razoável
-    if not (2000 <= ano <= ano_atual):
-        ano = ano_atual - 1
-
-    try:
-        pdf_bytes = gerar_declaracao_quitacao_pdf(contrato, ano)
-    except Exception as e:
-        logger.error('Erro ao gerar declaração de quitação contrato=%s ano=%s: %s', pk, ano, e)
-        messages.error(request, f'Erro ao gerar declaração: {e}')
-        return redirect('contratos:detalhe', pk=pk)
-
-    filename = f'declaracao_quitacao_{contrato.numero_contrato}_{ano}.pdf'
     response = HttpResponse(pdf_bytes, content_type='application/pdf')
     response['Content-Disposition'] = f'attachment; filename="{filename}"'
     return response

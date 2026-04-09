@@ -1077,7 +1077,6 @@
                                 <th>Forma</th>
                                 <th class="text-center">Comprovante</th>
                                 <th>Obs.</th>
-                                <th class="text-center">Recibo</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -1106,14 +1105,6 @@
                                     {% endif %}
                                 </td>
                                 <td class="text-muted small">{{ h.observacoes|truncatechars:40 }}</td>
-                                <td class="text-center">
-                                    <a href="{% url 'financeiro:recibo_pagamento' h.pk %}"
-                                       class="btn btn-xs btn-outline-success"
-                                       style="font-size:.75rem;padding:2px 7px;"
-                                       title="Baixar recibo de pagamento" target="_blank">
-                                        <i class="fas fa-file-pdf"></i>
-                                    </a>
-                                </td>
                             </tr>
                             {% endfor %}
                         </tbody>
@@ -1122,72 +1113,6 @@
             </div>
         </div>
         {% endif %}
-
-        <!-- 3.33 Documentos do Contrato -->
-        <div class="card mt-4" id="card-documentos">
-            <div class="card-header d-flex justify-content-between align-items-center"
-                 style="background:linear-gradient(135deg,#1b5e20,#2e7d32);color:#fff;cursor:pointer;"
-                 data-bs-toggle="collapse" data-bs-target="#documentos-body" aria-expanded="{% if contrato.documento_assinado or contrato.documento_assinado_db %}true{% else %}false{% endif %}">
-                <span><i class="fas fa-file-contract me-2"></i> Documentos</span>
-                <div class="d-flex align-items-center gap-2">
-                    {% if contrato.documento_assinado or contrato.documento_assinado_db %}
-                    <span class="badge bg-light text-success"><i class="fas fa-check me-1"></i>Contrato assinado</span>
-                    {% endif %}
-                    <i class="fas fa-chevron-{% if contrato.documento_assinado or contrato.documento_assinado_db %}up{% else %}down{% endif %}"></i>
-                </div>
-            </div>
-            <div class="collapse {% if contrato.documento_assinado or contrato.documento_assinado_db %}show{% endif %}" id="documentos-body">
-                <div class="card-body">
-                    {% if contrato.documento_assinado or contrato.documento_assinado_db %}
-                    <!-- Documento existente -->
-                    <div class="d-flex align-items-center gap-3 p-3 rounded mb-3" style="background:#e8f5e9;border:1px solid #c8e6c9;">
-                        <i class="fas fa-file-pdf fa-2x text-danger"></i>
-                        <div class="flex-grow-1">
-                            <div class="fw-semibold">Contrato Assinado</div>
-                            {% if contrato.data_assinatura %}
-                            <div class="small text-muted">Assinado em {{ contrato.data_assinatura|date:"d/m/Y" }}</div>
-                            {% endif %}
-                        </div>
-                        <div class="d-flex gap-2">
-                            <a href="{% url 'contratos:documento_download' contrato.pk %}" class="btn btn-sm btn-success" target="_blank">
-                                <i class="fas fa-download me-1"></i> Baixar
-                            </a>
-                            {% if request.user.is_staff or request.user.is_superuser %}
-                            <button type="button" class="btn btn-sm btn-outline-danger" onclick="excluirDocumento()">
-                                <i class="fas fa-trash"></i>
-                            </button>
-                            {% endif %}
-                        </div>
-                    </div>
-                    {% endif %}
-
-                    <!-- Upload form -->
-                    <form id="formDocumento" enctype="multipart/form-data">
-                        {% csrf_token %}
-                        <div class="row g-3 align-items-end">
-                            <div class="col-md-6">
-                                <label class="form-label fw-semibold">
-                                    {% if contrato.documento_assinado or contrato.documento_assinado_db %}Substituir documento{% else %}Enviar contrato assinado{% endif %}
-                                </label>
-                                <input type="file" class="form-control" id="docArquivo" name="arquivo" accept=".pdf,image/*" {% if not contrato.documento_assinado and not contrato.documento_assinado_db %}required{% endif %}>
-                                <div class="form-text">PDF ou imagem (máx 20 MB)</div>
-                            </div>
-                            <div class="col-md-3">
-                                <label class="form-label fw-semibold">Data de Assinatura</label>
-                                <input type="date" class="form-control" id="docDataAssinatura" name="data_assinatura"
-                                       value="{% if contrato.data_assinatura %}{{ contrato.data_assinatura|date:'Y-m-d' }}{% endif %}">
-                            </div>
-                            <div class="col-md-3">
-                                <button type="button" class="btn btn-success w-100" onclick="uploadDocumento()">
-                                    <i class="fas fa-upload me-1"></i> Enviar
-                                </button>
-                            </div>
-                        </div>
-                        <div id="docResultado" class="alert mt-2 d-none"></div>
-                    </form>
-                </div>
-            </div>
-        </div>
 
         <!-- 3.18 Aba Relatórios do Contrato -->
         <div class="card mt-4" id="card-relatorios">
@@ -1294,16 +1219,6 @@
                     <a href="{% url 'financeiro:recibo_antecipacao' contrato.pk %}" class="btn btn-outline-info"
                        title="Baixar recibo das últimas antecipações">
                         <i class="fas fa-file-pdf me-1"></i> Recibo Antecipação
-                    </a>
-                    <a href="{% url 'contratos:contrato_pdf' contrato.pk %}" class="btn btn-outline-primary"
-                       title="Baixar PDF do Contrato de Promessa de Compra e Venda" target="_blank">
-                        <i class="fas fa-file-contract me-1"></i> Contrato PDF
-                    </a>
-                    <a href="{% url 'financeiro:declaracao_quitacao' contrato.pk %}"
-                       class="btn btn-outline-secondary"
-                       title="Declaração Anual de Quitação — Lei 12.007/2009"
-                       target="_blank">
-                        <i class="fas fa-certificate me-1"></i> Decl. Quitação
                     </a>
                     <a href="{% url 'financeiro:renegociar_parcelas' contrato.pk %}" class="btn btn-outline-warning"
                        title="Renegociar parcelas em atraso">
@@ -2749,56 +2664,5 @@ function _bindReajusteModal(contratoId) {
         });
     }
 })();
-
-// 3.33: Documentos do Contrato
-function uploadDocumento() {
-    var form = document.getElementById('formDocumento');
-    var resultado = document.getElementById('docResultado');
-    var fileInput = document.getElementById('docArquivo');
-
-    if (fileInput.required && !fileInput.files.length) {
-        resultado.className = 'alert alert-warning mt-2';
-        resultado.textContent = 'Selecione um arquivo para enviar.';
-        return;
-    }
-
-    var fd = new FormData(form);
-    resultado.className = 'alert alert-info mt-2';
-    resultado.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i> Enviando...';
-
-    fetch('{% url "contratos:documento_upload" contrato.pk %}', {
-        method: 'POST',
-        body: fd,
-        headers: {'X-Requested-With': 'XMLHttpRequest'}
-    })
-    .then(function(r) { return r.json(); })
-    .then(function(data) {
-        if (data.sucesso) {
-            resultado.className = 'alert alert-success mt-2';
-            resultado.innerHTML = '<i class="fas fa-check me-1"></i>' + data.mensagem;
-            setTimeout(function() { location.reload(); }, 1200);
-        } else {
-            resultado.className = 'alert alert-danger mt-2';
-            resultado.textContent = data.erro || 'Erro ao enviar documento.';
-        }
-    })
-    .catch(function(e) {
-        resultado.className = 'alert alert-danger mt-2';
-        resultado.textContent = 'Erro de conexão: ' + e.message;
-    });
-}
-
-function excluirDocumento() {
-    if (!confirm('Tem certeza que deseja excluir o documento assinado? Esta ação não pode ser desfeita.')) return;
-    var csrf = document.querySelector('[name=csrfmiddlewaretoken]').value;
-    fetch('{% url "contratos:documento_excluir" contrato.pk %}', {
-        method: 'POST',
-        headers: {'X-CSRFToken': csrf, 'X-Requested-With': 'XMLHttpRequest'}
-    })
-    .then(function(r) { return r.json(); })
-    .then(function(data) {
-        if (data.sucesso) { location.reload(); }
-    });
-}
 </script>
 {% endblock %}

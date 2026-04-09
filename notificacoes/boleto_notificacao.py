@@ -19,7 +19,7 @@ from .models import (
     TemplateNotificacao, TipoTemplate, TipoNotificacao,
     Notificacao, StatusNotificacao
 )
-from .services import ServicoEmail, ServicoSMS, ServicoWhatsApp, _destinatario_email_teste, _destinatario_telefone_teste
+from .services import ServicoEmail, ServicoSMS, _destinatario_email_teste, _destinatario_telefone_teste
 
 logger = logging.getLogger(__name__)
 
@@ -331,7 +331,7 @@ class BoletoNotificacaoService:
             )
 
             try:
-                ServicoSMS.enviar(destinatario=numero_final, mensagem=mensagem)
+                ServicoSMS.enviar(destinatario=numero, mensagem=mensagem)
                 notificacao.marcar_como_enviada()
                 logger.info(f"SMS de boleto enviado para {numero_final} - Parcela {parcela.pk}")
                 return {
@@ -347,208 +347,12 @@ class BoletoNotificacaoService:
             logger.exception(f"Erro ao enviar SMS de boleto: {e}")
             return {'sucesso': False, 'erro': str(e)}
 
-    def enviar_whatsapp_boleto(self, parcela, tipo_template):
-        """
-        Envia notificação de boleto via WhatsApp.
-
-        Args:
-            parcela: Instância de Parcela
-            tipo_template: TipoTemplate (ex: TipoTemplate.BOLETO_CRIADO)
-
-        Returns:
-            dict: Resultado do envio
-        """
-        try:
-            contrato = parcela.contrato
-            comprador = contrato.comprador
-            imobiliaria = contrato.imovel.imobiliaria
-
-            if not comprador.notificar_whatsapp:
-                return {'sucesso': False, 'erro': 'Comprador optou por não receber WhatsApp'}
-
-            numero_raw = (comprador.celular or comprador.telefone or '').strip()
-            if not numero_raw:
-                return {'sucesso': False, 'erro': 'Comprador não possui celular/telefone cadastrado'}
-
-            import re as _re
-            numero = _re.sub(r'\D', '', numero_raw)
-            if len(numero) == 11:
-                numero = '+55' + numero
-            elif len(numero) == 10:
-                numero = '+55' + numero
-            elif len(numero) == 13 and numero.startswith('55'):
-                numero = '+' + numero
-            elif not numero.startswith('+'):
-                numero = '+' + numero
-            if len(numero) < 12:
-                return {'sucesso': False, 'erro': f'Número de telefone inválido: {numero_raw}'}
-
-            template = TemplateNotificacao.get_template(
-                codigo=tipo_template,
-                imobiliaria=imobiliaria,
-            )
-
-            if template and template.tem_whatsapp:
-                contexto = self.montar_contexto(parcela)
-                _, _, _, mensagem = template.renderizar(contexto)
-            else:
-                mensagem = (
-                    f"Olá {comprador.nome.split()[0]}, "
-                    f"seu boleto parcela {parcela.numero_parcela} "
-                    f"valor {self._formatar_valor(parcela.valor_atual)} "
-                    f"vence {self._formatar_data(parcela.data_vencimento)}. "
-                    f"{imobiliaria.nome}"
-                )
-
-            numero_final = _destinatario_telefone_teste(numero)
-
-            notificacao = Notificacao.objects.create(
-                parcela=parcela,
-                tipo=TipoNotificacao.WHATSAPP,
-                destinatario=numero_final,
-                assunto=f'WhatsApp Boleto Parcela {parcela.numero_parcela}',
-                mensagem=mensagem,
-                status=StatusNotificacao.PENDENTE
-            )
-
-            try:
-                ServicoWhatsApp.enviar(destinatario=numero_final, mensagem=mensagem)
-                notificacao.marcar_como_enviada()
-                logger.info(f"WhatsApp de boleto enviado para {numero_final} - Parcela {parcela.pk}")
-                return {
-                    'sucesso': True,
-                    'notificacao_id': notificacao.pk,
-                    'destinatario': numero_final,
-                }
-            except Exception as e:
-                notificacao.marcar_erro(str(e))
-                raise
-
-        except Exception as e:
-            logger.exception(f"Erro ao enviar WhatsApp de boleto: {e}")
-            return {'sucesso': False, 'erro': str(e)}
-
-    def montar_contexto_pagamento(self, historico):
-        """
-        Monta contexto estendido para o evento PAGAMENTO_CONFIRMADO.
-        Inclui todas as TAGs de montar_contexto() mais as TAGs de pagamento.
-        """
-        parcela = historico.parcela
-        ctx = self.montar_contexto(parcela)
-        ctx.update({
-            'DATAPAGAMENTO':     self._formatar_data(historico.data_pagamento),
-            'VALORPAGO':         self._formatar_valor(historico.valor_pago),
-            'FORMAPAGAMENTO':    historico.get_forma_pagamento_display(),
-            'VALORJUROSPAGO':    self._formatar_valor(historico.valor_juros or Decimal('0')),
-            'VALORMULTAPAGO':    self._formatar_valor(historico.valor_multa or Decimal('0')),
-            'VALORDESCONTOPAGO': self._formatar_valor(historico.valor_desconto or Decimal('0')),
-            # Placeholder — será substituído por texto fixo; a presença no template
-            # sinaliza que o PDF deve ser anexado (ver notificar_pagamento_confirmado).
-            'RECIBOPDF':         'O recibo de pagamento está em anexo.',
-        })
-        return ctx
-
-    def notificar_pagamento_confirmado(self, historico):
-        """
-        Envia notificação de confirmação de pagamento (evento PAGAMENTO_CONFIRMADO).
-
-        Regras:
-        - Usa o template TemplateNotificacao com codigo=PAGAMENTO_CONFIRMADO.
-        - Se o template (assunto, corpo ou corpo_html) contiver %%RECIBOPDF%%,
-          o recibo PDF é gerado e anexado ao e-mail.
-        - Cria registro em Notificacao para rastreabilidade.
-        - Retorna dict {'sucesso': bool, ...}.
-        """
-        try:
-            parcela  = historico.parcela
-            contrato = parcela.contrato
-            comprador = contrato.comprador
-            imobiliaria = contrato.imobiliaria
-
-            if not getattr(comprador, 'email', None):
-                return {'sucesso': False, 'erro': 'Comprador sem e-mail cadastrado'}
-
-            if not getattr(comprador, 'notificar_email', True):
-                return {'sucesso': False, 'erro': 'Comprador optou por não receber e-mails'}
-
-            template = TemplateNotificacao.get_template(
-                codigo=TipoTemplate.PAGAMENTO_CONFIRMADO,
-                imobiliaria=imobiliaria,
-            )
-            if not template:
-                logger.warning(
-                    'Template PAGAMENTO_CONFIRMADO não configurado — '
-                    'notificação de pagamento não enviada (parcela %s)', parcela.pk
-                )
-                return {'sucesso': False, 'erro': 'Template PAGAMENTO_CONFIRMADO não configurado'}
-
-            # Verificar se o template solicita o recibo PDF
-            template_raw = ' '.join(filter(None, [
-                template.assunto, template.corpo, template.corpo_html, template.corpo_whatsapp
-            ]))
-            anexar_recibo = '%%RECIBOPDF%%' in template_raw
-
-            ctx = self.montar_contexto_pagamento(historico)
-            assunto, corpo_txt, corpo_html, _ = template.renderizar(ctx)
-
-            destinatario = _destinatario_email_teste(comprador.email)
-
-            notificacao = Notificacao.objects.create(
-                parcela=parcela,
-                tipo=TipoNotificacao.EMAIL,
-                destinatario=destinatario,
-                assunto=assunto,
-                mensagem=corpo_txt,
-                status=StatusNotificacao.PENDENTE,
-            )
-
-            try:
-                email = EmailMultiAlternatives(
-                    subject=assunto,
-                    body=corpo_txt,
-                    from_email=settings.DEFAULT_FROM_EMAIL,
-                    to=[destinatario],
-                )
-                if corpo_html:
-                    email.attach_alternative(corpo_html, 'text/html')
-
-                if anexar_recibo:
-                    try:
-                        from financeiro.services.recibo_service import gerar_recibo_pagamento_pdf
-                        pdf_bytes = gerar_recibo_pagamento_pdf(historico)
-                        nome_pdf = (
-                            f'recibo_{contrato.numero_contrato}'
-                            f'_p{parcela.numero_parcela}.pdf'
-                        )
-                        email.attach(nome_pdf, pdf_bytes, 'application/pdf')
-                    except Exception as pdf_err:
-                        logger.warning(
-                            'Não foi possível gerar recibo PDF para anexar '
-                            '(historico pk=%s): %s', historico.pk, pdf_err
-                        )
-
-                email.send()
-                notificacao.marcar_como_enviada()
-                logger.info(
-                    'Notificação PAGAMENTO_CONFIRMADO enviada para %s (parcela %s)',
-                    destinatario, parcela.pk,
-                )
-                return {'sucesso': True, 'notificacao_id': notificacao.pk, 'destinatario': destinatario}
-
-            except Exception as send_err:
-                notificacao.marcar_erro(str(send_err))
-                raise
-
-        except Exception as e:
-            logger.exception('Erro ao enviar notificação de pagamento confirmado: %s', e)
-            return {'sucesso': False, 'erro': str(e)}
-
     def notificar_boleto_criado(self, parcela, anexar_pdf=True):
-        """Envia notificações de boleto criado (email + SMS + WhatsApp conforme preferências do comprador)"""
+        """Envia notificações de boleto criado (email + SMS conforme preferências do comprador)"""
         return self._notificar(parcela, TipoTemplate.BOLETO_CRIADO, anexar_pdf=anexar_pdf)
 
     def _notificar(self, parcela, tipo_template, anexar_pdf=True):
-        """Helper interno: envia email + SMS + WhatsApp (se comprador optar) para um tipo de template."""
+        """Helper interno: envia email + SMS (se comprador optar) para um tipo de template."""
         resultado = self.enviar_email_boleto(parcela, tipo_template, anexar_pdf=anexar_pdf)
         comprador = parcela.contrato.comprador
         if comprador.notificar_sms:
@@ -556,11 +360,6 @@ class BoletoNotificacaoService:
             if not res_sms.get('sucesso'):
                 logger.warning("SMS não enviado parcela %s: %s", parcela.pk, res_sms.get('erro'))
             resultado['sms'] = res_sms
-        if comprador.notificar_whatsapp:
-            res_whatsapp = self.enviar_whatsapp_boleto(parcela, tipo_template)
-            if not res_whatsapp.get('sucesso'):
-                logger.warning("WhatsApp não enviado parcela %s: %s", parcela.pk, res_whatsapp.get('erro'))
-            resultado['whatsapp'] = res_whatsapp
         return resultado
 
     def notificar_boleto_5_dias(self, parcela):
@@ -604,12 +403,11 @@ class BoletoNotificacaoService:
         ).select_related('contrato', 'contrato__comprador')
 
         for parcela in parcelas_5_dias:
-            # Verificar se já enviou notificação hoje para esta parcela
+            # Verificar se já enviou notificação hoje
             ja_enviou = Notificacao.objects.filter(
                 parcela=parcela,
-                tipo=TipoNotificacao.EMAIL,
                 status=StatusNotificacao.ENVIADA,
-                criado_em__date=hoje,
+                assunto__icontains='5 dias'
             ).exists()
 
             if not ja_enviou:
@@ -629,9 +427,8 @@ class BoletoNotificacaoService:
         for parcela in parcelas_amanha:
             ja_enviou = Notificacao.objects.filter(
                 parcela=parcela,
-                tipo=TipoNotificacao.EMAIL,
                 status=StatusNotificacao.ENVIADA,
-                criado_em__date=hoje,
+                assunto__icontains='amanhã'
             ).exists()
 
             if not ja_enviou:
@@ -651,9 +448,8 @@ class BoletoNotificacaoService:
         for parcela in parcelas_ontem:
             ja_enviou = Notificacao.objects.filter(
                 parcela=parcela,
-                tipo=TipoNotificacao.EMAIL,
                 status=StatusNotificacao.ENVIADA,
-                criado_em__date=hoje,
+                assunto__icontains='venceu'
             ).exists()
 
             if not ja_enviou:
@@ -763,54 +559,6 @@ def criar_templates_padrao():
                 'Vencimento: %%DATAVENCIMENTO%%\n\n'
                 'Pague hoje para evitar multas e juros!\n'
                 'Download: %%LINKBOLETO%%'
-            ),
-        },
-        {
-            'codigo': TipoTemplate.PAGAMENTO_CONFIRMADO,
-            'nome': 'Confirmação de Pagamento',
-            'assunto': 'Pagamento confirmado — Parcela %%PARCELA%% — Contrato %%NUMEROCONTRATO%%',
-            'corpo': (
-                '%%NOMEIMOBILIARIA%%: Ola %%NOMECOMPRADOR%%, '
-                'confirmamos o pagamento da parcela %%PARCELA%% '
-                'valor %%VALORPAGO%% em %%DATAPAGAMENTO%%. '
-                '%%RECIBOPDF%%'
-            ),
-            'corpo_html': """\
-<html>
-<body style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;">
-  <div style="background:#1b5e20;color:#fff;padding:20px;text-align:center;">
-    <h1 style="margin:0;">&#10003; Pagamento Confirmado</h1>
-  </div>
-  <div style="padding:20px;">
-    <p>Prezado(a) <strong>%%NOMECOMPRADOR%%</strong>,</p>
-    <p>Confirmamos o recebimento do pagamento da parcela <strong>%%PARCELA%%</strong> do contrato <strong>%%NUMEROCONTRATO%%</strong>.</p>
-    <div style="background:#e8f5e9;border-left:4px solid #1b5e20;padding:15px;border-radius:4px;margin:20px 0;">
-      <table style="width:100%;border-collapse:collapse;">
-        <tr><td style="padding:4px 8px;color:#555;"><strong>Data do pagamento</strong></td><td style="padding:4px 8px;">%%DATAPAGAMENTO%%</td></tr>
-        <tr style="background:#fff;"><td style="padding:4px 8px;color:#555;"><strong>Valor pago</strong></td><td style="padding:4px 8px;font-size:18px;color:#1b5e20;"><strong>%%VALORPAGO%%</strong></td></tr>
-        <tr><td style="padding:4px 8px;color:#555;"><strong>Forma de pagamento</strong></td><td style="padding:4px 8px;">%%FORMAPAGAMENTO%%</td></tr>
-        <tr style="background:#fff;"><td style="padding:4px 8px;color:#555;"><strong>Juros</strong></td><td style="padding:4px 8px;">%%VALORJUROSPAGO%%</td></tr>
-        <tr><td style="padding:4px 8px;color:#555;"><strong>Multa</strong></td><td style="padding:4px 8px;">%%VALORMULTAPAGO%%</td></tr>
-        <tr style="background:#fff;"><td style="padding:4px 8px;color:#555;"><strong>Desconto</strong></td><td style="padding:4px 8px;">%%VALORDESCONTOPAGO%%</td></tr>
-        <tr><td style="padding:4px 8px;color:#555;"><strong>Imóvel</strong></td><td style="padding:4px 8px;">%%IMOVEL%%</td></tr>
-      </table>
-    </div>
-    <p style="color:#555;">%%RECIBOPDF%%</p>
-  </div>
-  <div style="background:#f1f1f1;padding:15px;text-align:center;font-size:12px;color:#666;">
-    <p style="margin:0;"><strong>%%NOMEIMOBILIARIA%%</strong></p>
-    <p style="margin:5px 0;">%%TELEFONEIMOBILIARIA%% | %%EMAILIMOBILIARIA%%</p>
-  </div>
-</body>
-</html>""",
-            'corpo_whatsapp': (
-                '*%%NOMEIMOBILIARIA%%* — Pagamento confirmado ✔\n\n'
-                'Olá %%NOMECOMPRADOR%%,\n'
-                'Parcela: %%PARCELA%%\n'
-                'Valor pago: %%VALORPAGO%%\n'
-                'Data: %%DATAPAGAMENTO%%\n'
-                'Forma: %%FORMAPAGAMENTO%%\n\n'
-                'O recibo está disponível no portal.'
             ),
         },
         {
