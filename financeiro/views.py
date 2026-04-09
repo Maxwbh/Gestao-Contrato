@@ -708,6 +708,7 @@ def registrar_pagamento(request, pk):
                 valor_multa=valor_multa,
                 forma_pagamento=forma_pagamento,
                 observacoes=observacoes,
+                origem_pagamento='MANUAL',
             )
             if comprovante:
                 historico.comprovante = comprovante
@@ -1781,6 +1782,105 @@ def download_arquivo_remessa(request, pk):
 
 
 # =============================================================================
+# DASHBOARD DE CONCILIAÇÃO BANCÁRIA
+# =============================================================================
+
+@login_required
+def dashboard_conciliacao(request):
+    """
+    Hub de conciliação bancária — reúne os 3 métodos de baixa:
+      1. Retorno CNAB (arquivo do banco)
+      2. Extrato OFX
+      3. Baixa manual
+
+    Exibe KPIs, fila de boletos pendentes de conciliação e histórico recente.
+    """
+    from django.db.models import Count, Sum, Q as DQ
+    from .models import (
+        Parcela, HistoricoPagamento, ArquivoRetorno, StatusBoleto,
+        ItemRetorno,
+    )
+    from core.models import Imobiliaria
+
+    imobiliarias = Imobiliaria.objects.filter(ativo=True).order_by('nome')
+    imob_id = request.GET.get('imobiliaria')
+    periodo = request.GET.get('periodo', '30')  # dias
+    try:
+        dias = int(periodo)
+    except ValueError:
+        dias = 30
+
+    desde = timezone.now().date() - timezone.timedelta(days=dias)
+
+    # ── Boletos aguardando conciliação ────────────────────────────────────────
+    qs_pendentes = Parcela.objects.filter(
+        status_boleto__in=[StatusBoleto.GERADO, StatusBoleto.REGISTRADO, StatusBoleto.VENCIDO],
+        pago=False,
+    ).select_related('contrato', 'contrato__comprador', 'contrato__imobiliaria', 'conta_bancaria_boleto')
+
+    if imob_id:
+        qs_pendentes = qs_pendentes.filter(contrato__imobiliaria_id=imob_id)
+
+    total_pendentes = qs_pendentes.count()
+    valor_pendente = qs_pendentes.aggregate(s=Sum('valor_boleto'))['s'] or 0
+
+    # ── Histórico de conciliações (últimos N dias) ────────────────────────────
+    qs_hist = HistoricoPagamento.objects.filter(
+        data_pagamento__gte=desde,
+    ).select_related('parcela', 'parcela__contrato', 'parcela__contrato__comprador')
+
+    if imob_id:
+        qs_hist = qs_hist.filter(parcela__contrato__imobiliaria_id=imob_id)
+
+    hist_por_origem = (
+        qs_hist.values('origem_pagamento')
+        .annotate(total=Count('id'), valor=Sum('valor_pago'))
+        .order_by('origem_pagamento')
+    )
+    # normaliza em dict para template
+    origem_stats = {
+        'CNAB':      {'total': 0, 'valor': 0},
+        'OFX':       {'total': 0, 'valor': 0},
+        'MANUAL':    {'total': 0, 'valor': 0},
+        'ANTECIPACAO': {'total': 0, 'valor': 0},
+    }
+    for row in hist_por_origem:
+        key = row['origem_pagamento']
+        if key in origem_stats:
+            origem_stats[key] = {'total': row['total'], 'valor': float(row['valor'] or 0)}
+
+    historico_recente = qs_hist.order_by('-data_pagamento', '-id')[:50]
+
+    # ── Arquivos de retorno CNAB recentes ─────────────────────────────────────
+    arquivos_retorno = ArquivoRetorno.objects.filter(
+        data_upload__date__gte=desde
+    ).select_related('conta_bancaria', 'conta_bancaria__imobiliaria', 'processado_por').order_by('-data_upload')[:10]
+
+    # ── ItemRetornos com erro (não processados) ───────────────────────────────
+    itens_erro = ItemRetorno.objects.filter(
+        processado=False,
+        parcela__isnull=False,
+    ).exclude(erro_processamento='').select_related(
+        'arquivo_retorno', 'parcela', 'parcela__contrato'
+    ).order_by('-id')[:20]
+
+    context = {
+        'total_pendentes': total_pendentes,
+        'valor_pendente': valor_pendente,
+        'origem_stats': origem_stats,
+        'historico_recente': historico_recente,
+        'arquivos_retorno': arquivos_retorno,
+        'itens_erro': itens_erro,
+        'imobiliarias': imobiliarias,
+        'imob_id': imob_id or '',
+        'periodo': str(dias),
+        'parcelas_pendentes': qs_pendentes.order_by('data_vencimento')[:100],
+        'today': timezone.localdate(),
+    }
+    return render(request, 'financeiro/conciliacao/dashboard.html', context)
+
+
+# =============================================================================
 # VIEWS DE ARQUIVO DE RETORNO
 # =============================================================================
 
@@ -2034,7 +2134,8 @@ def pagar_parcela_ajax(request, pk):
             valor_multa=valor_multa,
             valor_desconto=valor_desconto,
             forma_pagamento=forma_pagamento,
-            observacoes=observacoes
+            observacoes=observacoes,
+            origem_pagamento='MANUAL',
         )
 
         return JsonResponse({
@@ -5204,7 +5305,8 @@ def api_parcela_registrar_pagamento(request, parcela_id):
             valor_multa=parcela.valor_multa,
             valor_desconto=parcela.valor_desconto,
             forma_pagamento=forma_pagamento,
-            observacoes=observacoes
+            observacoes=observacoes,
+            origem_pagamento='MANUAL',
         )
 
         return JsonResponse({
@@ -6679,6 +6781,7 @@ def simulador_antecipacao(request, contrato_id):
                         forma_pagamento='DINHEIRO',
                         antecipado=True,
                         observacoes=obs,
+                        origem_pagamento='ANTECIPACAO',
                     )
 
             messages.success(
