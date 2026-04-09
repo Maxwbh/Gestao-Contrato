@@ -771,6 +771,36 @@ class Imovel(TimeStampedModel):
         return ' '.join(partes) if partes else self.endereco
 
 
+class VerticePoligono(models.Model):
+    """Vértice de polígono de lote — define o contorno georreferenciado do imóvel no mapa."""
+    imovel = models.ForeignKey(
+        Imovel,
+        on_delete=models.CASCADE,
+        related_name='vertices',
+        verbose_name='Imóvel'
+    )
+    ordem = models.PositiveSmallIntegerField(verbose_name='Ordem')
+    latitude = models.DecimalField(
+        max_digits=10,
+        decimal_places=7,
+        verbose_name='Latitude'
+    )
+    longitude = models.DecimalField(
+        max_digits=10,
+        decimal_places=7,
+        verbose_name='Longitude'
+    )
+
+    class Meta:
+        verbose_name = 'Vértice de Polígono'
+        verbose_name_plural = 'Vértices de Polígonos'
+        ordering = ['imovel', 'ordem']
+        unique_together = [['imovel', 'ordem']]
+
+    def __str__(self):
+        return f"{self.imovel} — V{self.ordem} ({self.latitude}, {self.longitude})"
+
+
 class Comprador(TimeStampedModel):
     """Modelo para representar o Comprador do imóvel (Pessoa Física ou Jurídica)"""
 
