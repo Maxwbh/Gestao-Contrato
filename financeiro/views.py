@@ -654,91 +654,20 @@ def notificar_inadimplente(request, pk):
         return JsonResponse({'sucesso': False, 'erro': str(e)}, status=500)
 
 
-def _enviar_recibo_pagamento_email(historico):
+def _notificar_pagamento_bg(historico):
     """
-    Envia o recibo de pagamento por e-mail para o comprador em background.
-    Falhas são logadas e nunca propagadas (não bloqueia a resposta HTTP).
+    Dispara notificar_pagamento_confirmado em daemon thread.
+    Falhas são logadas e nunca propagadas — não bloqueia a resposta HTTP.
     """
     import threading
 
     def _do():
         try:
-            from .services.recibo_service import gerar_recibo_pagamento_pdf
-            from django.core.mail import EmailMessage as _EmailMessage, get_connection
-            from django.conf import settings
-            from notificacoes.services import _destinatario_email_teste
-
-            # Garantir que os relacionamentos estão carregados
-            parcela  = historico.parcela
-            contrato = parcela.contrato
-            comp     = contrato.comprador
-            imob     = contrato.imobiliaria
-
-            if not getattr(comp, 'email', None):
-                return
-
-            pdf_bytes = gerar_recibo_pagamento_pdf(historico)
-            num       = parcela.numero_parcela
-            num_total = contrato.numero_parcelas
-            filename  = f'recibo_{contrato.numero_contrato}_p{num}.pdf'
-
-            assunto = (
-                f'Recibo de Pagamento — Contrato {contrato.numero_contrato} '
-                f'— Parcela {num}/{num_total}'
-            )
-            corpo = (
-                f'Prezado(a) {comp.nome},\n\n'
-                f'Confirmamos o recebimento do pagamento da parcela '
-                f'{num}/{num_total} do Contrato {contrato.numero_contrato}.\n\n'
-                f'  Data do pagamento : {historico.data_pagamento.strftime("%d/%m/%Y")}\n'
-                f'  Valor pago        : R$ {float(historico.valor_pago):,.2f}\n'
-                f'  Forma de pagamento: {historico.get_forma_pagamento_display()}\n\n'
-                f'O recibo de pagamento está anexado a este e-mail.\n\n'
-                f'Atenciosamente,\n{imob.nome}'
-            )
-
-            destinatario = _destinatario_email_teste(comp.email)
-
-            try:
-                from notificacoes.models import ConfiguracaoEmail
-                config = ConfiguracaoEmail.objects.filter(ativo=True).first()
-            except Exception:
-                config = None
-
-            if config:
-                conn = get_connection(
-                    backend='django.core.mail.backends.smtp.EmailBackend',
-                    host=config.host,
-                    port=config.porta,
-                    username=config.usuario,
-                    password=config.senha,
-                    use_tls=config.usar_tls,
-                    use_ssl=config.usar_ssl,
-                )
-                email = _EmailMessage(
-                    subject=assunto,
-                    body=corpo,
-                    from_email=f'{config.nome_remetente} <{config.email_remetente}>',
-                    to=[destinatario],
-                    connection=conn,
-                )
-            else:
-                email = _EmailMessage(
-                    subject=assunto,
-                    body=corpo,
-                    from_email=getattr(settings, 'DEFAULT_FROM_EMAIL', 'noreply@localhost'),
-                    to=[destinatario],
-                )
-
-            email.attach(filename, pdf_bytes, 'application/pdf')
-            email.send()
-            logger.info(
-                'Recibo de pagamento enviado por e-mail para %s (historico pk=%s)',
-                comp.email, historico.pk,
-            )
+            from notificacoes.boleto_notificacao import BoletoNotificacaoService
+            BoletoNotificacaoService().notificar_pagamento_confirmado(historico)
         except Exception as exc:
             logger.exception(
-                'Falha ao enviar recibo por e-mail (historico pk=%s): %s',
+                'Falha ao notificar pagamento confirmado (historico pk=%s): %s',
                 historico.pk, exc,
             )
 
@@ -804,10 +733,7 @@ def registrar_pagamento(request, pk):
                 historico.comprovante = comprovante
                 historico.save(update_fields=['comprovante'])
 
-            # Recarregar relacionamentos para o envio do recibo
-            historico.parcela = parcela
-            historico.parcela.contrato = parcela.contrato
-            _enviar_recibo_pagamento_email(historico)
+            _notificar_pagamento_bg(historico)
 
             messages.success(request, 'Pagamento registrado com sucesso!')
             return redirect('financeiro:detalhe_parcela', pk=pk)
@@ -2132,7 +2058,7 @@ def pagar_parcela_ajax(request, pk):
             forma_pagamento=forma_pagamento,
             observacoes=observacoes,
         )
-        _enviar_recibo_pagamento_email(hist_ajax)
+        _notificar_pagamento_bg(hist_ajax)
 
         return JsonResponse({
             'sucesso': True,
