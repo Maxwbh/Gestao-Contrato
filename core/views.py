@@ -283,63 +283,11 @@ def dashboard(request):
 
 def setup(request):
     """
-    Página de setup inicial do sistema
-    Executa migrations, cria superuser e opcionalmente gera dados de teste
-
-    Acessível via: /setup/
-    NOTA: Endpoint protegido - requer superusuário para ações POST
+    Redireciona para /dados-teste/ (página unificada de setup + dados de teste).
+    Mantido para compatibilidade com links existentes e bookmarks.
     """
     if request.method == 'GET':
-        # Verificar status do banco
-        try:
-            with connection.cursor() as cursor:
-                cursor.execute("SELECT 1")
-            db_ok = True
-
-            # Verificar se tem tabelas
-            tables = connection.introspection.table_names()
-            has_tables = len(tables) > 0
-
-            # Verificar se tem dados
-            if has_tables:
-                try:
-                    total_contabilidades = Contabilidade.objects.count()
-                    total_users = get_user_model().objects.count()
-                    has_superuser = get_user_model().objects.filter(is_superuser=True).exists()
-                    total_contas_bancarias = ContaBancaria.objects.count()
-                    total_imobiliarias = Imobiliaria.objects.count()
-                except:
-                    total_contabilidades = 0
-                    total_users = 0
-                    has_superuser = False
-                    total_contas_bancarias = 0
-                    total_imobiliarias = 0
-            else:
-                total_contabilidades = 0
-                total_users = 0
-                has_superuser = False
-                total_contas_bancarias = 0
-                total_imobiliarias = 0
-
-        except Exception as e:
-            db_ok = False
-            has_tables = False
-            total_contabilidades = 0
-            total_users = 0
-            has_superuser = False
-            total_contas_bancarias = 0
-            total_imobiliarias = 0
-
-        context = {
-            'db_ok': db_ok,
-            'has_tables': has_tables,
-            'total_contabilidades': total_contabilidades,
-            'total_users': total_users,
-            'has_superuser': has_superuser,
-            'total_contas_bancarias': total_contas_bancarias,
-            'total_imobiliarias': total_imobiliarias,
-        }
-        return render(request, 'core/setup.html', context)
+        return redirect('core:pagina_dados_teste')
 
     # POST - Executar setup (requer autenticação para ações sensíveis)
     # Verificar se é primeira configuração (sem usuários) ou se usuário é superuser
@@ -1612,29 +1560,66 @@ def api_listar_acessos_usuario(request, usuario_id):
 @login_required
 def pagina_dados_teste(request):
     """
-    Página HTML para gerar/limpar dados de teste.
-    Apenas administradores (is_staff ou is_superuser) podem acessar.
+    Página unificada: setup do sistema + gerador de dados de teste.
+    Requer staff/superuser quando autenticado; permite acesso sem login apenas
+    quando não há nenhum usuário cadastrado (primeira instalação).
     """
-    if not (request.user.is_staff or request.user.is_superuser):
+    User = get_user_model()
+    try:
+        no_users = User.objects.count() == 0
+    except Exception:
+        no_users = True
+
+    if not no_users and not (request.user.is_authenticated and (request.user.is_staff or request.user.is_superuser)):
         messages.error(request, 'Acesso negado. Apenas administradores podem acessar esta página.')
         return redirect('core:dashboard')
 
     from contratos.models import Contrato, IndiceReajuste, TabelaJurosContrato
     from financeiro.models import Parcela
 
-    stats = {
-        'contabilidades': Contabilidade.objects.count(),
-        'imobiliarias': Imobiliaria.objects.count(),
-        'contas_bancarias': ContaBancaria.objects.count(),
-        'imoveis': Imovel.objects.count(),
-        'compradores': Comprador.objects.count(),
-        'contratos': Contrato.objects.count(),
-        'parcelas': Parcela.objects.count(),
-        'indices_reajuste': IndiceReajuste.objects.count(),
-        'tabela_juros': TabelaJurosContrato.objects.count(),
-    }
+    # Status do sistema (informações do banco)
+    try:
+        with connection.cursor() as cursor:
+            cursor.execute("SELECT 1")
+        db_ok = True
+        has_tables = len(connection.introspection.table_names()) > 0
+    except Exception:
+        db_ok = False
+        has_tables = False
 
-    return render(request, 'core/dados_teste.html', {'stats': stats})
+    try:
+        has_superuser = User.objects.filter(is_superuser=True).exists()
+        total_users = User.objects.count()
+    except Exception:
+        has_superuser = False
+        total_users = 0
+
+    try:
+        stats = {
+            'contabilidades': Contabilidade.objects.count(),
+            'imobiliarias': Imobiliaria.objects.count(),
+            'contas_bancarias': ContaBancaria.objects.count(),
+            'imoveis': Imovel.objects.count(),
+            'compradores': Comprador.objects.count(),
+            'contratos': Contrato.objects.count(),
+            'parcelas': Parcela.objects.count(),
+            'indices_reajuste': IndiceReajuste.objects.count(),
+            'tabela_juros': TabelaJurosContrato.objects.count(),
+        }
+    except Exception:
+        stats = {k: 0 for k in ['contabilidades', 'imobiliarias', 'contas_bancarias',
+                                  'imoveis', 'compradores', 'contratos', 'parcelas',
+                                  'indices_reajuste', 'tabela_juros']}
+
+    context = {
+        'stats': stats,
+        'db_ok': db_ok,
+        'has_tables': has_tables,
+        'has_superuser': has_superuser,
+        'total_users': total_users,
+        'no_users': no_users,
+    }
+    return render(request, 'core/dados_teste.html', context)
 
 
 # =============================================================================
