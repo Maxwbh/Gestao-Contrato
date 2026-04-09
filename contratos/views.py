@@ -2136,3 +2136,130 @@ def api_tabela_juros_delete(request, pk):
         contrato.recalcular_amortizacao(base_pv=base_pv)
 
     return JsonResponse({'sucesso': True})
+
+
+# ===========================================================================
+# 3.33: Documentos do Contrato (contrato assinado)
+# ===========================================================================
+
+@login_required
+@require_http_methods(['POST'])
+def upload_documento_contrato(request, pk):
+    """POST: faz upload do contrato assinado (PDF ou imagem). Dual storage."""
+    contrato = get_object_or_404(Contrato, pk=pk)
+
+    arquivo = request.FILES.get('arquivo')
+    if not arquivo:
+        return JsonResponse({'erro': 'Nenhum arquivo enviado.'}, status=400)
+
+    MAX_SIZE = 20 * 1024 * 1024  # 20 MB
+    if arquivo.size > MAX_SIZE:
+        return JsonResponse({'erro': 'Arquivo maior que 20 MB.'}, status=400)
+
+    ct = arquivo.content_type or 'application/pdf'
+    tipos_permitidos = ('application/pdf', 'image/png', 'image/jpeg', 'image/jpg', 'image/gif')
+    if not any(ct.startswith(t) for t in tipos_permitidos):
+        return JsonResponse({'erro': 'Formato não suportado. Use PDF ou imagem (PNG/JPG).'}, status=400)
+
+    arquivo_bytes = arquivo.read()
+    contrato.documento_assinado_db = arquivo_bytes
+    contrato.documento_assinado_content_type = ct
+
+    data_assinatura = request.POST.get('data_assinatura', '').strip()
+    if data_assinatura:
+        try:
+            from datetime import date
+            contrato.data_assinatura = datetime.strptime(data_assinatura, '%Y-%m-%d').date()
+        except ValueError:
+            pass
+
+    from django.core.files.base import ContentFile
+    contrato.documento_assinado.save(arquivo.name, ContentFile(arquivo_bytes), save=False)
+    contrato.save(update_fields=[
+        'documento_assinado', 'documento_assinado_db',
+        'documento_assinado_content_type', 'data_assinatura',
+    ])
+
+    return JsonResponse({'sucesso': True, 'mensagem': 'Documento salvo com sucesso!'})
+
+
+@login_required
+def download_documento_contrato(request, pk):
+    """Serve o contrato assinado — disco com fallback para banco de dados."""
+    from django.http import FileResponse
+    contrato = get_object_or_404(Contrato, pk=pk)
+
+    nome_arquivo = f'contrato_{contrato.numero_contrato}.pdf'
+
+    if contrato.documento_assinado and contrato.documento_assinado.storage.exists(contrato.documento_assinado.name):
+        response = FileResponse(
+            contrato.documento_assinado.open('rb'),
+            content_type=contrato.documento_assinado_content_type,
+        )
+        response['Content-Disposition'] = f'attachment; filename="{nome_arquivo}"'
+        return response
+
+    if contrato.documento_assinado_db:
+        from django.http import HttpResponse
+        response = HttpResponse(
+            bytes(contrato.documento_assinado_db),
+            content_type=contrato.documento_assinado_content_type,
+        )
+        response['Content-Disposition'] = f'attachment; filename="{nome_arquivo}"'
+        return response
+
+    return JsonResponse({'erro': 'Documento não encontrado.'}, status=404)
+
+
+@login_required
+@require_http_methods(['POST'])
+def excluir_documento_contrato(request, pk):
+    """Remove o contrato assinado (disco + banco)."""
+    contrato = get_object_or_404(Contrato, pk=pk)
+
+    if contrato.documento_assinado:
+        try:
+            contrato.documento_assinado.delete(save=False)
+        except Exception:
+            pass
+
+    contrato.documento_assinado = None
+    contrato.documento_assinado_db = None
+    contrato.documento_assinado_content_type = 'application/pdf'
+    contrato.data_assinatura = None
+    contrato.save(update_fields=[
+        'documento_assinado', 'documento_assinado_db',
+        'documento_assinado_content_type', 'data_assinatura',
+    ])
+    return JsonResponse({'sucesso': True})
+
+
+# ===========================================================================
+# PDF do Contrato (Promessa de Compra e Venda)
+# ===========================================================================
+
+@login_required
+def download_contrato_pdf(request, pk):
+    """
+    Gera e serve o PDF do contrato de promessa de compra e venda.
+    """
+    from django.http import HttpResponse
+    from .services.contrato_pdf_service import gerar_contrato_pdf
+
+    contrato = get_object_or_404(
+        Contrato.objects.select_related(
+            'imovel', 'comprador', 'imobiliaria', 'conta_bancaria_padrao'
+        ),
+        pk=pk,
+    )
+
+    try:
+        pdf_bytes = gerar_contrato_pdf(contrato)
+    except Exception as e:
+        logger.exception("Erro ao gerar PDF do contrato pk=%s: %s", pk, e)
+        return HttpResponse(f'Erro ao gerar PDF: {e}', status=500, content_type='text/plain')
+
+    nome_arquivo = f'contrato_{contrato.numero_contrato}.pdf'
+    response = HttpResponse(pdf_bytes, content_type='application/pdf')
+    response['Content-Disposition'] = f'attachment; filename="{nome_arquivo}"'
+    return response
