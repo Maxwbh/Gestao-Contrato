@@ -334,7 +334,7 @@
             headerName: 'Tipo',
             field: 'tipo_indice',
             filter: 'agTextColumnFilter',
-            floatingFilter: true,
+           
             minWidth: 90,
             cellRenderer: params => tipoBadge(params.value),
         },
@@ -342,7 +342,7 @@
             headerName: 'Período',
             field: 'periodo',
             filter: 'agTextColumnFilter',
-            floatingFilter: true,
+           
             minWidth: 110,
             cellRenderer: params => `<strong>${params.value}</strong>`,
             sort: 'desc',
@@ -351,7 +351,7 @@
             headerName: 'Valor (%)',
             field: 'valor',
             filter: 'agNumberColumnFilter',
-            floatingFilter: true,
+           
             minWidth: 100,
             type: 'numericColumn',
             cellRenderer: valorRenderer,
@@ -360,7 +360,7 @@
             headerName: 'Acum. Ano (%)',
             field: 'valor_acum_ano',
             filter: 'agNumberColumnFilter',
-            floatingFilter: true,
+           
             minWidth: 120,
             type: 'numericColumn',
             cellRenderer: valorRenderer,
@@ -369,7 +369,7 @@
             headerName: 'Acum. 12m (%)',
             field: 'valor_acum_12m',
             filter: 'agNumberColumnFilter',
-            floatingFilter: true,
+           
             minWidth: 120,
             type: 'numericColumn',
             cellRenderer: valorRenderer,
@@ -378,7 +378,7 @@
             headerName: 'Fonte',
             field: 'fonte',
             filter: 'agTextColumnFilter',
-            floatingFilter: true,
+           
             minWidth: 90,
             cellRenderer: params => `<small class="text-muted">${params.value}</small>`,
         },
@@ -410,7 +410,7 @@
                 defaultColDef: { sortable: true, resizable: true },
                 rowHeight: 42,
                 headerHeight: 48,
-                floatingFiltersHeight: 36,
+               
                 suppressCellFocus: true,
                 enableCellTextSelection: true,
             });
