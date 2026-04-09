@@ -701,19 +701,31 @@ class Parcela(TimeStampedModel):
 
             self.save()
 
-            # Enviar email para o comprador
+            # Enviar notificações (email + SMS + WhatsApp) em thread separada
+            # para não bloquear a resposta ao usuário (Render free tier sem Celery worker)
             if enviar_email:
-                try:
-                    from notificacoes.boleto_notificacao import BoletoNotificacaoService
-                    notificacao_service = BoletoNotificacaoService()
-                    email_result = notificacao_service.notificar_boleto_criado(self)
-                    resultado['email_enviado'] = email_result.get('sucesso', False)
-                    resultado['email_erro'] = email_result.get('erro', '')
-                except Exception as e:
-                    # Não falhar a geração do boleto por erro de email
-                    logger.exception("Erro ao enviar email após geração de boleto parcela pk=%s: %s", self.pk, e)
-                    resultado['email_enviado'] = False
-                    resultado['email_erro'] = str(e)
+                import threading
+                import django.db
+
+                parcela_pk = self.pk
+
+                def _enviar_notificacoes():
+                    try:
+                        from notificacoes.boleto_notificacao import BoletoNotificacaoService
+                        from financeiro.models import Parcela as _Parcela
+                        p = _Parcela.objects.get(pk=parcela_pk)
+                        BoletoNotificacaoService().notificar_boleto_criado(p)
+                    except Exception as exc:
+                        logger.exception(
+                            "Erro ao enviar notificações em background parcela pk=%s: %s",
+                            parcela_pk, exc,
+                        )
+                    finally:
+                        django.db.connection.close()
+
+                t = threading.Thread(target=_enviar_notificacoes, daemon=True)
+                t.start()
+                resultado['notificacao_agendada'] = True
 
         return resultado
 

@@ -19,7 +19,7 @@ from .models import (
     TemplateNotificacao, TipoTemplate, TipoNotificacao,
     Notificacao, StatusNotificacao
 )
-from .services import ServicoEmail, ServicoSMS, _destinatario_email_teste, _destinatario_telefone_teste
+from .services import ServicoEmail, ServicoSMS, ServicoWhatsApp, _destinatario_email_teste, _destinatario_telefone_teste
 
 logger = logging.getLogger(__name__)
 
@@ -347,12 +347,93 @@ class BoletoNotificacaoService:
             logger.exception(f"Erro ao enviar SMS de boleto: {e}")
             return {'sucesso': False, 'erro': str(e)}
 
+    def enviar_whatsapp_boleto(self, parcela, tipo_template):
+        """
+        Envia notificação de boleto via WhatsApp.
+
+        Args:
+            parcela: Instância de Parcela
+            tipo_template: TipoTemplate (ex: TipoTemplate.BOLETO_CRIADO)
+
+        Returns:
+            dict: Resultado do envio
+        """
+        try:
+            contrato = parcela.contrato
+            comprador = contrato.comprador
+            imobiliaria = contrato.imovel.imobiliaria
+
+            if not comprador.notificar_whatsapp:
+                return {'sucesso': False, 'erro': 'Comprador optou por não receber WhatsApp'}
+
+            numero_raw = (comprador.celular or comprador.telefone or '').strip()
+            if not numero_raw:
+                return {'sucesso': False, 'erro': 'Comprador não possui celular/telefone cadastrado'}
+
+            import re as _re
+            numero = _re.sub(r'\D', '', numero_raw)
+            if len(numero) == 11:
+                numero = '+55' + numero
+            elif len(numero) == 10:
+                numero = '+55' + numero
+            elif len(numero) == 13 and numero.startswith('55'):
+                numero = '+' + numero
+            elif not numero.startswith('+'):
+                numero = '+' + numero
+            if len(numero) < 12:
+                return {'sucesso': False, 'erro': f'Número de telefone inválido: {numero_raw}'}
+
+            template = TemplateNotificacao.get_template(
+                codigo=tipo_template,
+                imobiliaria=imobiliaria,
+            )
+
+            if template and template.tem_whatsapp:
+                contexto = self.montar_contexto(parcela)
+                _, _, _, mensagem = template.renderizar(contexto)
+            else:
+                mensagem = (
+                    f"Olá {comprador.nome.split()[0]}, "
+                    f"seu boleto parcela {parcela.numero_parcela} "
+                    f"valor {self._formatar_valor(parcela.valor_atual)} "
+                    f"vence {self._formatar_data(parcela.data_vencimento)}. "
+                    f"{imobiliaria.nome}"
+                )
+
+            numero_final = _destinatario_telefone_teste(numero)
+
+            notificacao = Notificacao.objects.create(
+                parcela=parcela,
+                tipo=TipoNotificacao.WHATSAPP,
+                destinatario=numero_final,
+                assunto=f'WhatsApp Boleto Parcela {parcela.numero_parcela}',
+                mensagem=mensagem,
+                status=StatusNotificacao.PENDENTE
+            )
+
+            try:
+                ServicoWhatsApp.enviar(destinatario=numero, mensagem=mensagem)
+                notificacao.marcar_como_enviada()
+                logger.info(f"WhatsApp de boleto enviado para {numero_final} - Parcela {parcela.pk}")
+                return {
+                    'sucesso': True,
+                    'notificacao_id': notificacao.pk,
+                    'destinatario': numero_final,
+                }
+            except Exception as e:
+                notificacao.marcar_erro(str(e))
+                raise
+
+        except Exception as e:
+            logger.exception(f"Erro ao enviar WhatsApp de boleto: {e}")
+            return {'sucesso': False, 'erro': str(e)}
+
     def notificar_boleto_criado(self, parcela, anexar_pdf=True):
-        """Envia notificações de boleto criado (email + SMS conforme preferências do comprador)"""
+        """Envia notificações de boleto criado (email + SMS + WhatsApp conforme preferências do comprador)"""
         return self._notificar(parcela, TipoTemplate.BOLETO_CRIADO, anexar_pdf=anexar_pdf)
 
     def _notificar(self, parcela, tipo_template, anexar_pdf=True):
-        """Helper interno: envia email + SMS (se comprador optar) para um tipo de template."""
+        """Helper interno: envia email + SMS + WhatsApp (se comprador optar) para um tipo de template."""
         resultado = self.enviar_email_boleto(parcela, tipo_template, anexar_pdf=anexar_pdf)
         comprador = parcela.contrato.comprador
         if comprador.notificar_sms:
@@ -360,6 +441,11 @@ class BoletoNotificacaoService:
             if not res_sms.get('sucesso'):
                 logger.warning("SMS não enviado parcela %s: %s", parcela.pk, res_sms.get('erro'))
             resultado['sms'] = res_sms
+        if comprador.notificar_whatsapp:
+            res_whatsapp = self.enviar_whatsapp_boleto(parcela, tipo_template)
+            if not res_whatsapp.get('sucesso'):
+                logger.warning("WhatsApp não enviado parcela %s: %s", parcela.pk, res_whatsapp.get('erro'))
+            resultado['whatsapp'] = res_whatsapp
         return resultado
 
     def notificar_boleto_5_dias(self, parcela):
