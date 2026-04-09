@@ -247,7 +247,26 @@ class ServicoWhatsApp:
 
         client = Client(account_sid, auth_token)
         message = client.messages.create(body=mensagem, from_=numero_remetente, to=destinatario)
-        logger.info("WhatsApp (Twilio) enviado para %s. SID: %s", destinatario, message.sid)
+
+        # Detecta falha de entrega imediata (ex: número não registrado como WhatsApp sender)
+        if message.status in ('failed', 'undelivered'):
+            raise ValueError(
+                f"Twilio rejeitou mensagem WhatsApp. Status: {message.status}, "
+                f"Erro: {message.error_code} — {message.error_message}. "
+                f"Verifique se '{numero_remetente}' está registrado como WhatsApp sender "
+                f"no painel Twilio (Messaging → Senders → WhatsApp Senders). "
+                f"Para testes use o sandbox: whatsapp:+14155238886"
+            )
+
+        if message.error_code:
+            logger.warning(
+                "WhatsApp (Twilio) enviado mas com aviso. SID: %s, ErrorCode: %s, ErrorMsg: %s. "
+                "Se receber Warning 63007, o número '%s' não é um canal WhatsApp válido. "
+                "Use o sandbox whatsapp:+14155238886 ou registre um sender em console.twilio.com.",
+                message.sid, message.error_code, message.error_message, numero_remetente,
+            )
+        else:
+            logger.info("WhatsApp (Twilio) enviado para %s. SID: %s", destinatario, message.sid)
         return True
 
     @staticmethod
