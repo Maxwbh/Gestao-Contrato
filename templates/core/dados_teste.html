@@ -3,6 +3,35 @@
 
 {% block title %}Setup & Dados de Teste — Gestão de Contratos{% endblock %}
 
+{% block extra_css %}
+<style>
+    /* Step list */
+    .step-list { list-style: none; padding: 0; margin: 0; }
+    .step-item { padding: .6rem 1rem; border-bottom: 1px solid #eee; display: flex; align-items: center; transition: all .3s; }
+    .step-item:last-child { border-bottom: none; }
+    .step-item.pending  { color: #6c757d; }
+    .step-item.active   { background: #f8f9fa; color: #0d6efd; font-weight: 600; }
+    .step-item.completed{ color: #28a745; }
+    .step-item.error    { color: #dc3545; }
+    .step-icon { width: 26px; height: 26px; border-radius: 50%; display: flex; align-items: center;
+                 justify-content: center; margin-right: .75rem; font-size: .8rem; flex-shrink: 0;
+                 background: #e9ecef; }
+    .step-item.active    .step-icon { background: #cfe2ff; }
+    .step-item.completed .step-icon { background: #d1e7dd; }
+    .step-item.error     .step-icon { background: #f8d7da; }
+    /* Result cards */
+    .result-card { background: #f8f9fa; border-radius: 8px; padding: .8rem; text-align: center; }
+    .result-card .number { font-size: 1.4rem; font-weight: bold; }
+    .result-card .label  { font-size: .8rem; color: #6c757d; }
+    .result-card.success { border-left: 4px solid #28a745; }
+    .result-card.info    { border-left: 4px solid #0dcaf0; }
+    .result-card.warning { border-left: 4px solid #ffc107; }
+    /* Progress modal header gradient */
+    .progress-header { background: linear-gradient(135deg, #0d6efd 0%, #6610f2 100%);
+                       color: white; padding: 1.25rem; }
+</style>
+{% endblock %}
+
 {% block content %}
 <div class="container-fluid py-4">
 
@@ -71,8 +100,8 @@
                         <div class="card-body text-center p-4">
                             <i class="fas fa-database fa-3x text-primary mb-3"></i>
                             <h5>Executar Migrations</h5>
-                            <p class="small text-muted">Aplica todas as migrations pendentes no banco de dados. Necessário após cada deploy ou reset do banco.</p>
-                            <button type="button" class="btn btn-primary w-100" onclick="executarSetup('migrations')">
+                            <p class="small text-muted">Aplica todas as migrations pendentes no banco de dados.</p>
+                            <button type="button" class="btn btn-primary w-100" onclick="executarSetup('migrations', this)">
                                 <i class="fas fa-play me-1"></i> Executar Migrate
                             </button>
                         </div>
@@ -84,8 +113,8 @@
                         <div class="card-body text-center p-4">
                             <i class="fas fa-user-shield fa-3x text-info mb-3"></i>
                             <h5>Criar Superusuário</h5>
-                            <p class="small text-muted">Cria o usuário admin/admin123 se não existir. Use para acessar o sistema após reset do banco.</p>
-                            <button type="button" class="btn btn-info w-100" onclick="executarSetup('superuser')">
+                            <p class="small text-muted">Cria o usuário admin/admin123 se não existir.</p>
+                            <button type="button" class="btn btn-info w-100" onclick="executarSetup('superuser', this)">
                                 <i class="fas fa-user-plus me-1"></i> Criar admin
                             </button>
                         </div>
@@ -97,8 +126,8 @@
                         <div class="card-body text-center p-4">
                             <i class="fas fa-rocket fa-3x text-success mb-3"></i>
                             <h5>Setup Completo</h5>
-                            <p class="small text-muted">Executa migrate + cria superusuário + gera dados de teste. Use para inicializar o sistema do zero.</p>
-                            <button type="button" class="btn btn-success w-100" onclick="executarSetup('setup_completo')">
+                            <p class="small text-muted">Executa migrate + cria superusuário + gera dados de teste.</p>
+                            <button type="button" class="btn btn-success w-100" onclick="executarSetup('setup_completo', this)">
                                 <i class="fas fa-rocket me-1"></i> Inicializar tudo
                             </button>
                         </div>
@@ -184,7 +213,7 @@
     <!-- Gerar / Limpar Dados de Teste -->
     <div class="row g-4 mb-4">
         <!-- Gerar -->
-        <div class="col-md-6">
+        <div class="col-md-8">
             <div class="card border-success shadow-sm h-100">
                 <div class="card-header bg-success text-white fw-semibold">
                     <i class="fas fa-plus-circle me-2"></i>Gerar Dados de Teste
@@ -211,21 +240,43 @@
                             </ul>
                         </div>
                     </div>
+
+                    <!-- Previsão baseada em histórico -->
+                    <div id="estimativaBox" class="alert alert-light border mb-3 small d-none">
+                        <i class="fas fa-history me-1 text-muted"></i>
+                        <span id="estimativaTexto"></span>
+                    </div>
+
                     <div class="form-check mb-3">
-                        <input class="form-check-input" type="checkbox" id="limpar-antes">
+                        <input class="form-check-input" type="checkbox" id="limpar-antes" onchange="atualizarEstimativa()">
                         <label class="form-check-label" for="limpar-antes">
                             <i class="fas fa-trash-alt text-danger me-1"></i>
                             Limpar dados existentes antes de gerar
                         </label>
                     </div>
-                    <button type="button" class="btn btn-success btn-lg mt-auto" id="btn-gerar" onclick="gerarDados()">
+                    <button type="button" class="btn btn-success btn-lg mt-auto" id="btn-gerar" onclick="iniciarGeracaoDados()">
                         <i class="fas fa-play me-2"></i>Gerar Dados de Teste
                     </button>
+
+                    <!-- Histórico de Execuções -->
+                    <div class="mt-4 pt-3 border-top">
+                        <div class="d-flex justify-content-between align-items-center mb-2">
+                            <h6 class="text-muted mb-0"><i class="fas fa-history me-2"></i>Histórico de Execuções</h6>
+                            <button class="btn btn-xs btn-sm btn-outline-secondary py-0 px-2" onclick="limparHistorico()" style="font-size:.75rem;">
+                                <i class="fas fa-trash-alt me-1"></i>Limpar
+                            </button>
+                        </div>
+                        <div id="historySection">
+                            <p class="text-muted text-center py-2 small">
+                                <i class="fas fa-clock me-2"></i>Nenhuma geração registrada ainda
+                            </p>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
         <!-- Limpar -->
-        <div class="col-md-6">
+        <div class="col-md-4">
             <div class="card border-danger shadow-sm h-100">
                 <div class="card-header bg-danger text-white fw-semibold">
                     <i class="fas fa-trash-alt me-2"></i>Limpar Todos os Dados
@@ -233,23 +284,7 @@
                 <div class="card-body d-flex flex-column">
                     <div class="alert alert-danger">
                         <i class="fas fa-exclamation-triangle me-2"></i>
-                        <strong>ATENÇÃO:</strong> Esta ação irá excluir PERMANENTEMENTE todos os dados do sistema!
-                    </div>
-                    <div class="row mb-3">
-                        <div class="col-6">
-                            <ul class="small text-muted mb-0">
-                                <li>Todas as parcelas</li>
-                                <li>Todos os contratos</li>
-                                <li>Todos os índices</li>
-                            </ul>
-                        </div>
-                        <div class="col-6">
-                            <ul class="small text-muted mb-0">
-                                <li>Todos os compradores</li>
-                                <li>Todos os imóveis</li>
-                                <li>Todas as imobiliárias</li>
-                            </ul>
-                        </div>
+                        <strong>ATENÇÃO:</strong> Esta ação irá excluir PERMANENTEMENTE todos os dados!
                     </div>
                     <div class="form-check mb-3">
                         <input class="form-check-input" type="checkbox" id="confirmar-exclusao">
@@ -257,7 +292,7 @@
                             <strong>Confirmo que desejo excluir TODOS os dados</strong>
                         </label>
                     </div>
-                    <button type="button" class="btn btn-danger btn-lg mt-auto" id="btn-limpar" onclick="limparDados()" disabled>
+                    <button type="button" class="btn btn-danger btn-lg mt-auto" id="btn-limpar" onclick="limparDados(this)" disabled>
                         <i class="fas fa-trash me-2"></i>Limpar Todos os Dados
                     </button>
                 </div>
@@ -265,154 +300,398 @@
         </div>
     </div>
 
-    <!-- Loading -->
-    <div class="text-center mt-4" id="loading" style="display:none;">
-        <div class="spinner-border text-primary" style="width:3rem;height:3rem;" role="status"></div>
-        <p class="mt-3 text-muted">Processando... Não feche esta página.</p>
-        <span class="badge bg-info fs-5"><i class="fas fa-clock me-1"></i><span id="timer-value">00:00</span></span>
-    </div>
+</div>
 
-    <!-- Resultado -->
-    <div id="output-container" style="display:none;" class="mb-4">
-        <div class="card">
-            <div class="card-header"><i class="fas fa-terminal me-2"></i>Resultado da Operação</div>
-            <div class="card-body">
-                <div class="alert" id="output-alert">
-                    <pre id="output-text" class="mb-0" style="white-space:pre-wrap;font-size:.85em;max-height:400px;overflow-y:auto;"></pre>
+<!-- ===== MODAL DE PROGRESSO ===== -->
+<div class="modal fade" id="progressModal" tabindex="-1" data-bs-backdrop="static" data-bs-keyboard="false">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content" style="border-radius:16px; overflow:hidden;">
+            <!-- Header com gradiente -->
+            <div class="progress-header text-center">
+                <div id="progressIcon"><i class="fas fa-cog fa-spin fa-3x mb-3"></i></div>
+                <h5 id="progressTitle" class="mb-0">Gerando Dados de Teste</h5>
+                <p id="progressSubtitle" class="mb-0 opacity-75 small">Aguarde...</p>
+            </div>
+
+            <div class="modal-body p-0">
+                <!-- Barra de progresso -->
+                <div class="px-4 pt-3">
+                    <div class="progress" style="height:10px; border-radius:5px;">
+                        <div id="progressBar" class="progress-bar progress-bar-striped progress-bar-animated"
+                             style="width:0%; transition:width .3s;"></div>
+                    </div>
+                    <div class="d-flex justify-content-between mt-1">
+                        <span class="d-flex align-items-center gap-2">
+                            <small id="progressPercent" class="fw-bold text-primary">0%</small>
+                            <small class="text-muted">|</small>
+                            <small id="elapsedTime" class="text-muted"><i class="fas fa-stopwatch me-1"></i>0s</small>
+                        </span>
+                        <small id="progressTime" class="text-muted fst-italic">Calculando...</small>
+                    </div>
                 </div>
+
+                <!-- Lista de passos -->
+                <ul class="step-list mt-3" id="stepsList">
+                    <li class="step-item pending" data-step="limpar">
+                        <span class="step-icon"><i class="fas fa-trash"></i></span>
+                        <span>Limpando dados existentes...</span>
+                    </li>
+                    <li class="step-item pending" data-step="contabilidade">
+                        <span class="step-icon"><i class="fas fa-building"></i></span>
+                        <span>Criando Contabilidade...</span>
+                    </li>
+                    <li class="step-item pending" data-step="imobiliarias">
+                        <span class="step-icon"><i class="fas fa-home"></i></span>
+                        <span>Criando Imobiliárias...</span>
+                    </li>
+                    <li class="step-item pending" data-step="contas">
+                        <span class="step-icon"><i class="fas fa-university"></i></span>
+                        <span>Criando Contas Bancárias...</span>
+                    </li>
+                    <li class="step-item pending" data-step="imoveis">
+                        <span class="step-icon"><i class="fas fa-map-marked-alt"></i></span>
+                        <span>Criando Imóveis...</span>
+                    </li>
+                    <li class="step-item pending" data-step="compradores">
+                        <span class="step-icon"><i class="fas fa-users"></i></span>
+                        <span>Criando Compradores...</span>
+                    </li>
+                    <li class="step-item pending" data-step="contratos">
+                        <span class="step-icon"><i class="fas fa-file-contract"></i></span>
+                        <span>Criando Contratos e Parcelas...</span>
+                    </li>
+                    <li class="step-item pending" data-step="pagamentos">
+                        <span class="step-icon"><i class="fas fa-dollar-sign"></i></span>
+                        <span>Registrando Pagamentos...</span>
+                    </li>
+                    <li class="step-item pending" data-step="indices">
+                        <span class="step-icon"><i class="fas fa-chart-line"></i></span>
+                        <span>Gerando Índices de Reajuste...</span>
+                    </li>
+                </ul>
+
+                <!-- Resultado (oculto até concluir) -->
+                <div id="resultSection" class="p-4 d-none">
+                    <div class="text-center mb-3">
+                        <i id="resultIcon" class="fa-4x mb-2"></i>
+                        <h5 id="resultTitle"></h5>
+                        <p id="resultMessage" class="text-muted small"></p>
+                    </div>
+                    <div class="row g-2" id="resultCards"></div>
+                </div>
+            </div>
+
+            <div class="modal-footer" id="modalBtnRow">
+                <button type="button" class="btn btn-secondary d-none" id="btnCancelar" data-bs-dismiss="modal">
+                    <i class="fas fa-times me-1"></i> Fechar
+                </button>
+                <button type="button" class="btn btn-primary d-none" id="btnConcluir" onclick="location.reload()">
+                    <i class="fas fa-check me-1"></i> Concluir
+                </button>
             </div>
         </div>
     </div>
-
 </div>
 
 <script>
-// Timer
-let timerInterval = null, startTime = null;
-function formatTime(s) { return String(Math.floor(s/60)).padStart(2,'0')+':'+String(s%60).padStart(2,'0'); }
-function startTimer() { startTime = Date.now(); timerInterval = setInterval(() => { document.getElementById('timer-value').textContent = formatTime(Math.floor((Date.now()-startTime)/1000)); }, 1000); }
-function stopTimer() { clearInterval(timerInterval); timerInterval = null; return startTime ? Math.floor((Date.now()-startTime)/1000) : 0; }
+// ===== CSRF =====
+const csrfToken = '{{ csrf_token }}';
 
-document.getElementById('confirmar-exclusao').addEventListener('change', function() {
-    document.getElementById('btn-limpar').disabled = !this.checked;
-});
-
-function showLoading(show) {
-    document.getElementById('loading').style.display = show ? 'block' : 'none';
-    document.getElementById('btn-gerar').disabled = show;
-    document.getElementById('btn-limpar').disabled = show || !document.getElementById('confirmar-exclusao').checked;
-    if (show) startTimer();
+// ===== HISTÓRICO (localStorage) =====
+const HISTORY_KEY = 'gestao_geracoes_v1';
+function loadHistory() { try { return JSON.parse(localStorage.getItem(HISTORY_KEY) || '[]'); } catch { return []; } }
+function saveToHistory(entry) {
+    const h = loadHistory(); h.unshift(entry);
+    if (h.length > 10) h.splice(10);
+    localStorage.setItem(HISTORY_KEY, JSON.stringify(h));
+}
+function formatMs(ms) {
+    const s = Math.round(ms / 1000);
+    return s < 60 ? `${s}s` : `${Math.floor(s/60)}m ${s%60}s`;
+}
+function getEstimatedDuration(limpar) {
+    const hist = loadHistory().filter(h => h.limpar === limpar);
+    if (!hist.length) return limpar ? 90000 : 75000;
+    return hist.slice(0,5).reduce((s,h) => s + h.duration, 0) / Math.min(hist.length, 5);
+}
+function atualizarEstimativa() {
+    const limpar = document.getElementById('limpar-antes').checked;
+    const box = document.getElementById('estimativaBox');
+    const txt = document.getElementById('estimativaTexto');
+    const hist = loadHistory().filter(h => h.limpar === limpar);
+    if (!hist.length) { box.classList.add('d-none'); return; }
+    const avg = getEstimatedDuration(limpar);
+    txt.textContent = `Baseado em ${hist.length} execução(ões) ${limpar ? 'com limpeza' : 'incremental'}: previsão ~${formatMs(avg)}`;
+    box.classList.remove('d-none');
+}
+function limparHistorico() {
+    if (!confirm('Limpar histórico de execuções?')) return;
+    localStorage.removeItem(HISTORY_KEY);
+    renderHistory(); atualizarEstimativa();
+}
+function renderHistory() {
+    const c = document.getElementById('historySection');
+    if (!c) return;
+    const hist = loadHistory();
+    if (!hist.length) {
+        c.innerHTML = '<p class="text-muted text-center py-2 small"><i class="fas fa-clock me-2"></i>Nenhuma geração registrada ainda</p>';
+        return;
+    }
+    const rows = hist.map((h, i) => {
+        const d = new Date(h.timestamp);
+        const dt = d.toLocaleDateString('pt-BR') + ' ' + d.toLocaleTimeString('pt-BR', {hour:'2-digit', minute:'2-digit'});
+        const badge = h.limpar ? '<span class="badge bg-danger">Com Limpeza</span>' : '<span class="badge bg-primary">Incremental</span>';
+        const rec = h.records ? h.records.toLocaleString('pt-BR') : '-';
+        return `<tr ${i===0?'class="fw-semibold"':''}>
+            <td class="small">${dt}</td><td>${badge}</td>
+            <td class="small text-center">${formatMs(h.duration)}</td>
+            <td class="small text-center text-muted">${rec}</td>
+        </tr>`;
+    }).join('');
+    c.innerHTML = `<div class="table-responsive"><table class="table table-sm table-hover mb-0">
+        <thead class="table-light"><tr>
+            <th class="small">Data/Hora</th><th class="small">Tipo</th>
+            <th class="small text-center">Duração</th><th class="small text-center">Registros</th>
+        </tr></thead><tbody>${rows}</tbody></table></div>`;
 }
 
-function showOutput(msg, isError) {
-    var c = document.getElementById('output-container');
-    var a = document.getElementById('output-alert');
-    c.style.display = 'block';
-    a.className = 'alert ' + (isError ? 'alert-danger' : 'alert-success');
-    document.getElementById('output-text').textContent = msg;
-    c.scrollIntoView({behavior:'smooth', block:'start'});
+// ===== MODAL DE PROGRESSO =====
+let progressModal, startTime, elapsedInterval, progressInterval;
+
+document.addEventListener('DOMContentLoaded', function() {
+    progressModal = new bootstrap.Modal(document.getElementById('progressModal'));
+    renderHistory();
+    atualizarEstimativa();
+    document.getElementById('confirmar-exclusao').addEventListener('change', function() {
+        document.getElementById('btn-limpar').disabled = !this.checked;
+    });
+});
+
+function updateStep(stepName, status) {
+    const step = document.querySelector(`[data-step="${stepName}"]`);
+    if (!step) return;
+    step.classList.remove('pending', 'active', 'completed', 'error');
+    step.classList.add(status);
+    const icon = step.querySelector('.step-icon i');
+    if (!icon) return;
+    if (status === 'active')     icon.className = 'fas fa-spinner fa-spin';
+    else if (status === 'completed') icon.className = 'fas fa-check';
+    else if (status === 'error')     icon.className = 'fas fa-times';
+}
+
+function stopTimers() { clearInterval(elapsedInterval); clearInterval(progressInterval); }
+
+function resetModal() {
+    stopTimers();
+    document.getElementById('progressBar').style.width = '0%';
+    document.getElementById('progressPercent').textContent = '0%';
+    document.getElementById('progressTime').textContent = 'Calculando...';
+    document.getElementById('elapsedTime').innerHTML = '<i class="fas fa-stopwatch me-1"></i>0s';
+    document.getElementById('progressIcon').innerHTML = '<i class="fas fa-cog fa-spin fa-3x mb-3"></i>';
+    document.getElementById('progressTitle').textContent = 'Gerando Dados de Teste';
+    document.getElementById('progressSubtitle').textContent = 'Aguarde...';
+    document.getElementById('resultSection').classList.add('d-none');
+    document.getElementById('stepsList').parentElement.classList.remove('d-none');
+    document.getElementById('btnCancelar').classList.add('d-none');
+    document.getElementById('btnConcluir').classList.add('d-none');
+    document.querySelectorAll('.step-item').forEach(item => {
+        item.classList.remove('active','completed','error');
+        item.classList.add('pending');
+        item.style.display = '';
+        const icon = item.querySelector('.step-icon i');
+        if (icon) icon.className = icon.className.replace(/fa-spinner fa-spin|fa-check|fa-times/g, icon.getAttribute('data-orig-class') || icon.className);
+    });
+}
+
+function showResult(success, data, duration) {
+    stopTimers();
+    document.getElementById('stepsList').parentElement.classList.add('d-none');
+    document.getElementById('resultSection').classList.remove('d-none');
+
+    const resultIcon  = document.getElementById('resultIcon');
+    const resultTitle = document.getElementById('resultTitle');
+    const resultMsg   = document.getElementById('resultMessage');
+    const resultCards = document.getElementById('resultCards');
+
+    if (success) {
+        const s = data.dados_gerados || {};
+        const total = (s.contratos||0) + (s.parcelas||0) + (s.imoveis||0) + (s.compradores||0);
+        resultIcon.className  = 'fas fa-check-circle fa-4x text-success mb-2';
+        resultTitle.textContent = 'Dados Gerados com Sucesso!';
+        resultMsg.textContent   = `Concluído em ${formatMs(duration)} — ${total.toLocaleString('pt-BR')} registros criados.`;
+        document.getElementById('progressIcon').innerHTML  = '<i class="fas fa-check-circle fa-3x mb-3" style="color:#28a745"></i>';
+        document.getElementById('progressTitle').textContent = 'Concluído!';
+        document.getElementById('progressSubtitle').textContent = `em ${formatMs(duration)}`;
+        document.getElementById('progressTime').textContent = '';
+        document.getElementById('elapsedTime').innerHTML = `<i class="fas fa-stopwatch me-1"></i>${formatMs(duration)}`;
+        resultCards.innerHTML = `
+            <div class="col-4"><div class="result-card success"><div class="number">${s.contabilidades||1}</div><div class="label">Contabilidade</div></div></div>
+            <div class="col-4"><div class="result-card info"><div class="number">${s.imobiliarias||2}</div><div class="label">Imobiliárias</div></div></div>
+            <div class="col-4"><div class="result-card info"><div class="number">${s.contas_bancarias||4}</div><div class="label">Contas</div></div></div>
+            <div class="col-4"><div class="result-card info"><div class="number">${s.imoveis||65}</div><div class="label">Imóveis</div></div></div>
+            <div class="col-4"><div class="result-card info"><div class="number">${s.compradores||60}</div><div class="label">Compradores</div></div></div>
+            <div class="col-4"><div class="result-card success"><div class="number">${s.contratos||60}</div><div class="label">Contratos</div></div></div>
+            <div class="col-6"><div class="result-card warning"><div class="number">${s.parcelas||0}</div><div class="label">Parcelas</div></div></div>
+            <div class="col-6"><div class="result-card info"><div class="number">${s.indices_reajuste||252}</div><div class="label">Índices</div></div></div>
+        `;
+        updateStats(s);
+    } else {
+        resultIcon.className  = 'fas fa-times-circle fa-4x text-danger mb-2';
+        resultTitle.textContent = 'Erro na Geração';
+        resultMsg.textContent   = data.message || data.error || 'Ocorreu um erro inesperado.';
+        document.getElementById('progressIcon').innerHTML   = '<i class="fas fa-times-circle fa-3x mb-3" style="color:#dc3545"></i>';
+        document.getElementById('progressTitle').textContent = 'Erro!';
+        document.getElementById('progressSubtitle').textContent = 'A geração falhou';
+        resultCards.innerHTML = `<div class="col-12"><div class="alert alert-danger small">${data.error||data.message||'Erro desconhecido'}</div></div>`;
+    }
+    document.getElementById('btnCancelar').classList.remove('d-none');
+    document.getElementById('btnConcluir').classList.remove('d-none');
+}
+
+// ===== GERAR DADOS =====
+async function iniciarGeracaoDados() {
+    const limpar = document.getElementById('limpar-antes').checked;
+    if (limpar && !confirm('⚠️ Isso irá LIMPAR todos os dados existentes e gerar novos.\n\nDeseja continuar?')) return;
+
+    resetModal();
+    progressModal.show();
+    startTime = Date.now();
+
+    const estimatedTotal = getEstimatedDuration(limpar);
+    const allSteps = ['limpar','contabilidade','imobiliarias','contas','imoveis','compradores','contratos','pagamentos','indices'];
+    const activeSteps = limpar ? allSteps : allSteps.slice(1);
+
+    if (!limpar) document.querySelector('[data-step="limpar"]').style.display = 'none';
+
+    let stepIdx = 0;
+    const stepInterval = Math.max(400, estimatedTotal / (activeSteps.length + 1));
+
+    elapsedInterval = setInterval(() => {
+        const elapsed = Date.now() - startTime;
+        document.getElementById('elapsedTime').innerHTML = `<i class="fas fa-stopwatch me-1"></i>${formatMs(elapsed)}`;
+        const pct = Math.min(93, (elapsed / estimatedTotal) * 100);
+        document.getElementById('progressBar').style.width = pct + '%';
+        document.getElementById('progressPercent').textContent = Math.floor(pct) + '%';
+        const remaining = estimatedTotal - elapsed;
+        document.getElementById('progressTime').textContent = remaining > 500
+            ? `~${formatMs(remaining)} restantes`
+            : elapsed >= estimatedTotal ? 'Aguardando servidor...' : '';
+    }, 200);
+
+    progressInterval = setInterval(() => {
+        if (stepIdx > 0) updateStep(activeSteps[stepIdx - 1], 'completed');
+        if (stepIdx < activeSteps.length) { updateStep(activeSteps[stepIdx], 'active'); stepIdx++; }
+    }, stepInterval);
+
+    try {
+        const response = await fetch('{% url "core:gerar_dados_teste" %}', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
+            body: JSON.stringify({ limpar })
+        });
+        const duration = Date.now() - startTime;
+        stopTimers();
+        const data = await response.json();
+        const success = data.status === 'success';
+
+        allSteps.forEach(s => {
+            const el = document.querySelector(`[data-step="${s}"]`);
+            if (el && el.style.display !== 'none') updateStep(s, success ? 'completed' : 'error');
+        });
+        document.getElementById('progressBar').style.width = '100%';
+        document.getElementById('progressPercent').textContent = '100%';
+
+        if (success) {
+            const sg = data.dados_gerados || {};
+            const totalRec = (sg.contratos||0) + (sg.parcelas||0) + (sg.imoveis||0) + (sg.compradores||0);
+            saveToHistory({ timestamp: Date.now(), duration, limpar, records: totalRec });
+            renderHistory(); atualizarEstimativa();
+        }
+        setTimeout(() => showResult(success, data, duration), 400);
+    } catch (error) {
+        const duration = Date.now() - startTime;
+        stopTimers();
+        showResult(false, { error: error.toString() }, duration);
+    }
+}
+
+// ===== LIMPAR DADOS =====
+async function limparDados(btn) {
+    if (!document.getElementById('confirmar-exclusao').checked) return alert('Confirme a exclusão primeiro.');
+    if (!confirm('TEM CERTEZA que deseja excluir TODOS os dados?\n\nEsta ação NÃO pode ser desfeita!')) return;
+
+    const orig = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Excluindo...';
+
+    try {
+        const response = await fetch('{% url "core:limpar_dados_teste" %}', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
+            body: JSON.stringify({ confirmar: true })
+        });
+        const data = await response.json();
+        if (data.status === 'success') {
+            alert('✅ Dados excluídos com sucesso!');
+            location.reload();
+        } else {
+            alert('❌ Erro: ' + (data.message || data.error || 'Erro desconhecido'));
+        }
+    } catch (e) {
+        alert('❌ Erro de conexão: ' + e.message);
+    }
+    btn.disabled = false;
+    btn.innerHTML = orig;
+}
+
+// ===== AÇÕES DE SETUP (migrate / superuser / setup_completo) =====
+function executarSetup(action, btn) {
+    const labels = {
+        migrations: 'Executar migrations?',
+        superuser:  'Criar superusuário admin/admin123?',
+        setup_completo: 'Executar Setup Completo (migrate + admin + dados)?'
+    };
+    if (!confirm(labels[action] || `Executar ${action}?`)) return;
+
+    const orig = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i> Executando...';
+
+    const fd = new FormData();
+    fd.append('action', action);
+    fd.append('csrfmiddlewaretoken', csrfToken);
+    if (action === 'setup_completo') fd.append('gerar_dados', 'true');
+
+    fetch('{% url "core:setup" %}', { method: 'POST', body: fd })
+        .then(r => r.json())
+        .then(data => {
+            btn.disabled = false;
+            btn.innerHTML = orig;
+            if (data.status === 'success') {
+                const msgs = (data.messages || []).join('\n');
+                alert('✅ ' + (msgs || 'Ação executada com sucesso!'));
+                if (action === 'setup_completo') location.reload();
+            } else {
+                alert('❌ Erro: ' + (data.message || 'Erro desconhecido'));
+            }
+        })
+        .catch(e => {
+            btn.disabled = false;
+            btn.innerHTML = orig;
+            alert('❌ Erro de conexão: ' + e.message);
+        });
 }
 
 function updateStats(s) {
     if (!s) return;
-    document.getElementById('stat-contabilidades').textContent = s.contabilidades || 0;
-    document.getElementById('stat-imobiliarias').textContent = s.imobiliarias || 0;
-    document.getElementById('stat-imoveis').textContent = s.imoveis || 0;
-    document.getElementById('stat-compradores').textContent = s.compradores || 0;
-    document.getElementById('stat-contratos').textContent = s.contratos || 0;
-    document.getElementById('stat-parcelas').textContent = s.parcelas || 0;
-    document.getElementById('stat-contas').textContent = s.contas_bancarias || 0;
-    document.getElementById('stat-indices').textContent = s.indices_reajuste || 0;
-}
-
-// Ações de setup (migrate, superuser, setup_completo)
-function executarSetup(action) {
-    var res = document.getElementById('setup-resultado');
-    res.className = 'alert alert-info mt-3';
-    res.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i> Executando ' + action + '...';
-
-    var fd = new FormData();
-    fd.append('action', action);
-    fd.append('csrfmiddlewaretoken', '{{ csrf_token }}');
-    if (action === 'setup_completo') fd.append('gerar_dados', 'true');
-
-    fetch('{% url "core:setup" %}', { method: 'POST', body: fd })
-    .then(function(r) { return r.json(); })
-    .then(function(data) {
-        if (data.status === 'success') {
-            res.className = 'alert alert-success mt-3';
-            var msgs = (data.messages || []).join('\n');
-            res.innerHTML = '<i class="fas fa-check me-1"></i><strong>Sucesso!</strong><pre class="mb-0 mt-2 small" style="white-space:pre-wrap;">' + msgs + '</pre>';
-            if (action === 'setup_completo') setTimeout(() => location.reload(), 2000);
-        } else {
-            res.className = 'alert alert-danger mt-3';
-            res.innerHTML = '<i class="fas fa-exclamation-circle me-1"></i>' + (data.message || 'Erro');
-        }
-    })
-    .catch(function(e) {
-        res.className = 'alert alert-danger mt-3';
-        res.textContent = 'Erro de conexão: ' + e.message;
-    });
-}
-
-function gerarDados() {
-    var limpar = document.getElementById('limpar-antes').checked;
-    if (limpar && !confirm('Você marcou para LIMPAR os dados existentes antes de gerar.\n\nDeseja continuar?')) return;
-    showLoading(true);
-    document.getElementById('output-container').style.display = 'none';
-    fetch('{% url "core:gerar_dados_teste" %}', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json', 'X-CSRFToken': '{{ csrf_token }}'},
-        body: JSON.stringify({limpar: limpar})
-    })
-    .then(r => r.json())
-    .then(data => {
-        var t = stopTimer(); showLoading(false);
-        if (data.status === 'success') {
-            var msg = '✅ DADOS GERADOS COM SUCESSO!\n================================\n⏱️ Tempo: ' + formatTime(t) + '\n\n';
-            if (data.output) msg += data.output;
-            var dg = data.dados_gerados || {};
-            msg += '\n\n📊 Estatísticas:\n';
-            msg += '- Contabilidades: ' + (dg.contabilidades||0) + '\n';
-            msg += '- Imobiliárias: ' + (dg.imobiliarias||0) + '\n';
-            msg += '- Imóveis: ' + (dg.imoveis||0) + '\n';
-            msg += '- Compradores: ' + (dg.compradores||0) + '\n';
-            msg += '- Contratos: ' + (dg.contratos||0) + '\n';
-            msg += '- Parcelas: ' + (dg.parcelas||0) + '\n';
-            showOutput(msg, false);
-            updateStats(dg);
-        } else {
-            showOutput('❌ ERRO: ' + (data.message || 'Erro desconhecido') + '\n⏱️ ' + formatTime(t) + '\n\n' + (data.traceback || ''), true);
-        }
-    })
-    .catch(e => { var t = stopTimer(); showLoading(false); showOutput('❌ ERRO: ' + e.message + '\n⏱️ ' + formatTime(t), true); });
-}
-
-function limparDados() {
-    if (!document.getElementById('confirmar-exclusao').checked) return alert('Confirme a exclusão primeiro.');
-    if (!confirm('TEM CERTEZA que deseja excluir TODOS os dados?\n\nEsta ação NÃO pode ser desfeita!')) return;
-    showLoading(true);
-    document.getElementById('output-container').style.display = 'none';
-    fetch('{% url "core:limpar_dados_teste" %}', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json', 'X-CSRFToken': '{{ csrf_token }}'},
-        body: JSON.stringify({confirmar: true})
-    })
-    .then(r => r.json())
-    .then(data => {
-        var t = stopTimer(); showLoading(false);
-        if (data.status === 'success') {
-            var msg = '🗑️ DADOS EXCLUÍDOS COM SUCESSO!\n================================\n⏱️ Tempo: ' + formatTime(t) + '\n\n📊 Excluídos:\n';
-            if (data.dados_excluidos) for (var [k, v] of Object.entries(data.dados_excluidos)) msg += '- ' + k + ': ' + v + '\n';
-            showOutput(msg, false);
-            updateStats({contabilidades:0,imobiliarias:0,imoveis:0,compradores:0,contratos:0,parcelas:0,contas_bancarias:0,indices_reajuste:0});
-            document.getElementById('confirmar-exclusao').checked = false;
-            document.getElementById('btn-limpar').disabled = true;
-        } else {
-            showOutput('❌ ERRO: ' + (data.message || 'Erro') + '\n⏱️ ' + formatTime(t), true);
-        }
-    })
-    .catch(e => { var t = stopTimer(); showLoading(false); showOutput('❌ ERRO: ' + e.message + '\n⏱️ ' + formatTime(t), true); });
+    const ids = { 'stat-contabilidades': s.contabilidades, 'stat-imobiliarias': s.imobiliarias,
+                  'stat-imoveis': s.imoveis, 'stat-compradores': s.compradores,
+                  'stat-contratos': s.contratos, 'stat-parcelas': s.parcelas,
+                  'stat-contas': s.contas_bancarias, 'stat-indices': s.indices_reajuste };
+    for (const [id, val] of Object.entries(ids)) {
+        const el = document.getElementById(id);
+        if (el) el.textContent = val || 0;
+    }
 }
 </script>
 {% endblock %}

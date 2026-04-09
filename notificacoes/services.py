@@ -16,6 +16,34 @@ from .models import (
 
 logger = logging.getLogger(__name__)
 
+# Twilio trial prepend (38 chars): "Sent from your Twilio trial account - "
+_TWILIO_TRIAL_PREFIX_LEN = 38
+_SMS_MAX_CHARS = 250
+
+
+def _truncar_sms(mensagem: str) -> str:
+    """
+    Garante que o corpo do SMS não ultrapasse 250 caracteres no total.
+
+    Se TWILIO_TRIAL_MODE=True, a conta Twilio trial insere automaticamente
+    "Sent from your Twilio trial account - " (38 chars) antes da mensagem,
+    portanto o limite efetivo do corpo é 250 - 38 = 212 caracteres.
+
+    Mensagens mais longas são truncadas com "..." ao final.
+    """
+    trial = getattr(settings, 'TWILIO_TRIAL_MODE', False)
+    limite = _SMS_MAX_CHARS - (_TWILIO_TRIAL_PREFIX_LEN if trial else 0)
+
+    if len(mensagem) <= limite:
+        return mensagem
+
+    truncado = mensagem[:limite - 3].rstrip() + '...'
+    logger.warning(
+        '[SMS] Mensagem truncada de %d para %d chars (trial=%s, limite=%d).',
+        len(mensagem), len(truncado), trial, limite,
+    )
+    return truncado
+
 
 # =============================================================================
 # SAFEGUARD DE AMBIENTE DE TESTE
@@ -157,6 +185,11 @@ class ServicoSMS:
             import re as _re
             numero_remetente = _re.sub(r'^whatsapp:', '', numero_remetente.strip())
 
+            # Truncar mensagem para não ultrapassar 250 chars totais.
+            # Contas Twilio trial adicionam 38 chars de prefixo — TWILIO_TRIAL_MODE
+            # reduz o limite efetivo do corpo para 212 chars.
+            mensagem = _truncar_sms(mensagem)
+
             # Enviar via Twilio
             client = Client(account_sid, auth_token)
 
@@ -247,7 +280,26 @@ class ServicoWhatsApp:
 
         client = Client(account_sid, auth_token)
         message = client.messages.create(body=mensagem, from_=numero_remetente, to=destinatario)
-        logger.info("WhatsApp (Twilio) enviado para %s. SID: %s", destinatario, message.sid)
+
+        # Detecta falha de entrega imediata (ex: número não registrado como WhatsApp sender)
+        if message.status in ('failed', 'undelivered'):
+            raise ValueError(
+                f"Twilio rejeitou mensagem WhatsApp. Status: {message.status}, "
+                f"Erro: {message.error_code} — {message.error_message}. "
+                f"Verifique se '{numero_remetente}' está registrado como WhatsApp sender "
+                f"no painel Twilio (Messaging → Senders → WhatsApp Senders). "
+                f"Para testes use o sandbox: whatsapp:+14155238886"
+            )
+
+        if message.error_code:
+            logger.warning(
+                "WhatsApp (Twilio) enviado mas com aviso. SID: %s, ErrorCode: %s, ErrorMsg: %s. "
+                "Se receber Warning 63007, o número '%s' não é um canal WhatsApp válido. "
+                "Use o sandbox whatsapp:+14155238886 ou registre um sender em console.twilio.com.",
+                message.sid, message.error_code, message.error_message, numero_remetente,
+            )
+        else:
+            logger.info("WhatsApp (Twilio) enviado para %s. SID: %s", destinatario, message.sid)
         return True
 
     @staticmethod

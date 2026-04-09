@@ -36,9 +36,10 @@ class TestSetupView:
     """Testes para a página de setup."""
 
     def test_setup_get_acessivel(self, client):
-        """GET no setup deve ser acessível."""
+        """/setup/ GET redireciona para /dados-teste/"""
         response = client.get('/setup/')
-        assert response.status_code == 200
+        assert response.status_code == 302
+        assert '/dados-teste/' in response['Location']
 
     def test_setup_post_requer_autenticacao(self, client, admin_user):
         """POST no setup requer autenticação quando já existem usuários."""
