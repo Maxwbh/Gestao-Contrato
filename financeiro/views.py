@@ -1127,6 +1127,7 @@ def gerar_boleto_parcela(request, pk):
                 'linha_digitavel': resultado.get('linha_digitavel', ''),
                 'codigo_barras': resultado.get('codigo_barras', ''),
                 'tem_pdf': parcela.boleto_pdf.name if parcela.boleto_pdf else False,
+                'status_boleto': parcela.status_boleto,
                 'mensagem': 'Boleto gerado com sucesso'
             })
         else:
