@@ -171,6 +171,8 @@ urlpatterns = [
     path('contrato/<int:contrato_id>/simulador/', views.simulador_antecipacao, name='simulador_antecipacao'),
     # R-05: Recibo PDF de quitação antecipada
     path('contrato/<int:contrato_id>/recibo-antecipacao.pdf', views.download_recibo_antecipacao, name='recibo_antecipacao'),
+    # R-06: Recibo PDF de pagamento individual
+    path('historico/<int:pk>/recibo.pdf', views.download_recibo_pagamento, name='recibo_pagamento'),
 
     # ==========================================================================
     # R-04 — RENEGOCIAÇÃO DE PARCELAS
