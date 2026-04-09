@@ -701,30 +701,31 @@ class Parcela(TimeStampedModel):
 
             self.save()
 
-            # Agendar notificações (email + SMS + WhatsApp) de forma assíncrona
-            # para não bloquear a resposta ao usuário
+            # Enviar notificações (email + SMS + WhatsApp) em thread separada
+            # para não bloquear a resposta ao usuário (Render free tier sem Celery worker)
             if enviar_email:
-                try:
-                    from notificacoes.tasks import enviar_notificacoes_boleto_async
-                    enviar_notificacoes_boleto_async.delay(self.pk)
-                    resultado['notificacao_agendada'] = True
-                except Exception as e:
-                    # Celery indisponível: tenta envio síncrono como fallback
-                    logger.warning(
-                        "Celery indisponível, tentando envio síncrono (parcela pk=%s): %s", self.pk, e
-                    )
+                import threading
+                import django.db
+
+                parcela_pk = self.pk
+
+                def _enviar_notificacoes():
                     try:
                         from notificacoes.boleto_notificacao import BoletoNotificacaoService
-                        notificacao_service = BoletoNotificacaoService()
-                        email_result = notificacao_service.notificar_boleto_criado(self)
-                        resultado['email_enviado'] = email_result.get('sucesso', False)
-                        resultado['email_erro'] = email_result.get('erro', '')
-                    except Exception as e2:
+                        from financeiro.models import Parcela as _Parcela
+                        p = _Parcela.objects.get(pk=parcela_pk)
+                        BoletoNotificacaoService().notificar_boleto_criado(p)
+                    except Exception as exc:
                         logger.exception(
-                            "Erro no envio síncrono de notificações parcela pk=%s: %s", self.pk, e2
+                            "Erro ao enviar notificações em background parcela pk=%s: %s",
+                            parcela_pk, exc,
                         )
-                        resultado['email_enviado'] = False
-                        resultado['email_erro'] = str(e2)
+                    finally:
+                        django.db.connection.close()
+
+                t = threading.Thread(target=_enviar_notificacoes, daemon=True)
+                t.start()
+                resultado['notificacao_agendada'] = True
 
         return resultado
 
