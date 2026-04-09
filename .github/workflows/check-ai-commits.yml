@@ -1,14 +1,16 @@
 name: Verificar Commits de IA
 
-# Bloqueia merge em 'master' se PR contiver commits gerados por IA.
-# Desbloqueio: @maxwbh aprova o PR (Review → Approve) — o check reroda automaticamente.
+# Bloqueia commits com marcadores de IA em qualquer branch.
+# Desbloqueio em 'master': @maxwbh aprova o PR (Review → Approve) — o check reroda automaticamente.
 # Em 'V3.1' apenas avisa — commits de IA são esperados na fase de staging/revisão.
+# Em branches 'claude/**': bloqueia push imediatamente.
 
 on:
   push:
     branches:
       - master
       - V3.1
+      - 'claude/**'
   pull_request:
     branches:
       - master
@@ -133,13 +135,23 @@ jobs:
             echo "🚫 BLOQUEADO — commits de IA não podem ser mergeados diretamente em 'master'."
             echo ""
             echo "   Para desbloquear:"
-            echo "   1. Revise os commits listados acima e limpe os marcadores"
+            echo "   1. Remova os marcadores de IA dos commits listados acima"
             echo "      OU"
             echo "   2. @maxwbh aprova este PR (Review → Approve)"
             echo "      — o check reroda automaticamente e libera o merge."
             echo ""
             echo "   Fluxo obrigatório (CLAUDE.md):"
             echo "     claude/branch → PR → V3.1 (revisado por @maxwbh) → master"
+            exit 1
+          elif echo "$TARGET" | grep -qE '^claude/'; then
+            echo "🚫 BLOQUEADO — mensagens de commit não devem conter referências a IA."
+            echo ""
+            echo "   Para corrigir:"
+            echo "   1. Reescreva o histórico removendo os marcadores:"
+            echo "      git filter-branch -f --msg-filter \\"
+            echo "        'sed \"/claude\\.ai/d; /anthropic\\.com/d\"' \\"
+            echo "        -- origin/V3.1..HEAD"
+            echo "   2. Force-push: git push --force-with-lease origin $TARGET"
             exit 1
           else
             echo "ℹ️  Branch '$TARGET': commits de IA são esperados nesta fase (staging/revisão)."
