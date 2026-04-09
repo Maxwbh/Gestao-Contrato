@@ -31,59 +31,6 @@
         </a>
     </div>
 
-    {% if boletos_pendentes_count %}
-    <div class="alert alert-warning mb-4">
-        <i class="fas fa-exclamation-triangle me-2"></i>
-        <strong>{{ boletos_pendentes_count }} boleto(s) disponíveis</strong> para incluir em nova remessa.
-        <a href="{% url 'financeiro:gerar_remessa' %}" class="alert-link ms-2">Gerar remessa agora</a>
-    </div>
-    {% endif %}
-
-    <!-- Filtros -->
-    <div class="card mb-4">
-        <div class="card-body">
-            <form method="get" class="row g-3">
-                <div class="col-md-3">
-                    <label class="form-label">Imobiliária</label>
-                    <select name="imobiliaria" class="form-select" onchange="this.form.submit()">
-                        <option value="">Todas as Imobiliárias</option>
-                        {% for imob in imobiliarias %}
-                        <option value="{{ imob.pk }}" {% if filtro_imobiliaria == imob.pk|stringformat:"s" %}selected{% endif %}>
-                            {{ imob.nome }}
-                        </option>
-                        {% endfor %}
-                    </select>
-                </div>
-                <div class="col-md-3">
-                    <label class="form-label">Conta Bancária</label>
-                    <select name="conta" class="form-select" onchange="this.form.submit()">
-                        <option value="">Todas as Contas</option>
-                        {% for conta in contas_bancarias %}
-                        <option value="{{ conta.pk }}" {% if filtro_conta == conta.pk|stringformat:"s" %}selected{% endif %}>
-                            {{ conta.descricao }} — {{ conta.imobiliaria.nome }}
-                        </option>
-                        {% endfor %}
-                    </select>
-                </div>
-                <div class="col-md-2">
-                    <label class="form-label">Status</label>
-                    <select name="status" class="form-select" onchange="this.form.submit()">
-                        <option value="">Todos</option>
-                        <option value="GERADO"     {% if filtro_status == 'GERADO' %}selected{% endif %}>Gerado</option>
-                        <option value="ENVIADO"    {% if filtro_status == 'ENVIADO' %}selected{% endif %}>Enviado</option>
-                        <option value="PROCESSADO" {% if filtro_status == 'PROCESSADO' %}selected{% endif %}>Processado</option>
-                        <option value="ERRO"       {% if filtro_status == 'ERRO' %}selected{% endif %}>Erro</option>
-                    </select>
-                </div>
-                <div class="col-md-2 d-flex align-items-end">
-                    <a href="{% url 'financeiro:listar_remessas' %}" class="btn btn-secondary w-100">
-                        <i class="fas fa-times me-1"></i> Limpar
-                    </a>
-                </div>
-            </form>
-        </div>
-    </div>
-
     <!-- Grid -->
     <div class="card">
         <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">

@@ -333,24 +333,25 @@ class CNABService:
         # Lista de boletos
         pagamentos = []
 
-        # Adicionar boletos
+        # Adicionar boletos (somente campos de pagamento — empresa vai no nível raiz)
         valor_total = Decimal('0.00')
         for parcela in parcelas_validas:
             dados_boleto = self._montar_dados_boleto(parcela, conta_bancaria)
-            # Mesclar dados da empresa com dados do boleto
-            boleto_completo = {**dados_empresa, **dados_boleto}
-            pagamentos.append(boleto_completo)
+            pagamentos.append(dados_boleto)
             valor_total += parcela.valor_boleto or parcela.valor_atual
 
         try:
             # A API /api/remessa espera multipart/form-data:
             #   bank  → campo de texto
             #   type  → campo de texto (cnab240 | cnab400)
-            #   data  → arquivo JSON com a lista de boletos (type: File no Grape)
-            # Refs: params[:data][:tempfile].read  → JSON.parse(...)
+            #   data  → arquivo JSON com um Hash:
+            #           { ...empresa_fields..., "pagamentos": [{...boleto1...}, ...] }
+            # O RemessaService.generate recebe values: Hash e extrai values['pagamentos'].
+            # Enviar Array diretamente causa "undefined method `merge' for an instance of Array".
             import io
             tipo_cnab = 'cnab240' if layout == 'CNAB_240' else 'cnab400'
-            data_json = json.dumps(pagamentos, ensure_ascii=False).encode('utf-8')
+            payload = {**dados_empresa, 'pagamentos': pagamentos}
+            data_json = json.dumps(payload, ensure_ascii=False).encode('utf-8')
 
             logger.info(f"Gerando remessa CNAB: banco={banco}, layout={tipo_cnab}, boletos={len(pagamentos)}")
 
