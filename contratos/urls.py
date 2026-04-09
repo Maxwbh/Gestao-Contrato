@@ -66,4 +66,11 @@ urlpatterns = [
     # ===========================================================================
     path('<int:pk>/tabela-juros/', views.api_tabela_juros_contrato, name='api_tabela_juros'),
     path('tabela-juros/<int:pk>/excluir/', views.api_tabela_juros_delete, name='api_tabela_juros_delete'),
+
+    # ===========================================================================
+    # 3.33: Documento Assinado do Contrato
+    # ===========================================================================
+    path('<int:pk>/documento/upload/', views.upload_documento_contrato, name='documento_upload'),
+    path('<int:pk>/documento/download/', views.download_documento_contrato, name='documento_download'),
+    path('<int:pk>/documento/excluir/', views.excluir_documento_contrato, name='documento_excluir'),
 ]
