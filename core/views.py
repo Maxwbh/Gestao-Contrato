@@ -22,6 +22,7 @@ from .mixins import PaginacaoMixin
 from .models import (
     Contabilidade, Imobiliaria, Imovel, Comprador, TipoImovel,
     ContaBancaria, BancoBrasil, LayoutCNAB, AcessoUsuario, VerticePoligono,
+    PlantaBaixaLoteamento,
     get_contabilidades_usuario, get_imobiliarias_usuario,
     usuario_tem_acesso_imobiliaria, usuario_tem_acesso_contabilidade,
     usuario_tem_permissao_total
@@ -1068,6 +1069,16 @@ def loteamento_detalhe(request, nome):
     elif filtro_disp == 'false':
         lista_imoveis = imoveis.filter(disponivel=False)
 
+    # M-14: Planta baixa como overlay no mapa
+    imobiliaria = imoveis.first().imobiliaria if imoveis else None
+    planta_baixa = None
+    if imobiliaria:
+        planta_baixa = PlantaBaixaLoteamento.objects.filter(
+            imobiliaria=imobiliaria,
+            loteamento__iexact=nome,
+            ativo=True
+        ).first()
+
     context = {
         'nome_loteamento': nome,
         'imoveis': lista_imoveis,
@@ -1081,6 +1092,8 @@ def loteamento_detalhe(request, nome):
         'valor_minimo': stats_valor['minimo'],
         'valor_maximo': stats_valor['maximo'],
         'filtro_disp': filtro_disp,
+        'planta_baixa': planta_baixa,
+        'imobiliaria': imobiliaria,
     }
     return render(request, 'core/loteamento_detalhe.html', context)
 
@@ -1836,4 +1849,126 @@ def api_poligono_imovel(request, pk):
 
     VerticePoligono.objects.bulk_create(novos)
     return JsonResponse({'ok': True, 'salvos': len(novos)})
+
+
+# =============================================================================
+# M-14: PLANTA BAIXA LOTEAMENTO
+# =============================================================================
+
+def servir_planta_baixa(request, pk):
+    """Serve o arquivo de imagem da planta baixa. Lê do disco ou do banco de dados."""
+    planta = get_object_or_404(PlantaBaixaLoteamento, pk=pk, ativo=True)
+
+    # Tentar do disco primeiro
+    try:
+        if planta.imagem and planta.imagem.name:
+            from django.core.files.storage import default_storage
+            if default_storage.exists(planta.imagem.name):
+                img_bytes = planta.imagem.read()
+                from django.http import HttpResponse
+                return HttpResponse(img_bytes, content_type=planta.imagem_content_type)
+    except Exception:
+        pass
+
+    # Fallback: banco de dados
+    if planta.imagem_db:
+        from django.http import HttpResponse
+        return HttpResponse(bytes(planta.imagem_db), content_type=planta.imagem_content_type)
+
+    return JsonResponse({'erro': 'Imagem não disponível.'}, status=404)
+
+
+def api_planta_baixa_loteamento(request):
+    """
+    GET ?imobiliaria=<pk>&loteamento=<nome>
+    Retorna dados do overlay (bounds, opacidade, url da imagem).
+    """
+    imobiliaria_id = request.GET.get('imobiliaria')
+    loteamento_nome = request.GET.get('loteamento', '').strip()
+
+    if not imobiliaria_id or not loteamento_nome:
+        return JsonResponse({'planta': None})
+
+    planta = PlantaBaixaLoteamento.objects.filter(
+        imobiliaria_id=imobiliaria_id,
+        loteamento=loteamento_nome,
+        ativo=True
+    ).first()
+
+    if not planta:
+        return JsonResponse({'planta': None})
+
+    return JsonResponse({
+        'planta': {
+            'pk': planta.pk,
+            'url': request.build_absolute_uri(f'/core/api/planta-baixa/{planta.pk}/imagem/'),
+            'lat_sw': float(planta.lat_sw),
+            'lng_sw': float(planta.lng_sw),
+            'lat_ne': float(planta.lat_ne),
+            'lng_ne': float(planta.lng_ne),
+            'opacidade': planta.opacidade,
+        }
+    })
+
+
+@login_required
+def upload_planta_baixa(request):
+    """
+    POST: cria ou atualiza a planta baixa de um loteamento.
+    Campos: imobiliaria_id, loteamento, imagem (file), lat_sw, lng_sw, lat_ne, lng_ne, opacidade.
+    Staff-only.
+    """
+    if not (request.user.is_staff or request.user.is_superuser):
+        return JsonResponse({'erro': 'Sem permissão.'}, status=403)
+
+    if request.method != 'POST':
+        return JsonResponse({'erro': 'Método não permitido.'}, status=405)
+
+    imobiliaria_id = request.POST.get('imobiliaria_id') or request.POST.get('imobiliaria')
+    loteamento_nome = request.POST.get('loteamento', '').strip()
+    imagem_file = request.FILES.get('imagem')
+
+    if not imobiliaria_id or not loteamento_nome:
+        return JsonResponse({'erro': 'imobiliaria e loteamento são obrigatórios.'}, status=400)
+
+    try:
+        lat_sw = float(request.POST.get('lat_sw', 0))
+        lng_sw = float(request.POST.get('lng_sw', 0))
+        lat_ne = float(request.POST.get('lat_ne', 0))
+        lng_ne = float(request.POST.get('lng_ne', 0))
+        opacidade = float(request.POST.get('opacidade', 0.7))
+        opacidade = max(0.1, min(1.0, opacidade))
+    except (ValueError, TypeError):
+        return JsonResponse({'erro': 'Coordenadas ou opacidade inválidas.'}, status=400)
+
+    planta, _ = PlantaBaixaLoteamento.objects.get_or_create(
+        imobiliaria_id=imobiliaria_id,
+        loteamento=loteamento_nome,
+    )
+    planta.lat_sw = lat_sw
+    planta.lng_sw = lng_sw
+    planta.lat_ne = lat_ne
+    planta.lng_ne = lng_ne
+    planta.opacidade = opacidade
+    planta.ativo = True
+
+    if imagem_file:
+        content_type = imagem_file.content_type or 'image/png'
+        if not content_type.startswith('image/'):
+            return JsonResponse({'erro': 'Arquivo deve ser uma imagem.'}, status=400)
+        planta.imagem_content_type = content_type
+        img_bytes = imagem_file.read()
+        planta.imagem_db = img_bytes  # backup DB (Render free)
+        # Salvar no disco também
+        from django.core.files.base import ContentFile
+        planta.imagem.save(imagem_file.name, ContentFile(img_bytes), save=False)
+
+    planta.save()
+
+    return JsonResponse({
+        'sucesso': True,
+        'pk': planta.pk,
+        'url': request.build_absolute_uri(f'/core/api/planta-baixa/{planta.pk}/imagem/'),
+        'mensagem': 'Planta baixa salva com sucesso!',
+    })
 
