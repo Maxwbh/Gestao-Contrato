@@ -73,4 +73,9 @@ urlpatterns = [
     path('<int:pk>/documento/upload/', views.upload_documento_contrato, name='documento_upload'),
     path('<int:pk>/documento/download/', views.download_documento_contrato, name='documento_download'),
     path('<int:pk>/documento/excluir/', views.excluir_documento_contrato, name='documento_excluir'),
+
+    # ===========================================================================
+    # PDF do Contrato (Promessa de Compra e Venda)
+    # ===========================================================================
+    path('<int:pk>/contrato.pdf', views.download_contrato_pdf, name='contrato_pdf'),
 ]

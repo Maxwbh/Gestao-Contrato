@@ -1286,6 +1286,10 @@
                        title="Baixar recibo das últimas antecipações">
                         <i class="fas fa-file-pdf me-1"></i> Recibo Antecipação
                     </a>
+                    <a href="{% url 'contratos:contrato_pdf' contrato.pk %}" class="btn btn-outline-primary"
+                       title="Baixar PDF do Contrato de Promessa de Compra e Venda" target="_blank">
+                        <i class="fas fa-file-contract me-1"></i> Contrato PDF
+                    </a>
                     <a href="{% url 'financeiro:renegociar_parcelas' contrato.pk %}" class="btn btn-outline-warning"
                        title="Renegociar parcelas em atraso">
                         <i class="fas fa-handshake me-1"></i> Renegociar
