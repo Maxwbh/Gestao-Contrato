@@ -132,6 +132,57 @@
         0% { background-color: #d4edda; }
         100% { background-color: transparent; }
     }
+
+    /* ── Drag & Resize dos cards ─────────────────────────────────── */
+    .sc-wrap {
+        position: relative;
+        margin-bottom: 0.75rem;
+    }
+    .sc-drag-handle {
+        position: absolute;
+        top: 0; left: 0; right: 0;
+        height: 18px;
+        cursor: grab;
+        z-index: 10;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        opacity: 0;
+        transition: opacity .15s;
+    }
+    .sc-wrap:hover .sc-drag-handle { opacity: 1; }
+    .sc-drag-handle:active { cursor: grabbing; }
+    .sc-drag-handle::before {
+        content: '⠿ ⠿ ⠿';
+        font-size: .6rem;
+        letter-spacing: 3px;
+        color: #6c757d;
+        pointer-events: none;
+    }
+    .sc-resize-bar {
+        height: 8px;
+        cursor: ns-resize;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        opacity: 0;
+        transition: opacity .15s;
+        user-select: none;
+    }
+    .sc-wrap:hover .sc-resize-bar { opacity: 1; }
+    .sc-resize-bar::before {
+        content: '— — —';
+        font-size: .6rem;
+        letter-spacing: 4px;
+        color: #adb5bd;
+        pointer-events: none;
+    }
+    .sc-card-inner {
+        overflow: hidden;
+    }
+    .sc-ghost { opacity: .35; }
+    .sc-chosen { box-shadow: 0 0 0 2px #0d6efd66; border-radius: .375rem; }
+    .sc-dragging { opacity: .9; }
 </style>
 {% endblock %}
 
@@ -246,7 +297,7 @@
 
         <div class="row">
             <!-- Coluna Esquerda: Informacoes -->
-            <div class="col-lg-5">
+            <div class="col-lg-5" id="sort-left">
                 <!-- Comprador -->
                 <div class="card info-card primary mb-3">
                     <div class="card-header bg-primary text-white">
@@ -732,7 +783,7 @@
             </div>
 
             <!-- Coluna Direita: Parcelas -->
-            <div class="col-lg-7">
+            <div class="col-lg-7" id="sort-right">
                 <div class="card">
                     <div class="card-header bg-dark text-white d-flex justify-content-between align-items-center">
                         <span><i class="fas fa-list"></i> Parcelas</span>
@@ -2676,6 +2727,157 @@ function _bindReajusteModal(contratoId) {
             chevron.style.transform = expanded ? 'rotate(0deg)' : 'rotate(180deg)';
         });
     }
+})();
+</script>
+
+<!-- ── Drag & Resize de Cards ─────────────────────────────────── -->
+<script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
+<script>
+(function () {
+    var STORAGE_KEY = 'detail_layout_{{ contrato.pk }}';
+
+    /* ── Wraps cada .card direto filho de sort-left / sort-right ── */
+    function wrapCards(colId) {
+        var col = document.getElementById(colId);
+        if (!col) return;
+        var cards = Array.from(col.children).filter(function (el) {
+            return el.classList.contains('card');
+        });
+        cards.forEach(function (card, i) {
+            var wrap = document.createElement('div');
+            wrap.className = 'sc-wrap';
+            wrap.dataset.cardId = colId + '-' + i;
+
+            /* drag handle (topo invisível — aparece no hover) */
+            var drag = document.createElement('div');
+            drag.className = 'sc-drag-handle';
+            drag.title = 'Arrastar para reposicionar';
+
+            /* inner: mantém overflow do card */
+            var inner = document.createElement('div');
+            inner.className = 'sc-card-inner';
+
+            /* resize bar (base do card) */
+            var resizeBar = document.createElement('div');
+            resizeBar.className = 'sc-resize-bar';
+            resizeBar.title = 'Arrastar para redimensionar';
+
+            col.insertBefore(wrap, card);
+            wrap.appendChild(drag);
+            inner.appendChild(card);
+            wrap.appendChild(inner);
+            wrap.appendChild(resizeBar);
+        });
+    }
+
+    wrapCards('sort-left');
+    wrapCards('sort-right');
+
+    /* ── SortableJS ─────────────────────────────────────────────── */
+    function makeSortable(colId) {
+        var el = document.getElementById(colId);
+        if (!el || typeof Sortable === 'undefined') return;
+        return Sortable.create(el, {
+            group: 'detail-cards',
+            handle: '.sc-drag-handle',
+            animation: 180,
+            ghostClass: 'sc-ghost',
+            chosenClass: 'sc-chosen',
+            dragClass: 'sc-dragging',
+            onEnd: saveLayout
+        });
+    }
+
+    makeSortable('sort-left');
+    makeSortable('sort-right');
+
+    /* ── Resize vertical ─────────────────────────────────────────── */
+    document.addEventListener('mousedown', function (e) {
+        var bar = e.target.closest('.sc-resize-bar');
+        if (!bar) return;
+        e.preventDefault();
+
+        var inner = bar.previousElementSibling; /* .sc-card-inner */
+        var startY = e.clientY;
+        var startH = inner.offsetHeight;
+
+        function onMove(ev) {
+            var newH = Math.max(80, startH + ev.clientY - startY);
+            inner.style.height = newH + 'px';
+            inner.style.overflowY = 'auto';
+        }
+        function onUp() {
+            document.removeEventListener('mousemove', onMove);
+            document.removeEventListener('mouseup', onUp);
+            saveLayout();
+        }
+        document.addEventListener('mousemove', onMove);
+        document.addEventListener('mouseup', onUp);
+    });
+
+    /* ── Persist layout ──────────────────────────────────────────── */
+    function getColState(colId) {
+        var col = document.getElementById(colId);
+        if (!col) return [];
+        return Array.from(col.querySelectorAll(':scope > .sc-wrap')).map(function (w) {
+            var inner = w.querySelector('.sc-card-inner');
+            return {
+                id: w.dataset.cardId,
+                h: inner && inner.style.height ? inner.style.height : null
+            };
+        });
+    }
+
+    function saveLayout() {
+        try {
+            localStorage.setItem(STORAGE_KEY, JSON.stringify({
+                left: getColState('sort-left'),
+                right: getColState('sort-right')
+            }));
+        } catch (e) {}
+    }
+
+    function restoreLayout() {
+        var raw;
+        try { raw = JSON.parse(localStorage.getItem(STORAGE_KEY)); } catch (e) {}
+        if (!raw) return;
+
+        ['left', 'right'].forEach(function (side) {
+            var colId = 'sort-' + side;
+            var col = document.getElementById(colId);
+            var items = raw[side];
+            if (!col || !items) return;
+
+            /* Reorder nodes to match saved order */
+            items.forEach(function (item) {
+                var wrap = col.querySelector('[data-card-id="' + item.id + '"]');
+                if (wrap) {
+                    col.appendChild(wrap);
+                    if (item.h) {
+                        var inner = wrap.querySelector('.sc-card-inner');
+                        if (inner) { inner.style.height = item.h; inner.style.overflowY = 'auto'; }
+                    }
+                }
+            });
+        });
+    }
+
+    restoreLayout();
+
+    /* Botão reset layout */
+    var resetBtn = document.createElement('button');
+    resetBtn.type = 'button';
+    resetBtn.className = 'btn btn-sm btn-outline-secondary';
+    resetBtn.title = 'Resetar disposição dos cards';
+    resetBtn.innerHTML = '<i class="fas fa-undo"></i>';
+    resetBtn.style.cssText = 'position:fixed;bottom:1.5rem;right:1.5rem;z-index:1050;opacity:.7;';
+    resetBtn.addEventListener('click', function () {
+        localStorage.removeItem(STORAGE_KEY);
+        location.reload();
+    });
+    resetBtn.addEventListener('mouseenter', function () { this.style.opacity = '1'; });
+    resetBtn.addEventListener('mouseleave', function () { this.style.opacity = '.7'; });
+    document.body.appendChild(resetBtn);
 })();
 </script>
 {% endblock %}
