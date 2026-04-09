@@ -101,7 +101,12 @@ class ConfiguracaoWhatsApp(TimeStampedModel):
         max_length=30,
         blank=True,
         verbose_name='Número WhatsApp Remetente',
-        help_text='Twilio/Meta: whatsapp:+5511999999999 | Z-API: número sem prefixo'
+        help_text=(
+            'Twilio — DEV: whatsapp:+14155238886 (sandbox) | '
+            'PROD: número aprovado em console.twilio.com → Messaging → Senders → WhatsApp Senders. '
+            'Usar número SMS comum gera erro Twilio 63007. '
+            'Meta: whatsapp:+5511999999999 | Z-API/Evolution: sem prefixo'
+        )
     )
     # Evolution API / Z-API fields
     api_url = models.URLField(
