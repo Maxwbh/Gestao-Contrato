@@ -1299,6 +1299,12 @@
                        title="Baixar PDF do Contrato de Promessa de Compra e Venda" target="_blank">
                         <i class="fas fa-file-contract me-1"></i> Contrato PDF
                     </a>
+                    <a href="{% url 'financeiro:declaracao_quitacao' contrato.pk %}"
+                       class="btn btn-outline-secondary"
+                       title="Declaração Anual de Quitação — Lei 12.007/2009"
+                       target="_blank">
+                        <i class="fas fa-certificate me-1"></i> Decl. Quitação
+                    </a>
                     <a href="{% url 'financeiro:renegociar_parcelas' contrato.pk %}" class="btn btn-outline-warning"
                        title="Renegociar parcelas em atraso">
                         <i class="fas fa-handshake me-1"></i> Renegociar
