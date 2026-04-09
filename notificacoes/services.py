@@ -81,6 +81,42 @@ def _destinatario_telefone_teste(destinatario_real: str) -> str:
     return destinatario_real
 
 
+# =============================================================================
+# SAFEGUARD DE AMBIENTE DE TESTE
+# =============================================================================
+
+def _destinatario_email_teste(destinatario_real: str) -> str:
+    """
+    Se TEST_MODE=True, substitui o e-mail pelo endereço de teste configurado.
+    Registra um aviso indicando o destinatário original.
+    """
+    if getattr(settings, 'TEST_MODE', False):
+        destino_teste = getattr(settings, 'TEST_RECIPIENT_EMAIL', 'receber@msbrasil.inf.br')
+        if destinatario_real != destino_teste:
+            logger.warning(
+                '[TEST_MODE] E-mail redirecionado: %s → %s',
+                destinatario_real, destino_teste
+            )
+        return destino_teste
+    return destinatario_real
+
+
+def _destinatario_telefone_teste(destinatario_real: str) -> str:
+    """
+    Se TEST_MODE=True, substitui o número pelo telefone de teste configurado.
+    Registra um aviso indicando o destinatário original.
+    """
+    if getattr(settings, 'TEST_MODE', False):
+        destino_teste = getattr(settings, 'TEST_RECIPIENT_PHONE', '+5531993257479')
+        if destinatario_real != destino_teste:
+            logger.warning(
+                '[TEST_MODE] SMS/WhatsApp redirecionado: %s → %s',
+                destinatario_real, destino_teste
+            )
+        return destino_teste
+    return destinatario_real
+
+
 class ServicoEmail:
     """Serviço para envio de e-mails"""
 
