@@ -13,6 +13,7 @@
     .ag-theme-material .ag-row-odd  { background-color: #f8f9fa; }
     .ag-theme-material .ag-row:hover { background-color: #e8f4fd !important; }
     .ag-grid-actions .btn { padding: 1px 6px; font-size: 0.75rem; margin: 1px; }
+    .canal-badge { font-size: .7rem; padding: 2px 6px; border-radius: 10px; white-space: nowrap; }
 </style>
 {% endblock %}
 
@@ -22,9 +23,9 @@
     <div class="d-flex justify-content-between align-items-center mb-4">
         <div>
             <h2 class="mb-1">
-                <i class="fas fa-file-alt text-success me-2"></i>Mensagens de E-mail
+                <i class="fas fa-file-alt text-success me-2"></i>Templates de Notificação
             </h2>
-            <p class="text-muted mb-0">Gerencie os templates de mensagens para notificações</p>
+            <p class="text-muted mb-0">Gerencie os templates de mensagens (E-mail, SMS e WhatsApp)</p>
         </div>
         <a href="{% url 'notificacoes:criar_template' %}" class="btn btn-success">
             <i class="fas fa-plus me-1"></i> Novo Template
@@ -35,14 +36,6 @@
     <div class="card mb-4">
         <div class="card-body py-2">
             <form method="get" class="row g-2 align-items-center">
-                <div class="col-md-3">
-                    <select name="tipo" class="form-select" onchange="this.form.submit()">
-                        <option value="">Todos os Canais</option>
-                        {% for value, label in tipos_notificacao %}
-                        <option value="{{ value }}" {% if tipo_selecionado == value %}selected{% endif %}>{{ label }}</option>
-                        {% endfor %}
-                    </select>
-                </div>
                 <div class="col-md-3">
                     <select name="codigo" class="form-select" onchange="this.form.submit()">
                         <option value="">Todos os Tipos</option>
@@ -85,7 +78,7 @@
 
 <!-- Modal de Preview -->
 <div class="modal fade" id="modalPreview" tabindex="-1">
-    <div class="modal-dialog modal-lg">
+    <div class="modal-dialog modal-xl">
         <div class="modal-content">
             <div class="modal-header">
                 <h5 class="modal-title"><i class="fas fa-eye me-2"></i>Preview do Template</h5>
@@ -114,7 +107,9 @@ const tplRowData = [
     pk: {{ template.pk }},
     nome: "{{ template.nome|escapejs }}",
     codigo_display: "{{ template.get_codigo_display|escapejs }}",
-    tipo: "{{ template.tipo|escapejs }}",
+    tem_email: {{ template.tem_email|yesno:"true,false" }},
+    tem_sms: {{ template.tem_sms|yesno:"true,false" }},
+    tem_whatsapp: {{ template.tem_whatsapp|yesno:"true,false" }},
     imobiliaria: "{% if template.imobiliaria %}{{ template.imobiliaria.nome|escapejs }}{% endif %}",
     assunto: "{{ template.assunto|escapejs }}",
     ativo: {{ template.ativo|yesno:"true,false" }},
@@ -126,13 +121,16 @@ const tplRowData = [
 {% endfor %}
 ];
 
-function canalRenderer(params) {
-    const icons = {
-        'EMAIL':    '<i class="fas fa-envelope text-primary me-1"></i>E-mail',
-        'SMS':      '<i class="fas fa-sms text-info me-1"></i>SMS',
-        'WHATSAPP': '<i class="fab fa-whatsapp text-success me-1"></i>WhatsApp',
-    };
-    return icons[params.value] || params.value;
+function canaisRenderer(params) {
+    const d = params.data;
+    let badges = '';
+    if (d.tem_email)
+        badges += '<span class="canal-badge bg-primary text-white me-1"><i class="fas fa-envelope me-1"></i>Email</span>';
+    if (d.tem_sms)
+        badges += '<span class="canal-badge bg-info text-white me-1"><i class="fas fa-sms me-1"></i>SMS</span>';
+    if (d.tem_whatsapp)
+        badges += '<span class="canal-badge text-white me-1" style="background:#25D366"><i class="fab fa-whatsapp me-1"></i>WA</span>';
+    return badges || '<span class="badge bg-secondary">—</span>';
 }
 
 function imobiliariaRenderer(params) {
@@ -162,16 +160,16 @@ document.addEventListener('DOMContentLoaded', function() {
         document.getElementById('tplGrid'),
         {
             columnDefs: [
-                { headerName: 'Nome', field: 'nome', filter: 'agTextColumnFilter', floatingFilter: true, minWidth: 160,
+                { headerName: 'Nome', field: 'nome', filter: 'agTextColumnFilter', minWidth: 180,
                   cellRenderer: p => `<strong>${p.value}</strong>` },
-                { headerName: 'Tipo', field: 'codigo_display', filter: 'agTextColumnFilter', floatingFilter: true, minWidth: 130,
+                { headerName: 'Tipo', field: 'codigo_display', filter: 'agTextColumnFilter', minWidth: 160,
                   cellRenderer: p => `<span class="badge bg-secondary">${p.value}</span>` },
-                { headerName: 'Canal', field: 'tipo', filter: 'agTextColumnFilter', floatingFilter: true, minWidth: 110,
-                  cellRenderer: canalRenderer },
-                { headerName: 'Imobiliária', field: 'imobiliaria', filter: 'agTextColumnFilter', floatingFilter: true, minWidth: 150,
+                { headerName: 'Canais', field: 'tem_email', sortable: false, filter: false, minWidth: 210,
+                  cellRenderer: canaisRenderer },
+                { headerName: 'Imobiliária', field: 'imobiliaria', filter: 'agTextColumnFilter', minWidth: 150,
                   cellRenderer: imobiliariaRenderer },
-                { headerName: 'Assunto', field: 'assunto', filter: 'agTextColumnFilter', floatingFilter: true, minWidth: 200,
-                  cellRenderer: p => `<small class="text-muted">${p.value}</small>` },
+                { headerName: 'Assunto (Email)', field: 'assunto', filter: 'agTextColumnFilter', minWidth: 200,
+                  cellRenderer: p => `<small class="text-muted">${p.value || '—'}</small>` },
                 { headerName: 'Status', field: 'ativo', filter: false, minWidth: 90,
                   cellRenderer: ativoTplRenderer },
                 { headerName: 'Ações', field: 'pk', sortable: false, filter: false, minWidth: 160,
@@ -180,7 +178,7 @@ document.addEventListener('DOMContentLoaded', function() {
             rowData: tplRowData,
             domLayout: 'autoHeight',
             defaultColDef: { sortable: true, resizable: true },
-            rowHeight: 44, headerHeight: 48, floatingFiltersHeight: 36,
+            rowHeight: 44, headerHeight: 48,
             suppressCellFocus: true, enableCellTextSelection: true,
         }
     );
@@ -199,16 +197,29 @@ document.addEventListener('DOMContentLoaded', function() {
         fetch(url, { method: 'GET', headers: { 'X-Requested-With': 'XMLHttpRequest' } })
             .then(r => r.json())
             .then(data => {
-                let html = '<div class="mb-3"><strong>Nome:</strong> ' + data.nome + '</div>';
-                html += '<div class="mb-3"><strong>Canal:</strong> ' + data.tipo + '</div>';
-                html += '<div class="mb-3"><strong>Assunto:</strong><br><div class="alert alert-light">' + data.assunto + '</div></div>';
-                html += '<div class="mb-3"><strong>Corpo (Texto):</strong><br><pre class="bg-light p-3 rounded" style="white-space: pre-wrap;">' + data.corpo + '</pre></div>';
-                if (data.corpo_html) {
-                    html += '<div class="mb-3"><strong>Corpo (HTML):</strong><br><div class="border p-3 rounded bg-white">' + data.corpo_html + '</div></div>';
+                let canais = '';
+                if (data.tem_email)    canais += '<span class="badge bg-primary me-1"><i class="fas fa-envelope me-1"></i>Email</span>';
+                if (data.tem_sms)      canais += '<span class="badge bg-info me-1"><i class="fas fa-sms me-1"></i>SMS</span>';
+                if (data.tem_whatsapp) canais += '<span class="badge text-white me-1" style="background:#25D366"><i class="fab fa-whatsapp me-1"></i>WhatsApp</span>';
+
+                let html = `<div class="mb-3"><strong>Nome:</strong> ${data.nome} &nbsp; ${canais}</div>`;
+
+                if (data.tem_email) {
+                    html += `<div class="mb-3"><strong>Assunto:</strong><div class="alert alert-light mt-1 mb-0">${data.assunto || '<em class="text-muted">(sem assunto)</em>'}</div></div>`;
+                    if (data.corpo_html) {
+                        html += `<div class="mb-3"><strong>Corpo E-mail (HTML):</strong><div class="border p-3 rounded bg-white mt-1" style="max-height:350px;overflow:auto;">${data.corpo_html}</div></div>`;
+                    }
                 }
+                if (data.tem_sms) {
+                    html += `<div class="mb-3"><strong>Corpo SMS:</strong><pre class="bg-light p-3 rounded mt-1" style="white-space:pre-wrap;">${data.corpo}</pre></div>`;
+                }
+                if (data.tem_whatsapp) {
+                    html += `<div class="mb-3"><strong>Corpo WhatsApp:</strong><pre class="bg-light p-3 rounded mt-1" style="white-space:pre-wrap;">${data.corpo_whatsapp}</pre></div>`;
+                }
+
                 modalBody.innerHTML = html;
             })
-            .catch(err => {
+            .catch(() => {
                 modalBody.innerHTML = '<div class="text-center py-4 text-danger"><i class="fas fa-exclamation-triangle fa-3x mb-3"></i><p>Erro ao carregar preview</p></div>';
             });
     });

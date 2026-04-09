@@ -690,7 +690,7 @@ const parcelasColumnDefs = [
         headerName: 'Contrato',
         field: 'contrato',
         filter: 'agTextColumnFilter',
-        floatingFilter: true,
+       
         minWidth: 120,
         cellRenderer: params => `<strong>${params.value}</strong>`,
     },
@@ -698,14 +698,14 @@ const parcelasColumnDefs = [
         headerName: 'Comprador',
         field: 'comprador',
         filter: 'agTextColumnFilter',
-        floatingFilter: true,
+       
         minWidth: 160,
     },
     {
         headerName: 'Parcela',
         field: 'numero_parcela',
         filter: 'agNumberColumnFilter',
-        floatingFilter: true,
+       
         minWidth: 90,
         cellRenderer: params => `${params.value}/${params.data.total_parcelas}`,
     },
@@ -713,7 +713,7 @@ const parcelasColumnDefs = [
         headerName: 'Vencimento',
         field: 'vencimento',
         filter: 'agDateColumnFilter',
-        floatingFilter: true,
+       
         minWidth: 120,
         cellRenderer: params => params.data.vencimento_fmt,
         sort: 'desc',
@@ -722,7 +722,7 @@ const parcelasColumnDefs = [
         headerName: 'Valor Original',
         field: 'valor_original',
         filter: 'agNumberColumnFilter',
-        floatingFilter: true,
+       
         minWidth: 130,
         type: 'numericColumn',
         cellRenderer: params => formatBRL(params.value),
@@ -731,7 +731,7 @@ const parcelasColumnDefs = [
         headerName: 'Valor Atual',
         field: 'valor_atual',
         filter: 'agNumberColumnFilter',
-        floatingFilter: true,
+       
         minWidth: 120,
         type: 'numericColumn',
         cellRenderer: params => formatBRL(params.value),
@@ -740,7 +740,7 @@ const parcelasColumnDefs = [
         headerName: 'Status',
         field: 'pago',
         filter: 'agTextColumnFilter',
-        floatingFilter: true,
+       
         minWidth: 110,
         cellRenderer: statusRenderer,
     },
@@ -748,7 +748,7 @@ const parcelasColumnDefs = [
         headerName: 'Boleto',
         field: 'status_boleto',
         filter: 'agTextColumnFilter',
-        floatingFilter: true,
+       
         minWidth: 110,
         cellRenderer: boletoRenderer,
     },
@@ -756,7 +756,7 @@ const parcelasColumnDefs = [
         headerName: 'Data Pgto',
         field: 'data_pagamento',
         filter: 'agTextColumnFilter',
-        floatingFilter: true,
+       
         minWidth: 110,
     },
     {
@@ -785,7 +785,7 @@ document.addEventListener('DOMContentLoaded', function() {
             suppressRowClickSelection: true,
             rowHeight: 42,
             headerHeight: 48,
-            floatingFiltersHeight: 36,
+           
             suppressCellFocus: true,
             enableCellTextSelection: true,
             onSelectionChanged: function() {

@@ -604,7 +604,7 @@
             headerName: 'Contrato',
             field: 'numero',
             filter: 'agTextColumnFilter',
-            floatingFilter: true,
+           
             minWidth: 130,
             cellRenderer: params => `<strong>${params.value}</strong><br><small class="text-muted">${params.data.data_contrato}</small>`,
         },
@@ -612,7 +612,7 @@
             headerName: 'Comprador',
             field: 'comprador',
             filter: 'agTextColumnFilter',
-            floatingFilter: true,
+           
             minWidth: 160,
             cellRenderer: params => `<i class="fas fa-user text-primary me-1"></i>${params.value}`,
         },
@@ -620,7 +620,7 @@
             headerName: 'Imóvel',
             field: 'imovel',
             filter: 'agTextColumnFilter',
-            floatingFilter: true,
+           
             minWidth: 150,
             cellRenderer: params => `<i class="fas fa-home text-success me-1"></i>${params.value}<br><small class="text-muted">${params.data.loteamento}</small>`,
         },
@@ -628,7 +628,7 @@
             headerName: 'Valor Total',
             field: 'valor_total',
             filter: 'agNumberColumnFilter',
-            floatingFilter: true,
+           
             minWidth: 130,
             type: 'numericColumn',
             cellRenderer: params => `<strong>${formatBRL(params.value)}</strong>`,
@@ -637,7 +637,7 @@
             headerName: 'Parcelas',
             field: 'numero_parcelas',
             filter: 'agNumberColumnFilter',
-            floatingFilter: true,
+           
             minWidth: 100,
             type: 'numericColumn',
             cellRenderer: params => `<span class="badge bg-secondary">${params.value}x</span><br><small class="text-muted">${formatBRL(params.data.valor_parcela)}</small>`,
@@ -646,7 +646,7 @@
             headerName: 'Progresso',
             field: 'progresso',
             filter: 'agNumberColumnFilter',
-            floatingFilter: true,
+           
             minWidth: 140,
             cellRenderer: progressoRenderer,
         },
@@ -654,7 +654,7 @@
             headerName: 'Status',
             field: 'status',
             filter: 'agTextColumnFilter',
-            floatingFilter: true,
+           
             minWidth: 110,
             cellRenderer: statusRenderer,
         },
@@ -683,7 +683,7 @@
                 },
                 rowHeight: 52,
                 headerHeight: 48,
-                floatingFiltersHeight: 36,
+               
                 suppressCellFocus: true,
                 enableCellTextSelection: true,
                 onSelectionChanged: function() {
