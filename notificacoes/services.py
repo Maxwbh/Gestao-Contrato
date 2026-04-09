@@ -16,6 +16,34 @@ from .models import (
 
 logger = logging.getLogger(__name__)
 
+# Twilio trial prepend (38 chars): "Sent from your Twilio trial account - "
+_TWILIO_TRIAL_PREFIX_LEN = 38
+_SMS_MAX_CHARS = 250
+
+
+def _truncar_sms(mensagem: str) -> str:
+    """
+    Garante que o corpo do SMS não ultrapasse 250 caracteres no total.
+
+    Se TWILIO_TRIAL_MODE=True, a conta Twilio trial insere automaticamente
+    "Sent from your Twilio trial account - " (38 chars) antes da mensagem,
+    portanto o limite efetivo do corpo é 250 - 38 = 212 caracteres.
+
+    Mensagens mais longas são truncadas com "..." ao final.
+    """
+    trial = getattr(settings, 'TWILIO_TRIAL_MODE', False)
+    limite = _SMS_MAX_CHARS - (_TWILIO_TRIAL_PREFIX_LEN if trial else 0)
+
+    if len(mensagem) <= limite:
+        return mensagem
+
+    truncado = mensagem[:limite - 3].rstrip() + '...'
+    logger.warning(
+        '[SMS] Mensagem truncada de %d para %d chars (trial=%s, limite=%d).',
+        len(mensagem), len(truncado), trial, limite,
+    )
+    return truncado
+
 
 # =============================================================================
 # SAFEGUARD DE AMBIENTE DE TESTE
@@ -156,6 +184,11 @@ class ServicoSMS:
             # (erro Twilio 63007 quando From tem prefixo errado)
             import re as _re
             numero_remetente = _re.sub(r'^whatsapp:', '', numero_remetente.strip())
+
+            # Truncar mensagem para não ultrapassar 250 chars totais.
+            # Contas Twilio trial adicionam 38 chars de prefixo — TWILIO_TRIAL_MODE
+            # reduz o limite efetivo do corpo para 212 chars.
+            mensagem = _truncar_sms(mensagem)
 
             # Enviar via Twilio
             client = Client(account_sid, auth_token)
