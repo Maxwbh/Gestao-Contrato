@@ -55,16 +55,19 @@ class TestDashboardView:
 
 @pytest.mark.django_db
 class TestSetupView:
-    """Testes da view setup"""
+    """Testes da view setup — agora redireciona para /dados-teste/"""
 
-    def test_retorna_200_sem_autenticacao(self, client):
-        """Setup é acessível sem login (permite configuração inicial)"""
+    def test_redireciona_sem_autenticacao(self, client):
+        """/setup/ GET redireciona para /dados-teste/"""
         response = client.get(reverse('core:setup'))
-        assert response.status_code == 200
+        assert response.status_code == 302
+        assert '/dados-teste/' in response['Location']
 
-    def test_retorna_200_autenticado(self, client_logado):
+    def test_redireciona_autenticado(self, client_logado):
+        """/setup/ GET redireciona para /dados-teste/"""
         response = client_logado.get(reverse('core:setup'))
-        assert response.status_code == 200
+        assert response.status_code == 302
+        assert '/dados-teste/' in response['Location']
 
 
 @pytest.mark.django_db

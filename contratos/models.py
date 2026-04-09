@@ -512,7 +512,34 @@ class Contrato(TimeStampedModel):
         help_text='Observações gerais sobre o contrato'
     )
 
-    # Campos calculados
+    # 3.33: Documento assinado (contrato PDF/imagem)
+    documento_assinado = models.FileField(
+        upload_to='contratos/documentos/%Y/',
+        null=True,
+        blank=True,
+        verbose_name='Contrato Assinado',
+        help_text='Upload do contrato assinado pelas partes (PDF ou imagem)'
+    )
+    documento_assinado_db = models.BinaryField(
+        null=True,
+        blank=True,
+        editable=False,
+        verbose_name='Contrato Assinado (banco de dados)',
+        help_text='Cópia do documento em banco de dados — persiste em storage efêmero (Render)'
+    )
+    documento_assinado_content_type = models.CharField(
+        max_length=100,
+        default='application/pdf',
+        editable=False,
+        verbose_name='Content-Type do documento',
+    )
+    data_assinatura = models.DateField(
+        null=True,
+        blank=True,
+        verbose_name='Data de Assinatura',
+    )
+
+
     valor_financiado = models.DecimalField(
         max_digits=12,
         decimal_places=2,
