@@ -211,6 +211,7 @@ EMAIL_USE_SSL = config('EMAIL_USE_SSL', default=False, cast=bool)
 EMAIL_HOST_USER = config('EMAIL_HOST_USER', default='')
 EMAIL_HOST_PASSWORD = config('EMAIL_HOST_PASSWORD', default='')
 DEFAULT_FROM_EMAIL = config('DEFAULT_FROM_EMAIL', default='noreply@gestaocontrato.com.br')
+EMAIL_TIMEOUT = config('EMAIL_TIMEOUT', default=15, cast=int)  # Segundos para timeout SMTP (evita bloqueio longo)
 
 # Twilio Configuration (SMS e WhatsApp)
 TWILIO_ACCOUNT_SID = config('TWILIO_ACCOUNT_SID', default='')
