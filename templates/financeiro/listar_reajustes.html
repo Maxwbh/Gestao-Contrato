@@ -102,7 +102,7 @@ const reajustesColumnDefs = [
         headerName: 'Contrato',
         field: 'contrato',
         filter: 'agTextColumnFilter',
-        floatingFilter: true,
+       
         minWidth: 120,
         cellRenderer: params => `<a href="/contratos/${params.data.contrato_pk}/">${params.value}</a>`,
     },
@@ -110,7 +110,7 @@ const reajustesColumnDefs = [
         headerName: 'Data',
         field: 'data_reajuste',
         filter: 'agTextColumnFilter',
-        floatingFilter: true,
+       
         minWidth: 105,
         sort: 'desc',
     },
@@ -118,7 +118,7 @@ const reajustesColumnDefs = [
         headerName: 'Ciclo',
         field: 'ciclo',
         filter: 'agNumberColumnFilter',
-        floatingFilter: true,
+       
         minWidth: 80,
         cellRenderer: params => `<span class="badge bg-secondary">${params.value}</span>`,
     },
@@ -126,7 +126,7 @@ const reajustesColumnDefs = [
         headerName: 'Índice',
         field: 'indice_tipo',
         filter: 'agTextColumnFilter',
-        floatingFilter: true,
+       
         minWidth: 90,
         cellRenderer: params => indiceBadge(params.value),
     },
@@ -134,7 +134,7 @@ const reajustesColumnDefs = [
         headerName: 'Período Ref.',
         field: 'periodo',
         filter: 'agTextColumnFilter',
-        floatingFilter: true,
+       
         minWidth: 140,
         cellRenderer: params => params.value ? `<small class="font-monospace">${params.value}</small>` : '<span class="text-muted">—</span>',
     },
@@ -142,7 +142,7 @@ const reajustesColumnDefs = [
         headerName: '% Bruto',
         field: 'percentual_bruto',
         filter: 'agNumberColumnFilter',
-        floatingFilter: true,
+       
         minWidth: 100,
         type: 'numericColumn',
         cellRenderer: params => params.value != null ? `${parseFloat(params.value).toFixed(2)}%` : '<span class="text-muted">—</span>',
@@ -151,7 +151,7 @@ const reajustesColumnDefs = [
         headerName: '% Aplicado',
         field: 'percentual',
         filter: 'agNumberColumnFilter',
-        floatingFilter: true,
+       
         minWidth: 110,
         type: 'numericColumn',
         cellRenderer: params => {
@@ -165,7 +165,7 @@ const reajustesColumnDefs = [
         headerName: 'Parcelas',
         field: 'parcela_inicial',
         filter: 'agNumberColumnFilter',
-        floatingFilter: true,
+       
         minWidth: 100,
         cellRenderer: params => `<small>${params.value}–${params.data.parcela_final}</small>`,
     },
@@ -173,7 +173,7 @@ const reajustesColumnDefs = [
         headerName: 'Por',
         field: 'usuario',
         filter: 'agTextColumnFilter',
-        floatingFilter: true,
+       
         minWidth: 100,
         cellRenderer: params => `<small class="text-muted">${params.value}</small>`,
     },
@@ -181,7 +181,7 @@ const reajustesColumnDefs = [
         headerName: 'Status',
         field: 'aplicado',
         filter: 'agTextColumnFilter',
-        floatingFilter: true,
+       
         minWidth: 120,
         cellRenderer: statusRenderer,
     },
@@ -197,7 +197,7 @@ document.addEventListener('DOMContentLoaded', function() {
             defaultColDef: { sortable: true, resizable: true },
             rowHeight: 42,
             headerHeight: 48,
-            floatingFiltersHeight: 36,
+           
             suppressCellFocus: true,
             enableCellTextSelection: true,
             overlayNoRowsTemplate: '<div class="text-center py-4 text-muted"><i class="fas fa-inbox fa-2x mb-2 d-block"></i>Nenhum reajuste registrado ainda.</div>',
