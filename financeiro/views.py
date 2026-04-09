@@ -712,6 +712,10 @@ def registrar_pagamento(request, pk):
             if data_pagamento > parcela.data_vencimento:
                 valor_juros, valor_multa = parcela.calcular_juros_multa(data_pagamento)
 
+            # Desconto = diferença entre o total a pagar e o que foi efetivamente pago
+            valor_total_devido = parcela.valor_atual + valor_juros + valor_multa
+            valor_desconto = max(Decimal('0.00'), valor_total_devido - valor_pago)
+
             parcela.registrar_pagamento(
                 valor_pago=valor_pago,
                 data_pagamento=data_pagamento,
@@ -726,6 +730,7 @@ def registrar_pagamento(request, pk):
                 valor_parcela=parcela.valor_atual,
                 valor_juros=valor_juros,
                 valor_multa=valor_multa,
+                valor_desconto=valor_desconto,
                 forma_pagamento=forma_pagamento,
                 observacoes=observacoes,
             )
@@ -741,9 +746,11 @@ def registrar_pagamento(request, pk):
             logger.exception("Erro ao registrar pagamento parcela pk=%s: %s", pk, e)
             messages.error(request, f'Erro ao registrar pagamento: {str(e)}')
 
+    valores = parcela.calcular_valores_hoje()
     context = {
         'parcela': parcela,
         'formas_pagamento': FORMAS_PAGAMENTO,
+        'valores': valores,
     }
     return render(request, 'financeiro/registrar_pagamento.html', context)
 
