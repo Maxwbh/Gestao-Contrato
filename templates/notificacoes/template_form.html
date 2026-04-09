@@ -17,8 +17,39 @@
     .sms-counter.over { color: #dc3545; font-weight: 600; }
     .sms-counter.ok   { color: #6c757d; }
     .tox-tinymce { border-radius: 0.375rem !important; }
+
     /* TAGs reference */
-    .tags-ref code { font-size: .75rem; background: #f8f9fa; padding: 1px 4px; border-radius: 3px; }
+    .tags-ref code {
+        font-size: .78rem;
+        background: #e8f4fd;
+        color: #0d6efd;
+        padding: 2px 6px;
+        border-radius: 4px;
+        border: 1px solid #b6d4fe;
+        cursor: pointer;
+        user-select: none;
+        transition: background .15s, transform .1s;
+        display: inline-block;
+    }
+    .tags-ref code:hover {
+        background: #0d6efd;
+        color: #fff;
+        transform: scale(1.05);
+    }
+    .tags-ref code:active { transform: scale(.97); }
+
+    /* Indicador de campo ativo */
+    .field-active-indicator {
+        font-size: .78rem;
+        color: #6c757d;
+        padding: 2px 8px;
+        background: #f8f9fa;
+        border-radius: 10px;
+        border: 1px dashed #ced4da;
+    }
+    .field-active-indicator.active-html  { color: #0d6efd; border-color: #0d6efd; background: #e8f0fe; }
+    .field-active-indicator.active-sms   { color: #0dcaf0; border-color: #0dcaf0; background: #e8fafd; }
+    .field-active-indicator.active-whats { color: #25D366; border-color: #25D366; background: #e8f8ed; }
 </style>
 {% endblock %}
 
@@ -104,10 +135,14 @@
                 <div class="mb-0">
                     <label class="form-label fw-semibold">
                         <i class="fas fa-code me-1 text-primary"></i>Corpo HTML
-                        <span class="badge bg-primary ms-1">Editor Avançado</span>
+                        <span class="badge bg-primary ms-1">Editor Rich Text</span>
                     </label>
                     {{ form.corpo_html }}
                     {% if form.corpo_html.errors %}<div class="text-danger small mt-1">{{ form.corpo_html.errors.0 }}</div>{% endif %}
+                    <div id="editorFallbackMsg" class="text-warning small mt-1 d-none">
+                        <i class="fas fa-exclamation-triangle me-1"></i>
+                        Editor visual não carregou — editando HTML direto. Verifique conexão com a internet.
+                    </div>
                 </div>
             </div>
         </div>
@@ -152,58 +187,66 @@
         <!-- ── CARD 5: TAGs disponíveis ──────────────────────────────── -->
         <div class="card mb-4 border-info tags-ref">
             <div class="card-header py-2 bg-info text-white d-flex justify-content-between align-items-center">
-                <span><i class="fas fa-tags me-2"></i><strong>TAGs Disponíveis</strong></span>
-                <button type="button" class="btn btn-sm btn-light" data-bs-toggle="collapse" data-bs-target="#collapseTags">
-                    <i class="fas fa-chevron-down"></i>
-                </button>
+                <span><i class="fas fa-tags me-2"></i><strong>TAGs Disponíveis</strong>
+                    <small class="fw-normal ms-2 opacity-75">— clique para inserir no campo ativo</small>
+                </span>
+                <div class="d-flex align-items-center gap-2">
+                    <span class="field-active-indicator" id="activeFieldIndicator">
+                        <i class="fas fa-mouse-pointer me-1"></i>clique em um campo primeiro
+                    </span>
+                    <button type="button" class="btn btn-sm btn-light" id="btnToggleTags"
+                            data-bs-toggle="collapse" data-bs-target="#collapseTags">
+                        <i class="fas fa-chevron-up" id="iconToggleTags"></i>
+                    </button>
+                </div>
             </div>
-            <div id="collapseTags" class="collapse">
+            <div id="collapseTags" class="collapse show">
                 <div class="card-body py-3">
                     <div class="row">
                         <div class="col-md-4">
                             <h6 class="text-primary"><i class="fas fa-user me-1"></i>Comprador</h6>
                             <ul class="list-unstyled small mb-3">
-                                <li><code>%%NOMECOMPRADOR%%</code> — Nome completo</li>
-                                <li><code>%%CPFCOMPRADOR%%</code> — CPF</li>
-                                <li><code>%%EMAILCOMPRADOR%%</code> — E-mail</li>
-                                <li><code>%%CELULARCOMPRADOR%%</code> — Celular</li>
-                                <li><code>%%TELEFONECOMPRADOR%%</code> — Telefone</li>
+                                <li class="mb-1"><code class="tag-chip" data-tag="%%NOMECOMPRADOR%%">%%NOMECOMPRADOR%%</code> Nome completo</li>
+                                <li class="mb-1"><code class="tag-chip" data-tag="%%CPFCOMPRADOR%%">%%CPFCOMPRADOR%%</code> CPF</li>
+                                <li class="mb-1"><code class="tag-chip" data-tag="%%EMAILCOMPRADOR%%">%%EMAILCOMPRADOR%%</code> E-mail</li>
+                                <li class="mb-1"><code class="tag-chip" data-tag="%%CELULARCOMPRADOR%%">%%CELULARCOMPRADOR%%</code> Celular</li>
+                                <li class="mb-1"><code class="tag-chip" data-tag="%%TELEFONECOMPRADOR%%">%%TELEFONECOMPRADOR%%</code> Telefone</li>
                             </ul>
                             <h6 class="text-primary"><i class="fas fa-building me-1"></i>Imobiliária</h6>
                             <ul class="list-unstyled small">
-                                <li><code>%%NOMEIMOBILIARIA%%</code> — Nome</li>
-                                <li><code>%%TELEFONEIMOBILIARIA%%</code> — Telefone</li>
-                                <li><code>%%EMAILIMOBILIARIA%%</code> — E-mail</li>
+                                <li class="mb-1"><code class="tag-chip" data-tag="%%NOMEIMOBILIARIA%%">%%NOMEIMOBILIARIA%%</code> Nome</li>
+                                <li class="mb-1"><code class="tag-chip" data-tag="%%TELEFONEIMOBILIARIA%%">%%TELEFONEIMOBILIARIA%%</code> Telefone</li>
+                                <li class="mb-1"><code class="tag-chip" data-tag="%%EMAILIMOBILIARIA%%">%%EMAILIMOBILIARIA%%</code> E-mail</li>
                             </ul>
                         </div>
                         <div class="col-md-4">
                             <h6 class="text-primary"><i class="fas fa-file-contract me-1"></i>Contrato / Parcela</h6>
                             <ul class="list-unstyled small mb-3">
-                                <li><code>%%NUMEROCONTRATO%%</code> — Nº contrato</li>
-                                <li><code>%%PARCELA%%</code> — Parcela (ex: 5/24)</li>
-                                <li><code>%%NUMEROPARCELA%%</code> — Nº parcela</li>
-                                <li><code>%%VALORPARCELA%%</code> — Valor parcela</li>
-                                <li><code>%%DATAVENCIMENTO%%</code> — Vencimento</li>
-                                <li><code>%%DIASATRASO%%</code> — Dias de atraso</li>
-                                <li><code>%%VALORJUROS%%</code> — Juros</li>
-                                <li><code>%%VALORMULTA%%</code> — Multa</li>
+                                <li class="mb-1"><code class="tag-chip" data-tag="%%NUMEROCONTRATO%%">%%NUMEROCONTRATO%%</code> Nº contrato</li>
+                                <li class="mb-1"><code class="tag-chip" data-tag="%%PARCELA%%">%%PARCELA%%</code> Parcela (ex: 5/24)</li>
+                                <li class="mb-1"><code class="tag-chip" data-tag="%%NUMEROPARCELA%%">%%NUMEROPARCELA%%</code> Nº parcela</li>
+                                <li class="mb-1"><code class="tag-chip" data-tag="%%VALORPARCELA%%">%%VALORPARCELA%%</code> Valor parcela</li>
+                                <li class="mb-1"><code class="tag-chip" data-tag="%%DATAVENCIMENTO%%">%%DATAVENCIMENTO%%</code> Vencimento</li>
+                                <li class="mb-1"><code class="tag-chip" data-tag="%%DIASATRASO%%">%%DIASATRASO%%</code> Dias de atraso</li>
+                                <li class="mb-1"><code class="tag-chip" data-tag="%%VALORJUROS%%">%%VALORJUROS%%</code> Juros</li>
+                                <li class="mb-1"><code class="tag-chip" data-tag="%%VALORMULTA%%">%%VALORMULTA%%</code> Multa</li>
                             </ul>
                         </div>
                         <div class="col-md-4">
                             <h6 class="text-primary"><i class="fas fa-barcode me-1"></i>Boleto</h6>
                             <ul class="list-unstyled small mb-3">
-                                <li><code>%%NOSSONUMERO%%</code> — Nosso número</li>
-                                <li><code>%%LINHADIGITAVEL%%</code> — Linha digitável</li>
-                                <li><code>%%CODIGOBARRAS%%</code> — Cód. barras</li>
-                                <li><code>%%VALORBOLETO%%</code> — Valor boleto</li>
-                                <li><code>%%LINKBOLETO%%</code> — Link download</li>
+                                <li class="mb-1"><code class="tag-chip" data-tag="%%NOSSONUMERO%%">%%NOSSONUMERO%%</code> Nosso número</li>
+                                <li class="mb-1"><code class="tag-chip" data-tag="%%LINHADIGITAVEL%%">%%LINHADIGITAVEL%%</code> Linha digitável</li>
+                                <li class="mb-1"><code class="tag-chip" data-tag="%%CODIGOBARRAS%%">%%CODIGOBARRAS%%</code> Cód. barras</li>
+                                <li class="mb-1"><code class="tag-chip" data-tag="%%VALORBOLETO%%">%%VALORBOLETO%%</code> Valor boleto</li>
+                                <li class="mb-1"><code class="tag-chip" data-tag="%%LINKBOLETO%%">%%LINKBOLETO%%</code> Link download</li>
                             </ul>
                             <h6 class="text-primary"><i class="fas fa-clock me-1"></i>Sistema</h6>
                             <ul class="list-unstyled small">
-                                <li><code>%%DATAATUAL%%</code> — Data atual</li>
-                                <li><code>%%HORAATUAL%%</code> — Hora atual</li>
-                                <li><code>%%IMOVEL%%</code> — Imóvel</li>
-                                <li><code>%%LOTEAMENTO%%</code> — Loteamento</li>
+                                <li class="mb-1"><code class="tag-chip" data-tag="%%DATAATUAL%%">%%DATAATUAL%%</code> Data atual</li>
+                                <li class="mb-1"><code class="tag-chip" data-tag="%%HORAATUAL%%">%%HORAATUAL%%</code> Hora atual</li>
+                                <li class="mb-1"><code class="tag-chip" data-tag="%%IMOVEL%%">%%IMOVEL%%</code> Imóvel</li>
+                                <li class="mb-1"><code class="tag-chip" data-tag="%%LOTEAMENTO%%">%%LOTEAMENTO%%</code> Loteamento</li>
                             </ul>
                         </div>
                     </div>
@@ -227,48 +270,106 @@
 {% endblock %}
 
 {% block extra_js %}
-<!-- TinyMCE 5 (self-hosted via cdnjs — sem API key) -->
-<script src="https://cdnjs.cloudflare.com/ajax/libs/tinymce/5.10.9/tinymce.min.js" integrity="sha512-+8U/aaRWBCeTGhF2lGl5gDkTWOhFnKpPWQFnQkJ/MBnIl7LZ0BTTKY7oPQ4GN+h0x91I9j5Qfn4K7b1E/gXw==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+<!-- TinyMCE via jsDelivr (sem SRI — carregamento confiável) -->
+<script src="https://cdn.jsdelivr.net/npm/tinymce@5.10.9/tinymce.min.js"></script>
 <script>
 (function () {
     'use strict';
 
-    // ── TinyMCE ──────────────────────────────────────────────────────────
-    tinymce.init({
-        selector: '#id_corpo_html',
-        language: 'pt_BR',
-        height: 420,
-        menubar: true,
-        branding: false,
-        plugins: [
-            'advlist autolink lists link image charmap preview anchor',
-            'searchreplace visualblocks code fullscreen',
-            'insertdatetime table paste wordcount',
-        ],
-        toolbar:
-            'undo redo | formatselect | bold italic underline forecolor backcolor | ' +
-            'alignleft aligncenter alignright alignjustify | ' +
-            'bullist numlist outdent indent | link image table | code fullscreen',
-        content_style: 'body { font-family: Arial, Helvetica, sans-serif; font-size: 14px; }',
-        setup: function (editor) {
-            // Sync TinyMCE content back to the hidden textarea before form submit
-            editor.on('change', function () { editor.save(); });
-        },
-    });
+    // ── Estado ───────────────────────────────────────────────────────────
+    // 'html' | 'sms' | 'whatsapp' | null
+    var _activeField = null;
+    var _editorHtml  = null;   // instância TinyMCE
 
-    // Before submit: flush TinyMCE to textarea
-    document.getElementById('formTemplate').addEventListener('submit', function () {
-        if (tinymce.get('id_corpo_html')) {
-            tinymce.get('id_corpo_html').save();
+    // ── Utilitários ──────────────────────────────────────────────────────
+    function insertAtCursor(field, text) {
+        var s = field.selectionStart != null ? field.selectionStart : field.value.length;
+        var e = field.selectionEnd   != null ? field.selectionEnd   : field.value.length;
+        field.value = field.value.substring(0, s) + text + field.value.substring(e);
+        field.selectionStart = field.selectionEnd = s + text.length;
+        field.focus();
+        field.dispatchEvent(new Event('input'));
+    }
+
+    // ── Indicador de campo ativo ─────────────────────────────────────────
+    var _indicator = document.getElementById('activeFieldIndicator');
+    var _fieldLabels = {
+        html:     { cls: 'active-html',  label: '<i class="fas fa-envelope me-1"></i>E-mail (HTML)' },
+        sms:      { cls: 'active-sms',   label: '<i class="fas fa-sms me-1"></i>SMS' },
+        whatsapp: { cls: 'active-whats', label: '<i class="fab fa-whatsapp me-1"></i>WhatsApp' },
+    };
+
+    function setActiveField(name) {
+        _activeField = name;
+        if (!_indicator) return;
+        var info = _fieldLabels[name];
+        _indicator.className = 'field-active-indicator ' + info.cls;
+        _indicator.innerHTML = info.label;
+    }
+
+    // ── Inserir TAG no campo ativo ───────────────────────────────────────
+    function insertarTag(tag) {
+        if (!_activeField) {
+            // Piscar o indicador para guiar o usuário
+            if (_indicator) {
+                _indicator.style.outline = '2px solid #dc3545';
+                setTimeout(function () { _indicator.style.outline = ''; }, 1200);
+            }
+            return;
         }
-    });
 
-    // ── SMS counter ──────────────────────────────────────────────────────
-    var smsField   = document.getElementById('id_corpo');
-    var smsCounter = document.getElementById('smsCounter');
-    var SMS_MAX    = 255;
+        if (_activeField === 'html') {
+            if (_editorHtml && _editorHtml.initialized) {
+                _editorHtml.focus();
+                _editorHtml.insertContent(tag);
+            } else {
+                // fallback: TinyMCE não carregou, inserir no textarea raw
+                insertAtCursor(document.getElementById('id_corpo_html'), tag);
+            }
+        } else if (_activeField === 'sms') {
+            insertAtCursor(document.getElementById('id_corpo'), tag);
+        } else if (_activeField === 'whatsapp') {
+            insertAtCursor(document.getElementById('id_corpo_whatsapp'), tag);
+        }
+    }
 
-    // Valores de exemplo para substituição de TAGs (para estimar comprimento real)
+    // ── TinyMCE ──────────────────────────────────────────────────────────
+    function initEditor() {
+        if (typeof tinymce === 'undefined') {
+            document.getElementById('editorFallbackMsg').classList.remove('d-none');
+            return;
+        }
+        try {
+            tinymce.init({
+                selector: '#id_corpo_html',
+                height: 450,
+                menubar: true,
+                branding: false,
+                plugins: [
+                    'advlist autolink lists link image charmap preview anchor',
+                    'searchreplace visualblocks code fullscreen',
+                    'insertdatetime table paste wordcount',
+                ],
+                toolbar:
+                    'undo redo | formatselect | bold italic underline strikethrough | ' +
+                    'forecolor backcolor | alignleft aligncenter alignright alignjustify | ' +
+                    'bullist numlist outdent indent | link image table | code fullscreen',
+                content_style: 'body { font-family: Arial, Helvetica, sans-serif; font-size: 14px; line-height: 1.6; }',
+                setup: function (editor) {
+                    _editorHtml = editor;
+                    editor.on('focus', function () { setActiveField('html'); });
+                    editor.on('change', function () { editor.save(); });
+                    editor.on('keyup',  function () { editor.save(); });
+                },
+            });
+        } catch (err) {
+            console.error('[TinyMCE] Falha ao inicializar:', err);
+            document.getElementById('editorFallbackMsg').classList.remove('d-none');
+        }
+    }
+
+    // ── SMS Counter ──────────────────────────────────────────────────────
+    var SMS_MAX = 255;
     var TAG_EXAMPLES = {
         'NOMECOMPRADOR':        'João da Silva',
         'CPFCOMPRADOR':         '123.456.789-00',
@@ -297,7 +398,7 @@
         'VALORMULTA':           'R$ 25,00',
         'VALORTOTALPARCELA':    'R$ 1.287,50',
         'NOSSONUMERO':          '12345678901',
-        'LINHADIGITAVEL':       '23793.38128 60000.000003 12345.678901 1 92350000125000',
+        'LINHADIGITAVEL':       '23793.381 60000.000003 12345.678901 1 92350000125000',
         'CODIGOBARRAS':         '23791923500001250003381286000000001234567890',
         'STATUSBOLETO':         'Registrado',
         'VALORBOLETO':          'R$ 1.287,50',
@@ -307,43 +408,89 @@
     };
 
     function substituirTags(texto) {
-        var result = texto;
-        for (var tag in TAG_EXAMPLES) {
-            result = result.split('%%' + tag + '%%').join(TAG_EXAMPLES[tag]);
+        var r = texto;
+        for (var k in TAG_EXAMPLES) {
+            r = r.split('%%' + k + '%%').join(TAG_EXAMPLES[k]);
         }
-        return result;
+        return r;
     }
 
     function updateSmsCounter() {
-        var template = smsField.value || '';
-        var templateLen = template.length;
-        var realText = substituirTags(template);
-        var realLen = realText.length;
+        var smsField   = document.getElementById('id_corpo');
+        var smsCounter = document.getElementById('smsCounter');
+        if (!smsField || !smsCounter) return;
 
-        if (templateLen === realLen) {
-            // Nenhuma tag — mostrar só o comprimento direto
-            smsCounter.textContent = templateLen + ' / ' + SMS_MAX;
+        var template = smsField.value || '';
+        var tplLen   = template.length;
+        var realText = substituirTags(template);
+        var realLen  = realText.length;
+
+        smsCounter.style.color = '';
+
+        if (tplLen === realLen) {
+            smsCounter.textContent = tplLen + ' / ' + SMS_MAX;
         } else {
-            // Há tags — mostrar template e estimativa real
             smsCounter.textContent =
-                'template: ' + templateLen + ' | real (est.): ' + realLen + ' / ' + SMS_MAX;
+                'template: ' + tplLen + ' | real (est.): ' + realLen + ' / ' + SMS_MAX;
         }
 
         if (realLen > SMS_MAX) {
             smsCounter.className = 'ms-auto sms-counter over';
-        } else if (realLen > Math.floor(SMS_MAX * 0.9)) {
+        } else if (realLen > Math.floor(SMS_MAX * 0.85)) {
             smsCounter.className = 'ms-auto sms-counter over';
-            smsCounter.style.color = '#fd7e14';  // laranja — atenção
+            smsCounter.style.color = '#fd7e14';
         } else {
             smsCounter.className = 'ms-auto sms-counter ok';
-            smsCounter.style.color = '';
         }
     }
 
+    // ── Collapse toggle icon ─────────────────────────────────────────────
+    (function () {
+        var collapseEl = document.getElementById('collapseTags');
+        var icon       = document.getElementById('iconToggleTags');
+        if (!collapseEl || !icon) return;
+        collapseEl.addEventListener('show.bs.collapse',  function () { icon.className = 'fas fa-chevron-up'; });
+        collapseEl.addEventListener('hide.bs.collapse', function () { icon.className = 'fas fa-chevron-down'; });
+    }());
+
+    // ── Inicialização ────────────────────────────────────────────────────
+    // (scripts em extra_js ficam ao final do <body> → DOM já disponível)
+    var smsField  = document.getElementById('id_corpo');
+    var waField   = document.getElementById('id_corpo_whatsapp');
+    var htmlField = document.getElementById('id_corpo_html');
+
     if (smsField) {
+        smsField.addEventListener('focus', function () { setActiveField('sms'); });
         smsField.addEventListener('input', updateSmsCounter);
-        updateSmsCounter();
+        updateSmsCounter();   // valor inicial (modo edição)
     }
-})();
+    if (waField) {
+        waField.addEventListener('focus', function () { setActiveField('whatsapp'); });
+    }
+    if (htmlField) {
+        htmlField.addEventListener('focus', function () { setActiveField('html'); });
+    }
+
+    // Clique nas TAGs
+    document.querySelectorAll('.tag-chip').forEach(function (el) {
+        el.addEventListener('click', function () { insertarTag(this.dataset.tag); });
+    });
+
+    // Submit: flush TinyMCE → textarea
+    var form = document.getElementById('formTemplate');
+    if (form) {
+        form.addEventListener('submit', function () {
+            try {
+                if (typeof tinymce !== 'undefined' && tinymce.get('id_corpo_html')) {
+                    tinymce.get('id_corpo_html').save();
+                }
+            } catch (e) { /* sem efeito */ }
+        });
+    }
+
+    // Iniciar TinyMCE por último (pode lançar erro sem prejudicar o resto)
+    initEditor();
+
+}());
 </script>
 {% endblock %}
