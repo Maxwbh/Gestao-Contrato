@@ -290,6 +290,15 @@ class TemplateNotificacao(TimeStampedModel):
     %%DATAATUAL%% - Data atual
     %%HORAATUAL%% - Hora atual
     %%LINKBOLETO%% - Link para download do boleto
+
+    DADOS DO PAGAMENTO (evento PAGAMENTO_CONFIRMADO):
+    %%DATAPAGAMENTO%% - Data em que o pagamento foi realizado
+    %%VALORPAGO%% - Valor efetivamente pago
+    %%FORMAPAGAMENTO%% - Forma de pagamento (Dinheiro, PIX, Boleto, etc.)
+    %%VALORJUROSPAGO%% - Valor de juros cobrados no pagamento
+    %%VALORMULTAPAGO%% - Valor de multa cobrada no pagamento
+    %%VALORDESCONTOPAGO%% - Desconto aplicado no pagamento
+    %%RECIBOPDF%% - (Especial) Quando presente, o recibo PDF é anexado ao e-mail
     """
 
     nome = models.CharField(max_length=100, verbose_name='Nome do Template')
