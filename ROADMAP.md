@@ -101,7 +101,7 @@
 ### P4 — Baixo
 | # | Tela/Componente |
 |---|-----------------|
-| 3.33 | Aba Documentos (upload contrato assinado) |
+| 3.33 | Aba Documentos (upload contrato assinado) | ✅ Campos `documento_assinado` (FileField) + `documento_assinado_db` (BinaryField backup) + `data_assinatura` no `Contrato`; migration `0010_documento_assinado`; views `upload_documento_contrato`, `download_documento_contrato`, `excluir_documento_contrato`; card colapsável "Documentos" em `contrato_detail.html` com download, exclusão staff-only e upload com data de assinatura |
 | 3.34 | Upload de logo da imobiliária | ✅ `ImageField logo` em `Imobiliaria`; migration `0005_add_logo_imobiliaria`; card de upload no form; exibição no card da lista |
 | 3.35 | Seletor de período reutilizável | ✅ `templates/components/period_selector.html` — campos De/Até com Flatpickr, parâmetros via `with`: `action`, `inicio_name/fim_name`, `inicio_val/fim_val`, `btn_label`, `compact`; limpa filtro se valores presentes |
 
@@ -882,8 +882,8 @@ para ciclo = 2..total_ciclos+1:
 |---|------|-----------|
 | M-11 | Página `/imoveis/loteamento/{slug}/` — mapa dedicado do empreendimento | P2 | ✅ `loteamento_detalhe` em `core/views.py` + URL `imoveis/loteamento/<str:nome>/` + template `loteamento_detalhe.html` com mapa Leaflet + lista filtrável por status |
 | M-12 | Estatísticas do loteamento: total, disponíveis %, valor médio por lote | P2 | ✅ KPI cards (total, disponíveis, vendidos, valor médio/min/max) + barra de progresso proporcional na página do loteamento |
-| M-13 | Polígonos de lote (boundaries) com `lat/lng` de cada vértice — modelo `LotePoligono` | P3 |
-| M-14 | Upload de planta baixa (imagem) como overlay no mapa | P3 |
+| M-13 | Polígonos de lote (boundaries) com `lat/lng` de cada vértice — modelo `LotePoligono` | P3 | ✅ `VerticePoligono` em `core/models.py` + migration `0006_add_vertice_poligono` + `api_poligono_imovel` view (GET/POST staff-only) + editor Leaflet com clique para adicionar vértices, clique em vértice para remover, botão "Salvar Polígono" no popup; polígonos renderizados em todos os imóveis com distinção de cor disponível/vendido |
+| M-14 | Upload de planta baixa (imagem) como overlay no mapa | P3 | ✅ `PlantaBaixaLoteamento` em `core/models.py` (BinaryField backup + ImageField, bounds SW/NE, opacidade); migration `0007_planta_baixa_loteamento`; views `upload_planta_baixa`, `api_planta_baixa_loteamento`, `servir_planta_baixa`; `loteamento_detalhe.html` com `L.imageOverlay`, slider de opacidade, toggle visibilidade, modal de upload staff-only com captura de bounds visíveis do mapa |
 | M-15 | Link direto "Ver no Google Maps / Waze" no popup do marcador | P3 | ✅ Links Maps e Waze exibidos no popup quando lat/lng disponíveis |
 | M-16 | Geolocalização do usuário para mostrar lotes próximos | P4 | ✅ Botão "Perto de mim" na toolbar do mapa; `navigator.geolocation` → centraliza mapa na posição do usuário + marcador azul "Você está aqui" + conta lotes num raio de 50 km |
 
@@ -951,6 +951,7 @@ para ciclo = 2..total_ciclos+1:
 | N-03 | Régua de cobrança configurável (D-5, D+3, D+10, D+30) | P3 | ✅ `RegraNotificacao` model em `notificacoes/models.py` + `TipoGatilho` (ANTES/APOS) + admin com `list_editable` + `_processar_regra()` em `core/tasks.py` — fallback automático para N-01/N-02 quando nenhuma regra configurada |
 | N-04 | Integração WhatsApp (Evolution API / Z-API) | P3 | ✅ `ConfiguracaoWhatsApp` agora suporta 4 provedores: Twilio, Meta (Cloud API), Evolution API v2 (`/message/sendText/{instancia}`), Z-API (`/send-text`). `ServicoWhatsApp` despacha pelo `provedor` do config ativo. Migration `0004_add_whatsapp_providers` adiciona `api_url`, `api_key`, `instancia`, `client_token`. Admin com fieldsets colapsáveis por provedor. |
 | N-05 | Push notification portal comprador | P4 | ⏳ |
+| PDF-01 | **PDF do Contrato** — `contratos/services/contrato_pdf_service.py` gera PDF A4 com ReportLab: cabeçalho da imobiliária, cláusulas legais (partes, objeto, preço, correção monetária, encargos, rescisão, cessão, foro), cronograma das primeiras 24 parcelas, assinaturas e testemunhas; view `download_contrato_pdf` + URL `<pk>/contrato.pdf`; botão "Contrato PDF" em `contrato_detail.html` | P3 | ✅ |
 | N-08 | **TEST_MODE safeguard** — `_destinatario_email_teste()` e `_destinatario_telefone_teste()` em `BoletoNotificacaoService`: em ambiente não-produção, redireciona todos os envios para endereços de teste configurados em `settings.EMAIL_TESTE` e `settings.TELEFONE_TESTE`; evita notificações acidentais para compradores reais durante desenvolvimento | P2 | ✅ `notificacoes/boleto_notificacao.py` |
 | N-09 | **Normalização E.164 para Twilio** — telefones no formato `(31) 99999-8888` são convertidos para `+5531999998888` antes do envio via Twilio SMS/WhatsApp; `_normalizar_telefone_e164()` strip de caracteres não-numéricos + prefixo `+55` | P2 | ✅ `notificacoes/boleto_notificacao.py` |
 | N-06 | **Template unificado** — 1 registro por `(codigo, imobiliaria)` com 3 canais: `corpo_html` (Email HTML via TinyMCE 5), `corpo` (SMS ≤255 chars), `corpo_whatsapp`; campo `tipo` removido do form; badges de canal baseados nos campos preenchidos; `renderizar()` retorna 4-tuple `(assunto, corpo, corpo_html, corpo_whatsapp)` | P2 | ✅ Migration `0005_template_unificado` + forms + views + template_form/list atualizados |
