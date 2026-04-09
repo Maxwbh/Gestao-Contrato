@@ -262,3 +262,176 @@ def gerar_recibo_antecipacao_pdf(contrato, historicos) -> bytes:
 
     doc.build(story)
     return buffer.getvalue()
+
+
+# =============================================================================
+# Recibo de Pagamento Individual (parcela quitada)
+# =============================================================================
+
+def gerar_recibo_pagamento_pdf(historico) -> bytes:
+    """
+    Gera recibo de pagamento para um HistoricoPagamento individual.
+
+    Args:
+        historico: instância de financeiro.models.HistoricoPagamento
+    Returns:
+        bytes do PDF
+    """
+    buffer = io.BytesIO()
+    parcela  = historico.parcela
+    contrato = parcela.contrato
+    imob     = contrato.imobiliaria
+    comp     = contrato.comprador
+
+    doc = SimpleDocTemplate(
+        buffer,
+        pagesize=A4,
+        leftMargin=2 * cm,
+        rightMargin=2 * cm,
+        topMargin=2 * cm,
+        bottomMargin=2 * cm,
+    )
+
+    styles = getSampleStyleSheet()
+    titulo  = ParagraphStyle('titulo',  parent=styles['Normal'], fontSize=16,
+                             fontName='Helvetica-Bold', textColor=AZUL, alignment=TA_CENTER)
+    negrito = ParagraphStyle('negrito', parent=styles['Normal'], fontName='Helvetica-Bold')
+    normal  = ParagraphStyle('normal',  parent=styles['Normal'], fontSize=9)
+    small   = ParagraphStyle('small',   parent=styles['Normal'], fontSize=8, textColor=CINZA)
+    small_c = ParagraphStyle('small_c', parent=styles['Normal'], fontSize=8,
+                             textColor=CINZA, alignment=TA_CENTER)
+    centro  = ParagraphStyle('centro',  parent=styles['Normal'], fontSize=9, alignment=TA_CENTER)
+
+    story = []
+
+    # ── Cabeçalho ─────────────────────────────────────────────────────────────
+    nome_empresa = imob.nome if imob else '—'
+    doc_empresa  = getattr(imob, 'documento', None) or getattr(imob, 'cnpj', '') or ''
+    end_empresa  = getattr(imob, 'endereco', '') or ''
+
+    story.append(Paragraph(nome_empresa.upper(), titulo))
+    if doc_empresa:
+        story.append(Paragraph(f'CNPJ/CPF: {doc_empresa}', ParagraphStyle('sub', fontSize=9,
+                    textColor=CINZA, alignment=TA_CENTER)))
+    if end_empresa:
+        story.append(Paragraph(end_empresa, ParagraphStyle('sub2', fontSize=9,
+                    textColor=CINZA, alignment=TA_CENTER)))
+    story.append(Spacer(1, 6))
+    story.append(HRFlowable(width='100%', thickness=2, color=AZUL))
+    story.append(Spacer(1, 6))
+    story.append(Paragraph('RECIBO DE PAGAMENTO', titulo))
+    story.append(HRFlowable(width='100%', thickness=1, color=AZUL_CLARO))
+    story.append(Spacer(1, 8))
+
+    # Número do recibo e data de emissão
+    num_recibo = f"{contrato.numero_contrato}-P{parcela.numero_parcela:03d}"
+    story.append(Paragraph(
+        f'<b>Recibo n.º {num_recibo}</b> &nbsp;&mdash;&nbsp; Emitido em {_fmt_data(date.today())}',
+        ParagraphStyle('nr', fontSize=10, alignment=TA_CENTER)
+    ))
+    story.append(Spacer(1, 12))
+
+    # ── Valor em destaque ─────────────────────────────────────────────────────
+    valor_total_pago = historico.valor_pago
+    val_data = [[
+        Paragraph('VALOR RECEBIDO', ParagraphStyle('vl', fontName='Helvetica-Bold',
+                  fontSize=11, textColor=white, alignment=TA_CENTER)),
+        Paragraph(_fmt_valor(valor_total_pago), ParagraphStyle('vv', fontName='Helvetica-Bold',
+                  fontSize=18, textColor=white, alignment=TA_CENTER)),
+    ]]
+    val_table = Table(val_data, colWidths=[6 * cm, 11 * cm])
+    val_table.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (-1, -1), VERDE),
+        ('VALIGN',     (0, 0), (-1, -1), 'MIDDLE'),
+        ('TOPPADDING', (0, 0), (-1, -1), 10),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 10),
+        ('ROUNDEDCORNERS', [6]),
+    ]))
+    story.append(val_table)
+    story.append(Spacer(1, 14))
+
+    # ── Dados do pagador ──────────────────────────────────────────────────────
+    story.append(Paragraph('<b>DADOS DO PAGAMENTO</b>', negrito))
+    story.append(Spacer(1, 4))
+
+    cpf_comp = getattr(comp, 'cpf', '') or ''
+    info_data = [
+        ['Pagador (Comprador):', comp.nome + (f' — CPF {cpf_comp}' if cpf_comp else '')],
+        ['Contrato n.º:',        contrato.numero_contrato],
+        ['Imóvel:',              f"{parcela.contrato.imovel.identificacao} — {parcela.contrato.imovel.loteamento or ''}"],
+        ['Parcela:',             f"{parcela.numero_parcela} / {contrato.numero_parcelas} "
+                                 f"(vencimento: {_fmt_data(parcela.data_vencimento)})"],
+        ['Data de Pagamento:',   _fmt_data(historico.data_pagamento)],
+        ['Forma de Pagamento:',  historico.get_forma_pagamento_display() if hasattr(historico, 'get_forma_pagamento_display') else historico.forma_pagamento],
+    ]
+
+    # Detalhamento se há juros/multa
+    if historico.valor_juros and historico.valor_juros > 0:
+        info_data.append(['Valor da Parcela:', _fmt_valor(historico.valor_parcela)])
+        info_data.append(['Juros de Mora:', _fmt_valor(historico.valor_juros)])
+        info_data.append(['Multa:', _fmt_valor(historico.valor_multa)])
+    if historico.valor_desconto and historico.valor_desconto > 0:
+        info_data.append(['Desconto:', f'- {_fmt_valor(historico.valor_desconto)}'])
+
+    info_data.append(['<b>TOTAL PAGO:</b>', f'<b>{_fmt_valor(valor_total_pago)}</b>'])
+
+    tabela_info = Table(
+        [[Paragraph(r[0], small), Paragraph(r[1], normal)] for r in info_data],
+        colWidths=[5 * cm, 12 * cm],
+    )
+    tabela_info.setStyle(TableStyle([
+        ('ROWBACKGROUNDS', (0, 0), (-1, -1), [white, AZUL_CLARO]),
+        ('TOPPADDING',    (0, 0), (-1, -1), 4),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
+        ('LEFTPADDING',   (0, 0), (-1, -1), 6),
+        ('RIGHTPADDING',  (0, 0), (-1, -1), 6),
+        ('BOX',           (0, 0), (-1, -1), 0.5, CINZA_LINHA),
+        ('GRID',          (0, 0), (-1, -1), 0.3, CINZA_LINHA),
+        ('FONTNAME',      (0, -1), (-1, -1), 'Helvetica-Bold'),
+    ]))
+    story.append(tabela_info)
+
+    # Observações
+    if historico.observacoes:
+        story.append(Spacer(1, 6))
+        story.append(Paragraph(f'<b>Observações:</b> {historico.observacoes}', normal))
+
+    # ── Declaração ────────────────────────────────────────────────────────────
+    story.append(Spacer(1, 14))
+    story.append(Paragraph(
+        f'Declaro que recebi de <b>{comp.nome}</b> a importância de '
+        f'<b>{_fmt_valor(valor_total_pago)}</b> referente ao pagamento da parcela '
+        f'n.º <b>{parcela.numero_parcela}</b> do contrato n.º <b>{contrato.numero_contrato}</b>, '
+        f'dando plena, geral e irrevogável quitação pelo valor recebido.',
+        ParagraphStyle('decl', fontSize=9, leading=14, alignment=TA_JUSTIFY)
+    ))
+
+    # ── Assinaturas ───────────────────────────────────────────────────────────
+    story.append(Spacer(1, 20))
+    story.append(HRFlowable(width='100%', thickness=0.5, color=CINZA_LINHA))
+    story.append(Spacer(1, 6))
+    story.append(Paragraph(f'___________________________, {_fmt_data(date.today())}', centro))
+    story.append(Spacer(1, 20))
+
+    sig_data = [
+        [Paragraph('_' * 40, small_c), Paragraph('_' * 40, small_c)],
+        [Paragraph(f'<b>RECEBEDOR</b><br/>{nome_empresa}', small_c),
+         Paragraph(f'<b>PAGADOR</b><br/>{comp.nome}', small_c)],
+    ]
+    sig_table = Table(sig_data, colWidths=[8.5 * cm, 8.5 * cm])
+    sig_table.setStyle(TableStyle([
+        ('TOPPADDING',    (0, 0), (-1, -1), 3),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 3),
+    ]))
+    story.append(sig_table)
+
+    # ── Rodapé ────────────────────────────────────────────────────────────────
+    story.append(Spacer(1, 12))
+    story.append(HRFlowable(width='100%', thickness=0.5, color=CINZA_LINHA))
+    story.append(Paragraph(
+        f'Documento gerado em {_fmt_data(date.today())} pelo sistema Gestão de Contratos — M&S do Brasil LTDA.',
+        ParagraphStyle('rodape2', fontSize=7, textColor=CINZA, alignment=TA_CENTER, spaceBefore=4)
+    ))
+
+    doc.build(story)
+    return buffer.getvalue()
