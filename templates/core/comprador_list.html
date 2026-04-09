@@ -174,7 +174,7 @@ const compradoresColumnDefs = [
         headerName: 'Nome',
         field: 'nome',
         filter: 'agTextColumnFilter',
-        floatingFilter: true,
+       
         minWidth: 180,
         cellRenderer: params => `<strong>${params.value}</strong>`,
         sort: 'asc',
@@ -183,14 +183,14 @@ const compradoresColumnDefs = [
         headerName: 'CPF',
         field: 'cpf',
         filter: 'agTextColumnFilter',
-        floatingFilter: true,
+       
         minWidth: 130,
     },
     {
         headerName: 'Email',
         field: 'email',
         filter: 'agTextColumnFilter',
-        floatingFilter: true,
+       
         minWidth: 180,
         cellRenderer: emailRenderer,
     },
@@ -198,7 +198,7 @@ const compradoresColumnDefs = [
         headerName: 'Telefone',
         field: 'celular',
         filter: 'agTextColumnFilter',
-        floatingFilter: true,
+       
         minWidth: 140,
         cellRenderer: telefoneRenderer,
     },
@@ -214,7 +214,7 @@ const compradoresColumnDefs = [
         headerName: 'Cadastro',
         field: 'cadastro',
         filter: 'agTextColumnFilter',
-        floatingFilter: true,
+       
         minWidth: 110,
         cellRenderer: params => `<small class="text-muted">${params.value}</small>`,
     },
@@ -241,7 +241,7 @@ document.addEventListener('DOMContentLoaded', function() {
             },
             rowHeight: 42,
             headerHeight: 48,
-            floatingFiltersHeight: 36,
+           
             suppressCellFocus: true,
             enableCellTextSelection: true,
             overlayNoRowsTemplate: '<div class="text-center py-4 text-muted"><i class="fas fa-inbox fa-2x mb-2 d-block"></i>Nenhum comprador encontrado</div>',
