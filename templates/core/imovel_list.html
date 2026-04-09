@@ -338,10 +338,14 @@ const imoveisData = [
         disponivel: {{ imovel.disponivel|yesno:"true,false" }},
         cidade: "{{ imovel.cidade|default:''|escapejs }}",
         estado: "{{ imovel.estado|default:''|escapejs }}",
-        editUrl: "{% url 'core:editar_imovel' imovel.pk %}"
+        editUrl: "{% url 'core:editar_imovel' imovel.pk %}",
+        poligonoUrl: "{% url 'core:api_poligono_imovel' imovel.pk %}"
     },
     {% endfor %}
 ];
+
+// M-13: dados de polígonos (imovel_id → [{lat,lng}])
+const poligonosData = {{ poligonos_json|safe }};
 
 // ─── Tile layers (100% gratuitos, sem API key) ───────────────────────────────
 const TILES = {
@@ -361,6 +365,11 @@ const TILES = {
 
 let map, clusterGroup, tileAtivo = 'voyager';
 let filtroLot = '', filtroSt = '';
+let poligonosLayer;     // LayerGroup para polígonos de lote
+let editorAtivo = null; // Estado do editor {imovelId, vertices[], tempLayer, tempMarkers[]}
+const COR_DISPONIVEL = '#28a745';
+const COR_VENDIDO    = '#dc3545';
+const COR_EDICAO     = '#f59e0b';
 
 // Criar ícone customizado DivIcon por status
 function criarIcone(disponivel, nome) {
@@ -407,9 +416,151 @@ function popupHtml(d) {
             </a>
             <a href="${wazeUrl}" target="_blank" rel="noopener" class="btn btn-sm btn-outline-info py-0 px-2" title="Navegar com Waze">
                 <i class="fas fa-route me-1"></i>Waze
+            </a>
+            {% if request.user.is_staff %}
+            <button onclick="editarPoligono(${d.id}, '${d.nome.replace(/'/g, "\\'")}', '${d.poligonoUrl}')"
+                    class="btn btn-sm btn-outline-warning py-0 px-2" title="${poligonosData[d.id] ? 'Editar polígono existente' : 'Desenhar polígono'}">
+                <i class="fas fa-draw-polygon me-1"></i>${poligonosData[d.id] ? 'Editar' : 'Polígono'}
+            </button>
+            {% endif %}
             </a>` : ''}
         </div>
     </div>`;
+}
+
+// ─── M-13: Polígonos de Lote ─────────────────────────────────────────────────
+
+function renderizarPoligonos(dados) {
+    if (!poligonosLayer) return;
+    poligonosLayer.clearLayers();
+    dados.forEach(d => {
+        const verts = poligonosData[d.id];
+        if (!verts || verts.length < 3) return;
+        if (filtroLot && d.loteamento !== filtroLot) return;
+        if (filtroSt === 'disponivel' && !d.disponivel) return;
+        if (filtroSt === 'vendido' && d.disponivel) return;
+        const cor = d.disponivel ? COR_DISPONIVEL : COR_VENDIDO;
+        const poly = L.polygon(verts.map(v => [v.lat, v.lng]), {
+            color: cor, weight: 2, fillColor: cor, fillOpacity: 0.20,
+            interactive: false
+        });
+        poligonosLayer.addLayer(poly);
+    });
+}
+
+// Inicia editor de polígono para um imóvel
+function editarPoligono(imovelId, imovelNome, poligonoUrl) {
+    if (editorAtivo) finalizarEditor(false);
+
+    const verts = (poligonosData[imovelId] || []).map(v => [v.lat, v.lng]);
+    editorAtivo = { imovelId, poligonoUrl, vertices: [...verts], polyLayer: null, markers: [] };
+
+    _desenharEditor();
+
+    // Barra de ferramentas do editor
+    const barra = L.control({ position: 'topright' });
+    barra.onAdd = function() {
+        const div = L.DomUtil.create('div', 'poligono-editor-barra leaflet-bar');
+        div.innerHTML = `
+            <div style="background:#fff;padding:8px 12px;border-radius:6px;font-size:13px;min-width:200px;">
+                <strong style="color:${COR_EDICAO}"><i class="fas fa-draw-polygon me-1"></i>Editando: ${imovelNome}</strong>
+                <div class="text-muted small mt-1">Clique no mapa para adicionar vértices.<br>Clique num vértice para removê-lo.</div>
+                <div class="mt-2 d-flex gap-2">
+                    <button onclick="salvarPoligono()" class="btn btn-success btn-sm flex-fill">
+                        <i class="fas fa-save me-1"></i>Salvar
+                    </button>
+                    <button onclick="finalizarEditor(false)" class="btn btn-outline-secondary btn-sm">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+                <button onclick="limparPoligono()" class="btn btn-outline-danger btn-sm w-100 mt-1">
+                    <i class="fas fa-trash me-1"></i>Limpar tudo
+                </button>
+            </div>`;
+        L.DomEvent.disableClickPropagation(div);
+        return div;
+    };
+    barra.addTo(map);
+    editorAtivo.barraControl = barra;
+
+    // Clique no mapa adiciona vértice
+    map.on('click', _adicionarVertice);
+}
+
+function _adicionarVertice(e) {
+    if (!editorAtivo) return;
+    editorAtivo.vertices.push([e.latlng.lat, e.latlng.lng]);
+    _desenharEditor();
+}
+
+function _desenharEditor() {
+    if (!editorAtivo) return;
+    const verts = editorAtivo.vertices;
+
+    // Remove layers anteriores
+    if (editorAtivo.polyLayer) { map.removeLayer(editorAtivo.polyLayer); editorAtivo.polyLayer = null; }
+    editorAtivo.markers.forEach(m => map.removeLayer(m));
+    editorAtivo.markers = [];
+
+    if (verts.length >= 2) {
+        editorAtivo.polyLayer = L.polygon(verts, {
+            color: COR_EDICAO, weight: 2.5, fillColor: COR_EDICAO, fillOpacity: 0.25
+        }).addTo(map);
+    }
+
+    verts.forEach(function(ll, idx) {
+        const m = L.circleMarker(ll, {
+            radius: 7, color: COR_EDICAO, fillColor: '#fff', fillOpacity: 1, weight: 2
+        }).addTo(map);
+        m.on('click', function(e) {
+            L.DomEvent.stopPropagation(e);
+            editorAtivo.vertices.splice(idx, 1);
+            _desenharEditor();
+        });
+        editorAtivo.markers.push(m);
+    });
+}
+
+function limparPoligono() {
+    if (!editorAtivo) return;
+    editorAtivo.vertices = [];
+    _desenharEditor();
+}
+
+function salvarPoligono() {
+    if (!editorAtivo) return;
+    const verts = editorAtivo.vertices.map(ll => ({ lat: ll[0], lng: ll[1] }));
+    const url   = editorAtivo.poligonoUrl;
+    const id    = editorAtivo.imovelId;
+
+    fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-CSRFToken': document.cookie.match(/csrftoken=([^;]+)/)?.[1] || '' },
+        body: JSON.stringify({ vertices: verts })
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.ok) {
+            // Atualiza cache local
+            poligonosData[id] = verts;
+            finalizarEditor(true);
+            renderizarPoligonos(imoveisData);
+            window.showToast && window.showToast('Polígono salvo com sucesso.', 'success');
+        } else {
+            alert('Erro ao salvar: ' + (data.erro || 'Tente novamente.'));
+        }
+    })
+    .catch(() => alert('Erro de conexão ao salvar polígono.'));
+}
+
+function finalizarEditor(silencioso) {
+    if (!editorAtivo) return;
+    map.off('click', _adicionarVertice);
+    if (editorAtivo.polyLayer) map.removeLayer(editorAtivo.polyLayer);
+    editorAtivo.markers.forEach(m => map.removeLayer(m));
+    if (editorAtivo.barraControl) map.removeControl(editorAtivo.barraControl);
+    editorAtivo = null;
+    if (!silencioso) renderizarPoligonos(imoveisData);
 }
 
 function adicionarMarcadores(dados) {
@@ -449,6 +600,10 @@ document.addEventListener('DOMContentLoaded', function () {
     });
     map.addLayer(clusterGroup);
 
+    // M-13: layer de polígonos (abaixo dos marcadores)
+    poligonosLayer = L.layerGroup().addTo(map);
+    renderizarPoligonos(imoveisData);
+
     // Legenda
     const legenda = L.control({ position: 'bottomright' });
     legenda.onAdd = function() {
@@ -483,6 +638,7 @@ function mudarTiles(nome, btn) {
 function filtrarPorLoteamento(v) {
     filtroLot = v;
     const n = adicionarMarcadores(imoveisData);
+    renderizarPoligonos(imoveisData);
     if (n > 0 && clusterGroup.getLayers().length > 0) {
         map.fitBounds(clusterGroup.getBounds(), { padding: [30, 30] });
     }
@@ -498,6 +654,7 @@ function filtrarPorLoteamento(v) {
 function filtrarPorStatus(v) {
     filtroSt = v;
     adicionarMarcadores(imoveisData);
+    renderizarPoligonos(imoveisData);
 }
 
 // ─── M-16: Geolocalização do usuário ─────────────────────────────────────────

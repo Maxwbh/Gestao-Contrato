@@ -227,7 +227,7 @@ class TestTemplateNotificacao:
             'DATAVENCIMENTO': '15/04/2026'
         }
 
-        assunto, corpo, _ = template.renderizar(contexto)
+        assunto, corpo, *_ = template.renderizar(contexto)
 
         assert assunto == 'Olá João Silva'
         assert 'João Silva' in corpo
