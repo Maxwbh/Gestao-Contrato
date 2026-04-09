@@ -6740,6 +6740,42 @@ def download_recibo_antecipacao(request, contrato_id):
 
 
 # =============================================================================
+# R-06: Recibo de Pagamento Individual (por HistoricoPagamento)
+# =============================================================================
+
+@login_required
+def download_recibo_pagamento(request, pk):
+    """
+    R-06: Gera e baixa o recibo PDF de um pagamento individual.
+    """
+    from .models import HistoricoPagamento
+    from .services.recibo_service import gerar_recibo_pagamento_pdf
+
+    historico = get_object_or_404(
+        HistoricoPagamento.objects.select_related(
+            'parcela__contrato__imobiliaria',
+            'parcela__contrato__comprador',
+            'parcela__contrato__imovel',
+        ),
+        pk=pk,
+    )
+
+    try:
+        pdf_bytes = gerar_recibo_pagamento_pdf(historico)
+    except Exception as e:
+        logger.error('Erro ao gerar recibo de pagamento pk=%s: %s', pk, e)
+        messages.error(request, f'Erro ao gerar recibo: {e}')
+        return redirect('contratos:detalhe', pk=historico.parcela.contrato_id)
+
+    contrato = historico.parcela.contrato
+    num_parcela = historico.parcela.numero_parcela
+    filename = f'recibo_{contrato.numero_contrato}_p{num_parcela}.pdf'
+    response = HttpResponse(pdf_bytes, content_type='application/pdf')
+    response['Content-Disposition'] = f'attachment; filename="{filename}"'
+    return response
+
+
+# =============================================================================
 # R-04: Renegociação de Parcelas em Atraso
 # =============================================================================
 
