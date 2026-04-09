@@ -101,7 +101,7 @@
 ### P4 — Baixo
 | # | Tela/Componente |
 |---|-----------------|
-| 3.33 | Aba Documentos (upload contrato assinado) |
+| 3.33 | Aba Documentos (upload contrato assinado) | ✅ Campos `documento_assinado` (FileField) + `documento_assinado_db` (BinaryField backup) + `data_assinatura` no `Contrato`; migration `0010_documento_assinado`; views `upload_documento_contrato`, `download_documento_contrato`, `excluir_documento_contrato`; card colapsável "Documentos" em `contrato_detail.html` com download, exclusão staff-only e upload com data de assinatura |
 | 3.34 | Upload de logo da imobiliária | ✅ `ImageField logo` em `Imobiliaria`; migration `0005_add_logo_imobiliaria`; card de upload no form; exibição no card da lista |
 | 3.35 | Seletor de período reutilizável | ✅ `templates/components/period_selector.html` — campos De/Até com Flatpickr, parâmetros via `with`: `action`, `inicio_name/fim_name`, `inicio_val/fim_val`, `btn_label`, `compact`; limpa filtro se valores presentes |
 
