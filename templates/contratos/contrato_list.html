@@ -210,89 +210,29 @@
                             {% endfor %}
                         </select>
                     </div>
-                    <div class="col-md-3 text-end">
-                        <div class="badge bg-info text-dark fs-6 me-1">
-                            <i class="fas fa-file-contract"></i> Total: {{ total_contratos }}
+                    <div class="col-md-3 text-end d-flex align-items-center justify-content-end gap-2 flex-wrap">
+                        <div class="badge bg-info text-dark fs-6">
+                            <i class="fas fa-file-contract"></i> {{ total_contratos }}
                         </div>
-                        <div class="badge bg-success fs-6 me-1">
-                            <i class="fas fa-check-circle"></i> Ativos: {{ contratos_ativos }}
+                        <div class="badge bg-success fs-6">
+                            <i class="fas fa-check-circle"></i> {{ contratos_ativos }}
                         </div>
                         <div class="badge bg-primary fs-6">
-                            <i class="fas fa-flag-checkered"></i> Quitados: {{ contratos_quitados }}
+                            <i class="fas fa-flag-checkered"></i> {{ contratos_quitados }}
                         </div>
+                        {% if contratos_reajuste %}
+                        <button type="button"
+                                id="btnFiltroReajuste"
+                                class="btn btn-sm btn-warning fw-bold"
+                                onclick="toggleFiltroReajuste(this)"
+                                title="Filtrar contratos com reajuste pendente">
+                            <i class="fas fa-sync-alt me-1"></i>Reajuste ({{ contratos_reajuste|length }})
+                        </button>
+                        {% endif %}
                     </div>
                 </div>
 
-                <!-- Card de Contratos que Precisam de Reajuste -->
-                {% if contratos_reajuste %}
-                <div class="card card-reajuste mb-4">
-                    <div class="card-header bg-warning text-dark d-flex justify-content-between align-items-center">
-                        <h5 class="mb-0">
-                            <i class="fas fa-sync-alt"></i> Contratos que Precisam de Reajuste
-                            <span class="badge bg-danger badge-atraso ms-2">{{ contratos_reajuste|length }}</span>
-                        </h5>
-                        <a href="{% url 'contratos:indices_listar' %}" class="btn btn-sm btn-outline-dark">
-                            <i class="fas fa-chart-line"></i> Ver Indices
-                        </a>
-                    </div>
-                    <div class="card-body p-0">
-                        <div class="table-responsive">
-                            <table class="table table-sm table-hover mb-0">
-                                <thead class="table-light">
-                                    <tr>
-                                        <th>Contrato</th>
-                                        <th>Comprador</th>
-                                        <th>Tipo Correcao</th>
-                                        <th>Ultimo Reajuste</th>
-                                        <th>Data Prevista</th>
-                                        <th>Atraso</th>
-                                        <th class="text-center">Acao</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {% for item in contratos_reajuste %}
-                                    <tr>
-                                        <td>
-                                            <strong>{{ item.contrato.numero_contrato }}</strong>
-                                        </td>
-                                        <td>{{ item.contrato.comprador.nome|truncatechars:25 }}</td>
-                                        <td>
-                                            <span class="badge {% if item.contrato.tipo_correcao == 'IPCA' %}bg-primary{% elif item.contrato.tipo_correcao == 'IGPM' %}bg-success{% else %}bg-info{% endif %}">
-                                                {{ item.contrato.tipo_correcao }}
-                                            </span>
-                                        </td>
-                                        <td>
-                                            {% if item.data_ultimo_reajuste %}
-                                                {{ item.data_ultimo_reajuste|date:"d/m/Y" }}
-                                            {% else %}
-                                                <span class="text-muted">Nunca</span>
-                                            {% endif %}
-                                        </td>
-                                        <td>{{ item.proxima_data_reajuste|date:"d/m/Y" }}</td>
-                                        <td>
-                                            {% if item.meses_atraso == 0 %}
-                                                <span class="badge bg-warning text-dark">Este mes</span>
-                                            {% elif item.meses_atraso == 1 %}
-                                                <span class="badge bg-danger">1 mes</span>
-                                            {% else %}
-                                                <span class="badge bg-danger">{{ item.meses_atraso }} meses</span>
-                                            {% endif %}
-                                        </td>
-                                        <td class="text-center">
-                                            <a href="{% url 'contratos:detalhe' item.contrato.pk %}" class="btn btn-sm btn-outline-primary" title="Ver Detalhes">
-                                                <i class="fas fa-eye"></i>
-                                            </a>
-                                        </td>
-                                    </tr>
-                                    {% endfor %}
-                                </tbody>
-                            </table>
-                        </div>
-                    </div>
-                </div>
-                {% endif %}
-
-                <!-- ===== CARD VIEW ===== -->
+                                <!-- ===== CARD VIEW ===== -->
                 <div id="card-view-container" class="d-none mb-3">
                     <div id="sortable-cards">
                         {% for contrato in contratos %}
@@ -364,6 +304,11 @@
                     </div>
                     <!-- Dados para AG Grid -->
                     <script>
+                    var _reajustePks = {};
+                    {% for item in contratos_reajuste %}
+                    _reajustePks[{{ item.contrato.pk }}] = {{ item.meses_atraso }};
+                    {% endfor %}
+
                     var contratosRowData = [
                     {% for contrato in contratos %}
                     {
@@ -381,6 +326,8 @@
                         status: "{{ contrato.status }}",
                         status_display: "{{ contrato.get_status_display|escapejs }}",
                         is_ativo: {% if contrato.status == 'ATIVO' %}true{% else %}false{% endif %},
+                        reajuste_pendente: _reajustePks[{{ contrato.pk }}] !== undefined,
+                        meses_atraso: _reajustePks[{{ contrato.pk }}] || 0,
                         detalhe_url: "{% url 'contratos:detalhe' contrato.pk %}",
                         editar_url: "{% url 'contratos:editar' contrato.pk %}",
                         cancelar_url: "{% url 'contratos:excluir' contrato.pk %}",
@@ -505,6 +452,23 @@
 
 {% block extra_js %}
 <script>
+    var _filtroReajusteAtivo = false;
+
+    function toggleFiltroReajuste(btn) {
+        _filtroReajusteAtivo = !_filtroReajusteAtivo;
+        btn.classList.toggle('active', _filtroReajusteAtivo);
+        btn.classList.toggle('btn-warning', !_filtroReajusteAtivo);
+        btn.classList.toggle('btn-dark', _filtroReajusteAtivo);
+        if (!window.contratosGridApi) return;
+        if (_filtroReajusteAtivo) {
+            window.contratosGridApi.setFilterModel({
+                reajuste_pendente: { filterType: 'text', type: 'equals', filter: 'true' }
+            });
+        } else {
+            window.contratosGridApi.setFilterModel(null);
+        }
+    }
+
     function confirmarCancelamento(numero, url) {
         document.getElementById('nomeContrato').textContent = numero;
         document.getElementById('formCancelamento').action = url;
@@ -654,9 +618,21 @@
             headerName: 'Status',
             field: 'status',
             filter: 'agTextColumnFilter',
-           
             minWidth: 110,
             cellRenderer: statusRenderer,
+        },
+        {
+            headerName: 'Reajuste',
+            field: 'reajuste_pendente',
+            filter: 'agTextColumnFilter',
+            minWidth: 110,
+            cellRenderer: function(params) {
+                if (!params.value) return '<span class="text-muted">—</span>';
+                var m = params.data.meses_atraso;
+                var cls = m === 0 ? 'bg-warning text-dark' : 'bg-danger';
+                var txt = m === 0 ? 'Este mês' : m + ' mês' + (m > 1 ? 'es' : '');
+                return '<span class="badge ' + cls + '"><i class="fas fa-sync-alt me-1"></i>' + txt + '</span>';
+            },
         },
         {
             headerName: 'Ações',
