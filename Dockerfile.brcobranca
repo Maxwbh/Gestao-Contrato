@@ -31,7 +31,7 @@ ENV BUNDLE_PATH=/usr/local/bundle \
 
 # ARG antes do git clone para invalidar o cache Docker quando o repo for atualizado.
 # Render: incremente CACHE_BUST para forçar novo clone + bundle install do zero.
-ARG CACHE_BUST=2
+ARG CACHE_BUST=3
 
 # Clonar repositório da API (shallow clone da branch master)
 RUN git clone --depth 1 --branch master \
