@@ -155,7 +155,7 @@ def processar_notificacoes_pendentes():
 
     for notificacao in notificacoes:
         try:
-            sucesso = enviar_notificacao(
+            sucesso, external_id = enviar_notificacao(
                 tipo=notificacao.tipo,
                 destinatario=notificacao.destinatario,
                 assunto=notificacao.assunto,
@@ -163,7 +163,7 @@ def processar_notificacoes_pendentes():
             )
 
             if sucesso:
-                notificacao.marcar_como_enviada()
+                notificacao.marcar_como_enviada(external_id=external_id)
                 enviadas += 1
             else:
                 notificacao.marcar_erro("Erro ao enviar notificação")
@@ -193,7 +193,7 @@ def reenviar_notificacao(notificacao_id):
     try:
         notificacao = Notificacao.objects.get(id=notificacao_id)
 
-        sucesso = enviar_notificacao(
+        sucesso, external_id = enviar_notificacao(
             tipo=notificacao.tipo,
             destinatario=notificacao.destinatario,
             assunto=notificacao.assunto,
@@ -201,12 +201,12 @@ def reenviar_notificacao(notificacao_id):
         )
 
         if sucesso:
-            notificacao.marcar_como_enviada()
-            logger.info(f"Notificação {notificacao_id} reenviada com sucesso")
+            notificacao.marcar_como_enviada(external_id=external_id)
+            logger.info("Notificação %s reenviada com sucesso (ext_id=%s)", notificacao_id, external_id)
             return True
         else:
             notificacao.marcar_erro("Erro ao reenviar notificação")
-            logger.error(f"Erro ao reenviar notificação {notificacao_id}")
+            logger.error("Erro ao reenviar notificação %s", notificacao_id)
             return False
 
     except Notificacao.DoesNotExist:
