@@ -15,6 +15,7 @@ Email: maxwbh@gmail.com
 Empresa: M&S do Brasil LTDA
 """
 import io
+import time
 import logging
 import requests
 import json
@@ -374,26 +375,27 @@ class CNABService:
             #           { ...empresa_fields..., "pagamentos": [{...boleto1...}, ...] }
             # O RemessaService.generate recebe values: Hash e extrai values['pagamentos'].
             # Enviar Array diretamente causa "undefined method `merge' for an instance of Array".
-            import io
             tipo_cnab = 'cnab240' if layout == 'CNAB_240' else 'cnab400'
             payload = {**dados_empresa, 'pagamentos': pagamentos}
             data_json = json.dumps(payload, ensure_ascii=False).encode('utf-8')
 
-            logger.info(f"Gerando remessa CNAB: banco={banco}, layout={tipo_cnab}, boletos={len(pagamentos)}")
+            descricao_conta = getattr(conta_bancaria, 'descricao', None) or str(conta_bancaria)
+            logger.info(
+                "[Remessa] conta=%s banco=%s layout=%s boletos=%d valor=R$%.2f",
+                descricao_conta, banco, tipo_cnab, len(pagamentos), float(valor_total)
+            )
 
-            # DEBUG: logar campos de data do primeiro boleto para diagnóstico
-            if pagamentos:
+            if logger.isEnabledFor(logging.DEBUG) and pagamentos:
                 p0 = pagamentos[0]
-                logger.info(
-                    "CNAB payload[0] datas: data_vencimento=%r data_documento=%r",
+                logger.debug(
+                    "[Remessa] payload[0] data_vencimento=%r data_documento=%r",
                     p0.get('data_vencimento'), p0.get('data_documento')
                 )
 
-            import time as _time
-
-            # Retry automático em 429 (rate limit): até 2 tentativas com backoff
+            # Retry automático em 429 (rate limit): até 3 tentativas com backoff exponencial
             _max_tentativas = 3
             _response = None
+            _t0 = time.monotonic()
             for _tentativa in range(_max_tentativas):
                 _response = requests.post(
                     f'{self.brcobranca_url}/api/remessa',
@@ -411,12 +413,14 @@ class CNABService:
                     break
                 _wait = 2 ** _tentativa  # 1s, 2s, 4s
                 logger.warning(
-                    "BRCobranca 429 Too Many Requests — aguardando %ds (tentativa %d/%d)",
-                    _wait, _tentativa + 1, _max_tentativas
+                    "[Remessa] BRCobranca 429 (rate limit) conta=%s banco=%s — "
+                    "aguardando %ds antes de nova tentativa (%d/%d)",
+                    descricao_conta, banco, _wait, _tentativa + 1, _max_tentativas
                 )
-                _time.sleep(_wait)
+                time.sleep(_wait)
 
             response = _response
+            _elapsed = time.monotonic() - _t0
 
             if response.status_code == 200:
                 resultado = response.json()
@@ -458,8 +462,10 @@ class CNABService:
                             )
 
                     logger.info(
-                        f"Remessa {numero_remessa} gerada: {len(parcelas_validas)} boletos, "
-                        f"R$ {valor_total}"
+                        "[Remessa] #%d gerada via BRCobranca: conta=%s boletos=%d "
+                        "valor=R$%.2f elapsed=%.1fs",
+                        numero_remessa, descricao_conta, len(parcelas_validas),
+                        float(valor_total), _elapsed
                     )
 
                     return {
@@ -477,19 +483,28 @@ class CNABService:
                     }
             else:
                 # HTTP error (429 persistente, 5xx, etc.) → fallback local
-                erro_msg = f"Erro BRCobranca: {response.status_code} - {response.text[:200]}"
-                logger.warning("%s — ativando fallback local", erro_msg)
+                logger.warning(
+                    "[Remessa] BRCobranca HTTP %d conta=%s banco=%s — ativando fallback local. "
+                    "Resposta: %s",
+                    response.status_code, descricao_conta, banco, response.text[:200]
+                )
                 return self._gerar_remessa_local(
                     parcelas_validas, conta_bancaria, numero_remessa, layout, valor_total
                 )
 
         except requests.exceptions.ConnectionError:
-            logger.warning("BRCobranca nao disponivel, gerando remessa local")
+            logger.warning(
+                "[Remessa] BRCobranca indisponivel conta=%s — ativando fallback local",
+                descricao_conta
+            )
             return self._gerar_remessa_local(
                 parcelas_validas, conta_bancaria, numero_remessa, layout, valor_total
             )
         except Exception as e:
-            logger.exception("Erro ao gerar remessa: %s", e)
+            logger.exception(
+                "[Remessa] Erro inesperado conta=%s banco=%s: %s",
+                descricao_conta, banco, e
+            )
             return {
                 'sucesso': False,
                 'erro': str(e)
@@ -627,6 +642,12 @@ class CNABService:
                     valor=parcela.valor_boleto or parcela.valor_atual,
                     data_vencimento=parcela.data_vencimento,
                 )
+
+        descricao_conta = getattr(conta_bancaria, 'descricao', None) or str(conta_bancaria)
+        logger.info(
+            "[Remessa] #%d gerada localmente (fallback): conta=%s boletos=%d valor=R$%.2f",
+            numero_remessa, descricao_conta, len(parcelas), float(valor_total)
+        )
 
         return {
             'sucesso': True,
@@ -1100,8 +1121,32 @@ class CNABService:
                 f"{len(sem_conta)} parcela(s) sem conta bancária associada foram ignoradas."
             )
 
-        for conta, lista_parcelas in grupos.items():
+        # Throttle: evita 429 no BRCobranca ao processar múltiplas contas do mesmo banco
+        # em sequência rápida. Garante ao menos MIN_INTERVAL segundos entre requisições
+        # ao mesmo banco.
+        _MIN_INTERVAL = 1.5  # segundos
+        _ultimo_request_banco: Dict[str, float] = {}
+        _total_contas = len(grupos)
+
+        for _idx, (conta, lista_parcelas) in enumerate(grupos.items(), start=1):
+            descricao_conta = getattr(conta, 'descricao', None) or str(conta)
+            banco_key = getattr(conta, 'banco', '')
+            logger.info(
+                "[Remessa lote] processando %d/%d: conta=%s banco=%s parcelas=%d",
+                _idx, _total_contas, descricao_conta, banco_key, len(lista_parcelas)
+            )
+            _agora = time.monotonic()
+            _ultimo = _ultimo_request_banco.get(banco_key, 0.0)
+            _espera = _MIN_INTERVAL - (_agora - _ultimo)
+            if _espera > 0:
+                logger.debug(
+                    "[Remessa lote] throttle banco=%s — aguardando %.1fs", banco_key, _espera
+                )
+                time.sleep(_espera)
+
             resultado = self.gerar_remessa(lista_parcelas, conta, layout)
+            _ultimo_request_banco[banco_key] = time.monotonic()
+
             if resultado.get('sucesso'):
                 arq = resultado['arquivo_remessa']
                 remessas_geradas.append({
