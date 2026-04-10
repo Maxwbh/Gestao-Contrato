@@ -389,18 +389,34 @@ class CNABService:
                     p0.get('data_vencimento'), p0.get('data_documento')
                 )
 
-            response = requests.post(
-                f'{self.brcobranca_url}/api/remessa',
-                data={
-                    'bank': banco,
-                    'type': tipo_cnab,
-                },
-                files={
-                    'data': ('remessa.json', io.BytesIO(data_json), 'application/json'),
-                },
-                headers={'Accept': 'application/vnd.BoletoApi-v1+json'},
-                timeout=60
-            )
+            import time as _time
+
+            # Retry automático em 429 (rate limit): até 2 tentativas com backoff
+            _max_tentativas = 3
+            _response = None
+            for _tentativa in range(_max_tentativas):
+                _response = requests.post(
+                    f'{self.brcobranca_url}/api/remessa',
+                    data={
+                        'bank': banco,
+                        'type': tipo_cnab,
+                    },
+                    files={
+                        'data': ('remessa.json', io.BytesIO(data_json), 'application/json'),
+                    },
+                    headers={'Accept': 'application/vnd.BoletoApi-v1+json'},
+                    timeout=60
+                )
+                if _response.status_code != 429:
+                    break
+                _wait = 2 ** _tentativa  # 1s, 2s, 4s
+                logger.warning(
+                    "BRCobranca 429 Too Many Requests — aguardando %ds (tentativa %d/%d)",
+                    _wait, _tentativa + 1, _max_tentativas
+                )
+                _time.sleep(_wait)
+
+            response = _response
 
             if response.status_code == 200:
                 resultado = response.json()
@@ -460,12 +476,12 @@ class CNABService:
                         'erro': 'BRCobranca nao retornou arquivo de remessa'
                     }
             else:
-                erro_msg = f"Erro BRCobranca: {response.status_code} - {response.text}"
-                logger.error(erro_msg)
-                return {
-                    'sucesso': False,
-                    'erro': erro_msg
-                }
+                # HTTP error (429 persistente, 5xx, etc.) → fallback local
+                erro_msg = f"Erro BRCobranca: {response.status_code} - {response.text[:200]}"
+                logger.warning("%s — ativando fallback local", erro_msg)
+                return self._gerar_remessa_local(
+                    parcelas_validas, conta_bancaria, numero_remessa, layout, valor_total
+                )
 
         except requests.exceptions.ConnectionError:
             logger.warning("BRCobranca nao disponivel, gerando remessa local")
