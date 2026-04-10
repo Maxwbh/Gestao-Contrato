@@ -299,11 +299,12 @@ class Parcela(TimeStampedModel):
             models.Index(fields=['contrato', 'pago', 'data_vencimento'], name='fin_parcela_ctrt_pago_venc_idx'),
         ]
         constraints = [
-            # Nosso número único quando preenchido — evita baixa duplicada
+            # Nosso número único por conta bancária quando preenchido — evita baixa duplicada
+            # Permite reutilização do mesmo nosso_numero em bancos diferentes
             models.UniqueConstraint(
-                fields=['nosso_numero'],
+                fields=['conta_bancaria', 'nosso_numero'],
                 condition=~Q(nosso_numero=''),
-                name='unique_nosso_numero_nao_vazio',
+                name='unique_nosso_numero_por_conta',
             ),
         ]
 
@@ -736,7 +737,8 @@ class Parcela(TimeStampedModel):
         return True
 
     def registrar_pagamento_boleto(self, valor_pago, data_pagamento=None,
-                                    banco_pagador='', agencia_pagadora=''):
+                                    banco_pagador='', agencia_pagadora='',
+                                    validar_minimo=True):
         """Registra o pagamento do boleto com dados bancários"""
         if data_pagamento is None:
             data_pagamento = timezone.now()
@@ -751,7 +753,8 @@ class Parcela(TimeStampedModel):
         self.registrar_pagamento(
             valor_pago=valor_pago,
             data_pagamento=data_pagamento.date() if hasattr(data_pagamento, 'date') else data_pagamento,
-            observacoes=f'Pago via boleto. Banco: {banco_pagador} Ag: {agencia_pagadora}'
+            observacoes=f'Pago via boleto. Banco: {banco_pagador} Ag: {agencia_pagadora}',
+            validar_minimo=validar_minimo,
         )
 
 
@@ -2199,6 +2202,13 @@ class ItemRetorno(TimeStampedModel):
 
         try:
             if self.tipo_ocorrencia == 'LIQUIDACAO':
+                # Guard: não reprocessar parcela já baixada (retorno duplicado do banco)
+                if self.parcela.pago:
+                    self.erro_processamento = 'Parcela já paga — possível retorno duplicado'
+                    self.processado = True
+                    self.save()
+                    return False
+
                 valor = self.valor_pago or self.valor_titulo
                 data_pgto = (
                     self.data_ocorrencia.date()
@@ -2217,6 +2227,7 @@ class ItemRetorno(TimeStampedModel):
                     data_pagamento=data_pgto,
                     banco_pagador=banco,
                     agencia_pagadora='',
+                    validar_minimo=False,
                 )
 
                 # Criar HistoricoPagamento vinculado a este ItemRetorno

@@ -732,7 +732,7 @@ class CNABService:
                         conta = arquivo_retorno.conta_bancaria
                         qs = Parcela.objects.filter(nosso_numero=nosso_numero)
                         if conta:
-                            qs_conta = qs.filter(conta_bancaria_boleto=conta)
+                            qs_conta = qs.filter(conta_bancaria=conta)
                             parcela = qs_conta.first() or qs.first()
                         else:
                             parcela = qs.first()
@@ -869,7 +869,7 @@ class CNABService:
                         conta = arquivo_retorno.conta_bancaria
                         qs = Parcela.objects.filter(nosso_numero=nosso_numero)
                         if conta:
-                            qs_conta = qs.filter(conta_bancaria_boleto=conta)
+                            qs_conta = qs.filter(conta_bancaria=conta)
                             parcela = qs_conta.first() or qs.first()
                         else:
                             parcela = qs.first()
