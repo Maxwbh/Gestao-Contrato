@@ -104,11 +104,25 @@ if config('DATABASE_URL', default=None):
             conn_health_checks=False,
         )
     }
-    # Usar schema separado para esta aplicacao (compartilhamento de banco)
-    # IMPORTANTE: Usar APENAS gestao_contrato (sem public) para evitar
-    # conflito com django_migrations da outra aplicacao
-    DATABASES['default']['OPTIONS'] = {
-        'options': '-c search_path=gestao_contrato'
+    import sys as _sys
+    _is_testing = 'pytest' in _sys.modules or (
+        len(_sys.argv) > 1 and _sys.argv[1] == 'test'
+    )
+
+    if not _is_testing:
+        # Usar schema separado para esta aplicacao (compartilhamento de banco)
+        # IMPORTANTE: Usar APENAS gestao_contrato (sem public) para evitar
+        # conflito com django_migrations da outra aplicacao
+        DATABASES['default']['OPTIONS'] = {
+            'options': '-c search_path=gestao_contrato'
+        }
+    else:
+        # Testes: usar schema public (sem multi-tenant; evita erros de schema ausente)
+        DATABASES['default']['OPTIONS'] = {}
+
+    # Banco de teste: nome fixo, schema public
+    DATABASES['default']['TEST'] = {
+        'NAME': 'test_gestao_contrato',
     }
 
     # pgBouncer transaction mode: desabilitar cursores nomeados server-side.
@@ -118,13 +132,14 @@ if config('DATABASE_URL', default=None):
     # Django buscar todas as linhas de uma vez (sem cursor nomeado).
     DATABASES['default']['DISABLE_SERVER_SIDE_CURSORS'] = True
 
-    # Signal para garantir search_path em cada conexao
-    from django.db.backends.signals import connection_created
-    def set_search_path(sender, connection, **kwargs):
-        if connection.vendor == 'postgresql':
-            cursor = connection.cursor()
-            cursor.execute("SET search_path TO gestao_contrato")
-    connection_created.connect(set_search_path)
+    # Signal para garantir search_path em cada conexao (desabilitado em testes)
+    if not _is_testing:
+        from django.db.backends.signals import connection_created
+        def set_search_path(sender, connection, **kwargs):
+            if connection.vendor == 'postgresql':
+                cursor = connection.cursor()
+                cursor.execute("SET search_path TO gestao_contrato")
+        connection_created.connect(set_search_path)
 else:
     DATABASES = {
         'default': {
