@@ -502,6 +502,7 @@
 | **18** | Frontend P3/P4 | 3 (P3, P4) | 🏦 Débito Técnico (pós-2050) |
 | **19** | Documentação | 9 | — |
 | **20** | ⭐ **Agendamento e Operações — cron-job.org + endpoints HTTP** | 24 | — |
+| **21** | ⭐ **Grid de Reajustes Pendentes — cálculo inline + Aprovar/Editar** | 25 | ✅ |
 
 ---
 
@@ -1142,8 +1143,10 @@ X-Task-Token: <valor de TASK_TOKEN no painel Render>
 |---|-----|-----|--------|--------------|------|--------|
 | J-04 | Relatório semanal para imobiliárias | `POST /api/tasks/relatorio-semanal/` | POST | Segunda 08:30 | `X-Task-Token` | — |
 | J-05 | Relatório mensal consolidado | `POST /api/tasks/relatorio-mensal/` | POST | 1º dia 07:30 | `X-Task-Token` | — |
-| J-06 | Monitoramento de bounces de e-mail | `POST /api/tasks/processar-bounces/` | POST | A cada 30 min | `X-Task-Token` | ⚠️ Endpoint não existe |
-| J-07 | Limpeza de sessões Django expiradas | `POST /api/tasks/limpar-sessoes/` | POST | Domingo 03:00 | `X-Task-Token` | ⚠️ Endpoint não existe |
+| J-06 | Monitoramento de bounces de e-mail | `POST /api/tasks/processar-bounces/` | POST | A cada 30 min | `X-Task-Token` | ⚠️ Endpoint pendente (E-01) |
+| J-07 | Limpeza de sessões Django expiradas | `POST /api/tasks/limpar-sessoes/` | POST | Domingo 03:00 | `X-Task-Token` | ⚠️ Endpoint pendente (E-02) |
+| J-08 | Baixar índices econômicos (IBGE + BCB) | `POST /api/tasks/atualizar-indices/` | POST | Toda segunda 07:00 | `X-Task-Token` | ✅ Implementado |
+| J-09 | Notificações dedicado (fila + venc. + inad.) | `POST /api/tasks/processar-notificacoes/` | POST | A cada 6 horas | `X-Task-Token` | ✅ Implementado |
 
 ---
 
@@ -1214,4 +1217,70 @@ def api_task_processar_bounces(request):
 [ ] J-06 bounce monitoring criado no cron-job.org (após E-01)
 [ ] E-02 endpoint /api/tasks/limpar-sessoes/ implementado
 [ ] J-07 limpeza de sessões criado no cron-job.org (após E-02)
+[ ] J-08 atualizar-indices criado no cron-job.org (toda segunda 07:00)
+[ ] J-09 processar-notificacoes criado no cron-job.org (a cada 6h, opcional)
 ```
+
+---
+
+## 25. HU — GRID DE REAJUSTES PENDENTES (Aprovar / Editar) ✅ CONCLUÍDO
+
+> **História de Usuário:**
+> Como administrador, quero visualizar todos os contratos com reajuste no período em uma
+> grade com os valores calculados já visíveis, podendo aprovar individualmente, editar
+> (informar %) individualmente ou selecionar N contratos e aplicar em lote (calculado ou informado).
+
+---
+
+### 25.1 Detecção Mês-a-Mês (não por dia)
+
+| Item | Implementação | Status |
+|------|--------------|--------|
+| `calcular_ciclo_pendente(antecipacao_meses=1)` | Novo parâmetro: usa `hoje_ym + antecipacao` vs `aniversario_ym`; padrão = 1 mês antes | ✅ |
+| Exibe contrato 1 mês antes do aniversário | Contrato 15/04/2024 → aparece na grid em 01/03/2025 | ✅ |
+| Independente do dia do mês | Aparece em 01/04/2025 e em 30/04/2025 igualmente | ✅ |
+
+### 25.2 Colunas da Grid
+
+| Coluna | Fonte | Comportamento |
+|--------|-------|---------------|
+| Contrato / Data | `Contrato` | Link para detalhe |
+| Comprador / Imóvel | `Contrato.comprador`, `Contrato.imovel` | — |
+| Ciclo / Parcelas | calculado por `prazo_reajuste_meses` | Badge ciclo + range parcelas |
+| Índice / Período de Ref. | `contrato.tipo_correcao` + `calcular_periodo_referencia()` | Badge índice + fallback automático |
+| Prestação Atual | `Parcela.valor_atual` da parcela inicial do ciclo | R$ formatado |
+| Correção % | `IndiceReajuste.get_acumulado_periodo()` | Badge verde com %; "Aguardando" se sem dados |
+| Prestação Nova | `prestacao_atual × (1 + %/100)` — mode SIMPLES | `*Price recalcula PMT` para contratos Price |
+| Ações | Botão Aprovar + botão Editar | Aprovar desabilitado se sem dados |
+
+### 25.3 Ações
+
+| Ação | Endpoint | Comportamento |
+|------|----------|---------------|
+| **Aprovar** (individual) | `POST /financeiro/reajustes/aplicar-lote/` | Aplica índice calculado; confirm() antes |
+| **Editar** (individual) | `POST /financeiro/reajustes/aplicar-informado-lote/` | Modal com campo % + observações |
+| **Aplicar Calculado** (lote) | `POST /financeiro/reajustes/aplicar-lote/` | N contratos, índice calculado, desconto opcional |
+| **Aplicar Informado** (lote) | `POST /financeiro/reajustes/aplicar-informado-lote/` | N contratos, % único informado, desconto opcional |
+
+### 25.4 Novo Endpoint
+
+| Endpoint | View | URL | Status |
+|----------|------|-----|--------|
+| `POST /financeiro/reajustes/aplicar-informado-lote/` | `aplicar_reajuste_informado_lote` | `financeiro/urls.py` | ✅ |
+
+### 25.5 Download de Índices (J-08)
+
+| Item | Implementação | Status |
+|------|--------------|--------|
+| `atualizar_indices_sync()` | `core/tasks.py` — chama `IndicesEconomicosService.importar_indices()` para 7 índices, últimos 13 meses | ✅ |
+| `POST /api/tasks/atualizar-indices/` | `task_atualizar_indices` em `core/tasks.py` + URL em `core/urls.py` | ✅ |
+| Agenda cron-job.org | J-08: toda segunda 07:00 BRT | — (configurar no cron-job.org) |
+| Sucesso parcial | Sucesso se ao menos 1 de 7 índices importado (tolerante a falhas de API) | ✅ |
+
+### 25.6 Endpoint Dedicado de Notificações (J-09)
+
+| Item | Implementação | Status |
+|------|--------------|--------|
+| `POST /api/tasks/processar-notificacoes/` | Fila + vencimentos + inadimplentes em sequência | ✅ |
+| `task_processar_notificacoes` | `core/tasks.py` + URL em `core/urls.py` | ✅ |
+| Quando usar | Quando quiser notificações mais frequentes que o `run-all` (ex.: a cada 6h) | ✅ |
