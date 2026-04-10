@@ -357,24 +357,42 @@ class CNABService:
             'codigo_cedente': conta_bancaria.convenio or '',
         }
 
-        # Lista de boletos
+        # Campos do cedente que pertencem APENAS ao root do payload de remessa.
+        # Não devem ser repetidos em cada pagamento — a API Ruby faz merge do root
+        # com os campos de cada boleto; duplicatas causam NoMethodError (merge on Array).
+        _CAMPOS_CEDENTE_ROOT = {
+            'agencia', 'conta_corrente', 'convenio', 'carteira',
+            'cedente', 'documento_cedente',
+        }
+
+        # Lista de boletos — apenas campos boleto-específicos (sacado, valores, datas, etc.)
         pagamentos = []
 
-        # Adicionar boletos (somente campos de pagamento — empresa vai no nível raiz)
         valor_total = Decimal('0.00')
         for parcela in parcelas_validas:
             dados_boleto = self._montar_dados_boleto(parcela, conta_bancaria)
-            pagamentos.append(dados_boleto)
+            # Strip de campos do cedente — ficam somente no root (dados_empresa)
+            boleto_remessa = {
+                k: v for k, v in dados_boleto.items()
+                if k not in _CAMPOS_CEDENTE_ROOT
+            }
+            pagamentos.append(boleto_remessa)
             valor_total += parcela.valor_boleto or parcela.valor_atual
 
         try:
             # A API /api/remessa espera multipart/form-data:
-            #   bank  → campo de texto
-            #   type  → campo de texto (cnab240 | cnab400)
-            #   data  → arquivo JSON com um Hash:
-            #           { ...empresa_fields..., "pagamentos": [{...boleto1...}, ...] }
-            # O RemessaService.generate recebe values: Hash e extrai values['pagamentos'].
-            # Enviar Array diretamente causa "undefined method `merge' for an instance of Array".
+            #   bank  → campo de texto (ex: 'banco_brasil')
+            #   type  → campo de texto ('cnab240' | 'cnab400')
+            #   data  → arquivo JSON com um Hash/objeto:
+            #           {
+            #             empresa_mae, documento_cedente, agencia, agencia_dv,
+            #             conta_corrente, digito_conta, convenio, carteira,
+            #             sequencial_remessa, codigo_cedente,
+            #             "pagamentos": [{nosso_numero, valor, sacado, ...}, ...]
+            #           }
+            # IMPORTANTE: campos do cedente (agencia, conta_corrente, convenio, carteira,
+            # cedente, documento_cedente) devem ficar APENAS no root — NÃO dentro de cada
+            # pagamento. Duplicar esses campos causa NoMethodError no Ruby (merge on Array).
             tipo_cnab = 'cnab240' if layout == 'CNAB_240' else 'cnab400'
             payload = {**dados_empresa, 'pagamentos': pagamentos}
             data_json = json.dumps(payload, ensure_ascii=False).encode('utf-8')
