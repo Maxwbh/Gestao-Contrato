@@ -59,12 +59,21 @@ class Migration(migrations.Migration):
             model_name="historicopagamento",
             index=models.Index(fields=["fitid_ofx"], name="financeiro__fitid_o_428052_idx"),
         ),
-        migrations.AddConstraint(
-            model_name="parcela",
-            constraint=models.UniqueConstraint(
-                condition=models.Q(("nosso_numero", ""), _negated=True),
-                fields=("nosso_numero",),
-                name="unique_nosso_numero_nao_vazio",
-            ),
+        # NOTA: A constraint unique_nosso_numero_nao_vazio (global) não é criada no DB
+        # porque produção já pode ter nosso_numero duplicados entre contas bancárias.
+        # O estado Django registra a constraint para consistência; a constraint real
+        # (por conta bancária) é criada na migration 0011.
+        migrations.SeparateDatabaseAndState(
+            database_operations=[],  # não cria no DB — pode falhar com duplicatas
+            state_operations=[
+                migrations.AddConstraint(
+                    model_name="parcela",
+                    constraint=models.UniqueConstraint(
+                        condition=models.Q(("nosso_numero", ""), _negated=True),
+                        fields=("nosso_numero",),
+                        name="unique_nosso_numero_nao_vazio",
+                    ),
+                ),
+            ],
         ),
     ]
