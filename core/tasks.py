@@ -1108,6 +1108,96 @@ def task_relatorio_mensal(request):
     return JsonResponse(result.to_dict(), status=status_code)
 
 
+@require_http_methods(["POST"])
+@task_api_rate_limit
+@task_auth_required
+def task_processar_notificacoes(request):
+    """
+    Endpoint dedicado para processamento COMPLETO de notificações.
+
+    Executa sequencialmente:
+      1. processar_fila_notificacoes  — boletos gerados aguardando envio (PENDENTE)
+      2. enviar_notificacoes_sync     — avisos de vencimento (N-01: D-5, D-3, D-1, D0)
+      3. enviar_inadimplentes_sync    — avisos de inadimplência (N-02: D+3, D+7, D+15)
+
+    Use este endpoint quando quiser acionar APENAS notificações com maior frequência
+    (ex.: a cada 6 horas), sem re-executar reajustes e atualização de parcelas.
+    """
+    results = []
+    results.append(processar_fila_notificacoes().to_dict())
+    results.append(enviar_notificacoes_sync().to_dict())
+    results.append(enviar_inadimplentes_sync().to_dict())
+
+    all_success = all(r['success'] for r in results)
+    return JsonResponse({
+        'status': 'success' if all_success else 'partial_failure',
+        'executed_at': datetime.now().isoformat(),
+        'tasks': results,
+    }, status=200 if all_success else 207)
+
+
+def atualizar_indices_sync():
+    """
+    Baixa e importa todos os índices econômicos disponíveis via APIs públicas.
+
+    Índices atualizados: IPCA, INPC (IBGE/SIDRA), IGP-M, INCC, IGP-DI, SELIC, TR (BCB/SGS).
+    Busca os últimos 13 meses para garantir que períodos de referência recentes estejam completos.
+    """
+    from financeiro.services.indices_economicos_service import IndicesEconomicosService
+    from datetime import date
+    from dateutil.relativedelta import relativedelta
+
+    result = TaskResult('atualizar_indices')
+    INDICES = ['IPCA', 'INPC', 'IGPM', 'INCC', 'IGPDI', 'SELIC', 'TR']
+
+    hoje = date.today()
+    data_inicio = hoje - relativedelta(months=13)
+    data_fim = hoje
+
+    service = IndicesEconomicosService()
+    total_criados = 0
+    total_atualizados = 0
+
+    for tipo in INDICES:
+        try:
+            resumo = service.importar_indices(tipo, data_inicio, data_fim)
+            criados = resumo.get('criados', 0)
+            atualizados = resumo.get('atualizados', 0)
+            total_criados += criados
+            total_atualizados += atualizados
+            result.add_message(f'{tipo}: {criados} novos, {atualizados} atualizados')
+            result.items_processed += criados + atualizados
+        except Exception as e:
+            result.add_error(f'{tipo}: erro — {e}')
+            logger.exception('Erro ao importar índice %s: %s', tipo, e)
+
+    if service.erros:
+        for err in service.erros:
+            result.add_error(err)
+
+    result.add_message(f'Total: {total_criados} criados, {total_atualizados} atualizados')
+    result.finish()
+    # Sobrepõe: sucesso parcial é aceitável (falha total apenas se TODOS os índices falharam)
+    result.success = len(result.errors) < len(INDICES)
+    return result
+
+
+@require_http_methods(["POST"])
+@task_api_rate_limit
+@task_auth_required
+def task_atualizar_indices(request):
+    """
+    Endpoint para baixar índices econômicos das APIs públicas (IBGE + Banco Central).
+
+    Agende semanalmente via cron-job.org (1×/semana) para manter a base de índices
+    atualizada e permitir aplicação de reajustes assim que o período de referência
+    estiver disponível.
+    """
+    result = atualizar_indices_sync()
+    status_code = 200 if result.success else 500
+    return JsonResponse(result.to_dict(), status=status_code)
+
+
 def testar_notificacoes_sync(email_destino=None, sms_destino=None, skip_sms=False):
     """
     Diagnóstico completo de e-mail e SMS.

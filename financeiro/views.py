@@ -3410,11 +3410,16 @@ def aplicar_reajuste_contrato(request, contrato_id):
 @login_required
 def reajustes_pendentes(request):
     """
-    Lista todos os contratos ativos que possuem ciclo de reajuste pendente,
-    agrupados por imobiliária, com informações do ciclo e período de referência.
+    Lista todos os contratos ativos com ciclo de reajuste pendente.
+
+    Detecção mês-a-mês (não por dia exato): exibe contratos a partir de
+    1 mês antes do aniversário, permitindo aplicar o reajuste assim que
+    o índice de referência estiver disponível.
+
+    Para cada contrato calcula: percentual do índice, prestação atual do
+    ciclo e estimativa da prestação nova.
     """
-    from contratos.models import Contrato as ContratoModel
-    from django.db.models import Prefetch
+    from contratos.models import Contrato as ContratoModel, IndiceReajuste, TabelaJurosContrato
 
     contratos_ativos = ContratoModel.objects.filter(
         status='ATIVO'
@@ -3433,6 +3438,49 @@ def reajustes_pendentes(request):
         parcela_inicial = (ciclo - 1) * prazo + 1
         parcela_final = min(ciclo * prazo, contrato.numero_parcelas)
 
+        # Busca o índice acumulado do período de referência
+        indice_tipo = contrato.tipo_correcao
+        percentual = IndiceReajuste.get_acumulado_periodo(
+            indice_tipo,
+            inicio_ref.year, inicio_ref.month,
+            fim_ref.year, fim_ref.month,
+        )
+        # Tenta fallback se configurado e índice principal sem dados
+        if percentual is None and contrato.tipo_correcao_fallback:
+            percentual = IndiceReajuste.get_acumulado_periodo(
+                contrato.tipo_correcao_fallback,
+                inicio_ref.year, inicio_ref.month,
+                fim_ref.year, fim_ref.month,
+            )
+            if percentual is not None:
+                indice_tipo = contrato.tipo_correcao_fallback
+
+        # Spread
+        taxa_tabela = TabelaJurosContrato.get_juros_para_ciclo(contrato, ciclo)
+        usa_price = taxa_tabela is not None
+        spread = taxa_tabela if usa_price else (contrato.spread_reajuste or Decimal('0'))
+
+        percentual_final = None
+        if percentual is not None:
+            perc_com_spread = percentual + spread
+            piso = contrato.reajuste_piso or Decimal('-100')
+            teto = contrato.reajuste_teto or Decimal('999')
+            percentual_final = max(piso, min(teto, perc_com_spread))
+
+        # Prestação atual: primeiro valor_atual do ciclo (parcela NORMAL não paga preferencial)
+        from financeiro.models import Parcela as ParcelaModel  # evita circular
+        parcela_ref = ParcelaModel.objects.filter(
+            contrato=contrato,
+            numero_parcela=parcela_inicial,
+            tipo_parcela='NORMAL',
+        ).values('valor_atual').first()
+        prestacao_atual = parcela_ref['valor_atual'] if parcela_ref else None
+
+        # Estimativa da prestação nova (somente modo SIMPLES — Price recalcula PMT)
+        prestacao_nova = None
+        if prestacao_atual and percentual_final is not None and not usa_price:
+            prestacao_nova = prestacao_atual * (1 + percentual_final / 100)
+
         pendentes.append({
             'contrato': contrato,
             'ciclo': ciclo,
@@ -3440,10 +3488,15 @@ def reajustes_pendentes(request):
             'parcela_final': parcela_final,
             'periodo_referencia_inicio': inicio_ref,
             'periodo_referencia_fim': fim_ref,
-            'indice_tipo': contrato.tipo_correcao,
+            'indice_tipo': indice_tipo,
+            'percentual': percentual_final,        # None = sem dados ainda
+            'prestacao_atual': prestacao_atual,
+            'prestacao_nova': prestacao_nova,
+            'usa_price': usa_price,
+            'dados_disponiveis': percentual_final is not None,
         })
 
-    # Paginação sobre a lista plana de pendentes
+    # Paginação
     per_page = request.GET.get('per_page', '25')
     try:
         per_page = min(int(per_page), 100)
@@ -3453,7 +3506,6 @@ def reajustes_pendentes(request):
     paginator = Paginator(pendentes, per_page)
     page_obj = paginator.get_page(request.GET.get('page', 1))
 
-    # Agrupar apenas os itens da página atual por imobiliária
     from itertools import groupby
     pendentes_agrupados = []
     for imob_nome, grupo in groupby(list(page_obj), key=lambda x: x['contrato'].imobiliaria.nome):
@@ -3605,6 +3657,139 @@ def aplicar_reajuste_lote(request):
             total_ok += 1
         except Exception as e:
             logger.exception(f"Erro ao aplicar reajuste em lote no contrato {contrato_id}: {e}")
+            resultados.append({
+                'contrato_id': contrato_id,
+                'numero_contrato': getattr(contrato, 'numero_contrato', str(contrato_id)),
+                'sucesso': False,
+                'erro': str(e),
+            })
+            total_erro += 1
+
+    return JsonResponse({
+        'sucesso': True,
+        'total_processados': len(resultados),
+        'total_ok': total_ok,
+        'total_erro': total_erro,
+        'resultados': resultados,
+    })
+
+
+@login_required
+@require_POST
+def aplicar_reajuste_informado_lote(request):
+    """
+    Aplica um percentual INFORMADO pelo usuário em múltiplos contratos.
+
+    Diferente de aplicar_reajuste_lote (que usa o índice calculado),
+    este endpoint recebe um percentual_informado fixo e o aplica a todos
+    os contratos selecionados — útil para acordos, arredondamentos ou
+    quando o índice ainda não está disponível.
+
+    Corpo JSON:
+      - contrato_ids: lista de IDs de contratos (int[])
+      - percentual_informado: percentual a aplicar (Decimal)
+      - desconto_percentual: desconto em p.p. (opcional)
+      - desconto_valor: desconto em R$/parcela (opcional)
+      - observacoes: texto livre (opcional)
+    """
+    import json
+
+    try:
+        data = json.loads(request.body) if request.content_type == 'application/json' else request.POST
+    except (json.JSONDecodeError, Exception):
+        return JsonResponse({'sucesso': False, 'erro': 'Corpo da requisição inválido'}, status=400)
+
+    contrato_ids = data.get('contrato_ids', [])
+    if not contrato_ids:
+        return JsonResponse({'sucesso': False, 'erro': 'Nenhum contrato selecionado'}, status=400)
+
+    try:
+        percentual_informado = Decimal(str(data.get('percentual_informado', '')))
+    except Exception:
+        return JsonResponse({'sucesso': False, 'erro': 'percentual_informado inválido'}, status=400)
+
+    desconto_percentual = data.get('desconto_percentual') or None
+    desconto_valor = data.get('desconto_valor') or None
+    observacoes = data.get('observacoes', 'Reajuste informado em lote')
+
+    def get_client_ip(req):
+        x_forwarded = req.META.get('HTTP_X_FORWARDED_FOR')
+        if x_forwarded:
+            return x_forwarded.split(',')[0].strip()
+        return req.META.get('REMOTE_ADDR')
+
+    resultados = []
+    total_ok = 0
+    total_erro = 0
+
+    for contrato_id in contrato_ids:
+        try:
+            contrato = Contrato.objects.get(pk=int(contrato_id))
+        except (Contrato.DoesNotExist, ValueError):
+            resultados.append({'contrato_id': contrato_id, 'sucesso': False, 'erro': 'Contrato não encontrado'})
+            total_erro += 1
+            continue
+
+        ciclo = Reajuste.calcular_ciclo_pendente(contrato)
+        if ciclo is None:
+            resultados.append({
+                'contrato_id': contrato_id,
+                'numero_contrato': contrato.numero_contrato,
+                'sucesso': False,
+                'erro': 'Nenhum ciclo pendente',
+            })
+            total_erro += 1
+            continue
+
+        inicio_ref, fim_ref = Reajuste.calcular_periodo_referencia(contrato, ciclo)
+        prazo = contrato.prazo_reajuste_meses
+        parcela_inicial = (ciclo - 1) * prazo + 1
+        parcela_final = min(ciclo * prazo, contrato.numero_parcelas)
+
+        # Aplica piso/teto ao percentual informado
+        piso = contrato.reajuste_piso or Decimal('-100')
+        teto = contrato.reajuste_teto or Decimal('999')
+        perc_final = max(piso, min(teto, percentual_informado))
+
+        # Desconto
+        desc_pct = Decimal(str(desconto_percentual)) if desconto_percentual else Decimal('0')
+        desc_val = Decimal(str(desconto_valor)) if desconto_valor else None
+        perc_final = max(piso, perc_final - desc_pct)
+
+        try:
+            with transaction.atomic():
+                reajuste = Reajuste.objects.create(
+                    contrato=contrato,
+                    data_reajuste=timezone.now().date(),
+                    indice_tipo=contrato.tipo_correcao,
+                    percentual=perc_final,
+                    percentual_bruto=percentual_informado,
+                    desconto_percentual=Decimal(str(desconto_percentual)) if desconto_percentual else None,
+                    desconto_valor=desc_val,
+                    piso_aplicado=piso if piso != Decimal('-100') else None,
+                    teto_aplicado=teto if teto != Decimal('999') else None,
+                    parcela_inicial=parcela_inicial,
+                    parcela_final=parcela_final,
+                    ciclo=ciclo,
+                    periodo_referencia_inicio=inicio_ref,
+                    periodo_referencia_fim=fim_ref,
+                    aplicado_manual=True,
+                    usuario=request.user,
+                    ip_address=get_client_ip(request),
+                    observacoes=observacoes,
+                )
+                resultado = reajuste.aplicar_reajuste()
+            resultados.append({
+                'contrato_id': contrato_id,
+                'numero_contrato': contrato.numero_contrato,
+                'sucesso': True,
+                'ciclo': ciclo,
+                'percentual': float(perc_final),
+                'parcelas_reajustadas': resultado.get('parcelas_reajustadas', 0),
+            })
+            total_ok += 1
+        except Exception as e:
+            logger.exception('Erro ao aplicar reajuste informado no contrato %s: %s', contrato_id, e)
             resultados.append({
                 'contrato_id': contrato_id,
                 'numero_contrato': getattr(contrato, 'numero_contrato', str(contrato_id)),
