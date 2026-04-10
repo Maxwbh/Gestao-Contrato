@@ -14,7 +14,6 @@ Desenvolvedor: Maxwell da Silva Oliveira
 Email: maxwbh@gmail.com
 Empresa: M&S do Brasil LTDA
 """
-import io
 import time
 import logging
 import requests
