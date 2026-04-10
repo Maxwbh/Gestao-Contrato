@@ -143,6 +143,10 @@ class Command(BaseCommand):
                 templates_criados = self.criar_templates_notificacao()
                 self.stdout.write(f'   {templates_criados} templates criados/verificados')
 
+                # 16. Simular retornos CNAB para dashboard de Conciliação Bancária
+                self.stdout.write('Simulando retornos CNAB (dashboard Conciliação Bancária)...')
+                retornos_cnab = self.simular_historico_conciliacao(contas_bancarias)
+
             # Contagem final
             pf_count = len([c for c in compradores if c.tipo_pessoa == 'PF'])
             pj_count = len([c for c in compradores if c.tipo_pessoa == 'PJ'])
@@ -162,6 +166,7 @@ class Command(BaseCommand):
             self.stdout.write(self.style.SUCCESS(f'   • {reajustes} Reajustes Aplicados'))
             self.stdout.write(self.style.SUCCESS(f'   • {indices} Índices de Reajuste'))
             self.stdout.write(self.style.SUCCESS(f'   • {templates_criados} Templates de Notificação (Email+SMS+WhatsApp)'))
+            self.stdout.write(self.style.SUCCESS(f'   • {retornos_cnab} Arquivos de Retorno CNAB (conciliação bancária)'))
 
         except Exception as e:
             import traceback
@@ -781,11 +786,24 @@ class Command(BaseCommand):
 
                 valor_pago = parcela.valor_atual + parcela.valor_juros + parcela.valor_multa
 
+                # Variar origem de pagamento para testar conciliação
+                origens_variaveis = ['MANUAL', 'MANUAL', 'CNAB', 'OFX', 'MANUAL']
+                origem = origens_variaveis[i % len(origens_variaveis)]
+
                 parcela.registrar_pagamento(
                     valor_pago=valor_pago,
                     data_pagamento=data_pagamento,
-                    observacoes='Pagamento gerado automaticamente para teste'
+                    observacoes=f'Pagamento gerado automaticamente para teste ({origem})'
                 )
+
+                # Atualizar origem_pagamento no HistoricoPagamento recém criado
+                from financeiro.models import HistoricoPagamento
+                hist = HistoricoPagamento.objects.filter(parcela=parcela).order_by('-id').first()
+                if hist and origem != 'MANUAL':
+                    hist.origem_pagamento = origem
+                    if origem == 'OFX':
+                        hist.fitid_ofx = f'OFX{data_pagamento.strftime("%Y%m%d")}{parcela.pk:06d}'
+                    hist.save(update_fields=['origem_pagamento', 'fitid_ofx'])
 
     def simular_boletos_gerados(self, contratos, contas_bancarias):
         """
@@ -811,6 +829,9 @@ class Command(BaseCommand):
         for imob_id, contas in contas_por_imob.items():
             contas.sort(key=lambda c: (not c.principal, c.banco))
 
+        # Rastrear todas as contas que tiveram nosso_numero_atual incrementado
+        contas_modificadas: dict = {}
+
         for idx, contrato in enumerate(contratos):
             contas_imob = contas_por_imob.get(contrato.imobiliaria_id)
             if not contas_imob:
@@ -824,7 +845,7 @@ class Command(BaseCommand):
                 contrato.parcelas.filter(
                     pago=False,
                     data_vencimento__lt=hoje_date,
-                    status_boleto__in=['PENDENTE', 'ERRO']
+                    status_boleto=StatusBoleto.NAO_GERADO,
                 ).order_by('data_vencimento')[:5]
             )
 
@@ -833,7 +854,7 @@ class Command(BaseCommand):
                 contrato.parcelas.filter(
                     pago=False,
                     data_vencimento__gte=hoje_date,
-                    status_boleto__in=['PENDENTE', 'ERRO']
+                    status_boleto=StatusBoleto.NAO_GERADO,
                 ).order_by('data_vencimento')[:2]
             )
 
@@ -856,8 +877,12 @@ class Command(BaseCommand):
                     'numero_documento', 'data_geracao_boleto'
                 ])
                 count += 1
+                contas_modificadas[conta.pk] = conta
 
-            conta.save(update_fields=['nosso_numero_atual'])
+        # Salvar nosso_numero_atual de TODAS as contas que foram modificadas
+        # (bug fix: antes só salvava a última conta do loop)
+        for conta_mod in contas_modificadas.values():
+            conta_mod.save(update_fields=['nosso_numero_atual'])
 
         # Estatísticas por banco
         from financeiro.models import Parcela, StatusBoleto as SB
@@ -1525,3 +1550,127 @@ class Command(BaseCommand):
         except Exception as e:
             self.stdout.write(self.style.WARNING(f'   ⚠ Erro ao criar templates: {e}'))
             return 0
+
+    def simular_historico_conciliacao(self, contas_bancarias):
+        """
+        Cria ArquivoRetorno + ItemRetorno simulados para demonstrar o
+        dashboard de Conciliação Bancária com dados realistas.
+
+        - 1 ArquivoRetorno CNAB400 por conta bancária que tiver boletos GERADO
+        - ItemRetorno com tipo_ocorrencia LIQUIDACAO para 50% dos boletos com nosso_numero
+        - HistoricoPagamento.origem_pagamento atualizado para 'CNAB' nos pagamentos vinculados
+        """
+        from financeiro.models import (
+            ArquivoRetorno, ItemRetorno, Parcela, HistoricoPagamento, StatusBoleto,
+        )
+        from django.utils import timezone as tz
+
+        hoje = tz.now()
+        retornos_criados = 0
+        itens_criados = 0
+
+        for conta in contas_bancarias:
+            # Boletos GERADO com nosso_numero para simular retorno bancário
+            boletos = list(
+                Parcela.objects.filter(
+                    conta_bancaria=conta,
+                    status_boleto=StatusBoleto.GERADO,
+                    pago=False,
+                    nosso_numero__gt='',
+                ).order_by('data_vencimento')[:10]
+            )
+            if not boletos:
+                continue
+
+            # Criar ArquivoRetorno simulado
+            arquivo = ArquivoRetorno.objects.create(
+                conta_bancaria=conta,
+                nome_arquivo=f'RET_{conta.banco}_{hoje.strftime("%Y%m%d")}.RET',
+                data_upload=hoje,
+                status='PROCESSADO',
+                total_registros=len(boletos),
+                registros_processados=0,
+                registros_erro=0,
+                valor_total_pago=0,
+                data_processamento=hoje,
+            )
+            retornos_criados += 1
+
+            valor_total = 0
+            processados = 0
+
+            # Metade dos boletos: LIQUIDACAO (pago pelo banco)
+            for parcela in boletos[:len(boletos) // 2]:
+                data_ocorrencia = parcela.data_vencimento + timedelta(days=random.randint(0, 5))
+                if data_ocorrencia > hoje.date():
+                    data_ocorrencia = hoje.date()
+
+                valor_pago = float(parcela.valor_atual)
+
+                item = ItemRetorno.objects.create(
+                    arquivo_retorno=arquivo,
+                    nosso_numero=parcela.nosso_numero,
+                    parcela=parcela,
+                    codigo_ocorrencia='06',
+                    descricao_ocorrencia='Liquidação normal',
+                    tipo_ocorrencia='LIQUIDACAO',
+                    valor_titulo=valor_pago,
+                    valor_pago=valor_pago,
+                    data_ocorrencia=hoje.replace(
+                        year=data_ocorrencia.year,
+                        month=data_ocorrencia.month,
+                        day=data_ocorrencia.day,
+                    ),
+                    data_credito=hoje.replace(
+                        year=data_ocorrencia.year,
+                        month=data_ocorrencia.month,
+                        day=data_ocorrencia.day,
+                    ),
+                    processado=True,
+                )
+                itens_criados += 1
+
+                # Registrar pagamento via CNAB
+                parcela.registrar_pagamento_boleto(
+                    valor_pago=Decimal(str(valor_pago)),
+                    data_pagamento=data_ocorrencia,
+                    banco_pagador=conta.banco,
+                    validar_minimo=False,
+                )
+
+                # Vincular ItemRetorno ao HistoricoPagamento criado
+                hist = HistoricoPagamento.objects.filter(parcela=parcela).order_by('-id').first()
+                if hist:
+                    hist.origem_pagamento = 'CNAB'
+                    hist.item_retorno = item
+                    hist.save(update_fields=['origem_pagamento', 'item_retorno'])
+
+                valor_total += valor_pago
+                processados += 1
+
+            # Demais boletos: OUTROS (entrada de registro, sem baixa)
+            for parcela in boletos[len(boletos) // 2:]:
+                ItemRetorno.objects.create(
+                    arquivo_retorno=arquivo,
+                    nosso_numero=parcela.nosso_numero,
+                    parcela=parcela,
+                    codigo_ocorrencia='02',
+                    descricao_ocorrencia='Entrada confirmada',
+                    tipo_ocorrencia='OUTROS',
+                    valor_titulo=float(parcela.valor_atual),
+                    valor_pago=None,
+                    data_ocorrencia=hoje,
+                    processado=True,
+                )
+                itens_criados += 1
+
+            # Atualizar totais no arquivo
+            arquivo.registros_processados = processados
+            arquivo.valor_total_pago = Decimal(str(valor_total))
+            arquivo.save(update_fields=['registros_processados', 'valor_total_pago'])
+
+        if retornos_criados:
+            self.stdout.write(
+                f'   → {retornos_criados} arquivos de retorno CNAB · {itens_criados} itens criados'
+            )
+        return retornos_criados

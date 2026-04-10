@@ -740,8 +740,14 @@ class Parcela(TimeStampedModel):
                                     banco_pagador='', agencia_pagadora='',
                                     validar_minimo=True):
         """Registra o pagamento do boleto com dados bancários"""
+        from datetime import date as date_type, datetime
         if data_pagamento is None:
             data_pagamento = timezone.now()
+        elif isinstance(data_pagamento, date_type) and not isinstance(data_pagamento, datetime):
+            # Converter date → datetime aware para evitar RuntimeWarning
+            data_pagamento = timezone.make_aware(
+                datetime.combine(data_pagamento, datetime.min.time())
+            )
 
         self.status_boleto = StatusBoleto.PAGO
         self.data_pagamento_boleto = data_pagamento
