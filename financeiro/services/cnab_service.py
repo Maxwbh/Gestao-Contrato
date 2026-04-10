@@ -14,7 +14,6 @@ Desenvolvedor: Maxwell da Silva Oliveira
 Email: maxwbh@gmail.com
 Empresa: M&S do Brasil LTDA
 """
-import io
 import time
 import logging
 import requests
@@ -380,22 +379,27 @@ class CNABService:
             valor_total += parcela.valor_boleto or parcela.valor_atual
 
         try:
-            # A API /api/remessa espera multipart/form-data:
-            #   bank  → campo de texto (ex: 'banco_brasil')
-            #   type  → campo de texto ('cnab240' | 'cnab400')
-            #   data  → arquivo JSON com um Hash/objeto:
-            #           {
-            #             empresa_mae, documento_cedente, agencia, agencia_dv,
-            #             conta_corrente, digito_conta, convenio, carteira,
-            #             sequencial_remessa, codigo_cedente,
-            #             "pagamentos": [{nosso_numero, valor, sacado, ...}, ...]
-            #           }
-            # IMPORTANTE: campos do cedente (agencia, conta_corrente, convenio, carteira,
-            # cedente, documento_cedente) devem ficar APENAS no root — NÃO dentro de cada
-            # pagamento. Duplicar esses campos causa NoMethodError no Ruby (merge on Array).
+            # A API /api/remessa espera POST com JSON body:
+            #   {
+            #     "banco":   "banco_brasil",    ← nome do banco (keyword obrigatório)
+            #     "formato": "cnab240",          ← layout (keyword obrigatório)
+            #     "empresa_mae": "...",          ← campos do cedente no root
+            #     "documento_cedente": "...",
+            #     "agencia": "...", "agencia_dv": "...",
+            #     "conta_corrente": "...", "digito_conta": "...",
+            #     "convenio": "...", "carteira": "...",
+            #     "sequencial_remessa": N, "codigo_cedente": "...",
+            #     "pagamentos": [{nosso_numero, valor, sacado, ...}, ...]
+            #   }
+            # NOTA: campos do cedente NÃO devem ser repetidos em cada pagamento.
+            # NOTA: usar json= (não multipart/files) — API espera body JSON.
             tipo_cnab = 'cnab240' if layout == 'CNAB_240' else 'cnab400'
-            payload = {**dados_empresa, 'pagamentos': pagamentos}
-            data_json = json.dumps(payload, ensure_ascii=False).encode('utf-8')
+            payload = {
+                'banco': banco,
+                'formato': tipo_cnab,
+                **dados_empresa,
+                'pagamentos': pagamentos,
+            }
 
             descricao_conta = getattr(conta_bancaria, 'descricao', None) or str(conta_bancaria)
             logger.info(
@@ -417,13 +421,7 @@ class CNABService:
             for _tentativa in range(_max_tentativas):
                 _response = requests.post(
                     f'{self.brcobranca_url}/api/remessa',
-                    data={
-                        'bank': banco,
-                        'type': tipo_cnab,
-                    },
-                    files={
-                        'data': ('remessa.json', io.BytesIO(data_json), 'application/json'),
-                    },
+                    json=payload,
                     headers={'Accept': 'application/vnd.BoletoApi-v1+json'},
                     timeout=60
                 )
