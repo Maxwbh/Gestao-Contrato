@@ -20,6 +20,9 @@ urlpatterns = [
     # Ações AJAX
     path('<int:pk>/reenviar/', views.reenviar_notificacao_ajax, name='reenviar'),
 
+    # Click-tracking de e-mail (sem login — acessado pelo destinatário)
+    path('track/<uuid:token>/click/', views.track_click, name='track_click'),
+
     # CRUD Configuracao de Email
     path('email/', views.ConfiguracaoEmailListView.as_view(), name='listar_config_email'),
     path('email/novo/', views.ConfiguracaoEmailCreateView.as_view(), name='criar_config_email'),

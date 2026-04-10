@@ -481,6 +481,7 @@ _STATUS_ENTREGA_LABELS = {
 }
 
 _STATUS_ENTREGA_CHOICES = [
+    # Twilio SMS/WhatsApp
     ('accepted', 'Aceito'),
     ('queued', 'Enfileirado'),
     ('sending', 'Enviando'),
@@ -489,6 +490,10 @@ _STATUS_ENTREGA_CHOICES = [
     ('undelivered', 'Não entregue'),
     ('failed', 'Falhou'),
     ('read', 'Lido'),
+    # E-mail — rastreamento local
+    ('clicked', 'Clicado (link)'),
+    ('bounced', 'Bounce (NDR)'),
+    ('opened', 'Aberto (pixel)'),
 ]
 
 
@@ -634,6 +639,40 @@ def _get_twilio_auth_token():
 
     from django.conf import settings as _s
     return getattr(_s, 'TWILIO_AUTH_TOKEN', '')
+
+
+def track_click(request, token):
+    """
+    Registra o clique no link do boleto e redireciona para o download.
+
+    URL: /notificacoes/track/<uuid>/click/
+    Sem autenticação — acessado pelo destinatário do e-mail.
+
+    O destino é reconstruído a partir da parcela vinculada à notificação,
+    eliminando qualquer risco de open-redirect por parâmetro de URL.
+    """
+    from django.conf import settings as _s
+    from django.shortcuts import redirect as _redirect
+
+    message_id = f"<{token}@gestao-contrato>"
+
+    # Atualizar status da notificação
+    Notificacao.objects.filter(external_id=message_id).update(
+        status_entrega='clicked',
+        data_confirmacao=timezone.now(),
+    )
+    logger.info('[ClickTracking] token=%s message_id=%s', token, message_id)
+
+    # Destino: URL de download do boleto (reconstruído a partir da parcela)
+    # Procura a notificação para obter a parcela
+    notificacao = Notificacao.objects.filter(external_id=message_id).select_related('parcela').first()
+    if notificacao and notificacao.parcela_id:
+        site_url = getattr(_s, 'SITE_URL', '').rstrip('/')
+        destino = f"{site_url}/financeiro/parcelas/{notificacao.parcela_id}/boleto/download/"
+    else:
+        destino = getattr(_s, 'SITE_URL', '') or '/'
+
+    return _redirect(destino)
 
 
 @csrf_exempt
