@@ -26,7 +26,8 @@ class StatusNotificacao(models.TextChoices):
 
 
 class StatusEntrega(models.TextChoices):
-    """Status de entrega retornado pelo provedor (Twilio, etc.)"""
+    """Status de entrega retornado pelo provedor ou detectado localmente."""
+    # Twilio SMS/WhatsApp
     ACEITO = 'accepted', 'Aceito'
     ENFILEIRADO = 'queued', 'Enfileirado'
     ENVIANDO = 'sending', 'Enviando'
@@ -35,6 +36,10 @@ class StatusEntrega(models.TextChoices):
     NAO_ENTREGUE = 'undelivered', 'Não entregue'
     FALHOU = 'failed', 'Falhou'
     LIDO = 'read', 'Lido'
+    # E-mail — rastreamento local
+    CLICADO = 'clicked', 'Clicado (link)'
+    BOUNCED = 'bounced', 'Bounce (NDR)'
+    ABERTO = 'opened', 'Aberto (pixel)'
 
 
 class ConfiguracaoEmail(TimeStampedModel):
