@@ -126,6 +126,32 @@ class CNABService:
                 return 0.0
         return 0.0
 
+    def _buscar_parcela_por_nosso_numero(self, nosso_numero: str, conta_bancaria=None):
+        """
+        Busca Parcela pelo nosso_numero com fallback de strip de zeros à esquerda.
+
+        Estratégia (por conta_bancaria quando fornecida):
+        1. Exact match + conta_bancaria
+        2. endswith(stripped) + conta_bancaria  ← CNAB envia zero-padded, DB pode ter curto
+        3. Exact match global
+        4. endswith(stripped) global
+        """
+        nn_stripped = nosso_numero.lstrip('0') if nosso_numero else ''
+
+        if conta_bancaria:
+            qs_conta = Parcela.objects.filter(conta_bancaria=conta_bancaria)
+            parcela = qs_conta.filter(nosso_numero=nosso_numero).first()
+            if not parcela and nn_stripped:
+                parcela = qs_conta.filter(nosso_numero__endswith=nn_stripped).first()
+            if parcela:
+                return parcela
+
+        # Fallback global (sem filtro de conta)
+        parcela = Parcela.objects.filter(nosso_numero=nosso_numero).first()
+        if not parcela and nn_stripped:
+            parcela = Parcela.objects.filter(nosso_numero__endswith=nn_stripped).first()
+        return parcela
+
     def _parsear_numero_dv(self, valor: str) -> tuple:
         """Separa número e dígito verificador. Aceita '1234-5' ou '1234 5' ou '1234'."""
         if not valor:
@@ -727,15 +753,9 @@ class CNABService:
                         if codigo_ocorrencia in OCORRENCIAS_CNAB:
                             tipo_ocorrencia, descricao = OCORRENCIAS_CNAB[codigo_ocorrencia]
 
-                        # Buscar parcela — prioriza conta_bancaria do arquivo para
-                        # evitar match cruzado quando dois clientes têm nosso_numero igual
+                        # Buscar parcela — exact match + fallback zero-pad, prioriza conta
                         conta = arquivo_retorno.conta_bancaria
-                        qs = Parcela.objects.filter(nosso_numero=nosso_numero)
-                        if conta:
-                            qs_conta = qs.filter(conta_bancaria=conta)
-                            parcela = qs_conta.first() or qs.first()
-                        else:
-                            parcela = qs.first()
+                        parcela = self._buscar_parcela_por_nosso_numero(nosso_numero, conta)
 
                         # Idempotência: não duplicar ItemRetorno para mesmo nosso_numero
                         item, criado = ItemRetorno.objects.get_or_create(
@@ -864,15 +884,9 @@ class CNABService:
                         if codigo_ocorrencia in OCORRENCIAS_CNAB:
                             tipo_ocorrencia, descricao = OCORRENCIAS_CNAB[codigo_ocorrencia]
 
-                        # Buscar parcela — prioriza conta_bancaria do arquivo para
-                        # evitar match cruzado quando dois clientes têm nosso_numero igual
+                        # Buscar parcela — exact match + fallback zero-pad, prioriza conta
                         conta = arquivo_retorno.conta_bancaria
-                        qs = Parcela.objects.filter(nosso_numero=nosso_numero)
-                        if conta:
-                            qs_conta = qs.filter(conta_bancaria=conta)
-                            parcela = qs_conta.first() or qs.first()
-                        else:
-                            parcela = qs.first()
+                        parcela = self._buscar_parcela_por_nosso_numero(nosso_numero, conta)
 
                         # Idempotência: não duplicar ItemRetorno para mesmo nosso_numero
                         item, criado = ItemRetorno.objects.get_or_create(
