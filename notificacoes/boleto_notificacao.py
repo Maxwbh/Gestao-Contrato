@@ -11,6 +11,7 @@ Empresa: M&S do Brasil LTDA
 import logging
 from decimal import Decimal
 from datetime import date, timedelta
+from uuid import uuid4
 from django.conf import settings
 from django.core.mail import EmailMultiAlternatives
 from django.utils import timezone
@@ -203,11 +204,13 @@ class BoletoNotificacaoService:
 
             # Enviar email
             try:
+                message_id = f"<{uuid4()}@gestao-contrato>"
                 email = EmailMultiAlternatives(
                     subject=assunto,
                     body=corpo_texto,
                     from_email=settings.DEFAULT_FROM_EMAIL,
-                    to=[destinatario_final]
+                    to=[destinatario_final],
+                    headers={'Message-ID': message_id},
                 )
 
                 # Adicionar versão HTML se disponível
@@ -239,9 +242,10 @@ class BoletoNotificacaoService:
                         logger.warning(f"PDF do boleto não disponível para parcela {parcela.pk}")
 
                 email.send()
-                notificacao.marcar_como_enviada()
+                notificacao.marcar_como_enviada(external_id=message_id)
 
-                logger.info(f"Email de boleto enviado para {destinatario_final} - Parcela {parcela.pk}")
+                logger.info("Email de boleto enviado para %s - Parcela %s (id=%s)",
+                            destinatario_final, parcela.pk, message_id)
                 return {
                     'sucesso': True,
                     'notificacao_id': notificacao.pk,
@@ -331,9 +335,10 @@ class BoletoNotificacaoService:
             )
 
             try:
-                ServicoSMS.enviar(destinatario=numero, mensagem=mensagem)
-                notificacao.marcar_como_enviada()
-                logger.info(f"SMS de boleto enviado para {numero_final} - Parcela {parcela.pk}")
+                _, sid = ServicoSMS.enviar(destinatario=numero, mensagem=mensagem)
+                notificacao.marcar_como_enviada(external_id=sid)
+                logger.info("SMS de boleto enviado para %s - Parcela %s (sid=%s)",
+                            numero_final, parcela.pk, sid)
                 return {
                     'sucesso': True,
                     'notificacao_id': notificacao.pk,

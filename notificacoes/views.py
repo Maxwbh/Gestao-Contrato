@@ -10,9 +10,11 @@ from django.contrib.auth.mixins import LoginRequiredMixin
 from django.views.generic import ListView, CreateView, UpdateView, DeleteView
 from django.urls import reverse_lazy
 from django.contrib import messages
-from django.http import JsonResponse
-from django.db.models import Q
+from django.http import JsonResponse, HttpResponse, HttpResponseNotAllowed
+from django.db.models import Q, Count
 from django.core.paginator import Paginator
+from django.views.decorators.csrf import csrf_exempt
+from django.utils import timezone
 from core.mixins import PaginacaoMixin
 import logging
 
@@ -21,7 +23,7 @@ logger = logging.getLogger(__name__)
 from .models import (
     Notificacao, TemplateNotificacao,
     ConfiguracaoEmail, ConfiguracaoSMS, ConfiguracaoWhatsApp,
-    RegraNotificacao, TipoGatilho, TipoNotificacao,
+    RegraNotificacao, TipoGatilho, TipoNotificacao, StatusNotificacao,
 )
 from .forms import ConfiguracaoEmailForm, TemplateNotificacaoForm
 
@@ -460,3 +462,228 @@ def toggle_regra_notificacao(request, pk):
         regra.save(update_fields=['ativo'])
         return JsonResponse({'sucesso': True, 'ativo': regra.ativo})
     return JsonResponse({'sucesso': False}, status=405)
+
+
+# =============================================================================
+# PAINEL DE CONTROLE DE MENSAGENS
+# =============================================================================
+
+# Mapeamento de status de entrega Twilio → label PT-BR
+_STATUS_ENTREGA_LABELS = {
+    'accepted': 'Aceito',
+    'queued': 'Enfileirado',
+    'sending': 'Enviando',
+    'sent': 'Enviado',
+    'delivered': 'Entregue',
+    'undelivered': 'Não entregue',
+    'failed': 'Falhou',
+    'read': 'Lido',
+}
+
+_STATUS_ENTREGA_CHOICES = [
+    ('accepted', 'Aceito'),
+    ('queued', 'Enfileirado'),
+    ('sending', 'Enviando'),
+    ('sent', 'Enviado'),
+    ('delivered', 'Entregue'),
+    ('undelivered', 'Não entregue'),
+    ('failed', 'Falhou'),
+    ('read', 'Lido'),
+]
+
+
+@login_required
+def painel_mensagens(request):
+    """
+    Painel de controle de mensagens: histórico completo com status de envio
+    e confirmação de entrega (SMS/WhatsApp via Twilio webhook; e-mail via Message-ID).
+    """
+    qs = Notificacao.objects.select_related('parcela').all()
+
+    # --- Filtros ---
+    f_tipo = request.GET.get('tipo', '').strip()
+    f_status = request.GET.get('status', '').strip()
+    f_status_entrega = request.GET.get('status_entrega', '').strip()
+    f_data_inicio = request.GET.get('data_inicio', '').strip()
+    f_data_fim = request.GET.get('data_fim', '').strip()
+    f_busca = request.GET.get('busca', '').strip()
+
+    if f_tipo:
+        qs = qs.filter(tipo=f_tipo)
+    if f_status:
+        qs = qs.filter(status=f_status)
+    if f_status_entrega:
+        qs = qs.filter(status_entrega=f_status_entrega)
+    if f_data_inicio:
+        try:
+            qs = qs.filter(data_agendamento__date__gte=f_data_inicio)
+        except Exception:
+            pass
+    if f_data_fim:
+        try:
+            qs = qs.filter(data_agendamento__date__lte=f_data_fim)
+        except Exception:
+            pass
+    if f_busca:
+        qs = qs.filter(
+            Q(destinatario__icontains=f_busca) |
+            Q(assunto__icontains=f_busca) |
+            Q(external_id__icontains=f_busca)
+        )
+
+    qs = qs.order_by('-data_agendamento')
+
+    # --- Agregações (sobre o queryset filtrado) ---
+    stats_status = {}
+    for row in qs.values('status').annotate(c=Count('id')):
+        stats_status[row['status']] = row['c']
+
+    stats_tipo = {}
+    for row in qs.values('tipo').annotate(c=Count('id')):
+        stats_tipo[row['tipo']] = row['c']
+
+    stats_entrega = {}
+    for row in qs.exclude(status_entrega='').values('status_entrega').annotate(c=Count('id')):
+        stats_entrega[row['status_entrega']] = row['c']
+
+    total = qs.count()
+    total_entregues = stats_entrega.get('delivered', 0) + stats_entrega.get('read', 0)
+    total_falhos = stats_entrega.get('failed', 0) + stats_entrega.get('undelivered', 0)
+    total_sem_confirmacao = qs.filter(
+        status=StatusNotificacao.ENVIADA,
+        status_entrega=''
+    ).count()
+
+    # --- Paginação ---
+    per_page = request.GET.get('per_page', '25')
+    try:
+        per_page = min(int(per_page), 100)
+    except (ValueError, TypeError):
+        per_page = 25
+
+    paginator = Paginator(qs, per_page)
+    page_obj = paginator.get_page(request.GET.get('page', 1))
+
+    context = {
+        'notificacoes': page_obj,
+        'page_obj': page_obj,
+        'paginator': paginator,
+        'is_paginated': paginator.num_pages > 1,
+        'total': total,
+        'total_entregues': total_entregues,
+        'total_falhos': total_falhos,
+        'total_sem_confirmacao': total_sem_confirmacao,
+        'stats_status': stats_status,
+        'stats_tipo': stats_tipo,
+        'stats_entrega': stats_entrega,
+        'status_entrega_labels': _STATUS_ENTREGA_LABELS,
+        # Filtros para manter na forma
+        'f_tipo': f_tipo,
+        'f_status': f_status,
+        'f_status_entrega': f_status_entrega,
+        'f_data_inicio': f_data_inicio,
+        'f_data_fim': f_data_fim,
+        'f_busca': f_busca,
+        'tipos_notificacao': TipoNotificacao.choices,
+        'status_notificacao_choices': StatusNotificacao.choices,
+        'status_entrega_choices': _STATUS_ENTREGA_CHOICES,
+    }
+    return render(request, 'notificacoes/painel_mensagens.html', context)
+
+
+@login_required
+def reenviar_notificacao_ajax(request, pk):
+    """
+    Recoloca a notificação como PENDENTE e enfileira reenvio via Celery (AJAX POST).
+    Limpa external_id e status_entrega anteriores.
+    """
+    if request.method != 'POST':
+        return JsonResponse({'sucesso': False, 'erro': 'Método não permitido'}, status=405)
+
+    notificacao = get_object_or_404(Notificacao, pk=pk)
+
+    notificacao.status = StatusNotificacao.PENDENTE
+    notificacao.erro_mensagem = ''
+    notificacao.external_id = ''
+    notificacao.status_entrega = ''
+    notificacao.data_confirmacao = None
+    notificacao.save(update_fields=[
+        'status', 'erro_mensagem', 'external_id', 'status_entrega', 'data_confirmacao'
+    ])
+
+    from .tasks import reenviar_notificacao as _task
+    _task.delay(pk)
+
+    logger.info("[Painel] Reenvio enfileirado para notificacao pk=%s", pk)
+    return JsonResponse({'sucesso': True})
+
+
+# =============================================================================
+# WEBHOOK TWILIO — Confirmação de entrega SMS / WhatsApp
+# =============================================================================
+
+def _get_twilio_auth_token():
+    """Retorna o Twilio auth_token do banco ou das settings."""
+    config_sms = ConfiguracaoSMS.objects.filter(ativo=True, provedor='TWILIO').first()
+    if config_sms and config_sms.auth_token:
+        return config_sms.auth_token
+
+    config_wa = ConfiguracaoWhatsApp.objects.filter(ativo=True, provedor='TWILIO').first()
+    if config_wa and config_wa.auth_token:
+        return config_wa.auth_token
+
+    from django.conf import settings as _s
+    return getattr(_s, 'TWILIO_AUTH_TOKEN', '')
+
+
+@csrf_exempt
+def webhook_twilio(request):
+    """
+    Recebe callbacks de status de entrega do Twilio (SMS e WhatsApp).
+
+    Twilio posta para esta URL (configurada em TWILIO_STATUS_CALLBACK_URL ou
+    diretamente no console Twilio) quando o status de uma mensagem muda.
+    Campos recebidos: MessageSid, MessageStatus, To, From, AccountSid.
+
+    Valida a assinatura X-Twilio-Signature antes de processar.
+    Atualiza Notificacao.status_entrega e Notificacao.data_confirmacao.
+    """
+    if request.method != 'POST':
+        return HttpResponseNotAllowed(['POST'])
+
+    # Validar assinatura Twilio
+    auth_token = _get_twilio_auth_token()
+    if auth_token:
+        try:
+            from twilio.request_validator import RequestValidator
+            validator = RequestValidator(auth_token)
+            url = request.build_absolute_uri()
+            signature = request.META.get('HTTP_X_TWILIO_SIGNATURE', '')
+            if not validator.validate(url, request.POST, signature):
+                logger.warning(
+                    '[Webhook Twilio] Assinatura inválida — ip=%s url=%s',
+                    request.META.get('REMOTE_ADDR'), url
+                )
+                return HttpResponse('Forbidden', status=403)
+        except ImportError:
+            logger.warning('[Webhook Twilio] twilio.request_validator não disponível — ignorando validação')
+        except Exception as exc:
+            logger.warning('[Webhook Twilio] Erro na validação de assinatura: %s', exc)
+            return HttpResponse('Forbidden', status=403)
+
+    message_sid = request.POST.get('MessageSid', '').strip()
+    message_status = request.POST.get('MessageStatus', '').strip()
+
+    if not message_sid or not message_status:
+        return HttpResponse('Bad Request', status=400)
+
+    updated = Notificacao.objects.filter(external_id=message_sid).update(
+        status_entrega=message_status,
+        data_confirmacao=timezone.now(),
+    )
+
+    logger.info(
+        '[Webhook Twilio] SID=%s status=%s registros_atualizados=%d',
+        message_sid, message_status, updated
+    )
+    return HttpResponse('OK', status=200)
