@@ -201,7 +201,7 @@
                     <dt class="col-sm-3">Destinatário</dt><dd class="col-sm-9" id="mdDestinatario"></dd>
                     <dt class="col-sm-3">Assunto</dt><dd class="col-sm-9" id="mdAssunto"></dd>
                     <dt class="col-sm-3">Status</dt><dd class="col-sm-9" id="mdStatus"></dd>
-                    <dt class="col-sm-3">Entrega</dt><dd class="col-sm-9" id="mdEntrega"></dd>
+                    <dt class="col-sm-3">Entrega / Engajamento</dt><dd class="col-sm-9" id="mdEntrega"></dd>
                     <dt class="col-sm-3">ID Externo</dt><dd class="col-sm-9 text-break font-monospace small" id="mdExtId"></dd>
                     <dt class="col-sm-3">Confirmação</dt><dd class="col-sm-9" id="mdConfirmacao"></dd>
                     <dt class="col-sm-3">Erro</dt><dd class="col-sm-9 text-danger" id="mdErro"></dd>
@@ -273,14 +273,19 @@ function statusEntregaRenderer(params) {
     const v = params.value || '';
     if (!v) return '<span class="text-muted small">—</span>';
     const cfg = {
-        'delivered':   ['bg-success',        'Entregue'],
-        'read':        ['bg-success',         'Lido'],
-        'sent':        ['bg-primary',         'Enviado'],
-        'sending':     ['bg-info text-dark',  'Enviando'],
-        'queued':      ['bg-warning text-dark','Enfileirado'],
-        'accepted':    ['bg-warning text-dark','Aceito'],
-        'undelivered': ['bg-danger',          'Não entregue'],
-        'failed':      ['bg-danger',          'Falhou'],
+        // Twilio SMS/WhatsApp
+        'delivered':   ['bg-success',          'Entregue'],
+        'read':        ['bg-success',           'Lido'],
+        'sent':        ['bg-primary',           'Enviado'],
+        'sending':     ['bg-info text-dark',    'Enviando'],
+        'queued':      ['bg-warning text-dark', 'Enfileirado'],
+        'accepted':    ['bg-warning text-dark', 'Aceito'],
+        'undelivered': ['bg-danger',            'Não entregue'],
+        'failed':      ['bg-danger',            'Falhou'],
+        // E-mail — rastreamento local
+        'clicked':     ['bg-success',           '🔗 Clicado'],
+        'bounced':     ['bg-danger',            '↩ Bounce'],
+        'opened':      ['bg-info text-dark',    '👁 Aberto'],
     };
     const [cls, label] = cfg[v] || ['bg-secondary', v];
     return `<span class="badge ${cls}">${label}</span>`;

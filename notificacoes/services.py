@@ -73,6 +73,13 @@ class ServicoEmail:
             # Gerar Message-ID único para rastreamento
             message_id = f"<{uuid4()}@gestao-contrato>"
 
+            # Cabeçalhos: Message-ID + Return-Path (bounce monitoring)
+            headers = {'Message-ID': message_id}
+            bounce_addr = getattr(settings, 'BOUNCE_EMAIL_ADDRESS', '')
+            if bounce_addr:
+                headers['Return-Path'] = bounce_addr
+                headers['Errors-To'] = bounce_addr
+
             # Buscar configuração ativa
             config = ConfiguracaoEmail.objects.filter(ativo=True).first()
 
@@ -84,7 +91,7 @@ class ServicoEmail:
                     body=mensagem,
                     from_email=settings.DEFAULT_FROM_EMAIL,
                     to=[destinatario],
-                    headers={'Message-ID': message_id},
+                    headers=headers,
                 )
                 email.send(fail_silently=False)
             else:
@@ -108,7 +115,7 @@ class ServicoEmail:
                     from_email=f"{config.nome_remetente} <{config.email_remetente}>",
                     to=[destinatario],
                     connection=connection,
-                    headers={'Message-ID': message_id},
+                    headers=headers,
                 )
                 email.send()
 
