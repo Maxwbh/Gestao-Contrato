@@ -319,10 +319,10 @@ class TestCNABServiceIntegracao(TestCase):
 
     @patch('requests.post')
     def test_gerar_remessa_erro_api(self, mock_post):
-        """Testa geração de remessa com erro da API"""
+        """Testa geração de remessa com erro HTTP da API — deve acionar fallback local"""
         from financeiro.models import Parcela, StatusBoleto
 
-        # Mock de erro da API
+        # Mock de erro da API (5xx)
         mock_response = MagicMock()
         mock_response.status_code = 500
         mock_response.text = 'Internal Server Error'
@@ -337,8 +337,9 @@ class TestCNABServiceIntegracao(TestCase):
 
         resultado = service.gerar_remessa(parcelas, self.conta_bancaria)
 
-        self.assertFalse(resultado['sucesso'])
-        self.assertIn('Erro BRCobranca', resultado['erro'])
+        # HTTP error aciona fallback local — deve ter sucesso
+        self.assertTrue(resultado['sucesso'])
+        self.assertIn('arquivo_remessa', resultado)
 
     @patch('requests.post')
     def test_gerar_remessa_api_indisponivel_fallback_local(self, mock_post):
