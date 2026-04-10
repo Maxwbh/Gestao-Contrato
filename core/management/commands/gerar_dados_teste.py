@@ -143,7 +143,12 @@ class Command(BaseCommand):
                 templates_criados = self.criar_templates_notificacao()
                 self.stdout.write(f'   {templates_criados} templates criados/verificados')
 
-                # 16. Simular retornos CNAB para dashboard de Conciliação Bancária
+                # 16. Gerar arquivo remessa CNAB para boletos simulados
+                self.stdout.write('Gerando arquivos de remessa CNAB...')
+                remessas_geradas = self.gerar_remessas_cnab()
+                self.stdout.write(f'   {remessas_geradas} arquivo(s) de remessa gerado(s)')
+
+                # 17. Simular retornos CNAB para dashboard de Conciliação Bancária
                 self.stdout.write('Simulando retornos CNAB (dashboard Conciliação Bancária)...')
                 retornos_cnab = self.simular_historico_conciliacao(contas_bancarias)
 
@@ -161,6 +166,7 @@ class Command(BaseCommand):
             self.stdout.write(self.style.SUCCESS(f'   • {len(contratos)} Contratos'))
             self.stdout.write(self.style.SUCCESS(f'   • {tabela_juros_count} Faixas de Juros Escalantes (TabelaJurosContrato)'))
             self.stdout.write(self.style.SUCCESS(f'   • {boletos_simulados} Boletos Simulados (prontos para remessa)'))
+            self.stdout.write(self.style.SUCCESS(f'   • {remessas_geradas} Arquivos de Remessa CNAB gerados'))
             self.stdout.write(self.style.SUCCESS(f'   • {intermediarias} Prestações Intermediárias'))
             self.stdout.write(self.style.SUCCESS(f'   • {acessos} Acessos ao Portal'))
             self.stdout.write(self.style.SUCCESS(f'   • {reajustes} Reajustes Aplicados'))
@@ -1550,6 +1556,55 @@ class Command(BaseCommand):
         except Exception as e:
             self.stdout.write(self.style.WARNING(f'   ⚠ Erro ao criar templates: {e}'))
             return 0
+
+    def gerar_remessas_cnab(self):
+        """
+        Gera arquivos de remessa CNAB para os boletos simulados.
+        Agrupa por conta bancária e chama CNABService.gerar_remessa()
+        com fallback local (sem BRCobrança necessário).
+        Retorna o número de remessas geradas.
+        """
+        from financeiro.models import Parcela, StatusBoleto, ArquivoRemessa
+        from financeiro.services.cnab_service import CNABService
+
+        service = CNABService()
+        count = 0
+
+        # Coletar IDs de boletos GERADO não pagos ainda sem remessa
+        parcela_ids = list(
+            Parcela.objects.filter(
+                status_boleto=StatusBoleto.GERADO,
+                pago=False,
+                nosso_numero__gt='',
+            ).exclude(
+                itens_remessa__isnull=False
+            ).values_list('pk', flat=True)
+        )
+
+        if not parcela_ids:
+            self.stdout.write('   Nenhum boleto disponível para remessa — pulando.')
+            return 0
+
+        try:
+            resultado = service.gerar_remessas_por_escopo(
+                parcela_ids=parcela_ids,
+                layout='CNAB_400',
+            )
+            remessas = resultado.get('remessas_geradas', [])
+            erros = resultado.get('erros', [])
+            count = len(remessas)
+            for r in remessas:
+                self.stdout.write(
+                    f"   → Remessa #{r.get('numero_remessa')} "
+                    f"— {r.get('banco', '')} "
+                    f"({r.get('total_boletos', 0)} boletos)"
+                )
+            for e in erros:
+                self.stdout.write(self.style.WARNING(f'   ⚠ {e}'))
+        except Exception as exc:
+            self.stdout.write(self.style.WARNING(f'   ⚠ Erro ao gerar remessa: {exc}'))
+
+        return count
 
     def simular_historico_conciliacao(self, contas_bancarias):
         """
