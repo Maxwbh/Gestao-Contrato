@@ -231,16 +231,19 @@ class HistoricoPagamentoAdmin(admin.ModelAdmin):
         'data_pagamento',
         'valor_pago_display',
         'forma_pagamento',
+        'origem_pagamento',
         'criado_em'
     ]
     list_filter = [
         'forma_pagamento',
+        'origem_pagamento',
         'data_pagamento',
         'criado_em'
     ]
     search_fields = [
         'parcela__contrato__numero_contrato',
-        'parcela__contrato__comprador__nome'
+        'parcela__contrato__comprador__nome',
+        'fitid_ofx',
     ]
     readonly_fields = ['criado_em', 'atualizado_em']
     autocomplete_fields = ['parcela']
@@ -268,6 +271,13 @@ class HistoricoPagamentoAdmin(admin.ModelAdmin):
                 'comprovante',
                 'observacoes'
             )
+        }),
+        ('Conciliação Bancária', {
+            'fields': (
+                'origem_pagamento',
+                'item_retorno',
+                'fitid_ofx',
+            ),
         }),
         ('Metadados', {
             'fields': (
