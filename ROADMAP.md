@@ -2,7 +2,7 @@
 
 **Desenvolvedor:** Maxwell da Silva Oliveira (maxwbh@gmail.com)
 **Empresa:** M&S do Brasil LTDA
-**Última atualização:** 2026-04-09 (rev 9)
+**Última atualização:** 2026-04-10 (rev 10)
 
 > Pendentes organizados por prioridade.
 > Para documentação do sistema atual, consulte **[SISTEMA.md](SISTEMA.md)**.
@@ -497,9 +497,10 @@
 | **13** | ⭐ **Contrato Tabela Price + Intermediárias (HU-360)** | 13 | ✅ |
 | **14** | ⭐ **Sistema de Amortização: Tabela Price e SAC** | 14 | ✅ |
 | **15** | ⭐ **Regras de Bloqueio de Boleto — Cascata + Lote** | 15 | ✅ |
-| **16** | Testes P3/P4 + CI/CD | 7.3, 7.4, 8 | — |
-| **17** | Frontend P3/P4 | 3 (P3, P4) | — |
-| **18** | Documentação | 9 | — |
+| **16** | ⭐ **Conciliação Bancária — CNAB Retorno + OFX + Baixa Manual** | 23 | ✅ |
+| **17** | Testes P3/P4 + CI/CD | 7.3, 7.4, 8 | — |
+| **18** | Frontend P3/P4 | 3 (P3, P4) | — |
+| **19** | Documentação | 9 | — |
 
 ---
 
@@ -986,6 +987,7 @@ para ciclo = 2..total_ciclos+1:
 | Permissões | — | 4 | 4 | 2 | 10 | ✅ 10/10 |
 | HU Boleto/Carnê/Remessa (Seção 21) | — | 10 | — | — | 10 | ✅ 10/10 |
 | OFX Extrato Bancário (Seção 22) | — | 5 | — | — | 5 | ✅ 5/5 |
+| Conciliação Bancária (Seção 23) | — | 8 | — | — | 8 | ✅ 8/8 |
 | Testes | 104 | ~164 | ~37 | ~41 | ~346 | ✅ 104/104 P1 · ✅ 508 passando (12 Simulador + 12 Notificações) |
 | CI/CD | — | 2 | 4 | 2 | 8 | — |
 | Documentação | — | — | 1 | 3 | 4 | — |
@@ -1091,3 +1093,16 @@ para ciclo = 2..total_ciclos+1:
 - `upload_ofx()` — GET página de upload / POST processa .ofx (limite 5 MB, filtro por imobiliária, dry_run)
 - URL: `/cnab/ofx/upload/` → `financeiro:upload_ofx`
 - 17 testes: `TestOFXParser` (6), `TestOFXReconciliacao` (6), `TestOFXView` (5)
+
+**Seção 23 — Conciliação Bancária (Hub Unificado):**
+- `HistoricoPagamento` estendido: `origem_pagamento` (MANUAL/CNAB/OFX/ANTECIPACAO/SISTEMA), `item_retorno` (FK), `fitid_ofx` (deduplicação OFX) — migration 0010
+- `Parcela.Meta.constraints`: `UniqueConstraint(conta_bancaria + nosso_numero, nosso_numero≠'')` — único por banco, não global — migration 0011
+- `CNABService._buscar_parcela_por_nosso_numero()`: lookup 4 etapas (exact+conta → endswith(strip)+conta → exact global → endswith global) — resolve CNAB zero-padded vs DB curto; elimina código duplicado nos 2 parsers (CNAB400/240)
+- `ItemRetorno.processar_baixa()`: guard contra retorno duplicado — `if self.parcela.pago: aborta com mensagem`
+- `registrar_pagamento_boleto()`: aceita `validar_minimo=False` para retornos CNAB liquidarem sem rejeição por valor mínimo
+- `HistoricoPagamento.objects.get_or_create(item_retorno=self, ...)` — idempotência no CNAB retorno
+- `OFXService._quitar()`: deduplicação por `fitid_ofx` antes de processar; cria `HistoricoPagamento` com `origem_pagamento='OFX'` + `fitid_ofx`
+- `dashboard_conciliacao()` view: KPIs (pendentes/CNAB/OFX/MANUAL por período), lista de boletos pendentes, histórico recente, arquivos CNAB recentes, erros de processamento
+- Template `financeiro/conciliacao/dashboard.html`: hub unificado com 3 métodos explicados
+- `management/commands/audit_nosso_numero.py`: audita duplicatas por conta, duplicatas globais e boletos sem nosso_numero; `--fix-duplicates` limpa mantendo o mais antigo
+- Admin: `HistoricoPagamentoAdmin` com campos de conciliação em `list_display`, `list_filter`, `search_fields` e fieldset dedicado
