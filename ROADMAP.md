@@ -501,6 +501,7 @@
 | **17** | Testes P3/P4 + CI/CD | 7.3, 7.4, 8 | 🏦 Débito Técnico (pós-2050) |
 | **18** | Frontend P3/P4 | 3 (P3, P4) | 🏦 Débito Técnico (pós-2050) |
 | **19** | Documentação | 9 | — |
+| **20** | ⭐ **Agendamento e Operações — cron-job.org + endpoints HTTP** | 24 | — |
 
 ---
 
@@ -1106,3 +1107,111 @@ para ciclo = 2..total_ciclos+1:
 - Template `financeiro/conciliacao/dashboard.html`: hub unificado com 3 métodos explicados
 - `management/commands/audit_nosso_numero.py`: audita duplicatas por conta, duplicatas globais e boletos sem nosso_numero; `--fix-duplicates` limpa mantendo o mais antigo
 - Admin: `HistoricoPagamentoAdmin` com campos de conciliação em `list_display`, `list_filter`, `search_fields` e fieldset dedicado
+
+---
+
+## 24. AGENDAMENTO E OPERAÇÕES — cron-job.org + Endpoints HTTP
+
+> **Contexto:** O plano gratuito do Render não suporta Background Workers (sem Celery).
+> Todas as tarefas periódicas são acionadas via HTTP por um agendador externo (cron-job.org, gratuito).
+> Esta seção lista os jobs que devem ser configurados e os endpoints HTTP que ainda precisam ser criados.
+> Documentação completa: `docs/deployment/CRONJOB.md`
+
+---
+
+### 24.1 Jobs a Configurar no cron-job.org (P1 — Imediatos)
+
+> Sem estes jobs o serviço "adormece" após 15 min e notificações diárias não são enviadas.
+
+| # | Job | URL | Método | Agenda (BRT) | Auth | Status |
+|---|-----|-----|--------|--------------|------|--------|
+| J-01 | Keep-alive app Django | `GET /health/` | GET | A cada 10 min | — | — |
+| J-02 | Keep-alive BRCobrança | `GET /api/health` (BRCobrança) | GET | A cada 10 min | — | — |
+| J-03 | Tarefas diárias (status, reajustes, notificações) | `POST /api/tasks/run-all/` | POST | Diário 08:00 | `X-Task-Token` | — |
+
+**Configuração do header de autenticação:**
+```
+X-Task-Token: <valor de TASK_TOKEN no painel Render>
+```
+
+---
+
+### 24.2 Jobs Recomendados (P2)
+
+| # | Job | URL | Método | Agenda (BRT) | Auth | Status |
+|---|-----|-----|--------|--------------|------|--------|
+| J-04 | Relatório semanal para imobiliárias | `POST /api/tasks/relatorio-semanal/` | POST | Segunda 08:30 | `X-Task-Token` | — |
+| J-05 | Relatório mensal consolidado | `POST /api/tasks/relatorio-mensal/` | POST | 1º dia 07:30 | `X-Task-Token` | — |
+| J-06 | Monitoramento de bounces de e-mail | `POST /api/tasks/processar-bounces/` | POST | A cada 30 min | `X-Task-Token` | ⚠️ Endpoint não existe |
+| J-07 | Limpeza de sessões Django expiradas | `POST /api/tasks/limpar-sessoes/` | POST | Domingo 03:00 | `X-Task-Token` | ⚠️ Endpoint não existe |
+
+---
+
+### 24.3 Endpoints HTTP Pendentes de Implementação (P2)
+
+> Os endpoints J-06 e J-07 precisam ser criados em `core/views.py` (ou `notificacoes/views.py`)
+> como wrappers HTTP dos management commands existentes.
+
+| # | Endpoint | Management Command | Arquivo | Status |
+|---|----------|--------------------|---------|--------|
+| E-01 | `POST /api/tasks/processar-bounces/` | `processar_bounces` | `notificacoes/management/commands/processar_bounces.py` | — |
+| E-02 | `POST /api/tasks/limpar-sessoes/` | `clearsessions` (Django built-in) | `core/views.py` (task API) | — |
+
+**Implementação sugerida para E-01** (em `core/views.py`, junto com os outros task endpoints):
+```python
+@csrf_exempt
+@task_api_rate_limit
+def api_task_processar_bounces(request):
+    if request.method != 'POST':
+        return HttpResponseNotAllowed(['POST'])
+    token = request.headers.get('X-Task-Token', '')
+    if token != settings.TASK_TOKEN:
+        return JsonResponse({'error': 'Unauthorized'}, status=401)
+    call_command('processar_bounces')
+    return JsonResponse({'status': 'ok'})
+```
+
+---
+
+### 24.4 Configurações Manuais Pendentes no Render (P1)
+
+> Estas variáveis têm `sync: false` no `render.yaml` — devem ser inseridas manualmente
+> no painel do Render em **Environment → Secret Files / Environment Variables**.
+
+| Variável | Valor | Onde configurar |
+|----------|-------|-----------------|
+| `BOUNCE_IMAP_PASSWORD` | Senha da caixa `bounces@msbrasil.inf.br` | Render → gestao-contrato-web → Environment |
+| `EMAIL_HOST_PASSWORD` | Senha SMTP Zoho (`teste@msbrasil.inf.br`) | Render → gestao-contrato-web → Environment |
+| `TWILIO_ACCOUNT_SID` | SID da conta Twilio | Render → gestao-contrato-web → Environment |
+| `TWILIO_AUTH_TOKEN` | Auth token Twilio | Render → gestao-contrato-web → Environment |
+
+---
+
+### 24.5 Pré-requisitos Externos (P1)
+
+| # | Item | Serviço | Status |
+|---|------|---------|--------|
+| X-01 | Criar caixa `bounces@msbrasil.inf.br` no painel Zoho | Zoho Mail | — |
+| X-02 | Habilitar IMAP na caixa de bounces (Zoho → Settings → Mail Accounts → IMAP) | Zoho Mail | — |
+| X-03 | Criar conta gratuita em cron-job.org e configurar os 7 jobs | cron-job.org | — |
+| X-04 | Verificar URL do callback Twilio: `TWILIO_STATUS_CALLBACK_URL` deve apontar para a URL real do app em produção | Render / Twilio | ✅ Configurado em `render.yaml` |
+
+---
+
+### 24.6 Checklist de Ativação
+
+```
+[ ] J-01 keep-alive Django criado no cron-job.org
+[ ] J-02 keep-alive BRCobrança criado no cron-job.org
+[ ] J-03 tarefas diárias criado no cron-job.org (com X-Task-Token)
+[ ] J-04 relatório semanal criado no cron-job.org
+[ ] J-05 relatório mensal criado no cron-job.org
+[ ] BOUNCE_IMAP_PASSWORD configurado no Render (manual)
+[ ] EMAIL_HOST_PASSWORD configurado no Render (manual)
+[ ] TWILIO_ACCOUNT_SID + TWILIO_AUTH_TOKEN configurados no Render (manual)
+[ ] Caixa bounces@msbrasil.inf.br criada e IMAP habilitado no Zoho
+[ ] E-01 endpoint /api/tasks/processar-bounces/ implementado
+[ ] J-06 bounce monitoring criado no cron-job.org (após E-01)
+[ ] E-02 endpoint /api/tasks/limpar-sessoes/ implementado
+[ ] J-07 limpeza de sessões criado no cron-job.org (após E-02)
+```
