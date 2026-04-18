@@ -53,6 +53,7 @@ class Command(BaseCommand):
         self._criar_conta_inter_vendedor_uanda(imobiliaria)
 
         self._importar_ipca_mensal()
+        self._importar_igpm_mensal()
         self._importar_contrato_henry(imobiliaria)
         self._importar_contrato_uanda(imobiliaria)
 
@@ -221,6 +222,101 @@ class Command(BaseCommand):
         self.stdout.write(
             self.style.SUCCESS(f'  IndiceReajuste IPCA: {criados} novos / {len(ipca_data)} total')
             if criados else f'  IndiceReajuste IPCA: todos {len(ipca_data)} já existiam'
+        )
+
+    # ------------------------------------------------------------------
+    # Índices IGPM mensais (fonte: Planilha_Henry_Magno_IGPM_.xlsx, aba Índices IGPM)
+    # ------------------------------------------------------------------
+    def _importar_igpm_mensal(self):
+        """
+        Importa série histórica do IGPM (Ago/2020–Fev/2026).
+        Fonte: Planilha_Henry_Magno_IGPM_.xlsx (FGV/IBRE, atualizado até Fev/2026).
+        Início em Ago/2020 (1º mês de variação do contrato Henry L13-QC, firmado Jul/2020).
+        Cobre ciclos 2 a 6 de reajuste (Ago/2020–Jul/2025) + dados disponíveis até Fev/2026.
+        """
+        igpm_data = [
+            # (ano, mês, variação_mensal_%)  — Fonte: FGV/IBRE via planilha Henry
+            (2020,  8, Decimal('2.7442')),
+            (2020,  9, Decimal('4.3408')),
+            (2020, 10, Decimal('3.2314')),
+            (2020, 11, Decimal('3.2774')),
+            (2020, 12, Decimal('0.9581')),
+            (2021,  1, Decimal('2.5767')),
+            (2021,  2, Decimal('2.5259')),
+            (2021,  3, Decimal('2.9383')),
+            (2021,  4, Decimal('1.5083')),
+            (2021,  5, Decimal('4.0963')),
+            (2021,  6, Decimal('0.6026')),
+            (2021,  7, Decimal('0.7773')),
+            (2021,  8, Decimal('0.6637')),
+            (2021,  9, Decimal('-0.6394')),
+            (2021, 10, Decimal('0.6429')),
+            (2021, 11, Decimal('0.0183')),
+            (2021, 12, Decimal('0.8708')),
+            (2022,  1, Decimal('1.8175')),
+            (2022,  2, Decimal('1.8329')),
+            (2022,  3, Decimal('1.7408')),
+            (2022,  4, Decimal('1.4113')),
+            (2022,  5, Decimal('0.5216')),
+            (2022,  6, Decimal('0.5852')),
+            (2022,  7, Decimal('0.2061')),
+            (2022,  8, Decimal('-0.6983')),
+            (2022,  9, Decimal('-0.9461')),
+            (2022, 10, Decimal('-0.9714')),
+            (2022, 11, Decimal('-0.5645')),
+            (2022, 12, Decimal('0.4479')),
+            (2023,  1, Decimal('0.2118')),
+            (2023,  2, Decimal('-0.0605')),
+            (2023,  3, Decimal('0.0514')),
+            (2023,  4, Decimal('-0.9500')),
+            (2023,  5, Decimal('-1.8440')),
+            (2023,  6, Decimal('-1.9299')),
+            (2023,  7, Decimal('-0.7236')),
+            (2023,  8, Decimal('-0.1357')),
+            (2023,  9, Decimal('0.3665')),
+            (2023, 10, Decimal('0.4979')),
+            (2023, 11, Decimal('0.5931')),
+            (2023, 12, Decimal('0.7400')),
+            (2024,  1, Decimal('0.0718')),
+            (2024,  2, Decimal('-0.5172')),
+            (2024,  3, Decimal('-0.4668')),
+            (2024,  4, Decimal('0.3091')),
+            (2024,  5, Decimal('0.8908')),
+            (2024,  6, Decimal('0.8140')),
+            (2024,  7, Decimal('0.6075')),
+            (2024,  8, Decimal('0.2853')),
+            (2024,  9, Decimal('0.6230')),
+            (2024, 10, Decimal('1.5215')),
+            (2024, 11, Decimal('1.2969')),
+            (2024, 12, Decimal('0.9400')),
+            (2025,  1, Decimal('0.2700')),
+            (2025,  2, Decimal('1.0600')),
+            (2025,  3, Decimal('-0.3400')),
+            (2025,  4, Decimal('0.2400')),
+            (2025,  5, Decimal('-0.4900')),
+            (2025,  6, Decimal('-1.6700')),
+            (2025,  7, Decimal('-0.7700')),
+            (2025,  8, Decimal('0.3600')),
+            (2025,  9, Decimal('0.4199')),
+            (2025, 10, Decimal('-0.3599')),
+            (2025, 11, Decimal('0.2700')),
+            (2025, 12, Decimal('-0.0100')),
+            (2026,  1, Decimal('0.4100')),
+            (2026,  2, Decimal('-0.7300')),
+        ]
+        criados = 0
+        for ano, mes, valor in igpm_data:
+            _, created = IndiceReajuste.objects.get_or_create(
+                tipo_indice='IGPM',
+                ano=ano,
+                mes=mes,
+                defaults=dict(valor=valor, fonte='FGV/IBRE (contrato Henry L13-QC)'),
+            )
+            if created:
+                criados += 1
+        self.stdout.write(
+            self.style.SUCCESS(f'  IndiceReajuste IGPM: {criados} novos / {len(igpm_data)} total')
+            if criados else f'  IndiceReajuste IGPM: todos {len(igpm_data)} já existiam'
         )
 
     # ==================================================================
