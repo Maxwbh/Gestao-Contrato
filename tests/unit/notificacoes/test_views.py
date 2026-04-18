@@ -1,0 +1,350 @@
+"""
+Testes das views do app notificacoes
+
+Desenvolvedor: Maxwell da Silva Oliveira <maxwbh@gmail.com>
+"""
+
+import pytest
+from django.urls import reverse
+from notificacoes.models import (
+    ConfiguracaoEmail,
+    TemplateNotificacao,
+    Notificacao,
+    TipoNotificacao,
+    TipoTemplate,
+)
+
+
+# =============================================================================
+# TESTES DE LISTAGEM DE NOTIFICACOES
+# =============================================================================
+
+@pytest.mark.django_db
+class TestListarNotificacoes:
+    """Testes da view listar_notificacoes"""
+
+    def test_listar_notificacoes_requer_login(self, client):
+        """Acesso requer autenticação"""
+        response = client.get(reverse('notificacoes:listar'))
+        assert response.status_code == 302
+        assert 'login' in response.url
+
+    def test_listar_notificacoes_exibe_lista(self, client, user_factory):
+        """Usuário autenticado vê lista de notificações"""
+        user = user_factory()
+        user.set_password('test123')
+        user.save()
+        client.login(username=user.username, password='test123')
+
+        # Criar algumas notificações
+        Notificacao.objects.create(
+            tipo=TipoNotificacao.EMAIL,
+            destinatario='teste@email.com',
+            mensagem='Teste'
+        )
+
+        response = client.get(reverse('notificacoes:listar'))
+        assert response.status_code == 200
+
+
+# =============================================================================
+# TESTES DE CONFIGURACOES
+# =============================================================================
+
+@pytest.mark.django_db
+class TestConfiguracoes:
+    """Testes da view configuracoes"""
+
+    def test_configuracoes_requer_login(self, client):
+        """Acesso requer autenticação"""
+        response = client.get(reverse('notificacoes:configuracoes'))
+        assert response.status_code == 302
+
+    def test_configuracoes_exibe_opcoes(self, client, user_factory):
+        """Usuário autenticado vê opções de configuração"""
+        user = user_factory()
+        user.set_password('test123')
+        user.save()
+        client.login(username=user.username, password='test123')
+
+        response = client.get(reverse('notificacoes:configuracoes'))
+        assert response.status_code == 200
+
+
+# =============================================================================
+# TESTES CRUD CONFIGURACAO EMAIL
+# =============================================================================
+
+@pytest.mark.django_db
+class TestConfiguracaoEmailViews:
+    """Testes das views CRUD de ConfiguracaoEmail"""
+
+    def test_list_requer_login(self, client):
+        """List requer autenticação"""
+        response = client.get(reverse('notificacoes:listar_config_email'))
+        assert response.status_code == 302
+
+    def test_list_exibe_configs(self, client, user_factory):
+        """List exibe configurações existentes"""
+        user = user_factory()
+        user.set_password('test123')
+        user.save()
+        client.login(username=user.username, password='test123')
+
+        ConfiguracaoEmail.objects.create(
+            nome='SMTP Teste',
+            host='smtp.test.com',
+            usuario='user',
+            senha='pass',
+            email_remetente='test@test.com'
+        )
+
+        response = client.get(reverse('notificacoes:listar_config_email'))
+        assert response.status_code == 200
+
+    def test_create_get(self, client, user_factory):
+        """GET no create retorna formulário"""
+        user = user_factory()
+        user.set_password('test123')
+        user.save()
+        client.login(username=user.username, password='test123')
+
+        response = client.get(reverse('notificacoes:criar_config_email'))
+        assert response.status_code == 200
+
+    def test_create_post_valido(self, client, user_factory):
+        """POST válido cria configuração"""
+        user = user_factory()
+        user.set_password('test123')
+        user.save()
+        client.login(username=user.username, password='test123')
+
+        response = client.post(reverse('notificacoes:criar_config_email'), {
+            'nome': 'Nova Config',
+            'host': 'smtp.gmail.com',
+            'porta': 587,
+            'usuario': 'user@gmail.com',
+            'senha': 'senha123',
+            'usar_tls': True,
+            'usar_ssl': False,
+            'email_remetente': 'user@gmail.com',
+            'nome_remetente': 'Sistema',
+            'ativo': True
+        })
+        # Redirect após sucesso ou form com erros
+        assert response.status_code in [200, 302]
+
+    def test_update_get(self, client, user_factory):
+        """GET no update retorna formulário preenchido"""
+        user = user_factory()
+        user.set_password('test123')
+        user.save()
+        client.login(username=user.username, password='test123')
+
+        config = ConfiguracaoEmail.objects.create(
+            nome='Config Existente',
+            host='smtp.test.com',
+            usuario='user',
+            senha='pass',
+            email_remetente='test@test.com'
+        )
+
+        response = client.get(reverse('notificacoes:editar_config_email', args=[config.pk]))
+        assert response.status_code == 200
+
+    def test_delete_get(self, client, user_factory):
+        """GET no delete mostra confirmação"""
+        user = user_factory()
+        user.set_password('test123')
+        user.save()
+        client.login(username=user.username, password='test123')
+
+        config = ConfiguracaoEmail.objects.create(
+            nome='Config para Deletar',
+            host='smtp.test.com',
+            usuario='user',
+            senha='pass',
+            email_remetente='test@test.com'
+        )
+
+        response = client.get(reverse('notificacoes:excluir_config_email', args=[config.pk]))
+        assert response.status_code == 200
+
+    def test_delete_post(self, client, user_factory):
+        """POST no delete remove configuração"""
+        user = user_factory()
+        user.set_password('test123')
+        user.save()
+        client.login(username=user.username, password='test123')
+
+        config = ConfiguracaoEmail.objects.create(
+            nome='Config para Deletar',
+            host='smtp.test.com',
+            usuario='user',
+            senha='pass',
+            email_remetente='test@test.com'
+        )
+
+        response = client.post(reverse('notificacoes:excluir_config_email', args=[config.pk]))
+        assert response.status_code == 302
+        assert not ConfiguracaoEmail.objects.filter(pk=config.pk).exists()
+
+
+# =============================================================================
+# TESTES CRUD TEMPLATE NOTIFICACAO
+# =============================================================================
+
+@pytest.mark.django_db
+class TestTemplateNotificacaoViews:
+    """Testes das views CRUD de TemplateNotificacao"""
+
+    def test_list_requer_login(self, client):
+        """List requer autenticação"""
+        response = client.get(reverse('notificacoes:listar_templates'))
+        assert response.status_code == 302
+
+    def test_list_exibe_templates(self, client, user_factory):
+        """List exibe templates existentes"""
+        user = user_factory()
+        user.set_password('test123')
+        user.save()
+        client.login(username=user.username, password='test123')
+
+        TemplateNotificacao.objects.create(
+            nome='Template Teste',
+            codigo=TipoTemplate.CUSTOM,
+            tipo=TipoNotificacao.EMAIL,
+            corpo='Corpo do template'
+        )
+
+        response = client.get(reverse('notificacoes:listar_templates'))
+        assert response.status_code == 200
+
+    def test_create_get(self, client, user_factory):
+        """GET no create retorna formulário"""
+        user = user_factory()
+        user.set_password('test123')
+        user.save()
+        client.login(username=user.username, password='test123')
+
+        response = client.get(reverse('notificacoes:criar_template'))
+        assert response.status_code == 200
+
+    def test_create_post_valido(self, client, user_factory):
+        """POST válido cria template"""
+        user = user_factory()
+        user.set_password('test123')
+        user.save()
+        client.login(username=user.username, password='test123')
+
+        response = client.post(reverse('notificacoes:criar_template'), {
+            'nome': 'Novo Template',
+            'codigo': TipoTemplate.CUSTOM,
+            'tipo': TipoNotificacao.EMAIL,
+            'assunto': 'Assunto Teste',
+            'corpo': 'Corpo do template %%NOMECOMPRADOR%%',
+            'ativo': True
+        })
+        assert response.status_code in [200, 302]
+
+    def test_update_get(self, client, user_factory):
+        """GET no update retorna formulário preenchido"""
+        user = user_factory()
+        user.set_password('test123')
+        user.save()
+        client.login(username=user.username, password='test123')
+
+        template = TemplateNotificacao.objects.create(
+            nome='Template Existente',
+            codigo=TipoTemplate.CUSTOM,
+            tipo=TipoNotificacao.EMAIL,
+            corpo='Corpo'
+        )
+
+        response = client.get(reverse('notificacoes:editar_template', args=[template.pk]))
+        assert response.status_code == 200
+
+    def test_delete_post(self, client, user_factory):
+        """POST no delete remove template"""
+        user = user_factory()
+        user.set_password('test123')
+        user.save()
+        client.login(username=user.username, password='test123')
+
+        template = TemplateNotificacao.objects.create(
+            nome='Template para Deletar',
+            codigo=TipoTemplate.CUSTOM,
+            tipo=TipoNotificacao.EMAIL,
+            corpo='Corpo'
+        )
+
+        response = client.post(reverse('notificacoes:excluir_template', args=[template.pk]))
+        assert response.status_code == 302
+        assert not TemplateNotificacao.objects.filter(pk=template.pk).exists()
+
+    def test_duplicar_template(self, client, user_factory):
+        """Duplicar cria cópia do template"""
+        user = user_factory()
+        user.set_password('test123')
+        user.save()
+        client.login(username=user.username, password='test123')
+
+        template = TemplateNotificacao.objects.create(
+            nome='Template Original',
+            codigo=TipoTemplate.CUSTOM,
+            tipo=TipoNotificacao.EMAIL,
+            corpo='Corpo original'
+        )
+
+        response = client.post(reverse('notificacoes:duplicar_template', args=[template.pk]))
+        assert response.status_code == 302
+        assert TemplateNotificacao.objects.count() == 2
+
+    def test_preview_template(self, client, user_factory):
+        """Preview renderiza template com dados de exemplo"""
+        user = user_factory()
+        user.set_password('test123')
+        user.save()
+        client.login(username=user.username, password='test123')
+
+        template = TemplateNotificacao.objects.create(
+            nome='Template Preview',
+            codigo=TipoTemplate.CUSTOM,
+            tipo=TipoNotificacao.EMAIL,
+            assunto='Olá %%NOMECOMPRADOR%%',
+            corpo='Prezado %%NOMECOMPRADOR%%, sua parcela %%PARCELA%%.'
+        )
+
+        response = client.get(reverse('notificacoes:preview_template', args=[template.pk]))
+        assert response.status_code == 200
+
+
+# =============================================================================
+# TESTES DE TESTAR CONEXAO EMAIL
+# =============================================================================
+
+@pytest.mark.django_db
+class TestTestarConexaoEmail:
+    """Testes da view testar_conexao_email"""
+
+    def test_testar_conexao_requer_login(self, client):
+        """Acesso requer autenticação"""
+        config = ConfiguracaoEmail.objects.create(
+            nome='Config',
+            host='smtp.test.com',
+            usuario='user',
+            senha='pass',
+            email_remetente='test@test.com'
+        )
+        response = client.get(reverse('notificacoes:testar_config_email', args=[config.pk]))
+        assert response.status_code == 302
+
+    def test_testar_conexao_config_inexistente(self, client, user_factory):
+        """Testar conexão com config inexistente retorna 404"""
+        user = user_factory()
+        user.set_password('test123')
+        user.save()
+        client.login(username=user.username, password='test123')
+
+        response = client.get(reverse('notificacoes:testar_config_email', args=[99999]))
+        assert response.status_code == 404

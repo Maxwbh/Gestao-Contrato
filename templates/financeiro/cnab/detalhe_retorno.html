@@ -1,0 +1,289 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Retorno {{ arquivo.nome_arquivo }} - CNAB{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2>
+            <i class="fas fa-file-import"></i> {{ arquivo.nome_arquivo }}
+            {% if arquivo.status == 'PENDENTE' %}
+            <span class="badge bg-warning">Pendente</span>
+            {% elif arquivo.status == 'PROCESSADO' %}
+            <span class="badge bg-success">Processado</span>
+            {% elif arquivo.status == 'PROCESSADO_PARCIAL' %}
+            <span class="badge bg-info">Processado Parcialmente</span>
+            {% elif arquivo.status == 'ERRO' %}
+            <span class="badge bg-danger">Erro</span>
+            {% endif %}
+        </h2>
+        <a href="{% url 'financeiro:listar_retornos' %}" class="btn btn-secondary">
+            <i class="fas fa-arrow-left"></i> Voltar
+        </a>
+    </div>
+
+    <div class="row">
+        <!-- Informacoes do Arquivo -->
+        <div class="col-md-4">
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h5 class="mb-0"><i class="fas fa-info-circle"></i> Informacoes</h5>
+                </div>
+                <div class="card-body">
+                    <table class="table table-sm">
+                        <tr>
+                            <th>Arquivo:</th>
+                            <td>{{ arquivo.nome_arquivo }}</td>
+                        </tr>
+                        <tr>
+                            <th>Layout:</th>
+                            <td>{{ arquivo.layout }}</td>
+                        </tr>
+                        <tr>
+                            <th>Conta:</th>
+                            <td>{{ arquivo.conta_bancaria.descricao }}</td>
+                        </tr>
+                        <tr>
+                            <th>Banco:</th>
+                            <td>{{ arquivo.conta_bancaria.get_codigo_banco_display }}</td>
+                        </tr>
+                        <tr>
+                            <th>Imobiliaria:</th>
+                            <td>{{ arquivo.conta_bancaria.imobiliaria.nome }}</td>
+                        </tr>
+                    </table>
+                </div>
+            </div>
+
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h5 class="mb-0"><i class="fas fa-chart-bar"></i> Estatisticas</h5>
+                </div>
+                <div class="card-body">
+                    <table class="table table-sm">
+                        <tr>
+                            <th>Total Registros:</th>
+                            <td>{{ arquivo.total_registros }}</td>
+                        </tr>
+                        <tr>
+                            <th>Processados:</th>
+                            <td><span class="text-success">{{ arquivo.registros_processados }}</span></td>
+                        </tr>
+                        <tr>
+                            <th>Com Erro:</th>
+                            <td><span class="text-danger">{{ arquivo.registros_erro }}</span></td>
+                        </tr>
+                        <tr>
+                            <th>Valor Total Pago:</th>
+                            <td><strong class="text-success">R$ {{ arquivo.valor_total_pago|floatformat:2 }}</strong></td>
+                        </tr>
+                        <tr>
+                            <th>Data Upload:</th>
+                            <td>{{ arquivo.data_upload|date:"d/m/Y H:i" }}</td>
+                        </tr>
+                        {% if arquivo.data_processamento %}
+                        <tr>
+                            <th>Data Processamento:</th>
+                            <td>{{ arquivo.data_processamento|date:"d/m/Y H:i" }}</td>
+                        </tr>
+                        {% endif %}
+                        {% if arquivo.processado_por %}
+                        <tr>
+                            <th>Processado por:</th>
+                            <td>{{ arquivo.processado_por.username }}</td>
+                        </tr>
+                        {% endif %}
+                    </table>
+                </div>
+            </div>
+
+            <!-- Acoes -->
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h5 class="mb-0"><i class="fas fa-cog"></i> Acoes</h5>
+                </div>
+                <div class="card-body d-grid gap-2">
+                    <a href="{% url 'financeiro:download_retorno' arquivo.pk %}" class="btn btn-success">
+                        <i class="fas fa-download"></i> Download do Arquivo
+                    </a>
+                    {% if arquivo.pode_reprocessar %}
+                    <button type="button" class="btn btn-primary" onclick="processarRetorno()" id="btnProcessar">
+                        <i class="fas fa-play"></i> Processar Arquivo
+                    </button>
+                    {% endif %}
+                </div>
+            </div>
+
+            {% if arquivo.erro_mensagem %}
+            <div class="alert alert-danger">
+                <h6><i class="fas fa-exclamation-triangle"></i> Erro</h6>
+                {{ arquivo.erro_mensagem }}
+            </div>
+            {% endif %}
+
+            {% if arquivo.observacoes %}
+            <div class="alert alert-info">
+                <h6><i class="fas fa-sticky-note"></i> Observacoes</h6>
+                {{ arquivo.observacoes }}
+            </div>
+            {% endif %}
+        </div>
+
+        <!-- Lista de Registros -->
+        <div class="col-md-8">
+            <!-- Resumo por Tipo -->
+            {% if itens_por_tipo %}
+            <div class="row mb-4">
+                {% for tipo, items in itens_por_tipo.items %}
+                <div class="col-md-4 mb-3">
+                    <div class="card
+                        {% if tipo == 'LIQUIDACAO' %}bg-success text-white
+                        {% elif tipo == 'ENTRADA' %}bg-info text-white
+                        {% elif tipo == 'REJEICAO' %}bg-danger text-white
+                        {% elif tipo == 'BAIXA' %}bg-secondary text-white
+                        {% elif tipo == 'PROTESTO' %}bg-warning
+                        {% else %}bg-light{% endif %}">
+                        <div class="card-body text-center">
+                            <h3>{{ items|length }}</h3>
+                            <p class="mb-0">{{ tipo }}</p>
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+            {% endif %}
+
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0"><i class="fas fa-list"></i> Registros ({{ itens|length }})</h5>
+                </div>
+                <div class="card-body">
+                    {% if itens %}
+                    <div class="table-responsive">
+                        <table class="table table-hover table-sm">
+                            <thead>
+                                <tr>
+                                    <th>Nosso Numero</th>
+                                    <th>Tipo</th>
+                                    <th>Comprador</th>
+                                    <th>Valor Pago</th>
+                                    <th>Data</th>
+                                    <th>Status</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for item in itens %}
+                                <tr class="{% if item.tipo_ocorrencia == 'LIQUIDACAO' %}table-success{% elif item.tipo_ocorrencia == 'REJEICAO' %}table-danger{% endif %}">
+                                    <td>
+                                        {{ item.nosso_numero }}
+                                        {% if item.numero_documento %}
+                                        <br><small class="text-muted">Doc: {{ item.numero_documento }}</small>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        <span class="badge
+                                            {% if item.tipo_ocorrencia == 'LIQUIDACAO' %}bg-success
+                                            {% elif item.tipo_ocorrencia == 'ENTRADA' %}bg-info
+                                            {% elif item.tipo_ocorrencia == 'REJEICAO' %}bg-danger
+                                            {% elif item.tipo_ocorrencia == 'BAIXA' %}bg-secondary
+                                            {% elif item.tipo_ocorrencia == 'PROTESTO' %}bg-warning
+                                            {% else %}bg-light text-dark{% endif %}">
+                                            {{ item.get_tipo_ocorrencia_display }}
+                                        </span>
+                                        <br><small>{{ item.codigo_ocorrencia }} - {{ item.descricao_ocorrencia|truncatechars:30 }}</small>
+                                    </td>
+                                    <td>
+                                        {% if item.parcela %}
+                                        <a href="{% url 'financeiro:detalhe_parcela' item.parcela.pk %}">
+                                            {{ item.parcela.contrato.comprador.nome_completo|truncatechars:25 }}
+                                        </a>
+                                        {% else %}
+                                        <span class="text-muted">Nao identificado</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        {% if item.valor_pago %}
+                                        R$ {{ item.valor_pago|floatformat:2 }}
+                                        {% elif item.valor_titulo %}
+                                        R$ {{ item.valor_titulo|floatformat:2 }}
+                                        {% else %}
+                                        -
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        {% if item.data_ocorrencia %}
+                                        {{ item.data_ocorrencia|date:"d/m/Y" }}
+                                        {% else %}
+                                        -
+                                        {% endif %}
+                                        {% if item.data_credito %}
+                                        <br><small class="text-muted">Credito: {{ item.data_credito|date:"d/m/Y" }}</small>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        {% if item.processado %}
+                                        <span class="badge bg-success">OK</span>
+                                        {% else %}
+                                        <span class="badge bg-secondary">Pendente</span>
+                                        {% endif %}
+                                        {% if item.erro_processamento %}
+                                        <br><small class="text-danger">{{ item.erro_processamento|truncatechars:30 }}</small>
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    {% else %}
+                    <div class="alert alert-info">
+                        <i class="fas fa-info-circle"></i> Nenhum registro encontrado. Clique em "Processar Arquivo" para analisar o conteudo.
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+function processarRetorno() {
+    if (!confirm('Deseja processar este arquivo de retorno?\n\nIsso ira realizar as baixas automaticamente para os boletos pagos.')) return;
+
+    var btn = document.getElementById('btnProcessar');
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Processando...';
+
+    fetch('{% url "financeiro:processar_retorno" arquivo.pk %}', {
+        method: 'POST',
+        headers: {
+            'X-CSRFToken': '{{ csrf_token }}',
+            'Content-Type': 'application/json'
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.sucesso) {
+            alert('Arquivo processado com sucesso!\n\n' +
+                  'Total de registros: ' + data.total_registros + '\n' +
+                  'Processados: ' + data.registros_processados + '\n' +
+                  'Com erro: ' + data.registros_erro + '\n' +
+                  'Valor total pago: R$ ' + data.valor_total_pago);
+            location.reload();
+        } else {
+            alert('Erro ao processar: ' + data.erro);
+            btn.disabled = false;
+            btn.innerHTML = '<i class="fas fa-play"></i> Processar Arquivo';
+        }
+    })
+    .catch(error => {
+        alert('Erro de conexao: ' + error);
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fas fa-play"></i> Processar Arquivo';
+    });
+}
+</script>
+{% endblock %}

@@ -1,0 +1,185 @@
+{% extends 'base.html' %}
+{% block title %}Renegociação — {{ contrato.numero_contrato }}{% endblock %}
+
+{% block content %}
+<div class="container" style="max-width:900px; padding:16px">
+
+  <!-- Cabeçalho -->
+  <div class="d-flex align-items-center gap-2 mb-3">
+    <a href="{% url 'contratos:detalhe' pk=contrato.pk %}" class="btn btn-sm btn-outline-secondary">
+      <i class="fas fa-arrow-left"></i>
+    </a>
+    <div>
+      <h4 class="mb-0"><i class="fas fa-handshake me-2 text-warning"></i>Renegociação de Parcelas</h4>
+      <small class="text-muted">Contrato {{ contrato.numero_contrato }} — {{ contrato.comprador.nome }}</small>
+    </div>
+  </div>
+
+  <!-- Aviso -->
+  <div class="alert alert-warning d-flex align-items-start gap-2 mb-3">
+    <i class="fas fa-exclamation-triangle mt-1"></i>
+    <div>
+      <strong>Como funciona:</strong> Selecione as parcelas em atraso que deseja renegociar,
+      informe nova data de vencimento e/ou novo valor. Ao confirmar, os juros e multas acumulados
+      serão zerados e o novo prazo passa a valer.
+    </div>
+  </div>
+
+  {% if parcelas %}
+  <form method="post" id="form-renegociacao">
+    {% csrf_token %}
+
+    <div class="card">
+      <div class="card-header d-flex justify-content-between align-items-center">
+        <span><strong>{{ parcelas.count }}</strong> parcela(s) em atraso</span>
+        <div class="form-check mb-0">
+          <input class="form-check-input" type="checkbox" id="select-all">
+          <label class="form-check-label" for="select-all">Selecionar todas</label>
+        </div>
+      </div>
+      <div class="card-body p-0">
+        <div class="table-responsive">
+          <table class="table table-sm table-hover mb-0 align-middle">
+            <thead class="table-dark">
+              <tr>
+                <th style="width:40px"></th>
+                <th class="text-center">Parc.</th>
+                <th>Vencimento atual</th>
+                <th class="text-end">Valor atual</th>
+                <th class="text-end">Juros + Multa</th>
+                <th class="text-center" style="width:140px">Nova data</th>
+                <th class="text-end" style="width:130px">Novo valor (R$)</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for p in parcelas %}
+              {% with dias=p.dias_atraso %}
+              <tr>
+                <td class="text-center">
+                  <input class="form-check-input parcela-check" type="checkbox"
+                         name="parcela_ids" value="{{ p.pk }}">
+                </td>
+                <td class="text-center fw-bold">{{ p.numero_parcela }}</td>
+                <td>
+                  {{ p.data_vencimento|date:"d/m/Y" }}
+                  <br><small class="text-danger"><i class="fas fa-clock"></i> {{ dias }} dia(s) atrás</small>
+                </td>
+                <td class="text-end">R$&nbsp;{{ p.valor_atual|floatformat:2 }}</td>
+                <td class="text-end text-danger">
+                  R$&nbsp;{{ p.valor_juros|floatformat:2 }}
+                  + R$&nbsp;{{ p.valor_multa|floatformat:2 }}
+                </td>
+                <td>
+                  <input type="date" name="nova_data_{{ p.pk }}"
+                         class="form-control form-control-sm nova-data-input"
+                         min="{{ hoje|date:'Y-m-d' }}"
+                         placeholder="Manter">
+                </td>
+                <td>
+                  <div class="input-group input-group-sm">
+                    <span class="input-group-text">R$</span>
+                    <input type="text" name="novo_valor_{{ p.pk }}"
+                           class="form-control form-control-sm text-end"
+                           placeholder="{{ p.valor_atual|floatformat:2 }}">
+                  </div>
+                </td>
+              </tr>
+              {% endwith %}
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- Ações rápidas: definir nova data para todas selecionadas -->
+    <div class="card mt-3">
+      <div class="card-body py-2">
+        <div class="row g-2 align-items-end">
+          <div class="col-auto">
+            <label class="form-label form-label-sm mb-0">Aplicar mesma data a todas selecionadas</label>
+            <input type="date" id="data-global" class="form-control form-control-sm" min="{{ hoje|date:'Y-m-d' }}">
+          </div>
+          <div class="col-auto">
+            <button type="button" class="btn btn-sm btn-outline-primary" onclick="aplicarDataGlobal()">
+              <i class="fas fa-calendar-check me-1"></i>Aplicar
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="d-flex gap-2 mt-3">
+      <button type="submit" class="btn btn-warning" id="btn-confirmar" disabled>
+        <i class="fas fa-handshake me-1"></i>Confirmar Renegociação
+      </button>
+      <a href="{% url 'contratos:detalhe' pk=contrato.pk %}" class="btn btn-outline-secondary">
+        Cancelar
+      </a>
+    </div>
+  </form>
+
+  {% else %}
+  <div class="card">
+    <div class="card-body text-center py-5 text-muted">
+      <i class="fas fa-check-circle fa-3x mb-3 text-success"></i>
+      <p class="mb-0">Nenhuma parcela em atraso encontrada para este contrato.</p>
+    </div>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+// Selecionar todas
+document.getElementById('select-all')?.addEventListener('change', function() {
+  document.querySelectorAll('.parcela-check').forEach(cb => {
+    cb.checked = this.checked;
+  });
+  atualizarBotao();
+});
+
+// Habilitar botão quando há seleção
+document.querySelectorAll('.parcela-check').forEach(cb => {
+  cb.addEventListener('change', atualizarBotao);
+});
+
+function atualizarBotao() {
+  const algumSelecionado = document.querySelectorAll('.parcela-check:checked').length > 0;
+  document.getElementById('btn-confirmar').disabled = !algumSelecionado;
+}
+
+// Aplicar data global a todas as linhas selecionadas
+function aplicarDataGlobal() {
+  const data = document.getElementById('data-global').value;
+  if (!data) { alert('Informe uma data.'); return; }
+  document.querySelectorAll('.parcela-check:checked').forEach(cb => {
+    const pk = cb.value;
+    const input = document.querySelector(`input[name="nova_data_${pk}"]`);
+    if (input) input.value = data;
+  });
+}
+
+// Validação antes de submeter
+document.getElementById('form-renegociacao')?.addEventListener('submit', function(e) {
+  const selecionadas = document.querySelectorAll('.parcela-check:checked');
+  if (selecionadas.length === 0) {
+    e.preventDefault();
+    alert('Selecione ao menos uma parcela.');
+    return;
+  }
+  let algumCampo = false;
+  selecionadas.forEach(cb => {
+    const pk = cb.value;
+    const data = document.querySelector(`input[name="nova_data_${pk}"]`)?.value;
+    const valor = document.querySelector(`input[name="novo_valor_${pk}"]`)?.value;
+    if (data || valor) algumCampo = true;
+  });
+  if (!algumCampo) {
+    e.preventDefault();
+    alert('Informe nova data ou novo valor para ao menos uma parcela selecionada.');
+  }
+});
+</script>
+{% endblock %}

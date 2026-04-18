@@ -1,0 +1,383 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Painel de Mensagens - Gestão de Contratos{% endblock %}
+
+{% block extra_css %}
+<style>
+    .ag-theme-material .ag-root-wrapper { border-radius: 0; border: none; }
+    .ag-theme-material .ag-header { background-color: #343a40; }
+    .ag-theme-material .ag-header-cell-text { color: #fff; font-weight: 600; }
+    .ag-theme-material .ag-header-icon { color: #fff; }
+    .ag-theme-material .ag-row-even { background-color: #fff; }
+    .ag-theme-material .ag-row-odd  { background-color: #f8f9fa; }
+    .ag-theme-material .ag-row:hover { background-color: #e8f4fd !important; }
+    .stat-card { transition: transform .15s; }
+    .stat-card:hover { transform: translateY(-2px); }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+
+    <!-- Header -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h2 class="mb-1">
+                <i class="fas fa-chart-bar text-primary me-2"></i>Painel de Mensagens
+            </h2>
+            <p class="text-muted mb-0">Controle de envio e confirmação de entrega — E-mail, SMS e WhatsApp</p>
+        </div>
+        <div>
+            <a href="{% url 'notificacoes:listar' %}" class="btn btn-outline-secondary me-2">
+                <i class="fas fa-list me-1"></i> Histórico
+            </a>
+            <a href="{% url 'notificacoes:listar_config_email' %}" class="btn btn-outline-primary">
+                <i class="fas fa-cog me-1"></i> Configurações
+            </a>
+        </div>
+    </div>
+
+    <!-- Cards de Resumo -->
+    <div class="row g-3 mb-4">
+        <div class="col-6 col-md-3">
+            <div class="card stat-card border-0 shadow-sm h-100">
+                <div class="card-body text-center py-3">
+                    <div class="fs-2 fw-bold text-dark">{{ total }}</div>
+                    <div class="text-muted small">Total filtrado</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-6 col-md-3">
+            <div class="card stat-card border-0 shadow-sm h-100" style="border-left: 4px solid #28a745 !important;">
+                <div class="card-body text-center py-3">
+                    <div class="fs-2 fw-bold text-success">{{ total_entregues }}</div>
+                    <div class="text-muted small">Entregues / Lidos</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-6 col-md-3">
+            <div class="card stat-card border-0 shadow-sm h-100" style="border-left: 4px solid #dc3545 !important;">
+                <div class="card-body text-center py-3">
+                    <div class="fs-2 fw-bold text-danger">{{ total_falhos }}</div>
+                    <div class="text-muted small">Com falha</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-6 col-md-3">
+            <div class="card stat-card border-0 shadow-sm h-100" style="border-left: 4px solid #6c757d !important;">
+                <div class="card-body text-center py-3">
+                    <div class="fs-2 fw-bold text-secondary">{{ total_sem_confirmacao }}</div>
+                    <div class="text-muted small">Sem confirmação</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Por Canal (mini badges) -->
+    <div class="d-flex flex-wrap gap-2 mb-4">
+        {% if stats_tipo.EMAIL %}
+        <span class="badge bg-primary py-2 px-3 fs-6">
+            <i class="fas fa-envelope me-1"></i>E-mail: {{ stats_tipo.EMAIL }}
+        </span>
+        {% endif %}
+        {% if stats_tipo.SMS %}
+        <span class="badge bg-info text-dark py-2 px-3 fs-6">
+            <i class="fas fa-sms me-1"></i>SMS: {{ stats_tipo.SMS }}
+        </span>
+        {% endif %}
+        {% if stats_tipo.WHATSAPP %}
+        <span class="badge bg-success py-2 px-3 fs-6">
+            <i class="fab fa-whatsapp me-1"></i>WhatsApp: {{ stats_tipo.WHATSAPP }}
+        </span>
+        {% endif %}
+        {% for status_key, count in stats_entrega.items %}
+        <span class="badge {% if status_key == 'delivered' or status_key == 'read' %}bg-success{% elif status_key == 'failed' or status_key == 'undelivered' %}bg-danger{% else %}bg-warning text-dark{% endif %} py-2 px-3 fs-6">
+            {{ status_key|capfirst }}: {{ count }}
+        </span>
+        {% endfor %}
+    </div>
+
+    <!-- Filtros -->
+    <div class="card mb-4">
+        <div class="card-header py-2">
+            <i class="fas fa-filter me-1"></i><strong>Filtros</strong>
+        </div>
+        <div class="card-body py-2">
+            <form method="get" class="row g-2 align-items-end">
+                <div class="col-md-2">
+                    <label class="form-label small mb-1">Canal</label>
+                    <select name="tipo" class="form-select form-select-sm">
+                        <option value="">Todos</option>
+                        {% for val, label in tipos_notificacao %}
+                        <option value="{{ val }}" {% if f_tipo == val %}selected{% endif %}>{{ label }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label small mb-1">Status</label>
+                    <select name="status" class="form-select form-select-sm">
+                        <option value="">Todos</option>
+                        {% for val, label in status_notificacao_choices %}
+                        <option value="{{ val }}" {% if f_status == val %}selected{% endif %}>{{ label }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label small mb-1">Entrega (Twilio)</label>
+                    <select name="status_entrega" class="form-select form-select-sm">
+                        <option value="">Todos</option>
+                        {% for val, label in status_entrega_choices %}
+                        <option value="{{ val }}" {% if f_status_entrega == val %}selected{% endif %}>{{ label }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label small mb-1">Data início</label>
+                    <input type="date" name="data_inicio" class="form-control form-control-sm"
+                           value="{{ f_data_inicio }}">
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label small mb-1">Data fim</label>
+                    <input type="date" name="data_fim" class="form-control form-control-sm"
+                           value="{{ f_data_fim }}">
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label small mb-1">Busca</label>
+                    <input type="text" name="busca" class="form-control form-control-sm"
+                           placeholder="Destinatário, assunto, SID..." value="{{ f_busca }}">
+                </div>
+                <div class="col-12 d-flex gap-2">
+                    <button type="submit" class="btn btn-sm btn-primary">
+                        <i class="fas fa-search me-1"></i>Filtrar
+                    </button>
+                    <a href="{% url 'notificacoes:painel_mensagens' %}" class="btn btn-sm btn-outline-secondary">
+                        <i class="fas fa-times me-1"></i>Limpar
+                    </a>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Tabela principal -->
+    <div class="card shadow-sm">
+        <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
+            <div>
+                <i class="fas fa-table me-1"></i>
+                <strong>Mensagens</strong>
+                <span class="badge bg-secondary ms-2">{{ paginator.count }} registro(s)</span>
+            </div>
+            <div class="d-flex align-items-center gap-2">
+                <input type="text" id="gridQuickFilter" class="form-control form-control-sm"
+                       placeholder="Busca rápida..." style="width: 200px;"
+                       oninput="if(window.painelGridApi) window.painelGridApi.setGridOption('quickFilterText', this.value)">
+                <button type="button" class="btn btn-sm btn-outline-success" title="Exportar CSV"
+                        onclick="window.painelGridApi && window.painelGridApi.exportDataAsCsv({fileName:'mensagens.csv'})">
+                    <i class="fas fa-file-csv me-1"></i>CSV
+                </button>
+            </div>
+        </div>
+        <div class="card-body p-0">
+            <div id="painelGrid" class="ag-theme-material" style="width:100%;"></div>
+        </div>
+        <div class="card-footer">
+            {% include "includes/pagination_perpage.html" %}
+        </div>
+    </div>
+
+</div>
+
+<!-- Modal de mensagem completa -->
+<div class="modal fade" id="modalMensagem" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="fas fa-envelope me-2"></i>Conteúdo da Mensagem</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <dl class="row">
+                    <dt class="col-sm-3">Canal</dt><dd class="col-sm-9" id="mdTipo"></dd>
+                    <dt class="col-sm-3">Destinatário</dt><dd class="col-sm-9" id="mdDestinatario"></dd>
+                    <dt class="col-sm-3">Assunto</dt><dd class="col-sm-9" id="mdAssunto"></dd>
+                    <dt class="col-sm-3">Status</dt><dd class="col-sm-9" id="mdStatus"></dd>
+                    <dt class="col-sm-3">Entrega / Engajamento</dt><dd class="col-sm-9" id="mdEntrega"></dd>
+                    <dt class="col-sm-3">ID Externo</dt><dd class="col-sm-9 text-break font-monospace small" id="mdExtId"></dd>
+                    <dt class="col-sm-3">Confirmação</dt><dd class="col-sm-9" id="mdConfirmacao"></dd>
+                    <dt class="col-sm-3">Erro</dt><dd class="col-sm-9 text-danger" id="mdErro"></dd>
+                </dl>
+                <div class="mt-2">
+                    <strong>Mensagem:</strong>
+                    <pre id="mdMensagem" class="bg-light p-2 rounded small mt-1" style="white-space: pre-wrap; max-height: 300px; overflow-y: auto;"></pre>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" id="btnReenviar" class="btn btn-warning me-auto">
+                    <i class="fas fa-redo me-1"></i>Reenviar
+                </button>
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Fechar</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+const painelRowData = [
+{% for notif in notificacoes %}
+{
+    pk: {{ notif.pk }},
+    data_agendamento: "{{ notif.data_agendamento|date:'Y-m-d H:i' }}",
+    data_agendamento_fmt: "{{ notif.data_agendamento|date:'d/m/Y H:i' }}",
+    data_envio_fmt: "{% if notif.data_envio %}{{ notif.data_envio|date:'d/m/Y H:i' }}{% endif %}",
+    data_confirmacao_fmt: "{% if notif.data_confirmacao %}{{ notif.data_confirmacao|date:'d/m/Y H:i' }}{% endif %}",
+    tipo: "{{ notif.tipo|escapejs }}",
+    destinatario: "{{ notif.destinatario|escapejs }}",
+    assunto: "{{ notif.assunto|default:''|escapejs }}",
+    mensagem: "{{ notif.mensagem|default:''|escapejs|truncatechars:200 }}",
+    mensagem_full: "{{ notif.mensagem|default:''|escapejs }}",
+    parcela_pk: {% if notif.parcela %}{{ notif.parcela.pk }}{% else %}null{% endif %},
+    parcela_str: "{% if notif.parcela %}{{ notif.parcela|escapejs }}{% endif %}",
+    status: "{{ notif.status|escapejs }}",
+    status_entrega: "{{ notif.status_entrega|default:''|escapejs }}",
+    external_id: "{{ notif.external_id|default:''|escapejs }}",
+    data_confirmacao: "{{ notif.data_confirmacao|default:''|escapejs }}",
+    tentativas: {{ notif.tentativas|default:0 }},
+    erro_mensagem: "{{ notif.erro_mensagem|default:''|escapejs }}",
+},
+{% endfor %}
+];
+
+function tipoRenderer(params) {
+    const icons = {
+        'EMAIL':    '<i class="fas fa-envelope text-primary me-1"></i>E-mail',
+        'SMS':      '<i class="fas fa-sms text-info me-1"></i>SMS',
+        'WHATSAPP': '<i class="fab fa-whatsapp text-success me-1"></i>WhatsApp',
+    };
+    return icons[params.value] || params.value;
+}
+
+function statusRenderer(params) {
+    const d = params.data;
+    const m = {
+        'PENDENTE':  '<span class="badge bg-warning text-dark">Pendente</span>',
+        'ENVIADA':   '<span class="badge bg-success">Enviada</span>',
+        'ERRO':      `<span class="badge bg-danger" title="${d.erro_mensagem}">Erro</span>`,
+        'CANCELADA': '<span class="badge bg-secondary">Cancelada</span>',
+    };
+    return m[params.value] || `<span class="badge bg-secondary">${params.value}</span>`;
+}
+
+function statusEntregaRenderer(params) {
+    const v = params.value || '';
+    if (!v) return '<span class="text-muted small">—</span>';
+    const cfg = {
+        // Twilio SMS/WhatsApp
+        'delivered':   ['bg-success',          'Entregue'],
+        'read':        ['bg-success',           'Lido'],
+        'sent':        ['bg-primary',           'Enviado'],
+        'sending':     ['bg-info text-dark',    'Enviando'],
+        'queued':      ['bg-warning text-dark', 'Enfileirado'],
+        'accepted':    ['bg-warning text-dark', 'Aceito'],
+        'undelivered': ['bg-danger',            'Não entregue'],
+        'failed':      ['bg-danger',            'Falhou'],
+        // E-mail — rastreamento local
+        'clicked':     ['bg-success',           '🔗 Clicado'],
+        'bounced':     ['bg-danger',            '↩ Bounce'],
+        'opened':      ['bg-info text-dark',    '👁 Aberto'],
+    };
+    const [cls, label] = cfg[v] || ['bg-secondary', v];
+    return `<span class="badge ${cls}">${label}</span>`;
+}
+
+function acoesRenderer(params) {
+    const d = params.data;
+    return `<button class="btn btn-xs btn-outline-secondary py-0 px-1" onclick="abrirModal(${d.pk})" title="Ver detalhes">
+                <i class="fas fa-eye"></i>
+            </button>`;
+}
+
+// Mapa de dados para o modal
+const dataMap = {};
+painelRowData.forEach(r => { dataMap[r.pk] = r; });
+
+let _modalPk = null;
+function abrirModal(pk) {
+    const d = dataMap[pk];
+    if (!d) return;
+    _modalPk = pk;
+    document.getElementById('mdTipo').textContent = d.tipo;
+    document.getElementById('mdDestinatario').textContent = d.destinatario;
+    document.getElementById('mdAssunto').textContent = d.assunto || '—';
+    document.getElementById('mdStatus').innerHTML = statusRenderer({value: d.status, data: d});
+    document.getElementById('mdEntrega').innerHTML = statusEntregaRenderer({value: d.status_entrega});
+    document.getElementById('mdExtId').textContent = d.external_id || '—';
+    document.getElementById('mdConfirmacao').textContent = d.data_confirmacao_fmt || '—';
+    document.getElementById('mdErro').textContent = d.erro_mensagem || '—';
+    document.getElementById('mdMensagem').textContent = d.mensagem_full || d.mensagem || '—';
+    const modal = new bootstrap.Modal(document.getElementById('modalMensagem'));
+    modal.show();
+}
+
+document.getElementById('btnReenviar').addEventListener('click', function() {
+    if (!_modalPk) return;
+    const btn = this;
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Reenviando...';
+    fetch(`/notificacoes/${_modalPk}/reenviar/`, {
+        method: 'POST',
+        headers: {'X-CSRFToken': document.cookie.match(/csrftoken=([^;]+)/)?.[1] || ''},
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.sucesso) {
+            btn.className = 'btn btn-success me-auto';
+            btn.innerHTML = '<i class="fas fa-check me-1"></i>Reenviado!';
+            setTimeout(() => location.reload(), 1200);
+        } else {
+            btn.disabled = false;
+            btn.innerHTML = '<i class="fas fa-redo me-1"></i>Reenviar';
+            alert('Erro ao reenviar: ' + (data.erro || 'desconhecido'));
+        }
+    })
+    .catch(() => {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fas fa-redo me-1"></i>Reenviar';
+        alert('Erro de comunicação com o servidor.');
+    });
+});
+
+document.addEventListener('DOMContentLoaded', function() {
+    window.painelGridApi = agGrid.createGrid(
+        document.getElementById('painelGrid'),
+        {
+            columnDefs: [
+                { headerName: 'Data', field: 'data_agendamento', filter: 'agDateColumnFilter', minWidth: 130,
+                  cellRenderer: p => `<small>${p.data.data_agendamento_fmt}</small>`, sort: 'desc' },
+                { headerName: 'Canal', field: 'tipo', filter: 'agTextColumnFilter', minWidth: 110,
+                  cellRenderer: tipoRenderer },
+                { headerName: 'Destinatário', field: 'destinatario', filter: 'agTextColumnFilter', minWidth: 160 },
+                { headerName: 'Assunto / Mensagem', field: 'assunto', filter: 'agTextColumnFilter', minWidth: 200,
+                  cellRenderer: p => p.data.assunto || `<span class="text-muted fst-italic small">${p.data.mensagem}</span>` },
+                { headerName: 'Status', field: 'status', filter: 'agTextColumnFilter', minWidth: 100,
+                  cellRenderer: statusRenderer },
+                { headerName: 'Entrega', field: 'status_entrega', filter: 'agTextColumnFilter', minWidth: 120,
+                  cellRenderer: statusEntregaRenderer },
+                { headerName: 'Confirmação', field: 'data_confirmacao_fmt', filter: 'agTextColumnFilter', minWidth: 130,
+                  cellRenderer: p => p.value ? `<small>${p.value}</small>` : '<span class="text-muted">—</span>' },
+                { headerName: 'ID Externo', field: 'external_id', filter: 'agTextColumnFilter', minWidth: 160,
+                  cellRenderer: p => p.value ? `<span class="font-monospace small text-muted">${p.value.substring(0,20)}…</span>` : '<span class="text-muted">—</span>' },
+                { headerName: '', field: 'pk', minWidth: 60, maxWidth: 60, sortable: false, filter: false,
+                  cellRenderer: acoesRenderer },
+            ],
+            rowData: painelRowData,
+            domLayout: 'autoHeight',
+            defaultColDef: { sortable: true, resizable: true },
+            rowHeight: 44, headerHeight: 48,
+            suppressCellFocus: true, enableCellTextSelection: true,
+        }
+    );
+});
+</script>
+{% endblock %}

@@ -1,0 +1,138 @@
+{% comment %}
+3.31 — Componente de gráfico reutilizável (Chart.js)
+
+Uso:
+  {% include 'components/chart_card.html' with
+      chart_id="recebimentos_chart"
+      chart_type="bar"         (bar|line|pie|doughnut)
+      title="Recebimentos Mensais"
+      subtitle="Últimos 12 meses"
+      height="280"             (em px, default 280)
+      api_url="/financeiro/api/dashboard-dados/"  (opcional, carrega via fetch)
+      chart_var="recebimentosChartData"           (JS var com dados inline, alternativa ao api_url)
+  %}
+
+Se usar api_url, espera resposta JSON com:
+  { labels: [...], datasets: [{label, data, backgroundColor?, borderColor?}] }
+
+Se usar chart_var, defina a variável JS antes do include:
+  <script>var recebimentosChartData = { labels: [...], datasets: [...] };</script>
+{% endcomment %}
+
+<div class="card shadow-sm">
+  <div class="card-header d-flex justify-content-between align-items-center">
+    <span>
+      {% if chart_type == "pie" or chart_type == "doughnut" %}
+        <i class="fas fa-chart-pie me-2 text-primary"></i>
+      {% elif chart_type == "line" %}
+        <i class="fas fa-chart-line me-2 text-success"></i>
+      {% else %}
+        <i class="fas fa-chart-bar me-2 text-info"></i>
+      {% endif %}
+      {{ title }}
+    </span>
+    {% if subtitle %}
+    <small class="text-muted">{{ subtitle }}</small>
+    {% endif %}
+  </div>
+  <div class="card-body p-2">
+    <div style="position:relative; height:{{ height|default:'280' }}px;">
+      <canvas id="{{ chart_id }}"></canvas>
+    </div>
+    <div id="{{ chart_id }}_loading" class="text-center text-muted py-3" style="display:none;">
+      <div class="spinner-border spinner-border-sm me-2" role="status"></div>
+      Carregando...
+    </div>
+    <div id="{{ chart_id }}_error" class="alert alert-warning py-2 small" style="display:none;">
+      <i class="fas fa-exclamation-triangle me-1"></i>
+      Não foi possível carregar os dados do gráfico.
+    </div>
+  </div>
+</div>
+
+{% if api_url or chart_var %}
+<script>
+(function() {
+  var chartId = '{{ chart_id }}';
+  var chartType = '{{ chart_type|default:"bar" }}';
+
+  {% if chart_var %}
+  // Dados inline
+  var chartData = {{ chart_var }};
+  renderChart(chartData);
+  {% elif api_url %}
+  // Carrega via API
+  var loadingEl = document.getElementById(chartId + '_loading');
+  var errorEl = document.getElementById(chartId + '_error');
+  if (loadingEl) loadingEl.style.display = '';
+
+  fetch('{{ api_url }}')
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+      if (loadingEl) loadingEl.style.display = 'none';
+      renderChart(data);
+    })
+    .catch(function() {
+      if (loadingEl) loadingEl.style.display = 'none';
+      if (errorEl) errorEl.style.display = '';
+    });
+  {% endif %}
+
+  function renderChart(data) {
+    var canvas = document.getElementById(chartId);
+    if (!canvas || typeof Chart === 'undefined') return;
+
+    // Paleta padrão Bootstrap
+    var defaultColors = [
+      '#0d6efd','#198754','#dc3545','#ffc107','#0dcaf0',
+      '#6f42c1','#fd7e14','#20c997','#6c757d','#d63384'
+    ];
+
+    if (data.datasets) {
+      data.datasets.forEach(function(ds, i) {
+        if (!ds.backgroundColor) {
+          if (chartType === 'bar' || chartType === 'line') {
+            ds.backgroundColor = defaultColors[i % defaultColors.length] + '88';
+            ds.borderColor = defaultColors[i % defaultColors.length];
+          } else {
+            ds.backgroundColor = defaultColors.slice(0, (data.labels || []).length);
+          }
+        }
+        if (chartType === 'line' && !ds.borderWidth) {
+          ds.borderWidth = 2;
+          ds.fill = false;
+          ds.tension = 0.3;
+        }
+      });
+    }
+
+    new Chart(canvas, {
+      type: chartType,
+      data: data,
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { position: chartType === 'pie' || chartType === 'doughnut' ? 'right' : 'top' },
+          tooltip: {
+            callbacks: {
+              label: function(ctx) {
+                var val = ctx.parsed.y !== undefined ? ctx.parsed.y : ctx.parsed;
+                if (typeof val === 'number' && val > 100) {
+                  return ctx.dataset.label + ': R$ ' + val.toLocaleString('pt-BR', {minimumFractionDigits: 2});
+                }
+                return ctx.dataset.label + ': ' + val;
+              }
+            }
+          }
+        },
+        scales: chartType === 'pie' || chartType === 'doughnut' ? {} : {
+          y: { beginAtZero: true, ticks: { font: { size: 11 } } },
+          x: { ticks: { font: { size: 11 } } }
+        }
+      }
+    });
+  }
+})();
+</script>
+{% endif %}

@@ -1,0 +1,228 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Templates de Notificação - Gestão de Contratos{% endblock %}
+
+{% block extra_css %}
+<style>
+    .ag-theme-material .ag-root-wrapper { border-radius: 0; border: none; }
+    .ag-theme-material .ag-header { background-color: #343a40; }
+    .ag-theme-material .ag-header-cell-text { color: #fff; font-weight: 600; }
+    .ag-theme-material .ag-header-icon { color: #fff; }
+    .ag-theme-material .ag-row-even { background-color: #fff; }
+    .ag-theme-material .ag-row-odd  { background-color: #f8f9fa; }
+    .ag-theme-material .ag-row:hover { background-color: #e8f4fd !important; }
+    .ag-grid-actions .btn { padding: 1px 6px; font-size: 0.75rem; margin: 1px; }
+    .canal-badge { font-size: .7rem; padding: 2px 6px; border-radius: 10px; white-space: nowrap; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <!-- Header -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h2 class="mb-1">
+                <i class="fas fa-file-alt text-success me-2"></i>Templates de Notificação
+            </h2>
+            <p class="text-muted mb-0">Gerencie os templates de mensagens (E-mail, SMS e WhatsApp)</p>
+        </div>
+        <a href="{% url 'notificacoes:criar_template' %}" class="btn btn-success">
+            <i class="fas fa-plus me-1"></i> Novo Template
+        </a>
+    </div>
+
+    <!-- Filtros -->
+    <div class="card mb-4">
+        <div class="card-body py-2">
+            <form method="get" class="row g-2 align-items-center">
+                <div class="col-md-3">
+                    <select name="codigo" class="form-select" onchange="this.form.submit()">
+                        <option value="">Todos os Tipos</option>
+                        {% for value, label in tipos_template %}
+                        <option value="{{ value }}" {% if codigo_selecionado == value %}selected{% endif %}>{{ label }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-2 d-flex align-items-end">
+                    <a href="{% url 'notificacoes:listar_templates' %}" class="btn btn-secondary w-100">
+                        <i class="fas fa-times me-1"></i> Limpar
+                    </a>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Grid -->
+    <div class="card shadow-sm">
+        <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
+            <div>
+                <strong>Templates</strong>
+                <span class="badge bg-secondary ms-2">{{ total_templates }} registro(s)</span>
+            </div>
+            <div class="d-flex align-items-center gap-2">
+                <i class="fas fa-search text-muted"></i>
+                <input type="text" id="gridQuickFilter" class="form-control form-control-sm"
+                       placeholder="Busca rápida..." style="width: 220px;"
+                       oninput="if(window.tplGridApi) window.tplGridApi.setGridOption('quickFilterText', this.value)">
+            </div>
+        </div>
+        <div class="card-body p-0">
+            <div id="tplGrid" class="ag-theme-material" style="width:100%;"></div>
+        </div>
+        <div class="card-footer">
+            {% include "includes/pagination_perpage.html" %}
+        </div>
+    </div>
+</div>
+
+<!-- Modal de Preview -->
+<div class="modal fade" id="modalPreview" tabindex="-1">
+    <div class="modal-dialog modal-xl">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="fas fa-eye me-2"></i>Preview do Template</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body" id="modalPreviewBody">
+                <div class="text-center py-4">
+                    <div class="spinner-border text-primary" role="status">
+                        <span class="visually-hidden">Carregando...</span>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Fechar</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+const tplRowData = [
+{% for template in templates %}
+{
+    pk: {{ template.pk }},
+    nome: "{{ template.nome|escapejs }}",
+    codigo_display: "{{ template.get_codigo_display|escapejs }}",
+    tem_email: {{ template.tem_email|yesno:"true,false" }},
+    tem_sms: {{ template.tem_sms|yesno:"true,false" }},
+    tem_whatsapp: {{ template.tem_whatsapp|yesno:"true,false" }},
+    imobiliaria: "{% if template.imobiliaria %}{{ template.imobiliaria.nome|escapejs }}{% endif %}",
+    assunto: "{{ template.assunto|escapejs }}",
+    ativo: {{ template.ativo|yesno:"true,false" }},
+    url_preview: "{% url 'notificacoes:preview_template' template.pk %}",
+    url_duplicar: "{% url 'notificacoes:duplicar_template' template.pk %}",
+    url_editar: "{% url 'notificacoes:editar_template' template.pk %}",
+    url_excluir: "{% url 'notificacoes:excluir_template' template.pk %}",
+},
+{% endfor %}
+];
+
+function canaisRenderer(params) {
+    const d = params.data;
+    let badges = '';
+    if (d.tem_email)
+        badges += '<span class="canal-badge bg-primary text-white me-1"><i class="fas fa-envelope me-1"></i>Email</span>';
+    if (d.tem_sms)
+        badges += '<span class="canal-badge bg-info text-white me-1"><i class="fas fa-sms me-1"></i>SMS</span>';
+    if (d.tem_whatsapp)
+        badges += '<span class="canal-badge text-white me-1" style="background:#25D366"><i class="fab fa-whatsapp me-1"></i>WA</span>';
+    return badges || '<span class="badge bg-secondary">—</span>';
+}
+
+function imobiliariaRenderer(params) {
+    return params.value
+        ? params.value
+        : '<span class="badge bg-info">Global</span>';
+}
+
+function ativoTplRenderer(params) {
+    return params.value
+        ? '<span class="badge bg-success">Ativo</span>'
+        : '<span class="badge bg-secondary">Inativo</span>';
+}
+
+function acoesTplRenderer(params) {
+    const d = params.data;
+    return `<div class="ag-grid-actions">
+        <button type="button" class="btn btn-sm btn-outline-info btn-preview" data-url="${d.url_preview}" title="Preview"><i class="fas fa-eye"></i></button>
+        <a href="${d.url_duplicar}" class="btn btn-sm btn-outline-secondary" title="Duplicar"><i class="fas fa-copy"></i></a>
+        <a href="${d.url_editar}" class="btn btn-sm btn-outline-primary" title="Editar"><i class="fas fa-edit"></i></a>
+        <a href="${d.url_excluir}" class="btn btn-sm btn-outline-danger" title="Excluir"><i class="fas fa-trash"></i></a>
+    </div>`;
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+    window.tplGridApi = agGrid.createGrid(
+        document.getElementById('tplGrid'),
+        {
+            columnDefs: [
+                { headerName: 'Nome', field: 'nome', filter: 'agTextColumnFilter', minWidth: 180,
+                  cellRenderer: p => `<strong>${p.value}</strong>` },
+                { headerName: 'Tipo', field: 'codigo_display', filter: 'agTextColumnFilter', minWidth: 160,
+                  cellRenderer: p => `<span class="badge bg-secondary">${p.value}</span>` },
+                { headerName: 'Canais', field: 'tem_email', sortable: false, filter: false, minWidth: 210,
+                  cellRenderer: canaisRenderer },
+                { headerName: 'Imobiliária', field: 'imobiliaria', filter: 'agTextColumnFilter', minWidth: 150,
+                  cellRenderer: imobiliariaRenderer },
+                { headerName: 'Assunto (Email)', field: 'assunto', filter: 'agTextColumnFilter', minWidth: 200,
+                  cellRenderer: p => `<small class="text-muted">${p.value || '—'}</small>` },
+                { headerName: 'Status', field: 'ativo', filter: false, minWidth: 90,
+                  cellRenderer: ativoTplRenderer },
+                { headerName: 'Ações', field: 'pk', sortable: false, filter: false, minWidth: 160,
+                  cellRenderer: acoesTplRenderer },
+            ],
+            rowData: tplRowData,
+            domLayout: 'autoHeight',
+            defaultColDef: { sortable: true, resizable: true },
+            rowHeight: 44, headerHeight: 48,
+            suppressCellFocus: true, enableCellTextSelection: true,
+        }
+    );
+
+    // Modal de preview — event delegation
+    const modal = new bootstrap.Modal(document.getElementById('modalPreview'));
+    const modalBody = document.getElementById('modalPreviewBody');
+
+    document.getElementById('tplGrid').addEventListener('click', function(e) {
+        const btn = e.target.closest('.btn-preview');
+        if (!btn) return;
+        const url = btn.dataset.url;
+        modalBody.innerHTML = '<div class="text-center py-4"><div class="spinner-border text-primary" role="status"><span class="visually-hidden">Carregando...</span></div></div>';
+        modal.show();
+
+        fetch(url, { method: 'GET', headers: { 'X-Requested-With': 'XMLHttpRequest' } })
+            .then(r => r.json())
+            .then(data => {
+                let canais = '';
+                if (data.tem_email)    canais += '<span class="badge bg-primary me-1"><i class="fas fa-envelope me-1"></i>Email</span>';
+                if (data.tem_sms)      canais += '<span class="badge bg-info me-1"><i class="fas fa-sms me-1"></i>SMS</span>';
+                if (data.tem_whatsapp) canais += '<span class="badge text-white me-1" style="background:#25D366"><i class="fab fa-whatsapp me-1"></i>WhatsApp</span>';
+
+                let html = `<div class="mb-3"><strong>Nome:</strong> ${data.nome} &nbsp; ${canais}</div>`;
+
+                if (data.tem_email) {
+                    html += `<div class="mb-3"><strong>Assunto:</strong><div class="alert alert-light mt-1 mb-0">${data.assunto || '<em class="text-muted">(sem assunto)</em>'}</div></div>`;
+                    if (data.corpo_html) {
+                        html += `<div class="mb-3"><strong>Corpo E-mail (HTML):</strong><div class="border p-3 rounded bg-white mt-1" style="max-height:350px;overflow:auto;">${data.corpo_html}</div></div>`;
+                    }
+                }
+                if (data.tem_sms) {
+                    html += `<div class="mb-3"><strong>Corpo SMS:</strong><pre class="bg-light p-3 rounded mt-1" style="white-space:pre-wrap;">${data.corpo}</pre></div>`;
+                }
+                if (data.tem_whatsapp) {
+                    html += `<div class="mb-3"><strong>Corpo WhatsApp:</strong><pre class="bg-light p-3 rounded mt-1" style="white-space:pre-wrap;">${data.corpo_whatsapp}</pre></div>`;
+                }
+
+                modalBody.innerHTML = html;
+            })
+            .catch(() => {
+                modalBody.innerHTML = '<div class="text-center py-4 text-danger"><i class="fas fa-exclamation-triangle fa-3x mb-3"></i><p>Erro ao carregar preview</p></div>';
+            });
+    });
+});
+</script>
+{% endblock %}

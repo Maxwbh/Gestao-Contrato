@@ -1,0 +1,293 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Simulador de Antecipação — {{ contrato.numero_contrato }}{% endblock %}
+
+{% block extra_css %}
+<style>
+    .parcela-row.selecionada { background-color: #e8f5e9; }
+    .resumo-card { border-left: 4px solid #007bff; }
+    .economia-destaque { font-size: 1.5rem; font-weight: bold; color: #28a745; }
+    .linha-prevista { color: #6c757d; font-style: italic; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+
+    <!-- Cabeçalho -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h2><i class="fas fa-calculator"></i> Simulador de Antecipação</h2>
+            <p class="text-muted mb-0">
+                Contrato <strong>{{ contrato.numero_contrato }}</strong> —
+                {{ contrato.comprador.nome }}
+                {% if contrato.imovel %} — Lote {{ contrato.imovel.identificacao }}{% endif %}
+            </p>
+        </div>
+        <a href="{% url 'contratos:detalhe' contrato.pk %}" class="btn btn-outline-secondary">
+            <i class="fas fa-arrow-left"></i> Voltar ao Contrato
+        </a>
+    </div>
+
+    {% if messages %}
+    {% for msg in messages %}
+    <div class="alert alert-{{ msg.tags }} alert-dismissible fade show">
+        {{ msg }} <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+    {% endfor %}
+    {% endif %}
+
+    <div class="row">
+        <!-- Formulário de seleção -->
+        <div class="col-lg-7">
+            <div class="card mb-4">
+                <div class="card-header bg-primary text-white">
+                    <i class="fas fa-list-check"></i> Parcelas disponíveis para antecipação
+                    <span class="badge bg-light text-dark ms-1">{{ parcelas_disponiveis|length }}</span>
+                </div>
+                <div class="card-body p-0">
+                    {% if parcelas_disponiveis %}
+                    <form method="post" id="formSimulador">
+                        {% csrf_token %}
+                        <input type="hidden" name="action" id="actionInput" value="preview">
+
+                        <div class="px-3 py-2 border-bottom bg-light">
+                            <div class="d-flex align-items-center gap-3">
+                                <div class="form-check mb-0">
+                                    <input class="form-check-input" type="checkbox" id="selecionarTodos">
+                                    <label class="form-check-label fw-semibold" for="selecionarTodos">
+                                        Selecionar todas
+                                    </label>
+                                </div>
+                                <div class="d-flex align-items-center gap-2 ms-auto">
+                                    <label class="fw-semibold mb-0">Desconto (%):</label>
+                                    <input type="number"
+                                           name="desconto"
+                                           id="descontoInput"
+                                           value="{{ desconto_perc }}"
+                                           min="0" max="100" step="0.01"
+                                           class="form-control form-control-sm"
+                                           style="width: 90px;"
+                                           required>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="table-responsive">
+                            <table class="table table-sm table-hover mb-0">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th class="text-center" style="width:40px;"></th>
+                                        <th class="text-center">Parc.</th>
+                                        <th>Vencimento</th>
+                                        <th class="text-end">Valor Atual</th>
+                                        <th class="text-end text-success" id="colDesconto">
+                                            Desconto (<span id="descontoLabel">{{ desconto_perc }}</span>%)
+                                        </th>
+                                        <th class="text-end text-primary">Antecipado</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="tabelaParcelas">
+                                    {% for p in parcelas_disponiveis %}
+                                    <tr class="parcela-row {% if p.id|stringformat:'s' in parcelas_selecionadas_ids %}selecionada{% endif %}"
+                                        data-valor="{{ p.valor_atual }}">
+                                        <td class="text-center">
+                                            <input class="form-check-input parcela-check"
+                                                   type="checkbox"
+                                                   name="parcelas"
+                                                   value="{{ p.id }}"
+                                                   {% if p.id|stringformat:'s' in parcelas_selecionadas_ids %}checked{% endif %}>
+                                        </td>
+                                        <td class="text-center">
+                                            <span class="badge bg-secondary">{{ p.numero_parcela }}</span>
+                                        </td>
+                                        <td>
+                                            {{ p.data_vencimento|date:"d/m/Y" }}
+                                            {% if p.esta_vencida %}
+                                            <span class="badge bg-danger ms-1">Vencida</span>
+                                            {% endif %}
+                                        </td>
+                                        <td class="text-end font-monospace">R$ {{ p.valor_atual|floatformat:2 }}</td>
+                                        <td class="text-end font-monospace text-success col-desconto">—</td>
+                                        <td class="text-end font-monospace text-primary col-antecipado">—</td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                                <tfoot class="table-light fw-bold">
+                                    <tr>
+                                        <td colspan="3" class="text-end">Total selecionado:</td>
+                                        <td class="text-end font-monospace" id="totalOriginal">R$ 0,00</td>
+                                        <td class="text-end font-monospace text-success" id="totalDesconto">R$ 0,00</td>
+                                        <td class="text-end font-monospace text-primary" id="totalAntecipado">R$ 0,00</td>
+                                    </tr>
+                                </tfoot>
+                            </table>
+                        </div>
+
+                        <div class="p-3 border-top d-flex gap-2 justify-content-end">
+                            <button type="submit" class="btn btn-primary" id="btnPreview">
+                                <i class="fas fa-eye"></i> Visualizar Prévia
+                            </button>
+                        </div>
+                    </form>
+                    {% else %}
+                    <div class="p-4 text-center text-muted">
+                        <i class="fas fa-check-circle fa-2x text-success mb-2"></i><br>
+                        Todas as parcelas deste contrato já foram pagas.
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <!-- Painel de resumo / preview -->
+        <div class="col-lg-5">
+            {% if preview and preview.itens %}
+            <div class="card mb-4 resumo-card">
+                <div class="card-header bg-success text-white">
+                    <i class="fas fa-calculator"></i> Prévia da Antecipação
+                </div>
+                <div class="card-body">
+                    <div class="row text-center mb-3">
+                        <div class="col-4">
+                            <div class="text-muted small">Total Original</div>
+                            <div class="fw-bold font-monospace">R$ {{ preview.total_original|floatformat:2 }}</div>
+                        </div>
+                        <div class="col-4">
+                            <div class="text-muted small">Desconto ({{ preview.desconto_perc }}%)</div>
+                            <div class="fw-bold font-monospace text-danger">− R$ {{ preview.economia|floatformat:2 }}</div>
+                        </div>
+                        <div class="col-4">
+                            <div class="text-muted small">A Pagar</div>
+                            <div class="fw-bold font-monospace text-primary">R$ {{ preview.total_antecipado|floatformat:2 }}</div>
+                        </div>
+                    </div>
+
+                    <div class="text-center mb-3 p-2 bg-light rounded">
+                        <div class="text-muted small">Economia Total</div>
+                        <div class="economia-destaque">R$ {{ preview.economia|floatformat:2 }}</div>
+                        <div class="text-muted small">em {{ preview.qtd }} parcela(s)</div>
+                    </div>
+
+                    <div class="table-responsive mb-3">
+                        <table class="table table-sm table-bordered mb-0">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Parc.</th>
+                                    <th>Venc.</th>
+                                    <th class="text-end">Original</th>
+                                    <th class="text-end text-success">Desconto</th>
+                                    <th class="text-end text-primary">Antecipado</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for item in preview.itens %}
+                                <tr>
+                                    <td><span class="badge bg-secondary">{{ item.parcela.numero_parcela }}</span></td>
+                                    <td class="font-monospace small">{{ item.parcela.data_vencimento|date:"d/m/Y" }}</td>
+                                    <td class="text-end font-monospace small">R$ {{ item.valor_original|floatformat:2 }}</td>
+                                    <td class="text-end font-monospace small text-success">− R$ {{ item.desconto_valor|floatformat:2 }}</td>
+                                    <td class="text-end font-monospace small text-primary fw-bold">R$ {{ item.valor_antecipado|floatformat:2 }}</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <form method="post">
+                        {% csrf_token %}
+                        <input type="hidden" name="action" value="aplicar">
+                        <input type="hidden" name="desconto" value="{{ preview.desconto_perc }}">
+                        {% for item in preview.itens %}
+                        <input type="hidden" name="parcelas" value="{{ item.parcela.id }}">
+                        {% endfor %}
+                        <button type="submit" class="btn btn-success w-100"
+                                onclick="return confirm('Confirmar antecipação de {{ preview.qtd }} parcela(s) com {{ preview.desconto_perc }}% de desconto? Esta ação não pode ser desfeita.')">
+                            <i class="fas fa-check-circle"></i>
+                            Confirmar Antecipação — Pagar R$ {{ preview.total_antecipado|floatformat:2 }}
+                        </button>
+                    </form>
+                </div>
+            </div>
+            {% else %}
+            <div class="card">
+                <div class="card-header">
+                    <i class="fas fa-info-circle"></i> Como funciona
+                </div>
+                <div class="card-body">
+                    <ol class="mb-0">
+                        <li class="mb-2">Selecione as parcelas que deseja antecipar.</li>
+                        <li class="mb-2">Informe o percentual de desconto a conceder.</li>
+                        <li class="mb-2">Clique em <strong>Visualizar Prévia</strong> para ver o resumo.</li>
+                        <li>Confirme para quitar as parcelas com o desconto aplicado.</li>
+                    </ol>
+                    <hr>
+                    <div class="alert alert-info mb-0 small">
+                        <i class="fas fa-lightbulb"></i>
+                        O pagamento será registrado com <strong>data de hoje</strong> e
+                        marcado como <em>antecipação</em> no histórico.
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function () {
+    const checks = document.querySelectorAll('.parcela-check');
+    const checkTodos = document.getElementById('selecionarTodos');
+    const descontoInput = document.getElementById('descontoInput');
+    const descontoLabel = document.getElementById('descontoLabel');
+
+    function fmt(v) {
+        return 'R$ ' + v.toLocaleString('pt-BR', { minimumFractionDigits: 2 });
+    }
+
+    function recalcular() {
+        const perc = parseFloat(descontoInput.value) || 0;
+        descontoLabel.textContent = perc % 1 === 0 ? perc.toFixed(0) : perc.toFixed(2);
+
+        let totalOrig = 0, totalDesc = 0, totalAntec = 0;
+
+        document.querySelectorAll('.parcela-row').forEach(function (row) {
+            const check = row.querySelector('.parcela-check');
+            const valor = parseFloat(row.dataset.valor) || 0;
+            const descValor = Math.round(valor * perc) / 100;
+            const antecValor = valor - descValor;
+
+            row.querySelector('.col-desconto').textContent = check.checked ? fmt(descValor) : '—';
+            row.querySelector('.col-antecipado').textContent = check.checked ? fmt(antecValor) : '—';
+            row.classList.toggle('selecionada', check.checked);
+
+            if (check.checked) {
+                totalOrig += valor;
+                totalDesc += descValor;
+                totalAntec += antecValor;
+            }
+        });
+
+        document.getElementById('totalOriginal').textContent = fmt(totalOrig);
+        document.getElementById('totalDesconto').textContent = fmt(totalDesc);
+        document.getElementById('totalAntecipado').textContent = fmt(totalAntec);
+    }
+
+    if (checkTodos) {
+        checkTodos.addEventListener('change', function () {
+            checks.forEach(c => { c.checked = checkTodos.checked; });
+            recalcular();
+        });
+    }
+
+    checks.forEach(c => c.addEventListener('change', recalcular));
+    if (descontoInput) descontoInput.addEventListener('input', recalcular);
+
+    // Inicializar
+    recalcular();
+})();
+</script>
+{% endblock %}

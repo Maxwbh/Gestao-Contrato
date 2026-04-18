@@ -1,0 +1,342 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Conciliação Bancária{% endblock %}
+
+{% block extra_css %}
+<style>
+    .origem-badge-CNAB        { background: #0d6efd; color: #fff; }
+    .origem-badge-OFX         { background: #0dcaf0; color: #000; }
+    .origem-badge-MANUAL      { background: #6c757d; color: #fff; }
+    .origem-badge-ANTECIPACAO { background: #198754; color: #fff; }
+    .origem-badge-SISTEMA     { background: #adb5bd; color: #000; }
+    .kpi-card { border-left: 4px solid; border-radius: .375rem; }
+    .kpi-card.pendente  { border-left-color: #dc3545; }
+    .kpi-card.cnab      { border-left-color: #0d6efd; }
+    .kpi-card.ofx       { border-left-color: #0dcaf0; }
+    .kpi-card.manual    { border-left-color: #6c757d; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+
+    <!-- Header -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h2 class="mb-0"><i class="fas fa-balance-scale me-2"></i>Conciliação Bancária</h2>
+            <small class="text-muted">3 métodos: Retorno CNAB · Extrato OFX · Baixa Manual</small>
+        </div>
+        <div class="d-flex gap-2">
+            <a href="{% url 'financeiro:upload_retorno' %}" class="btn btn-outline-primary btn-sm">
+                <i class="fas fa-file-import me-1"></i>Importar Retorno CNAB
+            </a>
+            <a href="{% url 'financeiro:upload_ofx' %}" class="btn btn-outline-info btn-sm">
+                <i class="fas fa-file-alt me-1"></i>Importar OFX
+            </a>
+        </div>
+    </div>
+
+    <!-- Filtros -->
+    <form method="get" class="card mb-4">
+        <div class="card-body py-2">
+            <div class="row g-2 align-items-end">
+                <div class="col-md-3">
+                    <label class="form-label mb-1 small">Imobiliária</label>
+                    <select name="imobiliaria" class="form-select form-select-sm">
+                        <option value="">Todas</option>
+                        {% for imob in imobiliarias %}
+                        <option value="{{ imob.pk }}" {% if imob_id == imob.pk|stringformat:"s" %}selected{% endif %}>{{ imob.nome }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label mb-1 small">Período (dias)</label>
+                    <select name="periodo" class="form-select form-select-sm">
+        <option value="7"  {% if periodo == "7"  %}selected{% endif %}>7 dias</option>
+                        <option value="15" {% if periodo == "15" %}selected{% endif %}>15 dias</option>
+                        <option value="30" {% if periodo == "30" %}selected{% endif %}>30 dias</option>
+                        <option value="60" {% if periodo == "60" %}selected{% endif %}>60 dias</option>
+                        <option value="90" {% if periodo == "90" %}selected{% endif %}>90 dias</option>
+                    </select>
+                </div>
+                <div class="col-auto">
+                    <button type="submit" class="btn btn-sm btn-outline-secondary">
+                        <i class="fas fa-search me-1"></i>Filtrar
+                    </button>
+                </div>
+            </div>
+        </div>
+    </form>
+
+    <!-- KPIs -->
+    <div class="row g-3 mb-4">
+        <div class="col-md-3">
+            <div class="card kpi-card pendente h-100">
+                <div class="card-body py-3">
+                    <div class="text-muted small mb-1"><i class="fas fa-clock me-1"></i>Aguardando Conciliação</div>
+                    <div class="fs-3 fw-bold text-danger">{{ total_pendentes }}</div>
+                    <div class="text-muted small">R$ {{ valor_pendente|floatformat:2 }}</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card kpi-card cnab h-100">
+                <div class="card-body py-3">
+                    <div class="text-muted small mb-1"><i class="fas fa-file-import me-1"></i>Retorno CNAB <span class="badge bg-secondary ms-1">{{ periodo }}d</span></div>
+                    <div class="fs-3 fw-bold text-primary">{{ origem_stats.CNAB.total }}</div>
+                    <div class="text-muted small">R$ {{ origem_stats.CNAB.valor|floatformat:2 }}</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card kpi-card ofx h-100">
+                <div class="card-body py-3">
+                    <div class="text-muted small mb-1"><i class="fas fa-file-alt me-1"></i>Extrato OFX <span class="badge bg-secondary ms-1">{{ periodo }}d</span></div>
+                    <div class="fs-3 fw-bold" style="color:#0dcaf0;">{{ origem_stats.OFX.total }}</div>
+                    <div class="text-muted small">R$ {{ origem_stats.OFX.valor|floatformat:2 }}</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card kpi-card manual h-100">
+                <div class="card-body py-3">
+                    <div class="text-muted small mb-1"><i class="fas fa-hand-paper me-1"></i>Baixa Manual <span class="badge bg-secondary ms-1">{{ periodo }}d</span></div>
+                    <div class="fs-3 fw-bold text-secondary">{{ origem_stats.MANUAL.total }}</div>
+                    <div class="text-muted small">R$ {{ origem_stats.MANUAL.valor|floatformat:2 }}</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row g-4">
+
+        <!-- Boletos Pendentes de Conciliação -->
+        <div class="col-lg-7">
+            <div class="card h-100">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <strong><i class="fas fa-exclamation-circle text-danger me-2"></i>Boletos Pendentes de Conciliação</strong>
+                    <span class="badge bg-danger">{{ total_pendentes }}</span>
+                </div>
+                <div class="card-body p-0">
+                    <div class="table-responsive" style="max-height: 420px; overflow-y: auto;">
+                        <table class="table table-sm table-hover mb-0">
+                            <thead class="table-light sticky-top" style="z-index:1;">
+                                <tr>
+                                    <th>Nosso Nº</th>
+                                    <th>Comprador</th>
+                                    <th>Contrato</th>
+                                    <th>Vencimento</th>
+                                    <th class="text-end">Valor</th>
+                                    <th>Status</th>
+                                    <th></th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for p in parcelas_pendentes %}
+                                <tr>
+                                    <td><code class="small">{{ p.nosso_numero|default:"—" }}</code></td>
+                                    <td class="small">{{ p.contrato.comprador.nome|truncatechars:22 }}</td>
+                                    <td><small>{{ p.contrato.numero_contrato }}</small></td>
+                                    <td>
+                                        {% if p.data_vencimento < today %}
+                                            <span class="text-danger small">{{ p.data_vencimento|date:"d/m/Y" }}</span>
+                                        {% else %}
+                                            <span class="small">{{ p.data_vencimento|date:"d/m/Y" }}</span>
+                                        {% endif %}
+                                    </td>
+                                    <td class="text-end small"><strong>R$ {{ p.valor_boleto|default:p.valor_atual|floatformat:2 }}</strong></td>
+                                    <td>
+                                        {% if p.status_boleto == 'VENCIDO' %}
+                                            <span class="badge bg-danger">Vencido</span>
+                                        {% elif p.status_boleto == 'REGISTRADO' %}
+                                            <span class="badge bg-info text-dark">Registrado</span>
+                                        {% else %}
+                                            <span class="badge bg-warning text-dark">Gerado</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        <a href="{% url 'financeiro:detalhe_parcela' p.pk %}" class="btn btn-sm btn-outline-secondary" title="Detalhe">
+                                            <i class="fas fa-eye"></i>
+                                        </a>
+                                    </td>
+                                </tr>
+                                {% empty %}
+                                <tr><td colspan="7" class="text-center py-4 text-muted">
+                                    <i class="fas fa-check-circle text-success fa-2x mb-2 d-block"></i>
+                                    Nenhum boleto pendente de conciliação.
+                                </td></tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+                {% if total_pendentes > 100 %}
+                <div class="card-footer text-muted small">
+                    Exibindo primeiros 100 de {{ total_pendentes }} boletos.
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Painel direito: Histórico + Erros + Arquivos -->
+        <div class="col-lg-5 d-flex flex-column gap-3">
+
+            <!-- Histórico recente -->
+            <div class="card">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <strong><i class="fas fa-history me-2"></i>Histórico Recente</strong>
+                    <span class="badge bg-secondary">{{ historico_recente|length }}</span>
+                </div>
+                <div class="card-body p-0">
+                    <div class="table-responsive" style="max-height: 240px; overflow-y: auto;">
+                        <table class="table table-sm mb-0">
+                            <thead class="table-light sticky-top" style="z-index:1;">
+                                <tr>
+                                    <th>Data</th>
+                                    <th>Comprador</th>
+                                    <th class="text-end">Valor</th>
+                                    <th>Origem</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for h in historico_recente %}
+                                <tr>
+                                    <td class="small">{{ h.data_pagamento|date:"d/m/Y" }}</td>
+                                    <td class="small">{{ h.parcela.contrato.comprador.nome|truncatechars:20 }}</td>
+                                    <td class="text-end small">R$ {{ h.valor_pago|floatformat:2 }}</td>
+                                    <td>
+                                        <span class="badge origem-badge-{{ h.origem_pagamento }} small">
+                                            {{ h.get_origem_pagamento_display }}
+                                        </span>
+                                    </td>
+                                </tr>
+                                {% empty %}
+                                <tr><td colspan="4" class="text-center text-muted py-3">Nenhum registro no período.</td></tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Arquivos de Retorno CNAB recentes -->
+            <div class="card">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <strong><i class="fas fa-file-import me-2"></i>Retornos CNAB Recentes</strong>
+                    <a href="{% url 'financeiro:listar_retornos' %}" class="btn btn-sm btn-outline-primary">Ver todos</a>
+                </div>
+                <div class="card-body p-0">
+                    <table class="table table-sm mb-0">
+                        <tbody>
+                            {% for arq in arquivos_retorno %}
+                            <tr>
+                                <td class="small">
+                                    <a href="{% url 'financeiro:detalhe_retorno' arq.pk %}">{{ arq.nome_arquivo }}</a>
+                                    <br><small class="text-muted">{{ arq.conta_bancaria.descricao }}</small>
+                                </td>
+                                <td class="text-end small">{{ arq.data_upload|date:"d/m" }}</td>
+                                <td>
+                                    {% if arq.status == 'PROCESSADO' %}
+                                        <span class="badge bg-success">Processado</span>
+                                    {% elif arq.status == 'PENDENTE' %}
+                                        <span class="badge bg-warning text-dark">Pendente</span>
+                                    {% else %}
+                                        <span class="badge bg-secondary">{{ arq.status }}</span>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            {% empty %}
+                            <tr><td colspan="3" class="text-center text-muted py-3">Nenhum arquivo no período.</td></tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Erros de processamento -->
+            {% if itens_erro %}
+            <div class="card border-danger">
+                <div class="card-header bg-danger text-white d-flex justify-content-between">
+                    <strong><i class="fas fa-exclamation-triangle me-2"></i>Erros de Processamento</strong>
+                    <span class="badge bg-white text-danger">{{ itens_erro|length }}</span>
+                </div>
+                <div class="card-body p-0">
+                    <div class="table-responsive" style="max-height: 180px; overflow-y: auto;">
+                        <table class="table table-sm mb-0">
+                            <tbody>
+                                {% for item in itens_erro %}
+                                <tr>
+                                    <td class="small">
+                                        <code>{{ item.nosso_numero }}</code>
+                                        <br><small class="text-danger">{{ item.erro_processamento|truncatechars:60 }}</small>
+                                    </td>
+                                    <td class="small text-muted">{{ item.arquivo_retorno.nome_arquivo }}</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+
+        </div><!-- col-lg-5 -->
+    </div><!-- row -->
+
+    <!-- Métodos explicados -->
+    <div class="card mt-4">
+        <div class="card-header"><strong><i class="fas fa-info-circle me-2"></i>Como Conciliar</strong></div>
+        <div class="card-body">
+            <div class="row g-3">
+                <div class="col-md-4">
+                    <div class="d-flex gap-3">
+                        <div class="fs-2 text-primary"><i class="fas fa-file-import"></i></div>
+                        <div>
+                            <strong>1. Retorno CNAB</strong>
+                            <p class="small text-muted mb-0">
+                                Baixe o arquivo <code>.RET</code> do internet banking e
+                                <a href="{% url 'financeiro:upload_retorno' %}">importe aqui</a>.
+                                O sistema cruza o <em>nosso número</em> e dá baixa automática nos boletos liquidados.
+                            </p>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="d-flex gap-3">
+                        <div class="fs-2 text-info"><i class="fas fa-file-alt"></i></div>
+                        <div>
+                            <strong>2. Extrato OFX</strong>
+                            <p class="small text-muted mb-0">
+                                Exporte o extrato em formato OFX do internet banking e
+                                <a href="{% url 'financeiro:upload_ofx' %}">importe aqui</a>.
+                                O sistema tenta casar pelo nosso número no histórico, depois pelo valor+data.
+                            </p>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="d-flex gap-3">
+                        <div class="fs-2 text-secondary"><i class="fas fa-hand-paper"></i></div>
+                        <div>
+                            <strong>3. Baixa Manual</strong>
+                            <p class="small text-muted mb-0">
+                                Para pagamentos em dinheiro, PIX ou transferência avulsa, acesse a parcela e clique em
+                                <em>"Registrar Pagamento"</em>. O sistema registra a origem como Manual.
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+// Filtro de período via split no template — helper
+{% comment %}O filtro split não existe no Django padrão; usando JS para o select{% endcomment %}
+</script>
+{% endblock %}
