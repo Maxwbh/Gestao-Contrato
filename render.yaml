@@ -106,6 +106,34 @@ services:
         sync: false
 
       # ==========================================================================
+      # RASTREAMENTO DE E-MAIL — Bounce Monitoring + Click Tracking
+      # ==========================================================================
+      # Return-Path: endereço que recebe NDR/DSN (bounce) do Zoho SMTP.
+      # Criar caixa bounces@msbrasil.inf.br no Zoho e configurar as
+      # credenciais IMAP abaixo para ativar o monitoramento.
+      - key: BOUNCE_EMAIL_ADDRESS
+        value: "bounces@msbrasil.inf.br"
+      - key: BOUNCE_IMAP_HOST
+        value: "imap.zoho.com"
+      - key: BOUNCE_IMAP_PORT
+        value: "993"
+      - key: BOUNCE_IMAP_USER
+        value: "bounces@msbrasil.inf.br"
+      # Senha da caixa de bounces: definir manualmente no painel do Render
+      - key: BOUNCE_IMAP_PASSWORD
+        sync: false
+      - key: BOUNCE_IMAP_FOLDER
+        value: "INBOX"
+
+      # ==========================================================================
+      # RASTREAMENTO TWILIO — Status Callback (SMS/WhatsApp)
+      # ==========================================================================
+      # URL de webhook para receber confirmações de entrega Twilio.
+      # Após o deploy, definir este valor com a URL real do serviço.
+      - key: TWILIO_STATUS_CALLBACK_URL
+        value: "https://gestao-contrato-web-mt6j.onrender.com/notificacoes/webhook/twilio/"
+
+      # ==========================================================================
       # TWILIO — SMS e WhatsApp
       # ==========================================================================
       - key: TWILIO_PHONE_NUMBER
