@@ -11,6 +11,7 @@ Empresa: M&S do Brasil LTDA
 import logging
 from decimal import Decimal
 from datetime import date, timedelta
+from uuid import uuid4
 from django.conf import settings
 from django.core.mail import EmailMultiAlternatives
 from django.utils import timezone
@@ -184,8 +185,22 @@ class BoletoNotificacaoService:
                     'erro': f'Template {tipo_template} não configurado'
                 }
 
-            # Montar contexto e renderizar
+            # Montar contexto
             contexto = self.montar_contexto(parcela)
+
+            # Gerar UUID de rastreamento ANTES de renderizar o template,
+            # para que %%LINKBOLETO%% já contenha a URL de click-tracking.
+            tracking_uuid = uuid4()
+            message_id = f"<{tracking_uuid}@gestao-contrato>"
+
+            link_boleto_original = contexto.get('LINKBOLETO', '')
+            if link_boleto_original and self.base_url:
+                # Substituir o link pelo URL de click-tracking (sem query string
+                # exposta — o destino é reconstruído pelo servidor a partir da parcela)
+                contexto['LINKBOLETO'] = (
+                    f"{self.base_url}/notificacoes/track/{tracking_uuid}/click/"
+                )
+
             assunto, corpo_texto, corpo_html, _ = template.renderizar(contexto)
 
             # Aplicar safeguard TEST_MODE
@@ -203,11 +218,19 @@ class BoletoNotificacaoService:
 
             # Enviar email
             try:
+                # Cabeçalhos: Message-ID (rastreamento) + Return-Path (bounces)
+                headers = {'Message-ID': message_id}
+                bounce_addr = getattr(settings, 'BOUNCE_EMAIL_ADDRESS', '')
+                if bounce_addr:
+                    headers['Return-Path'] = bounce_addr
+                    headers['Errors-To'] = bounce_addr
+
                 email = EmailMultiAlternatives(
                     subject=assunto,
                     body=corpo_texto,
                     from_email=settings.DEFAULT_FROM_EMAIL,
-                    to=[destinatario_final]
+                    to=[destinatario_final],
+                    headers=headers,
                 )
 
                 # Adicionar versão HTML se disponível
@@ -239,9 +262,10 @@ class BoletoNotificacaoService:
                         logger.warning(f"PDF do boleto não disponível para parcela {parcela.pk}")
 
                 email.send()
-                notificacao.marcar_como_enviada()
+                notificacao.marcar_como_enviada(external_id=message_id)
 
-                logger.info(f"Email de boleto enviado para {destinatario_final} - Parcela {parcela.pk}")
+                logger.info("Email de boleto enviado para %s - Parcela %s (id=%s)",
+                            destinatario_final, parcela.pk, message_id)
                 return {
                     'sucesso': True,
                     'notificacao_id': notificacao.pk,
@@ -331,9 +355,10 @@ class BoletoNotificacaoService:
             )
 
             try:
-                ServicoSMS.enviar(destinatario=numero, mensagem=mensagem)
-                notificacao.marcar_como_enviada()
-                logger.info(f"SMS de boleto enviado para {numero_final} - Parcela {parcela.pk}")
+                _, sid = ServicoSMS.enviar(destinatario=numero, mensagem=mensagem)
+                notificacao.marcar_como_enviada(external_id=sid)
+                logger.info("SMS de boleto enviado para %s - Parcela %s (sid=%s)",
+                            numero_final, parcela.pk, sid)
                 return {
                     'sucesso': True,
                     'notificacao_id': notificacao.pk,

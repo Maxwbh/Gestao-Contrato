@@ -25,6 +25,23 @@ class StatusNotificacao(models.TextChoices):
     CANCELADA = 'CANCELADA', 'Cancelada'
 
 
+class StatusEntrega(models.TextChoices):
+    """Status de entrega retornado pelo provedor ou detectado localmente."""
+    # Twilio SMS/WhatsApp
+    ACEITO = 'accepted', 'Aceito'
+    ENFILEIRADO = 'queued', 'Enfileirado'
+    ENVIANDO = 'sending', 'Enviando'
+    ENVIADO = 'sent', 'Enviado'
+    ENTREGUE = 'delivered', 'Entregue'
+    NAO_ENTREGUE = 'undelivered', 'Não entregue'
+    FALHOU = 'failed', 'Falhou'
+    LIDO = 'read', 'Lido'
+    # E-mail — rastreamento local
+    CLICADO = 'clicked', 'Clicado (link)'
+    BOUNCED = 'bounced', 'Bounce (NDR)'
+    ABERTO = 'opened', 'Aberto (pixel)'
+
+
 class ConfiguracaoEmail(TimeStampedModel):
     """Configurações de servidor de e-mail"""
     nome = models.CharField(max_length=100, verbose_name='Nome da Configuração')
@@ -192,6 +209,27 @@ class Notificacao(TimeStampedModel):
         verbose_name='Mensagem de Erro'
     )
 
+    # Rastreamento de entrega
+    external_id = models.CharField(
+        max_length=255,
+        blank=True,
+        verbose_name='ID Externo',
+        help_text='Twilio MessageSid ou Message-ID do e-mail para rastreamento'
+    )
+    status_entrega = models.CharField(
+        max_length=20,
+        blank=True,
+        choices=StatusEntrega.choices,
+        verbose_name='Status de Entrega',
+        help_text='Status confirmado pelo provedor: queued, sending, sent, delivered, undelivered, failed, read'
+    )
+    data_confirmacao = models.DateTimeField(
+        null=True,
+        blank=True,
+        verbose_name='Data de Confirmação',
+        help_text='Quando o provedor confirmou a entrega ou falha via webhook'
+    )
+
     class Meta:
         verbose_name = 'Notificação'
         verbose_name_plural = 'Notificações'
@@ -199,15 +237,18 @@ class Notificacao(TimeStampedModel):
         indexes = [
             models.Index(fields=['status', 'data_agendamento']),
             models.Index(fields=['parcela']),
+            models.Index(fields=['external_id'], name='notif_external_id_idx'),
         ]
 
     def __str__(self):
         return f"{self.get_tipo_display()} - {self.destinatario} - {self.get_status_display()}"
 
-    def marcar_como_enviada(self):
-        """Marca a notificação como enviada"""
+    def marcar_como_enviada(self, external_id=''):
+        """Marca a notificação como enviada, armazenando o ID externo se fornecido."""
         self.status = StatusNotificacao.ENVIADA
         self.data_envio = timezone.now()
+        if external_id:
+            self.external_id = external_id
         self.save()
 
     def marcar_erro(self, mensagem_erro):

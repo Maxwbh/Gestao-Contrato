@@ -1,5 +1,6 @@
 {% extends 'base.html' %}
 {% load static %}
+{% load humanize %}
 
 {% block title %}Reajustes Pendentes{% endblock %}
 
@@ -9,7 +10,7 @@
     <div class="d-flex justify-content-between align-items-center mb-4">
         <div>
             <h2 class="mb-1"><i class="fas fa-chart-line me-2"></i>Reajustes Pendentes</h2>
-            <p class="text-muted mb-0">Contratos ativos com ciclo de reajuste vencido e não aplicado</p>
+            <p class="text-muted mb-0">Contratos com ciclo de reajuste no período — clique em Aprovar ou Editar por linha, ou selecione múltiplos para ação em lote.</p>
         </div>
         <div class="d-flex gap-2">
             <a href="{% url 'financeiro:listar_reajustes' %}" class="btn btn-outline-secondary">
@@ -25,22 +26,25 @@
     </div>
     {% else %}
 
-    <div class="alert alert-warning mb-3 d-flex justify-content-between align-items-center">
+    <!-- Barra de ações em lote -->
+    <div class="alert alert-warning mb-3 d-flex justify-content-between align-items-center flex-wrap gap-2">
         <div>
             <i class="fas fa-exclamation-triangle me-2"></i>
-            <strong>{{ total_pendentes }} contrato{{ total_pendentes|pluralize }}</strong>
-            com reajuste pendente.
+            <strong>{{ total_pendentes }} contrato{{ total_pendentes|pluralize }}</strong> com reajuste pendente.
         </div>
-        <div class="d-flex gap-2 align-items-center">
+        <div class="d-flex gap-2 align-items-center flex-wrap">
             <span class="text-muted small" id="lote_selecao_info">Nenhum selecionado</span>
-            <button type="button" class="btn btn-sm btn-outline-primary" id="btnSelecionarTodos" onclick="selecionarTodos(true)">
-                <i class="fas fa-check-double me-1"></i>Selecionar Todos
+            <button type="button" class="btn btn-sm btn-outline-secondary" onclick="selecionarTodos(true)">
+                <i class="fas fa-check-double me-1"></i>Todos
             </button>
             <button type="button" class="btn btn-sm btn-outline-secondary" onclick="selecionarTodos(false)">
                 <i class="fas fa-times me-1"></i>Limpar
             </button>
-            <button type="button" class="btn btn-sm btn-success d-none" id="btnAplicarLote" onclick="abrirModalLote()">
-                <i class="fas fa-bolt me-1"></i>Aplicar Selecionados
+            <button type="button" class="btn btn-sm btn-success d-none" id="btnAplicarCalculado" onclick="abrirModal('calculado')">
+                <i class="fas fa-bolt me-1"></i>Aplicar Calculado
+            </button>
+            <button type="button" class="btn btn-sm btn-warning d-none" id="btnAplicarInformado" onclick="abrirModal('informado')">
+                <i class="fas fa-edit me-1"></i>Aplicar Informado
             </button>
         </div>
     </div>
@@ -48,9 +52,7 @@
     {% for grupo in pendentes_agrupados %}
     <div class="card mb-4">
         <div class="card-header bg-light d-flex justify-content-between align-items-center">
-            <h5 class="mb-0">
-                <i class="fas fa-building me-2"></i>{{ grupo.imobiliaria }}
-            </h5>
+            <h5 class="mb-0"><i class="fas fa-building me-2"></i>{{ grupo.imobiliaria }}</h5>
             <div class="d-flex align-items-center gap-2">
                 <span class="badge bg-warning text-dark">{{ grupo.contratos|length }} pendente{{ grupo.contratos|length|pluralize }}</span>
                 <button type="button" class="btn btn-xs btn-outline-secondary btn-sm"
@@ -61,24 +63,31 @@
             </div>
         </div>
         <div class="table-responsive">
-            <table class="table table-hover mb-0">
+            <table class="table table-hover mb-0 align-middle" style="font-size:0.88rem;">
                 <thead class="table-light">
                     <tr>
-                        <th class="text-center" style="width:40px;">
-                            <input type="checkbox" class="form-check-input" onchange="selecionarGrupo('{{ grupo.imobiliaria|escapejs }}', this.checked)" title="Selecionar grupo">
+                        <th class="text-center" style="width:36px;">
+                            <input type="checkbox" class="form-check-input"
+                                   onchange="selecionarGrupo('{{ grupo.imobiliaria|escapejs }}', this.checked)"
+                                   title="Selecionar grupo">
                         </th>
                         <th>Contrato</th>
                         <th>Comprador</th>
                         <th class="text-center">Ciclo</th>
-                        <th>Índice</th>
-                        <th>Período de Referência</th>
-                        <th class="text-center">Parcelas</th>
-                        <th class="text-center">Ações</th>
+                        <th>Índice / Período</th>
+                        <th class="text-end">Prestação Atual</th>
+                        <th class="text-center">Correção</th>
+                        <th class="text-end">Prestação Nova</th>
+                        <th class="text-center" style="width:130px;">Ações</th>
                     </tr>
                 </thead>
                 <tbody data-grupo="{{ grupo.imobiliaria|escapejs }}">
                     {% for item in grupo.contratos %}
-                    <tr>
+                    <tr data-contrato-id="{{ item.contrato.pk }}"
+                        data-ciclo="{{ item.ciclo }}"
+                        data-numero="{{ item.contrato.numero_contrato|escapejs }}"
+                        data-percentual="{% if item.percentual %}{{ item.percentual|floatformat:4 }}{% endif %}"
+                        data-tem-dados="{{ item.dados_disponiveis|yesno:'true,false' }}">
                         <td class="text-center">
                             <input type="checkbox"
                                    class="form-check-input contrato-check"
@@ -101,29 +110,71 @@
                         </td>
                         <td class="text-center">
                             <span class="badge bg-secondary fs-6">{{ item.ciclo }}</span>
+                            <br>
+                            <small class="text-muted font-monospace" style="font-size:0.72rem;">{{ item.parcela_inicial }}–{{ item.parcela_final }}</small>
                         </td>
                         <td>
                             <span class="badge bg-info text-dark">{{ item.indice_tipo }}</span>
+                            {% if item.usa_price %}
+                            <span class="badge bg-secondary ms-1" title="Tabela Price — PMT recalculado">Price</span>
+                            {% endif %}
                             {% if item.contrato.spread_reajuste %}
-                            <br><small class="text-muted">+{{ item.contrato.spread_reajuste|floatformat:2 }} p.p.</small>
+                            <small class="text-muted ms-1">+{{ item.contrato.spread_reajuste|floatformat:2 }}p.p.</small>
+                            {% endif %}
+                            <br>
+                            <small class="text-muted font-monospace" style="font-size:0.72rem;">
+                                {{ item.periodo_referencia_inicio|date:"m/Y" }}→{{ item.periodo_referencia_fim|date:"m/Y" }}
+                            </small>
+                        </td>
+                        <td class="text-end font-monospace">
+                            {% if item.prestacao_atual %}
+                                R$ {{ item.prestacao_atual|floatformat:2|intcomma }}
+                            {% else %}
+                                <span class="text-muted small">—</span>
                             {% endif %}
                         </td>
-                        <td>
-                            <span class="font-monospace small">
-                                {{ item.periodo_referencia_inicio|date:"m/Y" }}
-                                <i class="fas fa-arrow-right mx-1 text-muted"></i>
-                                {{ item.periodo_referencia_fim|date:"m/Y" }}
-                            </span>
+                        <td class="text-center">
+                            {% if item.dados_disponiveis %}
+                                <span class="badge bg-success fs-6">{{ item.percentual|floatformat:4 }}%</span>
+                            {% else %}
+                                <span class="badge bg-secondary" title="Período de referência ainda não disponível na base de índices">
+                                    <i class="fas fa-clock me-1"></i>Aguardando
+                                </span>
+                            {% endif %}
+                        </td>
+                        <td class="text-end font-monospace">
+                            {% if item.dados_disponiveis and item.prestacao_nova %}
+                                R$ {{ item.prestacao_nova|floatformat:2|intcomma }}
+                                {% if item.usa_price %}
+                                <br><small class="text-muted" style="font-size:0.7rem;">*Price recalcula PMT</small>
+                                {% endif %}
+                            {% elif item.dados_disponiveis and item.usa_price %}
+                                <small class="text-muted">Calc. ao aprovar</small>
+                            {% else %}
+                                <span class="text-muted small">—</span>
+                            {% endif %}
                         </td>
                         <td class="text-center">
-                            <span class="text-muted small">{{ item.parcela_inicial }}–{{ item.parcela_final }}</span>
-                        </td>
-                        <td class="text-center">
-                            <a href="{% url 'contratos:detalhe' item.contrato.pk %}"
-                               class="btn btn-sm btn-primary"
-                               title="Abrir contrato e aplicar reajuste">
-                                <i class="fas fa-chart-line me-1"></i>Aplicar
-                            </a>
+                            <div class="btn-group btn-group-sm">
+                                {% if item.dados_disponiveis %}
+                                <button type="button"
+                                        class="btn btn-success btn-aprovar"
+                                        title="Aprovar: aplicar correção calculada pelo índice"
+                                        onclick="aprovarUnico({{ item.contrato.pk }}, '{{ item.contrato.numero_contrato|escapejs }}', {{ item.ciclo }})">
+                                    <i class="fas fa-check"></i> Aprovar
+                                </button>
+                                {% else %}
+                                <button type="button" class="btn btn-success disabled" disabled title="Índice indisponível">
+                                    <i class="fas fa-check"></i> Aprovar
+                                </button>
+                                {% endif %}
+                                <button type="button"
+                                        class="btn btn-warning btn-editar"
+                                        title="Editar: informar percentual manualmente"
+                                        onclick="editarUnico({{ item.contrato.pk }}, '{{ item.contrato.numero_contrato|escapejs }}', {{ item.ciclo }}, '{% if item.percentual %}{{ item.percentual|floatformat:4 }}{% endif %}')">
+                                    <i class="fas fa-edit"></i>
+                                </button>
+                            </div>
                         </td>
                     </tr>
                     {% endfor %}
@@ -133,32 +184,40 @@
     </div>
     {% endfor %}
 
-    <!-- Modal de aplicação em lote -->
+    <!-- Modal Lote (calculado + informado) -->
     <div class="modal fade" id="modalLote" tabindex="-1">
         <div class="modal-dialog modal-lg">
             <div class="modal-content">
-                <div class="modal-header bg-success text-white">
-                    <h5 class="modal-title"><i class="fas fa-bolt me-2"></i>Aplicar Reajuste em Lote</h5>
+                <div class="modal-header" id="modalLoteHeader">
+                    <h5 class="modal-title" id="modalLoteTitulo"></h5>
                     <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
                 </div>
                 <div class="modal-body">
-                    <div id="lote_contratos_preview" class="mb-3">
-                        <p class="text-muted">Contratos selecionados para aplicação:</p>
-                        <ul id="lote_lista_contratos" class="list-unstyled small"></ul>
-                    </div>
+                    <p class="text-muted mb-1">Contratos selecionados:</p>
+                    <ul id="lote_lista_contratos" class="list-unstyled small mb-3"></ul>
 
                     <hr>
 
+                    <!-- Campos comuns -->
                     <div class="row g-3 mb-3">
+                        <!-- Percentual informado — só aparece no modo "informado" -->
+                        <div class="col-12" id="campo_percentual_informado" style="display:none;">
+                            <label class="form-label fw-bold">Percentual de reajuste <span class="text-danger">*</span></label>
+                            <div class="input-group">
+                                <input type="number" step="0.0001" class="form-control" id="lote_perc_informado" placeholder="ex: 4.6230">
+                                <span class="input-group-text">%</span>
+                            </div>
+                            <div class="form-text">Será aplicado a todos os contratos selecionados (sujeito ao piso/teto de cada contrato).</div>
+                        </div>
                         <div class="col-md-6">
-                            <label class="form-label">Desconto em p.p. <small class="text-muted">(aplicado a todos)</small></label>
+                            <label class="form-label">Desconto em p.p. <small class="text-muted">(opcional)</small></label>
                             <div class="input-group">
                                 <input type="number" step="0.0001" min="0" class="form-control" id="lote_desconto_pct" placeholder="0.0000">
                                 <span class="input-group-text">p.p.</span>
                             </div>
                         </div>
                         <div class="col-md-6">
-                            <label class="form-label">Desconto em R$ / parcela <small class="text-muted">(opcional)</small></label>
+                            <label class="form-label">Desconto em R$/parcela <small class="text-muted">(opcional)</small></label>
                             <div class="input-group">
                                 <span class="input-group-text">R$</span>
                                 <input type="number" step="0.01" min="0" class="form-control" id="lote_desconto_val" placeholder="0,00">
@@ -167,22 +226,59 @@
                     </div>
                     <div class="mb-3">
                         <label class="form-label">Observações</label>
-                        <input type="text" class="form-control" id="lote_obs" value="Reajuste em lote" placeholder="Motivo...">
+                        <input type="text" class="form-control" id="lote_obs" placeholder="Motivo...">
                     </div>
 
-                    <div class="alert alert-warning py-2">
+                    <div class="alert alert-warning py-2" id="alerta_calculado" style="display:none;">
                         <i class="fas fa-exclamation-triangle me-1"></i>
-                        <strong>Atenção:</strong> Os percentuais serão calculados individualmente por contrato
-                        (cada um com seu índice e período de referência). O desconto será aplicado a todos igualmente.
+                        Cada contrato usa seu próprio índice calculado. O desconto é aplicado igualmente a todos.
+                        Contratos sem dados de índice serão ignorados.
+                    </div>
+                    <div class="alert alert-warning py-2" id="alerta_informado" style="display:none;">
+                        <i class="fas fa-exclamation-triangle me-1"></i>
+                        O percentual informado será aplicado a TODOS os contratos selecionados,
+                        respeitando piso/teto de cada contrato.
                     </div>
 
-                    <!-- Resultado do lote (após aplicação) -->
                     <div id="lote_resultado" class="d-none"></div>
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
-                    <button type="button" class="btn btn-success" id="btnConfirmarLote" onclick="confirmarLote()">
-                        <i class="fas fa-bolt me-1"></i>Confirmar Aplicação
+                    <button type="button" class="btn" id="btnConfirmarLote" onclick="confirmarLote()">
+                        <i class="fas fa-bolt me-1"></i>Confirmar
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal Editar Único -->
+    <div class="modal fade" id="modalEditar" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header bg-warning">
+                    <h5 class="modal-title"><i class="fas fa-edit me-2"></i>Aplicar Reajuste Informado</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <p>Contrato: <strong id="editar_numero"></strong> — Ciclo <strong id="editar_ciclo"></strong></p>
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">Percentual de reajuste <span class="text-danger">*</span></label>
+                        <div class="input-group">
+                            <input type="number" step="0.0001" class="form-control" id="editar_percentual" placeholder="ex: 4.6230">
+                            <span class="input-group-text">%</span>
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Observações</label>
+                        <input type="text" class="form-control" id="editar_obs" value="Reajuste manual">
+                    </div>
+                    <div id="editar_resultado" class="d-none"></div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="button" class="btn btn-warning" id="btnConfirmarEditar" onclick="confirmarEditar()">
+                        <i class="fas fa-check me-1"></i>Aplicar
                     </button>
                 </div>
             </div>
@@ -205,51 +301,93 @@
 {% block extra_js %}
 <script>
 var _selecionados = [];
+var _modoLote = 'calculado';
+var _editarContratoId = null;
 
+/* ---- seleção ---- */
 function atualizarSelecao() {
-    _selecionados = Array.from(document.querySelectorAll('.contrato-check:checked')).map(el => ({
-        id: parseInt(el.value),
-        grupo: el.dataset.grupo,
-        ciclo: el.dataset.ciclo,
-        texto: el.closest('tr').querySelector('td:nth-child(2) a').textContent.trim(),
-    }));
+    _selecionados = Array.from(document.querySelectorAll('.contrato-check:checked')).map(function(el) {
+        var tr = el.closest('tr');
+        return {
+            id: parseInt(el.value),
+            grupo: el.dataset.grupo,
+            ciclo: el.dataset.ciclo,
+            numero: tr.dataset.numero,
+            percentual: tr.dataset.percentual,
+            temDados: tr.dataset.temDados === 'true',
+        };
+    });
 
+    var n = _selecionados.length;
     document.getElementById('lote_selecao_info').textContent =
-        _selecionados.length > 0
-            ? _selecionados.length + ' contrato(s) selecionado(s)'
-            : 'Nenhum selecionado';
+        n > 0 ? n + ' contrato(s) selecionado(s)' : 'Nenhum selecionado';
 
-    var btn = document.getElementById('btnAplicarLote');
-    if (_selecionados.length > 0) {
-        btn.classList.remove('d-none');
+    var btnCalc = document.getElementById('btnAplicarCalculado');
+    var btnInf  = document.getElementById('btnAplicarInformado');
+    if (n > 0) {
+        btnCalc.classList.remove('d-none');
+        btnInf.classList.remove('d-none');
     } else {
-        btn.classList.add('d-none');
+        btnCalc.classList.add('d-none');
+        btnInf.classList.add('d-none');
     }
 }
 
 function selecionarTodos(estado) {
-    document.querySelectorAll('.contrato-check').forEach(el => { el.checked = estado; });
+    document.querySelectorAll('.contrato-check').forEach(function(el) { el.checked = estado; });
     atualizarSelecao();
 }
 
 function selecionarGrupo(grupo, estado) {
-    document.querySelectorAll('.contrato-check[data-grupo="' + grupo + '"]').forEach(el => {
+    document.querySelectorAll('.contrato-check[data-grupo="' + grupo + '"]').forEach(function(el) {
         el.checked = estado;
     });
     atualizarSelecao();
 }
 
-function abrirModalLote() {
+/* ---- modal lote ---- */
+function abrirModal(modo) {
     if (_selecionados.length === 0) return;
+    _modoLote = modo;
+
+    var header = document.getElementById('modalLoteHeader');
+    var titulo = document.getElementById('modalLoteTitulo');
+    var btnConfirmar = document.getElementById('btnConfirmarLote');
+    var campoPct = document.getElementById('campo_percentual_informado');
+    var alertaCalc = document.getElementById('alerta_calculado');
+    var alertaInf = document.getElementById('alerta_informado');
+
+    if (modo === 'calculado') {
+        header.className = 'modal-header bg-success text-white';
+        titulo.innerHTML = '<i class="fas fa-bolt me-2"></i>Aplicar Reajuste Calculado em Lote';
+        btnConfirmar.className = 'btn btn-success';
+        campoPct.style.display = 'none';
+        alertaCalc.style.display = 'block';
+        alertaInf.style.display = 'none';
+        document.getElementById('lote_obs').value = 'Reajuste calculado em lote';
+    } else {
+        header.className = 'modal-header bg-warning';
+        titulo.innerHTML = '<i class="fas fa-edit me-2"></i>Aplicar Reajuste Informado em Lote';
+        btnConfirmar.className = 'btn btn-warning';
+        campoPct.style.display = 'block';
+        alertaCalc.style.display = 'none';
+        alertaInf.style.display = 'block';
+        document.getElementById('lote_obs').value = 'Reajuste informado em lote';
+    }
 
     var lista = document.getElementById('lote_lista_contratos');
-    lista.innerHTML = _selecionados.map(s =>
-        '<li><i class="fas fa-arrow-right text-success me-1"></i><strong>' + s.texto + '</strong> — Ciclo ' + s.ciclo + '</li>'
-    ).join('');
+    lista.innerHTML = _selecionados.map(function(s) {
+        var badge = s.temDados
+            ? (s.percentual ? '<span class="badge bg-success ms-1">' + parseFloat(s.percentual).toFixed(4) + '%</span>' : '')
+            : '<span class="badge bg-secondary ms-1">Sem dados</span>';
+        return '<li><i class="fas fa-arrow-right text-muted me-1"></i><strong>' + s.numero + '</strong> — Ciclo ' + s.ciclo + badge + '</li>';
+    }).join('');
 
     document.getElementById('lote_resultado').classList.add('d-none');
     document.getElementById('btnConfirmarLote').disabled = false;
-    document.getElementById('btnConfirmarLote').innerHTML = '<i class="fas fa-bolt me-1"></i>Confirmar Aplicação';
+    document.getElementById('lote_perc_informado').value = '';
+    document.getElementById('lote_desconto_pct').value = '';
+    document.getElementById('lote_desconto_val').value = '';
 
     new bootstrap.Modal(document.getElementById('modalLote')).show();
 }
@@ -258,19 +396,29 @@ function confirmarLote() {
     if (_selecionados.length === 0) return;
 
     var btn = document.getElementById('btnConfirmarLote');
-    btn.disabled = true;
-    btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Aplicando...';
 
     var payload = {
-        contrato_ids: _selecionados.map(s => s.id),
-        observacoes: document.getElementById('lote_obs').value || 'Reajuste em lote',
+        contrato_ids: _selecionados.map(function(s) { return s.id; }),
+        observacoes: document.getElementById('lote_obs').value || '',
     };
     var descPct = document.getElementById('lote_desconto_pct').value;
     var descVal = document.getElementById('lote_desconto_val').value;
     if (descPct) payload.desconto_percentual = parseFloat(descPct);
     if (descVal) payload.desconto_valor = parseFloat(descVal);
 
-    fetch('/financeiro/reajustes/aplicar-lote/', {
+    var url = '/financeiro/reajustes/aplicar-lote/';
+
+    if (_modoLote === 'informado') {
+        var pct = document.getElementById('lote_perc_informado').value;
+        if (!pct) { alert('Informe o percentual de reajuste.'); return; }
+        payload.percentual_informado = parseFloat(pct);
+        url = '/financeiro/reajustes/aplicar-informado-lote/';
+    }
+
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Aplicando...';
+
+    fetch(url, {
         method: 'POST',
         headers: {
             'X-CSRFToken': '{{ csrf_token }}',
@@ -278,10 +426,9 @@ function confirmarLote() {
         },
         body: JSON.stringify(payload),
     })
-    .then(r => r.json())
-    .then(data => {
-        var html = '<div class="mt-3">';
-        html += '<h6>' + data.total_ok + ' aplicados com sucesso, ' + data.total_erro + ' com erro.</h6>';
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+        var html = '<div class="mt-3"><h6>' + data.total_ok + ' aplicados com sucesso, ' + data.total_erro + ' com erro.</h6>';
         html += '<div style="max-height:200px;overflow-y:auto;">';
         html += '<table class="table table-sm table-bordered mb-0" style="font-size:0.82rem;">';
         html += '<thead class="table-light"><tr><th>Contrato</th><th>Status</th><th>Detalhe</th></tr></thead><tbody>';
@@ -300,19 +447,100 @@ function confirmarLote() {
         var resultado = document.getElementById('lote_resultado');
         resultado.innerHTML = html;
         resultado.classList.remove('d-none');
-
         btn.innerHTML = '<i class="fas fa-check me-1"></i>Concluído';
-
         if (data.total_ok > 0) {
-            setTimeout(() => location.reload(), 2500);
+            setTimeout(function() { location.reload(); }, 2500);
         }
     })
-    .catch(err => {
+    .catch(function(err) {
         document.getElementById('lote_resultado').innerHTML =
             '<div class="alert alert-danger mt-2">Erro de conexão: ' + err + '</div>';
         document.getElementById('lote_resultado').classList.remove('d-none');
         btn.disabled = false;
         btn.innerHTML = '<i class="fas fa-bolt me-1"></i>Tentar Novamente';
+    });
+}
+
+/* ---- aprovar único ---- */
+function aprovarUnico(contratoId, numero, ciclo) {
+    if (!confirm('Aprovar reajuste calculado para ' + numero + ' (Ciclo ' + ciclo + ')?\nO índice calculado será aplicado automaticamente.')) return;
+
+    fetch('/financeiro/reajustes/aplicar-lote/', {
+        method: 'POST',
+        headers: {
+            'X-CSRFToken': '{{ csrf_token }}',
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ contrato_ids: [contratoId], observacoes: 'Aprovação individual' }),
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+        var r = data.resultados[0];
+        if (r && r.sucesso) {
+            alert('Reajuste aplicado: ' + r.percentual.toFixed(4) + '% — ' + r.parcelas_reajustadas + ' parcelas.');
+            location.reload();
+        } else {
+            alert('Erro: ' + (r ? r.erro : 'desconhecido'));
+        }
+    })
+    .catch(function(err) { alert('Erro de conexão: ' + err); });
+}
+
+/* ---- editar único ---- */
+function editarUnico(contratoId, numero, ciclo, percentualAtual) {
+    _editarContratoId = contratoId;
+    document.getElementById('editar_numero').textContent = numero;
+    document.getElementById('editar_ciclo').textContent = ciclo;
+    document.getElementById('editar_percentual').value = percentualAtual || '';
+    document.getElementById('editar_obs').value = 'Reajuste manual';
+    document.getElementById('editar_resultado').classList.add('d-none');
+    document.getElementById('btnConfirmarEditar').disabled = false;
+    document.getElementById('btnConfirmarEditar').innerHTML = '<i class="fas fa-check me-1"></i>Aplicar';
+    new bootstrap.Modal(document.getElementById('modalEditar')).show();
+}
+
+function confirmarEditar() {
+    var pct = document.getElementById('editar_percentual').value;
+    if (!pct) { alert('Informe o percentual.'); return; }
+
+    var btn = document.getElementById('btnConfirmarEditar');
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Aplicando...';
+
+    fetch('/financeiro/reajustes/aplicar-informado-lote/', {
+        method: 'POST',
+        headers: {
+            'X-CSRFToken': '{{ csrf_token }}',
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+            contrato_ids: [_editarContratoId],
+            percentual_informado: parseFloat(pct),
+            observacoes: document.getElementById('editar_obs').value || 'Reajuste manual',
+        }),
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+        var r = data.resultados[0];
+        var div = document.getElementById('editar_resultado');
+        if (r && r.sucesso) {
+            div.innerHTML = '<div class="alert alert-success mt-2">Aplicado: ' + r.percentual.toFixed(4) + '% — ' + r.parcelas_reajustadas + ' parcelas.</div>';
+            div.classList.remove('d-none');
+            btn.innerHTML = '<i class="fas fa-check me-1"></i>Concluído';
+            setTimeout(function() { location.reload(); }, 2000);
+        } else {
+            div.innerHTML = '<div class="alert alert-danger mt-2">Erro: ' + (r ? r.erro : 'desconhecido') + '</div>';
+            div.classList.remove('d-none');
+            btn.disabled = false;
+            btn.innerHTML = '<i class="fas fa-check me-1"></i>Aplicar';
+        }
+    })
+    .catch(function(err) {
+        document.getElementById('editar_resultado').innerHTML =
+            '<div class="alert alert-danger mt-2">Erro de conexão: ' + err + '</div>';
+        document.getElementById('editar_resultado').classList.remove('d-none');
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fas fa-check me-1"></i>Aplicar';
     });
 }
 </script>
