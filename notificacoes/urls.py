@@ -11,7 +11,17 @@ app_name = 'notificacoes'
 urlpatterns = [
     # Notificacoes
     path('', views.listar_notificacoes, name='listar'),
+    path('painel/', views.painel_mensagens, name='painel_mensagens'),
     path('configuracoes/', views.configuracoes, name='configuracoes'),
+
+    # Webhook Twilio (sem CSRF — validado por assinatura)
+    path('webhook/twilio/', views.webhook_twilio, name='webhook_twilio'),
+
+    # Ações AJAX
+    path('<int:pk>/reenviar/', views.reenviar_notificacao_ajax, name='reenviar'),
+
+    # Click-tracking de e-mail (sem login — acessado pelo destinatário)
+    path('track/<uuid:token>/click/', views.track_click, name='track_click'),
 
     # CRUD Configuracao de Email
     path('email/', views.ConfiguracaoEmailListView.as_view(), name='listar_config_email'),
