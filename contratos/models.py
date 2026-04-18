@@ -697,10 +697,16 @@ class Contrato(TimeStampedModel):
         else:
             data_limite = None
 
+        prazo_ciclo = self.prazo_reajuste_meses or 12
+
         for numero in range(1, self.numero_parcelas + 1):
             # Se ate_mes_atual=True, parar quando vencimento ultrapassar o mês atual
             if data_limite and data_vencimento > data_limite:
                 break
+
+            # Ciclo de reajuste da parcela: 1 para as primeiras prazo_ciclo parcelas,
+            # 2 para as próximas, etc. Usado na trava de boleto e na grid de reajustes.
+            ciclo_reajuste = (numero - 1) // prazo_ciclo + 1
 
             parcela = Parcela.objects.create(
                 contrato=self,
@@ -708,6 +714,7 @@ class Contrato(TimeStampedModel):
                 data_vencimento=data_vencimento,
                 valor_original=valor_parcela,
                 valor_atual=valor_parcela,
+                ciclo_reajuste=ciclo_reajuste,
             )
             parcelas_criadas.append(parcela)
 
