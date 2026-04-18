@@ -76,3 +76,7 @@ coverage.xml
 
 # Scripts de configuração com tokens (nunca commitar)
 docs/deployment/*.sh
+
+# Documentos de dados reais — ficam somente local, não vão para main/V3.1
+docs/dados_reais/*
+!docs/dados_reais/.gitkeep

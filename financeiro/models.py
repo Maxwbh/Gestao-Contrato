@@ -1002,20 +1002,25 @@ class Reajuste(TimeStampedModel):
         """
         Retorna (data_inicio, data_fim) do período cujo acumulado será aplicado no ciclo N.
 
-        Regra: o ciclo N usa o acumulado dos 12 meses que correspondem ao ciclo N-1
-        (os 12 meses imediatamente anteriores ao início do novo ciclo).
+        Regra: ciclo N usa os 12 meses de variação do ciclo N-1.
+        O mês 1 do ciclo N-1 corresponde ao mês SEGUINTE ao mês do contrato no ano N-2.
+        Assim, início = data_contrato + (ciclo-2)*prazo + 1 mês.
 
         Exemplo — contrato Jan/2023, prazo=12:
-          ciclo 2 → referência: Jan/2023 a Dez/2023
-          ciclo 3 → referência: Jan/2024 a Dez/2024
+          ciclo 2 → referência: Fev/2023 a Jan/2024
+          ciclo 3 → referência: Fev/2024 a Jan/2025
+
+        Exemplo — contrato Jul/2020 (Henry), prazo=12:
+          ciclo 2 → referência: Ago/2020 a Jul/2021  (IGPM = JUL2021/JUL2020 − 1 ✓)
+          ciclo 3 → referência: Ago/2021 a Jul/2022
         """
         from dateutil.relativedelta import relativedelta
 
         prazo = contrato.prazo_reajuste_meses
-        # Início do ciclo anterior (N-1)
-        inicio = contrato.data_contrato + relativedelta(months=(ciclo - 2) * prazo)
-        # Fim = último dia antes do início do ciclo N
-        fim = contrato.data_contrato + relativedelta(months=(ciclo - 1) * prazo) - relativedelta(days=1)
+        # Primeiro mês de variação do ciclo N-1 (mês seguinte à data do contrato no ano N-2)
+        inicio = contrato.data_contrato + relativedelta(months=(ciclo - 2) * prazo + 1)
+        # Último mês de variação do ciclo N-1
+        fim = contrato.data_contrato + relativedelta(months=(ciclo - 1) * prazo)
         return inicio, fim
 
     @staticmethod
