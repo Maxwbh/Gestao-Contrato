@@ -6,6 +6,7 @@ Testa:
 - Login/Logout
 - Funcoes auxiliares (get_client_ip, registrar_log_acesso, get_comprador_from_request)
 """
+import re
 import pytest
 from django.test import RequestFactory
 from django.contrib.auth.models import AnonymousUser
@@ -187,3 +188,77 @@ class TestLogoutCompradorView:
 
         assert response.status_code == 302
         assert 'login' in response.url
+
+
+@pytest.mark.django_db
+class TestAtivoFlag:
+    """Testes do campo ativo no AcessoComprador"""
+
+    def test_login_bloqueado_quando_inativo(self, client):
+        """Acesso desativado impede login"""
+        comprador = CompradorFactory()
+        usuario = UserFactory(password='senha123')
+        AcessoComprador.objects.create(
+            comprador=comprador,
+            usuario=usuario,
+            ativo=False,
+        )
+
+        response = client.post('/portal/login/', {
+            'documento': re.sub(r'\D', '', comprador.cpf or comprador.cnpj or '12345678901'),
+            'senha': 'senha123',
+        })
+
+        # Não redireciona para dashboard — permanece na página de login
+        assert response.status_code in (200, 302)
+        if response.status_code == 302:
+            assert 'portal' not in response.url or 'login' in response.url
+
+    def test_get_comprador_retorna_none_quando_inativo(self, request_factory):
+        """get_comprador_from_request retorna None se acesso inativo"""
+        comprador = CompradorFactory()
+        usuario = UserFactory()
+        AcessoComprador.objects.create(
+            comprador=comprador,
+            usuario=usuario,
+            ativo=False,
+        )
+
+        request = request_factory.get('/')
+        request.user = usuario
+
+        resultado = get_comprador_from_request(request)
+
+        assert resultado is None
+
+    def test_get_comprador_retorna_comprador_quando_ativo(self, request_factory):
+        """get_comprador_from_request retorna comprador se acesso ativo"""
+        comprador = CompradorFactory()
+        usuario = UserFactory()
+        AcessoComprador.objects.create(
+            comprador=comprador,
+            usuario=usuario,
+            ativo=True,
+        )
+
+        request = request_factory.get('/')
+        request.user = usuario
+
+        resultado = get_comprador_from_request(request)
+
+        assert resultado == comprador
+
+    def test_dashboard_bloqueado_quando_inativo(self, client):
+        """Dashboard redireciona para login se acesso inativo"""
+        comprador = CompradorFactory()
+        usuario = UserFactory()
+        AcessoComprador.objects.create(
+            comprador=comprador,
+            usuario=usuario,
+            ativo=False,
+        )
+
+        client.force_login(usuario)
+        response = client.get('/portal/')
+
+        assert response.status_code == 302

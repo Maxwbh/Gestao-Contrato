@@ -84,13 +84,13 @@
             <div class="parcela-valor {% if not parcela.pago and parcela.data_vencimento < hoje %}vencida{% endif %}">
                 R$ {{ parcela.valor_atual|floatformat:2 }}
             </div>
-            {% if parcela.status_boleto == 'GERADO' and not parcela.pago %}
+            {% if parcela.pago or parcela.status_boleto == 'PAGO' %}
+            <span style="font-size:.72rem;color:#4caf50;"><i class="fas fa-check"></i> Quitado</span>
+            {% elif parcela.tem_boleto %}
             <a href="{% url 'portal_comprador:download_boleto' parcela.pk %}"
                style="font-size:.72rem;background:var(--portal-primary);color:#fff;padding:3px 10px;border-radius:12px;text-decoration:none;white-space:nowrap;">
                 <i class="fas fa-download" style="font-size:.65rem;"></i> Boleto
             </a>
-            {% elif parcela.status_boleto == 'PAGO' or parcela.pago %}
-            <span style="font-size:.72rem;color:#4caf50;"><i class="fas fa-check"></i> Quitado</span>
             {% endif %}
         </div>
     </div>
@@ -100,6 +100,26 @@
 <div style="text-align:center;padding:48px 16px;color:#9e9e9e;">
     <span class="material-icons" style="font-size:4rem;color:#e0e0e0;display:block;margin-bottom:12px;">receipt_long</span>
     <p style="margin:0;">Nenhum boleto encontrado.</p>
+</div>
+{% endif %}
+
+{% if page_obj.paginator.num_pages > 1 %}
+<div style="display:flex;justify-content:center;align-items:center;gap:8px;margin:16px 0;flex-wrap:wrap;">
+    {% if page_obj.has_previous %}
+    <a href="?{% if status_filtro != 'todos' %}status={{ status_filtro }}&{% endif %}{% if contrato_id %}contrato={{ contrato_id }}&{% endif %}page={{ page_obj.previous_page_number }}"
+       style="padding:6px 14px;border-radius:20px;background:#fff;border:1px solid var(--portal-primary);color:var(--portal-primary);text-decoration:none;font-size:.82rem;">
+        <i class="fas fa-chevron-left"></i> Anterior
+    </a>
+    {% endif %}
+    <span style="font-size:.82rem;color:#757575;">
+        Página {{ page_obj.number }} de {{ page_obj.paginator.num_pages }}
+    </span>
+    {% if page_obj.has_next %}
+    <a href="?{% if status_filtro != 'todos' %}status={{ status_filtro }}&{% endif %}{% if contrato_id %}contrato={{ contrato_id }}&{% endif %}page={{ page_obj.next_page_number }}"
+       style="padding:6px 14px;border-radius:20px;background:var(--portal-primary);color:#fff;text-decoration:none;font-size:.82rem;">
+        Próxima <i class="fas fa-chevron-right"></i>
+    </a>
+    {% endif %}
 </div>
 {% endif %}
 {% endblock %}
