@@ -334,8 +334,14 @@ class TestCenarioC:
                 f"Parcela {p.numero_parcela}: esperado {valor_esperado}, obtido {p.valor_atual}"
             )
 
-    def test_parcelas_fora_do_ciclo_nao_reajustadas(self, dominio):
-        """Reajuste ciclo 2 não altera parcelas 1–12 nem 25–36."""
+    def test_parcelas_anteriores_ao_ciclo_nao_reajustadas(self, dominio):
+        """
+        Reajuste ciclo 2 (MODO SIMPLES) não altera parcelas 1–12 (pagas/do ciclo 1),
+        mas atualiza TODAS as parcelas a partir da 13 — incluindo 25–36 (ciclos futuros).
+
+        Regra: o reajuste é permanente e composto. A prestação base é atualizada
+        para todos os ciclos futuros calcularem sobre o valor já corrigido.
+        """
         from financeiro.models import Reajuste
         contrato = self._criar_contrato(dominio)
 
@@ -350,10 +356,22 @@ class TestCenarioC:
         )
         reajuste.aplicar_reajuste()
 
+        valor_reajustado = (self.PARCELA_LINEAR * (1 + self.PERCENTUAL_REAJUSTE / 100)).quantize(Decimal('0.01'))
+
+        # Parcelas do ciclo 1 (1–12): não alteradas
         for p in contrato.parcelas.filter(tipo_parcela='NORMAL', numero_parcela__lte=12):
-            assert p.valor_atual == self.PARCELA_LINEAR
-        for p in contrato.parcelas.filter(tipo_parcela='NORMAL', numero_parcela__gte=25):
-            assert p.valor_atual == self.PARCELA_LINEAR
+            assert p.valor_atual == self.PARCELA_LINEAR, f"Parcela {p.numero_parcela} não deveria ser alterada"
+
+        # Parcelas do ciclo 2 em diante (13–36): todas reajustadas
+        for p in contrato.parcelas.filter(tipo_parcela='NORMAL', numero_parcela__gte=13):
+            p.refresh_from_db()
+            assert p.valor_atual == valor_reajustado, (
+                f"Parcela {p.numero_parcela}: esperado {valor_reajustado}, obtido {p.valor_atual}"
+            )
+
+        # parcela_final no registro deve ser atualizado para a última parcela do contrato
+        reajuste.refresh_from_db()
+        assert reajuste.parcela_final == contrato.numero_parcelas
 
 
 # ---------------------------------------------------------------------------
@@ -417,21 +435,24 @@ class TestCenarioD:
 
     def test_reajuste_tabela_price_recalcula_pmt(self, dominio):
         """
-        Após reajuste ciclo 2 (5%):
-        saldo_atual = Σ valor_atual parcelas 1–36 não pagas
-        saldo_atualizado = saldo_atual × 1.05
-        novo_pmt = PMT(saldo_atualizado, 0.6%, n_restantes)
+        Após reajuste ciclo 2 (5%) — modelo multiplicativo composto:
+        pmt_atual = 90000/36 = 2500
+        fator_juros = (1 + 0.6%)^12 = (1.006)^12
+        fator_ipca  = 1.05
+        novo_pmt = pmt_atual × fator_ipca × fator_juros
+        Conforme cláusula contratual: PMT_novo = PMT_atual × (1+IPCA) × (1+taxa_mensal)^prazo
         """
         from financeiro.models import Reajuste
-        from django.db.models import Sum
         contrato = self._criar_contrato(dominio)
 
-        saldo_antes = contrato.parcelas.filter(
+        pmt_atual = contrato.parcelas.filter(
             tipo_parcela='NORMAL', pago=False
-        ).aggregate(total=Sum('valor_atual'))['total']
-        saldo_atualizado = (saldo_antes * (1 + self.PERCENTUAL_REAJUSTE / 100)).quantize(Decimal('0.01'))
-        n_restantes = contrato.parcelas.filter(tipo_parcela='NORMAL', pago=False).count()
-        novo_pmt_esperado = _pmt(saldo_atualizado, self.TAXA_CICLO2, n_restantes)
+        ).order_by('numero_parcela').first().valor_atual
+        prazo = contrato.prazo_reajuste_meses
+        taxa_mensal = self.TAXA_CICLO2 / Decimal('100')
+        fator_juros = (1 + taxa_mensal) ** prazo
+        fator_ipca = 1 + self.PERCENTUAL_REAJUSTE / Decimal('100')
+        novo_pmt_esperado = (pmt_atual * fator_ipca * fator_juros).quantize(Decimal('0.01'))
 
         data_reajuste = contrato.data_contrato + relativedelta(months=12)
         reajuste = Reajuste.objects.create(
