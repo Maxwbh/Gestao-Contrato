@@ -86,7 +86,7 @@ class Command(BaseCommand):
                 contabilidade=contabilidade,
                 tipo_pessoa='PJ',
                 razao_social='DIZATY IMOBILIÁRIA LTDA',
-                cnpj='00.000.000/0001-00',   # placeholder — CNPJ real omitido (política de dados)
+                cnpj='11.222.333/0001-44',   # CNPJ fictício — dado real omitido (política de dados)
                 cep='35700-067',
                 logradouro='Rua Ouro Preto',
                 numero='344',
@@ -139,13 +139,50 @@ class Command(BaseCommand):
     # ------------------------------------------------------------------
     def _importar_ipca_mensal(self):
         """
-        Importa valores mensais do IPCA usados nos reajustes de Uanda (2024-2026).
-        Fonte: Calculo atualizacao parcela IPCA 2024_2025 UANDA.pdf
-               Calculo atualizacao parcela IPCA 2025_2026 UANDA.pdf
+        Importa série histórica completa do IPCA (Mar/2021–Mar/2026).
+        Fonte: Planilha_Uanda_Silva_IPCA_Saldo_Anual_Atualizado_Calculo_exato_2.xlsx
+               (aba "Índices IPCA") + PDFs de cálculo exato.
+        Cobre todos os ciclos de reajuste do contrato L16-QD desde o início.
         """
         ipca_data = [
-            # (ano, mês, valor_%)
-            # Abr-2024 a Mar-2025
+            # (ano, mês, variação_mensal_%)
+            # Série desde ABR/2021 (primeiro mês do contrato Uanda)
+            (2021,  4, Decimal('0.3100')),
+            (2021,  5, Decimal('0.8300')),
+            (2021,  6, Decimal('0.5300')),
+            (2021,  7, Decimal('0.9600')),
+            (2021,  8, Decimal('0.8700')),
+            (2021,  9, Decimal('1.1600')),
+            (2021, 10, Decimal('1.2500')),
+            (2021, 11, Decimal('0.9500')),
+            (2021, 12, Decimal('0.7300')),
+            (2022,  1, Decimal('0.5400')),
+            (2022,  2, Decimal('1.0100')),
+            (2022,  3, Decimal('1.6200')),
+            (2022,  4, Decimal('1.0600')),
+            (2022,  5, Decimal('0.4700')),
+            (2022,  6, Decimal('0.6700')),
+            (2022,  7, Decimal('-0.6800')),
+            (2022,  8, Decimal('-0.3600')),
+            (2022,  9, Decimal('-0.2900')),
+            (2022, 10, Decimal('0.5900')),
+            (2022, 11, Decimal('0.4100')),
+            (2022, 12, Decimal('0.6200')),
+            (2023,  1, Decimal('0.5300')),
+            (2023,  2, Decimal('0.8400')),
+            (2023,  3, Decimal('0.7100')),
+            (2023,  4, Decimal('0.6100')),
+            (2023,  5, Decimal('0.2300')),
+            (2023,  6, Decimal('-0.0800')),
+            (2023,  7, Decimal('0.1200')),
+            (2023,  8, Decimal('0.2300')),
+            (2023,  9, Decimal('0.2600')),
+            (2023, 10, Decimal('0.2400')),
+            (2023, 11, Decimal('0.2800')),
+            (2023, 12, Decimal('0.5600')),
+            (2024,  1, Decimal('0.4200')),
+            (2024,  2, Decimal('0.8300')),
+            (2024,  3, Decimal('0.1600')),
             (2024,  4, Decimal('0.3800')),
             (2024,  5, Decimal('0.4600')),
             (2024,  6, Decimal('0.2100')),
@@ -158,7 +195,6 @@ class Command(BaseCommand):
             (2025,  1, Decimal('0.1600')),
             (2025,  2, Decimal('1.3100')),
             (2025,  3, Decimal('0.5600')),
-            # Abr-2025 a Mar-2026
             (2025,  4, Decimal('0.4300')),
             (2025,  5, Decimal('0.2600')),
             (2025,  6, Decimal('0.2400')),
@@ -238,7 +274,7 @@ class Command(BaseCommand):
             nome='Henry Magno de Oliveira Silva',
             defaults=dict(
                 tipo_pessoa='PF',
-                cpf='000.000.000-00',    # CPF omitido — política de dados
+                cpf='111.222.333-44',    # CPF fictício — dado real omitido (política de dados)
                 estado_civil='SOLTEIRO',
                 profissao='Empresário',
                 logradouro='Rua Cracóvia',
@@ -367,7 +403,7 @@ class Command(BaseCommand):
             nome='Uanda Silva Carvalho',
             defaults=dict(
                 tipo_pessoa='PF',
-                cpf='000.000.001-00',    # CPF omitido — política de dados
+                cpf='999.888.777-66',    # CPF fictício — dado real omitido (política de dados)
                 estado_civil='SOLTEIRO',
                 profissao='Empresária',
                 logradouro='Rua Cruzeiro',
