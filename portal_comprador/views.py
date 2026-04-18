@@ -274,7 +274,10 @@ def meus_contratos(request):
 
     contratos = Contrato.objects.filter(
         comprador=comprador
-    ).select_related('imovel', 'imobiliaria').order_by('-data_contrato')
+    ).select_related('imovel', 'imobiliaria').annotate(
+        total_parcelas=Count('parcelas'),
+        parcelas_pagas=Count('parcelas', filter=Q(parcelas__pago=True)),
+    ).order_by('-data_contrato')
 
     context = {
         'comprador': comprador,
