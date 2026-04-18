@@ -24,6 +24,7 @@ import logging
 from datetime import datetime, timedelta
 from functools import wraps
 from django.http import JsonResponse
+from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
 from django.conf import settings
 from django.db import transaction
@@ -42,6 +43,7 @@ def task_auth_required(view_func):
 
     O token deve ser enviado no header X-Task-Token ou como parâmetro 'token'.
     Configure TASK_TOKEN nas variáveis de ambiente.
+    CSRF é dispensado porque estes endpoints usam autenticação por token (Bearer-style).
     """
     @wraps(view_func)
     def wrapper(request, *args, **kwargs):
@@ -70,6 +72,7 @@ def task_auth_required(view_func):
             }, status=403)
 
         return view_func(request, *args, **kwargs)
+    wrapper.csrf_exempt = True
     return wrapper
 
 
