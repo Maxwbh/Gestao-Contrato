@@ -233,6 +233,19 @@ TWILIO_ACCOUNT_SID = config('TWILIO_ACCOUNT_SID', default='')
 TWILIO_AUTH_TOKEN = config('TWILIO_AUTH_TOKEN', default='')
 TWILIO_PHONE_NUMBER = config('TWILIO_PHONE_NUMBER', default='')
 TWILIO_WHATSAPP_NUMBER = config('TWILIO_WHATSAPP_NUMBER', default='')
+TWILIO_STATUS_CALLBACK_URL = config('TWILIO_STATUS_CALLBACK_URL', default='')
+
+# Bounce Monitoring (IMAP)
+BOUNCE_EMAIL_ADDRESS = config('BOUNCE_EMAIL_ADDRESS', default='')
+BOUNCE_IMAP_HOST = config('BOUNCE_IMAP_HOST', default='imap.zoho.com')
+BOUNCE_IMAP_PORT = config('BOUNCE_IMAP_PORT', default=993, cast=int)
+BOUNCE_IMAP_USER = config('BOUNCE_IMAP_USER', default='')
+BOUNCE_IMAP_PASSWORD = config('BOUNCE_IMAP_PASSWORD', default='')
+BOUNCE_IMAP_FOLDER = config('BOUNCE_IMAP_FOLDER', default='INBOX')
+
+# Supabase (acesso direto via cliente Python, se necessário)
+SUPABASE_URL = config('SUPABASE_URL', default='')
+SUPABASE_KEY = config('SUPABASE_KEY', default='')
 
 # =============================================================================
 # MODO DE TESTE — Safeguard para ambiente de desenvolvimento
