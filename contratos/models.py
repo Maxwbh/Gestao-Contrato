@@ -1547,7 +1547,7 @@ class PrestacaoIntermediaria(TimeStampedModel):
 
         valor_base = self.valor_reajustado if self.valor_reajustado else self.valor
         fator = 1 + (Decimal(str(percentual)) / 100)
-        self.valor_reajustado = valor_base * fator
+        self.valor_reajustado = (valor_base * fator).quantize(Decimal('0.01'))
         self.save(update_fields=['valor_reajustado'])
 
         # Atualizar parcela vinculada se existir

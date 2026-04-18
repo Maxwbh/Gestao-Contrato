@@ -209,9 +209,9 @@ class Command(BaseCommand):
             (2026,  2, Decimal('0.7000')),
             (2026,  3, Decimal('0.8800')),
         ]
-        criados = 0
+        criados = atualizados = 0
         for ano, mes, valor in ipca_data:
-            _, created = IndiceReajuste.objects.get_or_create(
+            _, created = IndiceReajuste.objects.update_or_create(
                 tipo_indice='IPCA',
                 ano=ano,
                 mes=mes,
@@ -219,9 +219,12 @@ class Command(BaseCommand):
             )
             if created:
                 criados += 1
+            else:
+                atualizados += 1
         self.stdout.write(
-            self.style.SUCCESS(f'  IndiceReajuste IPCA: {criados} novos / {len(ipca_data)} total')
-            if criados else f'  IndiceReajuste IPCA: todos {len(ipca_data)} já existiam'
+            self.style.SUCCESS(
+                f'  IndiceReajuste IPCA: {criados} novos, {atualizados} atualizados / {len(ipca_data)} total'
+            )
         )
 
     # ------------------------------------------------------------------
@@ -304,9 +307,9 @@ class Command(BaseCommand):
             (2026,  1, Decimal('0.4100')),
             (2026,  2, Decimal('-0.7300')),
         ]
-        criados = 0
+        criados = atualizados = 0
         for ano, mes, valor in igpm_data:
-            _, created = IndiceReajuste.objects.get_or_create(
+            _, created = IndiceReajuste.objects.update_or_create(
                 tipo_indice='IGPM',
                 ano=ano,
                 mes=mes,
@@ -314,9 +317,12 @@ class Command(BaseCommand):
             )
             if created:
                 criados += 1
+            else:
+                atualizados += 1
         self.stdout.write(
-            self.style.SUCCESS(f'  IndiceReajuste IGPM: {criados} novos / {len(igpm_data)} total')
-            if criados else f'  IndiceReajuste IGPM: todos {len(igpm_data)} já existiam'
+            self.style.SUCCESS(
+                f'  IndiceReajuste IGPM: {criados} novos, {atualizados} atualizados / {len(igpm_data)} total'
+            )
         )
 
     # ==================================================================
