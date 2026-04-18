@@ -1274,11 +1274,14 @@ class Reajuste(TimeStampedModel):
                     boletos_emitidos.append(p.numero_parcela)
 
         else:
-            # MODO SIMPLES: multiplica valor_atual pelo fator dentro do ciclo
+            # MODO SIMPLES: aplica fator a TODAS as parcelas a partir da inicial.
+            # Reajuste é permanente e composto — cada ciclo atualiza todas as
+            # parcelas restantes, não apenas as do ciclo em questão.
+            # Ex.: contrato 360 meses, ciclo 2 IPCA 10% → parcelas 13-360 × 1,10.
+            parcela_final = contrato.numero_parcelas  # estende até o final do contrato
             fator = 1 + (percentual_com_caps / 100)
             parcelas_qs = contrato.parcelas.filter(
                 numero_parcela__gte=parcela_inicial,
-                numero_parcela__lte=parcela_final,
                 pago=False,
             ).order_by('numero_parcela')
 
@@ -1510,12 +1513,14 @@ class Reajuste(TimeStampedModel):
                 parcelas_reajustadas += 1
 
         else:
-            # MODO SIMPLES: multiplica valor_atual dentro do intervalo do ciclo
-            parcelas = self.contrato.parcelas.filter(
+            # MODO SIMPLES: aplica fator a TODAS as parcelas a partir da inicial.
+            # O reajuste é permanente — afeta o ciclo atual e todos os futuros,
+            # pois a prestação base é atualizada para o próximo ciclo calcular
+            # sobre o valor já corrigido.
+            parcelas = list(self.contrato.parcelas.filter(
                 numero_parcela__gte=self.parcela_inicial,
-                numero_parcela__lte=self.parcela_final,
                 pago=False,
-            )
+            ).order_by('numero_parcela'))
             fator_reajuste = 1 + (perc_final / 100)
 
             for parcela in parcelas:
@@ -1528,6 +1533,27 @@ class Reajuste(TimeStampedModel):
                 valor_anterior_total += valor_anterior
                 valor_novo_total += parcela.valor_atual
                 parcelas_reajustadas += 1
+
+            # Atualiza parcela_final para refletir o escopo real aplicado
+            if parcelas:
+                self.parcela_final = parcelas[-1].numero_parcela
+
+        # Cancelar boletos das parcelas afetadas cujo valor mudou.
+        # O PDF/código de barras foi gerado com o valor antigo — deve ser regenerado.
+        boletos_cancelados = 0
+        parcelas_boleto_qs = self.contrato.parcelas.filter(
+            numero_parcela__gte=self.parcela_inicial,
+            pago=False,
+            status_boleto__in=[StatusBoleto.GERADO, StatusBoleto.REGISTRADO],
+        )
+        for p_boleto in parcelas_boleto_qs:
+            p_boleto.status_boleto = StatusBoleto.CANCELADO
+            p_boleto.motivo_rejeicao = (
+                f"Cancelado — reajuste ciclo {self.ciclo} ({perc_final:+.2f}%) "
+                f"alterou o valor da parcela. Regenere o boleto."
+            )
+            p_boleto.save(update_fields=['status_boleto', 'motivo_rejeicao'])
+            boletos_cancelados += 1
 
         # Reajustar intermediárias do ciclo com perc_final (corrigido: era self.percentual)
         intermediarias = self.contrato.intermediarias.filter(
@@ -1546,10 +1572,10 @@ class Reajuste(TimeStampedModel):
             valor_intermediarias_novo += inter.valor_atual
             intermediarias_reajustadas += 1
 
-        # Marcar como aplicado
+        # Marcar como aplicado (salva parcela_final atualizado para MODO SIMPLES)
         self.aplicado = True
         self.data_aplicacao = timezone.now()
-        self.save(update_fields=['aplicado', 'data_aplicacao'])
+        self.save(update_fields=['aplicado', 'data_aplicacao', 'parcela_final'])
 
         # Atualizar dados do contrato
         self.contrato.data_ultimo_reajuste = self.data_reajuste
@@ -1572,6 +1598,7 @@ class Reajuste(TimeStampedModel):
             'intermediarias_reajustadas': intermediarias_reajustadas,
             'valor_intermediarias_anterior': valor_intermediarias_anterior,
             'valor_intermediarias_novo': valor_intermediarias_novo,
+            'boletos_cancelados': boletos_cancelados,
         }
 
     @classmethod
