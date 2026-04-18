@@ -73,3 +73,6 @@ coverage.xml
 # Migrations (opcional - comente se quiser commitar as migrations)
 # */migrations/*.py
 # !*/migrations/__init__.py
+
+# Scripts de configuração com tokens (nunca commitar)
+docs/deployment/*.sh
