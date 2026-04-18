@@ -1143,8 +1143,8 @@ X-Task-Token: <valor de TASK_TOKEN no painel Render>
 |---|-----|-----|--------|--------------|------|--------|
 | J-04 | Relatório semanal para imobiliárias | `POST /api/tasks/relatorio-semanal/` | POST | Segunda 08:30 | `X-Task-Token` | — |
 | J-05 | Relatório mensal consolidado | `POST /api/tasks/relatorio-mensal/` | POST | 1º dia 07:30 | `X-Task-Token` | — |
-| J-06 | Monitoramento de bounces de e-mail | `POST /api/tasks/processar-bounces/` | POST | A cada 30 min | `X-Task-Token` | ⚠️ Endpoint pendente (E-01) |
-| J-07 | Limpeza de sessões Django expiradas | `POST /api/tasks/limpar-sessoes/` | POST | Domingo 03:00 | `X-Task-Token` | ⚠️ Endpoint pendente (E-02) |
+| J-06 | Monitoramento de bounces de e-mail | `POST /api/tasks/processar-bounces/` | POST | A cada 30 min | `X-Task-Token` | ✅ Implementado |
+| J-07 | Limpeza de sessões Django expiradas | `POST /api/tasks/limpar-sessoes/` | POST | Domingo 03:00 | `X-Task-Token` | ✅ Implementado |
 | J-08 | Baixar índices econômicos (IBGE + BCB) | `POST /api/tasks/atualizar-indices/` | POST | Toda segunda 07:00 | `X-Task-Token` | ✅ Implementado |
 | J-09 | Notificações dedicado (fila + venc. + inad.) | `POST /api/tasks/processar-notificacoes/` | POST | A cada 6 horas | `X-Task-Token` | ✅ Implementado |
 
@@ -1157,22 +1157,8 @@ X-Task-Token: <valor de TASK_TOKEN no painel Render>
 
 | # | Endpoint | Management Command | Arquivo | Status |
 |---|----------|--------------------|---------|--------|
-| E-01 | `POST /api/tasks/processar-bounces/` | `processar_bounces` | `notificacoes/management/commands/processar_bounces.py` | — |
-| E-02 | `POST /api/tasks/limpar-sessoes/` | `clearsessions` (Django built-in) | `core/views.py` (task API) | — |
-
-**Implementação sugerida para E-01** (em `core/views.py`, junto com os outros task endpoints):
-```python
-@csrf_exempt
-@task_api_rate_limit
-def api_task_processar_bounces(request):
-    if request.method != 'POST':
-        return HttpResponseNotAllowed(['POST'])
-    token = request.headers.get('X-Task-Token', '')
-    if token != settings.TASK_TOKEN:
-        return JsonResponse({'error': 'Unauthorized'}, status=401)
-    call_command('processar_bounces')
-    return JsonResponse({'status': 'ok'})
-```
+| E-01 | `POST /api/tasks/processar-bounces/` | `processar_bounces` | `core/tasks.py` → `task_processar_bounces` | ✅ |
+| E-02 | `POST /api/tasks/limpar-sessoes/` | `clearsessions` (Django built-in) | `core/tasks.py` → `task_limpar_sessoes` | ✅ |
 
 ---
 
@@ -1213,10 +1199,10 @@ def api_task_processar_bounces(request):
 [ ] EMAIL_HOST_PASSWORD configurado no Render (manual)
 [ ] TWILIO_ACCOUNT_SID + TWILIO_AUTH_TOKEN configurados no Render (manual)
 [ ] Caixa bounces@msbrasil.inf.br criada e IMAP habilitado no Zoho
-[ ] E-01 endpoint /api/tasks/processar-bounces/ implementado
-[ ] J-06 bounce monitoring criado no cron-job.org (após E-01)
-[ ] E-02 endpoint /api/tasks/limpar-sessoes/ implementado
-[ ] J-07 limpeza de sessões criado no cron-job.org (após E-02)
+[x] E-01 endpoint /api/tasks/processar-bounces/ implementado
+[ ] J-06 bounce monitoring criado no cron-job.org
+[x] E-02 endpoint /api/tasks/limpar-sessoes/ implementado
+[ ] J-07 limpeza de sessões criado no cron-job.org
 [ ] J-08 atualizar-indices criado no cron-job.org (toda segunda 07:00)
 [ ] J-09 processar-notificacoes criado no cron-job.org (a cada 6h, opcional)
 ```

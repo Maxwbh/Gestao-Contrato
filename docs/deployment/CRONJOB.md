@@ -2,7 +2,7 @@
 
 **Sistema:** Gestão de Contratos — M&S do Brasil LTDA  
 **Desenvolvedor:** Maxwell da Silva Oliveira  
-**Última atualização:** 2026-04-10
+**Última atualização:** 2026-04-18
 
 > O Render Free Tier não oferece Background Workers (Celery). Todas as tarefas
 > agendadas são executadas via HTTP POST por cron externo.
@@ -169,27 +169,48 @@ Executa automaticamente no 1º dia útil do mês.
 
 ---
 
-### Job 6 — Somente Notificações (backup opcional)
+### Job 6 — Notificações Dedicado (fila + vencimentos + inadimplência)
 
-Útil para reenviar notificações que falharam fora do ciclo diário principal.
+Processa TODAS as notificações (fila pendente, vencimentos D-5..D0, inadimplência D+3..D+15).
+Use quando quiser notificações mais frequentes que o ciclo diário principal.
 
 | Campo | Valor |
 |-------|-------|
-| **Nome** | `gestao-fila-notificacoes` |
-| **URL** | `https://gestao-contrato-web-mt6j.onrender.com/api/tasks/processar-fila/` |
+| **Nome** | `gestao-notificacoes` |
+| **URL** | `https://gestao-contrato-web-mt6j.onrender.com/api/tasks/processar-notificacoes/` |
 | **Método** | `POST` |
-| **Horário** | A cada **4 horas** (06:00, 10:00, 14:00, 18:00, 22:00) |
+| **Horário** | A cada **6 horas** (06:00, 12:00, 18:00, 00:00) |
 | **Header** | `X-Task-Token: <SEU_TOKEN>` |
 | **Timeout** | 90 segundos |
 
-> **Opcional** — se o Job 3 (run-all) estiver funcionando corretamente,
-> este job não é necessário.
+> **Opcional** — se o Job 3 (run-all) estiver funcionando corretamente e
+> a frequência diária for suficiente, este job não é necessário.
+
+---
+
+### Job 7 — Atualizar Índices Econômicos (IBGE + BCB)
+
+Baixa os últimos 13 meses de IPCA, INPC, IGP-M, INCC, IGP-DI, SELIC e TR
+das APIs públicas do IBGE e Banco Central. Mantém a base de índices atualizada
+para que reajustes possam ser calculados automaticamente na grid de pendentes.
+
+| Campo | Valor |
+|-------|-------|
+| **Nome** | `gestao-atualizar-indices` |
+| **URL** | `https://gestao-contrato-web-mt6j.onrender.com/api/tasks/atualizar-indices/` |
+| **Método** | `POST` |
+| **Horário** | Toda **segunda-feira às 07:00** |
+| **Header** | `X-Task-Token: <SEU_TOKEN>` |
+| **Timeout** | 120 segundos |
+
+> Sucesso parcial é tolerado: se 5 de 7 índices forem importados e 2 falharem
+> (API indisponível), o status será `success` — apenas falha total retorna erro.
 
 ---
 
 ## 5. Jobs de Rastreamento de Mensagens
 
-### Job 7 — Processamento de Bounces IMAP
+### Job 8 — Processamento de Bounces IMAP
 
 Lê a caixa de e-mail `bounces@msbrasil.inf.br` via IMAP, detecta NDR/DSN
 (e-mails não entregues) e atualiza `status_entrega = 'bounced'` no banco.
@@ -206,9 +227,20 @@ Lê a caixa de e-mail `bounces@msbrasil.inf.br` via IMAP, detecta NDR/DSN
 | **Header** | `X-Task-Token: <SEU_TOKEN>` |
 | **Timeout** | 60 segundos |
 
-> **Status:** Este endpoint ainda precisa ser implementado (ver [ROADMAP — Item 17.3](#)).
-> Alternativa temporária: chamar manualmente via
-> `python manage.py processar_bounces` no shell do Render.
+---
+
+### Job 9 — Limpar Sessões Django Expiradas
+
+Remove sessões expiradas do banco de dados (equivalente a `manage.py clearsessions`).
+
+| Campo | Valor |
+|-------|-------|
+| **Nome** | `gestao-limpar-sessoes` |
+| **URL** | `https://gestao-contrato-web-mt6j.onrender.com/api/tasks/limpar-sessoes/` |
+| **Método** | `POST` |
+| **Horário** | Todo **domingo às 03:00** |
+| **Header** | `X-Task-Token: <SEU_TOKEN>` |
+| **Timeout** | 30 segundos |
 
 ---
 
@@ -252,9 +284,12 @@ No cron-job.org, o horário padrão é UTC. Para usar horário de Brasília (UTC
 | Keep-Alive app | Cada 10 min | Cada 10 min |
 | Keep-Alive BRCobrança | Cada 10 min | Cada 10 min |
 | Run-all diário | 08:00 | 11:00 |
-| Relatório semanal | Segunda 07:00 | Segunda 10:00 |
+| Notificações dedicado | Cada 6 horas | Cada 6 horas |
+| Atualizar índices | Segunda 07:00 | Segunda 10:00 |
+| Relatório semanal | Segunda 07:30 | Segunda 10:30 |
 | Relatório mensal | Dia 1 às 06:00 | Dia 1 às 09:00 |
 | Processar bounces | Cada 30 min | Cada 30 min |
+| Limpar sessões | Domingo 03:00 | Domingo 06:00 |
 
 ---
 
@@ -271,11 +306,14 @@ Todos requerem header `X-Task-Token` e método `POST`.
 | `/api/tasks/processar-reajustes/` | Processa reajustes IPCA/IGP-M/SELIC pendentes | — (incluso no run-all) |
 | `/api/tasks/enviar-notificacoes/` | Envia notificações de vencimento | — (incluso no run-all) |
 | `/api/tasks/enviar-inadimplentes/` | Envia notificações de inadimplência | — (incluso no run-all) |
-| `/api/tasks/processar-fila/` | Processa fila PENDENTE de notificações | A cada 4h (opcional) |
-| `/api/tasks/relatorio-semanal/` | Relatório semanal por imobiliária | Segunda 07:00 |
+| `/api/tasks/processar-fila/` | Processa fila PENDENTE de notificações | — (incluso no run-all) |
+| `/api/tasks/processar-notificacoes/` | Notificações dedicado (fila + venc. + inad.) | A cada 6h (opcional) |
+| `/api/tasks/atualizar-indices/` | Baixa índices IBGE + BCB (7 tipos) | Toda segunda 07:00 |
+| `/api/tasks/relatorio-semanal/` | Relatório semanal por imobiliária | Segunda 07:30 |
 | `/api/tasks/relatorio-mensal/` | Relatório mensal consolidado | Dia 1 às 06:00 |
+| `/api/tasks/processar-bounces/` | Bounce monitoring IMAP | A cada 30 min |
+| `/api/tasks/limpar-sessoes/` | Limpa sessões Django expiradas | Domingo 03:00 |
 | `/api/tasks/testar-notificacoes/` | Diagnóstico de notificações (dev) | Sob demanda |
-| `/api/tasks/processar-bounces/` | Bounce monitoring IMAP *(pendente)* | A cada 30 min |
 
 ### Endpoint de Saúde
 
@@ -447,19 +485,39 @@ Ação: verificar as credenciais Twilio no Render (`TWILIO_ACCOUNT_SID`, `TWILIO
 
 ### Complementar (recomendado)
 
-- [ ] **Job 4:** Relatório semanal (segunda 07:00, POST `/api/tasks/relatorio-semanal/`)
+- [ ] **Job 4:** Relatório semanal (segunda 07:30, POST `/api/tasks/relatorio-semanal/`)
 - [ ] **Job 5:** Relatório mensal (dia 1 às 06:00, POST `/api/tasks/relatorio-mensal/`)
+- [ ] **Job 6:** Notificações dedicado (6h, POST `/api/tasks/processar-notificacoes/`) — opcional
+- [ ] **Job 7:** Atualizar índices (segunda 07:00, POST `/api/tasks/atualizar-indices/`)
+- [ ] **Job 9:** Limpar sessões (domingo 03:00, POST `/api/tasks/limpar-sessoes/`)
 - [ ] Configurar alertas de falha por e-mail no cron-job.org
 
 ### Rastreamento de Mensagens (após criar caixa de bounces)
 
 - [ ] Criar caixa `bounces@msbrasil.inf.br` no Zoho Mail
+- [ ] Habilitar IMAP na caixa (Zoho → Settings → Mail Accounts → IMAP Access)
 - [ ] Definir `BOUNCE_IMAP_PASSWORD` no Render
-- [ ] Aguardar implementação do endpoint `/api/tasks/processar-bounces/`
-- [ ] **Job 7:** Processar bounces (a cada 30 min, POST `/api/tasks/processar-bounces/`)
+- [ ] **Job 8:** Processar bounces (a cada 30 min, POST `/api/tasks/processar-bounces/`)
 
 ### Twilio Delivery Callbacks (SMS/WhatsApp)
 
 - [ ] Confirmar que `TWILIO_STATUS_CALLBACK_URL` está definido no Render
 - [ ] No Console Twilio → Messaging → Settings → definir Status Callback URL
 - [ ] Verificar recebimento de callbacks no painel: `/notificacoes/painel/`
+
+### Configuração DNS Zoho (domínio msbrasil.inf.br)
+
+| Tipo | Host | Prioridade | Valor |
+|------|------|------------|-------|
+| MX | @ | 10 | mx.zoho.com |
+| MX | @ | 20 | mx2.zoho.com |
+| MX | @ | 50 | mx3.zoho.com |
+| TXT | @ | — | `v=spf1 include:zohomail.com ~all` |
+
+**Servidores de recebimento (IMAP/POP):**
+
+| Protocolo | Servidor | Porta | SSL |
+|-----------|----------|-------|-----|
+| IMAP | imap.zoho.com | 993 | Sim |
+| POP | pop.zoho.com | 995 | Sim |
+| SMTP | smtp.zoho.com | 465 (SSL) ou 587 (TLS) | Sim |

@@ -1198,6 +1198,72 @@ def task_atualizar_indices(request):
     return JsonResponse(result.to_dict(), status=status_code)
 
 
+@require_http_methods(["POST"])
+@task_api_rate_limit
+@task_auth_required
+def task_processar_bounces(request):
+    """
+    Endpoint para processar bounces de e-mail via IMAP.
+
+    Wrapper HTTP do management command `processar_bounces`: lê a caixa
+    bounces@msbrasil.inf.br, detecta NDR/DSN e atualiza status_entrega='bounced'.
+
+    Agende a cada 30 minutos no cron-job.org (J-06).
+    """
+    from django.core.management import call_command
+    from io import StringIO
+
+    result = TaskResult('processar_bounces')
+    stdout = StringIO()
+    stderr = StringIO()
+
+    try:
+        call_command('processar_bounces', stdout=stdout, stderr=stderr)
+        output = stdout.getvalue().strip()
+        if output:
+            for line in output.split('\n'):
+                result.add_message(line)
+        err_output = stderr.getvalue().strip()
+        if err_output:
+            for line in err_output.split('\n'):
+                result.add_error(line)
+        result.finish()
+    except Exception as e:
+        result.add_error(str(e))
+        result.finish(success=False)
+        logger.exception('[task_processar_bounces] %s', e)
+
+    status_code = 200 if result.success else 500
+    return JsonResponse(result.to_dict(), status=status_code)
+
+
+@require_http_methods(["POST"])
+@task_api_rate_limit
+@task_auth_required
+def task_limpar_sessoes(request):
+    """
+    Endpoint para limpar sessões Django expiradas.
+
+    Wrapper HTTP do management command `clearsessions` (built-in Django).
+    Agende semanalmente no cron-job.org (J-07, domingo 03:00).
+    """
+    from django.core.management import call_command
+
+    result = TaskResult('limpar_sessoes')
+
+    try:
+        call_command('clearsessions')
+        result.add_message('Sessões expiradas removidas com sucesso.')
+        result.finish()
+    except Exception as e:
+        result.add_error(str(e))
+        result.finish(success=False)
+        logger.exception('[task_limpar_sessoes] %s', e)
+
+    status_code = 200 if result.success else 500
+    return JsonResponse(result.to_dict(), status=status_code)
+
+
 def testar_notificacoes_sync(email_destino=None, sms_destino=None, skip_sms=False):
     """
     Diagnóstico completo de e-mail e SMS.

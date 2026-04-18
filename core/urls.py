@@ -28,6 +28,8 @@ urlpatterns = [
     path('api/tasks/relatorio-mensal/', tasks.task_relatorio_mensal, name='task_relatorio_mensal'),
     path('api/tasks/processar-notificacoes/', tasks.task_processar_notificacoes, name='task_processar_notificacoes'),
     path('api/tasks/atualizar-indices/', tasks.task_atualizar_indices, name='task_atualizar_indices'),
+    path('api/tasks/processar-bounces/', tasks.task_processar_bounces, name='task_processar_bounces'),
+    path('api/tasks/limpar-sessoes/', tasks.task_limpar_sessoes, name='task_limpar_sessoes'),
     path('api/tasks/testar-notificacoes/', tasks.task_testar_notificacoes, name='task_testar_notificacoes'),
 
     # Páginas principais
