@@ -18,6 +18,7 @@ from django.views.generic import TemplateView
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.views.decorators.http import require_POST, require_GET
 from django.utils import timezone
+from django.core.paginator import Paginator
 from django.db.models import Sum, Count, Q
 from decimal import Decimal
 from datetime import timedelta
@@ -63,7 +64,10 @@ def get_comprador_from_request(request):
     if not request.user.is_authenticated:
         return None
     try:
-        return request.user.acesso_comprador.comprador
+        acesso = request.user.acesso_comprador
+        if not acesso.ativo:
+            return None
+        return acesso.comprador
     except (AttributeError, AcessoComprador.DoesNotExist):
         return None
 
@@ -143,16 +147,19 @@ def login_comprador(request):
             user = authenticate(request, username=username, password=senha)
 
             if user is not None:
-                login(request, user)
+                # Verificar se acesso está ativo
+                if hasattr(user, 'acesso_comprador') and not user.acesso_comprador.ativo:
+                    messages.error(request, 'Acesso ao portal foi desativado. Entre em contato com o suporte.')
+                else:
+                    login(request, user)
 
-                # Registrar acesso
-                if hasattr(user, 'acesso_comprador'):
-                    acesso = user.acesso_comprador
-                    acesso.registrar_acesso()
-                    registrar_log_acesso(request, acesso, 'login')
+                    if hasattr(user, 'acesso_comprador'):
+                        acesso = user.acesso_comprador
+                        acesso.registrar_acesso()
+                        registrar_log_acesso(request, acesso, 'login')
 
-                messages.success(request, f'Bem-vindo de volta!')
-                return redirect('portal_comprador:dashboard')
+                    messages.success(request, 'Bem-vindo de volta!')
+                    return redirect('portal_comprador:dashboard')
             else:
                 messages.error(request, 'CPF/CNPJ ou senha inválidos.')
     else:
@@ -384,9 +391,14 @@ def meus_boletos(request):
         'pagos':  _stats_qs['pagos'] or 0,
     }
 
+    paginator = Paginator(parcelas, 20)
+    page_number = request.GET.get('page', 1)
+    page_obj = paginator.get_page(page_number)
+
     context = {
         'comprador': comprador,
-        'parcelas': parcelas[:50],  # Limitar a 50 por página
+        'parcelas': page_obj,
+        'page_obj': page_obj,
         'contratos': contratos,
         'status_filtro': status_filtro,
         'contrato_id': contrato_id,
@@ -567,7 +579,7 @@ def api_parcelas_contrato(request, contrato_id):
             'data_pagamento': parcela.data_pagamento.isoformat() if parcela.data_pagamento else None,
             'valor_pago': float(parcela.valor_pago) if parcela.valor_pago else None,
             'dias_atraso': dias_atraso,
-            'tem_boleto': bool(parcela.boleto_pdf),
+            'tem_boleto': parcela.tem_boleto,
         })
 
     return JsonResponse({
