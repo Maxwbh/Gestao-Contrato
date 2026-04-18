@@ -246,6 +246,24 @@ Remove sessões expiradas do banco de dados (equivalente a `manage.py clearsessi
 
 ## 6. Configuração Passo a Passo no cron-job.org
 
+### 6.0 Configuração Automática via API (recomendado)
+
+O script `docs/deployment/setup_cronjobs.sh` cria **todos os 9 jobs** automaticamente
+via a API REST do cron-job.org. Basta ter o API key (Settings → API) e o `TASK_TOKEN`
+do Render.
+
+```bash
+# Pré-requisito: TASK_TOKEN copiado do painel Render → Environment Variables
+export CRONJOB_API_KEY="DOkj9FGmkpqhjKNsOBc1SzQnaA3io5b/lnbT5wzIMLs="
+export TASK_TOKEN="<cole aqui o token do Render>"
+bash docs/deployment/setup_cronjobs.sh
+```
+
+O script:
+- Cria J-01..J-09 com schedules, timeouts e headers corretos
+- J-08 (bounces) é criado como **desativado** — ativar após configurar o Zoho
+- Exibe o `jobId` de cada job criado para referência
+
 ### 6.1 Criar conta e acessar o dashboard
 
 1. Acesse [cron-job.org/en/signup](https://cron-job.org/en/signup)
