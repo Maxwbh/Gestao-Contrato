@@ -63,9 +63,10 @@ class TestServicoSMSEnvio:
         settings.TWILIO_AUTH_TOKEN = 'test_auth_token_000000000000000000'
         settings.TWILIO_PHONE_NUMBER = '+16067334990'
 
-        resultado = ServicoSMS.enviar('+5531999999999', 'Mensagem de teste')
+        sucesso, external_id = ServicoSMS.enviar('+5531999999999', 'Mensagem de teste')
 
-        assert resultado is True
+        assert sucesso is True
+        assert external_id  # message.sid capturado
         mock_twilio_sms.messages.create.assert_called_once()
         call_kwargs = mock_twilio_sms.messages.create.call_args
         assert call_kwargs.kwargs['body'] == 'Mensagem de teste'
@@ -79,9 +80,9 @@ class TestServicoSMSEnvio:
         settings.TWILIO_AUTH_TOKEN = 'test_auth_token_000000000000000000'
         settings.TWILIO_PHONE_NUMBER = '+16067334990'
 
-        resultado = ServicoSMS.enviar('+5511999888777', 'Cobrança parcela 5')
+        sucesso, external_id = ServicoSMS.enviar('+5511999888777', 'Cobrança parcela 5')
 
-        assert resultado is True
+        assert sucesso is True
         call_kwargs = mock_twilio_sms.messages.create.call_args
         # Destinatário deve ser o número de teste, não o original
         assert call_kwargs.kwargs['to'] == '+5531993257479'
@@ -110,9 +111,9 @@ class TestServicoSMSEnvio:
         settings.TWILIO_PHONE_NUMBER = '+16067334990'
 
         mensagem_longa = 'A' * 300
-        resultado = ServicoSMS.enviar('+5531999999999', mensagem_longa)
+        sucesso, external_id = ServicoSMS.enviar('+5531999999999', mensagem_longa)
 
-        assert resultado is True
+        assert sucesso is True
         call_kwargs = mock_twilio_sms.messages.create.call_args
         assert len(call_kwargs.kwargs['body']) == 300
 
@@ -131,9 +132,10 @@ class TestServicoWhatsAppTwilio:
         settings.TWILIO_AUTH_TOKEN = 'test_auth_token_000000000000000000'
         settings.TWILIO_WHATSAPP_NUMBER = 'whatsapp:+16067334990'
 
-        resultado = ServicoWhatsApp.enviar('+5531999999999', 'Olá! Sua parcela vence amanhã.')
+        sucesso, external_id = ServicoWhatsApp.enviar('+5531999999999', 'Olá! Sua parcela vence amanhã.')
 
-        assert resultado is True
+        assert sucesso is True
+        assert external_id  # message.sid capturado
         mock_twilio_whatsapp.messages.create.assert_called_once()
 
     def test_enviar_whatsapp_adiciona_prefixo(self, mock_twilio_whatsapp, settings):
@@ -156,9 +158,9 @@ class TestServicoWhatsAppTwilio:
         settings.TWILIO_AUTH_TOKEN = 'test_auth_token_000000000000000000'
         settings.TWILIO_WHATSAPP_NUMBER = 'whatsapp:+16067334990'
 
-        resultado = ServicoWhatsApp.enviar('+5511888777666', 'Aviso vencimento')
+        sucesso, external_id = ServicoWhatsApp.enviar('+5511888777666', 'Aviso vencimento')
 
-        assert resultado is True
+        assert sucesso is True
         call_kwargs = mock_twilio_whatsapp.messages.create.call_args
         # Destinatário deve ser o número de teste com prefixo whatsapp:
         assert '+5531993257479' in call_kwargs.kwargs['to']

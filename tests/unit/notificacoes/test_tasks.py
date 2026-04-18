@@ -28,7 +28,7 @@ class TestProcessarNotificacoesPendentes:
     @patch('notificacoes.tasks.enviar_notificacao')
     def test_processar_notificacoes_pendentes_sucesso(self, mock_enviar):
         """Processa e envia notificações pendentes com sucesso"""
-        mock_enviar.return_value = True
+        mock_enviar.return_value = (True, '')
 
         # Criar notificação pendente
         notif = Notificacao.objects.create(
@@ -50,7 +50,7 @@ class TestProcessarNotificacoesPendentes:
     @patch('notificacoes.tasks.enviar_notificacao')
     def test_processar_notificacoes_pendentes_erro(self, mock_enviar):
         """Marca notificação com erro quando envio falha"""
-        mock_enviar.return_value = False
+        mock_enviar.return_value = (False, '')
 
         notif = Notificacao.objects.create(
             tipo=TipoNotificacao.EMAIL,
@@ -119,7 +119,7 @@ class TestReenviarNotificacao:
     @patch('notificacoes.tasks.enviar_notificacao')
     def test_reenviar_notificacao_sucesso(self, mock_enviar):
         """Reenvia notificação com sucesso"""
-        mock_enviar.return_value = True
+        mock_enviar.return_value = (True, '')
 
         notif = Notificacao.objects.create(
             tipo=TipoNotificacao.EMAIL,
@@ -137,7 +137,7 @@ class TestReenviarNotificacao:
     @patch('notificacoes.tasks.enviar_notificacao')
     def test_reenviar_notificacao_falha(self, mock_enviar):
         """Marca erro quando reenvio falha"""
-        mock_enviar.return_value = False
+        mock_enviar.return_value = (False, '')
 
         notif = Notificacao.objects.create(
             tipo=TipoNotificacao.EMAIL,

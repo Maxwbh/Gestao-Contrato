@@ -501,6 +501,8 @@
 | **17** | Testes P3/P4 + CI/CD | 7.3, 7.4, 8 | 🏦 Débito Técnico (pós-2050) |
 | **18** | Frontend P3/P4 | 3 (P3, P4) | 🏦 Débito Técnico (pós-2050) |
 | **19** | Documentação | 9 | — |
+| **20** | ⭐ **Agendamento e Operações — cron-job.org + endpoints HTTP** | 24 | — |
+| **21** | ⭐ **Grid de Reajustes Pendentes — cálculo inline + Aprovar/Editar** | 25 | ✅ |
 
 ---
 
@@ -1106,3 +1108,165 @@ para ciclo = 2..total_ciclos+1:
 - Template `financeiro/conciliacao/dashboard.html`: hub unificado com 3 métodos explicados
 - `management/commands/audit_nosso_numero.py`: audita duplicatas por conta, duplicatas globais e boletos sem nosso_numero; `--fix-duplicates` limpa mantendo o mais antigo
 - Admin: `HistoricoPagamentoAdmin` com campos de conciliação em `list_display`, `list_filter`, `search_fields` e fieldset dedicado
+
+---
+
+## 24. AGENDAMENTO E OPERAÇÕES — cron-job.org + Endpoints HTTP
+
+> **Contexto:** O plano gratuito do Render não suporta Background Workers (sem Celery).
+> Todas as tarefas periódicas são acionadas via HTTP por um agendador externo (cron-job.org, gratuito).
+> Esta seção lista os jobs que devem ser configurados e os endpoints HTTP que ainda precisam ser criados.
+> Documentação completa: `docs/deployment/CRONJOB.md`
+
+---
+
+### 24.1 Jobs a Configurar no cron-job.org (P1 — Imediatos)
+
+> Sem estes jobs o serviço "adormece" após 15 min e notificações diárias não são enviadas.
+
+| # | Job | URL | Método | Agenda (BRT) | Auth | Status |
+|---|-----|-----|--------|--------------|------|--------|
+| J-01 | Keep-alive app Django | `GET /health/` | GET | A cada 10 min | — | — |
+| J-02 | Keep-alive BRCobrança | `GET /api/health` (BRCobrança) | GET | A cada 10 min | — | — |
+| J-03 | Tarefas diárias (status, reajustes, notificações) | `POST /api/tasks/run-all/` | POST | Diário 08:00 | `X-Task-Token` | — |
+
+**Configuração do header de autenticação:**
+```
+X-Task-Token: <valor de TASK_TOKEN no painel Render>
+```
+
+---
+
+### 24.2 Jobs Recomendados (P2)
+
+| # | Job | URL | Método | Agenda (BRT) | Auth | Status |
+|---|-----|-----|--------|--------------|------|--------|
+| J-04 | Relatório semanal para imobiliárias | `POST /api/tasks/relatorio-semanal/` | POST | Segunda 08:30 | `X-Task-Token` | — |
+| J-05 | Relatório mensal consolidado | `POST /api/tasks/relatorio-mensal/` | POST | 1º dia 07:30 | `X-Task-Token` | — |
+| J-06 | Monitoramento de bounces de e-mail | `POST /api/tasks/processar-bounces/` | POST | A cada 30 min | `X-Task-Token` | ✅ Implementado |
+| J-07 | Limpeza de sessões Django expiradas | `POST /api/tasks/limpar-sessoes/` | POST | Domingo 03:00 | `X-Task-Token` | ✅ Implementado |
+| J-08 | Baixar índices econômicos (IBGE + BCB) | `POST /api/tasks/atualizar-indices/` | POST | Toda segunda 07:00 | `X-Task-Token` | ✅ Implementado |
+| J-09 | Notificações dedicado (fila + venc. + inad.) | `POST /api/tasks/processar-notificacoes/` | POST | A cada 6 horas | `X-Task-Token` | ✅ Implementado |
+
+---
+
+### 24.3 Endpoints HTTP Pendentes de Implementação (P2)
+
+> Os endpoints J-06 e J-07 precisam ser criados em `core/views.py` (ou `notificacoes/views.py`)
+> como wrappers HTTP dos management commands existentes.
+
+| # | Endpoint | Management Command | Arquivo | Status |
+|---|----------|--------------------|---------|--------|
+| E-01 | `POST /api/tasks/processar-bounces/` | `processar_bounces` | `core/tasks.py` → `task_processar_bounces` | ✅ |
+| E-02 | `POST /api/tasks/limpar-sessoes/` | `clearsessions` (Django built-in) | `core/tasks.py` → `task_limpar_sessoes` | ✅ |
+
+---
+
+### 24.4 Configurações Manuais Pendentes no Render (P1)
+
+> Estas variáveis têm `sync: false` no `render.yaml` — devem ser inseridas manualmente
+> no painel do Render em **Environment → Secret Files / Environment Variables**.
+
+| Variável | Valor | Onde configurar |
+|----------|-------|-----------------|
+| `BOUNCE_IMAP_PASSWORD` | Senha da caixa `bounces@msbrasil.inf.br` | Render → gestao-contrato-web → Environment |
+| `EMAIL_HOST_PASSWORD` | Senha SMTP Zoho (`teste@msbrasil.inf.br`) | Render → gestao-contrato-web → Environment |
+| `TWILIO_ACCOUNT_SID` | SID da conta Twilio | Render → gestao-contrato-web → Environment |
+| `TWILIO_AUTH_TOKEN` | Auth token Twilio | Render → gestao-contrato-web → Environment |
+
+---
+
+### 24.5 Pré-requisitos Externos (P1)
+
+| # | Item | Serviço | Status |
+|---|------|---------|--------|
+| X-01 | Criar caixa `bounces@msbrasil.inf.br` no painel Zoho | Zoho Mail | — |
+| X-02 | Habilitar IMAP na caixa de bounces (Zoho → Settings → Mail Accounts → IMAP) | Zoho Mail | — |
+| X-03 | Criar conta gratuita em cron-job.org e configurar os 7 jobs | cron-job.org | — |
+| X-04 | Verificar URL do callback Twilio: `TWILIO_STATUS_CALLBACK_URL` deve apontar para a URL real do app em produção | Render / Twilio | ✅ Configurado em `render.yaml` |
+
+---
+
+### 24.6 Checklist de Ativação
+
+```
+[ ] J-01 keep-alive Django criado no cron-job.org
+[ ] J-02 keep-alive BRCobrança criado no cron-job.org
+[ ] J-03 tarefas diárias criado no cron-job.org (com X-Task-Token)
+[ ] J-04 relatório semanal criado no cron-job.org
+[ ] J-05 relatório mensal criado no cron-job.org
+[ ] BOUNCE_IMAP_PASSWORD configurado no Render (manual)
+[ ] EMAIL_HOST_PASSWORD configurado no Render (manual)
+[ ] TWILIO_ACCOUNT_SID + TWILIO_AUTH_TOKEN configurados no Render (manual)
+[ ] Caixa bounces@msbrasil.inf.br criada e IMAP habilitado no Zoho
+[x] E-01 endpoint /api/tasks/processar-bounces/ implementado
+[ ] J-06 bounce monitoring criado no cron-job.org
+[x] E-02 endpoint /api/tasks/limpar-sessoes/ implementado
+[ ] J-07 limpeza de sessões criado no cron-job.org
+[ ] J-08 atualizar-indices criado no cron-job.org (toda segunda 07:00)
+[ ] J-09 processar-notificacoes criado no cron-job.org (a cada 6h, opcional)
+```
+
+---
+
+## 25. HU — GRID DE REAJUSTES PENDENTES (Aprovar / Editar) ✅ CONCLUÍDO
+
+> **História de Usuário:**
+> Como administrador, quero visualizar todos os contratos com reajuste no período em uma
+> grade com os valores calculados já visíveis, podendo aprovar individualmente, editar
+> (informar %) individualmente ou selecionar N contratos e aplicar em lote (calculado ou informado).
+
+---
+
+### 25.1 Detecção Mês-a-Mês (não por dia)
+
+| Item | Implementação | Status |
+|------|--------------|--------|
+| `calcular_ciclo_pendente(antecipacao_meses=1)` | Novo parâmetro: usa `hoje_ym + antecipacao` vs `aniversario_ym`; padrão = 1 mês antes | ✅ |
+| Exibe contrato 1 mês antes do aniversário | Contrato 15/04/2024 → aparece na grid em 01/03/2025 | ✅ |
+| Independente do dia do mês | Aparece em 01/04/2025 e em 30/04/2025 igualmente | ✅ |
+
+### 25.2 Colunas da Grid
+
+| Coluna | Fonte | Comportamento |
+|--------|-------|---------------|
+| Contrato / Data | `Contrato` | Link para detalhe |
+| Comprador / Imóvel | `Contrato.comprador`, `Contrato.imovel` | — |
+| Ciclo / Parcelas | calculado por `prazo_reajuste_meses` | Badge ciclo + range parcelas |
+| Índice / Período de Ref. | `contrato.tipo_correcao` + `calcular_periodo_referencia()` | Badge índice + fallback automático |
+| Prestação Atual | `Parcela.valor_atual` da parcela inicial do ciclo | R$ formatado |
+| Correção % | `IndiceReajuste.get_acumulado_periodo()` | Badge verde com %; "Aguardando" se sem dados |
+| Prestação Nova | `prestacao_atual × (1 + %/100)` — mode SIMPLES | `*Price recalcula PMT` para contratos Price |
+| Ações | Botão Aprovar + botão Editar | Aprovar desabilitado se sem dados |
+
+### 25.3 Ações
+
+| Ação | Endpoint | Comportamento |
+|------|----------|---------------|
+| **Aprovar** (individual) | `POST /financeiro/reajustes/aplicar-lote/` | Aplica índice calculado; confirm() antes |
+| **Editar** (individual) | `POST /financeiro/reajustes/aplicar-informado-lote/` | Modal com campo % + observações |
+| **Aplicar Calculado** (lote) | `POST /financeiro/reajustes/aplicar-lote/` | N contratos, índice calculado, desconto opcional |
+| **Aplicar Informado** (lote) | `POST /financeiro/reajustes/aplicar-informado-lote/` | N contratos, % único informado, desconto opcional |
+
+### 25.4 Novo Endpoint
+
+| Endpoint | View | URL | Status |
+|----------|------|-----|--------|
+| `POST /financeiro/reajustes/aplicar-informado-lote/` | `aplicar_reajuste_informado_lote` | `financeiro/urls.py` | ✅ |
+
+### 25.5 Download de Índices (J-08)
+
+| Item | Implementação | Status |
+|------|--------------|--------|
+| `atualizar_indices_sync()` | `core/tasks.py` — chama `IndicesEconomicosService.importar_indices()` para 7 índices, últimos 13 meses | ✅ |
+| `POST /api/tasks/atualizar-indices/` | `task_atualizar_indices` em `core/tasks.py` + URL em `core/urls.py` | ✅ |
+| Agenda cron-job.org | J-08: toda segunda 07:00 BRT | — (configurar no cron-job.org) |
+| Sucesso parcial | Sucesso se ao menos 1 de 7 índices importado (tolerante a falhas de API) | ✅ |
+
+### 25.6 Endpoint Dedicado de Notificações (J-09)
+
+| Item | Implementação | Status |
+|------|--------------|--------|
+| `POST /api/tasks/processar-notificacoes/` | Fila + vencimentos + inadimplentes em sequência | ✅ |
+| `task_processar_notificacoes` | `core/tasks.py` + URL em `core/urls.py` | ✅ |
+| Quando usar | Quando quiser notificações mais frequentes que o `run-all` (ex.: a cada 6h) | ✅ |
