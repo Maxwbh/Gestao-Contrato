@@ -334,8 +334,14 @@ class TestCenarioC:
                 f"Parcela {p.numero_parcela}: esperado {valor_esperado}, obtido {p.valor_atual}"
             )
 
-    def test_parcelas_fora_do_ciclo_nao_reajustadas(self, dominio):
-        """Reajuste ciclo 2 não altera parcelas 1–12 nem 25–36."""
+    def test_parcelas_anteriores_ao_ciclo_nao_reajustadas(self, dominio):
+        """
+        Reajuste ciclo 2 (MODO SIMPLES) não altera parcelas 1–12 (pagas/do ciclo 1),
+        mas atualiza TODAS as parcelas a partir da 13 — incluindo 25–36 (ciclos futuros).
+
+        Regra: o reajuste é permanente e composto. A prestação base é atualizada
+        para todos os ciclos futuros calcularem sobre o valor já corrigido.
+        """
         from financeiro.models import Reajuste
         contrato = self._criar_contrato(dominio)
 
@@ -350,10 +356,22 @@ class TestCenarioC:
         )
         reajuste.aplicar_reajuste()
 
+        valor_reajustado = (self.PARCELA_LINEAR * (1 + self.PERCENTUAL_REAJUSTE / 100)).quantize(Decimal('0.01'))
+
+        # Parcelas do ciclo 1 (1–12): não alteradas
         for p in contrato.parcelas.filter(tipo_parcela='NORMAL', numero_parcela__lte=12):
-            assert p.valor_atual == self.PARCELA_LINEAR
-        for p in contrato.parcelas.filter(tipo_parcela='NORMAL', numero_parcela__gte=25):
-            assert p.valor_atual == self.PARCELA_LINEAR
+            assert p.valor_atual == self.PARCELA_LINEAR, f"Parcela {p.numero_parcela} não deveria ser alterada"
+
+        # Parcelas do ciclo 2 em diante (13–36): todas reajustadas
+        for p in contrato.parcelas.filter(tipo_parcela='NORMAL', numero_parcela__gte=13):
+            p.refresh_from_db()
+            assert p.valor_atual == valor_reajustado, (
+                f"Parcela {p.numero_parcela}: esperado {valor_reajustado}, obtido {p.valor_atual}"
+            )
+
+        # parcela_final no registro deve ser atualizado para a última parcela do contrato
+        reajuste.refresh_from_db()
+        assert reajuste.parcela_final == contrato.numero_parcelas
 
 
 # ---------------------------------------------------------------------------
