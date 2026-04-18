@@ -1190,23 +1190,23 @@ class Reajuste(TimeStampedModel):
         usa_sac = usa_tabela_price and contrato.tipo_amortizacao == TipoAmortizacao.SAC
 
         if usa_tabela_price and not usa_sac:
-            # MODO TABELA PRICE
-            # Todas as parcelas NORMAL não pagas (todos os ciclos futuros)
+            # MODO TABELA PRICE — modelo multiplicativo composto
+            # Conforme cláusula contratual:
+            #   PMT_novo = PMT_atual × (1 + IPCA) × (1 + taxa_mensal)^prazo
+            # onde (1+taxa_mensal)^prazo é o fator de juros compostos anuais.
             todas_restantes = contrato.parcelas.filter(
                 pago=False,
                 tipo_parcela='NORMAL',
             ).order_by('numero_parcela')
 
-            n_restantes = todas_restantes.count()
-            saldo_atual = todas_restantes.aggregate(
-                total=Sum('valor_atual')
-            )['total'] or Decimal('0')
+            primeira = todas_restantes.first()
+            pmt_atual = primeira.valor_atual if primeira else Decimal('0')
 
-            # Aplica o índice ao saldo total
-            saldo_atualizado = saldo_atual * (1 + percentual_com_caps / 100)
-
-            # Novo PMT pela fórmula Price com a taxa do ciclo
-            novo_pmt = cls._calcular_pmt(saldo_atualizado, taxa_tabela, n_restantes)
+            prazo = contrato.prazo_reajuste_meses
+            taxa_mensal = taxa_tabela / Decimal('100')
+            fator_juros_anual = (1 + taxa_mensal) ** prazo  # (1+i)^prazo
+            fator_ipca = 1 + percentual_com_caps / Decimal('100')
+            novo_pmt = (pmt_atual * fator_ipca * fator_juros_anual).quantize(Decimal('0.01'))
             if desc_val and novo_pmt > desc_val:
                 novo_pmt = (novo_pmt - desc_val).quantize(Decimal('0.01'))
 
@@ -1274,11 +1274,14 @@ class Reajuste(TimeStampedModel):
                     boletos_emitidos.append(p.numero_parcela)
 
         else:
-            # MODO SIMPLES: multiplica valor_atual pelo fator dentro do ciclo
+            # MODO SIMPLES: aplica fator a TODAS as parcelas a partir da inicial.
+            # Reajuste é permanente e composto — cada ciclo atualiza todas as
+            # parcelas restantes, não apenas as do ciclo em questão.
+            # Ex.: contrato 360 meses, ciclo 2 IPCA 10% → parcelas 13-360 × 1,10.
+            parcela_final = contrato.numero_parcelas  # estende até o final do contrato
             fator = 1 + (percentual_com_caps / 100)
             parcelas_qs = contrato.parcelas.filter(
                 numero_parcela__gte=parcela_inicial,
-                numero_parcela__lte=parcela_final,
                 pago=False,
             ).order_by('numero_parcela')
 
@@ -1457,20 +1460,21 @@ class Reajuste(TimeStampedModel):
         usa_sac = usa_tabela_price and self.contrato.tipo_amortizacao == TipoAmortizacao.SAC
 
         if usa_tabela_price and not usa_sac:
-            # MODO TABELA PRICE
-            # Atualiza TODAS as parcelas normais restantes com o novo PMT
+            # MODO TABELA PRICE — modelo multiplicativo composto
+            # PMT_novo = PMT_atual × (1 + IPCA) × (1 + taxa_mensal)^prazo
             parcelas = self.contrato.parcelas.filter(
                 pago=False,
                 tipo_parcela='NORMAL',
             ).order_by('numero_parcela')
 
-            n_restantes = parcelas.count()
-            saldo_atual = parcelas.aggregate(
-                total=Sum('valor_atual')
-            )['total'] or Decimal('0')
+            primeira = parcelas.first()
+            pmt_atual = primeira.valor_atual if primeira else Decimal('0')
 
-            saldo_atualizado = saldo_atual * (1 + perc_final / 100)
-            novo_pmt = self._calcular_pmt(saldo_atualizado, taxa_tabela, n_restantes)
+            prazo = self.contrato.prazo_reajuste_meses
+            taxa_mensal = taxa_tabela / Decimal('100')
+            fator_juros_anual = (1 + taxa_mensal) ** prazo
+            fator_ipca = 1 + perc_final / Decimal('100')
+            novo_pmt = (pmt_atual * fator_ipca * fator_juros_anual).quantize(Decimal('0.01'))
             if desc_val and novo_pmt > desc_val:
                 novo_pmt = (novo_pmt - desc_val).quantize(Decimal('0.01'))
 
@@ -1510,12 +1514,14 @@ class Reajuste(TimeStampedModel):
                 parcelas_reajustadas += 1
 
         else:
-            # MODO SIMPLES: multiplica valor_atual dentro do intervalo do ciclo
-            parcelas = self.contrato.parcelas.filter(
+            # MODO SIMPLES: aplica fator a TODAS as parcelas a partir da inicial.
+            # O reajuste é permanente — afeta o ciclo atual e todos os futuros,
+            # pois a prestação base é atualizada para o próximo ciclo calcular
+            # sobre o valor já corrigido.
+            parcelas = list(self.contrato.parcelas.filter(
                 numero_parcela__gte=self.parcela_inicial,
-                numero_parcela__lte=self.parcela_final,
                 pago=False,
-            )
+            ).order_by('numero_parcela'))
             fator_reajuste = 1 + (perc_final / 100)
 
             for parcela in parcelas:
@@ -1528,6 +1534,27 @@ class Reajuste(TimeStampedModel):
                 valor_anterior_total += valor_anterior
                 valor_novo_total += parcela.valor_atual
                 parcelas_reajustadas += 1
+
+            # Atualiza parcela_final para refletir o escopo real aplicado
+            if parcelas:
+                self.parcela_final = parcelas[-1].numero_parcela
+
+        # Cancelar boletos das parcelas afetadas cujo valor mudou.
+        # O PDF/código de barras foi gerado com o valor antigo — deve ser regenerado.
+        boletos_cancelados = 0
+        parcelas_boleto_qs = self.contrato.parcelas.filter(
+            numero_parcela__gte=self.parcela_inicial,
+            pago=False,
+            status_boleto__in=[StatusBoleto.GERADO, StatusBoleto.REGISTRADO],
+        )
+        for p_boleto in parcelas_boleto_qs:
+            p_boleto.status_boleto = StatusBoleto.CANCELADO
+            p_boleto.motivo_rejeicao = (
+                f"Cancelado — reajuste ciclo {self.ciclo} ({perc_final:+.2f}%) "
+                f"alterou o valor da parcela. Regenere o boleto."
+            )
+            p_boleto.save(update_fields=['status_boleto', 'motivo_rejeicao'])
+            boletos_cancelados += 1
 
         # Reajustar intermediárias do ciclo com perc_final (corrigido: era self.percentual)
         intermediarias = self.contrato.intermediarias.filter(
@@ -1546,10 +1573,10 @@ class Reajuste(TimeStampedModel):
             valor_intermediarias_novo += inter.valor_atual
             intermediarias_reajustadas += 1
 
-        # Marcar como aplicado
+        # Marcar como aplicado (salva parcela_final atualizado para MODO SIMPLES)
         self.aplicado = True
         self.data_aplicacao = timezone.now()
-        self.save(update_fields=['aplicado', 'data_aplicacao'])
+        self.save(update_fields=['aplicado', 'data_aplicacao', 'parcela_final'])
 
         # Atualizar dados do contrato
         self.contrato.data_ultimo_reajuste = self.data_reajuste
@@ -1572,6 +1599,7 @@ class Reajuste(TimeStampedModel):
             'intermediarias_reajustadas': intermediarias_reajustadas,
             'valor_intermediarias_anterior': valor_intermediarias_anterior,
             'valor_intermediarias_novo': valor_intermediarias_novo,
+            'boletos_cancelados': boletos_cancelados,
         }
 
     @classmethod
