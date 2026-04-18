@@ -944,15 +944,20 @@ class Reajuste(TimeStampedModel):
     # ------------------------------------------------------------------
 
     @classmethod
-    def calcular_ciclo_pendente(cls, contrato):
+    def calcular_ciclo_pendente(cls, contrato, antecipacao_meses=1):
         """
         Retorna o próximo ciclo que precisa de reajuste, ou None se estiver em dia.
 
         Regra:
         - Ciclo 1 é sempre isento (sem reajuste).
-        - O ciclo N fica pendente quando os primeiros (N-1)*prazo meses do contrato
-          já transcorreram e ainda não foi aplicado.
+        - Detecção é baseada em MÊS, não em dia exato: o ciclo aparece como
+          pendente quando entramos no mês do aniversário (ou antecipacao_meses
+          antes, padrão=1). Isso permite aplicar o reajuste assim que o índice
+          de referência estiver disponível — ex.: contrato 15/04/2024 com
+          prazo=12 aparece na grid a partir de 01/03/2025 (1 mês antes de 04/2025).
         - Contratos FIXO nunca precisam de reajuste.
+
+        antecipacao_meses: quantos meses antes do aniversário exibir como pendente.
         """
         from django.utils import timezone as tz
         from dateutil.relativedelta import relativedelta
@@ -963,19 +968,21 @@ class Reajuste(TimeStampedModel):
         prazo = contrato.prazo_reajuste_meses
         hoje = tz.now().date()
 
-        # Quantos ciclos completos já transcorreram (ciclo 1 não conta)
-        meses_decorridos = (hoje.year - contrato.data_contrato.year) * 12 + \
-                           (hoje.month - contrato.data_contrato.month)
-        ciclos_decorridos = meses_decorridos // prazo  # 0 no primeiro ano
+        # Comparação mês-a-mês (ignora o dia): soma antecipação para "adiantar"
+        hoje_ym = hoje.year * 12 + hoje.month + antecipacao_meses
+        inicio_ym = contrato.data_contrato.year * 12 + contrato.data_contrato.month
+
+        meses_efetivos = hoje_ym - inicio_ym
+        ciclos_decorridos = meses_efetivos // prazo  # 0 no ciclo 1
 
         if ciclos_decorridos < 1:
-            return None  # ainda dentro do ciclo 1 — nenhum reajuste necessário
+            return None  # ainda no ciclo 1 — nenhum reajuste necessário
 
         # O próximo ciclo a aplicar é o que vem após o último aplicado
         ultimo_aplicado = contrato.ciclo_reajuste_atual or 1
         proximo = ultimo_aplicado + 1
 
-        # Não ultrapassa o número de ciclos que já transcorreram
+        # Não ultrapassa o número de ciclos disponíveis
         if proximo > ciclos_decorridos + 1:
             return None
 
