@@ -1190,23 +1190,23 @@ class Reajuste(TimeStampedModel):
         usa_sac = usa_tabela_price and contrato.tipo_amortizacao == TipoAmortizacao.SAC
 
         if usa_tabela_price and not usa_sac:
-            # MODO TABELA PRICE
-            # Todas as parcelas NORMAL não pagas (todos os ciclos futuros)
+            # MODO TABELA PRICE — modelo multiplicativo composto
+            # Conforme cláusula contratual:
+            #   PMT_novo = PMT_atual × (1 + IPCA) × (1 + taxa_mensal)^prazo
+            # onde (1+taxa_mensal)^prazo é o fator de juros compostos anuais.
             todas_restantes = contrato.parcelas.filter(
                 pago=False,
                 tipo_parcela='NORMAL',
             ).order_by('numero_parcela')
 
-            n_restantes = todas_restantes.count()
-            saldo_atual = todas_restantes.aggregate(
-                total=Sum('valor_atual')
-            )['total'] or Decimal('0')
+            primeira = todas_restantes.first()
+            pmt_atual = primeira.valor_atual if primeira else Decimal('0')
 
-            # Aplica o índice ao saldo total
-            saldo_atualizado = saldo_atual * (1 + percentual_com_caps / 100)
-
-            # Novo PMT pela fórmula Price com a taxa do ciclo
-            novo_pmt = cls._calcular_pmt(saldo_atualizado, taxa_tabela, n_restantes)
+            prazo = contrato.prazo_reajuste_meses
+            taxa_mensal = taxa_tabela / Decimal('100')
+            fator_juros_anual = (1 + taxa_mensal) ** prazo  # (1+i)^prazo
+            fator_ipca = 1 + percentual_com_caps / Decimal('100')
+            novo_pmt = (pmt_atual * fator_ipca * fator_juros_anual).quantize(Decimal('0.01'))
             if desc_val and novo_pmt > desc_val:
                 novo_pmt = (novo_pmt - desc_val).quantize(Decimal('0.01'))
 
@@ -1460,20 +1460,21 @@ class Reajuste(TimeStampedModel):
         usa_sac = usa_tabela_price and self.contrato.tipo_amortizacao == TipoAmortizacao.SAC
 
         if usa_tabela_price and not usa_sac:
-            # MODO TABELA PRICE
-            # Atualiza TODAS as parcelas normais restantes com o novo PMT
+            # MODO TABELA PRICE — modelo multiplicativo composto
+            # PMT_novo = PMT_atual × (1 + IPCA) × (1 + taxa_mensal)^prazo
             parcelas = self.contrato.parcelas.filter(
                 pago=False,
                 tipo_parcela='NORMAL',
             ).order_by('numero_parcela')
 
-            n_restantes = parcelas.count()
-            saldo_atual = parcelas.aggregate(
-                total=Sum('valor_atual')
-            )['total'] or Decimal('0')
+            primeira = parcelas.first()
+            pmt_atual = primeira.valor_atual if primeira else Decimal('0')
 
-            saldo_atualizado = saldo_atual * (1 + perc_final / 100)
-            novo_pmt = self._calcular_pmt(saldo_atualizado, taxa_tabela, n_restantes)
+            prazo = self.contrato.prazo_reajuste_meses
+            taxa_mensal = taxa_tabela / Decimal('100')
+            fator_juros_anual = (1 + taxa_mensal) ** prazo
+            fator_ipca = 1 + perc_final / Decimal('100')
+            novo_pmt = (pmt_atual * fator_ipca * fator_juros_anual).quantize(Decimal('0.01'))
             if desc_val and novo_pmt > desc_val:
                 novo_pmt = (novo_pmt - desc_val).quantize(Decimal('0.01'))
 
