@@ -435,21 +435,24 @@ class TestCenarioD:
 
     def test_reajuste_tabela_price_recalcula_pmt(self, dominio):
         """
-        Após reajuste ciclo 2 (5%):
-        saldo_atual = Σ valor_atual parcelas 1–36 não pagas
-        saldo_atualizado = saldo_atual × 1.05
-        novo_pmt = PMT(saldo_atualizado, 0.6%, n_restantes)
+        Após reajuste ciclo 2 (5%) — modelo multiplicativo composto:
+        pmt_atual = 90000/36 = 2500
+        fator_juros = (1 + 0.6%)^12 = (1.006)^12
+        fator_ipca  = 1.05
+        novo_pmt = pmt_atual × fator_ipca × fator_juros
+        Conforme cláusula contratual: PMT_novo = PMT_atual × (1+IPCA) × (1+taxa_mensal)^prazo
         """
         from financeiro.models import Reajuste
-        from django.db.models import Sum
         contrato = self._criar_contrato(dominio)
 
-        saldo_antes = contrato.parcelas.filter(
+        pmt_atual = contrato.parcelas.filter(
             tipo_parcela='NORMAL', pago=False
-        ).aggregate(total=Sum('valor_atual'))['total']
-        saldo_atualizado = (saldo_antes * (1 + self.PERCENTUAL_REAJUSTE / 100)).quantize(Decimal('0.01'))
-        n_restantes = contrato.parcelas.filter(tipo_parcela='NORMAL', pago=False).count()
-        novo_pmt_esperado = _pmt(saldo_atualizado, self.TAXA_CICLO2, n_restantes)
+        ).order_by('numero_parcela').first().valor_atual
+        prazo = contrato.prazo_reajuste_meses
+        taxa_mensal = self.TAXA_CICLO2 / Decimal('100')
+        fator_juros = (1 + taxa_mensal) ** prazo
+        fator_ipca = 1 + self.PERCENTUAL_REAJUSTE / Decimal('100')
+        novo_pmt_esperado = (pmt_atual * fator_ipca * fator_juros).quantize(Decimal('0.01'))
 
         data_reajuste = contrato.data_contrato + relativedelta(months=12)
         reajuste = Reajuste.objects.create(
