@@ -262,7 +262,7 @@ class Notificacao(TimeStampedModel):
 class TipoGatilho(models.TextChoices):
     """Momento de disparo em relação ao vencimento da parcela"""
     ANTES_VENCIMENTO = 'ANTES', 'Dias antes do vencimento'
-    APOS_VENCIMENTO  = 'APOS',  'Dias após o vencimento (inadimplência)'
+    APOS_VENCIMENTO = 'APOS', 'Dias após o vencimento (inadimplência)'
 
 
 class TipoTemplate(models.TextChoices):
