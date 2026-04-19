@@ -774,6 +774,52 @@ class Contrato(TimeStampedModel):
         return parcelas_criadas
 
     @transaction.atomic
+    def completar_parcelas_faltantes(self):
+        """
+        Cria somente as parcelas que ainda não existem no contrato.
+        Útil quando gerar_parcelas() foi chamado com ate_mes_atual=True e agora
+        as parcelas futuras precisam ser criadas.
+
+        Returns:
+            list[int]: Números das parcelas criadas
+        """
+        from financeiro.models import Parcela
+        from contratos.utils import ajustar_data_vencimento
+
+        existentes = set(self.parcelas.values_list('numero_parcela', flat=True))
+        if len(existentes) >= self.numero_parcelas:
+            return []
+
+        prazo_ciclo = self.prazo_reajuste_meses or 12
+        data_vencimento = self.data_primeiro_vencimento
+        criados = []
+
+        for numero in range(1, self.numero_parcelas + 1):
+            ciclo_reajuste = (numero - 1) // prazo_ciclo + 1
+
+            if numero not in existentes:
+                Parcela.objects.create(
+                    contrato=self,
+                    numero_parcela=numero,
+                    data_vencimento=data_vencimento,
+                    valor_original=self.valor_parcela_original,
+                    valor_atual=self.valor_parcela_original,
+                    ciclo_reajuste=ciclo_reajuste,
+                )
+                criados.append(numero)
+
+            proximo_mes = data_vencimento + relativedelta(months=1)
+            data_vencimento, _ = ajustar_data_vencimento(
+                dia_desejado=self.dia_vencimento,
+                mes=proximo_mes.month,
+                ano=proximo_mes.year,
+                ajustar_feriado=True,
+                ajustar_fim_semana=False,
+            )
+
+        return criados
+
+    @transaction.atomic
     def recalcular_amortizacao(self, base_pv=None):
         """
         Recalcula valor_original, valor_atual, amortizacao e juros_embutido

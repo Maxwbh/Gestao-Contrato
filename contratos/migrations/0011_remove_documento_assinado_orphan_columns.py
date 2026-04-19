@@ -5,6 +5,12 @@
 # IntegrityError whenever a new Contrato row was inserted.
 
 from django.db import migrations
+from contratos.migrations._sql_compat import drop_column_if_exists
+
+
+def drop_orphan_columns(apps, schema_editor):
+    for col in ('documento_assinado_content_type', 'documento_assinado_object_id', 'documento_assinado'):
+        drop_column_if_exists(schema_editor, 'contratos_contrato', col)
 
 
 class Migration(migrations.Migration):
@@ -14,39 +20,5 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
-        migrations.RunSQL(
-            sql="""
-                DO $$
-                BEGIN
-                    IF EXISTS (
-                        SELECT 1 FROM information_schema.columns
-                        WHERE table_name = 'contratos_contrato'
-                          AND column_name = 'documento_assinado_content_type'
-                    ) THEN
-                        ALTER TABLE contratos_contrato
-                            DROP COLUMN documento_assinado_content_type;
-                    END IF;
-
-                    IF EXISTS (
-                        SELECT 1 FROM information_schema.columns
-                        WHERE table_name = 'contratos_contrato'
-                          AND column_name = 'documento_assinado_object_id'
-                    ) THEN
-                        ALTER TABLE contratos_contrato
-                            DROP COLUMN documento_assinado_object_id;
-                    END IF;
-
-                    IF EXISTS (
-                        SELECT 1 FROM information_schema.columns
-                        WHERE table_name = 'contratos_contrato'
-                          AND column_name = 'documento_assinado'
-                    ) THEN
-                        ALTER TABLE contratos_contrato
-                            DROP COLUMN documento_assinado;
-                    END IF;
-                END
-                $$;
-            """,
-            reverse_sql=migrations.RunSQL.noop,
-        ),
+        migrations.RunPython(drop_orphan_columns, migrations.RunPython.noop),
     ]
