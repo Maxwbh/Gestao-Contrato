@@ -104,12 +104,7 @@ class Command(BaseCommand):
 
                 tabela_juros_count = TabelaJurosContrato.objects.count()
 
-                # 7. Remover parcelas futuras (manter apenas até o mês atual)
-                self.stdout.write('Removendo parcelas futuras...')
-                parcelas_removidas = self.remover_parcelas_futuras()
-                self.stdout.write(f'   {parcelas_removidas} parcelas futuras removidas')
-
-                # 8. Marcar 90% das parcelas como pagas
+                # 7. Marcar 90% das parcelas VENCIDAS como pagas
                 self.stdout.write('Marcando parcelas como pagas...')
                 self.marcar_parcelas_pagas(contratos, 0.90)
 
@@ -335,7 +330,7 @@ class Command(BaseCommand):
                 'agencia_dv': '0',
                 'conta': '12345678',
                 'conta_dv': '9',
-                'convenio': '1234567',  # 7 dígitos obrigatório
+                'convenio': '12345678',  # 8 dígitos — BB: convenio(8) + seq(9) = 17
                 'carteira': '18',
                 'nosso_numero_atual': 1,
             },
@@ -813,40 +808,37 @@ class Command(BaseCommand):
 
     def simular_boletos_gerados(self, contratos, contas_bancarias):
         """
-        Simula boletos gerados para parcelas VENCIDAS e pendentes,
-        distribuindo entre TODAS as contas bancárias disponíveis
-        (BB, Sicoob, Bradesco) de cada imobiliária.
+        Gera boletos para parcelas VENCIDAS e pendentes, distribuindo entre TODAS
+        as contas bancárias disponíveis (BB, Sicoob, Bradesco) de cada imobiliária.
+
+        Estratégia:
+          • API BRCobrança disponível → boletos REAIS via /api/boleto/multi em lotes
+            de 10-20 registros (1 chamada à API por lote → PDFs reais armazenados).
+          • API indisponível → fallback: popula campos sem PDF (dados suficientes
+            para remessa CNAB e testes).
+
         Parcelas PAGAS não recebem boleto (não entram em remessa).
         """
         from financeiro.models import StatusBoleto
         from django.utils import timezone as tz
 
-        count = 0
-        hoje = tz.now()
-        hoje_date = hoje.date()
+        hoje_date = tz.now().date()
 
-        # Mapear TODAS as contas por imobiliária (não só a principal)
+        # ── Fase 1: Selecionar parcelas e atribuir contas (round-robin) ──────
         contas_por_imob: dict = {}
         for cb in contas_bancarias:
-            contas_por_imob.setdefault(cb.imobiliaria_id, [])
-            contas_por_imob[cb.imobiliaria_id].append(cb)
-
-        # Ordenar: principal primeiro, depois as demais
-        for imob_id, contas in contas_por_imob.items():
+            contas_por_imob.setdefault(cb.imobiliaria_id, []).append(cb)
+        for contas in contas_por_imob.values():
             contas.sort(key=lambda c: (not c.principal, c.banco))
 
-        # Rastrear todas as contas que tiveram nosso_numero_atual incrementado
-        contas_modificadas: dict = {}
-
+        pares = []   # list of (parcela, conta)
         for idx, contrato in enumerate(contratos):
             contas_imob = contas_por_imob.get(contrato.imobiliaria_id)
             if not contas_imob:
                 continue
 
-            # Alternar conta bancária entre os contratos (round-robin entre BB, Sicoob, Bradesco)
             conta = contas_imob[idx % len(contas_imob)]
 
-            # Parcelas vencidas não pagas (prioridade)
             parcelas_vencidas = list(
                 contrato.parcelas.filter(
                     pago=False,
@@ -854,8 +846,6 @@ class Command(BaseCommand):
                     status_boleto=StatusBoleto.NAO_GERADO,
                 ).order_by('data_vencimento')[:5]
             )
-
-            # Parcelas a vencer não pagas (complemento)
             parcelas_a_vencer = list(
                 contrato.parcelas.filter(
                     pago=False,
@@ -863,41 +853,86 @@ class Command(BaseCommand):
                     status_boleto=StatusBoleto.NAO_GERADO,
                 ).order_by('data_vencimento')[:2]
             )
+            for parcela in (parcelas_vencidas or parcelas_a_vencer):
+                if not parcela.pago:
+                    pares.append((parcela, conta))
 
-            # Priorizar vencidas; se não houver, usar a vencer
-            parcelas_alvo = parcelas_vencidas if parcelas_vencidas else parcelas_a_vencer
+        if not pares:
+            self.stdout.write('   Nenhuma parcela elegível para boleto.')
+            return 0
 
-            for parcela in parcelas_alvo:
-                # Garantir que parcela não está paga (dupla verificação)
-                if parcela.pago:
-                    continue
+        # ── Fase 2: Geração real ou simulada ─────────────────────────────────
+        from financeiro.services.boleto_service import BoletoService
+        service = BoletoService()
 
-                conta.nosso_numero_atual += 1
-                parcela.conta_bancaria = conta
-                parcela.status_boleto = StatusBoleto.GERADO
-                parcela.nosso_numero = str(conta.nosso_numero_atual).zfill(10)
-                parcela.numero_documento = f'{contrato.numero_contrato}/{parcela.numero_parcela:03d}'
-                parcela.data_geracao_boleto = hoje
-                parcela.save(update_fields=[
-                    'conta_bancaria', 'status_boleto', 'nosso_numero',
-                    'numero_documento', 'data_geracao_boleto'
-                ])
-                count += 1
-                contas_modificadas[conta.pk] = conta
+        if service.verificar_api_disponivel():
+            self.stdout.write(
+                f'   → API BRCobrança disponível — gerando {len(pares)} boletos reais '
+                f'em lotes de 15 ({(len(pares) + 14) // 15} chamadas)...'
+            )
+            resultado = service.gerar_boletos_lote(pares, tamanho_lote=15)
+            count = resultado['gerados']
+            for e in resultado['erros']:
+                self.stdout.write(self.style.WARNING(f'   ⚠ {e}'))
+        else:
+            self.stdout.write(
+                f'   → API BRCobrança indisponível — simulando {len(pares)} boletos localmente...'
+            )
+            count = self._gerar_boletos_simulados(pares)
 
-        # Salvar nosso_numero_atual de TODAS as contas que foram modificadas
-        # (bug fix: antes só salvava a última conta do loop)
-        for conta_mod in contas_modificadas.values():
-            conta_mod.save(update_fields=['nosso_numero_atual'])
-
-        # Estatísticas por banco
+        # ── Fase 3: Estatísticas por banco ────────────────────────────────────
         from financeiro.models import Parcela, StatusBoleto as SB
         for cb in contas_bancarias:
             qtd = Parcela.objects.filter(
                 conta_bancaria=cb, status_boleto=SB.GERADO, pago=False
             ).count()
             if qtd > 0:
-                self.stdout.write(f'   → {cb.get_banco_display()} ({cb.banco}): {qtd} boletos simulados')
+                label = 'boletos reais' if service.verificar_api_disponivel() else 'boletos simulados'
+                self.stdout.write(f'   → {cb.get_banco_display()} ({cb.banco}): {qtd} {label}')
+
+        return count
+
+    def _gerar_boletos_simulados(self, pares):
+        """
+        Fallback quando a API BRCobrança está indisponível.
+        Popula os campos de boleto sem gerar PDF — dados suficientes para remessa CNAB.
+        """
+        from financeiro.models import StatusBoleto
+        from django.utils import timezone as tz
+
+        hoje = tz.now()
+        count = 0
+        contas_modificadas: dict = {}
+
+        for parcela, conta in pares:
+            if parcela.pago:
+                continue
+
+            conta.nosso_numero_atual += 1
+            seq_str = str(conta.nosso_numero_atual).zfill(9)
+
+            if conta.banco == '001' and conta.convenio:
+                nosso_numero_fmt = str(conta.convenio).zfill(8) + seq_str
+            else:
+                nosso_numero_fmt = seq_str.zfill(10)
+
+            parcela.conta_bancaria = conta
+            parcela.status_boleto = StatusBoleto.GERADO
+            parcela.nosso_numero = nosso_numero_fmt
+            parcela.nosso_numero_formatado = nosso_numero_fmt
+            parcela.nosso_numero_dv = ''
+            parcela.numero_documento = parcela.gerar_numero_documento()
+            parcela.data_geracao_boleto = hoje
+            parcela.save(update_fields=[
+                'conta_bancaria', 'status_boleto', 'nosso_numero',
+                'nosso_numero_formatado', 'nosso_numero_dv',
+                'numero_documento', 'data_geracao_boleto',
+            ])
+            count += 1
+            contas_modificadas[conta.pk] = conta
+
+        for conta_mod in contas_modificadas.values():
+            conta_mod.save(update_fields=['nosso_numero_atual'])
 
         return count
 
@@ -1672,9 +1707,11 @@ class Command(BaseCommand):
 
                 valor_pago = float(parcela.valor_atual)
 
+                # CNAB retorna o nosso_numero formatado (completo, como impresso no boleto)
+                nn_cnab = parcela.nosso_numero_formatado or parcela.nosso_numero
                 item = ItemRetorno.objects.create(
                     arquivo_retorno=arquivo,
-                    nosso_numero=parcela.nosso_numero,
+                    nosso_numero=nn_cnab,
                     parcela=parcela,
                     codigo_ocorrencia='06',
                     descricao_ocorrencia='Liquidação normal',
@@ -1717,7 +1754,7 @@ class Command(BaseCommand):
             for parcela in boletos[len(boletos) // 2:]:
                 ItemRetorno.objects.create(
                     arquivo_retorno=arquivo,
-                    nosso_numero=parcela.nosso_numero,
+                    nosso_numero=parcela.nosso_numero_formatado or parcela.nosso_numero,
                     parcela=parcela,
                     codigo_ocorrencia='02',
                     descricao_ocorrencia='Entrada confirmada',

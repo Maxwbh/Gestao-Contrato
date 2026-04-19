@@ -10,48 +10,28 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
-        migrations.SeparateDatabaseAndState(
-            database_operations=[
-                migrations.RunSQL(
-                    sql="ALTER TABLE financeiro_parcela ADD COLUMN IF NOT EXISTS amortizacao numeric(12,2) NULL;",
-                    reverse_sql="ALTER TABLE financeiro_parcela DROP COLUMN IF EXISTS amortizacao;",
-                ),
-            ],
-            state_operations=[
-                migrations.AddField(
-                    model_name="parcela",
-                    name="amortizacao",
-                    field=models.DecimalField(
-                        blank=True,
-                        decimal_places=2,
-                        help_text="Parcela de amortização do principal embutida nesta prestação",
-                        max_digits=12,
-                        null=True,
-                        verbose_name="Amortização",
-                    ),
-                ),
-            ],
+        migrations.AddField(
+            model_name="parcela",
+            name="amortizacao",
+            field=models.DecimalField(
+                blank=True,
+                decimal_places=2,
+                help_text="Parcela de amortização do principal embutida nesta prestação",
+                max_digits=12,
+                null=True,
+                verbose_name="Amortização",
+            ),
         ),
-        migrations.SeparateDatabaseAndState(
-            database_operations=[
-                migrations.RunSQL(
-                    sql="ALTER TABLE financeiro_parcela ADD COLUMN IF NOT EXISTS juros_embutido numeric(12,2) NULL;",
-                    reverse_sql="ALTER TABLE financeiro_parcela DROP COLUMN IF EXISTS juros_embutido;",
-                ),
-            ],
-            state_operations=[
-                migrations.AddField(
-                    model_name="parcela",
-                    name="juros_embutido",
-                    field=models.DecimalField(
-                        blank=True,
-                        decimal_places=2,
-                        help_text="Parcela de juros do financiamento embutida nesta prestação",
-                        max_digits=12,
-                        null=True,
-                        verbose_name="Juros Embutidos",
-                    ),
-                ),
-            ],
+        migrations.AddField(
+            model_name="parcela",
+            name="juros_embutido",
+            field=models.DecimalField(
+                blank=True,
+                decimal_places=2,
+                help_text="Parcela de juros do financiamento embutida nesta prestação",
+                max_digits=12,
+                null=True,
+                verbose_name="Juros Embutidos",
+            ),
         ),
     ]

@@ -10,42 +10,22 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
-        migrations.SeparateDatabaseAndState(
-            database_operations=[
-                migrations.RunSQL(
-                    sql="ALTER TABLE contratos_contrato ADD COLUMN IF NOT EXISTS intermediarias_reajustadas boolean NOT NULL DEFAULT true;",
-                    reverse_sql="ALTER TABLE contratos_contrato DROP COLUMN IF EXISTS intermediarias_reajustadas;",
-                ),
-            ],
-            state_operations=[
-                migrations.AddField(
-                    model_name="contrato",
-                    name="intermediarias_reajustadas",
-                    field=models.BooleanField(
-                        default=True,
-                        help_text="Se marcado, as intermediárias têm o valor atualizado pelo mesmo índice (IPCA etc.) a cada ciclo de reajuste. Se desmarcado, o valor das intermediárias é fixo até o vencimento.",
-                        verbose_name="Intermediárias Reajustadas pelo Índice",
-                    ),
-                ),
-            ],
+        migrations.AddField(
+            model_name="contrato",
+            name="intermediarias_reajustadas",
+            field=models.BooleanField(
+                default=True,
+                help_text="Se marcado, as intermediárias têm o valor atualizado pelo mesmo índice (IPCA etc.) a cada ciclo de reajuste. Se desmarcado, o valor das intermediárias é fixo até o vencimento.",
+                verbose_name="Intermediárias Reajustadas pelo Índice",
+            ),
         ),
-        migrations.SeparateDatabaseAndState(
-            database_operations=[
-                migrations.RunSQL(
-                    sql="ALTER TABLE contratos_contrato ADD COLUMN IF NOT EXISTS intermediarias_reduzem_pmt boolean NOT NULL DEFAULT false;",
-                    reverse_sql="ALTER TABLE contratos_contrato DROP COLUMN IF EXISTS intermediarias_reduzem_pmt;",
-                ),
-            ],
-            state_operations=[
-                migrations.AddField(
-                    model_name="contrato",
-                    name="intermediarias_reduzem_pmt",
-                    field=models.BooleanField(
-                        default=False,
-                        help_text="Se marcado, o valor das intermediárias é deduzido do saldo financiado antes de calcular a parcela mensal. Se desmarcado, as intermediárias são amortizações extras sobre a parcela mensal cheia.",
-                        verbose_name="Intermediárias Reduzem PMT",
-                    ),
-                ),
-            ],
+        migrations.AddField(
+            model_name="contrato",
+            name="intermediarias_reduzem_pmt",
+            field=models.BooleanField(
+                default=False,
+                help_text="Se marcado, o valor das intermediárias é deduzido do saldo financiado antes de calcular a parcela mensal. Se desmarcado, as intermediárias são amortizações extras sobre a parcela mensal cheia.",
+                verbose_name="Intermediárias Reduzem PMT",
+            ),
         ),
     ]

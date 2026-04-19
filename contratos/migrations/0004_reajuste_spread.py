@@ -11,27 +11,17 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
-        migrations.SeparateDatabaseAndState(
-            database_operations=[
-                migrations.RunSQL(
-                    sql="ALTER TABLE contratos_contrato ADD COLUMN IF NOT EXISTS spread_reajuste numeric(8,4) NULL DEFAULT 0;",
-                    reverse_sql="ALTER TABLE contratos_contrato DROP COLUMN IF EXISTS spread_reajuste;",
-                ),
-            ],
-            state_operations=[
-                migrations.AddField(
-                    model_name="contrato",
-                    name="spread_reajuste",
-                    field=models.DecimalField(
-                        blank=True,
-                        decimal_places=4,
-                        default=Decimal("0"),
-                        help_text="Pontos percentuais adicionados ao índice (ex: IPCA + 2 p.p. → spread=2.0000)",
-                        max_digits=8,
-                        null=True,
-                        verbose_name="Spread de Reajuste (p.p.)",
-                    ),
-                ),
-            ],
+        migrations.AddField(
+            model_name="contrato",
+            name="spread_reajuste",
+            field=models.DecimalField(
+                blank=True,
+                decimal_places=4,
+                default=Decimal("0"),
+                help_text="Pontos percentuais adicionados ao índice (ex: IPCA + 2 p.p. → spread=2.0000)",
+                max_digits=8,
+                null=True,
+                verbose_name="Spread de Reajuste (p.p.)",
+            ),
         ),
     ]
