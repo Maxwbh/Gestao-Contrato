@@ -28,8 +28,6 @@ from datetime import timedelta
 import time
 import logging
 
-logger = logging.getLogger(__name__)
-
 from contratos.models import Contrato
 from core.permissions import portal_rate_limit
 from financeiro.models import Parcela
@@ -39,6 +37,8 @@ from .forms import (
     AutoCadastroForm, LoginCompradorForm,
     DadosPessoaisForm, AlterarSenhaCompradorForm
 )
+
+logger = logging.getLogger(__name__)
 
 
 def get_client_ip(request):
