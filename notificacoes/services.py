@@ -300,36 +300,44 @@ class ServicoWhatsApp:
         """
         Evolution API v2 — POST /message/sendText/{instancia}
         Headers: apikey: <config.api_key>
-        Body: {"number": "<numero>", "text": "<mensagem>"}
+        Body: {"number": "5511999999999", "text": "...", "delay": 1200, "linkPreview": bool}
         """
         import urllib.request
+        import urllib.error
         import json as _json
         if not all([config.api_url, config.api_key, config.instancia]):
             raise ValueError("Evolution API: api_url, api_key e instancia são obrigatórios")
 
         numero = ServicoWhatsApp._normalizar_numero(destinatario)
-        # Evolution aceita formato: 5511999999999 (sem +)
         numero = numero.lstrip('+')
 
+        # linkPreview ativo quando mensagem contém URL
+        import re as _re
+        tem_url = bool(_re.search(r'https?://', mensagem))
+
         url = f"{config.api_url.rstrip('/')}/message/sendText/{config.instancia}"
-        payload = {"number": numero, "text": mensagem}
+        payload = {
+            "number": numero,
+            "text": mensagem,
+            "delay": 1200,
+            "linkPreview": tem_url,
+        }
         req = urllib.request.Request(
             url,
             data=_json.dumps(payload).encode(),
-            headers={
-                "Content-Type": "application/json",
-                "apikey": config.api_key,
-            },
+            headers={"Content-Type": "application/json", "apikey": config.api_key},
             method="POST",
         )
-        with urllib.request.urlopen(req, timeout=15) as resp:
-            body = _json.loads(resp.read())
-        logger.info("WhatsApp (Evolution) enviado para %s. Response: %s", numero, body)
-        ext_id = ''
         try:
-            ext_id = body.get('key', {}).get('id', '') or str(body.get('status', ''))
-        except Exception:
-            pass
+            with urllib.request.urlopen(req, timeout=15) as resp:
+                body = _json.loads(resp.read())
+        except urllib.error.HTTPError as e:
+            err_body = e.read().decode('utf-8', errors='replace')
+            raise ValueError(f"Evolution API HTTP {e.code}: {err_body}") from e
+
+        logger.info("WhatsApp (Evolution) enviado para %s. key.id=%s",
+                    numero, body.get('key', {}).get('id', ''))
+        ext_id = body.get('key', {}).get('id', '')
         return True, ext_id
 
     @staticmethod
@@ -368,6 +376,40 @@ class ServicoWhatsApp:
         except Exception:
             pass
         return True, ext_id
+
+
+    @staticmethod
+    def verificar_numero(destinatario, config):
+        """
+        Verifica se um número está registrado no WhatsApp via Evolution API.
+        POST /chat/whatsappNumbers/{instancia}
+        Retorna True se existe, False caso contrário. Erros retornam None.
+        Apenas suportado para provedor EVOLUTION.
+        """
+        if config.provedor != 'EVOLUTION':
+            return None
+        if not all([config.api_url, config.api_key, config.instancia]):
+            return None
+        try:
+            import urllib.request
+            import json as _json
+            numero = ServicoWhatsApp._normalizar_numero(destinatario).lstrip('+')
+            url = f"{config.api_url.rstrip('/')}/chat/whatsappNumbers/{config.instancia}"
+            payload = {"numbers": [numero]}
+            req = urllib.request.Request(
+                url,
+                data=_json.dumps(payload).encode(),
+                headers={"Content-Type": "application/json", "apikey": config.api_key},
+                method="POST",
+            )
+            with urllib.request.urlopen(req, timeout=10) as resp:
+                data = _json.loads(resp.read())
+            if isinstance(data, list) and data:
+                return bool(data[0].get('exists', False))
+            return False
+        except Exception as e:
+            logger.warning("Erro ao verificar numero WhatsApp %s: %s", destinatario, e)
+            return None
 
 
 def enviar_notificacao(tipo, destinatario, assunto, mensagem):
