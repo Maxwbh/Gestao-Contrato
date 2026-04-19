@@ -164,7 +164,19 @@ class Parcela(TimeStampedModel):
         max_length=30,
         blank=True,
         verbose_name='Nosso Número',
-        help_text='Número de identificação do boleto no banco'
+        help_text='Sequencial bruto do nosso número (sem convênio, sem DV). Usado para conciliação CNAB.'
+    )
+    nosso_numero_formatado = models.CharField(
+        max_length=30,
+        blank=True,
+        verbose_name='Nosso Número Formatado',
+        help_text='Nosso número completo conforme impresso no boleto (convênio + sequencial + DV). Usado para conciliação OFX.'
+    )
+    nosso_numero_dv = models.CharField(
+        max_length=2,
+        blank=True,
+        verbose_name='DV do Nosso Número',
+        help_text='Dígito verificador do nosso número (calculado pela API / banco).'
     )
     numero_documento = models.CharField(
         max_length=25,
@@ -533,9 +545,17 @@ class Parcela(TimeStampedModel):
         """
         Retorna o nosso número formatado com zeros à esquerda conforme o banco.
 
+        Prefere o valor já armazenado em ``nosso_numero_formatado`` (gravado a
+        partir da resposta da boleto_cnab_api — fonte da verdade para conciliação
+        OFX). Em caso de ausência, reconstrói a partir do sequencial bruto.
+
         Returns:
             str: Nosso número formatado
         """
+        # Valor autoritativo vindo da API (PR#32/#33 do boleto_cnab_api)
+        if self.nosso_numero_formatado:
+            return self.nosso_numero_formatado
+
         if not self.nosso_numero:
             return ''
 
@@ -562,6 +582,18 @@ class Parcela(TimeStampedModel):
         # Obter código do banco da conta bancária
         if self.conta_bancaria:
             codigo_banco = self.conta_bancaria.banco
+
+            # BB (001): formato = convenio(8) + sequencial(9) = 17 dígitos.
+            # boleto_cnab_api PR#32: nosso_numero_formatado vem completo da API.
+            # Se o DB armazena só o sequencial (fallback), reconstrói o display.
+            if codigo_banco == '001' and self.conta_bancaria.convenio:
+                seq = nosso_numero
+                if len(seq) <= 10:
+                    convenio_str = str(self.conta_bancaria.convenio).zfill(8)
+                    return convenio_str + seq.zfill(9)
+                # Já inclui o convenio — devolve como está (zfill para 17)
+                return seq.zfill(17)
+
             tamanho = tamanhos.get(codigo_banco, 10)  # Padrão: 10 dígitos
             return nosso_numero.zfill(tamanho)
 
@@ -621,11 +653,11 @@ class Parcela(TimeStampedModel):
             'dias_atraso': dias_atraso,
             'vencido': hoje > self.data_vencimento,
 
-            # Configurações do contrato (para exibição)
-            'config_multa_percentual': config.get('valor_multa', 0) or 0,
-            'config_multa_tipo': config.get('tipo_valor_multa', 'PERCENTUAL'),
-            'config_juros_percentual': config.get('valor_juros', 0) or 0,
-            'config_juros_tipo': config.get('tipo_valor_juros', 'PERCENTUAL'),
+            # Configurações do contrato (para exibição — valores efetivamente usados no cálculo)
+            'config_multa_percentual': self.contrato.percentual_multa,
+            'config_multa_tipo': 'PERCENTUAL',
+            'config_juros_percentual': self.contrato.percentual_juros_mora,
+            'config_juros_tipo': 'PERCENTUAL',
             'config_desconto_valor': config.get('valor_desconto', 0) or 0,
             'config_desconto_tipo': config.get('tipo_valor_desconto', 'PERCENTUAL'),
             'config_desconto_dias': config.get('dias_desconto', 0) or 0,
@@ -687,7 +719,13 @@ class Parcela(TimeStampedModel):
 
         if resultado.get('sucesso'):
             self.conta_bancaria = conta_bancaria
+            # Gravar os três campos de nosso_numero para conciliação futura:
+            # - nosso_numero: sequencial bruto → conciliação via CNAB (retorno do banco)
+            # - nosso_numero_formatado: valor completo impresso no boleto → conciliação via OFX
+            # - nosso_numero_dv: dígito verificador (quando o banco/API o retorna isolado)
             self.nosso_numero = resultado.get('nosso_numero', '')
+            self.nosso_numero_formatado = resultado.get('nosso_numero_formatado', '')
+            self.nosso_numero_dv = resultado.get('nosso_numero_dv', '')
             self.numero_documento = self.gerar_numero_documento()
             self.codigo_barras = resultado.get('codigo_barras', '')
             self.linha_digitavel = resultado.get('linha_digitavel', '')
