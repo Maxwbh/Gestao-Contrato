@@ -1375,35 +1375,36 @@ class BoletoService:
 
             logger.info(f"Boleto PDF gerado com sucesso ({len(pdf_content)} bytes)")
 
-            # Obter dados adicionais do boleto (linha digitavel e codigo de barras)
-            # via endpoint /api/boleto/data
-            linha_digitavel = ''
-            codigo_barras = ''
+            # PR#33: headers X-* já trazem os dados na mesma resposta binária,
+            # eliminando a segunda chamada para /api/boleto/data.
+            linha_digitavel  = response.headers.get('X-Linha-Digitavel', '')
+            codigo_barras    = response.headers.get('X-Codigo-Barras', '')
+            nosso_numero_api = response.headers.get('X-Nosso-Numero-Formatado', '')
 
-            if banco_nome and dados_boleto:
+            if linha_digitavel and nosso_numero_api:
+                logger.info("Dados obtidos via headers X-* (PR#33)")
+            elif banco_nome and dados_boleto:
+                # Fallback: API antiga (< PR#33) — segunda chamada a /api/boleto/data
                 logger.info("Obtendo linha digitavel e codigo de barras via /api/boleto/data")
                 dados_extras = self._obter_dados_boleto(banco_nome, dados_boleto)
-                linha_digitavel = dados_extras.get('linha_digitavel', '')
-                codigo_barras = dados_extras.get('codigo_barras', '')
+                linha_digitavel  = linha_digitavel  or dados_extras.get('linha_digitavel', '')
+                codigo_barras    = codigo_barras    or dados_extras.get('codigo_barras', '')
+                nosso_numero_api = nosso_numero_api or dados_extras.get('nosso_numero_formatado', '')
 
-                if linha_digitavel and codigo_barras:
-                    logger.info(f"Dados obtidos com sucesso - linha_digitavel: {linha_digitavel[:20]}..., codigo_barras: {codigo_barras[:20]}...")
-                else:
-                    logger.warning(f"Dados incompletos - linha_digitavel: {'OK' if linha_digitavel else 'VAZIO'}, codigo_barras: {'OK' if codigo_barras else 'VAZIO'}")
+            if linha_digitavel and codigo_barras:
+                logger.info(f"Dados obtidos — linha_digitavel: {linha_digitavel[:20]}..., codigo_barras: {codigo_barras[:20]}...")
+            else:
+                logger.warning(f"Dados incompletos — linha_digitavel: {'OK' if linha_digitavel else 'VAZIO'}, codigo_barras: {'OK' if codigo_barras else 'VAZIO'}")
 
-            # Capturar nosso_numero retornado pela API
-            nosso_numero_api = ''
-            if banco_nome and dados_boleto:
-                nosso_numero_api = dados_extras.get('nosso_numero_formatado', '')
-                if nosso_numero_api:
-                    logger.info(f"Nosso numero retornado pela API: {nosso_numero_api}")
+            if nosso_numero_api:
+                logger.info(f"Nosso numero retornado pela API: {nosso_numero_api}")
 
             return {
                 'sucesso': True,
                 'pdf_content': pdf_content,
                 'linha_digitavel': linha_digitavel,
                 'codigo_barras': codigo_barras,
-                'nosso_numero_api': nosso_numero_api,  # Nosso numero gerado pela API
+                'nosso_numero_api': nosso_numero_api,
             }
 
         except Exception as e:
