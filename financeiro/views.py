@@ -2657,8 +2657,9 @@ def api_gerar_boletos_parcelas(request):
                 })
             else:
                 erros += 1
-                detalhes.append({'parcela_id': parcela_id, 'sucesso': False,
-                                  'erro': resultado.get('erro', 'Erro desconhecido') if resultado else 'Sem resposta'})
+                detalhes.append({
+                    'parcela_id': parcela_id, 'sucesso': False,
+                    'erro': resultado.get('erro', 'Erro desconhecido') if resultado else 'Sem resposta'})
         except Exception as e:
             erros += 1
             logger.exception("Erro ao gerar boleto parcela %s: %s", parcela_id, e)
@@ -6120,8 +6121,10 @@ def api_cnab_remessa_gerar(request):
             arq = resultado['arquivo_remessa']
             return JsonResponse({
                 'sucesso': True,
-                'remessa': {'id': arq.id, 'numero_remessa': arq.numero_remessa, 'nome_arquivo': arq.nome_arquivo,
-                           'quantidade_boletos': resultado.get('quantidade_boletos'), 'valor_total': float(resultado.get('valor_total', 0))}
+                'remessa': {
+                    'id': arq.id, 'numero_remessa': arq.numero_remessa, 'nome_arquivo': arq.nome_arquivo,
+                    'quantidade_boletos': resultado.get('quantidade_boletos'),
+                    'valor_total': float(resultado.get('valor_total', 0))}
             })
         return JsonResponse({'sucesso': False, 'erro': resultado.get('erro')}, status=400)
 

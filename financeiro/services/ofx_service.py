@@ -382,16 +382,18 @@ class OFXService:
         if tx.memo:
             for p in disponiveis:
                 if p.nosso_numero and p.nosso_numero in tx.memo:
-                    return OFXReconciliacao(tx, p, 'ALTA',
-                                           f'nosso_número {p.nosso_numero} encontrado no MEMO')
+                    return OFXReconciliacao(
+                        tx, p, 'ALTA',
+                        f'nosso_número {p.nosso_numero} encontrado no MEMO')
 
         # P2 — número do contrato no MEMO
         if tx.memo:
             for p in disponiveis:
                 num = p.contrato.numero_contrato
                 if num and num.upper() in tx.memo.upper():
-                    return OFXReconciliacao(tx, p, 'ALTA',
-                                           f'contrato {num} encontrado no MEMO')
+                    return OFXReconciliacao(
+                        tx, p, 'ALTA',
+                        f'contrato {num} encontrado no MEMO')
 
         # P3 — valor exato + mesmo mês de vencimento
         if tx.data:
