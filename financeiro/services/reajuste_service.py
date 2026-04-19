@@ -721,7 +721,7 @@ class ReajusteService:
         Returns:
             Dicionário com relatório
         """
-        from django.db.models import Sum, Count, Avg
+        from django.db.models import Count, Avg
 
         reajustes = Reajuste.objects.filter(
             data_reajuste__gte=data_inicio,

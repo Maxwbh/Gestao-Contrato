@@ -18,14 +18,14 @@ from django.utils import timezone
 from core.mixins import PaginacaoMixin
 import logging
 
-logger = logging.getLogger(__name__)
-
 from .models import (
     Notificacao, TemplateNotificacao,
     ConfiguracaoEmail, ConfiguracaoSMS, ConfiguracaoWhatsApp,
     RegraNotificacao, TipoGatilho, TipoNotificacao, StatusNotificacao,
 )
 from .forms import ConfiguracaoEmailForm, TemplateNotificacaoForm
+
+logger = logging.getLogger(__name__)
 
 
 @login_required

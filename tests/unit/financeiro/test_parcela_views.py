@@ -5,7 +5,6 @@ Escopo: listar_parcelas, detalhe_parcela, registrar_pagamento,
         gerar_boleto, notificar_inadimplente
 """
 import pytest
-from decimal import Decimal
 from datetime import date, timedelta
 from django.urls import reverse
 from django.contrib.auth import get_user_model

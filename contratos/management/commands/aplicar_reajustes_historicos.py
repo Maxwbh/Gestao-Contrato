@@ -86,8 +86,6 @@ class Command(BaseCommand):
     # ------------------------------------------------------------------
 
     def _aplicar_contrato(self, contrato, esperados, dry_run):
-        from financeiro.models import Reajuste
-
         self.stdout.write(
             f'\n{"="*60}\n'
             f'{contrato.comprador.nome} | {contrato.imovel}\n'

@@ -11,11 +11,10 @@ com suporte a filtros, totalizadores e exportação.
 import logging
 from datetime import date, timedelta
 from decimal import Decimal
-from typing import Dict, List, Optional, Any
+from typing import Dict, Optional, Any
 from dataclasses import dataclass, field
 from enum import Enum
 
-from django.db.models import Sum, Count, Q, F
 from django.utils import timezone
 
 logger = logging.getLogger(__name__)
@@ -120,7 +119,7 @@ class RelatorioService:
         Returns:
             dict: Relatório com itens e totalizadores
         """
-        from financeiro.models import Parcela, TipoParcela
+        from financeiro.models import Parcela
 
         logger.info(f"Gerando relatório de prestações a pagar com filtros: {filtro}")
 
@@ -283,7 +282,7 @@ class RelatorioService:
         """
         from contratos.models import Contrato, StatusContrato
 
-        logger.info(f"Gerando relatório de posição de contratos")
+        logger.info("Gerando relatório de posição de contratos")
 
         queryset = Contrato.objects.filter(
             status=StatusContrato.ATIVO
@@ -360,7 +359,7 @@ class RelatorioService:
         from contratos.models import Contrato, StatusContrato, TipoCorrecao
         from financeiro.models import Reajuste
 
-        logger.info(f"Gerando relatório de previsão de reajustes")
+        logger.info("Gerando relatório de previsão de reajustes")
 
         hoje = date.today()
         data_limite = hoje + timedelta(days=dias_antecedencia)
@@ -815,7 +814,7 @@ class RelatorioService:
                 try:
                     if len(str(cell.value)) > max_length:
                         max_length = len(str(cell.value))
-                except:
+                except Exception:
                     pass
             adjusted_width = min(max_length + 2, 50)
             ws.column_dimensions[column_letter].width = adjusted_width

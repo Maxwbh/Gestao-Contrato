@@ -28,9 +28,8 @@ import time
 import re
 from decimal import Decimal
 from datetime import date, timedelta
-from django.conf import settings 
+from django.conf import settings
 from django.utils import timezone
-from urllib.parse import urlencode
 
 logger = logging.getLogger(__name__)
 
@@ -648,7 +647,7 @@ class BoletoService:
              # Codigo do banco para validacoes posteriores
              'codigo_banco': codigo_banco,
          }
- 
+
         # Adicionar campos especificos por banco (usa codigo_banco ja existente)
         # Banco do Brasil (001)
         if codigo_banco == '001':
@@ -1162,12 +1161,13 @@ class BoletoService:
                     # Log detalhado do erro 500 para debug
                     logger.error(f"Erro 500 da API BRCobranca. Response body: {response.text[:1000]}")
                     logger.error(f"Dados enviados - Banco: {banco_nome}")
-                    logger.error(f"Dados do boleto (primeiros campos): cedente={boleto_data.get('cedente')}, "
-                               f"documento_cedente={boleto_data.get('documento_cedente')}, "
-                               f"sacado={boleto_data.get('sacado')}, "
-                               f"valor={boleto_data.get('valor')}, "
-                               f"data_vencimento={boleto_data.get('data_vencimento')}, "
-                               f"nosso_numero={boleto_data.get('nosso_numero')}")
+                    logger.error(
+                        f"Dados do boleto (primeiros campos): cedente={boleto_data.get('cedente')}, "
+                        f"documento_cedente={boleto_data.get('documento_cedente')}, "
+                        f"sacado={boleto_data.get('sacado')}, "
+                        f"valor={boleto_data.get('valor')}, "
+                        f"data_vencimento={boleto_data.get('data_vencimento')}, "
+                        f"nosso_numero={boleto_data.get('nosso_numero')}")
 
                     # Log completo dos dados em formato JSON (apenas na última tentativa)
                     if tentativa == self.max_tentativas:
@@ -1290,7 +1290,7 @@ class BoletoService:
             except re.error:
                 # padrao invalido na configuracao -> usar default seguro
                 if not re.match(default_pattern + r'\Z', numero_documento):
-                    erros.append(f"Numero do documento invalido: caracteres nao permitidos")
+                    erros.append("Numero do documento invalido: caracteres nao permitidos")
 
             maxlen = maxlens.get(codigo_banco) or maxlens.get('default')
             if maxlen:
@@ -1341,7 +1341,7 @@ class BoletoService:
 
             if response.status_code == 200:
                 data = response.json()
-                logger.info(f"Dados do boleto obtidos via /api/boleto/data")
+                logger.info("Dados do boleto obtidos via /api/boleto/data")
                 return {
                     'linha_digitavel': data.get('linha_digitavel', ''),
                     'codigo_barras': data.get('codigo_barras', ''),
@@ -1359,8 +1359,6 @@ class BoletoService:
     def _processar_resposta_sucesso(self, response, banco_nome=None, dados_boleto=None):
         """Processa resposta bem-sucedida da API"""
         try:
-            content_type = response.headers.get('content-type', '')
-
             # Extrair PDF da resposta
             pdf_content = response.content
 
@@ -1417,7 +1415,7 @@ class BoletoService:
             error_data = response.json()
             if isinstance(error_data, dict):
                 return error_data.get('error', error_data.get('message', response.text))
-        except:
+        except Exception:
             pass
 
         return response.text or f"Erro HTTP {response.status_code}"
