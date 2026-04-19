@@ -1,12 +1,63 @@
-{% extends 'base.html' %}
-{% block title %}Login - Portal do Comprador{% endblock %}
+{% extends 'portal_comprador/portal_base.html' %}
+{% block title %}Entrar{% endblock %}
+
 {% block content %}
-<div class="container">
-    <h1>Login</h1>
-    <form method="post">
-        {% csrf_token %}
-        {{ form.as_p }}
-        <button type="submit">Entrar</button>
-    </form>
+<div style="max-width:400px;margin:32px auto 0;">
+
+    <div style="text-align:center;margin-bottom:28px;">
+        <i class="fas fa-lock" style="font-size:2.5rem;color:var(--portal-primary);"></i>
+        <h5 style="margin:12px 0 4px;font-weight:700;color:#212121;">Portal do Comprador</h5>
+        <p style="color:#757575;font-size:.875rem;margin:0;">Entre com seu CPF/CNPJ e senha</p>
+    </div>
+
+    <div class="portal-card">
+        <div class="portal-card-body">
+            <form method="post" novalidate>
+                {% csrf_token %}
+
+                <div style="margin-bottom:16px;">
+                    <label style="font-size:.82rem;font-weight:600;color:#424242;display:block;margin-bottom:6px;">
+                        CPF ou CNPJ
+                    </label>
+                    <input type="text" name="documento"
+                           value="{{ form.documento.value|default:'' }}"
+                           class="form-control form-control-lg"
+                           placeholder="000.000.000-00 ou 00.000.000/0001-00"
+                           autocomplete="off" autofocus>
+                    {% if form.documento.errors %}
+                    <div style="color:#f44336;font-size:.78rem;margin-top:4px;">{{ form.documento.errors|join:", " }}</div>
+                    {% endif %}
+                </div>
+
+                <div style="margin-bottom:20px;">
+                    <label style="font-size:.82rem;font-weight:600;color:#424242;display:block;margin-bottom:6px;">
+                        Senha
+                    </label>
+                    <input type="password" name="senha"
+                           class="form-control form-control-lg"
+                           placeholder="Digite sua senha">
+                    {% if form.senha.errors %}
+                    <div style="color:#f44336;font-size:.78rem;margin-top:4px;">{{ form.senha.errors|join:", " }}</div>
+                    {% endif %}
+                </div>
+
+                <button type="submit"
+                        style="width:100%;background:var(--portal-primary);color:#fff;border:none;
+                               border-radius:8px;padding:14px;font-size:1rem;font-weight:600;cursor:pointer;">
+                    Entrar
+                </button>
+            </form>
+        </div>
+    </div>
+
+    <div style="text-align:center;margin-top:16px;display:flex;justify-content:space-between;font-size:.85rem;">
+        <a href="{% url 'portal_comprador:esqueci_senha' %}" style="color:var(--portal-primary);">
+            Esqueci minha senha
+        </a>
+        <a href="{% url 'portal_comprador:auto_cadastro' %}" style="color:var(--portal-primary);">
+            Criar conta
+        </a>
+    </div>
+
 </div>
 {% endblock %}
