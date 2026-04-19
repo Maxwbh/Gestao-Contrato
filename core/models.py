@@ -1339,6 +1339,12 @@ class ParametroSistema(models.Model):
     )
     descricao = models.CharField(max_length=300, blank=True, verbose_name='Descrição')
     atualizado_em = models.DateTimeField(auto_now=True, verbose_name='Atualizado em')
+    modificado_manualmente = models.BooleanField(
+        default=False,
+        verbose_name='Alterado manualmente',
+        help_text='Marcado automaticamente ao salvar pelo admin. '
+                  'Protege o valor de ser sobrescrito pelo sync do .env.',
+    )
 
     class Meta:
         ordering = ['grupo', 'chave']
