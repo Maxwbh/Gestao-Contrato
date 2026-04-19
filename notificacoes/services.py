@@ -377,7 +377,6 @@ class ServicoWhatsApp:
             pass
         return True, ext_id
 
-
     @staticmethod
     def verificar_numero(destinatario, config):
         """

@@ -286,8 +286,10 @@ def testar_conexao_whatsapp(request, pk):
                 data = _json.loads(resp.read())
             state = data.get('instance', {}).get('state', '') or data.get('state', '')
             if state == 'open':
-                return JsonResponse({'status': 'success', 'message': f'Instancia "{config.instancia}" conectada (state: open)'})
-            return JsonResponse({'status': 'error', 'message': f'Instancia nao conectada (state: {state})'}, status=400)
+                return JsonResponse({'status': 'success',
+                                     'message': f'Instancia "{config.instancia}" conectada (state: open)'})
+            return JsonResponse({'status': 'error',
+                                 'message': f'Instancia nao conectada (state: {state})'}, status=400)
 
         elif provedor == 'ZAPI':
             import urllib.request as _req
@@ -312,7 +314,9 @@ def testar_conexao_whatsapp(request, pk):
             return JsonResponse({'status': 'success', 'message': f'Twilio OK — conta: {account.friendly_name}'})
 
         else:
-            return JsonResponse({'status': 'error', 'message': f'Teste nao disponivel para provedor {provedor}'}, status=400)
+            return JsonResponse(
+                {'status': 'error', 'message': f'Teste nao disponivel para provedor {provedor}'}, status=400
+            )
 
     except Exception as e:
         logger.exception("Erro ao testar conexao whatsapp pk=%s: %s", pk, e)
