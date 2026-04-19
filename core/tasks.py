@@ -24,7 +24,6 @@ import logging
 from datetime import datetime, timedelta
 from functools import wraps
 from django.http import JsonResponse
-from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
 from django.conf import settings
 from django.db import transaction
@@ -194,7 +193,7 @@ def _notificacao_ja_enviada_hoje(parcela, motivo_prefixo):
 
 def _registrar_notificacao(parcela, tipo, destinatario, assunto, mensagem):
     """Cria registro Notificacao e retorna o objeto criado."""
-    from notificacoes.models import Notificacao, TipoNotificacao, StatusNotificacao
+    from notificacoes.models import Notificacao, StatusNotificacao
     return Notificacao.objects.create(
         parcela=parcela,
         tipo=tipo,
@@ -346,7 +345,7 @@ def enviar_notificacoes_sync():
     Caso contrário, usa o comportamento padrão (D-5 via settings).
     """
     from financeiro.models import Parcela
-    from notificacoes.models import TipoNotificacao, StatusNotificacao, RegraNotificacao, TipoGatilho
+    from notificacoes.models import TipoNotificacao, RegraNotificacao, TipoGatilho
     from notificacoes.services import ServicoEmail
     from datetime import date, timedelta
 
@@ -440,7 +439,7 @@ def enviar_inadimplentes_sync():
     Caso contrário, usa o comportamento padrão (>= D+3 via settings).
     """
     from financeiro.models import Parcela
-    from notificacoes.models import TipoNotificacao, StatusNotificacao, RegraNotificacao, TipoGatilho
+    from notificacoes.models import TipoNotificacao, RegraNotificacao, TipoGatilho
     from notificacoes.services import ServicoEmail
     from datetime import date, timedelta
 
@@ -831,7 +830,6 @@ def relatorio_semanal_incorporadoras_sync():
     from django.core.mail import send_mail
     from django.db.models import Sum, Count
     from financeiro.models import Parcela
-    from contratos.models import Contrato
 
     result = TaskResult('relatorio_semanal_incorporadoras')
 

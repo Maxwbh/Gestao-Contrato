@@ -6,7 +6,6 @@ Inclui mixins para:
 - Otimização de queries
 - Paginação
 """
-from django.core.paginator import Paginator
 from .models import (
     get_contabilidades_usuario,
     get_imobiliarias_usuario,

@@ -9,7 +9,6 @@ Email: maxwbh@gmail.com
 Empresa: M&S do Brasil LTDA
 """
 import logging
-from decimal import Decimal
 from datetime import date, timedelta
 from uuid import uuid4
 from django.conf import settings
@@ -20,7 +19,7 @@ from .models import (
     TemplateNotificacao, TipoTemplate, TipoNotificacao,
     Notificacao, StatusNotificacao
 )
-from .services import ServicoEmail, ServicoSMS, _destinatario_email_teste, _destinatario_telefone_teste
+from .services import ServicoSMS, _destinatario_email_teste, _destinatario_telefone_teste
 
 logger = logging.getLogger(__name__)
 
