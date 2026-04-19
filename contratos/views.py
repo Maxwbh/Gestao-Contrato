@@ -1585,6 +1585,7 @@ def _gerar_numero_contrato():
             pass
     return f'{prefix}{seq:04d}'
 
+
 class ContratoWizardView(LoginRequiredMixin, View):
     """
     Wizard de 4 etapas para criar contratos com TabelaJuros escalante
