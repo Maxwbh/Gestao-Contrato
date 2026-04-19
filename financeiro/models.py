@@ -562,6 +562,17 @@ class Parcela(TimeStampedModel):
         # Obter código do banco da conta bancária
         if self.conta_bancaria:
             codigo_banco = self.conta_bancaria.banco
+
+            # BB (001): nosso_numero = convenio(7) + sequencial(10) = 17 dígitos.
+            # Se o DB armazena só o sequencial, reconstrói o display completo.
+            if codigo_banco == '001' and self.conta_bancaria.convenio:
+                convenio_str = str(self.conta_bancaria.convenio).zfill(7)
+                seq = nosso_numero
+                if len(seq) <= 10:
+                    return convenio_str + seq.zfill(10)
+                # Já inclui o convenio — devolve como está (zfill para 17)
+                return seq.zfill(17)
+
             tamanho = tamanhos.get(codigo_banco, 10)  # Padrão: 10 dígitos
             return nosso_numero.zfill(tamanho)
 
@@ -621,11 +632,11 @@ class Parcela(TimeStampedModel):
             'dias_atraso': dias_atraso,
             'vencido': hoje > self.data_vencimento,
 
-            # Configurações do contrato (para exibição)
-            'config_multa_percentual': config.get('valor_multa', 0) or 0,
-            'config_multa_tipo': config.get('tipo_valor_multa', 'PERCENTUAL'),
-            'config_juros_percentual': config.get('valor_juros', 0) or 0,
-            'config_juros_tipo': config.get('tipo_valor_juros', 'PERCENTUAL'),
+            # Configurações do contrato (para exibição — valores efetivamente usados no cálculo)
+            'config_multa_percentual': self.contrato.percentual_multa,
+            'config_multa_tipo': 'PERCENTUAL',
+            'config_juros_percentual': self.contrato.percentual_juros_mora,
+            'config_juros_tipo': 'PERCENTUAL',
             'config_desconto_valor': config.get('valor_desconto', 0) or 0,
             'config_desconto_tipo': config.get('tipo_valor_desconto', 'PERCENTUAL'),
             'config_desconto_dias': config.get('dias_desconto', 0) or 0,

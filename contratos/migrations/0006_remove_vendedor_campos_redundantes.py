@@ -10,32 +10,12 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
-        migrations.SeparateDatabaseAndState(
-            database_operations=[
-                migrations.RunSQL(
-                    sql="ALTER TABLE contratos_contrato DROP COLUMN IF EXISTS vendedor_cpf_cnpj;",
-                    reverse_sql="ALTER TABLE contratos_contrato ADD COLUMN IF NOT EXISTS vendedor_cpf_cnpj varchar(18) NOT NULL DEFAULT '';",
-                ),
-            ],
-            state_operations=[
-                migrations.RemoveField(
-                    model_name="contrato",
-                    name="vendedor_cpf_cnpj",
-                ),
-            ],
+        migrations.RemoveField(
+            model_name="contrato",
+            name="vendedor_cpf_cnpj",
         ),
-        migrations.SeparateDatabaseAndState(
-            database_operations=[
-                migrations.RunSQL(
-                    sql="ALTER TABLE contratos_contrato DROP COLUMN IF EXISTS vendedor_nome;",
-                    reverse_sql="ALTER TABLE contratos_contrato ADD COLUMN IF NOT EXISTS vendedor_nome varchar(200) NOT NULL DEFAULT '';",
-                ),
-            ],
-            state_operations=[
-                migrations.RemoveField(
-                    model_name="contrato",
-                    name="vendedor_nome",
-                ),
-            ],
+        migrations.RemoveField(
+            model_name="contrato",
+            name="vendedor_nome",
         ),
     ]

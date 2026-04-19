@@ -104,12 +104,7 @@ class Command(BaseCommand):
 
                 tabela_juros_count = TabelaJurosContrato.objects.count()
 
-                # 7. Remover parcelas futuras (manter apenas até o mês atual)
-                self.stdout.write('Removendo parcelas futuras...')
-                parcelas_removidas = self.remover_parcelas_futuras()
-                self.stdout.write(f'   {parcelas_removidas} parcelas futuras removidas')
-
-                # 8. Marcar 90% das parcelas como pagas
+                # 7. Marcar 90% das parcelas VENCIDAS como pagas
                 self.stdout.write('Marcando parcelas como pagas...')
                 self.marcar_parcelas_pagas(contratos, 0.90)
 
