@@ -12,7 +12,7 @@ from django.views.generic import ListView, CreateView, UpdateView, DeleteView, D
 from django.urls import reverse_lazy
 from django.contrib import messages
 from django.db import models
-from django.db.models import Q, Sum, Count
+from django.db.models import Q, Sum
 from .models import Contrato, StatusContrato, IndiceReajuste
 from .forms import ContratoForm, IndiceReajusteForm
 from core.mixins import PaginacaoMixin
@@ -223,7 +223,6 @@ class ContratoDetailView(LoginRequiredMixin, DetailView):
         ).count()
 
         # Reajustes do contrato
-        from financeiro.models import Reajuste
         context['reajustes'] = contrato.reajustes.all().order_by('-data_reajuste')
 
         # Índices disponíveis para reajuste manual
@@ -754,9 +753,7 @@ def _buscar_igpm_bcb(ano_inicio, mes_inicio):
         for item in data:
             # Data formato: dd/mm/yyyy
             partes = item['data'].split('/')
-            dia = int(partes[0])
-            mes = int(partes[1])
-            ano = int(partes[2])
+            _, mes, ano = int(partes[0]), int(partes[1]), int(partes[2])
 
             indices.append({
                 'ano': ano,
@@ -794,9 +791,7 @@ def _buscar_selic_bcb(ano_inicio, mes_inicio):
         for item in data:
             # Data formato: dd/mm/yyyy
             partes = item['data'].split('/')
-            dia = int(partes[0])
-            mes = int(partes[1])
-            ano = int(partes[2])
+            _, mes, ano = int(partes[0]), int(partes[1]), int(partes[2])
 
             indices.append({
                 'ano': ano,
@@ -968,7 +963,6 @@ def _buscar_tr_bcb(ano_inicio, mes_inicio):
 # ==============================================================
 
 from .models import PrestacaoIntermediaria
-from django.http import HttpResponseRedirect
 
 
 class IntermediariasListView(LoginRequiredMixin, PaginacaoMixin, ListView):
@@ -1066,8 +1060,6 @@ def criar_intermediaria(request, contrato_id):
 
         # Validar quantidade máxima de intermediárias
         qtd_atual = contrato.intermediarias.count() if hasattr(contrato, 'intermediarias') else 0
-        max_intermediarias = getattr(contrato, 'quantidade_intermediarias', 30)
-
         if qtd_atual >= 30:  # Limite absoluto
             return JsonResponse({
                 'sucesso': False,
@@ -1609,8 +1601,8 @@ class ContratoWizardView(LoginRequiredMixin, View):
 
     def get(self, request, step='basico'):
         from .forms import (
-            ContratoWizardBasicoForm, TabelaJurosForm,
-            IntermediariaPadraoForm, IntermediariaManualForm,
+            ContratoWizardBasicoForm,
+            IntermediariaPadraoForm,
         )
         sess = self._session(request)
 
@@ -1665,7 +1657,6 @@ class ContratoWizardView(LoginRequiredMixin, View):
             ContratoWizardBasicoForm, TabelaJurosForm,
             IntermediariaPadraoForm, IntermediariaManualForm,
         )
-        from contratos.models import TabelaJurosContrato, PrestacaoIntermediaria
         from django.db import transaction
         sess = self._session(request)
 
@@ -1872,13 +1863,9 @@ class ContratoWizardView(LoginRequiredMixin, View):
         """Cria o contrato com TabelaJuros e intermediárias em uma única transação"""
         from decimal import Decimal as D
         from contratos.models import TabelaJurosContrato, PrestacaoIntermediaria
-        from .forms import ContratoWizardBasicoForm
 
         basico = sess['basico']
         # Reconstruct form from session data
-        form = ContratoWizardBasicoForm(basico)
-        # We need to pass dates as strings matching widget format
-        # Use cleaned_data stored in session directly
         contrato = self._criar_contrato_from_session(basico)
 
         # TabelaJuros rows

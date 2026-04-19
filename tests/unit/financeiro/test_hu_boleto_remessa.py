@@ -24,11 +24,10 @@ import json
 import pytest
 from decimal import Decimal
 from datetime import date, timedelta
-from unittest.mock import patch, MagicMock, call
+from unittest.mock import patch, MagicMock
 
 from django.test import Client
 from django.urls import reverse
-from django.utils import timezone
 
 
 # ---------------------------------------------------------------------------
@@ -463,7 +462,6 @@ class TestHU11_RetornoCNAB:
 
     def test_processar_retorno_cnab(self, cli, dominio, contrato_com_parcelas):
         """POST em processar_retorno processa arquivo e quita parcelas."""
-        from financeiro.models import ArquivoRetorno
         from tests.fixtures.factories import ArquivoRetornoFactory
         imob, conta, imovel, comprador = dominio
 
@@ -502,7 +500,7 @@ class TestHU12_EnvioEmail:
 
         mock_result = _mock_brcobranca_sucesso()
 
-        with patch('financeiro.models.Parcela.gerar_boleto', return_value=mock_result) as mock_gerar:
+        with patch('financeiro.models.Parcela.gerar_boleto', return_value=mock_result):
             url = reverse('financeiro:gerar_boleto', kwargs={'pk': parcela.pk})
             resp = cli.post(
                 url,
@@ -907,7 +905,6 @@ class TestOFXView:
     def test_post_extensao_invalida_retorna_400(self, cli):
         """POST com arquivo .txt deve retornar 400."""
         from django.urls import reverse
-        from io import BytesIO
         from django.core.files.uploadedfile import SimpleUploadedFile
         url = reverse('financeiro:upload_ofx')
         arquivo = SimpleUploadedFile('extrato.txt', b'content', content_type='text/plain')

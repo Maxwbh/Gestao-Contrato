@@ -5,7 +5,6 @@ Desenvolvedor: Maxwell da Silva Oliveira
 Email: maxwbh@gmail.com
 Empresa: M&S do Brasil LTDA
 """
-import pytest
 import unittest
 from decimal import Decimal
 from datetime import date, timedelta

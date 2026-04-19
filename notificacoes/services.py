@@ -7,7 +7,6 @@ Empresa: M&S do Brasil LTDA
 """
 import logging
 from uuid import uuid4
-from django.core.mail import send_mail
 from django.conf import settings
 from twilio.rest import Client
 from .models import (

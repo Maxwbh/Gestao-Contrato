@@ -7,13 +7,13 @@ Email: maxwbh@gmail.com
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.mixins import LoginRequiredMixin
-from django.http import JsonResponse, HttpResponse
+from django.http import JsonResponse
 from django.views.decorators.http import require_http_methods
 # csrf_exempt removido por questões de segurança - endpoints agora verificam permissões
 from django.core.management import call_command
 from django.db import connection
 from django.contrib.auth import get_user_model
-from django.db.models import Count, Sum, Q
+from django.db.models import Sum, Q
 from django.views.generic import ListView, CreateView, UpdateView, DeleteView
 from django.urls import reverse_lazy
 from django.contrib import messages
@@ -21,13 +21,13 @@ from datetime import datetime, timedelta
 from django.utils import timezone
 from .mixins import PaginacaoMixin
 from .models import (
-    Contabilidade, Imobiliaria, Imovel, Comprador, TipoImovel,
+    Contabilidade, Imobiliaria, Imovel, Comprador,
     ContaBancaria, BancoBrasil, LayoutCNAB, AcessoUsuario, VerticePoligono,
     get_contabilidades_usuario, get_imobiliarias_usuario,
     usuario_tem_acesso_imobiliaria, usuario_tem_acesso_contabilidade,
     usuario_tem_permissao_total
 )
-from .forms import ContabilidadeForm, CompradorForm, ImovelForm, ImobiliariaForm, ContaBancariaForm, AcessoUsuarioForm
+from .forms import ContabilidadeForm, CompradorForm, ImovelForm, ImobiliariaForm, AcessoUsuarioForm
 from django.core.cache import cache
 import io
 import json
@@ -318,7 +318,7 @@ def setup(request):
                 total_contas_bancarias = 0
                 total_imobiliarias = 0
 
-        except Exception as e:
+        except Exception:
             db_ok = False
             has_tables = False
             total_contabilidades = 0
@@ -1129,8 +1129,7 @@ class ImobiliariaCreateView(LoginRequiredMixin, CreateView):
     success_url = reverse_lazy('core:listar_imobiliarias')
 
     def form_valid(self, form):
-        # Salvar a imobiliária primeiro
-        response = super().form_valid(form)
+        super().form_valid(form)
 
         # Criar acesso automático para o usuário que criou (se não for admin/superuser)
         user = self.request.user

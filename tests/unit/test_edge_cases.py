@@ -9,7 +9,6 @@ from decimal import Decimal
 
 from tests.fixtures.factories import (
     ContratoFactory,
-    ParcelaFactory,
     ReajusteFactory,
 )
 
@@ -155,7 +154,7 @@ class TestReajusteEdgeCases:
         contrato = ContratoFactory(numero_parcelas=12)
         contrato.parcelas.order_by('numero_parcela').first().valor_atual
 
-        reajuste = ReajusteFactory(
+        ReajusteFactory(
             contrato=contrato,
             percentual=Decimal('0.00'),
             ciclo=2,

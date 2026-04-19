@@ -7,7 +7,7 @@ Inclui:
 - Integração com API do Banco Central
 """
 from decimal import Decimal
-from datetime import date, timedelta
+from datetime import date
 from typing import Optional, Dict, Any
 from django.core.cache import cache
 from django.conf import settings
