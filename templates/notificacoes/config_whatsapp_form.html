@@ -1,0 +1,136 @@
+{% extends 'base.html' %}
+{% load crispy_forms_tags %}
+
+{% block title %}
+    {% if object %}Editar Configuração WhatsApp{% else %}Nova Configuração WhatsApp{% endif %} - Gestão de Contratos
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <div class="row justify-content-center">
+        <div class="col-xl-8">
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <div>
+                    <h4 class="mb-0 text-dark">
+                        <i class="fab fa-whatsapp me-2 text-success"></i>
+                        {% if object %}Editar: {{ object.nome }}{% else %}Nova Configuração WhatsApp{% endif %}
+                    </h4>
+                    <small class="text-muted">
+                        {% if object %}Atualize os dados do provedor WhatsApp{% else %}Configure um novo provedor WhatsApp{% endif %}
+                    </small>
+                </div>
+                <a href="{% url 'notificacoes:listar_config_whatsapp' %}" class="btn btn-outline-secondary btn-sm">
+                    <i class="fas fa-list me-1"></i>Ver Lista
+                </a>
+            </div>
+
+            <form method="post" novalidate>
+                {% csrf_token %}
+                {% crispy form %}
+            </form>
+
+            <!-- Dicas por Provedor -->
+            <div class="card mt-4 border-success">
+                <div class="card-header bg-success text-white py-2">
+                    <i class="fas fa-lightbulb me-2"></i>Guia de Configuração por Provedor
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <h6><i class="fas fa-server text-success me-1"></i>Evolution API (self-hosted)</h6>
+                            <ul class="small mb-0">
+                                <li>API URL: <code>http://servidor:8080</code></li>
+                                <li>API Key: chave definida em <code>AUTHENTICATION_API_KEY</code></li>
+                                <li>Instância: nome criado no painel Evolution</li>
+                                <li>Escaneie o QR Code na instância para conectar</li>
+                            </ul>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <h6><i class="fas fa-bolt text-warning me-1"></i>Z-API</h6>
+                            <ul class="small mb-0">
+                                <li>API URL: <code>https://api.z-api.io</code></li>
+                                <li>API Key: token da instância Z-API</li>
+                                <li>Instância: instance ID da Z-API</li>
+                                <li>Client-Token: cabeçalho obrigatório da Z-API</li>
+                            </ul>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <h6><i class="fas fa-phone text-primary me-1"></i>Twilio</h6>
+                            <ul class="small mb-0">
+                                <li>Account SID + Auth Token do console Twilio</li>
+                                <li>Número: <code>whatsapp:+5511999999999</code></li>
+                                <li>Habilite WhatsApp Sandbox no console</li>
+                            </ul>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <h6><i class="fab fa-meta text-primary me-1"></i>Meta (WhatsApp Business API)</h6>
+                            <ul class="small mb-0">
+                                <li>Account SID: ID da conta Meta Business</li>
+                                <li>API Key: token de acesso permanente</li>
+                                <li>API URL: endpoint da Cloud API Meta</li>
+                                <li>Número: número verificado no Meta Business</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const provedorSelect = document.getElementById('id_provedor');
+    const cardTwilioMeta = document.getElementById('card-twilio-meta');
+    const cardEvolutionZapi = document.getElementById('card-evolution-zapi');
+
+    function atualizarVisibilidade() {
+        const provedor = provedorSelect ? provedorSelect.value : '';
+        if (cardTwilioMeta) {
+            cardTwilioMeta.style.display = ['TWILIO', 'META'].includes(provedor) ? '' : 'none';
+        }
+        if (cardEvolutionZapi) {
+            cardEvolutionZapi.style.display = ['EVOLUTION', 'ZAPI'].includes(provedor) ? '' : 'none';
+        }
+    }
+
+    if (provedorSelect) {
+        provedorSelect.addEventListener('change', atualizarVisibilidade);
+        atualizarVisibilidade();
+    }
+
+    // Botao Testar Conexao
+    const btnTestar = document.getElementById('btn-testar-conexao');
+    if (btnTestar) {
+        btnTestar.addEventListener('click', function() {
+            {% if object %}
+            const url = '{% url "notificacoes:testar_config_whatsapp" object.pk %}';
+            btnTestar.disabled = true;
+            btnTestar.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Testando...';
+
+            fetch(url, { method: 'GET', headers: { 'X-Requested-With': 'XMLHttpRequest' } })
+                .then(r => r.json())
+                .then(data => {
+                    btnTestar.disabled = false;
+                    btnTestar.innerHTML = '<i class="fab fa-whatsapp me-1"></i>Testar Conexao';
+                    if (data.status === 'success') {
+                        alert('✅ ' + data.message);
+                    } else {
+                        alert('❌ ' + data.message);
+                    }
+                })
+                .catch(err => {
+                    btnTestar.disabled = false;
+                    btnTestar.innerHTML = '<i class="fab fa-whatsapp me-1"></i>Testar Conexao';
+                    alert('Erro: ' + err.message);
+                });
+            {% else %}
+            alert('Salve a configuração primeiro para poder testar.');
+            {% endif %}
+        });
+    }
+});
+</script>
+{% endblock %}

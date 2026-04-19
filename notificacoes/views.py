@@ -23,7 +23,7 @@ from .models import (
     ConfiguracaoEmail, ConfiguracaoSMS, ConfiguracaoWhatsApp,
     RegraNotificacao, TipoGatilho, TipoNotificacao, StatusNotificacao,
 )
-from .forms import ConfiguracaoEmailForm, TemplateNotificacaoForm
+from .forms import ConfiguracaoEmailForm, ConfiguracaoWhatsAppForm, TemplateNotificacaoForm
 
 logger = logging.getLogger(__name__)
 
@@ -194,6 +194,129 @@ def testar_conexao_email(request, pk):
             'status': 'error',
             'message': f'Erro na conexao: {str(e)}'
         }, status=400)
+
+
+# =============================================================================
+# CRUD VIEWS - CONFIGURACAO WHATSAPP
+# =============================================================================
+
+class ConfiguracaoWhatsAppListView(LoginRequiredMixin, PaginacaoMixin, ListView):
+    model = ConfiguracaoWhatsApp
+    template_name = 'notificacoes/config_whatsapp_list.html'
+    context_object_name = 'configuracoes'
+    paginate_by = 20
+
+    def get_queryset(self):
+        queryset = ConfiguracaoWhatsApp.objects.all().order_by('-ativo', '-criado_em')
+        search = self.request.GET.get('search')
+        if search:
+            queryset = queryset.filter(
+                Q(nome__icontains=search) |
+                Q(instancia__icontains=search) |
+                Q(api_url__icontains=search)
+            )
+        return queryset
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['total_configuracoes'] = ConfiguracaoWhatsApp.objects.count()
+        context['search'] = self.request.GET.get('search', '')
+        return context
+
+
+class ConfiguracaoWhatsAppCreateView(LoginRequiredMixin, CreateView):
+    model = ConfiguracaoWhatsApp
+    form_class = ConfiguracaoWhatsAppForm
+    template_name = 'notificacoes/config_whatsapp_form.html'
+    success_url = reverse_lazy('notificacoes:listar_config_whatsapp')
+
+    def form_valid(self, form):
+        messages.success(self.request, f'Configuracao "{form.instance.nome}" criada com sucesso!')
+        return super().form_valid(form)
+
+    def form_invalid(self, form):
+        messages.error(self.request, 'Erro ao criar configuracao. Verifique os dados.')
+        return super().form_invalid(form)
+
+
+class ConfiguracaoWhatsAppUpdateView(LoginRequiredMixin, UpdateView):
+    model = ConfiguracaoWhatsApp
+    form_class = ConfiguracaoWhatsAppForm
+    template_name = 'notificacoes/config_whatsapp_form.html'
+    success_url = reverse_lazy('notificacoes:listar_config_whatsapp')
+
+    def form_valid(self, form):
+        if not form.cleaned_data.get('auth_token'):
+            form.instance.auth_token = ConfiguracaoWhatsApp.objects.get(pk=self.object.pk).auth_token
+        messages.success(self.request, f'Configuracao "{form.instance.nome}" atualizada com sucesso!')
+        return super().form_valid(form)
+
+    def form_invalid(self, form):
+        messages.error(self.request, 'Erro ao atualizar configuracao. Verifique os dados.')
+        return super().form_invalid(form)
+
+
+class ConfiguracaoWhatsAppDeleteView(LoginRequiredMixin, DeleteView):
+    model = ConfiguracaoWhatsApp
+    success_url = reverse_lazy('notificacoes:listar_config_whatsapp')
+    template_name = 'notificacoes/config_whatsapp_confirm_delete.html'
+
+    def delete(self, request, *args, **kwargs):
+        self.object = self.get_object()
+        nome = self.object.nome
+        self.object.delete()
+        messages.success(request, f'Configuracao "{nome}" excluida com sucesso!')
+        return redirect(self.success_url)
+
+
+@login_required
+def testar_conexao_whatsapp(request, pk):
+    """Testa a conexao com o provedor WhatsApp configurado."""
+    config = get_object_or_404(ConfiguracaoWhatsApp, pk=pk)
+
+    try:
+        provedor = config.provedor
+
+        if provedor == 'EVOLUTION':
+            import urllib.request as _req
+            import json as _json
+            url = f"{config.api_url.rstrip('/')}/instance/connectionState/{config.instancia}"
+            req = _req.Request(url, headers={'apikey': config.api_key})
+            with _req.urlopen(req, timeout=10) as resp:
+                data = _json.loads(resp.read())
+            state = data.get('instance', {}).get('state', '') or data.get('state', '')
+            if state == 'open':
+                return JsonResponse({'status': 'success', 'message': f'Instancia "{config.instancia}" conectada (state: open)'})
+            return JsonResponse({'status': 'error', 'message': f'Instancia nao conectada (state: {state})'}, status=400)
+
+        elif provedor == 'ZAPI':
+            import urllib.request as _req
+            import json as _json
+            base = config.api_url.rstrip('/')
+            url = f"{base}/instances/{config.instancia}/token/{config.api_key}/status"
+            headers = {'Content-Type': 'application/json'}
+            if config.client_token:
+                headers['Client-Token'] = config.client_token
+            req = _req.Request(url, headers=headers)
+            with _req.urlopen(req, timeout=10) as resp:
+                data = _json.loads(resp.read())
+            connected = data.get('connected', False)
+            if connected:
+                return JsonResponse({'status': 'success', 'message': 'Z-API conectada com sucesso'})
+            return JsonResponse({'status': 'error', 'message': f'Z-API nao conectada: {data}'}, status=400)
+
+        elif provedor == 'TWILIO':
+            from twilio.rest import Client as TwilioClient
+            client = TwilioClient(config.account_sid, config.auth_token)
+            account = client.api.accounts(config.account_sid).fetch()
+            return JsonResponse({'status': 'success', 'message': f'Twilio OK — conta: {account.friendly_name}'})
+
+        else:
+            return JsonResponse({'status': 'error', 'message': f'Teste nao disponivel para provedor {provedor}'}, status=400)
+
+    except Exception as e:
+        logger.exception("Erro ao testar conexao whatsapp pk=%s: %s", pk, e)
+        return JsonResponse({'status': 'error', 'message': f'Erro: {str(e)}'}, status=400)
 
 
 # =============================================================================
