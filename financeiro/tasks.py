@@ -8,9 +8,7 @@ Empresa: M&S do Brasil LTDA
 from celery import shared_task
 from django.utils import timezone
 from django.conf import settings
-from decimal import Decimal
-import requests
-from datetime import datetime, timedelta
+from datetime import timedelta
 import logging
 
 from contratos.models import Contrato, TipoCorrecao
@@ -187,7 +185,6 @@ def buscar_indices_economicos():
     - IBGE: IPCA, INPC
     - FGV: IGPM, IGPDI, INCC
     """
-    from contratos.models import IndiceReajuste
     from .services.reajuste_service import IndiceEconomicoService
 
     logger.info("Iniciando busca de índices econômicos...")

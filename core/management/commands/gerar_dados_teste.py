@@ -13,7 +13,7 @@ import random
 import unicodedata
 import re
 from decimal import Decimal
-from datetime import datetime, timedelta
+from datetime import timedelta
 from django.core.management.base import BaseCommand
 from django.utils import timezone
 from django.db import transaction
@@ -1564,7 +1564,7 @@ class Command(BaseCommand):
         com fallback local (sem BRCobrança necessário).
         Retorna o número de remessas geradas.
         """
-        from financeiro.models import Parcela, StatusBoleto, ArquivoRemessa
+        from financeiro.models import Parcela, StatusBoleto
         from financeiro.services.cnab_service import CNABService
 
         service = CNABService()

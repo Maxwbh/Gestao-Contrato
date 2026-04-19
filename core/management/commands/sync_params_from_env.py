@@ -44,7 +44,7 @@ PARAMETROS = [
      'Número Twilio para SMS (E.164, ex.: +15551234567)'),
     ('TWILIO_WHATSAPP_NUMBER',    'twilio', 'str',    '',
      'Número Twilio para WhatsApp (ex.: whatsapp:+15551234567)'),
-    ('TWILIO_STATUS_CALLBACK_URL','twilio', 'str',    '',
+    ('TWILIO_STATUS_CALLBACK_URL', 'twilio', 'str',    '',
      'URL de webhook para callbacks de status Twilio'),
 
     # ── Bounce / IMAP ────────────────────────────────────────────────────────
@@ -84,7 +84,7 @@ PARAMETROS = [
      'URL base da API BRCobrança (docker run -p 9292:9292 kivanio/brcobranca)'),
     ('BRCOBRANCA_TIMEOUT',       'brcobranca', 'int', '30',
      'Timeout para chamadas à API BRCobrança (segundos)'),
-    ('BRCOBRANCA_MAX_TENTATIVAS','brcobranca', 'int', '3',
+    ('BRCOBRANCA_MAX_TENTATIVAS', 'brcobranca', 'int', '3',
      'Número máximo de tentativas em caso de falha'),
     ('BRCOBRANCA_DELAY_INICIAL', 'brcobranca', 'int', '2',
      'Delay inicial de retry em segundos (dobra a cada tentativa)'),
@@ -104,7 +104,7 @@ PARAMETROS = [
      'Código da série IPCA no BCB'),
     ('IGPM_SERIE_ID', 'bcb', 'str', '189',
      'Código da série IGP-M no BCB'),
-    ('SELIC_SERIE_ID','bcb', 'str', '432',
+    ('SELIC_SERIE_ID', 'bcb', 'str', '432',
      'Código da série SELIC no BCB'),
 ]
 

@@ -960,7 +960,6 @@ class Reajuste(TimeStampedModel):
         antecipacao_meses: quantos meses antes do aniversário exibir como pendente.
         """
         from django.utils import timezone as tz
-        from dateutil.relativedelta import relativedelta
 
         if contrato.tipo_correcao == 'FIXO':
             return None
@@ -1442,7 +1441,6 @@ class Reajuste(TimeStampedModel):
                 'erro': 'Reajuste já foi aplicado anteriormente'
             }
 
-        from django.db.models import Sum
         from contratos.models import TabelaJurosContrato
 
         perc_liquido = self.percentual_liquido

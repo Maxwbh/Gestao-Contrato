@@ -6,8 +6,7 @@ Desenvolvedor: Maxwell da Silva Oliveira <maxwbh@gmail.com>
 
 import pytest
 from decimal import Decimal
-from datetime import date, timedelta
-from unittest.mock import Mock, patch
+from unittest.mock import Mock
 
 from financeiro.services.boleto_service import BoletoService
 
@@ -163,14 +162,13 @@ class TestBoletoServiceFormatacao:
         service = BoletoService()
 
         cnpj = '23.456.781/0001-11'
-        esperado = '23456781000111'
 
         # Teste indireto através de _filtrar_campos_banco
         dados = {'documento_cedente': cnpj}
         # _filtrar_campos_banco não altera documento_cedente
         # mas valida formato
 
-        result = service._validar_dados_boleto(dados)
+        service._validar_dados_boleto(dados)
         # Validação básica passa com qualquer formato
 
     def test_formatar_numero_documento(self):

@@ -7,7 +7,6 @@ Testa os modelos:
 """
 import pytest
 from django.utils import timezone
-from datetime import timedelta
 
 from portal_comprador.models import AcessoComprador, LogAcessoComprador
 from tests.fixtures.factories import UserFactory, CompradorFactory

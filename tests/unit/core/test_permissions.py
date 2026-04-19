@@ -5,12 +5,11 @@ Cobre: rate_limit decorator, requer_permissao_total,
        helpers usuario_pode_editar / usuario_pode_excluir / usuario_eh_apenas_leitura.
 """
 import pytest
-from unittest.mock import patch, MagicMock
-from django.test import Client, RequestFactory
+from django.test import RequestFactory
 from django.http import HttpResponse
 from django.contrib.auth import get_user_model
 
-from core.permissions import rate_limit, rate_limit_by_user, requer_permissao_total
+from core.permissions import rate_limit
 from core.models import (
     usuario_pode_editar,
     usuario_pode_excluir,
@@ -23,7 +22,6 @@ from tests.fixtures.factories import (
     SuperUserFactory,
     ImobiliariaFactory,
     ContabilidadeFactory,
-    AcessoUsuarioFactory,
 )
 
 User = get_user_model()

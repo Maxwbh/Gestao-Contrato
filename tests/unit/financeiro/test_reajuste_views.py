@@ -6,8 +6,6 @@ Escopo: listar_reajustes, reajustes_pendentes, aplicar_reajuste_pagina,
         obter_indice_reajuste
 """
 import pytest
-from decimal import Decimal
-from datetime import date, timedelta
 from django.urls import reverse
 
 from tests.fixtures.factories import UserFactory, ContratoFactory

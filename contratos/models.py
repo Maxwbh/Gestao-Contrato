@@ -785,7 +785,6 @@ class Contrato(TimeStampedModel):
             base_pv: Valor presente base. Se None, usa valor_financiado.
         """
         from financeiro.models import Parcela as ParcelaModel, Reajuste
-        from django.db.models import Sum
 
         pv = base_pv if base_pv is not None else self.valor_financiado
         if pv <= 0 or self.numero_parcelas <= 0:
@@ -1147,7 +1146,7 @@ class Contrato(TimeStampedModel):
         Returns:
             dict: Resumo com totais e estatísticas
         """
-        from django.db.models import Sum, Count
+        from django.db.models import Sum
 
         parcelas = self.parcelas.all()
         pagas = parcelas.filter(pago=True)

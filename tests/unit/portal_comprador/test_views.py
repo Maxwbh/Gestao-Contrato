@@ -11,13 +11,11 @@ Testa:
 - Alterar Senha
 """
 import pytest
-from django.urls import reverse
 from decimal import Decimal
 from datetime import date, timedelta
 
 from portal_comprador.models import AcessoComprador, LogAcessoComprador
 from contratos.models import Contrato
-from financeiro.models import Parcela
 from tests.fixtures.factories import (
     UserFactory,
     CompradorFactory,
@@ -105,7 +103,7 @@ class TestMeusContratosView:
 
         # Criar contrato para o comprador
         imovel = ImovelFactory()
-        contrato = Contrato.objects.create(
+        Contrato.objects.create(
             imovel=imovel,
             comprador=comprador,
             imobiliaria=imovel.imobiliaria,
