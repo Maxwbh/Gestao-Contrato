@@ -1258,8 +1258,8 @@
         <!-- Botoes de Acao -->
         <div class="card mt-4">
             <div class="card-body d-flex justify-content-between">
-                <a href="{% url 'contratos:listar' %}" class="btn btn-secondary">
-                    <i class="fas fa-arrow-left"></i> Voltar para Lista
+                <a href="{{ voltar_url }}" class="btn btn-secondary">
+                    <i class="fas fa-arrow-left"></i> Voltar
                 </a>
                 <div class="d-flex flex-wrap gap-2">
                     <a href="{% url 'contratos:editar' contrato.pk %}" class="btn btn-primary">
@@ -1678,7 +1678,7 @@
     var reajustesMap = {};
     {% for r in reajustes %}
     reajustesMap[{{ r.ciclo }}] = {
-        pct: {{ r.percentual|default:0|floatformat:4 }},
+        pct: {{ r.percentual|default:0|stringformat:".4f" }},
         aplicado: {{ r.aplicado|yesno:"true,false" }},
         data: '{{ r.data_reajuste|date:"d/m/Y"|default:"" }}'
     };
@@ -2692,6 +2692,8 @@ function _bindReajusteModal(contratoId) {
         });
     }
 }
+
+
 </script>
 
 <!-- Modal Reajuste -->

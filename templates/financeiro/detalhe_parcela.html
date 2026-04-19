@@ -180,7 +180,7 @@
     <!-- Ações -->
     <div class="row">
         <div class="col-12 d-flex flex-wrap gap-2">
-            <a href="{% url 'financeiro:listar_parcelas' %}" class="btn btn-secondary">
+            <a href="{{ voltar_url }}" class="btn btn-secondary">
                 <i class="fas fa-arrow-left me-2"></i>Voltar
             </a>
             {% if not parcela.pago %}

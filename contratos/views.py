@@ -27,6 +27,17 @@ from decimal import Decimal
 logger = logging.getLogger(__name__)
 
 
+def _voltar_url(request, default):
+    """Retorna o HTTP_REFERER se for da mesma origem, senão o default."""
+    from urllib.parse import urlparse
+    ref = request.META.get('HTTP_REFERER', '')
+    if ref:
+        p = urlparse(ref)
+        if not p.netloc or p.netloc == request.get_host():
+            return ref
+    return default
+
+
 class ContratoListView(LoginRequiredMixin, PaginacaoMixin, ListView):
     """Lista todos os contratos"""
     model = Contrato
@@ -391,6 +402,12 @@ class ContratoDetailView(LoginRequiredMixin, DetailView):
             .order_by('-data_pagamento')
         )
 
+        # Botão Voltar dinâmico
+        from django.urls import reverse
+        context['voltar_url'] = _voltar_url(
+            self.request, reverse('contratos:listar')
+        )
+
         return context
 
 
@@ -445,6 +462,40 @@ def parcelas_contrato(request, pk):
         'parcelas': parcelas,
     }
     return render(request, 'contratos/parcelas.html', context)
+
+
+@login_required
+@require_http_methods(["POST"])
+def api_completar_parcelas(request, pk):
+    """
+    Cria as parcelas faltantes de um contrato sem recriar as existentes.
+    Útil após gerar_dados_teste (que cria só até o mês atual).
+    """
+    contrato = get_object_or_404(Contrato, pk=pk)
+
+    existentes = contrato.parcelas.count()
+    if existentes >= contrato.numero_parcelas:
+        return JsonResponse({
+            'status': 'ok',
+            'message': 'Nenhuma parcela faltando.',
+            'criadas': 0,
+        })
+
+    try:
+        criados = contrato.completar_parcelas_faltantes()
+        messages.success(
+            request,
+            f'{len(criados)} parcela(s) criada(s) para {contrato.numero_contrato}.'
+        )
+        return JsonResponse({
+            'status': 'ok',
+            'message': f'{len(criados)} parcela(s) criada(s).',
+            'criadas': len(criados),
+            'numeros': criados,
+        })
+    except Exception as e:
+        logger.exception("Erro ao completar parcelas do contrato %s: %s", pk, e)
+        return JsonResponse({'status': 'error', 'message': str(e)}, status=500)
 
 
 # ==============================================================
