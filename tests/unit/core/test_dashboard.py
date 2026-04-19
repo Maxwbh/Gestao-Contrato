@@ -6,7 +6,7 @@ Escopo: index, dashboard, setup, roadmap, pagina_dados_teste
 import pytest
 from django.urls import reverse
 
-from tests.fixtures.factories import UserFactory, ContratoFactory
+from tests.fixtures.factories import UserFactory
 
 
 @pytest.fixture
