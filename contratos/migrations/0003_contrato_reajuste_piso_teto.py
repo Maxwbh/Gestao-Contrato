@@ -88,276 +88,142 @@ class Migration(migrations.Migration):
             new_name="contratos_p_paga_a04c2e_idx",
             old_name="contratos_p_paga_idx",
         ),
-        # ---------------------------------------------------------------------------
-        # AddField idempotentes — usam ADD COLUMN IF NOT EXISTS para sobreviver
-        # a re-deploys onde as colunas já foram criadas em deployments anteriores.
-        # ---------------------------------------------------------------------------
-        migrations.SeparateDatabaseAndState(
-            database_operations=[
-                migrations.RunSQL(
-                    sql="ALTER TABLE contratos_contrato ADD COLUMN IF NOT EXISTS dias_carencia_boleto integer NOT NULL DEFAULT 0;",
-                    reverse_sql="ALTER TABLE contratos_contrato DROP COLUMN IF EXISTS dias_carencia_boleto;",
-                ),
-            ],
-            state_operations=[
-                migrations.AddField(
-                    model_name="contrato",
-                    name="dias_carencia_boleto",
-                    field=models.IntegerField(
-                        default=0,
-                        help_text="Dias sem cobrar multa/juros após vencimento",
-                        verbose_name="Dias sem Encargos",
-                    ),
-                ),
-            ],
+        migrations.AddField(
+            model_name="contrato",
+            name="dias_carencia_boleto",
+            field=models.IntegerField(
+                default=0,
+                help_text="Dias sem cobrar multa/juros após vencimento",
+                verbose_name="Dias sem Encargos",
+            ),
         ),
-        migrations.SeparateDatabaseAndState(
-            database_operations=[
-                migrations.RunSQL(
-                    sql="ALTER TABLE contratos_contrato ADD COLUMN IF NOT EXISTS dias_desconto_boleto integer NOT NULL DEFAULT 0;",
-                    reverse_sql="ALTER TABLE contratos_contrato DROP COLUMN IF EXISTS dias_desconto_boleto;",
-                ),
-            ],
-            state_operations=[
-                migrations.AddField(
-                    model_name="contrato",
-                    name="dias_desconto_boleto",
-                    field=models.IntegerField(
-                        default=0,
-                        help_text="Dias antes do vencimento para conceder desconto",
-                        verbose_name="Dias para Desconto",
-                    ),
-                ),
-            ],
+        migrations.AddField(
+            model_name="contrato",
+            name="dias_desconto_boleto",
+            field=models.IntegerField(
+                default=0,
+                help_text="Dias antes do vencimento para conceder desconto",
+                verbose_name="Dias para Desconto",
+            ),
         ),
-        migrations.SeparateDatabaseAndState(
-            database_operations=[
-                migrations.RunSQL(
-                    sql="ALTER TABLE contratos_contrato ADD COLUMN IF NOT EXISTS instrucao_boleto_1 varchar(255) NOT NULL DEFAULT '';",
-                    reverse_sql="ALTER TABLE contratos_contrato DROP COLUMN IF EXISTS instrucao_boleto_1;",
-                ),
-            ],
-            state_operations=[
-                migrations.AddField(
-                    model_name="contrato",
-                    name="instrucao_boleto_1",
-                    field=models.CharField(
-                        blank=True,
-                        help_text="Primeira linha de instrução do boleto",
-                        max_length=255,
-                        verbose_name="Instrução 1",
-                    ),
-                ),
-            ],
+        migrations.AddField(
+            model_name="contrato",
+            name="instrucao_boleto_1",
+            field=models.CharField(
+                blank=True,
+                help_text="Primeira linha de instrução do boleto",
+                max_length=255,
+                verbose_name="Instrução 1",
+            ),
         ),
-        migrations.SeparateDatabaseAndState(
-            database_operations=[
-                migrations.RunSQL(
-                    sql="ALTER TABLE contratos_contrato ADD COLUMN IF NOT EXISTS instrucao_boleto_2 varchar(255) NOT NULL DEFAULT '';",
-                    reverse_sql="ALTER TABLE contratos_contrato DROP COLUMN IF EXISTS instrucao_boleto_2;",
-                ),
-            ],
-            state_operations=[
-                migrations.AddField(
-                    model_name="contrato",
-                    name="instrucao_boleto_2",
-                    field=models.CharField(
-                        blank=True,
-                        help_text="Segunda linha de instrução do boleto",
-                        max_length=255,
-                        verbose_name="Instrução 2",
-                    ),
-                ),
-            ],
+        migrations.AddField(
+            model_name="contrato",
+            name="instrucao_boleto_2",
+            field=models.CharField(
+                blank=True,
+                help_text="Segunda linha de instrução do boleto",
+                max_length=255,
+                verbose_name="Instrução 2",
+            ),
         ),
-        migrations.SeparateDatabaseAndState(
-            database_operations=[
-                migrations.RunSQL(
-                    sql="ALTER TABLE contratos_contrato ADD COLUMN IF NOT EXISTS instrucao_boleto_3 varchar(255) NOT NULL DEFAULT '';",
-                    reverse_sql="ALTER TABLE contratos_contrato DROP COLUMN IF EXISTS instrucao_boleto_3;",
-                ),
-            ],
-            state_operations=[
-                migrations.AddField(
-                    model_name="contrato",
-                    name="instrucao_boleto_3",
-                    field=models.CharField(
-                        blank=True,
-                        help_text="Terceira linha de instrução do boleto",
-                        max_length=255,
-                        verbose_name="Instrução 3",
-                    ),
-                ),
-            ],
+        migrations.AddField(
+            model_name="contrato",
+            name="instrucao_boleto_3",
+            field=models.CharField(
+                blank=True,
+                help_text="Terceira linha de instrução do boleto",
+                max_length=255,
+                verbose_name="Instrução 3",
+            ),
         ),
-        migrations.SeparateDatabaseAndState(
-            database_operations=[
-                migrations.RunSQL(
-                    sql="ALTER TABLE contratos_contrato ADD COLUMN IF NOT EXISTS reajuste_piso numeric(8,4) NULL;",
-                    reverse_sql="ALTER TABLE contratos_contrato DROP COLUMN IF EXISTS reajuste_piso;",
-                ),
-            ],
-            state_operations=[
-                migrations.AddField(
-                    model_name="contrato",
-                    name="reajuste_piso",
-                    field=models.DecimalField(
-                        blank=True,
-                        decimal_places=4,
-                        help_text="Percentual mínimo aplicado ao reajuste (ex: 0 para nunca aplicar deflação)",
-                        max_digits=8,
-                        null=True,
-                        validators=[django.core.validators.MinValueValidator(Decimal("0"))],
-                        verbose_name="Piso de Reajuste (%)",
-                    ),
-                ),
-            ],
+        migrations.AddField(
+            model_name="contrato",
+            name="reajuste_piso",
+            field=models.DecimalField(
+                blank=True,
+                decimal_places=4,
+                help_text="Percentual mínimo aplicado ao reajuste (ex: 0 para nunca aplicar deflação)",
+                max_digits=8,
+                null=True,
+                validators=[django.core.validators.MinValueValidator(Decimal("0"))],
+                verbose_name="Piso de Reajuste (%)",
+            ),
         ),
-        migrations.SeparateDatabaseAndState(
-            database_operations=[
-                migrations.RunSQL(
-                    sql="ALTER TABLE contratos_contrato ADD COLUMN IF NOT EXISTS reajuste_teto numeric(8,4) NULL;",
-                    reverse_sql="ALTER TABLE contratos_contrato DROP COLUMN IF EXISTS reajuste_teto;",
-                ),
-            ],
-            state_operations=[
-                migrations.AddField(
-                    model_name="contrato",
-                    name="reajuste_teto",
-                    field=models.DecimalField(
-                        blank=True,
-                        decimal_places=4,
-                        help_text="Percentual máximo aplicado ao reajuste (ex: 15 para limitar a 15%)",
-                        max_digits=8,
-                        null=True,
-                        validators=[django.core.validators.MinValueValidator(Decimal("0"))],
-                        verbose_name="Teto de Reajuste (%)",
-                    ),
-                ),
-            ],
+        migrations.AddField(
+            model_name="contrato",
+            name="reajuste_teto",
+            field=models.DecimalField(
+                blank=True,
+                decimal_places=4,
+                help_text="Percentual máximo aplicado ao reajuste (ex: 15 para limitar a 15%)",
+                max_digits=8,
+                null=True,
+                validators=[django.core.validators.MinValueValidator(Decimal("0"))],
+                verbose_name="Teto de Reajuste (%)",
+            ),
         ),
-        migrations.SeparateDatabaseAndState(
-            database_operations=[
-                migrations.RunSQL(
-                    sql="ALTER TABLE contratos_contrato ADD COLUMN IF NOT EXISTS tipo_valor_desconto varchar(10) NOT NULL DEFAULT 'PERCENTUAL';",
-                    reverse_sql="ALTER TABLE contratos_contrato DROP COLUMN IF EXISTS tipo_valor_desconto;",
-                ),
-            ],
-            state_operations=[
-                migrations.AddField(
-                    model_name="contrato",
-                    name="tipo_valor_desconto",
-                    field=models.CharField(
-                        choices=[("PERCENTUAL", "Percentual"), ("VALOR", "Valor Fixo")],
-                        default="PERCENTUAL",
-                        max_length=10,
-                        verbose_name="Tipo de Desconto",
-                    ),
-                ),
-            ],
+        migrations.AddField(
+            model_name="contrato",
+            name="tipo_valor_desconto",
+            field=models.CharField(
+                choices=[("PERCENTUAL", "Percentual"), ("VALOR", "Valor Fixo")],
+                default="PERCENTUAL",
+                max_length=10,
+                verbose_name="Tipo de Desconto",
+            ),
         ),
-        migrations.SeparateDatabaseAndState(
-            database_operations=[
-                migrations.RunSQL(
-                    sql="ALTER TABLE contratos_contrato ADD COLUMN IF NOT EXISTS tipo_valor_juros varchar(10) NOT NULL DEFAULT 'PERCENTUAL';",
-                    reverse_sql="ALTER TABLE contratos_contrato DROP COLUMN IF EXISTS tipo_valor_juros;",
-                ),
-            ],
-            state_operations=[
-                migrations.AddField(
-                    model_name="contrato",
-                    name="tipo_valor_juros",
-                    field=models.CharField(
-                        choices=[("PERCENTUAL", "Percentual"), ("VALOR", "Valor Fixo")],
-                        default="PERCENTUAL",
-                        max_length=10,
-                        verbose_name="Tipo de Juros",
-                    ),
-                ),
-            ],
+        migrations.AddField(
+            model_name="contrato",
+            name="tipo_valor_juros",
+            field=models.CharField(
+                choices=[("PERCENTUAL", "Percentual"), ("VALOR", "Valor Fixo")],
+                default="PERCENTUAL",
+                max_length=10,
+                verbose_name="Tipo de Juros",
+            ),
         ),
-        migrations.SeparateDatabaseAndState(
-            database_operations=[
-                migrations.RunSQL(
-                    sql="ALTER TABLE contratos_contrato ADD COLUMN IF NOT EXISTS tipo_valor_multa varchar(10) NOT NULL DEFAULT 'PERCENTUAL';",
-                    reverse_sql="ALTER TABLE contratos_contrato DROP COLUMN IF EXISTS tipo_valor_multa;",
-                ),
-            ],
-            state_operations=[
-                migrations.AddField(
-                    model_name="contrato",
-                    name="tipo_valor_multa",
-                    field=models.CharField(
-                        choices=[("PERCENTUAL", "Percentual"), ("VALOR", "Valor Fixo")],
-                        default="PERCENTUAL",
-                        max_length=10,
-                        verbose_name="Tipo de Multa",
-                    ),
-                ),
-            ],
+        migrations.AddField(
+            model_name="contrato",
+            name="tipo_valor_multa",
+            field=models.CharField(
+                choices=[("PERCENTUAL", "Percentual"), ("VALOR", "Valor Fixo")],
+                default="PERCENTUAL",
+                max_length=10,
+                verbose_name="Tipo de Multa",
+            ),
         ),
-        migrations.SeparateDatabaseAndState(
-            database_operations=[
-                migrations.RunSQL(
-                    sql="ALTER TABLE contratos_contrato ADD COLUMN IF NOT EXISTS valor_desconto_boleto numeric(10,2) NOT NULL DEFAULT 0;",
-                    reverse_sql="ALTER TABLE contratos_contrato DROP COLUMN IF EXISTS valor_desconto_boleto;",
-                ),
-            ],
-            state_operations=[
-                migrations.AddField(
-                    model_name="contrato",
-                    name="valor_desconto_boleto",
-                    field=models.DecimalField(
-                        decimal_places=2,
-                        default=0,
-                        help_text="Valor em percentual ou reais conforme tipo",
-                        max_digits=10,
-                        verbose_name="Desconto do Boleto",
-                    ),
-                ),
-            ],
+        migrations.AddField(
+            model_name="contrato",
+            name="valor_desconto_boleto",
+            field=models.DecimalField(
+                decimal_places=2,
+                default=0,
+                help_text="Valor em percentual ou reais conforme tipo",
+                max_digits=10,
+                verbose_name="Desconto do Boleto",
+            ),
         ),
-        migrations.SeparateDatabaseAndState(
-            database_operations=[
-                migrations.RunSQL(
-                    sql="ALTER TABLE contratos_contrato ADD COLUMN IF NOT EXISTS valor_juros_boleto numeric(10,4) NOT NULL DEFAULT 0;",
-                    reverse_sql="ALTER TABLE contratos_contrato DROP COLUMN IF EXISTS valor_juros_boleto;",
-                ),
-            ],
-            state_operations=[
-                migrations.AddField(
-                    model_name="contrato",
-                    name="valor_juros_boleto",
-                    field=models.DecimalField(
-                        decimal_places=4,
-                        default=0,
-                        help_text="Valor em percentual (0,0333 = 1% ao mês) ou reais",
-                        max_digits=10,
-                        verbose_name="Juros ao Dia do Boleto",
-                    ),
-                ),
-            ],
+        migrations.AddField(
+            model_name="contrato",
+            name="valor_juros_boleto",
+            field=models.DecimalField(
+                decimal_places=4,
+                default=0,
+                help_text="Valor em percentual (0,0333 = 1% ao mês) ou reais",
+                max_digits=10,
+                verbose_name="Juros ao Dia do Boleto",
+            ),
         ),
-        migrations.SeparateDatabaseAndState(
-            database_operations=[
-                migrations.RunSQL(
-                    sql="ALTER TABLE contratos_contrato ADD COLUMN IF NOT EXISTS valor_multa_boleto numeric(10,2) NOT NULL DEFAULT 0;",
-                    reverse_sql="ALTER TABLE contratos_contrato DROP COLUMN IF EXISTS valor_multa_boleto;",
-                ),
-            ],
-            state_operations=[
-                migrations.AddField(
-                    model_name="contrato",
-                    name="valor_multa_boleto",
-                    field=models.DecimalField(
-                        decimal_places=2,
-                        default=0,
-                        help_text="Valor em percentual ou reais conforme tipo",
-                        max_digits=10,
-                        verbose_name="Multa do Boleto",
-                    ),
-                ),
-            ],
+        migrations.AddField(
+            model_name="contrato",
+            name="valor_multa_boleto",
+            field=models.DecimalField(
+                decimal_places=2,
+                default=0,
+                help_text="Valor em percentual ou reais conforme tipo",
+                max_digits=10,
+                verbose_name="Multa do Boleto",
+            ),
         ),
         migrations.AlterField(
             model_name="contrato",

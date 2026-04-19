@@ -29,6 +29,17 @@ from contratos.models import Contrato, StatusContrato
 logger = logging.getLogger(__name__)
 
 
+def _voltar_url(request, default):
+    """Retorna o HTTP_REFERER se for da mesma origem, senão o default."""
+    from urllib.parse import urlparse
+    ref = request.META.get('HTTP_REFERER', '')
+    if ref:
+        p = urlparse(ref)
+        if not p.netloc or p.netloc == request.get_host():
+            return ref
+    return default
+
+
 class DashboardFinanceiroView(LoginRequiredMixin, TemplateView):
     """Dashboard Financeiro por Imobiliária"""
     template_name = 'financeiro/dashboard.html'
@@ -557,8 +568,10 @@ def detalhe_parcela(request, pk):
     if parcela.esta_vencida and not parcela.pago:
         parcela.atualizar_juros_multa()
 
+    from django.urls import reverse
     context = {
         'parcela': parcela,
+        'voltar_url': _voltar_url(request, reverse('financeiro:listar_parcelas')),
     }
     return render(request, 'financeiro/detalhe_parcela.html', context)
 
@@ -1432,6 +1445,7 @@ def visualizar_boleto(request, pk):
     # Verificar se e popup (sem navbar) - verificando se tem parametro popup ou se nao tem referer
     popup = request.GET.get('popup', 'false').lower() == 'true' or not request.META.get('HTTP_REFERER')
 
+    from django.urls import reverse
     context = {
         'parcela': parcela,
         'contrato': contrato,
@@ -1439,6 +1453,9 @@ def visualizar_boleto(request, pk):
         'imobiliaria': imobiliaria,
         'valores_hoje': valores_hoje,
         'popup': popup,
+        'voltar_url': _voltar_url(
+            request, reverse('financeiro:detalhe_parcela', args=[parcela.pk])
+        ),
     }
 
     return render(request, 'financeiro/visualizar_boleto.html', context)
