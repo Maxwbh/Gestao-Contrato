@@ -17,7 +17,6 @@ from functools import wraps
 from django.core.cache import cache
 from django.http import JsonResponse, HttpResponseForbidden
 from django.contrib.auth.decorators import login_required
-from django.shortcuts import redirect
 import time
 import logging
 

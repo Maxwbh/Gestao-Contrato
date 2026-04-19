@@ -6,7 +6,6 @@ Desenvolvedor: Maxwell da Silva Oliveira <maxwbh@gmail.com>
 """
 
 import pytest
-from unittest.mock import patch, MagicMock
 from twilio.base.exceptions import TwilioRestException
 
 from notificacoes.services import (

@@ -5,13 +5,11 @@ Desenvolvedor: Maxwell da Silva Oliveira
 Email: maxwbh@gmail.com
 Empresa: M&S do Brasil LTDA
 """
-import pytest
 from decimal import Decimal
 from datetime import date, timedelta
 from unittest.mock import patch, MagicMock
 
 from django.test import TestCase
-from django.utils import timezone
 
 from financeiro.services.reajuste_service import ReajusteService, IndiceEconomicoService
 
@@ -228,8 +226,7 @@ class TestReajusteAplicacao(TestCase):
     def setUpTestData(cls):
         """Configura dados para todos os testes"""
         from core.models import Contabilidade, Imobiliaria, Comprador, Imovel
-        from contratos.models import Contrato, TipoCorrecao, StatusContrato, IndiceReajuste
-        from financeiro.models import Parcela
+        from contratos.models import IndiceReajuste
 
         # Criar estrutura base
         cls.contabilidade = Contabilidade.objects.create(

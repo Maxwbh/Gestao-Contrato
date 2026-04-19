@@ -10,16 +10,12 @@ import re
 import pytest
 from django.test import RequestFactory
 from django.contrib.auth.models import AnonymousUser
-from unittest.mock import Mock, patch
 
 from portal_comprador.models import AcessoComprador, LogAcessoComprador
 from portal_comprador.views import (
     get_client_ip,
     registrar_log_acesso,
     get_comprador_from_request,
-    auto_cadastro,
-    login_comprador,
-    logout_comprador,
 )
 from tests.fixtures.factories import UserFactory, CompradorFactory
 
@@ -376,7 +372,7 @@ class TestVerificacaoEmail:
         settings.PORTAL_EMAIL_VERIFICACAO = True
         comprador = CompradorFactory()
         usuario = UserFactory()
-        acesso = AcessoComprador.objects.create(
+        AcessoComprador.objects.create(
             comprador=comprador, usuario=usuario, email_verificado=True
         )
         client.force_login(usuario)
@@ -388,7 +384,7 @@ class TestVerificacaoEmail:
         """Com PORTAL_EMAIL_VERIFICACAO=False, email_verificado=True no cadastro"""
         settings.PORTAL_EMAIL_VERIFICACAO = False
         comprador = CompradorFactory(email='teste@example.com')
-        response = client.post('/portal/cadastro/', {
+        client.post('/portal/cadastro/', {
             'documento': re.sub(r'\D', '', comprador.cpf or ''),
             'email': comprador.email,
             'senha': 'SenhaForte@123',

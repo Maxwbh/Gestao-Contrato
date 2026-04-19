@@ -10,7 +10,7 @@ Uso:
 import traceback
 from django.core.management.base import BaseCommand
 from django.conf import settings
-from django.core.mail import send_mail, get_connection
+from django.core.mail import send_mail
 
 
 class Command(BaseCommand):

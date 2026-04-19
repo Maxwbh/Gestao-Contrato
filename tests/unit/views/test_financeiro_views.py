@@ -255,7 +255,7 @@ class TestRelatoriosAvancados:
 @pytest.fixture
 def client_autenticado(db, django_user_model):
     """Cliente autenticado para testes"""
-    user = django_user_model.objects.create_user(
+    django_user_model.objects.create_user(
         username='testuser',
         email='test@test.com',
         password='testpass123'

@@ -5,14 +5,11 @@ Desenvolvedor: Maxwell da Silva Oliveira
 Email: maxwbh@gmail.com
 Empresa: M&S do Brasil LTDA
 """
-import pytest
 from decimal import Decimal
 from datetime import date, timedelta
-from unittest.mock import patch, MagicMock, Mock
-from io import BytesIO
+from unittest.mock import patch, MagicMock
 
 from django.test import TestCase
-from django.utils import timezone
 from django.core.files.base import ContentFile
 
 from financeiro.services.cnab_service import (
@@ -293,7 +290,7 @@ class TestCNABServiceIntegracao(TestCase):
     @patch('requests.post')
     def test_gerar_remessa_sucesso_api(self, mock_post):
         """Testa geração de remessa com sucesso via API"""
-        from financeiro.models import Parcela, ArquivoRemessa, StatusBoleto
+        from financeiro.models import Parcela, StatusBoleto
         import base64
 
         # Mock da resposta da API
@@ -389,7 +386,7 @@ class TestProcessamentoRetornoCNAB400(TestCase):
         """Configura dados para todos os testes"""
         from core.models import Contabilidade, Imobiliaria, Comprador, Imovel
         from contratos.models import Contrato, TipoCorrecao, StatusContrato
-        from financeiro.models import Parcela, ContaBancaria, ArquivoRetorno
+        from financeiro.models import Parcela, ContaBancaria
 
         cls.contabilidade = Contabilidade.objects.create(
             nome='Contabilidade Retorno',
@@ -644,7 +641,7 @@ class TestProcessamentoRetornoCNAB240(TestCase):
             save=True
         )
 
-        service = CNABService()
+        CNABService()
 
         # Ler arquivo e verificar tamanho da linha
         arquivo_retorno.arquivo.seek(0)
@@ -663,7 +660,7 @@ class TestRegenerarRemessa(TestCase):
         """Configura dados para todos os testes"""
         from core.models import Contabilidade, Imobiliaria, Comprador, Imovel
         from contratos.models import Contrato, TipoCorrecao, StatusContrato
-        from financeiro.models import Parcela, ContaBancaria, ArquivoRemessa
+        from financeiro.models import ContaBancaria
 
         cls.contabilidade = Contabilidade.objects.create(
             nome='Contabilidade Regen',

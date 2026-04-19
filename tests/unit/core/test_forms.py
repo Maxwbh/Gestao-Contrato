@@ -5,7 +5,6 @@ Escopo: ContabilidadeForm, CompradorForm, ImovelForm, ImobiliariaForm,
         ContaBancariaForm, AcessoUsuarioForm
 """
 import pytest
-from decimal import Decimal
 
 from core.forms import ContabilidadeForm, CompradorForm, ImovelForm, ImobiliariaForm
 
@@ -124,7 +123,6 @@ class TestImobiliariaForm:
         assert not form.is_valid()
 
     def test_form_valido_basico(self, contrato):
-        from core.models import Contabilidade
         contabilidade = contrato.imobiliaria.contabilidade
         data = {
             'contabilidade': contabilidade.pk,

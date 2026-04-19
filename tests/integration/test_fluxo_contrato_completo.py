@@ -4,7 +4,6 @@ Testes de integração — Fluxo completo do contrato.
 Cobre: criação de contrato → listagem → detalhe → edição → registrar pagamento
 """
 import pytest
-from datetime import date, timedelta
 from django.urls import reverse
 
 from tests.fixtures.factories import UserFactory, ContratoFactory
