@@ -14,6 +14,14 @@ urlpatterns = [
     path('login/', views.login_comprador, name='login'),
     path('logout/', views.logout_comprador, name='logout'),
 
+    # Recuperação de senha
+    path('esqueci-senha/', views.esqueci_senha, name='esqueci_senha'),
+    path('redefinir-senha/<str:token>/', views.redefinir_senha, name='redefinir_senha'),
+
+    # Verificação de e-mail
+    path('verificar-email/<str:token>/', views.verificar_email, name='verificar_email'),
+    path('reenviar-verificacao/', views.reenviar_verificacao, name='reenviar_verificacao'),
+
     # ==========================================================================
     # DASHBOARD
     # ==========================================================================

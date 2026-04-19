@@ -75,6 +75,18 @@ class IndiceReajuste(TimeStampedModel):
         verbose_name='Acumulado 12 meses (%)',
         help_text='Valor acumulado nos últimos 12 meses'
     )
+    numero_indice = models.DecimalField(
+        max_digits=12,
+        decimal_places=4,
+        null=True,
+        blank=True,
+        verbose_name='Número Índice (IBGE/FGV)',
+        help_text=(
+            'Número índice acumulado publicado pelo IBGE (IPCA) ou FGV (IGPM). '
+            'Permite cálculo exato: acumulado = C(fim) / C(mês anterior ao início) − 1. '
+            'Quando disponível, tem prioridade sobre o produto das variações mensais.'
+        ),
+    )
     fonte = models.CharField(
         max_length=100,
         blank=True,
@@ -126,7 +138,36 @@ class IndiceReajuste(TimeStampedModel):
 
     @classmethod
     def get_acumulado_periodo(cls, tipo_indice, ano_inicio, mes_inicio, ano_fim, mes_fim):
-        """Calcula o índice acumulado em um período"""
+        """Calcula o acumulado do índice num período de referência.
+
+        Método 1 — número-índice IBGE/FGV (prioritário, mais preciso):
+            acumulado = C(ano_fim, mes_fim) / C(mês_anterior_ao_início) − 1
+            Fórmula: % Acumulado = C(MesFinal) / C(MesInicial) − 1
+            onde MesInicial é o mês imediatamente anterior ao início do período.
+
+        Método 2 — produto das variações mensais (fallback):
+            Usado quando o número-índice não está disponível para os meses extremos.
+        """
+        from datetime import date
+        from dateutil.relativedelta import relativedelta
+
+        # ── Método 1: número-índice publicado ────────────────────────────────
+        # "MesInicial" da fórmula = mês anterior ao início do período
+        data_inicio = date(ano_inicio, mes_inicio, 1)
+        mes_base = data_inicio - relativedelta(months=1)
+
+        ci = cls.objects.filter(
+            tipo_indice=tipo_indice, ano=mes_base.year, mes=mes_base.month,
+        ).values_list('numero_indice', flat=True).first()
+
+        cf = cls.objects.filter(
+            tipo_indice=tipo_indice, ano=ano_fim, mes=mes_fim,
+        ).values_list('numero_indice', flat=True).first()
+
+        if ci and cf:
+            return (Decimal(str(cf)) / Decimal(str(ci)) - 1) * 100
+
+        # ── Método 2: produto das variações mensais (fallback) ────────────────
         indices = cls.objects.filter(
             tipo_indice=tipo_indice
         ).filter(
@@ -140,7 +181,6 @@ class IndiceReajuste(TimeStampedModel):
         if not indices.exists():
             return None
 
-        # Calcula acumulado: (1 + i1/100) * (1 + i2/100) * ... - 1
         acumulado = Decimal('1')
         for indice in indices:
             acumulado *= (1 + indice.valor / 100)
@@ -1547,7 +1587,7 @@ class PrestacaoIntermediaria(TimeStampedModel):
 
         valor_base = self.valor_reajustado if self.valor_reajustado else self.valor
         fator = 1 + (Decimal(str(percentual)) / 100)
-        self.valor_reajustado = valor_base * fator
+        self.valor_reajustado = (valor_base * fator).quantize(Decimal('0.01'))
         self.save(update_fields=['valor_reajustado'])
 
         # Atualizar parcela vinculada se existir
