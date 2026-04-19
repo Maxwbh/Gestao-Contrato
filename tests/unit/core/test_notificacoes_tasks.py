@@ -22,7 +22,6 @@ from datetime import date, timedelta
 from unittest.mock import patch, MagicMock
 
 from django.test import Client, override_settings
-from django.urls import reverse
 
 
 # ---------------------------------------------------------------------------

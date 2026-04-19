@@ -11,7 +11,6 @@ from django.urls import reverse
 from tests.fixtures.factories import (
     UserFactory,
     ContratoFactory,
-    ParcelaFactory,
     HistoricoPagamentoFactory,
 )
 

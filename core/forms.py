@@ -7,15 +7,14 @@ Email: maxwbh@gmail.com
 from django import forms
 from django.core.exceptions import ValidationError
 from crispy_forms.helper import FormHelper
-from crispy_forms.layout import Layout, Submit, Row, Column, Div, HTML, Field
+from crispy_forms.layout import Layout, Row, Column, Div, HTML, Field
 from crispy_forms.bootstrap import PrependedText, AppendedText
 from .models import (
-    Contabilidade, Imobiliaria, Imovel, Comprador, TipoImovel,
-    ContaBancaria, BancoBrasil, TipoValor, TipoTitulo, LayoutCNAB,
+    Contabilidade, Imobiliaria, Imovel, Comprador,
+    ContaBancaria,
     AcessoUsuario
 )
 from django.contrib.auth import get_user_model
-import re
 
 
 class ContabilidadeForm(forms.ModelForm):

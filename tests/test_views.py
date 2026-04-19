@@ -2,7 +2,6 @@
 Testes para as views do sistema.
 """
 import pytest
-from django.urls import reverse
 
 
 @pytest.mark.django_db
