@@ -290,7 +290,6 @@ def enviar_alerta_reajuste(contrato_id, dias_restantes, urgente=False, bloqueado
     Envia alerta de reajuste pendente para administradores.
     """
     from django.core.mail import send_mail
-    from django.conf import settings
 
     try:
         contrato = Contrato.objects.select_related('imobiliaria').get(id=contrato_id)
@@ -467,7 +466,6 @@ def enviar_lembrete_parcela(parcela_id, dias_para_vencimento):
     """
     from .models import Parcela
     from django.core.mail import send_mail
-    from django.conf import settings
 
     try:
         parcela = Parcela.objects.select_related(
