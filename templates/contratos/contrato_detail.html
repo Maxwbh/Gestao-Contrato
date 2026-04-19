@@ -1678,7 +1678,7 @@
     var reajustesMap = {};
     {% for r in reajustes %}
     reajustesMap[{{ r.ciclo }}] = {
-        pct: {{ r.percentual|default:0|floatformat:4 }},
+        pct: {{ r.percentual|default:0|stringformat:".4f" }},
         aplicado: {{ r.aplicado|yesno:"true,false" }},
         data: '{{ r.data_reajuste|date:"d/m/Y"|default:"" }}'
     };
