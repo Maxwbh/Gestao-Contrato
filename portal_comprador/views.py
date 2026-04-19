@@ -18,10 +18,17 @@ from django.views.generic import TemplateView
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.views.decorators.http import require_POST, require_GET
 from django.utils import timezone
+from django.core.paginator import Paginator
+from django.core.cache import cache
+from django.core.mail import send_mail
+from django.core import signing
+from django.conf import settings
+from django.urls import reverse
 from django.db.models import Sum, Count, Q
 from decimal import Decimal
 from datetime import timedelta
 import re
+import time
 import logging
 
 logger = logging.getLogger(__name__)
@@ -63,7 +70,10 @@ def get_comprador_from_request(request):
     if not request.user.is_authenticated:
         return None
     try:
-        return request.user.acesso_comprador.comprador
+        acesso = request.user.acesso_comprador
+        if not acesso.ativo:
+            return None
+        return acesso.comprador
     except (AttributeError, AcessoComprador.DoesNotExist):
         return None
 
@@ -100,11 +110,33 @@ def auto_cadastro(request):
                 last_name=' '.join(comprador.nome.split()[1:]) if comprador.nome else ''
             )
 
+            verificacao_habilitada = getattr(settings, 'PORTAL_EMAIL_VERIFICACAO', False)
+
             # Criar acesso do comprador
             acesso = AcessoComprador.objects.create(
                 comprador=comprador,
-                usuario=user
+                usuario=user,
+                # email_verificado=True quando feature desabilitada — sem pendência
+                email_verificado=not verificacao_habilitada,
             )
+
+            # Enviar e-mail de verificação apenas quando feature habilitada
+            if verificacao_habilitada and comprador.email:
+                token = signing.dumps(acesso.pk, salt='portal-email-verify')
+                link = request.build_absolute_uri(
+                    reverse('portal_comprador:verificar_email', kwargs={'token': token})
+                )
+                send_mail(
+                    subject='Confirme seu e-mail — Portal do Comprador',
+                    message=(
+                        f'Bem-vindo ao Portal do Comprador, {comprador.nome}!\n\n'
+                        f'Clique no link abaixo para verificar seu e-mail (válido por 24 horas):\n\n'
+                        f'{link}'
+                    ),
+                    from_email=settings.DEFAULT_FROM_EMAIL,
+                    recipient_list=[comprador.email],
+                    fail_silently=True,
+                )
 
             # Fazer login
             login(request, user)
@@ -133,27 +165,36 @@ def login_comprador(request):
         return redirect('core:dashboard')
 
     if request.method == 'POST':
+        # Rate limit: 5 tentativas por minuto por IP
+        ip = get_client_ip(request)
+        rl_key = f'portal_login:{ip}:{int(time.time() // 60)}'
+        attempts = cache.get(rl_key, 0)
+        if attempts >= 5:
+            messages.error(request, 'Muitas tentativas de login. Aguarde 1 minuto e tente novamente.')
+            return render(request, 'portal_comprador/login.html', {'form': LoginCompradorForm()})
+
         form = LoginCompradorForm(request.POST)
         if form.is_valid():
             documento = form.cleaned_data['documento']
             senha = form.cleaned_data['senha']
 
-            # Buscar usuário pelo documento
             username = f'comprador_{documento}'
             user = authenticate(request, username=username, password=senha)
 
             if user is not None:
-                login(request, user)
-
-                # Registrar acesso
-                if hasattr(user, 'acesso_comprador'):
-                    acesso = user.acesso_comprador
-                    acesso.registrar_acesso()
-                    registrar_log_acesso(request, acesso, 'login')
-
-                messages.success(request, f'Bem-vindo de volta!')
-                return redirect('portal_comprador:dashboard')
+                if hasattr(user, 'acesso_comprador') and not user.acesso_comprador.ativo:
+                    messages.error(request, 'Acesso ao portal foi desativado. Entre em contato com o suporte.')
+                else:
+                    login(request, user)
+                    if hasattr(user, 'acesso_comprador'):
+                        acesso = user.acesso_comprador
+                        acesso.registrar_acesso()
+                        registrar_log_acesso(request, acesso, 'login')
+                    messages.success(request, 'Bem-vindo de volta!')
+                    return redirect('portal_comprador:dashboard')
             else:
+                # Incrementa contador apenas em falha
+                cache.set(rl_key, attempts + 1, timeout=90)
                 messages.error(request, 'CPF/CNPJ ou senha inválidos.')
     else:
         form = LoginCompradorForm()
@@ -267,7 +308,10 @@ def meus_contratos(request):
 
     contratos = Contrato.objects.filter(
         comprador=comprador
-    ).select_related('imovel', 'imobiliaria').order_by('-data_contrato')
+    ).select_related('imovel', 'imobiliaria').annotate(
+        total_parcelas=Count('parcelas'),
+        parcelas_pagas=Count('parcelas', filter=Q(parcelas__pago=True)),
+    ).order_by('-data_contrato')
 
     context = {
         'comprador': comprador,
@@ -384,9 +428,14 @@ def meus_boletos(request):
         'pagos':  _stats_qs['pagos'] or 0,
     }
 
+    paginator = Paginator(parcelas, 20)
+    page_number = request.GET.get('page', 1)
+    page_obj = paginator.get_page(page_number)
+
     context = {
         'comprador': comprador,
-        'parcelas': parcelas[:50],  # Limitar a 50 por página
+        'parcelas': page_obj,
+        'page_obj': page_obj,
         'contratos': contratos,
         'status_filtro': status_filtro,
         'contrato_id': contrato_id,
@@ -533,6 +582,152 @@ def alterar_senha(request):
 
 
 # =============================================================================
+# RECUPERAÇÃO DE SENHA
+# =============================================================================
+
+def esqueci_senha(request):
+    """
+    Solicita redefinição de senha por CPF/CNPJ.
+    Envia e-mail com link assinado (válido por 1 hora).
+    """
+    if request.user.is_authenticated and hasattr(request.user, 'acesso_comprador'):
+        return redirect('portal_comprador:dashboard')
+
+    from .forms import EsqueciSenhaForm
+    if request.method == 'POST':
+        form = EsqueciSenhaForm(request.POST)
+        if form.is_valid():
+            acesso = form.cleaned_data['acesso']
+            # Token inclui hash da senha atual → invalida automaticamente após uso
+            token = signing.dumps(
+                f'{acesso.pk}:{acesso.usuario.password}',
+                salt='portal-reset-senha',
+            )
+            link = request.build_absolute_uri(
+                reverse('portal_comprador:redefinir_senha', kwargs={'token': token})
+            )
+            send_mail(
+                subject='Redefinição de senha — Portal do Comprador',
+                message=(
+                    f'Olá, {acesso.comprador.nome}!\n\n'
+                    f'Clique no link abaixo para redefinir sua senha (válido por 1 hora):\n\n'
+                    f'{link}\n\n'
+                    f'Se não solicitou, ignore este e-mail.'
+                ),
+                from_email=settings.DEFAULT_FROM_EMAIL,
+                recipient_list=[acesso.comprador.email],
+                fail_silently=True,
+            )
+            messages.success(request, 'Instruções enviadas para o e-mail cadastrado.')
+            return redirect('portal_comprador:login')
+    else:
+        form = EsqueciSenhaForm()
+
+    return render(request, 'portal_comprador/esqueci_senha.html', {'form': form})
+
+
+def redefinir_senha(request, token):
+    """
+    Define nova senha usando o link enviado por e-mail.
+    Token expira em 1 hora e é invalidado ao trocar a senha.
+    """
+    from .forms import RedefinirSenhaForm
+    try:
+        payload = signing.loads(token, salt='portal-reset-senha', max_age=3600)
+        pk, senha_hash = payload.split(':', 1)
+        acesso = AcessoComprador.objects.select_related('usuario', 'comprador').get(pk=pk)
+        # Verifica que a senha não foi alterada desde que o token foi emitido
+        if acesso.usuario.password != senha_hash:
+            raise signing.BadSignature()
+    except (signing.BadSignature, signing.SignatureExpired,
+            AcessoComprador.DoesNotExist, ValueError):
+        messages.error(request, 'Link inválido ou expirado. Solicite um novo link.')
+        return redirect('portal_comprador:esqueci_senha')
+
+    if request.method == 'POST':
+        form = RedefinirSenhaForm(request.POST)
+        if form.is_valid():
+            acesso.usuario.set_password(form.cleaned_data['nova_senha'])
+            acesso.usuario.save()
+            messages.success(request, 'Senha redefinida com sucesso! Faça login com a nova senha.')
+            return redirect('portal_comprador:login')
+    else:
+        form = RedefinirSenhaForm()
+
+    return render(request, 'portal_comprador/redefinir_senha.html', {
+        'form': form,
+        'token': token,
+    })
+
+
+# =============================================================================
+# VERIFICAÇÃO DE E-MAIL
+# =============================================================================
+
+def verificar_email(request, token):
+    """
+    Confirma o e-mail do comprador a partir do link enviado no cadastro.
+    Token expira em 24 horas.
+    """
+    try:
+        pk = signing.loads(token, salt='portal-email-verify', max_age=86400)
+        acesso = AcessoComprador.objects.get(pk=pk)
+    except (signing.BadSignature, signing.SignatureExpired, AcessoComprador.DoesNotExist):
+        messages.error(request, 'Link inválido ou expirado. Solicite um novo e-mail de verificação.')
+        return redirect('portal_comprador:login')
+
+    if not acesso.email_verificado:
+        acesso.email_verificado = True
+        acesso.save(update_fields=['email_verificado'])
+        messages.success(request, 'E-mail verificado com sucesso!')
+    else:
+        messages.info(request, 'Seu e-mail já estava verificado.')
+
+    if request.user.is_authenticated:
+        return redirect('portal_comprador:dashboard')
+    return redirect('portal_comprador:login')
+
+
+@login_required(login_url='portal_comprador:login')
+def reenviar_verificacao(request):
+    """Reenvia o e-mail de verificação para o comprador autenticado."""
+    if not getattr(settings, 'PORTAL_EMAIL_VERIFICACAO', False):
+        messages.info(request, 'Verificação de e-mail não está habilitada.')
+        return redirect('portal_comprador:dashboard')
+
+    comprador = get_comprador_from_request(request)
+    if not comprador:
+        return redirect('portal_comprador:login')
+
+    acesso = request.user.acesso_comprador
+    if acesso.email_verificado:
+        messages.info(request, 'Seu e-mail já está verificado.')
+        return redirect('portal_comprador:dashboard')
+
+    if not comprador.email:
+        messages.error(request, 'Nenhum e-mail cadastrado. Atualize seus dados primeiro.')
+        return redirect('portal_comprador:meus_dados')
+
+    token = signing.dumps(acesso.pk, salt='portal-email-verify')
+    link = request.build_absolute_uri(
+        reverse('portal_comprador:verificar_email', kwargs={'token': token})
+    )
+    send_mail(
+        subject='Confirme seu e-mail — Portal do Comprador',
+        message=(
+            f'Olá, {comprador.nome}!\n\n'
+            f'Clique no link abaixo para verificar seu e-mail (válido por 24 horas):\n\n'
+            f'{link}'
+        ),
+        from_email=settings.DEFAULT_FROM_EMAIL,
+        recipient_list=[comprador.email],
+        fail_silently=True,
+    )
+    messages.success(request, 'E-mail de verificação enviado!')
+    return redirect('portal_comprador:dashboard')
+
+
+# =============================================================================
 # API
 # =============================================================================
 
@@ -567,7 +762,7 @@ def api_parcelas_contrato(request, contrato_id):
             'data_pagamento': parcela.data_pagamento.isoformat() if parcela.data_pagamento else None,
             'valor_pago': float(parcela.valor_pago) if parcela.valor_pago else None,
             'dias_atraso': dias_atraso,
-            'tem_boleto': bool(parcela.boleto_pdf),
+            'tem_boleto': parcela.tem_boleto,
         })
 
     return JsonResponse({
