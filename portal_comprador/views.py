@@ -110,15 +110,18 @@ def auto_cadastro(request):
                 last_name=' '.join(comprador.nome.split()[1:]) if comprador.nome else ''
             )
 
+            verificacao_habilitada = getattr(settings, 'PORTAL_EMAIL_VERIFICACAO', False)
+
             # Criar acesso do comprador
             acesso = AcessoComprador.objects.create(
                 comprador=comprador,
                 usuario=user,
-                email_verificado=False,
+                # email_verificado=True quando feature desabilitada — sem pendência
+                email_verificado=not verificacao_habilitada,
             )
 
-            # Enviar e-mail de verificação (se e-mail disponível)
-            if comprador.email:
+            # Enviar e-mail de verificação apenas quando feature habilitada
+            if verificacao_habilitada and comprador.email:
                 token = signing.dumps(acesso.pk, salt='portal-email-verify')
                 link = request.build_absolute_uri(
                     reverse('portal_comprador:verificar_email', kwargs={'token': token})
@@ -688,6 +691,10 @@ def verificar_email(request, token):
 @login_required(login_url='portal_comprador:login')
 def reenviar_verificacao(request):
     """Reenvia o e-mail de verificação para o comprador autenticado."""
+    if not getattr(settings, 'PORTAL_EMAIL_VERIFICACAO', False):
+        messages.info(request, 'Verificação de e-mail não está habilitada.')
+        return redirect('portal_comprador:dashboard')
+
     comprador = get_comprador_from_request(request)
     if not comprador:
         return redirect('portal_comprador:login')
