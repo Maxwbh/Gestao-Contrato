@@ -71,7 +71,7 @@ const remessasRowData = [
     imobiliaria: "{{ arquivo.conta_bancaria.imobiliaria.nome|escapejs }}",
     layout: "{{ arquivo.layout|escapejs }}",
     qtd_boletos: {{ arquivo.quantidade_boletos|default:0 }},
-    valor_total: {{ arquivo.valor_total|default:0 }},
+    valor_total: {{ arquivo.valor_total|default:0|stringformat:".2f" }},
     data_geracao: "{{ arquivo.data_geracao|date:'Y-m-d H:i' }}",
     data_geracao_fmt: "{{ arquivo.data_geracao|date:'d/m/Y H:i' }}",
     status: "{{ arquivo.status|escapejs }}",
