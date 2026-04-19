@@ -857,20 +857,31 @@ class BoletoService:
 
             # Em caso de sucesso, incluir identificadores locais para UI
             if resultado.get('sucesso'):
-                # Usar nosso_numero retornado pela API, se disponivel
-                # Caso contrario, usar o nosso_numero local
-                nosso_numero_final = resultado.get('nosso_numero_api') or str(nosso_numero)
+                # Três valores relacionados ao nosso_numero, cada um com seu papel na conciliação:
+                # - formatado: valor completo impresso no boleto (convênio+seq+DV) → OFX / retorno CNAB
+                # - raw:       sequencial bruto isolado (sem convênio, sem DV)     → comparação numérica
+                # - dv:        dígito verificador isolado                          → validação
+                nosso_numero_formatado = resultado.get('nosso_numero_api') or str(nosso_numero)
+                nosso_numero_raw = resultado.get('nosso_numero_raw') or str(nosso_numero)
+                nosso_numero_dv = resultado.get('nosso_numero_dv', '')
 
                 if resultado.get('nosso_numero_api'):
-                    logger.info(f"Usando nosso_numero da API: {nosso_numero_final}")
+                    logger.info(f"Usando nosso_numero da API: {nosso_numero_formatado}")
                 else:
-                    logger.info(f"Usando nosso_numero local: {nosso_numero_final}")
+                    logger.info(f"Usando nosso_numero local: {nosso_numero_formatado}")
 
                 # Usar gerar_numero_documento() para obter o numero, pois alguns bancos
                 # (BB, Sicoob) removem documento_numero dos dados antes de enviar a API
                 return {
                     'sucesso': True,
-                    'nosso_numero': nosso_numero_final,
+                    # 'nosso_numero' (campo histórico) continua sendo o valor formatado —
+                    # preserva compatibilidade com dados já gravados e com a constraint
+                    # unique_nosso_numero_por_conta. Os dois campos abaixo são novos
+                    # e gravados em paralelo para conciliação CNAB/OFX.
+                    'nosso_numero': nosso_numero_formatado,
+                    'nosso_numero_formatado': nosso_numero_formatado,
+                    'nosso_numero_dv': nosso_numero_dv,
+                    'nosso_numero_raw': nosso_numero_raw,
                     'numero_documento': parcela.gerar_numero_documento(),
                     'linha_digitavel': resultado.get('linha_digitavel', ''),
                     'codigo_barras': resultado.get('codigo_barras', ''),
@@ -1012,6 +1023,142 @@ class BoletoService:
         error_msg = self._extrair_mensagem_erro(response)
         logger.error('gerar_carne: erro HTTP %s — %s', response.status_code, error_msg)
         return {'sucesso': False, 'erro': error_msg}
+
+    def gerar_boletos_lote(self, parcelas_contas, tamanho_lote=15):
+        """
+        Gera boletos reais em lotes via POST /api/boleto/multi.
+        1 chamada à API por lote → drástica redução de requisições vs. gerar_boleto() individual.
+
+        Cada parcela do lote recebe:
+          • boleto_pdf_db: PDF combinado do lote (carnê com todos os boletos)
+          • nosso_numero / nosso_numero_formatado: calculados localmente (convenio+seq para BB)
+          • status_boleto = GERADO  •  data_geracao_boleto = agora
+
+        Uso típico: gerar_dados_teste. Em produção use gerar_boleto() (individual)
+        para obter PDF exclusivo e dados precisos via headers X-* (PR#33).
+
+        Args:
+            parcelas_contas: iterable de (Parcela, ContaBancaria)
+            tamanho_lote: boletos por chamada à API (recomendado 10-20, padrão 15)
+
+        Returns:
+            dict: {'gerados': int, 'erros': list[str]}
+        """
+        from collections import defaultdict
+        from financeiro.models import StatusBoleto, Parcela as ParcelaModel
+
+        gerados = 0
+        erros = []
+
+        # Agrupar por (banco_nome, conta.pk) — /api/boleto/multi exige mesmo banco
+        grupos: dict = defaultdict(list)
+        conta_por_pk: dict = {}
+        for parcela, conta in parcelas_contas:
+            banco_nome = self._get_banco_brcobranca(getattr(conta, 'banco', ''))
+            if not banco_nome:
+                logger.warning(
+                    'gerar_boletos_lote: banco %s não suportado — parcela pk=%s ignorada',
+                    getattr(conta, 'banco', '?'), parcela.pk,
+                )
+                continue
+            grupos[(banco_nome, conta.pk)].append(parcela)
+            conta_por_pk[conta.pk] = conta
+
+        for (banco_nome, conta_pk), todas_parcelas in grupos.items():
+            conta = conta_por_pk[conta_pk]
+
+            for inicio in range(0, len(todas_parcelas), tamanho_lote):
+                lote = todas_parcelas[inicio:inicio + tamanho_lote]
+
+                # Montar dados de cada boleto (incrementa nosso_numero_atual em ContaBancaria)
+                lote_dados = []
+                for parcela in lote:
+                    try:
+                        dados, nosso_numero = self._montar_dados_boleto(parcela, conta)
+                        dados.pop('codigo_banco', None)
+                        lote_dados.append((parcela, dados, nosso_numero))
+                    except Exception as exc:
+                        msg = f'Parcela pk={parcela.pk}: {exc}'
+                        erros.append(msg)
+                        logger.warning('gerar_boletos_lote: erro ao montar parcela pk=%s: %s', parcela.pk, exc)
+
+                if not lote_dados:
+                    continue
+
+                payload = {
+                    'bank': banco_nome,
+                    'type': 'pdf',
+                    'data': [d for _, d, _ in lote_dados],
+                }
+
+                timeout_lote = max(self.timeout, len(lote_dados) * 5)
+                try:
+                    response = requests.post(
+                        f"{self.brcobranca_url}/api/boleto/multi",
+                        json=payload,
+                        headers={'Accept': 'application/vnd.BoletoApi-v1+json'},
+                        timeout=timeout_lote,
+                    )
+                except requests.exceptions.RequestException as exc:
+                    msg = f'gerar_boletos_lote [{banco_nome}]: conexão falhou: {exc}'
+                    logger.error(msg)
+                    erros.append(msg)
+                    continue
+
+                if response.status_code != 200:
+                    msg = (
+                        f'gerar_boletos_lote [{banco_nome}]: '
+                        f'HTTP {response.status_code}: {self._extrair_mensagem_erro(response)}'
+                    )
+                    logger.error(msg)
+                    erros.append(msg)
+                    continue
+
+                pdf_combinado = response.content
+                if not pdf_combinado:
+                    erros.append(f'gerar_boletos_lote [{banco_nome}]: PDF vazio')
+                    continue
+
+                logger.info(
+                    'gerar_boletos_lote: lote gerado — banco=%s %d boletos %d bytes',
+                    banco_nome, len(lote_dados), len(pdf_combinado),
+                )
+
+                agora = timezone.now()
+                a_atualizar = []
+                for parcela, dados, nosso_numero in lote_dados:
+                    # Nosso número formatado conforme o banco:
+                    #   BB (001): convenio(8) + sequencial(9) = 17 dígitos
+                    #   Demais:   valor já formatado por _montar_dados_boleto
+                    nn_banco = dados.get('nosso_numero', str(nosso_numero))
+                    if conta.banco == '001' and conta.convenio:
+                        conv = str(conta.convenio).zfill(8)
+                        nn_fmt = conv + str(nosso_numero).zfill(9)
+                    else:
+                        nn_fmt = nn_banco
+
+                    parcela.conta_bancaria = conta
+                    parcela.status_boleto = StatusBoleto.GERADO
+                    parcela.nosso_numero = nn_fmt
+                    parcela.nosso_numero_formatado = nn_fmt
+                    parcela.nosso_numero_dv = ''
+                    parcela.numero_documento = parcela.gerar_numero_documento()
+                    parcela.data_geracao_boleto = agora
+                    # PDF do lote — carnê compartilhado por todas as parcelas do lote
+                    parcela.boleto_pdf_db = pdf_combinado
+                    a_atualizar.append(parcela)
+
+                ParcelaModel.objects.bulk_update(
+                    a_atualizar,
+                    [
+                        'conta_bancaria', 'status_boleto',
+                        'nosso_numero', 'nosso_numero_formatado', 'nosso_numero_dv',
+                        'numero_documento', 'data_geracao_boleto', 'boleto_pdf_db',
+                    ],
+                )
+                gerados += len(a_atualizar)
+
+        return {'gerados': gerados, 'erros': erros}
 
     def _chamar_api_boleto(self, banco_nome, dados_boleto):
         """
@@ -1345,7 +1492,14 @@ class BoletoService:
                 return {
                     'linha_digitavel': data.get('linha_digitavel', ''),
                     'codigo_barras': data.get('codigo_barras', ''),
-                    'nosso_numero_formatado': data.get('nosso_numero', ''),
+                    # PR #32 da boleto_cnab_api separou os campos:
+                    # nosso_numero         = sequencial bruto (ex: "000000018")           → conciliação CNAB
+                    # nosso_numero_formatado = completo para impressão (ex: "01234567000000018") → conciliação OFX
+                    # nosso_numero_dv      = dígito verificador isolado (quando disponível)
+                    # Fallback para compatibilidade com versões anteriores da API.
+                    'nosso_numero': data.get('nosso_numero', ''),
+                    'nosso_numero_formatado': data.get('nosso_numero_formatado', '') or data.get('nosso_numero', ''),
+                    'nosso_numero_dv': data.get('nosso_numero_dv', '') or data.get('dv', ''),
                     'agencia_conta_boleto': data.get('agencia_conta_boleto', '')
                 }
             else:
@@ -1371,35 +1525,43 @@ class BoletoService:
 
             logger.info(f"Boleto PDF gerado com sucesso ({len(pdf_content)} bytes)")
 
-            # Obter dados adicionais do boleto (linha digitavel e codigo de barras)
-            # via endpoint /api/boleto/data
-            linha_digitavel = ''
-            codigo_barras = ''
+            # PR#33: headers X-* já trazem os dados na mesma resposta binária,
+            # eliminando a segunda chamada para /api/boleto/data.
+            linha_digitavel = response.headers.get('X-Linha-Digitavel', '')
+            codigo_barras = response.headers.get('X-Codigo-Barras', '')
+            nosso_numero_api = response.headers.get('X-Nosso-Numero-Formatado', '')
+            # Campos separados para conciliação (CNAB / OFX):
+            nosso_numero_raw = response.headers.get('X-Nosso-Numero', '')
+            nosso_numero_dv = response.headers.get('X-Nosso-Numero-DV', '')
 
-            if banco_nome and dados_boleto:
+            if linha_digitavel and nosso_numero_api:
+                logger.info("Dados obtidos via headers X-* (PR#33)")
+            elif banco_nome and dados_boleto:
+                # Fallback: API antiga (< PR#33) — segunda chamada a /api/boleto/data
                 logger.info("Obtendo linha digitavel e codigo de barras via /api/boleto/data")
                 dados_extras = self._obter_dados_boleto(banco_nome, dados_boleto)
-                linha_digitavel = dados_extras.get('linha_digitavel', '')
-                codigo_barras = dados_extras.get('codigo_barras', '')
+                linha_digitavel = linha_digitavel or dados_extras.get('linha_digitavel', '')
+                codigo_barras = codigo_barras or dados_extras.get('codigo_barras', '')
+                nosso_numero_api = nosso_numero_api or dados_extras.get('nosso_numero_formatado', '')
+                nosso_numero_raw = nosso_numero_raw or dados_extras.get('nosso_numero', '')
+                nosso_numero_dv = nosso_numero_dv or dados_extras.get('nosso_numero_dv', '')
 
-                if linha_digitavel and codigo_barras:
-                    logger.info(f"Dados obtidos com sucesso - linha_digitavel: {linha_digitavel[:20]}..., codigo_barras: {codigo_barras[:20]}...")
-                else:
-                    logger.warning(f"Dados incompletos - linha_digitavel: {'OK' if linha_digitavel else 'VAZIO'}, codigo_barras: {'OK' if codigo_barras else 'VAZIO'}")
+            if linha_digitavel and codigo_barras:
+                logger.info(f"Dados obtidos — linha_digitavel: {linha_digitavel[:20]}..., codigo_barras: {codigo_barras[:20]}...")
+            else:
+                logger.warning(f"Dados incompletos — linha_digitavel: {'OK' if linha_digitavel else 'VAZIO'}, codigo_barras: {'OK' if codigo_barras else 'VAZIO'}")
 
-            # Capturar nosso_numero retornado pela API
-            nosso_numero_api = ''
-            if banco_nome and dados_boleto:
-                nosso_numero_api = dados_extras.get('nosso_numero_formatado', '')
-                if nosso_numero_api:
-                    logger.info(f"Nosso numero retornado pela API: {nosso_numero_api}")
+            if nosso_numero_api:
+                logger.info(f"Nosso numero retornado pela API: {nosso_numero_api} (raw={nosso_numero_raw}, dv={nosso_numero_dv})")
 
             return {
                 'sucesso': True,
                 'pdf_content': pdf_content,
                 'linha_digitavel': linha_digitavel,
                 'codigo_barras': codigo_barras,
-                'nosso_numero_api': nosso_numero_api,  # Nosso numero gerado pela API
+                'nosso_numero_api': nosso_numero_api,
+                'nosso_numero_raw': nosso_numero_raw,
+                'nosso_numero_dv': nosso_numero_dv,
             }
 
         except Exception as e:

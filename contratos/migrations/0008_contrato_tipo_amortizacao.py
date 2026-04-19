@@ -10,28 +10,18 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
-        migrations.SeparateDatabaseAndState(
-            database_operations=[
-                migrations.RunSQL(
-                    sql="ALTER TABLE contratos_contrato ADD COLUMN IF NOT EXISTS tipo_amortizacao varchar(10) NOT NULL DEFAULT 'PRICE';",
-                    reverse_sql="ALTER TABLE contratos_contrato DROP COLUMN IF EXISTS tipo_amortizacao;",
-                ),
-            ],
-            state_operations=[
-                migrations.AddField(
-                    model_name="contrato",
-                    name="tipo_amortizacao",
-                    field=models.CharField(
-                        choices=[
-                            ("PRICE", "Tabela Price (PMT constante por ciclo)"),
-                            ("SAC", "SAC — Amortização Constante (PMT decrescente)"),
-                        ],
-                        default="PRICE",
-                        help_text="Tabela Price: PMT constante por ciclo, juros decrescentes, amortização crescente. SAC: amortização constante, PMT e juros decrescentes a cada período.",
-                        max_length=10,
-                        verbose_name="Sistema de Amortização",
-                    ),
-                ),
-            ],
+        migrations.AddField(
+            model_name="contrato",
+            name="tipo_amortizacao",
+            field=models.CharField(
+                choices=[
+                    ("PRICE", "Tabela Price (PMT constante por ciclo)"),
+                    ("SAC", "SAC — Amortização Constante (PMT decrescente)"),
+                ],
+                default="PRICE",
+                help_text="Tabela Price: PMT constante por ciclo, juros decrescentes, amortização crescente. SAC: amortização constante, PMT e juros decrescentes a cada período.",
+                max_length=10,
+                verbose_name="Sistema de Amortização",
+            ),
         ),
     ]
