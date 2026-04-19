@@ -30,6 +30,13 @@ urlpatterns = [
     path('email/<int:pk>/excluir/', views.ConfiguracaoEmailDeleteView.as_view(), name='excluir_config_email'),
     path('email/<int:pk>/testar/', views.testar_conexao_email, name='testar_config_email'),
 
+    # CRUD Configuracao de WhatsApp
+    path('whatsapp/', views.ConfiguracaoWhatsAppListView.as_view(), name='listar_config_whatsapp'),
+    path('whatsapp/novo/', views.ConfiguracaoWhatsAppCreateView.as_view(), name='criar_config_whatsapp'),
+    path('whatsapp/<int:pk>/editar/', views.ConfiguracaoWhatsAppUpdateView.as_view(), name='editar_config_whatsapp'),
+    path('whatsapp/<int:pk>/excluir/', views.ConfiguracaoWhatsAppDeleteView.as_view(), name='excluir_config_whatsapp'),
+    path('whatsapp/<int:pk>/testar/', views.testar_conexao_whatsapp, name='testar_config_whatsapp'),
+
     # CRUD Templates de Notificacao (Mensagens de Email)
     path('templates/', views.TemplateNotificacaoListView.as_view(), name='listar_templates'),
     path('templates/novo/', views.TemplateNotificacaoCreateView.as_view(), name='criar_template'),
