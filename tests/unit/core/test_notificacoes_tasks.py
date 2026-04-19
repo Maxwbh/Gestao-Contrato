@@ -255,12 +255,12 @@ class TestN02Inadimplencia:
 @pytest.mark.django_db
 class TestEndpointInadimplentes:
     def test_endpoint_sem_token_retorna_401(self, client):
-        with patch('core.tasks.TASK_TOKEN', 'test-token-123'):
+        with patch('core.parametros.get_param', return_value='test-token-123'):
             resp = client.post('/api/tasks/enviar-inadimplentes/')
         assert resp.status_code == 401
 
     def test_endpoint_token_invalido_retorna_403(self, client):
-        with patch('core.tasks.TASK_TOKEN', 'test-token-123'):
+        with patch('core.parametros.get_param', return_value='test-token-123'):
             resp = client.post(
                 '/api/tasks/enviar-inadimplentes/',
                 HTTP_X_TASK_TOKEN='token-errado'
@@ -271,7 +271,7 @@ class TestEndpointInadimplentes:
     @override_settings(NOTIFICACAO_DIAS_INADIMPLENCIA=3)
     def test_endpoint_token_valido_retorna_200(self, mock_email, client):
         mock_email.enviar = MagicMock()
-        with patch('core.tasks.TASK_TOKEN', 'test-token-123'):
+        with patch('core.parametros.get_param', return_value='test-token-123'):
             resp = client.post(
                 '/api/tasks/enviar-inadimplentes/',
                 HTTP_X_TASK_TOKEN='test-token-123'
