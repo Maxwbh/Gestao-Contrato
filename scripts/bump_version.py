@@ -16,7 +16,6 @@ Exemplos:
     python scripts/bump_version.py major  # 1.0.0 -> 2.0.0
 """
 import sys
-import os
 from pathlib import Path
 
 

@@ -8,9 +8,7 @@ Empresa: M&S do Brasil LTDA
 from celery import shared_task
 from django.utils import timezone
 from django.conf import settings
-from decimal import Decimal
-import requests
-from datetime import datetime, timedelta
+from datetime import timedelta
 import logging
 
 from contratos.models import Contrato, TipoCorrecao
@@ -187,7 +185,6 @@ def buscar_indices_economicos():
     - IBGE: IPCA, INPC
     - FGV: IGPM, IGPDI, INCC
     """
-    from contratos.models import IndiceReajuste
     from .services.reajuste_service import IndiceEconomicoService
 
     logger.info("Iniciando busca de índices econômicos...")
@@ -290,7 +287,6 @@ def enviar_alerta_reajuste(contrato_id, dias_restantes, urgente=False, bloqueado
     Envia alerta de reajuste pendente para administradores.
     """
     from django.core.mail import send_mail
-    from django.conf import settings
 
     try:
         contrato = Contrato.objects.select_related('imobiliaria').get(id=contrato_id)
@@ -467,7 +463,6 @@ def enviar_lembrete_parcela(parcela_id, dias_para_vencimento):
     """
     from .models import Parcela
     from django.core.mail import send_mail
-    from django.conf import settings
 
     try:
         parcela = Parcela.objects.select_related(

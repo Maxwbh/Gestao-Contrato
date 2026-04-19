@@ -9,13 +9,11 @@ Testa:
 - api_portal_linha_digitavel (P3)
 """
 import pytest
-import json
 from decimal import Decimal
 from datetime import date, timedelta
 
 from portal_comprador.models import AcessoComprador
 from contratos.models import Contrato
-from financeiro.models import Parcela
 from tests.fixtures.factories import (
     UserFactory,
     CompradorFactory,

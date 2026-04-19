@@ -7,7 +7,6 @@ Empresa: M&S do Brasil LTDA
 """
 from django.db import models
 from django.core.validators import EmailValidator, RegexValidator
-from django.utils import timezone
 
 
 class TimeStampedModel(models.Model):

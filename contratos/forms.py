@@ -7,9 +7,9 @@ Email: maxwbh@gmail.com
 from django import forms
 from django.db.models import Q
 from crispy_forms.helper import FormHelper
-from crispy_forms.layout import Layout, Field, Row, Column, HTML, Div
+from crispy_forms.layout import Layout, Field, Row, Column, HTML
 from decimal import Decimal
-from .models import Contrato, TipoCorrecao, StatusContrato, IndiceReajuste
+from .models import Contrato, IndiceReajuste
 from core.models import Imovel, Comprador, Imobiliaria
 
 

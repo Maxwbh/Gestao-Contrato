@@ -8,8 +8,6 @@ Escopo: api_contratos_lista, api_contrato_detalhe, api_contrato_parcelas,
         api_imobiliarias_lista, api_status_boleto
 """
 import pytest
-from decimal import Decimal
-from datetime import date
 from django.urls import reverse
 
 from tests.fixtures.factories import UserFactory, ContratoFactory

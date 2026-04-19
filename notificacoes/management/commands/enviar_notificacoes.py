@@ -25,7 +25,7 @@ class Command(BaseCommand):
             notificacoes_criadas = enviar_notificacoes_vencimento()
 
             self.stdout.write(self.style.SUCCESS(
-                f'\n✅ Envio concluído!'
+                '\n✅ Envio concluído!'
             ))
             self.stdout.write(self.style.SUCCESS(
                 f'   Notificações criadas: {notificacoes_criadas}'

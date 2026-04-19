@@ -4,12 +4,11 @@ Testes dos forms do app contratos.
 Escopo: ContratoForm, IndiceReajusteForm, ContratoWizardBasicoForm
 """
 import pytest
-from decimal import Decimal
 from datetime import date, timedelta
 
 from contratos.forms import ContratoForm, IndiceReajusteForm
 
-from tests.fixtures.factories import UserFactory, ContratoFactory
+from tests.fixtures.factories import ContratoFactory
 
 
 @pytest.fixture

@@ -3,8 +3,7 @@ Testes para os modelos do sistema.
 """
 import pytest
 from decimal import Decimal
-from datetime import date, timedelta
-from django.db import IntegrityError
+from datetime import date
 
 
 @pytest.mark.django_db

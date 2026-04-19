@@ -17,11 +17,10 @@ Empresa: M&S do Brasil LTDA
 import time
 import logging
 import requests
-import json
 import base64
 from decimal import Decimal
-from datetime import date, datetime
-from typing import Dict, List, Optional, Tuple
+from datetime import datetime
+from typing import Dict, List
 
 from django.conf import settings
 from django.utils import timezone
@@ -136,6 +135,7 @@ class CNABService:
         3. Exact match global
         4. endswith(stripped) global
         """
+        from financeiro.models import Parcela
         nn_stripped = nosso_numero.lstrip('0') if nosso_numero else ''
 
         if conta_bancaria:
@@ -680,8 +680,6 @@ class CNABService:
         Regenera um arquivo de remessa existente.
         Usa os mesmos boletos do arquivo original.
         """
-        from financeiro.models import ItemRemessa
-
         if arquivo_remessa.status not in ['GERADO', 'ERRO']:
             return {
                 'sucesso': False,
@@ -717,9 +715,7 @@ class CNABService:
         Returns:
             dict: Resultado do processamento
         """
-        from financeiro.models import (
-            ItemRetorno, StatusArquivoRetorno, Parcela
-        )
+        from financeiro.models import StatusArquivoRetorno
 
         try:
             # Ler arquivo
@@ -760,7 +756,7 @@ class CNABService:
     ) -> Dict:
         """Processa arquivo de retorno CNAB 400"""
         from financeiro.models import (
-            ItemRetorno, StatusArquivoRetorno, Parcela
+            ItemRetorno, StatusArquivoRetorno
         )
 
         arquivo_retorno.layout = 'CNAB_400'
@@ -880,7 +876,7 @@ class CNABService:
     ) -> Dict:
         """Processa arquivo de retorno CNAB 240"""
         from financeiro.models import (
-            ItemRetorno, StatusArquivoRetorno, Parcela
+            ItemRetorno, StatusArquivoRetorno
         )
 
         arquivo_retorno.layout = 'CNAB_240'

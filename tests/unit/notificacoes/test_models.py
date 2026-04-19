@@ -5,7 +5,6 @@ Desenvolvedor: Maxwell da Silva Oliveira <maxwbh@gmail.com>
 """
 
 import pytest
-from django.utils import timezone
 from notificacoes.models import (
     ConfiguracaoEmail,
     ConfiguracaoSMS,

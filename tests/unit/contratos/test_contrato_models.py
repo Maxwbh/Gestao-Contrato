@@ -10,7 +10,6 @@ Testa:
 import pytest
 from decimal import Decimal
 from datetime import date, timedelta
-from django.core.exceptions import ValidationError
 from django.utils import timezone
 
 
