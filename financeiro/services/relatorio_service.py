@@ -11,11 +11,10 @@ com suporte a filtros, totalizadores e exportação.
 import logging
 from datetime import date, timedelta
 from decimal import Decimal
-from typing import Dict, List, Optional, Any
+from typing import Dict, Optional, Any
 from dataclasses import dataclass, field
 from enum import Enum
 
-from django.db.models import Sum, Count, Q, F
 from django.utils import timezone
 
 logger = logging.getLogger(__name__)
@@ -120,7 +119,7 @@ class RelatorioService:
         Returns:
             dict: Relatório com itens e totalizadores
         """
-        from financeiro.models import Parcela, TipoParcela
+        from financeiro.models import Parcela
 
         logger.info(f"Gerando relatório de prestações a pagar com filtros: {filtro}")
 

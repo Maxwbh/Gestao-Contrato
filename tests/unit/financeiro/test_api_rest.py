@@ -5,7 +5,6 @@ Desenvolvedor: Maxwell da Silva Oliveira
 Email: maxwbh@gmail.com
 Empresa: M&S do Brasil LTDA
 """
-import pytest
 import json
 from decimal import Decimal
 from datetime import date, timedelta
@@ -16,7 +15,7 @@ from django.contrib.auth.models import User
 
 from core.models import Contabilidade, Imobiliaria, Comprador, Imovel
 from contratos.models import Contrato, TipoCorrecao, StatusContrato
-from financeiro.models import Parcela, Reajuste
+from financeiro.models import Parcela
 
 
 class TestAPIBaseSetup(TestCase):

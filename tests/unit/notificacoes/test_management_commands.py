@@ -4,7 +4,7 @@ Testes dos management commands de notificacoes.
 Cobre: enviar_notificacoes, processar_notificacoes_pendentes
 """
 import pytest
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 from io import StringIO
 from django.core.management import call_command
 

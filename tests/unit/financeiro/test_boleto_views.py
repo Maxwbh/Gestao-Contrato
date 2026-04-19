@@ -5,9 +5,6 @@ Escopo: gerar_boleto, download_boleto, cancelar_boleto,
         download_zip_boletos, segunda_via_boleto, gerar_carne
 """
 import pytest
-from decimal import Decimal
-from datetime import date, timedelta
-from unittest.mock import patch, MagicMock
 from django.urls import reverse
 
 from tests.fixtures.factories import UserFactory, ContratoFactory

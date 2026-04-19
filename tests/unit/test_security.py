@@ -6,7 +6,7 @@ não causam erros inesperados nem exposição de dados.
 """
 import pytest
 from django.urls import reverse
-from tests.fixtures.factories import UserFactory, ContratoFactory, ParcelaFactory
+from tests.fixtures.factories import UserFactory, ContratoFactory
 
 
 @pytest.fixture

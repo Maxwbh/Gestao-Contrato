@@ -9,7 +9,6 @@ LinkedIn: https://www.linkedin.com/in/maxwbh/
 GitHub: https://github.com/Maxwbh/
 """
 
-import os
 from pathlib import Path
 import dj_database_url
 from decouple import config, Csv
