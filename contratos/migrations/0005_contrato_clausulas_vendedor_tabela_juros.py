@@ -13,269 +13,176 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
-        migrations.SeparateDatabaseAndState(
-            database_operations=[
-                migrations.RunSQL(
-                    sql="ALTER TABLE contratos_contrato ADD COLUMN IF NOT EXISTS percentual_cessao numeric(6,4) NOT NULL DEFAULT 3.0000;",
-                    reverse_sql="ALTER TABLE contratos_contrato DROP COLUMN IF EXISTS percentual_cessao;",
-                ),
-            ],
-            state_operations=[
-                migrations.AddField(
-                    model_name="contrato",
-                    name="percentual_cessao",
-                    field=models.DecimalField(
-                        decimal_places=4,
-                        default=Decimal("3.0000"),
-                        help_text="Percentual cobrado sobre o valor atualizado para cessão de direitos a terceiros",
-                        max_digits=6,
-                        validators=[
-                            django.core.validators.MinValueValidator(Decimal("0")),
-                            django.core.validators.MaxValueValidator(Decimal("100")),
-                        ],
-                        verbose_name="Taxa de Cessão de Direitos (%)",
+        migrations.AddField(
+            model_name="contrato",
+            name="percentual_cessao",
+            field=models.DecimalField(
+                decimal_places=4,
+                default=Decimal("3.0000"),
+                help_text="Percentual cobrado sobre o valor atualizado para cessão de direitos a terceiros",
+                max_digits=6,
+                validators=[
+                    django.core.validators.MinValueValidator(Decimal("0")),
+                    django.core.validators.MaxValueValidator(Decimal("100")),
+                ],
+                verbose_name="Taxa de Cessão de Direitos (%)",
+            ),
+        ),
+        migrations.AddField(
+            model_name="contrato",
+            name="percentual_fruicao",
+            field=models.DecimalField(
+                decimal_places=4,
+                default=Decimal("0.5000"),
+                help_text="Percentual mensal de fruição em caso de rescisão (uso do imóvel pelo comprador)",
+                max_digits=6,
+                validators=[
+                    django.core.validators.MinValueValidator(Decimal("0")),
+                    django.core.validators.MaxValueValidator(Decimal("100")),
+                ],
+                verbose_name="Taxa de Fruição (% a.m.)",
+            ),
+        ),
+        migrations.AddField(
+            model_name="contrato",
+            name="percentual_multa_rescisao_adm",
+            field=models.DecimalField(
+                decimal_places=4,
+                default=Decimal("12.0000"),
+                help_text="Percentual de despesas administrativas retido em caso de rescisão",
+                max_digits=6,
+                validators=[
+                    django.core.validators.MinValueValidator(Decimal("0")),
+                    django.core.validators.MaxValueValidator(Decimal("100")),
+                ],
+                verbose_name="Despesas Administrativas de Rescisão (%)",
+            ),
+        ),
+        migrations.AddField(
+            model_name="contrato",
+            name="percentual_multa_rescisao_penal",
+            field=models.DecimalField(
+                decimal_places=4,
+                default=Decimal("10.0000"),
+                help_text="Percentual de cláusula penal retido em caso de rescisão pelo comprador",
+                max_digits=6,
+                validators=[
+                    django.core.validators.MinValueValidator(Decimal("0")),
+                    django.core.validators.MaxValueValidator(Decimal("100")),
+                ],
+                verbose_name="Multa Penal de Rescisão (%)",
+            ),
+        ),
+        migrations.AddField(
+            model_name="contrato",
+            name="tipo_correcao_fallback",
+            field=models.CharField(
+                blank=True,
+                choices=[
+                    ("IPCA", "IPCA - Índice de Preços ao Consumidor Amplo"),
+                    ("IGPM", "IGP-M - Índice Geral de Preços do Mercado"),
+                    ("INCC", "INCC - Índice Nacional de Custo da Construção"),
+                    ("IGPDI", "IGP-DI - Índice Geral de Preços - Disponibilidade Interna"),
+                    ("INPC", "INPC - Índice Nacional de Preços ao Consumidor"),
+                    ("TR", "TR - Taxa Referencial"),
+                    ("SELIC", "SELIC - Taxa Básica de Juros"),
+                    ("FIXO", "Valor Fixo (sem correção)"),
+                ],
+                help_text="Índice substituto caso o principal seja extinto (ex: INPC se IGPM for extinto)",
+                max_length=10,
+                verbose_name="Índice de Fallback",
+            ),
+        ),
+        migrations.AddField(
+            model_name="contrato",
+            name="vendedor_cpf_cnpj",
+            field=models.CharField(
+                blank=True,
+                help_text="CPF ou CNPJ do vendedor pessoa física ou jurídica",
+                max_length=18,
+                verbose_name="CPF/CNPJ do Vendedor",
+            ),
+        ),
+        migrations.AddField(
+            model_name="contrato",
+            name="vendedor_nome",
+            field=models.CharField(
+                blank=True,
+                help_text="Nome completo do vendedor (quando diferente da imobiliária)",
+                max_length=200,
+                verbose_name="Nome do Vendedor",
+            ),
+        ),
+        migrations.CreateModel(
+            name="TabelaJurosContrato",
+            fields=[
+                (
+                    "id",
+                    models.BigAutoField(
+                        auto_created=True, primary_key=True, serialize=False, verbose_name="ID"
                     ),
                 ),
-            ],
-        ),
-        migrations.SeparateDatabaseAndState(
-            database_operations=[
-                migrations.RunSQL(
-                    sql="ALTER TABLE contratos_contrato ADD COLUMN IF NOT EXISTS percentual_fruicao numeric(6,4) NOT NULL DEFAULT 0.5000;",
-                    reverse_sql="ALTER TABLE contratos_contrato DROP COLUMN IF EXISTS percentual_fruicao;",
+                ("criado_em", models.DateTimeField(auto_now_add=True, verbose_name="Criado em")),
+                (
+                    "atualizado_em",
+                    models.DateTimeField(auto_now=True, verbose_name="Atualizado em"),
                 ),
-            ],
-            state_operations=[
-                migrations.AddField(
-                    model_name="contrato",
-                    name="percentual_fruicao",
-                    field=models.DecimalField(
-                        decimal_places=4,
-                        default=Decimal("0.5000"),
-                        help_text="Percentual mensal de fruição em caso de rescisão (uso do imóvel pelo comprador)",
-                        max_digits=6,
-                        validators=[
-                            django.core.validators.MinValueValidator(Decimal("0")),
-                            django.core.validators.MaxValueValidator(Decimal("100")),
-                        ],
-                        verbose_name="Taxa de Fruição (% a.m.)",
+                (
+                    "ciclo_inicio",
+                    models.PositiveIntegerField(
+                        help_text="Primeiro ciclo de reajuste em que esta taxa se aplica (1 = ano 1)",
+                        validators=[django.core.validators.MinValueValidator(1)],
+                        verbose_name="Ciclo Início",
                     ),
                 ),
-            ],
-        ),
-        migrations.SeparateDatabaseAndState(
-            database_operations=[
-                migrations.RunSQL(
-                    sql="ALTER TABLE contratos_contrato ADD COLUMN IF NOT EXISTS percentual_multa_rescisao_adm numeric(6,4) NOT NULL DEFAULT 12.0000;",
-                    reverse_sql="ALTER TABLE contratos_contrato DROP COLUMN IF EXISTS percentual_multa_rescisao_adm;",
-                ),
-            ],
-            state_operations=[
-                migrations.AddField(
-                    model_name="contrato",
-                    name="percentual_multa_rescisao_adm",
-                    field=models.DecimalField(
-                        decimal_places=4,
-                        default=Decimal("12.0000"),
-                        help_text="Percentual de despesas administrativas retido em caso de rescisão",
-                        max_digits=6,
-                        validators=[
-                            django.core.validators.MinValueValidator(Decimal("0")),
-                            django.core.validators.MaxValueValidator(Decimal("100")),
-                        ],
-                        verbose_name="Despesas Administrativas de Rescisão (%)",
-                    ),
-                ),
-            ],
-        ),
-        migrations.SeparateDatabaseAndState(
-            database_operations=[
-                migrations.RunSQL(
-                    sql="ALTER TABLE contratos_contrato ADD COLUMN IF NOT EXISTS percentual_multa_rescisao_penal numeric(6,4) NOT NULL DEFAULT 10.0000;",
-                    reverse_sql="ALTER TABLE contratos_contrato DROP COLUMN IF EXISTS percentual_multa_rescisao_penal;",
-                ),
-            ],
-            state_operations=[
-                migrations.AddField(
-                    model_name="contrato",
-                    name="percentual_multa_rescisao_penal",
-                    field=models.DecimalField(
-                        decimal_places=4,
-                        default=Decimal("10.0000"),
-                        help_text="Percentual de cláusula penal retido em caso de rescisão pelo comprador",
-                        max_digits=6,
-                        validators=[
-                            django.core.validators.MinValueValidator(Decimal("0")),
-                            django.core.validators.MaxValueValidator(Decimal("100")),
-                        ],
-                        verbose_name="Multa Penal de Rescisão (%)",
-                    ),
-                ),
-            ],
-        ),
-        migrations.SeparateDatabaseAndState(
-            database_operations=[
-                migrations.RunSQL(
-                    sql="ALTER TABLE contratos_contrato ADD COLUMN IF NOT EXISTS tipo_correcao_fallback varchar(10) NOT NULL DEFAULT '';",
-                    reverse_sql="ALTER TABLE contratos_contrato DROP COLUMN IF EXISTS tipo_correcao_fallback;",
-                ),
-            ],
-            state_operations=[
-                migrations.AddField(
-                    model_name="contrato",
-                    name="tipo_correcao_fallback",
-                    field=models.CharField(
+                (
+                    "ciclo_fim",
+                    models.PositiveIntegerField(
                         blank=True,
-                        choices=[
-                            ("IPCA", "IPCA - Índice de Preços ao Consumidor Amplo"),
-                            ("IGPM", "IGP-M - Índice Geral de Preços do Mercado"),
-                            ("INCC", "INCC - Índice Nacional de Custo da Construção"),
-                            ("IGPDI", "IGP-DI - Índice Geral de Preços - Disponibilidade Interna"),
-                            ("INPC", "INPC - Índice Nacional de Preços ao Consumidor"),
-                            ("TR", "TR - Taxa Referencial"),
-                            ("SELIC", "SELIC - Taxa Básica de Juros"),
-                            ("FIXO", "Valor Fixo (sem correção)"),
-                        ],
-                        help_text="Índice substituto caso o principal seja extinto (ex: INPC se IGPM for extinto)",
-                        max_length=10,
-                        verbose_name="Índice de Fallback",
+                        help_text='Último ciclo de aplicação. Deixe em branco para "este ciclo em diante"',
+                        null=True,
+                        validators=[django.core.validators.MinValueValidator(1)],
+                        verbose_name="Ciclo Fim",
                     ),
                 ),
-            ],
-        ),
-        migrations.SeparateDatabaseAndState(
-            database_operations=[
-                migrations.RunSQL(
-                    sql="ALTER TABLE contratos_contrato ADD COLUMN IF NOT EXISTS vendedor_cpf_cnpj varchar(18) NOT NULL DEFAULT '';",
-                    reverse_sql="ALTER TABLE contratos_contrato DROP COLUMN IF EXISTS vendedor_cpf_cnpj;",
-                ),
-            ],
-            state_operations=[
-                migrations.AddField(
-                    model_name="contrato",
-                    name="vendedor_cpf_cnpj",
-                    field=models.CharField(
-                        blank=True,
-                        help_text="CPF ou CNPJ do vendedor pessoa física ou jurídica",
-                        max_length=18,
-                        verbose_name="CPF/CNPJ do Vendedor",
+                (
+                    "juros_mensal",
+                    models.DecimalField(
+                        decimal_places=4,
+                        help_text="Taxa de juros compostos mensais embutida nas parcelas deste ciclo (ex: 0.6000 = 0,60% a.m.)",
+                        max_digits=8,
+                        validators=[django.core.validators.MinValueValidator(Decimal("0"))],
+                        verbose_name="Juros Mensais (%)",
                     ),
                 ),
-            ],
-        ),
-        migrations.SeparateDatabaseAndState(
-            database_operations=[
-                migrations.RunSQL(
-                    sql="ALTER TABLE contratos_contrato ADD COLUMN IF NOT EXISTS vendedor_nome varchar(200) NOT NULL DEFAULT '';",
-                    reverse_sql="ALTER TABLE contratos_contrato DROP COLUMN IF EXISTS vendedor_nome;",
-                ),
-            ],
-            state_operations=[
-                migrations.AddField(
-                    model_name="contrato",
-                    name="vendedor_nome",
-                    field=models.CharField(
+                (
+                    "observacoes",
+                    models.CharField(
                         blank=True,
-                        help_text="Nome completo do vendedor (quando diferente da imobiliária)",
+                        help_text="Ex: Conforme cláusula 8.2 do contrato",
                         max_length=200,
-                        verbose_name="Nome do Vendedor",
+                        verbose_name="Observações",
+                    ),
+                ),
+                (
+                    "contrato",
+                    models.ForeignKey(
+                        on_delete=django.db.models.deletion.CASCADE,
+                        related_name="tabela_juros",
+                        to="contratos.contrato",
+                        verbose_name="Contrato",
                     ),
                 ),
             ],
-        ),
-        migrations.SeparateDatabaseAndState(
-            database_operations=[
-                migrations.RunSQL(
-                    sql="""
-                        CREATE TABLE IF NOT EXISTS contratos_tabelajuroscontrato (
-                            id bigserial PRIMARY KEY,
-                            criado_em timestamptz NOT NULL,
-                            atualizado_em timestamptz NOT NULL,
-                            ciclo_inicio integer NOT NULL,
-                            ciclo_fim integer NULL,
-                            juros_mensal numeric(8,4) NOT NULL,
-                            observacoes varchar(200) NOT NULL DEFAULT '',
-                            contrato_id bigint NOT NULL REFERENCES contratos_contrato(id) ON DELETE CASCADE
-                        );
-                        CREATE INDEX IF NOT EXISTS contratos_t_contrat_56940a_idx
-                            ON contratos_tabelajuroscontrato (contrato_id, ciclo_inicio);
-                    """,
-                    reverse_sql="DROP TABLE IF EXISTS contratos_tabelajuroscontrato;",
-                ),
-            ],
-            state_operations=[
-                migrations.CreateModel(
-                    name="TabelaJurosContrato",
-                    fields=[
-                        (
-                            "id",
-                            models.BigAutoField(
-                                auto_created=True, primary_key=True, serialize=False, verbose_name="ID"
-                            ),
-                        ),
-                        ("criado_em", models.DateTimeField(auto_now_add=True, verbose_name="Criado em")),
-                        (
-                            "atualizado_em",
-                            models.DateTimeField(auto_now=True, verbose_name="Atualizado em"),
-                        ),
-                        (
-                            "ciclo_inicio",
-                            models.PositiveIntegerField(
-                                help_text="Primeiro ciclo de reajuste em que esta taxa se aplica (1 = ano 1)",
-                                validators=[django.core.validators.MinValueValidator(1)],
-                                verbose_name="Ciclo Início",
-                            ),
-                        ),
-                        (
-                            "ciclo_fim",
-                            models.PositiveIntegerField(
-                                blank=True,
-                                help_text='Último ciclo de aplicação. Deixe em branco para "este ciclo em diante"',
-                                null=True,
-                                validators=[django.core.validators.MinValueValidator(1)],
-                                verbose_name="Ciclo Fim",
-                            ),
-                        ),
-                        (
-                            "juros_mensal",
-                            models.DecimalField(
-                                decimal_places=4,
-                                help_text="Taxa de juros compostos mensais embutida nas parcelas deste ciclo (ex: 0.6000 = 0,60% a.m.)",
-                                max_digits=8,
-                                validators=[django.core.validators.MinValueValidator(Decimal("0"))],
-                                verbose_name="Juros Mensais (%)",
-                            ),
-                        ),
-                        (
-                            "observacoes",
-                            models.CharField(
-                                blank=True,
-                                help_text="Ex: Conforme cláusula 8.2 do contrato",
-                                max_length=200,
-                                verbose_name="Observações",
-                            ),
-                        ),
-                        (
-                            "contrato",
-                            models.ForeignKey(
-                                on_delete=django.db.models.deletion.CASCADE,
-                                related_name="tabela_juros",
-                                to="contratos.contrato",
-                                verbose_name="Contrato",
-                            ),
-                        ),
-                    ],
-                    options={
-                        "verbose_name": "Tabela de Juros por Ciclo",
-                        "verbose_name_plural": "Tabela de Juros por Ciclo",
-                        "ordering": ["contrato", "ciclo_inicio"],
-                        "indexes": [
-                            models.Index(
-                                fields=["contrato", "ciclo_inicio"], name="contratos_t_contrat_56940a_idx"
-                            )
-                        ],
-                    },
-                ),
-            ],
+            options={
+                "verbose_name": "Tabela de Juros por Ciclo",
+                "verbose_name_plural": "Tabela de Juros por Ciclo",
+                "ordering": ["contrato", "ciclo_inicio"],
+                "indexes": [
+                    models.Index(
+                        fields=["contrato", "ciclo_inicio"], name="contratos_t_contrat_56940a_idx"
+                    )
+                ],
+            },
         ),
     ]

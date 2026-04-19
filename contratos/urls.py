@@ -26,6 +26,7 @@ urlpatterns = [
 
     # Parcelas
     path('<int:pk>/parcelas/', views.parcelas_contrato, name='parcelas'),
+    path('<int:pk>/completar-parcelas/', views.api_completar_parcelas, name='completar_parcelas'),
 
     # CRUD de Índices de Reajuste
     path('indices/', views.IndiceReajusteListView.as_view(), name='indices_listar'),
