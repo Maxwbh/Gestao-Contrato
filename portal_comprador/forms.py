@@ -10,6 +10,7 @@ Inclui:
 from django import forms
 from django.contrib.auth.models import User
 from django.contrib.auth.forms import AuthenticationForm
+from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError
 import re
 
@@ -73,6 +74,15 @@ class AutoCadastroForm(forms.Form):
             return documento_limpo
         else:
             raise ValidationError('CPF deve ter 11 dígitos ou CNPJ deve ter 14 dígitos')
+
+    def clean_senha(self):
+        senha = self.cleaned_data.get('senha')
+        if senha:
+            try:
+                validate_password(senha)
+            except ValidationError as e:
+                raise ValidationError(list(e.messages))
+        return senha
 
     def clean(self):
         cleaned_data = super().clean()
@@ -231,6 +241,15 @@ class AlterarSenhaCompradorForm(forms.Form):
         })
     )
 
+    def clean_nova_senha(self):
+        nova_senha = self.cleaned_data.get('nova_senha')
+        if nova_senha:
+            try:
+                validate_password(nova_senha)
+            except ValidationError as e:
+                raise ValidationError(list(e.messages))
+        return nova_senha
+
     def clean(self):
         cleaned_data = super().clean()
         nova_senha = cleaned_data.get('nova_senha')
@@ -242,5 +261,89 @@ class AlterarSenhaCompradorForm(forms.Form):
         return cleaned_data
 
 
-# Import para o clean do AutoCadastroForm
+class EsqueciSenhaForm(forms.Form):
+    """Solicita redefinição de senha por CPF/CNPJ."""
+    documento = forms.CharField(
+        max_length=18,
+        label='CPF ou CNPJ',
+        widget=forms.TextInput(attrs={
+            'class': 'form-control form-control-lg',
+            'placeholder': 'Digite seu CPF ou CNPJ',
+            'autocomplete': 'off',
+        }),
+    )
+
+    def clean_documento(self):
+        doc = re.sub(r'\D', '', self.cleaned_data['documento'])
+        if len(doc) not in (11, 14):
+            raise ValidationError('CPF deve ter 11 dígitos ou CNPJ deve ter 14 dígitos')
+        return doc
+
+    def clean(self):
+        cleaned_data = super().clean()
+        doc = cleaned_data.get('documento')
+        if not doc:
+            return cleaned_data
+
+        from portal_comprador.models import AcessoComprador
+        if len(doc) == 11:
+            cpf_fmt = f'{doc[:3]}.{doc[3:6]}.{doc[6:9]}-{doc[9:]}'
+            comprador = models.Q(cpf=doc) | models.Q(cpf=cpf_fmt)
+        else:
+            cnpj_fmt = f'{doc[:2]}.{doc[2:5]}.{doc[5:8]}/{doc[8:12]}-{doc[12:]}'
+            comprador = models.Q(cnpj=doc) | models.Q(cnpj=cnpj_fmt)
+
+        from core.models import Comprador as CompradorModel
+        obj = CompradorModel.objects.filter(comprador).first()
+
+        if not obj or not hasattr(obj, 'acesso_portal'):
+            # Mensagem genérica — não revela se o documento existe
+            raise ValidationError(
+                'Se este documento estiver cadastrado com e-mail, você receberá as instruções.'
+            )
+        if not obj.email:
+            raise ValidationError(
+                'Nenhum e-mail cadastrado para este documento. Entre em contato com a imobiliária.'
+            )
+        cleaned_data['acesso'] = obj.acesso_portal
+        return cleaned_data
+
+
+class RedefinirSenhaForm(forms.Form):
+    """Nova senha via link de redefinição."""
+    nova_senha = forms.CharField(
+        min_length=8,
+        label='Nova Senha',
+        widget=forms.PasswordInput(attrs={
+            'class': 'form-control form-control-lg',
+            'placeholder': 'Digite a nova senha',
+        }),
+        help_text='Mínimo de 8 caracteres',
+    )
+    confirmar_senha = forms.CharField(
+        min_length=8,
+        label='Confirmar Nova Senha',
+        widget=forms.PasswordInput(attrs={
+            'class': 'form-control form-control-lg',
+            'placeholder': 'Confirme a nova senha',
+        }),
+    )
+
+    def clean_nova_senha(self):
+        senha = self.cleaned_data.get('nova_senha')
+        if senha:
+            try:
+                validate_password(senha)
+            except ValidationError as e:
+                raise ValidationError(list(e.messages))
+        return senha
+
+    def clean(self):
+        cleaned_data = super().clean()
+        if cleaned_data.get('nova_senha') != cleaned_data.get('confirmar_senha'):
+            raise ValidationError('As senhas não coincidem')
+        return cleaned_data
+
+
+# Import para o clean do AutoCadastroForm e EsqueciSenhaForm
 from django.db import models
