@@ -54,7 +54,7 @@ python manage.py processar_notificacoes_pendentes
 
 Certifique-se de que o código está no GitHub:
 ```bash
-git push origin claude/update-developer-docs-01TGF4Y9D8H9JukuLRBxgQct
+git push origin master
 ```
 
 ### 2. Criar Conta no Render
@@ -68,7 +68,7 @@ git push origin claude/update-developer-docs-01TGF4Y9D8H9JukuLRBxgQct
 1. No Dashboard do Render, clique em **"New +"**
 2. Selecione **"Blueprint"**
 3. Conecte o repositório: `Maxwbh/Gestao-Contrato`
-4. Selecione o branch: `claude/update-developer-docs-01TGF4Y9D8H9JukuLRBxgQct`
+4. Selecione o branch: `master`
 5. Nome do Blueprint: `Gestao-Contrato`
 6. Clique em **"Apply"**
 

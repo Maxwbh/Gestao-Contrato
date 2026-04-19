@@ -1,12 +1,49 @@
-{% extends 'base.html' %}
-{% block title %}Cadastro - Portal do Comprador{% endblock %}
+{% extends 'portal_comprador/portal_base.html' %}
+{% block title %}Criar Conta{% endblock %}
+
 {% block content %}
-<div class="container">
-    <h1>Cadastro</h1>
-    <form method="post">
-        {% csrf_token %}
-        {{ form.as_p }}
-        <button type="submit">Cadastrar</button>
-    </form>
+<div style="max-width:400px;margin:24px auto 0;">
+
+    <div style="text-align:center;margin-bottom:24px;">
+        <i class="fas fa-user-plus" style="font-size:2.5rem;color:var(--portal-primary);"></i>
+        <h5 style="margin:12px 0 4px;font-weight:700;color:#212121;">Criar Conta</h5>
+        <p style="color:#757575;font-size:.875rem;margin:0;">Use o CPF/CNPJ do seu contrato</p>
+    </div>
+
+    <div class="portal-card">
+        <div class="portal-card-body">
+            <form method="post" novalidate>
+                {% csrf_token %}
+
+                {% for field in form %}
+                <div style="margin-bottom:14px;">
+                    <label style="font-size:.82rem;font-weight:600;color:#424242;display:block;margin-bottom:5px;">
+                        {{ field.label }}
+                    </label>
+                    {{ field }}
+                    {% if field.help_text %}
+                    <div style="font-size:.75rem;color:#9e9e9e;margin-top:3px;">{{ field.help_text }}</div>
+                    {% endif %}
+                    {% if field.errors %}
+                    <div style="color:#f44336;font-size:.78rem;margin-top:4px;">{{ field.errors|join:", " }}</div>
+                    {% endif %}
+                </div>
+                {% endfor %}
+
+                <button type="submit"
+                        style="width:100%;background:var(--portal-primary);color:#fff;border:none;
+                               border-radius:8px;padding:14px;font-size:1rem;font-weight:600;cursor:pointer;margin-top:4px;">
+                    Criar Conta
+                </button>
+            </form>
+        </div>
+    </div>
+
+    <div style="text-align:center;margin-top:14px;font-size:.85rem;">
+        <a href="{% url 'portal_comprador:login' %}" style="color:var(--portal-primary);">
+            Já tenho conta — Entrar
+        </a>
+    </div>
+
 </div>
 {% endblock %}

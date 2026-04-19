@@ -4,6 +4,9 @@ Testes das APIs JSON do app portal_comprador
 Testa:
 - api_parcelas_contrato
 - api_resumo_financeiro
+- api_portal_vencimentos (P2)
+- api_portal_boletos (P2)
+- api_portal_linha_digitavel (P3)
 """
 import pytest
 import json
@@ -12,6 +15,7 @@ from datetime import date, timedelta
 
 from portal_comprador.models import AcessoComprador
 from contratos.models import Contrato
+from financeiro.models import Parcela
 from tests.fixtures.factories import (
     UserFactory,
     CompradorFactory,
@@ -110,3 +114,158 @@ class TestApiResumoFinanceiro:
         data = response.json()
         assert data['sucesso'] is True
         assert 'resumo' in data
+
+
+# =============================================================================
+# FASE 9 P2 — api_portal_vencimentos
+# =============================================================================
+
+@pytest.mark.django_db
+class TestApiPortalVencimentos:
+    """Testes da API de vencimentos (P2)"""
+
+    def test_vencimentos_requer_login(self, client):
+        response = client.get('/portal/api/vencimentos/')
+        assert response.status_code == 302
+
+    def test_vencimentos_retorna_apenas_do_comprador(self, comprador_logado):
+        client = comprador_logado['client']
+        comprador = comprador_logado['comprador']
+
+        # Parcela do comprador logado
+        contrato_proprio = ContratoFactory(comprador=comprador)
+        ParcelaFactory(contrato=contrato_proprio, pago=False,
+                       data_vencimento=date.today() + timedelta(days=10))
+
+        # Parcela de outro comprador — não deve aparecer
+        outro = CompradorFactory()
+        contrato_alheio = ContratoFactory(comprador=outro)
+        ParcelaFactory(contrato=contrato_alheio, pago=False,
+                       data_vencimento=date.today() + timedelta(days=10))
+
+        response = client.get('/portal/api/vencimentos/')
+        assert response.status_code == 200
+        data = response.json()
+        assert data['sucesso'] is True
+        ids_contratos = {p['contrato']['id'] for p in data['parcelas']}
+        assert contrato_alheio.id not in ids_contratos
+
+    def test_vencimentos_filtro_status_pago(self, comprador_logado):
+        client = comprador_logado['client']
+        comprador = comprador_logado['comprador']
+        contrato = ContratoFactory(comprador=comprador)
+        ParcelaFactory(contrato=contrato, pago=True,
+                       data_vencimento=date.today() - timedelta(days=5))
+
+        response = client.get('/portal/api/vencimentos/?status=pago')
+        assert response.status_code == 200
+        data = response.json()
+        assert all(p['pago'] for p in data['parcelas'])
+
+    def test_vencimentos_paginacao(self, comprador_logado):
+        client = comprador_logado['client']
+        comprador = comprador_logado['comprador']
+        contrato = ContratoFactory(comprador=comprador)
+        for i in range(5):
+            ParcelaFactory(contrato=contrato, pago=False,
+                           data_vencimento=date.today() + timedelta(days=i + 1))
+
+        response = client.get('/portal/api/vencimentos/?per_page=2&page=1')
+        assert response.status_code == 200
+        data = response.json()
+        assert len(data['parcelas']) <= 2
+        assert data['per_page'] == 2
+        assert data['page'] == 1
+
+
+# =============================================================================
+# FASE 9 P2 — api_portal_boletos
+# =============================================================================
+
+@pytest.mark.django_db
+class TestApiPortalBoletos:
+    """Testes da API de boletos (P2)"""
+
+    def test_boletos_requer_login(self, client):
+        response = client.get('/portal/api/boletos/')
+        assert response.status_code == 302
+
+    def test_boletos_exclui_nao_gerados(self, comprador_logado):
+        """NAO_GERADO não aparece na listagem de boletos"""
+        client = comprador_logado['client']
+        comprador = comprador_logado['comprador']
+        contrato = ContratoFactory(comprador=comprador)
+        # parcela sem boleto
+        ParcelaFactory(contrato=contrato, status_boleto='NAO_GERADO')
+
+        response = client.get('/portal/api/boletos/')
+        assert response.status_code == 200
+        data = response.json()
+        assert data['sucesso'] is True
+        # nenhum boleto com status NAO_GERADO deve aparecer
+        for b in data['boletos']:
+            assert b['status_boleto'] != 'NAO_GERADO'
+
+    def test_boletos_filtro_status(self, comprador_logado):
+        client = comprador_logado['client']
+        comprador = comprador_logado['comprador']
+        contrato = ContratoFactory(comprador=comprador)
+        ParcelaFactory(contrato=contrato, status_boleto='GERADO',
+                       nosso_numero='0001234')
+
+        response = client.get('/portal/api/boletos/?status_boleto=GERADO')
+        assert response.status_code == 200
+        data = response.json()
+        for b in data['boletos']:
+            assert b['status_boleto'] == 'GERADO'
+
+
+# =============================================================================
+# FASE 9 P3 — api_portal_linha_digitavel
+# =============================================================================
+
+@pytest.mark.django_db
+class TestApiPortalLinhaDigitavel:
+    """Testes da API de linha digitável (P3)"""
+
+    def test_linha_digitavel_requer_login(self, client):
+        parcela = ParcelaFactory()
+        response = client.get(f'/portal/api/boletos/{parcela.id}/linha-digitavel/')
+        assert response.status_code == 302
+
+    def test_linha_digitavel_sem_nosso_numero_retorna_404(self, comprador_logado):
+        client = comprador_logado['client']
+        comprador = comprador_logado['comprador']
+        contrato = ContratoFactory(comprador=comprador)
+        parcela = ParcelaFactory(contrato=contrato, nosso_numero='')
+
+        response = client.get(f'/portal/api/boletos/{parcela.id}/linha-digitavel/')
+        assert response.status_code == 404
+
+    def test_linha_digitavel_de_outro_comprador_retorna_404(self, comprador_logado):
+        client = comprador_logado['client']
+        outro = CompradorFactory()
+        contrato = ContratoFactory(comprador=outro)
+        parcela = ParcelaFactory(contrato=contrato, nosso_numero='9999')
+
+        response = client.get(f'/portal/api/boletos/{parcela.id}/linha-digitavel/')
+        assert response.status_code == 404
+
+    def test_linha_digitavel_retorna_dados_corretos(self, comprador_logado):
+        client = comprador_logado['client']
+        comprador = comprador_logado['comprador']
+        contrato = ContratoFactory(comprador=comprador)
+        parcela = ParcelaFactory(
+            contrato=contrato,
+            nosso_numero='0001',
+            linha_digitavel='12345.67890 12345.678901 12345.678901 1 12340000100000',
+            status_boleto='GERADO',
+        )
+
+        response = client.get(f'/portal/api/boletos/{parcela.id}/linha-digitavel/')
+        assert response.status_code == 200
+        data = response.json()
+        assert data['sucesso'] is True
+        assert data['nosso_numero'] == '0001'
+        assert 'linha_digitavel' in data
+        assert 'valor' in data
