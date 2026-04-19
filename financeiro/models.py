@@ -11,11 +11,12 @@ from django.core.exceptions import ValidationError
 from django.utils import timezone
 from django.db.models import Q
 from decimal import Decimal
+from datetime import timedelta
 import logging
 
-logger = logging.getLogger(__name__)
-from datetime import timedelta
 from core.models import TimeStampedModel, ContaBancaria
+
+logger = logging.getLogger(__name__)
 
 
 class StatusBoleto(models.TextChoices):
@@ -574,7 +575,7 @@ class Parcela(TimeStampedModel):
         Returns:
             dict: Dicionário com valores calculados e configurações
         """
-        from datetime import date, timedelta
+        from datetime import date
 
         hoje = date.today()
         config = self.contrato.get_config_boleto()
@@ -737,8 +738,8 @@ class Parcela(TimeStampedModel):
         return True
 
     def registrar_pagamento_boleto(self, valor_pago, data_pagamento=None,
-                                    banco_pagador='', agencia_pagadora='',
-                                    validar_minimo=True):
+                                   banco_pagador='', agencia_pagadora='',
+                                   validar_minimo=True):
         """Registra o pagamento do boleto com dados bancários"""
         from datetime import date as date_type, datetime
         if data_pagamento is None:
@@ -960,7 +961,6 @@ class Reajuste(TimeStampedModel):
         antecipacao_meses: quantos meses antes do aniversário exibir como pendente.
         """
         from django.utils import timezone as tz
-        from dateutil.relativedelta import relativedelta
 
         if contrato.tipo_correcao == 'FIXO':
             return None
@@ -1442,7 +1442,6 @@ class Reajuste(TimeStampedModel):
                 'erro': 'Reajuste já foi aplicado anteriormente'
             }
 
-        from django.db.models import Sum
         from contratos.models import TabelaJurosContrato
 
         perc_liquido = self.percentual_liquido

@@ -7,15 +7,14 @@ Email: maxwbh@gmail.com
 from django import forms
 from django.core.exceptions import ValidationError
 from crispy_forms.helper import FormHelper
-from crispy_forms.layout import Layout, Submit, Row, Column, Div, HTML, Field
+from crispy_forms.layout import Layout, Row, Column, Div, HTML, Field
 from crispy_forms.bootstrap import PrependedText, AppendedText
 from .models import (
-    Contabilidade, Imobiliaria, Imovel, Comprador, TipoImovel,
-    ContaBancaria, BancoBrasil, TipoValor, TipoTitulo, LayoutCNAB,
+    Contabilidade, Imobiliaria, Imovel, Comprador,
+    ContaBancaria,
     AcessoUsuario
 )
 from django.contrib.auth import get_user_model
-import re
 
 
 class ContabilidadeForm(forms.ModelForm):
@@ -1000,27 +999,32 @@ class ContaBancariaForm(forms.ModelForm):
             if convenio:
                 convenio_numeros = ''.join(filter(str.isdigit, convenio))
                 if config.get('convenio_digitos') and len(convenio_numeros) != config['convenio_digitos']:
-                    self.add_error('convenio',
+                    self.add_error(
+                        'convenio',
                         f'Para {banco_nome}, o convênio deve ter exatamente {config["convenio_digitos"]} dígitos')
                 elif config.get('convenio_min') and len(convenio_numeros) < config['convenio_min']:
-                    self.add_error('convenio',
+                    self.add_error(
+                        'convenio',
                         f'Para {banco_nome}, o convênio deve ter entre {config["convenio_min"]} e {config["convenio_max"]} dígitos')
                 elif config.get('convenio_max') and len(convenio_numeros) > config['convenio_max']:
-                    self.add_error('convenio',
+                    self.add_error(
+                        'convenio',
                         f'Para {banco_nome}, o convênio deve ter no máximo {config["convenio_max"]} dígitos')
 
             # Validar tamanho da agência
             if agencia and config.get('agencia_max'):
                 agencia_numeros = ''.join(filter(str.isdigit, agencia))
                 if len(agencia_numeros) > config['agencia_max']:
-                    self.add_error('agencia',
+                    self.add_error(
+                        'agencia',
                         f'Para {banco_nome}, a agência deve ter no máximo {config["agencia_max"]} dígitos')
 
             # Validar tamanho da conta
             if conta and config.get('conta_max'):
                 conta_numeros = ''.join(filter(str.isdigit, conta))
                 if len(conta_numeros) > config['conta_max']:
-                    self.add_error('conta',
+                    self.add_error(
+                        'conta',
                         f'Para {banco_nome}, a conta deve ter no máximo {config["conta_max"]} dígitos')
 
             # Sicredi: posto e byte_idt obrigatórios
@@ -1029,14 +1033,16 @@ class ContaBancariaForm(forms.ModelForm):
             if posto and config.get('posto_digitos'):
                 posto_nums = ''.join(filter(str.isdigit, posto))
                 if len(posto_nums) != config['posto_digitos']:
-                    self.add_error('posto',
+                    self.add_error(
+                        'posto',
                         f'Para {banco_nome}, o posto deve ter exatamente {config["posto_digitos"]} dígitos')
 
             if config.get('byte_idt_obrigatorio') and not byte_idt:
                 self.add_error('byte_idt', f'Byte IDT é obrigatório para {banco_nome}')
             if byte_idt and config.get('byte_idt_digitos'):
                 if len(byte_idt) != config['byte_idt_digitos']:
-                    self.add_error('byte_idt',
+                    self.add_error(
+                        'byte_idt',
                         f'Para {banco_nome}, o Byte IDT deve ter exatamente {config["byte_idt_digitos"]} caractere')
 
             # Caixa: emissao e codigo_beneficiario obrigatórios
@@ -1044,7 +1050,8 @@ class ContaBancariaForm(forms.ModelForm):
                 self.add_error('emissao', f'Tipo de Emissão é obrigatório para {banco_nome}')
             if emissao and config.get('emissao_digitos'):
                 if len(emissao) != config['emissao_digitos']:
-                    self.add_error('emissao',
+                    self.add_error(
+                        'emissao',
                         f'Para {banco_nome}, o tipo de emissão deve ter exatamente {config["emissao_digitos"]} dígito')
 
             if config.get('codigo_beneficiario_obrigatorio') and not codigo_beneficiario:

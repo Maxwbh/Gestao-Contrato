@@ -14,7 +14,6 @@ Usa reportlab (disponível no projeto) para o fallback.
 """
 import io
 import logging
-from decimal import Decimal
 
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.units import cm
@@ -262,7 +261,7 @@ def gerar_carne_multiplos_contratos(contratos_parcelas: list, usar_brcobranca: b
         bytes — PDF único com todos os carnês
     """
     try:
-        from pypdf import PdfWriter
+        import pypdf  # noqa: F401
         _use_pypdf = True
     except ImportError:
         _use_pypdf = False

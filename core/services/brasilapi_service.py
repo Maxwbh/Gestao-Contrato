@@ -279,6 +279,7 @@ class BrasilAPIService:
 # Instancia global para uso simplificado
 _service = None
 
+
 def get_service() -> BrasilAPIService:
     """Retorna instancia singleton do servico."""
     global _service

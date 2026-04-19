@@ -4,11 +4,9 @@ Views de autenticação e registro de usuários
 Desenvolvedor: Maxwell da Silva Oliveira
 """
 from django.shortcuts import render, redirect
-from django.contrib.auth import login, logout, authenticate, update_session_auth_hash
+from django.contrib.auth import login, logout, update_session_auth_hash
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
-from django.urls import reverse_lazy
-from django.views.generic import CreateView
 
 from .forms import LoginForm, RegistroUsuarioForm, AlterarSenhaForm, PerfilUsuarioForm
 

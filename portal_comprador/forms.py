@@ -8,8 +8,7 @@ Inclui:
 - Formulário de alteração de senha
 """
 from django import forms
-from django.contrib.auth.models import User
-from django.contrib.auth.forms import AuthenticationForm
+from django.db import models
 from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError
 import re
@@ -119,7 +118,6 @@ class AutoCadastroForm(forms.Form):
                 raise ValidationError('E-mail não confere com o cadastro')
 
             # Verificar se já tem acesso
-            from portal_comprador.models import AcessoComprador
             if hasattr(comprador, 'acesso_portal'):
                 raise ValidationError('Já existe uma conta para este documento. Use a opção de login.')
 
@@ -285,7 +283,6 @@ class EsqueciSenhaForm(forms.Form):
         if not doc:
             return cleaned_data
 
-        from portal_comprador.models import AcessoComprador
         if len(doc) == 11:
             cpf_fmt = f'{doc[:3]}.{doc[3:6]}.{doc[6:9]}-{doc[9:]}'
             comprador = models.Q(cpf=doc) | models.Q(cpf=cpf_fmt)
@@ -343,7 +340,3 @@ class RedefinirSenhaForm(forms.Form):
         if cleaned_data.get('nova_senha') != cleaned_data.get('confirmar_senha'):
             raise ValidationError('As senhas não coincidem')
         return cleaned_data
-
-
-# Import para o clean do AutoCadastroForm e EsqueciSenhaForm
-from django.db import models

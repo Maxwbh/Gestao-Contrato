@@ -9,7 +9,6 @@ LinkedIn: https://www.linkedin.com/in/maxwbh/
 GitHub: https://github.com/Maxwbh/
 """
 
-import os
 from pathlib import Path
 import dj_database_url
 from decouple import config, Csv
@@ -135,6 +134,7 @@ if config('DATABASE_URL', default=None):
     # Signal para garantir search_path em cada conexao (desabilitado em testes)
     if not _is_testing:
         from django.db.backends.signals import connection_created
+
         def set_search_path(sender, connection, **kwargs):
             if connection.vendor == 'postgresql':
                 cursor = connection.cursor()

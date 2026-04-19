@@ -14,8 +14,6 @@ from tests.fixtures.factories import (
     ImobiliariaFactory,
     ImovelFactory,
     CompradorFactory,
-    ContabilidadeFactory,
-    ContaBancariaFactory,
 )
 
 pytestmark = pytest.mark.django_db

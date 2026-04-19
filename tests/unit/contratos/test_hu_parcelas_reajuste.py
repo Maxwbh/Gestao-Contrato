@@ -17,7 +17,7 @@ Cada teste valida:
   - Reajuste aplicado (cenários C e D)
 """
 import pytest
-from decimal import Decimal, ROUND_HALF_UP
+from decimal import Decimal
 from datetime import date
 from dateutil.relativedelta import relativedelta
 
