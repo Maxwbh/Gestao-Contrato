@@ -11,7 +11,6 @@
 
 {% if contratos %}
 {% for contrato in contratos %}
-{% with total=contrato.parcelas.count pagas=contrato.parcelas.filter.count %}
 <div class="contrato-card">
     <div class="contrato-card-top">
         <div class="num">{{ contrato.numero_contrato }}</div>
@@ -20,9 +19,16 @@
         </div>
         <div class="valor">Valor total: R$ {{ contrato.valor_total|floatformat:2 }}</div>
 
+        <!-- Parcelas pagas / total -->
+        {% if contrato.total_parcelas %}
+        <div style="margin-top:6px;font-size:.75rem;color:#757575;">
+            {{ contrato.parcelas_pagas }} de {{ contrato.total_parcelas }} parcela{{ contrato.total_parcelas|pluralize }} paga{{ contrato.total_parcelas|pluralize }}
+        </div>
+        {% endif %}
+
         <!-- Progresso -->
         {% with prog=contrato.calcular_progresso %}
-        <div style="margin-top:10px;">
+        <div style="margin-top:8px;">
             <div style="display:flex;justify-content:space-between;font-size:.72rem;color:#757575;margin-bottom:4px;">
                 <span>Progresso</span>
                 <span>{{ prog|floatformat:0 }}%</span>
@@ -52,7 +58,6 @@
         </a>
     </div>
 </div>
-{% endwith %}
 {% endfor %}
 
 {% else %}

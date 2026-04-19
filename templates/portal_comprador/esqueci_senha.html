@@ -1,0 +1,53 @@
+{% extends 'portal_comprador/portal_base.html' %}
+{% block title %}Esqueci minha senha{% endblock %}
+
+{% block content %}
+<div style="max-width:400px;margin:32px auto 0;">
+
+    <div style="text-align:center;margin-bottom:24px;">
+        <i class="fas fa-key" style="font-size:2.5rem;color:var(--portal-primary);"></i>
+        <h5 style="margin:12px 0 4px;font-weight:700;color:#212121;">Recuperar Senha</h5>
+        <p style="color:#757575;font-size:.875rem;margin:0;">
+            Informe seu CPF ou CNPJ para receber o link de redefinição por e-mail.
+        </p>
+    </div>
+
+    <div class="portal-card">
+        <div class="portal-card-body">
+            <form method="post" novalidate>
+                {% csrf_token %}
+
+                <div style="margin-bottom:20px;">
+                    <label style="font-size:.82rem;font-weight:600;color:#424242;display:block;margin-bottom:6px;">
+                        CPF ou CNPJ
+                    </label>
+                    <input type="text" name="documento"
+                           value="{{ form.documento.value|default:'' }}"
+                           class="form-control form-control-lg"
+                           placeholder="000.000.000-00 ou 00.000.000/0001-00"
+                           autocomplete="off" autofocus>
+                    {% if form.documento.errors %}
+                    <div style="color:#f44336;font-size:.78rem;margin-top:4px;">{{ form.documento.errors|join:", " }}</div>
+                    {% endif %}
+                    {% if form.non_field_errors %}
+                    <div style="color:#f44336;font-size:.78rem;margin-top:4px;">{{ form.non_field_errors|join:", " }}</div>
+                    {% endif %}
+                </div>
+
+                <button type="submit"
+                        style="width:100%;background:var(--portal-primary);color:#fff;border:none;
+                               border-radius:8px;padding:14px;font-size:1rem;font-weight:600;cursor:pointer;">
+                    Enviar Instruções
+                </button>
+            </form>
+        </div>
+    </div>
+
+    <div style="text-align:center;margin-top:16px;font-size:.85rem;">
+        <a href="{% url 'portal_comprador:login' %}" style="color:var(--portal-primary);">
+            <i class="fas fa-arrow-left" style="font-size:.75rem;"></i> Voltar ao login
+        </a>
+    </div>
+
+</div>
+{% endblock %}
