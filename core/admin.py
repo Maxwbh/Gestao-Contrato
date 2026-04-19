@@ -118,17 +118,17 @@ class CompradorAdmin(admin.ModelAdmin):
 
 @admin.register(ParametroSistema)
 class ParametroSistemaAdmin(admin.ModelAdmin):
-    list_display = ['chave', 'valor_admin', 'tipo', 'grupo', 'descricao', 'atualizado_em']
-    list_filter = ['grupo', 'tipo']
+    list_display = ['chave', 'valor_admin', 'tipo', 'grupo', 'modificado_manualmente', 'atualizado_em']
+    list_filter = ['grupo', 'tipo', 'modificado_manualmente']
     search_fields = ['chave', 'descricao']
     ordering = ['grupo', 'chave']
-    readonly_fields = ['atualizado_em']
+    readonly_fields = ['atualizado_em', 'modificado_manualmente']
     list_per_page = 50
 
     def get_readonly_fields(self, request, obj=None):
         if obj:
-            return ['chave', 'atualizado_em']
-        return ['atualizado_em']
+            return ['chave', 'atualizado_em', 'modificado_manualmente']
+        return ['atualizado_em', 'modificado_manualmente']
 
     fieldsets = (
         (None, {
@@ -139,7 +139,7 @@ class ParametroSistemaAdmin(admin.ModelAdmin):
             'description': 'Campos do tipo Senha/Token são exibidos mascarados na listagem.',
         }),
         ('Auditoria', {
-            'fields': ('atualizado_em',),
+            'fields': ('atualizado_em', 'modificado_manualmente'),
             'classes': ('collapse',),
         }),
     )
@@ -151,6 +151,7 @@ class ParametroSistemaAdmin(admin.ModelAdmin):
     valor_admin.short_description = 'Valor'
 
     def save_model(self, request, obj, form, change):
+        obj.modificado_manualmente = True
         super().save_model(request, obj, form, change)
         invalidar_cache()
 

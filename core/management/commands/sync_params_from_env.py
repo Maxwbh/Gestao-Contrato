@@ -3,11 +3,12 @@ Sincroniza parâmetros do .env com a tabela ParametroSistema.
 
 Comportamento padrão:
   - Atualiza apenas registros cujo valor no .env é não-vazio e diferente do default.
-  - Não sobrescreve valores já personalizados no banco, a menos que --force seja usado.
+  - NUNCA sobrescreve registros com modificado_manualmente=True (alterados pelo admin).
+  - Use --force para forçar a sobrescrita mesmo de valores alterados manualmente.
 
 Opções:
   --dry-run   Mostra o que seria alterado sem gravar.
-  --force     Atualiza todos os registros com o valor do .env, mesmo que já exista valor.
+  --force     Sobrescreve todos os registros, incluindo os alterados manualmente.
 """
 from django.core.management.base import BaseCommand
 from django.db import transaction
@@ -129,7 +130,8 @@ class Command(BaseCommand):
         parser.add_argument(
             '--force',
             action='store_true',
-            help='Atualiza todos os registros com o valor do .env, mesmo que o banco já tenha valor.',
+            help='Sobrescreve todos os registros com o valor do .env, '
+                 'inclusive os alterados manualmente pelo admin.',
         )
 
     def handle(self, *args, **options):
@@ -163,6 +165,11 @@ class Command(BaseCommand):
                     criados.append((chave, valor_env if tipo != 'secret' else '••••••••'))
                     continue
 
+                # Valores alterados manualmente pelo admin têm prioridade
+                if obj.modificado_manualmente and not force:
+                    ignorados.append((chave, 'alterado manualmente — use --force para sobrescrever'))
+                    continue
+
                 deve_atualizar = force or tem_valor_env
                 if deve_atualizar and obj.valor != valor_env:
                     valor_exibir = valor_env if tipo != 'secret' else '••••••••'
@@ -170,9 +177,10 @@ class Command(BaseCommand):
                     atualizados.append((chave, valor_anterior, valor_exibir))
                     if not dry_run:
                         obj.valor = valor_env
-                        obj.save(update_fields=['valor'])
+                        obj.modificado_manualmente = False
+                        obj.save(update_fields=['valor', 'modificado_manualmente'])
                 else:
-                    ignorados.append(chave)
+                    ignorados.append((chave, ''))
 
             if dry_run:
                 transaction.set_rollback(True)
@@ -188,8 +196,18 @@ class Command(BaseCommand):
             for chave, antes, depois in atualizados:
                 self.stdout.write(f'  ~ {chave}: "{antes}" → "{depois}"')
 
-        if ignorados:
-            self.stdout.write(self.style.HTTP_INFO(f'\nIgnorados (sem valor no .env ou já atualizados): {len(ignorados)}'))
+        protegidos = [(c, m) for c, m in ignorados if m]
+        sem_mudanca = [(c, m) for c, m in ignorados if not m]
+
+        if protegidos:
+            self.stdout.write(self.style.ERROR(f'\nProtegidos — alterados manualmente ({len(protegidos)}):'))
+            for chave, motivo in protegidos:
+                self.stdout.write(f'  ! {chave}: {motivo}')
+
+        if sem_mudanca:
+            self.stdout.write(self.style.HTTP_INFO(
+                f'\nSem alteração (valor igual ou .env com default): {len(sem_mudanca)}'
+            ))
 
         if not dry_run and atualizados:
             invalidar_cache()
