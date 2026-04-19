@@ -326,6 +326,13 @@ TASK_TOKEN = config('TASK_TOKEN', default=None)
 BRCOBRANCA_URL = config('BRCOBRANCA_URL', default='http://localhost:9292')
 SITE_URL = config('SITE_URL', default='http://localhost:8000')
 BRCOBRANCA_TIMEOUT = config('BRCOBRANCA_TIMEOUT', default=30, cast=int)
+
+# Portal do Comprador
+# Habilita verificação de e-mail no auto-cadastro (banner + envio de link).
+# Desative em ambientes sem SMTP configurado ou durante rollout gradual.
+#   PORTAL_EMAIL_VERIFICACAO=True   → exige confirmação, envia e-mail
+#   PORTAL_EMAIL_VERIFICACAO=False  → cadastro libera acesso imediato (padrão)
+PORTAL_EMAIL_VERIFICACAO = config('PORTAL_EMAIL_VERIFICACAO', default=False, cast=bool)
 BRCOBRANCA_MAX_TENTATIVAS = 3
 BRCOBRANCA_DELAY_INICIAL = 2  # segundos
 # Configurações de Índices Econômicos (APIs)
