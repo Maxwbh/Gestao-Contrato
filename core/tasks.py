@@ -29,33 +29,27 @@ from django.views.decorators.http import require_http_methods
 from django.conf import settings
 from django.db import transaction
 from core.permissions import task_api_rate_limit
+from core.parametros import get_param
 from notificacoes.services import _destinatario_email_teste
 
 logger = logging.getLogger(__name__)
-
-# Token para autenticação de tarefas (configurar via env var)
-TASK_TOKEN = getattr(settings, 'TASK_TOKEN', None)
 
 
 def task_auth_required(view_func):
     """
     Decorator que verifica autenticação por token para endpoints de tarefas.
-
-    O token deve ser enviado no header X-Task-Token ou como parâmetro 'token'.
-    Configure TASK_TOKEN nas variáveis de ambiente.
-    CSRF é dispensado porque estes endpoints usam autenticação por token (Bearer-style).
+    O token é lido de ParametroSistema a cada chamada (sem cache de módulo).
     """
     @wraps(view_func)
     def wrapper(request, *args, **kwargs):
-        # Verificar se TASK_TOKEN está configurado
-        if not TASK_TOKEN:
+        task_token = get_param('TASK_TOKEN')
+        if not task_token:
             logger.warning("TASK_TOKEN não configurado - tarefas desabilitadas")
             return JsonResponse({
                 'status': 'error',
-                'message': 'Tarefas não configuradas. Defina TASK_TOKEN nas variáveis de ambiente.'
+                'message': 'Tarefas não configuradas. Defina TASK_TOKEN em Parâmetros do Sistema.'
             }, status=503)
 
-        # Obter token do request
         token = request.headers.get('X-Task-Token') or request.GET.get('token')
 
         if not token:
@@ -64,7 +58,7 @@ def task_auth_required(view_func):
                 'message': 'Token de autenticação não fornecido'
             }, status=401)
 
-        if token != TASK_TOKEN:
+        if token != task_token:
             logger.warning(f"Tentativa de acesso com token inválido: {request.META.get('REMOTE_ADDR')}")
             return JsonResponse({
                 'status': 'error',
@@ -775,7 +769,7 @@ def task_status(request):
     Útil para verificar se o sistema de tarefas está configurado.
     """
     return JsonResponse({
-        'tasks_enabled': bool(TASK_TOKEN),
+        'tasks_enabled': bool(get_param('TASK_TOKEN')),
         'available_tasks': [
             {
                 'name': 'processar_reajustes',

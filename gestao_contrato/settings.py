@@ -217,44 +217,48 @@ CELERY_RESULT_SERIALIZER = 'json'
 CELERY_TIMEZONE = TIME_ZONE
 CELERY_BEAT_SCHEDULER = 'django_celery_beat.schedulers:DatabaseScheduler'
 
+# =============================================================================
+# Parâmetros operacionais — valores padrão (bootstrap)
+# Estes valores são usados apenas na primeira inicialização ou em testes.
+# Em produção, CoreConfig.ready() sobrescreve estas configurações com os
+# valores armazenados em ParametroSistema (banco de dados).
+# Para alterar em produção: Admin → Gestão Principal → Parâmetros do Sistema.
+# =============================================================================
+
 # Email Configuration
-EMAIL_BACKEND = config('EMAIL_BACKEND', default='django.core.mail.backends.console.EmailBackend')
-EMAIL_HOST = config('EMAIL_HOST', default='localhost')
-EMAIL_PORT = config('EMAIL_PORT', default=587, cast=int)
-EMAIL_USE_TLS = config('EMAIL_USE_TLS', default=True, cast=bool)
-EMAIL_USE_SSL = config('EMAIL_USE_SSL', default=False, cast=bool)
-EMAIL_HOST_USER = config('EMAIL_HOST_USER', default='')
-EMAIL_HOST_PASSWORD = config('EMAIL_HOST_PASSWORD', default='')
-DEFAULT_FROM_EMAIL = config('DEFAULT_FROM_EMAIL', default='noreply@gestaocontrato.com.br')
-EMAIL_TIMEOUT = config('EMAIL_TIMEOUT', default=10, cast=int)  # segundos — evita bloquear request por TCP timeout
+EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
+EMAIL_HOST = 'localhost'
+EMAIL_PORT = 587
+EMAIL_USE_TLS = True
+EMAIL_USE_SSL = False
+EMAIL_HOST_USER = ''
+EMAIL_HOST_PASSWORD = ''
+DEFAULT_FROM_EMAIL = 'noreply@gestaocontrato.com.br'
+EMAIL_TIMEOUT = 10
 
 # Twilio Configuration (SMS e WhatsApp)
-TWILIO_ACCOUNT_SID = config('TWILIO_ACCOUNT_SID', default='')
-TWILIO_AUTH_TOKEN = config('TWILIO_AUTH_TOKEN', default='')
-TWILIO_PHONE_NUMBER = config('TWILIO_PHONE_NUMBER', default='')
-TWILIO_WHATSAPP_NUMBER = config('TWILIO_WHATSAPP_NUMBER', default='')
-TWILIO_STATUS_CALLBACK_URL = config('TWILIO_STATUS_CALLBACK_URL', default='')
+TWILIO_ACCOUNT_SID = ''
+TWILIO_AUTH_TOKEN = ''
+TWILIO_PHONE_NUMBER = ''
+TWILIO_WHATSAPP_NUMBER = ''
+TWILIO_STATUS_CALLBACK_URL = ''
 
 # Bounce Monitoring (IMAP)
-BOUNCE_EMAIL_ADDRESS = config('BOUNCE_EMAIL_ADDRESS', default='')
-BOUNCE_IMAP_HOST = config('BOUNCE_IMAP_HOST', default='imap.zoho.com')
-BOUNCE_IMAP_PORT = config('BOUNCE_IMAP_PORT', default=993, cast=int)
-BOUNCE_IMAP_USER = config('BOUNCE_IMAP_USER', default='')
-BOUNCE_IMAP_PASSWORD = config('BOUNCE_IMAP_PASSWORD', default='')
-BOUNCE_IMAP_FOLDER = config('BOUNCE_IMAP_FOLDER', default='INBOX')
+BOUNCE_EMAIL_ADDRESS = ''
+BOUNCE_IMAP_HOST = 'imap.zoho.com'
+BOUNCE_IMAP_PORT = 993
+BOUNCE_IMAP_USER = ''
+BOUNCE_IMAP_PASSWORD = ''
+BOUNCE_IMAP_FOLDER = 'INBOX'
 
 # Supabase (acesso direto via cliente Python, se necessário)
 SUPABASE_URL = config('SUPABASE_URL', default='')
 SUPABASE_KEY = config('SUPABASE_KEY', default='')
 
-# =============================================================================
-# MODO DE TESTE — Safeguard para ambiente de desenvolvimento
-# Quando TEST_MODE=True, TODOS os e-mails e SMS/WhatsApp são redirecionados
-# para os endereços de teste abaixo, independente do destinatário real.
-# =============================================================================
-TEST_MODE = config('TEST_MODE', default=False, cast=bool)
-TEST_RECIPIENT_EMAIL = config('TEST_RECIPIENT_EMAIL', default='receber@msbrasil.inf.br')
-TEST_RECIPIENT_PHONE = config('TEST_RECIPIENT_PHONE', default='+5531993257479')
+# Modo de Teste
+TEST_MODE = False
+TEST_RECIPIENT_EMAIL = 'receber@msbrasil.inf.br'
+TEST_RECIPIENT_PHONE = '+5531993257479'
 
 # =============================================================================
 # REST FRAMEWORK (DRF) + drf-spectacular (Swagger/OpenAPI)
@@ -303,43 +307,30 @@ SPECTACULAR_SETTINGS = {
     'SORT_OPERATIONS': False,
 }
 
-# Configurações de Notificação
-NOTIFICACAO_DIAS_ANTECEDENCIA = config('NOTIFICACAO_DIAS_ANTECEDENCIA', default=5, cast=int)
-# Dias de atraso para disparar notificação de inadimplência (N-02)
-NOTIFICACAO_DIAS_INADIMPLENCIA = config('NOTIFICACAO_DIAS_INADIMPLENCIA', default=3, cast=int)
+# Notificações
+NOTIFICACAO_DIAS_ANTECEDENCIA = 5
+NOTIFICACAO_DIAS_INADIMPLENCIA = 3
 
-# =============================================================================
-# RENDER FREE TIER - Configuração de Tarefas Agendadas
-# =============================================================================
-# Como o Celery não está disponível no Free tier, usamos endpoints HTTP
-# protegidos por token que podem ser chamados por cron jobs externos.
-# Configure um cron job em https://cron-job.org (gratuito) para chamar
-# POST /api/tasks/run-all/ com o header X-Task-Token
-TASK_TOKEN = config('TASK_TOKEN', default=None)
+# Tarefas Agendadas
+TASK_TOKEN = None
 
-# =============================================================================
-# BRCOBRANÇA - Configuração para Geração de Boletos
-# =============================================================================
-# BRCobrança é uma API Ruby para geração de boletos bancários.
-# Rode o container Docker: docker run -p 9292:9292 kivanio/brcobranca
-# Documentação: https://github.com/kivanio/brcobranca
-BRCOBRANCA_URL = config('BRCOBRANCA_URL', default='http://localhost:9292')
-SITE_URL = config('SITE_URL', default='http://localhost:8000')
-BRCOBRANCA_TIMEOUT = config('BRCOBRANCA_TIMEOUT', default=30, cast=int)
+# BRCobrança
+BRCOBRANCA_URL = 'http://localhost:9292'
+BRCOBRANCA_TIMEOUT = 30
+BRCOBRANCA_MAX_TENTATIVAS = 3
+BRCOBRANCA_DELAY_INICIAL = 2
 
 # Portal do Comprador
-# Habilita verificação de e-mail no auto-cadastro (banner + envio de link).
-# Desative em ambientes sem SMTP configurado ou durante rollout gradual.
-#   PORTAL_EMAIL_VERIFICACAO=True   → exige confirmação, envia e-mail
-#   PORTAL_EMAIL_VERIFICACAO=False  → cadastro libera acesso imediato (padrão)
-PORTAL_EMAIL_VERIFICACAO = config('PORTAL_EMAIL_VERIFICACAO', default=False, cast=bool)
-BRCOBRANCA_MAX_TENTATIVAS = 3
-BRCOBRANCA_DELAY_INICIAL = 2  # segundos
-# Configurações de Índices Econômicos (APIs)
+PORTAL_EMAIL_VERIFICACAO = False
+
+# Aplicação
+SITE_URL = 'http://localhost:8000'
+
+# APIs BCB — Índices Econômicos
 BCBAPI_URL = 'https://api.bcb.gov.br/dados/serie/bcdata.sgs.{}/dados'
-IPCA_SERIE_ID = '433'  # Código do IPCA no BCB
-IGPM_SERIE_ID = '189'  # Código do IGP-M no BCB
-SELIC_SERIE_ID = '432'  # Código da SELIC no BCB
+IPCA_SERIE_ID = '433'
+IGPM_SERIE_ID = '189'
+SELIC_SERIE_ID = '432'
 
 # Logging Configuration
 LOGGING = {

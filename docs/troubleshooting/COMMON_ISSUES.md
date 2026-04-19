@@ -67,7 +67,7 @@ Se o erro persistir após o último commit:
 ### Opção 1: Via Dashboard
 1. Acesse o serviço **gestao-contrato-web**
 2. Clique em **"Manual Deploy"**
-3. Selecione o branch: `claude/update-developer-docs-01TGF4Y9D8H9JukuLRBxgQct`
+3. Selecione o branch: `master`
 4. Clique em **"Deploy"**
 
 ### Opção 2: Via Shell (se o serviço subir)
@@ -183,7 +183,7 @@ Clone o repositório e teste local:
 ```bash
 git clone https://github.com/Maxwbh/Gestao-Contrato.git
 cd Gestao-Contrato
-git checkout claude/update-developer-docs-01TGF4Y9D8H9JukuLRBxgQct
+git checkout master
 
 pip install -r requirements.txt
 python manage.py migrate
