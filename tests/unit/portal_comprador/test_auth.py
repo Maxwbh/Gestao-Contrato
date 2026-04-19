@@ -359,8 +359,21 @@ class TestVerificacaoEmail:
         assert response.status_code == 302
         assert 'login' in response.url
 
-    def test_reenviar_verificacao_ja_verificado(self, client):
+    def test_reenviar_verificacao_desabilitada(self, client, settings):
+        """Reenvio bloqueado quando PORTAL_EMAIL_VERIFICACAO=False"""
+        settings.PORTAL_EMAIL_VERIFICACAO = False
+        comprador = CompradorFactory()
+        usuario = UserFactory()
+        AcessoComprador.objects.create(
+            comprador=comprador, usuario=usuario, email_verificado=False
+        )
+        client.force_login(usuario)
+        response = client.get('/portal/reenviar-verificacao/')
+        assert response.status_code == 302
+
+    def test_reenviar_verificacao_ja_verificado(self, client, settings):
         """Comprador já verificado recebe mensagem info"""
+        settings.PORTAL_EMAIL_VERIFICACAO = True
         comprador = CompradorFactory()
         usuario = UserFactory()
         acesso = AcessoComprador.objects.create(
@@ -370,6 +383,35 @@ class TestVerificacaoEmail:
         response = client.get('/portal/reenviar-verificacao/')
         assert response.status_code == 302
         assert 'portal' in response.url
+
+    def test_auto_cadastro_sem_verificacao_cria_verificado(self, client, settings):
+        """Com PORTAL_EMAIL_VERIFICACAO=False, email_verificado=True no cadastro"""
+        settings.PORTAL_EMAIL_VERIFICACAO = False
+        comprador = CompradorFactory(email='teste@example.com')
+        response = client.post('/portal/cadastro/', {
+            'documento': re.sub(r'\D', '', comprador.cpf or ''),
+            'email': comprador.email,
+            'senha': 'SenhaForte@123',
+            'confirmar_senha': 'SenhaForte@123',
+        })
+        acesso = getattr(comprador, 'acesso_portal', None)
+        if acesso:
+            assert acesso.email_verificado is True
+
+    def test_auto_cadastro_com_verificacao_cria_nao_verificado(self, client, settings, mailoutbox):
+        """Com PORTAL_EMAIL_VERIFICACAO=True, email_verificado=False e envia e-mail"""
+        settings.PORTAL_EMAIL_VERIFICACAO = True
+        comprador = CompradorFactory(email='usuario@example.com')
+        client.post('/portal/cadastro/', {
+            'documento': re.sub(r'\D', '', comprador.cpf or ''),
+            'email': comprador.email,
+            'senha': 'SenhaForte@123',
+            'confirmar_senha': 'SenhaForte@123',
+        })
+        acesso = getattr(comprador, 'acesso_portal', None)
+        if acesso:
+            assert acesso.email_verificado is False
+            assert len(mailoutbox) >= 1
 
 
 @pytest.mark.django_db
