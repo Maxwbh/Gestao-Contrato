@@ -456,7 +456,9 @@ def enviar_inadimplentes_sync():
             for regra in regras:
                 _processar_regra(regra, result)
         else:
-            # Fallback N-02: >= D+3 padrão
+            # Fallback N-02: exatamente D+N (mesma lógica de data_alvo do N-03)
+            # Usa data_vencimento=data_corte para disparar UMA VEZ no dia exato,
+            # evitando reenvio diário para parcelas com atraso acumulado.
             PREFIXO = '[INADIMPLENCIA]'
             dias_carencia = getattr(settings, 'NOTIFICACAO_DIAS_INADIMPLENCIA', 3)
             hoje = date.today()
@@ -465,11 +467,11 @@ def enviar_inadimplentes_sync():
             parcelas = Parcela.objects.filter(
                 pago=False,
                 tipo_parcela='NORMAL',
-                data_vencimento__lte=data_corte,
+                data_vencimento=data_corte,
             ).select_related('contrato', 'contrato__comprador', 'contrato__imobiliaria')
 
             result.add_message(
-                f"N-02 (padrão): {parcelas.count()} parcelas em atraso (>= D+{dias_carencia})"
+                f"N-02 (padrão): {parcelas.count()} parcelas em atraso (D+{dias_carencia})"
             )
 
             for parcela in parcelas:
