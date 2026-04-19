@@ -1035,20 +1035,26 @@ class Command(BaseCommand):
         """
         Gera índices de reajuste mensais para os últimos 36 meses.
         Valores baseados em médias históricas reais.
+        Popula numero_indice para exercitar o caminho de cálculo exato
+        em IndiceReajuste.get_acumulado_periodo() (Método 1).
         """
         count = 0
         hoje = timezone.now().date()
 
-        # Configuração dos índices com médias históricas aproximadas
+        # Configuração: (tipo, min_var%, max_var%, fonte, numero_indice_base)
+        # Bases aproximadas de valores reais publicados (referência: jan 36 meses atrás)
         indices_config = [
-            ('IPCA', 0.30, 0.80, 'IBGE/SIDRA'),      # IPCA: 0.3% a 0.8%
-            ('IGPM', 0.20, 1.00, 'BCB/FGV'),         # IGP-M: 0.2% a 1.0%
-            ('INCC', 0.25, 0.70, 'BCB/FGV'),         # INCC: 0.25% a 0.7%
-            ('IGPDI', 0.20, 0.90, 'BCB/FGV'),        # IGP-DI: 0.2% a 0.9%
-            ('INPC', 0.25, 0.75, 'IBGE/SIDRA'),      # INPC: 0.25% a 0.75%
-            ('TR', 0.00, 0.15, 'BCB'),               # TR: 0% a 0.15%
-            ('SELIC', 0.80, 1.10, 'BCB'),            # SELIC: 0.8% a 1.1%
+            ('IPCA',  0.30, 0.80, 'IBGE/SIDRA', Decimal('6000.0000')),
+            ('IGPM',  0.20, 1.00, 'BCB/FGV',    Decimal('3000.0000')),
+            ('INCC',  0.25, 0.70, 'BCB/FGV',    Decimal('2000.0000')),
+            ('IGPDI', 0.20, 0.90, 'BCB/FGV',    Decimal('2500.0000')),
+            ('INPC',  0.25, 0.75, 'IBGE/SIDRA', Decimal('5500.0000')),
+            ('TR',    0.00, 0.15, 'BCB',         Decimal('3.0000')),
+            ('SELIC', 0.80, 1.10, 'BCB',         Decimal('100.0000')),
         ]
+
+        # numero_indice corrente por tipo (começa um mês antes do período)
+        numero_indice_atual = {tipo: base for tipo, *_, base in indices_config}
 
         # Gerar últimos 36 meses (usa relativedelta para datas precisas)
         from dateutil.relativedelta import relativedelta
@@ -1057,11 +1063,14 @@ class Command(BaseCommand):
             ano = data.year
             mes = data.month
 
-            for tipo, min_val, max_val, fonte in indices_config:
-                # Gerar valor aleatório dentro da faixa
+            for tipo, min_val, max_val, fonte, _ in indices_config:
                 valor = Decimal(str(round(random.uniform(min_val, max_val), 4)))
 
-                # Calcular acumulado no ano (simplificado)
+                # Avançar numero_indice: C(t) = C(t-1) × (1 + valor/100)
+                numero_indice_atual[tipo] = (
+                    numero_indice_atual[tipo] * (1 + valor / 100)
+                ).quantize(Decimal('0.0001'))
+
                 acum_ano = None
                 if mes > 1:
                     indices_ano = IndiceReajuste.objects.filter(
@@ -1082,6 +1091,7 @@ class Command(BaseCommand):
                         'valor': valor,
                         'valor_acumulado_ano': acum_ano,
                         'valor_acumulado_12m': None,
+                        'numero_indice': numero_indice_atual[tipo],
                         'fonte': f'{fonte} (teste)',
                         'data_importacao': timezone.now(),
                     }
