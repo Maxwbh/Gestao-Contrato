@@ -862,8 +862,8 @@ class BoletoService:
                 # - raw:       sequencial bruto isolado (sem convênio, sem DV)     → comparação numérica
                 # - dv:        dígito verificador isolado                          → validação
                 nosso_numero_formatado = resultado.get('nosso_numero_api') or str(nosso_numero)
-                nosso_numero_raw       = resultado.get('nosso_numero_raw') or str(nosso_numero)
-                nosso_numero_dv        = resultado.get('nosso_numero_dv', '')
+                nosso_numero_raw = resultado.get('nosso_numero_raw') or str(nosso_numero)
+                nosso_numero_dv = resultado.get('nosso_numero_dv', '')
 
                 if resultado.get('nosso_numero_api'):
                     logger.info(f"Usando nosso_numero da API: {nosso_numero_formatado}")
@@ -1527,12 +1527,12 @@ class BoletoService:
 
             # PR#33: headers X-* já trazem os dados na mesma resposta binária,
             # eliminando a segunda chamada para /api/boleto/data.
-            linha_digitavel  = response.headers.get('X-Linha-Digitavel', '')
-            codigo_barras    = response.headers.get('X-Codigo-Barras', '')
+            linha_digitavel = response.headers.get('X-Linha-Digitavel', '')
+            codigo_barras = response.headers.get('X-Codigo-Barras', '')
             nosso_numero_api = response.headers.get('X-Nosso-Numero-Formatado', '')
             # Campos separados para conciliação (CNAB / OFX):
             nosso_numero_raw = response.headers.get('X-Nosso-Numero', '')
-            nosso_numero_dv  = response.headers.get('X-Nosso-Numero-DV', '')
+            nosso_numero_dv = response.headers.get('X-Nosso-Numero-DV', '')
 
             if linha_digitavel and nosso_numero_api:
                 logger.info("Dados obtidos via headers X-* (PR#33)")
@@ -1540,11 +1540,11 @@ class BoletoService:
                 # Fallback: API antiga (< PR#33) — segunda chamada a /api/boleto/data
                 logger.info("Obtendo linha digitavel e codigo de barras via /api/boleto/data")
                 dados_extras = self._obter_dados_boleto(banco_nome, dados_boleto)
-                linha_digitavel  = linha_digitavel  or dados_extras.get('linha_digitavel', '')
-                codigo_barras    = codigo_barras    or dados_extras.get('codigo_barras', '')
+                linha_digitavel = linha_digitavel or dados_extras.get('linha_digitavel', '')
+                codigo_barras = codigo_barras or dados_extras.get('codigo_barras', '')
                 nosso_numero_api = nosso_numero_api or dados_extras.get('nosso_numero_formatado', '')
                 nosso_numero_raw = nosso_numero_raw or dados_extras.get('nosso_numero', '')
-                nosso_numero_dv  = nosso_numero_dv  or dados_extras.get('nosso_numero_dv', '')
+                nosso_numero_dv = nosso_numero_dv or dados_extras.get('nosso_numero_dv', '')
 
             if linha_digitavel and codigo_barras:
                 logger.info(f"Dados obtidos — linha_digitavel: {linha_digitavel[:20]}..., codigo_barras: {codigo_barras[:20]}...")
