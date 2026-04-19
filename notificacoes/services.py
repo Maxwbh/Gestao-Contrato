@@ -266,7 +266,8 @@ class ServicoWhatsApp:
     @staticmethod
     def _enviar_meta(destinatario, mensagem, config):
         """Meta (Cloud API) — envia texto simples via /messages."""
-        import urllib.request, json as _json
+        import urllib.request
+        import json as _json
         numero = ServicoWhatsApp._normalizar_numero(destinatario).lstrip('+')
         payload = {
             "messaging_product": "whatsapp",
@@ -302,7 +303,8 @@ class ServicoWhatsApp:
         Headers: apikey: <config.api_key>
         Body: {"number": "<numero>", "text": "<mensagem>"}
         """
-        import urllib.request, json as _json
+        import urllib.request
+        import json as _json
         if not all([config.api_url, config.api_key, config.instancia]):
             raise ValueError("Evolution API: api_url, api_key e instancia são obrigatórios")
 
@@ -338,7 +340,8 @@ class ServicoWhatsApp:
         Header: Client-Token: <config.client_token>
         Body: {"phone": "<numero>", "message": "<mensagem>"}
         """
-        import urllib.request, json as _json
+        import urllib.request
+        import json as _json
         if not all([config.api_url, config.api_key, config.instancia]):
             raise ValueError("Z-API: api_url, api_key e instancia são obrigatórios")
 

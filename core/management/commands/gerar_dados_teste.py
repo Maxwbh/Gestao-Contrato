@@ -157,8 +157,8 @@ class Command(BaseCommand):
             pj_count = len([c for c in compradores if c.tipo_pessoa == 'PJ'])
 
             self.stdout.write(self.style.SUCCESS('\n✅ Dados gerados com sucesso!'))
-            self.stdout.write(self.style.SUCCESS(f'   • 1 Contabilidade'))
-            self.stdout.write(self.style.SUCCESS(f'   • 2 Imobiliárias'))
+            self.stdout.write(self.style.SUCCESS('   • 1 Contabilidade'))
+            self.stdout.write(self.style.SUCCESS('   • 2 Imobiliárias'))
             self.stdout.write(self.style.SUCCESS(f'   • {len(contas_bancarias)} Contas Bancárias'))
             self.stdout.write(self.style.SUCCESS(f'   • {len(lotes)} Lotes'))
             self.stdout.write(self.style.SUCCESS(f'   • {len(terrenos)} Terrenos'))
@@ -702,7 +702,7 @@ class Command(BaseCommand):
                 intermediarias_reajustadas=random.random() < 0.7,
                 tipo_amortizacao='SAC' if random.random() < 0.25 else 'PRICE',
                 status=StatusContrato.ATIVO,
-                observacoes=f'Contrato gerado automaticamente para teste'
+                observacoes='Contrato gerado automaticamente para teste'
             )
             contratos.append(contrato)
 
@@ -1446,7 +1446,7 @@ class Command(BaseCommand):
             )
             count += 1
 
-        self.stdout.write(f'   → Senha padrão para acessos de teste: teste123')
+        self.stdout.write('   → Senha padrão para acessos de teste: teste123')
         return count
 
     def criar_reajustes_aplicados(self, contratos):

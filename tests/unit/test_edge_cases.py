@@ -10,8 +10,6 @@ from decimal import Decimal
 from tests.fixtures.factories import (
     ContratoFactory,
     ParcelaFactory,
-    ImobiliariaFactory,
-    ContaBancariaFactory,
     ReajusteFactory,
 )
 
@@ -155,7 +153,7 @@ class TestReajusteEdgeCases:
     def test_reajuste_percentual_zero(self, db):
         """Reajuste com percentual 0% não altera valores das parcelas"""
         contrato = ContratoFactory(numero_parcelas=12)
-        valor_antes = contrato.parcelas.order_by('numero_parcela').first().valor_atual
+        contrato.parcelas.order_by('numero_parcela').first().valor_atual
 
         reajuste = ReajusteFactory(
             contrato=contrato,

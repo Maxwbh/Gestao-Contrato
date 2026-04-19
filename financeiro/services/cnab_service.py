@@ -136,6 +136,7 @@ class CNABService:
         3. Exact match global
         4. endswith(stripped) global
         """
+        from financeiro.models import Parcela
         nn_stripped = nosso_numero.lstrip('0') if nosso_numero else ''
 
         if conta_bancaria:
