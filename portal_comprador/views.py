@@ -14,8 +14,6 @@ from django.contrib.auth.decorators import login_required
 from django.contrib.auth.models import User
 from django.contrib import messages
 from django.http import JsonResponse, HttpResponse, FileResponse
-from django.views.generic import TemplateView
-from django.contrib.auth.mixins import LoginRequiredMixin
 from django.views.decorators.http import require_POST, require_GET
 from django.utils import timezone
 from django.core.paginator import Paginator
@@ -27,13 +25,9 @@ from django.urls import reverse
 from django.db.models import Sum, Count, Q
 from decimal import Decimal
 from datetime import timedelta
-import re
 import time
 import logging
 
-logger = logging.getLogger(__name__)
-
-from core.models import Comprador
 from contratos.models import Contrato
 from core.permissions import portal_rate_limit
 from financeiro.models import Parcela
@@ -43,6 +37,8 @@ from .forms import (
     AutoCadastroForm, LoginCompradorForm,
     DadosPessoaisForm, AlterarSenhaCompradorForm
 )
+
+logger = logging.getLogger(__name__)
 
 
 def get_client_ip(request):
@@ -922,7 +918,6 @@ def api_portal_boletos(request):
     if not comprador:
         return JsonResponse({'erro': 'Acesso não autorizado'}, status=403)
 
-    hoje = timezone.now().date()
     qs = Parcela.objects.select_related(
         'contrato', 'contrato__imovel'
     ).filter(

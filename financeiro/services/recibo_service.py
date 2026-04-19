@@ -14,19 +14,18 @@ from datetime import date
 
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.units import cm
-from reportlab.lib.colors import black, white, HexColor
-from reportlab.pdfgen import canvas
+from reportlab.lib.colors import white, HexColor
 from reportlab.platypus import (
     SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, HRFlowable
 )
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-from reportlab.lib.enums import TA_CENTER, TA_RIGHT, TA_LEFT
+from reportlab.lib.enums import TA_CENTER, TA_RIGHT
 
 # ─── Cores ────────────────────────────────────────────────────────────────────
-AZUL        = HexColor('#1a3a5c')
-AZUL_CLARO  = HexColor('#e8f0f8')
-VERDE       = HexColor('#1b5e20')
-CINZA       = HexColor('#616161')
+AZUL = HexColor('#1a3a5c')
+AZUL_CLARO = HexColor('#e8f0f8')
+VERDE = HexColor('#1b5e20')
+CINZA = HexColor('#616161')
 CINZA_LINHA = HexColor('#e0e0e0')
 
 PAGE_W, PAGE_H = A4
@@ -67,21 +66,19 @@ def gerar_recibo_antecipacao_pdf(contrato, historicos) -> bytes:
     )
 
     styles = getSampleStyleSheet()
-    bold   = ParagraphStyle('bold',   parent=styles['Normal'], fontName='Helvetica-Bold')
+    bold = ParagraphStyle('bold', parent=styles['Normal'], fontName='Helvetica-Bold')
     normal = ParagraphStyle('normal', parent=styles['Normal'], fontSize=9)
-    small  = ParagraphStyle('small',  parent=styles['Normal'], fontSize=8, textColor=CINZA)
-    titulo = ParagraphStyle('titulo', parent=styles['Normal'], fontSize=16,
-                            fontName='Helvetica-Bold', textColor=AZUL, alignment=TA_CENTER)
+    small = ParagraphStyle('small', parent=styles['Normal'], fontSize=8, textColor=CINZA)
     centro = ParagraphStyle('centro', parent=styles['Normal'], fontSize=9, alignment=TA_CENTER)
-    right  = ParagraphStyle('right',  parent=styles['Normal'], fontSize=9, alignment=TA_RIGHT)
+    right = ParagraphStyle('right', parent=styles['Normal'], fontSize=9, alignment=TA_RIGHT)
 
     story = []
 
     # ─── Cabeçalho ────────────────────────────────────────────────────────────
-    imob   = contrato.imobiliaria
+    imob = contrato.imobiliaria
     nome_empresa = imob.nome if imob else 'Imobiliária'
     cnpj_empresa = getattr(imob, 'cnpj', '') or ''
-    end_empresa  = getattr(imob, 'endereco', '') or ''
+    end_empresa = getattr(imob, 'endereco', '') or ''
 
     cab_data = [
         [Paragraph(f'<b>{nome_empresa}</b>', ParagraphStyle('eh', fontSize=13, fontName='Helvetica-Bold', textColor=AZUL)),
@@ -100,9 +97,9 @@ def gerar_recibo_antecipacao_pdf(contrato, historicos) -> bytes:
     story.append(HRFlowable(width='100%', thickness=2, color=AZUL, spaceAfter=8))
 
     # ─── Dados do contrato / comprador ────────────────────────────────────────
-    comprador  = contrato.comprador
-    nome_comp  = comprador.nome if comprador else '—'
-    doc_comp   = ''
+    comprador = contrato.comprador
+    nome_comp = comprador.nome if comprador else '—'
+    doc_comp = ''
     if comprador:
         doc_comp = getattr(comprador, 'cpf', '') or getattr(comprador, 'cnpj', '') or ''
 
@@ -146,10 +143,9 @@ def gerar_recibo_antecipacao_pdf(contrato, historicos) -> bytes:
     ]
 
     rows = [header]
-    total_original   = Decimal('0')
-    total_desconto   = Decimal('0')
-    total_pago       = Decimal('0')
-    desconto_perc    = Decimal('0')
+    total_original = Decimal('0')
+    total_desconto = Decimal('0')
+    total_pago = Decimal('0')
 
     for h in historicos:
         parcela = h.parcela
@@ -158,7 +154,7 @@ def gerar_recibo_antecipacao_pdf(contrato, historicos) -> bytes:
         vp = h.valor_pago or Decimal('0')
         total_original += vo
         total_desconto += vd
-        total_pago     += vp
+        total_pago += vp
 
         row = [
             Paragraph(str(parcela.numero_parcela), normal),

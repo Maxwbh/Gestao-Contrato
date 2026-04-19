@@ -5,13 +5,12 @@ Desenvolvedor: Maxwell da Silva Oliveira <maxwbh@gmail.com>
 """
 
 import pytest
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 from django.utils import timezone
 from datetime import timedelta
 
 from notificacoes.models import Notificacao, TipoNotificacao, StatusNotificacao
 from notificacoes.tasks import (
-    enviar_notificacoes_vencimento,
     processar_notificacoes_pendentes,
     reenviar_notificacao,
 )
@@ -80,7 +79,7 @@ class TestProcessarNotificacoesPendentes:
             data_agendamento=timezone.now() - timedelta(minutes=5)
         )
 
-        resultado = processar_notificacoes_pendentes()
+        processar_notificacoes_pendentes()
 
         notif.refresh_from_db()
         assert notif.status == StatusNotificacao.ERRO
