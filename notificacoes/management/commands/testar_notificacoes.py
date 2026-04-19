@@ -101,7 +101,7 @@ class Command(BaseCommand):
                 '  → Defina EMAIL_BACKEND=django.core.mail.backends.smtp.EmailBackend no .env'
             )
         else:
-            self._ok(f'EMAIL_BACKEND configurado para SMTP')
+            self._ok('EMAIL_BACKEND configurado para SMTP')
 
         # ------------------------------------------------------------------ #
         # 2. ConfiguracaoEmail no banco de dados

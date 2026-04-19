@@ -574,7 +574,7 @@ class Parcela(TimeStampedModel):
         Returns:
             dict: Dicionário com valores calculados e configurações
         """
-        from datetime import date, timedelta
+        from datetime import date
 
         hoje = date.today()
         config = self.contrato.get_config_boleto()

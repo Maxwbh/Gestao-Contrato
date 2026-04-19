@@ -18,6 +18,7 @@ from django.views.generic import ListView, CreateView, UpdateView, DeleteView
 from django.urls import reverse_lazy
 from django.contrib import messages
 from datetime import datetime, timedelta
+from django.utils import timezone
 from .mixins import PaginacaoMixin
 from .models import (
     Contabilidade, Imobiliaria, Imovel, Comprador, TipoImovel,
@@ -179,9 +180,6 @@ def index(request):
 @login_required
 def dashboard(request):
     """Dashboard principal com estatísticas"""
-    from datetime import timedelta
-    from django.utils import timezone
-    from django.db.models import Sum, Q
     from contratos.models import Contrato, StatusContrato
     from financeiro.models import Parcela
 
@@ -307,7 +305,7 @@ def setup(request):
                     has_superuser = get_user_model().objects.filter(is_superuser=True).exists()
                     total_contas_bancarias = ContaBancaria.objects.count()
                     total_imobiliarias = Imobiliaria.objects.count()
-                except:
+                except Exception:
                     total_contabilidades = 0
                     total_users = 0
                     has_superuser = False
@@ -490,7 +488,7 @@ def gerar_dados_teste(request):
             try:
                 data = json.loads(request.body)
                 limpar = data.get('limpar', False)
-            except:
+            except Exception:
                 limpar = False
         else:
             limpar = request.POST.get('limpar', 'false').lower() == 'true'
@@ -601,7 +599,7 @@ def limpar_dados_teste(request):
             try:
                 data = json.loads(request.body)
                 confirmar = data.get('confirmar', False)
-            except:
+            except Exception:
                 confirmar = False
         else:
             confirmar = request.POST.get('confirmar', 'false').lower() == 'true'
@@ -1836,4 +1834,3 @@ def api_poligono_imovel(request, pk):
 
     VerticePoligono.objects.bulk_create(novos)
     return JsonResponse({'ok': True, 'salvos': len(novos)})
-

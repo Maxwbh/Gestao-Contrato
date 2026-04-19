@@ -191,7 +191,7 @@ class Command(BaseCommand):
                 self.stdout.write(f'  + {chave} = {val}')
 
         if atualizados:
-            label = '[DRY-RUN] Seriam atualizados' if dry_run else f'Atualizados'
+            label = '[DRY-RUN] Seriam atualizados' if dry_run else 'Atualizados'
             self.stdout.write(self.style.WARNING(f'\n{label} ({len(atualizados)}):'))
             for chave, antes, depois in atualizados:
                 self.stdout.write(f'  ~ {chave}: "{antes}" → "{depois}"')

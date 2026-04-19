@@ -1306,7 +1306,8 @@ def download_zip_boletos(request, contrato_id):
     Download em ZIP de todos os boletos com PDF de um contrato.
     POST opcionalmente com lista de parcela_ids para filtrar.
     """
-    import io, zipfile
+    import io
+    import zipfile
 
     from contratos.models import Contrato
     contrato = get_object_or_404(Contrato, pk=contrato_id)
@@ -3268,7 +3269,7 @@ def aplicar_reajuste_contrato(request, contrato_id):
 
 @login_required
 @require_POST
-def aplicar_reajuste_contrato(request, contrato_id):
+def aplicar_reajuste_contrato(request, contrato_id):  # noqa: F811
     """
     Aplica o reajuste nas parcelas de um contrato.
 
@@ -5904,7 +5905,16 @@ def api_boletos_revalidar(request):
 @login_required
 def api_cnab_remessa_listar(request):
     """API para listar remessas CNAB. GET /api/cnab/remessas/"""
+    import json
     from .models import ArquivoRemessa
+
+    CAMPOS_OBRIG_BANCO = {
+        '001': ['convenio'],
+        '033': ['convenio'],
+        '104': ['convenio'],
+        '748': ['posto', 'byte_idt'],
+        '756': [],
+    }
 
     qs = ArquivoRemessa.objects.select_related('conta_bancaria', 'conta_bancaria__imobiliaria').order_by('-data_geracao')
 
@@ -6030,7 +6040,7 @@ def api_cnab_remessa_listar(request):
 # =============================================================================
 
 @login_required
-def api_cnab_remessa_listar(request):
+def api_cnab_remessa_listar(request):  # noqa: F811
     """API para listar remessas CNAB. GET /api/cnab/remessas/"""
     from .models import ArquivoRemessa
 

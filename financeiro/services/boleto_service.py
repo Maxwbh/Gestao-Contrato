@@ -28,7 +28,7 @@ import time
 import re
 from decimal import Decimal
 from datetime import date, timedelta
-from django.conf import settings 
+from django.conf import settings
 from django.utils import timezone
 from urllib.parse import urlencode
 
@@ -648,7 +648,7 @@ class BoletoService:
              # Codigo do banco para validacoes posteriores
              'codigo_banco': codigo_banco,
          }
- 
+
         # Adicionar campos especificos por banco (usa codigo_banco ja existente)
         # Banco do Brasil (001)
         if codigo_banco == '001':
@@ -1290,7 +1290,7 @@ class BoletoService:
             except re.error:
                 # padrao invalido na configuracao -> usar default seguro
                 if not re.match(default_pattern + r'\Z', numero_documento):
-                    erros.append(f"Numero do documento invalido: caracteres nao permitidos")
+                    erros.append("Numero do documento invalido: caracteres nao permitidos")
 
             maxlen = maxlens.get(codigo_banco) or maxlens.get('default')
             if maxlen:
@@ -1341,7 +1341,7 @@ class BoletoService:
 
             if response.status_code == 200:
                 data = response.json()
-                logger.info(f"Dados do boleto obtidos via /api/boleto/data")
+                logger.info("Dados do boleto obtidos via /api/boleto/data")
                 return {
                     'linha_digitavel': data.get('linha_digitavel', ''),
                     'codigo_barras': data.get('codigo_barras', ''),
@@ -1417,7 +1417,7 @@ class BoletoService:
             error_data = response.json()
             if isinstance(error_data, dict):
                 return error_data.get('error', error_data.get('message', response.text))
-        except:
+        except Exception:
             pass
 
         return response.text or f"Erro HTTP {response.status_code}"
