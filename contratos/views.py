@@ -13,7 +13,7 @@ from django.urls import reverse_lazy
 from django.contrib import messages
 from django.db import models
 from django.db.models import Q, Sum
-from .models import Contrato, StatusContrato, IndiceReajuste
+from .models import Contrato, StatusContrato, IndiceReajuste, PrestacaoIntermediaria, TabelaJurosContrato
 from .forms import ContratoForm, IndiceReajusteForm
 from core.mixins import PaginacaoMixin
 import requests
@@ -111,8 +111,9 @@ class ContratoListView(LoginRequiredMixin, PaginacaoMixin, ListView):
             proxima_data_reajuste = data_base + relativedelta(months=contrato.prazo_reajuste_meses)
 
             # Se a próxima data de reajuste é no mês corrente ou já passou
-            if (proxima_data_reajuste.year < hoje.year or
-                (proxima_data_reajuste.year == hoje.year and proxima_data_reajuste.month <= hoje.month)):
+            if (proxima_data_reajuste.year < hoje.year
+                    or (proxima_data_reajuste.year == hoje.year
+                        and proxima_data_reajuste.month <= hoje.month)):
 
                 # Calcular meses em atraso
                 meses_atraso = (hoje.year - proxima_data_reajuste.year) * 12 + (hoje.month - proxima_data_reajuste.month)
@@ -961,8 +962,6 @@ def _buscar_tr_bcb(ano_inicio, mes_inicio):
 # ==============================================================
 # CRUD de Prestações Intermediárias
 # ==============================================================
-
-from .models import PrestacaoIntermediaria
 
 
 class IntermediariasListView(LoginRequiredMixin, PaginacaoMixin, ListView):
@@ -2020,8 +2019,6 @@ def calcular_cessao_view(request, pk):
 # TabelaJurosContrato — CRUD inline (Q-04 / HU-360)
 # Permite gerenciar juros escalantes diretamente na tela do contrato.
 # =============================================================================
-
-from .models import TabelaJurosContrato
 
 
 @login_required

@@ -8,6 +8,7 @@ Inclui:
 - Formulário de alteração de senha
 """
 from django import forms
+from django.db import models
 from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError
 import re
@@ -339,7 +340,3 @@ class RedefinirSenhaForm(forms.Form):
         if cleaned_data.get('nova_senha') != cleaned_data.get('confirmar_senha'):
             raise ValidationError('As senhas não coincidem')
         return cleaned_data
-
-
-# Import para o clean do AutoCadastroForm e EsqueciSenhaForm
-from django.db import models

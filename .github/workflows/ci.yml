@@ -77,6 +77,6 @@ jobs:
             --max-line-length=120 \
             --exclude=migrations,staticfiles,media,venv,.venv,static/vendor \
             --per-file-ignores="*/migrations/*.py:E501,F401" \
+            --extend-ignore=E501 \
             --count \
-            --statistics \
-            || true  # Não falha o CI por lint ainda (apenas reporta)
+            --statistics

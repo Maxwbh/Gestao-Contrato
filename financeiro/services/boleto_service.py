@@ -1161,12 +1161,13 @@ class BoletoService:
                     # Log detalhado do erro 500 para debug
                     logger.error(f"Erro 500 da API BRCobranca. Response body: {response.text[:1000]}")
                     logger.error(f"Dados enviados - Banco: {banco_nome}")
-                    logger.error(f"Dados do boleto (primeiros campos): cedente={boleto_data.get('cedente')}, "
-                               f"documento_cedente={boleto_data.get('documento_cedente')}, "
-                               f"sacado={boleto_data.get('sacado')}, "
-                               f"valor={boleto_data.get('valor')}, "
-                               f"data_vencimento={boleto_data.get('data_vencimento')}, "
-                               f"nosso_numero={boleto_data.get('nosso_numero')}")
+                    logger.error(
+                        f"Dados do boleto (primeiros campos): cedente={boleto_data.get('cedente')}, "
+                        f"documento_cedente={boleto_data.get('documento_cedente')}, "
+                        f"sacado={boleto_data.get('sacado')}, "
+                        f"valor={boleto_data.get('valor')}, "
+                        f"data_vencimento={boleto_data.get('data_vencimento')}, "
+                        f"nosso_numero={boleto_data.get('nosso_numero')}")
 
                     # Log completo dos dados em formato JSON (apenas na última tentativa)
                     if tentativa == self.max_tentativas:

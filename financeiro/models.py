@@ -11,11 +11,12 @@ from django.core.exceptions import ValidationError
 from django.utils import timezone
 from django.db.models import Q
 from decimal import Decimal
+from datetime import timedelta
 import logging
 
-logger = logging.getLogger(__name__)
-from datetime import timedelta
 from core.models import TimeStampedModel, ContaBancaria
+
+logger = logging.getLogger(__name__)
 
 
 class StatusBoleto(models.TextChoices):
@@ -737,8 +738,8 @@ class Parcela(TimeStampedModel):
         return True
 
     def registrar_pagamento_boleto(self, valor_pago, data_pagamento=None,
-                                    banco_pagador='', agencia_pagadora='',
-                                    validar_minimo=True):
+                                   banco_pagador='', agencia_pagadora='',
+                                   validar_minimo=True):
         """Registra o pagamento do boleto com dados bancários"""
         from datetime import date as date_type, datetime
         if data_pagamento is None:

@@ -12,9 +12,10 @@ from django.utils import timezone
 from decimal import Decimal
 import logging
 
-logger = logging.getLogger(__name__)
 from dateutil.relativedelta import relativedelta
 from core.models import TimeStampedModel, Imovel, Comprador, Imobiliaria
+
+logger = logging.getLogger(__name__)
 
 
 class TipoCorrecao(models.TextChoices):
@@ -946,7 +947,7 @@ class Contrato(TimeStampedModel):
 
         # Verificar se passou o prazo desde o último reajuste
         meses_desde_reajuste = (timezone.now().date().year - self.data_ultimo_reajuste.year) * 12 + \
-                              (timezone.now().date().month - self.data_ultimo_reajuste.month)
+            (timezone.now().date().month - self.data_ultimo_reajuste.month)
         return meses_desde_reajuste >= self.prazo_reajuste_meses
 
     @property
@@ -1255,12 +1256,12 @@ class Contrato(TimeStampedModel):
 
         # Encargos de rescisão calculados sobre o saldo atualizado
         pct_fruicao = (self.percentual_fruicao or Decimal('0.5000')) / Decimal('100')
-        pct_penal   = (self.percentual_multa_rescisao_penal or Decimal('10.0000')) / Decimal('100')
-        pct_adm     = (self.percentual_multa_rescisao_adm or Decimal('12.0000')) / Decimal('100')
+        pct_penal = (self.percentual_multa_rescisao_penal or Decimal('10.0000')) / Decimal('100')
+        pct_adm = (self.percentual_multa_rescisao_adm or Decimal('12.0000')) / Decimal('100')
 
-        fruicao     = (saldo * pct_fruicao * meses_ocupados).quantize(Decimal('0.01'))
+        fruicao = (saldo * pct_fruicao * meses_ocupados).quantize(Decimal('0.01'))
         multa_penal = (saldo * pct_penal).quantize(Decimal('0.01'))
-        desp_adm    = (saldo * pct_adm).quantize(Decimal('0.01'))
+        desp_adm = (saldo * pct_adm).quantize(Decimal('0.01'))
 
         total_retencoes = fruicao + multa_penal + desp_adm
         devolucao = max(Decimal('0.00'), (total_pago - total_retencoes).quantize(Decimal('0.01')))
