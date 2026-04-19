@@ -330,7 +330,7 @@ class Command(BaseCommand):
                 'agencia_dv': '0',
                 'conta': '12345678',
                 'conta_dv': '9',
-                'convenio': '1234567',  # 7 dígitos obrigatório
+                'convenio': '12345678',  # 8 dígitos — BB: convenio(8) + seq(9) = 17
                 'carteira': '18',
                 'nosso_numero_atual': 1,
             },
@@ -868,13 +868,27 @@ class Command(BaseCommand):
                     continue
 
                 conta.nosso_numero_atual += 1
+                seq_str = str(conta.nosso_numero_atual).zfill(9)
+
+                # Montar nosso_numero_formatado conforme regras do banco.
+                # BB: convenio(8) + sequencial(9) = 17 dígitos.
+                # Outros: sequencial zerado (padrão 10 dígitos).
+                if conta.banco == '001' and conta.convenio:
+                    conv = str(conta.convenio).zfill(8)
+                    nosso_numero_fmt = conv + seq_str
+                else:
+                    nosso_numero_fmt = seq_str.zfill(10)
+
                 parcela.conta_bancaria = conta
                 parcela.status_boleto = StatusBoleto.GERADO
-                parcela.nosso_numero = str(conta.nosso_numero_atual).zfill(10)
+                parcela.nosso_numero = nosso_numero_fmt
+                parcela.nosso_numero_formatado = nosso_numero_fmt
+                parcela.nosso_numero_dv = ''
                 parcela.numero_documento = f'{contrato.numero_contrato}/{parcela.numero_parcela:03d}'
                 parcela.data_geracao_boleto = hoje
                 parcela.save(update_fields=[
                     'conta_bancaria', 'status_boleto', 'nosso_numero',
+                    'nosso_numero_formatado', 'nosso_numero_dv',
                     'numero_documento', 'data_geracao_boleto'
                 ])
                 count += 1
@@ -1667,9 +1681,11 @@ class Command(BaseCommand):
 
                 valor_pago = float(parcela.valor_atual)
 
+                # CNAB retorna o nosso_numero formatado (completo, como impresso no boleto)
+                nn_cnab = parcela.nosso_numero_formatado or parcela.nosso_numero
                 item = ItemRetorno.objects.create(
                     arquivo_retorno=arquivo,
-                    nosso_numero=parcela.nosso_numero,
+                    nosso_numero=nn_cnab,
                     parcela=parcela,
                     codigo_ocorrencia='06',
                     descricao_ocorrencia='Liquidação normal',
@@ -1712,7 +1728,7 @@ class Command(BaseCommand):
             for parcela in boletos[len(boletos) // 2:]:
                 ItemRetorno.objects.create(
                     arquivo_retorno=arquivo,
-                    nosso_numero=parcela.nosso_numero,
+                    nosso_numero=parcela.nosso_numero_formatado or parcela.nosso_numero,
                     parcela=parcela,
                     codigo_ocorrencia='02',
                     descricao_ocorrencia='Entrada confirmada',
