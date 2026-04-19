@@ -1024,6 +1024,142 @@ class BoletoService:
         logger.error('gerar_carne: erro HTTP %s — %s', response.status_code, error_msg)
         return {'sucesso': False, 'erro': error_msg}
 
+    def gerar_boletos_lote(self, parcelas_contas, tamanho_lote=15):
+        """
+        Gera boletos reais em lotes via POST /api/boleto/multi.
+        1 chamada à API por lote → drástica redução de requisições vs. gerar_boleto() individual.
+
+        Cada parcela do lote recebe:
+          • boleto_pdf_db: PDF combinado do lote (carnê com todos os boletos)
+          • nosso_numero / nosso_numero_formatado: calculados localmente (convenio+seq para BB)
+          • status_boleto = GERADO  •  data_geracao_boleto = agora
+
+        Uso típico: gerar_dados_teste. Em produção use gerar_boleto() (individual)
+        para obter PDF exclusivo e dados precisos via headers X-* (PR#33).
+
+        Args:
+            parcelas_contas: iterable de (Parcela, ContaBancaria)
+            tamanho_lote: boletos por chamada à API (recomendado 10-20, padrão 15)
+
+        Returns:
+            dict: {'gerados': int, 'erros': list[str]}
+        """
+        from collections import defaultdict
+        from financeiro.models import StatusBoleto, Parcela as ParcelaModel
+
+        gerados = 0
+        erros = []
+
+        # Agrupar por (banco_nome, conta.pk) — /api/boleto/multi exige mesmo banco
+        grupos: dict = defaultdict(list)
+        conta_por_pk: dict = {}
+        for parcela, conta in parcelas_contas:
+            banco_nome = self._get_banco_brcobranca(getattr(conta, 'banco', ''))
+            if not banco_nome:
+                logger.warning(
+                    'gerar_boletos_lote: banco %s não suportado — parcela pk=%s ignorada',
+                    getattr(conta, 'banco', '?'), parcela.pk,
+                )
+                continue
+            grupos[(banco_nome, conta.pk)].append(parcela)
+            conta_por_pk[conta.pk] = conta
+
+        for (banco_nome, conta_pk), todas_parcelas in grupos.items():
+            conta = conta_por_pk[conta_pk]
+
+            for inicio in range(0, len(todas_parcelas), tamanho_lote):
+                lote = todas_parcelas[inicio:inicio + tamanho_lote]
+
+                # Montar dados de cada boleto (incrementa nosso_numero_atual em ContaBancaria)
+                lote_dados = []
+                for parcela in lote:
+                    try:
+                        dados, nosso_numero = self._montar_dados_boleto(parcela, conta)
+                        dados.pop('codigo_banco', None)
+                        lote_dados.append((parcela, dados, nosso_numero))
+                    except Exception as exc:
+                        msg = f'Parcela pk={parcela.pk}: {exc}'
+                        erros.append(msg)
+                        logger.warning('gerar_boletos_lote: erro ao montar parcela pk=%s: %s', parcela.pk, exc)
+
+                if not lote_dados:
+                    continue
+
+                payload = {
+                    'bank': banco_nome,
+                    'type': 'pdf',
+                    'data': [d for _, d, _ in lote_dados],
+                }
+
+                timeout_lote = max(self.timeout, len(lote_dados) * 5)
+                try:
+                    response = requests.post(
+                        f"{self.brcobranca_url}/api/boleto/multi",
+                        json=payload,
+                        headers={'Accept': 'application/vnd.BoletoApi-v1+json'},
+                        timeout=timeout_lote,
+                    )
+                except requests.exceptions.RequestException as exc:
+                    msg = f'gerar_boletos_lote [{banco_nome}]: conexão falhou: {exc}'
+                    logger.error(msg)
+                    erros.append(msg)
+                    continue
+
+                if response.status_code != 200:
+                    msg = (
+                        f'gerar_boletos_lote [{banco_nome}]: '
+                        f'HTTP {response.status_code}: {self._extrair_mensagem_erro(response)}'
+                    )
+                    logger.error(msg)
+                    erros.append(msg)
+                    continue
+
+                pdf_combinado = response.content
+                if not pdf_combinado:
+                    erros.append(f'gerar_boletos_lote [{banco_nome}]: PDF vazio')
+                    continue
+
+                logger.info(
+                    'gerar_boletos_lote: lote gerado — banco=%s %d boletos %d bytes',
+                    banco_nome, len(lote_dados), len(pdf_combinado),
+                )
+
+                agora = timezone.now()
+                a_atualizar = []
+                for parcela, dados, nosso_numero in lote_dados:
+                    # Nosso número formatado conforme o banco:
+                    #   BB (001): convenio(8) + sequencial(9) = 17 dígitos
+                    #   Demais:   valor já formatado por _montar_dados_boleto
+                    nn_banco = dados.get('nosso_numero', str(nosso_numero))
+                    if conta.banco == '001' and conta.convenio:
+                        conv = str(conta.convenio).zfill(8)
+                        nn_fmt = conv + str(nosso_numero).zfill(9)
+                    else:
+                        nn_fmt = nn_banco
+
+                    parcela.conta_bancaria = conta
+                    parcela.status_boleto = StatusBoleto.GERADO
+                    parcela.nosso_numero = nn_fmt
+                    parcela.nosso_numero_formatado = nn_fmt
+                    parcela.nosso_numero_dv = ''
+                    parcela.numero_documento = parcela.gerar_numero_documento()
+                    parcela.data_geracao_boleto = agora
+                    # PDF do lote — carnê compartilhado por todas as parcelas do lote
+                    parcela.boleto_pdf_db = pdf_combinado
+                    a_atualizar.append(parcela)
+
+                ParcelaModel.objects.bulk_update(
+                    a_atualizar,
+                    [
+                        'conta_bancaria', 'status_boleto',
+                        'nosso_numero', 'nosso_numero_formatado', 'nosso_numero_dv',
+                        'numero_documento', 'data_geracao_boleto', 'boleto_pdf_db',
+                    ],
+                )
+                gerados += len(a_atualizar)
+
+        return {'gerados': gerados, 'erros': erros}
+
     def _chamar_api_boleto(self, banco_nome, dados_boleto):
         """
         Chama a API BRCobranca para gerar o boleto com retry e backoff.
