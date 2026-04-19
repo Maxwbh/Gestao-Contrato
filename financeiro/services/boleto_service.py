@@ -1345,7 +1345,11 @@ class BoletoService:
                 return {
                     'linha_digitavel': data.get('linha_digitavel', ''),
                     'codigo_barras': data.get('codigo_barras', ''),
-                    'nosso_numero_formatado': data.get('nosso_numero', ''),
+                    # PR #32 da boleto_cnab_api separou os campos:
+                    # nosso_numero      = sequencial bruto   (ex: "000000018")
+                    # nosso_numero_formatado = completo para impressão (ex: "01234567000000018")
+                    # Lemos o formatado; fallback para nosso_numero (compatibilidade com versões antigas)
+                    'nosso_numero_formatado': data.get('nosso_numero_formatado', '') or data.get('nosso_numero', ''),
                     'agencia_conta_boleto': data.get('agencia_conta_boleto', '')
                 }
             else:
