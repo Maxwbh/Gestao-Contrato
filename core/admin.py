@@ -5,7 +5,9 @@ Desenvolvedor: Maxwell da Silva Oliveira
 Email: maxwbh@gmail.com
 """
 from django.contrib import admin
-from .models import Contabilidade, Imobiliaria, Imovel, Comprador
+from django.utils.html import format_html
+from .models import Contabilidade, Imobiliaria, Imovel, Comprador, ParametroSistema
+from .parametros import invalidar_cache
 
 
 @admin.register(Contabilidade)
@@ -112,3 +114,46 @@ class CompradorAdmin(admin.ModelAdmin):
             'fields': ('ativo', 'criado_em', 'atualizado_em')
         }),
     )
+
+
+@admin.register(ParametroSistema)
+class ParametroSistemaAdmin(admin.ModelAdmin):
+    list_display = ['chave', 'valor_admin', 'tipo', 'grupo', 'descricao', 'atualizado_em']
+    list_filter = ['grupo', 'tipo']
+    search_fields = ['chave', 'descricao']
+    ordering = ['grupo', 'chave']
+    readonly_fields = ['atualizado_em']
+    list_per_page = 50
+
+    def get_readonly_fields(self, request, obj=None):
+        if obj:
+            return ['chave', 'atualizado_em']
+        return ['atualizado_em']
+
+    fieldsets = (
+        (None, {
+            'fields': ('chave', 'grupo', 'tipo', 'descricao')
+        }),
+        ('Valor', {
+            'fields': ('valor',),
+            'description': 'Campos do tipo Senha/Token são exibidos mascarados na listagem.',
+        }),
+        ('Auditoria', {
+            'fields': ('atualizado_em',),
+            'classes': ('collapse',),
+        }),
+    )
+
+    def valor_admin(self, obj):
+        if obj.tipo == ParametroSistema.TIPO_SECRET and obj.valor:
+            return format_html('<span style="color:#999">••••••••</span>')
+        return obj.valor or format_html('<em style="color:#ccc">—</em>')
+    valor_admin.short_description = 'Valor'
+
+    def save_model(self, request, obj, form, change):
+        super().save_model(request, obj, form, change)
+        invalidar_cache()
+
+    def delete_model(self, request, obj):
+        super().delete_model(request, obj)
+        invalidar_cache()

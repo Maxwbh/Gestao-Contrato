@@ -322,8 +322,6 @@ Todos os commits atribuídos a: **Maxwell da Silva Oliveira** (maxwbh@gmail.com)
 **Documentação Completa:** ✅ Toda referência aos repos customizados
 **Commits Atribuídos:** ✅ Maxwell da Silva Oliveira
 
-**Branch:** `claude/fix-sicoob-boleto-error-01Wt8qoGhJ2CRJ8isfjGvey2`
-
 ---
 
 ## 📚 Referências Oficiais (API Customizada Maxwell)
