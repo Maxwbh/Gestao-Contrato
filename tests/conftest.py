@@ -6,7 +6,6 @@ Desenvolvedor: Maxwell da Silva Oliveira <maxwbh@gmail.com>
 
 import pytest
 from pytest_factoryboy import register
-from django.conf import settings
 from django.test import Client
 
 # Importar todas as factories

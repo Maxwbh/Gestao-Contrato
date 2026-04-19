@@ -135,6 +135,7 @@ if config('DATABASE_URL', default=None):
     # Signal para garantir search_path em cada conexao (desabilitado em testes)
     if not _is_testing:
         from django.db.backends.signals import connection_created
+
         def set_search_path(sender, connection, **kwargs):
             if connection.vendor == 'postgresql':
                 cursor = connection.cursor()
