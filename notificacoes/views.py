@@ -319,6 +319,171 @@ def testar_conexao_whatsapp(request, pk):
         return JsonResponse({'status': 'error', 'message': f'Erro: {str(e)}'}, status=400)
 
 
+@login_required
+def configurar_webhook_evolution(request, pk):
+    """
+    Registra o webhook de delivery tracking na instância Evolution API.
+    Chama POST {api_url}/webhook/set/{instancia} com a URL do sistema.
+    """
+    if request.method != 'POST':
+        return JsonResponse({'status': 'error', 'message': 'Metodo nao permitido'}, status=405)
+
+    config = get_object_or_404(ConfiguracaoWhatsApp, pk=pk)
+    if config.provedor != 'EVOLUTION':
+        return JsonResponse({'status': 'error', 'message': 'Apenas Evolution API suportado'}, status=400)
+
+    try:
+        import urllib.request as _req
+        import json as _json
+        from django.conf import settings as _s
+
+        site_url = getattr(_s, 'SITE_URL', request.build_absolute_uri('/').rstrip('/'))
+        webhook_url = f"{site_url}/notificacoes/webhook/evolution/"
+
+        payload = {
+            'url': webhook_url,
+            'enabled': True,
+            'webhookByEvents': False,
+            'webhookBase64': False,
+            'events': ['MESSAGES_UPDATE'],
+        }
+        url = f"{config.api_url.rstrip('/')}/webhook/set/{config.instancia}"
+        req = _req.Request(
+            url,
+            data=_json.dumps(payload).encode(),
+            headers={'Content-Type': 'application/json', 'apikey': config.api_key},
+            method='POST',
+        )
+        with _req.urlopen(req, timeout=10) as resp:
+            data = _json.loads(resp.read())
+
+        logger.info('[Evolution Webhook] Configurado para instancia=%s url=%s resp=%s',
+                    config.instancia, webhook_url, data)
+        return JsonResponse({
+            'status': 'success',
+            'message': f'Webhook configurado com sucesso → {webhook_url}',
+            'webhook_url': webhook_url,
+        })
+
+    except Exception as e:
+        logger.exception("Erro ao configurar webhook evolution pk=%s: %s", pk, e)
+        return JsonResponse({'status': 'error', 'message': f'Erro: {str(e)}'}, status=400)
+
+
+# =============================================================================
+# WEBHOOK EVOLUTION API — Confirmação de entrega WhatsApp
+# =============================================================================
+
+# Mapeamento de status Evolution/Baileys → StatusEntrega
+_EVOLUTION_STATUS_MAP = {
+    # String values (Evolution API v2)
+    'SERVER_ACK': 'sent',
+    'DELIVERY_ACK': 'delivered',
+    'READ': 'read',
+    'PLAYED': 'read',
+    # Numeric values (Baileys proto.WebMessageInfo.Status)
+    2: 'sent',       # SERVER_ACK
+    3: 'delivered',  # DELIVERY_ACK
+    4: 'read',       # READ
+    5: 'read',       # PLAYED
+    '2': 'sent',
+    '3': 'delivered',
+    '4': 'read',
+    '5': 'read',
+}
+
+
+@csrf_exempt
+def webhook_evolution(request):
+    """
+    Recebe callbacks de status de entrega da Evolution API (MESSAGES_UPDATE).
+
+    Evolution posta para esta URL (configurada via /webhook/set/{instance})
+    quando o status de uma mensagem muda.
+
+    Payload esperado:
+    {
+      "event": "messages.update",
+      "instance": "nome-instancia",
+      "data": [
+        {
+          "key": {"id": "3EB0...", "fromMe": true, "remoteJid": "55...@s.whatsapp.net"},
+          "update": {"status": "READ"}
+        }
+      ]
+    }
+
+    Valida apikey recebida no header ou no payload contra ConfiguracaoWhatsApp.
+    Atualiza Notificacao.status_entrega e Notificacao.data_confirmacao.
+    """
+    if request.method != 'POST':
+        return HttpResponseNotAllowed(['POST'])
+
+    try:
+        import json as _json
+        body = _json.loads(request.body)
+    except Exception:
+        return HttpResponse('Bad Request', status=400)
+
+    event = body.get('event', '')
+    instance_name = body.get('instance', '')
+
+    # Validar apikey: header ou campo no payload
+    apikey_header = request.META.get('HTTP_APIKEY', '')
+    apikey_payload = body.get('apikey', '')
+    apikey = apikey_header or apikey_payload
+
+    if apikey:
+        config = ConfiguracaoWhatsApp.objects.filter(
+            provedor='EVOLUTION', instancia=instance_name, api_key=apikey, ativo=True
+        ).first()
+        if not config:
+            logger.warning(
+                '[Webhook Evolution] apikey invalida — instance=%s ip=%s',
+                instance_name, request.META.get('REMOTE_ADDR')
+            )
+            return HttpResponse('Forbidden', status=403)
+    else:
+        # Sem apikey: aceitar mas logar aviso (Evolution pode não enviar em algumas versões)
+        logger.warning('[Webhook Evolution] Payload sem apikey — instance=%s', instance_name)
+
+    if event not in ('messages.update', 'MESSAGES_UPDATE'):
+        return HttpResponse('OK', status=200)
+
+    data_list = body.get('data', [])
+    if not isinstance(data_list, list):
+        data_list = [data_list]
+
+    updated_total = 0
+    for item in data_list:
+        key = item.get('key', {})
+        message_id = key.get('id', '').strip()
+        from_me = key.get('fromMe', False)
+
+        # Só nos interessa rastrear mensagens enviadas por nós
+        if not from_me or not message_id:
+            continue
+
+        update = item.get('update', {})
+        raw_status = update.get('status', '')
+        status_entrega = _EVOLUTION_STATUS_MAP.get(raw_status)
+
+        if not status_entrega:
+            continue
+
+        updated = Notificacao.objects.filter(external_id=message_id).update(
+            status_entrega=status_entrega,
+            data_confirmacao=timezone.now(),
+        )
+        updated_total += updated
+
+    logger.info(
+        '[Webhook Evolution] event=%s instance=%s itens=%d atualizados=%d',
+        event, instance_name, len(data_list), updated_total
+    )
+    return HttpResponse('OK', status=200)
+
+
 # =============================================================================
 # CRUD VIEWS - TEMPLATE NOTIFICACAO (Mensagens de Email)
 # =============================================================================

@@ -82,6 +82,7 @@ const waRowData = [
     pk: {{ config.pk }},
     nome: "{{ config.nome|escapejs }}",
     provedor: "{{ config.get_provedor_display|escapejs }}",
+    provedor_code: "{{ config.provedor }}",
     instancia: "{{ config.instancia|default:''|escapejs }}",
     api_url: "{{ config.api_url|default:''|escapejs }}",
     numero_remetente: "{{ config.numero_remetente|default:''|escapejs }}",
@@ -89,6 +90,7 @@ const waRowData = [
     url_testar: "{% url 'notificacoes:testar_config_whatsapp' config.pk %}",
     url_editar: "{% url 'notificacoes:editar_config_whatsapp' config.pk %}",
     url_excluir: "{% url 'notificacoes:excluir_config_whatsapp' config.pk %}",
+    url_webhook: "{% url 'notificacoes:configurar_webhook_evolution' config.pk %}",
 },
 {% endfor %}
 ];
@@ -108,8 +110,12 @@ function ativoRenderer(params) {
 
 function acoesWaRenderer(params) {
     const d = params.data;
+    const btnWebhook = d.provedor_code === 'EVOLUTION'
+        ? `<button type="button" class="btn btn-sm btn-outline-info btn-webhook" data-url="${d.url_webhook}" title="Configurar Webhook"><i class="fas fa-plug"></i></button>`
+        : '';
     return `<div class="ag-grid-actions">
         <button type="button" class="btn btn-sm btn-outline-success btn-testar" data-url="${d.url_testar}" title="Testar Conexão"><i class="fab fa-whatsapp"></i></button>
+        ${btnWebhook}
         <a href="${d.url_editar}" class="btn btn-sm btn-outline-primary" title="Editar"><i class="fas fa-edit"></i></a>
         <a href="${d.url_excluir}" class="btn btn-sm btn-outline-danger" title="Excluir"><i class="fas fa-trash"></i></a>
     </div>`;
@@ -144,25 +150,59 @@ document.addEventListener('DOMContentLoaded', function() {
     const modal = new bootstrap.Modal(document.getElementById('modalTeste'));
     const modalBody = document.getElementById('modalTesteBody');
 
-    document.getElementById('waGrid').addEventListener('click', function(e) {
-        const btn = e.target.closest('.btn-testar');
-        if (!btn) return;
-        const url = btn.dataset.url;
-        modalBody.innerHTML = '<div class="text-center py-4"><div class="spinner-border text-success" role="status"></div><p class="mt-2">Testando conexão...</p></div>';
-        modal.show();
+    function getCsrf() {
+        return document.cookie.split(';').map(c => c.trim())
+            .find(c => c.startsWith('csrftoken='))?.split('=')[1] || '';
+    }
 
-        fetch(url, { method: 'GET', headers: { 'X-Requested-With': 'XMLHttpRequest' } })
+    document.getElementById('waGrid').addEventListener('click', function(e) {
+        // Testar conexão
+        const btnTestar = e.target.closest('.btn-testar');
+        if (btnTestar) {
+            const url = btnTestar.dataset.url;
+            modalBody.innerHTML = '<div class="text-center py-4"><div class="spinner-border text-success" role="status"></div><p class="mt-2">Testando conexão...</p></div>';
+            modal.show();
+            fetch(url, { method: 'GET', headers: { 'X-Requested-With': 'XMLHttpRequest' } })
+                .then(r => r.json())
+                .then(data => {
+                    if (data.status === 'success') {
+                        modalBody.innerHTML = '<div class="text-center py-4"><i class="fas fa-check-circle fa-3x text-success mb-3"></i><p class="text-success fw-bold">' + data.message + '</p></div>';
+                    } else {
+                        modalBody.innerHTML = '<div class="text-center py-4"><i class="fas fa-times-circle fa-3x text-danger mb-3"></i><p class="text-danger fw-bold">' + data.message + '</p></div>';
+                    }
+                })
+                .catch(err => {
+                    modalBody.innerHTML = '<div class="text-center py-4"><i class="fas fa-exclamation-triangle fa-3x text-warning mb-3"></i><p class="text-warning fw-bold">Erro ao testar: ' + err.message + '</p></div>';
+                });
+            return;
+        }
+
+        // Configurar webhook Evolution
+        const btnWebhook = e.target.closest('.btn-webhook');
+        if (btnWebhook) {
+            const url = btnWebhook.dataset.url;
+            modalBody.innerHTML = '<div class="text-center py-4"><div class="spinner-border text-info" role="status"></div><p class="mt-2">Configurando webhook...</p></div>';
+            modal.show();
+            fetch(url, {
+                method: 'POST',
+                headers: { 'X-Requested-With': 'XMLHttpRequest', 'X-CSRFToken': getCsrf() },
+            })
             .then(r => r.json())
             .then(data => {
                 if (data.status === 'success') {
-                    modalBody.innerHTML = '<div class="text-center py-4"><i class="fas fa-check-circle fa-3x text-success mb-3"></i><p class="text-success fw-bold">' + data.message + '</p></div>';
+                    modalBody.innerHTML = `<div class="text-center py-4">
+                        <i class="fas fa-check-circle fa-3x text-success mb-3"></i>
+                        <p class="text-success fw-bold">${data.message}</p>
+                        <p class="small text-muted mt-2">URL registrada:<br><code>${data.webhook_url || ''}</code></p>
+                    </div>`;
                 } else {
                     modalBody.innerHTML = '<div class="text-center py-4"><i class="fas fa-times-circle fa-3x text-danger mb-3"></i><p class="text-danger fw-bold">' + data.message + '</p></div>';
                 }
             })
             .catch(err => {
-                modalBody.innerHTML = '<div class="text-center py-4"><i class="fas fa-exclamation-triangle fa-3x text-warning mb-3"></i><p class="text-warning fw-bold">Erro ao testar: ' + err.message + '</p></div>';
+                modalBody.innerHTML = '<div class="text-center py-4"><i class="fas fa-exclamation-triangle fa-3x text-warning mb-3"></i><p class="text-warning fw-bold">Erro: ' + err.message + '</p></div>';
             });
+        }
     });
 });
 </script>
