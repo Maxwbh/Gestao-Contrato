@@ -1,181 +1,159 @@
-# Parâmetros de Ambiente (.env)
+# Parâmetros de Configuração
 
-Referência completa de todas as variáveis de ambiente utilizadas pelo projeto.
-Copie `.env.example` para `.env` e ajuste os valores conforme o ambiente.
+O sistema usa dois mecanismos distintos de configuração:
+
+| Mecanismo | Onde editar | Quando muda |
+|-----------|-------------|-------------|
+| **`.env`** — Infraestrutura | Arquivo no servidor / variáveis do Render | Só na implantação (requer restart) |
+| **`ParametroSistema`** — Operacional | Admin → Gestão Principal → Parâmetros do Sistema | A qualquer momento (restart para aplicar) |
 
 ---
 
-## Django — Core
+## `.env` — Parâmetros de Infraestrutura
+
+Apenas o que não pode estar no banco de dados (precede a conexão com o DB).
 
 | Variável | Padrão | Tipo | Obrigatório | Descrição |
 |----------|--------|------|-------------|-----------|
-| `SECRET_KEY` | `django-insecure-dev-key-change-in-production` | `str` | **Sim** (produção) | Chave secreta do Django. Gere com `python -c "from django.core.management.utils import get_random_secret_key; print(get_random_secret_key())"` |
-| `DEBUG` | `False` | `bool` | Não | Ativa modo debug. **Nunca `True` em produção.** |
-| `ALLOWED_HOSTS` | `""` | `str` (CSV) | **Sim** (produção) | Hosts permitidos, separados por vírgula. Ex.: `meusite.com,www.meusite.com` |
-| `CSRF_TRUSTED_ORIGINS` | `https://*.onrender.com` | `str` (CSV) | Não | Origens confiáveis para CSRF (HTTPS). Necessário atrás de proxy reverso. Só aplicado quando `DEBUG=False`. |
+| `SECRET_KEY` | `django-insecure-...` | `str` | **Sim** (produção) | Chave secreta Django. Gere com `python -c "from django.core.management.utils import get_random_secret_key; print(get_random_secret_key())"` |
+| `DEBUG` | `False` | `bool` | Não | Modo debug. **Nunca `True` em produção.** |
+| `ALLOWED_HOSTS` | `""` | CSV | **Sim** (produção) | Hosts permitidos. Ex.: `meusite.com,www.meusite.com` |
+| `DATABASE_URL` | — | `str` | **Sim** | URL PostgreSQL. Ex.: `postgresql://user:pass@host:5432/db` |
+| `SUPABASE_URL` | `""` | `str` | Não | URL do projeto Supabase para acesso via cliente Python |
+| `SUPABASE_KEY` | `""` | `str` | Não | Chave anônima (`anon key`) do Supabase |
+| `REDIS_URL` | `redis://localhost:6379/0` | `str` | Não | URL do Redis para Celery |
+| `SENTRY_DSN` | `None` | `str` | Não | DSN do Sentry. Omitir ou deixar vazio para desativar |
+| `CSRF_TRUSTED_ORIGINS` | `https://*.onrender.com` | CSV | Não | Origens CSRF confiáveis. Necessário atrás de proxy HTTPS |
+
+> **Geração de `SECRET_KEY`:**
+> ```bash
+> python -c "from django.core.management.utils import get_random_secret_key; print(get_random_secret_key())"
+> ```
 
 ---
 
-## Banco de Dados
+## `ParametroSistema` — Parâmetros Operacionais
 
-| Variável | Padrão | Tipo | Obrigatório | Descrição |
-|----------|--------|------|-------------|-----------|
-| `DATABASE_URL` | — | `str` | **Sim** | URL de conexão PostgreSQL. Ex.: `postgresql://user:pass@host:5432/dbname`. Sem esta variável, usa SQLite local. |
-| `SUPABASE_URL` | `""` | `str` | Não | URL do projeto Supabase. Ex.: `https://xyz.supabase.co`. Usado para funcionalidades adicionais via cliente Supabase. |
-| `SUPABASE_KEY` | `""` | `str` | Não | Chave anônima (`anon key`) do Supabase. |
+Gerenciados via **Admin → Gestão Principal → Parâmetros do Sistema**.  
+Populados automaticamente na primeira execução de `migrate` com os valores do `.env` ou defaults.
 
----
+A tabela abaixo documenta todos os parâmetros com seus grupos, tipos e defaults.
 
-## Redis / Celery
+### Grupo: E-mail SMTP (`email`)
 
-| Variável | Padrão | Tipo | Obrigatório | Descrição |
-|----------|--------|------|-------------|-----------|
-| `REDIS_URL` | `redis://localhost:6379/0` | `str` | Não | URL do Redis. Usado como broker e backend do Celery. |
+| Chave | Tipo | Padrão | Descrição |
+|-------|------|--------|-----------|
+| `EMAIL_BACKEND` | str | `django.core.mail.backends.console.EmailBackend` | Backend Django. Em produção: `django.core.mail.backends.smtp.EmailBackend` |
+| `EMAIL_HOST` | str | `localhost` | Servidor SMTP. Ex.: `smtp.zoho.com`, `smtp.gmail.com` |
+| `EMAIL_PORT` | int | `587` | Porta SMTP. 587 para TLS, 465 para SSL |
+| `EMAIL_USE_TLS` | bool | `True` | Ativar STARTTLS (porta 587) |
+| `EMAIL_USE_SSL` | bool | `False` | Ativar SSL nativo (porta 465). Mutuamente exclusivo com TLS |
+| `EMAIL_HOST_USER` | str | `""` | Usuário SMTP |
+| `EMAIL_HOST_PASSWORD` | secret | `""` | Senha SMTP ou senha de aplicativo |
+| `DEFAULT_FROM_EMAIL` | str | `noreply@gestaocontrato.com.br` | Endereço remetente padrão |
+| `EMAIL_TIMEOUT` | int | `10` | Timeout TCP com servidor SMTP (segundos) |
 
----
+> **Zoho:** `HOST=smtp.zoho.com PORT=465 USE_SSL=True USE_TLS=False`  
+> **Gmail:** `HOST=smtp.gmail.com PORT=587 USE_TLS=True USE_SSL=False`
 
-## E-mail (SMTP)
+### Grupo: Twilio SMS/WhatsApp (`twilio`)
 
-| Variável | Padrão | Tipo | Obrigatório | Descrição |
-|----------|--------|------|-------------|-----------|
-| `EMAIL_BACKEND` | `django.core.mail.backends.console.EmailBackend` | `str` | Não | Backend de e-mail. Em produção use `django.core.mail.backends.smtp.EmailBackend`. |
-| `EMAIL_HOST` | `localhost` | `str` | Não | Servidor SMTP. Ex.: `smtp.zoho.com`, `smtp.gmail.com` |
-| `EMAIL_PORT` | `587` | `int` | Não | Porta SMTP. Use `465` para SSL, `587` para TLS. |
-| `EMAIL_USE_TLS` | `True` | `bool` | Não | Ativa STARTTLS. Use `True` para porta 587. |
-| `EMAIL_USE_SSL` | `False` | `bool` | Não | Ativa SSL nativo. Use `True` para porta 465. **Mutuamente exclusivo com `EMAIL_USE_TLS`.** |
-| `EMAIL_HOST_USER` | `""` | `str` | Não | Usuário SMTP (geralmente o e-mail remetente). |
-| `EMAIL_HOST_PASSWORD` | `""` | `str` | Não | Senha do SMTP ou senha de aplicativo. |
-| `DEFAULT_FROM_EMAIL` | `noreply@gestaocontrato.com.br` | `str` | Não | Endereço remetente padrão para todos os e-mails do sistema. |
-| `EMAIL_TIMEOUT` | `10` | `int` | Não | Timeout de conexão TCP com o servidor SMTP (segundos). Evita bloquear requisições. |
+| Chave | Tipo | Padrão | Descrição |
+|-------|------|--------|-----------|
+| `TWILIO_ACCOUNT_SID` | str | `""` | Account SID da conta Twilio |
+| `TWILIO_AUTH_TOKEN` | secret | `""` | Auth Token da conta Twilio |
+| `TWILIO_PHONE_NUMBER` | str | `""` | Número para SMS (E.164, ex.: `+15551234567`) |
+| `TWILIO_WHATSAPP_NUMBER` | str | `""` | Número para WhatsApp (ex.: `whatsapp:+15551234567`) |
+| `TWILIO_STATUS_CALLBACK_URL` | str | `""` | Webhook de status de mensagem |
 
-> **Zoho**: `HOST=smtp.zoho.com PORT=465 USE_SSL=True USE_TLS=False`  
-> **Gmail**: `HOST=smtp.gmail.com PORT=587 USE_TLS=True USE_SSL=False`
+### Grupo: Bounce / IMAP (`imap`)
 
----
+| Chave | Tipo | Padrão | Descrição |
+|-------|------|--------|-----------|
+| `BOUNCE_EMAIL_ADDRESS` | str | `""` | Endereço que recebe os bounces |
+| `BOUNCE_IMAP_HOST` | str | `imap.zoho.com` | Servidor IMAP |
+| `BOUNCE_IMAP_PORT` | int | `993` | Porta IMAP (993 = SSL) |
+| `BOUNCE_IMAP_USER` | str | `""` | Usuário IMAP |
+| `BOUNCE_IMAP_PASSWORD` | secret | `""` | Senha IMAP |
+| `BOUNCE_IMAP_FOLDER` | str | `INBOX` | Pasta monitorada |
 
-## Twilio — SMS e WhatsApp
+### Grupo: Modo de Teste (`teste`)
 
-| Variável | Padrão | Tipo | Obrigatório | Descrição |
-|----------|--------|------|-------------|-----------|
-| `TWILIO_ACCOUNT_SID` | `""` | `str` | Não | Account SID da conta Twilio. |
-| `TWILIO_AUTH_TOKEN` | `""` | `str` | Não | Auth Token da conta Twilio. |
-| `TWILIO_PHONE_NUMBER` | `""` | `str` | Não | Número Twilio para SMS. Formato E.164: `+15551234567` |
-| `TWILIO_WHATSAPP_NUMBER` | `""` | `str` | Não | Número Twilio para WhatsApp. Formato: `whatsapp:+15551234567` |
-| `TWILIO_STATUS_CALLBACK_URL` | `""` | `str` | Não | URL de webhook para callbacks de status de mensagem Twilio. |
+| Chave | Tipo | Padrão | Descrição |
+|-------|------|--------|-----------|
+| `TEST_MODE` | bool | `False` | Redireciona todos os envios para os destinatários abaixo. **Nunca `True` em produção** |
+| `TEST_RECIPIENT_EMAIL` | str | `receber@msbrasil.inf.br` | E-mail de destino em modo de teste |
+| `TEST_RECIPIENT_PHONE` | str | `+5531993257479` | Telefone de destino em modo de teste (E.164) |
 
----
+### Grupo: Notificações (`notificacao`)
 
-## Bounce / IMAP
+| Chave | Tipo | Padrão | Descrição |
+|-------|------|--------|-----------|
+| `NOTIFICACAO_DIAS_ANTECEDENCIA` | int | `5` | Dias de antecedência para notificar vencimento próximo |
+| `NOTIFICACAO_DIAS_INADIMPLENCIA` | int | `3` | Dias após vencimento para alertar inadimplência |
 
-Processamento automático de e-mails devolvidos (bounces).
+### Grupo: Tarefas Agendadas (`tarefa`)
 
-| Variável | Padrão | Tipo | Obrigatório | Descrição |
-|----------|--------|------|-------------|-----------|
-| `BOUNCE_EMAIL_ADDRESS` | `""` | `str` | Não | Endereço de e-mail que recebe os bounces. |
-| `BOUNCE_IMAP_HOST` | `imap.zoho.com` | `str` | Não | Servidor IMAP para leitura de bounces. |
-| `BOUNCE_IMAP_PORT` | `993` | `int` | Não | Porta IMAP (993 = SSL). |
-| `BOUNCE_IMAP_USER` | `""` | `str` | Não | Usuário IMAP. |
-| `BOUNCE_IMAP_PASSWORD` | `""` | `str` | Não | Senha IMAP. |
-| `BOUNCE_IMAP_FOLDER` | `INBOX` | `str` | Não | Pasta IMAP a ser monitorada. |
+| Chave | Tipo | Padrão | Descrição |
+|-------|------|--------|-----------|
+| `TASK_TOKEN` | secret | `""` | Token Bearer para `/api/tasks/run-all/`. Gere com `python -c "import secrets; print(secrets.token_urlsafe(32))"` |
 
----
+### Grupo: BRCobrança (`brcobranca`)
 
-## Modo de Teste
+| Chave | Tipo | Padrão | Descrição |
+|-------|------|--------|-----------|
+| `BRCOBRANCA_URL` | str | `http://localhost:9292` | URL da API BRCobrança (`docker run -p 9292:9292 kivanio/brcobranca`) |
+| `BRCOBRANCA_TIMEOUT` | int | `30` | Timeout para chamadas à API (segundos) |
+| `BRCOBRANCA_MAX_TENTATIVAS` | int | `3` | Máximo de tentativas em caso de falha |
+| `BRCOBRANCA_DELAY_INICIAL` | int | `2` | Delay inicial de retry em segundos (dobra a cada tentativa) |
 
-Redireciona **todos** os envios (e-mail e SMS/WhatsApp) para endereços de teste. Útil em homologação para evitar envios reais.
+### Grupo: Portal do Comprador (`portal`)
 
-| Variável | Padrão | Tipo | Obrigatório | Descrição |
-|----------|--------|------|-------------|-----------|
-| `TEST_MODE` | `False` | `bool` | Não | Quando `True`, redireciona todos os envios para os destinatários de teste abaixo. **Nunca usar em produção.** |
-| `TEST_RECIPIENT_EMAIL` | `receber@msbrasil.inf.br` | `str` | Não | E-mail de destino em modo de teste. |
-| `TEST_RECIPIENT_PHONE` | `+5531993257479` | `str` | Não | Telefone de destino em modo de teste (E.164). |
+| Chave | Tipo | Padrão | Descrição |
+|-------|------|--------|-----------|
+| `PORTAL_EMAIL_VERIFICACAO` | bool | `False` | `True` = exige confirmação de e-mail após cadastro |
 
----
+### Grupo: Aplicação (`aplicacao`)
 
-## Notificações
+| Chave | Tipo | Padrão | Descrição |
+|-------|------|--------|-----------|
+| `SITE_URL` | str | `http://localhost:8000` | URL pública sem barra final. Usada em links de e-mails |
 
-| Variável | Padrão | Tipo | Obrigatório | Descrição |
-|----------|--------|------|-------------|-----------|
-| `NOTIFICACAO_DIAS_ANTECEDENCIA` | `5` | `int` | Não | Dias de antecedência para enviar notificação de vencimento próximo. |
-| `NOTIFICACAO_DIAS_INADIMPLENCIA` | `3` | `int` | Não | Dias após vencimento para enviar alerta de inadimplência. |
+### Grupo: APIs BCB (`bcb`)
 
----
-
-## Tarefas Agendadas
-
-| Variável | Padrão | Tipo | Obrigatório | Descrição |
-|----------|--------|------|-------------|-----------|
-| `TASK_TOKEN` | `None` | `str` | Não | Token Bearer para autenticar chamadas à API `/api/tasks/run-all/`. Gere com `python -c "import secrets; print(secrets.token_urlsafe(32))"`. Sem este token, o endpoint é desativado. |
-
----
-
-## BRCobrança — Boletos
-
-| Variável | Padrão | Tipo | Obrigatório | Descrição |
-|----------|--------|------|-------------|-----------|
-| `BRCOBRANCA_URL` | `http://localhost:9292` | `str` | Não | URL base da API BRCobrança. Execute com Docker: `docker run -p 9292:9292 kivanio/brcobranca` |
-| `BRCOBRANCA_TIMEOUT` | `30` | `int` | Não | Timeout para chamadas à API BRCobrança (segundos). |
+| Chave | Tipo | Padrão | Descrição |
+|-------|------|--------|-----------|
+| `BCBAPI_URL` | str | `https://api.bcb.gov.br/dados/serie/bcdata.sgs.{}/dados` | URL template da API de séries temporais do BCB |
+| `IPCA_SERIE_ID` | str | `433` | Código da série IPCA |
+| `IGPM_SERIE_ID` | str | `189` | Código da série IGP-M |
+| `SELIC_SERIE_ID` | str | `432` | Código da série SELIC |
 
 ---
 
-## Portal do Comprador
+## Como funciona em produção
 
-| Variável | Padrão | Tipo | Obrigatório | Descrição |
-|----------|--------|------|-------------|-----------|
-| `PORTAL_EMAIL_VERIFICACAO` | `False` | `bool` | Não | Quando `True`, exige confirmação de e-mail após cadastro no portal. O comprador recebe um link de verificação e fica com acesso restrito até confirmar. Quando `False` (padrão), o acesso é liberado imediatamente. |
-
----
-
-## Aplicação
-
-| Variável | Padrão | Tipo | Obrigatório | Descrição |
-|----------|--------|------|-------------|-----------|
-| `SITE_URL` | `http://localhost:8000` | `str` | Não | URL pública do site, sem barra final. Usada para gerar links absolutos em e-mails e notificações. Em produção: `https://meusite.com.br` |
-
----
-
-## Monitoramento
-
-| Variável | Padrão | Tipo | Obrigatório | Descrição |
-|----------|--------|------|-------------|-----------|
-| `SENTRY_DSN` | `None` | `str` | Não | DSN do Sentry para rastreamento de erros em produção. Se vazio ou ausente, o Sentry não é inicializado. |
-
----
-
-## APIs BCB (Banco Central do Brasil)
-
-> Estas constantes são **hardcoded** no `settings.py` e **não são configuráveis via `.env`**. Listadas aqui apenas para referência.
-
-| Constante | Valor | Descrição |
-|-----------|-------|-----------|
-| `BCBAPI_URL` | `https://api.bcb.gov.br/dados/serie/bcdata.sgs.{}/dados` | URL template da API de séries temporais do BCB. |
-| `IPCA_SERIE_ID` | `433` | Código da série IPCA no BCB. |
-| `IGPM_SERIE_ID` | `189` | Código da série IGP-M no BCB. |
-| `SELIC_SERIE_ID` | `432` | Código da série SELIC no BCB. |
-
----
-
-## Configuração por Ambiente
-
-| Variável | Desenvolvimento | Homologação | Produção |
-|----------|----------------|-------------|----------|
-| `DEBUG` | `True` | `False` | `False` |
-| `DATABASE_URL` | SQLite (omitir) | Supabase staging | Supabase produção |
-| `EMAIL_BACKEND` | `console` | `smtp` | `smtp` |
-| `TEST_MODE` | `True` | `True` | `False` |
-| `BRCOBRANCA_URL` | `http://localhost:9292` | URL do Docker | URL do Docker |
-| `PORTAL_EMAIL_VERIFICACAO` | `False` | `True` | `True` |
-| `SENTRY_DSN` | omitir | opcional | recomendado |
-| `TASK_TOKEN` | omitir | token seguro | token seguro |
-
----
-
-## Geração de Valores Seguros
-
-```bash
-# SECRET_KEY
-python -c "from django.core.management.utils import get_random_secret_key; print(get_random_secret_key())"
-
-# TASK_TOKEN
-python -c "import secrets; print(secrets.token_urlsafe(32))"
 ```
+Startup:
+  settings.py       → define defaults (hardcoded)
+  CoreConfig.ready() → lê ParametroSistema → sobrescreve settings.*
+  Cache (5 min)     → evita queries repetidas
+
+Request:
+  get_param('CHAVE')  → DB (cache) → settings.* → default
+  settings.EMAIL_HOST → já foi sobrescrito pelo ready()
+
+Mudança de config:
+  1. Admin → Parâmetros do Sistema → editar valor
+  2. Reiniciar a aplicação (Render: Manual Deploy ou restart)
+```
+
+---
+
+## Migração inicial
+
+Na primeira execução de `python manage.py migrate`, a migration
+`0008_data_parametro_sistema` lê os valores atuais do `.env` (via
+`decouple.config()`) e os insere na tabela `ParametroSistema`.
+
+Após a migração, os valores do `.env` para parâmetros operacionais
+podem ser removidos — eles serão lidos do banco de dados.
