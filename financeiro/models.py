@@ -563,13 +563,14 @@ class Parcela(TimeStampedModel):
         if self.conta_bancaria:
             codigo_banco = self.conta_bancaria.banco
 
-            # BB (001): nosso_numero = convenio(7) + sequencial(10) = 17 dígitos.
-            # Se o DB armazena só o sequencial, reconstrói o display completo.
+            # BB (001): formato = convenio(8) + sequencial(9) = 17 dígitos.
+            # boleto_cnab_api PR#32: nosso_numero_formatado vem completo da API.
+            # Se o DB armazena só o sequencial (fallback), reconstrói o display.
             if codigo_banco == '001' and self.conta_bancaria.convenio:
-                convenio_str = str(self.conta_bancaria.convenio).zfill(7)
                 seq = nosso_numero
                 if len(seq) <= 10:
-                    return convenio_str + seq.zfill(10)
+                    convenio_str = str(self.conta_bancaria.convenio).zfill(8)
+                    return convenio_str + seq.zfill(9)
                 # Já inclui o convenio — devolve como está (zfill para 17)
                 return seq.zfill(17)
 
