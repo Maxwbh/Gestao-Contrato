@@ -207,14 +207,19 @@ def _registrar_notificacao(parcela, tipo, destinatario, assunto, mensagem):
 def _get_destinatario(comprador, tipo_notificacao):
     """
     Retorna o endereço de destino para o canal informado, ou None se indisponível.
+    Respeita os flags notificar_email / notificar_whatsapp do comprador.
     """
     from notificacoes.models import TipoNotificacao
     if tipo_notificacao == TipoNotificacao.EMAIL:
         return comprador.email if (getattr(comprador, 'notificar_email', True) and comprador.email) else None
     if tipo_notificacao == TipoNotificacao.SMS:
+        if not getattr(comprador, 'notificar_sms', False):
+            return None
         tel = getattr(comprador, 'celular', None) or getattr(comprador, 'telefone', None)
         return tel or None
     if tipo_notificacao == TipoNotificacao.WHATSAPP:
+        if not getattr(comprador, 'notificar_whatsapp', False):
+            return None
         tel = getattr(comprador, 'celular', None) or getattr(comprador, 'telefone', None)
         return f"whatsapp:{tel}" if tel else None
     return None

@@ -345,7 +345,9 @@ def configurar_webhook_evolution(request, pk):
             'enabled': True,
             'webhookByEvents': False,
             'webhookBase64': False,
-            'events': ['MESSAGES_UPDATE'],
+            # MESSAGES_UPDATE: status delivery/read
+            # MESSAGES_UPSERT: captura fromMe ao enviar (status inicial PENDING→sent)
+            'events': ['MESSAGES_UPDATE', 'MESSAGES_UPSERT'],
         }
         url = f"{config.api_url.rstrip('/')}/webhook/set/{config.instancia}"
         req = _req.Request(
@@ -377,15 +379,20 @@ def configurar_webhook_evolution(request, pk):
 # Mapeamento de status Evolution/Baileys → StatusEntrega
 _EVOLUTION_STATUS_MAP = {
     # String values (Evolution API v2)
+    'PENDING': 'queued',
     'SERVER_ACK': 'sent',
     'DELIVERY_ACK': 'delivered',
     'READ': 'read',
     'PLAYED': 'read',
     # Numeric values (Baileys proto.WebMessageInfo.Status)
+    0: 'queued',     # ERROR/PENDING
+    1: 'queued',     # PENDING
     2: 'sent',       # SERVER_ACK
     3: 'delivered',  # DELIVERY_ACK
     4: 'read',       # READ
     5: 'read',       # PLAYED
+    '0': 'queued',
+    '1': 'queued',
     '2': 'sent',
     '3': 'delivered',
     '4': 'read',
@@ -447,7 +454,10 @@ def webhook_evolution(request):
         # Sem apikey: aceitar mas logar aviso (Evolution pode não enviar em algumas versões)
         logger.warning('[Webhook Evolution] Payload sem apikey — instance=%s', instance_name)
 
-    if event not in ('messages.update', 'MESSAGES_UPDATE'):
+    is_update = event in ('messages.update', 'MESSAGES_UPDATE')
+    is_upsert = event in ('messages.upsert', 'MESSAGES_UPSERT')
+
+    if not (is_update or is_upsert):
         return HttpResponse('OK', status=200)
 
     data_list = body.get('data', [])
@@ -460,16 +470,20 @@ def webhook_evolution(request):
         message_id = key.get('id', '').strip()
         from_me = key.get('fromMe', False)
 
-        # Só nos interessa rastrear mensagens enviadas por nós
         if not from_me or not message_id:
             continue
 
-        update = item.get('update', {})
-        raw_status = update.get('status', '')
-        status_entrega = _EVOLUTION_STATUS_MAP.get(raw_status)
-
-        if not status_entrega:
-            continue
+        if is_update:
+            # MESSAGES_UPDATE: status mudou (SERVER_ACK, DELIVERY_ACK, READ, PLAYED)
+            update = item.get('update', {})
+            raw_status = update.get('status', '')
+            status_entrega = _EVOLUTION_STATUS_MAP.get(raw_status)
+            if not status_entrega:
+                continue
+        else:
+            # MESSAGES_UPSERT: mensagem recém-enviada — captura status inicial
+            raw_status = item.get('status', item.get('messageStatus', ''))
+            status_entrega = _EVOLUTION_STATUS_MAP.get(raw_status, 'queued')
 
         updated = Notificacao.objects.filter(external_id=message_id).update(
             status_entrega=status_entrega,
