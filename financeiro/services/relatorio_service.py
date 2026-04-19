@@ -283,7 +283,7 @@ class RelatorioService:
         """
         from contratos.models import Contrato, StatusContrato
 
-        logger.info(f"Gerando relatório de posição de contratos")
+        logger.info("Gerando relatório de posição de contratos")
 
         queryset = Contrato.objects.filter(
             status=StatusContrato.ATIVO
@@ -360,7 +360,7 @@ class RelatorioService:
         from contratos.models import Contrato, StatusContrato, TipoCorrecao
         from financeiro.models import Reajuste
 
-        logger.info(f"Gerando relatório de previsão de reajustes")
+        logger.info("Gerando relatório de previsão de reajustes")
 
         hoje = date.today()
         data_limite = hoje + timedelta(days=dias_antecedencia)
@@ -815,7 +815,7 @@ class RelatorioService:
                 try:
                     if len(str(cell.value)) > max_length:
                         max_length = len(str(cell.value))
-                except:
+                except Exception:
                     pass
             adjusted_width = min(max_length + 2, 50)
             ws.column_dimensions[column_letter].width = adjusted_width

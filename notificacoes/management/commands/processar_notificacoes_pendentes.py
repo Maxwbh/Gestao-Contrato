@@ -25,7 +25,7 @@ class Command(BaseCommand):
             resultado = processar_notificacoes_pendentes()
 
             self.stdout.write(self.style.SUCCESS(
-                f'\n✅ Processamento concluído!'
+                '\n✅ Processamento concluído!'
             ))
             self.stdout.write(self.style.SUCCESS(
                 f'   Notificações enviadas: {resultado["enviadas"]}'
