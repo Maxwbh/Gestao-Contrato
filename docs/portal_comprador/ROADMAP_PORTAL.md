@@ -1,7 +1,7 @@
 # ROADMAP — Portal do Comprador
 
 **Desenvolvedor:** Maxwell da Silva Oliveira (maxwbh@gmail.com)
-**Última atualização:** 2026-04-18
+**Última atualização:** 2026-04-19
 
 > Roadmap específico do Portal do Comprador. Para documentação técnica do que já está implementado, consulte **[PORTAL_COMPRADOR.md](PORTAL_COMPRADOR.md)**.
 
@@ -13,6 +13,7 @@
 - **P2** Alto — funcionalidade importante para o comprador
 - **P3** Médio — melhoria significativa de UX
 - **P4** Baixo — nice to have
+- 🏦 **Débito Técnico** — identificado, fora do horizonte atual
 
 ---
 
@@ -54,16 +55,16 @@
 ### P2
 | # | Item | Status | Descrição |
 |---|------|--------|-----------|
-| 1.6 | 2FA opcional (TOTP) | ⏳ Pendente | `django-otp` com app autenticador. Ativação voluntária em "Meus Dados". |
+| 1.6 | 2FA opcional (TOTP) | 🏦 Débito Técnico — pós-2050 | `django-otp` com app autenticador. Ativação voluntária em "Meus Dados". |
 | 1.7 | Notificação de login suspeito | ⏳ Pendente | E-mail quando login vem de IP/país novo (comparar com histórico de `LogAcessoComprador`). |
 
 ---
 
-## 2. PAGAMENTO (P1)
+## 2. PAGAMENTO (P1/P2)
 
 | # | Item | Status | Descrição |
 |---|------|--------|-----------|
-| 2.1 | Exibir PIX Copia-e-Cola no detalhe da parcela | ⏳ Pendente | Campos `pix_copia_cola` e `pix_qrcode` já existem em `Parcela`. Renderizar QR code (biblioteca `segno` ou `qrcode`) + botão "copiar código". |
+| 2.1 | Exibir PIX Copia-e-Cola + QR code | 🏦 Débito Técnico — 2050 | Campos `pix_copia_cola` e `pix_qrcode` já existem em `Parcela`. Renderizar QR + botão "copiar código". |
 | 2.2 | Botão "Segunda Via" no portal | ⏳ Pendente | A API P3 existe (`api_portal_segunda_via`) mas não há botão UI. Adicionar em `meus_boletos.html` para parcelas vencidas. |
 | 2.3 | Confirmação de pagamento em tempo real | ⏳ Pendente | Polling ou webhook do BRCobrança → atualizar UI sem refresh. |
 
@@ -75,13 +76,13 @@
 
 ---
 
-## 3. DOCUMENTOS E CONTRATO (P2)
+## 3. DOCUMENTOS E CONTRATO 🏦 Débito Técnico — pós-2050
 
 | # | Item | Status | Descrição |
 |---|------|--------|-----------|
-| 3.1 | Download do contrato PDF assinado | ⏳ Pendente | Campo para upload admin → comprador baixa no portal. |
-| 3.2 | Download da escritura (quando disponível) | ⏳ Pendente | Vincular a campo de upload admin em `Contrato`. |
-| 3.3 | Informe de rendimentos anual | ⏳ Pendente | PDF gerado automaticamente para IR, com valores pagos no ano fiscal. |
+| 3.1 | Download do contrato PDF assinado | 🏦 pós-2050 | Campo para upload admin → comprador baixa no portal. |
+| 3.2 | Download da escritura (quando disponível) | 🏦 pós-2050 | Vincular a campo de upload admin em `Contrato`. |
+| 3.3 | Informe de rendimentos anual | 🏦 pós-2050 | PDF gerado automaticamente para IR, com valores pagos no ano fiscal. |
 
 ---
 
@@ -119,13 +120,13 @@
 
 ---
 
-## 6. SUPORTE E COMUNICAÇÃO (P3)
+## 6. SUPORTE E COMUNICAÇÃO 🏦 Débito Técnico — pós-2050
 
 | # | Item | Status | Descrição |
 |---|------|--------|-----------|
-| 6.1 | Chat / sistema de tickets | ⏳ Pendente | Comprador abre ticket → imobiliária responde. Vincular a `Contrato`. |
-| 6.2 | FAQ dinâmica | ⏳ Pendente | Gerenciada pela imobiliária, contextualizada (dúvidas sobre reajuste, boleto, etc). |
-| 6.3 | Botão "Falar com a imobiliária" (WhatsApp/e-mail) | ⏳ Pendente | Link direto com contexto (número do contrato pré-preenchido). |
+| 6.1 | Chat / sistema de tickets | 🏦 pós-2050 | Comprador abre ticket → imobiliária responde. Vincular a `Contrato`. |
+| 6.2 | FAQ dinâmica | 🏦 pós-2050 | Gerenciada pela imobiliária, contextualizada (dúvidas sobre reajuste, boleto, etc). |
+| 6.3 | Botão "Falar com a imobiliária" (WhatsApp/e-mail) | 🏦 pós-2050 | Link direto com contexto (número do contrato pré-preenchido). |
 
 ---
 
@@ -144,52 +145,53 @@
 
 ---
 
-## 8. ADMINISTRAÇÃO E OBSERVABILIDADE (P3)
+## 8. ADMINISTRAÇÃO E OBSERVABILIDADE 🏦 Débito Técnico — pós-2050
 
 | # | Item | Status | Descrição |
 |---|------|--------|-----------|
-| 8.1 | Dashboard admin de uso do portal | ⏳ Pendente | Compradores ativos, logins/dia, páginas mais acessadas, taxa de adoção. |
-| 8.2 | Impersonation ("entrar como comprador") | ⏳ Pendente | Admin acessa o portal como um comprador específico para suporte. Registrar como log especial. |
-| 8.3 | Bulk de operações sobre acessos | ⏳ Pendente | Ativar/desativar em lote, enviar convite para cadastro em massa. |
-| 8.4 | Alertas de anomalia | ⏳ Pendente | Login de país estranho, sequência de tentativas falhas, etc — notificar admin. |
+| 8.1 | Dashboard admin de uso do portal | 🏦 pós-2050 | Compradores ativos, logins/dia, páginas mais acessadas, taxa de adoção. |
+| 8.2 | Impersonation ("entrar como comprador") | 🏦 pós-2050 | Admin acessa o portal como um comprador específico para suporte. Registrar como log especial. |
+| 8.3 | Bulk de operações sobre acessos | 🏦 pós-2050 | Ativar/desativar em lote, enviar convite para cadastro em massa. |
+| 8.4 | Alertas de anomalia | 🏦 pós-2050 | Login de país estranho, sequência de tentativas falhas, etc — notificar admin. |
 
 ---
 
-## 9. LGPD E COMPLIANCE (P1)
+## 9. LGPD E COMPLIANCE 🏦 Débito Técnico — 3200
 
 | # | Item | Status | Descrição |
 |---|------|--------|-----------|
-| 9.1 | Aceite explícito de Termos e Política de Privacidade | ⏳ Pendente | Checkbox obrigatório no auto-cadastro com versionamento. |
-| 9.2 | Exportar dados pessoais (direito de acesso) | ⏳ Pendente | Botão "Baixar meus dados" → ZIP com JSON + PDFs. |
-| 9.3 | Solicitação de exclusão/anonimização | ⏳ Pendente | Fluxo de request → validação admin (pode conflitar com obrigação fiscal de 5 anos). |
-| 9.4 | Log de consentimento | ⏳ Pendente | Rastrear quando comprador aceitou cada versão dos termos. |
+| 9.1 | Aceite explícito de Termos e Política de Privacidade | 🏦 3200 | Checkbox obrigatório no auto-cadastro com versionamento. |
+| 9.2 | Exportar dados pessoais (direito de acesso) | 🏦 3200 | Botão "Baixar meus dados" → ZIP com JSON + PDFs. |
+| 9.3 | Solicitação de exclusão/anonimização | 🏦 3200 | Fluxo de request → validação admin (pode conflitar com obrigação fiscal de 5 anos). |
+| 9.4 | Log de consentimento | 🏦 3200 | Rastrear quando comprador aceitou cada versão dos termos. |
 
 ---
 
 ## Priorização Sugerida (Próximas Sprints)
 
-### Sprint 1 — Segurança crítica
+### Sprint 1 — Segurança
 - 1.1 Esqueci minha senha
-- 1.2 Verificação de e-mail
+- 1.2 Verificação de e-mail (ativar campos já existentes no modelo)
 - 1.3 Rate limit em login
-- 9.1 Aceite de termos
+- 1.4 Política de senha forte
 
-### Sprint 2 — Pagamento
-- 2.1 PIX copia-e-cola + QR code
-- 2.2 Botão segunda via no portal
-- 2.4 Carnê PDF
+### Sprint 2 — Pagamento e boletos
+- 2.2 Botão "Segunda Via" no portal (API já existe, falta UI)
+- 2.4 Carnê PDF (service já existe, falta exposição no portal)
+- 2.5 Histórico de pagamentos exportável
 
-### Sprint 3 — Documentos e compliance
-- 3.1 Download do contrato
-- 3.3 Informe de rendimentos anual
-- 9.2 Exportar dados pessoais
+### Sprint 3 — UX e contratos
+- 5.1 Busca/filtro em meus_contratos
+- 5.2 Aggregado de atraso por contrato
+- 4.1 Histórico de notificações no portal
+- 4.3 Banner de parcelas próximas (7 dias)
 
-### Sprint 4 — Engajamento
-- 4.1 Histórico de notificações
-- 4.2 Preferências granulares
-- 5.1/5.2 Busca e agregados em contratos
+### Sprint 4 — Engajamento e notificações
+- 4.2 Preferências granulares de notificação
+- 1.7 Notificação de login suspeito
+- 5.5 Gráfico de evolução dos pagamentos
 
-### Sprint 5 — PWA e escala
-- 7.1 PWA
+### Sprint 5 — PWA e infraestrutura
+- 7.1 PWA (manifest + service worker)
 - 4.4 Push notifications
-- 8.1 Dashboard admin de uso
+- 7.2 CDN para PDFs
