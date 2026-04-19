@@ -1288,3 +1288,78 @@ def get_acesso_usuario(user, imobiliaria):
         )
     except AcessoUsuario.DoesNotExist:
         return None
+
+
+# =============================================================================
+# Parâmetros do Sistema
+# =============================================================================
+
+class ParametroSistema(models.Model):
+    TIPO_STR = 'str'
+    TIPO_INT = 'int'
+    TIPO_BOOL = 'bool'
+    TIPO_SECRET = 'secret'
+    TIPO_CHOICES = [
+        (TIPO_STR, 'Texto'),
+        (TIPO_INT, 'Inteiro'),
+        (TIPO_BOOL, 'Booleano'),
+        (TIPO_SECRET, 'Senha / Token'),
+    ]
+
+    GRUPO_EMAIL = 'email'
+    GRUPO_TWILIO = 'twilio'
+    GRUPO_IMAP = 'imap'
+    GRUPO_TESTE = 'teste'
+    GRUPO_NOTIFICACAO = 'notificacao'
+    GRUPO_TAREFA = 'tarefa'
+    GRUPO_BRCOBRANCA = 'brcobranca'
+    GRUPO_PORTAL = 'portal'
+    GRUPO_APLICACAO = 'aplicacao'
+    GRUPO_BCB = 'bcb'
+    GRUPO_CHOICES = [
+        (GRUPO_EMAIL, 'E-mail SMTP'),
+        (GRUPO_TWILIO, 'Twilio (SMS / WhatsApp)'),
+        (GRUPO_IMAP, 'Bounce / IMAP'),
+        (GRUPO_TESTE, 'Modo de Teste'),
+        (GRUPO_NOTIFICACAO, 'Notificações'),
+        (GRUPO_TAREFA, 'Tarefas Agendadas'),
+        (GRUPO_BRCOBRANCA, 'BRCobrança'),
+        (GRUPO_PORTAL, 'Portal do Comprador'),
+        (GRUPO_APLICACAO, 'Aplicação'),
+        (GRUPO_BCB, 'APIs BCB'),
+    ]
+
+    chave = models.CharField(max_length=100, unique=True, verbose_name='Chave')
+    valor = models.TextField(blank=True, default='', verbose_name='Valor')
+    tipo = models.CharField(
+        max_length=10, choices=TIPO_CHOICES, default=TIPO_STR, verbose_name='Tipo'
+    )
+    grupo = models.CharField(
+        max_length=20, choices=GRUPO_CHOICES, default=GRUPO_APLICACAO, verbose_name='Grupo'
+    )
+    descricao = models.CharField(max_length=300, blank=True, verbose_name='Descrição')
+    atualizado_em = models.DateTimeField(auto_now=True, verbose_name='Atualizado em')
+
+    class Meta:
+        ordering = ['grupo', 'chave']
+        verbose_name = 'Parâmetro do Sistema'
+        verbose_name_plural = 'Parâmetros do Sistema'
+
+    def __str__(self):
+        return f'{self.chave} = {self.valor_exibicao}'
+
+    @property
+    def valor_exibicao(self):
+        if self.tipo == self.TIPO_SECRET and self.valor:
+            return '••••••••'
+        return self.valor
+
+    def get_valor_tipado(self):
+        if self.tipo == self.TIPO_INT:
+            try:
+                return int(self.valor)
+            except (ValueError, TypeError):
+                return 0
+        if self.tipo == self.TIPO_BOOL:
+            return self.valor.strip().lower() in ('true', '1', 'yes', 'on')
+        return self.valor
