@@ -14,13 +14,12 @@ from datetime import date
 
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.units import cm
-from reportlab.lib.colors import black, white, HexColor
-from reportlab.pdfgen import canvas
+from reportlab.lib.colors import white, HexColor
 from reportlab.platypus import (
     SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, HRFlowable
 )
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-from reportlab.lib.enums import TA_CENTER, TA_RIGHT, TA_LEFT
+from reportlab.lib.enums import TA_CENTER, TA_RIGHT
 
 # ─── Cores ────────────────────────────────────────────────────────────────────
 AZUL        = HexColor('#1a3a5c')
@@ -70,8 +69,6 @@ def gerar_recibo_antecipacao_pdf(contrato, historicos) -> bytes:
     bold   = ParagraphStyle('bold',   parent=styles['Normal'], fontName='Helvetica-Bold')
     normal = ParagraphStyle('normal', parent=styles['Normal'], fontSize=9)
     small  = ParagraphStyle('small',  parent=styles['Normal'], fontSize=8, textColor=CINZA)
-    titulo = ParagraphStyle('titulo', parent=styles['Normal'], fontSize=16,
-                            fontName='Helvetica-Bold', textColor=AZUL, alignment=TA_CENTER)
     centro = ParagraphStyle('centro', parent=styles['Normal'], fontSize=9, alignment=TA_CENTER)
     right  = ParagraphStyle('right',  parent=styles['Normal'], fontSize=9, alignment=TA_RIGHT)
 
@@ -149,7 +146,6 @@ def gerar_recibo_antecipacao_pdf(contrato, historicos) -> bytes:
     total_original   = Decimal('0')
     total_desconto   = Decimal('0')
     total_pago       = Decimal('0')
-    desconto_perc    = Decimal('0')
 
     for h in historicos:
         parcela = h.parcela

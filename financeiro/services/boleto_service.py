@@ -30,7 +30,6 @@ from decimal import Decimal
 from datetime import date, timedelta
 from django.conf import settings
 from django.utils import timezone
-from urllib.parse import urlencode
 
 logger = logging.getLogger(__name__)
 
@@ -1359,8 +1358,6 @@ class BoletoService:
     def _processar_resposta_sucesso(self, response, banco_nome=None, dados_boleto=None):
         """Processa resposta bem-sucedida da API"""
         try:
-            content_type = response.headers.get('content-type', '')
-
             # Extrair PDF da resposta
             pdf_content = response.content
 

@@ -5,13 +5,11 @@ Desenvolvedor: Maxwell da Silva Oliveira
 Email: maxwbh@gmail.com
 Empresa: M&S do Brasil LTDA
 """
-import pytest
 from decimal import Decimal
 from datetime import date, timedelta
 from unittest.mock import patch, MagicMock
 
 from django.test import TestCase
-from django.utils import timezone
 
 
 class TestFinanceiroTasks(TestCase):

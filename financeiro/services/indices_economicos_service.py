@@ -15,7 +15,7 @@ Empresa: M&S do Brasil LTDA
 import logging
 import requests
 from decimal import Decimal
-from datetime import date, datetime
+from datetime import date
 from typing import Optional, List, Dict, Tuple
 from dateutil.relativedelta import relativedelta
 
@@ -264,7 +264,7 @@ class BCBService:
                     # Converter data DD/MM/YYYY
                     partes = data_str.split('/')
                     if len(partes) == 3:
-                        dia, mes, ano = int(partes[0]), int(partes[1]), int(partes[2])
+                        _, mes, ano = int(partes[0]), int(partes[1]), int(partes[2])
                         resultados.append({
                             'tipo_indice': tipo_indice.upper(),
                             'ano': ano,

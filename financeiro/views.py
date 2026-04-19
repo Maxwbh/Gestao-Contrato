@@ -11,7 +11,7 @@ from django.contrib import messages
 from django.http import JsonResponse, HttpResponse, FileResponse
 from django.utils import timezone
 from django.db import transaction
-from django.db.models import Sum, Count, Q, F, Min
+from django.db.models import Sum, Count, Q, Min
 from django.views.generic import TemplateView
 from django.views.decorators.http import require_POST, require_GET
 from django.core.paginator import Paginator
@@ -584,7 +584,6 @@ def notificar_inadimplente(request, pk):
         from core.tasks import (
             _notificacao_ja_enviada_hoje,
             _registrar_notificacao,
-            _get_destinatario,
             _enviar_pelo_canal,
         )
         from notificacoes.models import TipoNotificacao
@@ -1588,7 +1587,6 @@ def gerar_arquivo_remessa(request):
     POST: Gera 1 arquivo de remessa por conta bancária a partir
           das parcelas selecionadas (auto-split por conta).
     """
-    from .models import ArquivoRemessa, Parcela, StatusBoleto
     from .services.cnab_service import CNABService
 
     service = CNABService()
@@ -1796,7 +1794,7 @@ def dashboard_conciliacao(request):
 
     Exibe KPIs, fila de boletos pendentes de conciliação e histórico recente.
     """
-    from django.db.models import Count, Sum, Q as DQ
+    from django.db.models import Count, Sum
     from .models import (
         Parcela, HistoricoPagamento, ArquivoRetorno, StatusBoleto,
         ItemRetorno,
@@ -2490,7 +2488,7 @@ def api_parcelas_elegibilidade(request, contrato_id):
     Retorna lista de parcelas com status de elegibilidade e informacoes do ciclo.
     """
     try:
-     return _api_parcelas_elegibilidade_logic(request, contrato_id)
+        return _api_parcelas_elegibilidade_logic(request, contrato_id)
     except Exception as exc:
         import logging
         logging.getLogger(__name__).exception('api_parcelas_elegibilidade erro contrato_id=%s', contrato_id)
@@ -3929,7 +3927,6 @@ def calcular_reajuste_proporcional(request, contrato_id):
     """
     from contratos.models import IndiceReajuste
     from calendar import monthrange
-    from datetime import date
 
     contrato = get_object_or_404(Contrato, pk=contrato_id)
 
@@ -4325,8 +4322,6 @@ def api_dashboard_contabilidade(request):
     API para retornar dados do dashboard de contabilidade em JSON.
     Usado para gráficos e atualizações via AJAX.
     """
-    from core.models import Contabilidade
-    from contratos.models import PrestacaoIntermediaria
 
     hoje = timezone.now().date()
 
@@ -4908,8 +4903,6 @@ def api_imobiliarias_lista(request):
         - contabilidade: ID da contabilidade (opcional)
         - ativo: true/false (opcional)
     """
-    from core.models import Contabilidade
-
     contabilidade_id = request.GET.get('contabilidade')
     ativo = request.GET.get('ativo', 'true').lower() == 'true'
 
@@ -5923,14 +5916,6 @@ def api_cnab_remessa_listar(request):
     if request.GET.get('status'):
         qs = qs.filter(status=request.GET['status'])
 
-    try:
-        page = max(1, int(request.GET.get('page', 1)))
-        per_page = min(max(1, int(request.GET.get('per_page', 20))), 100)
-    except (ValueError, TypeError):
-        page, per_page = 1, 20
-    total = qs.count()
-    arquivos = qs[(page-1)*per_page:page*per_page]
-
     NOMES_BANCO = {
         '001': 'Banco do Brasil',
         '033': 'Santander',
@@ -6358,7 +6343,6 @@ def api_reajustes_pendentes_count(request):
 @require_GET
 def api_sidebar_pendencias(request):
     """Retorna todos os contadores de pendências para a sidebar em uma única chamada."""
-    from django.db.models import Q
     from contratos.models import TipoCorrecao
     from django.db.models import Prefetch
     from .services.cnab_service import CNABService
@@ -7171,7 +7155,6 @@ def api_contabilidade_relatorios_vencimentos(request):
       meses    : quantidade de meses a projetar (default: 3)
       imobiliaria: ID da imobiliária (opcional)
     """
-    from datetime import date
     from dateutil.relativedelta import relativedelta
 
     hoje = timezone.now().date()
