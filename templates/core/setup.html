@@ -667,12 +667,17 @@
                 }
             }, stepInterval);
 
+            const controller = new AbortController();
+            const fetchTimeout = setTimeout(() => controller.abort(), 300000); // 5 min
+
             try {
                 const response = await fetch('/api/gerar-dados-teste/', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrftoken },
-                    body: JSON.stringify({ limpar })
+                    body: JSON.stringify({ limpar }),
+                    signal: controller.signal
                 });
+                clearTimeout(fetchTimeout);
 
                 const duration = Date.now() - startTime;
                 stopTimers();
@@ -698,9 +703,13 @@
                 setTimeout(() => showResult(success, data, duration), 400);
 
             } catch (error) {
+                clearTimeout(fetchTimeout);
                 const duration = Date.now() - startTime;
                 stopTimers();
-                showResult(false, { error: error.toString() }, duration);
+                const msg = error.name === 'AbortError'
+                    ? 'Tempo limite excedido (5 min). O servidor pode estar processando — verifique em alguns instantes.'
+                    : error.toString();
+                showResult(false, { error: msg }, duration);
             }
         }
 
