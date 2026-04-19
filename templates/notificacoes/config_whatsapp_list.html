@@ -1,0 +1,169 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Configurações de WhatsApp - Gestão de Contratos{% endblock %}
+
+{% block extra_css %}
+<style>
+    .ag-theme-material .ag-root-wrapper { border-radius: 0; border: none; }
+    .ag-theme-material .ag-header { background-color: #343a40; }
+    .ag-theme-material .ag-header-cell-text { color: #fff; font-weight: 600; }
+    .ag-theme-material .ag-header-icon { color: #fff; }
+    .ag-theme-material .ag-row-even { background-color: #fff; }
+    .ag-theme-material .ag-row-odd  { background-color: #f8f9fa; }
+    .ag-theme-material .ag-row:hover { background-color: #e8f8f0 !important; }
+    .ag-grid-actions .btn { padding: 1px 6px; font-size: 0.75rem; margin: 1px; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h2 class="mb-1">
+                <i class="fab fa-whatsapp text-success me-2"></i>Configurações de WhatsApp
+            </h2>
+            <p class="text-muted mb-0">Gerencie os provedores WhatsApp para envio de notificações</p>
+        </div>
+        <a href="{% url 'notificacoes:criar_config_whatsapp' %}" class="btn btn-success">
+            <i class="fas fa-plus me-1"></i> Nova Configuração
+        </a>
+    </div>
+
+    <div class="card shadow-sm">
+        <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
+            <div>
+                <strong>Configurações WhatsApp</strong>
+                <span class="badge bg-secondary ms-2">{{ total_configuracoes }} registro(s)</span>
+            </div>
+            <div class="d-flex align-items-center gap-2">
+                <i class="fas fa-search text-muted"></i>
+                <input type="text" id="gridQuickFilter" class="form-control form-control-sm"
+                       placeholder="Busca rápida..." style="width: 220px;"
+                       oninput="if(window.waGridApi) window.waGridApi.setGridOption('quickFilterText', this.value)">
+            </div>
+        </div>
+        <div class="card-body p-0">
+            <div id="waGrid" class="ag-theme-material" style="width:100%;"></div>
+        </div>
+        <div class="card-footer">
+            {% include "includes/pagination_perpage.html" %}
+        </div>
+    </div>
+</div>
+
+<!-- Modal de Resultado do Teste -->
+<div class="modal fade" id="modalTeste" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="fab fa-whatsapp me-2 text-success"></i>Resultado do Teste</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body" id="modalTesteBody">
+                <div class="text-center py-4">
+                    <div class="spinner-border text-success" role="status"></div>
+                    <p class="mt-2">Testando conexão...</p>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Fechar</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+const waRowData = [
+{% for config in configuracoes %}
+{
+    pk: {{ config.pk }},
+    nome: "{{ config.nome|escapejs }}",
+    provedor: "{{ config.get_provedor_display|escapejs }}",
+    instancia: "{{ config.instancia|default:''|escapejs }}",
+    api_url: "{{ config.api_url|default:''|escapejs }}",
+    numero_remetente: "{{ config.numero_remetente|default:''|escapejs }}",
+    ativo: {{ config.ativo|yesno:"true,false" }},
+    url_testar: "{% url 'notificacoes:testar_config_whatsapp' config.pk %}",
+    url_editar: "{% url 'notificacoes:editar_config_whatsapp' config.pk %}",
+    url_excluir: "{% url 'notificacoes:excluir_config_whatsapp' config.pk %}",
+},
+{% endfor %}
+];
+
+function provedorRenderer(params) {
+    const cores = { 'Twilio': 'primary', 'Meta (WhatsApp Business API)': 'info',
+                    'Evolution API (self-hosted)': 'success', 'Z-API': 'warning' };
+    const cor = cores[params.value] || 'secondary';
+    return `<span class="badge bg-${cor}">${params.value}</span>`;
+}
+
+function ativoRenderer(params) {
+    return params.value
+        ? '<span class="badge bg-success">Ativo</span>'
+        : '<span class="badge bg-secondary">Inativo</span>';
+}
+
+function acoesWaRenderer(params) {
+    const d = params.data;
+    return `<div class="ag-grid-actions">
+        <button type="button" class="btn btn-sm btn-outline-success btn-testar" data-url="${d.url_testar}" title="Testar Conexão"><i class="fab fa-whatsapp"></i></button>
+        <a href="${d.url_editar}" class="btn btn-sm btn-outline-primary" title="Editar"><i class="fas fa-edit"></i></a>
+        <a href="${d.url_excluir}" class="btn btn-sm btn-outline-danger" title="Excluir"><i class="fas fa-trash"></i></a>
+    </div>`;
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+    window.waGridApi = agGrid.createGrid(
+        document.getElementById('waGrid'),
+        {
+            columnDefs: [
+                { headerName: 'Nome', field: 'nome', filter: 'agTextColumnFilter', minWidth: 160,
+                  cellRenderer: p => `<strong>${p.value}</strong>` },
+                { headerName: 'Provedor', field: 'provedor', filter: 'agTextColumnFilter', minWidth: 180,
+                  cellRenderer: provedorRenderer },
+                { headerName: 'Instância / Número', field: 'instancia', filter: 'agTextColumnFilter', minWidth: 150,
+                  cellRenderer: p => p.value ? `<code>${p.value}</code>` : `<small class="text-muted">${p.data.numero_remetente || '—'}</small>` },
+                { headerName: 'API URL', field: 'api_url', filter: 'agTextColumnFilter', minWidth: 200,
+                  cellRenderer: p => p.value ? `<code class="small">${p.value}</code>` : '<span class="text-muted">—</span>' },
+                { headerName: 'Status', field: 'ativo', filter: false, minWidth: 90,
+                  cellRenderer: ativoRenderer },
+                { headerName: 'Ações', field: 'pk', sortable: false, filter: false, minWidth: 130,
+                  cellRenderer: acoesWaRenderer },
+            ],
+            rowData: waRowData,
+            domLayout: 'autoHeight',
+            defaultColDef: { sortable: true, resizable: true },
+            rowHeight: 44, headerHeight: 48,
+            suppressCellFocus: true, enableCellTextSelection: true,
+        }
+    );
+
+    const modal = new bootstrap.Modal(document.getElementById('modalTeste'));
+    const modalBody = document.getElementById('modalTesteBody');
+
+    document.getElementById('waGrid').addEventListener('click', function(e) {
+        const btn = e.target.closest('.btn-testar');
+        if (!btn) return;
+        const url = btn.dataset.url;
+        modalBody.innerHTML = '<div class="text-center py-4"><div class="spinner-border text-success" role="status"></div><p class="mt-2">Testando conexão...</p></div>';
+        modal.show();
+
+        fetch(url, { method: 'GET', headers: { 'X-Requested-With': 'XMLHttpRequest' } })
+            .then(r => r.json())
+            .then(data => {
+                if (data.status === 'success') {
+                    modalBody.innerHTML = '<div class="text-center py-4"><i class="fas fa-check-circle fa-3x text-success mb-3"></i><p class="text-success fw-bold">' + data.message + '</p></div>';
+                } else {
+                    modalBody.innerHTML = '<div class="text-center py-4"><i class="fas fa-times-circle fa-3x text-danger mb-3"></i><p class="text-danger fw-bold">' + data.message + '</p></div>';
+                }
+            })
+            .catch(err => {
+                modalBody.innerHTML = '<div class="text-center py-4"><i class="fas fa-exclamation-triangle fa-3x text-warning mb-3"></i><p class="text-warning fw-bold">Erro ao testar: ' + err.message + '</p></div>';
+            });
+    });
+});
+</script>
+{% endblock %}
