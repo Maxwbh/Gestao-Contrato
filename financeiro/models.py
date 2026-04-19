@@ -164,7 +164,19 @@ class Parcela(TimeStampedModel):
         max_length=30,
         blank=True,
         verbose_name='Nosso Número',
-        help_text='Número de identificação do boleto no banco'
+        help_text='Sequencial bruto do nosso número (sem convênio, sem DV). Usado para conciliação CNAB.'
+    )
+    nosso_numero_formatado = models.CharField(
+        max_length=30,
+        blank=True,
+        verbose_name='Nosso Número Formatado',
+        help_text='Nosso número completo conforme impresso no boleto (convênio + sequencial + DV). Usado para conciliação OFX.'
+    )
+    nosso_numero_dv = models.CharField(
+        max_length=2,
+        blank=True,
+        verbose_name='DV do Nosso Número',
+        help_text='Dígito verificador do nosso número (calculado pela API / banco).'
     )
     numero_documento = models.CharField(
         max_length=25,
@@ -533,9 +545,17 @@ class Parcela(TimeStampedModel):
         """
         Retorna o nosso número formatado com zeros à esquerda conforme o banco.
 
+        Prefere o valor já armazenado em ``nosso_numero_formatado`` (gravado a
+        partir da resposta da boleto_cnab_api — fonte da verdade para conciliação
+        OFX). Em caso de ausência, reconstrói a partir do sequencial bruto.
+
         Returns:
             str: Nosso número formatado
         """
+        # Valor autoritativo vindo da API (PR#32/#33 do boleto_cnab_api)
+        if self.nosso_numero_formatado:
+            return self.nosso_numero_formatado
+
         if not self.nosso_numero:
             return ''
 
@@ -699,7 +719,13 @@ class Parcela(TimeStampedModel):
 
         if resultado.get('sucesso'):
             self.conta_bancaria = conta_bancaria
+            # Gravar os três campos de nosso_numero para conciliação futura:
+            # - nosso_numero: sequencial bruto → conciliação via CNAB (retorno do banco)
+            # - nosso_numero_formatado: valor completo impresso no boleto → conciliação via OFX
+            # - nosso_numero_dv: dígito verificador (quando o banco/API o retorna isolado)
             self.nosso_numero = resultado.get('nosso_numero', '')
+            self.nosso_numero_formatado = resultado.get('nosso_numero_formatado', '')
+            self.nosso_numero_dv = resultado.get('nosso_numero_dv', '')
             self.numero_documento = self.gerar_numero_documento()
             self.codigo_barras = resultado.get('codigo_barras', '')
             self.linha_digitavel = resultado.get('linha_digitavel', '')

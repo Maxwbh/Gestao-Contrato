@@ -857,20 +857,31 @@ class BoletoService:
 
             # Em caso de sucesso, incluir identificadores locais para UI
             if resultado.get('sucesso'):
-                # Usar nosso_numero retornado pela API, se disponivel
-                # Caso contrario, usar o nosso_numero local
-                nosso_numero_final = resultado.get('nosso_numero_api') or str(nosso_numero)
+                # Três valores relacionados ao nosso_numero, cada um com seu papel na conciliação:
+                # - formatado: valor completo impresso no boleto (convênio+seq+DV) → OFX / retorno CNAB
+                # - raw:       sequencial bruto isolado (sem convênio, sem DV)     → comparação numérica
+                # - dv:        dígito verificador isolado                          → validação
+                nosso_numero_formatado = resultado.get('nosso_numero_api') or str(nosso_numero)
+                nosso_numero_raw       = resultado.get('nosso_numero_raw') or str(nosso_numero)
+                nosso_numero_dv        = resultado.get('nosso_numero_dv', '')
 
                 if resultado.get('nosso_numero_api'):
-                    logger.info(f"Usando nosso_numero da API: {nosso_numero_final}")
+                    logger.info(f"Usando nosso_numero da API: {nosso_numero_formatado}")
                 else:
-                    logger.info(f"Usando nosso_numero local: {nosso_numero_final}")
+                    logger.info(f"Usando nosso_numero local: {nosso_numero_formatado}")
 
                 # Usar gerar_numero_documento() para obter o numero, pois alguns bancos
                 # (BB, Sicoob) removem documento_numero dos dados antes de enviar a API
                 return {
                     'sucesso': True,
-                    'nosso_numero': nosso_numero_final,
+                    # 'nosso_numero' (campo histórico) continua sendo o valor formatado —
+                    # preserva compatibilidade com dados já gravados e com a constraint
+                    # unique_nosso_numero_por_conta. Os dois campos abaixo são novos
+                    # e gravados em paralelo para conciliação CNAB/OFX.
+                    'nosso_numero': nosso_numero_formatado,
+                    'nosso_numero_formatado': nosso_numero_formatado,
+                    'nosso_numero_dv': nosso_numero_dv,
+                    'nosso_numero_raw': nosso_numero_raw,
                     'numero_documento': parcela.gerar_numero_documento(),
                     'linha_digitavel': resultado.get('linha_digitavel', ''),
                     'codigo_barras': resultado.get('codigo_barras', ''),
@@ -1346,10 +1357,13 @@ class BoletoService:
                     'linha_digitavel': data.get('linha_digitavel', ''),
                     'codigo_barras': data.get('codigo_barras', ''),
                     # PR #32 da boleto_cnab_api separou os campos:
-                    # nosso_numero      = sequencial bruto   (ex: "000000018")
-                    # nosso_numero_formatado = completo para impressão (ex: "01234567000000018")
-                    # Lemos o formatado; fallback para nosso_numero (compatibilidade com versões antigas)
+                    # nosso_numero         = sequencial bruto (ex: "000000018")           → conciliação CNAB
+                    # nosso_numero_formatado = completo para impressão (ex: "01234567000000018") → conciliação OFX
+                    # nosso_numero_dv      = dígito verificador isolado (quando disponível)
+                    # Fallback para compatibilidade com versões anteriores da API.
+                    'nosso_numero': data.get('nosso_numero', ''),
                     'nosso_numero_formatado': data.get('nosso_numero_formatado', '') or data.get('nosso_numero', ''),
+                    'nosso_numero_dv': data.get('nosso_numero_dv', '') or data.get('dv', ''),
                     'agencia_conta_boleto': data.get('agencia_conta_boleto', '')
                 }
             else:
@@ -1380,6 +1394,9 @@ class BoletoService:
             linha_digitavel  = response.headers.get('X-Linha-Digitavel', '')
             codigo_barras    = response.headers.get('X-Codigo-Barras', '')
             nosso_numero_api = response.headers.get('X-Nosso-Numero-Formatado', '')
+            # Campos separados para conciliação (CNAB / OFX):
+            nosso_numero_raw = response.headers.get('X-Nosso-Numero', '')
+            nosso_numero_dv  = response.headers.get('X-Nosso-Numero-DV', '')
 
             if linha_digitavel and nosso_numero_api:
                 logger.info("Dados obtidos via headers X-* (PR#33)")
@@ -1390,6 +1407,8 @@ class BoletoService:
                 linha_digitavel  = linha_digitavel  or dados_extras.get('linha_digitavel', '')
                 codigo_barras    = codigo_barras    or dados_extras.get('codigo_barras', '')
                 nosso_numero_api = nosso_numero_api or dados_extras.get('nosso_numero_formatado', '')
+                nosso_numero_raw = nosso_numero_raw or dados_extras.get('nosso_numero', '')
+                nosso_numero_dv  = nosso_numero_dv  or dados_extras.get('nosso_numero_dv', '')
 
             if linha_digitavel and codigo_barras:
                 logger.info(f"Dados obtidos — linha_digitavel: {linha_digitavel[:20]}..., codigo_barras: {codigo_barras[:20]}...")
@@ -1397,7 +1416,7 @@ class BoletoService:
                 logger.warning(f"Dados incompletos — linha_digitavel: {'OK' if linha_digitavel else 'VAZIO'}, codigo_barras: {'OK' if codigo_barras else 'VAZIO'}")
 
             if nosso_numero_api:
-                logger.info(f"Nosso numero retornado pela API: {nosso_numero_api}")
+                logger.info(f"Nosso numero retornado pela API: {nosso_numero_api} (raw={nosso_numero_raw}, dv={nosso_numero_dv})")
 
             return {
                 'sucesso': True,
@@ -1405,6 +1424,8 @@ class BoletoService:
                 'linha_digitavel': linha_digitavel,
                 'codigo_barras': codigo_barras,
                 'nosso_numero_api': nosso_numero_api,
+                'nosso_numero_raw': nosso_numero_raw,
+                'nosso_numero_dv': nosso_numero_dv,
             }
 
         except Exception as e:
