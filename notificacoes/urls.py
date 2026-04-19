@@ -36,6 +36,10 @@ urlpatterns = [
     path('whatsapp/<int:pk>/editar/', views.ConfiguracaoWhatsAppUpdateView.as_view(), name='editar_config_whatsapp'),
     path('whatsapp/<int:pk>/excluir/', views.ConfiguracaoWhatsAppDeleteView.as_view(), name='excluir_config_whatsapp'),
     path('whatsapp/<int:pk>/testar/', views.testar_conexao_whatsapp, name='testar_config_whatsapp'),
+    path('whatsapp/<int:pk>/configurar-webhook/', views.configurar_webhook_evolution, name='configurar_webhook_evolution'),
+
+    # Webhook Evolution API (sem CSRF — validado por apikey)
+    path('webhook/evolution/', views.webhook_evolution, name='webhook_evolution'),
 
     # CRUD Templates de Notificacao (Mensagens de Email)
     path('templates/', views.TemplateNotificacaoListView.as_view(), name='listar_templates'),

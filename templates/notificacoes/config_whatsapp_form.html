@@ -29,6 +29,30 @@
                 {% crispy form %}
             </form>
 
+            {% if object and object.provedor == 'EVOLUTION' %}
+            <!-- Painel Webhook Evolution -->
+            <div class="card mt-4 border-info">
+                <div class="card-header bg-info text-white py-2 d-flex justify-content-between align-items-center">
+                    <span><i class="fas fa-plug me-2"></i><strong>Webhook de Entrega</strong></span>
+                    <button type="button" class="btn btn-light btn-sm" id="btn-configurar-webhook">
+                        <i class="fas fa-satellite-dish me-1"></i>Configurar Webhook na Instância
+                    </button>
+                </div>
+                <div class="card-body py-3">
+                    <p class="mb-2 small text-muted">
+                        Registra a URL abaixo na instância Evolution para receber confirmações de
+                        <strong>entregue</strong> e <strong>lido</strong> em tempo real.
+                    </p>
+                    <div id="webhook-url-box">
+                        <code class="small text-break" id="webhook-url-display">
+                            {{ request.scheme }}://{{ request.get_host }}/notificacoes/webhook/evolution/
+                        </code>
+                    </div>
+                    <div id="webhook-resultado" class="mt-2"></div>
+                </div>
+            </div>
+            {% endif %}
+
             <!-- Dicas por Provedor -->
             <div class="card mt-4 border-success">
                 <div class="card-header bg-success text-white py-2">
@@ -99,6 +123,42 @@ document.addEventListener('DOMContentLoaded', function() {
     if (provedorSelect) {
         provedorSelect.addEventListener('change', atualizarVisibilidade);
         atualizarVisibilidade();
+    }
+
+    // Botao Configurar Webhook (Evolution apenas)
+    const btnWebhook = document.getElementById('btn-configurar-webhook');
+    if (btnWebhook) {
+        btnWebhook.addEventListener('click', function() {
+            {% if object and object.provedor == 'EVOLUTION' %}
+            const url = '{% url "notificacoes:configurar_webhook_evolution" object.pk %}';
+            const resultado = document.getElementById('webhook-resultado');
+            btnWebhook.disabled = true;
+            btnWebhook.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Configurando...';
+
+            fetch(url, {
+                method: 'POST',
+                headers: {
+                    'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value,
+                    'X-Requested-With': 'XMLHttpRequest',
+                },
+            })
+            .then(r => r.json())
+            .then(data => {
+                btnWebhook.disabled = false;
+                btnWebhook.innerHTML = '<i class="fas fa-satellite-dish me-1"></i>Configurar Webhook na Instância';
+                if (data.status === 'success') {
+                    resultado.innerHTML = '<div class="alert alert-success py-2 mb-0 small"><i class="fas fa-check-circle me-1"></i>' + data.message + '</div>';
+                } else {
+                    resultado.innerHTML = '<div class="alert alert-danger py-2 mb-0 small"><i class="fas fa-times-circle me-1"></i>' + data.message + '</div>';
+                }
+            })
+            .catch(err => {
+                btnWebhook.disabled = false;
+                btnWebhook.innerHTML = '<i class="fas fa-satellite-dish me-1"></i>Configurar Webhook na Instância';
+                resultado.innerHTML = '<div class="alert alert-danger py-2 mb-0 small">Erro: ' + err.message + '</div>';
+            });
+            {% endif %}
+        });
     }
 
     // Botao Testar Conexao
