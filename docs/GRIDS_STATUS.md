@@ -34,7 +34,7 @@ Grid com todas as prestações do sistema filtráveis por imobiliária, contrato
 |---------------|----------|--------------------------------------------|-------------------------------------|
 | **Pago**      | Verde    | `parcela.pago = True`                      | Parcela quitada, pagamento registrado |
 | **Vencida**   | Vermelho | `parcela.pago = False` e `data_vencimento < hoje` | Em atraso — gera juros e multa |
-| **Em aberto** | Amarelo  | `parcela.pago = False` e `data_vencimento >= hoje` | Ainda dentro do prazo              |
+| **A Vencer** | Azul  | `parcela.pago = False` e `data_vencimento >= hoje` | Ainda dentro do prazo              |
 
 ### Coluna: Boleto
 
@@ -64,7 +64,7 @@ Grid com as parcelas vencendo ou vencidas no mês selecionado. Usada para acompa
 |---------------|----------|-----------------------------------------------|-------------------------|
 | **Pago**      | Verde    | `pago = True`                                 | Quitada                 |
 | **Vencida**   | Vermelho | `pago = False` e data passada                 | Em atraso               |
-| **Em aberto** | Amarelo  | `pago = False` e data futura ou no dia        | Aguardando pagamento    |
+| **A Vencer** | Azul  | `pago = False` e data futura ou no dia        | Aguardando pagamento    |
 
 ---
 
@@ -335,7 +335,7 @@ Grid com os usuários e suas permissões por imobiliária.
 
 | Grid                  | Status possíveis                                                    |
 |-----------------------|----------------------------------------------------------------------|
-| Parcela               | Pago · Vencida · Em aberto                                          |
+| Parcela               | Pago · Vencida · A Vencer · Ag. Reajuste                                          |
 | Boleto (da parcela)   | — · Gerado · Registrado · Pago · Vencido · Cancelado · Baixado · Protestado |
 | Contrato              | Ativo · Quitado · Cancelado · Suspenso                              |
 | Remessa CNAB          | Gerado · Enviado · Processado · Erro                                |
