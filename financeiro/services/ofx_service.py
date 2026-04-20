@@ -7,7 +7,7 @@ dos principais bancos brasileiros (BB, Bradesco, Itaú, Caixa, Santander, etc.).
 Fluxo:
   1. Usuário exporta extrato OFX do internet banking
   2. Faz upload via /financeiro/cnab/ofx/upload/
-  3. Sistema parseia o arquivo e tenta reconciliar transações com parcelas
+  3. Sistema parseia o arquivo via BRCobrança e reconcilia transações com parcelas
   4. Parcelas identificadas são marcadas como pagas
   5. Relatório exibido: reconciliadas / não reconciliadas
 
@@ -19,11 +19,10 @@ Estratégia de reconciliação (em ordem de prioridade):
   P4  — valor ±R$0,10 sem restrição de data
 
 Parse:
-  Primário   — POST /api/ofx/parse no boleto_cnab_api (gem Ruby `ofx`, OFX v1/v2)
-  Fallback   — parse manual SGML Python (sem dependências externas)
+  POST /api/ofx/parse no boleto_cnab_api (gem Ruby `ofx`, OFX v1/v2, bank-specific)
+  Se a API estiver indisponível, RuntimeError é levantado.
 """
 import io
-import re
 import logging
 from datetime import date
 from decimal import Decimal, InvalidOperation
@@ -34,7 +33,7 @@ logger = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
-# Parser OFX
+# OFXTransaction
 # ---------------------------------------------------------------------------
 
 class OFXTransaction:
@@ -53,101 +52,6 @@ class OFXTransaction:
 
     def __repr__(self):
         return f"<OFXTransaction {self.fitid} {self.data} {self.valor} '{self.memo[:30]}'>"
-
-
-def _parse_data_ofx(s: str) -> date | None:
-    """
-    Parseia data OFX. Formatos suportados:
-      20260407         → date(2026, 4, 7)
-      20260407120000   → date(2026, 4, 7)
-      20260407120000[-3:BRT] → date(2026, 4, 7)
-    """
-    s = s.strip()
-    # Remover timezone OFX como [-3:BRT]
-    s = re.sub(r'\[.*?\]', '', s).strip()
-    s = re.sub(r'[^0-9]', '', s)
-    if len(s) >= 8:
-        try:
-            return date(int(s[:4]), int(s[4:6]), int(s[6:8]))
-        except (ValueError, TypeError):
-            pass
-    return None
-
-
-def _parse_valor(s: str) -> Decimal:
-    """Parseia valor OFX (pode ser negativo: -1500.00 ou +1500.00)."""
-    s = s.strip().replace(',', '.')
-    try:
-        return Decimal(s)
-    except InvalidOperation:
-        return Decimal('0')
-
-
-def parse_ofx(content: str | bytes) -> list[OFXTransaction]:
-    """
-    Parseia arquivo OFX (formato SGML, não XML).
-    Retorna lista de OFXTransaction com todas as transações encontradas.
-
-    Suporta ambos os formatos:
-      - SGML clássico (maioria dos bancos BR): <TAG>valor (sem fechamento)
-      - XML-like: <TAG>valor</TAG>
-    """
-    if isinstance(content, bytes):
-        # Tentar detectar encoding
-        for enc in ('utf-8', 'latin-1', 'cp1252', 'iso-8859-1'):
-            try:
-                content = content.decode(enc)
-                break
-            except UnicodeDecodeError:
-                continue
-        else:
-            content = content.decode('latin-1', errors='replace')
-
-    # Normalizar quebras de linha
-    content = content.replace('\r\n', '\n').replace('\r', '\n')
-
-    transacoes = []
-    # Encontrar blocos <STMTTRN>...</STMTTRN> ou <STMTTRN> sem fechamento
-    # Dividir o conteúdo por <STMTTRN>
-    blocos = re.split(r'<STMTTRN>', content, flags=re.IGNORECASE)
-
-    for bloco in blocos[1:]:  # pular o cabeçalho
-        # Determinar fim do bloco
-        fim = re.search(r'</STMTTRN>|<STMTTRN>', bloco, re.IGNORECASE)
-        if fim:
-            bloco = bloco[:fim.start()]
-
-        tx = OFXTransaction()
-
-        def _get(tag: str) -> str:
-            """Extrai valor de <TAG>valor ou <TAG>valor</TAG>."""
-            m = re.search(
-                rf'<{re.escape(tag)}>\s*([^\n<]+)',
-                bloco,
-                re.IGNORECASE
-            )
-            return m.group(1).strip() if m else ''
-
-        tx.tipo = _get('TRNTYPE').upper()
-        tx.fitid = _get('FITID')
-        tx.memo = _get('MEMO') or _get('NAME')
-        tx.numero_cheque = _get('CHECKNUM')
-        tx.banco_pagador = _get('BANKID') or _get('BRANCHID')
-
-        data_raw = _get('DTPOSTED') or _get('DTUSER')
-        tx.data = _parse_data_ofx(data_raw)
-
-        valor_raw = _get('TRNAMT')
-        tx.valor = _parse_valor(valor_raw)
-
-        # Pular transações sem dados essenciais
-        if tx.data is None or tx.valor == Decimal('0'):
-            continue
-
-        transacoes.append(tx)
-
-    logger.info('OFX parse: %d transações encontradas', len(transacoes))
-    return transacoes
 
 
 # ---------------------------------------------------------------------------
@@ -175,23 +79,26 @@ def _parse_via_brcobranca(content: bytes, brcobranca_url: str) -> list[OFXTransa
             timeout=15,
         )
     except requests.exceptions.ConnectionError:
-        logger.debug('OFX BRCobrança: serviço indisponível em %s — usando parser Python', brcobranca_url)
+        logger.warning(
+            'OFX BRCobrança: serviço indisponível em %s — verifique o container/serviço',
+            brcobranca_url
+        )
         return None
     except requests.exceptions.Timeout:
-        logger.warning('OFX BRCobrança: timeout em %s — usando parser Python', brcobranca_url)
+        logger.warning('OFX BRCobrança: timeout em %s', brcobranca_url)
         return None
     except Exception as e:
-        logger.warning('OFX BRCobrança: erro inesperado (%s) — usando parser Python', e)
+        logger.warning('OFX BRCobrança: erro inesperado — %s', e)
         return None
 
     if resp.status_code != 200:
-        logger.warning('OFX BRCobrança: status %s — usando parser Python', resp.status_code)
+        logger.warning('OFX BRCobrança: status %s — resposta: %s', resp.status_code, resp.text[:200])
         return None
 
     try:
         dados = resp.json()
     except Exception:
-        logger.warning('OFX BRCobrança: resposta não é JSON — usando parser Python')
+        logger.warning('OFX BRCobrança: resposta não é JSON — %s', resp.text[:200])
         return None
 
     transacoes_raw = dados.get('transacoes') or []
@@ -257,8 +164,8 @@ class OFXService:
     Recebe conteúdo do arquivo OFX e tenta casar cada crédito
     com uma parcela não paga do sistema.
 
-    Parse: tenta primeiro via BRCobrança (gem Ruby `ofx`); se indisponível,
-    usa o parser Python puro como fallback.
+    Parse: POST /api/ofx/parse no boleto_cnab_api (obrigatório).
+    Se a API estiver indisponível, RuntimeError é levantado.
     """
 
     # Tolerância em R$ para match de valor
@@ -280,10 +187,8 @@ class OFXService:
 
     def processar(self, ofx_content: str | bytes) -> dict:
         """
-        Parseia OFX e reconcilia transações com parcelas não pagas.
-
-        Tenta parse via BRCobrança primeiro (gem Ruby `ofx`, suporta OFX v1/v2,
-        com extração bank-specific de nosso_número). Fallback para parser Python.
+        Parseia OFX via BRCobrança e reconcilia transações com parcelas não pagas.
+        Levanta RuntimeError se a API BRCobrança estiver indisponível.
 
         Returns:
             {
@@ -292,7 +197,7 @@ class OFXService:
                 'nao_reconciliadas': int,
                 'resultados': list[OFXReconciliacao],
                 'parcelas_quitadas': list[Parcela],
-                'parser': 'brcobranca' | 'python',
+                'parser': 'brcobranca',
             }
         """
         from financeiro.models import Parcela
@@ -303,12 +208,18 @@ class OFXService:
             else ofx_content.encode('utf-8')
         )
 
-        # Tentar BRCobrança primeiro
         transacoes = _parse_via_brcobranca(content_bytes, self.brcobranca_url)
-        parser_usado = 'brcobranca'
         if transacoes is None:
-            transacoes = parse_ofx(ofx_content)
-            parser_usado = 'python'
+            logger.error(
+                "[OFX] API BRCobrança indisponível em %s\n"
+                "  → Verifique se o container/serviço BRCobrança está rodando.",
+                self.brcobranca_url,
+            )
+            raise RuntimeError(
+                'Não foi possível processar o arquivo OFX: API BRCobrança indisponível. '
+                'Verifique os logs do servidor.'
+            )
+        parser_usado = 'brcobranca'
         if not transacoes:
             return {
                 'total_transacoes': 0,
@@ -478,8 +389,14 @@ def processar_ofx_upload(arquivo_content: bytes,
     service = OFXService(imobiliaria=imobiliaria, contrato=contrato)
 
     if dry_run:
-        # Simulação: parseia e reconcilia sem quitar
-        transacoes = parse_ofx(arquivo_content)
+        from django.conf import settings
+        brcobranca_url = getattr(settings, 'BRCOBRANCA_URL', 'http://localhost:9292')
+        transacoes = _parse_via_brcobranca(arquivo_content, brcobranca_url)
+        if transacoes is None:
+            raise RuntimeError(
+                'Não foi possível processar o arquivo OFX: API BRCobrança indisponível. '
+                'Verifique os logs do servidor.'
+            )
         return {
             'dry_run': True,
             'total_transacoes': len(transacoes),

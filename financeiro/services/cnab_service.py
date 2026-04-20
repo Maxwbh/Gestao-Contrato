@@ -14,6 +14,7 @@ Desenvolvedor: Maxwell da Silva Oliveira
 Email: maxwbh@gmail.com
 Empresa: M&S do Brasil LTDA
 """
+import io
 import time
 import logging
 import requests
@@ -567,299 +568,197 @@ class CNABService:
             arquivo_para_atualizar=arquivo_remessa,
         )
 
-    def processar_retorno(
-        self,
-        arquivo_retorno,
-        user=None
-    ) -> Dict:
+    def processar_retorno(self, arquivo_retorno, user=None) -> Dict:
         """
-        Processa um arquivo de retorno CNAB.
-
-        Args:
-            arquivo_retorno: ArquivoRetorno com o arquivo carregado
-            user: Usuario que esta processando
-
-        Returns:
-            dict: Resultado do processamento
+        Processa um arquivo de retorno CNAB via API BRCobrança (POST /api/retorno).
+        Não existe parsing local — todo processamento é delegado à API.
         """
-        from financeiro.models import StatusArquivoRetorno
+        from financeiro.models import ItemRetorno, StatusArquivoRetorno
 
         try:
-            # Ler arquivo
             arquivo_retorno.arquivo.seek(0)
             conteudo = arquivo_retorno.arquivo.read()
 
-            # Tentar decodificar
+            # Detectar layout pelo comprimento da primeira linha
             try:
-                linhas = conteudo.decode('latin-1').split('\n')
-            except UnicodeDecodeError:
-                linhas = conteudo.decode('utf-8').split('\n')
+                primeira_linha = conteudo.decode('latin-1').split('\n')[0].strip()
+            except Exception:
+                primeira_linha = conteudo.split(b'\n')[0].decode('latin-1', errors='replace').strip()
 
-            # Detectar layout
-            if len(linhas[0].strip()) == 240:
-                return self._processar_retorno_cnab240(
-                    arquivo_retorno, linhas, user
+            layout_detectado = 'CNAB_240' if len(primeira_linha) == 240 else 'CNAB_400'
+            formato_api = 'cnab240' if layout_detectado == 'CNAB_240' else 'cnab400'
+
+            conta = arquivo_retorno.conta_bancaria
+            banco = self._get_banco_brcobranca(getattr(conta, 'banco', '') or '')
+            descricao_conta = getattr(conta, 'descricao', None) or str(conta)
+
+            logger.info(
+                "[Retorno] Enviando para BRCobrança — conta=%s banco=%s layout=%s bytes=%d",
+                descricao_conta, banco, formato_api, len(conteudo)
+            )
+
+            try:
+                response = requests.post(
+                    f'{self.brcobranca_url}/api/retorno',
+                    files={'file': ('retorno.ret', io.BytesIO(conteudo), 'application/octet-stream')},
+                    data={'banco': banco, 'formato': formato_api},
+                    timeout=60,
                 )
-            else:
-                return self._processar_retorno_cnab400(
-                    arquivo_retorno, linhas, user
+            except requests.exceptions.ConnectionError as e:
+                logger.error(
+                    "[Retorno] ERRO DE CONEXÃO com BRCobrança — conta=%s banco=%s\n"
+                    "  → A API não está acessível em: %s\n"
+                    "  → Confirme que o container/serviço BRCobrança está rodando.\n"
+                    "  → Detalhe: %s",
+                    descricao_conta, banco, self.brcobranca_url, e,
                 )
+                arquivo_retorno.status = StatusArquivoRetorno.ERRO
+                arquivo_retorno.erro_mensagem = (
+                    'Não foi possível conectar à API BRCobrança. '
+                    'Verifique se o serviço está ativo.'
+                )
+                arquivo_retorno.save()
+                return {'sucesso': False, 'erro': arquivo_retorno.erro_mensagem}
+
+            if response.status_code != 200:
+                erro_body = response.text[:500]
+                logger.error(
+                    "[Retorno] ERRO BRCobrança HTTP %d — conta=%s banco=%s layout=%s\n"
+                    "  → URL: %s\n"
+                    "  → Resposta: %s",
+                    response.status_code, descricao_conta, banco, formato_api,
+                    f'{self.brcobranca_url}/api/retorno', erro_body,
+                )
+                arquivo_retorno.status = StatusArquivoRetorno.ERRO
+                arquivo_retorno.erro_mensagem = (
+                    f'BRCobrança retornou HTTP {response.status_code}. '
+                    'Verifique os logs do servidor.'
+                )
+                arquivo_retorno.save()
+                return {'sucesso': False, 'erro': arquivo_retorno.erro_mensagem}
+
+            try:
+                dados = response.json()
+            except Exception:
+                logger.error(
+                    "[Retorno] BRCobrança retornou resposta não-JSON: %s",
+                    response.text[:200]
+                )
+                arquivo_retorno.status = StatusArquivoRetorno.ERRO
+                arquivo_retorno.erro_mensagem = 'API BRCobrança retornou resposta inválida.'
+                arquivo_retorno.save()
+                return {'sucesso': False, 'erro': arquivo_retorno.erro_mensagem}
+
+            retornos = dados.get('retornos') or []
+            arquivo_retorno.layout = layout_detectado
+
+            total_registros = 0
+            registros_processados = 0
+            registros_erro = 0
+            valor_total_pago = Decimal('0.00')
+
+            with transaction.atomic():
+                for reg in retornos:
+                    total_registros += 1
+                    try:
+                        nosso_numero = str(reg.get('nosso_numero') or '').strip()
+                        codigo_ocorrencia = str(reg.get('codigo_ocorrencia') or '')
+
+                        def _to_dec(v):
+                            try:
+                                return Decimal(str(v)) if v is not None else Decimal('0.00')
+                            except Exception:
+                                return Decimal('0.00')
+
+                        valor_titulo = _to_dec(reg.get('valor_titulo'))
+                        valor_pago = _to_dec(reg.get('valor_pago'))
+
+                        def _parse_date(s):
+                            if not s:
+                                return None
+                            try:
+                                parts = str(s).split('-')
+                                if len(parts) == 3:
+                                    return datetime(int(parts[0]), int(parts[1]), int(parts[2])).date()
+                            except Exception:
+                                pass
+                            return None
+
+                        data_ocorrencia = _parse_date(reg.get('data_ocorrencia'))
+                        data_credito = _parse_date(reg.get('data_credito'))
+
+                        tipo_ocorrencia = 'OUTROS'
+                        descricao = ''
+                        if codigo_ocorrencia in OCORRENCIAS_CNAB:
+                            tipo_ocorrencia, descricao = OCORRENCIAS_CNAB[codigo_ocorrencia]
+
+                        parcela = self._buscar_parcela_por_nosso_numero(nosso_numero, conta)
+
+                        item, criado = ItemRetorno.objects.get_or_create(
+                            arquivo_retorno=arquivo_retorno,
+                            nosso_numero=nosso_numero,
+                            defaults=dict(
+                                parcela=parcela,
+                                codigo_ocorrencia=codigo_ocorrencia,
+                                descricao_ocorrencia=descricao,
+                                tipo_ocorrencia=tipo_ocorrencia,
+                                valor_titulo=valor_titulo,
+                                valor_pago=valor_pago if valor_pago > 0 else None,
+                                data_ocorrencia=data_ocorrencia,
+                                data_credito=data_credito,
+                            ),
+                        )
+                        if not criado:
+                            registros_processados += (1 if item.processado else 0)
+                            continue
+
+                        if item.processar_baixa():
+                            registros_processados += 1
+                            if tipo_ocorrencia == 'LIQUIDACAO':
+                                valor_total_pago += valor_pago or valor_titulo
+                        else:
+                            if item.erro_processamento:
+                                registros_erro += 1
+
+                    except Exception as e:
+                        registros_erro += 1
+                        logger.exception("[Retorno] Erro ao processar registro: %s", e)
+
+                arquivo_retorno.total_registros = total_registros
+                arquivo_retorno.registros_processados = registros_processados
+                arquivo_retorno.registros_erro = registros_erro
+                arquivo_retorno.valor_total_pago = valor_total_pago
+                arquivo_retorno.data_processamento = timezone.now()
+                arquivo_retorno.processado_por = user
+
+                if registros_erro == 0:
+                    arquivo_retorno.status = StatusArquivoRetorno.PROCESSADO
+                elif registros_processados > 0:
+                    arquivo_retorno.status = StatusArquivoRetorno.PROCESSADO_PARCIAL
+                else:
+                    arquivo_retorno.status = StatusArquivoRetorno.ERRO
+
+                arquivo_retorno.save()
+
+            logger.info(
+                "[Retorno] %d/%d registros processados, R$ %.2f pagos",
+                registros_processados, total_registros, float(valor_total_pago)
+            )
+
+            return {
+                'sucesso': True,
+                'total_registros': total_registros,
+                'registros_processados': registros_processados,
+                'registros_erro': registros_erro,
+                'valor_total_pago': valor_total_pago,
+            }
 
         except Exception as e:
             arquivo_retorno.status = StatusArquivoRetorno.ERRO
             arquivo_retorno.erro_mensagem = str(e)
             arquivo_retorno.save()
-            logger.exception("Erro ao processar retorno: %s", e)
-            return {
-                'sucesso': False,
-                'erro': str(e)
-            }
-
-    def _processar_retorno_cnab400(
-        self,
-        arquivo_retorno,
-        linhas: List[str],
-        user
-    ) -> Dict:
-        """Processa arquivo de retorno CNAB 400"""
-        from financeiro.models import (
-            ItemRetorno, StatusArquivoRetorno
-        )
-
-        arquivo_retorno.layout = 'CNAB_400'
-        total_registros = 0
-        registros_processados = 0
-        registros_erro = 0
-        valor_total_pago = Decimal('0.00')
-
-        with transaction.atomic():
-            for linha in linhas:
-                linha = linha.strip()
-                if not linha:
-                    continue
-
-                # Registro de detalhe (tipo 1)
-                if linha[0] == '1':
-                    total_registros += 1
-
-                    try:
-                        # Extrair dados
-                        nosso_numero = linha[62:82].strip()
-                        codigo_ocorrencia = linha[108:110]
-                        valor_titulo = Decimal(linha[152:165]) / 100
-                        valor_pago = Decimal(linha[253:266]) / 100
-
-                        # Data da ocorrencia
-                        data_str = linha[110:116]
-                        if data_str.strip():
-                            data_ocorrencia = datetime.strptime(data_str, '%d%m%y').date()
-                        else:
-                            data_ocorrencia = None
-
-                        # Data de credito
-                        data_credito_str = linha[175:181]
-                        if data_credito_str.strip():
-                            data_credito = datetime.strptime(data_credito_str, '%d%m%y').date()
-                        else:
-                            data_credito = None
-
-                        # Identificar tipo de ocorrencia
-                        tipo_ocorrencia = 'OUTROS'
-                        descricao = ''
-                        if codigo_ocorrencia in OCORRENCIAS_CNAB:
-                            tipo_ocorrencia, descricao = OCORRENCIAS_CNAB[codigo_ocorrencia]
-
-                        # Buscar parcela — exact match + fallback zero-pad, prioriza conta
-                        conta = arquivo_retorno.conta_bancaria
-                        parcela = self._buscar_parcela_por_nosso_numero(nosso_numero, conta)
-
-                        # Idempotência: não duplicar ItemRetorno para mesmo nosso_numero
-                        item, criado = ItemRetorno.objects.get_or_create(
-                            arquivo_retorno=arquivo_retorno,
-                            nosso_numero=nosso_numero,
-                            defaults=dict(
-                                parcela=parcela,
-                                codigo_ocorrencia=codigo_ocorrencia,
-                                descricao_ocorrencia=descricao,
-                                tipo_ocorrencia=tipo_ocorrencia,
-                                valor_titulo=valor_titulo,
-                                valor_pago=valor_pago if valor_pago > 0 else None,
-                                data_ocorrencia=data_ocorrencia,
-                                data_credito=data_credito,
-                            ),
-                        )
-                        if not criado:
-                            registros_processados += (1 if item.processado else 0)
-                            continue
-
-                        # Processar baixa
-                        if item.processar_baixa():
-                            registros_processados += 1
-                            if tipo_ocorrencia == 'LIQUIDACAO':
-                                valor_total_pago += valor_pago or valor_titulo
-                        else:
-                            if item.erro_processamento:
-                                registros_erro += 1
-
-                    except Exception as e:
-                        registros_erro += 1
-                        logger.exception("Erro ao processar linha de retorno: %s", e)
-
-            # Atualizar arquivo
-            arquivo_retorno.total_registros = total_registros
-            arquivo_retorno.registros_processados = registros_processados
-            arquivo_retorno.registros_erro = registros_erro
-            arquivo_retorno.valor_total_pago = valor_total_pago
-            arquivo_retorno.data_processamento = timezone.now()
-            arquivo_retorno.processado_por = user
-
-            if registros_erro == 0:
-                arquivo_retorno.status = StatusArquivoRetorno.PROCESSADO
-            elif registros_processados > 0:
-                arquivo_retorno.status = StatusArquivoRetorno.PROCESSADO_PARCIAL
-            else:
-                arquivo_retorno.status = StatusArquivoRetorno.ERRO
-
-            arquivo_retorno.save()
-
-        logger.info(
-            f"Retorno processado: {registros_processados}/{total_registros} registros, "
-            f"R$ {valor_total_pago} pagos"
-        )
-
-        return {
-            'sucesso': True,
-            'total_registros': total_registros,
-            'registros_processados': registros_processados,
-            'registros_erro': registros_erro,
-            'valor_total_pago': valor_total_pago,
-        }
-
-    def _processar_retorno_cnab240(
-        self,
-        arquivo_retorno,
-        linhas: List[str],
-        user
-    ) -> Dict:
-        """Processa arquivo de retorno CNAB 240"""
-        from financeiro.models import (
-            ItemRetorno, StatusArquivoRetorno
-        )
-
-        arquivo_retorno.layout = 'CNAB_240'
-        total_registros = 0
-        registros_processados = 0
-        registros_erro = 0
-        valor_total_pago = Decimal('0.00')
-
-        with transaction.atomic():
-            for linha in linhas:
-                linha = linha.strip()
-                if len(linha) < 240:
-                    continue
-
-                tipo_registro = linha[7]
-
-                # Registro de detalhe segmento T (tipo 3, segmento T)
-                if tipo_registro == '3' and linha[13] == 'T':
-                    total_registros += 1
-
-                    try:
-                        nosso_numero = linha[37:57].strip()
-                        codigo_ocorrencia = linha[15:17]
-                        valor_titulo = Decimal(linha[81:96]) / 100
-
-                        # Buscar segmento U correspondente (proxima linha)
-                        idx = linhas.index(linha)
-                        if idx + 1 < len(linhas):
-                            linha_u = linhas[idx + 1].strip()
-                            if len(linha_u) >= 240 and linha_u[13] == 'U':
-                                valor_pago = Decimal(linha_u[77:92]) / 100
-                                data_str = linha_u[137:145]
-                                if data_str.strip() and data_str != '00000000':
-                                    data_ocorrencia = datetime.strptime(data_str, '%d%m%Y').date()
-                                else:
-                                    data_ocorrencia = None
-                                data_credito_str = linha_u[145:153]
-                                if data_credito_str.strip() and data_credito_str != '00000000':
-                                    data_credito = datetime.strptime(data_credito_str, '%d%m%Y').date()
-                                else:
-                                    data_credito = None
-                            else:
-                                valor_pago = Decimal('0.00')
-                                data_ocorrencia = None
-                                data_credito = None
-                        else:
-                            valor_pago = Decimal('0.00')
-                            data_ocorrencia = None
-                            data_credito = None
-
-                        # Identificar tipo de ocorrencia
-                        tipo_ocorrencia = 'OUTROS'
-                        descricao = ''
-                        if codigo_ocorrencia in OCORRENCIAS_CNAB:
-                            tipo_ocorrencia, descricao = OCORRENCIAS_CNAB[codigo_ocorrencia]
-
-                        # Buscar parcela — exact match + fallback zero-pad, prioriza conta
-                        conta = arquivo_retorno.conta_bancaria
-                        parcela = self._buscar_parcela_por_nosso_numero(nosso_numero, conta)
-
-                        # Idempotência: não duplicar ItemRetorno para mesmo nosso_numero
-                        item, criado = ItemRetorno.objects.get_or_create(
-                            arquivo_retorno=arquivo_retorno,
-                            nosso_numero=nosso_numero,
-                            defaults=dict(
-                                parcela=parcela,
-                                codigo_ocorrencia=codigo_ocorrencia,
-                                descricao_ocorrencia=descricao,
-                                tipo_ocorrencia=tipo_ocorrencia,
-                                valor_titulo=valor_titulo,
-                                valor_pago=valor_pago if valor_pago > 0 else None,
-                                data_ocorrencia=data_ocorrencia,
-                                data_credito=data_credito,
-                            ),
-                        )
-                        if not criado:
-                            registros_processados += (1 if item.processado else 0)
-                            continue
-
-                        # Processar baixa
-                        if item.processar_baixa():
-                            registros_processados += 1
-                            if tipo_ocorrencia == 'LIQUIDACAO':
-                                valor_total_pago += valor_pago or valor_titulo
-                        else:
-                            if item.erro_processamento:
-                                registros_erro += 1
-
-                    except Exception as e:
-                        registros_erro += 1
-                        logger.exception("Erro ao processar linha de retorno CNAB240: %s", e)
-
-            # Atualizar arquivo
-            arquivo_retorno.total_registros = total_registros
-            arquivo_retorno.registros_processados = registros_processados
-            arquivo_retorno.registros_erro = registros_erro
-            arquivo_retorno.valor_total_pago = valor_total_pago
-            arquivo_retorno.data_processamento = timezone.now()
-            arquivo_retorno.processado_por = user
-
-            if registros_erro == 0:
-                arquivo_retorno.status = StatusArquivoRetorno.PROCESSADO
-            elif registros_processados > 0:
-                arquivo_retorno.status = StatusArquivoRetorno.PROCESSADO_PARCIAL
-            else:
-                arquivo_retorno.status = StatusArquivoRetorno.ERRO
-
-            arquivo_retorno.save()
-
-        return {
-            'sucesso': True,
-            'total_registros': total_registros,
-            'registros_processados': registros_processados,
-            'registros_erro': registros_erro,
-            'valor_total_pago': valor_total_pago,
-        }
+            logger.exception("[Retorno] Erro inesperado: %s", e)
+            return {'sucesso': False, 'erro': str(e)}
 
     def obter_boletos_sem_remessa(
         self,
