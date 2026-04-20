@@ -69,7 +69,7 @@
                 <!-- Layout CNAB + Select All + Gerar (inline no mesmo card) -->
                 <div class="col-md-2">
                     <label class="form-label mb-1">Layout CNAB</label>
-                    <select name="layout" class="form-select form-select-sm" form="form-remessa">
+                    <select name="layout" id="sel-layout" class="form-select form-select-sm" form="form-remessa" onchange="atualizarContador()">
                         <option value="CNAB_240">CNAB 240</option>
                         <option value="CNAB_400">CNAB 400</option>
                     </select>
@@ -116,7 +116,7 @@
                     <strong>{{ conta.descricao }}</strong>
                     <span class="text-muted ms-2">— {{ conta.imobiliaria.nome }}</span>
                     <span class="badge bg-secondary ms-2">Banco {{ conta.banco }}</span>
-                    <span class="badge bg-info ms-1">{{ conta.get_layout_cnab_display }}</span>
+                    <span class="badge bg-info ms-1" title="Layout configurado nesta conta">{{ conta.get_layout_cnab_display }}</span>
                 </div>
                 <div class="d-flex align-items-center gap-3">
                     <span class="badge bg-primary">{{ parcelas|length }} boleto(s)</span>
@@ -150,6 +150,7 @@
                                            name="parcelas" value="{{ parcela.pk }}"
                                            data-layout="{{ conta.layout_cnab }}"
                                            data-banco="{{ conta.get_banco_display }}"
+                                           data-banco-cod="{{ conta.banco }}"
                                            onchange="atualizarContador()">
                                 </td>
                                 <td><code>{{ parcela.nosso_numero }}</code></td>
@@ -205,6 +206,9 @@
 <script>
 const escopo = '{{ escopo }}';
 
+// Mapa banco_cod → layouts suportados pela BRCobrança (gerado pelo backend)
+const BANCOS_CNAB = {{ bancos_cnab_js|safe }};
+
 function atualizarEscopo() {
     const sel = document.getElementById('sel-escopo').value;
     document.getElementById('campo-imobiliaria').style.display = (sel === 'imobiliaria') ? '' : 'none';
@@ -228,44 +232,65 @@ function atualizarContador() {
     const total = marcadas.length;
     document.getElementById('contador-selecionados').textContent = total + ' selecionados';
 
-    // Detectar conflito de layout CNAB entre bancos selecionados
-    const bancosPorLayout = {};  // { 'CNAB_240': Set('104 - Caixa', ...), ... }
-    marcadas.forEach(cb => {
-        const layout = cb.dataset.layout;
-        const banco = cb.dataset.banco;
-        if (!bancosPorLayout[layout]) bancosPorLayout[layout] = new Set();
-        bancosPorLayout[layout].add(banco);
-    });
-
-    const layouts = Object.keys(bancosPorLayout);
+    const layoutSel = (document.getElementById('sel-layout') || {}).value || 'CNAB_240';
     const alerta = document.getElementById('alerta-conflito-cnab');
-    const msgEl = document.getElementById('msg-conflito-cnab');
-    const conflito = layouts.length > 1;
+    const msgEl  = document.getElementById('msg-conflito-cnab');
+    const erros   = [];
+
+    if (total > 0) {
+        // Coletar bancos únicos selecionados
+        const bancosCod  = new Set();
+        const bancosNome = {};
+        const layoutsConta = {};  // { layout_configurado: Set(nomeDisplay) }
+        marcadas.forEach(cb => {
+            const cod   = cb.dataset.bancoCod;
+            const nome  = cb.dataset.banco;
+            const lay   = cb.dataset.layout;
+            bancosCod.add(cod);
+            bancosNome[cod] = nome;
+            if (!layoutsConta[lay]) layoutsConta[lay] = new Set();
+            layoutsConta[lay].add(nome);
+        });
+
+        // 1. Verificar se o layout escolhido é suportado pelo BRCobrança para cada banco
+        bancosCod.forEach(cod => {
+            const suportados = BANCOS_CNAB[cod] || [];
+            if (suportados.length === 0) {
+                erros.push(`<strong>${bancosNome[cod]}</strong> não possui remessa CNAB no BRCobrança`);
+            } else if (!suportados.includes(layoutSel)) {
+                const labs = suportados.map(l => l.replace('_', ' ')).join(' / ');
+                erros.push(`<strong>${bancosNome[cod]}</strong> só aceita ${labs} (selecionado: ${layoutSel.replace('_', ' ')})`);
+            }
+        });
+
+        // 2. Verificar conflito de layout entre as contas configuradas
+        const layoutsUnicos = Object.keys(layoutsConta);
+        if (layoutsUnicos.length > 1) {
+            const partes = layoutsUnicos.map(l => {
+                const nomes = Array.from(layoutsConta[l]).join(', ');
+                return `<strong>${nomes}</strong> (${l.replace('_', ' ')})`;
+            });
+            erros.push(`${partes.join(' e ')} não usam o mesmo padrão — Gere os CNAB's separadamente`);
+        }
+    }
 
     if (alerta && msgEl) {
-        if (conflito) {
-            const partes = layouts.map(l => {
-                const bancos = Array.from(bancosPorLayout[l]).join(', ');
-                const label = l.replace('_', ' ');
-                return `<strong>${bancos}</strong> (${label})`;
-            });
-            msgEl.innerHTML =
-                `${partes.join(' e ')} não usam o mesmo padrão de CNAB. ` +
-                `Gere os CNAB's separadamente.`;
+        if (erros.length) {
+            msgEl.innerHTML = erros.join('<br>');
             alerta.classList.remove('d-none');
         } else {
             alerta.classList.add('d-none');
         }
     }
 
-    document.getElementById('btn-gerar').disabled = !(total > 0 && !conflito);
+    document.getElementById('btn-gerar').disabled = !(total > 0 && erros.length === 0);
 
     // Atualizar estado dos checkboxes de grupo
     document.querySelectorAll('.check-grupo').forEach(grupoCb => {
         const grupoId = grupoCb.dataset.grupo;
-        const todos = document.querySelectorAll(`.grupo-${grupoId}`);
+        const todos   = document.querySelectorAll(`.grupo-${grupoId}`);
         const marcados = document.querySelectorAll(`.grupo-${grupoId}:checked`);
-        grupoCb.checked = todos.length > 0 && marcados.length === todos.length;
+        grupoCb.checked       = todos.length > 0 && marcados.length === todos.length;
         grupoCb.indeterminate = marcados.length > 0 && marcados.length < todos.length;
     });
 }
@@ -274,11 +299,8 @@ function atualizarContador() {
 document.addEventListener('DOMContentLoaded', function() {
     atualizarEscopo();
 
-    // Mostrar campo correto baseado no escopo atual
     const sel = document.getElementById('sel-escopo');
-    if (sel.value === 'imobiliaria') {
-        sel.value = 'imobiliaria';
-    }
+    if (sel.value === 'imobiliaria') sel.value = 'imobiliaria';
     atualizarEscopo();
 });
 </script>
