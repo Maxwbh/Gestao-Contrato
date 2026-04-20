@@ -23,7 +23,7 @@ import logging
 
 from django.core.cache import cache
 from .models import Parcela, Reajuste, StatusBoleto, HistoricoPagamento
-from core.models import Imobiliaria, ContaBancaria
+from core.models import Imobiliaria, ContaBancaria, BancoBrasil
 from contratos.models import Contrato, StatusContrato
 
 logger = logging.getLogger(__name__)
@@ -1621,8 +1621,34 @@ def gerar_arquivo_remessa(request):
             messages.error(request, 'Selecione pelo menos uma parcela.')
             return redirect('financeiro:gerar_remessa')
 
-        # Verificar se há parcelas pagas na seleção — informar ao usuário
+        # Verificar conflito de layout CNAB entre as contas selecionadas
         from .models import Parcela as _Parcela
+        contas_selecionadas = (
+            _Parcela.objects.filter(pk__in=parcela_ids)
+            .select_related('conta_bancaria')
+            .values_list(
+                'conta_bancaria__layout_cnab',
+                'conta_bancaria__banco',
+            )
+            .distinct()
+        )
+        layouts_por_banco = {}  # {layout: set(banco_codigo)}
+        for lay, banco in contas_selecionadas:
+            layouts_por_banco.setdefault(lay, set()).add(banco or '000')
+        if len(layouts_por_banco) > 1:
+            banco_display = dict(BancoBrasil.choices)
+            partes = []
+            for lay, bancos in layouts_por_banco.items():
+                nomes = ', '.join(banco_display.get(b, b) for b in sorted(bancos))
+                partes.append(f"{nomes} ({lay.replace('_', ' ')})")
+            messages.error(
+                request,
+                f"{' e '.join(partes)} não usam o mesmo padrão de CNAB. "
+                "Gere os CNAB's separadamente."
+            )
+            return redirect('financeiro:gerar_remessa')
+
+        # Verificar se há parcelas pagas na seleção — informar ao usuário
         pagas_selecionadas = _Parcela.objects.filter(pk__in=parcela_ids, pago=True).count()
         if pagas_selecionadas:
             messages.warning(
