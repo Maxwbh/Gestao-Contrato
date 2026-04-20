@@ -679,8 +679,8 @@
             .then(function(r) { return r.ok ? r.json() : null; })
             .then(function(data) {
                 if (data && data.count > 0) {
-                    // Badge no link "Arquivos de Remessa" no dropdown
-                    var links = document.querySelectorAll('a[href*="cnab/remessa"]');
+                    // Badge no link "Arquivos de Remessa" no dropdown (href exato da lista)
+                    var links = document.querySelectorAll('a[href="{% url "financeiro:listar_remessas" %}"]');
                     links.forEach(function(link) {
                         if (!link.querySelector('.badge-remessa')) {
                             var badge = document.createElement('span');
