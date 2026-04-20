@@ -7,7 +7,7 @@
 <link rel="stylesheet" href="{% static 'vendor/flatpickr/css/flatpickr.min.css' %}">
 <style>
     .badge-pago { background-color: #28a745; }
-    .badge-pendente { background-color: #ffc107; color: #212529; }
+    .badge-pendente { background-color: #0d6efd; }
     .badge-vencida { background-color: #dc3545; }
     .badge-boleto-gerado { background-color: #0d6efd; }
     .btn-filter { margin-right: 5px; margin-bottom: 5px; }
@@ -608,7 +608,7 @@ function statusRenderer(params) {
     const data = params.data;
     if (data.pago) return '<span class="badge badge-pago">Pago</span>';
     if (data.esta_vencida) return '<span class="badge badge-vencida">Vencida</span>';
-    return '<span class="badge badge-pendente">Em aberto</span>';
+    return '<span class="badge badge-pendente">A Vencer</span>';
 }
 
 function boletoRenderer(params) {

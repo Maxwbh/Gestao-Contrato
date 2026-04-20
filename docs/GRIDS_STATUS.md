@@ -335,7 +335,7 @@ Grid com os usuários e suas permissões por imobiliária.
 
 | Grid                  | Status possíveis                                                    |
 |-----------------------|----------------------------------------------------------------------|
-| Parcela               | Pago · Vencida · Em aberto                                          |
+| Parcela               | Pago · Vencida · A Vencer · Ag. Reajuste                                          |
 | Boleto (da parcela)   | — · Gerado · Registrado · Pago · Vencido · Cancelado · Baixado · Protestado |
 | Contrato              | Ativo · Quitado · Cancelado · Suspenso                              |
 | Remessa CNAB          | Gerado · Enviado · Processado · Erro                                |

@@ -6,7 +6,7 @@
 {% block extra_css %}
 <style>
     .badge-pago { background-color: #28a745; }
-    .badge-pendente { background-color: #ffc107; color: #212529; }
+    .badge-pendente { background-color: #0d6efd; }
     .badge-vencida { background-color: #dc3545; }
     .info-label { font-weight: 600; color: #6c757d; }
     .info-value { font-size: 1.1rem; }
@@ -33,7 +33,7 @@
                 {% elif parcela.esta_vencida %}
                     <span class="badge badge-vencida">Vencida</span>
                 {% else %}
-                    <span class="badge badge-pendente">Em aberto</span>
+                    <span class="badge badge-pendente">A Vencer</span>
                 {% endif %}
             </h2>
         </div>
