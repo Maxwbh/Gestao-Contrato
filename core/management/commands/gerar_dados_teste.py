@@ -1878,8 +1878,6 @@ class Command(BaseCommand):
           2. HENRY MAGNO DE OLIVEIRA SILVA — IGPM + juros escalantes, lote 13 Qd C (22/07/2020)
         Aplica reajustes reais ciclo a ciclo e registra pagamentos históricos.
         """
-        from dateutil.relativedelta import relativedelta
-
         hoje = timezone.now().date()
         imob = imobiliarias[0]
         contratos_criados = []
