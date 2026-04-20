@@ -455,10 +455,11 @@ def listar_parcelas(request):
 
     # Filtro por Status do Boleto
     status_boleto_filtro = request.GET.get('status_boleto', '')
-    if status_boleto_filtro == StatusBoleto.NAO_GERADO:
-        # "Parcelas que devem ser geradas no mês":
-        #   boleto não gerado + não pago + vencimento no mês corrente +
-        #   (é a 1ª parcela do contrato OU a parcela anterior já tem boleto gerado)
+    # Quando vem do menu (?status_boleto=NAO_GERADO sem filtro_manual),
+    # aplica regra de negócio: só parcelas a gerar no mês.
+    # Quando vem do formulário da tela (filtro_manual=1), comportamento normal.
+    from_form = bool(request.GET.get('filtro_manual'))
+    if status_boleto_filtro == StatusBoleto.NAO_GERADO and not from_form:
         hoje = timezone.localdate()
         parcela_anterior_gerada = Parcela.objects.filter(
             contrato_id=OuterRef('contrato_id'),
@@ -1907,7 +1908,7 @@ def dashboard_conciliacao(request):
     qs_pendentes = Parcela.objects.filter(
         status_boleto__in=[StatusBoleto.GERADO, StatusBoleto.REGISTRADO, StatusBoleto.VENCIDO],
         pago=False,
-    ).select_related('contrato', 'contrato__comprador', 'contrato__imobiliaria', 'conta_bancaria_boleto')
+    ).select_related('contrato', 'contrato__comprador', 'contrato__imobiliaria', 'conta_bancaria')
 
     if imob_id:
         qs_pendentes = qs_pendentes.filter(contrato__imobiliaria_id=imob_id)
