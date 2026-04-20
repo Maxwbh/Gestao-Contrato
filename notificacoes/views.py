@@ -23,7 +23,7 @@ from .models import (
     ConfiguracaoEmail, ConfiguracaoSMS, ConfiguracaoWhatsApp,
     RegraNotificacao, TipoGatilho, TipoNotificacao, StatusNotificacao,
 )
-from .forms import ConfiguracaoEmailForm, TemplateNotificacaoForm
+from .forms import ConfiguracaoEmailForm, ConfiguracaoWhatsAppForm, TemplateNotificacaoForm
 
 logger = logging.getLogger(__name__)
 
@@ -194,6 +194,312 @@ def testar_conexao_email(request, pk):
             'status': 'error',
             'message': f'Erro na conexao: {str(e)}'
         }, status=400)
+
+
+# =============================================================================
+# CRUD VIEWS - CONFIGURACAO WHATSAPP
+# =============================================================================
+
+class ConfiguracaoWhatsAppListView(LoginRequiredMixin, PaginacaoMixin, ListView):
+    model = ConfiguracaoWhatsApp
+    template_name = 'notificacoes/config_whatsapp_list.html'
+    context_object_name = 'configuracoes'
+    paginate_by = 20
+
+    def get_queryset(self):
+        queryset = ConfiguracaoWhatsApp.objects.all().order_by('-ativo', '-criado_em')
+        search = self.request.GET.get('search')
+        if search:
+            queryset = queryset.filter(
+                Q(nome__icontains=search) |
+                Q(instancia__icontains=search) |
+                Q(api_url__icontains=search)
+            )
+        return queryset
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['total_configuracoes'] = ConfiguracaoWhatsApp.objects.count()
+        context['search'] = self.request.GET.get('search', '')
+        return context
+
+
+class ConfiguracaoWhatsAppCreateView(LoginRequiredMixin, CreateView):
+    model = ConfiguracaoWhatsApp
+    form_class = ConfiguracaoWhatsAppForm
+    template_name = 'notificacoes/config_whatsapp_form.html'
+    success_url = reverse_lazy('notificacoes:listar_config_whatsapp')
+
+    def form_valid(self, form):
+        messages.success(self.request, f'Configuracao "{form.instance.nome}" criada com sucesso!')
+        return super().form_valid(form)
+
+    def form_invalid(self, form):
+        messages.error(self.request, 'Erro ao criar configuracao. Verifique os dados.')
+        return super().form_invalid(form)
+
+
+class ConfiguracaoWhatsAppUpdateView(LoginRequiredMixin, UpdateView):
+    model = ConfiguracaoWhatsApp
+    form_class = ConfiguracaoWhatsAppForm
+    template_name = 'notificacoes/config_whatsapp_form.html'
+    success_url = reverse_lazy('notificacoes:listar_config_whatsapp')
+
+    def form_valid(self, form):
+        if not form.cleaned_data.get('auth_token'):
+            form.instance.auth_token = ConfiguracaoWhatsApp.objects.get(pk=self.object.pk).auth_token
+        messages.success(self.request, f'Configuracao "{form.instance.nome}" atualizada com sucesso!')
+        return super().form_valid(form)
+
+    def form_invalid(self, form):
+        messages.error(self.request, 'Erro ao atualizar configuracao. Verifique os dados.')
+        return super().form_invalid(form)
+
+
+class ConfiguracaoWhatsAppDeleteView(LoginRequiredMixin, DeleteView):
+    model = ConfiguracaoWhatsApp
+    success_url = reverse_lazy('notificacoes:listar_config_whatsapp')
+    template_name = 'notificacoes/config_whatsapp_confirm_delete.html'
+
+    def delete(self, request, *args, **kwargs):
+        self.object = self.get_object()
+        nome = self.object.nome
+        self.object.delete()
+        messages.success(request, f'Configuracao "{nome}" excluida com sucesso!')
+        return redirect(self.success_url)
+
+
+@login_required
+def testar_conexao_whatsapp(request, pk):
+    """Testa a conexao com o provedor WhatsApp configurado."""
+    config = get_object_or_404(ConfiguracaoWhatsApp, pk=pk)
+
+    try:
+        provedor = config.provedor
+
+        if provedor == 'EVOLUTION':
+            import urllib.request as _req
+            import json as _json
+            url = f"{config.api_url.rstrip('/')}/instance/connectionState/{config.instancia}"
+            req = _req.Request(url, headers={'apikey': config.api_key})
+            with _req.urlopen(req, timeout=10) as resp:
+                data = _json.loads(resp.read())
+            state = data.get('instance', {}).get('state', '') or data.get('state', '')
+            if state == 'open':
+                return JsonResponse({'status': 'success',
+                                     'message': f'Instancia "{config.instancia}" conectada (state: open)'})
+            return JsonResponse({'status': 'error',
+                                 'message': f'Instancia nao conectada (state: {state})'}, status=400)
+
+        elif provedor == 'ZAPI':
+            import urllib.request as _req
+            import json as _json
+            base = config.api_url.rstrip('/')
+            url = f"{base}/instances/{config.instancia}/token/{config.api_key}/status"
+            headers = {'Content-Type': 'application/json'}
+            if config.client_token:
+                headers['Client-Token'] = config.client_token
+            req = _req.Request(url, headers=headers)
+            with _req.urlopen(req, timeout=10) as resp:
+                data = _json.loads(resp.read())
+            connected = data.get('connected', False)
+            if connected:
+                return JsonResponse({'status': 'success', 'message': 'Z-API conectada com sucesso'})
+            return JsonResponse({'status': 'error', 'message': f'Z-API nao conectada: {data}'}, status=400)
+
+        elif provedor == 'TWILIO':
+            from twilio.rest import Client as TwilioClient
+            client = TwilioClient(config.account_sid, config.auth_token)
+            account = client.api.accounts(config.account_sid).fetch()
+            return JsonResponse({'status': 'success', 'message': f'Twilio OK — conta: {account.friendly_name}'})
+
+        else:
+            return JsonResponse(
+                {'status': 'error', 'message': f'Teste nao disponivel para provedor {provedor}'}, status=400
+            )
+
+    except Exception as e:
+        logger.exception("Erro ao testar conexao whatsapp pk=%s: %s", pk, e)
+        return JsonResponse({'status': 'error', 'message': f'Erro: {str(e)}'}, status=400)
+
+
+@login_required
+def configurar_webhook_evolution(request, pk):
+    """
+    Registra o webhook de delivery tracking na instância Evolution API.
+    Chama POST {api_url}/webhook/set/{instancia} com a URL do sistema.
+    """
+    if request.method != 'POST':
+        return JsonResponse({'status': 'error', 'message': 'Metodo nao permitido'}, status=405)
+
+    config = get_object_or_404(ConfiguracaoWhatsApp, pk=pk)
+    if config.provedor != 'EVOLUTION':
+        return JsonResponse({'status': 'error', 'message': 'Apenas Evolution API suportado'}, status=400)
+
+    try:
+        import urllib.request as _req
+        import json as _json
+        from django.conf import settings as _s
+
+        site_url = getattr(_s, 'SITE_URL', request.build_absolute_uri('/').rstrip('/'))
+        webhook_url = f"{site_url}/notificacoes/webhook/evolution/"
+
+        payload = {
+            'url': webhook_url,
+            'enabled': True,
+            'webhookByEvents': False,
+            'webhookBase64': False,
+            # MESSAGES_UPDATE: status delivery/read
+            # MESSAGES_UPSERT: captura fromMe ao enviar (status inicial PENDING→sent)
+            'events': ['MESSAGES_UPDATE', 'MESSAGES_UPSERT'],
+        }
+        url = f"{config.api_url.rstrip('/')}/webhook/set/{config.instancia}"
+        req = _req.Request(
+            url,
+            data=_json.dumps(payload).encode(),
+            headers={'Content-Type': 'application/json', 'apikey': config.api_key},
+            method='POST',
+        )
+        with _req.urlopen(req, timeout=10) as resp:
+            data = _json.loads(resp.read())
+
+        logger.info('[Evolution Webhook] Configurado para instancia=%s url=%s resp=%s',
+                    config.instancia, webhook_url, data)
+        return JsonResponse({
+            'status': 'success',
+            'message': f'Webhook configurado com sucesso → {webhook_url}',
+            'webhook_url': webhook_url,
+        })
+
+    except Exception as e:
+        logger.exception("Erro ao configurar webhook evolution pk=%s: %s", pk, e)
+        return JsonResponse({'status': 'error', 'message': f'Erro: {str(e)}'}, status=400)
+
+
+# =============================================================================
+# WEBHOOK EVOLUTION API — Confirmação de entrega WhatsApp
+# =============================================================================
+
+# Mapeamento de status Evolution/Baileys → StatusEntrega
+_EVOLUTION_STATUS_MAP = {
+    # String values (Evolution API v2)
+    'PENDING': 'queued',
+    'SERVER_ACK': 'sent',
+    'DELIVERY_ACK': 'delivered',
+    'READ': 'read',
+    'PLAYED': 'read',
+    # Numeric values (Baileys proto.WebMessageInfo.Status)
+    0: 'queued',     # ERROR/PENDING
+    1: 'queued',     # PENDING
+    2: 'sent',       # SERVER_ACK
+    3: 'delivered',  # DELIVERY_ACK
+    4: 'read',       # READ
+    5: 'read',       # PLAYED
+    '0': 'queued',
+    '1': 'queued',
+    '2': 'sent',
+    '3': 'delivered',
+    '4': 'read',
+    '5': 'read',
+}
+
+
+@csrf_exempt
+def webhook_evolution(request):
+    """
+    Recebe callbacks de status de entrega da Evolution API (MESSAGES_UPDATE).
+
+    Evolution posta para esta URL (configurada via /webhook/set/{instance})
+    quando o status de uma mensagem muda.
+
+    Payload esperado:
+    {
+      "event": "messages.update",
+      "instance": "nome-instancia",
+      "data": [
+        {
+          "key": {"id": "3EB0...", "fromMe": true, "remoteJid": "55...@s.whatsapp.net"},
+          "update": {"status": "READ"}
+        }
+      ]
+    }
+
+    Valida apikey recebida no header ou no payload contra ConfiguracaoWhatsApp.
+    Atualiza Notificacao.status_entrega e Notificacao.data_confirmacao.
+    """
+    if request.method != 'POST':
+        return HttpResponseNotAllowed(['POST'])
+
+    try:
+        import json as _json
+        body = _json.loads(request.body)
+    except Exception:
+        return HttpResponse('Bad Request', status=400)
+
+    event = body.get('event', '')
+    instance_name = body.get('instance', '')
+
+    # Validar apikey: header ou campo no payload
+    apikey_header = request.META.get('HTTP_APIKEY', '')
+    apikey_payload = body.get('apikey', '')
+    apikey = apikey_header or apikey_payload
+
+    if apikey:
+        config = ConfiguracaoWhatsApp.objects.filter(
+            provedor='EVOLUTION', instancia=instance_name, api_key=apikey, ativo=True
+        ).first()
+        if not config:
+            logger.warning(
+                '[Webhook Evolution] apikey invalida — instance=%s ip=%s',
+                instance_name, request.META.get('REMOTE_ADDR')
+            )
+            return HttpResponse('Forbidden', status=403)
+    else:
+        # Sem apikey: aceitar mas logar aviso (Evolution pode não enviar em algumas versões)
+        logger.warning('[Webhook Evolution] Payload sem apikey — instance=%s', instance_name)
+
+    is_update = event in ('messages.update', 'MESSAGES_UPDATE')
+    is_upsert = event in ('messages.upsert', 'MESSAGES_UPSERT')
+
+    if not (is_update or is_upsert):
+        return HttpResponse('OK', status=200)
+
+    data_list = body.get('data', [])
+    if not isinstance(data_list, list):
+        data_list = [data_list]
+
+    updated_total = 0
+    for item in data_list:
+        key = item.get('key', {})
+        message_id = key.get('id', '').strip()
+        from_me = key.get('fromMe', False)
+
+        if not from_me or not message_id:
+            continue
+
+        if is_update:
+            # MESSAGES_UPDATE: status mudou (SERVER_ACK, DELIVERY_ACK, READ, PLAYED)
+            update = item.get('update', {})
+            raw_status = update.get('status', '')
+            status_entrega = _EVOLUTION_STATUS_MAP.get(raw_status)
+            if not status_entrega:
+                continue
+        else:
+            # MESSAGES_UPSERT: mensagem recém-enviada — captura status inicial
+            raw_status = item.get('status', item.get('messageStatus', ''))
+            status_entrega = _EVOLUTION_STATUS_MAP.get(raw_status, 'queued')
+
+        updated = Notificacao.objects.filter(external_id=message_id).update(
+            status_entrega=status_entrega,
+            data_confirmacao=timezone.now(),
+        )
+        updated_total += updated
+
+    logger.info(
+        '[Webhook Evolution] event=%s instance=%s itens=%d atualizados=%d',
+        event, instance_name, len(data_list), updated_total
+    )
+    return HttpResponse('OK', status=200)
 
 
 # =============================================================================

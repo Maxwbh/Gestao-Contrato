@@ -103,7 +103,7 @@ const retornosRowData = [
     registros_processados: {{ arquivo.registros_processados|default:0 }},
     total_registros: {{ arquivo.total_registros|default:0 }},
     registros_erro: {{ arquivo.registros_erro|default:0 }},
-    valor_total_pago: {{ arquivo.valor_total_pago|default:0 }},
+    valor_total_pago: {{ arquivo.valor_total_pago|default:0|stringformat:".2f" }},
     data_upload: "{{ arquivo.data_upload|date:'Y-m-d H:i' }}",
     data_upload_fmt: "{{ arquivo.data_upload|date:'d/m/Y H:i' }}",
     status: "{{ arquivo.status|escapejs }}",
