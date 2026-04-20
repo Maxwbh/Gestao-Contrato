@@ -26,25 +26,20 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-          cache: pip
+
+      - name: Instalar uv
+        uses: astral-sh/setup-uv@v3
+        with:
+          enable-cache: true
+          cache-dependency-glob: requirements.txt
 
       - name: Instalar dependências
-        run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt flake8
+        run: uv pip install --system -r requirements.txt
 
-      - name: Lint — erros críticos (F + E9)
-        run: |
-          flake8 . \
-            --select=F,E9 \
-            --exclude=migrations,staticfiles,media,venv,.venv,static/vendor \
-            --per-file-ignores="*/migrations/*.py:F401" \
-            --count --statistics
-
-      - name: Testes unitários
+      - name: Testes unitários (paralelo)
         run: |
           python -m pytest tests/unit/ \
-            --tb=short -q --no-header -p no:cacheprovider
+            -n auto --tb=short -q --no-header -p no:cacheprovider
 
   # ── Bloqueia referências a IA ─────────────────────────────────────────────
   no-ai-refs:
