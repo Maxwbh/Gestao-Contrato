@@ -362,6 +362,7 @@ def detalhe_contrato(request, contrato_id):
         'intermediarias': intermediarias,
         'resumo_financeiro': resumo_financeiro,
         'progresso': contrato.calcular_progresso() if hasattr(contrato, 'calcular_progresso') else 0,
+        'hoje': hoje,
     }
     return render(request, 'portal_comprador/detalhe_contrato.html', context)
 
