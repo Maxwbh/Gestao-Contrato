@@ -91,15 +91,12 @@ jobs:
 
       - name: Verificar mensagens de commit
         run: |
-          # Descobre a base de comparação: apenas commits recém enviados
           if [ "${{ github.event_name }}" = "pull_request" ]; then
             BASE="${{ github.event.pull_request.base.sha }}"
             HEAD="${{ github.event.pull_request.head.sha }}"
           else
-            # Push: github.event.before é o SHA anterior ao push
             BEFORE="${{ github.event.before }}"
             HEAD="${{ github.sha }}"
-            # Branch nova: before é 0000...0000 — usa merge-base como fallback
             if [ "$BEFORE" = "0000000000000000000000000000000000000000" ]; then
               BASE=$(git merge-base HEAD origin/V3.1 2>/dev/null \
                      || git merge-base HEAD origin/master 2>/dev/null \
@@ -109,12 +106,14 @@ jobs:
             fi
           fi
 
-          if [ -z "$BASE" ]; then
-            echo "✅ Branch nova sem base — nada a verificar."
+          if [ -z "$BASE" ] || [ -z "$HEAD" ]; then
+            echo "✅ Sem base para comparar — nada a verificar."
             exit 0
           fi
 
-          COMMITS=$(git log "$BASE".."$HEAD" --format="%H")
+          # Ancestral comum real entre BASE e HEAD (evita incluir commits do lado base)
+          MERGE_BASE=$(git merge-base "$BASE" "$HEAD" 2>/dev/null || echo "$BASE")
+          COMMITS=$(git log "$MERGE_BASE".."$HEAD" --format="%H")
 
           if [ -z "$COMMITS" ]; then
             echo "✅ Nenhum commit novo para verificar."
