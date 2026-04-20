@@ -56,26 +56,9 @@ class BoletoService:
     """
 
     # Mapeamento de codigos de banco para nomes no BRCobranca
-    BANCOS_BRCOBRANCA = {
-        '001': 'banco_brasil',
-        '004': 'banco_nordeste',
-        '021': 'banestes',
-        '033': 'santander',
-        '041': 'banrisul',
-        '070': 'brb',
-        '077': 'banco_inter',
-        '084': 'unicred',
-        '085': 'ailos',
-        '104': 'caixa',
-        '133': 'cresol',
-        '136': 'unicred',
-        '237': 'bradesco',
-        '341': 'itau',
-        '389': 'banco_mercantil',
-        '422': 'safra',
-        '748': 'sicredi',
-        '756': 'sicoob',
-    }
+    # Fonte única: financeiro.services.bancos.BANCOS_SUPORTADOS
+    from .bancos import BANCOS_SUPORTADOS as _BANCOS
+    BANCOS_BRCOBRANCA = {cod: spec['brcobranca_id'] for cod, spec in _BANCOS.items()}
 
     # Carteiras padrao por banco (conforme documentacao BRCobranca)
     CARTEIRAS_PADRAO = {
