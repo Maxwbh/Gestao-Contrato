@@ -246,7 +246,8 @@ class CNABService:
         self,
         parcelas: List,
         conta_bancaria,
-        layout: str = 'CNAB_240'
+        layout: str = 'CNAB_240',
+        arquivo_para_atualizar=None,
     ) -> Dict:
         """
         Gera arquivo de remessa CNAB para um conjunto de parcelas.
@@ -314,11 +315,14 @@ class CNABService:
                 'erro': 'Nenhuma parcela valida para remessa'
             }
 
-        # Obter proximo numero de remessa
-        ultimo = ArquivoRemessa.objects.filter(
-            conta_bancaria=conta_bancaria
-        ).order_by('-numero_remessa').first()
-        numero_remessa = (ultimo.numero_remessa + 1) if ultimo else 1
+        # Número de remessa: preservar o existente ao atualizar, ou incrementar
+        if arquivo_para_atualizar:
+            numero_remessa = arquivo_para_atualizar.numero_remessa
+        else:
+            ultimo = ArquivoRemessa.objects.filter(
+                conta_bancaria=conta_bancaria
+            ).order_by('-numero_remessa').first()
+            numero_remessa = (ultimo.numero_remessa + 1) if ultimo else 1
 
         # Montar dados para BRCobranca
         banco = self._get_banco_brcobranca(conta_bancaria.banco)
@@ -435,21 +439,33 @@ class CNABService:
                         data_atual = timezone.now()
                         nome_arquivo = f"CB{data_atual.strftime('%d%m')}{numero_remessa:02d}.REM"
 
-                        arquivo_remessa = ArquivoRemessa.objects.create(
-                            conta_bancaria=conta_bancaria,
-                            numero_remessa=numero_remessa,
-                            layout=layout,
-                            nome_arquivo=nome_arquivo,
-                            quantidade_boletos=len(parcelas_validas),
-                            valor_total=valor_total,
-                        )
-
-                        # Salvar arquivo
-                        arquivo_remessa.arquivo.save(
-                            nome_arquivo,
-                            ContentFile(arquivo_content),
-                            save=True
-                        )
+                        if arquivo_para_atualizar:
+                            from financeiro.models import StatusArquivoRemessa
+                            arquivo_remessa = arquivo_para_atualizar
+                            arquivo_remessa.quantidade_boletos = len(parcelas_validas)
+                            arquivo_remessa.valor_total = valor_total
+                            arquivo_remessa.nome_arquivo = nome_arquivo
+                            arquivo_remessa.status = StatusArquivoRemessa.GERADO
+                            arquivo_remessa.erro_mensagem = ''
+                            arquivo_remessa.save(update_fields=[
+                                'quantidade_boletos', 'valor_total', 'nome_arquivo',
+                                'status', 'erro_mensagem',
+                            ])
+                            arquivo_remessa.arquivo.save(
+                                nome_arquivo, ContentFile(arquivo_content), save=True
+                            )
+                        else:
+                            arquivo_remessa = ArquivoRemessa.objects.create(
+                                conta_bancaria=conta_bancaria,
+                                numero_remessa=numero_remessa,
+                                layout=layout,
+                                nome_arquivo=nome_arquivo,
+                                quantidade_boletos=len(parcelas_validas),
+                                valor_total=valor_total,
+                            )
+                            arquivo_remessa.arquivo.save(
+                                nome_arquivo, ContentFile(arquivo_content), save=True
+                            )
 
                         # Criar itens
                         for parcela in parcelas_validas:
@@ -489,7 +505,8 @@ class CNABService:
                     response.status_code, descricao_conta, banco, response.text[:200]
                 )
                 return self._gerar_remessa_local(
-                    parcelas_validas, conta_bancaria, numero_remessa, layout, valor_total
+                    parcelas_validas, conta_bancaria, numero_remessa, layout, valor_total,
+                    arquivo_para_atualizar=arquivo_para_atualizar,
                 )
 
         except requests.exceptions.ConnectionError:
@@ -498,7 +515,8 @@ class CNABService:
                 descricao_conta
             )
             return self._gerar_remessa_local(
-                parcelas_validas, conta_bancaria, numero_remessa, layout, valor_total
+                parcelas_validas, conta_bancaria, numero_remessa, layout, valor_total,
+                arquivo_para_atualizar=arquivo_para_atualizar,
             )
         except Exception as e:
             logger.exception(
@@ -516,7 +534,8 @@ class CNABService:
         conta_bancaria,
         numero_remessa: int,
         layout: str,
-        valor_total: Decimal
+        valor_total: Decimal,
+        arquivo_para_atualizar=None,
     ) -> Dict:
         """
         Gera arquivo de remessa localmente (fallback quando BRCobranca nao disponivel).
@@ -618,21 +637,35 @@ class CNABService:
             data_atual = timezone.now()
             nome_arquivo = f"CB{data_atual.strftime('%d%m')}{numero_remessa:02d}.REM"
 
-            arquivo_remessa = ArquivoRemessa.objects.create(
-                conta_bancaria=conta_bancaria,
-                numero_remessa=numero_remessa,
-                layout=layout,
-                nome_arquivo=nome_arquivo,
-                quantidade_boletos=len(parcelas),
-                valor_total=valor_total,
-                observacoes='Gerado localmente (BRCobranca indisponivel)'
-            )
-
-            arquivo_remessa.arquivo.save(
-                nome_arquivo,
-                ContentFile(conteudo.encode('latin-1')),
-                save=True
-            )
+            if arquivo_para_atualizar:
+                from financeiro.models import StatusArquivoRemessa
+                arquivo_remessa = arquivo_para_atualizar
+                arquivo_remessa.quantidade_boletos = len(parcelas)
+                arquivo_remessa.valor_total = valor_total
+                arquivo_remessa.nome_arquivo = nome_arquivo
+                arquivo_remessa.status = StatusArquivoRemessa.GERADO
+                arquivo_remessa.erro_mensagem = ''
+                arquivo_remessa.observacoes = 'Regenerado localmente (BRCobranca indisponivel)'
+                arquivo_remessa.save(update_fields=[
+                    'quantidade_boletos', 'valor_total', 'nome_arquivo',
+                    'status', 'erro_mensagem', 'observacoes',
+                ])
+                arquivo_remessa.arquivo.save(
+                    nome_arquivo, ContentFile(conteudo.encode('latin-1')), save=True
+                )
+            else:
+                arquivo_remessa = ArquivoRemessa.objects.create(
+                    conta_bancaria=conta_bancaria,
+                    numero_remessa=numero_remessa,
+                    layout=layout,
+                    nome_arquivo=nome_arquivo,
+                    quantidade_boletos=len(parcelas),
+                    valor_total=valor_total,
+                    observacoes='Gerado localmente (BRCobranca indisponivel)'
+                )
+                arquivo_remessa.arquivo.save(
+                    nome_arquivo, ContentFile(conteudo.encode('latin-1')), save=True
+                )
 
             for parcela in parcelas:
                 ItemRemessa.objects.create(
@@ -674,14 +707,15 @@ class CNABService:
         itens = arquivo_remessa.itens.select_related('parcela').all()
         parcelas = [item.parcela for item in itens]
 
-        # Excluir itens antigos
+        # Excluir itens antigos (serão recriados pelo gerar_remessa)
         itens.delete()
 
-        # Regenerar
+        # Regenerar atualizando o mesmo registro (sem criar novo ArquivoRemessa)
         return self.gerar_remessa(
             parcelas,
             arquivo_remessa.conta_bancaria,
-            arquivo_remessa.layout
+            arquivo_remessa.layout,
+            arquivo_para_atualizar=arquivo_remessa,
         )
 
     def processar_retorno(

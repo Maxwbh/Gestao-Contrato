@@ -106,6 +106,10 @@
                     <button type="button" class="btn btn-outline-primary" onclick="regenerarRemessa()">
                         <i class="fas fa-redo"></i> Regenerar Arquivo
                     </button>
+                    <hr class="my-1">
+                    <button type="button" class="btn btn-outline-danger" onclick="excluirRemessa()">
+                        <i class="fas fa-trash me-1"></i> Excluir Remessa
+                    </button>
                     {% endif %}
                 </div>
             </div>
@@ -212,7 +216,7 @@ function marcarEnviada() {
 }
 
 function regenerarRemessa() {
-    if (!confirm('Deseja regenerar este arquivo de remessa?')) return;
+    if (!confirm('Deseja regenerar este arquivo de remessa?\n\nO registro atual será atualizado com o novo arquivo.')) return;
 
     fetch('{% url "financeiro:regenerar_remessa" arquivo.pk %}', {
         method: 'POST',
@@ -225,11 +229,28 @@ function regenerarRemessa() {
     .then(data => {
         if (data.sucesso) {
             alert('Remessa regenerada com sucesso!');
-            if (data.redirect) {
-                location.href = data.redirect;
-            } else {
-                location.reload();
-            }
+            location.reload();
+        } else {
+            alert('Erro: ' + data.erro);
+        }
+    });
+}
+
+function excluirRemessa() {
+    if (!confirm('ATENÇÃO: Excluir esta remessa irá remover o arquivo CNAB.\n\nOs boletos voltarão a ficar disponíveis para nova remessa.\n\nDeseja continuar?')) return;
+
+    fetch('{% url "financeiro:excluir_remessa" arquivo.pk %}', {
+        method: 'POST',
+        headers: {
+            'X-CSRFToken': '{{ csrf_token }}',
+            'Content-Type': 'application/json'
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.sucesso) {
+            alert('Remessa excluída com sucesso!');
+            location.href = '{% url "financeiro:listar_remessas" %}';
         } else {
             alert('Erro: ' + data.erro);
         }
