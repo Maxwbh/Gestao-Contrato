@@ -498,199 +498,48 @@ class CNABService:
                         'erro': 'BRCobranca nao retornou arquivo de remessa'
                     }
             else:
-                # HTTP error (429 persistente, 5xx, etc.) → fallback local
-                logger.warning(
-                    "[Remessa] BRCobranca HTTP %d conta=%s banco=%s — ativando fallback local. "
-                    "Resposta: %s",
-                    response.status_code, descricao_conta, banco, response.text[:200]
+                # HTTP error (429 persistente, 5xx, etc.)
+                erro_body = response.text[:500]
+                logger.error(
+                    "[Remessa] ERRO BRCobranca HTTP %d — conta=%s banco=%s layout=%s\n"
+                    "  → Verifique se a API BRCobranca está rodando e aceitando requisições.\n"
+                    "  → URL: %s\n"
+                    "  → Resposta: %s",
+                    response.status_code, descricao_conta, banco, layout,
+                    f'{self.brcobranca_url}/api/remessa', erro_body,
                 )
-                return self._gerar_remessa_local(
-                    parcelas_validas, conta_bancaria, numero_remessa, layout, valor_total,
-                    arquivo_para_atualizar=arquivo_para_atualizar,
-                )
+                return {
+                    'sucesso': False,
+                    'erro': (
+                        f'BRCobranca retornou HTTP {response.status_code}. '
+                        'Verifique os logs do servidor e se a API está operacional.'
+                    ),
+                }
 
-        except requests.exceptions.ConnectionError:
-            logger.warning(
-                "[Remessa] BRCobranca indisponivel conta=%s — ativando fallback local",
-                descricao_conta
-            )
-            return self._gerar_remessa_local(
-                parcelas_validas, conta_bancaria, numero_remessa, layout, valor_total,
-                arquivo_para_atualizar=arquivo_para_atualizar,
-            )
-        except Exception as e:
-            logger.exception(
-                "[Remessa] Erro inesperado conta=%s banco=%s: %s",
-                descricao_conta, banco, e
+        except requests.exceptions.ConnectionError as e:
+            logger.error(
+                "[Remessa] ERRO DE CONEXÃO com BRCobranca — conta=%s banco=%s\n"
+                "  → A API não está acessível em: %s\n"
+                "  → Confirme que o container/serviço BRCobranca está rodando.\n"
+                "  → Detalhe: %s",
+                descricao_conta, banco, self.brcobranca_url, e,
             )
             return {
                 'sucesso': False,
-                'erro': str(e)
+                'erro': (
+                    'Não foi possível conectar à API BRCobranca. '
+                    'Verifique se o serviço está ativo e acessível.'
+                ),
             }
-
-    def _gerar_remessa_local(
-        self,
-        parcelas: List,
-        conta_bancaria,
-        numero_remessa: int,
-        layout: str,
-        valor_total: Decimal,
-        arquivo_para_atualizar=None,
-    ) -> Dict:
-        """
-        Gera arquivo de remessa localmente (fallback quando BRCobranca nao disponivel).
-        Gera formato CNAB 400 simplificado.
-        """
-        from financeiro.models import ArquivoRemessa, ItemRemessa
-
-        linhas = []
-        imobiliaria = conta_bancaria.imobiliaria
-
-        # Header do arquivo (registro tipo 0)
-        header = '0'  # Tipo registro
-        header += '1'  # Operacao (remessa)
-        header += 'REMESSA'.ljust(7)
-        header += '01'  # Tipo servico (cobranca)
-        header += 'COBRANCA'.ljust(15)
-        agencia_num, agencia_dv = self._parsear_numero_dv(conta_bancaria.agencia)
-        conta_num, conta_dv = self._parsear_numero_dv(conta_bancaria.conta)
-        header += agencia_num.zfill(4)
-        header += '00'  # Digito agencia
-        header += conta_num.zfill(8)
-        header += conta_dv.ljust(1)
-        header += ''.ljust(6)  # Brancos
-        header += (imobiliaria.razao_social or imobiliaria.nome)[:30].ljust(30)
-        header += conta_bancaria.banco.zfill(3)
-        header += conta_bancaria.get_banco_display()[:15].ljust(15)
-        header += timezone.now().strftime('%d%m%y')
-        header += ''.ljust(8)  # Brancos
-        header += ''.ljust(2)  # Identificacao sistema
-        header += str(numero_remessa).zfill(7)
-        header += ''.ljust(277)  # Brancos ate 394
-        header += '000001'  # Sequencial
-        linhas.append(header[:400])
-
-        # Registros de boletos (tipo 1)
-        sequencial = 2
-        for parcela in parcelas:
-            contrato = parcela.contrato
-            comprador = contrato.comprador
-
-            detalhe = '1'  # Tipo registro
-            # Tipo inscricao cedente
-            detalhe += '02' if len(self._formatar_cpf_cnpj(imobiliaria.cnpj)) > 11 else '01'
-            detalhe += self._formatar_cpf_cnpj(imobiliaria.cnpj).zfill(14)
-            detalhe += agencia_num.zfill(4)
-            detalhe += '00'  # Digito agencia
-            detalhe += conta_num.zfill(8)
-            detalhe += conta_dv.ljust(1)
-            detalhe += ''.ljust(6)  # Brancos
-            detalhe += (parcela.numero_documento or '')[:25].ljust(25)
-            detalhe += (parcela.nosso_numero or '').zfill(20)
-            detalhe += ''.ljust(25)  # Brancos
-            detalhe += '0'  # Codigo mora
-            detalhe += '01'  # Codigo carteira
-            detalhe += '01'  # Comando (entrada)
-            detalhe += (parcela.numero_documento or '')[:10].ljust(10)
-            detalhe += parcela.data_vencimento.strftime('%d%m%y')
-            valor_str = str(int((parcela.valor_boleto or parcela.valor_atual) * 100)).zfill(13)
-            detalhe += valor_str
-            detalhe += conta_bancaria.banco.zfill(3)
-            detalhe += '00000'  # Agencia cobradora
-            detalhe += '01'  # Especie titulo
-            detalhe += 'N'  # Aceite
-            data_emissao = parcela.data_geracao_boleto or timezone.now()
-            detalhe += data_emissao.strftime('%d%m%y')
-            detalhe += '00'  # Instrucao 1
-            detalhe += '00'  # Instrucao 2
-            detalhe += '0000000000000'  # Juros
-            detalhe += '000000'  # Data desconto
-            detalhe += '0000000000000'  # Valor desconto
-            detalhe += '0000000000000'  # Valor IOF
-            detalhe += '0000000000000'  # Valor abatimento
-            # Tipo inscricao sacado
-            cpf_cnpj_sacado = self._formatar_cpf_cnpj(comprador.cnpj or comprador.cpf)
-            detalhe += '02' if len(cpf_cnpj_sacado) > 11 else '01'
-            detalhe += cpf_cnpj_sacado.zfill(14)
-            detalhe += comprador.nome[:40].ljust(40)
-            endereco = f"{comprador.logradouro or ''} {comprador.numero or ''}"
-            detalhe += endereco[:40].ljust(40)
-            detalhe += ''.ljust(12)  # Mensagem
-            detalhe += self._formatar_cpf_cnpj(comprador.cep or '').zfill(8)
-            detalhe += (comprador.cidade or '')[:15].ljust(15)
-            detalhe += (comprador.estado or '')[:2].ljust(2)
-            detalhe += ''.ljust(40)  # Sacador avalista
-            detalhe += str(sequencial).zfill(6)
-            linhas.append(detalhe[:400])
-            sequencial += 1
-
-        # Trailer (registro tipo 9)
-        trailer = '9'
-        trailer += ''.ljust(393)
-        trailer += str(sequencial).zfill(6)
-        linhas.append(trailer[:400])
-
-        # Criar arquivo
-        conteudo = '\r\n'.join(linhas)
-
-        with transaction.atomic():
-            data_atual = timezone.now()
-            nome_arquivo = f"CB{data_atual.strftime('%d%m')}{numero_remessa:02d}.REM"
-
-            if arquivo_para_atualizar:
-                from financeiro.models import StatusArquivoRemessa
-                arquivo_remessa = arquivo_para_atualizar
-                arquivo_remessa.quantidade_boletos = len(parcelas)
-                arquivo_remessa.valor_total = valor_total
-                arquivo_remessa.nome_arquivo = nome_arquivo
-                arquivo_remessa.status = StatusArquivoRemessa.GERADO
-                arquivo_remessa.erro_mensagem = ''
-                arquivo_remessa.observacoes = 'Regenerado localmente (BRCobranca indisponivel)'
-                arquivo_remessa.save(update_fields=[
-                    'quantidade_boletos', 'valor_total', 'nome_arquivo',
-                    'status', 'erro_mensagem', 'observacoes',
-                ])
-                arquivo_remessa.arquivo.save(
-                    nome_arquivo, ContentFile(conteudo.encode('latin-1')), save=True
-                )
-            else:
-                arquivo_remessa = ArquivoRemessa.objects.create(
-                    conta_bancaria=conta_bancaria,
-                    numero_remessa=numero_remessa,
-                    layout=layout,
-                    nome_arquivo=nome_arquivo,
-                    quantidade_boletos=len(parcelas),
-                    valor_total=valor_total,
-                    observacoes='Gerado localmente (BRCobranca indisponivel)'
-                )
-                arquivo_remessa.arquivo.save(
-                    nome_arquivo, ContentFile(conteudo.encode('latin-1')), save=True
-                )
-
-            for parcela in parcelas:
-                ItemRemessa.objects.create(
-                    arquivo_remessa=arquivo_remessa,
-                    parcela=parcela,
-                    nosso_numero=parcela.nosso_numero,
-                    valor=parcela.valor_boleto or parcela.valor_atual,
-                    data_vencimento=parcela.data_vencimento,
-                )
-
-        descricao_conta = getattr(conta_bancaria, 'descricao', None) or str(conta_bancaria)
-        logger.info(
-            "[Remessa] #%d gerada localmente (fallback): conta=%s boletos=%d valor=R$%.2f",
-            numero_remessa, descricao_conta, len(parcelas), float(valor_total)
-        )
-
-        return {
-            'sucesso': True,
-            'arquivo_remessa': arquivo_remessa,
-            'numero_remessa': numero_remessa,
-            'quantidade_boletos': len(parcelas),
-            'valor_total': valor_total,
-            'arquivo_path': arquivo_remessa.arquivo.path,
-            'aviso': 'Arquivo gerado localmente (formato simplificado)'
-        }
+        except Exception as e:
+            logger.exception(
+                "[Remessa] ERRO INESPERADO — conta=%s banco=%s: %s",
+                descricao_conta, banco, e,
+            )
+            return {
+                'sucesso': False,
+                'erro': str(e),
+            }
 
     def regenerar_remessa(self, arquivo_remessa) -> Dict:
         """
