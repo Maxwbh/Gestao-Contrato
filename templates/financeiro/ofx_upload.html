@@ -212,8 +212,7 @@ document.getElementById('ofxForm').addEventListener('submit', async function(e) 
             document.getElementById('totalReconciliadas').textContent = data.reconciliadas;
             document.getElementById('totalNaoReconciliadas').textContent = data.nao_reconciliadas;
 
-            const parser = data.parser === 'brcobranca' ? 'BRCobrança' : 'Python';
-            document.getElementById('badgeParser').textContent = 'Parser: ' + parser;
+            document.getElementById('badgeParser').textContent = 'Parser: BRCobrança';
 
             const tbody = document.getElementById('tabelaTransacoes');
             tbody.innerHTML = (data.resultados || []).map(r => {
