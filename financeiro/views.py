@@ -3583,6 +3583,10 @@ def reajustes_pendentes(request):
             'periodo_referencia_fim': fim_ref,
             'indice_tipo': indice_tipo,
             'percentual': percentual_final,        # None = sem dados ainda
+            'percentual_bruto': percentual,        # acumulado puro do índice
+            'spread': spread,
+            'piso': contrato.reajuste_piso,
+            'teto': contrato.reajuste_teto,
             'prestacao_atual': prestacao_atual,
             'prestacao_nova': prestacao_nova,
             'usa_price': usa_price,
