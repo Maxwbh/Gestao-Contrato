@@ -1418,13 +1418,23 @@ def api_excluir_conta_bancaria(request, conta_id):
 @login_required
 @require_http_methods(["GET"])
 def api_listar_bancos(request):
-    """Lista todos os bancos disponíveis e layouts CNAB"""
-    bancos = [{'codigo': choice[0], 'nome': choice[1]} for choice in BancoBrasil.choices]
+    """
+    Lista bancos e layouts CNAB suportados.
+
+    Consulta a API BRCobrança (boleto_cnab_api) via probe dinâmico para
+    detectar quais bancos e formatos de remessa estão disponíveis.
+    Se o serviço estiver indisponível usa a tabela estática como fallback.
+    Resultado é cacheado por 60 min para evitar probes a cada requisição.
+    """
+    from django.conf import settings as _s
+    from financeiro.services.bancos import descobrir_bancos_fallback
+    brcobranca_url = getattr(_s, 'BRCOBRANCA_URL', 'http://localhost:9292')
+    bancos = descobrir_bancos_fallback(brcobranca_url)
     layouts = [{'codigo': choice[0], 'nome': choice[1]} for choice in LayoutCNAB.choices]
     return JsonResponse({
         'status': 'success',
         'bancos': bancos,
-        'layouts_cnab': layouts
+        'layouts_cnab': layouts,
     })
 
 
