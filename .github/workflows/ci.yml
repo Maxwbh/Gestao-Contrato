@@ -80,3 +80,77 @@ jobs:
             --extend-ignore=E501 \
             --count \
             --statistics
+
+  no-ai-refs:
+    name: Sem referências a IA
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Verificar mensagens de commit
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            BASE="${{ github.event.pull_request.base.sha }}"
+            HEAD="${{ github.event.pull_request.head.sha }}"
+          else
+            BEFORE="${{ github.event.before }}"
+            HEAD="${{ github.sha }}"
+            if [ "$BEFORE" = "0000000000000000000000000000000000000000" ]; then
+              BASE=$(git merge-base HEAD origin/V3.1 2>/dev/null \
+                     || git merge-base HEAD origin/master 2>/dev/null \
+                     || echo "")
+            else
+              BASE="$BEFORE"
+            fi
+          fi
+
+          if [ -z "$BASE" ] || [ -z "$HEAD" ]; then
+            echo "✅ Sem base para comparar — nada a verificar."
+            exit 0
+          fi
+
+          # Ancestral comum real entre BASE e HEAD (evita incluir commits do lado base)
+          MERGE_BASE=$(git merge-base "$BASE" "$HEAD" 2>/dev/null || echo "$BASE")
+          COMMITS=$(git log "$MERGE_BASE".."$HEAD" --format="%H")
+
+          if [ -z "$COMMITS" ]; then
+            echo "✅ Nenhum commit novo para verificar."
+            exit 0
+          fi
+
+          AI_PATTERN='claude\.ai|anthropic\.com|openai\.com|chatgpt\.com|chat\.openai\.com|gemini\.google\.com|bard\.google\.com|copilot\.microsoft\.com|copilot\.github\.com|grok\.x\.com|mistral\.ai|perplexity\.ai|Co-Authored-By:.*[Cc]opilot|Co-Authored-By:.*[Cc]laude|Co-Authored-By:.*ChatGPT|Co-Authored-By:.*Gemini|[Gg]enerated by (AI|Claude|ChatGPT|Copilot|Gemini|GPT)|[Pp]owered by (AI|Claude|OpenAI|ChatGPT)'
+
+          FOUND=0
+          for sha in $COMMITS; do
+            MSG=$(git log -1 --format="%B" "$sha")
+            if echo "$MSG" | grep -qiE "$AI_PATTERN"; then
+              echo "❌ Commit $sha contém referência a IA:"
+              echo "$MSG" | grep -iE "$AI_PATTERN"
+              FOUND=1
+            fi
+          done
+
+          if [ "$FOUND" -eq 1 ]; then
+            echo ""
+            echo "Remova URLs ou atribuições a ferramentas de IA das mensagens de commit."
+            exit 1
+          fi
+          echo "✅ Nenhuma referência a IA encontrada nos commits."
+
+      - name: Verificar corpo do Pull Request
+        if: github.event_name == 'pull_request'
+        env:
+          PR_BODY: ${{ github.event.pull_request.body }}
+        run: |
+          AI_PATTERN='claude\.ai|anthropic\.com|openai\.com|chatgpt\.com|gemini\.google\.com|bard\.google\.com|copilot\.microsoft\.com|grok\.x\.com|mistral\.ai|perplexity\.ai|[Gg]enerated by (AI|Claude|ChatGPT|Copilot|Gemini|GPT)|[Pp]owered by (AI|Claude|OpenAI|ChatGPT)'
+
+          if echo "$PR_BODY" | grep -qiE "$AI_PATTERN"; then
+            echo "❌ Descrição do PR contém referência a IA:"
+            echo "$PR_BODY" | grep -iE "$AI_PATTERN"
+            echo ""
+            echo "Remova URLs ou atribuições a ferramentas de IA da descrição do PR."
+            exit 1
+          fi
+          echo "✅ Descrição do PR sem referências a IA."
