@@ -222,7 +222,7 @@ function statusMesRenderer(params) {
     const d = params.data;
     if (d.pago)         return '<span class="badge bg-success">Pago</span>';
     if (d.esta_vencida) return '<span class="badge bg-danger">Vencida</span>';
-    return '<span class="badge bg-warning text-dark">Em aberto</span>';
+    return '<span class="badge bg-primary">A Vencer</span>';
 }
 
 function acoesMesRenderer(params) {
