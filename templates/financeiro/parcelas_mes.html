@@ -200,7 +200,7 @@ const parcelasMesRowData = [
     imobiliaria: "{{ parcela.contrato.imovel.imobiliaria.nome|default:'-'|escapejs }}",
     comprador: "{{ parcela.contrato.comprador.nome|escapejs }}",
     comprador_pk: {{ parcela.contrato.comprador.pk }},
-    valor_atual: parseFloat("{{ parcela.valor_atual|default:'0' }}") || 0,
+    valor_atual: parseFloat("{{ parcela.valor_atual|default:0|stringformat:'.2f' }}") || 0,
     pago: {{ parcela.pago|yesno:"true,false" }},
     esta_vencida: {{ parcela.esta_vencida|yesno:"true,false" }},
     detalhe_url: "{% url 'financeiro:detalhe_parcela' parcela.pk %}",

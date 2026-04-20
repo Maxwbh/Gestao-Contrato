@@ -91,7 +91,11 @@
                     {% if config_whatsapp %}
                         <p class="mb-2"><strong>{{ config_whatsapp.nome }}</strong></p>
                         <p class="small text-muted mb-1">Provedor: {{ config_whatsapp.get_provedor_display }}</p>
-                        <p class="small text-muted mb-1">Numero: {{ config_whatsapp.numero_remetente }}</p>
+                        {% if config_whatsapp.instancia %}
+                            <p class="small text-muted mb-1">Instância: {{ config_whatsapp.instancia }}</p>
+                        {% elif config_whatsapp.numero_remetente %}
+                            <p class="small text-muted mb-1">Número: {{ config_whatsapp.numero_remetente }}</p>
+                        {% endif %}
                         <span class="badge bg-success">Configurado</span>
                     {% else %}
                         <p class="text-muted mb-0">
@@ -101,9 +105,9 @@
                     {% endif %}
                 </div>
                 <div class="card-footer bg-transparent">
-                    <button class="btn btn-success btn-sm w-100" disabled>
-                        <i class="fas fa-cog me-1"></i> Em breve
-                    </button>
+                    <a href="{% url 'notificacoes:listar_config_whatsapp' %}" class="btn btn-success btn-sm w-100">
+                        <i class="fas fa-cog me-1"></i> Gerenciar
+                    </a>
                 </div>
             </div>
         </div>
