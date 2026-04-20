@@ -601,34 +601,69 @@ def criar_templates_padrao():
                 'boleto parcela %%PARCELA%% '
                 'R$%%VALORBOLETO%% vence %%DATAVENCIMENTO%%.'
             ),
-            'corpo_html': """<html>
-<body style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-  <div style="background:#2c3e50;color:#fff;padding:20px;text-align:center;">
-    <h1 style="margin:0;">Boleto Gerado</h1>
-  </div>
-  <div style="padding:20px;">
-    <p>Prezado(a) <strong>%%NOMECOMPRADOR%%</strong>,</p>
-    <p>O boleto referente à parcela <strong>%%PARCELA%%</strong> do seu contrato foi gerado.</p>
-    <div style="background:#f8f9fa;padding:15px;border-radius:5px;margin:20px 0;">
-      <h3 style="margin-top:0;color:#2c3e50;">Dados do Boleto</h3>
-      <table style="width:100%;">
-        <tr><td><strong>Contrato:</strong></td><td>%%NUMEROCONTRATO%%</td></tr>
-        <tr><td><strong>Imóvel:</strong></td><td>%%IMOVEL%% - %%LOTEAMENTO%%</td></tr>
-        <tr><td><strong>Parcela:</strong></td><td>%%PARCELA%%</td></tr>
-        <tr><td><strong>Valor:</strong></td><td style="font-size:18px;color:#27ae60;"><strong>%%VALORBOLETO%%</strong></td></tr>
-        <tr><td><strong>Vencimento:</strong></td><td>%%DATAVENCIMENTO%%</td></tr>
-      </table>
-    </div>
-    <div style="background:#e8f4f8;padding:15px;border-radius:5px;margin:20px 0;">
-      <h4 style="margin-top:0;">Linha Digitável:</h4>
-      <code style="font-size:14px;word-break:break-all;">%%LINHADIGITAVEL%%</code>
-    </div>
-    <p style="color:#666;">O boleto segue em anexo para sua comodidade.</p>
-  </div>
-  <div style="background:#f1f1f1;padding:15px;text-align:center;font-size:12px;color:#666;">
-    <p style="margin:0;"><strong>%%NOMEIMOBILIARIA%%</strong></p>
-    <p style="margin:5px 0;">%%TELEFONEIMOBILIARIA%% | %%EMAILIMOBILIARIA%%</p>
-  </div>
+            'corpo_html': """<!DOCTYPE html>
+<html lang="pt-BR">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+<body style="margin:0;padding:0;background:#f4f6f8;font-family:Arial,Helvetica,sans-serif;">
+<table width="100%" cellpadding="0" cellspacing="0" style="background:#f4f6f8;padding:30px 0;">
+  <tr><td align="center">
+    <table width="600" cellpadding="0" cellspacing="0"
+           style="max-width:600px;width:100%;background:#fff;border-radius:8px;
+                  overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,.08);">
+      <tr>
+        <td style="background:#27ae60;padding:28px 32px;text-align:center;">
+          <div style="font-size:32px;margin-bottom:8px;">🏦</div>
+          <h1 style="margin:0;color:#fff;font-size:22px;">Boleto Gerado</h1>
+          <p style="margin:6px 0 0;color:rgba(255,255,255,.85);font-size:14px;">
+            Olá, %%NOMECOMPRADOR%%! Seu boleto está disponível para pagamento.
+          </p>
+        </td>
+      </tr>
+      <tr>
+        <td style="padding:28px 32px;">
+          <table width="100%" cellpadding="0" cellspacing="0"
+                 style="border:1px solid #e8eaed;border-radius:6px;overflow:hidden;">
+            <tr><td style="background:#f8f9fa;padding:12px 16px;" colspan="2">
+              <span style="font-size:12px;font-weight:700;color:#888;text-transform:uppercase;">Detalhes do Boleto</span>
+            </td></tr>
+            <tr>
+              <td style="padding:8px 16px;color:#555;font-size:14px;border-bottom:1px solid #f0f0f0;"><strong>Contrato:</strong></td>
+              <td style="padding:8px 16px;color:#222;font-size:14px;border-bottom:1px solid #f0f0f0;text-align:right;">%%NUMEROCONTRATO%%</td>
+            </tr>
+            <tr>
+              <td style="padding:8px 16px;color:#555;font-size:14px;border-bottom:1px solid #f0f0f0;"><strong>Imóvel:</strong></td>
+              <td style="padding:8px 16px;color:#222;font-size:14px;border-bottom:1px solid #f0f0f0;text-align:right;">%%IMOVEL%% — %%LOTEAMENTO%%</td>
+            </tr>
+            <tr>
+              <td style="padding:8px 16px;color:#555;font-size:14px;border-bottom:1px solid #f0f0f0;"><strong>Parcela:</strong></td>
+              <td style="padding:8px 16px;color:#222;font-size:14px;border-bottom:1px solid #f0f0f0;text-align:right;">%%PARCELA%%</td>
+            </tr>
+            <tr>
+              <td style="padding:8px 16px;color:#555;font-size:14px;border-bottom:1px solid #f0f0f0;"><strong>Vencimento:</strong></td>
+              <td style="padding:8px 16px;color:#222;font-size:14px;border-bottom:1px solid #f0f0f0;text-align:right;">%%DATAVENCIMENTO%%</td>
+            </tr>
+            <tr>
+              <td style="padding:8px 16px;color:#555;font-size:14px;"><strong>Valor:</strong></td>
+              <td style="padding:8px 16px;font-size:18px;color:#27ae60;font-weight:700;text-align:right;">%%VALORBOLETO%%</td>
+            </tr>
+          </table>
+          <div style="background:#f8f9fa;padding:12px 16px;border-radius:6px;margin:20px 0;">
+            <p style="margin:0 0 6px;font-size:12px;font-weight:700;color:#888;text-transform:uppercase;">Linha Digitável</p>
+            <code style="font-size:13px;word-break:break-all;color:#333;">%%LINHADIGITAVEL%%</code>
+          </div>
+          <p style="color:#666;font-size:13px;">O boleto segue em anexo para sua comodidade.</p>
+        </td>
+      </tr>
+      <tr>
+        <td style="background:#f8f9fa;padding:16px 32px;text-align:center;border-top:1px solid #e8eaed;">
+          <p style="margin:0;font-size:13px;font-weight:700;color:#444;">%%NOMEIMOBILIARIA%%</p>
+          <p style="margin:4px 0 0;font-size:12px;color:#888;">%%TELEFONEIMOBILIARIA%% &nbsp;|&nbsp; %%EMAILIMOBILIARIA%%</p>
+          <p style="margin:8px 0 0;font-size:11px;color:#bbb;">Você recebe este e-mail por ter uma parcela em aberto.</p>
+        </td>
+      </tr>
+    </table>
+  </td></tr>
+</table>
 </body>
 </html>""",
             'corpo_whatsapp': (
@@ -650,7 +685,70 @@ def criar_templates_padrao():
                 'boleto parcela %%PARCELA%% vence em 5 dias '
                 'valor %%VALORBOLETO%% data %%DATAVENCIMENTO%%.'
             ),
-            'corpo_html': '',
+            'corpo_html': """<!DOCTYPE html>
+<html lang="pt-BR">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+<body style="margin:0;padding:0;background:#f4f6f8;font-family:Arial,Helvetica,sans-serif;">
+<table width="100%" cellpadding="0" cellspacing="0" style="background:#f4f6f8;padding:30px 0;">
+  <tr><td align="center">
+    <table width="600" cellpadding="0" cellspacing="0"
+           style="max-width:600px;width:100%;background:#fff;border-radius:8px;
+                  overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,.08);">
+      <tr>
+        <td style="background:#2980b9;padding:28px 32px;text-align:center;">
+          <div style="font-size:32px;margin-bottom:8px;">📅</div>
+          <h1 style="margin:0;color:#fff;font-size:22px;">Lembrete de Vencimento</h1>
+          <p style="margin:6px 0 0;color:rgba(255,255,255,.85);font-size:14px;">
+            Olá, %%NOMECOMPRADOR%%! Seu boleto vence em 5 dias.
+          </p>
+        </td>
+      </tr>
+      <tr>
+        <td style="padding:28px 32px;">
+          <table width="100%" cellpadding="0" cellspacing="0"
+                 style="border:1px solid #e8eaed;border-radius:6px;overflow:hidden;">
+            <tr><td style="background:#f8f9fa;padding:12px 16px;" colspan="2">
+              <span style="font-size:12px;font-weight:700;color:#888;text-transform:uppercase;">Detalhes do Boleto</span>
+            </td></tr>
+            <tr>
+              <td style="padding:8px 16px;color:#555;font-size:14px;border-bottom:1px solid #f0f0f0;"><strong>Contrato:</strong></td>
+              <td style="padding:8px 16px;color:#222;font-size:14px;border-bottom:1px solid #f0f0f0;text-align:right;">%%NUMEROCONTRATO%%</td>
+            </tr>
+            <tr>
+              <td style="padding:8px 16px;color:#555;font-size:14px;border-bottom:1px solid #f0f0f0;"><strong>Parcela:</strong></td>
+              <td style="padding:8px 16px;color:#222;font-size:14px;border-bottom:1px solid #f0f0f0;text-align:right;">%%PARCELA%%</td>
+            </tr>
+            <tr>
+              <td style="padding:8px 16px;color:#555;font-size:14px;border-bottom:1px solid #f0f0f0;"><strong>Vencimento:</strong></td>
+              <td style="padding:8px 16px;color:#222;font-size:14px;border-bottom:1px solid #f0f0f0;text-align:right;">%%DATAVENCIMENTO%%</td>
+            </tr>
+            <tr>
+              <td style="padding:8px 16px;color:#555;font-size:14px;"><strong>Valor:</strong></td>
+              <td style="padding:8px 16px;font-size:18px;color:#27ae60;font-weight:700;text-align:right;">%%VALORBOLETO%%</td>
+            </tr>
+          </table>
+          <div style="background:#2980b9;color:#fff;padding:12px 16px;border-radius:6px;margin:20px 0;font-size:13px;">
+            Efetue o pagamento até %%DATAVENCIMENTO%% para evitar juros e multa.
+          </div>
+          <div style="background:#f8f9fa;padding:12px 16px;border-radius:6px;margin:16px 0;">
+            <p style="margin:0 0 6px;font-size:12px;font-weight:700;color:#888;text-transform:uppercase;">Linha Digitável</p>
+            <code style="font-size:13px;word-break:break-all;color:#333;">%%LINHADIGITAVEL%%</code>
+          </div>
+          <p style="color:#666;font-size:13px;">O boleto segue em anexo para sua comodidade.</p>
+        </td>
+      </tr>
+      <tr>
+        <td style="background:#f8f9fa;padding:16px 32px;text-align:center;border-top:1px solid #e8eaed;">
+          <p style="margin:0;font-size:13px;font-weight:700;color:#444;">%%NOMEIMOBILIARIA%%</p>
+          <p style="margin:4px 0 0;font-size:12px;color:#888;">%%TELEFONEIMOBILIARIA%% &nbsp;|&nbsp; %%EMAILIMOBILIARIA%%</p>
+          <p style="margin:8px 0 0;font-size:11px;color:#bbb;">Você recebe este e-mail por ter uma parcela em aberto.</p>
+        </td>
+      </tr>
+    </table>
+  </td></tr>
+</table>
+</body>
+</html>""",
             'corpo_whatsapp': (
                 '*%%NOMEIMOBILIARIA%%* — Lembrete de vencimento\n\n'
                 'Olá %%NOMECOMPRADOR%%,\n'
@@ -671,7 +769,70 @@ def criar_templates_padrao():
                 'boleto parcela %%PARCELA%% vence AMANHA '
                 'valor %%VALORBOLETO%%.'
             ),
-            'corpo_html': '',
+            'corpo_html': """<!DOCTYPE html>
+<html lang="pt-BR">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+<body style="margin:0;padding:0;background:#f4f6f8;font-family:Arial,Helvetica,sans-serif;">
+<table width="100%" cellpadding="0" cellspacing="0" style="background:#f4f6f8;padding:30px 0;">
+  <tr><td align="center">
+    <table width="600" cellpadding="0" cellspacing="0"
+           style="max-width:600px;width:100%;background:#fff;border-radius:8px;
+                  overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,.08);">
+      <tr>
+        <td style="background:#e67e22;padding:28px 32px;text-align:center;">
+          <div style="font-size:32px;margin-bottom:8px;">⏰</div>
+          <h1 style="margin:0;color:#fff;font-size:22px;">Boleto Vence AMANHÃ!</h1>
+          <p style="margin:6px 0 0;color:rgba(255,255,255,.85);font-size:14px;">
+            Olá, %%NOMECOMPRADOR%%! Atenção: seu boleto vence amanhã.
+          </p>
+        </td>
+      </tr>
+      <tr>
+        <td style="padding:28px 32px;">
+          <table width="100%" cellpadding="0" cellspacing="0"
+                 style="border:1px solid #e8eaed;border-radius:6px;overflow:hidden;">
+            <tr><td style="background:#f8f9fa;padding:12px 16px;" colspan="2">
+              <span style="font-size:12px;font-weight:700;color:#888;text-transform:uppercase;">Detalhes do Boleto</span>
+            </td></tr>
+            <tr>
+              <td style="padding:8px 16px;color:#555;font-size:14px;border-bottom:1px solid #f0f0f0;"><strong>Contrato:</strong></td>
+              <td style="padding:8px 16px;color:#222;font-size:14px;border-bottom:1px solid #f0f0f0;text-align:right;">%%NUMEROCONTRATO%%</td>
+            </tr>
+            <tr>
+              <td style="padding:8px 16px;color:#555;font-size:14px;border-bottom:1px solid #f0f0f0;"><strong>Parcela:</strong></td>
+              <td style="padding:8px 16px;color:#222;font-size:14px;border-bottom:1px solid #f0f0f0;text-align:right;">%%PARCELA%%</td>
+            </tr>
+            <tr>
+              <td style="padding:8px 16px;color:#555;font-size:14px;border-bottom:1px solid #f0f0f0;"><strong>Vencimento:</strong></td>
+              <td style="padding:8px 16px;color:#e67e22;font-size:14px;font-weight:700;border-bottom:1px solid #f0f0f0;text-align:right;">%%DATAVENCIMENTO%% (AMANHÃ)</td>
+            </tr>
+            <tr>
+              <td style="padding:8px 16px;color:#555;font-size:14px;"><strong>Valor:</strong></td>
+              <td style="padding:8px 16px;font-size:18px;color:#27ae60;font-weight:700;text-align:right;">%%VALORBOLETO%%</td>
+            </tr>
+          </table>
+          <div style="background:#e67e22;color:#fff;padding:12px 16px;border-radius:6px;margin:20px 0;font-size:13px;">
+            Pague hoje para evitar multas e juros a partir de amanhã!
+          </div>
+          <div style="background:#f8f9fa;padding:12px 16px;border-radius:6px;margin:16px 0;">
+            <p style="margin:0 0 6px;font-size:12px;font-weight:700;color:#888;text-transform:uppercase;">Linha Digitável</p>
+            <code style="font-size:13px;word-break:break-all;color:#333;">%%LINHADIGITAVEL%%</code>
+          </div>
+          <p style="color:#666;font-size:13px;">O boleto segue em anexo para sua comodidade.</p>
+        </td>
+      </tr>
+      <tr>
+        <td style="background:#f8f9fa;padding:16px 32px;text-align:center;border-top:1px solid #e8eaed;">
+          <p style="margin:0;font-size:13px;font-weight:700;color:#444;">%%NOMEIMOBILIARIA%%</p>
+          <p style="margin:4px 0 0;font-size:12px;color:#888;">%%TELEFONEIMOBILIARIA%% &nbsp;|&nbsp; %%EMAILIMOBILIARIA%%</p>
+          <p style="margin:8px 0 0;font-size:11px;color:#bbb;">Você recebe este e-mail por ter uma parcela em aberto.</p>
+        </td>
+      </tr>
+    </table>
+  </td></tr>
+</table>
+</body>
+</html>""",
             'corpo_whatsapp': (
                 '*%%NOMEIMOBILIARIA%%* — ATENÇÃO!\n\n'
                 'Olá %%NOMECOMPRADOR%%,\n'
@@ -692,7 +853,68 @@ def criar_templates_padrao():
                 'boleto parcela %%PARCELA%% venceu em %%DATAVENCIMENTO%%. '
                 'Contato: %%TELEFONEIMOBILIARIA%%'
             ),
-            'corpo_html': '',
+            'corpo_html': """<!DOCTYPE html>
+<html lang="pt-BR">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+<body style="margin:0;padding:0;background:#f4f6f8;font-family:Arial,Helvetica,sans-serif;">
+<table width="100%" cellpadding="0" cellspacing="0" style="background:#f4f6f8;padding:30px 0;">
+  <tr><td align="center">
+    <table width="600" cellpadding="0" cellspacing="0"
+           style="max-width:600px;width:100%;background:#fff;border-radius:8px;
+                  overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,.08);">
+      <tr>
+        <td style="background:#c0392b;padding:28px 32px;text-align:center;">
+          <div style="font-size:32px;margin-bottom:8px;">⚠️</div>
+          <h1 style="margin:0;color:#fff;font-size:22px;">Boleto Vencido</h1>
+          <p style="margin:6px 0 0;color:rgba(255,255,255,.85);font-size:14px;">
+            Olá, %%NOMECOMPRADOR%%! Identificamos um boleto em atraso.
+          </p>
+        </td>
+      </tr>
+      <tr>
+        <td style="padding:28px 32px;">
+          <table width="100%" cellpadding="0" cellspacing="0"
+                 style="border:1px solid #e8eaed;border-radius:6px;overflow:hidden;">
+            <tr><td style="background:#f8f9fa;padding:12px 16px;" colspan="2">
+              <span style="font-size:12px;font-weight:700;color:#888;text-transform:uppercase;">Detalhes do Boleto</span>
+            </td></tr>
+            <tr>
+              <td style="padding:8px 16px;color:#555;font-size:14px;border-bottom:1px solid #f0f0f0;"><strong>Contrato:</strong></td>
+              <td style="padding:8px 16px;color:#222;font-size:14px;border-bottom:1px solid #f0f0f0;text-align:right;">%%NUMEROCONTRATO%%</td>
+            </tr>
+            <tr>
+              <td style="padding:8px 16px;color:#555;font-size:14px;border-bottom:1px solid #f0f0f0;"><strong>Parcela:</strong></td>
+              <td style="padding:8px 16px;color:#222;font-size:14px;border-bottom:1px solid #f0f0f0;text-align:right;">%%PARCELA%%</td>
+            </tr>
+            <tr>
+              <td style="padding:8px 16px;color:#555;font-size:14px;border-bottom:1px solid #f0f0f0;"><strong>Venceu em:</strong></td>
+              <td style="padding:8px 16px;color:#c0392b;font-size:14px;font-weight:700;border-bottom:1px solid #f0f0f0;text-align:right;">%%DATAVENCIMENTO%%</td>
+            </tr>
+            <tr>
+              <td style="padding:8px 16px;color:#555;font-size:14px;"><strong>Valor:</strong></td>
+              <td style="padding:8px 16px;font-size:18px;color:#c0392b;font-weight:700;text-align:right;">%%VALORBOLETO%%</td>
+            </tr>
+          </table>
+          <div style="background:#c0392b;color:#fff;padding:12px 16px;border-radius:6px;margin:20px 0;font-size:13px;">
+            Regularize o pagamento para evitar acréscimo de juros, multa e protesto do título.
+          </div>
+          <p style="color:#666;font-size:13px;">
+            Entre em contato conosco: <strong>%%TELEFONEIMOBILIARIA%%</strong> | %%EMAILIMOBILIARIA%%
+          </p>
+        </td>
+      </tr>
+      <tr>
+        <td style="background:#f8f9fa;padding:16px 32px;text-align:center;border-top:1px solid #e8eaed;">
+          <p style="margin:0;font-size:13px;font-weight:700;color:#444;">%%NOMEIMOBILIARIA%%</p>
+          <p style="margin:4px 0 0;font-size:12px;color:#888;">%%TELEFONEIMOBILIARIA%% &nbsp;|&nbsp; %%EMAILIMOBILIARIA%%</p>
+          <p style="margin:8px 0 0;font-size:11px;color:#bbb;">Você recebe este e-mail por ter uma parcela em aberto.</p>
+        </td>
+      </tr>
+    </table>
+  </td></tr>
+</table>
+</body>
+</html>""",
             'corpo_whatsapp': (
                 '*%%NOMEIMOBILIARIA%%* — Boleto vencido\n\n'
                 'Olá %%NOMECOMPRADOR%%,\n'
