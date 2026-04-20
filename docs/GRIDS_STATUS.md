@@ -34,7 +34,7 @@ Grid com todas as prestações do sistema filtráveis por imobiliária, contrato
 |---------------|----------|--------------------------------------------|-------------------------------------|
 | **Pago**      | Verde    | `parcela.pago = True`                      | Parcela quitada, pagamento registrado |
 | **Vencida**   | Vermelho | `parcela.pago = False` e `data_vencimento < hoje` | Em atraso — gera juros e multa |
-| **A Vencer** | Azul  | `parcela.pago = False` e `data_vencimento >= hoje` | Ainda dentro do prazo              |
+| **Em aberto** | Amarelo  | `parcela.pago = False` e `data_vencimento >= hoje` | Ainda dentro do prazo              |
 
 ### Coluna: Boleto
 
@@ -64,7 +64,7 @@ Grid com as parcelas vencendo ou vencidas no mês selecionado. Usada para acompa
 |---------------|----------|-----------------------------------------------|-------------------------|
 | **Pago**      | Verde    | `pago = True`                                 | Quitada                 |
 | **Vencida**   | Vermelho | `pago = False` e data passada                 | Em atraso               |
-| **A Vencer** | Azul  | `pago = False` e data futura ou no dia        | Aguardando pagamento    |
+| **Em aberto** | Amarelo  | `pago = False` e data futura ou no dia        | Aguardando pagamento    |
 
 ---
 
