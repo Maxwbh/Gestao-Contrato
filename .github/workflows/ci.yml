@@ -91,13 +91,34 @@ jobs:
 
       - name: Verificar mensagens de commit
         run: |
-          # Pega commits do PR ou do push (últimos 50 no máximo)
+          # Descobre a base de comparação: apenas commits recém enviados
           if [ "${{ github.event_name }}" = "pull_request" ]; then
             BASE="${{ github.event.pull_request.base.sha }}"
             HEAD="${{ github.event.pull_request.head.sha }}"
-            COMMITS=$(git log "$BASE".."$HEAD" --format="%H")
           else
-            COMMITS=$(git log -50 --format="%H")
+            # Push: github.event.before é o SHA anterior ao push
+            BEFORE="${{ github.event.before }}"
+            HEAD="${{ github.sha }}"
+            # Branch nova: before é 0000...0000 — usa merge-base como fallback
+            if [ "$BEFORE" = "0000000000000000000000000000000000000000" ]; then
+              BASE=$(git merge-base HEAD origin/V3.1 2>/dev/null \
+                     || git merge-base HEAD origin/master 2>/dev/null \
+                     || echo "")
+            else
+              BASE="$BEFORE"
+            fi
+          fi
+
+          if [ -z "$BASE" ]; then
+            echo "✅ Branch nova sem base — nada a verificar."
+            exit 0
+          fi
+
+          COMMITS=$(git log "$BASE".."$HEAD" --format="%H")
+
+          if [ -z "$COMMITS" ]; then
+            echo "✅ Nenhum commit novo para verificar."
+            exit 0
           fi
 
           AI_PATTERN='claude\.ai|anthropic\.com|openai\.com|chatgpt\.com|chat\.openai\.com|gemini\.google\.com|bard\.google\.com|copilot\.microsoft\.com|copilot\.github\.com|grok\.x\.com|mistral\.ai|perplexity\.ai|Co-Authored-By:.*[Cc]opilot|Co-Authored-By:.*[Cc]laude|Co-Authored-By:.*ChatGPT|Co-Authored-By:.*Gemini|[Gg]enerated by (AI|Claude|ChatGPT|Copilot|Gemini|GPT)|[Pp]owered by (AI|Claude|OpenAI|ChatGPT)'
