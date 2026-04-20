@@ -104,42 +104,48 @@
                     </div>
                 </div>
 
-                <!-- Atual vs Novo -->
+                <!-- Índice (somente leitura - não pode ser alterado) -->
                 <div class="row g-3 mb-3">
                     <div class="col-6">
-                        <label class="form-label fw-semibold text-muted">Índice Atual</label>
+                        <label class="form-label fw-semibold text-muted mb-1">
+                            <i class="fas fa-lock me-1 text-muted"></i>Índice (não editável)
+                        </label>
                         <div id="altIndiceAtual" class="form-control bg-light fw-bold">—</div>
                     </div>
                     <div class="col-6">
-                        <label class="form-label fw-semibold">Novo Índice <span class="text-danger">*</span></label>
-                        <select id="altNovoIndice" class="form-select">
-                            <option value="">Selecione...</option>
-                            <option value="IPCA">IPCA</option>
-                            <option value="IGPM">IGP-M</option>
-                            <option value="INCC">INCC</option>
-                            <option value="IGPDI">IGP-DI</option>
-                            <option value="INPC">INPC</option>
-                            <option value="TR">TR</option>
-                            <option value="SELIC">SELIC</option>
-                        </select>
+                        <label class="form-label fw-semibold text-muted mb-1">% Atual</label>
+                        <div id="altPercAtual" class="form-control bg-light fw-bold">—</div>
                     </div>
                 </div>
 
-                <!-- Resultado do recálculo (aparece após confirmar) -->
+                <!-- Novo % (entrada manual) -->
+                <div class="mb-3">
+                    <label class="form-label fw-semibold">Novo % (entrada manual) <span class="text-danger">*</span></label>
+                    <div class="input-group">
+                        <input type="number" id="altNovoPercentual" class="form-control form-control-lg"
+                               step="0.0001" placeholder="Ex: 5.2400">
+                        <span class="input-group-text">%</span>
+                    </div>
+                    <small class="text-muted">Informe manualmente o percentual a ser aplicado ao reajuste.</small>
+                </div>
+
+                <!-- Resultado (aparece após confirmar) -->
                 <div id="altResultado" class="d-none"></div>
 
                 <div class="alert alert-warning py-2 mb-0">
                     <i class="fas fa-exclamation-triangle me-1"></i>
                     <small>
-                        O percentual bruto será recalculado com o novo índice para o mesmo período de referência.
-                        Se o reajuste já foi aplicado, as parcelas não pagas serão atualizadas automaticamente.
+                        Somente o <strong>percentual</strong> pode ser alterado — o tipo de índice é preservado.
+                        Se o reajuste já foi aplicado, as parcelas não pagas serão ajustadas:
+                        o fator antigo é revertido e o novo percentual é aplicado automaticamente.
+                        O reajuste será marcado como <strong>manual</strong>.
                     </small>
                 </div>
             </div>
             <div class="modal-footer">
                 <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
                 <button type="button" class="btn btn-warning" id="btnConfirmarAlterar" onclick="confirmarAlterar()">
-                    <i class="fas fa-sync-alt me-1"></i> Recalcular e Salvar
+                    <i class="fas fa-save me-1"></i> Salvar Alteração
                 </button>
             </div>
         </div>
@@ -508,18 +514,18 @@ function renderVisualizarBody(d) {
     </div>`;
 }
 
-// ===== ALTERAR ÍNDICE =====
+// ===== ALTERAR ÍNDICE / PERCENTUAL =====
 function abrirAlterar(pk) {
     _reajustePkAtual = pk;
     document.getElementById('altResultado').className = 'd-none';
     document.getElementById('altResultado').innerHTML = '';
-    document.getElementById('altNovoIndice').value = '';
 
     const btn = document.getElementById('btnConfirmarAlterar');
     btn.disabled = false;
-    btn.innerHTML = '<i class="fas fa-sync-alt me-1"></i> Recalcular e Salvar';
+    btn.className = 'btn btn-warning';
+    btn.innerHTML = '<i class="fas fa-save me-1"></i> Salvar Alteração';
+    btn.onclick = confirmarAlterar;
 
-    // Preencher com dados da linha (sem fetch, aproveita rowData)
     const row = reajustesRowData.find(r => r.pk === pk);
     if (row) {
         document.getElementById('altContrato').textContent = row.contrato;
@@ -528,63 +534,78 @@ function abrirAlterar(pk) {
         document.getElementById('altPeriodo').textContent = row.periodo || '—';
         document.getElementById('altParcelas').textContent = `${row.parcela_inicial} – ${row.parcela_final}`;
         document.getElementById('altIndiceAtual').textContent = row.indice_tipo;
+        const percAtual = parseFloat(row.percentual);
+        const sign = percAtual >= 0 ? '+' : '';
+        document.getElementById('altPercAtual').textContent = `${sign}${percAtual.toFixed(4)}%`;
 
-        // Remover opção atual do select para evitar confusão
-        const sel = document.getElementById('altNovoIndice');
-        Array.from(sel.options).forEach(opt => {
-            opt.disabled = opt.value === row.indice_tipo;
-            opt.text = opt.value === row.indice_tipo ? `${opt.value} (atual)` : opt.value.replace(' (atual)', '');
-        });
+        // Pré-preenche com o % atual para facilitar ajuste fino
+        document.getElementById('altNovoPercentual').value = percAtual.toFixed(4);
     }
 
     getMModal('modalAlterarReajuste').open();
+    setTimeout(() => document.getElementById('altNovoPercentual').select(), 150);
 }
 
 function confirmarAlterar() {
-    const novoIndice = document.getElementById('altNovoIndice').value;
-    if (!novoIndice) { alert('Selecione o novo índice.'); return; }
+    const novoPerc = document.getElementById('altNovoPercentual').value;
+
+    if (novoPerc === '' || novoPerc == null) { alert('Informe o novo percentual.'); return; }
+    const percNum = parseFloat(novoPerc);
+    if (isNaN(percNum)) { alert('Percentual inválido.'); return; }
+    if (percNum <= -100) { alert('Percentual deve ser maior que -100%.'); return; }
 
     const btn = document.getElementById('btnConfirmarAlterar');
     btn.disabled = true;
-    btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i> Processando...';
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i> Salvando...';
 
     const resultado = document.getElementById('altResultado');
     resultado.className = 'alert alert-info mb-3';
-    resultado.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i> Recalculando...';
+    resultado.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i> Salvando alteração...';
     resultado.classList.remove('d-none');
 
     fetch(`/financeiro/reajuste/${_reajustePkAtual}/alterar-indice/`, {
         method: 'POST',
         headers: {'Content-Type': 'application/json', 'X-CSRFToken': CSRF_TOKEN},
-        body: JSON.stringify({indice_tipo: novoIndice}),
+        body: JSON.stringify({percentual: percNum}),
     })
     .then(r => r.json())
     .then(data => {
         btn.disabled = false;
-        btn.innerHTML = '<i class="fas fa-sync-alt me-1"></i> Recalcular e Salvar';
         if (data.sucesso) {
             resultado.className = 'alert alert-success mb-3';
+            const finalPerc = parseFloat(data.novo_percentual);
+            const fSign = finalPerc >= 0 ? '+' : '';
             resultado.innerHTML = `<i class="fas fa-check-circle me-1"></i> <strong>${data.mensagem}</strong>
-                <br><small>Novo % bruto: <strong>${parseFloat(data.novo_percentual_bruto).toFixed(4)}%</strong>
-                &nbsp;|&nbsp; % final: <strong>${parseFloat(data.novo_percentual) >= 0 ? '+' : ''}${parseFloat(data.novo_percentual).toFixed(4)}%</strong></small>`;
+                <br><small>Índice: <strong>${data.novo_indice_tipo}</strong>
+                &nbsp;|&nbsp; % aplicado: <strong>${fSign}${finalPerc.toFixed(4)}%</strong></small>`;
             // Atualizar linha no grid
             const rowNode = window.reajustesGridApi.getRowNode(String(_reajustePkAtual));
             if (rowNode) {
                 rowNode.setDataValue('indice_tipo', data.novo_indice_tipo);
                 rowNode.setDataValue('percentual_bruto', data.novo_percentual_bruto);
                 rowNode.setDataValue('percentual', data.novo_percentual);
+                rowNode.setDataValue('aplicado_manual', true);
+            }
+            // Atualizar também no rowData em memória
+            const row = reajustesRowData.find(r => r.pk === _reajustePkAtual);
+            if (row) {
+                row.indice_tipo = data.novo_indice_tipo;
+                row.percentual_bruto = data.novo_percentual_bruto;
+                row.percentual = data.novo_percentual;
+                row.aplicado_manual = true;
             }
             btn.innerHTML = '<i class="fas fa-times me-1"></i> Fechar';
             btn.className = 'btn btn-secondary';
             btn.onclick = () => getMModal('modalAlterarReajuste').close();
         } else {
+            btn.innerHTML = '<i class="fas fa-save me-1"></i> Salvar Alteração';
             resultado.className = 'alert alert-danger mb-3';
             resultado.innerHTML = `<i class="fas fa-exclamation-triangle me-1"></i> ${data.erro || 'Erro desconhecido.'}`;
         }
     })
     .catch(err => {
         btn.disabled = false;
-        btn.innerHTML = '<i class="fas fa-sync-alt me-1"></i> Recalcular e Salvar';
+        btn.innerHTML = '<i class="fas fa-save me-1"></i> Salvar Alteração';
         resultado.className = 'alert alert-danger mb-3';
         resultado.innerHTML = `<i class="fas fa-exclamation-triangle me-1"></i> Erro: ${err.message}`;
     });
