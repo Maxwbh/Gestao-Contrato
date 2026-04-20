@@ -881,6 +881,10 @@
                                                 <span class="badge bg-warning text-dark">
                                                     <i class="fas fa-clock"></i> Próxima
                                                 </span>
+                                            {% elif reajuste_pendente_desde_parcela and parcela.numero_parcela >= reajuste_pendente_desde_parcela %}
+                                                <span class="badge bg-secondary">
+                                                    <i class="fas fa-sync-alt"></i> Ag. Reajuste
+                                                </span>
                                             {% else %}
                                                 <span class="badge bg-primary">
                                                     <i class="fas fa-calendar"></i> A Vencer

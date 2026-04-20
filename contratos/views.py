@@ -234,6 +234,15 @@ class ContratoDetailView(LoginRequiredMixin, DetailView):
             data_vencimento__lt=timezone.now().date()
         ).count()
 
+        # Reajuste pendente no mês exato do aniversário (antecipacao_meses=0)
+        from financeiro.models import Reajuste
+        ciclo_pendente = Reajuste.calcular_ciclo_pendente(contrato, antecipacao_meses=0)
+        if ciclo_pendente:
+            prazo = contrato.prazo_reajuste_meses or 12
+            context['reajuste_pendente_desde_parcela'] = (ciclo_pendente - 1) * prazo + 1
+        else:
+            context['reajuste_pendente_desde_parcela'] = None
+
         # Reajustes do contrato
         context['reajustes'] = contrato.reajustes.all().order_by('-data_reajuste')
 
