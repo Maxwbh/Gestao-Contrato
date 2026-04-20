@@ -97,7 +97,9 @@ jobs:
           else
             BEFORE="${{ github.event.before }}"
             HEAD="${{ github.sha }}"
-            if [ "$BEFORE" = "0000000000000000000000000000000000000000" ]; then
+            # BEFORE inválido: branch nova (0000...) ou SHA órfão (força push reescreveu história)
+            if [ "$BEFORE" = "0000000000000000000000000000000000000000" ] \
+               || ! git cat-file -e "$BEFORE" 2>/dev/null; then
               BASE=$(git merge-base HEAD origin/V3.1 2>/dev/null \
                      || git merge-base HEAD origin/master 2>/dev/null \
                      || echo "")
@@ -108,6 +110,12 @@ jobs:
 
           if [ -z "$BASE" ] || [ -z "$HEAD" ]; then
             echo "✅ Sem base para comparar — nada a verificar."
+            exit 0
+          fi
+
+          # Se BASE ou HEAD ainda não for resolvível, pula a checagem
+          if ! git cat-file -e "$BASE" 2>/dev/null || ! git cat-file -e "$HEAD" 2>/dev/null; then
+            echo "✅ BASE ou HEAD não resolvível (histórico reescrito?) — nada a verificar."
             exit 0
           fi
 
