@@ -57,47 +57,35 @@ class ServicoEmail:
     """Serviço para envio de e-mails"""
 
     @staticmethod
-    def enviar(destinatario, assunto, mensagem):
+    def enviar(destinatario, assunto, mensagem, html_message=None):
         """
-        Envia um e-mail.
+        Envia um e-mail com suporte a versão HTML alternativa.
+
+        Args:
+            html_message: HTML opcional; quando fornecido, envia multipart/alternative.
 
         Returns:
             tuple[bool, str]: (True, message_id) em caso de sucesso; raise em caso de falha.
-            O message_id é o Message-ID gerado para rastreamento (UUID@domínio).
         """
         try:
-            # Safeguard: em TEST_MODE redireciona para e-mail de teste
+            from django.core.mail import EmailMultiAlternatives, get_connection
+
             destinatario = _destinatario_email_teste(destinatario)
 
-            # Gerar Message-ID único para rastreamento
             message_id = f"<{uuid4()}@gestao-contrato>"
 
-            # Cabeçalhos: Message-ID + Return-Path (bounce monitoring)
             headers = {'Message-ID': message_id}
             bounce_addr = getattr(settings, 'BOUNCE_EMAIL_ADDRESS', '')
             if bounce_addr:
                 headers['Return-Path'] = bounce_addr
                 headers['Errors-To'] = bounce_addr
 
-            # Buscar configuração ativa
             config = ConfiguracaoEmail.objects.filter(ativo=True).first()
 
             if not config:
-                # Usar configurações padrão do settings
-                from django.core.mail import EmailMessage as _EmailMessage
-                email = _EmailMessage(
-                    subject=assunto,
-                    body=mensagem,
-                    from_email=settings.DEFAULT_FROM_EMAIL,
-                    to=[destinatario],
-                    headers=headers,
-                )
-                email.send(fail_silently=False)
+                connection = None
+                from_email = settings.DEFAULT_FROM_EMAIL
             else:
-                # Usar configuração personalizada
-                from django.core.mail import EmailMessage
-                from django.core.mail import get_connection
-
                 connection = get_connection(
                     backend='django.core.mail.backends.smtp.EmailBackend',
                     host=config.host,
@@ -107,16 +95,19 @@ class ServicoEmail:
                     use_tls=config.usar_tls,
                     use_ssl=config.usar_ssl,
                 )
+                from_email = f"{config.nome_remetente} <{config.email_remetente}>"
 
-                email = EmailMessage(
-                    subject=assunto,
-                    body=mensagem,
-                    from_email=f"{config.nome_remetente} <{config.email_remetente}>",
-                    to=[destinatario],
-                    connection=connection,
-                    headers=headers,
-                )
-                email.send()
+            email = EmailMultiAlternatives(
+                subject=assunto,
+                body=mensagem,
+                from_email=from_email,
+                to=[destinatario],
+                connection=connection,
+                headers=headers,
+            )
+            if html_message:
+                email.attach_alternative(html_message, 'text/html')
+            email.send(fail_silently=False)
 
             logger.info("E-mail enviado com sucesso para %s (id=%s)", destinatario, message_id)
             return True, message_id
