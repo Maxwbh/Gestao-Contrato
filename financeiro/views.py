@@ -11,7 +11,7 @@ from django.contrib import messages
 from django.http import JsonResponse, HttpResponse, FileResponse
 from django.utils import timezone
 from django.db import transaction
-from django.db.models import Sum, Count, Q, Min
+from django.db.models import Sum, Count, Q, Min, F, Exists, OuterRef
 from django.views.generic import TemplateView
 from django.views.decorators.http import require_POST, require_GET
 from django.core.paginator import Paginator
@@ -23,7 +23,7 @@ import logging
 
 from django.core.cache import cache
 from .models import Parcela, Reajuste, StatusBoleto, HistoricoPagamento
-from core.models import Imobiliaria, ContaBancaria
+from core.models import Imobiliaria, ContaBancaria, BancoBrasil
 from contratos.models import Contrato, StatusContrato
 
 logger = logging.getLogger(__name__)
@@ -455,7 +455,28 @@ def listar_parcelas(request):
 
     # Filtro por Status do Boleto
     status_boleto_filtro = request.GET.get('status_boleto', '')
-    if status_boleto_filtro:
+    if status_boleto_filtro == StatusBoleto.NAO_GERADO:
+        # "Parcelas que devem ser geradas no mês":
+        #   boleto não gerado + não pago + vencimento no mês corrente +
+        #   (é a 1ª parcela do contrato OU a parcela anterior já tem boleto gerado)
+        hoje = timezone.localdate()
+        parcela_anterior_gerada = Parcela.objects.filter(
+            contrato_id=OuterRef('contrato_id'),
+            numero_parcela=OuterRef('_numero_anterior'),
+        ).exclude(status_boleto=StatusBoleto.NAO_GERADO)
+
+        parcelas = parcelas.filter(
+            status_boleto=StatusBoleto.NAO_GERADO,
+            pago=False,
+            data_vencimento__year=hoje.year,
+            data_vencimento__month=hoje.month,
+        ).annotate(
+            _numero_anterior=F('numero_parcela') - 1,
+            _anterior_gerada=Exists(parcela_anterior_gerada),
+        ).filter(
+            Q(numero_parcela=1) | Q(_anterior_gerada=True)
+        )
+    elif status_boleto_filtro:
         parcelas = parcelas.filter(status_boleto=status_boleto_filtro)
 
     # Filtro por Imobiliária
@@ -1621,8 +1642,34 @@ def gerar_arquivo_remessa(request):
             messages.error(request, 'Selecione pelo menos uma parcela.')
             return redirect('financeiro:gerar_remessa')
 
-        # Verificar se há parcelas pagas na seleção — informar ao usuário
+        # Verificar conflito de layout CNAB entre as contas selecionadas
         from .models import Parcela as _Parcela
+        contas_selecionadas = (
+            _Parcela.objects.filter(pk__in=parcela_ids)
+            .select_related('conta_bancaria')
+            .values_list(
+                'conta_bancaria__layout_cnab',
+                'conta_bancaria__banco',
+            )
+            .distinct()
+        )
+        layouts_por_banco = {}  # {layout: set(banco_codigo)}
+        for lay, banco in contas_selecionadas:
+            layouts_por_banco.setdefault(lay, set()).add(banco or '000')
+        if len(layouts_por_banco) > 1:
+            banco_display = dict(BancoBrasil.choices)
+            partes = []
+            for lay, bancos in layouts_por_banco.items():
+                nomes = ', '.join(banco_display.get(b, b) for b in sorted(bancos))
+                partes.append(f"{nomes} ({lay.replace('_', ' ')})")
+            messages.error(
+                request,
+                f"{' e '.join(partes)} não usam o mesmo padrão de CNAB. "
+                "Gere os CNAB's separadamente."
+            )
+            return redirect('financeiro:gerar_remessa')
+
+        # Verificar se há parcelas pagas na seleção — informar ao usuário
         pagas_selecionadas = _Parcela.objects.filter(pk__in=parcela_ids, pago=True).count()
         if pagas_selecionadas:
             messages.warning(
