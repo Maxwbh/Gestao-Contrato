@@ -23,7 +23,7 @@ import logging
 
 from django.core.cache import cache
 from .models import Parcela, Reajuste, StatusBoleto, HistoricoPagamento
-from core.models import Imobiliaria, ContaBancaria, BancoBrasil
+from core.models import Imobiliaria, ContaBancaria
 from contratos.models import Contrato, StatusContrato
 
 logger = logging.getLogger(__name__)
@@ -1657,10 +1657,10 @@ def gerar_arquivo_remessa(request):
         for lay, banco in contas_selecionadas:
             layouts_por_banco.setdefault(lay, set()).add(banco or '000')
         if len(layouts_por_banco) > 1:
-            banco_display = dict(BancoBrasil.choices)
+            from .services import bancos as bancos_brcobranca
             partes = []
             for lay, bancos in layouts_por_banco.items():
-                nomes = ', '.join(banco_display.get(b, b) for b in sorted(bancos))
+                nomes = ', '.join(bancos_brcobranca.nome(b) for b in sorted(bancos))
                 partes.append(f"{nomes} ({lay.replace('_', ' ')})")
             messages.error(
                 request,
