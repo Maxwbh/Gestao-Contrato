@@ -7,7 +7,7 @@ Email: maxwbh@gmail.com
 from django import forms
 from crispy_forms.helper import FormHelper
 from crispy_forms.layout import Layout, Row, Column, Field, HTML, Div
-from .models import ConfiguracaoEmail, TemplateNotificacao
+from .models import ConfiguracaoEmail, ConfiguracaoWhatsApp, TemplateNotificacao
 from core.models import Imobiliaria
 
 
@@ -142,6 +142,140 @@ class ConfiguracaoEmailForm(forms.ModelForm):
         if usar_tls and usar_ssl:
             raise forms.ValidationError('Nao e possivel usar TLS e SSL ao mesmo tempo.')
 
+        return cleaned_data
+
+
+class ConfiguracaoWhatsAppForm(forms.ModelForm):
+    """Formulario para configuracao de WhatsApp (Twilio, Meta, Evolution API, Z-API)."""
+
+    class Meta:
+        model = ConfiguracaoWhatsApp
+        fields = [
+            'nome', 'provedor', 'ativo',
+            'account_sid', 'auth_token', 'numero_remetente',
+            'api_url', 'api_key', 'instancia', 'client_token',
+        ]
+        widgets = {
+            'nome': forms.TextInput(attrs={'placeholder': 'Ex: Evolution Producao'}),
+            'account_sid': forms.TextInput(attrs={'placeholder': 'ACxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'}),
+            'auth_token': forms.PasswordInput(attrs={'placeholder': '••••••••', 'autocomplete': 'new-password'}),
+            'numero_remetente': forms.TextInput(attrs={'placeholder': 'whatsapp:+5511999999999'}),
+            'api_url': forms.URLInput(attrs={'placeholder': 'http://seu-servidor:8080'}),
+            'api_key': forms.TextInput(attrs={'placeholder': 'sua-api-key-ou-token'}),
+            'instancia': forms.TextInput(attrs={'placeholder': 'gestao'}),
+            'client_token': forms.TextInput(attrs={'placeholder': 'Client-Token (Z-API)'}),
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        for field_name, field in self.fields.items():
+            if 'class' not in field.widget.attrs:
+                if isinstance(field.widget, forms.Select):
+                    field.widget.attrs['class'] = 'form-select'
+                elif isinstance(field.widget, forms.CheckboxInput):
+                    field.widget.attrs['class'] = 'form-check-input'
+                else:
+                    field.widget.attrs['class'] = 'form-control'
+
+        if self.instance and self.instance.pk:
+            self.fields['auth_token'].widget.attrs['placeholder'] = 'Deixe em branco para manter o token atual'
+            self.fields['auth_token'].required = False
+
+        self.helper = FormHelper()
+        self.helper.form_method = 'post'
+        self.helper.layout = Layout(
+            HTML('''
+                <div class="card mb-3">
+                    <div class="card-header py-2 bg-success text-white">
+                        <i class="fab fa-whatsapp me-2"></i><strong>Identificacao</strong>
+                    </div>
+                    <div class="card-body py-3">
+            '''),
+            Row(
+                Column(Field('nome', wrapper_class='mb-2'), css_class='col-md-6'),
+                Column(Field('provedor', wrapper_class='mb-2'), css_class='col-md-4'),
+                Column(Div(Field('ativo'), css_class='form-check mt-4'), css_class='col-md-2'),
+            ),
+            HTML('</div></div>'),
+
+            HTML('''
+                <div class="card mb-3" id="card-twilio-meta">
+                    <div class="card-header py-2">
+                        <i class="fas fa-phone me-2"></i><strong>Twilio / Meta</strong>
+                        <small class="text-muted ms-2">Preencha para provedores Twilio ou Meta</small>
+                    </div>
+                    <div class="card-body py-3">
+            '''),
+            Row(
+                Column(Field('account_sid', wrapper_class='mb-2'), css_class='col-md-6'),
+                Column(Field('auth_token', wrapper_class='mb-2'), css_class='col-md-6'),
+            ),
+            Field('numero_remetente', wrapper_class='mb-2'),
+            HTML('''
+                        <small class="text-muted">
+                            <i class="fas fa-info-circle me-1"></i>
+                            Twilio: <code>whatsapp:+5511999999999</code> &nbsp;|&nbsp;
+                            Meta: numero sem prefixo whatsapp:
+                        </small>
+                    </div>
+                </div>
+            '''),
+
+            HTML('''
+                <div class="card mb-3" id="card-evolution-zapi">
+                    <div class="card-header py-2">
+                        <i class="fas fa-server me-2"></i><strong>Evolution API / Z-API</strong>
+                        <small class="text-muted ms-2">Preencha para provedores self-hosted</small>
+                    </div>
+                    <div class="card-body py-3">
+            '''),
+            Row(
+                Column(Field('api_url', wrapper_class='mb-2'), css_class='col-md-8'),
+                Column(Field('instancia', wrapper_class='mb-2'), css_class='col-md-4'),
+            ),
+            Row(
+                Column(Field('api_key', wrapper_class='mb-2'), css_class='col-md-6'),
+                Column(Field('client_token', wrapper_class='mb-2'), css_class='col-md-6'),
+            ),
+            HTML('''
+                        <small class="text-muted">
+                            <i class="fas fa-info-circle me-1"></i>
+                            Evolution: <code>apikey</code> no cabecalho &nbsp;|&nbsp;
+                            Z-API: <code>Client-Token</code> obrigatorio
+                        </small>
+                    </div>
+                </div>
+            '''),
+
+            HTML('''
+                <div class="d-flex justify-content-between align-items-center mt-4 pt-3 border-top">
+                    <a href="{% url 'notificacoes:listar_config_whatsapp' %}" class="btn btn-outline-secondary">
+                        <i class="fas fa-arrow-left me-2"></i>Voltar
+                    </a>
+                    <div>
+                        <button type="button" class="btn btn-outline-success me-2" id="btn-testar-conexao">
+                            <i class="fab fa-whatsapp me-1"></i>Testar Conexao
+                        </button>
+                        <button type="submit" class="btn btn-success btn-lg px-5">
+                            <i class="fas fa-save me-2"></i>Salvar
+                        </button>
+                    </div>
+                </div>
+            ''')
+        )
+
+    def clean(self):
+        cleaned_data = super().clean()
+        provedor = cleaned_data.get('provedor')
+        if provedor in ('TWILIO', 'META'):
+            if not cleaned_data.get('account_sid') and provedor == 'TWILIO':
+                self.add_error('account_sid', 'Obrigatorio para Twilio.')
+        if provedor in ('EVOLUTION', 'ZAPI'):
+            if not cleaned_data.get('api_url'):
+                self.add_error('api_url', 'Obrigatorio para Evolution API / Z-API.')
+            if not cleaned_data.get('instancia'):
+                self.add_error('instancia', 'Obrigatorio para Evolution API / Z-API.')
         return cleaned_data
 
 
