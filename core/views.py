@@ -1419,7 +1419,15 @@ def api_excluir_conta_bancaria(request, conta_id):
 @require_http_methods(["GET"])
 def api_listar_bancos(request):
     """Lista todos os bancos disponíveis e layouts CNAB"""
-    bancos = [{'codigo': choice[0], 'nome': choice[1]} for choice in BancoBrasil.choices]
+    from financeiro.services.bancos import BANCOS_SUPORTADOS as _BRC
+    bancos = [
+        {
+            'codigo': choice[0],
+            'nome': choice[1],
+            'layouts_cnab': list(_BRC[choice[0]]['layouts_cnab']) if choice[0] in _BRC else [],
+        }
+        for choice in BancoBrasil.choices
+    ]
     layouts = [{'codigo': choice[0], 'nome': choice[1]} for choice in LayoutCNAB.choices]
     return JsonResponse({
         'status': 'success',
