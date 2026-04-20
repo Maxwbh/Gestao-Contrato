@@ -3885,6 +3885,182 @@ def excluir_reajuste(request, pk):
 
 
 @login_required
+def api_reajuste_detail(request, pk):
+    """Retorna JSON completo de um reajuste para os modais Visualizar/Alterar."""
+    reajuste = get_object_or_404(Reajuste, pk=pk)
+    contrato = reajuste.contrato
+
+    parcelas_qs = contrato.parcelas.filter(
+        numero_parcela__gte=reajuste.parcela_inicial,
+        numero_parcela__lte=reajuste.parcela_final,
+    ).order_by('numero_parcela').values(
+        'numero_parcela', 'valor_original', 'valor_atual', 'pago', 'data_vencimento'
+    )
+
+    parcelas_lista = list(parcelas_qs[:20])
+    total_parcelas = contrato.parcelas.filter(
+        numero_parcela__gte=reajuste.parcela_inicial,
+        numero_parcela__lte=reajuste.parcela_final,
+    ).count()
+
+    valor_original_total = contrato.parcelas.filter(
+        numero_parcela__gte=reajuste.parcela_inicial,
+        numero_parcela__lte=reajuste.parcela_final,
+        pago=False,
+    ).aggregate(s=Sum('valor_original'))['s'] or Decimal('0')
+
+    valor_atual_total = contrato.parcelas.filter(
+        numero_parcela__gte=reajuste.parcela_inicial,
+        numero_parcela__lte=reajuste.parcela_final,
+        pago=False,
+    ).aggregate(s=Sum('valor_atual'))['s'] or Decimal('0')
+
+    for p in parcelas_lista:
+        p['data_vencimento'] = p['data_vencimento'].strftime('%d/%m/%Y') if p['data_vencimento'] else None
+        p['valor_original'] = float(p['valor_original']) if p['valor_original'] else None
+        p['valor_atual'] = float(p['valor_atual']) if p['valor_atual'] else None
+
+    return JsonResponse({
+        'pk': reajuste.pk,
+        'contrato': contrato.numero_contrato,
+        'contrato_pk': contrato.pk,
+        'comprador': contrato.comprador.nome,
+        'data_reajuste': reajuste.data_reajuste.strftime('%d/%m/%Y'),
+        'ciclo': reajuste.ciclo,
+        'indice_tipo': reajuste.indice_tipo,
+        'percentual_bruto': float(reajuste.percentual_bruto) if reajuste.percentual_bruto is not None else None,
+        'percentual': float(reajuste.percentual),
+        'spread_aplicado': float(reajuste.spread_aplicado) if reajuste.spread_aplicado else 0,
+        'desconto_percentual': float(reajuste.desconto_percentual) if reajuste.desconto_percentual else 0,
+        'desconto_valor': float(reajuste.desconto_valor) if reajuste.desconto_valor else 0,
+        'piso_aplicado': float(reajuste.piso_aplicado) if reajuste.piso_aplicado is not None else None,
+        'teto_aplicado': float(reajuste.teto_aplicado) if reajuste.teto_aplicado is not None else None,
+        'parcela_inicial': reajuste.parcela_inicial,
+        'parcela_final': reajuste.parcela_final,
+        'periodo_referencia_inicio': reajuste.periodo_referencia_inicio.strftime('%m/%Y') if reajuste.periodo_referencia_inicio else None,
+        'periodo_referencia_fim': reajuste.periodo_referencia_fim.strftime('%m/%Y') if reajuste.periodo_referencia_fim else None,
+        'aplicado': reajuste.aplicado,
+        'aplicado_manual': reajuste.aplicado_manual,
+        'data_aplicacao': reajuste.data_aplicacao.strftime('%d/%m/%Y %H:%M') if reajuste.data_aplicacao else None,
+        'usuario': (reajuste.usuario.get_full_name() or reajuste.usuario.username) if reajuste.usuario else None,
+        'observacoes': reajuste.observacoes or '',
+        'total_parcelas': total_parcelas,
+        'valor_original_total': float(valor_original_total),
+        'valor_atual_total': float(valor_atual_total),
+        'diferenca_total': float(valor_atual_total - valor_original_total),
+        'parcelas': parcelas_lista,
+        'mais_parcelas': total_parcelas > 20,
+    })
+
+
+@login_required
+@require_POST
+def alterar_indice_reajuste(request, pk):
+    """
+    Altera o tipo de índice de um reajuste e recalcula percentual_bruto e percentual.
+    Se já aplicado, reverte as parcelas com o fator antigo e reaplicar com o novo.
+    """
+    import json
+    from contratos.models import IndiceReajuste, TipoCorrecao
+
+    try:
+        body = json.loads(request.body)
+        novo_indice = body.get('indice_tipo', '').strip().upper()
+    except (json.JSONDecodeError, AttributeError):
+        return JsonResponse({'sucesso': False, 'erro': 'JSON inválido.'}, status=400)
+
+    INDICES_VALIDOS = [c.value for c in TipoCorrecao if c != TipoCorrecao.FIXO]
+    if novo_indice not in INDICES_VALIDOS:
+        return JsonResponse({'sucesso': False, 'erro': f'Índice inválido: {novo_indice}'}, status=400)
+
+    reajuste = get_object_or_404(Reajuste, pk=pk)
+
+    if novo_indice == reajuste.indice_tipo:
+        return JsonResponse({'sucesso': False, 'erro': 'O índice informado é igual ao atual.'}, status=400)
+
+    if not reajuste.periodo_referencia_inicio or not reajuste.periodo_referencia_fim:
+        return JsonResponse({'sucesso': False, 'erro': 'Reajuste sem período de referência definido.'}, status=400)
+
+    novo_percentual_bruto = IndiceReajuste.get_acumulado_periodo(
+        novo_indice,
+        reajuste.periodo_referencia_inicio.year, reajuste.periodo_referencia_inicio.month,
+        reajuste.periodo_referencia_fim.year, reajuste.periodo_referencia_fim.month,
+    )
+
+    if novo_percentual_bruto is None:
+        periodo = f"{reajuste.periodo_referencia_inicio.strftime('%m/%Y')} → {reajuste.periodo_referencia_fim.strftime('%m/%Y')}"
+        return JsonResponse({
+            'sucesso': False,
+            'erro': f'Sem dados de {novo_indice} para o período {periodo}. Importe os índices antes.',
+        }, status=400)
+
+    spread = reajuste.spread_aplicado or Decimal('0')
+    desconto = reajuste.desconto_percentual or Decimal('0')
+    novo_percentual = novo_percentual_bruto + spread - desconto
+    if reajuste.piso_aplicado is not None:
+        novo_percentual = max(reajuste.piso_aplicado, novo_percentual)
+    if reajuste.teto_aplicado is not None:
+        novo_percentual = min(reajuste.teto_aplicado, novo_percentual)
+
+    try:
+        with transaction.atomic():
+            contrato = reajuste.contrato
+
+            if reajuste.aplicado:
+                # Reverter o fator antigo nas parcelas não pagas do intervalo
+                fator_antigo = 1 + (reajuste.percentual / 100)
+                parcelas = contrato.parcelas.filter(
+                    numero_parcela__gte=reajuste.parcela_inicial,
+                    numero_parcela__lte=reajuste.parcela_final,
+                    pago=False,
+                )
+                for p in parcelas:
+                    if fator_antigo != 0:
+                        p.valor_atual = (p.valor_atual / fator_antigo).quantize(Decimal('0.01'))
+                    p.save(update_fields=['valor_atual'])
+
+                intermediarias = contrato.intermediarias.filter(
+                    paga=False,
+                    mes_vencimento__gte=reajuste.parcela_inicial,
+                    mes_vencimento__lte=reajuste.parcela_final,
+                )
+                for inter in intermediarias:
+                    if fator_antigo != 0:
+                        inter.valor_atual = (inter.valor_atual / fator_antigo).quantize(Decimal('0.01'))
+                    inter.save(update_fields=['valor_atual'])
+
+                # Atualiza o registro e reaplicar
+                reajuste.indice_tipo = novo_indice
+                reajuste.percentual_bruto = novo_percentual_bruto
+                reajuste.percentual = novo_percentual
+                reajuste.usuario = request.user
+                reajuste.aplicado = False
+                reajuste.save()
+
+                resultado = reajuste.aplicar_reajuste()
+                if not resultado.get('sucesso'):
+                    raise Exception(resultado.get('erro', 'Erro ao reaplicar reajuste.'))
+            else:
+                reajuste.indice_tipo = novo_indice
+                reajuste.percentual_bruto = novo_percentual_bruto
+                reajuste.percentual = novo_percentual
+                reajuste.usuario = request.user
+                reajuste.save()
+
+    except Exception as e:
+        logger.exception(f"Erro ao alterar índice do reajuste {pk}: {e}")
+        return JsonResponse({'sucesso': False, 'erro': str(e)}, status=500)
+
+    return JsonResponse({
+        'sucesso': True,
+        'mensagem': f'Índice alterado para {novo_indice}. Percentual recalculado: {float(novo_percentual):.4f}%.',
+        'novo_indice_tipo': reajuste.indice_tipo,
+        'novo_percentual_bruto': float(reajuste.percentual_bruto),
+        'novo_percentual': float(reajuste.percentual),
+    })
+
+
+@login_required
 def obter_indice_reajuste(request):
     """
     Retorna o percentual do indice de reajuste para um tipo e periodo.
