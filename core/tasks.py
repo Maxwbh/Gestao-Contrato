@@ -218,6 +218,84 @@ def _registrar_notificacao(parcela, tipo, destinatario, assunto, mensagem):
     )
 
 
+def _html_email(titulo, cor_header, icone, subtitulo, linhas_info, rodape_nome,
+                rodape_tel='', rodape_email='', aviso='', cor_aviso='#e67e22'):
+    """
+    Gera HTML transacional responsivo para e-mails de notificação.
+    Usa table-layout para máxima compatibilidade com clientes de e-mail.
+    """
+    linhas_html = ''.join(
+        f'<tr>'
+        f'<td style="padding:8px 0;color:#555;font-size:14px;border-bottom:1px solid #f0f0f0;">'
+        f'<strong>{label}</strong></td>'
+        f'<td style="padding:8px 0;color:#222;font-size:14px;border-bottom:1px solid #f0f0f0;'
+        f'text-align:right;">{valor}</td>'
+        f'</tr>'
+        for label, valor in linhas_info
+    )
+    aviso_html = (
+        f'<div style="background:{cor_aviso};color:#fff;padding:12px 16px;'
+        f'border-radius:6px;margin:20px 0;font-size:13px;">'
+        f'{aviso}</div>'
+    ) if aviso else ''
+
+    return f"""<!DOCTYPE html>
+<html lang="pt-BR">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+<body style="margin:0;padding:0;background:#f4f6f8;font-family:Arial,Helvetica,sans-serif;">
+<table width="100%" cellpadding="0" cellspacing="0" style="background:#f4f6f8;padding:30px 0;">
+  <tr><td align="center">
+    <table width="600" cellpadding="0" cellspacing="0"
+           style="max-width:600px;width:100%;background:#ffffff;border-radius:8px;
+                  overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,.08);">
+
+      <!-- CABEÇALHO -->
+      <tr>
+        <td style="background:{cor_header};padding:28px 32px;text-align:center;">
+          <div style="font-size:32px;margin-bottom:8px;">{icone}</div>
+          <h1 style="margin:0;color:#ffffff;font-size:22px;font-weight:700;">{titulo}</h1>
+          <p style="margin:6px 0 0;color:rgba(255,255,255,.85);font-size:14px;">{subtitulo}</p>
+        </td>
+      </tr>
+
+      <!-- CORPO -->
+      <tr>
+        <td style="padding:28px 32px;">
+          <table width="100%" cellpadding="0" cellspacing="0"
+                 style="border:1px solid #e8eaed;border-radius:6px;overflow:hidden;">
+            <tr>
+              <td style="background:#f8f9fa;padding:12px 16px;" colspan="2">
+                <span style="font-size:12px;font-weight:700;color:#888;text-transform:uppercase;
+                             letter-spacing:.5px;">Detalhes</span>
+              </td>
+            </tr>
+            {linhas_html}
+          </table>
+          {aviso_html}
+        </td>
+      </tr>
+
+      <!-- RODAPÉ -->
+      <tr>
+        <td style="background:#f8f9fa;padding:16px 32px;text-align:center;
+                   border-top:1px solid #e8eaed;">
+          <p style="margin:0;font-size:13px;font-weight:700;color:#444;">{rodape_nome}</p>
+          <p style="margin:4px 0 0;font-size:12px;color:#888;">
+            {f'{rodape_tel} &nbsp;|&nbsp; ' if rodape_tel else ''}{rodape_email}
+          </p>
+          <p style="margin:8px 0 0;font-size:11px;color:#bbb;">
+            Você recebe este e-mail por ter uma parcela em aberto.
+          </p>
+        </td>
+      </tr>
+
+    </table>
+  </td></tr>
+</table>
+</body>
+</html>"""
+
+
 def _get_destinatario(comprador, tipo_notificacao):
     """
     Retorna o endereço de destino para o canal informado, ou None se indisponível.
@@ -412,7 +490,8 @@ def enviar_notificacoes_sync():
                         f"{PREFIXO} Parcela {parcela.numero_parcela} vence em "
                         f"{dias_antecedencia} dia(s) — {parcela.data_vencimento.strftime('%d/%m/%Y')}"
                     )
-                    imob_nome = getattr(parcela.contrato.imobiliaria, 'nome', 'Gestão de Contratos')
+                    imob = parcela.contrato.imobiliaria
+                    imob_nome = getattr(imob, 'nome', 'Gestão de Contratos')
                     mensagem = (
                         f"Olá {comprador.nome},\n\n"
                         f"Lembramos que a parcela {parcela.numero_parcela}/{parcela.contrato.numero_parcelas} "
@@ -422,13 +501,32 @@ def enviar_notificacoes_sync():
                         f"Por favor, efetue o pagamento até a data de vencimento.\n\n"
                         f"Atenciosamente,\n{imob_nome}"
                     )
+                    html_msg = _html_email(
+                        titulo='Lembrete de Vencimento',
+                        cor_header='#2980b9',
+                        icone='📅',
+                        subtitulo=f'Olá, {comprador.nome}! Sua parcela vence em breve.',
+                        linhas_info=[
+                            ('Contrato', parcela.contrato.numero_contrato),
+                            ('Parcela', f'{parcela.numero_parcela}/{parcela.contrato.numero_parcelas}'),
+                            ('Vencimento', parcela.data_vencimento.strftime('%d/%m/%Y')),
+                            ('Valor', f'R$ {parcela.valor_atual:,.2f}'),
+                            ('Dias restantes', f'{dias_antecedencia} dia(s)'),
+                        ],
+                        rodape_nome=imob_nome,
+                        rodape_tel=getattr(imob, 'telefone', ''),
+                        rodape_email=getattr(imob, 'email', ''),
+                        aviso='Efetue o pagamento até a data de vencimento para evitar juros e multa.',
+                        cor_aviso='#2980b9',
+                    )
 
                     notif = _registrar_notificacao(
                         parcela, TipoNotificacao.EMAIL, comprador.email, assunto, mensagem
                     )
                     try:
                         ServicoEmail.enviar(
-                            destinatario=comprador.email, assunto=assunto, mensagem=mensagem,
+                            destinatario=comprador.email, assunto=assunto,
+                            mensagem=mensagem, html_message=html_msg,
                         )
                         notif.marcar_como_enviada()
                         result.items_processed += 1
@@ -507,7 +605,8 @@ def enviar_inadimplentes_sync():
                         f"{PREFIXO} Parcela {parcela.numero_parcela} em atraso há {dias_atraso} dia(s) "
                         f"— {parcela.data_vencimento.strftime('%d/%m/%Y')}"
                     )
-                    imob_nome = getattr(parcela.contrato.imobiliaria, 'nome', 'Gestão de Contratos')
+                    imob = parcela.contrato.imobiliaria
+                    imob_nome = getattr(imob, 'nome', 'Gestão de Contratos')
                     mensagem = (
                         f"Olá {comprador.nome},\n\n"
                         f"Verificamos que a parcela {parcela.numero_parcela}/{parcela.contrato.numero_parcelas} "
@@ -520,13 +619,35 @@ def enviar_inadimplentes_sync():
                         f"Em caso de dúvidas, entre em contato conosco.\n\n"
                         f"Atenciosamente,\n{imob_nome}"
                     )
+                    html_msg = _html_email(
+                        titulo='Aviso de Inadimplência',
+                        cor_header='#c0392b',
+                        icone='⚠️',
+                        subtitulo=f'Olá, {comprador.nome}! Identificamos uma parcela em atraso.',
+                        linhas_info=[
+                            ('Contrato', parcela.contrato.numero_contrato),
+                            ('Parcela', f'{parcela.numero_parcela}/{parcela.contrato.numero_parcelas}'),
+                            ('Vencimento', parcela.data_vencimento.strftime('%d/%m/%Y')),
+                            ('Dias em atraso', f'{dias_atraso} dia(s)'),
+                            ('Valor em aberto', f'R$ {parcela.valor_atual:,.2f}'),
+                        ],
+                        rodape_nome=imob_nome,
+                        rodape_tel=getattr(imob, 'telefone', ''),
+                        rodape_email=getattr(imob, 'email', ''),
+                        aviso=(
+                            'Regularize o pagamento o quanto antes para evitar acréscimo de '
+                            'juros e multa, bem como protesto do título.'
+                        ),
+                        cor_aviso='#c0392b',
+                    )
 
                     notif = _registrar_notificacao(
                         parcela, TipoNotificacao.EMAIL, comprador.email, assunto, mensagem
                     )
                     try:
                         ServicoEmail.enviar(
-                            destinatario=comprador.email, assunto=assunto, mensagem=mensagem,
+                            destinatario=comprador.email, assunto=assunto,
+                            mensagem=mensagem, html_message=html_msg,
                         )
                         notif.marcar_como_enviada()
                         result.items_processed += 1
