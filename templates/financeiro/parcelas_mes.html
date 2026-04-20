@@ -59,10 +59,10 @@
             </div>
         </div>
         <div class="col-md-3">
-            <div class="card card-stats warning">
+            <div class="card card-stats" style="border-color:#0d6efd;">
                 <div class="card-body text-center">
-                    <div class="stat-value text-warning">{{ stats.pendentes|default:0 }}</div>
-                    <div class="stat-label">Em aberto</div>
+                    <div class="stat-value" style="color:#0d6efd;">{{ stats.pendentes|default:0 }}</div>
+                    <div class="stat-label">A Vencer</div>
                     <small class="text-muted">R$ {{ stats.valor_pendente|floatformat:2|default:"0,00" }}</small>
                 </div>
             </div>
@@ -97,7 +97,7 @@
                     <label class="form-label">Status</label>
                     <select name="status" class="form-select" onchange="this.form.submit()">
                         <option value="">Todos</option>
-                        <option value="pendentes" {% if filtro_status == 'pendentes' %}selected{% endif %}>Em aberto</option>
+                        <option value="pendentes" {% if filtro_status == 'pendentes' %}selected{% endif %}>A Vencer</option>
                         <option value="pagas" {% if filtro_status == 'pagas' %}selected{% endif %}>Pagas</option>
                         <option value="vencidas" {% if filtro_status == 'vencidas' %}selected{% endif %}>Vencidas</option>
                     </select>
