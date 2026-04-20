@@ -3903,6 +3903,10 @@ def api_reajuste_detail(request, pk):
         s=Sum('valor_atual')
     )['s'] or Decimal('0')
 
+    primeira_aberta = parcelas_no_range.filter(pago=False).order_by('numero_parcela').first()
+    prestacao_atual = float(primeira_aberta.valor_atual) if primeira_aberta else None
+    qtd_parcelas_abertas = parcelas_no_range.filter(pago=False).count()
+
     # Ciclos afetados — determina pelo range de parcelas e prazo_reajuste_meses
     prazo = contrato.prazo_reajuste_meses or 12
     ciclo_inicial = ((reajuste.parcela_inicial - 1) // prazo) + 1
@@ -3951,6 +3955,8 @@ def api_reajuste_detail(request, pk):
         'usuario': (reajuste.usuario.get_full_name() or reajuste.usuario.username) if reajuste.usuario else None,
         'observacoes': reajuste.observacoes or '',
         'total_parcelas': total_parcelas,
+        'qtd_parcelas_abertas': qtd_parcelas_abertas,
+        'prestacao_atual': prestacao_atual,
         'valor_original_total': float(valor_original_total),
         'valor_atual_total': float(valor_atual_total),
         'diferenca_total': float(valor_atual_total - valor_original_total),
