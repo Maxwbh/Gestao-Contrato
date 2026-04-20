@@ -1,0 +1,61 @@
+#!/usr/bin/env bash
+# Bloqueia commits com referências a ferramentas de IA
+# Cobre: Claude, ChatGPT, Copilot, Gemini, Bard, Grok, Meta AI, Mistral, etc.
+
+COMMIT_MSG_FILE="$1"
+MSG=$(cat "$COMMIT_MSG_FILE")
+
+# Padrões de URLs de serviços de IA
+URL_PATTERNS=(
+    "claude\.ai"
+    "anthropic\.com"
+    "openai\.com"
+    "chatgpt\.com"
+    "chat\.openai\.com"
+    "gemini\.google\.com"
+    "bard\.google\.com"
+    "copilot\.microsoft\.com"
+    "copilot\.github\.com"
+    "grok\.x\.com"
+    "mistral\.ai"
+    "perplexity\.ai"
+    "you\.com"
+    "cohere\.com"
+    "huggingface\.co"
+)
+
+# Padrões de atribuição a IA no texto do commit
+TEXT_PATTERNS=(
+    "[Gg]erado por IA"
+    "[Gg]enerated by (AI|Claude|ChatGPT|Copilot|Gemini|Grok|GPT)"
+    "[Cc]reated by (AI|Claude|ChatGPT|Copilot|Gemini|Grok|GPT)"
+    "[Cc]o-[Aa]uthored-[Bb]y.*[Cc]opilot"
+    "[Cc]o-[Aa]uthored-[Bb]y.*[Cc]laude"
+    "[Cc]o-[Aa]uthored-[Bb]y.*ChatGPT"
+    "[Cc]o-[Aa]uthored-[Bb]y.*Gemini"
+    "[Pp]owered by (AI|Claude|OpenAI|ChatGPT)"
+)
+
+FOUND=0
+
+for pat in "${URL_PATTERNS[@]}"; do
+    if echo "$MSG" | grep -qiE "$pat"; then
+        echo "❌ COMMIT BLOQUEADO: mensagem contém referência a IA ($pat)"
+        FOUND=1
+    fi
+done
+
+for pat in "${TEXT_PATTERNS[@]}"; do
+    if echo "$MSG" | grep -qE "$pat"; then
+        echo "❌ COMMIT BLOQUEADO: mensagem contém atribuição a IA ($pat)"
+        FOUND=1
+    fi
+done
+
+if [ "$FOUND" -eq 1 ]; then
+    echo ""
+    echo "Remova qualquer URL ou atribuição a ferramentas de IA da mensagem de commit."
+    exit 1
+fi
+
+exit 0
