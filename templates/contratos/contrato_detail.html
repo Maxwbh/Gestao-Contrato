@@ -831,7 +831,7 @@
                                 </thead>
                                 <tbody>
                                     {% for parcela in parcelas %}
-                                    <tr class="parcela-row {% if parcela.pago %}paga{% elif parcela.esta_atrasada %}atrasada{% elif parcela == proxima_parcela %}proxima{% endif %}">
+                                    <tr class="parcela-row {% if parcela.pago %}paga{% elif parcela.esta_vencida %}atrasada{% elif parcela == proxima_parcela %}proxima{% endif %}">
                                         <td class="text-center">
                                             <strong>{{ parcela.numero_parcela }}</strong>
                                         </td>
@@ -873,9 +873,13 @@
                                                     <i class="fas fa-check"></i> Pago
                                                 </span>
                                                 <br><small>{{ parcela.data_pagamento|date:"d/m/Y" }}</small>
-                                            {% elif parcela.esta_atrasada %}
+                                            {% elif parcela.esta_vencida %}
                                                 <span class="badge bg-danger">
-                                                    <i class="fas fa-exclamation-triangle"></i> {{ parcela.dias_atraso }}d
+                                                    <i class="fas fa-exclamation-triangle"></i> Vencida {{ parcela.dias_atraso }}d
+                                                </span>
+                                            {% elif parcela == proxima_parcela %}
+                                                <span class="badge bg-warning text-dark">
+                                                    <i class="fas fa-clock"></i> Próxima
                                                 </span>
                                             {% else %}
                                                 <span class="badge bg-secondary">
