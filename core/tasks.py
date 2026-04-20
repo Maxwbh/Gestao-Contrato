@@ -1278,14 +1278,18 @@ def _data_inicio_incremental(tipo_indice: str, hoje) -> 'date':
     """
     Calcula data_inicio para busca incremental por tipo de índice.
 
-    - Sem dados: busca 13 meses completos (carga inicial)
-    - Com dados recentes (≤3 meses): reprocessa últimos 3 meses (captura correções)
-    - Com dados antigos (>3 meses): continua de onde parou − 1 mês de overlap
-    Nunca vai além de 13 meses atrás.
+    Sem dados no BD:
+      - Usa a data do contrato mais antigo ativo que utiliza este índice
+        (primário ou fallback), garantindo cobertura histórica completa.
+      - Se nenhum contrato usa o índice, usa 13 meses atrás.
+
+    Com dados no BD:
+      - Reprocessa a partir do último registro − 1 mês (overlap para revisões).
+      - Sempre garante pelo menos 3 meses de lookback.
     """
     from datetime import date as _date
     from dateutil.relativedelta import relativedelta as _rd
-    from contratos.models import IndiceReajuste
+    from contratos.models import IndiceReajuste, Contrato as _Contrato
 
     ultimo = (
         IndiceReajuste.objects
@@ -1294,15 +1298,40 @@ def _data_inicio_incremental(tipo_indice: str, hoje) -> 'date':
         .values('ano', 'mes')
         .first()
     )
-    data_max_passado = hoje - _rd(months=13)
 
     if not ultimo:
-        return data_max_passado
+        # Carga inicial: buscar a partir do contrato mais antigo que usa este índice
+        contrato_mais_antigo = (
+            _Contrato.objects
+            .filter(
+                status='ATIVO',
+                tipo_correcao=tipo_indice,
+            )
+            .order_by('data_contrato')
+            .values('data_contrato')
+            .first()
+        )
+        if not contrato_mais_antigo:
+            # Tenta também como fallback
+            contrato_mais_antigo = (
+                _Contrato.objects
+                .filter(
+                    status='ATIVO',
+                    tipo_correcao_fallback=tipo_indice,
+                )
+                .order_by('data_contrato')
+                .values('data_contrato')
+                .first()
+            )
+        if contrato_mais_antigo and contrato_mais_antigo['data_contrato']:
+            dc = contrato_mais_antigo['data_contrato']
+            return _date(dc.year, dc.month, 1)
+        return hoje - _rd(months=13)
 
     data_ultimo = _date(ultimo['ano'], ultimo['mes'], 1)
     # Overlap de 1 mês para capturar revisões; mínimo de 3 meses de lookback
     data_inicio = max(data_ultimo - _rd(months=1), hoje - _rd(months=3))
-    return max(data_inicio, data_max_passado)
+    return data_inicio
 
 
 def atualizar_indices_sync():
