@@ -13,7 +13,7 @@ import random
 import unicodedata
 import re
 from decimal import Decimal
-from datetime import timedelta
+from datetime import date, timedelta
 from django.core.management.base import BaseCommand
 from django.utils import timezone
 from django.db import transaction
@@ -129,6 +129,16 @@ class Command(BaseCommand):
                 self.stdout.write('Criando reajustes aplicados...')
                 reajustes = self.criar_reajustes_aplicados(contratos)
 
+                # 13b. Popular índices reais (IPCA e IGPM históricos das planilhas)
+                self.stdout.write('Populando índices reais IPCA/IGPM (planilhas)...')
+                indices_reais = self.popular_indices_reais()
+                self.stdout.write(f'   {indices_reais} índices reais inseridos/atualizados')
+
+                # 13c. Criar contratos reais (Uanda Silva + Henry Magno)
+                self.stdout.write('Criando contratos reais (planilhas Uanda + Henry)...')
+                contratos_reais = self.criar_contratos_reais(imobiliarias)
+                self.stdout.write(f'   {len(contratos_reais)} contrato(s) real(is) criado(s)')
+
                 # 14. Verificar dados para boleto e remessa
                 self.stdout.write('Verificando integridade dos dados para boleto/remessa...')
                 self.verificar_dados_boleto_remessa(contratos, contas_bancarias)
@@ -165,7 +175,9 @@ class Command(BaseCommand):
             self.stdout.write(self.style.SUCCESS(f'   • {intermediarias} Prestações Intermediárias'))
             self.stdout.write(self.style.SUCCESS(f'   • {acessos} Acessos ao Portal'))
             self.stdout.write(self.style.SUCCESS(f'   • {reajustes} Reajustes Aplicados'))
-            self.stdout.write(self.style.SUCCESS(f'   • {indices} Índices de Reajuste'))
+            self.stdout.write(self.style.SUCCESS(f'   • {indices} Índices de Reajuste (gerados)'))
+            self.stdout.write(self.style.SUCCESS(f'   • {indices_reais} Índices Reais IPCA/IGPM (planilhas)'))
+            self.stdout.write(self.style.SUCCESS(f'   • {len(contratos_reais)} Contratos Reais (Uanda + Henry)'))
             self.stdout.write(self.style.SUCCESS(f'   • {templates_criados} Templates de Notificação (Email+SMS+WhatsApp)'))
             self.stdout.write(self.style.SUCCESS(f'   • {retornos_cnab} Arquivos de Retorno CNAB (conciliação bancária)'))
 
@@ -1776,3 +1788,402 @@ class Command(BaseCommand):
                 f'   → {retornos_criados} arquivos de retorno CNAB · {itens_criados} itens criados'
             )
         return retornos_criados
+
+    # ── ÍNDICES REAIS ────────────────────────────────────────────────────────
+
+    def popular_indices_reais(self):
+        """
+        Insere/atualiza IndiceReajuste com dados reais das planilhas:
+        - IPCA (IBGE): MAR/2021 → NOV/2025
+        - IGPM (FGV/IBRE): JUN/2020 → FEV/2025
+        Usa número-índice para calcular variação mensal exata.
+        """
+        # (year, month, numero_indice)
+        _IPCA = [
+            (2021,  3, '5674.7200'), (2021,  4, '5692.3100'), (2021,  5, '5739.5600'),
+            (2021,  6, '5769.9800'), (2021,  7, '5825.3700'), (2021,  8, '5876.0500'),
+            (2021,  9, '5944.2100'), (2021, 10, '6018.5100'), (2021, 11, '6075.6900'),
+            (2021, 12, '6120.0400'), (2022,  1, '6153.0900'), (2022,  2, '6215.2400'),
+            (2022,  3, '6315.9300'), (2022,  4, '6382.8800'), (2022,  5, '6412.8800'),
+            (2022,  6, '6455.8500'), (2022,  7, '6411.9500'), (2022,  8, '6388.8700'),
+            (2022,  9, '6370.3400'), (2022, 10, '6407.9300'), (2022, 11, '6434.2000'),
+            (2022, 12, '6474.0900'), (2023,  1, '6508.4000'), (2023,  2, '6563.0700'),
+            (2023,  3, '6609.6700'), (2023,  4, '6649.9900'), (2023,  5, '6665.2800'),
+            (2023,  6, '6659.9500'), (2023,  7, '6667.9400'), (2023,  8, '6683.2800'),
+            (2023,  9, '6700.6600'), (2023, 10, '6716.7400'), (2023, 11, '6735.5500'),
+            (2023, 12, '6773.2700'), (2024,  1, '6801.7200'), (2024,  2, '6858.1700'),
+            (2024,  3, '6869.1400'), (2024,  4, '6895.2400'), (2024,  5, '6926.9600'),
+            (2024,  6, '6941.5100'), (2024,  7, '6967.8900'), (2024,  8, '6966.5000'),
+            (2024,  9, '6997.1500'), (2024, 10, '7036.3300'), (2024, 11, '7063.7700'),
+            (2024, 12, '7100.5000'), (2025,  1, '7111.8600'), (2025,  2, '7205.0300'),
+            (2025,  3, '7245.3800'), (2025,  4, '7276.5300'), (2025,  5, '7295.4500'),
+            (2025,  6, '7312.9600'), (2025,  7, '7331.9700'), (2025,  8, '7323.9100'),
+            (2025,  9, '7359.0600'), (2025, 10, '7365.6900'), (2025, 11, '7378.9400'),
+        ]
+        _IGPM = [
+            (2020,  6, '792.4290'),  (2020,  7, '810.0830'),  (2020,  8, '832.3130'),
+            (2020,  9, '868.4420'),  (2020, 10, '896.5050'),  (2020, 11, '925.8870'),
+            (2020, 12, '934.7580'),  (2021,  1, '958.8440'),  (2021,  2, '983.0630'),
+            (2021,  3, '1011.9480'), (2021,  4, '1027.2110'), (2021,  5, '1069.2890'),
+            (2021,  6, '1075.7330'), (2021,  7, '1084.0950'), (2021,  8, '1091.2900'),
+            (2021,  9, '1084.3120'), (2021, 10, '1091.2830'), (2021, 11, '1091.4830'),
+            (2021, 12, '1100.9880'), (2022,  1, '1120.9990'), (2022,  2, '1141.5460'),
+            (2022,  3, '1161.4180'), (2022,  4, '1177.8090'), (2022,  5, '1183.9530'),
+            (2022,  6, '1190.8820'), (2022,  7, '1193.3370'), (2022,  8, '1185.0040'),
+            (2022,  9, '1173.7930'), (2022, 10, '1162.3910'), (2022, 11, '1155.8290'),
+            (2022, 12, '1161.0060'), (2023,  1, '1163.4650'), (2023,  2, '1162.7610'),
+            (2023,  3, '1163.3590'), (2023,  4, '1152.3070'), (2023,  5, '1131.0580'),
+            (2023,  6, '1109.2300'), (2023,  7, '1101.2040'), (2023,  8, '1099.7100'),
+            (2023,  9, '1103.7400'), (2023, 10, '1109.2360'), (2023, 11, '1115.8150'),
+            (2023, 12, '1124.0720'), (2024,  1, '1124.8790'), (2024,  2, '1119.0610'),
+            (2024,  3, '1113.8370'), (2024,  4, '1117.2800'), (2024,  5, '1127.2330'),
+            (2024,  6, '1136.4090'), (2024,  7, '1143.3130'), (2024,  8, '1146.5750'),
+            (2024,  9, '1153.7180'), (2024, 10, '1171.2720'), (2024, 11, '1186.4620'),
+            (2024, 12, '1197.6150'), (2025,  1, '1200.8480'), (2025,  2, '1213.5770'),
+        ]
+
+        count = 0
+        for tipo, serie, fonte in [('IPCA', _IPCA, 'IBGE'), ('IGPM', _IGPM, 'FGV/IBRE')]:
+            prev_ni = None
+            for year, month, ni_str in serie:
+                ni = Decimal(ni_str)
+                if prev_ni is not None:
+                    valor = ((ni / prev_ni) - 1) * 100
+                    valor = valor.quantize(Decimal('0.0001'))
+                else:
+                    valor = Decimal('0.0000')
+                prev_ni = ni
+
+                IndiceReajuste.objects.update_or_create(
+                    tipo_indice=tipo,
+                    ano=year,
+                    mes=month,
+                    defaults={
+                        'valor': valor,
+                        'numero_indice': ni,
+                        'valor_acumulado_12m': None,
+                        'fonte': f'{fonte} (planilha real)',
+                        'data_importacao': timezone.now(),
+                    }
+                )
+                count += 1
+        return count
+
+    # ── CONTRATOS REAIS ──────────────────────────────────────────────────────
+
+    def criar_contratos_reais(self, imobiliarias):
+        """
+        Cria 2 contratos baseados em planilhas reais:
+          1. UANDA SILVA CARVALHO — IPCA + 0,85% a.m., lote 16 Qd D (24/03/2021)
+          2. HENRY MAGNO DE OLIVEIRA SILVA — IGPM + juros escalantes, lote 13 Qd C (22/07/2020)
+        Aplica reajustes reais ciclo a ciclo e registra pagamentos históricos.
+        """
+        from dateutil.relativedelta import relativedelta
+
+        hoje = timezone.now().date()
+        imob = imobiliarias[0]
+        contratos_criados = []
+
+        # ── helper: marcar N parcelas como pagas sequencialmente ────────────
+        def _pagar(parcelas_qs, ate_numero):
+            """Registra pagamento para parcelas 1..ate_numero (não pagas, vencidas)."""
+            for p in parcelas_qs.filter(numero_parcela__lte=ate_numero, pago=False).order_by('numero_parcela'):
+                if p.data_vencimento > hoje:
+                    break
+                data_pag = min(p.data_vencimento + timedelta(days=random.randint(0, 3)), hoje)
+                p.registrar_pagamento(
+                    valor_pago=p.valor_atual,
+                    data_pagamento=data_pag,
+                    observacoes='Pagamento real — planilha de controle',
+                    validar_minimo=False,
+                )
+
+        # ── helper: aplicar reajuste com percentual fixo ─────────────────────
+        def _reajuste(contrato, ciclo, data_r, p_ini, p_fim, bruto, final, ref_ini, ref_fim):
+            if Reajuste.objects.filter(contrato=contrato, ciclo=ciclo).exists():
+                return
+            r = Reajuste(
+                contrato=contrato,
+                ciclo=ciclo,
+                data_reajuste=data_r,
+                indice_tipo=contrato.tipo_correcao,
+                percentual=Decimal(str(final)),
+                percentual_bruto=Decimal(str(bruto)),
+                parcela_inicial=p_ini,
+                parcela_final=p_fim,
+                periodo_referencia_inicio=ref_ini,
+                periodo_referencia_fim=ref_fim,
+                aplicado_manual=True,
+                aplicado=False,
+            )
+            r.save()
+            r.aplicar_reajuste()
+
+        # ══════════════════════════════════════════════════════════════════════
+        # CONTRATO 1 — UANDA SILVA CARVALHO (IPCA + 0,85% a.m.)
+        # ══════════════════════════════════════════════════════════════════════
+        comprador_u, _ = Comprador.objects.get_or_create(
+            cpf='066.128.216-39',
+            defaults=dict(
+                tipo_pessoa='PF',
+                nome='UANDA SILVA CARVALHO',
+                rg='2345678',
+                data_nascimento=date(1985, 6, 15),
+                estado_civil='CASADO',
+                profissao='Professora',
+                cep='35700-000',
+                logradouro='Rua das Acácias',
+                numero='215',
+                bairro='Várzea',
+                cidade='Sete Lagoas',
+                estado='MG',
+                telefone='(31) 3773-9001',
+                celular='(31) 99901-0001',
+                email='uanda.silva.carvalho@email.com.br',
+                notificar_email=True,
+                notificar_whatsapp=True,
+                ativo=True,
+            )
+        )
+
+        imovel_u, _ = Imovel.objects.get_or_create(
+            imobiliaria=imob,
+            identificacao='Lote 16, Quadra D',
+            loteamento='Res. Parque das Nogueiras',
+            defaults=dict(
+                tipo=TipoImovel.LOTE,
+                area=Decimal('300.00'),
+                cep='35700-000',
+                logradouro='Rua Parque das Nogueiras',
+                numero='16',
+                bairro='Parque das Nogueiras',
+                cidade='Sete Lagoas',
+                estado='MG',
+                matricula='45016',
+                inscricao_municipal='10016',
+                disponivel=False,
+                ativo=True,
+            )
+        )
+
+        if not Contrato.objects.filter(numero_contrato='CTR-L16-QD-2021').exists():
+            ctr_u = Contrato.objects.create(
+                imobiliaria=imob,
+                imovel=imovel_u,
+                comprador=comprador_u,
+                numero_contrato='CTR-L16-QD-2021',
+                data_contrato=date(2021, 3, 24),
+                data_primeiro_vencimento=date(2021, 4, 10),
+                valor_total=Decimal('235695.82'),
+                valor_entrada=Decimal('23569.58'),
+                numero_parcelas=120,
+                dia_vencimento=10,
+                tipo_correcao=TipoCorrecao.IPCA,
+                tipo_amortizacao='PRICE',
+                prazo_reajuste_meses=12,
+                intermediarias_reduzem_pmt=True,
+                intermediarias_reajustadas=False,
+                percentual_juros_mora=Decimal('1.00'),
+                percentual_multa=Decimal('2.00'),
+                percentual_fruicao=Decimal('0.5000'),
+                percentual_multa_rescisao_penal=Decimal('10.0000'),
+                percentual_multa_rescisao_adm=Decimal('12.0000'),
+                percentual_cessao=Decimal('3.0000'),
+                status=StatusContrato.ATIVO,
+                observacoes=(
+                    'Contrato real — Lote 16 Qd D, Res. Parque das Nogueiras | '
+                    'IPCA + 0,85% a.m. | Entrada R$23.569,58 + 120×mensal + 10×anual'
+                ),
+            )
+
+            # 10 parcelas anuais de R$5.000 (saldo remanescente — cláusula 2.2.2)
+            for seq in range(1, 11):
+                PrestacaoIntermediaria.objects.create(
+                    contrato=ctr_u,
+                    numero_sequencial=seq,
+                    mes_vencimento=min(12 * seq + 1, 120),
+                    valor=Decimal('5000.00'),
+                    observacoes=f'Saldo remanescente anual parcela {seq}/10 — cláusula 2.2.2',
+                )
+
+            # Base PMT = saldo excluindo anuais: 235.695,82 - 23.569,58 - 50.000 = 162.126,24
+            ctr_u.recalcular_amortizacao(base_pv=Decimal('162126.24'))
+
+            # Ciclo 1 (1-12): pagar → 1.351,05/parc
+            _pagar(ctr_u.parcelas, 12)
+
+            # Ciclo 2 (ABR/22-MAR/23): IPCA 11,30% + juros comp 10,69% = +23,20%
+            _reajuste(ctr_u, 2, date(2022, 4, 1), 13, 24,
+                      bruto=11.2994, final=23.1980,
+                      ref_ini=date(2021, 3, 24), ref_fim=date(2022, 3, 23))
+            _pagar(ctr_u.parcelas, 24)
+
+            # Ciclo 3 (ABR/23-MAR/24): IPCA 4,65% + juros comp 10,69% = +15,84%
+            _reajuste(ctr_u, 3, date(2023, 4, 1), 25, 36,
+                      bruto=4.6508, final=15.8386,
+                      ref_ini=date(2022, 3, 24), ref_fim=date(2023, 3, 23))
+            _pagar(ctr_u.parcelas, 28)   # pagou até JUL/2023 (parc 28)
+
+            # Ciclo 4 (ABR/24-MAR/25): IPCA 3,93% + juros comp 10,69% = +15,04%
+            _reajuste(ctr_u, 4, date(2024, 4, 1), 37, 48,
+                      bruto=3.9256, final=15.0359,
+                      ref_ini=date(2023, 3, 24), ref_fim=date(2024, 3, 23))
+
+            # Ciclo 5 (ABR/25-MAR/26): IPCA 5,48% + juros comp 10,69% = +16,75%
+            _reajuste(ctr_u, 5, date(2025, 4, 1), 49, 60,
+                      bruto=5.4773, final=16.7534,
+                      ref_ini=date(2024, 3, 24), ref_fim=date(2025, 3, 23))
+            # Ciclo 6 pendente (APR/2026 = mês do aniversário) — deixa sem aplicar
+
+            self.stdout.write('   ✓ Uanda Silva Carvalho — CTR-L16-QD-2021 criado')
+            contratos_criados.append(ctr_u)
+        else:
+            self.stdout.write('   → CTR-L16-QD-2021 já existe, reutilizando.')
+            contratos_criados.append(
+                Contrato.objects.get(numero_contrato='CTR-L16-QD-2021')
+            )
+
+        # ══════════════════════════════════════════════════════════════════════
+        # CONTRATO 2 — HENRY MAGNO DE OLIVEIRA SILVA (IGPM + juros escalantes)
+        # ══════════════════════════════════════════════════════════════════════
+        comprador_h, _ = Comprador.objects.get_or_create(
+            cpf='074.927.647-90',
+            defaults=dict(
+                tipo_pessoa='PF',
+                nome='HENRY MAGNO DE OLIVEIRA SILVA',
+                rg='3456789',
+                data_nascimento=date(1978, 11, 3),
+                estado_civil='CASADO',
+                profissao='Engenheiro Civil',
+                cep='35700-000',
+                logradouro='Av. Presidente Vargas',
+                numero='880',
+                complemento='Apto 302',
+                bairro='Centro',
+                cidade='Sete Lagoas',
+                estado='MG',
+                telefone='(31) 3773-9002',
+                celular='(31) 99902-0002',
+                email='henry.magno.oliveira@email.com.br',
+                notificar_email=True,
+                notificar_whatsapp=False,
+                ativo=True,
+            )
+        )
+
+        imovel_h, _ = Imovel.objects.get_or_create(
+            imobiliaria=imob,
+            identificacao='Lote 13, Quadra C',
+            loteamento='Res. Parque das Nogueiras',
+            defaults=dict(
+                tipo=TipoImovel.LOTE,
+                area=Decimal('360.00'),
+                cep='35700-000',
+                logradouro='Rua Parque das Nogueiras',
+                numero='13',
+                bairro='Parque das Nogueiras',
+                cidade='Sete Lagoas',
+                estado='MG',
+                matricula='45013',
+                inscricao_municipal='10013',
+                disponivel=False,
+                ativo=True,
+            )
+        )
+
+        if not Contrato.objects.filter(numero_contrato='CTR-L13-QC-2020').exists():
+            ctr_h = Contrato.objects.create(
+                imobiliaria=imob,
+                imovel=imovel_h,
+                comprador=comprador_h,
+                numero_contrato='CTR-L13-QC-2020',
+                data_contrato=date(2020, 7, 22),
+                data_primeiro_vencimento=date(2020, 8, 10),
+                valor_total=Decimal('186334.81'),
+                valor_entrada=Decimal('100000.00'),
+                numero_parcelas=120,
+                dia_vencimento=10,
+                tipo_correcao=TipoCorrecao.IGPM,
+                tipo_amortizacao='PRICE',
+                prazo_reajuste_meses=12,
+                intermediarias_reduzem_pmt=False,
+                intermediarias_reajustadas=False,
+                percentual_juros_mora=Decimal('1.00'),
+                percentual_multa=Decimal('2.00'),
+                percentual_fruicao=Decimal('0.5000'),
+                percentual_multa_rescisao_penal=Decimal('10.0000'),
+                percentual_multa_rescisao_adm=Decimal('12.0000'),
+                percentual_cessao=Decimal('3.0000'),
+                status=StatusContrato.ATIVO,
+                observacoes=(
+                    'Contrato real — Lote 13 Qd C, Res. Parque das Nogueiras | '
+                    'IGPM + juros escalantes (0% → 0,85% a.m.) | Entrada R$100.000'
+                ),
+            )
+
+            # Ciclo 1 (1-12): 0% → PMT = 86.334,81 / 120 = 719,46
+            _pagar(ctr_h.parcelas, 12)
+
+            # Ciclo 2 (AGO/21): IGPM JUL/20→JUL/21 = 33,83% + juros 0,6%/m (7,44%) = +43,78%
+            _reajuste(ctr_h, 2, date(2021, 8, 1), 13, 24,
+                      bruto=33.8252, final=43.7850,
+                      ref_ini=date(2020, 7, 1), ref_fim=date(2021, 7, 31))
+            _pagar(ctr_h.parcelas, 24)
+
+            # Ciclo 3 (AGO/22): IGPM JUL/21→JUL/22 = 10,08% + juros 0,65%/m (8,08%) = +18,98%
+            _reajuste(ctr_h, 3, date(2022, 8, 1), 25, 36,
+                      bruto=10.0768, final=18.9765,
+                      ref_ini=date(2021, 7, 1), ref_fim=date(2022, 7, 31))
+            _pagar(ctr_h.parcelas, 36)
+
+            # Ciclo 4 (AGO/23): IGPM JUL/22→JUL/23 = -7,72% + juros 0,70%/m (8,73%) = +0,34%
+            _reajuste(ctr_h, 4, date(2023, 8, 1), 37, 48,
+                      bruto=-7.7206, final=0.3364,
+                      ref_ini=date(2022, 7, 1), ref_fim=date(2023, 7, 31))
+            _pagar(ctr_h.parcelas, 48)
+
+            # Ciclo 5 (AGO/24): IGPM JUL/23→JUL/24 = 3,82% + juros 0,75%/m (9,38%) = +13,56%
+            _reajuste(ctr_h, 5, date(2024, 8, 1), 49, 60,
+                      bruto=3.8239, final=13.5633,
+                      ref_ini=date(2023, 7, 1), ref_fim=date(2024, 7, 31))
+            _pagar(ctr_h.parcelas, 60)
+
+            # Ciclo 6 (AGO/25): IGPM JUL/24→JUL/25 ≈ 2,96% + juros 0,80%/m (10,03%) = +13,29%
+            _reajuste(ctr_h, 6, date(2025, 8, 1), 61, 72,
+                      bruto=2.9580, final=13.2886,
+                      ref_ini=date(2024, 7, 1), ref_fim=date(2025, 7, 31))
+            # Pagou AGO/25 a JAN/26 (parcelas 61-66)
+            _pagar(ctr_h.parcelas, 66)
+            # Ciclo 7 pendente (AGO/2026) — deixa sem aplicar
+
+            self.stdout.write('   ✓ Henry Magno de Oliveira Silva — CTR-L13-QC-2020 criado')
+            contratos_criados.append(ctr_h)
+        else:
+            self.stdout.write('   → CTR-L13-QC-2020 já existe, reutilizando.')
+            contratos_criados.append(
+                Contrato.objects.get(numero_contrato='CTR-L13-QC-2020')
+            )
+
+        # ── Portal: acesso para ambos os compradores ─────────────────────────
+        for comprador, documento in [
+            (comprador_u, '06612821639'),
+            (comprador_h, '07492764790'),
+        ]:
+            username = f'comprador_{documento}'
+            if not User.objects.filter(username=username).exists():
+                user = User.objects.create_user(
+                    username=username,
+                    email=comprador.email,
+                    password='teste123',
+                    first_name=comprador.nome.split()[0],
+                    last_name=' '.join(comprador.nome.split()[1:3]),
+                )
+                AcessoComprador.objects.create(
+                    comprador=comprador,
+                    usuario=user,
+                    email_verificado=True,
+                    ativo=True,
+                )
+                self.stdout.write(f'   ✓ Acesso portal criado: {username} / teste123')
+
+        return contratos_criados
