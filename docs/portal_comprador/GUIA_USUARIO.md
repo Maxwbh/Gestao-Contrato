@@ -46,12 +46,29 @@ que forneceu no momento da compra**.
 1. Acesse `/portal/cadastro/`
 2. Informe seu **CPF ou CNPJ** (com ou sem pontuação)
 3. Informe o **e-mail** cadastrado no contrato
-4. Crie uma **senha** (mínimo 8 caracteres)
+4. Crie uma **senha** seguindo os requisitos abaixo
 5. Confirme a senha
 6. Clique em **"Criar Conta"**
 
 > Se seu CPF/CNPJ ou e-mail não for encontrado, entre em contato com a imobiliária para
 > confirmar os dados cadastrados.
+
+### Requisitos de senha
+
+| Regra | Detalhe |
+|-------|---------|
+| Mínimo 8 caracteres | Senhas curtas são rejeitadas |
+| Não muito parecida com seus dados | Ex.: não use seu CPF como senha |
+| Não seja uma senha comum | Ex.: "12345678" ou "password" são bloqueadas |
+| Não seja totalmente numérica | Inclua ao menos uma letra |
+
+### Verificação de e-mail
+
+Quando habilitada pela imobiliária, após o cadastro você receberá um e-mail de confirmação.
+Clique no link (válido por **24 horas**) para ativar o acesso completo.
+
+Enquanto o e-mail não for verificado, um aviso amarelo aparecerá no topo do portal.
+Clique em **"Reenviar verificação"** caso não tenha recebido o e-mail.
 
 ---
 
@@ -70,7 +87,7 @@ https://gestao-contrato-web-mt6j.onrender.com/portal/login/
 | CPF/CNPJ | Seu documento (com ou sem pontuação)                |
 | Senha    | A senha que você cadastrou                          |
 
-> Após 5 tentativas erradas seguidas, aguarde 1 minuto antes de tentar novamente.
+> **Rate limit:** máximo de 5 tentativas por minuto por endereço IP. Após esse limite, aguarde 1 minuto antes de tentar novamente.
 
 ---
 
@@ -251,6 +268,8 @@ Você será redirecionado para a tela de login.
 | Criar conta           | `/portal/cadastro/`                    | Público        |
 | Esqueci minha senha   | `/portal/esqueci-senha/`              | Público        |
 | Redefinir senha       | `/portal/redefinir-senha/<token>/`    | Link por e-mail |
+| Verificar e-mail      | `/portal/verificar-email/<token>/`    | Link por e-mail |
+| Reenviar verificação  | `/portal/reenviar-verificacao/`       | Login obrigatório |
 | Dashboard             | `/portal/`                             | Login obrigatório |
 | Meus Contratos        | `/portal/contratos/`                   | Login obrigatório |
 | Detalhe do Contrato   | `/portal/contratos/<id>/`             | Login obrigatório |
@@ -270,6 +289,12 @@ Seu CPF/CNPJ ou e-mail pode não corresponder ao cadastrado no contrato. Entre e
 
 **Não recebi o e-mail de redefinição de senha. O que fazer?**
 Verifique a pasta de spam/lixo eletrônico. O link expira em 1 hora. Se necessário, repita o processo.
+
+**Aparece um aviso amarelo pedindo para verificar meu e-mail. O que faço?**
+Você precisa confirmar o endereço de e-mail cadastrado. Clique em **"Reenviar verificação"** no aviso ou acesse `/portal/reenviar-verificacao/`. O link de confirmação expira em 24 horas.
+
+**Tentei fazer login várias vezes e estou bloqueado. O que fazer?**
+Por segurança, o sistema bloqueia temporariamente após 5 tentativas por minuto. Aguarde 1 minuto e tente novamente com a senha correta.
 
 **O botão de download do boleto não aparece.**
 O boleto ainda não foi gerado pela imobiliária. Entre em contato para solicitar.
