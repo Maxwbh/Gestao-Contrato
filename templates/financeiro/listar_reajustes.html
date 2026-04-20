@@ -123,10 +123,51 @@
                     <label class="form-label fw-semibold">Novo % (entrada manual) <span class="text-danger">*</span></label>
                     <div class="input-group">
                         <input type="number" id="altNovoPercentual" class="form-control form-control-lg"
-                               step="0.0001" placeholder="Ex: 5.2400">
+                               step="0.000001" placeholder="Ex: 5,240000"
+                               oninput="recalcularPreview()" onblur="formatarPercentualInput()">
                         <span class="input-group-text">%</span>
                     </div>
-                    <small class="text-muted">Informe manualmente o percentual a ser aplicado ao reajuste.</small>
+                    <small class="text-muted">Informe manualmente o percentual a ser aplicado (até 6 casas decimais).</small>
+                </div>
+
+                <!-- Preview ao vivo -->
+                <div id="altPreview" class="card border-info mb-3 d-none">
+                    <div class="card-header bg-info bg-opacity-10 py-2">
+                        <small class="fw-semibold text-info">
+                            <i class="fas fa-calculator me-1"></i>Simulação — valores das parcelas não pagas
+                        </small>
+                    </div>
+                    <div class="card-body py-2">
+                        <div class="row g-2 text-center">
+                            <div class="col-4">
+                                <span class="label-detalhe">Prestação atual</span>
+                                <div class="valor-detalhe" id="prevPrestacaoAtual">—</div>
+                            </div>
+                            <div class="col-4">
+                                <span class="label-detalhe">Nova prestação</span>
+                                <div class="valor-detalhe text-primary" id="prevPrestacaoNova">—</div>
+                            </div>
+                            <div class="col-4">
+                                <span class="label-detalhe">Diferença por parcela</span>
+                                <div class="valor-detalhe" id="prevDifParcela">—</div>
+                            </div>
+                        </div>
+                        <hr class="my-2">
+                        <div class="row g-2 text-center">
+                            <div class="col-4">
+                                <span class="label-detalhe">Total atual <small id="prevQtdAbertas" class="text-muted"></small></span>
+                                <div class="valor-detalhe" id="prevTotalAtual">—</div>
+                            </div>
+                            <div class="col-4">
+                                <span class="label-detalhe">Novo total</span>
+                                <div class="valor-detalhe text-primary" id="prevTotalNovo">—</div>
+                            </div>
+                            <div class="col-4">
+                                <span class="label-detalhe">Diferença total</span>
+                                <div class="valor-detalhe" id="prevDifTotal">—</div>
+                            </div>
+                        </div>
+                    </div>
                 </div>
 
                 <!-- Resultado (aparece após confirmar) -->
@@ -259,7 +300,7 @@ const reajustesColumnDefs = [
         filter: 'agNumberColumnFilter',
         minWidth: 100,
         type: 'numericColumn',
-        cellRenderer: params => params.value != null ? `${parseFloat(params.value).toFixed(2)}%` : '<span class="text-muted">—</span>',
+        cellRenderer: params => params.value != null ? `${fmtNumBR(params.value, 4)}%` : '<span class="text-muted">—</span>',
     },
     {
         headerName: '% Aplicado',
@@ -271,7 +312,7 @@ const reajustesColumnDefs = [
             const v = parseFloat(params.value);
             const cls = v < 0 ? 'text-danger' : 'text-success';
             const sign = v >= 0 ? '+' : '';
-            return `<strong class="${cls}">${sign}${v.toFixed(2)}%</strong>`;
+            return `<strong class="${cls}">${sign}${fmtNumBR(v, 4)}%</strong>`;
         },
     },
     {
@@ -324,16 +365,26 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 
 // ===== UTILITÁRIOS =====
+function fmtNumBR(v, decimals=2) {
+    if (v == null || isNaN(parseFloat(v))) return '—';
+    return parseFloat(v).toLocaleString('pt-BR', {minimumFractionDigits: decimals, maximumFractionDigits: decimals});
+}
 function fmtBRL(v) {
-    if (v == null) return '—';
-    return 'R$ ' + parseFloat(v).toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+    if (v == null || isNaN(parseFloat(v))) return '—';
+    return 'R$ ' + fmtNumBR(v, 2);
 }
 function fmtPerc(v, decimals=4) {
-    if (v == null) return '—';
+    if (v == null || isNaN(parseFloat(v))) return '—';
     const n = parseFloat(v);
     const cls = n < 0 ? 'text-danger' : (n > 0 ? 'text-success' : '');
     const sign = n > 0 ? '+' : '';
-    return `<span class="${cls}">${sign}${n.toFixed(decimals)}%</span>`;
+    return `<span class="${cls}">${sign}${fmtNumBR(n, decimals)}%</span>`;
+}
+function fmtPercPlain(v, decimals=4) {
+    if (v == null || isNaN(parseFloat(v))) return '—';
+    const n = parseFloat(v);
+    const sign = n > 0 ? '+' : '';
+    return `${sign}${fmtNumBR(n, decimals)}%`;
 }
 
 function getMModal(id) {
@@ -363,11 +414,11 @@ function abrirVisualizar(pk) {
 }
 
 function renderVisualizarBody(d) {
-    const percBruto = d.percentual_bruto != null ? `${parseFloat(d.percentual_bruto).toFixed(4)}%` : '—';
-    const spread = d.spread_aplicado ? `+${parseFloat(d.spread_aplicado).toFixed(4)}%` : null;
-    const desconto = d.desconto_percentual ? `-${parseFloat(d.desconto_percentual).toFixed(4)}%` : null;
-    const piso = d.piso_aplicado != null ? `${parseFloat(d.piso_aplicado).toFixed(2)}%` : null;
-    const teto = d.teto_aplicado != null ? `${parseFloat(d.teto_aplicado).toFixed(2)}%` : null;
+    const percBruto = d.percentual_bruto != null ? `${fmtNumBR(d.percentual_bruto, 6)}%` : '—';
+    const spread = d.spread_aplicado ? `+${fmtNumBR(d.spread_aplicado, 6)}%` : null;
+    const desconto = d.desconto_percentual ? `-${fmtNumBR(d.desconto_percentual, 6)}%` : null;
+    const piso = d.piso_aplicado != null ? `${fmtNumBR(d.piso_aplicado, 4)}%` : null;
+    const teto = d.teto_aplicado != null ? `${fmtNumBR(d.teto_aplicado, 4)}%` : null;
     const percFinal = parseFloat(d.percentual);
     const percFinalSign = percFinal >= 0 ? '+' : '';
     const percFinalCls = percFinal < 0 ? 'danger' : 'success';
@@ -377,7 +428,8 @@ function renderVisualizarBody(d) {
         : '<span class="badge bg-warning text-dark">Pendente</span>';
 
     const diffCls = d.diferenca_total >= 0 ? 'success' : 'danger';
-    const diffSign = d.diferenca_total >= 0 ? '+' : '';
+    const diffSign = d.diferenca_total >= 0 ? '+' : '-';
+    const diffAbs  = Math.abs(d.diferenca_total);
 
     // Resumo de parcelas: tabela só se afetar >1 ciclo; senão mensagem
     let blocoParcelas;
@@ -386,7 +438,7 @@ function renderVisualizarBody(d) {
             const diff = p.valor_atual != null && p.valor_original != null
                 ? (p.valor_atual - p.valor_original) : null;
             const diffStr = diff != null
-                ? `<small class="${diff >= 0 ? 'text-success' : 'text-danger'}">${diff >= 0 ? '+' : ''}${fmtBRL(diff)}</small>`
+                ? `<small class="${diff >= 0 ? 'text-success' : 'text-danger'}">${diff >= 0 ? '+' : '-'}${fmtBRL(Math.abs(diff))}</small>`
                 : '—';
             const pagoTag = p.pago ? '<span class="badge bg-success" style="font-size:0.65rem">Pago</span>' : '';
             return `<tr>
@@ -494,7 +546,7 @@ function renderVisualizarBody(d) {
                 </div>` : ''}
                 <div class="col text-center">
                     <span class="label-detalhe">% Final Aplicado</span>
-                    <div class="fw-bold fs-5 text-${percFinalCls}">${percFinalSign}${percFinal.toFixed(4)}%</div>
+                    <div class="fw-bold fs-5 text-${percFinalCls}">${percFinalSign}${fmtNumBR(percFinal, 6)}%</div>
                 </div>
             </div>
         </div>
@@ -511,7 +563,7 @@ function renderVisualizarBody(d) {
         </div>
         <div class="col-md-4">
             <span class="label-detalhe">Diferença total</span>
-            <div class="valor-detalhe text-${diffCls}">${diffSign}${fmtBRL(d.diferenca_total)}</div>
+            <div class="valor-detalhe text-${diffCls}">${diffSign}${fmtBRL(diffAbs)}</div>
         </div>
     </div>
 
@@ -521,10 +573,14 @@ function renderVisualizarBody(d) {
 }
 
 // ===== ALTERAR ÍNDICE / PERCENTUAL =====
+// Estado global do reajuste em edição para recálculo ao vivo
+let _alterarState = { percAtual: 0, prestacaoAtual: null, valorAtualTotal: null, qtdAbertas: 0 };
+
 function abrirAlterar(pk) {
     _reajustePkAtual = pk;
     document.getElementById('altResultado').className = 'd-none';
     document.getElementById('altResultado').innerHTML = '';
+    document.getElementById('altPreview').classList.add('d-none');
 
     const btn = document.getElementById('btnConfirmarAlterar');
     btn.disabled = false;
@@ -532,6 +588,7 @@ function abrirAlterar(pk) {
     btn.innerHTML = '<i class="fas fa-save me-1"></i> Salvar Alteração';
     btn.onclick = confirmarAlterar;
 
+    // Preenche dados básicos da linha do grid
     const row = reajustesRowData.find(r => r.pk === pk);
     if (row) {
         document.getElementById('altContrato').textContent = row.contrato;
@@ -541,15 +598,70 @@ function abrirAlterar(pk) {
         document.getElementById('altParcelas').textContent = `${row.parcela_inicial} – ${row.parcela_final}`;
         document.getElementById('altIndiceAtual').textContent = row.indice_tipo;
         const percAtual = parseFloat(row.percentual);
-        const sign = percAtual >= 0 ? '+' : '';
-        document.getElementById('altPercAtual').textContent = `${sign}${percAtual.toFixed(4)}%`;
-
-        // Pré-preenche com o % atual para facilitar ajuste fino
-        document.getElementById('altNovoPercentual').value = percAtual.toFixed(4);
+        document.getElementById('altPercAtual').textContent = fmtPercPlain(percAtual, 6);
+        // Pré-preenche com o % atual (formato pt-BR) para facilitar ajuste fino
+        document.getElementById('altNovoPercentual').value = percAtual.toFixed(6);
     }
 
     getMModal('modalAlterarReajuste').open();
     setTimeout(() => document.getElementById('altNovoPercentual').select(), 150);
+
+    // Carrega dados completos via API para preview (prestação atual + qtd abertas)
+    fetch(`/financeiro/api/reajuste/${pk}/`, { headers: {'X-CSRFToken': CSRF_TOKEN} })
+        .then(r => r.json())
+        .then(d => {
+            if (!d.pk) return;
+            _alterarState = {
+                percAtual: parseFloat(d.percentual),
+                prestacaoAtual: d.prestacao_atual,
+                valorAtualTotal: d.valor_atual_total,
+                qtdAbertas: d.qtd_parcelas_abertas || 0,
+            };
+            recalcularPreview();
+        })
+        .catch(() => { /* sem preview se API falhar */ });
+}
+
+function formatarPercentualInput() {
+    const el = document.getElementById('altNovoPercentual');
+    const v = parseFloat(el.value);
+    if (!isNaN(v)) el.value = v.toFixed(6);
+}
+
+function recalcularPreview() {
+    const panel = document.getElementById('altPreview');
+    const st = _alterarState;
+    const novoPerc = parseFloat(document.getElementById('altNovoPercentual').value);
+
+    if (isNaN(novoPerc) || st.prestacaoAtual == null || st.qtdAbertas === 0) {
+        panel.classList.add('d-none');
+        return;
+    }
+    panel.classList.remove('d-none');
+
+    const fatorAntigo = 1 + (st.percAtual / 100);
+    const fatorNovo   = 1 + (novoPerc / 100);
+    const ratio = fatorAntigo !== 0 ? (fatorNovo / fatorAntigo) : 0;
+
+    const novaPrestacao = st.prestacaoAtual * ratio;
+    const difPrestacao  = novaPrestacao - st.prestacaoAtual;
+    const novoTotal     = st.valorAtualTotal * ratio;
+    const difTotal      = novoTotal - st.valorAtualTotal;
+
+    document.getElementById('prevPrestacaoAtual').textContent = fmtBRL(st.prestacaoAtual);
+    document.getElementById('prevPrestacaoNova').textContent  = fmtBRL(novaPrestacao);
+    document.getElementById('prevTotalAtual').textContent     = fmtBRL(st.valorAtualTotal);
+    document.getElementById('prevTotalNovo').textContent      = fmtBRL(novoTotal);
+    document.getElementById('prevQtdAbertas').textContent     = `(${st.qtdAbertas} parc.)`;
+
+    const difParcEl = document.getElementById('prevDifParcela');
+    const difTotEl  = document.getElementById('prevDifTotal');
+    const fmtDif = (v) => (v >= 0 ? '+' : '-') + fmtBRL(Math.abs(v));
+    const cDif = (v) => v >= 0 ? 'text-success' : 'text-danger';
+    difParcEl.className = 'valor-detalhe ' + cDif(difPrestacao);
+    difParcEl.textContent = fmtDif(difPrestacao);
+    difTotEl.className = 'valor-detalhe ' + cDif(difTotal);
+    difTotEl.textContent = fmtDif(difTotal);
 }
 
 function confirmarAlterar() {
@@ -583,7 +695,7 @@ function confirmarAlterar() {
             const fSign = finalPerc >= 0 ? '+' : '';
             resultado.innerHTML = `<i class="fas fa-check-circle me-1"></i> <strong>${data.mensagem}</strong>
                 <br><small>Índice: <strong>${data.novo_indice_tipo}</strong>
-                &nbsp;|&nbsp; % aplicado: <strong>${fSign}${finalPerc.toFixed(4)}%</strong></small>`;
+                &nbsp;|&nbsp; % aplicado: <strong>${fSign}${fmtNumBR(finalPerc, 6)}%</strong></small>`;
             // Atualizar linha no grid
             const rowNode = window.reajustesGridApi.getRowNode(String(_reajustePkAtual));
             if (rowNode) {
