@@ -238,9 +238,9 @@
             </div>
             <div class="d-flex align-items-center gap-2">
             {% if filtro_status_boleto == 'NAO_GERADO' and total_parcelas > 0 %}
-            <button type="button" class="btn btn-primary btn-sm" onclick="gerarTodosVisiveis()"
-                    title="Gera boletos para todas as {{ total_parcelas }} parcelas listadas">
-                <i class="fas fa-barcode me-1"></i> Gerar Todos ({{ total_parcelas }})
+            <button type="button" class="btn btn-outline-primary btn-sm" onclick="selecionarTodosGrid()"
+                    title="Seleciona todas as {{ total_parcelas }} parcelas para geração em lote">
+                <i class="fas fa-check-double me-1"></i> Selecionar Todos ({{ total_parcelas }})
             </button>
             {% endif %}
                 <i class="fas fa-search text-muted"></i>
@@ -1194,56 +1194,11 @@ function confirmarPagamentoMassa() {
     });
 }
 
-// ===== GERAR TODOS VISÍVEIS =====
-function gerarTodosVisiveis() {
-    const ids = parcelasRowData.filter(r => !r.pago).map(r => r.pk);
-    if (!ids.length) {
-        alert('Nenhuma parcela disponível para geração.');
-        return;
+// ===== SELECIONAR TODOS NO GRID =====
+function selecionarTodosGrid() {
+    if (window.parcelasGridApi) {
+        window.parcelasGridApi.selectAll();
     }
-    if (!confirm('Gerar boletos para ' + ids.length + ' parcela(s)?')) return;
-
-    const btn = document.querySelector('[onclick="gerarTodosVisiveis()"]');
-    if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i> Gerando...'; }
-
-    const resultado = document.getElementById('bulkResultado');
-    resultado.className = 'alert alert-info';
-    resultado.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i> Gerando ' + ids.length + ' boleto(s)...';
-    resultado.classList.remove('d-none');
-
-    const restoreBtn = () => {
-        if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-barcode me-1"></i> Gerar Todos (' + ids.length + ')'; }
-    };
-
-    const timeoutMs = Math.min(300000, 60000 + ids.length * 10000);
-    const controller = new AbortController();
-    const tid = setTimeout(() => controller.abort(), timeoutMs);
-
-    fetch('/financeiro/api/boletos/gerar-parcelas/', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json', 'X-CSRFToken': CSRF_TOKEN},
-        body: JSON.stringify({parcela_ids: ids, force: false}),
-        signal: controller.signal,
-    })
-    .then(r => { clearTimeout(tid); return r.json(); })
-    .then(data => {
-        restoreBtn();
-        const cls = data.erros > 0 ? 'alert-warning' : 'alert-success';
-        let msg = `<strong><i class="fas fa-check-circle me-1"></i>${data.gerados} gerado(s)</strong>`;
-        if (data.bloqueados) msg += ` &nbsp; <span class="text-warning">${data.bloqueados} bloqueado(s) por reajuste</span>`;
-        if (data.erros) msg += ` &nbsp; <span class="text-danger">${data.erros} erro(s)</span>`;
-        resultado.className = 'alert ' + cls;
-        resultado.innerHTML = msg + '<br><small class="text-muted">Recarregue para ver os status atualizados.</small>' +
-            ' <button class="btn btn-sm btn-outline-secondary ms-2" onclick="location.reload()">Recarregar</button>';
-    })
-    .catch(err => {
-        clearTimeout(tid);
-        restoreBtn();
-        resultado.className = 'alert alert-danger';
-        resultado.innerHTML = err.name === 'AbortError'
-            ? '<i class="fas fa-clock me-1"></i> Tempo esgotado. BRCobrança pode estar iniciando. Tente novamente.'
-            : '<i class="fas fa-exclamation-triangle me-1"></i> Erro: ' + err.message;
-    });
 }
 
 {% if filtro_status_boleto == 'GERADO' %}
