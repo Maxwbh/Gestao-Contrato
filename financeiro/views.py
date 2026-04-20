@@ -2740,7 +2740,7 @@ def api_gerar_boletos_parcelas(request):
             continue
 
         try:
-            resultado = parcela.gerar_boleto(conta_bancaria, force=force, enviar_email=False)
+            resultado = parcela.gerar_boleto(conta_bancaria, force=force, enviar_email=True)
             if resultado and resultado.get('sucesso'):
                 gerados += 1
                 detalhes.append({
