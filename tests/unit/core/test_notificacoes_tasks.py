@@ -3,9 +3,9 @@ Testes — Seção 19: Notificações de Vencimento (N-01) e Inadimplência (N-0
 
 Cenários:
   N-01 Vencimento
-   1  Parcelas a vencer em <= 5 dias geram notificação por e-mail
+   1  Parcela vencendo EXATAMENTE em dias_antecedencia dias gera notificação
    2  Parcelas já pagas NÃO geram notificação
-   3  Parcelas fora do horizonte (> 5 dias) NÃO geram notificação
+   3  Parcelas fora da data exata (mais cedo ou mais tarde) NÃO geram notificação
    4  Duplicatas no mesmo dia são ignoradas
    5  Comprador sem e-mail é ignorado
 
@@ -107,7 +107,7 @@ class TestN01Vencimento:
         from notificacoes.models import Notificacao
 
         mock_email.enviar = MagicMock()
-        _criar_parcela(contrato_base, dias_offset=3)  # vence em 3 dias
+        _criar_parcela(contrato_base, dias_offset=5)  # vence exatamente em dias_antecedencia dias
 
         result = enviar_notificacoes_sync()
 
@@ -151,7 +151,7 @@ class TestN01Vencimento:
         from notificacoes.models import Notificacao
 
         mock_email.enviar = MagicMock()
-        _criar_parcela(contrato_base, dias_offset=2)
+        _criar_parcela(contrato_base, dias_offset=5)  # vence exatamente no limite — deve ser processada
 
         enviar_notificacoes_sync()
         count1 = Notificacao.objects.filter(assunto__startswith='[VENCIMENTO]').count()
@@ -236,7 +236,7 @@ class TestN02Inadimplencia:
         from notificacoes.models import Notificacao
 
         mock_email.enviar = MagicMock()
-        _criar_parcela(contrato_base, dias_offset=-5)
+        _criar_parcela(contrato_base, dias_offset=-3)  # venceu exatamente no limite de inadimplência
 
         enviar_inadimplentes_sync()
         count1 = Notificacao.objects.filter(assunto__startswith='[INADIMPLENCIA]').count()
