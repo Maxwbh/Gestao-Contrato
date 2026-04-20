@@ -119,54 +119,37 @@
                 </div>
 
                 <!-- Novo % (entrada manual) -->
-                <div class="mb-3">
+                <div class="mb-2">
                     <label class="form-label fw-semibold">Novo % (entrada manual) <span class="text-danger">*</span></label>
                     <div class="input-group">
-                        <input type="number" id="altNovoPercentual" class="form-control form-control-lg"
-                               step="0.000001" placeholder="Ex: 5,240000"
-                               oninput="recalcularPreview()" onblur="formatarPercentualInput()">
+                        <input type="text" id="altNovoPercentual" class="form-control form-control-lg font-monospace"
+                               inputmode="decimal" placeholder="Ex: 5,240000"
+                               oninput="onPercInput(this)" onblur="onPercBlur(this)">
                         <span class="input-group-text">%</span>
                     </div>
-                    <small class="text-muted">Informe manualmente o percentual a ser aplicado (até 6 casas decimais).</small>
+                    <div class="d-flex justify-content-between mt-1">
+                        <small class="text-muted">Use vírgula ou ponto como separador decimal.</small>
+                        <small id="percFormatado" class="text-info fw-semibold font-monospace"></small>
+                    </div>
                 </div>
 
-                <!-- Preview ao vivo -->
-                <div id="altPreview" class="card border-info mb-3 d-none">
-                    <div class="card-header bg-info bg-opacity-10 py-2">
-                        <small class="fw-semibold text-info">
-                            <i class="fas fa-calculator me-1"></i>Simulação — valores das parcelas não pagas
-                        </small>
+                <!-- Preview inline: prestação -->
+                <div id="altPreview" class="row g-2 mb-3 p-2 rounded border border-info border-opacity-25 bg-info bg-opacity-10 d-none">
+                    <div class="col-6">
+                        <span class="label-detalhe">Prestação atual</span>
+                        <div class="valor-detalhe text-muted" id="prevPrestacaoAtual">—</div>
                     </div>
-                    <div class="card-body py-2">
-                        <div class="row g-2 text-center">
-                            <div class="col-4">
-                                <span class="label-detalhe">Prestação atual</span>
-                                <div class="valor-detalhe" id="prevPrestacaoAtual">—</div>
-                            </div>
-                            <div class="col-4">
-                                <span class="label-detalhe">Nova prestação</span>
-                                <div class="valor-detalhe text-primary" id="prevPrestacaoNova">—</div>
-                            </div>
-                            <div class="col-4">
-                                <span class="label-detalhe">Diferença por parcela</span>
-                                <div class="valor-detalhe" id="prevDifParcela">—</div>
-                            </div>
-                        </div>
-                        <hr class="my-2">
-                        <div class="row g-2 text-center">
-                            <div class="col-4">
-                                <span class="label-detalhe">Total atual <small id="prevQtdAbertas" class="text-muted"></small></span>
-                                <div class="valor-detalhe" id="prevTotalAtual">—</div>
-                            </div>
-                            <div class="col-4">
-                                <span class="label-detalhe">Novo total</span>
-                                <div class="valor-detalhe text-primary" id="prevTotalNovo">—</div>
-                            </div>
-                            <div class="col-4">
-                                <span class="label-detalhe">Diferença total</span>
-                                <div class="valor-detalhe" id="prevDifTotal">—</div>
-                            </div>
-                        </div>
+                    <div class="col-6">
+                        <span class="label-detalhe">Nova prestação</span>
+                        <div class="valor-detalhe text-primary fw-bold" id="prevPrestacaoNova">—</div>
+                    </div>
+                    <div class="col-6">
+                        <span class="label-detalhe">Diferença / parcela</span>
+                        <div class="valor-detalhe" id="prevDifParcela">—</div>
+                    </div>
+                    <div class="col-6">
+                        <span class="label-detalhe">Diferença total <small id="prevQtdAbertas" class="text-muted"></small></span>
+                        <div class="valor-detalhe" id="prevDifTotal">—</div>
                     </div>
                 </div>
 
@@ -580,6 +563,7 @@ function abrirAlterar(pk) {
     _reajustePkAtual = pk;
     document.getElementById('altResultado').className = 'd-none';
     document.getElementById('altResultado').innerHTML = '';
+    document.getElementById('percFormatado').textContent = '';
     document.getElementById('altPreview').classList.add('d-none');
 
     const btn = document.getElementById('btnConfirmarAlterar');
@@ -599,9 +583,11 @@ function abrirAlterar(pk) {
         document.getElementById('altIndiceAtual').textContent = row.indice_tipo;
         const percAtual = parseFloat(row.percentual);
         document.getElementById('altPercAtual').textContent = fmtPercPlain(percAtual, 6);
-        // Pré-preenche com o % atual (formato pt-BR) para facilitar ajuste fino
-        document.getElementById('altNovoPercentual').value = percAtual.toFixed(6);
+        // Pré-preenche em pt-BR para facilitar ajuste fino
+        document.getElementById('altNovoPercentual').value = fmtNumBR(percAtual, 6);
+        document.getElementById('percFormatado').textContent = fmtNumBR(percAtual, 6) + '%';
     }
+    document.getElementById('altPreview').classList.add('d-none');
 
     getMModal('modalAlterarReajuste').open();
     setTimeout(() => document.getElementById('altNovoPercentual').select(), 150);
@@ -622,16 +608,52 @@ function abrirAlterar(pk) {
         .catch(() => { /* sem preview se API falhar */ });
 }
 
-function formatarPercentualInput() {
-    const el = document.getElementById('altNovoPercentual');
-    const v = parseFloat(el.value);
-    if (!isNaN(v)) el.value = v.toFixed(6);
+function parsePtBR(str) {
+    // Aceita tanto "5,24" quanto "5.24" — trata última vírgula/ponto como decimal
+    if (str == null || str === '') return NaN;
+    const s = String(str).trim();
+    // Remove separadores de milhar e normaliza decimal
+    const lastComma = s.lastIndexOf(',');
+    const lastDot   = s.lastIndexOf('.');
+    let normalized;
+    if (lastComma > lastDot) {
+        // Vírgula é o separador decimal: "1.234,56" → "1234.56"
+        normalized = s.replace(/\./g, '').replace(',', '.');
+    } else {
+        // Ponto é o separador decimal: "1,234.56" ou "5.24" → remove milhar
+        normalized = s.replace(/,/g, '');
+    }
+    return parseFloat(normalized);
 }
 
-function recalcularPreview() {
+function onPercInput(el) {
+    const v = parsePtBR(el.value);
+    // Exibe formato pt-BR enquanto digita (no span ao lado)
+    const spanFmt = document.getElementById('percFormatado');
+    if (!isNaN(v)) {
+        spanFmt.textContent = fmtNumBR(v, 6) + '%';
+    } else {
+        spanFmt.textContent = '';
+    }
+    recalcularPreview(v);
+}
+
+function onPercBlur(el) {
+    const v = parsePtBR(el.value);
+    if (!isNaN(v)) {
+        // Formata o campo em pt-BR ao perder foco
+        el.value = fmtNumBR(v, 6);
+    }
+}
+
+function recalcularPreview(novoPerc) {
     const panel = document.getElementById('altPreview');
     const st = _alterarState;
-    const novoPerc = parseFloat(document.getElementById('altNovoPercentual').value);
+
+    // Permite chamar sem argumento (ex: quando API retorna dados)
+    if (novoPerc === undefined) {
+        novoPerc = parsePtBR(document.getElementById('altNovoPercentual').value);
+    }
 
     if (isNaN(novoPerc) || st.prestacaoAtual == null || st.qtdAbertas === 0) {
         panel.classList.add('d-none');
@@ -650,14 +672,12 @@ function recalcularPreview() {
 
     document.getElementById('prevPrestacaoAtual').textContent = fmtBRL(st.prestacaoAtual);
     document.getElementById('prevPrestacaoNova').textContent  = fmtBRL(novaPrestacao);
-    document.getElementById('prevTotalAtual').textContent     = fmtBRL(st.valorAtualTotal);
-    document.getElementById('prevTotalNovo').textContent      = fmtBRL(novoTotal);
     document.getElementById('prevQtdAbertas').textContent     = `(${st.qtdAbertas} parc.)`;
 
     const difParcEl = document.getElementById('prevDifParcela');
     const difTotEl  = document.getElementById('prevDifTotal');
     const fmtDif = (v) => (v >= 0 ? '+' : '-') + fmtBRL(Math.abs(v));
-    const cDif = (v) => v >= 0 ? 'text-success' : 'text-danger';
+    const cDif   = (v) => v >= 0 ? 'text-success' : 'text-danger';
     difParcEl.className = 'valor-detalhe ' + cDif(difPrestacao);
     difParcEl.textContent = fmtDif(difPrestacao);
     difTotEl.className = 'valor-detalhe ' + cDif(difTotal);
@@ -668,7 +688,7 @@ function confirmarAlterar() {
     const novoPerc = document.getElementById('altNovoPercentual').value;
 
     if (novoPerc === '' || novoPerc == null) { alert('Informe o novo percentual.'); return; }
-    const percNum = parseFloat(novoPerc);
+    const percNum = parsePtBR(novoPerc);
     if (isNaN(percNum)) { alert('Percentual inválido.'); return; }
     if (percNum <= -100) { alert('Percentual deve ser maior que -100%.'); return; }
 
