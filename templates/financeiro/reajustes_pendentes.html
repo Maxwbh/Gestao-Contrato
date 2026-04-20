@@ -171,7 +171,18 @@
                                 <button type="button"
                                         class="btn btn-warning btn-editar"
                                         title="Editar: informar percentual manualmente"
-                                        onclick="editarUnico({{ item.contrato.pk }}, '{{ item.contrato.numero_contrato|escapejs }}', {{ item.ciclo }}, '{% if item.percentual %}{{ item.percentual|floatformat:4 }}{% endif %}')">
+                                        onclick="editarUnico({{ item.contrato.pk }}, '{{ item.contrato.numero_contrato|escapejs }}', {{ item.ciclo }}, {
+                                            percentual: '{% if item.percentual %}{{ item.percentual|floatformat:4 }}{% endif %}',
+                                            bruto: '{% if item.percentual_bruto %}{{ item.percentual_bruto|floatformat:4 }}{% endif %}',
+                                            spread: '{{ item.spread|floatformat:4 }}',
+                                            piso: '{% if item.piso %}{{ item.piso|floatformat:2 }}{% endif %}',
+                                            teto: '{% if item.teto %}{{ item.teto|floatformat:2 }}{% endif %}',
+                                            indice: '{{ item.indice_tipo }}',
+                                            periodoInicio: '{{ item.periodo_referencia_inicio|date:"m/Y" }}',
+                                            periodoFim: '{{ item.periodo_referencia_fim|date:"m/Y" }}',
+                                            prestacaoAtual: '{% if item.prestacao_atual %}{{ item.prestacao_atual|floatformat:2 }}{% endif %}',
+                                            prestacaoNova: '{% if item.prestacao_nova %}{{ item.prestacao_nova|floatformat:2 }}{% endif %}'
+                                        })">
                                     <i class="fas fa-edit"></i>
                                 </button>
                             </div>
@@ -254,20 +265,62 @@
 
     <!-- Modal Editar Único -->
     <div class="modal fade" id="modalEditar" tabindex="-1">
-        <div class="modal-dialog">
+        <div class="modal-dialog modal-lg">
             <div class="modal-content">
                 <div class="modal-header bg-warning">
                     <h5 class="modal-title"><i class="fas fa-edit me-2"></i>Aplicar Reajuste Informado</h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                 </div>
                 <div class="modal-body">
-                    <p>Contrato: <strong id="editar_numero"></strong> — Ciclo <strong id="editar_ciclo"></strong></p>
+                    <p class="mb-2">Contrato: <strong id="editar_numero"></strong> — Ciclo <strong id="editar_ciclo"></strong></p>
+
+                    <!-- Resumo do cálculo -->
+                    <div class="card mb-3 bg-light border-0">
+                        <div class="card-body py-2 px-3">
+                            <div class="row g-2 small">
+                                <div class="col-6 col-md-3">
+                                    <span class="text-muted d-block">Índice</span>
+                                    <strong id="editar_indice">—</strong>
+                                </div>
+                                <div class="col-6 col-md-3">
+                                    <span class="text-muted d-block">Período de referência</span>
+                                    <strong id="editar_periodo">—</strong>
+                                </div>
+                                <div class="col-6 col-md-3">
+                                    <span class="text-muted d-block">Acumulado do índice</span>
+                                    <strong id="editar_bruto">—</strong>
+                                </div>
+                                <div class="col-6 col-md-3">
+                                    <span class="text-muted d-block">Spread</span>
+                                    <strong id="editar_spread">—</strong>
+                                </div>
+                                <div class="col-6 col-md-3">
+                                    <span class="text-muted d-block">Piso / Teto</span>
+                                    <strong id="editar_pisoteto">—</strong>
+                                </div>
+                                <div class="col-6 col-md-3">
+                                    <span class="text-muted d-block">Calculado (final)</span>
+                                    <strong id="editar_calculado" class="text-success">—</strong>
+                                </div>
+                                <div class="col-6 col-md-3">
+                                    <span class="text-muted d-block">Prestação atual</span>
+                                    <strong id="editar_prestacao_atual">—</strong>
+                                </div>
+                                <div class="col-6 col-md-3">
+                                    <span class="text-muted d-block">Prestação estimada</span>
+                                    <strong id="editar_prestacao_nova">—</strong>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
                     <div class="mb-3">
-                        <label class="form-label fw-bold">Percentual de reajuste <span class="text-danger">*</span></label>
+                        <label class="form-label fw-bold">Percentual a aplicar <span class="text-danger">*</span></label>
                         <div class="input-group">
                             <input type="number" step="0.0001" class="form-control" id="editar_percentual" placeholder="ex: 4.6230">
                             <span class="input-group-text">%</span>
                         </div>
+                        <div class="form-text">Preencher para sobrescrever o índice calculado. Deixe igual ao calculado para confirmar sem alteração.</div>
                     </div>
                     <div class="mb-3">
                         <label class="form-label">Observações</label>
@@ -487,15 +540,31 @@ function aprovarUnico(contratoId, numero, ciclo) {
 }
 
 /* ---- editar único ---- */
-function editarUnico(contratoId, numero, ciclo, percentualAtual) {
+function editarUnico(contratoId, numero, ciclo, dados) {
     _editarContratoId = contratoId;
     document.getElementById('editar_numero').textContent = numero;
     document.getElementById('editar_ciclo').textContent = ciclo;
-    document.getElementById('editar_percentual').value = percentualAtual || '';
+    document.getElementById('editar_percentual').value = dados.percentual || '';
     document.getElementById('editar_obs').value = 'Reajuste manual';
     document.getElementById('editar_resultado').classList.add('d-none');
     document.getElementById('btnConfirmarEditar').disabled = false;
     document.getElementById('btnConfirmarEditar').innerHTML = '<i class="fas fa-check me-1"></i>Aplicar';
+
+    // Preenche resumo do cálculo
+    var fmt = function(v, suffix) { return v ? parseFloat(v).toFixed(4) + (suffix || '%') : '—'; };
+    var fmtBRL = function(v) { return v ? 'R$ ' + parseFloat(v).toLocaleString('pt-BR', {minimumFractionDigits:2, maximumFractionDigits:2}) : '—'; };
+    document.getElementById('editar_indice').textContent = dados.indice || '—';
+    document.getElementById('editar_periodo').textContent = dados.periodoInicio && dados.periodoFim ? dados.periodoInicio + ' → ' + dados.periodoFim : '—';
+    document.getElementById('editar_bruto').textContent = dados.bruto ? fmt(dados.bruto) : 'Sem dados';
+    document.getElementById('editar_spread').textContent = dados.spread && parseFloat(dados.spread) !== 0 ? fmt(dados.spread, 'p.p.') : '—';
+    var pisoteto = [];
+    if (dados.piso) pisoteto.push('Piso ' + parseFloat(dados.piso).toFixed(2) + '%');
+    if (dados.teto) pisoteto.push('Teto ' + parseFloat(dados.teto).toFixed(2) + '%');
+    document.getElementById('editar_pisoteto').textContent = pisoteto.length ? pisoteto.join(' / ') : '—';
+    document.getElementById('editar_calculado').textContent = dados.percentual ? fmt(dados.percentual) : (dados.bruto ? 'Sem dados' : '—');
+    document.getElementById('editar_prestacao_atual').textContent = fmtBRL(dados.prestacaoAtual);
+    document.getElementById('editar_prestacao_nova').textContent = fmtBRL(dados.prestacaoNova);
+
     new bootstrap.Modal(document.getElementById('modalEditar')).show();
 }
 
