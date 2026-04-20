@@ -590,7 +590,8 @@
 <script>
 const IMOBILIARIA_ID = {{ object.pk|default:'null' }};
 let contasLocais = []; // Para armazenar contas no modo criação
-let bancosLista = {}; // Cache dos bancos para exibir nome
+let bancosLista = {};      // Cache dos bancos para exibir nome
+let bancosLayouts = {};    // Cache banco_cod → layouts_cnab suportados
 
 function _getModalContaBancaria() {
     const el = document.getElementById('modalContaBancaria');
@@ -645,8 +646,28 @@ function atualizarCamposBanco(bancoCodigo) {
     agenciaHelp.classList.add('d-none');
     contaHelp.classList.add('d-none');
 
+    // Filtrar dropdown de layout para qualquer banco (inclusive os sem config detalhada)
+    const layoutSel = document.getElementById('layout_cnab');
+    const layoutsSuportados = bancosLayouts[bancoCodigo] || [];
+    if (layoutSel) {
+        Array.from(layoutSel.options).forEach(opt => {
+            opt.hidden = layoutsSuportados.length > 0 && !layoutsSuportados.includes(opt.value);
+        });
+        if (layoutsSuportados.length === 1) {
+            layoutSel.value = layoutsSuportados[0];
+        } else if (layoutsSuportados.length > 0 && !layoutsSuportados.includes(layoutSel.value)) {
+            layoutSel.value = layoutsSuportados[0];
+        }
+    }
+
     if (!config) {
         labelConvenio.textContent = 'Convênio';
+        // Mostrar alerta de layout mesmo sem config de campos
+        if (layoutsSuportados.length > 0) {
+            const labels = layoutsSuportados.map(l => l.replace('_', ' ')).join(' / ');
+            alertText.innerHTML = `<strong>${bancosLista[bancoCodigo] || bancoCodigo}:</strong> CNAB suportado: <strong>${labels}</strong>`;
+            alertEl.classList.remove('d-none');
+        }
         return;
     }
 
@@ -695,6 +716,12 @@ function atualizarCamposBanco(bancoCodigo) {
         }
     }
 
+    // Adicionar info de CNAB no alerta
+    if (layoutsSuportados.length > 0) {
+        const labels = layoutsSuportados.map(l => l.replace('_', ' ')).join(' / ');
+        infos.push(`CNAB suportado: <strong>${labels}</strong>`);
+    }
+
     // Mostrar resumo
     if (infos.length > 0) {
         alertText.innerHTML = `<strong>${config.nome}:</strong> ` + infos.join(' · ');
@@ -715,6 +742,7 @@ async function carregarBancos() {
                 option.textContent = banco.nome;
                 select.appendChild(option);
                 bancosLista[banco.codigo] = banco.nome;
+                bancosLayouts[banco.codigo] = banco.layouts_cnab || [];
             });
 
             // Listener para mudança de banco
