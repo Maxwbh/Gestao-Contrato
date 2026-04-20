@@ -26,6 +26,15 @@
     /* Flatpickr */
     .flatpickr-input[readonly] { background-color: #fff; }
     .btn-date-shortcut { font-size: 0.78rem; padding: 2px 8px; }
+    /* Override Materialize checkbox styles inside ag-grid to preserve click area */
+    .ag-theme-material .ag-checkbox-input {
+        position: absolute !important;
+        left: 0 !important; right: 0 !important; top: 0 !important; bottom: 0 !important;
+        width: 100% !important; height: 100% !important;
+        opacity: 0 !important; margin: 0 !important;
+        cursor: pointer !important; z-index: 2 !important;
+    }
+    .ag-theme-material .ag-checkbox-input-wrapper { cursor: pointer; }
 </style>
 {% endblock %}
 
@@ -129,6 +138,7 @@
                     </div>
                 </div>
 
+                <input type="hidden" name="filtro_manual" value="1">
                 <!-- Atalhos de data + botões -->
                 <div class="mt-2 d-flex flex-wrap gap-1 align-items-center">
                     <small class="text-muted me-1">Atalhos:</small>
@@ -227,6 +237,12 @@
                 {% endif %}
             </div>
             <div class="d-flex align-items-center gap-2">
+            {% if filtro_status_boleto == 'NAO_GERADO' and total_parcelas > 0 %}
+            <button type="button" class="btn btn-outline-primary btn-sm" onclick="selecionarTodosGrid()"
+                    title="Seleciona todas as {{ total_parcelas }} parcelas para geração em lote">
+                <i class="fas fa-check-double me-1"></i> Selecionar Todos ({{ total_parcelas }})
+            </button>
+            {% endif %}
                 <i class="fas fa-search text-muted"></i>
                 <input type="text" id="gridQuickFilter" class="form-control form-control-sm"
                        placeholder="Busca rápida na página..." style="width: 220px;"
@@ -1176,6 +1192,13 @@ function confirmarPagamentoMassa() {
         }
         if (ok > 0) window.parcelasGridApi.deselectAll();
     });
+}
+
+// ===== SELECIONAR TODOS NO GRID =====
+function selecionarTodosGrid() {
+    if (window.parcelasGridApi) {
+        window.parcelasGridApi.selectAll();
+    }
 }
 
 {% if filtro_status_boleto == 'GERADO' %}
