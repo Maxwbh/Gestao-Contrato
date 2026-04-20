@@ -31,25 +31,9 @@ logger = logging.getLogger(__name__)
 
 
 # Mapeamento de bancos para o BRCobranca
-BANCOS_BRCOBRANCA = {
-    '001': 'banco_brasil',
-    '033': 'santander',
-    '104': 'caixa',
-    '237': 'bradesco',
-    '341': 'itau',
-    '399': 'hsbc',
-    '422': 'safra',
-    '748': 'sicredi',
-    '756': 'sicoob',
-    '085': 'cecred',
-    '041': 'banrisul',
-    '070': 'brb',
-    '097': 'credisis',
-    '136': 'unicred',
-    '212': 'banco_original',
-    '260': 'nubank',
-    '655': 'votorantim',
-}
+# Fonte única: financeiro.services.bancos.BANCOS_SUPORTADOS
+from .bancos import BANCOS_SUPORTADOS as _BANCOS
+BANCOS_BRCOBRANCA = {cod: spec['brcobranca_id'] for cod, spec in _BANCOS.items()}
 
 # Codigos de ocorrencia padrao CNAB
 OCORRENCIAS_CNAB = {
