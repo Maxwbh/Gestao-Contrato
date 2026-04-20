@@ -177,8 +177,7 @@ def processar_reajustes_sync():
 
 def _notificacao_ja_enviada_hoje(parcela, motivo_prefixo):
     """
-    Verifica se já existe Notificacao registrada para esta parcela hoje
-    com o dado motivo (verificado pelo prefixo do assunto).
+    Verifica se já existe Notificacao registrada para esta parcela hoje.
     Evita duplicatas quando a task roda múltiplas vezes no mesmo dia.
     """
     from notificacoes.models import Notificacao, StatusNotificacao
@@ -188,6 +187,21 @@ def _notificacao_ja_enviada_hoje(parcela, motivo_prefixo):
         assunto__startswith=motivo_prefixo,
         status__in=[StatusNotificacao.PENDENTE, StatusNotificacao.ENVIADA],
         data_agendamento__date=date.today(),
+    ).exists()
+
+
+def _notificacao_ja_enviada(parcela, motivo_prefixo):
+    """
+    Verifica se já existe Notificacao registrada para esta parcela em qualquer data.
+    Usado por N-02 fallback: como disparamos uma única vez (data exata D+N),
+    esta verificação garante que mesmo em caso de re-execução ou bug na query
+    a parcela não receba a mesma notificação duas vezes.
+    """
+    from notificacoes.models import Notificacao, StatusNotificacao
+    return Notificacao.objects.filter(
+        parcela=parcela,
+        assunto__startswith=motivo_prefixo,
+        status__in=[StatusNotificacao.PENDENTE, StatusNotificacao.ENVIADA],
     ).exists()
 
 
@@ -367,21 +381,23 @@ def enviar_notificacoes_sync():
             for regra in regras:
                 _processar_regra(regra, result)
         else:
-            # Fallback N-01: D-5 padrão
+            # Fallback N-01: exatamente D-N (data exata, como N-03 faz)
+            # Usando data exata evita: (a) envio no dia do vencimento ("0 dias"),
+            # (b) envio repetido todos os dias enquanto parcela estiver na janela.
             PREFIXO = '[VENCIMENTO]'
             dias_antecedencia = getattr(settings, 'NOTIFICACAO_DIAS_ANTECEDENCIA', 5)
             hoje = date.today()
-            data_limite = hoje + timedelta(days=dias_antecedencia)
+            data_alvo = hoje + timedelta(days=dias_antecedencia)
 
             parcelas = Parcela.objects.filter(
                 pago=False,
                 tipo_parcela='NORMAL',
-                data_vencimento__gte=hoje,
-                data_vencimento__lte=data_limite,
+                data_vencimento=data_alvo,
             ).select_related('contrato', 'contrato__comprador', 'contrato__imobiliaria')
 
             result.add_message(
-                f"N-01 (padrão): {parcelas.count()} parcelas próximas do vencimento (D-{dias_antecedencia})"
+                f"N-01 (padrão): {parcelas.count()} parcelas vencendo em "
+                f"{dias_antecedencia} dia(s) ({data_alvo.strftime('%d/%m/%Y')})"
             )
 
             for parcela in parcelas:
@@ -392,11 +408,9 @@ def enviar_notificacoes_sync():
                     if _notificacao_ja_enviada_hoje(parcela, PREFIXO):
                         continue
 
-                    hoje_local = date.today()
-                    dias_para_vencer = (parcela.data_vencimento - hoje_local).days
                     assunto = (
                         f"{PREFIXO} Parcela {parcela.numero_parcela} vence em "
-                        f"{dias_para_vencer} dia(s) — {parcela.data_vencimento.strftime('%d/%m/%Y')}"
+                        f"{dias_antecedencia} dia(s) — {parcela.data_vencimento.strftime('%d/%m/%Y')}"
                     )
                     imob_nome = getattr(parcela.contrato.imobiliaria, 'nome', 'Gestão de Contratos')
                     mensagem = (
@@ -484,7 +498,8 @@ def enviar_inadimplentes_sync():
                     comprador = parcela.contrato.comprador
                     if not (getattr(comprador, 'notificar_email', True) and comprador.email):
                         continue
-                    if _notificacao_ja_enviada_hoje(parcela, PREFIXO):
+                    # Dedup all-time: N-02 dispara UMA única vez por parcela
+                    if _notificacao_ja_enviada(parcela, PREFIXO):
                         continue
 
                     dias_atraso = (hoje - parcela.data_vencimento).days
