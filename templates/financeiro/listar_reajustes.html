@@ -13,6 +13,11 @@
     .ag-theme-material .ag-row-even { background-color: #fff; }
     .ag-theme-material .ag-row-odd  { background-color: #f8f9fa; }
     .ag-theme-material .ag-row:hover { background-color: #e8f4fd !important; }
+    .ag-grid-actions .btn { padding: 2px 7px; font-size: 0.75rem; }
+    /* Tabela do modal */
+    #tblParcelasViz th, #tblParcelasViz td { font-size: 0.82rem; padding: 4px 8px; }
+    .label-detalhe { font-size: 0.75rem; color: #6c757d; text-transform: uppercase; letter-spacing: .04em; }
+    .valor-detalhe { font-weight: 600; font-size: 0.95rem; }
 </style>
 {% endblock %}
 
@@ -47,10 +52,137 @@
     </div>
 
 </div>
+
+<!-- ===== MODAL: VISUALIZAR REAJUSTE ===== -->
+<div class="modal fade" id="modalVisualizarReajuste" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header bg-info text-white">
+                <h5 class="modal-title"><i class="fas fa-eye me-2"></i>Detalhes do Reajuste</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body" id="vizBody">
+                <div class="text-center py-4"><i class="fas fa-spinner fa-spin fa-2x text-muted"></i></div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Fechar</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ===== MODAL: ALTERAR ÍNDICE ===== -->
+<div class="modal fade" id="modalAlterarReajuste" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-warning">
+                <h5 class="modal-title"><i class="fas fa-edit me-2"></i>Alterar Índice do Reajuste</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <!-- Info resumida (readonly) -->
+                <div class="row g-2 mb-3 p-2 bg-light rounded">
+                    <div class="col-6">
+                        <span class="label-detalhe">Contrato</span>
+                        <div class="valor-detalhe" id="altContrato">—</div>
+                    </div>
+                    <div class="col-3">
+                        <span class="label-detalhe">Ciclo</span>
+                        <div class="valor-detalhe" id="altCiclo">—</div>
+                    </div>
+                    <div class="col-3">
+                        <span class="label-detalhe">Data</span>
+                        <div class="valor-detalhe" id="altData">—</div>
+                    </div>
+                    <div class="col-6">
+                        <span class="label-detalhe">Período Ref.</span>
+                        <div class="valor-detalhe" id="altPeriodo">—</div>
+                    </div>
+                    <div class="col-6">
+                        <span class="label-detalhe">Parcelas afetadas</span>
+                        <div class="valor-detalhe" id="altParcelas">—</div>
+                    </div>
+                </div>
+
+                <!-- Índice (somente leitura - não pode ser alterado) -->
+                <div class="row g-3 mb-3">
+                    <div class="col-6">
+                        <label class="form-label fw-semibold text-muted mb-1">
+                            <i class="fas fa-lock me-1 text-muted"></i>Índice (não editável)
+                        </label>
+                        <div id="altIndiceAtual" class="form-control bg-light fw-bold">—</div>
+                    </div>
+                    <div class="col-6">
+                        <label class="form-label fw-semibold text-muted mb-1">% Atual</label>
+                        <div id="altPercAtual" class="form-control bg-light fw-bold">—</div>
+                    </div>
+                </div>
+
+                <!-- Novo % (entrada manual) -->
+                <div class="mb-2">
+                    <label class="form-label fw-semibold">Novo % (entrada manual) <span class="text-danger">*</span></label>
+                    <div class="input-group">
+                        <input type="text" id="altNovoPercentual" class="form-control form-control-lg font-monospace"
+                               inputmode="decimal" placeholder="Ex: 5,240000"
+                               oninput="onPercInput(this)" onblur="onPercBlur(this)">
+                        <span class="input-group-text">%</span>
+                    </div>
+                    <div class="d-flex justify-content-between mt-1">
+                        <small class="text-muted">Use vírgula ou ponto como separador decimal.</small>
+                        <small id="percFormatado" class="text-info fw-semibold font-monospace"></small>
+                    </div>
+                </div>
+
+                <!-- Preview inline: prestação -->
+                <div id="altPreview" class="row g-2 mb-3 p-2 rounded border border-info border-opacity-25 bg-info bg-opacity-10 d-none">
+                    <div class="col-6">
+                        <span class="label-detalhe">Prestação atual</span>
+                        <div class="valor-detalhe text-muted" id="prevPrestacaoAtual">—</div>
+                    </div>
+                    <div class="col-6">
+                        <span class="label-detalhe">Nova prestação</span>
+                        <div class="valor-detalhe text-primary fw-bold" id="prevPrestacaoNova">—</div>
+                    </div>
+                    <div class="col-6">
+                        <span class="label-detalhe">Diferença / parcela</span>
+                        <div class="valor-detalhe" id="prevDifParcela">—</div>
+                    </div>
+                    <div class="col-6">
+                        <span class="label-detalhe">Diferença total <small id="prevQtdAbertas" class="text-muted"></small></span>
+                        <div class="valor-detalhe" id="prevDifTotal">—</div>
+                    </div>
+                </div>
+
+                <!-- Resultado (aparece após confirmar) -->
+                <div id="altResultado" class="d-none"></div>
+
+                <div class="alert alert-warning py-2 mb-0">
+                    <i class="fas fa-exclamation-triangle me-1"></i>
+                    <small>
+                        Somente o <strong>percentual</strong> pode ser alterado — o tipo de índice é preservado.
+                        Se o reajuste já foi aplicado, as parcelas não pagas serão ajustadas:
+                        o fator antigo é revertido e o novo percentual é aplicado automaticamente.
+                        O reajuste será marcado como <strong>manual</strong>.
+                    </small>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-warning" id="btnConfirmarAlterar" onclick="confirmarAlterar()">
+                    <i class="fas fa-save me-1"></i> Salvar Alteração
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
 {% endblock %}
 
 {% block extra_js %}
 <script>
+const CSRF_TOKEN = '{{ csrf_token }}';
+let _reajustePkAtual = null;
+
 function cleanCsvCell(params) {
     const v = params.value;
     if (v == null) return '';
@@ -83,7 +215,7 @@ const reajustesRowData = [
 ];
 
 function indiceBadge(tipo) {
-    const colors = { IPCA: 'bg-primary', IGPM: 'bg-success', INCC: 'bg-info text-dark', INPC: 'bg-danger', TR: 'bg-dark', SELIC: 'bg-warning text-dark' };
+    const colors = { IPCA: 'bg-primary', IGPM: 'bg-success', INCC: 'bg-info text-dark', IGPDI: 'bg-teal', INPC: 'bg-danger', TR: 'bg-dark', SELIC: 'bg-warning text-dark' };
     return `<span class="badge ${colors[tipo] || 'bg-secondary'}">${tipo}</span>`;
 }
 
@@ -97,12 +229,23 @@ function statusRenderer(params) {
     return '<span class="badge bg-warning text-dark">Pendente</span>';
 }
 
+function acoesRenderer(params) {
+    const pk = params.data.pk;
+    return `<div class="ag-grid-actions">
+        <button class="btn btn-sm btn-outline-info" onclick="abrirVisualizar(${pk})" title="Visualizar detalhes">
+            <i class="fas fa-eye"></i>
+        </button>
+        <button class="btn btn-sm btn-outline-warning ms-1" onclick="abrirAlterar(${pk})" title="Alterar índice">
+            <i class="fas fa-edit"></i>
+        </button>
+    </div>`;
+}
+
 const reajustesColumnDefs = [
     {
         headerName: 'Contrato',
         field: 'contrato',
         filter: 'agTextColumnFilter',
-       
         minWidth: 120,
         cellRenderer: params => `<a href="/contratos/${params.data.contrato_pk}/">${params.value}</a>`,
     },
@@ -110,7 +253,6 @@ const reajustesColumnDefs = [
         headerName: 'Data',
         field: 'data_reajuste',
         filter: 'agTextColumnFilter',
-       
         minWidth: 105,
         sort: 'desc',
     },
@@ -118,7 +260,6 @@ const reajustesColumnDefs = [
         headerName: 'Ciclo',
         field: 'ciclo',
         filter: 'agNumberColumnFilter',
-       
         minWidth: 80,
         cellRenderer: params => `<span class="badge bg-secondary">${params.value}</span>`,
     },
@@ -126,7 +267,6 @@ const reajustesColumnDefs = [
         headerName: 'Índice',
         field: 'indice_tipo',
         filter: 'agTextColumnFilter',
-       
         minWidth: 90,
         cellRenderer: params => indiceBadge(params.value),
     },
@@ -134,7 +274,6 @@ const reajustesColumnDefs = [
         headerName: 'Período Ref.',
         field: 'periodo',
         filter: 'agTextColumnFilter',
-       
         minWidth: 140,
         cellRenderer: params => params.value ? `<small class="font-monospace">${params.value}</small>` : '<span class="text-muted">—</span>',
     },
@@ -142,30 +281,27 @@ const reajustesColumnDefs = [
         headerName: '% Bruto',
         field: 'percentual_bruto',
         filter: 'agNumberColumnFilter',
-       
         minWidth: 100,
         type: 'numericColumn',
-        cellRenderer: params => params.value != null ? `${parseFloat(params.value).toFixed(2)}%` : '<span class="text-muted">—</span>',
+        cellRenderer: params => params.value != null ? `${fmtNumBR(params.value, 4)}%` : '<span class="text-muted">—</span>',
     },
     {
         headerName: '% Aplicado',
         field: 'percentual',
         filter: 'agNumberColumnFilter',
-       
         minWidth: 110,
         type: 'numericColumn',
         cellRenderer: params => {
             const v = parseFloat(params.value);
             const cls = v < 0 ? 'text-danger' : 'text-success';
             const sign = v >= 0 ? '+' : '';
-            return `<strong class="${cls}">${sign}${v.toFixed(2)}%</strong>`;
+            return `<strong class="${cls}">${sign}${fmtNumBR(v, 4)}%</strong>`;
         },
     },
     {
         headerName: 'Parcelas',
         field: 'parcela_inicial',
         filter: 'agNumberColumnFilter',
-       
         minWidth: 100,
         cellRenderer: params => `<small>${params.value}–${params.data.parcela_final}</small>`,
     },
@@ -173,7 +309,6 @@ const reajustesColumnDefs = [
         headerName: 'Por',
         field: 'usuario',
         filter: 'agTextColumnFilter',
-       
         minWidth: 100,
         cellRenderer: params => `<small class="text-muted">${params.value}</small>`,
     },
@@ -181,9 +316,17 @@ const reajustesColumnDefs = [
         headerName: 'Status',
         field: 'aplicado',
         filter: 'agTextColumnFilter',
-       
         minWidth: 120,
         cellRenderer: statusRenderer,
+    },
+    {
+        headerName: 'Ações',
+        field: 'pk',
+        sortable: false,
+        filter: false,
+        minWidth: 100,
+        maxWidth: 100,
+        cellRenderer: acoesRenderer,
     },
 ];
 
@@ -197,12 +340,413 @@ document.addEventListener('DOMContentLoaded', function() {
             defaultColDef: { sortable: true, resizable: true },
             rowHeight: 42,
             headerHeight: 48,
-           
             suppressCellFocus: true,
             enableCellTextSelection: true,
             overlayNoRowsTemplate: '<div class="text-center py-4 text-muted"><i class="fas fa-inbox fa-2x mb-2 d-block"></i>Nenhum reajuste registrado ainda.</div>',
         }
     );
 });
+
+// ===== UTILITÁRIOS =====
+function fmtNumBR(v, decimals=2) {
+    if (v == null || isNaN(parseFloat(v))) return '—';
+    return parseFloat(v).toLocaleString('pt-BR', {minimumFractionDigits: decimals, maximumFractionDigits: decimals});
+}
+function fmtBRL(v) {
+    if (v == null || isNaN(parseFloat(v))) return '—';
+    return 'R$ ' + fmtNumBR(v, 2);
+}
+function fmtPerc(v, decimals=4) {
+    if (v == null || isNaN(parseFloat(v))) return '—';
+    const n = parseFloat(v);
+    const cls = n < 0 ? 'text-danger' : (n > 0 ? 'text-success' : '');
+    const sign = n > 0 ? '+' : '';
+    return `<span class="${cls}">${sign}${fmtNumBR(n, decimals)}%</span>`;
+}
+function fmtPercPlain(v, decimals=4) {
+    if (v == null || isNaN(parseFloat(v))) return '—';
+    const n = parseFloat(v);
+    const sign = n > 0 ? '+' : '';
+    return `${sign}${fmtNumBR(n, decimals)}%`;
+}
+
+function getMModal(id) {
+    const el = document.getElementById(id);
+    if (!el) return null;
+    return M.Modal.getInstance(el) || M.Modal.init(el, {dismissible: true});
+}
+
+// ===== VISUALIZAR =====
+function abrirVisualizar(pk) {
+    _reajustePkAtual = pk;
+    document.getElementById('vizBody').innerHTML =
+        '<div class="text-center py-4"><i class="fas fa-spinner fa-spin fa-2x text-muted"></i></div>';
+    getMModal('modalVisualizarReajuste').open();
+
+    fetch(`/financeiro/api/reajuste/${pk}/`, {
+        headers: {'X-CSRFToken': CSRF_TOKEN},
+    })
+    .then(r => r.json())
+    .then(d => {
+        if (!d.pk) { document.getElementById('vizBody').innerHTML = '<div class="alert alert-danger">Erro ao carregar dados.</div>'; return; }
+        renderVisualizarBody(d);
+    })
+    .catch(err => {
+        document.getElementById('vizBody').innerHTML = `<div class="alert alert-danger">Erro: ${err.message}</div>`;
+    });
+}
+
+function renderVisualizarBody(d) {
+    const percBruto = d.percentual_bruto != null ? `${fmtNumBR(d.percentual_bruto, 6)}%` : '—';
+    const spread = d.spread_aplicado ? `+${fmtNumBR(d.spread_aplicado, 6)}%` : null;
+    const desconto = d.desconto_percentual ? `-${fmtNumBR(d.desconto_percentual, 6)}%` : null;
+    const piso = d.piso_aplicado != null ? `${fmtNumBR(d.piso_aplicado, 4)}%` : null;
+    const teto = d.teto_aplicado != null ? `${fmtNumBR(d.teto_aplicado, 4)}%` : null;
+    const percFinal = parseFloat(d.percentual);
+    const percFinalSign = percFinal >= 0 ? '+' : '';
+    const percFinalCls = percFinal < 0 ? 'danger' : 'success';
+
+    const statusBadge = d.aplicado
+        ? `<span class="badge bg-success">Aplicado</span>${d.aplicado_manual ? ' <span class="badge bg-secondary">Manual</span>' : ''}`
+        : '<span class="badge bg-warning text-dark">Pendente</span>';
+
+    const diffCls = d.diferenca_total >= 0 ? 'success' : 'danger';
+    const diffSign = d.diferenca_total >= 0 ? '+' : '-';
+    const diffAbs  = Math.abs(d.diferenca_total);
+
+    // Resumo de parcelas: tabela só se afetar >1 ciclo; senão mensagem
+    let blocoParcelas;
+    if (d.afeta_multiplos_ciclos && d.parcelas_por_ciclo && d.parcelas_por_ciclo.length > 0) {
+        const tblRows = d.parcelas_por_ciclo.map(p => {
+            const diff = p.valor_atual != null && p.valor_original != null
+                ? (p.valor_atual - p.valor_original) : null;
+            const diffStr = diff != null
+                ? `<small class="${diff >= 0 ? 'text-success' : 'text-danger'}">${diff >= 0 ? '+' : '-'}${fmtBRL(Math.abs(diff))}</small>`
+                : '—';
+            const pagoTag = p.pago ? '<span class="badge bg-success" style="font-size:0.65rem">Pago</span>' : '';
+            return `<tr>
+                <td class="text-center"><span class="badge bg-secondary">${p.ciclo}</span></td>
+                <td class="text-center">${p.numero_parcela} ${pagoTag}</td>
+                <td class="text-end">${fmtBRL(p.valor_original)}</td>
+                <td class="text-end">${fmtBRL(p.valor_atual)}</td>
+                <td class="text-end">${diffStr}</td>
+                <td class="text-muted">${p.data_vencimento || '—'}</td>
+            </tr>`;
+        }).join('');
+        blocoParcelas = `
+        <span class="label-detalhe">
+            1ª parcela de cada ciclo afetado
+            <span class="badge bg-info ms-1">${d.num_ciclos_afetados} ciclos (${d.ciclo_inicial}–${d.ciclo_final})</span>
+        </span>
+        <div class="table-responsive mt-1">
+            <table class="table table-sm table-bordered mb-0" id="tblParcelasViz">
+                <thead class="table-light">
+                    <tr>
+                        <th class="text-center">Ciclo</th>
+                        <th class="text-center">Nº Parcela</th>
+                        <th class="text-end">Valor Orig.</th>
+                        <th class="text-end">Valor Atual</th>
+                        <th class="text-end">Diferença</th>
+                        <th>Vencimento</th>
+                    </tr>
+                </thead>
+                <tbody>${tblRows}</tbody>
+            </table>
+        </div>`;
+    } else {
+        blocoParcelas = `
+        <div class="alert alert-info mb-0 py-2">
+            <i class="fas fa-info-circle me-1"></i>
+            <small>Somente o ciclo atual (<strong>${d.ciclo_inicial}</strong>) foi afetado — parcelas ${d.parcela_inicial}–${d.parcela_final}.</small>
+        </div>`;
+    }
+
+    document.getElementById('vizBody').innerHTML = `
+    <div class="row g-3 mb-3">
+        <div class="col-md-5">
+            <span class="label-detalhe">Contrato</span>
+            <div class="valor-detalhe">
+                <a href="/contratos/${d.contrato_pk}/" target="_blank">${d.contrato}</a>
+                <small class="text-muted ms-1">${d.comprador}</small>
+            </div>
+        </div>
+        <div class="col-md-2">
+            <span class="label-detalhe">Ciclo</span>
+            <div class="valor-detalhe"><span class="badge bg-secondary fs-6">${d.ciclo}</span></div>
+        </div>
+        <div class="col-md-3">
+            <span class="label-detalhe">Data do Reajuste</span>
+            <div class="valor-detalhe">${d.data_reajuste}</div>
+        </div>
+        <div class="col-md-2">
+            <span class="label-detalhe">Status</span>
+            <div>${statusBadge}</div>
+        </div>
+    </div>
+
+    <hr class="my-2">
+
+    <div class="row g-3 mb-3">
+        <div class="col-md-3">
+            <span class="label-detalhe">Índice</span>
+            <div class="valor-detalhe">${indiceBadge(d.indice_tipo)}</div>
+        </div>
+        <div class="col-md-4">
+            <span class="label-detalhe">Período de Referência</span>
+            <div class="valor-detalhe font-monospace">${d.periodo_referencia_inicio || '—'} → ${d.periodo_referencia_fim || '—'}</div>
+        </div>
+        <div class="col-md-2">
+            <span class="label-detalhe">Parcelas</span>
+            <div class="valor-detalhe">${d.parcela_inicial} – ${d.parcela_final}</div>
+        </div>
+        <div class="col-md-3">
+            <span class="label-detalhe">Aplicado por</span>
+            <div class="valor-detalhe">${d.usuario || '—'}</div>
+            ${d.data_aplicacao ? `<small class="text-muted">${d.data_aplicacao}</small>` : ''}
+        </div>
+    </div>
+
+    <div class="card bg-light mb-3">
+        <div class="card-body py-2">
+            <div class="row g-2 align-items-center">
+                <div class="col-md-2 text-center">
+                    <span class="label-detalhe">% Bruto</span>
+                    <div class="fw-bold">${percBruto}</div>
+                </div>
+                ${spread ? `<div class="col-md-1 text-center text-muted small pt-3">+ spread</div>
+                <div class="col-md-2 text-center">
+                    <span class="label-detalhe">Spread</span>
+                    <div class="fw-bold text-secondary">${spread}</div>
+                </div>` : ''}
+                ${desconto ? `<div class="col-md-1 text-center text-muted small pt-3">−</div>
+                <div class="col-md-2 text-center">
+                    <span class="label-detalhe">Desconto</span>
+                    <div class="fw-bold text-info">${desconto}</div>
+                </div>` : ''}
+                ${piso || teto ? `<div class="col-md-2 text-center">
+                    <span class="label-detalhe">Piso / Teto</span>
+                    <div class="fw-bold text-muted">${piso || '—'} / ${teto || '—'}</div>
+                </div>` : ''}
+                <div class="col text-center">
+                    <span class="label-detalhe">% Final Aplicado</span>
+                    <div class="fw-bold fs-5 text-${percFinalCls}">${percFinalSign}${fmtNumBR(percFinal, 6)}%</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row g-3 mb-3">
+        <div class="col-md-4">
+            <span class="label-detalhe">Total anterior (parc. abertas)</span>
+            <div class="valor-detalhe">${fmtBRL(d.valor_original_total)}</div>
+        </div>
+        <div class="col-md-4">
+            <span class="label-detalhe">Total atualizado</span>
+            <div class="valor-detalhe">${fmtBRL(d.valor_atual_total)}</div>
+        </div>
+        <div class="col-md-4">
+            <span class="label-detalhe">Diferença total</span>
+            <div class="valor-detalhe text-${diffCls}">${diffSign}${fmtBRL(diffAbs)}</div>
+        </div>
+    </div>
+
+    ${d.observacoes ? `<div class="mb-3"><span class="label-detalhe">Observações</span><div class="mt-1 text-muted">${d.observacoes}</div></div>` : ''}
+
+    <div>${blocoParcelas}</div>`;
+}
+
+// ===== ALTERAR ÍNDICE / PERCENTUAL =====
+// Estado global do reajuste em edição para recálculo ao vivo
+let _alterarState = { percAtual: 0, prestacaoAtual: null, valorAtualTotal: null, qtdAbertas: 0 };
+
+function abrirAlterar(pk) {
+    _reajustePkAtual = pk;
+    document.getElementById('altResultado').className = 'd-none';
+    document.getElementById('altResultado').innerHTML = '';
+    document.getElementById('percFormatado').textContent = '';
+    document.getElementById('altPreview').classList.add('d-none');
+
+    const btn = document.getElementById('btnConfirmarAlterar');
+    btn.disabled = false;
+    btn.className = 'btn btn-warning';
+    btn.innerHTML = '<i class="fas fa-save me-1"></i> Salvar Alteração';
+    btn.onclick = confirmarAlterar;
+
+    // Preenche dados básicos da linha do grid
+    const row = reajustesRowData.find(r => r.pk === pk);
+    if (row) {
+        document.getElementById('altContrato').textContent = row.contrato;
+        document.getElementById('altCiclo').textContent = row.ciclo;
+        document.getElementById('altData').textContent = row.data_reajuste;
+        document.getElementById('altPeriodo').textContent = row.periodo || '—';
+        document.getElementById('altParcelas').textContent = `${row.parcela_inicial} – ${row.parcela_final}`;
+        document.getElementById('altIndiceAtual').textContent = row.indice_tipo;
+        const percAtual = parseFloat(row.percentual);
+        document.getElementById('altPercAtual').textContent = fmtPercPlain(percAtual, 6);
+        // Pré-preenche em pt-BR para facilitar ajuste fino
+        document.getElementById('altNovoPercentual').value = fmtNumBR(percAtual, 6);
+        document.getElementById('percFormatado').textContent = fmtNumBR(percAtual, 6) + '%';
+    }
+    document.getElementById('altPreview').classList.add('d-none');
+
+    getMModal('modalAlterarReajuste').open();
+    setTimeout(() => document.getElementById('altNovoPercentual').select(), 150);
+
+    // Carrega dados completos via API para preview (prestação atual + qtd abertas)
+    fetch(`/financeiro/api/reajuste/${pk}/`, { headers: {'X-CSRFToken': CSRF_TOKEN} })
+        .then(r => r.json())
+        .then(d => {
+            if (!d.pk) return;
+            _alterarState = {
+                percAtual: parseFloat(d.percentual),
+                prestacaoAtual: d.prestacao_atual,
+                valorAtualTotal: d.valor_atual_total,
+                qtdAbertas: d.qtd_parcelas_abertas || 0,
+            };
+            recalcularPreview();
+        })
+        .catch(() => { /* sem preview se API falhar */ });
+}
+
+function parsePtBR(str) {
+    // Aceita tanto "5,24" quanto "5.24" — trata última vírgula/ponto como decimal
+    if (str == null || str === '') return NaN;
+    const s = String(str).trim();
+    // Remove separadores de milhar e normaliza decimal
+    const lastComma = s.lastIndexOf(',');
+    const lastDot   = s.lastIndexOf('.');
+    let normalized;
+    if (lastComma > lastDot) {
+        // Vírgula é o separador decimal: "1.234,56" → "1234.56"
+        normalized = s.replace(/\./g, '').replace(',', '.');
+    } else {
+        // Ponto é o separador decimal: "1,234.56" ou "5.24" → remove milhar
+        normalized = s.replace(/,/g, '');
+    }
+    return parseFloat(normalized);
+}
+
+function onPercInput(el) {
+    const v = parsePtBR(el.value);
+    // Exibe formato pt-BR enquanto digita (no span ao lado)
+    const spanFmt = document.getElementById('percFormatado');
+    if (!isNaN(v)) {
+        spanFmt.textContent = fmtNumBR(v, 6) + '%';
+    } else {
+        spanFmt.textContent = '';
+    }
+    recalcularPreview(v);
+}
+
+function onPercBlur(el) {
+    const v = parsePtBR(el.value);
+    if (!isNaN(v)) {
+        // Formata o campo em pt-BR ao perder foco
+        el.value = fmtNumBR(v, 6);
+    }
+}
+
+function recalcularPreview(novoPerc) {
+    const panel = document.getElementById('altPreview');
+    const st = _alterarState;
+
+    // Permite chamar sem argumento (ex: quando API retorna dados)
+    if (novoPerc === undefined) {
+        novoPerc = parsePtBR(document.getElementById('altNovoPercentual').value);
+    }
+
+    if (isNaN(novoPerc) || st.prestacaoAtual == null || st.qtdAbertas === 0) {
+        panel.classList.add('d-none');
+        return;
+    }
+    panel.classList.remove('d-none');
+
+    const fatorAntigo = 1 + (st.percAtual / 100);
+    const fatorNovo   = 1 + (novoPerc / 100);
+    const ratio = fatorAntigo !== 0 ? (fatorNovo / fatorAntigo) : 0;
+
+    const novaPrestacao = st.prestacaoAtual * ratio;
+    const difPrestacao  = novaPrestacao - st.prestacaoAtual;
+    const novoTotal     = st.valorAtualTotal * ratio;
+    const difTotal      = novoTotal - st.valorAtualTotal;
+
+    document.getElementById('prevPrestacaoAtual').textContent = fmtBRL(st.prestacaoAtual);
+    document.getElementById('prevPrestacaoNova').textContent  = fmtBRL(novaPrestacao);
+    document.getElementById('prevQtdAbertas').textContent     = `(${st.qtdAbertas} parc.)`;
+
+    const difParcEl = document.getElementById('prevDifParcela');
+    const difTotEl  = document.getElementById('prevDifTotal');
+    const fmtDif = (v) => (v >= 0 ? '+' : '-') + fmtBRL(Math.abs(v));
+    const cDif   = (v) => v >= 0 ? 'text-success' : 'text-danger';
+    difParcEl.className = 'valor-detalhe ' + cDif(difPrestacao);
+    difParcEl.textContent = fmtDif(difPrestacao);
+    difTotEl.className = 'valor-detalhe ' + cDif(difTotal);
+    difTotEl.textContent = fmtDif(difTotal);
+}
+
+function confirmarAlterar() {
+    const novoPerc = document.getElementById('altNovoPercentual').value;
+
+    if (novoPerc === '' || novoPerc == null) { alert('Informe o novo percentual.'); return; }
+    const percNum = parsePtBR(novoPerc);
+    if (isNaN(percNum)) { alert('Percentual inválido.'); return; }
+    if (percNum <= -100) { alert('Percentual deve ser maior que -100%.'); return; }
+
+    const btn = document.getElementById('btnConfirmarAlterar');
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i> Salvando...';
+
+    const resultado = document.getElementById('altResultado');
+    resultado.className = 'alert alert-info mb-3';
+    resultado.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i> Salvando alteração...';
+    resultado.classList.remove('d-none');
+
+    fetch(`/financeiro/reajuste/${_reajustePkAtual}/alterar-indice/`, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json', 'X-CSRFToken': CSRF_TOKEN},
+        body: JSON.stringify({percentual: percNum}),
+    })
+    .then(r => r.json())
+    .then(data => {
+        btn.disabled = false;
+        if (data.sucesso) {
+            resultado.className = 'alert alert-success mb-3';
+            const finalPerc = parseFloat(data.novo_percentual);
+            const fSign = finalPerc >= 0 ? '+' : '';
+            resultado.innerHTML = `<i class="fas fa-check-circle me-1"></i> <strong>${data.mensagem}</strong>
+                <br><small>Índice: <strong>${data.novo_indice_tipo}</strong>
+                &nbsp;|&nbsp; % aplicado: <strong>${fSign}${fmtNumBR(finalPerc, 6)}%</strong></small>`;
+            // Atualizar linha no grid
+            const rowNode = window.reajustesGridApi.getRowNode(String(_reajustePkAtual));
+            if (rowNode) {
+                rowNode.setDataValue('indice_tipo', data.novo_indice_tipo);
+                rowNode.setDataValue('percentual_bruto', data.novo_percentual_bruto);
+                rowNode.setDataValue('percentual', data.novo_percentual);
+                rowNode.setDataValue('aplicado_manual', true);
+            }
+            // Atualizar também no rowData em memória
+            const row = reajustesRowData.find(r => r.pk === _reajustePkAtual);
+            if (row) {
+                row.indice_tipo = data.novo_indice_tipo;
+                row.percentual_bruto = data.novo_percentual_bruto;
+                row.percentual = data.novo_percentual;
+                row.aplicado_manual = true;
+            }
+            btn.innerHTML = '<i class="fas fa-times me-1"></i> Fechar';
+            btn.className = 'btn btn-secondary';
+            btn.onclick = () => getMModal('modalAlterarReajuste').close();
+        } else {
+            btn.innerHTML = '<i class="fas fa-save me-1"></i> Salvar Alteração';
+            resultado.className = 'alert alert-danger mb-3';
+            resultado.innerHTML = `<i class="fas fa-exclamation-triangle me-1"></i> ${data.erro || 'Erro desconhecido.'}`;
+        }
+    })
+    .catch(err => {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fas fa-save me-1"></i> Salvar Alteração';
+        resultado.className = 'alert alert-danger mb-3';
+        resultado.innerHTML = `<i class="fas fa-exclamation-triangle me-1"></i> Erro: ${err.message}`;
+    });
+}
 </script>
 {% endblock %}
