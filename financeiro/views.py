@@ -3890,35 +3890,41 @@ def api_reajuste_detail(request, pk):
     reajuste = get_object_or_404(Reajuste, pk=pk)
     contrato = reajuste.contrato
 
-    parcelas_qs = contrato.parcelas.filter(
+    parcelas_no_range = contrato.parcelas.filter(
         numero_parcela__gte=reajuste.parcela_inicial,
         numero_parcela__lte=reajuste.parcela_final,
-    ).order_by('numero_parcela').values(
-        'numero_parcela', 'valor_original', 'valor_atual', 'pago', 'data_vencimento'
     )
+    total_parcelas = parcelas_no_range.count()
 
-    parcelas_lista = list(parcelas_qs[:20])
-    total_parcelas = contrato.parcelas.filter(
-        numero_parcela__gte=reajuste.parcela_inicial,
-        numero_parcela__lte=reajuste.parcela_final,
-    ).count()
+    valor_original_total = parcelas_no_range.filter(pago=False).aggregate(
+        s=Sum('valor_original')
+    )['s'] or Decimal('0')
+    valor_atual_total = parcelas_no_range.filter(pago=False).aggregate(
+        s=Sum('valor_atual')
+    )['s'] or Decimal('0')
 
-    valor_original_total = contrato.parcelas.filter(
-        numero_parcela__gte=reajuste.parcela_inicial,
-        numero_parcela__lte=reajuste.parcela_final,
-        pago=False,
-    ).aggregate(s=Sum('valor_original'))['s'] or Decimal('0')
+    # Ciclos afetados — determina pelo range de parcelas e prazo_reajuste_meses
+    prazo = contrato.prazo_reajuste_meses or 12
+    ciclo_inicial = ((reajuste.parcela_inicial - 1) // prazo) + 1
+    ciclo_final = ((reajuste.parcela_final - 1) // prazo) + 1
+    afeta_multiplos_ciclos = ciclo_final > ciclo_inicial
 
-    valor_atual_total = contrato.parcelas.filter(
-        numero_parcela__gte=reajuste.parcela_inicial,
-        numero_parcela__lte=reajuste.parcela_final,
-        pago=False,
-    ).aggregate(s=Sum('valor_atual'))['s'] or Decimal('0')
-
-    for p in parcelas_lista:
-        p['data_vencimento'] = p['data_vencimento'].strftime('%d/%m/%Y') if p['data_vencimento'] else None
-        p['valor_original'] = float(p['valor_original']) if p['valor_original'] else None
-        p['valor_atual'] = float(p['valor_atual']) if p['valor_atual'] else None
+    # Se afeta >1 ciclo: pega a 1ª parcela de cada ciclo afetado dentro do range
+    parcelas_por_ciclo = []
+    if afeta_multiplos_ciclos:
+        for c in range(ciclo_inicial, ciclo_final + 1):
+            primeira_num = max(reajuste.parcela_inicial, (c - 1) * prazo + 1)
+            if primeira_num > reajuste.parcela_final:
+                break
+            p = contrato.parcelas.filter(numero_parcela=primeira_num).values(
+                'numero_parcela', 'valor_original', 'valor_atual', 'pago', 'data_vencimento'
+            ).first()
+            if p:
+                p['ciclo'] = c
+                p['data_vencimento'] = p['data_vencimento'].strftime('%d/%m/%Y') if p['data_vencimento'] else None
+                p['valor_original'] = float(p['valor_original']) if p['valor_original'] else None
+                p['valor_atual'] = float(p['valor_atual']) if p['valor_atual'] else None
+                parcelas_por_ciclo.append(p)
 
     return JsonResponse({
         'pk': reajuste.pk,
@@ -3948,8 +3954,12 @@ def api_reajuste_detail(request, pk):
         'valor_original_total': float(valor_original_total),
         'valor_atual_total': float(valor_atual_total),
         'diferenca_total': float(valor_atual_total - valor_original_total),
-        'parcelas': parcelas_lista,
-        'mais_parcelas': total_parcelas > 20,
+        # Resumo por ciclo
+        'afeta_multiplos_ciclos': afeta_multiplos_ciclos,
+        'ciclo_inicial': ciclo_inicial,
+        'ciclo_final': ciclo_final,
+        'num_ciclos_afetados': ciclo_final - ciclo_inicial + 1,
+        'parcelas_por_ciclo': parcelas_por_ciclo,
     })
 
 

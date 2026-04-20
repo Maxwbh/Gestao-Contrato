@@ -379,10 +379,10 @@ function renderVisualizarBody(d) {
     const diffCls = d.diferenca_total >= 0 ? 'success' : 'danger';
     const diffSign = d.diferenca_total >= 0 ? '+' : '';
 
-    // Tabela de parcelas
-    let tblRows = '';
-    if (d.parcelas && d.parcelas.length > 0) {
-        tblRows = d.parcelas.map(p => {
+    // Resumo de parcelas: tabela só se afetar >1 ciclo; senão mensagem
+    let blocoParcelas;
+    if (d.afeta_multiplos_ciclos && d.parcelas_por_ciclo && d.parcelas_por_ciclo.length > 0) {
+        const tblRows = d.parcelas_por_ciclo.map(p => {
             const diff = p.valor_atual != null && p.valor_original != null
                 ? (p.valor_atual - p.valor_original) : null;
             const diffStr = diff != null
@@ -390,6 +390,7 @@ function renderVisualizarBody(d) {
                 : '—';
             const pagoTag = p.pago ? '<span class="badge bg-success" style="font-size:0.65rem">Pago</span>' : '';
             return `<tr>
+                <td class="text-center"><span class="badge bg-secondary">${p.ciclo}</span></td>
                 <td class="text-center">${p.numero_parcela} ${pagoTag}</td>
                 <td class="text-end">${fmtBRL(p.valor_original)}</td>
                 <td class="text-end">${fmtBRL(p.valor_atual)}</td>
@@ -397,11 +398,33 @@ function renderVisualizarBody(d) {
                 <td class="text-muted">${p.data_vencimento || '—'}</td>
             </tr>`;
         }).join('');
+        blocoParcelas = `
+        <span class="label-detalhe">
+            1ª parcela de cada ciclo afetado
+            <span class="badge bg-info ms-1">${d.num_ciclos_afetados} ciclos (${d.ciclo_inicial}–${d.ciclo_final})</span>
+        </span>
+        <div class="table-responsive mt-1">
+            <table class="table table-sm table-bordered mb-0" id="tblParcelasViz">
+                <thead class="table-light">
+                    <tr>
+                        <th class="text-center">Ciclo</th>
+                        <th class="text-center">Nº Parcela</th>
+                        <th class="text-end">Valor Orig.</th>
+                        <th class="text-end">Valor Atual</th>
+                        <th class="text-end">Diferença</th>
+                        <th>Vencimento</th>
+                    </tr>
+                </thead>
+                <tbody>${tblRows}</tbody>
+            </table>
+        </div>`;
     } else {
-        tblRows = '<tr><td colspan="5" class="text-center text-muted">Sem parcelas no intervalo</td></tr>';
+        blocoParcelas = `
+        <div class="alert alert-info mb-0 py-2">
+            <i class="fas fa-info-circle me-1"></i>
+            <small>Somente o ciclo atual (<strong>${d.ciclo_inicial}</strong>) foi afetado — parcelas ${d.parcela_inicial}–${d.parcela_final}.</small>
+        </div>`;
     }
-    const maisNote = d.mais_parcelas
-        ? `<div class="text-muted small text-center mt-1">Exibindo 20 de ${d.total_parcelas} parcelas.</div>` : '';
 
     document.getElementById('vizBody').innerHTML = `
     <div class="row g-3 mb-3">
@@ -494,24 +517,7 @@ function renderVisualizarBody(d) {
 
     ${d.observacoes ? `<div class="mb-3"><span class="label-detalhe">Observações</span><div class="mt-1 text-muted">${d.observacoes}</div></div>` : ''}
 
-    <div>
-        <span class="label-detalhe">Parcelas do intervalo (${d.total_parcelas} no total)</span>
-        <div class="table-responsive mt-1">
-            <table class="table table-sm table-bordered mb-0" id="tblParcelasViz">
-                <thead class="table-light">
-                    <tr>
-                        <th class="text-center">Nº</th>
-                        <th class="text-end">Valor Orig.</th>
-                        <th class="text-end">Valor Atual</th>
-                        <th class="text-end">Diferença</th>
-                        <th>Vencimento</th>
-                    </tr>
-                </thead>
-                <tbody>${tblRows}</tbody>
-            </table>
-        </div>
-        ${maisNote}
-    </div>`;
+    <div>${blocoParcelas}</div>`;
 }
 
 // ===== ALTERAR ÍNDICE / PERCENTUAL =====
