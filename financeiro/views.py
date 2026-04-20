@@ -23,7 +23,7 @@ import logging
 
 from django.core.cache import cache
 from .models import Parcela, Reajuste, StatusBoleto, HistoricoPagamento
-from core.models import Imobiliaria, ContaBancaria, BancoBrasil
+from core.models import Imobiliaria, ContaBancaria
 from contratos.models import Contrato, StatusContrato
 
 logger = logging.getLogger(__name__)
@@ -1643,24 +1643,43 @@ def gerar_arquivo_remessa(request):
             return redirect('financeiro:gerar_remessa')
 
         # Verificar conflito de layout CNAB entre as contas selecionadas
+        # e se o layout escolhido é suportado por cada banco na BRCobrança
         from .models import Parcela as _Parcela
+        from .services import bancos as _bancos
         contas_selecionadas = (
             _Parcela.objects.filter(pk__in=parcela_ids)
             .select_related('conta_bancaria')
-            .values_list(
-                'conta_bancaria__layout_cnab',
-                'conta_bancaria__banco',
-            )
+            .values_list('conta_bancaria__banco', flat=True)
             .distinct()
         )
-        layouts_por_banco = {}  # {layout: set(banco_codigo)}
-        for lay, banco in contas_selecionadas:
+        codigos_banco = [b or '000' for b in contas_selecionadas]
+
+        # 1. Bancos que não suportam o layout escolhido na BRCobrança
+        incompativeis = [
+            c for c in codigos_banco if not _bancos.suporta_cnab(c, layout)
+        ]
+        if incompativeis:
+            nomes_inc = ', '.join(_bancos.nome(c) for c in incompativeis)
+            messages.error(
+                request,
+                f"{nomes_inc} não suporta {layout.replace('_', ' ')} na BRCobrança. "
+                "Altere o layout ou gere os CNAB's separadamente."
+            )
+            return redirect('financeiro:gerar_remessa')
+
+        # 2. Contas configuradas com layouts diferentes entre si
+        layouts_config = (
+            _Parcela.objects.filter(pk__in=parcela_ids)
+            .values_list('conta_bancaria__layout_cnab', 'conta_bancaria__banco')
+            .distinct()
+        )
+        layouts_por_banco = {}
+        for lay, banco in layouts_config:
             layouts_por_banco.setdefault(lay, set()).add(banco or '000')
         if len(layouts_por_banco) > 1:
-            banco_display = dict(BancoBrasil.choices)
             partes = []
             for lay, bancos in layouts_por_banco.items():
-                nomes = ', '.join(banco_display.get(b, b) for b in sorted(bancos))
+                nomes = ', '.join(_bancos.nome(b) for b in sorted(bancos))
                 partes.append(f"{nomes} ({lay.replace('_', ' ')})")
             messages.error(
                 request,
@@ -1738,9 +1757,17 @@ def gerar_arquivo_remessa(request):
 
     # Agrupar disponíveis por conta_bancaria para exibição
     from collections import defaultdict
+    from .services import bancos as _bancos
+    import json as _json
     grupos_conta = defaultdict(list)
     for p in boletos_disponiveis:
         grupos_conta[p.conta_bancaria].append(p)
+
+    # Mapa banco_cod → layouts suportados (JSON p/ template JS)
+    bancos_cnab_js = {
+        cod: list(spec['layouts_cnab'])
+        for cod, spec in _bancos.BANCOS_SUPORTADOS.items()
+    }
 
     context = {
         'contas_bancarias': contas,
@@ -1755,6 +1782,7 @@ def gerar_arquivo_remessa(request):
         'boletos_pendentes': boletos_pendentes,
         'total_disponivel': len(boletos_disponiveis),
         'today': timezone.localdate(),
+        'bancos_cnab_js': _json.dumps(bancos_cnab_js),
     }
     return render(request, 'financeiro/cnab/gerar_remessa.html', context)
 
