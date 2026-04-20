@@ -51,8 +51,8 @@
                 <i class="fas fa-check-circle"></i> Pagas
             </a>
             <a href="{% url 'financeiro:listar_parcelas' %}?status=pendentes{% if filtro_status_boleto %}&status_boleto={{ filtro_status_boleto }}{% endif %}"
-               class="btn btn-outline-warning btn-filter {% if filtro_status == 'pendentes' %}active{% endif %}">
-                <i class="fas fa-clock"></i> Em aberto
+               class="btn btn-outline-primary btn-filter {% if filtro_status == 'pendentes' %}active{% endif %}">
+                <i class="fas fa-calendar"></i> A Vencer
             </a>
             <a href="{% url 'financeiro:listar_parcelas' %}?status=vencidas{% if filtro_status_boleto %}&status_boleto={{ filtro_status_boleto }}{% endif %}"
                class="btn btn-outline-danger btn-filter {% if filtro_status == 'vencidas' %}active{% endif %}">
