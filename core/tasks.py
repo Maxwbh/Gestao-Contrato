@@ -1274,12 +1274,73 @@ def task_processar_notificacoes(request):
     }, status=200 if all_success else 207)
 
 
+def _data_inicio_incremental(tipo_indice: str, hoje) -> 'date':
+    """
+    Calcula data_inicio para busca incremental por tipo de índice.
+
+    Sem dados no BD:
+      - Usa a data do contrato mais antigo ativo que utiliza este índice
+        (primário ou fallback), garantindo cobertura histórica completa.
+      - Se nenhum contrato usa o índice, usa 13 meses atrás.
+
+    Com dados no BD:
+      - Reprocessa a partir do último registro − 1 mês (overlap para revisões).
+      - Sempre garante pelo menos 3 meses de lookback.
+    """
+    from datetime import date as _date
+    from dateutil.relativedelta import relativedelta as _rd
+    from contratos.models import IndiceReajuste, Contrato as _Contrato
+
+    ultimo = (
+        IndiceReajuste.objects
+        .filter(tipo_indice=tipo_indice)
+        .order_by('-ano', '-mes')
+        .values('ano', 'mes')
+        .first()
+    )
+
+    if not ultimo:
+        # Carga inicial: buscar a partir do contrato mais antigo que usa este índice
+        contrato_mais_antigo = (
+            _Contrato.objects
+            .filter(
+                status='ATIVO',
+                tipo_correcao=tipo_indice,
+            )
+            .order_by('data_contrato')
+            .values('data_contrato')
+            .first()
+        )
+        if not contrato_mais_antigo:
+            # Tenta também como fallback
+            contrato_mais_antigo = (
+                _Contrato.objects
+                .filter(
+                    status='ATIVO',
+                    tipo_correcao_fallback=tipo_indice,
+                )
+                .order_by('data_contrato')
+                .values('data_contrato')
+                .first()
+            )
+        if contrato_mais_antigo and contrato_mais_antigo['data_contrato']:
+            dc = contrato_mais_antigo['data_contrato']
+            return _date(dc.year, dc.month, 1)
+        return hoje - _rd(months=13)
+
+    data_ultimo = _date(ultimo['ano'], ultimo['mes'], 1)
+    # Overlap de 1 mês para capturar revisões; mínimo de 3 meses de lookback
+    data_inicio = max(data_ultimo - _rd(months=1), hoje - _rd(months=3))
+    return data_inicio
+
+
 def atualizar_indices_sync():
     """
-    Baixa e importa todos os índices econômicos disponíveis via APIs públicas.
+    Baixa e importa índices econômicos de forma incremental.
 
-    Índices atualizados: IPCA, INPC (IBGE/SIDRA), IGP-M, INCC, IGP-DI, SELIC, TR (BCB/SGS).
-    Busca os últimos 13 meses para garantir que períodos de referência recentes estejam completos.
+    Para cada índice consulta o último registro no BD e busca apenas o
+    período em falta (+ 1–3 meses de overlap para capturar revisões).
+    Carga inicial (BD vazio) busca 13 meses completos.
     """
     from financeiro.services.indices_economicos_service import IndicesEconomicosService
     from datetime import date
@@ -1289,7 +1350,6 @@ def atualizar_indices_sync():
     INDICES = ['IPCA', 'INPC', 'IGPM', 'INCC', 'IGPDI', 'SELIC', 'TR']
 
     hoje = date.today()
-    data_inicio = hoje - relativedelta(months=13)
     data_fim = hoje
 
     service = IndicesEconomicosService()
@@ -1297,13 +1357,17 @@ def atualizar_indices_sync():
     total_atualizados = 0
 
     for tipo in INDICES:
+        data_inicio = _data_inicio_incremental(tipo, hoje)
         try:
             resumo = service.importar_indices(tipo, data_inicio, data_fim)
             criados = resumo.get('criados', 0)
             atualizados = resumo.get('atualizados', 0)
             total_criados += criados
             total_atualizados += atualizados
-            result.add_message(f'{tipo}: {criados} novos, {atualizados} atualizados')
+            result.add_message(
+                f'{tipo}: {criados} novos, {atualizados} atualizados'
+                f' (período {data_inicio:%m/%Y}–{data_fim:%m/%Y})'
+            )
             result.items_processed += criados + atualizados
         except Exception as e:
             result.add_error(f'{tipo}: erro — {e}')
@@ -1315,7 +1379,6 @@ def atualizar_indices_sync():
 
     result.add_message(f'Total: {total_criados} criados, {total_atualizados} atualizados')
     result.finish()
-    # Sobrepõe: sucesso parcial é aceitável (falha total apenas se TODOS os índices falharam)
     result.success = len(result.errors) < len(INDICES)
     return result
 

@@ -275,6 +275,8 @@ class TipoTemplate(models.TextChoices):
     PAGAMENTO_CONFIRMADO = 'PAGAMENTO_CONFIRMADO', 'Pagamento Confirmado'
     CONTRATO_CRIADO = 'CONTRATO_CRIADO', 'Contrato Criado'
     LEMBRETE_PARCELA = 'LEMBRETE_PARCELA', 'Lembrete de Parcela'
+    RELATORIO_MENSAL = 'RELATORIO_MENSAL', 'Relatório Mensal'
+    RELATORIO_SEMANAL = 'RELATORIO_SEMANAL', 'Relatório Semanal'
     CUSTOM = 'CUSTOM', 'Personalizado'
 
 
