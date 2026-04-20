@@ -11,7 +11,7 @@ from django.contrib import messages
 from django.http import JsonResponse, HttpResponse, FileResponse
 from django.utils import timezone
 from django.db import transaction
-from django.db.models import Sum, Count, Q, Min
+from django.db.models import Sum, Count, Q, Min, F, Exists, OuterRef
 from django.views.generic import TemplateView
 from django.views.decorators.http import require_POST, require_GET
 from django.core.paginator import Paginator
@@ -455,7 +455,28 @@ def listar_parcelas(request):
 
     # Filtro por Status do Boleto
     status_boleto_filtro = request.GET.get('status_boleto', '')
-    if status_boleto_filtro:
+    if status_boleto_filtro == StatusBoleto.NAO_GERADO:
+        # "Parcelas que devem ser geradas no mês":
+        #   boleto não gerado + não pago + vencimento no mês corrente +
+        #   (é a 1ª parcela do contrato OU a parcela anterior já tem boleto gerado)
+        hoje = timezone.localdate()
+        parcela_anterior_gerada = Parcela.objects.filter(
+            contrato_id=OuterRef('contrato_id'),
+            numero_parcela=OuterRef('_numero_anterior'),
+        ).exclude(status_boleto=StatusBoleto.NAO_GERADO)
+
+        parcelas = parcelas.filter(
+            status_boleto=StatusBoleto.NAO_GERADO,
+            pago=False,
+            data_vencimento__year=hoje.year,
+            data_vencimento__month=hoje.month,
+        ).annotate(
+            _numero_anterior=F('numero_parcela') - 1,
+            _anterior_gerada=Exists(parcela_anterior_gerada),
+        ).filter(
+            Q(numero_parcela=1) | Q(_anterior_gerada=True)
+        )
+    elif status_boleto_filtro:
         parcelas = parcelas.filter(status_boleto=status_boleto_filtro)
 
     # Filtro por Imobiliária
@@ -1621,8 +1642,53 @@ def gerar_arquivo_remessa(request):
             messages.error(request, 'Selecione pelo menos uma parcela.')
             return redirect('financeiro:gerar_remessa')
 
-        # Verificar se há parcelas pagas na seleção — informar ao usuário
+        # Verificar conflito de layout CNAB entre as contas selecionadas
+        # e se o layout escolhido é suportado por cada banco na BRCobrança
         from .models import Parcela as _Parcela
+        from .services import bancos as _bancos
+        contas_selecionadas = (
+            _Parcela.objects.filter(pk__in=parcela_ids)
+            .select_related('conta_bancaria')
+            .values_list('conta_bancaria__banco', flat=True)
+            .distinct()
+        )
+        codigos_banco = [b or '000' for b in contas_selecionadas]
+
+        # 1. Bancos que não suportam o layout escolhido na BRCobrança
+        incompativeis = [
+            c for c in codigos_banco if not _bancos.suporta_cnab(c, layout)
+        ]
+        if incompativeis:
+            nomes_inc = ', '.join(_bancos.nome(c) for c in incompativeis)
+            messages.error(
+                request,
+                f"{nomes_inc} não suporta {layout.replace('_', ' ')} na BRCobrança. "
+                "Altere o layout ou gere os CNAB's separadamente."
+            )
+            return redirect('financeiro:gerar_remessa')
+
+        # 2. Contas configuradas com layouts diferentes entre si
+        layouts_config = (
+            _Parcela.objects.filter(pk__in=parcela_ids)
+            .values_list('conta_bancaria__layout_cnab', 'conta_bancaria__banco')
+            .distinct()
+        )
+        layouts_por_banco = {}
+        for lay, banco in layouts_config:
+            layouts_por_banco.setdefault(lay, set()).add(banco or '000')
+        if len(layouts_por_banco) > 1:
+            partes = []
+            for lay, bancos in layouts_por_banco.items():
+                nomes = ', '.join(_bancos.nome(b) for b in sorted(bancos))
+                partes.append(f"{nomes} ({lay.replace('_', ' ')})")
+            messages.error(
+                request,
+                f"{' e '.join(partes)} não usam o mesmo padrão de CNAB. "
+                "Gere os CNAB's separadamente."
+            )
+            return redirect('financeiro:gerar_remessa')
+
+        # Verificar se há parcelas pagas na seleção — informar ao usuário
         pagas_selecionadas = _Parcela.objects.filter(pk__in=parcela_ids, pago=True).count()
         if pagas_selecionadas:
             messages.warning(
@@ -1691,9 +1757,17 @@ def gerar_arquivo_remessa(request):
 
     # Agrupar disponíveis por conta_bancaria para exibição
     from collections import defaultdict
+    from .services import bancos as _bancos
+    import json as _json
     grupos_conta = defaultdict(list)
     for p in boletos_disponiveis:
         grupos_conta[p.conta_bancaria].append(p)
+
+    # Mapa banco_cod → layouts suportados (JSON p/ template JS)
+    bancos_cnab_js = {
+        cod: list(spec['layouts_cnab'])
+        for cod, spec in _bancos.BANCOS_SUPORTADOS.items()
+    }
 
     context = {
         'contas_bancarias': contas,
@@ -1708,6 +1782,7 @@ def gerar_arquivo_remessa(request):
         'boletos_pendentes': boletos_pendentes,
         'total_disponivel': len(boletos_disponiveis),
         'today': timezone.localdate(),
+        'bancos_cnab_js': _json.dumps(bancos_cnab_js),
     }
     return render(request, 'financeiro/cnab/gerar_remessa.html', context)
 
