@@ -3957,50 +3957,33 @@ def api_reajuste_detail(request, pk):
 @require_POST
 def alterar_indice_reajuste(request, pk):
     """
-    Altera o tipo de índice de um reajuste e recalcula percentual_bruto e percentual.
-    Se já aplicado, reverte as parcelas com o fator antigo e reaplicar com o novo.
+    Altera o percentual de um reajuste (entrada manual). O tipo de índice é preservado.
+    Se o reajuste já foi aplicado, reverte o fator antigo nas parcelas não pagas
+    e reaplica automaticamente com o novo percentual.
     """
     import json
-    from contratos.models import IndiceReajuste, TipoCorrecao
 
     try:
         body = json.loads(request.body)
-        novo_indice = body.get('indice_tipo', '').strip().upper()
+        novo_perc_raw = body.get('percentual')
     except (json.JSONDecodeError, AttributeError):
         return JsonResponse({'sucesso': False, 'erro': 'JSON inválido.'}, status=400)
 
-    INDICES_VALIDOS = [c.value for c in TipoCorrecao if c != TipoCorrecao.FIXO]
-    if novo_indice not in INDICES_VALIDOS:
-        return JsonResponse({'sucesso': False, 'erro': f'Índice inválido: {novo_indice}'}, status=400)
-
     reajuste = get_object_or_404(Reajuste, pk=pk)
 
-    if novo_indice == reajuste.indice_tipo:
-        return JsonResponse({'sucesso': False, 'erro': 'O índice informado é igual ao atual.'}, status=400)
+    if novo_perc_raw is None or novo_perc_raw == '':
+        return JsonResponse({'sucesso': False, 'erro': 'Informe o novo percentual.'}, status=400)
 
-    if not reajuste.periodo_referencia_inicio or not reajuste.periodo_referencia_fim:
-        return JsonResponse({'sucesso': False, 'erro': 'Reajuste sem período de referência definido.'}, status=400)
+    try:
+        novo_percentual = Decimal(str(novo_perc_raw).replace(',', '.'))
+    except Exception:
+        return JsonResponse({'sucesso': False, 'erro': 'Percentual inválido.'}, status=400)
 
-    novo_percentual_bruto = IndiceReajuste.get_acumulado_periodo(
-        novo_indice,
-        reajuste.periodo_referencia_inicio.year, reajuste.periodo_referencia_inicio.month,
-        reajuste.periodo_referencia_fim.year, reajuste.periodo_referencia_fim.month,
-    )
+    if novo_percentual <= Decimal('-100'):
+        return JsonResponse({'sucesso': False, 'erro': 'Percentual deve ser maior que -100%.'}, status=400)
 
-    if novo_percentual_bruto is None:
-        periodo = f"{reajuste.periodo_referencia_inicio.strftime('%m/%Y')} → {reajuste.periodo_referencia_fim.strftime('%m/%Y')}"
-        return JsonResponse({
-            'sucesso': False,
-            'erro': f'Sem dados de {novo_indice} para o período {periodo}. Importe os índices antes.',
-        }, status=400)
-
-    spread = reajuste.spread_aplicado or Decimal('0')
-    desconto = reajuste.desconto_percentual or Decimal('0')
-    novo_percentual = novo_percentual_bruto + spread - desconto
-    if reajuste.piso_aplicado is not None:
-        novo_percentual = max(reajuste.piso_aplicado, novo_percentual)
-    if reajuste.teto_aplicado is not None:
-        novo_percentual = min(reajuste.teto_aplicado, novo_percentual)
+    if novo_percentual == reajuste.percentual:
+        return JsonResponse({'sucesso': False, 'erro': 'O percentual informado é igual ao atual.'}, status=400)
 
     try:
         with transaction.atomic():
@@ -4029,10 +4012,10 @@ def alterar_indice_reajuste(request, pk):
                         inter.valor_atual = (inter.valor_atual / fator_antigo).quantize(Decimal('0.01'))
                     inter.save(update_fields=['valor_atual'])
 
-                # Atualiza o registro e reaplicar
-                reajuste.indice_tipo = novo_indice
-                reajuste.percentual_bruto = novo_percentual_bruto
+                # Atualiza só o percentual (índice preservado) e reaplica
                 reajuste.percentual = novo_percentual
+                reajuste.percentual_bruto = novo_percentual  # entrada manual: bruto = final
+                reajuste.aplicado_manual = True
                 reajuste.usuario = request.user
                 reajuste.aplicado = False
                 reajuste.save()
@@ -4041,19 +4024,19 @@ def alterar_indice_reajuste(request, pk):
                 if not resultado.get('sucesso'):
                     raise Exception(resultado.get('erro', 'Erro ao reaplicar reajuste.'))
             else:
-                reajuste.indice_tipo = novo_indice
-                reajuste.percentual_bruto = novo_percentual_bruto
                 reajuste.percentual = novo_percentual
+                reajuste.percentual_bruto = novo_percentual
+                reajuste.aplicado_manual = True
                 reajuste.usuario = request.user
                 reajuste.save()
 
     except Exception as e:
-        logger.exception(f"Erro ao alterar índice do reajuste {pk}: {e}")
+        logger.exception(f"Erro ao alterar reajuste {pk}: {e}")
         return JsonResponse({'sucesso': False, 'erro': str(e)}, status=500)
 
     return JsonResponse({
         'sucesso': True,
-        'mensagem': f'Índice alterado para {novo_indice}. Percentual recalculado: {float(novo_percentual):.4f}%.',
+        'mensagem': f'Percentual atualizado para {float(novo_percentual):+.4f}% (índice {reajuste.indice_tipo} preservado).',
         'novo_indice_tipo': reajuste.indice_tipo,
         'novo_percentual_bruto': float(reajuste.percentual_bruto),
         'novo_percentual': float(reajuste.percentual),
