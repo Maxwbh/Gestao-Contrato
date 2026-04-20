@@ -92,6 +92,13 @@
                 </div>
                 {% endif %}
             </div>
+
+            {% if grupos_conta %}
+            <div id="alerta-conflito-cnab" class="alert alert-danger mt-3 mb-0 py-2 d-none" role="alert">
+                <i class="fas fa-exclamation-triangle me-1"></i>
+                <span id="msg-conflito-cnab"></span>
+            </div>
+            {% endif %}
         </div>
     </div>
 
@@ -109,6 +116,7 @@
                     <strong>{{ conta.descricao }}</strong>
                     <span class="text-muted ms-2">— {{ conta.imobiliaria.nome }}</span>
                     <span class="badge bg-secondary ms-2">Banco {{ conta.banco }}</span>
+                    <span class="badge bg-info ms-1">{{ conta.get_layout_cnab_display }}</span>
                 </div>
                 <div class="d-flex align-items-center gap-3">
                     <span class="badge bg-primary">{{ parcelas|length }} boleto(s)</span>
@@ -139,7 +147,10 @@
                             <tr>
                                 <td>
                                     <input type="checkbox" class="form-check-input parcela-check grupo-{{ conta.pk }}"
-                                           name="parcelas" value="{{ parcela.pk }}" onchange="atualizarContador()">
+                                           name="parcelas" value="{{ parcela.pk }}"
+                                           data-layout="{{ conta.layout_cnab }}"
+                                           data-banco="{{ conta.get_banco_display }}"
+                                           onchange="atualizarContador()">
                                 </td>
                                 <td><code>{{ parcela.nosso_numero }}</code></td>
                                 <td>
@@ -213,10 +224,41 @@ function toggleGrupo(grupoId, source) {
 }
 
 function atualizarContador() {
-    const total = document.querySelectorAll('.parcela-check:checked').length;
+    const marcadas = document.querySelectorAll('.parcela-check:checked');
+    const total = marcadas.length;
     document.getElementById('contador-selecionados').textContent = total + ' selecionados';
-    const habilitado = total > 0;
-    document.getElementById('btn-gerar').disabled = !habilitado;
+
+    // Detectar conflito de layout CNAB entre bancos selecionados
+    const bancosPorLayout = {};  // { 'CNAB_240': Set('104 - Caixa', ...), ... }
+    marcadas.forEach(cb => {
+        const layout = cb.dataset.layout;
+        const banco = cb.dataset.banco;
+        if (!bancosPorLayout[layout]) bancosPorLayout[layout] = new Set();
+        bancosPorLayout[layout].add(banco);
+    });
+
+    const layouts = Object.keys(bancosPorLayout);
+    const alerta = document.getElementById('alerta-conflito-cnab');
+    const msgEl = document.getElementById('msg-conflito-cnab');
+    const conflito = layouts.length > 1;
+
+    if (alerta && msgEl) {
+        if (conflito) {
+            const partes = layouts.map(l => {
+                const bancos = Array.from(bancosPorLayout[l]).join(', ');
+                const label = l.replace('_', ' ');
+                return `<strong>${bancos}</strong> (${label})`;
+            });
+            msgEl.innerHTML =
+                `${partes.join(' e ')} não usam o mesmo padrão de CNAB. ` +
+                `Gere os CNAB's separadamente.`;
+            alerta.classList.remove('d-none');
+        } else {
+            alerta.classList.add('d-none');
+        }
+    }
+
+    document.getElementById('btn-gerar').disabled = !(total > 0 && !conflito);
 
     // Atualizar estado dos checkboxes de grupo
     document.querySelectorAll('.check-grupo').forEach(grupoCb => {
