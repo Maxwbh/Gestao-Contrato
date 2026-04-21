@@ -788,12 +788,12 @@ def contabilidade_configuracoes(request, pk):
     ).select_related('usuario', 'imobiliaria').order_by('usuario__username')
 
     # Estatísticas rápidas
-    from contratos.models import Contrato
+    from contratos.models import Contrato, StatusContrato
     total_contratos = Contrato.objects.filter(
         imobiliaria__in=imobiliarias
     ).count()
     total_ativos = Contrato.objects.filter(
-        imobiliaria__in=imobiliarias, status='ATIVO'
+        imobiliaria__in=imobiliarias, status=StatusContrato.ATIVO
     ).count()
 
     context = {

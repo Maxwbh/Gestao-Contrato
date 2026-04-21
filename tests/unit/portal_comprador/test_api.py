@@ -13,7 +13,7 @@ from decimal import Decimal
 from datetime import date, timedelta
 
 from portal_comprador.models import AcessoComprador
-from contratos.models import Contrato
+from contratos.models import Contrato, StatusContrato
 from tests.fixtures.factories import (
     UserFactory,
     CompradorFactory,
@@ -81,7 +81,7 @@ class TestApiParcelasContrato:
             valor_entrada=Decimal('10000.00'),
             numero_parcelas=12,
             dia_vencimento=5,
-            status='ATIVO',
+            status=StatusContrato.ATIVO,
         )
         response = client.get(f'/portal/api/contratos/{contrato.id}/parcelas/')
 
