@@ -413,6 +413,9 @@ class CNABService:
         elif codigo_banco == '237':
             # Bradesco: codigo_empresa obrigatório
             dados_empresa['codigo_empresa'] = conta_bancaria.convenio or ''
+        elif codigo_banco == '756':
+            # Sicoob: sequencial_remessa precisa ser string de 7 dígitos
+            dados_empresa['sequencial_remessa'] = str(numero_remessa).zfill(7)[-7:]
 
         # Pagamentos com campos corretos do Brcobranca::Remessa::Pagamento
         pagamentos = []
