@@ -28,7 +28,7 @@ from datetime import timedelta
 import time
 import logging
 
-from contratos.models import Contrato
+from contratos.models import Contrato, StatusContrato
 from core.permissions import portal_rate_limit
 from financeiro.models import Parcela, StatusBoleto
 
@@ -230,7 +230,7 @@ def dashboard(request):
     # Contratos do comprador
     contratos = Contrato.objects.filter(
         comprador=comprador,
-        status='ATIVO'
+        status=StatusContrato.ATIVO
     ).select_related('imovel', 'imobiliaria')
 
     # Estatísticas gerais
