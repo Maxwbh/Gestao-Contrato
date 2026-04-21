@@ -160,21 +160,14 @@ class TestParcelasContrato:
         assert response.status_code in (302, 403)
 
     def test_exibe_parcelas(self, client_logado, contrato):
-        """View de parcelas do contrato — pode não ter template se não implementada"""
         url = reverse('contratos:parcelas', kwargs={'pk': contrato.pk})
-        try:
-            response = client_logado.get(url)
-            assert response.status_code in (200, 302)
-        except Exception:
-            pytest.skip('Template de parcelas não implementado')
+        response = client_logado.get(url)
+        assert response.status_code in (200, 302)
 
     def test_contrato_inexistente_retorna_404(self, client_logado):
         url = reverse('contratos:parcelas', kwargs={'pk': 999999})
-        try:
-            response = client_logado.get(url)
-            assert response.status_code == 404
-        except Exception:
-            pytest.skip('Template de parcelas não implementado')
+        response = client_logado.get(url)
+        assert response.status_code == 404
 
 
 @pytest.mark.django_db
