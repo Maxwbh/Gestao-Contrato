@@ -14,6 +14,7 @@ Desenvolvedor: Maxwell da Silva Oliveira
 Email: maxwbh@gmail.com
 Empresa: M&S do Brasil LTDA
 """
+import io
 import time
 import logging
 import requests
@@ -246,7 +247,8 @@ class CNABService:
         self,
         parcelas: List,
         conta_bancaria,
-        layout: str = 'CNAB_240'
+        layout: str = 'CNAB_240',
+        arquivo_para_atualizar=None,
     ) -> Dict:
         """
         Gera arquivo de remessa CNAB para um conjunto de parcelas.
@@ -314,11 +316,14 @@ class CNABService:
                 'erro': 'Nenhuma parcela valida para remessa'
             }
 
-        # Obter proximo numero de remessa
-        ultimo = ArquivoRemessa.objects.filter(
-            conta_bancaria=conta_bancaria
-        ).order_by('-numero_remessa').first()
-        numero_remessa = (ultimo.numero_remessa + 1) if ultimo else 1
+        # Número de remessa: preservar o existente ao atualizar, ou incrementar
+        if arquivo_para_atualizar:
+            numero_remessa = arquivo_para_atualizar.numero_remessa
+        else:
+            ultimo = ArquivoRemessa.objects.filter(
+                conta_bancaria=conta_bancaria
+            ).order_by('-numero_remessa').first()
+            numero_remessa = (ultimo.numero_remessa + 1) if ultimo else 1
 
         # Montar dados para BRCobranca
         banco = self._get_banco_brcobranca(conta_bancaria.banco)
@@ -435,21 +440,33 @@ class CNABService:
                         data_atual = timezone.now()
                         nome_arquivo = f"CB{data_atual.strftime('%d%m')}{numero_remessa:02d}.REM"
 
-                        arquivo_remessa = ArquivoRemessa.objects.create(
-                            conta_bancaria=conta_bancaria,
-                            numero_remessa=numero_remessa,
-                            layout=layout,
-                            nome_arquivo=nome_arquivo,
-                            quantidade_boletos=len(parcelas_validas),
-                            valor_total=valor_total,
-                        )
-
-                        # Salvar arquivo
-                        arquivo_remessa.arquivo.save(
-                            nome_arquivo,
-                            ContentFile(arquivo_content),
-                            save=True
-                        )
+                        if arquivo_para_atualizar:
+                            from financeiro.models import StatusArquivoRemessa
+                            arquivo_remessa = arquivo_para_atualizar
+                            arquivo_remessa.quantidade_boletos = len(parcelas_validas)
+                            arquivo_remessa.valor_total = valor_total
+                            arquivo_remessa.nome_arquivo = nome_arquivo
+                            arquivo_remessa.status = StatusArquivoRemessa.GERADO
+                            arquivo_remessa.erro_mensagem = ''
+                            arquivo_remessa.save(update_fields=[
+                                'quantidade_boletos', 'valor_total', 'nome_arquivo',
+                                'status', 'erro_mensagem',
+                            ])
+                            arquivo_remessa.arquivo.save(
+                                nome_arquivo, ContentFile(arquivo_content), save=True
+                            )
+                        else:
+                            arquivo_remessa = ArquivoRemessa.objects.create(
+                                conta_bancaria=conta_bancaria,
+                                numero_remessa=numero_remessa,
+                                layout=layout,
+                                nome_arquivo=nome_arquivo,
+                                quantidade_boletos=len(parcelas_validas),
+                                valor_total=valor_total,
+                            )
+                            arquivo_remessa.arquivo.save(
+                                nome_arquivo, ContentFile(arquivo_content), save=True
+                            )
 
                         # Criar itens
                         for parcela in parcelas_validas:
@@ -482,182 +499,48 @@ class CNABService:
                         'erro': 'BRCobranca nao retornou arquivo de remessa'
                     }
             else:
-                # HTTP error (429 persistente, 5xx, etc.) → fallback local
-                logger.warning(
-                    "[Remessa] BRCobranca HTTP %d conta=%s banco=%s — ativando fallback local. "
-                    "Resposta: %s",
-                    response.status_code, descricao_conta, banco, response.text[:200]
+                # HTTP error (429 persistente, 5xx, etc.)
+                erro_body = response.text[:500]
+                logger.error(
+                    "[Remessa] ERRO BRCobranca HTTP %d — conta=%s banco=%s layout=%s\n"
+                    "  → Verifique se a API BRCobranca está rodando e aceitando requisições.\n"
+                    "  → URL: %s\n"
+                    "  → Resposta: %s",
+                    response.status_code, descricao_conta, banco, layout,
+                    f'{self.brcobranca_url}/api/remessa', erro_body,
                 )
-                return self._gerar_remessa_local(
-                    parcelas_validas, conta_bancaria, numero_remessa, layout, valor_total
-                )
+                return {
+                    'sucesso': False,
+                    'erro': (
+                        f'BRCobranca retornou HTTP {response.status_code}. '
+                        'Verifique os logs do servidor e se a API está operacional.'
+                    ),
+                }
 
-        except requests.exceptions.ConnectionError:
-            logger.warning(
-                "[Remessa] BRCobranca indisponivel conta=%s — ativando fallback local",
-                descricao_conta
-            )
-            return self._gerar_remessa_local(
-                parcelas_validas, conta_bancaria, numero_remessa, layout, valor_total
-            )
-        except Exception as e:
-            logger.exception(
-                "[Remessa] Erro inesperado conta=%s banco=%s: %s",
-                descricao_conta, banco, e
+        except requests.exceptions.ConnectionError as e:
+            logger.error(
+                "[Remessa] ERRO DE CONEXÃO com BRCobranca — conta=%s banco=%s\n"
+                "  → A API não está acessível em: %s\n"
+                "  → Confirme que o container/serviço BRCobranca está rodando.\n"
+                "  → Detalhe: %s",
+                descricao_conta, banco, self.brcobranca_url, e,
             )
             return {
                 'sucesso': False,
-                'erro': str(e)
+                'erro': (
+                    'Não foi possível conectar à API BRCobranca. '
+                    'Verifique se o serviço está ativo e acessível.'
+                ),
             }
-
-    def _gerar_remessa_local(
-        self,
-        parcelas: List,
-        conta_bancaria,
-        numero_remessa: int,
-        layout: str,
-        valor_total: Decimal
-    ) -> Dict:
-        """
-        Gera arquivo de remessa localmente (fallback quando BRCobranca nao disponivel).
-        Gera formato CNAB 400 simplificado.
-        """
-        from financeiro.models import ArquivoRemessa, ItemRemessa
-
-        linhas = []
-        imobiliaria = conta_bancaria.imobiliaria
-
-        # Header do arquivo (registro tipo 0)
-        header = '0'  # Tipo registro
-        header += '1'  # Operacao (remessa)
-        header += 'REMESSA'.ljust(7)
-        header += '01'  # Tipo servico (cobranca)
-        header += 'COBRANCA'.ljust(15)
-        agencia_num, agencia_dv = self._parsear_numero_dv(conta_bancaria.agencia)
-        conta_num, conta_dv = self._parsear_numero_dv(conta_bancaria.conta)
-        header += agencia_num.zfill(4)
-        header += '00'  # Digito agencia
-        header += conta_num.zfill(8)
-        header += conta_dv.ljust(1)
-        header += ''.ljust(6)  # Brancos
-        header += (imobiliaria.razao_social or imobiliaria.nome)[:30].ljust(30)
-        header += conta_bancaria.banco.zfill(3)
-        header += conta_bancaria.get_banco_display()[:15].ljust(15)
-        header += timezone.now().strftime('%d%m%y')
-        header += ''.ljust(8)  # Brancos
-        header += ''.ljust(2)  # Identificacao sistema
-        header += str(numero_remessa).zfill(7)
-        header += ''.ljust(277)  # Brancos ate 394
-        header += '000001'  # Sequencial
-        linhas.append(header[:400])
-
-        # Registros de boletos (tipo 1)
-        sequencial = 2
-        for parcela in parcelas:
-            contrato = parcela.contrato
-            comprador = contrato.comprador
-
-            detalhe = '1'  # Tipo registro
-            # Tipo inscricao cedente
-            detalhe += '02' if len(self._formatar_cpf_cnpj(imobiliaria.cnpj)) > 11 else '01'
-            detalhe += self._formatar_cpf_cnpj(imobiliaria.cnpj).zfill(14)
-            detalhe += agencia_num.zfill(4)
-            detalhe += '00'  # Digito agencia
-            detalhe += conta_num.zfill(8)
-            detalhe += conta_dv.ljust(1)
-            detalhe += ''.ljust(6)  # Brancos
-            detalhe += (parcela.numero_documento or '')[:25].ljust(25)
-            detalhe += (parcela.nosso_numero or '').zfill(20)
-            detalhe += ''.ljust(25)  # Brancos
-            detalhe += '0'  # Codigo mora
-            detalhe += '01'  # Codigo carteira
-            detalhe += '01'  # Comando (entrada)
-            detalhe += (parcela.numero_documento or '')[:10].ljust(10)
-            detalhe += parcela.data_vencimento.strftime('%d%m%y')
-            valor_str = str(int((parcela.valor_boleto or parcela.valor_atual) * 100)).zfill(13)
-            detalhe += valor_str
-            detalhe += conta_bancaria.banco.zfill(3)
-            detalhe += '00000'  # Agencia cobradora
-            detalhe += '01'  # Especie titulo
-            detalhe += 'N'  # Aceite
-            data_emissao = parcela.data_geracao_boleto or timezone.now()
-            detalhe += data_emissao.strftime('%d%m%y')
-            detalhe += '00'  # Instrucao 1
-            detalhe += '00'  # Instrucao 2
-            detalhe += '0000000000000'  # Juros
-            detalhe += '000000'  # Data desconto
-            detalhe += '0000000000000'  # Valor desconto
-            detalhe += '0000000000000'  # Valor IOF
-            detalhe += '0000000000000'  # Valor abatimento
-            # Tipo inscricao sacado
-            cpf_cnpj_sacado = self._formatar_cpf_cnpj(comprador.cnpj or comprador.cpf)
-            detalhe += '02' if len(cpf_cnpj_sacado) > 11 else '01'
-            detalhe += cpf_cnpj_sacado.zfill(14)
-            detalhe += comprador.nome[:40].ljust(40)
-            endereco = f"{comprador.logradouro or ''} {comprador.numero or ''}"
-            detalhe += endereco[:40].ljust(40)
-            detalhe += ''.ljust(12)  # Mensagem
-            detalhe += self._formatar_cpf_cnpj(comprador.cep or '').zfill(8)
-            detalhe += (comprador.cidade or '')[:15].ljust(15)
-            detalhe += (comprador.estado or '')[:2].ljust(2)
-            detalhe += ''.ljust(40)  # Sacador avalista
-            detalhe += str(sequencial).zfill(6)
-            linhas.append(detalhe[:400])
-            sequencial += 1
-
-        # Trailer (registro tipo 9)
-        trailer = '9'
-        trailer += ''.ljust(393)
-        trailer += str(sequencial).zfill(6)
-        linhas.append(trailer[:400])
-
-        # Criar arquivo
-        conteudo = '\r\n'.join(linhas)
-
-        with transaction.atomic():
-            data_atual = timezone.now()
-            nome_arquivo = f"CB{data_atual.strftime('%d%m')}{numero_remessa:02d}.REM"
-
-            arquivo_remessa = ArquivoRemessa.objects.create(
-                conta_bancaria=conta_bancaria,
-                numero_remessa=numero_remessa,
-                layout=layout,
-                nome_arquivo=nome_arquivo,
-                quantidade_boletos=len(parcelas),
-                valor_total=valor_total,
-                observacoes='Gerado localmente (BRCobranca indisponivel)'
+        except Exception as e:
+            logger.exception(
+                "[Remessa] ERRO INESPERADO — conta=%s banco=%s: %s",
+                descricao_conta, banco, e,
             )
-
-            arquivo_remessa.arquivo.save(
-                nome_arquivo,
-                ContentFile(conteudo.encode('latin-1')),
-                save=True
-            )
-
-            for parcela in parcelas:
-                ItemRemessa.objects.create(
-                    arquivo_remessa=arquivo_remessa,
-                    parcela=parcela,
-                    nosso_numero=parcela.nosso_numero,
-                    valor=parcela.valor_boleto or parcela.valor_atual,
-                    data_vencimento=parcela.data_vencimento,
-                )
-
-        descricao_conta = getattr(conta_bancaria, 'descricao', None) or str(conta_bancaria)
-        logger.info(
-            "[Remessa] #%d gerada localmente (fallback): conta=%s boletos=%d valor=R$%.2f",
-            numero_remessa, descricao_conta, len(parcelas), float(valor_total)
-        )
-
-        return {
-            'sucesso': True,
-            'arquivo_remessa': arquivo_remessa,
-            'numero_remessa': numero_remessa,
-            'quantidade_boletos': len(parcelas),
-            'valor_total': valor_total,
-            'arquivo_path': arquivo_remessa.arquivo.path,
-            'aviso': 'Arquivo gerado localmente (formato simplificado)'
-        }
+            return {
+                'sucesso': False,
+                'erro': str(e),
+            }
 
     def regenerar_remessa(self, arquivo_remessa) -> Dict:
         """
@@ -674,309 +557,208 @@ class CNABService:
         itens = arquivo_remessa.itens.select_related('parcela').all()
         parcelas = [item.parcela for item in itens]
 
-        # Excluir itens antigos
+        # Excluir itens antigos (serão recriados pelo gerar_remessa)
         itens.delete()
 
-        # Regenerar
+        # Regenerar atualizando o mesmo registro (sem criar novo ArquivoRemessa)
         return self.gerar_remessa(
             parcelas,
             arquivo_remessa.conta_bancaria,
-            arquivo_remessa.layout
+            arquivo_remessa.layout,
+            arquivo_para_atualizar=arquivo_remessa,
         )
 
-    def processar_retorno(
-        self,
-        arquivo_retorno,
-        user=None
-    ) -> Dict:
+    def processar_retorno(self, arquivo_retorno, user=None) -> Dict:
         """
-        Processa um arquivo de retorno CNAB.
-
-        Args:
-            arquivo_retorno: ArquivoRetorno com o arquivo carregado
-            user: Usuario que esta processando
-
-        Returns:
-            dict: Resultado do processamento
+        Processa um arquivo de retorno CNAB via API BRCobrança (POST /api/retorno).
+        Não existe parsing local — todo processamento é delegado à API.
         """
-        from financeiro.models import StatusArquivoRetorno
+        from financeiro.models import ItemRetorno, StatusArquivoRetorno
 
         try:
-            # Ler arquivo
             arquivo_retorno.arquivo.seek(0)
             conteudo = arquivo_retorno.arquivo.read()
 
-            # Tentar decodificar
+            # Detectar layout pelo comprimento da primeira linha
             try:
-                linhas = conteudo.decode('latin-1').split('\n')
-            except UnicodeDecodeError:
-                linhas = conteudo.decode('utf-8').split('\n')
+                primeira_linha = conteudo.decode('latin-1').split('\n')[0].strip()
+            except Exception:
+                primeira_linha = conteudo.split(b'\n')[0].decode('latin-1', errors='replace').strip()
 
-            # Detectar layout
-            if len(linhas[0].strip()) == 240:
-                return self._processar_retorno_cnab240(
-                    arquivo_retorno, linhas, user
+            layout_detectado = 'CNAB_240' if len(primeira_linha) == 240 else 'CNAB_400'
+            formato_api = 'cnab240' if layout_detectado == 'CNAB_240' else 'cnab400'
+
+            conta = arquivo_retorno.conta_bancaria
+            banco = self._get_banco_brcobranca(getattr(conta, 'banco', '') or '')
+            descricao_conta = getattr(conta, 'descricao', None) or str(conta)
+
+            logger.info(
+                "[Retorno] Enviando para BRCobrança — conta=%s banco=%s layout=%s bytes=%d",
+                descricao_conta, banco, formato_api, len(conteudo)
+            )
+
+            try:
+                response = requests.post(
+                    f'{self.brcobranca_url}/api/retorno',
+                    files={'file': ('retorno.ret', io.BytesIO(conteudo), 'application/octet-stream')},
+                    data={'banco': banco, 'formato': formato_api},
+                    timeout=60,
                 )
-            else:
-                return self._processar_retorno_cnab400(
-                    arquivo_retorno, linhas, user
+            except requests.exceptions.ConnectionError as e:
+                logger.error(
+                    "[Retorno] ERRO DE CONEXÃO com BRCobrança — conta=%s banco=%s\n"
+                    "  → A API não está acessível em: %s\n"
+                    "  → Confirme que o container/serviço BRCobrança está rodando.\n"
+                    "  → Detalhe: %s",
+                    descricao_conta, banco, self.brcobranca_url, e,
                 )
+                arquivo_retorno.status = StatusArquivoRetorno.ERRO
+                arquivo_retorno.erro_mensagem = (
+                    'Não foi possível conectar à API BRCobrança. '
+                    'Verifique se o serviço está ativo.'
+                )
+                arquivo_retorno.save()
+                return {'sucesso': False, 'erro': arquivo_retorno.erro_mensagem}
+
+            if response.status_code != 200:
+                erro_body = response.text[:500]
+                logger.error(
+                    "[Retorno] ERRO BRCobrança HTTP %d — conta=%s banco=%s layout=%s\n"
+                    "  → URL: %s\n"
+                    "  → Resposta: %s",
+                    response.status_code, descricao_conta, banco, formato_api,
+                    f'{self.brcobranca_url}/api/retorno', erro_body,
+                )
+                arquivo_retorno.status = StatusArquivoRetorno.ERRO
+                arquivo_retorno.erro_mensagem = (
+                    f'BRCobrança retornou HTTP {response.status_code}. '
+                    'Verifique os logs do servidor.'
+                )
+                arquivo_retorno.save()
+                return {'sucesso': False, 'erro': arquivo_retorno.erro_mensagem}
+
+            try:
+                dados = response.json()
+            except Exception:
+                logger.error(
+                    "[Retorno] BRCobrança retornou resposta não-JSON: %s",
+                    response.text[:200]
+                )
+                arquivo_retorno.status = StatusArquivoRetorno.ERRO
+                arquivo_retorno.erro_mensagem = 'API BRCobrança retornou resposta inválida.'
+                arquivo_retorno.save()
+                return {'sucesso': False, 'erro': arquivo_retorno.erro_mensagem}
+
+            retornos = dados.get('retornos') or []
+            arquivo_retorno.layout = layout_detectado
+
+            total_registros = 0
+            registros_processados = 0
+            registros_erro = 0
+            valor_total_pago = Decimal('0.00')
+
+            with transaction.atomic():
+                for reg in retornos:
+                    total_registros += 1
+                    try:
+                        nosso_numero = str(reg.get('nosso_numero') or '').strip()
+                        codigo_ocorrencia = str(reg.get('codigo_ocorrencia') or '')
+
+                        def _to_dec(v):
+                            try:
+                                return Decimal(str(v)) if v is not None else Decimal('0.00')
+                            except Exception:
+                                return Decimal('0.00')
+
+                        valor_titulo = _to_dec(reg.get('valor_titulo'))
+                        valor_pago = _to_dec(reg.get('valor_pago'))
+
+                        def _parse_date(s):
+                            if not s:
+                                return None
+                            try:
+                                parts = str(s).split('-')
+                                if len(parts) == 3:
+                                    return datetime(int(parts[0]), int(parts[1]), int(parts[2])).date()
+                            except Exception:
+                                pass
+                            return None
+
+                        data_ocorrencia = _parse_date(reg.get('data_ocorrencia'))
+                        data_credito = _parse_date(reg.get('data_credito'))
+
+                        tipo_ocorrencia = 'OUTROS'
+                        descricao = ''
+                        if codigo_ocorrencia in OCORRENCIAS_CNAB:
+                            tipo_ocorrencia, descricao = OCORRENCIAS_CNAB[codigo_ocorrencia]
+
+                        parcela = self._buscar_parcela_por_nosso_numero(nosso_numero, conta)
+
+                        item, criado = ItemRetorno.objects.get_or_create(
+                            arquivo_retorno=arquivo_retorno,
+                            nosso_numero=nosso_numero,
+                            defaults=dict(
+                                parcela=parcela,
+                                codigo_ocorrencia=codigo_ocorrencia,
+                                descricao_ocorrencia=descricao,
+                                tipo_ocorrencia=tipo_ocorrencia,
+                                valor_titulo=valor_titulo,
+                                valor_pago=valor_pago if valor_pago > 0 else None,
+                                data_ocorrencia=data_ocorrencia,
+                                data_credito=data_credito,
+                            ),
+                        )
+                        if not criado:
+                            registros_processados += (1 if item.processado else 0)
+                            continue
+
+                        if item.processar_baixa():
+                            registros_processados += 1
+                            if tipo_ocorrencia == 'LIQUIDACAO':
+                                valor_total_pago += valor_pago or valor_titulo
+                        else:
+                            if item.erro_processamento:
+                                registros_erro += 1
+
+                    except Exception as e:
+                        registros_erro += 1
+                        logger.exception("[Retorno] Erro ao processar registro: %s", e)
+
+                arquivo_retorno.total_registros = total_registros
+                arquivo_retorno.registros_processados = registros_processados
+                arquivo_retorno.registros_erro = registros_erro
+                arquivo_retorno.valor_total_pago = valor_total_pago
+                arquivo_retorno.data_processamento = timezone.now()
+                arquivo_retorno.processado_por = user
+
+                if registros_erro == 0:
+                    arquivo_retorno.status = StatusArquivoRetorno.PROCESSADO
+                elif registros_processados > 0:
+                    arquivo_retorno.status = StatusArquivoRetorno.PROCESSADO_PARCIAL
+                else:
+                    arquivo_retorno.status = StatusArquivoRetorno.ERRO
+
+                arquivo_retorno.save()
+
+            logger.info(
+                "[Retorno] %d/%d registros processados, R$ %.2f pagos",
+                registros_processados, total_registros, float(valor_total_pago)
+            )
+
+            return {
+                'sucesso': True,
+                'total_registros': total_registros,
+                'registros_processados': registros_processados,
+                'registros_erro': registros_erro,
+                'valor_total_pago': valor_total_pago,
+            }
 
         except Exception as e:
             arquivo_retorno.status = StatusArquivoRetorno.ERRO
             arquivo_retorno.erro_mensagem = str(e)
             arquivo_retorno.save()
-            logger.exception("Erro ao processar retorno: %s", e)
-            return {
-                'sucesso': False,
-                'erro': str(e)
-            }
-
-    def _processar_retorno_cnab400(
-        self,
-        arquivo_retorno,
-        linhas: List[str],
-        user
-    ) -> Dict:
-        """Processa arquivo de retorno CNAB 400"""
-        from financeiro.models import (
-            ItemRetorno, StatusArquivoRetorno
-        )
-
-        arquivo_retorno.layout = 'CNAB_400'
-        total_registros = 0
-        registros_processados = 0
-        registros_erro = 0
-        valor_total_pago = Decimal('0.00')
-
-        with transaction.atomic():
-            for linha in linhas:
-                linha = linha.strip()
-                if not linha:
-                    continue
-
-                # Registro de detalhe (tipo 1)
-                if linha[0] == '1':
-                    total_registros += 1
-
-                    try:
-                        # Extrair dados
-                        nosso_numero = linha[62:82].strip()
-                        codigo_ocorrencia = linha[108:110]
-                        valor_titulo = Decimal(linha[152:165]) / 100
-                        valor_pago = Decimal(linha[253:266]) / 100
-
-                        # Data da ocorrencia
-                        data_str = linha[110:116]
-                        if data_str.strip():
-                            data_ocorrencia = datetime.strptime(data_str, '%d%m%y').date()
-                        else:
-                            data_ocorrencia = None
-
-                        # Data de credito
-                        data_credito_str = linha[175:181]
-                        if data_credito_str.strip():
-                            data_credito = datetime.strptime(data_credito_str, '%d%m%y').date()
-                        else:
-                            data_credito = None
-
-                        # Identificar tipo de ocorrencia
-                        tipo_ocorrencia = 'OUTROS'
-                        descricao = ''
-                        if codigo_ocorrencia in OCORRENCIAS_CNAB:
-                            tipo_ocorrencia, descricao = OCORRENCIAS_CNAB[codigo_ocorrencia]
-
-                        # Buscar parcela — exact match + fallback zero-pad, prioriza conta
-                        conta = arquivo_retorno.conta_bancaria
-                        parcela = self._buscar_parcela_por_nosso_numero(nosso_numero, conta)
-
-                        # Idempotência: não duplicar ItemRetorno para mesmo nosso_numero
-                        item, criado = ItemRetorno.objects.get_or_create(
-                            arquivo_retorno=arquivo_retorno,
-                            nosso_numero=nosso_numero,
-                            defaults=dict(
-                                parcela=parcela,
-                                codigo_ocorrencia=codigo_ocorrencia,
-                                descricao_ocorrencia=descricao,
-                                tipo_ocorrencia=tipo_ocorrencia,
-                                valor_titulo=valor_titulo,
-                                valor_pago=valor_pago if valor_pago > 0 else None,
-                                data_ocorrencia=data_ocorrencia,
-                                data_credito=data_credito,
-                            ),
-                        )
-                        if not criado:
-                            registros_processados += (1 if item.processado else 0)
-                            continue
-
-                        # Processar baixa
-                        if item.processar_baixa():
-                            registros_processados += 1
-                            if tipo_ocorrencia == 'LIQUIDACAO':
-                                valor_total_pago += valor_pago or valor_titulo
-                        else:
-                            if item.erro_processamento:
-                                registros_erro += 1
-
-                    except Exception as e:
-                        registros_erro += 1
-                        logger.exception("Erro ao processar linha de retorno: %s", e)
-
-            # Atualizar arquivo
-            arquivo_retorno.total_registros = total_registros
-            arquivo_retorno.registros_processados = registros_processados
-            arquivo_retorno.registros_erro = registros_erro
-            arquivo_retorno.valor_total_pago = valor_total_pago
-            arquivo_retorno.data_processamento = timezone.now()
-            arquivo_retorno.processado_por = user
-
-            if registros_erro == 0:
-                arquivo_retorno.status = StatusArquivoRetorno.PROCESSADO
-            elif registros_processados > 0:
-                arquivo_retorno.status = StatusArquivoRetorno.PROCESSADO_PARCIAL
-            else:
-                arquivo_retorno.status = StatusArquivoRetorno.ERRO
-
-            arquivo_retorno.save()
-
-        logger.info(
-            f"Retorno processado: {registros_processados}/{total_registros} registros, "
-            f"R$ {valor_total_pago} pagos"
-        )
-
-        return {
-            'sucesso': True,
-            'total_registros': total_registros,
-            'registros_processados': registros_processados,
-            'registros_erro': registros_erro,
-            'valor_total_pago': valor_total_pago,
-        }
-
-    def _processar_retorno_cnab240(
-        self,
-        arquivo_retorno,
-        linhas: List[str],
-        user
-    ) -> Dict:
-        """Processa arquivo de retorno CNAB 240"""
-        from financeiro.models import (
-            ItemRetorno, StatusArquivoRetorno
-        )
-
-        arquivo_retorno.layout = 'CNAB_240'
-        total_registros = 0
-        registros_processados = 0
-        registros_erro = 0
-        valor_total_pago = Decimal('0.00')
-
-        with transaction.atomic():
-            for linha in linhas:
-                linha = linha.strip()
-                if len(linha) < 240:
-                    continue
-
-                tipo_registro = linha[7]
-
-                # Registro de detalhe segmento T (tipo 3, segmento T)
-                if tipo_registro == '3' and linha[13] == 'T':
-                    total_registros += 1
-
-                    try:
-                        nosso_numero = linha[37:57].strip()
-                        codigo_ocorrencia = linha[15:17]
-                        valor_titulo = Decimal(linha[81:96]) / 100
-
-                        # Buscar segmento U correspondente (proxima linha)
-                        idx = linhas.index(linha)
-                        if idx + 1 < len(linhas):
-                            linha_u = linhas[idx + 1].strip()
-                            if len(linha_u) >= 240 and linha_u[13] == 'U':
-                                valor_pago = Decimal(linha_u[77:92]) / 100
-                                data_str = linha_u[137:145]
-                                if data_str.strip() and data_str != '00000000':
-                                    data_ocorrencia = datetime.strptime(data_str, '%d%m%Y').date()
-                                else:
-                                    data_ocorrencia = None
-                                data_credito_str = linha_u[145:153]
-                                if data_credito_str.strip() and data_credito_str != '00000000':
-                                    data_credito = datetime.strptime(data_credito_str, '%d%m%Y').date()
-                                else:
-                                    data_credito = None
-                            else:
-                                valor_pago = Decimal('0.00')
-                                data_ocorrencia = None
-                                data_credito = None
-                        else:
-                            valor_pago = Decimal('0.00')
-                            data_ocorrencia = None
-                            data_credito = None
-
-                        # Identificar tipo de ocorrencia
-                        tipo_ocorrencia = 'OUTROS'
-                        descricao = ''
-                        if codigo_ocorrencia in OCORRENCIAS_CNAB:
-                            tipo_ocorrencia, descricao = OCORRENCIAS_CNAB[codigo_ocorrencia]
-
-                        # Buscar parcela — exact match + fallback zero-pad, prioriza conta
-                        conta = arquivo_retorno.conta_bancaria
-                        parcela = self._buscar_parcela_por_nosso_numero(nosso_numero, conta)
-
-                        # Idempotência: não duplicar ItemRetorno para mesmo nosso_numero
-                        item, criado = ItemRetorno.objects.get_or_create(
-                            arquivo_retorno=arquivo_retorno,
-                            nosso_numero=nosso_numero,
-                            defaults=dict(
-                                parcela=parcela,
-                                codigo_ocorrencia=codigo_ocorrencia,
-                                descricao_ocorrencia=descricao,
-                                tipo_ocorrencia=tipo_ocorrencia,
-                                valor_titulo=valor_titulo,
-                                valor_pago=valor_pago if valor_pago > 0 else None,
-                                data_ocorrencia=data_ocorrencia,
-                                data_credito=data_credito,
-                            ),
-                        )
-                        if not criado:
-                            registros_processados += (1 if item.processado else 0)
-                            continue
-
-                        # Processar baixa
-                        if item.processar_baixa():
-                            registros_processados += 1
-                            if tipo_ocorrencia == 'LIQUIDACAO':
-                                valor_total_pago += valor_pago or valor_titulo
-                        else:
-                            if item.erro_processamento:
-                                registros_erro += 1
-
-                    except Exception as e:
-                        registros_erro += 1
-                        logger.exception("Erro ao processar linha de retorno CNAB240: %s", e)
-
-            # Atualizar arquivo
-            arquivo_retorno.total_registros = total_registros
-            arquivo_retorno.registros_processados = registros_processados
-            arquivo_retorno.registros_erro = registros_erro
-            arquivo_retorno.valor_total_pago = valor_total_pago
-            arquivo_retorno.data_processamento = timezone.now()
-            arquivo_retorno.processado_por = user
-
-            if registros_erro == 0:
-                arquivo_retorno.status = StatusArquivoRetorno.PROCESSADO
-            elif registros_processados > 0:
-                arquivo_retorno.status = StatusArquivoRetorno.PROCESSADO_PARCIAL
-            else:
-                arquivo_retorno.status = StatusArquivoRetorno.ERRO
-
-            arquivo_retorno.save()
-
-        return {
-            'sucesso': True,
-            'total_registros': total_registros,
-            'registros_processados': registros_processados,
-            'registros_erro': registros_erro,
-            'valor_total_pago': valor_total_pago,
-        }
+            logger.exception("[Retorno] Erro inesperado: %s", e)
+            return {'sucesso': False, 'erro': str(e)}
 
     def obter_boletos_sem_remessa(
         self,

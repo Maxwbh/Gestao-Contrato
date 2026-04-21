@@ -333,6 +333,30 @@ class TemplateNotificacao(TimeStampedModel):
     %%DATAATUAL%% - Data atual
     %%HORAATUAL%% - Hora atual
     %%LINKBOLETO%% - Link para download do boleto
+
+    RELATÓRIO SEMANAL (RELATORIO_SEMANAL):
+    %%NOMEIMOBILIARIA%% - Nome da imobiliária
+    %%PERIODORELATORIO%% - Período (ex: 14/04/2025 a 20/04/2025)
+    %%QTDRECEBIMENTOS%% - Quantidade de pagamentos recebidos na semana
+    %%VALORRECEBIMENTOS%% - Valor total recebido na semana (R$)
+    %%QTDINADIMPLENTES%% - Quantidade de parcelas vencidas em aberto
+    %%VALORINADIMPLENTES%% - Valor total inadimplente (R$)
+    %%QTDAVENCER%% - Quantidade de parcelas a vencer nos próximos 7 dias
+    %%VALORAVENCER%% - Valor a vencer nos próximos 7 dias (R$)
+    %%DATAATUAL%% - Data de geração do relatório
+
+    RELATÓRIO MENSAL (RELATORIO_MENSAL):
+    %%NOMECONTABILIDADE%% - Nome da contabilidade destinatária
+    %%MESREFERENCIA%% - Mês de referência (ex: março/2025)
+    %%PERIODORELATORIO%% - Período completo (ex: 01/03/2025 a 31/03/2025)
+    %%QTDCONTRATOSATIVOS%% - Total de contratos ativos (todas as imobiliárias)
+    %%QTDRECEBIMENTOS%% - Total de recebimentos no mês
+    %%VALORRECEBIMENTOS%% - Valor total recebido no mês (R$)
+    %%QTDINADIMPLENTES%% - Total de parcelas vencidas em aberto
+    %%VALORINADIMPLENTES%% - Valor total inadimplente (R$)
+    %%QTDREAJUSTES%% - Reajustes aplicados no mês
+    %%TABELAIMOBILIARIAS%% - Tabela HTML com resumo por imobiliária
+    %%DATAATUAL%% - Data de geração do relatório
     """
 
     nome = models.CharField(max_length=100, verbose_name='Nome do Template')

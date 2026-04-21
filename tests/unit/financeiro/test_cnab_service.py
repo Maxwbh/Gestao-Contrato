@@ -315,11 +315,10 @@ class TestCNABServiceIntegracao(TestCase):
         self.assertEqual(resultado['quantidade_boletos'], len(parcelas))
 
     @patch('requests.post')
-    def test_gerar_remessa_erro_api(self, mock_post):
-        """Testa geração de remessa com erro HTTP da API — deve acionar fallback local"""
+    def test_gerar_remessa_erro_api_retorna_falha(self, mock_post):
+        """Testa geração de remessa com erro HTTP da API — deve retornar sucesso=False"""
         from financeiro.models import Parcela, StatusBoleto
 
-        # Mock de erro da API (5xx)
         mock_response = MagicMock()
         mock_response.status_code = 500
         mock_response.text = 'Internal Server Error'
@@ -334,17 +333,15 @@ class TestCNABServiceIntegracao(TestCase):
 
         resultado = service.gerar_remessa(parcelas, self.conta_bancaria)
 
-        # HTTP error aciona fallback local — deve ter sucesso
-        self.assertTrue(resultado['sucesso'])
-        self.assertIn('arquivo_remessa', resultado)
+        self.assertFalse(resultado['sucesso'])
+        self.assertIn('erro', resultado)
 
     @patch('requests.post')
-    def test_gerar_remessa_api_indisponivel_fallback_local(self, mock_post):
-        """Testa fallback para geração local quando API indisponível"""
+    def test_gerar_remessa_api_indisponivel_retorna_falha(self, mock_post):
+        """Testa que ConnectionError com API retorna sucesso=False com mensagem de erro"""
         from financeiro.models import Parcela, StatusBoleto
         import requests
 
-        # Mock de erro de conexão
         mock_post.side_effect = requests.exceptions.ConnectionError()
 
         service = CNABService()
@@ -356,9 +353,8 @@ class TestCNABServiceIntegracao(TestCase):
 
         resultado = service.gerar_remessa(parcelas, self.conta_bancaria)
 
-        self.assertTrue(resultado['sucesso'])
-        self.assertIn('aviso', resultado)
-        self.assertIn('localmente', resultado['aviso'])
+        self.assertFalse(resultado['sucesso'])
+        self.assertIn('erro', resultado)
 
     def test_obter_boletos_sem_remessa(self):
         """Testa obtenção de boletos sem remessa"""
@@ -502,38 +498,49 @@ class TestProcessamentoRetornoCNAB400(TestCase):
         return linha[:400]
 
     def test_processar_retorno_cnab400_liquidacao(self):
-        """Testa processamento de retorno com liquidação CNAB 400"""
+        """Testa processamento de retorno com liquidação CNAB 400 via API BRCobrança"""
         from financeiro.models import ArquivoRetorno, StatusArquivoRetorno
 
-        # Criar arquivo de retorno
         arquivo_retorno = ArquivoRetorno.objects.create(
             conta_bancaria=self.conta_bancaria,
             nome_arquivo='CB0601.RET',
             status=StatusArquivoRetorno.PENDENTE
         )
 
-        # Criar conteúdo do arquivo
         header = '0' + ''.ljust(399)
         detalhe = self._criar_linha_retorno_cnab400(
             nosso_numero=self.parcela.nosso_numero,
-            codigo_ocorrencia='06',  # Liquidação
+            codigo_ocorrencia='06',
             valor_titulo=Decimal('3750.00'),
             valor_pago=Decimal('3750.00')
         )
         trailer = '9' + ''.ljust(399)
-
         conteudo = f"{header}\n{detalhe}\n{trailer}"
 
-        # Salvar arquivo
         arquivo_retorno.arquivo.save(
             'CB0601.RET',
             ContentFile(conteudo.encode('latin-1')),
             save=True
         )
 
-        # Processar
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {
+            'retornos': [
+                {
+                    'nosso_numero': self.parcela.nosso_numero,
+                    'codigo_ocorrencia': '06',
+                    'valor_titulo': '3750.00',
+                    'valor_pago': '3750.00',
+                    'data_ocorrencia': '2026-06-01',
+                    'data_credito': '2026-06-01',
+                }
+            ]
+        }
+
         service = CNABService()
-        resultado = service.processar_retorno(arquivo_retorno)
+        with patch('financeiro.services.cnab_service.requests.post', return_value=mock_response):
+            resultado = service.processar_retorno(arquivo_retorno)
 
         self.assertTrue(resultado['sucesso'])
         self.assertGreater(resultado['total_registros'], 0)

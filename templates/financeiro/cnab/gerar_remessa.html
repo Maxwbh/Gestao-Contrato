@@ -3,6 +3,22 @@
 
 {% block title %}Gerar Arquivo de Remessa{% endblock %}
 
+{% block extra_css %}
+<style>
+  /* Override Materialize: checkboxes nesta página devem ser nativos (Bootstrap) */
+  #form-remessa input[type=checkbox],
+  #form-filtro input[type=checkbox] {
+    opacity: 1 !important;
+    position: static !important;
+    pointer-events: auto !important;
+  }
+  /* Linhas clicáveis */
+  #form-remessa tbody tr { cursor: pointer; }
+  #form-remessa tbody tr:hover { background-color: #f0f7ff; }
+  #form-remessa tbody tr.row-selecionada { background-color: #dbeafe; }
+</style>
+{% endblock %}
+
 {% block content %}
 <div class="container-fluid">
     <div class="d-flex justify-content-between align-items-center mb-4">
@@ -144,14 +160,14 @@
                         </thead>
                         <tbody>
                             {% for parcela in parcelas %}
-                            <tr>
-                                <td>
+                            <tr onclick="toggleLinhaParcela(this)">
+                                <td onclick="event.stopPropagation()">
                                     <input type="checkbox" class="form-check-input parcela-check grupo-{{ conta.pk }}"
                                            name="parcelas" value="{{ parcela.pk }}"
                                            data-layout="{{ conta.layout_cnab }}"
                                            data-banco="{{ conta.get_banco_display }}"
                                            data-banco-cod="{{ conta.banco }}"
-                                           onchange="atualizarContador()">
+                                           onchange="this.closest('tr').classList.toggle('row-selecionada',this.checked);atualizarContador()">
                                 </td>
                                 <td><code>{{ parcela.nosso_numero }}</code></td>
                                 <td>
@@ -209,6 +225,14 @@ const escopo = '{{ escopo }}';
 // Mapa banco_cod → layouts suportados pela BRCobrança (gerado pelo backend)
 const BANCOS_CNAB = {{ bancos_cnab_js|safe }};
 
+function toggleLinhaParcela(tr) {
+    const cb = tr.querySelector('.parcela-check');
+    if (!cb) return;
+    cb.checked = !cb.checked;
+    tr.classList.toggle('row-selecionada', cb.checked);
+    atualizarContador();
+}
+
 function atualizarEscopo() {
     const sel = document.getElementById('sel-escopo').value;
     document.getElementById('campo-imobiliaria').style.display = (sel === 'imobiliaria') ? '' : 'none';
@@ -217,13 +241,21 @@ function atualizarEscopo() {
 }
 
 function toggleTodos(source) {
-    document.querySelectorAll('.parcela-check').forEach(cb => cb.checked = source.checked);
+    document.querySelectorAll('.parcela-check').forEach(cb => {
+        cb.checked = source.checked;
+        const tr = cb.closest('tr');
+        if (tr) tr.classList.toggle('row-selecionada', source.checked);
+    });
     document.querySelectorAll('.check-grupo').forEach(cb => cb.checked = source.checked);
     atualizarContador();
 }
 
 function toggleGrupo(grupoId, source) {
-    document.querySelectorAll(`.grupo-${grupoId}`).forEach(cb => cb.checked = source.checked);
+    document.querySelectorAll(`.grupo-${grupoId}`).forEach(cb => {
+        cb.checked = source.checked;
+        const tr = cb.closest('tr');
+        if (tr) tr.classList.toggle('row-selecionada', source.checked);
+    });
     atualizarContador();
 }
 
