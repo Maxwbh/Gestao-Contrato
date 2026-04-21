@@ -963,6 +963,168 @@ def task_status(request):
 # RELATÓRIOS PERIÓDICOS (P3)
 # =============================================================================
 
+def _fmt_brl(value: float) -> str:
+    """Formata valor monetário em padrão brasileiro: R$ 1.234,56"""
+    return "R$ " + f"{value:,.2f}".replace(',', 'X').replace('.', ',').replace('X', '.')
+
+
+def _enviar_relatorio_semanal(imobiliaria, relatorio: dict) -> None:
+    """
+    Envia o relatório semanal para a imobiliária usando TemplateNotificacao.
+    Fallback para texto simples quando o template não está configurado.
+    """
+    from django.core.mail import send_mail
+    from django.utils import timezone
+    from notificacoes.models import TemplateNotificacao, TipoTemplate
+
+    periodo = relatorio['periodo']
+    rec = relatorio['recebimentos']
+    inad = relatorio['inadimplencia']
+    avc = relatorio['a_vencer_7_dias']
+
+    contexto = {
+        'NOMEIMOBILIARIA': imobiliaria.nome,
+        'PERIODORELATORIO': periodo,
+        'QTDRECEBIMENTOS': str(rec['quantidade']),
+        'VALORRECEBIMENTOS': _fmt_brl(rec['valor']),
+        'QTDINADIMPLENTES': str(inad['quantidade']),
+        'VALORINADIMPLENTES': _fmt_brl(inad['valor']),
+        'QTDAVENCER': str(avc['quantidade']),
+        'VALORAVENCER': _fmt_brl(avc['valor']),
+        'DATAATUAL': timezone.localdate().strftime('%d/%m/%Y'),
+    }
+
+    template = TemplateNotificacao.get_template(TipoTemplate.RELATORIO_SEMANAL, imobiliaria)
+    if template and template.tem_email:
+        assunto, _, corpo_html, _ = template.renderizar(contexto)
+        send_mail(
+            subject=assunto or f'Relatório Semanal — {imobiliaria.nome}',
+            message='',
+            html_message=corpo_html or None,
+            from_email=None,
+            recipient_list=[_destinatario_email_teste(imobiliaria.email)],
+            fail_silently=True,
+        )
+    else:
+        # Fallback texto simples quando template não configurado
+        corpo = (
+            f"Relatório Semanal — {imobiliaria.nome}\n"
+            f"Período: {periodo}\n\n"
+            f"Recebimentos: {rec['quantidade']} ({_fmt_brl(rec['valor'])})\n"
+            f"Inadimplência: {inad['quantidade']} ({_fmt_brl(inad['valor'])})\n"
+            f"A vencer (7d): {avc['quantidade']} ({_fmt_brl(avc['valor'])})\n"
+        )
+        send_mail(
+            subject=f'Relatório Semanal — {imobiliaria.nome}',
+            message=corpo,
+            from_email=None,
+            recipient_list=[_destinatario_email_teste(imobiliaria.email)],
+            fail_silently=True,
+        )
+
+
+def _enviar_relatorio_mensal(contabilidade, dados: dict) -> None:
+    """
+    Envia o relatório mensal consolidado para a contabilidade usando TemplateNotificacao.
+    Fallback para texto simples quando o template não está configurado.
+    """
+    from django.core.mail import send_mail
+    from django.utils import timezone
+    from notificacoes.models import TemplateNotificacao, TipoTemplate
+
+    totais = dados['totais']
+    mes_ref = dados['mes_referencia']
+    imobiliarias = dados['imobiliarias']
+
+    # Monta tabela HTML com dados por imobiliária
+    linhas_tabela = ''.join(
+        f"<tr>"
+        f"<td>{i['nome']}</td>"
+        f"<td style='text-align:center'>{i['contratos_ativos']}</td>"
+        f"<td style='text-align:center'>{i['recebimentos']}</td>"
+        f"<td style='text-align:right'>{_fmt_brl(i['valor_recebido'])}</td>"
+        f"<td style='text-align:center'>{i['inadimplentes']}</td>"
+        f"<td style='text-align:right'>{_fmt_brl(i['valor_inadimplente'])}</td>"
+        f"<td style='text-align:center'>{i['reajustes_aplicados']}</td>"
+        f"</tr>"
+        for i in imobiliarias
+    )
+    tabela_html = (
+        '<table border="1" cellpadding="6" cellspacing="0" '
+        'style="border-collapse:collapse;width:100%;font-size:13px;">'
+        '<thead><tr style="background:#f0f0f0;font-weight:bold;">'
+        '<th>Imobiliária</th><th>Contratos Ativos</th>'
+        '<th>Recebimentos</th><th>Valor Recebido</th>'
+        '<th>Inadimplentes</th><th>Valor Inadimplente</th>'
+        '<th>Reajustes</th></tr></thead>'
+        f'<tbody>{linhas_tabela}</tbody>'
+        f'<tfoot><tr style="background:#e8f4fd;font-weight:bold;">'
+        f'<td>TOTAL</td>'
+        f'<td style="text-align:center">{totais["contratos_ativos"]}</td>'
+        f'<td style="text-align:center">{totais["recebimentos"]}</td>'
+        f'<td style="text-align:right">{_fmt_brl(totais["valor_recebido"])}</td>'
+        f'<td style="text-align:center">{totais["inadimplentes"]}</td>'
+        f'<td style="text-align:right">{_fmt_brl(totais["valor_inadimplente"])}</td>'
+        f'<td style="text-align:center">{totais["reajustes_aplicados"]}</td>'
+        f'</tr></tfoot>'
+        '</table>'
+    )
+
+    # Período: primeiro ao último dia do mês anterior
+    from datetime import date
+    hoje = timezone.localdate()
+    primeiro_mes_atual = hoje.replace(day=1)
+    ultimo_mes_ant = primeiro_mes_atual - timedelta(days=1)
+    primeiro_mes_ant = ultimo_mes_ant.replace(day=1)
+    periodo = f"{primeiro_mes_ant.strftime('%d/%m/%Y')} a {ultimo_mes_ant.strftime('%d/%m/%Y')}"
+
+    contexto = {
+        'NOMECONTABILIDADE': contabilidade.nome,
+        'MESREFERENCIA': mes_ref,
+        'PERIODORELATORIO': periodo,
+        'QTDCONTRATOSATIVOS': str(totais['contratos_ativos']),
+        'QTDRECEBIMENTOS': str(totais['recebimentos']),
+        'VALORRECEBIMENTOS': _fmt_brl(totais['valor_recebido']),
+        'QTDINADIMPLENTES': str(totais['inadimplentes']),
+        'VALORINADIMPLENTES': _fmt_brl(totais['valor_inadimplente']),
+        'QTDREAJUSTES': str(totais['reajustes_aplicados']),
+        'TABELAIMOBILIARIAS': tabela_html,
+        'DATAATUAL': hoje.strftime('%d/%m/%Y'),
+    }
+
+    template = TemplateNotificacao.get_template(TipoTemplate.RELATORIO_MENSAL)
+    if template and template.tem_email:
+        assunto, _, corpo_html, _ = template.renderizar(contexto)
+        send_mail(
+            subject=assunto or f'Relatório Mensal — {contabilidade.nome} — {mes_ref}',
+            message='',
+            html_message=corpo_html or None,
+            from_email=None,
+            recipient_list=[_destinatario_email_teste(contabilidade.email)],
+            fail_silently=True,
+        )
+    else:
+        linhas = [
+            f"Relatório Mensal Consolidado — {contabilidade.nome}",
+            f"Referência: {mes_ref}  |  Período: {periodo}", "",
+            f"Contratos ativos: {totais['contratos_ativos']}",
+            f"Recebimentos: {totais['recebimentos']} ({_fmt_brl(totais['valor_recebido'])})",
+            f"Inadimplência: {totais['inadimplentes']} ({_fmt_brl(totais['valor_inadimplente'])})",
+            f"Reajustes aplicados: {totais['reajustes_aplicados']}", "", "Por imobiliária:",
+        ] + [
+            f"  {i['nome']}: {i['contratos_ativos']} contratos, "
+            f"{_fmt_brl(i['valor_recebido'])} recebido, {i['inadimplentes']} inadimplentes"
+            for i in imobiliarias
+        ]
+        send_mail(
+            subject=f'Relatório Mensal — {contabilidade.nome} — {mes_ref}',
+            message='\n'.join(linhas),
+            from_email=None,
+            recipient_list=[_destinatario_email_teste(contabilidade.email)],
+            fail_silently=True,
+        )
+
+
 def relatorio_semanal_incorporadoras_sync():
     """
     Gera e envia relatório semanal para cada imobiliária.
@@ -1042,25 +1204,9 @@ def relatorio_semanal_incorporadoras_sync():
             # Enviar por e-mail se imobiliária tiver e-mail configurado
             if imobiliaria.email:
                 try:
-                    corpo = (
-                        f"Relatório Semanal — {imobiliaria.nome}\n"
-                        f"Período: {relatorio['periodo']}\n\n"
-                        f"Recebimentos: {relatorio['recebimentos']['quantidade']} "
-                        f"(R$ {relatorio['recebimentos']['valor']:.2f})\n"
-                        f"Inadimplência: {relatorio['inadimplencia']['quantidade']} "
-                        f"(R$ {relatorio['inadimplencia']['valor']:.2f})\n"
-                        f"A vencer (7d): {relatorio['a_vencer_7_dias']['quantidade']} "
-                        f"(R$ {relatorio['a_vencer_7_dias']['valor']:.2f})\n"
-                    )
-                    send_mail(
-                        subject=f'Relatório Semanal — {imobiliaria.nome}',
-                        message=corpo,
-                        from_email=None,  # usa DEFAULT_FROM_EMAIL
-                        recipient_list=[_destinatario_email_teste(imobiliaria.email)],
-                        fail_silently=True,
-                    )
+                    _enviar_relatorio_semanal(imobiliaria, relatorio)
                 except Exception as e:
-                    logger.warning("Erro ao enviar e-mail para %s: %s", imobiliaria.email, e)
+                    logger.warning("Erro ao enviar relatório semanal para %s: %s", imobiliaria.email, e)
 
             relatorios_gerados += 1
             result.add_message(
@@ -1179,34 +1325,9 @@ def relatorio_mensal_consolidado_sync():
             # Enviar e-mail para contabilidade
             if contabilidade.email:
                 try:
-                    totais = dados_contabilidade['totais']
-                    linhas = [
-                        f"Relatório Mensal Consolidado — {contabilidade.nome}",
-                        f"Referência: {dados_contabilidade['mes_referencia']}",
-                        "",
-                        f"Contratos ativos: {totais['contratos_ativos']}",
-                        f"Recebimentos: {totais['recebimentos']} (R$ {totais['valor_recebido']:.2f})",
-                        f"Inadimplência: {totais['inadimplentes']} (R$ {totais['valor_inadimplente']:.2f})",
-                        f"Reajustes aplicados: {totais['reajustes_aplicados']}",
-                        "",
-                        "Por imobiliária:",
-                    ]
-                    for imob in dados_contabilidade['imobiliarias']:
-                        linhas.append(
-                            f"  {imob['nome']}: "
-                            f"{imob['contratos_ativos']} contratos, "
-                            f"R$ {imob['valor_recebido']:.2f} recebido, "
-                            f"{imob['inadimplentes']} inadimplentes"
-                        )
-                    send_mail(
-                        subject=f'Relatório Mensal — {contabilidade.nome} — {dados_contabilidade["mes_referencia"]}',
-                        message='\n'.join(linhas),
-                        from_email=None,
-                        recipient_list=[_destinatario_email_teste(contabilidade.email)],
-                        fail_silently=True,
-                    )
+                    _enviar_relatorio_mensal(contabilidade, dados_contabilidade)
                 except Exception as e:
-                    logger.warning("Erro ao enviar e-mail para %s: %s", contabilidade.email, e)
+                    logger.warning("Erro ao enviar relatório mensal para %s: %s", contabilidade.email, e)
 
             relatorios_gerados += 1
             result.add_message(

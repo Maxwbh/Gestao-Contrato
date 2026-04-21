@@ -202,14 +202,14 @@ class BoletoNotificacaoService:
 
             assunto, corpo_texto, corpo_html, _ = template.renderizar(contexto)
 
-            # Aplicar safeguard TEST_MODE
+            # Aplicar safeguard TEST_MODE (só afeta o envio, não o registro)
             destinatario_final = _destinatario_email_teste(comprador.email)
 
-            # Criar registro de notificação
+            # Criar registro de notificação com o destinatário real
             notificacao = Notificacao.objects.create(
                 parcela=parcela,
                 tipo=TipoNotificacao.EMAIL,
-                destinatario=destinatario_final,
+                destinatario=comprador.email,
                 assunto=assunto,
                 mensagem=corpo_texto,
                 status=StatusNotificacao.PENDENTE
@@ -340,14 +340,14 @@ class BoletoNotificacaoService:
                     f"{imobiliaria.nome}"
                 )
 
-            # Safeguard TEST_MODE
+            # Safeguard TEST_MODE (só afeta o envio, não o registro)
             numero_final = _destinatario_telefone_teste(numero)
 
-            # Criar registro de notificação
+            # Criar registro de notificação com o número real
             notificacao = Notificacao.objects.create(
                 parcela=parcela,
                 tipo=TipoNotificacao.SMS,
-                destinatario=numero_final,
+                destinatario=numero,
                 assunto=f'SMS Boleto Parcela {parcela.numero_parcela}',
                 mensagem=mensagem,
                 status=StatusNotificacao.PENDENTE
@@ -403,11 +403,10 @@ class BoletoNotificacaoService:
                     corpo_sms = f"Boleto da parcela {parcela.numero_parcela} gerado."
                     corpo_html = ''
 
-                destinatario = _destinatario_email_teste(comprador.email)
                 notif = Notificacao.objects.create(
                     parcela=parcela,
                     tipo=TipoNotificacao.EMAIL,
-                    destinatario=destinatario,
+                    destinatario=comprador.email,
                     assunto=assunto,
                     mensagem=corpo_html or corpo_sms,
                     status=StatusNotificacao.PENDENTE,
@@ -451,11 +450,10 @@ class BoletoNotificacaoService:
                                 f"{imobiliaria.nome}"
                             )
 
-                        numero_final = _destinatario_telefone_teste(numero)
                         notif = Notificacao.objects.create(
                             parcela=parcela,
                             tipo=TipoNotificacao.SMS,
-                            destinatario=numero_final,
+                            destinatario=numero,
                             assunto=f'SMS Boleto Parcela {parcela.numero_parcela}',
                             mensagem=mensagem_sms,
                             status=StatusNotificacao.PENDENTE,
@@ -464,6 +462,53 @@ class BoletoNotificacaoService:
             except Exception as exc:
                 logger.exception(
                     "Erro ao agendar SMS boleto para parcela %s: %s", parcela.pk, exc
+                )
+
+        # --- WHATSAPP ---
+        if getattr(comprador, 'notificar_whatsapp', False):
+            try:
+                import re as _re
+                numero_raw = (getattr(comprador, 'celular', '') or getattr(comprador, 'telefone', '') or '').strip()
+                if numero_raw:
+                    numero = _re.sub(r'\D', '', numero_raw)
+                    if len(numero) == 11:
+                        numero = '+55' + numero
+                    elif len(numero) == 10:
+                        numero = '+55' + numero
+                    elif len(numero) == 13 and numero.startswith('55'):
+                        numero = '+' + numero
+                    elif not numero.startswith('+'):
+                        numero = '+' + numero
+
+                    if len(numero) >= 12:
+                        template = TemplateNotificacao.get_template(
+                            codigo=TipoTemplate.BOLETO_CRIADO,
+                            imobiliaria=imobiliaria,
+                        )
+                        if template and template.tem_whatsapp:
+                            contexto = self.montar_contexto(parcela)
+                            _, _, _, mensagem_wa = template.renderizar(contexto)
+                        else:
+                            mensagem_wa = (
+                                f"Ola {comprador.nome.split()[0]}, "
+                                f"boleto parcela {parcela.numero_parcela} "
+                                f"valor {self._formatar_valor(parcela.valor_atual)} "
+                                f"vence {self._formatar_data(parcela.data_vencimento)}. "
+                                f"{imobiliaria.nome}"
+                            )
+
+                        notif = Notificacao.objects.create(
+                            parcela=parcela,
+                            tipo=TipoNotificacao.WHATSAPP,
+                            destinatario=numero,
+                            assunto=f'WhatsApp Boleto Parcela {parcela.numero_parcela}',
+                            mensagem=mensagem_wa,
+                            status=StatusNotificacao.PENDENTE,
+                        )
+                        agendadas.append(notif.pk)
+            except Exception as exc:
+                logger.exception(
+                    "Erro ao agendar WhatsApp boleto para parcela %s: %s", parcela.pk, exc
                 )
 
         logger.info("Notificações agendadas para parcela %s: pks=%s", parcela.pk, agendadas)

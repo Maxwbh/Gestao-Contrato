@@ -79,6 +79,7 @@ urlpatterns = [
     path('cnab/remessa/<int:pk>/', views.detalhe_arquivo_remessa, name='detalhe_remessa'),
     path('cnab/remessa/<int:pk>/regenerar/', views.regenerar_arquivo_remessa, name='regenerar_remessa'),
     path('cnab/remessa/<int:pk>/marcar-enviada/', views.marcar_remessa_enviada, name='marcar_remessa_enviada'),
+    path('cnab/remessa/<int:pk>/excluir/', views.excluir_arquivo_remessa, name='excluir_remessa'),
     path('cnab/remessa/<int:pk>/download/', views.download_arquivo_remessa, name='download_remessa'),
 
     # ==========================================================================
