@@ -1622,7 +1622,7 @@ class Command(BaseCommand):
         """
         Gera arquivos de remessa CNAB para os boletos simulados.
         Agrupa por conta bancária e chama CNABService.gerar_remessa()
-        com fallback local (sem BRCobrança necessário).
+        agrupando por layout_cnab configurado em cada ContaBancaria.
         Retorna o número de remessas geradas.
         """
         from financeiro.models import Parcela, StatusBoleto
