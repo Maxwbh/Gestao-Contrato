@@ -336,7 +336,7 @@ def setup(request):
     # Verificar se é primeira configuração (sem usuários) ou se usuário é superuser
     User = get_user_model()
     try:
-        is_first_setup = User.objects.count() == 0
+        is_first_setup = not User.objects.exists()
     except Exception:
         # Tabelas ainda não existem (migrations não foram executadas) — permitir acesso livre
         is_first_setup = True
