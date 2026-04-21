@@ -882,12 +882,12 @@ class CNABService:
         Retorna parcelas já incluídas em remessa com status GERADO (não enviada).
         Usado para exibir aviso de duplicata potencial.
         """
-        from financeiro.models import Parcela, StatusBoleto
+        from financeiro.models import Parcela, StatusBoleto, StatusArquivoRemessa
 
         queryset = Parcela.objects.filter(
             status_boleto=StatusBoleto.GERADO,
             pago=False,
-            itens_remessa__arquivo_remessa__status='GERADO'
+            itens_remessa__arquivo_remessa__status=StatusArquivoRemessa.GERADO
         ).select_related(
             'contrato', 'contrato__comprador', 'conta_bancaria',
             'contrato__imobiliaria'
