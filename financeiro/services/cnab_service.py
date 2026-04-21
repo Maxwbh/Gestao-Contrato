@@ -487,6 +487,8 @@ class CNABService:
                         if arquivo_para_atualizar:
                             from financeiro.models import StatusArquivoRemessa
                             arquivo_remessa = arquivo_para_atualizar
+                            # Deletar itens antigos dentro da transação (somente no sucesso)
+                            arquivo_remessa.itens.all().delete()
                             arquivo_remessa.quantidade_boletos = len(parcelas_validas)
                             arquivo_remessa.valor_total = valor_total
                             arquivo_remessa.nome_arquivo = nome_arquivo
@@ -538,9 +540,12 @@ class CNABService:
                         'arquivo_path': arquivo_remessa.arquivo.path,
                     }
                 else:
+                    erro_msg = 'BRCobranca nao retornou arquivo de remessa'
+                    if arquivo_para_atualizar:
+                        arquivo_para_atualizar.marcar_erro(erro_msg)
                     return {
                         'sucesso': False,
-                        'erro': 'BRCobranca nao retornou arquivo de remessa'
+                        'erro': erro_msg,
                     }
             else:
                 # HTTP error (429 persistente, 5xx, etc.)
@@ -553,12 +558,15 @@ class CNABService:
                     response.status_code, descricao_conta, banco, layout,
                     f'{self.brcobranca_url}/api/remessa', erro_body,
                 )
+                erro_msg = (
+                    f'BRCobranca retornou HTTP {response.status_code}. '
+                    'Verifique os logs do servidor e se a API está operacional.'
+                )
+                if arquivo_para_atualizar:
+                    arquivo_para_atualizar.marcar_erro(erro_msg)
                 return {
                     'sucesso': False,
-                    'erro': (
-                        f'BRCobranca retornou HTTP {response.status_code}. '
-                        'Verifique os logs do servidor e se a API está operacional.'
-                    ),
+                    'erro': erro_msg,
                 }
 
         except requests.exceptions.ConnectionError as e:
@@ -569,21 +577,27 @@ class CNABService:
                 "  → Detalhe: %s",
                 descricao_conta, banco, self.brcobranca_url, e,
             )
+            erro_msg = (
+                'Não foi possível conectar à API BRCobranca. '
+                'Verifique se o serviço está ativo e acessível.'
+            )
+            if arquivo_para_atualizar:
+                arquivo_para_atualizar.marcar_erro(erro_msg)
             return {
                 'sucesso': False,
-                'erro': (
-                    'Não foi possível conectar à API BRCobranca. '
-                    'Verifique se o serviço está ativo e acessível.'
-                ),
+                'erro': erro_msg,
             }
         except Exception as e:
             logger.exception(
                 "[Remessa] ERRO INESPERADO — conta=%s banco=%s: %s",
                 descricao_conta, banco, e,
             )
+            erro_msg = str(e)
+            if arquivo_para_atualizar:
+                arquivo_para_atualizar.marcar_erro(erro_msg)
             return {
                 'sucesso': False,
-                'erro': str(e),
+                'erro': erro_msg,
             }
 
     def regenerar_remessa(self, arquivo_remessa) -> Dict:
@@ -597,12 +611,16 @@ class CNABService:
                 'erro': 'Apenas remessas com status GERADO ou ERRO podem ser regeneradas'
             }
 
-        # Obter parcelas do arquivo original
+        # Obter parcelas do arquivo original (sem deletar — a deleção ocorre
+        # dentro de gerar_remessa somente após sucesso da API, em transação atômica)
         itens = arquivo_remessa.itens.select_related('parcela').all()
         parcelas = [item.parcela for item in itens]
 
-        # Excluir itens antigos (serão recriados pelo gerar_remessa)
-        itens.delete()
+        if not parcelas:
+            return {
+                'sucesso': False,
+                'erro': 'Remessa não possui boletos associados para regenerar',
+            }
 
         # Regenerar atualizando o mesmo registro (sem criar novo ArquivoRemessa)
         return self.gerar_remessa(
