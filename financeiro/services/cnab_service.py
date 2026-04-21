@@ -608,7 +608,10 @@ class CNABService:
         Regenera um arquivo de remessa existente.
         Usa os mesmos boletos do arquivo original.
         """
-        if arquivo_remessa.status not in ['GERADO', 'ERRO']:
+        from financeiro.models import StatusArquivoRemessa
+        if arquivo_remessa.status not in [
+            StatusArquivoRemessa.GERADO, StatusArquivoRemessa.ERRO
+        ]:
             return {
                 'sucesso': False,
                 'erro': 'Apenas remessas com status GERADO ou ERRO podem ser regeneradas'
