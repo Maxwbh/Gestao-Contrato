@@ -13,7 +13,7 @@ from django.urls import reverse_lazy
 from django.contrib import messages
 from django.db import models
 from django.db.models import Q, Sum
-from .models import Contrato, StatusContrato, IndiceReajuste, PrestacaoIntermediaria, TabelaJurosContrato
+from .models import Contrato, StatusContrato, IndiceReajuste, PrestacaoIntermediaria, TabelaJurosContrato, TipoAmortizacao
 from .forms import ContratoForm, IndiceReajusteForm
 from core.mixins import PaginacaoMixin
 import requests
@@ -1556,7 +1556,7 @@ def api_preview_parcelas(request):
         juros_ciclo1 = get_juros_ciclo(1)
         preview_count = min(numero_parcelas, 24)
 
-        if tipo_amortizacao == 'SAC':
+        if tipo_amortizacao == TipoAmortizacao.SAC:
             # Pré-calcular tabela SAC completa para os primeiros 24
             tabela_full = _P._calcular_sac_tabela(base_pmt, juros_ciclo1, numero_parcelas)
             tabela_preview = tabela_full[:preview_count]
@@ -1578,7 +1578,7 @@ def api_preview_parcelas(request):
                 ultimo = calendar.monthrange(venc.year, venc.month)[1]
                 venc = venc.replace(day=min(dia_vencimento, ultimo))
 
-            if tipo_amortizacao == 'SAC':
+            if tipo_amortizacao == TipoAmortizacao.SAC:
                 pmt_k, amort_k, juros_k = tabela_preview[i - 1]
             else:
                 # Para Price: recalcula PMT se ciclo mudar (projeção aproximada)
@@ -1886,7 +1886,7 @@ class ContratoWizardView(LoginRequiredMixin, View):
 
         if numero_parcelas > 0:
             from financeiro.models import Reajuste as _P
-            if tipo_amortizacao == 'SAC':
+            if tipo_amortizacao == TipoAmortizacao.SAC:
                 # PMT do primeiro período SAC (o maior)
                 tabela = _P._calcular_sac_tabela(base_pmt, taxa_ciclo1, numero_parcelas)
                 pmt_ciclo1 = tabela[0][0] if tabela else D('0')
