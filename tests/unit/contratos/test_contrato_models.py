@@ -219,7 +219,6 @@ class TestPrestacaoIntermediariaModel:
         inter_ciclo2 = intermediaria_factory(contrato=contrato, mes_vencimento=18, numero_sequencial=2)
         assert inter_ciclo2.ciclo_reajuste == 2
 
-    @pytest.mark.xfail(reason="Bug de precisão decimal: aplicar_reajuste() não arredonda antes de salvar, causando ValidationError para campos com decimal_places=2")
     def test_intermediaria_aplicar_reajuste(self, intermediaria_factory):
         """Testa aplicação de reajuste na intermediária"""
         intermediaria = intermediaria_factory(valor=Decimal('10000.00'))
