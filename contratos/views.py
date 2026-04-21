@@ -13,7 +13,7 @@ from django.urls import reverse_lazy
 from django.contrib import messages
 from django.db import models
 from django.db.models import Q, Sum
-from .models import Contrato, StatusContrato, IndiceReajuste, PrestacaoIntermediaria, TabelaJurosContrato, TipoAmortizacao
+from .models import Contrato, StatusContrato, IndiceReajuste, PrestacaoIntermediaria, TabelaJurosContrato, TipoAmortizacao, TipoCorrecao
 from .forms import ContratoForm, IndiceReajusteForm
 from core.mixins import PaginacaoMixin
 import requests
@@ -102,7 +102,6 @@ class ContratoListView(LoginRequiredMixin, PaginacaoMixin, ListView):
         3. Passou o prazo de reajuste desde a última atualização
         """
         from django.utils import timezone
-        from .models import TipoCorrecao
         from dateutil.relativedelta import relativedelta
 
         hoje = timezone.now().date()
@@ -325,11 +324,10 @@ class ContratoDetailView(LoginRequiredMixin, DetailView):
             from financeiro.models import Reajuste as ReajusteModel
             from django.utils import timezone as _tz
             from dateutil.relativedelta import relativedelta as _rdelta
-            from contratos.models import TipoCorrecao as _TC
 
             _hoje = _tz.now().date()
             _prazo = contrato.prazo_reajuste_meses or 12
-            _fixo = contrato.tipo_correcao == _TC.FIXO
+            _fixo = contrato.tipo_correcao == TipoCorrecao.FIXO
 
             # Single query: all applied cycles for this contract
             _applied_cycles = set(
@@ -1993,20 +1991,20 @@ class ContratoWizardView(LoginRequiredMixin, View):
             dia_vencimento=int(basico['dia_vencimento']),
             percentual_juros_mora=to_dec(basico.get('percentual_juros_mora', '1.00')),
             percentual_multa=to_dec(basico.get('percentual_multa', '2.00')),
-            tipo_correcao=basico.get('tipo_correcao', 'IPCA'),
+            tipo_correcao=basico.get('tipo_correcao', TipoCorrecao.IPCA),
             prazo_reajuste_meses=int(basico.get('prazo_reajuste_meses', 12)),
             tipo_correcao_fallback=basico.get('tipo_correcao_fallback', ''),
             spread_reajuste=to_dec(basico.get('spread_reajuste')),
             reajuste_piso=to_dec(basico.get('reajuste_piso')),
             reajuste_teto=to_dec(basico.get('reajuste_teto')),
-            tipo_amortizacao=basico.get('tipo_amortizacao', 'PRICE'),
+            tipo_amortizacao=basico.get('tipo_amortizacao', TipoAmortizacao.PRICE),
             intermediarias_reduzem_pmt=bool(basico.get('intermediarias_reduzem_pmt', False)),
             intermediarias_reajustadas=bool(basico.get('intermediarias_reajustadas', True)),
             percentual_fruicao=to_dec(basico.get('percentual_fruicao', '0.5000')),
             percentual_multa_rescisao_penal=to_dec(basico.get('percentual_multa_rescisao_penal', '10.0000')),
             percentual_multa_rescisao_adm=to_dec(basico.get('percentual_multa_rescisao_adm', '12.0000')),
             percentual_cessao=to_dec(basico.get('percentual_cessao', '3.0000')),
-            status=basico.get('status', 'ATIVO'),
+            status=basico.get('status', StatusContrato.ATIVO),
             observacoes=basico.get('observacoes', ''),
         )
         return contrato
