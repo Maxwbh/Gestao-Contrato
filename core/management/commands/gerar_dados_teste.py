@@ -1705,12 +1705,13 @@ class Command(BaseCommand):
             if not boletos:
                 continue
 
+            from financeiro.models import StatusArquivoRetorno
             # Criar ArquivoRetorno simulado
             arquivo = ArquivoRetorno.objects.create(
                 conta_bancaria=conta,
                 nome_arquivo=f'RET_{conta.banco}_{hoje.strftime("%Y%m%d")}.RET',
                 data_upload=hoje,
-                status='PROCESSADO',
+                status=StatusArquivoRetorno.PROCESSADO,
                 total_registros=len(boletos),
                 registros_processados=0,
                 registros_erro=0,
