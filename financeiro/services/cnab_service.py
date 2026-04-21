@@ -74,6 +74,9 @@ class CNABService:
             'BRCOBRANCA_URL',
             'http://localhost:9292'
         )
+        self.timeout = getattr(settings, 'BRCOBRANCA_TIMEOUT', 30)
+        self.max_tentativas = getattr(settings, 'BRCOBRANCA_MAX_TENTATIVAS', 3)
+        self.delay_inicial = getattr(settings, 'BRCOBRANCA_DELAY_INICIAL', 2)
 
     def _get_banco_brcobranca(self, codigo_banco: str) -> str:
         """Retorna o nome do banco para o BRCobranca"""
@@ -449,11 +452,10 @@ class CNABService:
                     p0.get('data_vencimento'), p0.get('data_emissao')
                 )
 
-            # Retry automático em 429 (rate limit): até 3 tentativas com backoff exponencial
-            _max_tentativas = 3
+            # Retry automático em 429 (rate limit): backoff exponencial configurável
             _response = None
             _t0 = time.monotonic()
-            for _tentativa in range(_max_tentativas):
+            for _tentativa in range(self.max_tentativas):
                 _response = requests.post(
                     f'{self.brcobranca_url}/api/remessa',
                     files={'data': ('remessa.json',
@@ -461,15 +463,15 @@ class CNABService:
                                     'application/json')},
                     data={'bank': banco, 'type': tipo_cnab},
                     headers={'Accept': 'application/vnd.BoletoApi-v1+json'},
-                    timeout=60,
+                    timeout=self.timeout,
                 )
                 if _response.status_code != 429:
                     break
-                _wait = 2 ** _tentativa  # 1s, 2s, 4s
+                _wait = self.delay_inicial ** _tentativa
                 logger.warning(
                     "[Remessa] BRCobranca 429 (rate limit) conta=%s banco=%s — "
                     "aguardando %ds antes de nova tentativa (%d/%d)",
-                    descricao_conta, banco, _wait, _tentativa + 1, _max_tentativas
+                    descricao_conta, banco, _wait, _tentativa + 1, self.max_tentativas
                 )
                 time.sleep(_wait)
 
@@ -670,7 +672,7 @@ class CNABService:
                     f'{self.brcobranca_url}/api/retorno',
                     files={'file': ('retorno.ret', io.BytesIO(conteudo), 'application/octet-stream')},
                     data={'banco': banco, 'formato': formato_api},
-                    timeout=60,
+                    timeout=self.timeout,
                 )
             except requests.exceptions.ConnectionError as e:
                 logger.error(
