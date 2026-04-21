@@ -637,12 +637,13 @@ function boletoRenderer(params) {
 
 function acoesRenderer(params) {
     const d = params.data;
+    const sp = "event.stopPropagation();";
     let html = '<div class="ag-grid-actions">';
-    html += `<a href="/financeiro/parcelas/${d.pk}/" class="btn btn-sm btn-outline-secondary" title="Ver detalhes"><i class="fas fa-eye"></i></a>`;
-    html += `<a href="/contratos/${d.contrato_pk}/" class="btn btn-sm btn-outline-info" title="Ver contrato"><i class="fas fa-file-contract"></i></a>`;
+    html += `<a href="/financeiro/parcelas/${d.pk}/" class="btn btn-sm btn-outline-secondary" title="Ver detalhes" onclick="${sp}"><i class="fas fa-eye"></i></a>`;
+    html += `<a href="/contratos/${d.contrato_pk}/" class="btn btn-sm btn-outline-info" title="Ver contrato" onclick="${sp}"><i class="fas fa-file-contract"></i></a>`;
     if (!d.pago) {
-        html += `<button class="btn btn-sm btn-outline-primary" title="Gerar boleto" onclick="abrirModalBoleto(${d.pk}, '${d.contrato.replace(/'/g,"\\'")}', ${d.numero_parcela})"><i class="fas fa-barcode"></i></button>`;
-        html += `<button class="btn btn-sm btn-outline-success" title="Registrar pagamento" onclick="abrirModalPagar(${d.pk}, '${d.contrato.replace(/'/g,"\\'")}', ${d.numero_parcela}, '${d.vencimento_fmt}', ${d.valor_original})"><i class="fas fa-dollar-sign"></i></button>`;
+        html += `<button class="btn btn-sm btn-outline-primary" title="Gerar boleto" onclick="${sp}abrirModalBoleto(${d.pk}, '${d.contrato.replace(/'/g,"\\'")}', ${d.numero_parcela})"><i class="fas fa-barcode"></i></button>`;
+        html += `<button class="btn btn-sm btn-outline-success" title="Registrar pagamento" onclick="${sp}abrirModalPagar(${d.pk}, '${d.contrato.replace(/'/g,"\\'")}', ${d.numero_parcela}, '${d.vencimento_fmt}', ${d.valor_original})"><i class="fas fa-dollar-sign"></i></button>`;
     }
     html += '</div>';
     return html;
@@ -759,7 +760,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 suppressMovable: false,
             },
             rowSelection: 'multiple',
-            suppressRowClickSelection: true,
+            rowMultiSelectWithClick: true,
             rowHeight: 42,
             headerHeight: 48,
            

@@ -8,7 +8,7 @@ Requires: page_obj, paginator, is_paginated in context (standard Django ListView
   <!-- Per-page selector -->
   <div class="d-flex align-items-center gap-2">
     <small class="text-muted fw-semibold">Exibir:</small>
-    <select id="perPageSelect" class="form-select form-select-sm" style="width: auto;" title="Registros por página">
+    <select id="perPageSelect" class="form-select form-select-sm browser-default" style="width: auto;" title="Registros por página">
       {% with pp=paginator.per_page %}
       <option value="5"   {% if pp == 5   %}selected{% endif %}>5</option>
       <option value="10"  {% if pp == 10  %}selected{% endif %}>10</option>

@@ -1849,6 +1849,31 @@ def marcar_remessa_enviada(request, pk):
 
 
 @login_required
+@require_POST
+def excluir_arquivo_remessa(request, pk):
+    """
+    Exclui um arquivo de remessa que ainda não foi enviado ao banco.
+    Parcelas associadas retornam automaticamente ao pool de disponíveis para remessa.
+    """
+    from .models import ArquivoRemessa, StatusArquivoRemessa
+
+    arquivo = get_object_or_404(ArquivoRemessa, pk=pk)
+
+    if arquivo.status in [StatusArquivoRemessa.ENVIADO, StatusArquivoRemessa.PROCESSADO]:
+        return JsonResponse({
+            'sucesso': False,
+            'erro': 'Remessa já enviada ao banco não pode ser excluída.'
+        }, status=400)
+
+    try:
+        arquivo.delete()
+        return JsonResponse({'sucesso': True, 'mensagem': 'Remessa excluída com sucesso.'})
+    except Exception as e:
+        logger.exception("Erro ao excluir remessa pk=%s: %s", pk, e)
+        return JsonResponse({'sucesso': False, 'erro': str(e)}, status=500)
+
+
+@login_required
 def download_arquivo_remessa(request, pk):
     """Download do arquivo de remessa"""
     from .models import ArquivoRemessa
@@ -2740,7 +2765,7 @@ def api_gerar_boletos_parcelas(request):
             continue
 
         try:
-            resultado = parcela.gerar_boleto(conta_bancaria, force=force, enviar_email=False)
+            resultado = parcela.gerar_boleto(conta_bancaria, force=force, enviar_email=True)
             if resultado and resultado.get('sucesso'):
                 gerados += 1
                 detalhes.append({
