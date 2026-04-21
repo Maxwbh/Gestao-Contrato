@@ -745,11 +745,11 @@ class ContabilidadeDeleteView(LoginRequiredMixin, DeleteView):
     def get_queryset(self):
         return Contabilidade.objects.filter(ativo=True)
 
-    def delete(self, request, *args, **kwargs):
+    def form_valid(self, form):
         self.object = self.get_object()
         self.object.ativo = False
         self.object.save()
-        messages.success(request, f'Contabilidade {self.object.nome} removida com sucesso!')
+        messages.success(self.request, f'Contabilidade {self.object.nome} removida com sucesso!')
         return redirect(self.success_url)
 
 
@@ -1529,12 +1529,12 @@ class AcessoUsuarioDeleteView(LoginRequiredMixin, DeleteView):
     def get_queryset(self):
         return AcessoUsuario.objects.filter(ativo=True)
 
-    def delete(self, request, *args, **kwargs):
+    def form_valid(self, form):
         self.object = self.get_object()
         self.object.ativo = False
         self.object.save()
         messages.success(
-            request,
+            self.request,
             f'Acesso de {self.object.usuario.username} a {self.object.imobiliaria.nome} removido!'
         )
         return redirect(self.success_url)

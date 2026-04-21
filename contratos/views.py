@@ -425,13 +425,13 @@ class ContratoDeleteView(LoginRequiredMixin, DeleteView):
     model = Contrato
     success_url = reverse_lazy('contratos:listar')
 
-    def delete(self, request, *args, **kwargs):
+    def form_valid(self, form):
         self.object = self.get_object()
 
         # Verifica se tem parcelas pagas
         parcelas_pagas = self.object.parcelas.filter(pago=True).count()
         if parcelas_pagas > 0:
-            messages.error(request, f'Não é possível cancelar o contrato. Existem {parcelas_pagas} parcela(s) já paga(s).')
+            messages.error(self.request, f'Não é possível cancelar o contrato. Existem {parcelas_pagas} parcela(s) já paga(s).')
             return redirect('contratos:detalhe', pk=self.object.pk)
 
         # Soft delete - apenas muda o status para CANCELADO
@@ -443,7 +443,7 @@ class ContratoDeleteView(LoginRequiredMixin, DeleteView):
             self.object.imovel.disponivel = True
             self.object.imovel.save()
 
-        messages.success(request, f'Contrato {self.object.numero_contrato} cancelado com sucesso!')
+        messages.success(self.request, f'Contrato {self.object.numero_contrato} cancelado com sucesso!')
         return redirect(self.success_url)
 
 
