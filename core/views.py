@@ -181,7 +181,7 @@ def index(request):
 def dashboard(request):
     """Dashboard principal com estatísticas"""
     from contratos.models import Contrato, StatusContrato
-    from financeiro.models import Parcela
+    from financeiro.models import Parcela, StatusBoleto
 
     hoje = timezone.now().date()
     inicio_mes = hoje.replace(day=1)
@@ -218,14 +218,14 @@ def dashboard(request):
         ).aggregate(total=Sum('valor_pago'))['total'] or 0
 
         boletos_pendentes = Parcela.objects.filter(
-            pago=False, status_boleto='NAO_GERADO'
+            pago=False, status_boleto=StatusBoleto.NAO_GERADO
         ).count()
         boletos_gerados = Parcela.objects.filter(
-            pago=False, status_boleto__in=['GERADO', 'REGISTRADO']
+            pago=False, status_boleto__in=[StatusBoleto.GERADO, StatusBoleto.REGISTRADO]
         ).count()
         boletos_vencidos = Parcela.objects.filter(
             pago=False,
-            status_boleto__in=['GERADO', 'REGISTRADO', 'VENCIDO'],
+            status_boleto__in=[StatusBoleto.GERADO, StatusBoleto.REGISTRADO, StatusBoleto.VENCIDO],
             data_vencimento__lt=hoje,
         ).count()
 
