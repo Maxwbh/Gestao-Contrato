@@ -1444,6 +1444,7 @@ def segunda_via_boleto(request, pk):
 
 
 @login_required
+@login_required
 @require_GET
 @xframe_options_sameorigin
 def visualizar_boleto(request, pk):
@@ -6190,141 +6191,13 @@ def api_boletos_revalidar(request):
     })
 
 
+
 # =============================================================================
 # APIs REST - CNAB REMESSA
 # =============================================================================
 
 @login_required
 def api_cnab_remessa_listar(request):
-    """API para listar remessas CNAB. GET /api/cnab/remessas/"""
-    import json
-    from .models import ArquivoRemessa
-
-    CAMPOS_OBRIG_BANCO = {
-        '001': ['convenio'],
-        '033': ['convenio'],
-        '104': ['convenio'],
-        '748': ['posto', 'byte_idt'],
-        '756': [],
-    }
-
-    qs = ArquivoRemessa.objects.select_related('conta_bancaria', 'conta_bancaria__imobiliaria').order_by('-data_geracao')
-
-    if request.GET.get('conta_bancaria_id'):
-        qs = qs.filter(conta_bancaria_id=request.GET['conta_bancaria_id'])
-    if request.GET.get('status'):
-        qs = qs.filter(status=request.GET['status'])
-
-    NOMES_BANCO = {
-        '001': 'Banco do Brasil',
-        '033': 'Santander',
-        '104': 'Caixa Econômica',
-        '237': 'Bradesco',
-        '341': 'Itaú',
-        '748': 'Sicredi',
-        '756': 'Sicoob',
-    }
-
-    try:
-        data = json.loads(request.body) if request.body else {}
-    except json.JSONDecodeError:
-        return JsonResponse({'sucesso': False, 'erro': 'JSON inválido.'}, status=400)
-
-    parcela_ids = data.get('parcela_ids', [])
-
-    qs = Parcela.objects.filter(
-        status_boleto=StatusBoleto.GERADO
-    ).select_related(
-        'conta_bancaria',
-        'contrato',
-        'contrato__comprador',
-        'contrato__imovel',
-        'contrato__imovel__imobiliaria',
-    )
-
-    if parcela_ids:
-        qs = qs.filter(pk__in=parcela_ids)
-
-    resultados = []
-    validos = invalidos = 0
-
-    for parcela in qs:
-        erros_parcela = []
-
-        # 1. Nosso número
-        if not parcela.nosso_numero:
-            erros_parcela.append('Sem nosso_numero')
-
-        # 2. Conta bancária
-        conta = parcela.conta_bancaria
-        if not conta:
-            erros_parcela.append('Sem conta bancária associada')
-        else:
-            banco = conta.banco
-            nome_banco = NOMES_BANCO.get(banco, f'Banco {banco}')
-
-            # Campos obrigatórios por banco
-            campos_obrig = CAMPOS_OBRIG_BANCO.get(banco, [])
-            for campo in campos_obrig:
-                valor = getattr(conta, campo, '') or ''
-                if not valor.strip():
-                    erros_parcela.append(f'{nome_banco}: campo "{campo}" obrigatório ausente na conta bancária')
-
-            # Agência e conta corrente básicos
-            if not (conta.agencia or '').strip():
-                erros_parcela.append('Agência bancária ausente')
-            if not (conta.conta or '').strip():
-                erros_parcela.append('Conta corrente ausente')
-
-            # CNPJ da imobiliária
-            imobiliaria = getattr(conta, 'imobiliaria', None)
-            if imobiliaria and not (imobiliaria.cnpj or '').strip():
-                erros_parcela.append('CNPJ da imobiliária ausente')
-
-        # 3. Dados do comprador
-        comprador = parcela.contrato.comprador if parcela.contrato_id else None
-        if comprador:
-            doc = (comprador.cpf or '') or (getattr(comprador, 'cnpj', '') or '')
-            if not doc.strip():
-                erros_parcela.append('Comprador sem CPF/CNPJ')
-        else:
-            erros_parcela.append('Sem comprador no contrato')
-
-        if erros_parcela:
-            invalidos += 1
-            resultados.append({
-                'parcela_id': parcela.id,
-                'valido': False,
-                'erros': erros_parcela,
-                'contrato': parcela.contrato.numero_contrato if parcela.contrato_id else '-',
-                'nosso_numero': parcela.nosso_numero or '-',
-            })
-        else:
-            validos += 1
-            resultados.append({
-                'parcela_id': parcela.id,
-                'valido': True,
-                'erros': [],
-                'contrato': parcela.contrato.numero_contrato if parcela.contrato_id else '-',
-                'nosso_numero': parcela.nosso_numero,
-            })
-
-    total = validos + invalidos
-    return JsonResponse({
-        'sucesso': True,
-        'total': total,
-        'validos': validos,
-        'invalidos': invalidos,
-        'resultados': resultados,
-    })
-
-
-# =============================================================================
-# APIs REST - CNAB REMESSA
-# =============================================================================
-
-@login_required
-def api_cnab_remessa_listar(request):  # noqa: F811
     """API para listar remessas CNAB. GET /api/cnab/remessas/"""
     from .models import ArquivoRemessa
 
