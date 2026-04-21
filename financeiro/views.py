@@ -1833,9 +1833,10 @@ def marcar_remessa_enviada(request, pk):
     """Marca um arquivo de remessa como enviado ao banco"""
     from .models import ArquivoRemessa
 
+    from .models import StatusArquivoRemessa
     arquivo = get_object_or_404(ArquivoRemessa, pk=pk)
 
-    if arquivo.status != 'GERADO':
+    if arquivo.status != StatusArquivoRemessa.GERADO:
         return JsonResponse({
             'sucesso': False,
             'erro': 'Apenas arquivos com status GERADO podem ser marcados como enviados'
