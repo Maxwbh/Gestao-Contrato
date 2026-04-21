@@ -15,6 +15,7 @@ Email: maxwbh@gmail.com
 Empresa: M&S do Brasil LTDA
 """
 import io
+import json
 import time
 import logging
 import requests
@@ -368,30 +369,23 @@ class CNABService:
             valor_total += parcela.valor_boleto or parcela.valor_atual
 
         try:
-            # A API /api/remessa espera POST com JSON body:
-            #   {
-            #     "bank":   "banco_brasil",      ← nome do banco (keyword obrigatório)
-            #     "type":   "cnab240",            ← layout (keyword obrigatório)
-            #     "data": {                       ← dados do cedente + boletos
-            #       "empresa_mae": "...",
-            #       "documento_cedente": "...",
-            #       "agencia": "...", "agencia_dv": "...",
-            #       "conta_corrente": "...", "digito_conta": "...",
-            #       "convenio": "...", "carteira": "...",
-            #       "sequencial_remessa": N, "codigo_cedente": "...",
-            #       "pagamentos": [{nosso_numero, valor, sacado, ...}, ...]
-            #     }
-            #   }
-            # NOTA: campos do cedente NÃO devem ser repetidos em cada pagamento.
-            # NOTA: usar json= (não multipart/files) — API espera body JSON.
+            # A API /api/remessa espera multipart/form-data:
+            #   - bank   → campo de formulário (nome do banco, ex: 'banco_brasil')
+            #   - type   → campo de formulário (layout: 'cnab240' ou 'cnab400')
+            #   - data   → arquivo JSON com os dados do cedente + pagamentos:
+            #       {
+            #         "empresa_mae": "...", "documento_cedente": "...",
+            #         "agencia": "...", "agencia_dv": "...",
+            #         "conta_corrente": "...", "digito_conta": "...",
+            #         "convenio": "...", "carteira": "...",
+            #         "sequencial_remessa": N, "codigo_cedente": "...",
+            #         "pagamentos": [{nosso_numero, valor, sacado, ...}, ...]
+            #       }
+            # Resposta: conteúdo CNAB bruto (text/plain), NÃO JSON+base64.
             tipo_cnab = 'cnab240' if layout == 'CNAB_240' else 'cnab400'
-            payload = {
-                'bank': banco,
-                'type': tipo_cnab,
-                'data': {
-                    **dados_empresa,
-                    'pagamentos': pagamentos,
-                },
+            data_remessa = {
+                **dados_empresa,
+                'pagamentos': pagamentos,
             }
 
             descricao_conta = getattr(conta_bancaria, 'descricao', None) or str(conta_bancaria)
@@ -414,9 +408,12 @@ class CNABService:
             for _tentativa in range(_max_tentativas):
                 _response = requests.post(
                     f'{self.brcobranca_url}/api/remessa',
-                    json=payload,
+                    files={'data': ('remessa.json',
+                                    json.dumps(data_remessa).encode('utf-8'),
+                                    'application/json')},
+                    data={'bank': banco, 'type': tipo_cnab},
                     headers={'Accept': 'application/vnd.BoletoApi-v1+json'},
-                    timeout=60
+                    timeout=60,
                 )
                 if _response.status_code != 429:
                     break
@@ -432,11 +429,9 @@ class CNABService:
             _elapsed = time.monotonic() - _t0
 
             if response.status_code == 200:
-                resultado = response.json()
-
-                # Decodificar arquivo
-                if resultado.get('remessa'):
-                    arquivo_content = base64.b64decode(resultado['remessa'])
+                # API retorna conteúdo CNAB bruto (text/plain)
+                arquivo_content = response.content
+                if arquivo_content:
 
                     # Criar registro no banco
                     with transaction.atomic():
