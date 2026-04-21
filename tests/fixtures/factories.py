@@ -53,6 +53,7 @@ User = get_user_model()
 class UserFactory(DjangoModelFactory):
     class Meta:
         model = User
+        skip_postgeneration_save = True
 
     username = factory.Sequence(lambda n: f'user{n}')
     email = factory.LazyAttribute(lambda obj: f'{obj.username}@example.com')
@@ -70,6 +71,7 @@ class UserFactory(DjangoModelFactory):
             obj.set_password(extracted)
         else:
             obj.set_password('testpass123')
+        obj.save()
 
 
 class SuperUserFactory(UserFactory):
