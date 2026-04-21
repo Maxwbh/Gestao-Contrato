@@ -226,7 +226,7 @@ class TestReajusteModel:
         assert contrato.bloqueio_boleto_reajuste is False
 
     def test_reajuste_criar_reajuste_ciclo(self, contrato_com_parcelas, indice_factory):
-        """Testa criação automática de reajuste para ciclo"""
+        """Testa criação de reajuste para ciclo usando a API moderna"""
         from financeiro.models import Reajuste
 
         contrato = contrato_com_parcelas
@@ -240,12 +240,15 @@ class TestReajusteModel:
                 valor=Decimal('0.50')
             )
 
-        # Criar reajuste para ciclo 2
-        reajuste = Reajuste.criar_reajuste_ciclo(
+        # Criar reajuste para ciclo 2 via API moderna
+        reajuste = Reajuste.objects.create(
             contrato=contrato,
             ciclo=2,
-            percentual=Decimal('6.17')  # Passando percentual manualmente para o teste
+            percentual=Decimal('6.17'),
+            parcela_inicial=1,
+            parcela_final=contrato.numero_parcelas,
         )
+        reajuste.aplicar_reajuste()
 
         assert reajuste is not None
         assert reajuste.ciclo == 2
