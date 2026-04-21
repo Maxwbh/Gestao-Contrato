@@ -2346,7 +2346,7 @@ def gerar_carne(request, contrato_id):
         # Ciclos futuros (data ainda não chegou) só são permitidos individualmente.
         # =====================================================================
         max_parcela_lote = None  # None = sem limite (FIXO ou todos ciclos quitados)
-        if not force and contrato.tipo_correcao != 'FIXO':
+        if not force and contrato.tipo_correcao != TipoCorrecao.FIXO:
             from dateutil.relativedelta import relativedelta as _rd
             prazo_lote = contrato.prazo_reajuste_meses or 12
             hoje_lote = timezone.now().date()
@@ -2622,7 +2622,7 @@ def _api_parcelas_elegibilidade_logic(request, contrato_id):
     parcelas = contrato.parcelas.filter(pago=False).order_by('numero_parcela')
 
     # Verificar se o tipo de correcao e FIXO (sem reajuste necessario)
-    tipo_correcao_fixo = contrato.tipo_correcao == 'FIXO'
+    tipo_correcao_fixo = contrato.tipo_correcao == TipoCorrecao.FIXO
 
     # Informacoes do ciclo atual
     prazo_reajuste = contrato.prazo_reajuste_meses or 12
@@ -3172,7 +3172,7 @@ def aplicar_reajuste_pagina(request, contrato_id):
         # Verificar se o contrato sequer tem parcelas no ciclo 2
         prazo = contrato.prazo_reajuste_meses or 12
         reajuste_nao_aplicavel = (
-            contrato.tipo_correcao != 'FIXO'
+            contrato.tipo_correcao != TipoCorrecao.FIXO
             and (contrato.numero_parcelas or 0) <= prazo
         )
         context = {
@@ -3217,179 +3217,6 @@ def aplicar_reajuste_pagina(request, contrato_id):
 @require_POST
 def aplicar_reajuste_contrato(request, contrato_id):
     """
-    Página dedicada para aplicar reajuste em um contrato.
-
-    GET  → calcula o preview server-side e exibe o formulário.
-           Query params opcionais: desconto_percentual, desconto_valor, modal=1
-    POST → aplica o reajuste e redireciona para o detalhe do contrato.
-           Se modal=1 ou X-Requested-With=XMLHttpRequest → retorna JSON.
-    """
-    contrato = get_object_or_404(Contrato, pk=contrato_id)
-    is_modal = (
-        request.GET.get('modal') == '1'
-        or request.POST.get('modal') == '1'
-        or request.headers.get('X-Requested-With') == 'XMLHttpRequest'
-    )
-
-    # V-08: Contratos FIXO não têm reajuste periódico
-    if contrato.tipo_correcao == 'FIXO':
-        return JsonResponse({
-            'sucesso': False,
-            'erro': 'Contratos com índice FIXO são pré-fixados e não possuem reajuste periódico.'
-        }, status=400)
-
-    # Capturar IP do usuário
-    def get_client_ip(req):
-        x_forwarded = req.META.get('HTTP_X_FORWARDED_FOR')
-        if x_forwarded:
-            return x_forwarded.split(',')[0].strip()
-        return req.META.get('REMOTE_ADDR')
-
-    if request.method == 'POST':
-        ciclo_param = request.POST.get('ciclo')
-        desconto_percentual = request.POST.get('desconto_percentual') or None
-        desconto_valor = request.POST.get('desconto_valor') or None
-        observacoes = request.POST.get('observacoes', '')
-
-        try:
-            if not ciclo_param:
-                if is_modal:
-                    return JsonResponse({'sucesso': False, 'erro': 'Ciclo de reajuste não informado.'}, status=400)
-                messages.error(request, 'Ciclo de reajuste não informado.')
-                return redirect('financeiro:aplicar_reajuste', contrato_id=contrato_id)
-
-            ciclo = int(ciclo_param)
-
-            # V-09: Validar sequência obrigatória de ciclos (2.9 — não pular ciclos)
-            ciclo_esperado = Reajuste.calcular_ciclo_pendente(contrato)
-            if ciclo_esperado is None:
-                erro_seq = 'Não há ciclos de reajuste pendentes para este contrato.'
-                if is_modal:
-                    return JsonResponse({'sucesso': False, 'erro': erro_seq}, status=400)
-                messages.error(request, erro_seq)
-                return redirect('financeiro:aplicar_reajuste', contrato_id=contrato_id)
-            if ciclo > ciclo_esperado:
-                erro_seq = (
-                    f'Sequência incorreta: o ciclo {ciclo_esperado} ainda não foi aplicado. '
-                    f'Execute os reajustes em ordem — aplique o ciclo {ciclo_esperado} antes do {ciclo}.'
-                )
-                if is_modal:
-                    return JsonResponse({'sucesso': False, 'erro': erro_seq}, status=400)
-                messages.error(request, erro_seq)
-                return redirect('financeiro:aplicar_reajuste', contrato_id=contrato_id)
-            if ciclo < ciclo_esperado:
-                erro_seq = f'Ciclo {ciclo} já foi aplicado anteriormente.'
-                if is_modal:
-                    return JsonResponse({'sucesso': False, 'erro': erro_seq}, status=400)
-                messages.error(request, erro_seq)
-                return redirect('financeiro:aplicar_reajuste', contrato_id=contrato_id)
-
-            preview = Reajuste.preview_reajuste(
-                contrato, ciclo,
-                desconto_percentual=desconto_percentual,
-                desconto_valor=desconto_valor,
-            )
-
-            if 'erro' in preview:
-                if is_modal:
-                    return JsonResponse({'sucesso': False, 'erro': preview['erro']}, status=400)
-                messages.error(request, preview['erro'])
-                return redirect('financeiro:aplicar_reajuste', contrato_id=contrato_id)
-
-            if not contrato.parcelas.filter(
-                numero_parcela__gte=preview['parcela_inicial'],
-                numero_parcela__lte=preview['parcela_final'],
-                pago=False,
-            ).exists():
-                if is_modal:
-                    return JsonResponse({'sucesso': False, 'erro': 'Nenhuma parcela pendente no intervalo selecionado.'}, status=400)
-                messages.error(request, 'Nenhuma parcela pendente no intervalo selecionado.')
-                return redirect('financeiro:aplicar_reajuste', contrato_id=contrato_id)
-
-            reajuste = Reajuste.objects.create(
-                contrato=contrato,
-                data_reajuste=timezone.now().date(),
-                indice_tipo=preview['indice_tipo'],
-                percentual=preview['percentual_final'],
-                percentual_bruto=preview['percentual_bruto'],
-                spread_aplicado=preview['spread'] if preview.get('spread') else None,
-                desconto_percentual=Decimal(str(desconto_percentual)) if desconto_percentual else None,
-                desconto_valor=Decimal(str(desconto_valor)) if desconto_valor else None,
-                piso_aplicado=preview.get('piso'),
-                teto_aplicado=preview.get('teto'),
-                parcela_inicial=preview['parcela_inicial'],
-                parcela_final=preview['parcela_final'],
-                ciclo=ciclo,
-                periodo_referencia_inicio=preview['periodo_referencia_inicio'],
-                periodo_referencia_fim=preview['periodo_referencia_fim'],
-                aplicado_manual=True,
-                usuario=request.user,
-                ip_address=get_client_ip(request),
-                observacoes=observacoes,
-            )
-
-            resultado = reajuste.aplicar_reajuste()
-            msg = (
-                f'Reajuste do ciclo {ciclo} ({preview["percentual_final"]:,.4f}%) '
-                f'aplicado em {resultado["parcelas_reajustadas"]} parcela(s).'
-            )
-            if is_modal:
-                return JsonResponse({'sucesso': True, 'mensagem': msg})
-            messages.success(request, msg)
-            return redirect('contratos:detalhe', pk=contrato_id)
-
-        except Exception as e:
-            logger.exception(f'Erro ao aplicar reajuste: {e}')
-            if is_modal:
-                return JsonResponse({'sucesso': False, 'erro': str(e)}, status=400)
-            messages.error(request, f'Erro ao aplicar reajuste: {e}')
-            return redirect('financeiro:aplicar_reajuste', contrato_id=contrato_id)
-
-    # ── GET ──────────────────────────────────────────────────────────────────
-    ciclo = Reajuste.calcular_ciclo_pendente(contrato)
-
-    if not ciclo:
-        context = {
-            'contrato': contrato,
-            'sem_pendente': True,
-            'proximo_reajuste': contrato.data_proximo_reajuste,
-        }
-        tpl = 'financeiro/aplicar_reajuste_partial.html' if is_modal else 'financeiro/aplicar_reajuste.html'
-        return render(request, tpl, context)
-
-    desconto_percentual = request.GET.get('desconto_percentual') or None
-    desconto_valor = request.GET.get('desconto_valor') or None
-
-    preview = Reajuste.preview_reajuste(
-        contrato, ciclo,
-        desconto_percentual=desconto_percentual,
-        desconto_valor=desconto_valor,
-    )
-
-    # Calcular histórico de reajustes já aplicados
-    reajustes_anteriores = Reajuste.objects.filter(
-        contrato=contrato, aplicado=True
-    ).order_by('ciclo')
-
-    context = {
-        'contrato': contrato,
-        'ciclo': ciclo,
-        'preview': preview,
-        'desconto_percentual': desconto_percentual or '',
-        'desconto_valor': desconto_valor or '',
-        'reajustes_anteriores': reajustes_anteriores,
-        'sem_pendente': False,
-        'tem_erro': 'erro' in preview,
-        'is_modal': is_modal,
-    }
-    tpl = 'financeiro/aplicar_reajuste_partial.html' if is_modal else 'financeiro/aplicar_reajuste.html'
-    return render(request, tpl, context)
-
-
-@login_required
-@require_POST
-def aplicar_reajuste_contrato(request, contrato_id):  # noqa: F811
-    """
     Aplica o reajuste nas parcelas de um contrato.
 
     Modo automático (recomendado): passa apenas ciclo + desconto opcionais.
@@ -3408,7 +3235,7 @@ def aplicar_reajuste_contrato(request, contrato_id):  # noqa: F811
     contrato = get_object_or_404(Contrato, pk=contrato_id)
 
     # V-08: Contratos FIXO não têm reajuste periódico
-    if contrato.tipo_correcao == 'FIXO':
+    if contrato.tipo_correcao == TipoCorrecao.FIXO:
         return JsonResponse({
             'sucesso': False,
             'erro': 'Contratos com índice FIXO são pré-fixados e não possuem reajuste periódico.'

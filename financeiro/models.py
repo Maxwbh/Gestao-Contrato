@@ -999,8 +999,9 @@ class Reajuste(TimeStampedModel):
         antecipacao_meses: quantos meses antes do aniversário exibir como pendente.
         """
         from django.utils import timezone as tz
+        from contratos.models import TipoCorrecao
 
-        if contrato.tipo_correcao == 'FIXO':
+        if contrato.tipo_correcao == TipoCorrecao.FIXO:
             return None
 
         prazo = contrato.prazo_reajuste_meses
@@ -1411,7 +1412,8 @@ class Reajuste(TimeStampedModel):
 
         # V-08: Contratos FIXO não têm reajuste periódico
         if hasattr(self, 'contrato') and self.contrato:
-            if self.contrato.tipo_correcao == 'FIXO':
+            from contratos.models import TipoCorrecao
+            if self.contrato.tipo_correcao == TipoCorrecao.FIXO:
                 errors['contrato'] = (
                     'Contratos com índice FIXO são pré-fixados e não possuem reajuste periódico. '
                     'O valor das parcelas é definido na TabelaJurosContrato no momento da criação.'
