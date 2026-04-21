@@ -412,3 +412,26 @@ def imovel_factory(db, imobiliaria_factory):
         return Imovel.objects.create(**defaults)
 
     return create
+
+
+# =============================================================================
+# Testes do ReciboService
+# =============================================================================
+
+@pytest.mark.django_db
+class TestGeradorReciboPDF:
+    """Testes para gerar_recibo_antecipacao_pdf."""
+
+    def test_gera_pdf_bytes(self):
+        """O serviço deve retornar bytes de PDF não-vazios."""
+        from tests.fixtures.factories import ContratoFactory
+        from financeiro.services.recibo_service import gerar_recibo_antecipacao_pdf
+
+        contrato = ContratoFactory()
+
+        pdf = gerar_recibo_antecipacao_pdf(contrato, historicos=[])
+
+        assert isinstance(pdf, bytes)
+        assert len(pdf) > 0
+        assert pdf[:4] == b'%PDF'
+
