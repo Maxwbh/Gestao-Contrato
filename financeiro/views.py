@@ -2845,7 +2845,7 @@ def api_gerar_boletos_lote(request):
             # Obter parcelas elegiveis (nao pagas, sem boleto, elegíveis por reajuste)
             parcelas = contrato.parcelas.filter(
                 pago=False,
-                status_boleto='NAO_GERADO'
+                status_boleto=StatusBoleto.NAO_GERADO
             ).order_by('numero_parcela')
 
             gerados_contrato = 0

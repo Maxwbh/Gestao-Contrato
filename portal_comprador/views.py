@@ -30,7 +30,7 @@ import logging
 
 from contratos.models import Contrato
 from core.permissions import portal_rate_limit
-from financeiro.models import Parcela
+from financeiro.models import Parcela, StatusBoleto
 
 from .models import AcessoComprador, LogAcessoComprador
 from .forms import (
@@ -923,7 +923,7 @@ def api_portal_boletos(request):
         'contrato', 'contrato__imovel'
     ).filter(
         contrato__comprador=comprador
-    ).exclude(status_boleto='NAO_GERADO')
+    ).exclude(status_boleto=StatusBoleto.NAO_GERADO)
 
     # Filtros
     status_boleto = request.GET.get('status_boleto', '')
