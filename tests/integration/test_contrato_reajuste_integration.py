@@ -142,7 +142,6 @@ class TestFluxoContratoCompleto:
         valor_esperado = contrato.valor_parcela_original * Decimal('1.0617')
         assert abs(parcela_13.valor_atual - valor_esperado) < Decimal('0.01')
 
-    @pytest.mark.xfail(reason="Bug de precisão decimal: aplicar_reajuste() em PrestacaoIntermediaria não arredonda antes de salvar, causando ValidationError para campos com decimal_places=2")
     def test_intermediarias_reajustadas_junto_com_parcelas(
         self,
         contrato_factory,
