@@ -16,6 +16,7 @@ Empresa: M&S do Brasil LTDA
 """
 import io
 import json
+import re
 import time
 import logging
 import requests
@@ -244,6 +245,56 @@ class CNABService:
 
         return boleto_data
 
+    def _montar_dados_pagamento_remessa(self, parcela, conta_bancaria) -> dict:
+        """
+        Monta dados de pagamento para a API /api/remessa (Brcobranca::Remessa::Pagamento).
+
+        Os campos do Pagamento de remessa são DIFERENTES dos campos do Boleto individual:
+        - nome_sacado (não sacado)
+        - documento_sacado (não sacado_documento)
+        - data_emissao (não data_documento)
+        - numero (não documento_numero)
+        - endereco separado em rua + bairro + cep + cidade + uf
+        - identificacao_ocorrencia obrigatório
+        """
+        contrato = parcela.contrato
+        comprador = contrato.comprador
+
+        cpf_cnpj = self._formatar_cpf_cnpj(
+            comprador.cnpj if getattr(comprador, 'cnpj', None) else comprador.cpf
+        )
+
+        logradouro = getattr(comprador, 'logradouro', None) or getattr(comprador, 'endereco', None) or ''
+        numero_end = getattr(comprador, 'numero', '') or ''
+        rua = f"{logradouro}, {numero_end}".strip(', ') if numero_end else logradouro
+
+        bairro = getattr(comprador, 'bairro', '') or ''
+        cidade = getattr(comprador, 'cidade', '') or ''
+        uf = getattr(comprador, 'estado', '') or ''
+        cep = re.sub(r'\D', '', getattr(comprador, 'cep', '') or '')[:8].zfill(8)
+
+        from django.utils import timezone as _tz
+        data_emissao = (
+            parcela.data_geracao_boleto if parcela.data_geracao_boleto
+            else _tz.now()
+        )
+
+        return {
+            'nosso_numero': str(parcela.nosso_numero or '1'),
+            'numero': (parcela.numero_documento or '')[:25],
+            'valor': self._formatar_valor(parcela.valor_boleto or parcela.valor_atual),
+            'data_vencimento': self._formatar_data(parcela.data_vencimento),
+            'data_emissao': self._formatar_data(data_emissao),
+            'nome_sacado': comprador.nome[:40],
+            'documento_sacado': cpf_cnpj,
+            'endereco_sacado': rua[:40],
+            'bairro_sacado': bairro[:15],
+            'cep_sacado': cep,
+            'cidade_sacado': cidade[:15],
+            'uf_sacado': uf[:2],
+            'identificacao_ocorrencia': '01',
+        }
+
     def gerar_remessa(
         self,
         parcelas: List,
@@ -330,58 +381,52 @@ class CNABService:
         banco = self._get_banco_brcobranca(conta_bancaria.banco)
         imobiliaria = conta_bancaria.imobiliaria
 
-        # Estrutura de dados do cedente/empresa
+        # Agencia: CNAB240 usa até 5 dígitos (num+DV para BB), CNAB400 usa 4
         agencia_num, agencia_dv = self._parsear_numero_dv(conta_bancaria.agencia)
         conta_num, conta_dv = self._parsear_numero_dv(conta_bancaria.conta)
+        if layout == 'CNAB_240' and agencia_dv:
+            agencia_remessa = f"{agencia_num}{agencia_dv}"[:5]
+        else:
+            agencia_remessa = agencia_num
+
         dados_empresa = {
             'empresa_mae': imobiliaria.razao_social or imobiliaria.nome,
             'documento_cedente': self._formatar_cpf_cnpj(imobiliaria.cnpj),
-            'agencia': agencia_num,
-            'agencia_dv': agencia_dv,
+            'agencia': agencia_remessa,
             'conta_corrente': conta_num,
             'digito_conta': conta_dv,
             'convenio': conta_bancaria.convenio or '',
             'carteira': conta_bancaria.carteira or '',
             'sequencial_remessa': numero_remessa,
-            'codigo_cedente': conta_bancaria.convenio or '',
         }
 
-        # Campos do cedente que pertencem APENAS ao root do payload de remessa.
-        # Não devem ser repetidos em cada pagamento — a API Ruby faz merge do root
-        # com os campos de cada boleto; duplicatas causam NoMethodError (merge on Array).
-        _CAMPOS_CEDENTE_ROOT = {
-            'agencia', 'conta_corrente', 'convenio', 'carteira',
-            'cedente', 'documento_cedente',
-        }
+        # Campos extras por banco
+        codigo_banco = conta_bancaria.banco
+        carteira_str = conta_bancaria.carteira or ''
+        if codigo_banco == '001':
+            # BB: variacao = carteira zero-padded a 3 dígitos
+            variacao = re.sub(r'\D', '', carteira_str).zfill(3)[:3]
+            if layout == 'CNAB_240':
+                dados_empresa['variacao'] = variacao
+            else:
+                dados_empresa['variacao_carteira'] = variacao
+        elif codigo_banco == '237':
+            # Bradesco: codigo_empresa obrigatório
+            dados_empresa['codigo_empresa'] = conta_bancaria.convenio or ''
 
-        # Lista de boletos — apenas campos boleto-específicos (sacado, valores, datas, etc.)
+        # Pagamentos com campos corretos do Brcobranca::Remessa::Pagamento
         pagamentos = []
-
         valor_total = Decimal('0.00')
         for parcela in parcelas_validas:
-            dados_boleto = self._montar_dados_boleto(parcela, conta_bancaria)
-            # Strip de campos do cedente — ficam somente no root (dados_empresa)
-            boleto_remessa = {
-                k: v for k, v in dados_boleto.items()
-                if k not in _CAMPOS_CEDENTE_ROOT
-            }
-            pagamentos.append(boleto_remessa)
+            pagamentos.append(self._montar_dados_pagamento_remessa(parcela, conta_bancaria))
             valor_total += parcela.valor_boleto or parcela.valor_atual
 
         try:
             # A API /api/remessa espera multipart/form-data:
-            #   - bank   → campo de formulário (nome do banco, ex: 'banco_brasil')
-            #   - type   → campo de formulário (layout: 'cnab240' ou 'cnab400')
-            #   - data   → arquivo JSON com os dados do cedente + pagamentos:
-            #       {
-            #         "empresa_mae": "...", "documento_cedente": "...",
-            #         "agencia": "...", "agencia_dv": "...",
-            #         "conta_corrente": "...", "digito_conta": "...",
-            #         "convenio": "...", "carteira": "...",
-            #         "sequencial_remessa": N, "codigo_cedente": "...",
-            #         "pagamentos": [{nosso_numero, valor, sacado, ...}, ...]
-            #       }
-            # Resposta: conteúdo CNAB bruto (text/plain), NÃO JSON+base64.
+            #   - bank   → campo de formulário (ex: 'banco_brasil')
+            #   - type   → campo de formulário ('cnab240' ou 'cnab400')
+            #   - data   → arquivo JSON (empresa + pagamentos)
+            # Resposta: conteúdo CNAB bruto (text/plain).
             tipo_cnab = 'cnab240' if layout == 'CNAB_240' else 'cnab400'
             data_remessa = {
                 **dados_empresa,
@@ -397,8 +442,8 @@ class CNABService:
             if logger.isEnabledFor(logging.DEBUG) and pagamentos:
                 p0 = pagamentos[0]
                 logger.debug(
-                    "[Remessa] payload[0] data_vencimento=%r data_documento=%r",
-                    p0.get('data_vencimento'), p0.get('data_documento')
+                    "[Remessa] payload[0] data_vencimento=%r data_emissao=%r",
+                    p0.get('data_vencimento'), p0.get('data_emissao')
                 )
 
             # Retry automático em 429 (rate limit): até 3 tentativas com backoff exponencial
