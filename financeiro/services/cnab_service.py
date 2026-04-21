@@ -370,24 +370,28 @@ class CNABService:
         try:
             # A API /api/remessa espera POST com JSON body:
             #   {
-            #     "banco":   "banco_brasil",    ← nome do banco (keyword obrigatório)
-            #     "formato": "cnab240",          ← layout (keyword obrigatório)
-            #     "empresa_mae": "...",          ← campos do cedente no root
-            #     "documento_cedente": "...",
-            #     "agencia": "...", "agencia_dv": "...",
-            #     "conta_corrente": "...", "digito_conta": "...",
-            #     "convenio": "...", "carteira": "...",
-            #     "sequencial_remessa": N, "codigo_cedente": "...",
-            #     "pagamentos": [{nosso_numero, valor, sacado, ...}, ...]
+            #     "bank":   "banco_brasil",      ← nome do banco (keyword obrigatório)
+            #     "type":   "cnab240",            ← layout (keyword obrigatório)
+            #     "data": {                       ← dados do cedente + boletos
+            #       "empresa_mae": "...",
+            #       "documento_cedente": "...",
+            #       "agencia": "...", "agencia_dv": "...",
+            #       "conta_corrente": "...", "digito_conta": "...",
+            #       "convenio": "...", "carteira": "...",
+            #       "sequencial_remessa": N, "codigo_cedente": "...",
+            #       "pagamentos": [{nosso_numero, valor, sacado, ...}, ...]
+            #     }
             #   }
             # NOTA: campos do cedente NÃO devem ser repetidos em cada pagamento.
             # NOTA: usar json= (não multipart/files) — API espera body JSON.
             tipo_cnab = 'cnab240' if layout == 'CNAB_240' else 'cnab400'
             payload = {
-                'banco': banco,
-                'formato': tipo_cnab,
-                **dados_empresa,
-                'pagamentos': pagamentos,
+                'bank': banco,
+                'type': tipo_cnab,
+                'data': {
+                    **dados_empresa,
+                    'pagamentos': pagamentos,
+                },
             }
 
             descricao_conta = getattr(conta_bancaria, 'descricao', None) or str(conta_bancaria)
