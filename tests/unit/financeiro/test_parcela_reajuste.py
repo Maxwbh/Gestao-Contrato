@@ -10,6 +10,7 @@ import pytest
 from decimal import Decimal
 from datetime import date, timedelta
 from django.utils import timezone
+from financeiro.models import TipoParcela
 
 
 @pytest.mark.django_db
@@ -19,7 +20,7 @@ class TestParcelaModel:
     def test_parcela_tipo_padrao_normal(self, parcela_factory):
         """Testa que parcela tem tipo NORMAL por padrão"""
         parcela = parcela_factory()
-        assert parcela.tipo_parcela == 'NORMAL'
+        assert parcela.tipo_parcela == TipoParcela.NORMAL
 
     def test_parcela_ciclo_reajuste_padrao(self, parcela_factory):
         """Testa que parcela tem ciclo 1 por padrão"""

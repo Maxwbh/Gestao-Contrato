@@ -831,7 +831,7 @@ class Contrato(TimeStampedModel):
         Args:
             base_pv: Valor presente base. Se None, usa valor_financiado.
         """
-        from financeiro.models import Parcela as ParcelaModel, Reajuste
+        from financeiro.models import Parcela as ParcelaModel, Reajuste, TipoParcela
 
         pv = base_pv if base_pv is not None else self.valor_financiado
         if pv <= 0 or self.numero_parcelas <= 0:
@@ -840,7 +840,7 @@ class Contrato(TimeStampedModel):
         taxa = TabelaJurosContrato.get_juros_para_ciclo(self, 1) or Decimal('0')
 
         parcelas_qs = self.parcelas.filter(
-            tipo_parcela='NORMAL'
+            tipo_parcela=TipoParcela.NORMAL
         ).order_by('numero_parcela')
 
         n = parcelas_qs.count()
@@ -945,7 +945,8 @@ class Contrato(TimeStampedModel):
           Se amortizacao não preenchida ainda, cai para valor_atual como fallback.
         """
         from django.db.models import Sum
-        qs = self.parcelas.filter(pago=False, tipo_parcela='NORMAL')
+        from financeiro.models import TipoParcela
+        qs = self.parcelas.filter(pago=False, tipo_parcela=TipoParcela.NORMAL)
         if self.tipo_amortizacao == TipoAmortizacao.SAC:
             saldo = qs.aggregate(total=Sum('amortizacao'))['total']
             if saldo is None:
