@@ -333,7 +333,7 @@ def _processar_regra(regra, result):
     """
     N-03: Executa uma RegrarNotificacao: encontra as parcelas na data-alvo e envia.
     """
-    from financeiro.models import Parcela
+    from financeiro.models import Parcela, TipoParcela
     from notificacoes.models import TipoGatilho
     from datetime import date, timedelta
 
@@ -344,13 +344,13 @@ def _processar_regra(regra, result):
         data_alvo = hoje + timedelta(days=regra.dias_offset)
         label = f"D-{regra.dias_offset}"
         parcelas = Parcela.objects.filter(
-            pago=False, tipo_parcela='NORMAL', data_vencimento=data_alvo,
+            pago=False, tipo_parcela=TipoParcela.NORMAL, data_vencimento=data_alvo,
         ).select_related('contrato', 'contrato__comprador', 'contrato__imobiliaria')
     else:  # APOS_VENCIMENTO
         data_alvo = hoje - timedelta(days=regra.dias_offset)
         label = f"D+{regra.dias_offset}"
         parcelas = Parcela.objects.filter(
-            pago=False, tipo_parcela='NORMAL', data_vencimento=data_alvo,
+            pago=False, tipo_parcela=TipoParcela.NORMAL, data_vencimento=data_alvo,
         ).select_related('contrato', 'contrato__comprador', 'contrato__imobiliaria')
 
     result.add_message(
@@ -441,7 +441,7 @@ def enviar_notificacoes_sync():
     Se existirem RegraNotificacao ativas do tipo ANTES, usa a régua configurável.
     Caso contrário, usa o comportamento padrão (D-5 via settings).
     """
-    from financeiro.models import Parcela
+    from financeiro.models import Parcela, TipoParcela
     from notificacoes.models import TipoNotificacao, RegraNotificacao, TipoGatilho
     from notificacoes.services import ServicoEmail
     from datetime import date, timedelta
@@ -469,7 +469,7 @@ def enviar_notificacoes_sync():
 
             parcelas = Parcela.objects.filter(
                 pago=False,
-                tipo_parcela='NORMAL',
+                tipo_parcela=TipoParcela.NORMAL,
                 data_vencimento=data_alvo,
             ).select_related('contrato', 'contrato__comprador', 'contrato__imobiliaria')
 
@@ -555,7 +555,7 @@ def enviar_inadimplentes_sync():
     Se existirem RegraNotificacao ativas do tipo APOS, usa a régua configurável.
     Caso contrário, usa o comportamento padrão (>= D+3 via settings).
     """
-    from financeiro.models import Parcela
+    from financeiro.models import Parcela, TipoParcela
     from notificacoes.models import TipoNotificacao, RegraNotificacao, TipoGatilho
     from notificacoes.services import ServicoEmail
     from datetime import date, timedelta
@@ -583,7 +583,7 @@ def enviar_inadimplentes_sync():
 
             parcelas = Parcela.objects.filter(
                 pago=False,
-                tipo_parcela='NORMAL',
+                tipo_parcela=TipoParcela.NORMAL,
                 data_vencimento=data_corte,
             ).select_related('contrato', 'contrato__comprador', 'contrato__imobiliaria')
 

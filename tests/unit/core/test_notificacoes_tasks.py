@@ -81,7 +81,7 @@ def contrato_base(db, dominio):
 
 def _criar_parcela(contrato, dias_offset, pago=False):
     """Cria parcela com vencimento relativo a hoje."""
-    from financeiro.models import Parcela
+    from financeiro.models import Parcela, TipoParcela
     return Parcela.objects.create(
         contrato=contrato,
         numero_parcela=900 + dias_offset,
@@ -89,7 +89,7 @@ def _criar_parcela(contrato, dias_offset, pago=False):
         valor_atual=Decimal('1000.00'),
         valor_pago=Decimal('0.00'),
         data_vencimento=date.today() + timedelta(days=dias_offset),
-        tipo_parcela='NORMAL',
+        tipo_parcela=TipoParcela.NORMAL,
         pago=pago,
     )
 

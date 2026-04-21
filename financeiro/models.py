@@ -1240,7 +1240,7 @@ class Reajuste(TimeStampedModel):
             # onde (1+taxa_mensal)^prazo é o fator de juros compostos anuais.
             todas_restantes = contrato.parcelas.filter(
                 pago=False,
-                tipo_parcela='NORMAL',
+                tipo_parcela=TipoParcela.NORMAL,
             ).order_by('numero_parcela')
 
             primeira = todas_restantes.first()
@@ -1278,7 +1278,7 @@ class Reajuste(TimeStampedModel):
             # MODO SAC — amortização constante recalculada sobre o saldo corrigido
             todas_restantes = contrato.parcelas.filter(
                 pago=False,
-                tipo_parcela='NORMAL',
+                tipo_parcela=TipoParcela.NORMAL,
             ).order_by('numero_parcela')
 
             n_restantes = todas_restantes.count()
@@ -1508,7 +1508,7 @@ class Reajuste(TimeStampedModel):
             # PMT_novo = PMT_atual × (1 + IPCA) × (1 + taxa_mensal)^prazo
             parcelas = self.contrato.parcelas.filter(
                 pago=False,
-                tipo_parcela='NORMAL',
+                tipo_parcela=TipoParcela.NORMAL,
             ).order_by('numero_parcela')
 
             primeira = parcelas.first()
@@ -1534,7 +1534,7 @@ class Reajuste(TimeStampedModel):
             # MODO SAC — recalcula amortização constante sobre saldo corrigido
             parcelas = list(self.contrato.parcelas.filter(
                 pago=False,
-                tipo_parcela='NORMAL',
+                tipo_parcela=TipoParcela.NORMAL,
             ).order_by('numero_parcela'))
 
             n_restantes = len(parcelas)

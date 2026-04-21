@@ -899,12 +899,8 @@ class TestOFXView:
         """GET deve retornar 200 (template de upload)."""
         from django.urls import reverse
         url = reverse('financeiro:upload_ofx')
-        # Template pode não existir ainda — aceitar 200 ou TemplateDoesNotExist
-        try:
-            resp = cli.get(url)
-            assert resp.status_code in (200, 500)
-        except Exception:
-            pass  # template ainda não criado
+        resp = cli.get(url)
+        assert resp.status_code == 200
 
     def test_post_sem_arquivo_retorna_400(self, cli):
         """POST sem arquivo deve retornar 400."""
