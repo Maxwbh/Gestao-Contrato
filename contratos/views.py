@@ -609,10 +609,11 @@ class IndiceReajusteDeleteView(LoginRequiredMixin, DeleteView):
     model = IndiceReajuste
     success_url = reverse_lazy('contratos:indices_listar')
 
-    def delete(self, request, *args, **kwargs):
-        self.object = self.get_object()
-        messages.success(request, f'Índice {self.object} excluído com sucesso!')
-        return super().delete(request, *args, **kwargs)
+    def form_valid(self, form):
+        label = str(self.object)
+        response = super().form_valid(form)
+        messages.success(self.request, f'Índice {label} excluído com sucesso!')
+        return response
 
 
 # ==============================================================
