@@ -232,12 +232,13 @@ class TestHU04_05_CarnePDF:
 
     def test_carne_6_meses_brcobranca(self, cli, contrato_com_parcelas, dominio):
         """Carnê 6 meses via BRCobrança retorna PDF."""
+        from financeiro.services.boleto_service import BoletoService
         parcelas = self._parcelas_com_boleto(contrato_com_parcelas, 6)
         ids = [p.pk for p in parcelas]
 
         pdf_mock = b'%PDF-1.4 CARNE_MOCK'
-        with patch('financeiro.services.carne_service._gerar_carne_brcobranca',
-                   return_value=pdf_mock):
+        with patch.object(BoletoService, 'gerar_carne',
+                          return_value={'sucesso': True, 'pdf_content': pdf_mock}):
             url = reverse('financeiro:download_carne_pdf',
                           kwargs={'contrato_id': contrato_com_parcelas.pk})
             resp = cli.post(
@@ -250,24 +251,23 @@ class TestHU04_05_CarnePDF:
         assert resp['Content-Type'] == 'application/pdf'
         assert b'PDF' in resp.content
 
-    def test_carne_12_meses_fallback_reportlab(self, cli, contrato_com_parcelas):
-        """Carnê 12 meses via fallback ReportLab (sem BRCobrança)."""
-        parcelas = list(contrato_com_parcelas.parcelas.order_by('numero_parcela'))
+    def test_carne_api_indisponivel_retorna_500(self, cli, contrato_com_parcelas, dominio):
+        """BRCobrança indisponível → view retorna 500 com mensagem de erro."""
+        from financeiro.services.boleto_service import BoletoService
+        parcelas = self._parcelas_com_boleto(contrato_com_parcelas, 6)
         ids = [p.pk for p in parcelas]
 
-        # Simula BRCobrança indisponível → fallback ReportLab
-        with patch('financeiro.services.carne_service._gerar_carne_brcobranca', return_value=None):
+        with patch.object(BoletoService, 'gerar_carne',
+                          return_value={'sucesso': False, 'erro': 'API indisponível'}):
             url = reverse('financeiro:download_carne_pdf',
                           kwargs={'contrato_id': contrato_com_parcelas.pk})
             resp = cli.post(
                 url,
                 content_type='application/json',
-                data=json.dumps({'parcela_ids': ids, 'apenas_com_boleto': False}),
+                data=json.dumps({'parcela_ids': ids}),
             )
 
-        assert resp.status_code == 200
-        assert resp['Content-Type'] == 'application/pdf'
-        assert len(resp.content) > 100  # PDF não vazio
+        assert resp.status_code == 500
 
     def test_carne_get_retorna_lista_parcelas(self, cli, contrato_com_parcelas):
         """GET em download_carne_pdf retorna lista de parcelas disponíveis."""
@@ -315,7 +315,9 @@ class TestHU06_07_CarneMultiplosContratos:
             ]
         }
 
-        with patch('financeiro.services.carne_service._gerar_carne_brcobranca', return_value=None):
+        pdf_mock = b'%PDF-1.4 MULTIPLOS'
+        with patch('financeiro.services.carne_service.gerar_carne_multiplos_contratos',
+                   return_value=pdf_mock):
             url = reverse('financeiro:download_carne_multiplos')
             resp = cli.post(url, content_type='application/json', data=json.dumps(payload))
 
@@ -530,38 +532,27 @@ class TestHU12_EnvioEmail:
 class TestCarneService:
     """Testes unitários do CarneService."""
 
-    def test_gerar_carne_brcobranca_chamado_quando_disponivel(self, contrato_com_parcelas):
-        """gerar_carne_pdf tenta BRCobrança antes do fallback."""
+    def test_gerar_carne_brcobranca_chamado(self, contrato_com_parcelas, dominio):
+        """gerar_carne_pdf chama BRCobrança e retorna o PDF recebido."""
         from financeiro.services.carne_service import gerar_carne_pdf
+        from financeiro.services.boleto_service import BoletoService
         parcelas = list(contrato_com_parcelas.parcelas.order_by('numero_parcela')[:6])
 
         pdf_brcobranca = b'%PDF-1.4 BRCOBRANCA'
-        with patch('financeiro.services.carne_service._gerar_carne_brcobranca',
-                   return_value=pdf_brcobranca) as mock_br:
+        with patch.object(BoletoService, 'gerar_carne', return_value={'sucesso': True, 'pdf_content': pdf_brcobranca}):
             result = gerar_carne_pdf(parcelas, contrato_com_parcelas)
 
-        mock_br.assert_called_once()
         assert result == pdf_brcobranca
 
-    def test_gerar_carne_fallback_reportlab_quando_brcobranca_falha(self, contrato_com_parcelas):
-        """gerar_carne_pdf usa ReportLab quando BRCobrança retorna None."""
+    def test_gerar_carne_levanta_runtime_error_quando_api_falha(self, contrato_com_parcelas, dominio):
+        """gerar_carne_pdf levanta RuntimeError quando BRCobrança retorna erro."""
         from financeiro.services.carne_service import gerar_carne_pdf
+        from financeiro.services.boleto_service import BoletoService
         parcelas = list(contrato_com_parcelas.parcelas.order_by('numero_parcela')[:6])
 
-        with patch('financeiro.services.carne_service._gerar_carne_brcobranca', return_value=None):
-            result = gerar_carne_pdf(parcelas, contrato_com_parcelas, usar_brcobranca=True)
-
-        assert result[:4] == b'%PDF'
-        assert len(result) > 100
-
-    def test_gerar_carne_reportlab_direto(self, contrato_com_parcelas):
-        """usar_brcobranca=False usa ReportLab diretamente."""
-        from financeiro.services.carne_service import gerar_carne_pdf
-        parcelas = list(contrato_com_parcelas.parcelas.order_by('numero_parcela')[:12])
-
-        result = gerar_carne_pdf(parcelas, contrato_com_parcelas, usar_brcobranca=False)
-
-        assert result[:4] == b'%PDF'
+        with patch.object(BoletoService, 'gerar_carne', return_value={'sucesso': False, 'erro': 'API indisponível'}):
+            with pytest.raises(RuntimeError, match='BRCobrança'):
+                gerar_carne_pdf(parcelas, contrato_com_parcelas)
 
     def test_gerar_carne_sem_parcelas_levanta_exception(self, contrato_com_parcelas):
         """Lista vazia levanta ValueError."""
@@ -570,20 +561,28 @@ class TestCarneService:
         with pytest.raises(ValueError, match='Nenhuma parcela'):
             gerar_carne_pdf([], contrato_com_parcelas)
 
-    def test_gerar_carne_6_meses(self, contrato_com_parcelas):
-        """Carnê de 6 parcelas gera PDF válido."""
+    def test_gerar_carne_6_meses(self, contrato_com_parcelas, dominio):
+        """Carnê de 6 parcelas retorna PDF válido via BRCobrança."""
         from financeiro.services.carne_service import gerar_carne_pdf
+        from financeiro.services.boleto_service import BoletoService
         parcelas = list(contrato_com_parcelas.parcelas.order_by('numero_parcela')[:6])
 
-        result = gerar_carne_pdf(parcelas, contrato_com_parcelas, usar_brcobranca=False)
+        pdf_mock = b'%PDF-1.4 MOCK6'
+        with patch.object(BoletoService, 'gerar_carne', return_value={'sucesso': True, 'pdf_content': pdf_mock}):
+            result = gerar_carne_pdf(parcelas, contrato_com_parcelas)
+
         assert result[:4] == b'%PDF'
 
-    def test_gerar_carne_12_meses(self, contrato_com_parcelas):
-        """Carnê de 12 parcelas gera PDF válido."""
+    def test_gerar_carne_12_meses(self, contrato_com_parcelas, dominio):
+        """Carnê de 12 parcelas retorna PDF válido via BRCobrança."""
         from financeiro.services.carne_service import gerar_carne_pdf
+        from financeiro.services.boleto_service import BoletoService
         parcelas = list(contrato_com_parcelas.parcelas.order_by('numero_parcela'))
 
-        result = gerar_carne_pdf(parcelas, contrato_com_parcelas, usar_brcobranca=False)
+        pdf_mock = b'%PDF-1.4 MOCK12'
+        with patch.object(BoletoService, 'gerar_carne', return_value={'sucesso': True, 'pdf_content': pdf_mock}):
+            result = gerar_carne_pdf(parcelas, contrato_com_parcelas)
+
         assert result[:4] == b'%PDF'
 
 
@@ -760,53 +759,46 @@ NEWFILEUID:NONE
 """
 
 
-@pytest.mark.django_db
-class TestOFXParser:
-    """Testa o parser OFX puro (sem banco de dados)."""
+_OFX_SAMPLE_BRCOBRANCA = {
+    "transacoes": [
+        {
+            "fitid": "20260405001", "tipo": "CREDIT",
+            "data": "2026-04-05", "valor": 8333.33,
+            "memo": "PAG PARCELA CTR-HU-001 COMPRADOR HU",
+            "nosso_numero_extraido": None,
+        },
+        {
+            "fitid": "20260406001", "tipo": "DEBIT",
+            "data": "2026-04-06", "valor": 150.0,
+            "memo": "TARIFA BANCARIA",
+            "nosso_numero_extraido": None,
+        },
+        {
+            "fitid": "20260407001", "tipo": "CREDIT",
+            "data": "2026-04-07", "valor": 9999.0,
+            "memo": "TED OUTROS",
+            "nosso_numero_extraido": None,
+        },
+    ]
+}
 
-    def test_parse_ofx_retorna_transacoes(self):
-        """parse_ofx deve retornar lista com transações do arquivo."""
-        from financeiro.services.ofx_service import parse_ofx
-        transacoes = parse_ofx(OFX_SAMPLE)
-        # 2 créditos + 1 débito = 3 transações no total
-        assert len(transacoes) == 3
+_OFX_NOSSO_NUMERO_BRCOBRANCA = {
+    "transacoes": [
+        {
+            "fitid": "FIT-NN-001", "tipo": "CREDIT",
+            "data": "2026-04-05", "valor": 8333.33,
+            "memo": "COBRANCA NOSSO NUMERO 0000000042 PAGO",
+            "nosso_numero_extraido": "0000000042",
+        },
+    ]
+}
 
-    def test_parse_ofx_ignora_debito_valor(self):
-        """Transação de débito deve ter valor negativo."""
-        from financeiro.services.ofx_service import parse_ofx
-        transacoes = parse_ofx(OFX_SAMPLE)
-        debitos = [t for t in transacoes if t.valor < 0]
-        assert len(debitos) == 1
-        assert debitos[0].valor == Decimal('-150.00')
 
-    def test_parse_ofx_extrai_campos(self):
-        """Campos essenciais devem ser extraídos corretamente."""
-        from financeiro.services.ofx_service import parse_ofx
-        from datetime import date
-        transacoes = parse_ofx(OFX_SAMPLE)
-        primeira = transacoes[0]
-        assert primeira.fitid == '20260405001'
-        assert primeira.valor == Decimal('8333.33')
-        assert primeira.data == date(2026, 4, 5)
-        assert 'CTR-HU-001' in primeira.memo
-
-    def test_parse_ofx_aceita_bytes(self):
-        """parse_ofx deve aceitar bytes (e decodificar automaticamente)."""
-        from financeiro.services.ofx_service import parse_ofx
-        transacoes = parse_ofx(OFX_SAMPLE)
-        assert len(transacoes) > 0
-
-    def test_parse_ofx_aceita_string(self):
-        """parse_ofx deve aceitar string."""
-        from financeiro.services.ofx_service import parse_ofx
-        transacoes = parse_ofx(OFX_SAMPLE.decode('utf-8'))
-        assert len(transacoes) > 0
-
-    def test_parse_ofx_arquivo_vazio(self):
-        """Arquivo sem transações retorna lista vazia."""
-        from financeiro.services.ofx_service import parse_ofx
-        transacoes = parse_ofx(b'<OFX><BANKMSGSRSV1></BANKMSGSRSV1></OFX>')
-        assert transacoes == []
+def _mock_brcobranca_response(data: dict):
+    mock_resp = MagicMock()
+    mock_resp.status_code = 200
+    mock_resp.json.return_value = data
+    return mock_resp
 
 
 @pytest.mark.django_db
@@ -816,9 +808,12 @@ class TestOFXReconciliacao:
     def test_reconcilia_por_numero_contrato_no_memo(self, contrato_com_parcelas):
         """P2: número do contrato no MEMO → match ALTA."""
         from financeiro.services.ofx_service import OFXService
-        # OFX_SAMPLE tem MEMO com 'CTR-HU-001' (numero_contrato do contrato_com_parcelas)
         service = OFXService(contrato=contrato_com_parcelas)
-        resultado = service.processar(OFX_SAMPLE)
+
+        with patch('financeiro.services.ofx_service.requests.post',
+                   return_value=_mock_brcobranca_response(_OFX_SAMPLE_BRCOBRANCA)):
+            resultado = service.processar(OFX_SAMPLE)
+
         reconciliadas = [r for r in resultado['resultados'] if r.reconciliada]
         assert len(reconciliadas) >= 1
         assert reconciliadas[0].confianca == 'ALTA'
@@ -826,13 +821,15 @@ class TestOFXReconciliacao:
     def test_reconcilia_por_nosso_numero(self, contrato_com_parcelas):
         """P1: nosso_numero no MEMO → match ALTA."""
         from financeiro.services.ofx_service import OFXService
-        # Configurar nosso_numero em uma parcela
         parcela = contrato_com_parcelas.parcelas.first()
         parcela.nosso_numero = '0000000042'
         parcela.save()
 
         service = OFXService(contrato=contrato_com_parcelas)
-        resultado = service.processar(OFX_NOSSO_NUMERO)
+        with patch('financeiro.services.ofx_service.requests.post',
+                   return_value=_mock_brcobranca_response(_OFX_NOSSO_NUMERO_BRCOBRANCA)):
+            resultado = service.processar(OFX_NOSSO_NUMERO)
+
         reconciliadas = [r for r in resultado['resultados'] if r.reconciliada]
         assert len(reconciliadas) == 1
         assert reconciliadas[0].confianca == 'ALTA'
@@ -842,9 +839,12 @@ class TestOFXReconciliacao:
         """Transações de débito (valor < 0) devem ser ignoradas na reconciliação."""
         from financeiro.services.ofx_service import OFXService
         service = OFXService(contrato=contrato_com_parcelas)
-        resultado = service.processar(OFX_SAMPLE)
+
+        with patch('financeiro.services.ofx_service.requests.post',
+                   return_value=_mock_brcobranca_response(_OFX_SAMPLE_BRCOBRANCA)):
+            resultado = service.processar(OFX_SAMPLE)
+
         nao_rec = [r for r in resultado['resultados'] if r.confianca == 'NAO_ENCONTRADA']
-        # Débito de -150.00 deve estar em não reconciliadas com motivo 'Débito ignorado'
         debitos = [r for r in nao_rec if 'Débito' in r.motivo]
         assert len(debitos) == 1
 
@@ -852,26 +852,38 @@ class TestOFXReconciliacao:
         """O total de transações retornado deve incluir débitos."""
         from financeiro.services.ofx_service import OFXService
         service = OFXService(contrato=contrato_com_parcelas)
-        resultado = service.processar(OFX_SAMPLE)
+
+        with patch('financeiro.services.ofx_service.requests.post',
+                   return_value=_mock_brcobranca_response(_OFX_SAMPLE_BRCOBRANCA)):
+            resultado = service.processar(OFX_SAMPLE)
+
         assert resultado['total_transacoes'] == 3
 
     def test_processar_arquivo_vazio_retorna_zeros(self, db):
         """Arquivo sem transações retorna resultado zerado."""
         from financeiro.services.ofx_service import OFXService
         service = OFXService()
-        resultado = service.processar(b'<OFX></OFX>')
+
+        with patch('financeiro.services.ofx_service.requests.post',
+                   return_value=_mock_brcobranca_response({'transacoes': []})):
+            resultado = service.processar(b'<OFX></OFX>')
+
         assert resultado['total_transacoes'] == 0
         assert resultado['reconciliadas'] == 0
         assert resultado['resultados'] == []
 
     def test_dry_run_nao_quita(self, contrato_com_parcelas):
-        """dry_run=True: reconcilia sem marcar parcelas como pagas."""
+        """dry_run=True: parseia via BRCobrança sem marcar parcelas como pagas."""
         from financeiro.services.ofx_service import processar_ofx_upload
-        resultado = processar_ofx_upload(
-            OFX_SAMPLE,
-            contrato=contrato_com_parcelas,
-            dry_run=True,
-        )
+
+        with patch('financeiro.services.ofx_service.requests.post',
+                   return_value=_mock_brcobranca_response(_OFX_SAMPLE_BRCOBRANCA)):
+            resultado = processar_ofx_upload(
+                OFX_SAMPLE,
+                contrato=contrato_com_parcelas,
+                dry_run=True,
+            )
+
         assert resultado['dry_run'] is True
         assert 'transacoes' in resultado
         # Parcelas não devem ter sido quitadas
@@ -921,7 +933,10 @@ class TestOFXView:
         arquivo = SimpleUploadedFile(
             'extrato.ofx', OFX_SAMPLE, content_type='application/x-ofx'
         )
-        resp = cli.post(url, {'arquivo_ofx': arquivo, 'dry_run': '0'})
+        with patch('financeiro.services.ofx_service.requests.post',
+                   return_value=_mock_brcobranca_response(_OFX_SAMPLE_BRCOBRANCA)):
+            resp = cli.post(url, {'arquivo_ofx': arquivo, 'dry_run': '0'})
+
         assert resp.status_code == 200
         data = json.loads(resp.content)
         assert data['sucesso'] is True
@@ -937,7 +952,10 @@ class TestOFXView:
         arquivo = SimpleUploadedFile(
             'extrato.ofx', OFX_NOSSO_NUMERO, content_type='application/x-ofx'
         )
-        resp = cli.post(url, {'arquivo_ofx': arquivo, 'dry_run': '1'})
+        with patch('financeiro.services.ofx_service.requests.post',
+                   return_value=_mock_brcobranca_response(_OFX_NOSSO_NUMERO_BRCOBRANCA)):
+            resp = cli.post(url, {'arquivo_ofx': arquivo, 'dry_run': '1'})
+
         assert resp.status_code == 200
         data = json.loads(resp.content)
         assert data.get('dry_run') is True
@@ -1034,7 +1052,7 @@ class TestOFXBRCobranca:
         assert debito.valor < 0
 
     def test_parse_via_brcobranca_retorna_none_em_connection_error(self):
-        """ConnectionError → retorna None (aciona fallback Python)."""
+        """ConnectionError → retorna None (serviço levantará RuntimeError)."""
         import requests as req_lib
         from unittest.mock import patch
         from financeiro.services.ofx_service import _parse_via_brcobranca
@@ -1046,7 +1064,7 @@ class TestOFXBRCobranca:
         assert result is None
 
     def test_parse_via_brcobranca_retorna_none_em_status_nao_200(self):
-        """Status != 200 → retorna None."""
+        """Status != 200 → retorna None (serviço levantará RuntimeError)."""
         from unittest.mock import patch, MagicMock
         from financeiro.services.ofx_service import _parse_via_brcobranca
 
@@ -1074,8 +1092,8 @@ class TestOFXBRCobranca:
         assert resultado['parser'] == 'brcobranca'
         assert resultado['total_transacoes'] == 2
 
-    def test_ofx_service_fallback_python_quando_brcobranca_indisponivel(self, contrato_com_parcelas):
-        """OFXService.processar faz fallback para Python quando BRCobrança falha."""
+    def test_ofx_service_levanta_erro_quando_brcobranca_indisponivel(self, contrato_com_parcelas):
+        """OFXService.processar levanta RuntimeError quando BRCobrança não está disponível."""
         import requests as req_lib
         from unittest.mock import patch
         from financeiro.services.ofx_service import OFXService
@@ -1083,10 +1101,8 @@ class TestOFXBRCobranca:
         with patch('financeiro.services.ofx_service.requests.post',
                    side_effect=req_lib.exceptions.ConnectionError()):
             service = OFXService(contrato=contrato_com_parcelas)
-            resultado = service.processar(OFX_SAMPLE)
-
-        assert resultado['parser'] == 'python'
-        assert resultado['total_transacoes'] == 3  # parser Python encontra 3 transações
+            with pytest.raises(RuntimeError, match='BRCobrança'):
+                service.processar(OFX_SAMPLE)
 
     def test_reconciliacao_p1a_usa_nosso_numero_extraido(self, contrato_com_parcelas):
         """P1a: nosso_numero_extraido pelo BRCobrança casa com parcela.nosso_numero."""
