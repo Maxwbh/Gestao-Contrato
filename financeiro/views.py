@@ -22,7 +22,7 @@ from decimal import Decimal
 import logging
 
 from django.core.cache import cache
-from .models import Parcela, Reajuste, StatusBoleto, HistoricoPagamento
+from .models import Parcela, Reajuste, StatusBoleto, HistoricoPagamento, TipoParcela
 from core.models import Imobiliaria, ContaBancaria
 from contratos.models import Contrato, StatusContrato, TipoCorrecao
 
@@ -161,7 +161,7 @@ class DashboardFinanceiroView(LoginRequiredMixin, TemplateView):
                 pago=False,
                 data_vencimento__gte=hoje,
                 data_vencimento__lte=fim_semana,
-                tipo_parcela='NORMAL',
+                tipo_parcela=TipoParcela.NORMAL,
             )
             .select_related('contrato__comprador', 'contrato__imovel')
             .order_by('data_vencimento')[:20]
@@ -173,7 +173,7 @@ class DashboardFinanceiroView(LoginRequiredMixin, TemplateView):
             .annotate(
                 saldo_est=Sum(
                     'parcelas__valor_atual',
-                    filter=Q(parcelas__pago=False, parcelas__tipo_parcela='NORMAL')
+                    filter=Q(parcelas__pago=False, parcelas__tipo_parcela=TipoParcela.NORMAL)
                 )
             )
             .filter(saldo_est__isnull=False)
@@ -2478,7 +2478,7 @@ def download_carne_pdf(request, contrato_id):
     if request.method == 'GET':
         # Lista parcelas elegíveis
         parcelas = (
-            Parcela.objects.filter(contrato=contrato, pago=False, tipo_parcela='NORMAL')
+            Parcela.objects.filter(contrato=contrato, pago=False, tipo_parcela=TipoParcela.NORMAL)
             .order_by('numero_parcela')
             .values('id', 'numero_parcela', 'data_vencimento', 'valor_atual',
                     'nosso_numero', 'linha_digitavel', 'status_boleto')
@@ -2513,7 +2513,7 @@ def download_carne_pdf(request, contrato_id):
     qs = Parcela.objects.filter(
         pk__in=parcela_ids,
         contrato=contrato,
-        tipo_parcela='NORMAL',
+        tipo_parcela=TipoParcela.NORMAL,
     ).select_related('contrato__comprador', 'contrato__imovel', 'contrato__imobiliaria').order_by('numero_parcela')
 
     if apenas_com_boleto:
@@ -2574,7 +2574,7 @@ def download_carne_pdf_multiplos(request):
         except Contrato.DoesNotExist:
             continue
         parcelas = Parcela.objects.filter(
-            pk__in=pids, contrato=contrato, tipo_parcela='NORMAL'
+            pk__in=pids, contrato=contrato, tipo_parcela=TipoParcela.NORMAL
         ).order_by('numero_parcela')
         contratos_parcelas.append({'contrato': contrato, 'parcelas': parcelas})
 
@@ -3419,7 +3419,7 @@ def reajustes_pendentes(request):
         parcela_ref = ParcelaModel.objects.filter(
             contrato=contrato,
             numero_parcela=parcela_inicial,
-            tipo_parcela='NORMAL',
+            tipo_parcela=TipoParcela.NORMAL,
         ).values('valor_atual').first()
         prestacao_atual = parcela_ref['valor_atual'] if parcela_ref else None
 
@@ -6887,7 +6887,7 @@ def simulador_antecipacao(request, contrato_id):
         Parcela.objects.filter(
             contrato=contrato,
             pago=False,
-            tipo_parcela='NORMAL',
+            tipo_parcela=TipoParcela.NORMAL,
         )
         .order_by('numero_parcela')
     )
