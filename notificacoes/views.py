@@ -614,7 +614,11 @@ def preview_template(request, pk):
     """Visualiza preview do template com dados de exemplo"""
     template = get_object_or_404(TemplateNotificacao, pk=pk)
 
-    # Dados de exemplo
+    from django.utils import timezone
+    from notificacoes.models import TipoTemplate
+    hoje_str = timezone.localdate().strftime('%d/%m/%Y')
+
+    # Dados de exemplo — base (boleto/parcela)
     contexto_exemplo = {
         'NOMECOMPRADOR': 'Joao da Silva',
         'CPFCOMPRADOR': '123.456.789-00',
@@ -647,10 +651,46 @@ def preview_template(request, pk):
         'CODIGOBARRAS': '23791923500001250003381286000000001234567890',
         'STATUSBOLETO': 'Registrado',
         'VALORBOLETO': 'R$ 1.287,50',
-        'DATAATUAL': '10/06/2024',
+        'DATAATUAL': hoje_str,
         'HORAATUAL': '14:30',
         'LINKBOLETO': 'https://sistema.com/boleto/12345',
     }
+
+    # Dados adicionais para relatórios
+    if template.codigo == TipoTemplate.RELATORIO_SEMANAL:
+        contexto_exemplo.update({
+            'PERIODORELATORIO': '14/04/2025 a 20/04/2025',
+            'QTDRECEBIMENTOS': '18',
+            'VALORRECEBIMENTOS': 'R$ 22.500,00',
+            'QTDINADIMPLENTES': '5',
+            'VALORINADIMPLENTES': 'R$ 6.250,00',
+            'QTDAVENCER': '12',
+            'VALORAVENCER': 'R$ 15.000,00',
+        })
+    elif template.codigo == TipoTemplate.RELATORIO_MENSAL:
+        tabela_exemplo = (
+            '<table border="1" cellpadding="6" cellspacing="0" style="border-collapse:collapse;width:100%;">'
+            '<thead><tr style="background:#f0f0f0;">'
+            '<th>Imobiliária</th><th>Contratos Ativos</th>'
+            '<th>Recebimentos</th><th>Valor Recebido</th>'
+            '<th>Inadimplentes</th><th>Valor Inadimplente</th>'
+            '<th>Reajustes</th></tr></thead><tbody>'
+            '<tr><td>Imobiliária Exemplo</td><td>45</td><td>32</td>'
+            '<td>R$ 40.000,00</td><td>3</td><td>R$ 3.750,00</td><td>5</td></tr>'
+            '</tbody></table>'
+        )
+        contexto_exemplo.update({
+            'NOMECONTABILIDADE': 'Contabilidade Exemplo Ltda',
+            'MESREFERENCIA': 'março/2025',
+            'PERIODORELATORIO': '01/03/2025 a 31/03/2025',
+            'QTDCONTRATOSATIVOS': '45',
+            'QTDRECEBIMENTOS': '32',
+            'VALORRECEBIMENTOS': 'R$ 40.000,00',
+            'QTDINADIMPLENTES': '3',
+            'VALORINADIMPLENTES': 'R$ 3.750,00',
+            'QTDREAJUSTES': '5',
+            'TABELAIMOBILIARIAS': tabela_exemplo,
+        })
 
     assunto, corpo, corpo_html, corpo_whatsapp = template.renderizar(contexto_exemplo)
 

@@ -12,6 +12,7 @@
     .ag-theme-material .ag-row-even { background-color: #fff; }
     .ag-theme-material .ag-row-odd  { background-color: #f8f9fa; }
     .ag-theme-material .ag-row:hover { background-color: #e8f4fd !important; }
+    .ag-theme-material .ag-row { cursor: pointer; }
 </style>
 {% endblock %}
 
@@ -92,6 +93,24 @@
         </div>
     </div>
 </div>
+<!-- Modal: conteúdo da mensagem -->
+<div class="modal fade" id="modalMensagem" tabindex="-1" aria-labelledby="modalMensagemLabel" aria-hidden="true">
+  <div class="modal-dialog modal-lg modal-dialog-scrollable">
+    <div class="modal-content">
+      <div class="modal-header">
+        <div>
+          <h5 class="modal-title mb-0" id="modalMensagemLabel">Conteúdo da Mensagem</h5>
+          <small class="text-muted" id="modalMensagemMeta"></small>
+        </div>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fechar"></button>
+      </div>
+      <div class="modal-body p-0">
+        <iframe id="modalMensagemFrame" srcdoc="" style="width:100%;min-height:420px;border:none;" title="Conteúdo"></iframe>
+        <pre id="modalMensagemTexto" class="p-3 mb-0 bg-light" style="display:none;white-space:pre-wrap;font-size:13px;"></pre>
+      </div>
+    </div>
+  </div>
+</div>
 {% endblock %}
 
 {% block extra_js %}
@@ -110,6 +129,7 @@ const notifRowData = [
     status: "{{ notif.status|escapejs }}",
     tentativas: {{ notif.tentativas|default:0 }},
     erro_mensagem: "{{ notif.erro_mensagem|default:''|escapejs }}",
+    mensagem: "{{ notif.mensagem|default:''|escapejs }}",
 },
 {% endfor %}
 ];
@@ -140,6 +160,29 @@ function parcelaRenderer(params) {
     return `<a href="/financeiro/parcela/${d.parcela_pk}/">${d.parcela_str}</a>`;
 }
 
+function abrirMensagem(data) {
+    const isHtml = data.tipo === 'EMAIL';
+    document.getElementById('modalMensagemLabel').textContent =
+        data.assunto || ('Mensagem — ' + data.tipo);
+    document.getElementById('modalMensagemMeta').textContent =
+        data.tipo + ' · ' + data.destinatario + ' · ' + data.data_agendamento_fmt;
+
+    const frame = document.getElementById('modalMensagemFrame');
+    const pre = document.getElementById('modalMensagemTexto');
+
+    if (isHtml && data.mensagem.trim().startsWith('<')) {
+        frame.style.display = '';
+        pre.style.display = 'none';
+        frame.srcdoc = data.mensagem;
+    } else {
+        frame.style.display = 'none';
+        pre.style.display = '';
+        pre.textContent = data.mensagem || '(sem conteúdo)';
+    }
+
+    new bootstrap.Modal(document.getElementById('modalMensagem')).show();
+}
+
 document.addEventListener('DOMContentLoaded', function() {
     window.notifGridApi = agGrid.createGrid(
         document.getElementById('notifGrid'),
@@ -162,6 +205,7 @@ document.addEventListener('DOMContentLoaded', function() {
             defaultColDef: { sortable: true, resizable: true },
             rowHeight: 44, headerHeight: 48,
             suppressCellFocus: true, enableCellTextSelection: true,
+            onRowClicked: function(e) { abrirMensagem(e.data); },
         }
     );
 });
