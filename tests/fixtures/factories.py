@@ -28,6 +28,8 @@ from financeiro.models import (
     ArquivoRetorno,
     ItemRemessa,
     ItemRetorno,
+    StatusArquivoRemessa,
+    StatusArquivoRetorno,
 )
 from notificacoes.models import (
     ConfiguracaoEmail,
@@ -284,7 +286,7 @@ class ArquivoRetornoFactory(DjangoModelFactory):
     conta_bancaria = factory.SubFactory(ContaBancariaFactory)
     nome_arquivo = factory.Sequence(lambda n: f'retorno_{n}.ret')
     layout = 'CNAB_240'
-    status = 'PENDENTE'
+    status = StatusArquivoRetorno.PENDENTE
     arquivo = factory.django.FileField(filename='retorno.ret', data=b'HEADER\nDETALHE\nTRAILER')
 
 
@@ -296,7 +298,7 @@ class ArquivoRemessaFactory(DjangoModelFactory):
     numero_remessa = factory.Sequence(lambda n: n + 1)
     layout = 'CNAB_240'
     nome_arquivo = factory.Sequence(lambda n: f'remessa_{n}.rem')
-    status = 'GERADO'
+    status = StatusArquivoRemessa.GERADO
     arquivo = factory.django.FileField(filename='remessa.rem', data=b'HEADER\nDETALHE\nTRAILER')
     quantidade_boletos = 1
     valor_total = Decimal('7500.00')
