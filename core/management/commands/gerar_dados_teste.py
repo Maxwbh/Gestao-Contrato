@@ -1647,21 +1647,28 @@ class Command(BaseCommand):
             return 0
 
         try:
-            resultado = service.gerar_remessas_por_escopo(
-                parcela_ids=parcela_ids,
-                layout='CNAB_400',
-            )
-            remessas = resultado.get('remessas_geradas', [])
-            erros = resultado.get('erros', [])
-            count = len(remessas)
-            for r in remessas:
-                self.stdout.write(
-                    f"   → Remessa #{r.get('numero_remessa')} "
-                    f"— {r.get('banco', '')} "
-                    f"({r.get('total_boletos', 0)} boletos)"
+            # Agrupar por layout configurado na conta para não misturar CNAB_240 e CNAB_400
+            from financeiro.models import Parcela as _Parcela
+            from collections import defaultdict
+            grupos_layout = defaultdict(list)
+            for pid in parcela_ids:
+                p = _Parcela.objects.select_related('conta_bancaria').get(pk=pid)
+                layout = getattr(p.conta_bancaria, 'layout_cnab', 'CNAB_400') or 'CNAB_400'
+                grupos_layout[layout].append(pid)
+
+            for layout, ids in grupos_layout.items():
+                resultado = service.gerar_remessas_por_escopo(
+                    parcela_ids=ids,
+                    layout=layout,
                 )
-            for e in erros:
-                self.stdout.write(self.style.WARNING(f'   ⚠ {e}'))
+                for r in resultado.get('remessas_geradas', []):
+                    count += 1
+                    self.stdout.write(
+                        f"   → Remessa #{r.get('numero_remessa')} "
+                        f"[{layout}] ({r.get('quantidade_boletos', 0)} boletos)"
+                    )
+                for e in resultado.get('erros', []):
+                    self.stdout.write(self.style.WARNING(f'   ⚠ {e}'))
         except Exception as exc:
             self.stdout.write(self.style.WARNING(f'   ⚠ Erro ao gerar remessa: {exc}'))
 
