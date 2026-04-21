@@ -335,10 +335,10 @@ class Parcela(TimeStampedModel):
             pass  # Tratado no método gerar_boleto
 
         # Validar valores positivos
-        if self.valor_original and self.valor_original <= Decimal('0'):
+        if self.valor_original is not None and self.valor_original <= Decimal('0'):
             errors['valor_original'] = 'O valor original deve ser maior que zero.'
 
-        if self.valor_atual and self.valor_atual <= Decimal('0'):
+        if self.valor_atual is not None and self.valor_atual <= Decimal('0'):
             errors['valor_atual'] = 'O valor atual deve ser maior que zero.'
 
         # Validar data de pagamento não pode ser futura
@@ -350,7 +350,7 @@ class Parcela(TimeStampedModel):
             errors['valor_pago'] = 'Informe o valor pago ao marcar a parcela como paga.'
 
         # Validar ciclo de reajuste
-        if self.ciclo_reajuste and self.ciclo_reajuste < 1:
+        if self.ciclo_reajuste is not None and self.ciclo_reajuste < 1:
             errors['ciclo_reajuste'] = 'O ciclo de reajuste deve ser pelo menos 1.'
 
         if errors:
