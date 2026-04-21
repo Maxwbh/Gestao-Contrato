@@ -1404,6 +1404,10 @@ class Command(BaseCommand):
         )
 
         for contrato in contratos_com_intermediarias:
+            # Pular contratos que já têm intermediárias (ex: cenários HU configurados manualmente)
+            if contrato.intermediarias.exists():
+                continue
+
             # Intervalo: 50% usa a cada 6 meses, 50% a cada 12 meses
             intervalo = random.choice([6, 12])
             max_intermediarias = contrato.numero_parcelas // intervalo
