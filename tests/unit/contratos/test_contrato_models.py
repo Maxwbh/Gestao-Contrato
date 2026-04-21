@@ -11,6 +11,7 @@ import pytest
 from decimal import Decimal
 from datetime import date, timedelta
 from django.utils import timezone
+from contratos.models import StatusContrato
 
 
 @pytest.mark.django_db
@@ -22,7 +23,7 @@ class TestContratoModel:
         contrato = contrato_factory()
         assert contrato.pk is not None
         assert contrato.numero_contrato is not None
-        assert contrato.status == 'ATIVO'
+        assert contrato.status == StatusContrato.ATIVO
 
     def test_contrato_valor_financiado_calculado(self, contrato_factory):
         """Testa cálculo automático do valor financiado"""
