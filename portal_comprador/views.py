@@ -979,7 +979,7 @@ def api_portal_boletos(request):
 # 4-P3-4 : POST /portal/api/boletos/segunda-via/
 # =============================================================================
 
-@login_required
+@login_required(login_url='portal_comprador:login')
 @portal_rate_limit
 @require_POST
 def api_portal_segunda_via(request, parcela_id):
@@ -1042,7 +1042,7 @@ def api_portal_segunda_via(request, parcela_id):
 # 4-P3-5 : GET /portal/api/boletos/<id>/linha-digitavel/
 # =============================================================================
 
-@login_required
+@login_required(login_url='portal_comprador:login')
 @require_GET
 def api_portal_linha_digitavel(request, parcela_id):
     """
