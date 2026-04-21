@@ -20,7 +20,7 @@ from django.db import transaction
 from faker import Faker
 
 from core.models import Contabilidade, Imobiliaria, Imovel, Comprador, TipoImovel, ContaBancaria
-from contratos.models import Contrato, TipoCorrecao, StatusContrato, IndiceReajuste, PrestacaoIntermediaria, TabelaJurosContrato
+from contratos.models import Contrato, TipoCorrecao, TipoAmortizacao, StatusContrato, IndiceReajuste, PrestacaoIntermediaria, TabelaJurosContrato
 from financeiro.models import Parcela, Reajuste
 from portal_comprador.models import AcessoComprador
 from django.contrib.auth.models import User
@@ -707,7 +707,7 @@ class Command(BaseCommand):
                 percentual_cessao=Decimal('3.0000'),
                 intermediarias_reduzem_pmt=random.random() < 0.3,
                 intermediarias_reajustadas=random.random() < 0.7,
-                tipo_amortizacao='SAC' if random.random() < 0.25 else 'PRICE',
+                tipo_amortizacao=TipoAmortizacao.SAC if random.random() < 0.25 else TipoAmortizacao.PRICE,
                 status=StatusContrato.ATIVO,
                 observacoes='Contrato gerado automaticamente para teste'
             )
@@ -1204,7 +1204,7 @@ class Command(BaseCommand):
             numero_parcelas=24,
             dia_vencimento=15,
             tipo_correcao=TipoCorrecao.FIXO,
-            tipo_amortizacao='PRICE',
+            tipo_amortizacao=TipoAmortizacao.PRICE,
             prazo_reajuste_meses=12,
             percentual_juros_mora=Decimal('1.00'),
             percentual_multa=Decimal('2.00'),
@@ -1234,7 +1234,7 @@ class Command(BaseCommand):
             numero_parcelas=24,
             dia_vencimento=10,
             tipo_correcao=TipoCorrecao.FIXO,
-            tipo_amortizacao='SAC',
+            tipo_amortizacao=TipoAmortizacao.SAC,
             prazo_reajuste_meses=12,
             percentual_juros_mora=Decimal('1.00'),
             percentual_multa=Decimal('2.00'),
@@ -1264,7 +1264,7 @@ class Command(BaseCommand):
             numero_parcelas=36,
             dia_vencimento=5,
             tipo_correcao=TipoCorrecao.IPCA,
-            tipo_amortizacao='PRICE',
+            tipo_amortizacao=TipoAmortizacao.PRICE,
             prazo_reajuste_meses=12,
             spread_reajuste=Decimal('0.5000'),
             percentual_juros_mora=Decimal('1.00'),
@@ -1307,7 +1307,7 @@ class Command(BaseCommand):
             numero_parcelas=36,
             dia_vencimento=20,
             tipo_correcao=TipoCorrecao.IPCA,
-            tipo_amortizacao='PRICE',
+            tipo_amortizacao=TipoAmortizacao.PRICE,
             prazo_reajuste_meses=12,
             percentual_juros_mora=Decimal('1.00'),
             percentual_multa=Decimal('2.00'),
@@ -1356,7 +1356,7 @@ class Command(BaseCommand):
             numero_parcelas=24,
             dia_vencimento=25,
             tipo_correcao=TipoCorrecao.IGPM,
-            tipo_amortizacao='PRICE',
+            tipo_amortizacao=TipoAmortizacao.PRICE,
             prazo_reajuste_meses=12,
             intermediarias_reduzem_pmt=True,
             intermediarias_reajustadas=True,
@@ -1989,7 +1989,7 @@ class Command(BaseCommand):
                 numero_parcelas=120,
                 dia_vencimento=10,
                 tipo_correcao=TipoCorrecao.IPCA,
-                tipo_amortizacao='PRICE',
+                tipo_amortizacao=TipoAmortizacao.PRICE,
                 prazo_reajuste_meses=12,
                 intermediarias_reduzem_pmt=True,
                 intermediarias_reajustadas=False,
@@ -2114,7 +2114,7 @@ class Command(BaseCommand):
                 numero_parcelas=120,
                 dia_vencimento=10,
                 tipo_correcao=TipoCorrecao.IGPM,
-                tipo_amortizacao='PRICE',
+                tipo_amortizacao=TipoAmortizacao.PRICE,
                 prazo_reajuste_meses=12,
                 intermediarias_reduzem_pmt=False,
                 intermediarias_reajustadas=False,
