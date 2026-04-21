@@ -64,7 +64,7 @@ def dominio(db):
 @pytest.fixture
 def contrato_com_parcelas(db, dominio):
     """Cria contrato FIXO+Price com 12 parcelas (auto-geradas pelo Contrato.save)."""
-    from contratos.models import Contrato
+    from contratos.models import Contrato, StatusContrato, TipoCorrecao, TipoAmortizacao
     imob, conta, imovel, comprador = dominio
     contrato = Contrato.objects.create(
         imobiliaria=imob,
@@ -77,12 +77,12 @@ def contrato_com_parcelas(db, dominio):
         valor_entrada=Decimal('20000.00'),
         numero_parcelas=12,
         dia_vencimento=5,
-        tipo_amortizacao='PRICE',
-        tipo_correcao='FIXO',
+        tipo_amortizacao=TipoAmortizacao.PRICE,
+        tipo_correcao=TipoCorrecao.FIXO,
         percentual_juros_mora=Decimal('1.00'),
         percentual_multa=Decimal('2.00'),
         prazo_reajuste_meses=12,
-        status='ATIVO',
+        status=StatusContrato.ATIVO,
     )
     # Parcelas são auto-geradas pelo Contrato.save() — forçar se necessário
     if not contrato.parcelas.exists():
@@ -192,12 +192,13 @@ class TestHU02_GerarNBoletos:
     def test_gerar_carne_parcela_de_outro_contrato_ignorada(self, cli, contrato_com_parcelas, dominio):
         """IDs de outro contrato são silenciosamente ignorados."""
         from tests.fixtures.factories import ContratoFactory
+        from contratos.models import TipoCorrecao
         imob, conta, imovel, comprador = dominio
 
         # Criar outro contrato com suas parcelas (auto-geradas)
         outro = ContratoFactory(imobiliaria=imob, imovel=imovel, comprador=comprador,
                                 numero_contrato='CTR-HU-999', numero_parcelas=3,
-                                tipo_correcao='FIXO')
+                                tipo_correcao=TipoCorrecao.FIXO)
         parcela_outra = outro.parcelas.first()
 
         url = reverse('financeiro:gerar_carne', kwargs={'contrato_id': contrato_com_parcelas.pk})

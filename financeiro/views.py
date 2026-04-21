@@ -24,7 +24,7 @@ import logging
 from django.core.cache import cache
 from .models import Parcela, Reajuste, StatusBoleto, HistoricoPagamento
 from core.models import Imobiliaria, ContaBancaria
-from contratos.models import Contrato, StatusContrato
+from contratos.models import Contrato, StatusContrato, TipoCorrecao
 
 logger = logging.getLogger(__name__)
 
@@ -81,7 +81,7 @@ class DashboardFinanceiroView(LoginRequiredMixin, TemplateView):
         # K-06: Reajustes pendentes
         contratos_nao_fixo = contratos_qs.filter(
             status=StatusContrato.ATIVO
-        ).exclude(tipo_correcao='FIXO').only(
+        ).exclude(tipo_correcao=TipoCorrecao.FIXO).only(
             'tipo_correcao', 'prazo_reajuste_meses', 'data_contrato', 'ciclo_reajuste_atual'
         )
         reajustes_pendentes = sum(
@@ -1632,7 +1632,7 @@ def gerar_arquivo_remessa(request):
     imobiliarias = Imobiliaria.objects.filter(ativo=True).order_by('nome')
     contas = ContaBancaria.objects.filter(ativo=True).select_related('imobiliaria')
     contratos = Contrato.objects.filter(
-        status='ATIVO'
+        status=StatusContrato.ATIVO
     ).select_related('comprador', 'imobiliaria').order_by('numero_contrato')
 
     if request.method == 'POST':
@@ -2832,7 +2832,7 @@ def api_gerar_boletos_lote(request):
 
         for contrato_id in contrato_ids:
             try:
-                contrato = Contrato.objects.get(pk=contrato_id, status='ATIVO')
+                contrato = Contrato.objects.get(pk=contrato_id, status=StatusContrato.ATIVO)
             except Contrato.DoesNotExist:
                 resultados.append({
                     'contrato_id': contrato_id,
@@ -3541,7 +3541,7 @@ def reajustes_pendentes(request):
     from contratos.models import Contrato as ContratoModel, IndiceReajuste, TabelaJurosContrato
 
     contratos_ativos = ContratoModel.objects.filter(
-        status='ATIVO'
+        status=StatusContrato.ATIVO
     ).select_related('comprador', 'imobiliaria', 'imovel').order_by(
         'imobiliaria__nome', 'data_contrato'
     )

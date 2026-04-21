@@ -19,7 +19,7 @@ from core.models import (
     Comprador,
     AcessoUsuario,
 )
-from contratos.models import Contrato
+from contratos.models import Contrato, TipoCorrecao, TipoAmortizacao, StatusContrato
 from financeiro.models import (
     Parcela,
     Reajuste,
@@ -220,14 +220,14 @@ class ContratoFactory(DjangoModelFactory):
     numero_parcelas = 12
     dia_vencimento = 5
 
-    tipo_amortizacao = 'PRICE'
+    tipo_amortizacao = TipoAmortizacao.PRICE
     percentual_juros_mora = Decimal('1.00')
     percentual_multa = Decimal('2.00')
 
-    tipo_correcao = 'IPCA'
+    tipo_correcao = TipoCorrecao.IPCA
     prazo_reajuste_meses = 12
 
-    status = 'ATIVO'
+    status = StatusContrato.ATIVO
 
 
 class ParcelaFactory(DjangoModelFactory):

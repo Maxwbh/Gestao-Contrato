@@ -93,7 +93,7 @@ class TestCenarioA:
     N = 24
 
     def _criar_contrato(self, dominio):
-        from contratos.models import Contrato, TabelaJurosContrato, TipoCorrecao
+        from contratos.models import Contrato, TabelaJurosContrato, TipoCorrecao, TipoAmortizacao
         imob, _imovel, comprador = dominio
         hoje = date.today()
         contrato = Contrato.objects.create(
@@ -108,7 +108,7 @@ class TestCenarioA:
             numero_parcelas=self.N,
             dia_vencimento=15,
             tipo_correcao=TipoCorrecao.FIXO,
-            tipo_amortizacao='PRICE',
+            tipo_amortizacao=TipoAmortizacao.PRICE,
             prazo_reajuste_meses=12,
         )
         TabelaJurosContrato.objects.create(
@@ -183,7 +183,7 @@ class TestCenarioB:
     AMORT_ESPERADA = (Decimal('120000.00') / 24).quantize(Decimal('0.01'))
 
     def _criar_contrato(self, dominio):
-        from contratos.models import Contrato, TabelaJurosContrato, TipoCorrecao
+        from contratos.models import Contrato, TabelaJurosContrato, TipoCorrecao, TipoAmortizacao
         imob, _imovel, comprador = dominio
         hoje = date.today()
         contrato = Contrato.objects.create(
@@ -198,7 +198,7 @@ class TestCenarioB:
             numero_parcelas=self.N,
             dia_vencimento=10,
             tipo_correcao=TipoCorrecao.FIXO,
-            tipo_amortizacao='SAC',
+            tipo_amortizacao=TipoAmortizacao.SAC,
             prazo_reajuste_meses=12,
         )
         TabelaJurosContrato.objects.create(
@@ -267,7 +267,7 @@ class TestCenarioC:
     PERCENTUAL_REAJUSTE = Decimal('5.0000')
 
     def _criar_contrato(self, dominio):
-        from contratos.models import Contrato, TipoCorrecao
+        from contratos.models import Contrato, TipoCorrecao, TipoAmortizacao
         imob, _imovel, comprador = dominio
         hoje = date.today()
         contrato = Contrato.objects.create(
@@ -282,7 +282,7 @@ class TestCenarioC:
             numero_parcelas=self.N,
             dia_vencimento=5,
             tipo_correcao=TipoCorrecao.IPCA,
-            tipo_amortizacao='PRICE',
+            tipo_amortizacao=TipoAmortizacao.PRICE,
             prazo_reajuste_meses=12,
         )
         return contrato
@@ -394,7 +394,7 @@ class TestCenarioD:
     PERCENTUAL_REAJUSTE = Decimal('5.0000')
 
     def _criar_contrato(self, dominio):
-        from contratos.models import Contrato, TabelaJurosContrato, TipoCorrecao
+        from contratos.models import Contrato, TabelaJurosContrato, TipoCorrecao, TipoAmortizacao
         imob, _imovel, comprador = dominio
         hoje = date.today()
         contrato = Contrato.objects.create(
@@ -409,7 +409,7 @@ class TestCenarioD:
             numero_parcelas=self.N,
             dia_vencimento=20,
             tipo_correcao=TipoCorrecao.IPCA,
-            tipo_amortizacao='PRICE',
+            tipo_amortizacao=TipoAmortizacao.PRICE,
             prazo_reajuste_meses=12,
         )
         TabelaJurosContrato.objects.create(
@@ -499,7 +499,7 @@ class TestCenarioE:
     N = 24
 
     def _criar_contrato(self, dominio):
-        from contratos.models import Contrato, PrestacaoIntermediaria, TipoCorrecao
+        from contratos.models import Contrato, PrestacaoIntermediaria, TipoCorrecao, TipoAmortizacao
         from django.db.models import Sum
         imob, _imovel, comprador = dominio
         hoje = date.today()
@@ -515,7 +515,7 @@ class TestCenarioE:
             numero_parcelas=self.N,
             dia_vencimento=25,
             tipo_correcao=TipoCorrecao.IGPM,
-            tipo_amortizacao='PRICE',
+            tipo_amortizacao=TipoAmortizacao.PRICE,
             prazo_reajuste_meses=12,
             intermediarias_reduzem_pmt=True,
         )
@@ -580,7 +580,7 @@ class TestSaldoDevedor:
     """Valida calcular_saldo_devedor() para Price e SAC separadamente."""
 
     def _contrato_price(self, dominio):
-        from contratos.models import Contrato, TabelaJurosContrato, TipoCorrecao
+        from contratos.models import Contrato, TabelaJurosContrato, TipoCorrecao, TipoAmortizacao
         imob, _imovel, comprador = dominio
         hoje = date.today()
         c = Contrato.objects.create(
@@ -590,7 +590,7 @@ class TestSaldoDevedor:
             data_primeiro_vencimento=hoje - relativedelta(months=1),
             valor_total=Decimal('130000.00'), valor_entrada=Decimal('10000.00'),
             numero_parcelas=24, dia_vencimento=15,
-            tipo_correcao=TipoCorrecao.FIXO, tipo_amortizacao='PRICE',
+            tipo_correcao=TipoCorrecao.FIXO, tipo_amortizacao=TipoAmortizacao.PRICE,
             prazo_reajuste_meses=12,
         )
         TabelaJurosContrato.objects.create(
@@ -600,7 +600,7 @@ class TestSaldoDevedor:
         return c
 
     def _contrato_sac(self, dominio):
-        from contratos.models import Contrato, TabelaJurosContrato, TipoCorrecao
+        from contratos.models import Contrato, TabelaJurosContrato, TipoCorrecao, TipoAmortizacao
         imob, _imovel, comprador = dominio
         hoje = date.today()
         c = Contrato.objects.create(
@@ -610,7 +610,7 @@ class TestSaldoDevedor:
             data_primeiro_vencimento=hoje - relativedelta(months=1),
             valor_total=Decimal('130000.00'), valor_entrada=Decimal('10000.00'),
             numero_parcelas=24, dia_vencimento=10,
-            tipo_correcao=TipoCorrecao.FIXO, tipo_amortizacao='SAC',
+            tipo_correcao=TipoCorrecao.FIXO, tipo_amortizacao=TipoAmortizacao.SAC,
             prazo_reajuste_meses=12,
         )
         TabelaJurosContrato.objects.create(

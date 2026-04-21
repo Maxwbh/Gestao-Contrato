@@ -40,7 +40,7 @@ def contrato_com_parcelas(db):
     from tests.fixtures.factories import (
         ImobiliariaFactory, ImovelFactory, CompradorFactory
     )
-    from contratos.models import Contrato
+    from contratos.models import Contrato, StatusContrato, TipoCorrecao, TipoAmortizacao
 
     imob = ImobiliariaFactory()
     imovel = ImovelFactory(imobiliaria=imob)
@@ -57,12 +57,12 @@ def contrato_com_parcelas(db):
         valor_entrada=Decimal('10000.00'),
         numero_parcelas=6,
         dia_vencimento=5,
-        tipo_amortizacao='PRICE',
-        tipo_correcao='FIXO',
+        tipo_amortizacao=TipoAmortizacao.PRICE,
+        tipo_correcao=TipoCorrecao.FIXO,
         percentual_juros_mora=Decimal('1.00'),
         percentual_multa=Decimal('2.00'),
         prazo_reajuste_meses=12,
-        status='ATIVO',
+        status=StatusContrato.ATIVO,
     )
     if not contrato.parcelas.exists():
         contrato.gerar_parcelas()

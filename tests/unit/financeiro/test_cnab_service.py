@@ -15,6 +15,7 @@ from django.core.files.base import ContentFile
 from financeiro.services.cnab_service import (
     CNABService, BANCOS_BRCOBRANCA, OCORRENCIAS_CNAB
 )
+from financeiro.models import StatusArquivoRemessa
 
 
 class TestCNABServiceBasico(TestCase):
@@ -835,7 +836,7 @@ class TestRegenerarRemessa(TestCase):
             nome_arquivo='CB0601.REM',
             quantidade_boletos=1,
             valor_total=Decimal('1000.00'),
-            status='ENVIADO'
+            status=StatusArquivoRemessa.ENVIADO
         )
 
         service = CNABService()

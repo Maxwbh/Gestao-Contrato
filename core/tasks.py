@@ -1135,6 +1135,7 @@ def relatorio_semanal_incorporadoras_sync():
     from django.core.mail import send_mail
     from django.db.models import Sum, Count
     from financeiro.models import Parcela
+    from contratos.models import StatusContrato
 
     result = TaskResult('relatorio_semanal_incorporadoras')
 
@@ -1151,7 +1152,7 @@ def relatorio_semanal_incorporadoras_sync():
         for imobiliaria in imobiliarias:
             parcelas_qs = Parcela.objects.filter(
                 contrato__imobiliaria=imobiliaria,
-                contrato__status='ATIVO',
+                contrato__status=StatusContrato.ATIVO,
             )
 
             # Recebimentos da semana
@@ -1238,7 +1239,7 @@ def relatorio_mensal_consolidado_sync():
     from django.core.mail import send_mail
     from django.db.models import Sum, Count
     from financeiro.models import Parcela, Reajuste
-    from contratos.models import Contrato
+    from contratos.models import Contrato, StatusContrato
 
     result = TaskResult('relatorio_mensal_consolidado')
 
@@ -1277,7 +1278,7 @@ def relatorio_mensal_consolidado_sync():
 
                 contratos_ativos = Contrato.objects.filter(
                     imobiliaria=imobiliaria,
-                    status='ATIVO',
+                    status=StatusContrato.ATIVO,
                 ).count()
 
                 recebimentos = parcelas_qs.filter(
@@ -1410,7 +1411,7 @@ def _data_inicio_incremental(tipo_indice: str, hoje) -> 'date':
     """
     from datetime import date as _date
     from dateutil.relativedelta import relativedelta as _rd
-    from contratos.models import IndiceReajuste, Contrato as _Contrato
+    from contratos.models import IndiceReajuste, Contrato as _Contrato, StatusContrato
 
     ultimo = (
         IndiceReajuste.objects
@@ -1425,7 +1426,7 @@ def _data_inicio_incremental(tipo_indice: str, hoje) -> 'date':
         contrato_mais_antigo = (
             _Contrato.objects
             .filter(
-                status='ATIVO',
+                status=StatusContrato.ATIVO,
                 tipo_correcao=tipo_indice,
             )
             .order_by('data_contrato')
@@ -1437,7 +1438,7 @@ def _data_inicio_incremental(tipo_indice: str, hoje) -> 'date':
             contrato_mais_antigo = (
                 _Contrato.objects
                 .filter(
-                    status='ATIVO',
+                    status=StatusContrato.ATIVO,
                     tipo_correcao_fallback=tipo_indice,
                 )
                 .order_by('data_contrato')
