@@ -291,14 +291,11 @@ class TestCNABServiceIntegracao(TestCase):
     def test_gerar_remessa_sucesso_api(self, mock_post):
         """Testa geração de remessa com sucesso via API"""
         from financeiro.models import Parcela, StatusBoleto
-        import base64
 
-        # Mock da resposta da API
+        # API retorna conteúdo CNAB bruto (text/plain), não JSON+base64
         mock_response = MagicMock()
         mock_response.status_code = 200
-        mock_response.json.return_value = {
-            'remessa': base64.b64encode(b'ARQUIVO REMESSA TESTE').decode()
-        }
+        mock_response.content = b'ARQUIVO REMESSA TESTE CNAB240\n'
         mock_post.return_value = mock_response
 
         service = CNABService()
