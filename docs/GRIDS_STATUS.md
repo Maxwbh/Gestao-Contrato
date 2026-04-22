@@ -1,6 +1,6 @@
 # Grids do Sistema — Status e Significados
 
-**Última atualização:** 2026-04-20
+**Última atualização:** 2026-04-22
 
 Todas as tabelas do sistema usam [AG Grid](https://www.ag-grid.com/) com tema Material.
 Este documento descreve cada grid, suas colunas de Status e o significado de cada valor.
@@ -34,7 +34,7 @@ Grid com todas as prestações do sistema filtráveis por imobiliária, contrato
 |---------------|----------|--------------------------------------------|-------------------------------------|
 | **Pago**      | Verde    | `parcela.pago = True`                      | Parcela quitada, pagamento registrado |
 | **Vencida**   | Vermelho | `parcela.pago = False` e `data_vencimento < hoje` | Em atraso — gera juros e multa |
-| **Em aberto** | Amarelo  | `parcela.pago = False` e `data_vencimento >= hoje` | Ainda dentro do prazo              |
+| **A Vencer**  | Azul     | `parcela.pago = False` e `data_vencimento >= hoje` | Ainda dentro do prazo              |
 
 ### Coluna: Boleto
 
@@ -335,7 +335,7 @@ Grid com os usuários e suas permissões por imobiliária.
 
 | Grid                  | Status possíveis                                                    |
 |-----------------------|----------------------------------------------------------------------|
-| Parcela               | Pago · Vencida · A Vencer · Ag. Reajuste                                          |
+| Parcela               | Pago · Vencida · A Vencer                                                        |
 | Boleto (da parcela)   | — · Gerado · Registrado · Pago · Vencido · Cancelado · Baixado · Protestado |
 | Contrato              | Ativo · Quitado · Cancelado · Suspenso                              |
 | Remessa CNAB          | Gerado · Enviado · Processado · Erro                                |
