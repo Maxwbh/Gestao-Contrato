@@ -2,7 +2,7 @@
 
 **Desenvolvedor:** Maxwell da Silva Oliveira (maxwbh@gmail.com)
 **Empresa:** M&S do Brasil LTDA
-**Última atualização:** 2026-04-22 (rev 11)
+**Última atualização:** 2026-04-22 (rev 12)
 
 > Pendentes organizados por prioridade.
 > Para documentação do sistema atual, consulte **[SISTEMA.md](SISTEMA.md)**.
@@ -170,7 +170,7 @@
 
 ## 7. TESTES AUTOMATIZADOS
 
-**Meta:** > 80% de cobertura | **Atual:** 826 testes passando
+**Meta:** > 80% de cobertura | **Atual:** 942 testes passando
 
 ### 7.1 P1 — Apps sem nenhum teste (~104 testes) ✅ CONCLUÍDO
 | Arquivo | Escopo | Qtd | Status |
@@ -220,6 +220,13 @@
 | `tests/unit/test_edge_cases.py` | Valores extremos, datas limite, reajuste | 12 | ✅ |
 | `tests/unit/notificacoes/test_management_commands.py` | enviar_notificacoes, processar_pendentes | 4 | ✅ |
 | `tests/unit/financeiro/test_management_commands.py` | processar_reajustes, audit_nosso_numero | 4 | ✅ |
+
+### 7.6 Smoke Tests ✅ CONCLUÍDO (P1)
+| Arquivo | Escopo | Qtd | Status |
+|---------|--------|-----|--------|
+| `tests/test_smoke.py` | Todos os endpoints GET do sistema — core, accounts, contratos, financeiro, notificações, portal comprador | 117 | ✅ |
+
+Detectou e corrigiu 1 bug real: `NoReverseMatch` 500 em `/financeiro/relatorios/posicao-contratos/` — template usava `contratos:detalhe_contrato` (inexistente) em vez de `contratos:detalhe`.
 
 ### 7.5 Infraestrutura de Testes ✅ CONCLUÍDO (P2)
 | Prioridade | Item | Status |
@@ -990,7 +997,7 @@ para ciclo = 2..total_ciclos+1:
 | HU Boleto/Carnê/Remessa (Seção 21) | — | 10 | — | — | 10 | ✅ 10/10 |
 | OFX Extrato Bancário (Seção 22) | — | 5 | — | — | 5 | ✅ 5/5 |
 | Conciliação Bancária (Seção 23) | — | 8 | — | — | 8 | ✅ 8/8 |
-| Testes | 104 | ~164 | ~37 | ~41 | ~346 | ✅ 826 testes passando |
+| Testes | 104 | ~164 | ~37 | ~41+117 | ~463 | ✅ 942 testes passando |
 | CI/CD | — | 2 | 4 | 2 | 8 | — |
 | Documentação | — | — | 1 | 3 | 4 | — |
 | **Total** | **~117** | **~251** | **~107** | **~61** | **~536** | |
