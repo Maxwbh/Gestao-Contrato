@@ -15,6 +15,8 @@ Email: maxwbh@gmail.com
 Empresa: M&S do Brasil LTDA
 """
 import io
+import json
+import re
 import time
 import logging
 import requests
@@ -72,6 +74,9 @@ class CNABService:
             'BRCOBRANCA_URL',
             'http://localhost:9292'
         )
+        self.timeout = getattr(settings, 'BRCOBRANCA_TIMEOUT', 30)
+        self.max_tentativas = getattr(settings, 'BRCOBRANCA_MAX_TENTATIVAS', 3)
+        self.delay_inicial = getattr(settings, 'BRCOBRANCA_DELAY_INICIAL', 2)
 
     def _get_banco_brcobranca(self, codigo_banco: str) -> str:
         """Retorna o nome do banco para o BRCobranca"""
@@ -243,6 +248,56 @@ class CNABService:
 
         return boleto_data
 
+    def _montar_dados_pagamento_remessa(self, parcela, conta_bancaria) -> dict:
+        """
+        Monta dados de pagamento para a API /api/remessa (Brcobranca::Remessa::Pagamento).
+
+        Os campos do Pagamento de remessa são DIFERENTES dos campos do Boleto individual:
+        - nome_sacado (não sacado)
+        - documento_sacado (não sacado_documento)
+        - data_emissao (não data_documento)
+        - numero (não documento_numero)
+        - endereco separado em rua + bairro + cep + cidade + uf
+        - identificacao_ocorrencia obrigatório
+        """
+        contrato = parcela.contrato
+        comprador = contrato.comprador
+
+        cpf_cnpj = self._formatar_cpf_cnpj(
+            comprador.cnpj if getattr(comprador, 'cnpj', None) else comprador.cpf
+        )
+
+        logradouro = getattr(comprador, 'logradouro', None) or getattr(comprador, 'endereco', None) or ''
+        numero_end = getattr(comprador, 'numero', '') or ''
+        rua = f"{logradouro}, {numero_end}".strip(', ') if numero_end else logradouro
+
+        bairro = getattr(comprador, 'bairro', '') or ''
+        cidade = getattr(comprador, 'cidade', '') or ''
+        uf = getattr(comprador, 'estado', '') or ''
+        cep = re.sub(r'\D', '', getattr(comprador, 'cep', '') or '')[:8].zfill(8)
+
+        from django.utils import timezone as _tz
+        data_emissao = (
+            parcela.data_geracao_boleto if parcela.data_geracao_boleto
+            else _tz.now()
+        )
+
+        return {
+            'nosso_numero': str(parcela.nosso_numero or '1'),
+            'numero': (parcela.numero_documento or '')[:25],
+            'valor': self._formatar_valor(parcela.valor_boleto or parcela.valor_atual),
+            'data_vencimento': self._formatar_data(parcela.data_vencimento),
+            'data_emissao': self._formatar_data(data_emissao),
+            'nome_sacado': comprador.nome[:40],
+            'documento_sacado': cpf_cnpj,
+            'endereco_sacado': rua[:40],
+            'bairro_sacado': bairro[:15],
+            'cep_sacado': cep,
+            'cidade_sacado': cidade[:15],
+            'uf_sacado': uf[:2],
+            'identificacao_ocorrencia': '01',
+        }
+
     def gerar_remessa(
         self,
         parcelas: List,
@@ -329,69 +384,59 @@ class CNABService:
         banco = self._get_banco_brcobranca(conta_bancaria.banco)
         imobiliaria = conta_bancaria.imobiliaria
 
-        # Estrutura de dados do cedente/empresa
+        # Agencia: CNAB240 usa até 5 dígitos (num+DV para BB), CNAB400 usa 4
         agencia_num, agencia_dv = self._parsear_numero_dv(conta_bancaria.agencia)
         conta_num, conta_dv = self._parsear_numero_dv(conta_bancaria.conta)
+        if layout == 'CNAB_240' and agencia_dv:
+            agencia_remessa = f"{agencia_num}{agencia_dv}"[:5]
+        else:
+            agencia_remessa = agencia_num
+
         dados_empresa = {
             'empresa_mae': imobiliaria.razao_social or imobiliaria.nome,
             'documento_cedente': self._formatar_cpf_cnpj(imobiliaria.cnpj),
-            'agencia': agencia_num,
-            'agencia_dv': agencia_dv,
+            'agencia': agencia_remessa,
             'conta_corrente': conta_num,
             'digito_conta': conta_dv,
             'convenio': conta_bancaria.convenio or '',
             'carteira': conta_bancaria.carteira or '',
             'sequencial_remessa': numero_remessa,
-            'codigo_cedente': conta_bancaria.convenio or '',
         }
 
-        # Campos do cedente que pertencem APENAS ao root do payload de remessa.
-        # Não devem ser repetidos em cada pagamento — a API Ruby faz merge do root
-        # com os campos de cada boleto; duplicatas causam NoMethodError (merge on Array).
-        _CAMPOS_CEDENTE_ROOT = {
-            'agencia', 'conta_corrente', 'convenio', 'carteira',
-            'cedente', 'documento_cedente',
-        }
+        # Campos extras por banco
+        codigo_banco = conta_bancaria.banco
+        carteira_str = conta_bancaria.carteira or ''
+        if codigo_banco == '001':
+            # BB: variacao = carteira zero-padded a 3 dígitos
+            variacao = re.sub(r'\D', '', carteira_str).zfill(3)[:3]
+            if layout == 'CNAB_240':
+                dados_empresa['variacao'] = variacao
+            else:
+                dados_empresa['variacao_carteira'] = variacao
+        elif codigo_banco == '237':
+            # Bradesco: codigo_empresa obrigatório
+            dados_empresa['codigo_empresa'] = conta_bancaria.convenio or ''
+        elif codigo_banco == '756':
+            # Sicoob: sequencial_remessa precisa ser string de 7 dígitos
+            dados_empresa['sequencial_remessa'] = str(numero_remessa).zfill(7)[-7:]
 
-        # Lista de boletos — apenas campos boleto-específicos (sacado, valores, datas, etc.)
+        # Pagamentos com campos corretos do Brcobranca::Remessa::Pagamento
         pagamentos = []
-
         valor_total = Decimal('0.00')
         for parcela in parcelas_validas:
-            dados_boleto = self._montar_dados_boleto(parcela, conta_bancaria)
-            # Strip de campos do cedente — ficam somente no root (dados_empresa)
-            boleto_remessa = {
-                k: v for k, v in dados_boleto.items()
-                if k not in _CAMPOS_CEDENTE_ROOT
-            }
-            pagamentos.append(boleto_remessa)
+            pagamentos.append(self._montar_dados_pagamento_remessa(parcela, conta_bancaria))
             valor_total += parcela.valor_boleto or parcela.valor_atual
 
         try:
-            # A API /api/remessa espera POST com JSON body:
-            #   {
-            #     "bank":   "banco_brasil",      ← nome do banco (keyword obrigatório)
-            #     "type":   "cnab240",            ← layout (keyword obrigatório)
-            #     "data": {                       ← dados do cedente + boletos
-            #       "empresa_mae": "...",
-            #       "documento_cedente": "...",
-            #       "agencia": "...", "agencia_dv": "...",
-            #       "conta_corrente": "...", "digito_conta": "...",
-            #       "convenio": "...", "carteira": "...",
-            #       "sequencial_remessa": N, "codigo_cedente": "...",
-            #       "pagamentos": [{nosso_numero, valor, sacado, ...}, ...]
-            #     }
-            #   }
-            # NOTA: campos do cedente NÃO devem ser repetidos em cada pagamento.
-            # NOTA: usar json= (não multipart/files) — API espera body JSON.
+            # A API /api/remessa espera multipart/form-data:
+            #   - bank   → campo de formulário (ex: 'banco_brasil')
+            #   - type   → campo de formulário ('cnab240' ou 'cnab400')
+            #   - data   → arquivo JSON (empresa + pagamentos)
+            # Resposta: conteúdo CNAB bruto (text/plain).
             tipo_cnab = 'cnab240' if layout == 'CNAB_240' else 'cnab400'
-            payload = {
-                'bank': banco,
-                'type': tipo_cnab,
-                'data': {
-                    **dados_empresa,
-                    'pagamentos': pagamentos,
-                },
+            data_remessa = {
+                **dados_empresa,
+                'pagamentos': pagamentos,
             }
 
             descricao_conta = getattr(conta_bancaria, 'descricao', None) or str(conta_bancaria)
@@ -403,28 +448,30 @@ class CNABService:
             if logger.isEnabledFor(logging.DEBUG) and pagamentos:
                 p0 = pagamentos[0]
                 logger.debug(
-                    "[Remessa] payload[0] data_vencimento=%r data_documento=%r",
-                    p0.get('data_vencimento'), p0.get('data_documento')
+                    "[Remessa] payload[0] data_vencimento=%r data_emissao=%r",
+                    p0.get('data_vencimento'), p0.get('data_emissao')
                 )
 
-            # Retry automático em 429 (rate limit): até 3 tentativas com backoff exponencial
-            _max_tentativas = 3
+            # Retry automático em 429 (rate limit): backoff exponencial configurável
             _response = None
             _t0 = time.monotonic()
-            for _tentativa in range(_max_tentativas):
+            for _tentativa in range(self.max_tentativas):
                 _response = requests.post(
                     f'{self.brcobranca_url}/api/remessa',
-                    json=payload,
+                    files={'data': ('remessa.json',
+                                    json.dumps(data_remessa).encode('utf-8'),
+                                    'application/json')},
+                    data={'bank': banco, 'type': tipo_cnab},
                     headers={'Accept': 'application/vnd.BoletoApi-v1+json'},
-                    timeout=60
+                    timeout=self.timeout,
                 )
                 if _response.status_code != 429:
                     break
-                _wait = 2 ** _tentativa  # 1s, 2s, 4s
+                _wait = self.delay_inicial ** _tentativa
                 logger.warning(
                     "[Remessa] BRCobranca 429 (rate limit) conta=%s banco=%s — "
                     "aguardando %ds antes de nova tentativa (%d/%d)",
-                    descricao_conta, banco, _wait, _tentativa + 1, _max_tentativas
+                    descricao_conta, banco, _wait, _tentativa + 1, self.max_tentativas
                 )
                 time.sleep(_wait)
 
@@ -432,11 +479,9 @@ class CNABService:
             _elapsed = time.monotonic() - _t0
 
             if response.status_code == 200:
-                resultado = response.json()
-
-                # Decodificar arquivo
-                if resultado.get('remessa'):
-                    arquivo_content = base64.b64decode(resultado['remessa'])
+                # API retorna conteúdo CNAB bruto (text/plain)
+                arquivo_content = response.content
+                if arquivo_content:
 
                     # Criar registro no banco
                     with transaction.atomic():
@@ -447,6 +492,8 @@ class CNABService:
                         if arquivo_para_atualizar:
                             from financeiro.models import StatusArquivoRemessa
                             arquivo_remessa = arquivo_para_atualizar
+                            # Deletar itens antigos dentro da transação (somente no sucesso)
+                            arquivo_remessa.itens.all().delete()
                             arquivo_remessa.quantidade_boletos = len(parcelas_validas)
                             arquivo_remessa.valor_total = valor_total
                             arquivo_remessa.nome_arquivo = nome_arquivo
@@ -498,9 +545,12 @@ class CNABService:
                         'arquivo_path': arquivo_remessa.arquivo.path,
                     }
                 else:
+                    erro_msg = 'BRCobranca nao retornou arquivo de remessa'
+                    if arquivo_para_atualizar:
+                        arquivo_para_atualizar.marcar_erro(erro_msg)
                     return {
                         'sucesso': False,
-                        'erro': 'BRCobranca nao retornou arquivo de remessa'
+                        'erro': erro_msg,
                     }
             else:
                 # HTTP error (429 persistente, 5xx, etc.)
@@ -513,12 +563,15 @@ class CNABService:
                     response.status_code, descricao_conta, banco, layout,
                     f'{self.brcobranca_url}/api/remessa', erro_body,
                 )
+                erro_msg = (
+                    f'BRCobranca retornou HTTP {response.status_code}. '
+                    'Verifique os logs do servidor e se a API está operacional.'
+                )
+                if arquivo_para_atualizar:
+                    arquivo_para_atualizar.marcar_erro(erro_msg)
                 return {
                     'sucesso': False,
-                    'erro': (
-                        f'BRCobranca retornou HTTP {response.status_code}. '
-                        'Verifique os logs do servidor e se a API está operacional.'
-                    ),
+                    'erro': erro_msg,
                 }
 
         except requests.exceptions.ConnectionError as e:
@@ -529,21 +582,27 @@ class CNABService:
                 "  → Detalhe: %s",
                 descricao_conta, banco, self.brcobranca_url, e,
             )
+            erro_msg = (
+                'Não foi possível conectar à API BRCobranca. '
+                'Verifique se o serviço está ativo e acessível.'
+            )
+            if arquivo_para_atualizar:
+                arquivo_para_atualizar.marcar_erro(erro_msg)
             return {
                 'sucesso': False,
-                'erro': (
-                    'Não foi possível conectar à API BRCobranca. '
-                    'Verifique se o serviço está ativo e acessível.'
-                ),
+                'erro': erro_msg,
             }
         except Exception as e:
             logger.exception(
                 "[Remessa] ERRO INESPERADO — conta=%s banco=%s: %s",
                 descricao_conta, banco, e,
             )
+            erro_msg = str(e)
+            if arquivo_para_atualizar:
+                arquivo_para_atualizar.marcar_erro(erro_msg)
             return {
                 'sucesso': False,
-                'erro': str(e),
+                'erro': erro_msg,
             }
 
     def regenerar_remessa(self, arquivo_remessa) -> Dict:
@@ -551,18 +610,25 @@ class CNABService:
         Regenera um arquivo de remessa existente.
         Usa os mesmos boletos do arquivo original.
         """
-        if arquivo_remessa.status not in ['GERADO', 'ERRO']:
+        from financeiro.models import StatusArquivoRemessa
+        if arquivo_remessa.status not in [
+            StatusArquivoRemessa.GERADO, StatusArquivoRemessa.ERRO
+        ]:
             return {
                 'sucesso': False,
                 'erro': 'Apenas remessas com status GERADO ou ERRO podem ser regeneradas'
             }
 
-        # Obter parcelas do arquivo original
+        # Obter parcelas do arquivo original (sem deletar — a deleção ocorre
+        # dentro de gerar_remessa somente após sucesso da API, em transação atômica)
         itens = arquivo_remessa.itens.select_related('parcela').all()
         parcelas = [item.parcela for item in itens]
 
-        # Excluir itens antigos (serão recriados pelo gerar_remessa)
-        itens.delete()
+        if not parcelas:
+            return {
+                'sucesso': False,
+                'erro': 'Remessa não possui boletos associados para regenerar',
+            }
 
         # Regenerar atualizando o mesmo registro (sem criar novo ArquivoRemessa)
         return self.gerar_remessa(
@@ -606,7 +672,7 @@ class CNABService:
                     f'{self.brcobranca_url}/api/retorno',
                     files={'file': ('retorno.ret', io.BytesIO(conteudo), 'application/octet-stream')},
                     data={'banco': banco, 'formato': formato_api},
-                    timeout=60,
+                    timeout=self.timeout,
                 )
             except requests.exceptions.ConnectionError as e:
                 logger.error(
@@ -816,12 +882,12 @@ class CNABService:
         Retorna parcelas já incluídas em remessa com status GERADO (não enviada).
         Usado para exibir aviso de duplicata potencial.
         """
-        from financeiro.models import Parcela, StatusBoleto
+        from financeiro.models import Parcela, StatusBoleto, StatusArquivoRemessa
 
         queryset = Parcela.objects.filter(
             status_boleto=StatusBoleto.GERADO,
             pago=False,
-            itens_remessa__arquivo_remessa__status='GERADO'
+            itens_remessa__arquivo_remessa__status=StatusArquivoRemessa.GERADO
         ).select_related(
             'contrato', 'contrato__comprador', 'conta_bancaria',
             'contrato__imobiliaria'

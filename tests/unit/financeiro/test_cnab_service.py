@@ -15,6 +15,7 @@ from django.core.files.base import ContentFile
 from financeiro.services.cnab_service import (
     CNABService, BANCOS_BRCOBRANCA, OCORRENCIAS_CNAB
 )
+from financeiro.models import StatusArquivoRemessa
 
 
 class TestCNABServiceBasico(TestCase):
@@ -291,14 +292,11 @@ class TestCNABServiceIntegracao(TestCase):
     def test_gerar_remessa_sucesso_api(self, mock_post):
         """Testa geração de remessa com sucesso via API"""
         from financeiro.models import Parcela, StatusBoleto
-        import base64
 
-        # Mock da resposta da API
+        # API retorna conteúdo CNAB bruto (text/plain), não JSON+base64
         mock_response = MagicMock()
         mock_response.status_code = 200
-        mock_response.json.return_value = {
-            'remessa': base64.b64encode(b'ARQUIVO REMESSA TESTE').decode()
-        }
+        mock_response.content = b'ARQUIVO REMESSA TESTE CNAB240\n'
         mock_post.return_value = mock_response
 
         service = CNABService()
@@ -355,6 +353,104 @@ class TestCNABServiceIntegracao(TestCase):
 
         self.assertFalse(resultado['sucesso'])
         self.assertIn('erro', resultado)
+
+    @patch('requests.post')
+    def test_gerar_remessa_usa_multipart_form_data(self, mock_post):
+        """Regressão: API /api/remessa exige multipart (files+data), não JSON body.
+
+        Antes do fix a chamada usava json={...} e a API retornava
+        HTTP 400 "data is invalid". Este teste garante que as chamadas
+        usam files={'data': ...} + data={'bank':..., 'type':...}.
+        """
+        from financeiro.models import Parcela, StatusBoleto
+
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.content = b'ARQUIVO REMESSA\n'
+        mock_post.return_value = mock_response
+
+        service = CNABService()
+        parcelas = list(Parcela.objects.filter(
+            contrato=self.contrato,
+            status_boleto=StatusBoleto.GERADO,
+            pago=False
+        )[:1])
+
+        service.gerar_remessa(parcelas, self.conta_bancaria, layout='CNAB_240')
+
+        self.assertTrue(mock_post.called)
+        _, kwargs = mock_post.call_args
+
+        # Deve usar multipart/form-data, não JSON body
+        self.assertNotIn('json', kwargs, 'gerar_remessa não deve usar json={...}')
+        self.assertIn('files', kwargs, 'gerar_remessa deve usar files={...}')
+        self.assertIn('data', kwargs, 'gerar_remessa deve usar data={...}')
+
+        # files deve conter 'data' como arquivo JSON
+        self.assertIn('data', kwargs['files'])
+        filename, content, content_type = kwargs['files']['data']
+        self.assertEqual(content_type, 'application/json')
+
+        # data deve conter bank e type
+        self.assertIn('bank', kwargs['data'])
+        self.assertIn('type', kwargs['data'])
+        self.assertEqual(kwargs['data']['bank'], 'banco_brasil')
+        self.assertEqual(kwargs['data']['type'], 'cnab240')
+
+    @patch('requests.post')
+    def test_regenerar_remessa_preserva_itens_em_falha(self, mock_post):
+        """Regressão: regenerar_remessa NÃO deve deletar ItemRemessa se API falhar.
+
+        Antes do fix, itens.delete() era chamado ANTES da API. Se a API
+        falhasse, o ArquivoRemessa ficava sem nenhum ItemRemessa.
+        """
+        from financeiro.models import (
+            Parcela, StatusBoleto, ArquivoRemessa, ItemRemessa,
+            StatusArquivoRemessa,
+        )
+        from decimal import Decimal
+
+        # Criar ArquivoRemessa existente (simula remessa anterior com sucesso)
+        parcelas = list(Parcela.objects.filter(
+            contrato=self.contrato,
+            status_boleto=StatusBoleto.GERADO,
+            pago=False
+        )[:2])
+        arquivo = ArquivoRemessa.objects.create(
+            conta_bancaria=self.conta_bancaria,
+            numero_remessa=1,
+            layout='CNAB_240',
+            nome_arquivo='remessa_teste.REM',
+            quantidade_boletos=len(parcelas),
+            valor_total=Decimal('1000.00'),
+        )
+        for p in parcelas:
+            ItemRemessa.objects.create(
+                arquivo_remessa=arquivo,
+                parcela=p,
+                nosso_numero=p.nosso_numero,
+                valor=p.valor_boleto or p.valor_atual or Decimal('500.00'),
+                data_vencimento=p.data_vencimento,
+            )
+        itens_count_antes = arquivo.itens.count()
+        self.assertEqual(itens_count_antes, len(parcelas))
+
+        # API falha com 500
+        mock_response = MagicMock()
+        mock_response.status_code = 500
+        mock_response.text = 'Internal Server Error'
+        mock_post.return_value = mock_response
+
+        service = CNABService()
+        resultado = service.regenerar_remessa(arquivo)
+
+        self.assertFalse(resultado['sucesso'])
+
+        # Itens devem estar PRESERVADOS, arquivo deve estar em ERRO
+        arquivo.refresh_from_db()
+        self.assertEqual(arquivo.status, StatusArquivoRemessa.ERRO)
+        self.assertEqual(arquivo.itens.count(), itens_count_antes,
+                         'ItemRemessa não deve ser deletado quando API falha')
 
     def test_obter_boletos_sem_remessa(self):
         """Testa obtenção de boletos sem remessa"""
@@ -740,7 +836,7 @@ class TestRegenerarRemessa(TestCase):
             nome_arquivo='CB0601.REM',
             quantidade_boletos=1,
             valor_total=Decimal('1000.00'),
-            status='ENVIADO'
+            status=StatusArquivoRemessa.ENVIADO
         )
 
         service = CNABService()

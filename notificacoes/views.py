@@ -145,12 +145,11 @@ class ConfiguracaoEmailDeleteView(LoginRequiredMixin, DeleteView):
     success_url = reverse_lazy('notificacoes:listar_config_email')
     template_name = 'notificacoes/config_email_confirm_delete.html'
 
-    def delete(self, request, *args, **kwargs):
-        self.object = self.get_object()
+    def form_valid(self, form):
         nome = self.object.nome
-        self.object.delete()
-        messages.success(request, f'Configuracao "{nome}" excluida com sucesso!')
-        return redirect(self.success_url)
+        response = super().form_valid(form)
+        messages.success(self.request, f'Configuracao "{nome}" excluida com sucesso!')
+        return response
 
 
 @login_required
@@ -261,12 +260,11 @@ class ConfiguracaoWhatsAppDeleteView(LoginRequiredMixin, DeleteView):
     success_url = reverse_lazy('notificacoes:listar_config_whatsapp')
     template_name = 'notificacoes/config_whatsapp_confirm_delete.html'
 
-    def delete(self, request, *args, **kwargs):
-        self.object = self.get_object()
+    def form_valid(self, form):
         nome = self.object.nome
-        self.object.delete()
-        messages.success(request, f'Configuracao "{nome}" excluida com sucesso!')
-        return redirect(self.success_url)
+        response = super().form_valid(form)
+        messages.success(self.request, f'Configuracao "{nome}" excluida com sucesso!')
+        return response
 
 
 @login_required
@@ -580,12 +578,11 @@ class TemplateNotificacaoDeleteView(LoginRequiredMixin, DeleteView):
     success_url = reverse_lazy('notificacoes:listar_templates')
     template_name = 'notificacoes/template_confirm_delete.html'
 
-    def delete(self, request, *args, **kwargs):
-        self.object = self.get_object()
+    def form_valid(self, form):
         nome = self.object.nome
-        self.object.delete()
-        messages.success(request, f'Template "{nome}" excluido com sucesso!')
-        return redirect(self.success_url)
+        response = super().form_valid(form)
+        messages.success(self.request, f'Template "{nome}" excluido com sucesso!')
+        return response
 
 
 @login_required

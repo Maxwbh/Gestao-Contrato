@@ -13,6 +13,7 @@ from decimal import Decimal
 from django.core.management.base import BaseCommand
 from django.db import transaction
 from django.utils import timezone
+from financeiro.models import TipoParcela
 
 
 # Valores esperados da planilha (para validação)
@@ -117,7 +118,7 @@ class Command(BaseCommand):
 
         # Resumo
         pmt_atual = contrato.parcelas.filter(
-            tipo_parcela='NORMAL', pago=False
+            tipo_parcela=TipoParcela.NORMAL, pago=False
         ).order_by('numero_parcela').first()
         self.stdout.write(
             f'\n  Resultado: {aplicados} ciclo(s) aplicado(s), {pulados} já existiam.\n'
@@ -218,7 +219,7 @@ class Command(BaseCommand):
         parcela_inicial = (ciclo - 1) * prazo + 1
         parcela = contrato.parcelas.filter(
             numero_parcela=parcela_inicial,
-            tipo_parcela='NORMAL',
+            tipo_parcela=TipoParcela.NORMAL,
         ).first()
         return parcela.valor_atual if parcela else None
 

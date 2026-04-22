@@ -333,7 +333,7 @@ def _processar_regra(regra, result):
     """
     N-03: Executa uma RegrarNotificacao: encontra as parcelas na data-alvo e envia.
     """
-    from financeiro.models import Parcela
+    from financeiro.models import Parcela, TipoParcela
     from notificacoes.models import TipoGatilho
     from datetime import date, timedelta
 
@@ -344,13 +344,13 @@ def _processar_regra(regra, result):
         data_alvo = hoje + timedelta(days=regra.dias_offset)
         label = f"D-{regra.dias_offset}"
         parcelas = Parcela.objects.filter(
-            pago=False, tipo_parcela='NORMAL', data_vencimento=data_alvo,
+            pago=False, tipo_parcela=TipoParcela.NORMAL, data_vencimento=data_alvo,
         ).select_related('contrato', 'contrato__comprador', 'contrato__imobiliaria')
     else:  # APOS_VENCIMENTO
         data_alvo = hoje - timedelta(days=regra.dias_offset)
         label = f"D+{regra.dias_offset}"
         parcelas = Parcela.objects.filter(
-            pago=False, tipo_parcela='NORMAL', data_vencimento=data_alvo,
+            pago=False, tipo_parcela=TipoParcela.NORMAL, data_vencimento=data_alvo,
         ).select_related('contrato', 'contrato__comprador', 'contrato__imobiliaria')
 
     result.add_message(
@@ -441,7 +441,7 @@ def enviar_notificacoes_sync():
     Se existirem RegraNotificacao ativas do tipo ANTES, usa a régua configurável.
     Caso contrário, usa o comportamento padrão (D-5 via settings).
     """
-    from financeiro.models import Parcela
+    from financeiro.models import Parcela, TipoParcela
     from notificacoes.models import TipoNotificacao, RegraNotificacao, TipoGatilho
     from notificacoes.services import ServicoEmail
     from datetime import date, timedelta
@@ -469,7 +469,7 @@ def enviar_notificacoes_sync():
 
             parcelas = Parcela.objects.filter(
                 pago=False,
-                tipo_parcela='NORMAL',
+                tipo_parcela=TipoParcela.NORMAL,
                 data_vencimento=data_alvo,
             ).select_related('contrato', 'contrato__comprador', 'contrato__imobiliaria')
 
@@ -555,7 +555,7 @@ def enviar_inadimplentes_sync():
     Se existirem RegraNotificacao ativas do tipo APOS, usa a régua configurável.
     Caso contrário, usa o comportamento padrão (>= D+3 via settings).
     """
-    from financeiro.models import Parcela
+    from financeiro.models import Parcela, TipoParcela
     from notificacoes.models import TipoNotificacao, RegraNotificacao, TipoGatilho
     from notificacoes.services import ServicoEmail
     from datetime import date, timedelta
@@ -583,7 +583,7 @@ def enviar_inadimplentes_sync():
 
             parcelas = Parcela.objects.filter(
                 pago=False,
-                tipo_parcela='NORMAL',
+                tipo_parcela=TipoParcela.NORMAL,
                 data_vencimento=data_corte,
             ).select_related('contrato', 'contrato__comprador', 'contrato__imobiliaria')
 
@@ -1135,6 +1135,7 @@ def relatorio_semanal_incorporadoras_sync():
     from django.core.mail import send_mail
     from django.db.models import Sum, Count
     from financeiro.models import Parcela
+    from contratos.models import StatusContrato
 
     result = TaskResult('relatorio_semanal_incorporadoras')
 
@@ -1151,7 +1152,7 @@ def relatorio_semanal_incorporadoras_sync():
         for imobiliaria in imobiliarias:
             parcelas_qs = Parcela.objects.filter(
                 contrato__imobiliaria=imobiliaria,
-                contrato__status='ATIVO',
+                contrato__status=StatusContrato.ATIVO,
             )
 
             # Recebimentos da semana
@@ -1238,7 +1239,7 @@ def relatorio_mensal_consolidado_sync():
     from django.core.mail import send_mail
     from django.db.models import Sum, Count
     from financeiro.models import Parcela, Reajuste
-    from contratos.models import Contrato
+    from contratos.models import Contrato, StatusContrato
 
     result = TaskResult('relatorio_mensal_consolidado')
 
@@ -1277,7 +1278,7 @@ def relatorio_mensal_consolidado_sync():
 
                 contratos_ativos = Contrato.objects.filter(
                     imobiliaria=imobiliaria,
-                    status='ATIVO',
+                    status=StatusContrato.ATIVO,
                 ).count()
 
                 recebimentos = parcelas_qs.filter(
@@ -1410,7 +1411,7 @@ def _data_inicio_incremental(tipo_indice: str, hoje) -> 'date':
     """
     from datetime import date as _date
     from dateutil.relativedelta import relativedelta as _rd
-    from contratos.models import IndiceReajuste, Contrato as _Contrato
+    from contratos.models import IndiceReajuste, Contrato as _Contrato, StatusContrato
 
     ultimo = (
         IndiceReajuste.objects
@@ -1425,7 +1426,7 @@ def _data_inicio_incremental(tipo_indice: str, hoje) -> 'date':
         contrato_mais_antigo = (
             _Contrato.objects
             .filter(
-                status='ATIVO',
+                status=StatusContrato.ATIVO,
                 tipo_correcao=tipo_indice,
             )
             .order_by('data_contrato')
@@ -1437,7 +1438,7 @@ def _data_inicio_incremental(tipo_indice: str, hoje) -> 'date':
             contrato_mais_antigo = (
                 _Contrato.objects
                 .filter(
-                    status='ATIVO',
+                    status=StatusContrato.ATIVO,
                     tipo_correcao_fallback=tipo_indice,
                 )
                 .order_by('data_contrato')

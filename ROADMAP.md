@@ -2,7 +2,7 @@
 
 **Desenvolvedor:** Maxwell da Silva Oliveira (maxwbh@gmail.com)
 **Empresa:** M&S do Brasil LTDA
-**Última atualização:** 2026-04-10 (rev 10)
+**Última atualização:** 2026-04-22 (rev 11)
 
 > Pendentes organizados por prioridade.
 > Para documentação do sistema atual, consulte **[SISTEMA.md](SISTEMA.md)**.
@@ -170,42 +170,42 @@
 
 ## 7. TESTES AUTOMATIZADOS
 
-**Meta:** > 80% de cobertura | **Atual:** ~51% (763 testes passando)
+**Meta:** > 80% de cobertura | **Atual:** 826 testes passando
 
 ### 7.1 P1 — Apps sem nenhum teste (~104 testes) ✅ CONCLUÍDO
 | Arquivo | Escopo | Qtd | Status |
 |---------|--------|-----|--------|
-| `tests/unit/accounts/test_auth_views.py` | login, logout, registro, perfil, alterar senha | 22 | ✅ |
-| `tests/unit/notificacoes/test_models.py` | ConfiguracaoEmail, SMS, WhatsApp, Notificacao | 10 | ✅ |
-| `tests/unit/notificacoes/test_views.py` | CRUD configs e templates, preview | 22 | ✅ |
+| `tests/unit/accounts/test_auth_views.py` | login, logout, registro, perfil, alterar senha | 23 | ✅ |
+| `tests/unit/notificacoes/test_models.py` | ConfiguracaoEmail, SMS, WhatsApp, Notificacao | 14 | ✅ |
+| `tests/unit/notificacoes/test_views.py` | CRUD configs e templates, preview | 21 | ✅ |
 | `tests/unit/notificacoes/test_tasks.py` | envio email/sms, processar pendentes | 8 | ✅ |
 | `tests/unit/portal_comprador/test_models.py` | AcessoComprador, LogAcessoComprador | 5 | ✅ |
-| `tests/unit/portal_comprador/test_auth.py` | auto-cadastro, login/logout | 11 | ✅ |
+| `tests/unit/portal_comprador/test_auth.py` | auto-cadastro, login/logout | 29 | ✅ |
 | `tests/unit/portal_comprador/test_views.py` | dashboard, contratos, boletos, dados | 21 | ✅ |
-| `tests/unit/portal_comprador/test_api.py` | APIs do portal | 5 | ✅ |
+| `tests/unit/portal_comprador/test_api.py` | APIs do portal (P2: vencimentos/boletos · P3: linha digitável) | 16 | ✅ |
 
 ### 7.2 P2 — Views e APIs faltantes (~164 testes) ✅ CONCLUÍDO
 | Arquivo | Escopo | Qtd | Status |
 |---------|--------|-----|--------|
-| `tests/unit/core/test_models.py` | Modelos do core | 12 | ✅ (preexistente) |
+| `tests/unit/core/test_models.py` | Modelos do core | 20 | ✅ (preexistente) |
 | `tests/unit/core/test_crud_views.py` | CRUD completo | 30 | ✅ (preexistente) |
-| `tests/unit/core/test_api_views.py` | APIs bancos, CEP, CNPJ | 15 | ✅ |
-| `tests/unit/core/test_dashboard.py` | index, dashboard, setup | 7 | ✅ |
-| `tests/unit/core/test_management_commands.py` | gerar_dados_teste | 8 | ✅ |
-| `tests/unit/contratos/test_crud_views.py` | CRUD contratos | 14 | ✅ |
-| `tests/unit/contratos/test_indices_views.py` | CRUD índices | 9 | ✅ |
-| `tests/unit/financeiro/test_parcela_views.py` | listar, detalhe, pagar | 14 | ✅ |
-| `tests/unit/financeiro/test_boleto_views.py` | gerar, download, carnê | 17 | ✅ |
-| `tests/unit/financeiro/test_reajuste_views.py` | listar, aplicar, calcular | 9 | ✅ |
-| `tests/unit/financeiro/test_cnab_views.py` | remessa e retorno | 15 | ✅ |
+| `tests/unit/core/test_api_views.py` | APIs bancos, CEP, CNPJ | 17 | ✅ |
+| `tests/unit/core/test_dashboard.py` | index, dashboard, setup | 8 | ✅ |
+| `tests/unit/core/test_management_commands.py` | gerar_dados_teste, processar_reajustes | 4 | ✅ |
+| `tests/unit/contratos/test_crud_views.py` | CRUD contratos | 24 | ✅ |
+| `tests/unit/contratos/test_indices_views.py` | CRUD índices | 12 | ✅ |
+| `tests/unit/financeiro/test_parcela_views.py` | listar, detalhe, pagar | 19 | ✅ |
+| `tests/unit/financeiro/test_boleto_views.py` | gerar, download, carnê | 20 | ✅ |
+| `tests/unit/financeiro/test_reajuste_views.py` | listar, aplicar, calcular | 15 | ✅ |
+| `tests/unit/financeiro/test_cnab_views.py` | remessa e retorno | 21 | ✅ |
 | `tests/unit/financeiro/test_dashboard_views.py` | dashboards | 9 | ✅ |
-| `tests/unit/financeiro/test_rest_api_views.py` | APIs REST | 24 | ✅ |
+| `tests/unit/financeiro/test_rest_api_views.py` | APIs REST | 26 | ✅ |
 
 ### 7.3 P3 — Integração e Forms (~37 testes) ✅ CONCLUÍDO
 | Arquivo | Escopo | Qtd | Status |
 |---------|--------|-----|--------|
-| `tests/unit/core/test_forms.py` | Forms core | 10 | ✅ |
-| `tests/unit/contratos/test_forms.py` | Forms contratos | 8 | ✅ |
+| `tests/unit/core/test_forms.py` | Forms core | 9 | ✅ |
+| `tests/unit/contratos/test_forms.py` | Forms contratos | 7 | ✅ |
 | `tests/integration/test_fluxo_contrato_completo.py` | E2E contrato | 5 | ✅ |
 | `tests/integration/test_fluxo_boleto.py` | E2E boleto | 3 | ✅ |
 | `tests/integration/test_portal_comprador.py` | E2E portal | 3 | ✅ |
@@ -219,7 +219,7 @@
 | `tests/unit/test_security.py` | Autenticação, 404s, isolamento portal | 14 | ✅ |
 | `tests/unit/test_edge_cases.py` | Valores extremos, datas limite, reajuste | 12 | ✅ |
 | `tests/unit/notificacoes/test_management_commands.py` | enviar_notificacoes, processar_pendentes | 4 | ✅ |
-| `tests/unit/financeiro/test_management_commands.py` | processar_reajustes | 2 | ✅ |
+| `tests/unit/financeiro/test_management_commands.py` | processar_reajustes, audit_nosso_numero | 4 | ✅ |
 
 ### 7.5 Infraestrutura de Testes ✅ CONCLUÍDO (P2)
 | Prioridade | Item | Status |
@@ -491,9 +491,9 @@
 | **7** | ⭐ **CNAB Remessa — por escopo, BRCobrança, anti-duplicata** | 12 | ✅ |
 | **8** | Frontend P2 (telas principais) | 3 (P2) | ✅ |
 | **9** | APIs P2 | 4 (P2) | ✅ |
-| **10** | Testes P2 (views e APIs) | 7.2 | — |
-| **11** | Permissões e segurança | 6 | — |
-| **12** | Cálculos contratuais avançados (rescisão, cessão, mora pro rata) | 11 (G-10, G-11, G-15) | — |
+| **10** | Testes P2 (views e APIs) | 7.2 | ✅ |
+| **11** | Permissões e segurança | 6 | ✅ |
+| **12** | Cálculos contratuais avançados (rescisão, cessão, mora pro rata) | 11 (G-10, G-11, G-15) | ✅ |
 | **13** | ⭐ **Contrato Tabela Price + Intermediárias (HU-360)** | 13 | ✅ |
 | **14** | ⭐ **Sistema de Amortização: Tabela Price e SAC** | 14 | ✅ |
 | **15** | ⭐ **Regras de Bloqueio de Boleto — Cascata + Lote** | 15 | ✅ |
@@ -990,7 +990,7 @@ para ciclo = 2..total_ciclos+1:
 | HU Boleto/Carnê/Remessa (Seção 21) | — | 10 | — | — | 10 | ✅ 10/10 |
 | OFX Extrato Bancário (Seção 22) | — | 5 | — | — | 5 | ✅ 5/5 |
 | Conciliação Bancária (Seção 23) | — | 8 | — | — | 8 | ✅ 8/8 |
-| Testes | 104 | ~164 | ~37 | ~41 | ~346 | ✅ 104/104 P1 · ✅ 508 passando (12 Simulador + 12 Notificações) |
+| Testes | 104 | ~164 | ~37 | ~41 | ~346 | ✅ 826 testes passando |
 | CI/CD | — | 2 | 4 | 2 | 8 | — |
 | Documentação | — | — | 1 | 3 | 4 | — |
 | **Total** | **~117** | **~251** | **~107** | **~61** | **~536** | |

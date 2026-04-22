@@ -30,6 +30,7 @@ from decimal import Decimal
 from datetime import date, timedelta
 from django.conf import settings
 from django.utils import timezone
+from financeiro.models import TipoParcela
 
 logger = logging.getLogger(__name__)
 
@@ -524,7 +525,7 @@ class BoletoService:
         numero_documento = parcela.gerar_numero_documento()
 
         # ── Slot 1: Identificação ──────────────────────────────────────────────
-        if parcela.tipo_parcela == 'INTERMEDIARIA':
+        if parcela.tipo_parcela == TipoParcela.INTERMEDIARIA:
             try:
                 num_seq = parcela.intermediaria_origem.numero_sequencial
                 id_label = f"Intermediaria {num_seq}"

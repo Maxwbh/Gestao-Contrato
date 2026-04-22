@@ -20,6 +20,7 @@ import pytest
 from decimal import Decimal
 from datetime import date
 from dateutil.relativedelta import relativedelta
+from financeiro.models import TipoParcela
 
 
 # ---------------------------------------------------------------------------
@@ -93,7 +94,7 @@ class TestCenarioA:
     N = 24
 
     def _criar_contrato(self, dominio):
-        from contratos.models import Contrato, TabelaJurosContrato, TipoCorrecao
+        from contratos.models import Contrato, TabelaJurosContrato, TipoCorrecao, TipoAmortizacao
         imob, _imovel, comprador = dominio
         hoje = date.today()
         contrato = Contrato.objects.create(
@@ -108,7 +109,7 @@ class TestCenarioA:
             numero_parcelas=self.N,
             dia_vencimento=15,
             tipo_correcao=TipoCorrecao.FIXO,
-            tipo_amortizacao='PRICE',
+            tipo_amortizacao=TipoAmortizacao.PRICE,
             prazo_reajuste_meses=12,
         )
         TabelaJurosContrato.objects.create(
@@ -120,13 +121,13 @@ class TestCenarioA:
 
     def test_numero_parcelas_geradas(self, dominio):
         contrato = self._criar_contrato(dominio)
-        assert contrato.parcelas.filter(tipo_parcela='NORMAL').count() == self.N
+        assert contrato.parcelas.filter(tipo_parcela=TipoParcela.NORMAL).count() == self.N
 
     def test_pmt_valor_correto(self, dominio):
         contrato = self._criar_contrato(dominio)
         pmt_esperado = _pmt(self.PV, self.TAXA, self.N)
         # Todas as parcelas (exceto última) devem ter valor_atual ≈ PMT
-        parcelas = list(contrato.parcelas.filter(tipo_parcela='NORMAL').order_by('numero_parcela'))
+        parcelas = list(contrato.parcelas.filter(tipo_parcela=TipoParcela.NORMAL).order_by('numero_parcela'))
         for p in parcelas[:-1]:
             assert p.valor_atual == pmt_esperado, (
                 f"Parcela {p.numero_parcela}: esperado {pmt_esperado}, obtido {p.valor_atual}"
@@ -134,7 +135,7 @@ class TestCenarioA:
 
     def test_amortizacao_juros_preenchidos(self, dominio):
         contrato = self._criar_contrato(dominio)
-        for p in contrato.parcelas.filter(tipo_parcela='NORMAL'):
+        for p in contrato.parcelas.filter(tipo_parcela=TipoParcela.NORMAL):
             assert p.amortizacao is not None
             assert p.juros_embutido is not None
             assert p.amortizacao > Decimal('0')
@@ -143,7 +144,7 @@ class TestCenarioA:
     def test_pmt_equals_amort_plus_juros(self, dominio):
         """PMT = amortizacao + juros_embutido para cada parcela (exceto última)."""
         contrato = self._criar_contrato(dominio)
-        parcelas = list(contrato.parcelas.filter(tipo_parcela='NORMAL').order_by('numero_parcela'))
+        parcelas = list(contrato.parcelas.filter(tipo_parcela=TipoParcela.NORMAL).order_by('numero_parcela'))
         for p in parcelas[:-1]:
             assert p.valor_atual == (p.amortizacao + p.juros_embutido), (
                 f"Parcela {p.numero_parcela}: {p.valor_atual} ≠ {p.amortizacao} + {p.juros_embutido}"
@@ -156,7 +157,7 @@ class TestCenarioA:
         saldo = contrato.calcular_saldo_devedor()
         # saldo = N × PMT (≈ valor financiado + juros totais)
         assert saldo == contrato.parcelas.filter(
-            tipo_parcela='NORMAL', pago=False
+            tipo_parcela=TipoParcela.NORMAL, pago=False
         ).count() * pmt_esperado or saldo > self.PV
 
     def test_fixo_sem_reajuste_disponivel(self, dominio):
@@ -183,7 +184,7 @@ class TestCenarioB:
     AMORT_ESPERADA = (Decimal('120000.00') / 24).quantize(Decimal('0.01'))
 
     def _criar_contrato(self, dominio):
-        from contratos.models import Contrato, TabelaJurosContrato, TipoCorrecao
+        from contratos.models import Contrato, TabelaJurosContrato, TipoCorrecao, TipoAmortizacao
         imob, _imovel, comprador = dominio
         hoje = date.today()
         contrato = Contrato.objects.create(
@@ -198,7 +199,7 @@ class TestCenarioB:
             numero_parcelas=self.N,
             dia_vencimento=10,
             tipo_correcao=TipoCorrecao.FIXO,
-            tipo_amortizacao='SAC',
+            tipo_amortizacao=TipoAmortizacao.SAC,
             prazo_reajuste_meses=12,
         )
         TabelaJurosContrato.objects.create(
@@ -212,7 +213,7 @@ class TestCenarioB:
         """SAC: amortizacao deve ser constante (exceto última parcela)."""
         contrato = self._criar_contrato(dominio)
         parcelas = list(contrato.parcelas.filter(
-            tipo_parcela='NORMAL'
+            tipo_parcela=TipoParcela.NORMAL
         ).order_by('numero_parcela'))
         for p in parcelas[:-1]:
             assert p.amortizacao == self.AMORT_ESPERADA, (
@@ -223,7 +224,7 @@ class TestCenarioB:
         """SAC: PMT deve decrescer a cada parcela (juros sobre saldo decrescente)."""
         contrato = self._criar_contrato(dominio)
         parcelas = list(contrato.parcelas.filter(
-            tipo_parcela='NORMAL'
+            tipo_parcela=TipoParcela.NORMAL
         ).order_by('numero_parcela'))
         for i in range(len(parcelas) - 2):
             assert parcelas[i].valor_atual >= parcelas[i + 1].valor_atual, (
@@ -237,7 +238,7 @@ class TestCenarioB:
         saldo = contrato.calcular_saldo_devedor()
         soma_amort = sum(
             p.amortizacao for p in contrato.parcelas.filter(
-                tipo_parcela='NORMAL', pago=False
+                tipo_parcela=TipoParcela.NORMAL, pago=False
             ) if p.amortizacao
         )
         assert saldo == soma_amort
@@ -245,7 +246,7 @@ class TestCenarioB:
     def test_juros_primeira_parcela(self, dominio):
         """SAC: juros da 1ª parcela = PV × taxa."""
         contrato = self._criar_contrato(dominio)
-        p1 = contrato.parcelas.filter(tipo_parcela='NORMAL').order_by('numero_parcela').first()
+        p1 = contrato.parcelas.filter(tipo_parcela=TipoParcela.NORMAL).order_by('numero_parcela').first()
         juros_esperados = (self.PV * self.TAXA / 100).quantize(Decimal('0.01'))
         assert p1.juros_embutido == juros_esperados
 
@@ -267,7 +268,7 @@ class TestCenarioC:
     PERCENTUAL_REAJUSTE = Decimal('5.0000')
 
     def _criar_contrato(self, dominio):
-        from contratos.models import Contrato, TipoCorrecao
+        from contratos.models import Contrato, TipoCorrecao, TipoAmortizacao
         imob, _imovel, comprador = dominio
         hoje = date.today()
         contrato = Contrato.objects.create(
@@ -282,7 +283,7 @@ class TestCenarioC:
             numero_parcelas=self.N,
             dia_vencimento=5,
             tipo_correcao=TipoCorrecao.IPCA,
-            tipo_amortizacao='PRICE',
+            tipo_amortizacao=TipoAmortizacao.PRICE,
             prazo_reajuste_meses=12,
         )
         return contrato
@@ -290,7 +291,7 @@ class TestCenarioC:
     def test_parcelas_lineares_sem_tabela(self, dominio):
         """Sem TabelaJuros: parcelas devem ter valor linear (PV/n)."""
         contrato = self._criar_contrato(dominio)
-        for p in contrato.parcelas.filter(tipo_parcela='NORMAL'):
+        for p in contrato.parcelas.filter(tipo_parcela=TipoParcela.NORMAL):
             assert p.valor_atual == self.PARCELA_LINEAR, (
                 f"Esperado {self.PARCELA_LINEAR}, obtido {p.valor_atual}"
             )
@@ -298,7 +299,7 @@ class TestCenarioC:
     def test_amortizacao_nula_sem_tabela(self, dominio):
         """Sem TabelaJuros: amortizacao e juros_embutido devem ser None."""
         contrato = self._criar_contrato(dominio)
-        for p in contrato.parcelas.filter(tipo_parcela='NORMAL'):
+        for p in contrato.parcelas.filter(tipo_parcela=TipoParcela.NORMAL):
             assert p.amortizacao is None
             assert p.juros_embutido is None
 
@@ -324,7 +325,7 @@ class TestCenarioC:
 
         valor_esperado = (self.PARCELA_LINEAR * (1 + self.PERCENTUAL_REAJUSTE / 100)).quantize(Decimal('0.01'))
         parcelas_reajustadas = contrato.parcelas.filter(
-            tipo_parcela='NORMAL',
+            tipo_parcela=TipoParcela.NORMAL,
             numero_parcela__gte=13,
             numero_parcela__lte=24,
             pago=False,
@@ -359,11 +360,11 @@ class TestCenarioC:
         valor_reajustado = (self.PARCELA_LINEAR * (1 + self.PERCENTUAL_REAJUSTE / 100)).quantize(Decimal('0.01'))
 
         # Parcelas do ciclo 1 (1–12): não alteradas
-        for p in contrato.parcelas.filter(tipo_parcela='NORMAL', numero_parcela__lte=12):
+        for p in contrato.parcelas.filter(tipo_parcela=TipoParcela.NORMAL, numero_parcela__lte=12):
             assert p.valor_atual == self.PARCELA_LINEAR, f"Parcela {p.numero_parcela} não deveria ser alterada"
 
         # Parcelas do ciclo 2 em diante (13–36): todas reajustadas
-        for p in contrato.parcelas.filter(tipo_parcela='NORMAL', numero_parcela__gte=13):
+        for p in contrato.parcelas.filter(tipo_parcela=TipoParcela.NORMAL, numero_parcela__gte=13):
             p.refresh_from_db()
             assert p.valor_atual == valor_reajustado, (
                 f"Parcela {p.numero_parcela}: esperado {valor_reajustado}, obtido {p.valor_atual}"
@@ -394,7 +395,7 @@ class TestCenarioD:
     PERCENTUAL_REAJUSTE = Decimal('5.0000')
 
     def _criar_contrato(self, dominio):
-        from contratos.models import Contrato, TabelaJurosContrato, TipoCorrecao
+        from contratos.models import Contrato, TabelaJurosContrato, TipoCorrecao, TipoAmortizacao
         imob, _imovel, comprador = dominio
         hoje = date.today()
         contrato = Contrato.objects.create(
@@ -409,7 +410,7 @@ class TestCenarioD:
             numero_parcelas=self.N,
             dia_vencimento=20,
             tipo_correcao=TipoCorrecao.IPCA,
-            tipo_amortizacao='PRICE',
+            tipo_amortizacao=TipoAmortizacao.PRICE,
             prazo_reajuste_meses=12,
         )
         TabelaJurosContrato.objects.create(
@@ -428,7 +429,7 @@ class TestCenarioD:
         contrato = self._criar_contrato(dominio)
         pmt_ciclo1 = _pmt(self.PV, self.TAXA_CICLO1, self.N)  # = 2500.00
         parcelas = list(contrato.parcelas.filter(
-            tipo_parcela='NORMAL'
+            tipo_parcela=TipoParcela.NORMAL
         ).order_by('numero_parcela'))
         for p in parcelas[:-1]:
             assert p.valor_atual == pmt_ciclo1
@@ -446,7 +447,7 @@ class TestCenarioD:
         contrato = self._criar_contrato(dominio)
 
         pmt_atual = contrato.parcelas.filter(
-            tipo_parcela='NORMAL', pago=False
+            tipo_parcela=TipoParcela.NORMAL, pago=False
         ).order_by('numero_parcela').first().valor_atual
         prazo = contrato.prazo_reajuste_meses
         taxa_mensal = self.TAXA_CICLO2 / Decimal('100')
@@ -466,7 +467,7 @@ class TestCenarioD:
         reajuste.aplicar_reajuste()
 
         # Todas as parcelas não pagas devem ter o novo PMT
-        for p in contrato.parcelas.filter(tipo_parcela='NORMAL', pago=False):
+        for p in contrato.parcelas.filter(tipo_parcela=TipoParcela.NORMAL, pago=False):
             assert p.valor_atual == novo_pmt_esperado, (
                 f"Parcela {p.numero_parcela}: esperado {novo_pmt_esperado}, obtido {p.valor_atual}"
             )
@@ -477,7 +478,7 @@ class TestCenarioD:
         contrato = self._criar_contrato(dominio)
         saldo = contrato.calcular_saldo_devedor()
         soma_valor = contrato.parcelas.filter(
-            tipo_parcela='NORMAL', pago=False
+            tipo_parcela=TipoParcela.NORMAL, pago=False
         ).aggregate(total=Sum('valor_atual'))['total']
         assert saldo == soma_valor
 
@@ -499,7 +500,7 @@ class TestCenarioE:
     N = 24
 
     def _criar_contrato(self, dominio):
-        from contratos.models import Contrato, PrestacaoIntermediaria, TipoCorrecao
+        from contratos.models import Contrato, PrestacaoIntermediaria, TipoCorrecao, TipoAmortizacao
         from django.db.models import Sum
         imob, _imovel, comprador = dominio
         hoje = date.today()
@@ -515,7 +516,7 @@ class TestCenarioE:
             numero_parcelas=self.N,
             dia_vencimento=25,
             tipo_correcao=TipoCorrecao.IGPM,
-            tipo_amortizacao='PRICE',
+            tipo_amortizacao=TipoAmortizacao.PRICE,
             prazo_reajuste_meses=12,
             intermediarias_reduzem_pmt=True,
         )
@@ -539,7 +540,7 @@ class TestCenarioE:
         # PMT deve ser calculado sobre 80k, não 90k
         pmt_sobre_pv_total = _pmt(self.PV_TOTAL, Decimal('0'), self.N)  # 3750
         pmt_sobre_base_pv = _pmt(self.BASE_PV, Decimal('0'), self.N)    # 3333.33
-        p1 = contrato.parcelas.filter(tipo_parcela='NORMAL').order_by('numero_parcela').first()
+        p1 = contrato.parcelas.filter(tipo_parcela=TipoParcela.NORMAL).order_by('numero_parcela').first()
         assert p1.valor_atual == pmt_sobre_base_pv
         assert p1.valor_atual != pmt_sobre_pv_total
 
@@ -548,7 +549,7 @@ class TestCenarioE:
         contrato = self._criar_contrato(dominio)
         pmt_esperado = _pmt(self.BASE_PV, Decimal('0'), self.N)
         parcelas = list(contrato.parcelas.filter(
-            tipo_parcela='NORMAL'
+            tipo_parcela=TipoParcela.NORMAL
         ).order_by('numero_parcela'))
         for p in parcelas[:-1]:
             assert p.valor_atual == pmt_esperado
@@ -564,7 +565,7 @@ class TestCenarioE:
         contrato = self._criar_contrato(dominio)
         saldo = contrato.calcular_saldo_devedor()
         soma_normal = contrato.parcelas.filter(
-            tipo_parcela='NORMAL', pago=False
+            tipo_parcela=TipoParcela.NORMAL, pago=False
         ).aggregate(total=Sum('valor_atual'))['total']
         assert saldo == soma_normal
         # Saldo ≠ valor financiado total (pois as intermediárias não estão no saldo)
@@ -580,7 +581,7 @@ class TestSaldoDevedor:
     """Valida calcular_saldo_devedor() para Price e SAC separadamente."""
 
     def _contrato_price(self, dominio):
-        from contratos.models import Contrato, TabelaJurosContrato, TipoCorrecao
+        from contratos.models import Contrato, TabelaJurosContrato, TipoCorrecao, TipoAmortizacao
         imob, _imovel, comprador = dominio
         hoje = date.today()
         c = Contrato.objects.create(
@@ -590,7 +591,7 @@ class TestSaldoDevedor:
             data_primeiro_vencimento=hoje - relativedelta(months=1),
             valor_total=Decimal('130000.00'), valor_entrada=Decimal('10000.00'),
             numero_parcelas=24, dia_vencimento=15,
-            tipo_correcao=TipoCorrecao.FIXO, tipo_amortizacao='PRICE',
+            tipo_correcao=TipoCorrecao.FIXO, tipo_amortizacao=TipoAmortizacao.PRICE,
             prazo_reajuste_meses=12,
         )
         TabelaJurosContrato.objects.create(
@@ -600,7 +601,7 @@ class TestSaldoDevedor:
         return c
 
     def _contrato_sac(self, dominio):
-        from contratos.models import Contrato, TabelaJurosContrato, TipoCorrecao
+        from contratos.models import Contrato, TabelaJurosContrato, TipoCorrecao, TipoAmortizacao
         imob, _imovel, comprador = dominio
         hoje = date.today()
         c = Contrato.objects.create(
@@ -610,7 +611,7 @@ class TestSaldoDevedor:
             data_primeiro_vencimento=hoje - relativedelta(months=1),
             valor_total=Decimal('130000.00'), valor_entrada=Decimal('10000.00'),
             numero_parcelas=24, dia_vencimento=10,
-            tipo_correcao=TipoCorrecao.FIXO, tipo_amortizacao='SAC',
+            tipo_correcao=TipoCorrecao.FIXO, tipo_amortizacao=TipoAmortizacao.SAC,
             prazo_reajuste_meses=12,
         )
         TabelaJurosContrato.objects.create(
@@ -624,7 +625,7 @@ class TestSaldoDevedor:
         from django.db.models import Sum
         c = self._contrato_price(dominio)
         saldo = c.calcular_saldo_devedor()
-        soma_pmt = c.parcelas.filter(tipo_parcela='NORMAL', pago=False).aggregate(
+        soma_pmt = c.parcelas.filter(tipo_parcela=TipoParcela.NORMAL, pago=False).aggregate(
             total=Sum('valor_atual')
         )['total']
         assert saldo == soma_pmt
@@ -642,7 +643,7 @@ class TestSaldoDevedor:
         from django.utils import timezone
         c = self._contrato_price(dominio)
         saldo_antes = c.calcular_saldo_devedor()
-        p = c.parcelas.filter(tipo_parcela='NORMAL', pago=False).order_by('numero_parcela').first()
+        p = c.parcelas.filter(tipo_parcela=TipoParcela.NORMAL, pago=False).order_by('numero_parcela').first()
         p.pago = True
         p.valor_pago = p.valor_atual
         p.data_pagamento = timezone.now().date()

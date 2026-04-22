@@ -14,6 +14,8 @@ from tests.fixtures.factories import (
     ImobiliariaFactory,
     ImovelFactory,
     CompradorFactory,
+    ContabilidadeFactory,
+    AcessoUsuarioFactory,
 )
 
 pytestmark = pytest.mark.django_db
@@ -209,3 +211,43 @@ class TestCompradorDeleteView:
         assert response.status_code == 302
         comprador.refresh_from_db()
         assert comprador.ativo is False
+
+
+# =============================================================================
+# CONTABILIDADE CRUD
+# =============================================================================
+
+class TestContabilidadeDeleteView:
+    def test_unauthenticated_redirects(self):
+        contabilidade = ContabilidadeFactory.create()
+        response = anon_get(reverse('core:excluir_contabilidade', args=[contabilidade.pk]))
+        assert response.status_code == 302
+
+    def test_post_authenticated_soft_deletes(self):
+        user = UserFactory.create()
+        contabilidade = ContabilidadeFactory.create()
+        client = make_client(user)
+        response = client.post(reverse('core:excluir_contabilidade', args=[contabilidade.pk]))
+        assert response.status_code == 302
+        contabilidade.refresh_from_db()
+        assert contabilidade.ativo is False
+
+
+# =============================================================================
+# ACESSO USUARIO CRUD
+# =============================================================================
+
+class TestAcessoUsuarioDeleteView:
+    def test_unauthenticated_redirects(self):
+        acesso = AcessoUsuarioFactory.create()
+        response = anon_get(reverse('core:excluir_acesso', args=[acesso.pk]))
+        assert response.status_code == 302
+
+    def test_post_authenticated_soft_deletes(self):
+        user = UserFactory.create()
+        acesso = AcessoUsuarioFactory.create()
+        client = make_client(user)
+        response = client.post(reverse('core:excluir_acesso', args=[acesso.pk]))
+        assert response.status_code == 302
+        acesso.refresh_from_db()
+        assert acesso.ativo is False

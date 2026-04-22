@@ -195,7 +195,14 @@ static_dir = BASE_DIR / 'static'
 if static_dir.exists():
     STATICFILES_DIRS = [static_dir]
 
-STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
+STORAGES = {
+    "default": {
+        "BACKEND": "django.core.files.storage.FileSystemStorage",
+    },
+    "staticfiles": {
+        "BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage",
+    },
+}
 
 MEDIA_URL = '/media/'
 MEDIA_ROOT = BASE_DIR / 'media'
@@ -316,7 +323,7 @@ NOTIFICACAO_DIAS_INADIMPLENCIA = 3
 TASK_TOKEN = None
 
 # BRCobrança
-BRCOBRANCA_URL = 'http://localhost:9292'
+BRCOBRANCA_URL = config('BRCOBRANCA_URL', default='http://localhost:9292')
 BRCOBRANCA_TIMEOUT = 30
 BRCOBRANCA_MAX_TENTATIVAS = 3
 BRCOBRANCA_DELAY_INICIAL = 2
