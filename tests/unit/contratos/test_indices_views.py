@@ -104,3 +104,14 @@ class TestIndiceReajusteDeleteView:
         url = reverse('contratos:indices_excluir', kwargs={'pk': 999999})
         response = client_logado.post(url, {})
         assert response.status_code == 404
+
+    def test_post_deleta_indice(self, client_logado):
+        from datetime import date
+        from contratos.models import IndiceReajuste
+        indice = IndiceReajuste.objects.create(
+            tipo_indice='IPCA', ano=date.today().year, mes=1, valor='0.50'
+        )
+        url = reverse('contratos:indices_excluir', kwargs={'pk': indice.pk})
+        response = client_logado.post(url, {})
+        assert response.status_code == 302
+        assert not IndiceReajuste.objects.filter(pk=indice.pk).exists()

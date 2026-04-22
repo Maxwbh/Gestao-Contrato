@@ -8,7 +8,7 @@ Escopo: ContratoListView, ContratoDetailView, ContratoCreateView,
 import pytest
 from django.urls import reverse
 
-from tests.fixtures.factories import UserFactory, ContratoFactory
+from tests.fixtures.factories import UserFactory, ContratoFactory, ParcelaFactory
 
 
 @pytest.fixture
@@ -120,6 +120,37 @@ class TestContratoUpdateView:
 
 
 @pytest.mark.django_db
+class TestContratoDeleteView:
+    """Testes da view ContratoDeleteView (soft delete → status CANCELADO)"""
+
+    def test_requer_autenticacao(self, client, contrato):
+        url = reverse('contratos:excluir', kwargs={'pk': contrato.pk})
+        response = client.post(url)
+        assert response.status_code in (302, 403)
+
+    def test_contrato_inexistente_retorna_404(self, client_logado):
+        url = reverse('contratos:excluir', kwargs={'pk': 999999})
+        response = client_logado.post(url)
+        assert response.status_code == 404
+
+    def test_cancela_contrato_sem_parcelas_pagas(self, client_logado, contrato):
+        from contratos.models import StatusContrato
+        url = reverse('contratos:excluir', kwargs={'pk': contrato.pk})
+        response = client_logado.post(url)
+        assert response.status_code == 302
+        contrato.refresh_from_db()
+        assert contrato.status == StatusContrato.CANCELADO
+
+    def test_bloqueia_cancelamento_com_parcelas_pagas(self, client_logado, contrato):
+        ParcelaFactory(contrato=contrato, pago=True)
+        url = reverse('contratos:excluir', kwargs={'pk': contrato.pk})
+        response = client_logado.post(url)
+        assert response.status_code == 302
+        contrato.refresh_from_db()
+        assert contrato.status != 'CANCELADO'
+
+
+@pytest.mark.django_db
 class TestParcelasContrato:
     """Testes da view parcelas_contrato"""
 
@@ -129,21 +160,14 @@ class TestParcelasContrato:
         assert response.status_code in (302, 403)
 
     def test_exibe_parcelas(self, client_logado, contrato):
-        """View de parcelas do contrato — pode não ter template se não implementada"""
         url = reverse('contratos:parcelas', kwargs={'pk': contrato.pk})
-        try:
-            response = client_logado.get(url)
-            assert response.status_code in (200, 302)
-        except Exception:
-            pytest.skip('Template de parcelas não implementado')
+        response = client_logado.get(url)
+        assert response.status_code in (200, 302)
 
     def test_contrato_inexistente_retorna_404(self, client_logado):
         url = reverse('contratos:parcelas', kwargs={'pk': 999999})
-        try:
-            response = client_logado.get(url)
-            assert response.status_code == 404
-        except Exception:
-            pytest.skip('Template de parcelas não implementado')
+        response = client_logado.get(url)
+        assert response.status_code == 404
 
 
 @pytest.mark.django_db
