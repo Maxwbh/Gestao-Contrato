@@ -20,7 +20,7 @@ from django.db import transaction
 from faker import Faker
 
 from core.models import Contabilidade, Imobiliaria, Imovel, Comprador, TipoImovel, ContaBancaria
-from contratos.models import Contrato, TipoCorrecao, StatusContrato, IndiceReajuste, PrestacaoIntermediaria, TabelaJurosContrato
+from contratos.models import Contrato, TipoCorrecao, TipoAmortizacao, StatusContrato, IndiceReajuste, PrestacaoIntermediaria, TabelaJurosContrato
 from financeiro.models import Parcela, Reajuste
 from portal_comprador.models import AcessoComprador
 from django.contrib.auth.models import User
@@ -707,7 +707,7 @@ class Command(BaseCommand):
                 percentual_cessao=Decimal('3.0000'),
                 intermediarias_reduzem_pmt=random.random() < 0.3,
                 intermediarias_reajustadas=random.random() < 0.7,
-                tipo_amortizacao='SAC' if random.random() < 0.25 else 'PRICE',
+                tipo_amortizacao=TipoAmortizacao.SAC if random.random() < 0.25 else TipoAmortizacao.PRICE,
                 status=StatusContrato.ATIVO,
                 observacoes='Contrato gerado automaticamente para teste'
             )
@@ -1204,7 +1204,7 @@ class Command(BaseCommand):
             numero_parcelas=24,
             dia_vencimento=15,
             tipo_correcao=TipoCorrecao.FIXO,
-            tipo_amortizacao='PRICE',
+            tipo_amortizacao=TipoAmortizacao.PRICE,
             prazo_reajuste_meses=12,
             percentual_juros_mora=Decimal('1.00'),
             percentual_multa=Decimal('2.00'),
@@ -1234,7 +1234,7 @@ class Command(BaseCommand):
             numero_parcelas=24,
             dia_vencimento=10,
             tipo_correcao=TipoCorrecao.FIXO,
-            tipo_amortizacao='SAC',
+            tipo_amortizacao=TipoAmortizacao.SAC,
             prazo_reajuste_meses=12,
             percentual_juros_mora=Decimal('1.00'),
             percentual_multa=Decimal('2.00'),
@@ -1264,7 +1264,7 @@ class Command(BaseCommand):
             numero_parcelas=36,
             dia_vencimento=5,
             tipo_correcao=TipoCorrecao.IPCA,
-            tipo_amortizacao='PRICE',
+            tipo_amortizacao=TipoAmortizacao.PRICE,
             prazo_reajuste_meses=12,
             spread_reajuste=Decimal('0.5000'),
             percentual_juros_mora=Decimal('1.00'),
@@ -1307,7 +1307,7 @@ class Command(BaseCommand):
             numero_parcelas=36,
             dia_vencimento=20,
             tipo_correcao=TipoCorrecao.IPCA,
-            tipo_amortizacao='PRICE',
+            tipo_amortizacao=TipoAmortizacao.PRICE,
             prazo_reajuste_meses=12,
             percentual_juros_mora=Decimal('1.00'),
             percentual_multa=Decimal('2.00'),
@@ -1356,7 +1356,7 @@ class Command(BaseCommand):
             numero_parcelas=24,
             dia_vencimento=25,
             tipo_correcao=TipoCorrecao.IGPM,
-            tipo_amortizacao='PRICE',
+            tipo_amortizacao=TipoAmortizacao.PRICE,
             prazo_reajuste_meses=12,
             intermediarias_reduzem_pmt=True,
             intermediarias_reajustadas=True,
@@ -1622,7 +1622,7 @@ class Command(BaseCommand):
         """
         Gera arquivos de remessa CNAB para os boletos simulados.
         Agrupa por conta bancária e chama CNABService.gerar_remessa()
-        com fallback local (sem BRCobrança necessário).
+        agrupando por layout_cnab configurado em cada ContaBancaria.
         Retorna o número de remessas geradas.
         """
         from financeiro.models import Parcela, StatusBoleto
@@ -1647,21 +1647,28 @@ class Command(BaseCommand):
             return 0
 
         try:
-            resultado = service.gerar_remessas_por_escopo(
-                parcela_ids=parcela_ids,
-                layout='CNAB_400',
-            )
-            remessas = resultado.get('remessas_geradas', [])
-            erros = resultado.get('erros', [])
-            count = len(remessas)
-            for r in remessas:
-                self.stdout.write(
-                    f"   → Remessa #{r.get('numero_remessa')} "
-                    f"— {r.get('banco', '')} "
-                    f"({r.get('total_boletos', 0)} boletos)"
+            # Agrupar por layout configurado na conta para não misturar CNAB_240 e CNAB_400
+            from financeiro.models import Parcela as _Parcela
+            from collections import defaultdict
+            grupos_layout = defaultdict(list)
+            for pid in parcela_ids:
+                p = _Parcela.objects.select_related('conta_bancaria').get(pk=pid)
+                layout = getattr(p.conta_bancaria, 'layout_cnab', 'CNAB_400') or 'CNAB_400'
+                grupos_layout[layout].append(pid)
+
+            for layout, ids in grupos_layout.items():
+                resultado = service.gerar_remessas_por_escopo(
+                    parcela_ids=ids,
+                    layout=layout,
                 )
-            for e in erros:
-                self.stdout.write(self.style.WARNING(f'   ⚠ {e}'))
+                for r in resultado.get('remessas_geradas', []):
+                    count += 1
+                    self.stdout.write(
+                        f"   → Remessa #{r.get('numero_remessa')} "
+                        f"[{layout}] ({r.get('quantidade_boletos', 0)} boletos)"
+                    )
+                for e in resultado.get('erros', []):
+                    self.stdout.write(self.style.WARNING(f'   ⚠ {e}'))
         except Exception as exc:
             self.stdout.write(self.style.WARNING(f'   ⚠ Erro ao gerar remessa: {exc}'))
 
@@ -1698,12 +1705,13 @@ class Command(BaseCommand):
             if not boletos:
                 continue
 
+            from financeiro.models import StatusArquivoRetorno
             # Criar ArquivoRetorno simulado
             arquivo = ArquivoRetorno.objects.create(
                 conta_bancaria=conta,
                 nome_arquivo=f'RET_{conta.banco}_{hoje.strftime("%Y%m%d")}.RET',
                 data_upload=hoje,
-                status='PROCESSADO',
+                status=StatusArquivoRetorno.PROCESSADO,
                 total_registros=len(boletos),
                 registros_processados=0,
                 registros_erro=0,
@@ -1981,7 +1989,7 @@ class Command(BaseCommand):
                 numero_parcelas=120,
                 dia_vencimento=10,
                 tipo_correcao=TipoCorrecao.IPCA,
-                tipo_amortizacao='PRICE',
+                tipo_amortizacao=TipoAmortizacao.PRICE,
                 prazo_reajuste_meses=12,
                 intermediarias_reduzem_pmt=True,
                 intermediarias_reajustadas=False,
@@ -2106,7 +2114,7 @@ class Command(BaseCommand):
                 numero_parcelas=120,
                 dia_vencimento=10,
                 tipo_correcao=TipoCorrecao.IGPM,
-                tipo_amortizacao='PRICE',
+                tipo_amortizacao=TipoAmortizacao.PRICE,
                 prazo_reajuste_meses=12,
                 intermediarias_reduzem_pmt=False,
                 intermediarias_reajustadas=False,

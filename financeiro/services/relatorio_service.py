@@ -302,6 +302,7 @@ class RelatorioService:
             proxima_parcela = contrato.get_parcelas_a_pagar().first()
 
             itens.append({
+                'contrato_id': contrato.pk,
                 'contrato_numero': contrato.numero_contrato,
                 'comprador_nome': contrato.comprador.nome,
                 'imovel': str(contrato.imovel),

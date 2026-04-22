@@ -212,14 +212,13 @@ def parcela_vencida(db, parcela_factory):
     from datetime import date, timedelta
     return parcela_factory(
         data_vencimento=date.today() - timedelta(days=30),
-        status='vencida'
     )
 
 
 @pytest.fixture
 def parcela_paga(db, parcela_factory, historico_pagamento_factory):
     """Cria uma parcela já paga"""
-    parcela = parcela_factory(status='paga')
+    parcela = parcela_factory(pago=True)
     historico_pagamento_factory(parcela=parcela)
     return parcela
 

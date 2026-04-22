@@ -34,7 +34,7 @@ class TestFluxoContratoCompleto:
         - 30 intermediárias de R$ 5.000,00 cada (a cada 12 meses)
         - Reajuste anual por IPCA
         """
-        from contratos.models import Contrato, PrestacaoIntermediaria
+        from contratos.models import Contrato, PrestacaoIntermediaria, TipoCorrecao
 
         imobiliaria = imobiliaria_factory()
         comprador = comprador_factory()
@@ -52,7 +52,7 @@ class TestFluxoContratoCompleto:
             valor_entrada=Decimal('0.00'),
             numero_parcelas=360,
             dia_vencimento=15,
-            tipo_correcao='IPCA',
+            tipo_correcao=TipoCorrecao.IPCA,
             prazo_reajuste_meses=12,
             quantidade_intermediarias=30,
         )
@@ -142,7 +142,6 @@ class TestFluxoContratoCompleto:
         valor_esperado = contrato.valor_parcela_original * Decimal('1.0617')
         assert abs(parcela_13.valor_atual - valor_esperado) < Decimal('0.01')
 
-    @pytest.mark.xfail(reason="Bug de precisão decimal: aplicar_reajuste() em PrestacaoIntermediaria não arredonda antes de salvar, causando ValidationError para campos com decimal_places=2")
     def test_intermediarias_reajustadas_junto_com_parcelas(
         self,
         contrato_factory,
@@ -308,8 +307,9 @@ class TestCenariosEspeciais:
         """
         Testa que contrato com valor fixo não tem bloqueio de reajuste.
         """
+        from contratos.models import TipoCorrecao
         contrato = contrato_factory(
-            tipo_correcao='FIXO',
+            tipo_correcao=TipoCorrecao.FIXO,
             prazo_reajuste_meses=12
         )
 
@@ -383,7 +383,7 @@ def contrato_factory(db, imobiliaria_factory, comprador_factory, imovel_factory)
     counter = {'n': 0}
 
     def create(**kwargs):
-        from contratos.models import Contrato
+        from contratos.models import Contrato, TipoCorrecao
 
         counter['n'] += 1
         n = counter['n']
@@ -401,7 +401,7 @@ def contrato_factory(db, imobiliaria_factory, comprador_factory, imovel_factory)
             'valor_entrada': kwargs.pop('valor_entrada', Decimal('10000.00')),
             'numero_parcelas': kwargs.pop('numero_parcelas', 24),
             'dia_vencimento': kwargs.pop('dia_vencimento', 15),
-            'tipo_correcao': kwargs.pop('tipo_correcao', 'IPCA'),
+            'tipo_correcao': kwargs.pop('tipo_correcao', TipoCorrecao.IPCA),
             'prazo_reajuste_meses': kwargs.pop('prazo_reajuste_meses', 12),
         }
         defaults.update(kwargs)

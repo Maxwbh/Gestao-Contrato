@@ -15,28 +15,18 @@ class TestGerarDadosTeste:
     def test_comando_executa_sem_erro(self):
         """Executa o comando sem --limpar e verifica que não lança exceção"""
         out = StringIO()
-        # Pode demorar mas não deve levantar exceção
         try:
             call_command('gerar_dados_teste', stdout=out)
-            sucesso = True
         except SystemExit as e:
-            # Alguns commands chamam sys.exit(0) no sucesso
-            sucesso = e.code == 0
-        except Exception:
-            sucesso = False
-        assert sucesso
+            assert e.code == 0
 
     def test_comando_com_limpar(self):
         """Executa com --limpar não deve falhar"""
         out = StringIO()
         try:
             call_command('gerar_dados_teste', limpar=True, stdout=out)
-            sucesso = True
         except SystemExit as e:
-            sucesso = e.code == 0
-        except Exception:
-            sucesso = False
-        assert sucesso
+            assert e.code == 0
 
     def test_cria_dados_no_banco(self):
         """Após execução, existem dados no banco"""
@@ -55,9 +45,5 @@ class TestProcessarReajustes:
         out = StringIO()
         try:
             call_command('processar_reajustes', stdout=out)
-            sucesso = True
         except SystemExit as e:
-            sucesso = e.code == 0
-        except Exception:
-            sucesso = False
-        assert sucesso
+            assert e.code == 0

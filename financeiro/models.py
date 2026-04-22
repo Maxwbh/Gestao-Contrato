@@ -335,10 +335,10 @@ class Parcela(TimeStampedModel):
             pass  # Tratado no método gerar_boleto
 
         # Validar valores positivos
-        if self.valor_original and self.valor_original <= Decimal('0'):
+        if self.valor_original is not None and self.valor_original <= Decimal('0'):
             errors['valor_original'] = 'O valor original deve ser maior que zero.'
 
-        if self.valor_atual and self.valor_atual <= Decimal('0'):
+        if self.valor_atual is not None and self.valor_atual <= Decimal('0'):
             errors['valor_atual'] = 'O valor atual deve ser maior que zero.'
 
         # Validar data de pagamento não pode ser futura
@@ -350,7 +350,7 @@ class Parcela(TimeStampedModel):
             errors['valor_pago'] = 'Informe o valor pago ao marcar a parcela como paga.'
 
         # Validar ciclo de reajuste
-        if self.ciclo_reajuste and self.ciclo_reajuste < 1:
+        if self.ciclo_reajuste is not None and self.ciclo_reajuste < 1:
             errors['ciclo_reajuste'] = 'O ciclo de reajuste deve ser pelo menos 1.'
 
         if errors:
@@ -999,8 +999,9 @@ class Reajuste(TimeStampedModel):
         antecipacao_meses: quantos meses antes do aniversário exibir como pendente.
         """
         from django.utils import timezone as tz
+        from contratos.models import TipoCorrecao
 
-        if contrato.tipo_correcao == 'FIXO':
+        if contrato.tipo_correcao == TipoCorrecao.FIXO:
             return None
 
         prazo = contrato.prazo_reajuste_meses
@@ -1239,7 +1240,7 @@ class Reajuste(TimeStampedModel):
             # onde (1+taxa_mensal)^prazo é o fator de juros compostos anuais.
             todas_restantes = contrato.parcelas.filter(
                 pago=False,
-                tipo_parcela='NORMAL',
+                tipo_parcela=TipoParcela.NORMAL,
             ).order_by('numero_parcela')
 
             primeira = todas_restantes.first()
@@ -1277,7 +1278,7 @@ class Reajuste(TimeStampedModel):
             # MODO SAC — amortização constante recalculada sobre o saldo corrigido
             todas_restantes = contrato.parcelas.filter(
                 pago=False,
-                tipo_parcela='NORMAL',
+                tipo_parcela=TipoParcela.NORMAL,
             ).order_by('numero_parcela')
 
             n_restantes = todas_restantes.count()
@@ -1411,7 +1412,8 @@ class Reajuste(TimeStampedModel):
 
         # V-08: Contratos FIXO não têm reajuste periódico
         if hasattr(self, 'contrato') and self.contrato:
-            if self.contrato.tipo_correcao == 'FIXO':
+            from contratos.models import TipoCorrecao
+            if self.contrato.tipo_correcao == TipoCorrecao.FIXO:
                 errors['contrato'] = (
                     'Contratos com índice FIXO são pré-fixados e não possuem reajuste periódico. '
                     'O valor das parcelas é definido na TabelaJurosContrato no momento da criação.'
@@ -1506,7 +1508,7 @@ class Reajuste(TimeStampedModel):
             # PMT_novo = PMT_atual × (1 + IPCA) × (1 + taxa_mensal)^prazo
             parcelas = self.contrato.parcelas.filter(
                 pago=False,
-                tipo_parcela='NORMAL',
+                tipo_parcela=TipoParcela.NORMAL,
             ).order_by('numero_parcela')
 
             primeira = parcelas.first()
@@ -1532,7 +1534,7 @@ class Reajuste(TimeStampedModel):
             # MODO SAC — recalcula amortização constante sobre saldo corrigido
             parcelas = list(self.contrato.parcelas.filter(
                 pago=False,
-                tipo_parcela='NORMAL',
+                tipo_parcela=TipoParcela.NORMAL,
             ).order_by('numero_parcela'))
 
             n_restantes = len(parcelas)

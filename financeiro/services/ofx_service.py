@@ -200,7 +200,7 @@ class OFXService:
                 'parser': 'brcobranca',
             }
         """
-        from financeiro.models import Parcela
+        from financeiro.models import Parcela, TipoParcela
 
         # Garantir bytes para BRCobrança (multipart upload)
         content_bytes = (
@@ -231,7 +231,7 @@ class OFXService:
             }
 
         # Carregar parcelas não pagas em memória (para evitar N+1)
-        qs = Parcela.objects.filter(pago=False, tipo_parcela='NORMAL').select_related(
+        qs = Parcela.objects.filter(pago=False, tipo_parcela=TipoParcela.NORMAL).select_related(
             'contrato', 'contrato__comprador', 'contrato__imobiliaria'
         )
         if self.imobiliaria:

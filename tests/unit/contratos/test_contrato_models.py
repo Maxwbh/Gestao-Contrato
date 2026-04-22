@@ -11,6 +11,7 @@ import pytest
 from decimal import Decimal
 from datetime import date, timedelta
 from django.utils import timezone
+from contratos.models import StatusContrato
 
 
 @pytest.mark.django_db
@@ -22,7 +23,7 @@ class TestContratoModel:
         contrato = contrato_factory()
         assert contrato.pk is not None
         assert contrato.numero_contrato is not None
-        assert contrato.status == 'ATIVO'
+        assert contrato.status == StatusContrato.ATIVO
 
     def test_contrato_valor_financiado_calculado(self, contrato_factory):
         """Testa cálculo automático do valor financiado"""
@@ -145,10 +146,11 @@ class TestContratoModel:
     def test_contrato_data_proximo_reajuste(self, contrato_factory):
         """Testa cálculo da data do próximo reajuste"""
         data_contrato = date(2024, 1, 15)
+        from contratos.models import TipoCorrecao
         contrato = contrato_factory(
             data_contrato=data_contrato,
             prazo_reajuste_meses=12,
-            tipo_correcao='IPCA'
+            tipo_correcao=TipoCorrecao.IPCA
         )
 
         # Próximo reajuste deve ser 12 meses após a data do contrato
@@ -156,7 +158,8 @@ class TestContratoModel:
 
     def test_contrato_sem_reajuste_valor_fixo(self, contrato_factory):
         """Testa que contrato com valor fixo não precisa de reajuste"""
-        contrato = contrato_factory(tipo_correcao='FIXO')
+        from contratos.models import TipoCorrecao
+        contrato = contrato_factory(tipo_correcao=TipoCorrecao.FIXO)
 
         assert contrato.verificar_reajuste_necessario() is False
         assert contrato.data_proximo_reajuste is None
@@ -219,7 +222,6 @@ class TestPrestacaoIntermediariaModel:
         inter_ciclo2 = intermediaria_factory(contrato=contrato, mes_vencimento=18, numero_sequencial=2)
         assert inter_ciclo2.ciclo_reajuste == 2
 
-    @pytest.mark.xfail(reason="Bug de precisão decimal: aplicar_reajuste() não arredonda antes de salvar, causando ValidationError para campos com decimal_places=2")
     def test_intermediaria_aplicar_reajuste(self, intermediaria_factory):
         """Testa aplicação de reajuste na intermediária"""
         intermediaria = intermediaria_factory(valor=Decimal('10000.00'))
@@ -292,7 +294,7 @@ def contrato_factory(db, imobiliaria_factory, comprador_factory, imovel_factory)
     counter = {'n': 0}
 
     def create(**kwargs):
-        from contratos.models import Contrato
+        from contratos.models import Contrato, TipoCorrecao
 
         counter['n'] += 1
         n = counter['n']
@@ -310,7 +312,7 @@ def contrato_factory(db, imobiliaria_factory, comprador_factory, imovel_factory)
             'valor_entrada': kwargs.pop('valor_entrada', Decimal('10000.00')),
             'numero_parcelas': kwargs.pop('numero_parcelas', 120),
             'dia_vencimento': kwargs.pop('dia_vencimento', 15),
-            'tipo_correcao': kwargs.pop('tipo_correcao', 'IPCA'),
+            'tipo_correcao': kwargs.pop('tipo_correcao', TipoCorrecao.IPCA),
             'prazo_reajuste_meses': kwargs.pop('prazo_reajuste_meses', 12),
         }
         defaults.update(kwargs)

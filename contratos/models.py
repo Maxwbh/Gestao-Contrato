@@ -642,10 +642,10 @@ class Contrato(TimeStampedModel):
         errors = {}
 
         # Validar prazo máximo de 360 meses
-        if self.numero_parcelas and self.numero_parcelas > 360:
+        if self.numero_parcelas is not None and self.numero_parcelas > 360:
             errors['numero_parcelas'] = 'O número máximo de parcelas é 360 (30 anos).'
 
-        if self.numero_parcelas and self.numero_parcelas < 1:
+        if self.numero_parcelas is not None and self.numero_parcelas < 1:
             errors['numero_parcelas'] = 'O contrato deve ter pelo menos 1 parcela.'
 
         # Validar máximo de 30 prestações intermediárias
@@ -653,7 +653,7 @@ class Contrato(TimeStampedModel):
             errors['quantidade_intermediarias'] = 'O máximo de prestações intermediárias é 30.'
 
         # Validar prazo de reajuste (padrão 12, mínimo 1, máximo 24)
-        if self.prazo_reajuste_meses:
+        if self.prazo_reajuste_meses is not None:
             if self.prazo_reajuste_meses < 1:
                 errors['prazo_reajuste_meses'] = 'O prazo mínimo de reajuste é 1 mês.'
             elif self.prazo_reajuste_meses > 24:
@@ -831,7 +831,7 @@ class Contrato(TimeStampedModel):
         Args:
             base_pv: Valor presente base. Se None, usa valor_financiado.
         """
-        from financeiro.models import Parcela as ParcelaModel, Reajuste
+        from financeiro.models import Parcela as ParcelaModel, Reajuste, TipoParcela
 
         pv = base_pv if base_pv is not None else self.valor_financiado
         if pv <= 0 or self.numero_parcelas <= 0:
@@ -840,7 +840,7 @@ class Contrato(TimeStampedModel):
         taxa = TabelaJurosContrato.get_juros_para_ciclo(self, 1) or Decimal('0')
 
         parcelas_qs = self.parcelas.filter(
-            tipo_parcela='NORMAL'
+            tipo_parcela=TipoParcela.NORMAL
         ).order_by('numero_parcela')
 
         n = parcelas_qs.count()
@@ -945,7 +945,8 @@ class Contrato(TimeStampedModel):
           Se amortizacao não preenchida ainda, cai para valor_atual como fallback.
         """
         from django.db.models import Sum
-        qs = self.parcelas.filter(pago=False, tipo_parcela='NORMAL')
+        from financeiro.models import TipoParcela
+        qs = self.parcelas.filter(pago=False, tipo_parcela=TipoParcela.NORMAL)
         if self.tipo_amortizacao == TipoAmortizacao.SAC:
             saldo = qs.aggregate(total=Sum('amortizacao'))['total']
             if saldo is None:
@@ -1563,7 +1564,7 @@ class PrestacaoIntermediaria(TimeStampedModel):
                 errors['numero_sequencial'] = f'O contrato permite no máximo {limite} prestações intermediárias.'
 
         # Validar valor mínimo
-        if self.valor and self.valor <= Decimal('0'):
+        if self.valor is not None and self.valor <= Decimal('0'):
             errors['valor'] = 'O valor da intermediária deve ser maior que zero.'
 
         if errors:

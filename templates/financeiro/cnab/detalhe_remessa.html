@@ -96,13 +96,17 @@
                     <h5 class="mb-0"><i class="fas fa-cog"></i> Acoes</h5>
                 </div>
                 <div class="card-body d-grid gap-2">
+                    {% if arquivo.arquivo %}
                     <a href="{% url 'financeiro:download_remessa' arquivo.pk %}" class="btn btn-success">
                         <i class="fas fa-download"></i> Download do Arquivo
                     </a>
+                    {% endif %}
                     {% if arquivo.pode_reenviar %}
+                    {% if arquivo.arquivo %}
                     <button type="button" class="btn btn-warning" onclick="marcarEnviada()">
                         <i class="fas fa-paper-plane"></i> Marcar como Enviado
                     </button>
+                    {% endif %}
                     <button type="button" class="btn btn-outline-primary" onclick="regenerarRemessa()">
                         <i class="fas fa-redo"></i> Regenerar Arquivo
                     </button>

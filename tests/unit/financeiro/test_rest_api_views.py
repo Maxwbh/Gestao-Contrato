@@ -210,3 +210,23 @@ class TestApiImobiliariasLista:
         assert response.status_code == 200
         data = response.json()
         assert isinstance(data, (list, dict))
+
+
+@pytest.mark.django_db
+class TestVisualizarBoleto:
+    """Testes da view visualizar_boleto — garante que requer autenticação."""
+
+    def test_requer_autenticacao(self, client, parcela):
+        url = reverse('financeiro:visualizar_boleto', kwargs={'pk': parcela.pk})
+        response = client.get(url)
+        assert response.status_code in (302, 403)
+
+    def test_parcela_sem_boleto_redireciona(self, client_logado, parcela):
+        url = reverse('financeiro:visualizar_boleto', kwargs={'pk': parcela.pk})
+        response = client_logado.get(url)
+        assert response.status_code == 302
+
+    def test_parcela_inexistente_retorna_404(self, client_logado):
+        url = reverse('financeiro:visualizar_boleto', kwargs={'pk': 999999})
+        response = client_logado.get(url)
+        assert response.status_code == 404

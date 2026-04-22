@@ -19,7 +19,7 @@ from core.models import (
     Comprador,
     AcessoUsuario,
 )
-from contratos.models import Contrato
+from contratos.models import Contrato, TipoCorrecao, TipoAmortizacao, StatusContrato
 from financeiro.models import (
     Parcela,
     Reajuste,
@@ -28,6 +28,8 @@ from financeiro.models import (
     ArquivoRetorno,
     ItemRemessa,
     ItemRetorno,
+    StatusArquivoRemessa,
+    StatusArquivoRetorno,
 )
 from notificacoes.models import (
     ConfiguracaoEmail,
@@ -53,6 +55,7 @@ User = get_user_model()
 class UserFactory(DjangoModelFactory):
     class Meta:
         model = User
+        skip_postgeneration_save = True
 
     username = factory.Sequence(lambda n: f'user{n}')
     email = factory.LazyAttribute(lambda obj: f'{obj.username}@example.com')
@@ -70,6 +73,7 @@ class UserFactory(DjangoModelFactory):
             obj.set_password(extracted)
         else:
             obj.set_password('testpass123')
+        obj.save()
 
 
 class SuperUserFactory(UserFactory):
@@ -218,14 +222,14 @@ class ContratoFactory(DjangoModelFactory):
     numero_parcelas = 12
     dia_vencimento = 5
 
-    tipo_amortizacao = 'PRICE'
+    tipo_amortizacao = TipoAmortizacao.PRICE
     percentual_juros_mora = Decimal('1.00')
     percentual_multa = Decimal('2.00')
 
-    tipo_correcao = 'IPCA'
+    tipo_correcao = TipoCorrecao.IPCA
     prazo_reajuste_meses = 12
 
-    status = 'ATIVO'
+    status = StatusContrato.ATIVO
 
 
 class ParcelaFactory(DjangoModelFactory):
@@ -282,7 +286,7 @@ class ArquivoRetornoFactory(DjangoModelFactory):
     conta_bancaria = factory.SubFactory(ContaBancariaFactory)
     nome_arquivo = factory.Sequence(lambda n: f'retorno_{n}.ret')
     layout = 'CNAB_240'
-    status = 'PENDENTE'
+    status = StatusArquivoRetorno.PENDENTE
     arquivo = factory.django.FileField(filename='retorno.ret', data=b'HEADER\nDETALHE\nTRAILER')
 
 
@@ -294,7 +298,7 @@ class ArquivoRemessaFactory(DjangoModelFactory):
     numero_remessa = factory.Sequence(lambda n: n + 1)
     layout = 'CNAB_240'
     nome_arquivo = factory.Sequence(lambda n: f'remessa_{n}.rem')
-    status = 'GERADO'
+    status = StatusArquivoRemessa.GERADO
     arquivo = factory.django.FileField(filename='remessa.rem', data=b'HEADER\nDETALHE\nTRAILER')
     quantidade_boletos = 1
     valor_total = Decimal('7500.00')
