@@ -6,7 +6,7 @@ Email: maxwbh@gmail.com
 """
 from django.contrib import admin
 from django.utils.html import format_html
-from .models import Contrato, TabelaJurosContrato
+from .models import Contrato, TabelaJurosContrato, StatusContrato
 
 
 class TabelaJurosInline(admin.TabularInline):
@@ -220,18 +220,18 @@ class ContratoAdmin(admin.ModelAdmin):
 
     def marcar_como_ativo(self, request, queryset):
         """Marca contratos selecionados como ativos"""
-        updated = queryset.update(status='ATIVO')
+        updated = queryset.update(status=StatusContrato.ATIVO)
         self.message_user(request, f'{updated} contrato(s) marcado(s) como ativo.')
     marcar_como_ativo.short_description = 'Marcar como Ativo'
 
     def marcar_como_suspenso(self, request, queryset):
         """Marca contratos selecionados como suspensos"""
-        updated = queryset.update(status='SUSPENSO')
+        updated = queryset.update(status=StatusContrato.SUSPENSO)
         self.message_user(request, f'{updated} contrato(s) marcado(s) como suspenso.')
     marcar_como_suspenso.short_description = 'Marcar como Suspenso'
 
     def marcar_como_quitado(self, request, queryset):
         """Marca contratos selecionados como quitados"""
-        updated = queryset.update(status='QUITADO')
+        updated = queryset.update(status=StatusContrato.QUITADO)
         self.message_user(request, f'{updated} contrato(s) marcado(s) como quitado.')
     marcar_como_quitado.short_description = 'Marcar como Quitado'

@@ -10,6 +10,7 @@ import pytest
 from decimal import Decimal
 from datetime import date, timedelta
 from django.utils import timezone
+from financeiro.models import TipoParcela
 
 
 @pytest.mark.django_db
@@ -19,7 +20,7 @@ class TestParcelaModel:
     def test_parcela_tipo_padrao_normal(self, parcela_factory):
         """Testa que parcela tem tipo NORMAL por padrão"""
         parcela = parcela_factory()
-        assert parcela.tipo_parcela == 'NORMAL'
+        assert parcela.tipo_parcela == TipoParcela.NORMAL
 
     def test_parcela_ciclo_reajuste_padrao(self, parcela_factory):
         """Testa que parcela tem ciclo 1 por padrão"""
@@ -226,7 +227,7 @@ class TestReajusteModel:
         assert contrato.bloqueio_boleto_reajuste is False
 
     def test_reajuste_criar_reajuste_ciclo(self, contrato_com_parcelas, indice_factory):
-        """Testa criação automática de reajuste para ciclo"""
+        """Testa criação de reajuste para ciclo usando a API moderna"""
         from financeiro.models import Reajuste
 
         contrato = contrato_com_parcelas
@@ -240,12 +241,15 @@ class TestReajusteModel:
                 valor=Decimal('0.50')
             )
 
-        # Criar reajuste para ciclo 2
-        reajuste = Reajuste.criar_reajuste_ciclo(
+        # Criar reajuste para ciclo 2 via API moderna
+        reajuste = Reajuste.objects.create(
             contrato=contrato,
             ciclo=2,
-            percentual=Decimal('6.17')  # Passando percentual manualmente para o teste
+            percentual=Decimal('6.17'),
+            parcela_inicial=1,
+            parcela_final=contrato.numero_parcelas,
         )
+        reajuste.aplicar_reajuste()
 
         assert reajuste is not None
         assert reajuste.ciclo == 2

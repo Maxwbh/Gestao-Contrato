@@ -54,7 +54,7 @@ def dominio(db):
 
 @pytest.fixture
 def contrato_base(db, dominio):
-    from contratos.models import Contrato
+    from contratos.models import Contrato, StatusContrato, TipoCorrecao, TipoAmortizacao
     imob, imovel, comprador = dominio
     c = Contrato.objects.create(
         imobiliaria=imob,
@@ -67,12 +67,12 @@ def contrato_base(db, dominio):
         valor_entrada=Decimal('10000.00'),
         numero_parcelas=12,
         dia_vencimento=5,
-        tipo_amortizacao='PRICE',
-        tipo_correcao='FIXO',
+        tipo_amortizacao=TipoAmortizacao.PRICE,
+        tipo_correcao=TipoCorrecao.FIXO,
         percentual_juros_mora=Decimal('1.00'),
         percentual_multa=Decimal('2.00'),
         prazo_reajuste_meses=12,
-        status='ATIVO',
+        status=StatusContrato.ATIVO,
     )
     if not c.parcelas.exists():
         c.gerar_parcelas()
@@ -81,7 +81,7 @@ def contrato_base(db, dominio):
 
 def _criar_parcela(contrato, dias_offset, pago=False):
     """Cria parcela com vencimento relativo a hoje."""
-    from financeiro.models import Parcela
+    from financeiro.models import Parcela, TipoParcela
     return Parcela.objects.create(
         contrato=contrato,
         numero_parcela=900 + dias_offset,
@@ -89,7 +89,7 @@ def _criar_parcela(contrato, dias_offset, pago=False):
         valor_atual=Decimal('1000.00'),
         valor_pago=Decimal('0.00'),
         data_vencimento=date.today() + timedelta(days=dias_offset),
-        tipo_parcela='NORMAL',
+        tipo_parcela=TipoParcela.NORMAL,
         pago=pago,
     )
 
