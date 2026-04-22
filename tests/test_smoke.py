@@ -73,6 +73,22 @@ def dados(django_db_setup, django_db_blocker):
             'usuario_comprador': usuario_comprador,
         }
 
+        # Teardown — delete in reverse dependency order so FKs don't block
+        AcessoComprador.objects.filter(usuario=usuario_comprador).delete()
+        notificacao.delete()
+        regra.delete()
+        template.delete()
+        cfg_wa.delete()
+        cfg_email.delete()
+        retorno.delete()
+        remessa.delete()
+        parcela.delete()
+        contrato.delete()
+        comprador.delete()
+        imovel.delete()
+        conta.delete()
+        imobiliaria.delete()
+        contabilidade.delete()
         User.objects.filter(username__in=['_smoke_staff', '_smoke_comprador']).delete()
 
 
