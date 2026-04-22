@@ -12,7 +12,7 @@ Uso:
 """
 from django.core.management.base import BaseCommand
 from django.db.models import Count
-from financeiro.models import Parcela
+from financeiro.models import Parcela, StatusBoleto
 
 
 class Command(BaseCommand):
@@ -29,7 +29,7 @@ class Command(BaseCommand):
         self.stdout.write(self.style.MIGRATE_HEADING('=== Auditoria nosso_numero ===\n'))
 
         # 1. Boletos gerados sem nosso_numero
-        sem_nn = Parcela.objects.exclude(status_boleto='NAO_GERADO').filter(nosso_numero='')
+        sem_nn = Parcela.objects.exclude(status_boleto=StatusBoleto.NAO_GERADO).filter(nosso_numero='')
         self.stdout.write(f'Boletos gerados sem nosso_numero: {sem_nn.count()}')
         for p in sem_nn[:20]:
             self.stdout.write(f'  Parcela #{p.pk} — {p.contrato.numero_contrato} p{p.numero_parcela}')

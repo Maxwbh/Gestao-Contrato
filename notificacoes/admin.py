@@ -8,7 +8,7 @@ from django.contrib import admin
 from django.utils.html import format_html
 from .models import (
     ConfiguracaoEmail, ConfiguracaoSMS, ConfiguracaoWhatsApp,
-    Notificacao, TemplateNotificacao, RegraNotificacao
+    Notificacao, TemplateNotificacao, RegraNotificacao, StatusNotificacao
 )
 from .tasks import reenviar_notificacao
 
@@ -139,13 +139,13 @@ class NotificacaoAdmin(admin.ModelAdmin):
     def status_badge(self, obj):
         """Exibe um badge colorido para o status"""
         colors = {
-            'PENDENTE': '#ffc107',
-            'ENVIADA': '#28a745',
-            'ERRO': '#dc3545',
-            'CANCELADA': '#6c757d'
+            StatusNotificacao.PENDENTE: '#ffc107',
+            StatusNotificacao.ENVIADA: '#28a745',
+            StatusNotificacao.ERRO: '#dc3545',
+            StatusNotificacao.CANCELADA: '#6c757d'
         }
         color = colors.get(obj.status, '#6c757d')
-        text_color = 'black' if obj.status == 'PENDENTE' else 'white'
+        text_color = 'black' if obj.status == StatusNotificacao.PENDENTE else 'white'
         return format_html(
             '<span style="background-color: {}; color: {}; padding: 3px 10px; border-radius: 3px;">{}</span>',
             color,
@@ -167,7 +167,7 @@ class NotificacaoAdmin(admin.ModelAdmin):
 
     def cancelar_notificacoes(self, request, queryset):
         """Cancela as notificações selecionadas"""
-        updated = queryset.update(status='CANCELADA')
+        updated = queryset.update(status=StatusNotificacao.CANCELADA)
         self.message_user(request, f'{updated} notificação(ões) cancelada(s).')
     cancelar_notificacoes.short_description = 'Cancelar Notificações'
 

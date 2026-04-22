@@ -94,7 +94,7 @@
           <tbody>
             {% for item in relatorio.itens %}
             <tr {% if item.parcelas_vencidas > 0 %}class="table-warning"{% endif %}>
-              <td><small><a href="{% url 'contratos:detalhe_contrato' item.contrato_numero %}">{{ item.contrato_numero }}</a></small></td>
+              <td><small><a href="{% url 'contratos:detalhe' item.contrato_id %}">{{ item.contrato_numero }}</a></small></td>
               <td><small>{{ item.comprador_nome }}</small></td>
               <td><small>{{ item.imovel }}</small></td>
               <td class="text-center" style="min-width:100px">

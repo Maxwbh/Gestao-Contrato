@@ -28,9 +28,9 @@ from datetime import timedelta
 import time
 import logging
 
-from contratos.models import Contrato
+from contratos.models import Contrato, StatusContrato
 from core.permissions import portal_rate_limit
-from financeiro.models import Parcela
+from financeiro.models import Parcela, StatusBoleto
 
 from .models import AcessoComprador, LogAcessoComprador
 from .forms import (
@@ -230,7 +230,7 @@ def dashboard(request):
     # Contratos do comprador
     contratos = Contrato.objects.filter(
         comprador=comprador,
-        status='ATIVO'
+        status=StatusContrato.ATIVO
     ).select_related('imovel', 'imobiliaria')
 
     # Estatísticas gerais
@@ -923,7 +923,7 @@ def api_portal_boletos(request):
         'contrato', 'contrato__imovel'
     ).filter(
         contrato__comprador=comprador
-    ).exclude(status_boleto='NAO_GERADO')
+    ).exclude(status_boleto=StatusBoleto.NAO_GERADO)
 
     # Filtros
     status_boleto = request.GET.get('status_boleto', '')
@@ -979,7 +979,7 @@ def api_portal_boletos(request):
 # 4-P3-4 : POST /portal/api/boletos/segunda-via/
 # =============================================================================
 
-@login_required
+@login_required(login_url='portal_comprador:login')
 @portal_rate_limit
 @require_POST
 def api_portal_segunda_via(request, parcela_id):
@@ -1042,7 +1042,7 @@ def api_portal_segunda_via(request, parcela_id):
 # 4-P3-5 : GET /portal/api/boletos/<id>/linha-digitavel/
 # =============================================================================
 
-@login_required
+@login_required(login_url='portal_comprador:login')
 @require_GET
 def api_portal_linha_digitavel(request, parcela_id):
     """

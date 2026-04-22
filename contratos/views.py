@@ -13,7 +13,7 @@ from django.urls import reverse_lazy
 from django.contrib import messages
 from django.db import models
 from django.db.models import Q, Sum
-from .models import Contrato, StatusContrato, IndiceReajuste, PrestacaoIntermediaria, TabelaJurosContrato
+from .models import Contrato, StatusContrato, IndiceReajuste, PrestacaoIntermediaria, TabelaJurosContrato, TipoAmortizacao, TipoCorrecao
 from .forms import ContratoForm, IndiceReajusteForm
 from core.mixins import PaginacaoMixin
 import requests
@@ -102,7 +102,6 @@ class ContratoListView(LoginRequiredMixin, PaginacaoMixin, ListView):
         3. Passou o prazo de reajuste desde a última atualização
         """
         from django.utils import timezone
-        from .models import TipoCorrecao
         from dateutil.relativedelta import relativedelta
 
         hoje = timezone.now().date()
@@ -325,11 +324,10 @@ class ContratoDetailView(LoginRequiredMixin, DetailView):
             from financeiro.models import Reajuste as ReajusteModel
             from django.utils import timezone as _tz
             from dateutil.relativedelta import relativedelta as _rdelta
-            from contratos.models import TipoCorrecao as _TC
 
             _hoje = _tz.now().date()
             _prazo = contrato.prazo_reajuste_meses or 12
-            _fixo = contrato.tipo_correcao == _TC.FIXO
+            _fixo = contrato.tipo_correcao == TipoCorrecao.FIXO
 
             # Single query: all applied cycles for this contract
             _applied_cycles = set(
@@ -425,13 +423,13 @@ class ContratoDeleteView(LoginRequiredMixin, DeleteView):
     model = Contrato
     success_url = reverse_lazy('contratos:listar')
 
-    def delete(self, request, *args, **kwargs):
+    def form_valid(self, form):
         self.object = self.get_object()
 
         # Verifica se tem parcelas pagas
         parcelas_pagas = self.object.parcelas.filter(pago=True).count()
         if parcelas_pagas > 0:
-            messages.error(request, f'Não é possível cancelar o contrato. Existem {parcelas_pagas} parcela(s) já paga(s).')
+            messages.error(self.request, f'Não é possível cancelar o contrato. Existem {parcelas_pagas} parcela(s) já paga(s).')
             return redirect('contratos:detalhe', pk=self.object.pk)
 
         # Soft delete - apenas muda o status para CANCELADO
@@ -443,7 +441,7 @@ class ContratoDeleteView(LoginRequiredMixin, DeleteView):
             self.object.imovel.disponivel = True
             self.object.imovel.save()
 
-        messages.success(request, f'Contrato {self.object.numero_contrato} cancelado com sucesso!')
+        messages.success(self.request, f'Contrato {self.object.numero_contrato} cancelado com sucesso!')
         return redirect(self.success_url)
 
 
@@ -609,10 +607,11 @@ class IndiceReajusteDeleteView(LoginRequiredMixin, DeleteView):
     model = IndiceReajuste
     success_url = reverse_lazy('contratos:indices_listar')
 
-    def delete(self, request, *args, **kwargs):
-        self.object = self.get_object()
-        messages.success(request, f'Índice {self.object} excluído com sucesso!')
-        return super().delete(request, *args, **kwargs)
+    def form_valid(self, form):
+        label = str(self.object)
+        response = super().form_valid(form)
+        messages.success(self.request, f'Índice {label} excluído com sucesso!')
+        return response
 
 
 # ==============================================================
@@ -1555,7 +1554,7 @@ def api_preview_parcelas(request):
         juros_ciclo1 = get_juros_ciclo(1)
         preview_count = min(numero_parcelas, 24)
 
-        if tipo_amortizacao == 'SAC':
+        if tipo_amortizacao == TipoAmortizacao.SAC:
             # Pré-calcular tabela SAC completa para os primeiros 24
             tabela_full = _P._calcular_sac_tabela(base_pmt, juros_ciclo1, numero_parcelas)
             tabela_preview = tabela_full[:preview_count]
@@ -1577,7 +1576,7 @@ def api_preview_parcelas(request):
                 ultimo = calendar.monthrange(venc.year, venc.month)[1]
                 venc = venc.replace(day=min(dia_vencimento, ultimo))
 
-            if tipo_amortizacao == 'SAC':
+            if tipo_amortizacao == TipoAmortizacao.SAC:
                 pmt_k, amort_k, juros_k = tabela_preview[i - 1]
             else:
                 # Para Price: recalcula PMT se ciclo mudar (projeção aproximada)
@@ -1885,7 +1884,7 @@ class ContratoWizardView(LoginRequiredMixin, View):
 
         if numero_parcelas > 0:
             from financeiro.models import Reajuste as _P
-            if tipo_amortizacao == 'SAC':
+            if tipo_amortizacao == TipoAmortizacao.SAC:
                 # PMT do primeiro período SAC (o maior)
                 tabela = _P._calcular_sac_tabela(base_pmt, taxa_ciclo1, numero_parcelas)
                 pmt_ciclo1 = tabela[0][0] if tabela else D('0')
@@ -1992,20 +1991,20 @@ class ContratoWizardView(LoginRequiredMixin, View):
             dia_vencimento=int(basico['dia_vencimento']),
             percentual_juros_mora=to_dec(basico.get('percentual_juros_mora', '1.00')),
             percentual_multa=to_dec(basico.get('percentual_multa', '2.00')),
-            tipo_correcao=basico.get('tipo_correcao', 'IPCA'),
+            tipo_correcao=basico.get('tipo_correcao', TipoCorrecao.IPCA),
             prazo_reajuste_meses=int(basico.get('prazo_reajuste_meses', 12)),
             tipo_correcao_fallback=basico.get('tipo_correcao_fallback', ''),
             spread_reajuste=to_dec(basico.get('spread_reajuste')),
             reajuste_piso=to_dec(basico.get('reajuste_piso')),
             reajuste_teto=to_dec(basico.get('reajuste_teto')),
-            tipo_amortizacao=basico.get('tipo_amortizacao', 'PRICE'),
+            tipo_amortizacao=basico.get('tipo_amortizacao', TipoAmortizacao.PRICE),
             intermediarias_reduzem_pmt=bool(basico.get('intermediarias_reduzem_pmt', False)),
             intermediarias_reajustadas=bool(basico.get('intermediarias_reajustadas', True)),
             percentual_fruicao=to_dec(basico.get('percentual_fruicao', '0.5000')),
             percentual_multa_rescisao_penal=to_dec(basico.get('percentual_multa_rescisao_penal', '10.0000')),
             percentual_multa_rescisao_adm=to_dec(basico.get('percentual_multa_rescisao_adm', '12.0000')),
             percentual_cessao=to_dec(basico.get('percentual_cessao', '3.0000')),
-            status=basico.get('status', 'ATIVO'),
+            status=basico.get('status', StatusContrato.ATIVO),
             observacoes=basico.get('observacoes', ''),
         )
         return contrato

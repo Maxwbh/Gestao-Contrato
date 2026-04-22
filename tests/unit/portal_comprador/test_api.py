@@ -13,7 +13,7 @@ from decimal import Decimal
 from datetime import date, timedelta
 
 from portal_comprador.models import AcessoComprador
-from contratos.models import Contrato
+from contratos.models import Contrato, StatusContrato
 from tests.fixtures.factories import (
     UserFactory,
     CompradorFactory,
@@ -21,6 +21,7 @@ from tests.fixtures.factories import (
     ParcelaFactory,
     ImovelFactory,
 )
+from financeiro.models import StatusBoleto
 
 
 @pytest.fixture
@@ -81,7 +82,7 @@ class TestApiParcelasContrato:
             valor_entrada=Decimal('10000.00'),
             numero_parcelas=12,
             dia_vencimento=5,
-            status='ATIVO',
+            status=StatusContrato.ATIVO,
         )
         response = client.get(f'/portal/api/contratos/{contrato.id}/parcelas/')
 
@@ -194,7 +195,7 @@ class TestApiPortalBoletos:
         comprador = comprador_logado['comprador']
         contrato = ContratoFactory(comprador=comprador)
         # parcela sem boleto
-        ParcelaFactory(contrato=contrato, status_boleto='NAO_GERADO')
+        ParcelaFactory(contrato=contrato, status_boleto=StatusBoleto.NAO_GERADO)
 
         response = client.get('/portal/api/boletos/')
         assert response.status_code == 200
@@ -208,7 +209,7 @@ class TestApiPortalBoletos:
         client = comprador_logado['client']
         comprador = comprador_logado['comprador']
         contrato = ContratoFactory(comprador=comprador)
-        ParcelaFactory(contrato=contrato, status_boleto='GERADO',
+        ParcelaFactory(contrato=contrato, status_boleto=StatusBoleto.GERADO,
                        nosso_numero='0001234')
 
         response = client.get('/portal/api/boletos/?status_boleto=GERADO')
@@ -257,7 +258,7 @@ class TestApiPortalLinhaDigitavel:
             contrato=contrato,
             nosso_numero='0001',
             linha_digitavel='12345.67890 12345.678901 12345.678901 1 12340000100000',
-            status_boleto='GERADO',
+            status_boleto=StatusBoleto.GERADO,
         )
 
         response = client.get(f'/portal/api/boletos/{parcela.id}/linha-digitavel/')

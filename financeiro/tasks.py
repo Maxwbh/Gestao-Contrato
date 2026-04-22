@@ -11,7 +11,7 @@ from django.conf import settings
 from datetime import timedelta
 import logging
 
-from contratos.models import Contrato, TipoCorrecao
+from contratos.models import Contrato, TipoCorrecao, StatusContrato
 from .models import Reajuste
 
 logger = logging.getLogger(__name__)
@@ -29,7 +29,7 @@ def processar_reajustes_pendentes():
     """
     logger.info("Iniciando processamento automático de reajustes pendentes...")
 
-    contratos = Contrato.objects.filter(status='ATIVO').select_related('comprador', 'imobiliaria')
+    contratos = Contrato.objects.filter(status=StatusContrato.ATIVO).select_related('comprador', 'imobiliaria')
     processados = 0
     reajustados = 0
     erros = 0
