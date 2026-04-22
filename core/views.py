@@ -181,7 +181,7 @@ def index(request):
 def dashboard(request):
     """Dashboard principal com estatísticas"""
     from contratos.models import Contrato, StatusContrato
-    from financeiro.models import Parcela
+    from financeiro.models import Parcela, StatusBoleto
 
     hoje = timezone.now().date()
     inicio_mes = hoje.replace(day=1)
@@ -218,14 +218,14 @@ def dashboard(request):
         ).aggregate(total=Sum('valor_pago'))['total'] or 0
 
         boletos_pendentes = Parcela.objects.filter(
-            pago=False, status_boleto='NAO_GERADO'
+            pago=False, status_boleto=StatusBoleto.NAO_GERADO
         ).count()
         boletos_gerados = Parcela.objects.filter(
-            pago=False, status_boleto__in=['GERADO', 'REGISTRADO']
+            pago=False, status_boleto__in=[StatusBoleto.GERADO, StatusBoleto.REGISTRADO]
         ).count()
         boletos_vencidos = Parcela.objects.filter(
             pago=False,
-            status_boleto__in=['GERADO', 'REGISTRADO', 'VENCIDO'],
+            status_boleto__in=[StatusBoleto.GERADO, StatusBoleto.REGISTRADO, StatusBoleto.VENCIDO],
             data_vencimento__lt=hoje,
         ).count()
 
@@ -336,7 +336,7 @@ def setup(request):
     # Verificar se é primeira configuração (sem usuários) ou se usuário é superuser
     User = get_user_model()
     try:
-        is_first_setup = User.objects.count() == 0
+        is_first_setup = not User.objects.exists()
     except Exception:
         # Tabelas ainda não existem (migrations não foram executadas) — permitir acesso livre
         is_first_setup = True
@@ -745,11 +745,11 @@ class ContabilidadeDeleteView(LoginRequiredMixin, DeleteView):
     def get_queryset(self):
         return Contabilidade.objects.filter(ativo=True)
 
-    def delete(self, request, *args, **kwargs):
+    def form_valid(self, form):
         self.object = self.get_object()
         self.object.ativo = False
         self.object.save()
-        messages.success(request, f'Contabilidade {self.object.nome} removida com sucesso!')
+        messages.success(self.request, f'Contabilidade {self.object.nome} removida com sucesso!')
         return redirect(self.success_url)
 
 
@@ -788,12 +788,12 @@ def contabilidade_configuracoes(request, pk):
     ).select_related('usuario', 'imobiliaria').order_by('usuario__username')
 
     # Estatísticas rápidas
-    from contratos.models import Contrato
+    from contratos.models import Contrato, StatusContrato
     total_contratos = Contrato.objects.filter(
         imobiliaria__in=imobiliarias
     ).count()
     total_ativos = Contrato.objects.filter(
-        imobiliaria__in=imobiliarias, status='ATIVO'
+        imobiliaria__in=imobiliarias, status=StatusContrato.ATIVO
     ).count()
 
     context = {
@@ -1529,12 +1529,12 @@ class AcessoUsuarioDeleteView(LoginRequiredMixin, DeleteView):
     def get_queryset(self):
         return AcessoUsuario.objects.filter(ativo=True)
 
-    def delete(self, request, *args, **kwargs):
+    def form_valid(self, form):
         self.object = self.get_object()
         self.object.ativo = False
         self.object.save()
         messages.success(
-            request,
+            self.request,
             f'Acesso de {self.object.usuario.username} a {self.object.imobiliaria.nome} removido!'
         )
         return redirect(self.success_url)

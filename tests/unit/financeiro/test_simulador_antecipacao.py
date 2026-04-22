@@ -19,6 +19,7 @@ from datetime import date, timedelta
 
 from django.test import Client
 from django.urls import reverse
+from financeiro.models import TipoParcela
 
 
 @pytest.fixture
@@ -40,7 +41,7 @@ def contrato_com_parcelas(db):
     from tests.fixtures.factories import (
         ImobiliariaFactory, ImovelFactory, CompradorFactory
     )
-    from contratos.models import Contrato
+    from contratos.models import Contrato, StatusContrato, TipoCorrecao, TipoAmortizacao
 
     imob = ImobiliariaFactory()
     imovel = ImovelFactory(imobiliaria=imob)
@@ -57,12 +58,12 @@ def contrato_com_parcelas(db):
         valor_entrada=Decimal('10000.00'),
         numero_parcelas=6,
         dia_vencimento=5,
-        tipo_amortizacao='PRICE',
-        tipo_correcao='FIXO',
+        tipo_amortizacao=TipoAmortizacao.PRICE,
+        tipo_correcao=TipoCorrecao.FIXO,
         percentual_juros_mora=Decimal('1.00'),
         percentual_multa=Decimal('2.00'),
         prazo_reajuste_meses=12,
-        status='ATIVO',
+        status=StatusContrato.ATIVO,
     )
     if not contrato.parcelas.exists():
         contrato.gerar_parcelas()
@@ -86,7 +87,7 @@ class TestSimuladorGet:
 
     def test_get_lista_apenas_normais_nao_pagas(self, cli, contrato_com_parcelas):
         # Pagar 1 parcela antecipadamente
-        parcela = contrato_com_parcelas.parcelas.filter(tipo_parcela='NORMAL').first()
+        parcela = contrato_com_parcelas.parcelas.filter(tipo_parcela=TipoParcela.NORMAL).first()
         parcela.pago = True
         parcela.valor_pago = parcela.valor_atual
         parcela.data_pagamento = date.today()
@@ -106,7 +107,7 @@ class TestSimuladorGet:
             valor_atual=Decimal('5000.00'),
             valor_pago=Decimal('0.00'),
             data_vencimento=date.today() + timedelta(days=30),
-            tipo_parcela='INTERMEDIARIA',
+            tipo_parcela=TipoParcela.INTERMEDIARIA,
         )
         resp = cli.get(_url(contrato_com_parcelas.pk))
         tipos = [p.tipo_parcela for p in resp.context['parcelas_disponiveis']]
@@ -121,7 +122,7 @@ class TestSimuladorGet:
 class TestSimuladorPreview:
     def _parcelas_ids(self, contrato, n=2):
         return list(
-            contrato.parcelas.filter(pago=False, tipo_parcela='NORMAL')
+            contrato.parcelas.filter(pago=False, tipo_parcela=TipoParcela.NORMAL)
             .order_by('numero_parcela')[:n]
             .values_list('id', flat=True)
         )
@@ -172,7 +173,7 @@ class TestSimuladorPreview:
 class TestSimuladorAplicar:
     def _parcelas_ids(self, contrato, n=2):
         return list(
-            contrato.parcelas.filter(pago=False, tipo_parcela='NORMAL')
+            contrato.parcelas.filter(pago=False, tipo_parcela=TipoParcela.NORMAL)
             .order_by('numero_parcela')[:n]
             .values_list('id', flat=True)
         )

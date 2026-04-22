@@ -1,6 +1,6 @@
 # Grids do Sistema — Status e Significados
 
-**Última atualização:** 2026-04-20
+**Última atualização:** 2026-04-22
 
 Todas as tabelas do sistema usam [AG Grid](https://www.ag-grid.com/) com tema Material.
 Este documento descreve cada grid, suas colunas de Status e o significado de cada valor.
@@ -34,7 +34,7 @@ Grid com todas as prestações do sistema filtráveis por imobiliária, contrato
 |---------------|----------|--------------------------------------------|-------------------------------------|
 | **Pago**      | Verde    | `parcela.pago = True`                      | Parcela quitada, pagamento registrado |
 | **Vencida**   | Vermelho | `parcela.pago = False` e `data_vencimento < hoje` | Em atraso — gera juros e multa |
-| **Em aberto** | Amarelo  | `parcela.pago = False` e `data_vencimento >= hoje` | Ainda dentro do prazo              |
+| **A Vencer**  | Azul     | `parcela.pago = False` e `data_vencimento >= hoje` | Ainda dentro do prazo              |
 
 ### Coluna: Boleto
 
@@ -64,7 +64,7 @@ Grid com as parcelas vencendo ou vencidas no mês selecionado. Usada para acompa
 |---------------|----------|-----------------------------------------------|-------------------------|
 | **Pago**      | Verde    | `pago = True`                                 | Quitada                 |
 | **Vencida**   | Vermelho | `pago = False` e data passada                 | Em atraso               |
-| **Em aberto** | Amarelo  | `pago = False` e data futura ou no dia        | Aguardando pagamento    |
+| **A Vencer**  | Azul     | `pago = False` e data futura ou no dia        | Aguardando pagamento    |
 
 ---
 
@@ -86,11 +86,11 @@ Grid com todos os contratos de compra e venda cadastrados no sistema.
 
 ### Coluna: Reajuste
 
-| Valor exibido               | Cor      | O que significa                                  |
-|-----------------------------|----------|--------------------------------------------------|
-| **— (sem badge)**           | —        | Nenhum reajuste pendente, ciclo 1 em andamento   |
-| **Reajuste Pendente — Mês** | Vermelho | Ciclo de reajuste venceu sem ser aplicado        |
-| **Reajuste em X dias**      | Amarelo  | Reajuste se aproximando (1 mês de antecedência)  |
+| Valor exibido    | Cor      | O que significa                                                          |
+|------------------|----------|--------------------------------------------------------------------------|
+| **— (sem badge)**| —        | Nenhum reajuste pendente no mês corrente                                 |
+| **Este mês**     | Amarelo  | Reajuste vence no mês corrente, ainda não aplicado (`meses_atraso = 0`) |
+| **N mês(es)**    | Vermelho | Reajuste vencido há N meses sem ser aplicado (`meses_atraso > 0`)       |
 
 ---
 
@@ -284,14 +284,15 @@ Grid com os valores mensais dos índices econômicos importados do IBGE/BCB/FGV.
 
 ### Coluna: Tipo de Índice
 
-| Badge   | Cor      | O que é                                               |
-|---------|----------|-------------------------------------------------------|
-| **IPCA**  | Azul   | Índice de Preços ao Consumidor Amplo (IBGE)           |
-| **IGPM**  | Verde  | Índice Geral de Preços do Mercado (FGV)               |
-| **INCC**  | Ciano  | Índice Nacional do Custo da Construção (FGV)          |
-| **INPC**  | Vermelho | Índice Nacional de Preços ao Consumidor (IBGE)      |
-| **TR**    | Escuro | Taxa Referencial (BCB)                                |
-| **SELIC** | Amarelo | Taxa SELIC (BCB)                                     |
+| Badge     | Cor      | O que é                                                           |
+|-----------|----------|-------------------------------------------------------------------|
+| **IPCA**  | Azul     | Índice de Preços ao Consumidor Amplo (IBGE)                       |
+| **IGPM**  | Verde    | Índice Geral de Preços do Mercado (FGV)                           |
+| **INCC**  | Ciano    | Índice Nacional do Custo da Construção (FGV)                      |
+| **INPC**  | Vermelho | Índice Nacional de Preços ao Consumidor (IBGE)                    |
+| **TR**    | Escuro   | Taxa Referencial (BCB)                                            |
+| **SELIC** | Amarelo  | Taxa SELIC (BCB)                                                  |
+| **IGPDI** | Amarelo  | Índice Geral de Preços — Disponibilidade Interna (FGV)            |
 
 ---
 
@@ -333,16 +334,17 @@ Grid com os usuários e suas permissões por imobiliária.
 
 ## Resumo Rápido de Todos os Status
 
-| Grid                  | Status possíveis                                                    |
-|-----------------------|----------------------------------------------------------------------|
-| Parcela               | Pago · Vencida · A Vencer · Ag. Reajuste                                          |
-| Boleto (da parcela)   | — · Gerado · Registrado · Pago · Vencido · Cancelado · Baixado · Protestado |
-| Contrato              | Ativo · Quitado · Cancelado · Suspenso                              |
-| Remessa CNAB          | Gerado · Enviado · Processado · Erro                                |
-| Retorno CNAB          | Pendente · Processado · Parcial · Erro                              |
-| Reajuste              | Aplicado · Aplicado (Manual) · Pendente                             |
-| Notificação           | Pendente · Enviada · Erro · Cancelada                               |
+| Grid                  | Status possíveis                                                                                                 |
+|-----------------------|------------------------------------------------------------------------------------------------------------------|
+| Parcela               | Pago · Vencida · A Vencer                                                                                        |
+| Boleto (da parcela)   | — · Gerado · Registrado · Pago · Vencido · Cancelado · Baixado · Protestado                                     |
+| Contrato (status)     | Ativo · Quitado · Cancelado · Suspenso                                                                           |
+| Contrato (reajuste)   | — · Este mês · N mês(es)                                                                                        |
+| Remessa CNAB          | Gerado · Enviado · Processado · Erro                                                                             |
+| Retorno CNAB          | Pendente · Processado · Parcial · Erro                                                                           |
+| Reajuste              | Aplicado · Aplicado (Manual) · Pendente                                                                          |
+| Notificação           | Pendente · Enviada · Erro · Cancelada                                                                            |
 | Entrega (mensagem)    | Enfileirado · Aceito · Enviando · Enviado · Entregue · Lido · Aberto · Clicado · Não entregue · Falhou · Bounce |
-| Template Notificação  | Ativo · Inativo                                                     |
-| Config E-mail         | Ativo · Inativo                                                     |
-| Config WhatsApp       | Ativo · Inativo                                                     |
+| Template Notificação  | Ativo · Inativo                                                                                                  |
+| Config E-mail         | Ativo · Inativo                                                                                                  |
+| Config WhatsApp       | Ativo · Inativo                                                                                                  |

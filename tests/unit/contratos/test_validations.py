@@ -77,13 +77,8 @@ class TestContratoValidations(TestCase):
 
         self.assertIn('numero_parcelas', context.exception.message_dict)
 
-    @unittest.expectedFailure
     def test_validar_numero_parcelas_minimo(self):
-        """Testa que número de parcelas deve ser pelo menos 1.
-
-        Nota: Falha esperada — bug na produção: `if self.numero_parcelas and self.numero_parcelas < 1`
-        avalia como False quando numero_parcelas=0 (valor falsy), então a validação não dispara.
-        """
+        """Testa que número de parcelas deve ser pelo menos 1."""
         contrato = Contrato(
             imobiliaria=self.imobiliaria,
             comprador=self.comprador,
@@ -125,13 +120,8 @@ class TestContratoValidations(TestCase):
 
         self.assertIn('quantidade_intermediarias', context.exception.message_dict)
 
-    @unittest.expectedFailure
     def test_validar_prazo_reajuste_minimo(self):
-        """Testa que prazo de reajuste mínimo é 1 mês.
-
-        Nota: Falha esperada — bug na produção: `if self.prazo_reajuste_meses`
-        avalia como False quando prazo_reajuste_meses=0 (valor falsy), então a validação não dispara.
-        """
+        """Testa que prazo de reajuste mínimo é 1 mês."""
         contrato = Contrato(
             imobiliaria=self.imobiliaria,
             comprador=self.comprador,
@@ -387,13 +377,8 @@ class TestPrestacaoIntermediariaValidations(TestCase):
 
         self.assertIn('numero_sequencial', context.exception.message_dict)
 
-    @unittest.expectedFailure
     def test_validar_valor_maior_que_zero(self):
-        """Testa que valor da intermediária deve ser maior que zero.
-
-        Nota: Falha esperada — bug na produção: `if self.valor and self.valor <= Decimal('0')`
-        avalia como False quando valor=Decimal('0.00') (valor falsy), então a validação não dispara.
-        """
+        """Testa que valor da intermediária deve ser maior que zero."""
         intermediaria = PrestacaoIntermediaria(
             contrato=self.contrato,
             numero_sequencial=1,
