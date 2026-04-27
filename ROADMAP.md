@@ -2,7 +2,7 @@
 
 **Desenvolvedor:** Maxwell da Silva Oliveira (maxwbh@gmail.com)
 **Empresa:** M&S do Brasil LTDA
-**Última atualização:** 2026-04-22 (rev 12)
+**Última atualização:** 2026-04-27 (rev 13)
 
 > Pendentes organizados por prioridade.
 > Para documentação do sistema atual, consulte **[SISTEMA.md](SISTEMA.md)**.
@@ -510,6 +510,7 @@ Detectou e corrigiu 1 bug real: `NoReverseMatch` 500 em `/financeiro/relatorios/
 | **19** | Documentação | 9 | — |
 | **20** | ⭐ **Agendamento e Operações — cron-job.org + endpoints HTTP** | 24 | — |
 | **21** | ⭐ **Grid de Reajustes Pendentes — cálculo inline + Aprovar/Editar** | 25 | ✅ |
+| **22** | ⭐ **WhatsApp — Evolução: Cloud API mode + Whapi.cloud sandbox + Templates interativos** | 26 | — |
 
 ---
 
@@ -944,7 +945,7 @@ para ciclo = 2..total_ciclos+1:
 | N-01 | E-mail automático D-5 antes do vencimento da parcela | P2 | ✅ `enviar_notificacoes_sync()` em `core/tasks.py` + deduplicação via `Notificacao` model + POST `/api/tasks/enviar-notificacoes/` |
 | N-02 | E-mail de inadimplência após D+3 | P2 | ✅ `enviar_inadimplentes_sync()` em `core/tasks.py` + `task_run_all` inclui N-02 + POST `/api/tasks/enviar-inadimplentes/` + `NOTIFICACAO_DIAS_INADIMPLENCIA=3` |
 | N-03 | Régua de cobrança configurável (D-5, D+3, D+10, D+30) | P3 | ✅ `RegraNotificacao` model em `notificacoes/models.py` + `TipoGatilho` (ANTES/APOS) + admin com `list_editable` + `_processar_regra()` em `core/tasks.py` — fallback automático para N-01/N-02 quando nenhuma regra configurada |
-| N-04 | Integração WhatsApp (Evolution API / Z-API) | P3 | ✅ `ConfiguracaoWhatsApp` agora suporta 4 provedores: Twilio, Meta (Cloud API), Evolution API v2 (`/message/sendText/{instancia}`), Z-API (`/send-text`). `ServicoWhatsApp` despacha pelo `provedor` do config ativo. Migration `0004_add_whatsapp_providers` adiciona `api_url`, `api_key`, `instancia`, `client_token`. Admin com fieldsets colapsáveis por provedor. |
+| N-04 | Integração WhatsApp (4 provedores) | P3 | ✅ `ConfiguracaoWhatsApp` suporta: Twilio, Meta Cloud API, Evolution API v2, Z-API. Webhooks de entrega (Evolution + Twilio). Teste de conexão por provedor. Análise custo/benefício e roadmap de evolução: **ver Seção 26**. |
 | N-05 | Push notification portal comprador | P4 | 🏦 Débito Técnico (pós-2050) |
 | N-08 | **TEST_MODE safeguard** — `_destinatario_email_teste()` e `_destinatario_telefone_teste()` em `BoletoNotificacaoService`: em ambiente não-produção, redireciona todos os envios para endereços de teste configurados em `settings.EMAIL_TESTE` e `settings.TELEFONE_TESTE`; evita notificações acidentais para compradores reais durante desenvolvimento | P2 | ✅ `notificacoes/boleto_notificacao.py` |
 | N-09 | **Normalização E.164 para Twilio** — telefones no formato `(31) 99999-8888` são convertidos para `+5531999998888` antes do envio via Twilio SMS/WhatsApp; `_normalizar_telefone_e164()` strip de caracteres não-numéricos + prefixo `+55` | P2 | ✅ `notificacoes/boleto_notificacao.py` |
@@ -997,10 +998,11 @@ para ciclo = 2..total_ciclos+1:
 | HU Boleto/Carnê/Remessa (Seção 21) | — | 10 | — | — | 10 | ✅ 10/10 |
 | OFX Extrato Bancário (Seção 22) | — | 5 | — | — | 5 | ✅ 5/5 |
 | Conciliação Bancária (Seção 23) | — | 8 | — | — | 8 | ✅ 8/8 |
+| WhatsApp — Evolução (Seção 26) | — | 3 | 5 | — | 8 | ⏳ 0/8 — análise concluída, implementação pendente |
 | Testes | 104 | ~164 | ~37 | ~41+117 | ~463 | ✅ 942 testes passando |
 | CI/CD | — | 2 | 4 | 2 | 8 | — |
 | Documentação | — | — | 1 | 3 | 4 | — |
-| **Total** | **~117** | **~251** | **~107** | **~61** | **~536** | |
+| **Total** | **~117** | **~254** | **~112** | **~61** | **~544** | |
 
 ### ✅ Fases concluídas (2026-04-01)
 
@@ -1269,6 +1271,146 @@ X-Task-Token: <valor de TASK_TOKEN no painel Render>
 | `POST /api/tasks/atualizar-indices/` | `task_atualizar_indices` em `core/tasks.py` + URL em `core/urls.py` | ✅ |
 | Agenda cron-job.org | J-08: toda segunda 07:00 BRT | — (configurar no cron-job.org) |
 | Sucesso parcial | Sucesso se ao menos 1 de 7 índices importado (tolerante a falhas de API) | ✅ |
+
+---
+
+## 26. WHATSAPP — ANÁLISE DE PROVEDORES E ROADMAP DE INTEGRAÇÃO
+
+> **Contexto:** A Meta alterou seu modelo de cobrança em julho 2025 (por conversa → por mensagem/template).
+> Esta seção documenta os provedores disponíveis, análise custo/benefício e o roteiro de evolução
+> da integração WhatsApp no sistema.
+> **Referência de pesquisa:** https://comunidade.zdg.com.br/geral/api-oficial-whatsapp/
+
+---
+
+### 26.1 Estado Atual da Implementação
+
+Os 4 provedores abaixo já estão implementados em `notificacoes/models.py` (ConfiguracaoWhatsApp) e despachados pelo ServicoWhatsApp em `notificacoes/boleto_notificacao.py`:
+
+| Provedor | Campo `provedor` | Autenticação | Endpoint | Status |
+|----------|------------------|--------------|----------|--------|
+| **Twilio** | `TWILIO` | `account_sid` + `auth_token` | Twilio API REST | ✅ Implementado |
+| **Meta (Cloud API)** | `META` | `account_sid` (token) + `auth_token` | Graph API v18+ | ✅ Implementado |
+| **Evolution API v2** | `EVOLUTION` | `api_url` + `api_key` + `instancia` | `POST /message/sendText/{instancia}` | ✅ Implementado |
+| **Z-API** | `ZAPI` | `api_url` + `api_key` + `instancia` + `client_token` | `POST /send-text` | ✅ Implementado |
+
+**Funcionalidades transversais já implementadas:**
+- Webhook de entrega (Evolution + Twilio) → atualiza `Notificacao.status_entrega`
+- Teste de conexão por provedor (`testar_conexao_whatsapp` view)
+- TEST_MODE safeguard (redireciona envios em dev para `settings.TELEFONE_TESTE`)
+- Normalização E.164: `(31) 99999-8888` → `+5531999998888`
+- CRUD completo de configuração via `/notificacoes/config/whatsapp/`
+
+---
+
+### 26.2 Mudança de Modelo de Cobrança Meta (Julho 2025)
+
+A partir de 01/07/2025, a Meta abandonou a cobrança por janela de conversa (24h) e passou a cobrar **por mensagem de template entregue**:
+
+| Categoria de Template | Custo (USD/msg) | Custo aprox. (BRL) | Janela de Serviço |
+|-----------------------|-----------------|---------------------|-------------------|
+| **Utility** (vencimentos, boletos) | $0,0068 | ~R$ 0,04 | Cobrado só fora da janela 24h |
+| **Marketing** (campanhas) | $0,0625 | ~R$ 0,35 | Sempre cobrado |
+| **Authentication** | $0,0068 | ~R$ 0,04 | Sempre cobrado |
+| **Service** (cliente iniciou) | Grátis | R$ 0,00 | Sempre grátis |
+
+> Para um sistema de gestão de contratos as mensagens de vencimento/boleto se enquadram em **Utility** — o custo unitário mais baixo da API oficial.
+
+---
+
+### 26.3 Tabela Comparativa — Custo/Benefício (2026)
+
+| Provedor | Custo/msg | Mensalidade (BRL) | Aprovação Meta | Self-hosted | Risco de Banimento | LGPD (BR) | Python | Recomendado para |
+|----------|-----------|--------------------|-----------------|-------------|---------------------|-----------|--------|-----------------|
+| **Meta Cloud API** (via BSP BR) | R$ 0,04 (Utility) | R$ 200–600 (BSP fee) | ✅ Obrigatória | ❌ Não | ✅ Zero | ✅ Sim | ✅ SDK `pywa` | Conformidade total, número verificado |
+| **Twilio WhatsApp** | R$ 0,04 + R$ 0,028/msg | R$ 0 (paga por uso) | ✅ Via Twilio | ❌ Não | ✅ Zero | ⚠️ EUA | ✅ SDK maduro | Quem já usa Twilio; equipe enterprise |
+| **Z-API** | R$ 0/msg (flat) | R$ 55–100/instância | ❌ Não | ❌ SaaS BR | ⚠️ Existe | ✅ Brasil | ✅ REST JSON | PMEs brasileiras, custo previsível, prioridade suporte PT-BR |
+| **Evolution API** (Baileys) | R$ 0/msg | R$ 30–150 (só VPS) | ❌ Não | ✅ Sim | ⚠️ Existe | ✅ Brasil | ✅ REST | Devs com DevOps, custo mínimo, controle total |
+| **Evolution API** (Cloud API mode) | R$ 0,04 (Utility) + VPS | R$ 30–150 (VPS) | ✅ Via Meta | ✅ Sim | ✅ Zero | ✅ Brasil | ✅ REST | **Melhor custo/benefício: self-hosted + compliance** |
+| **Whapi.cloud** | R$ 0/msg | R$ 165/instância ($29) | ❌ Não | ❌ SaaS EU | ⚠️ Existe | ⚠️ Europa | ✅ Exemplos prontos | Protótipo/sandbox gratuito para testes |
+| **WPPConnect** | R$ 0/msg | R$ 30–150 (só VPS) | ❌ Não | ✅ Sim | ⚠️ Existe | ✅ Brasil | ✅ REST (Node) | Alternativa ao Evolution, mais Node.js |
+| **Chat-API** | — | — | — | — | — | — | — | ❌ Descontinuado em 2026 |
+
+---
+
+### 26.4 Simulação de Custo Mensal (Sistema Imobiliário)
+
+**Cenário:** 500–5.000 msgs/mês — vencimentos (Utility) + inadimplência + lembretes
+
+| Volume | Meta Cloud API (BSP) | Z-API | Evolution API + VPS R$80 |
+|--------|----------------------|-------|--------------------------|
+| 500 msgs | R$ 220–620 | R$ 55–100 | R$ 80 |
+| 1.000 msgs | R$ 240–640 | R$ 55–100 | R$ 80 |
+| 3.000 msgs | R$ 320–720 | R$ 55–100 | R$ 80–150 |
+| 5.000 msgs | R$ 400–800 | R$ 55–100 | R$ 80–150 |
+
+> **Nota:** BSP Fee é a mensalidade cobrada pelo parceiro BSP (Hablla, Poli Digital, Digisac) além das taxas Meta. Para volume < 5.000 msgs/mês, Evolution API no modo Cloud API próprio é o mais econômico com compliance.
+
+---
+
+### 26.5 Roadmap de Evolução Recomendado
+
+| Fase | Cenário | Provedor Recomendado | Custo/mês | Ação no Sistema |
+|------|---------|----------------------|-----------|-----------------|
+| **Dev/Testes** | Desenvolvimento e homologação | Whapi.cloud Sandbox (grátis) | R$ 0 | Adicionar `WHAPI` como 5º provedor |
+| **MVP/Prod pequena** | Até 2.000 msgs/mês, sem equipe DevOps | **Z-API** | R$ 55–100 | Já implementado ✅ |
+| **Prod média** | 2.000–5.000 msgs/mês, equipe técnica disponível | **Evolution API (Baileys)** | R$ 80–150 | Já implementado ✅ |
+| **Prod compliance** | Escala > 5.000 msgs/mês ou número verificado | **Evolution API (Cloud API mode)** ou **Meta via BSP BR** | R$ 300–800 | Requer config Evolution + número Meta |
+
+---
+
+### 26.6 Itens Pendentes de Implementação
+
+| # | Item | Prioridade | Provedor | Status |
+|---|------|------------|----------|--------|
+| W-01 | Adicionar **Whapi.cloud** como 5º provedor (`WHAPI`) — ideal para sandbox/dev | P3 | Whapi.cloud | — |
+| W-02 | Suporte a **Evolution API no modo Cloud API oficial** — campos `phone_number_id` + `access_token` Meta | P2 | Evolution + Meta | — |
+| W-03 | **Webhook Evolution no modo Cloud API** — payload diferente do Baileys | P2 | Evolution | — |
+| W-04 | **Teste de conexão Meta Cloud API** — validar `access_token` via Graph API `/me` | P3 | Meta | — |
+| W-05 | **Templates interativos (botões/lista)** — `corpo_whatsapp_interativo` + payload de botões para Evolution e Meta | P3 | Evolution / Meta | — |
+| W-06 | **BSP brasileiro** — documentar e testar integração com Hablla ou Poli Digital como BSP da Meta | P2 | Meta via BSP | — |
+| W-07 | **Número verificado** — guia de verificação de empresa no Meta Business Manager | P2 | Meta | — (doc) |
+| W-08 | **Status de entrega unificado** — mapa de status entre provedores (DELIVERED/READ) para `Notificacao.status_entrega` | P3 | Todos | — |
+
+---
+
+### 26.7 Configuração Evolution API no Modo Cloud API Oficial
+
+> Esta é a opção recomendada para produção com compliance: auto-hospedado + sem risco de banimento.
+
+**Como funciona:**
+```
+Evolution API (self-hosted no VPS)
+    └─► Conecta à Meta Cloud API (não ao WhatsApp Web)
+    └─► Usa phone_number_id + access_token da Meta
+    └─► Mesma API REST familiar do Evolution
+    └─► Sem Baileys, sem risco de banimento
+```
+
+**Campos adicionais necessários no modelo (W-02):**
+```python
+# ConfiguracaoWhatsApp — novos campos para Evolution + Cloud API mode
+modo_evolution = CharField(choices=['BAILEYS', 'CLOUD_API'], default='BAILEYS')
+phone_number_id = CharField(blank=True)    # ID do número no Meta Business
+meta_access_token = CharField(blank=True)  # Token permanente do Meta
+```
+
+**Custo estimado:**
+- VPS 2GB RAM (Hostinger Brasil): ~R$ 45/mês
+- Taxa Meta Utility (3.000 msgs): ~R$ 120/mês
+- **Total: ~R$ 165/mês** com número verificado e compliance total
+
+---
+
+### 26.8 Comparativo com Concorrentes
+
+| Sistema | WhatsApp |
+|---------|----------|
+| LoteWin | Meta Cloud API via BSP |
+| GELOT | Z-API ou Evolution |
+| SGL | Twilio |
+| SmartIPTU | Meta Cloud API direto |
+| **Este Sistema** | ✅ 4 provedores (Twilio, Meta, Evolution, Z-API) — configurável por imobiliária |
 
 ### 25.6 Endpoint Dedicado de Notificações (J-09)
 
