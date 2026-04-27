@@ -182,6 +182,89 @@ services:
       # no Dockerfile.brcobranca e faça push — o Render reconstruirá do zero.
 
   # =============================================================================
+  # Evolution API — WhatsApp (Somente Testes)
+  # =============================================================================
+  # Imagem oficial: https://hub.docker.com/r/atendai/evolution-api
+  #
+  # SESSÃO PERSISTENTE SEM DISCO:
+  #   DATABASE_ENABLED=true armazena a sessão Baileys no Supabase (Postgres).
+  #   O container pode reiniciar ou adormecer sem perder o QR — reconecta
+  #   automaticamente ao acordar lendo a sessão do banco.
+  #
+  # SEGURANÇA (Opção A — apikey no header):
+  #   AUTHENTICATION_API_KEY: chave enviada em todo request Django → Evolution
+  #   e validada no webhook /notificacoes/webhook/evolution/
+  #   Definir manualmente no painel do Render (sync: false).
+  #
+  # CONFIGURAÇÃO NO SISTEMA:
+  #   /notificacoes/whatsapp/ → Novo → Provedor: Evolution API
+  #   api_url  = https://evolution-api-test.onrender.com
+  #   api_key  = <mesmo valor de AUTHENTICATION_API_KEY abaixo>
+  #   instancia = gestao-test
+  #   → Botão "Configurar Webhook" → aponta para o Django no Render
+  #
+  # KEEP-ALIVE:
+  #   Adicionar no cron-job.org:
+  #   GET https://evolution-api-test.onrender.com/  a cada 10 min
+  #   (só necessário durante janelas de teste ativo)
+  # =============================================================================
+  - type: web
+    name: evolution-api-test
+    runtime: docker
+    plan: free
+    image:
+      url: docker.io/atendai/evolution-api:v2.2.3
+    healthCheckPath: /
+    autoDeploy: false
+    envVars:
+      # URL pública deste serviço (necessário para links internos do Evolution)
+      - key: SERVER_URL
+        value: "https://evolution-api-test.onrender.com"
+
+      # Segurança — Opção A: apikey no header (sync: false → definir no painel Render)
+      - key: AUTHENTICATION_TYPE
+        value: "apikey"
+      - key: AUTHENTICATION_API_KEY
+        sync: false
+
+      # Sessão persistente no Supabase (mesma connection string do Django)
+      - key: DATABASE_ENABLED
+        value: "true"
+      - key: DATABASE_PROVIDER
+        value: "postgresql"
+      - key: DATABASE_CONNECTION_URI
+        value: "postgresql://postgres.szyouijmxhlbavkzibxa:123ewqasdcxz%21%40%23@aws-1-us-east-2.pooler.supabase.com:6543/postgres"
+      - key: DATABASE_CONNECTION_CLIENT_NAME
+        value: "evolution_test"
+
+      # Porta — Render injeta $PORT; Evolution respeita PORT env
+      - key: PORT
+        value: "8080"
+
+      # Redis para filas internas do Evolution (usa o mesmo Redis do projeto)
+      - key: CACHE_REDIS_ENABLED
+        value: "true"
+      - key: CACHE_REDIS_URI
+        fromService:
+          name: gestao-contrato-redis
+          type: redis
+          property: connectionString
+      - key: CACHE_REDIS_PREFIX_KEY
+        value: "evolution"
+
+      # Limites de memória adequados ao Free Tier (512MB)
+      - key: NODE_OPTIONS
+        value: "--max-old-space-size=400"
+
+      # Desabilitar recursos desnecessários para testes
+      - key: DEL_INSTANCE
+        value: "false"
+      - key: QRCODE_LIMIT
+        value: "10"
+      - key: LOG_LEVEL
+        value: "ERROR"
+
+  # =============================================================================
   # Redis (para cache e sessoes - Free: 25MB)
   # =============================================================================
   - type: redis
@@ -227,4 +310,11 @@ services:
 #    - Metodo: GET
 #    - Agenda: A cada 10 minutos
 #
-# 3. Ou use https://uptimerobot.com (gratuito, 5 min interval)
+# 3. Para o Evolution API (somente durante janelas de teste ativo):
+#    - URL: https://evolution-api-test.onrender.com/
+#    - Metodo: GET
+#    - Agenda: A cada 10 minutos
+#    Obs: pode deixar adormecer fora dos testes — reconecta automaticamente
+#    via sessao salva no Supabase sem precisar novo QR Code.
+#
+# 4. Ou use https://uptimerobot.com (gratuito, 5 min interval)
