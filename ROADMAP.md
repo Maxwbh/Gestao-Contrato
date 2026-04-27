@@ -1348,69 +1348,187 @@ A partir de 01/07/2025, a Meta abandonou a cobrança por janela de conversa (24h
 
 ---
 
-### 26.5 Roadmap de Evolução Recomendado
 
-| Fase | Cenário | Provedor Recomendado | Custo/mês | Ação no Sistema |
-|------|---------|----------------------|-----------|-----------------|
-| **Dev/Testes** | Desenvolvimento e homologação | Whapi.cloud Sandbox (grátis) | R$ 0 | Adicionar `WHAPI` como 5º provedor |
-| **MVP/Prod pequena** | Até 2.000 msgs/mês, sem equipe DevOps | **Z-API** | R$ 55–100 | Já implementado ✅ |
-| **Prod média** | 2.000–5.000 msgs/mês, equipe técnica disponível | **Evolution API (Baileys)** | R$ 80–150 | Já implementado ✅ |
-| **Prod compliance** | Escala > 5.000 msgs/mês ou número verificado | **Evolution API (Cloud API mode)** ou **Meta via BSP BR** | R$ 300–800 | Requer config Evolution + número Meta |
+### 26.5 Quadro Comparativo — 4 Provedores × 4 Ambientes
+
+> **Premissa:** VPS própria disponível (custo já pago). Evolution API pode rodar na VPS sem custo adicional de infraestrutura.
 
 ---
 
-### 26.6 Itens Pendentes de Implementação
+#### Ambiente 1 — Desenvolvimento / Homologação
+
+| Critério | Twilio | Meta Cloud API | Evolution API (Baileys) | Z-API |
+|----------|--------|----------------|------------------------|-------|
+| **Custo/mês** | R$ 0 (trial) | R$ 0 (sandbox) | **R$ 0** (VPS já paga) | R$ 0 (2 dias trial) |
+| **Setup (horas)** | 2h | 4h | **1h** (Docker na VPS) | 1h (QR Code) |
+| **Número real necessário** | Não (sandbox) | Não (sandbox) | **Não** (pode usar número pessoal) | Sim |
+| **Reinicialização** | Sem estado | Sem estado | Persiste na VPS | Reconectar QR |
+| **Logs/Debug** | Dashboard Twilio | Meta Developers | **Logs diretos na VPS** | Dashboard web |
+| **Isolamento de dev/prod** | Fácil (2 projetos) | Médio | **Fácil** (2 instâncias Docker) | 2 planos |
+| **Recomendação** | ⭐⭐⭐ | ⭐⭐⭐ | ⭐⭐⭐⭐⭐ | ⭐⭐⭐ |
+| **Veredicto** | Funciona | Funciona | **Melhor: grátis + na VPS** | Funciona |
+
+---
+
+#### Ambiente 2 — Produção Pequena (até 2.000 msgs/mês)
+
+| Critério | Twilio | Meta Cloud API | Evolution API (Baileys) | Z-API |
+|----------|--------|----------------|------------------------|-------|
+| **Custo/mês** | ~R$ 85 (2.000 msgs × R$ 0,04 Meta + markup) | ~R$ 80 (BSP mínimo) | **R$ 0** (VPS já paga) | R$ 55–100 |
+| **Custo/mensagem** | ~R$ 0,07 | ~R$ 0,04 (Utility) | **R$ 0** | R$ 0 (flat) |
+| **Aprovação prévia** | Sim (semanas) | Sim (dias-semanas) | **Não** | **Não** |
+| **Risco de banimento** | ✅ Zero | ✅ Zero | ⚠️ Baixo-médio | ⚠️ Baixo-médio |
+| **Número verificado** | ✅ Sim | ✅ Sim | ❌ Não | ❌ Não |
+| **Botões interativos** | ✅ Sim | ✅ Sim (templates) | Parcial | Parcial |
+| **Suporte PT-BR** | ❌ Inglês | ❌ Inglês | Comunidade | **✅ BR** |
+| **Manutenção** | Zero | Zero | **Baixa** (VPS + Docker) | Zero |
+| **LGPD** | ⚠️ EUA | ⚠️ EUA/EU | **✅ Brasil (VPS)** | **✅ Brasil** |
+| **Recomendação** | ⭐⭐⭐ | ⭐⭐⭐ | **⭐⭐⭐⭐⭐** | ⭐⭐⭐⭐ |
+| **Veredicto** | Caro para volume baixo | Setup burocrático | **Melhor: custo zero na VPS** | Boa alternativa sem DevOps |
+
+---
+
+#### Ambiente 3 — Produção Média (2.000–10.000 msgs/mês)
+
+| Critério | Twilio | Meta Cloud API | Evolution API (Baileys) | Z-API |
+|----------|--------|----------------|------------------------|-------|
+| **Custo/mês (5.000 msgs)** | ~R$ 350 | ~R$ 400 (BSP + msgs) | **R$ 0** (VPS já paga) | R$ 55–100 |
+| **Custo/mês (10.000 msgs)** | ~R$ 700 | ~R$ 600 | **R$ 0** | R$ 55–100 |
+| **Escalabilidade** | Ilimitada | Ilimitada | ✅ Multi-instância VPS | Paga por instância |
+| **Múltiplos números** | Paga por número | Paga por número | **✅ N instâncias grátis** | R$ 55-100/número |
+| **Webhook entrega** | ✅ Robusto | ✅ Robusto | ✅ Implementado | ✅ Implementado |
+| **Uptime** | 99,99% (SLA) | 99,99% | Depende da VPS | 99,9% declarado |
+| **Risco de banimento** | ✅ Zero | ✅ Zero | ⚠️ Médio (volume alto) | ⚠️ Médio |
+| **Recomendação** | ⭐⭐ | ⭐⭐⭐ | **⭐⭐⭐⭐** | ⭐⭐⭐ |
+| **Veredicto** | Muito caro | Custo cresce com volume | **Melhor: sem custo por msg** | Custo fixo previsível |
+
+---
+
+#### Ambiente 4 — Produção Compliance / Escala (>10.000 msgs/mês ou número verificado)
+
+| Critério | Twilio | Meta Cloud API (BSP BR) | Evolution API (Cloud API mode) | Z-API |
+|----------|--------|--------------------------|-------------------------------|-------|
+| **Custo/mês (10.000 msgs)** | ~R$ 700 | ~R$ 600 (BSP + R$0,04/Utility) | **~R$ 400** (VPS já paga + Meta R$0,04/msg) | ❌ Alto risco neste volume |
+| **Conformidade TOS Meta** | ✅ Total | ✅ Total | ✅ Total (sem Baileys) | ❌ Não conforme |
+| **Número verificado** | ✅ Sim | ✅ Sim | ✅ Sim (via Meta direto) | ❌ Não |
+| **Selo de empresa verificada** | ✅ Sim | ✅ Sim | ✅ Sim | ❌ Não |
+| **Risco de banimento** | ✅ Zero | ✅ Zero | ✅ Zero | ⚠️ Alto em escala |
+| **Templates aprovados pela Meta** | ✅ Sim | ✅ Sim | ✅ Sim | ❌ Não suporta |
+| **Botões / Listas / Carousel** | ✅ Completo | ✅ Completo | ✅ Completo | Parcial |
+| **LGPD** | ⚠️ EUA | ⚠️ Depende do BSP | **✅ Brasil (VPS)** | ✅ Brasil |
+| **Suporte enterprise** | ✅ Twilio | ✅ BSP BR (Hablla, Digisac) | Comunidade | Suporte BR |
+| **Setup** | Semanas | Semanas | **1 semana** | ❌ Não indicado |
+| **Recomendação** | ⭐⭐⭐ | ⭐⭐⭐⭐ | **⭐⭐⭐⭐⭐** | ❌ |
+| **Veredicto** | Caro + dados nos EUA | Boa opção com BSP BR | **Melhor: VPS própria + Meta oficial** | Não indicado para este volume |
+
+---
+
+### 26.6 Decisão Recomendada (com VPS própria disponível)
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│  VPS JÁ DISPONÍVEL → Evolution API é a âncora em todos os ambientes    │
+└─────────────────────────────────────────────────────────────────────────┘
+
+DEV/HOMOLOGAÇÃO
+  └─► Evolution API (Baileys) na VPS
+      • Instância Docker separada: evolution-dev
+      • Custo: R$ 0 (VPS já paga)
+      • Setup: 1h
+
+PRODUÇÃO — FASE 1 (até 5.000 msgs/mês, início rápido)
+  └─► Evolution API (Baileys) na VPS
+      • Instância Docker: evolution-prod
+      • Custo: R$ 0 adicional
+      • Risco de banimento: baixo-médio (monitorar)
+      • Setup: 1-2h
+
+PRODUÇÃO — FASE 2 (quando quiser número verificado OU > 5.000 msgs/mês)
+  └─► Evolution API no modo Cloud API oficial na VPS
+      • Mesma VPS, mesmo endpoint, campo extra no config
+      • Custo: R$ 0 (VPS) + R$ 0,04/msg Meta (Utility)
+      • Risco de banimento: ZERO
+      • Setup: 3-5 dias (verificação Meta Business)
+
+FALLBACK (se VPS ficar fora)
+  └─► Z-API (R$ 55-100/mês) — SaaS BR, sem infraestrutura
+```
+
+---
+
+### 26.7 Comparativo Consolidado — Scorecard Final (com VPS disponível)
+
+| Critério (peso) | Twilio | Meta via BSP | Evolution Baileys | Evolution Cloud API | Z-API |
+|-----------------|--------|-------------|-------------------|---------------------|-------|
+| **Custo total (30%)** | ⭐⭐ | ⭐⭐⭐ | ⭐⭐⭐⭐⭐ | ⭐⭐⭐⭐ | ⭐⭐⭐⭐ |
+| **Conformidade TOS (20%)** | ⭐⭐⭐⭐⭐ | ⭐⭐⭐⭐⭐ | ⭐⭐ | ⭐⭐⭐⭐⭐ | ⭐⭐ |
+| **Facilidade setup (15%)** | ⭐⭐⭐ | ⭐⭐ | ⭐⭐⭐⭐⭐ | ⭐⭐⭐ | ⭐⭐⭐⭐⭐ |
+| **LGPD / dados BR (15%)** | ⭐⭐ | ⭐⭐⭐ | ⭐⭐⭐⭐⭐ | ⭐⭐⭐⭐⭐ | ⭐⭐⭐⭐⭐ |
+| **Recursos (templates, botões) (10%)** | ⭐⭐⭐⭐⭐ | ⭐⭐⭐⭐⭐ | ⭐⭐⭐ | ⭐⭐⭐⭐⭐ | ⭐⭐⭐ |
+| **Escalabilidade (10%)** | ⭐⭐⭐⭐⭐ | ⭐⭐⭐⭐⭐ | ⭐⭐⭐⭐ | ⭐⭐⭐⭐⭐ | ⭐⭐⭐ |
+| **Score ponderado** | 3,1 | 3,4 | **4,3** | **4,7** | 3,7 |
+| **Indicado para** | Infra Twilio existente | Empresa com CNPJ verificado | Início rápido + VPS | **Produção ideal** | Sem DevOps |
+
+> **Vencedor com VPS disponível: Evolution API no modo Cloud API oficial** — custo mínimo, compliance total, dados no Brasil, escala ilimitada.
+
+---
+
+### 26.8 Itens Pendentes de Implementação
 
 | # | Item | Prioridade | Provedor | Status |
 |---|------|------------|----------|--------|
-| W-01 | Adicionar **Whapi.cloud** como 5º provedor (`WHAPI`) — ideal para sandbox/dev | P3 | Whapi.cloud | — |
-| W-02 | Suporte a **Evolution API no modo Cloud API oficial** — campos `phone_number_id` + `access_token` Meta | P2 | Evolution + Meta | — |
-| W-03 | **Webhook Evolution no modo Cloud API** — payload diferente do Baileys | P2 | Evolution | — |
-| W-04 | **Teste de conexão Meta Cloud API** — validar `access_token` via Graph API `/me` | P3 | Meta | — |
-| W-05 | **Templates interativos (botões/lista)** — `corpo_whatsapp_interativo` + payload de botões para Evolution e Meta | P3 | Evolution / Meta | — |
-| W-06 | **BSP brasileiro** — documentar e testar integração com Hablla ou Poli Digital como BSP da Meta | P2 | Meta via BSP | — |
-| W-07 | **Número verificado** — guia de verificação de empresa no Meta Business Manager | P2 | Meta | — (doc) |
-| W-08 | **Status de entrega unificado** — mapa de status entre provedores (DELIVERED/READ) para `Notificacao.status_entrega` | P3 | Todos | — |
+| W-01 | Adicionar `modo_evolution` (`BAILEYS`/`CLOUD_API`) ao model `ConfiguracaoWhatsApp` + migration | P1 | Evolution | — |
+| W-02 | Campos `phone_number_id` + `meta_access_token` no model para modo Cloud API | P1 | Evolution | — |
+| W-03 | `ServicoWhatsApp._enviar_evolution()` — branch por `modo_evolution` (endpoint e payload diferentes) | P1 | Evolution | — |
+| W-04 | **Webhook Evolution modo Cloud API** — payload diferente do Baileys; atualizar `webhook_evolution()` | P2 | Evolution | — |
+| W-05 | **Teste de conexão** para modo Cloud API (`GET /<instancia>/instance/connectionState`) | P2 | Evolution | — |
+| W-06 | **Templates interativos** — `corpo_whatsapp_interativo` (JSON) com botões para Evolution Cloud API e Meta | P3 | Evolution / Meta | — |
+| W-07 | **BSP brasileiro** — testar com Hablla ou Poli Digital como alternativa ao Evolution direto | P3 | Meta via BSP | — |
+| W-08 | **Status de entrega unificado** — normalizar `DELIVERED/READ` entre provedores | P3 | Todos | — |
 
 ---
 
-### 26.7 Configuração Evolution API no Modo Cloud API Oficial
+### 26.9 Configuração Docker — Evolution API na VPS
 
-> Esta é a opção recomendada para produção com compliance: auto-hospedado + sem risco de banimento.
+```yaml
+# docker-compose.evolution.yml (na VPS)
+services:
+  evolution-dev:
+    image: atendai/evolution-api:latest
+    ports: ["8080:8080"]
+    environment:
+      - SERVER_URL=http://sua-vps:8080
+      - AUTHENTICATION_API_KEY=sua-chave-dev
+      - DATABASE_ENABLED=true
+    volumes: ["./evolution-dev-data:/evolution/store"]
 
-**Como funciona:**
+  evolution-prod:
+    image: atendai/evolution-api:latest
+    ports: ["8081:8080"]
+    environment:
+      - SERVER_URL=http://sua-vps:8081
+      - AUTHENTICATION_API_KEY=sua-chave-prod
+      - DATABASE_ENABLED=true
+      # Modo Cloud API oficial (W-01):
+      # - CLOUD_API_ENABLED=true
+      # - CLOUD_API_PHONE_NUMBER_ID=seu-phone-number-id
+      # - CLOUD_API_ACCESS_TOKEN=seu-access-token-meta
+    volumes: ["./evolution-prod-data:/evolution/store"]
 ```
-Evolution API (self-hosted no VPS)
-    └─► Conecta à Meta Cloud API (não ao WhatsApp Web)
-    └─► Usa phone_number_id + access_token da Meta
-    └─► Mesma API REST familiar do Evolution
-    └─► Sem Baileys, sem risco de banimento
-```
 
-**Campos adicionais necessários no modelo (W-02):**
-```python
-# ConfiguracaoWhatsApp — novos campos para Evolution + Cloud API mode
-modo_evolution = CharField(choices=['BAILEYS', 'CLOUD_API'], default='BAILEYS')
-phone_number_id = CharField(blank=True)    # ID do número no Meta Business
-meta_access_token = CharField(blank=True)  # Token permanente do Meta
-```
-
-**Custo estimado:**
-- VPS 2GB RAM (Hostinger Brasil): ~R$ 45/mês
-- Taxa Meta Utility (3.000 msgs): ~R$ 120/mês
-- **Total: ~R$ 165/mês** com número verificado e compliance total
+**Custo total na VPS:** R$ 0 adicional (VPS já contratada).
 
 ---
 
-### 26.8 Comparativo com Concorrentes
+### 26.10 Comparativo com Concorrentes
 
-| Sistema | WhatsApp |
-|---------|----------|
-| LoteWin | Meta Cloud API via BSP |
-| GELOT | Z-API ou Evolution |
-| SGL | Twilio |
-| SmartIPTU | Meta Cloud API direto |
-| **Este Sistema** | ✅ 4 provedores (Twilio, Meta, Evolution, Z-API) — configurável por imobiliária |
+| Sistema | Provedor WhatsApp | Custo estimado |
+|---------|-------------------|----------------|
+| LoteWin | Meta Cloud API via BSP | R$ 400–800/mês |
+| GELOT | Z-API ou Evolution | R$ 80–150/mês |
+| SGL | Twilio | R$ 300–700/mês |
+| SmartIPTU | Meta Cloud API direto | R$ 300–600/mês |
+| **Este Sistema (com VPS)** | **Evolution API (VPS própria)** | **R$ 0–120/mês** |
 
 ### 25.6 Endpoint Dedicado de Notificações (J-09)
 
