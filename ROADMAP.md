@@ -170,14 +170,14 @@
 
 ## 7. TESTES AUTOMATIZADOS
 
-**Meta:** > 80% de cobertura | **Atual:** 942 testes passando
+**Meta:** > 80% de cobertura | **Atual:** 960 testes passando (947 + 13 novos — revisão HU 2026-04-28)
 
 ### 7.1 P1 — Apps sem nenhum teste (~104 testes) ✅ CONCLUÍDO
 | Arquivo | Escopo | Qtd | Status |
 |---------|--------|-----|--------|
 | `tests/unit/accounts/test_auth_views.py` | login, logout, registro, perfil, alterar senha | 23 | ✅ |
 | `tests/unit/notificacoes/test_models.py` | ConfiguracaoEmail, SMS, WhatsApp, Notificacao | 14 | ✅ |
-| `tests/unit/notificacoes/test_views.py` | CRUD configs e templates, preview | 21 | ✅ |
+| `tests/unit/notificacoes/test_views.py` | CRUD configs e templates, preview, webhook Evolution (apikey) | 26 | ✅ |
 | `tests/unit/notificacoes/test_tasks.py` | envio email/sms, processar pendentes | 8 | ✅ |
 | `tests/unit/portal_comprador/test_models.py` | AcessoComprador, LogAcessoComprador | 5 | ✅ |
 | `tests/unit/portal_comprador/test_auth.py` | auto-cadastro, login/logout | 29 | ✅ |
@@ -196,7 +196,7 @@
 | `tests/unit/contratos/test_indices_views.py` | CRUD índices | 12 | ✅ |
 | `tests/unit/financeiro/test_parcela_views.py` | listar, detalhe, pagar | 19 | ✅ |
 | `tests/unit/financeiro/test_boleto_views.py` | gerar, download, carnê | 20 | ✅ |
-| `tests/unit/financeiro/test_reajuste_views.py` | listar, aplicar, calcular | 15 | ✅ |
+| `tests/unit/financeiro/test_reajuste_views.py` | listar, aplicar, calcular, aplicar_informado_lote (J-09) | 20 | ✅ |
 | `tests/unit/financeiro/test_cnab_views.py` | remessa e retorno | 21 | ✅ |
 | `tests/unit/financeiro/test_dashboard_views.py` | dashboards | 9 | ✅ |
 | `tests/unit/financeiro/test_rest_api_views.py` | APIs REST | 26 | ✅ |
@@ -220,6 +220,8 @@
 | `tests/unit/test_edge_cases.py` | Valores extremos, datas limite, reajuste | 12 | ✅ |
 | `tests/unit/notificacoes/test_management_commands.py` | enviar_notificacoes, processar_pendentes | 4 | ✅ |
 | `tests/unit/financeiro/test_management_commands.py` | processar_reajustes, audit_nosso_numero | 4 | ✅ |
+| `tests/unit/financeiro/test_tasks.py` — **J-08** | `atualizar_indices_sync` (7 índices, tolerância a falhas, endpoint auth) | +3 | ✅ |
+| `tests/unit/financeiro/test_parcela_reajuste.py` — **Sec 25.1** | `calcular_ciclo_pendente(antecipacao_meses=1)` — detecção 1 mês antes | +2 | ✅ |
 
 ### 7.6 Smoke Tests ✅ CONCLUÍDO (P1)
 | Arquivo | Escopo | Qtd | Status |
@@ -227,6 +229,24 @@
 | `tests/test_smoke.py` | Todos os endpoints GET do sistema — core, accounts, contratos, financeiro, notificações, portal comprador | 117 | ✅ |
 
 Detectou e corrigiu 1 bug real: `NoReverseMatch` 500 em `/financeiro/relatorios/posicao-contratos/` — template usava `contratos:detalhe_contrato` (inexistente) em vez de `contratos:detalhe`.
+
+### 7.7 Revisão HU — Auditoria de Cobertura (2026-04-28) ✅
+
+Suite de 947 testes executada integralmente. Todos os cenários HU verificados:
+
+| Seção ROADMAP | Arquivo de Teste | Cenários Cobertos | Resultado |
+|---------------|-----------------|-------------------|-----------|
+| Sec 10 — R-01..R-19 (Reajuste) | `test_parcela_reajuste.py`, `test_reajuste_service.py`, `test_hu_parcelas_reajuste.py` | Ciclo, acumulado, preview, piso/teto, spread, bloqueio, audit, desfazer | ✅ 81/81 pass |
+| Sec 12 — C-01..C-08 (CNAB) | `test_cnab_service.py` | gerar_remessa, parsear_numero_dv, fallback local, processar_retorno CNAB400/240 | ✅ pass |
+| Sec 13 — HU-360 Price/SAC | `test_hu_parcelas_reajuste.py` | Cenários A-E: FIXO+Price, FIXO+SAC, IPCA+Simples, IPCA+TabelaPrice, IGPM+intermediárias | ✅ 24 pass |
+| Sec 15 — B-01..B-05 (Bloqueio) | `test_parcela_reajuste.py` | pode_gerar_boleto cascata, primeiro ciclo livre, após reajuste libera | ✅ pass |
+| Sec 18 — R-01..R-05 (Simulador) | `test_simulador_antecipacao.py` | preview, aplicar, desconto 0/completo, redirect, HistoricoPagamento | ✅ 12 pass |
+| Sec 21 — BoletoService | `test_boleto_service.py`, `test_hu_boleto_remessa.py` | HU 1..14: gerar, carne, OFX, CNAB retorno, WhatsApp, SMS | ✅ 81 pass |
+| Sec 25 — Grid Reajustes Pendentes | `test_reajuste_views.py`, `test_parcela_reajuste.py`, `test_tasks.py` | J-08 (atualizar_indices), J-09 (informado_lote), antecipacao_meses | ✅ +13 novos |
+| Sec 26 — Webhook Evolution | `test_views.py` (notificacoes) | apikey obrigatória, apikey inválida, payload, GET=405 | ✅ 5 pass |
+
+**Gaps confirmados sem cobertura (implementações futuras):**
+- Sec 27 — Chatbot WhatsApp (C-01..C-16): funcionalidade não implementada; testes serão adicionados ao implementar.
 
 ### 7.5 Infraestrutura de Testes ✅ CONCLUÍDO (P2)
 | Prioridade | Item | Status |
