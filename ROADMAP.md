@@ -2,7 +2,7 @@
 
 **Desenvolvedor:** Maxwell da Silva Oliveira (maxwbh@gmail.com)
 **Empresa:** M&S do Brasil LTDA
-**Última atualização:** 2026-04-27 (rev 13)
+**Última atualização:** 2026-04-28 (rev 15)
 
 > Pendentes organizados por prioridade.
 > Para documentação do sistema atual, consulte **[SISTEMA.md](SISTEMA.md)**.
@@ -511,6 +511,7 @@ Detectou e corrigiu 1 bug real: `NoReverseMatch` 500 em `/financeiro/relatorios/
 | **20** | ⭐ **Agendamento e Operações — cron-job.org + endpoints HTTP** | 24 | — |
 | **21** | ⭐ **Grid de Reajustes Pendentes — cálculo inline + Aprovar/Editar** | 25 | ✅ |
 | **22** | ⭐ **WhatsApp — Evolução: Cloud API mode + Whapi.cloud sandbox + Templates interativos** | 26 | — |
+| **23** | ⭐ **Chatbot WhatsApp — 2ª via, boletos em atraso, comprovante de pagamento** | 27 | — |
 
 ---
 
@@ -999,6 +1000,7 @@ para ciclo = 2..total_ciclos+1:
 | OFX Extrato Bancário (Seção 22) | — | 5 | — | — | 5 | ✅ 5/5 |
 | Conciliação Bancária (Seção 23) | — | 8 | — | — | 8 | ✅ 8/8 |
 | WhatsApp — Evolução (Seção 26) | — | 3 | 5 | — | 8 | ⏳ 0/8 — análise concluída, implementação pendente |
+| Chatbot WhatsApp (Seção 27) | 2 | 8 | 6 | — | 16 | ⏳ 0/16 — especificado, implementação pendente |
 | Testes | 104 | ~164 | ~37 | ~41+117 | ~463 | ✅ 942 testes passando |
 | CI/CD | — | 2 | 4 | 2 | 8 | — |
 | Documentação | — | — | 1 | 3 | 4 | — |
@@ -1537,3 +1539,323 @@ services:
 | `POST /api/tasks/processar-notificacoes/` | Fila + vencimentos + inadimplentes em sequência | ✅ |
 | `task_processar_notificacoes` | `core/tasks.py` + URL em `core/urls.py` | ✅ |
 | Quando usar | Quando quiser notificações mais frequentes que o `run-all` (ex.: a cada 6h) | ✅ |
+
+---
+
+## 27. CHATBOT WHATSAPP — 2ª VIA, COMPROVANTE E ATENDIMENTO AUTOMÁTICO
+
+> **Contexto:** cliente envia mensagem para o número WhatsApp da imobiliária e recebe
+> automaticamente: 2ª via de boleto, linha digitável, envio de comprovante de pagamento,
+> situação de boletos em atraso e resumo financeiro — sem intervenção humana.
+>
+> **Base técnica:** Evolution API (já implementado). O webhook atual já recebe
+> `messages.upsert` mas ignora `fromMe=False` (linha 478 de `notificacoes/views.py`).
+> Esta seção especifica o que adicionar a partir desse ponto de entrada.
+
+---
+
+### 27.1 Fluxos Implementados
+
+#### Fluxo A — Identificação do Cliente
+
+```
+Cliente envia qualquer mensagem
+        │
+        ▼
+webhook_evolution() ── fromMe=False? ──► WhatsAppBotService.processar()
+        │
+        ▼
+Busca Comprador por telefone E.164
+        │
+    Encontrou? ──Não──► "Olá! Informe seu CPF para acessar seus boletos:"
+        │                      │
+       Sim                     ▼ (cliente responde com CPF)
+        │               Busca por CPF → encontrou → salva sessão → continua
+        ▼
+Exibe menu principal (ver 27.1B)
+```
+
+#### Fluxo B — Menu Principal
+
+```
+🏠 *Gestão de Contratos*
+Olá, [Nome]! Como posso ajudar?
+
+1️⃣ 2ª via de boleto
+2️⃣ Boletos em atraso
+3️⃣ Enviar comprovante de pagamento
+4️⃣ Meu resumo financeiro
+0️⃣ Falar com atendente
+
+Responda com o número da opção.
+```
+
+#### Fluxo C — 2ª Via de Boleto
+
+```
+Cliente escolhe "1" ou digita "segunda via" / "boleto"
+        │
+        ▼
+Lista parcelas PENDENTES + VENCIDAS (até 5):
+  📄 Parc. 3 — Venc. 10/05/2026 — R$ 850,00
+  📄 Parc. 4 — Venc. 10/06/2026 — R$ 850,00
+  ...
+"Qual parcela deseja? Responda com o número."
+        │
+        ▼
+Cliente responde "1" → seleciona parcela
+        │
+        ▼
+BoletoService.gerar_segunda_via() ── sem boleto? ──► gerar novo boleto
+        │
+        ▼
+Envia texto:
+  ✅ *2ª Via — Parcela 3*
+  📋 Linha digitável: 00190.00009 02625...
+  📅 Vencimento: 10/05/2026
+  💰 Valor: R$ 850,00
+
+Envia PDF do boleto via sendMedia (Evolution)
+```
+
+#### Fluxo D — Boletos em Atraso
+
+```
+Cliente escolhe "2" ou digita "atraso" / "vencido" / "atrasado"
+        │
+        ▼
+Lista parcelas VENCIDAS com encargos calculados:
+  ⚠️ *Boletos em Atraso*
+  📄 Parc. 1 — Venc. 10/03/2026
+     Principal: R$ 850,00
+     Juros + Multa: R$ 42,50
+     *Total hoje: R$ 892,50*
+
+  📄 Parc. 2 — Venc. 10/04/2026
+     ...
+
+"Deseja a 2ª via de alguma dessas parcelas? (número ou 0 para voltar)"
+        │
+        ▼
+Segue Fluxo C com a parcela selecionada
+```
+
+#### Fluxo E — Comprovante de Pagamento
+
+```
+Cliente escolhe "3" OU envia imagem/PDF diretamente
+        │
+        ▼
+"Qual parcela este comprovante se refere?"
+Lista parcelas aguardando pagamento
+        │
+        ▼ (cliente seleciona)
+Baixa o arquivo do Evolution API (base64 → arquivo)
+        │
+        ▼
+Salva em HistoricoPagamento.comprovante (FileField)
+Cria Notificacao interna para admin revisar
+        │
+        ▼
+"✅ Comprovante recebido! Nossa equipe confirmará em até 1 dia útil."
+Notificação push para admin (email + painel)
+```
+
+#### Fluxo F — Resumo Financeiro
+
+```
+Cliente escolhe "4"
+        │
+        ▼
+Contrato.get_resumo_financeiro()
+        │
+        ▼
+📊 *Seu Resumo — Contrato #001*
+✅ Parcelas pagas: 12 de 60
+💰 Total pago: R$ 10.200,00
+📅 Próximo vencimento: 10/05/2026 — R$ 850,00
+⚠️ Em atraso: 0 parcelas
+📈 Progresso: 20%
+```
+
+---
+
+### 27.2 Modelo de Sessão de Conversa
+
+```python
+# notificacoes/models.py — novo modelo
+class SessaoConversaWhatsApp(models.Model):
+    """
+    Estado da conversa por número de telefone.
+    Armazenado no banco; Redis seria mais rápido mas requer infra extra.
+    TTL: limpar sessões com updated_at > 30 minutos (management command).
+    """
+    class Estado(models.TextChoices):
+        IDLE                    = 'IDLE',                    'Aguardando'
+        AGUARDANDO_CPF          = 'AGUARDANDO_CPF',          'Aguardando CPF'
+        MENU_PRINCIPAL          = 'MENU_PRINCIPAL',          'Menu principal'
+        AGUARDANDO_PARCELA_2VIA = 'AGUARDANDO_PARCELA_2VIA', 'Seleção 2ª via'
+        AGUARDANDO_PARCELA_COMP = 'AGUARDANDO_PARCELA_COMP', 'Seleção comprovante'
+        AGUARDANDO_COMPROVANTE  = 'AGUARDANDO_COMPROVANTE',  'Enviando comprovante'
+
+    telefone    = models.CharField(max_length=20, unique=True, db_index=True)
+    comprador   = models.ForeignKey('financeiro.Comprador', null=True, blank=True,
+                                    on_delete=models.SET_NULL)
+    estado      = models.CharField(max_length=30, choices=Estado.choices,
+                                    default=Estado.IDLE)
+    contexto    = models.JSONField(default=dict)   # parcelas_ids, contrato_id etc.
+    config_wa   = models.ForeignKey('ConfiguracaoWhatsApp', null=True,
+                                    on_delete=models.SET_NULL)
+    updated_at  = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = 'Sessão WhatsApp'
+```
+
+---
+
+### 27.3 Serviço do Chatbot
+
+```python
+# notificacoes/whatsapp_bot.py — novo arquivo
+class WhatsAppBotService:
+
+    def processar(self, telefone, mensagem, tipo_msg, media_b64, config_wa): ...
+    # Despacha para o estado correto da sessão
+
+    def _identificar_comprador(self, telefone): ...
+    # Busca por Comprador.telefone normalizado E.164
+
+    def _menu_principal(self, sessao): ...
+    def _fluxo_2a_via(self, sessao, mensagem): ...
+    def _fluxo_atraso(self, sessao, mensagem): ...
+    def _fluxo_comprovante(self, sessao, mensagem, media_b64): ...
+    def _fluxo_resumo(self, sessao): ...
+
+    def _responder(self, telefone, texto, config_wa): ...
+    # ServicoWhatsApp._enviar_evolution() já existente
+
+    def _enviar_pdf(self, telefone, pdf_bytes, filename, config_wa): ...
+    # POST /message/sendMedia/{instancia} (base64)
+
+    def _baixar_media(self, message_id, config_wa): ...
+    # GET /message/download-media/{instancia}/{messageId}
+```
+
+---
+
+### 27.4 Mudanças no Webhook Existente
+
+```python
+# notificacoes/views.py — webhook_evolution() — adicionar após linha 478:
+
+# fromMe=False → mensagem recebida do cliente → chatbot
+if not from_me and is_upsert:
+    _processar_mensagem_inbound(item, config, request)
+    continue
+```
+
+```python
+def _processar_mensagem_inbound(item, config, request):
+    """Extrai texto/mídia e despacha para WhatsAppBotService."""
+    remote_jid = item.get('key', {}).get('remoteJid', '')
+    telefone = remote_jid.replace('@s.whatsapp.net', '')
+
+    msg_content = item.get('message', {})
+    texto = (
+        msg_content.get('conversation')
+        or msg_content.get('extendedTextMessage', {}).get('text', '')
+        or ''
+    ).strip()
+
+    # Mídia (imagem/documento = comprovante)
+    tipo_msg = 'text'
+    media_b64 = None
+    if 'imageMessage' in msg_content or 'documentMessage' in msg_content:
+        tipo_msg = 'media'
+        # Download lazy — feito dentro do bot se necessário
+
+    WhatsAppBotService().processar(
+        telefone=telefone,
+        mensagem=texto,
+        tipo_msg=tipo_msg,
+        media_b64=media_b64,
+        config_wa=config,
+    )
+```
+
+---
+
+### 27.5 Plano de Implementação
+
+#### Fase 1 — Infraestrutura (P1)
+
+| # | Item | Arquivo | Status |
+|---|------|---------|--------|
+| C-01 | Model `SessaoConversaWhatsApp` + migration | `notificacoes/models.py` | — |
+| C-02 | Webhook: rotear `fromMe=False` para `_processar_mensagem_inbound()` | `notificacoes/views.py` | — |
+| C-03 | `WhatsAppBotService.processar()` — dispatcher por estado | `notificacoes/whatsapp_bot.py` | — |
+| C-04 | Identificação por telefone + fallback CPF (Fluxo A) | `notificacoes/whatsapp_bot.py` | — |
+| C-05 | Menu principal (Fluxo B) | `notificacoes/whatsapp_bot.py` | — |
+
+#### Fase 2 — 2ª Via e Atraso (P1)
+
+| # | Item | Arquivo | Status |
+|---|------|---------|--------|
+| C-06 | Fluxo C — 2ª via: lista parcelas + `gerar_segunda_via()` + envio PDF | `notificacoes/whatsapp_bot.py` | — |
+| C-07 | Fluxo D — boletos em atraso: encargos calculados + linha digitável | `notificacoes/whatsapp_bot.py` | — |
+| C-08 | `_enviar_pdf()` — `POST /message/sendMedia/{instancia}` (base64) | `notificacoes/whatsapp_bot.py` | — |
+
+#### Fase 3 — Comprovante (P2)
+
+| # | Item | Arquivo | Status |
+|---|------|---------|--------|
+| C-09 | Fluxo E — receber mídia + `_baixar_media()` via Evolution API | `notificacoes/whatsapp_bot.py` | — |
+| C-10 | Salvar em `HistoricoPagamento.comprovante` + notificação admin | `notificacoes/whatsapp_bot.py` | — |
+| C-11 | Admin: fila de comprovantes pendentes de revisão | `notificacoes/admin.py` | — |
+
+#### Fase 4 — UX e Robustez (P2)
+
+| # | Item | Arquivo | Status |
+|---|------|---------|--------|
+| C-12 | Fluxo F — resumo financeiro | `notificacoes/whatsapp_bot.py` | — |
+| C-13 | Management command `limpar_sessoes_whatsapp` — remove sessões > 30 min | `notificacoes/management/` | — |
+| C-14 | Timeout de sessão: mensagem de aviso após 20 min sem resposta | `notificacoes/whatsapp_bot.py` | — |
+| C-15 | Opção "0 — Falar com atendente": pausa bot + notifica staff por email | `notificacoes/whatsapp_bot.py` | — |
+| C-16 | Testes unitários: 20 casos (identificação, fluxos A–F, estados, edge cases) | `tests/unit/notificacoes/test_whatsapp_bot.py` | — |
+
+---
+
+### 27.6 Dependências e Integrações Existentes
+
+| Recurso existente | Reutilizado em |
+|-------------------|----------------|
+| `BoletoService.gerar_segunda_via()` | Fluxo C (2ª via) |
+| `ServicoWhatsApp._enviar_evolution()` | Todos os fluxos (resposta texto) |
+| `ServicoWhatsApp._normalizar_numero()` | Identificação por telefone |
+| `Parcela.calcular_encargos()` | Fluxo D (boletos em atraso) |
+| `Contrato.get_resumo_financeiro()` | Fluxo F |
+| `HistoricoPagamento.comprovante` (FileField) | Fluxo E |
+| `AcessoComprador` (Portal do Comprador) | Identificação alternativa |
+| Redis (já disponível) | Cache de sessão opcional (fase futura) |
+
+---
+
+### 27.7 Palavras-chave Reconhecidas (Intents)
+
+| Intenção | Palavras-chave |
+|----------|---------------|
+| 2ª via | `segunda via`, `2a via`, `boleto`, `2ª via`, `1` |
+| Atraso | `atraso`, `atrasado`, `vencido`, `em atraso`, `2` |
+| Comprovante | `comprovante`, `paguei`, `pagamento`, `enviar comprovante`, `3` |
+| Resumo | `saldo`, `resumo`, `situação`, `meu contrato`, `4` |
+| Atendente | `atendente`, `humano`, `pessoa`, `falar com`, `0` |
+| Cancelar/Voltar | `cancelar`, `voltar`, `sair`, `menu` |
+
+---
+
+### 27.8 Adição ao Execution Order
+
+| Fase | Escopo | Status |
+|------|--------|--------|
+| **23** | ⭐ **Chatbot WhatsApp — 2ª via, atraso, comprovante** | — |
