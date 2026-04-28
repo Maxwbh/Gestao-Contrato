@@ -138,3 +138,76 @@ class TestAplicarReajusteLote:
         if response.status_code == 200:
             data = response.json()
             assert 'sucesso' in data or 'resultados' in data
+
+
+# ---------------------------------------------------------------------------
+# Section 25.4 — aplicar_reajuste_informado_lote (J-09)
+# ---------------------------------------------------------------------------
+
+@pytest.mark.django_db
+class TestAplicarReajusteInformadoLote:
+    """Testes da view aplicar_reajuste_informado_lote (Section 25.4 / J-09).
+
+    Aplica um percentual INFORMADO pelo usuário em lote — diferente de
+    aplicar_reajuste_lote que usa o índice calculado automaticamente.
+    """
+
+    URL = 'financeiro:aplicar_reajuste_informado_lote'
+
+    def test_requer_autenticacao(self, client):
+        url = reverse(self.URL)
+        response = client.post(url, content_type='application/json', data='{}')
+        assert response.status_code in (302, 403)
+
+    def test_sem_contrato_ids_retorna_400(self, client_logado):
+        """POST sem contrato_ids deve retornar 400."""
+        import json
+        url = reverse(self.URL)
+        response = client_logado.post(
+            url,
+            content_type='application/json',
+            data=json.dumps({'percentual_informado': '5.0'}),
+        )
+        assert response.status_code == 400
+        data = response.json()
+        assert data['sucesso'] is False
+
+    def test_percentual_invalido_retorna_400(self, client_logado):
+        """POST com percentual_informado não numérico deve retornar 400."""
+        import json
+        url = reverse(self.URL)
+        response = client_logado.post(
+            url,
+            content_type='application/json',
+            data=json.dumps({'contrato_ids': [1], 'percentual_informado': 'abc'}),
+        )
+        assert response.status_code == 400
+        data = response.json()
+        assert data['sucesso'] is False
+
+    def test_contrato_inexistente_relatado_como_erro(self, client_logado):
+        """Contrato não encontrado deve ser relatado nos resultados, não levantar 500."""
+        import json
+        url = reverse(self.URL)
+        response = client_logado.post(
+            url,
+            content_type='application/json',
+            data=json.dumps({'contrato_ids': [999999], 'percentual_informado': '5.0'}),
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert 'resultados' in data
+        assert any(r.get('sucesso') is False for r in data['resultados'])
+
+    def test_contrato_sem_ciclo_pendente_relatado(self, client_logado, contrato):
+        """Contrato sem ciclo reajuste pendente retorna resultados com erro por contrato."""
+        import json
+        url = reverse(self.URL)
+        response = client_logado.post(
+            url,
+            content_type='application/json',
+            data=json.dumps({'contrato_ids': [contrato.pk], 'percentual_informado': '5.0'}),
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert 'resultados' in data
