@@ -437,24 +437,27 @@ def webhook_evolution(request):
     event = body.get('event', '')
     instance_name = body.get('instance', '')
 
-    # Validar apikey: header ou campo no payload
+    # Validar apikey: header ou campo no payload (obrigatório — Opção A de segurança)
     apikey_header = request.META.get('HTTP_APIKEY', '')
     apikey_payload = body.get('apikey', '')
     apikey = apikey_header or apikey_payload
 
-    if apikey:
-        config = ConfiguracaoWhatsApp.objects.filter(
-            provedor='EVOLUTION', instancia=instance_name, api_key=apikey, ativo=True
-        ).first()
-        if not config:
-            logger.warning(
-                '[Webhook Evolution] apikey invalida — instance=%s ip=%s',
-                instance_name, request.META.get('REMOTE_ADDR')
-            )
-            return HttpResponse('Forbidden', status=403)
-    else:
-        # Sem apikey: aceitar mas logar aviso (Evolution pode não enviar em algumas versões)
-        logger.warning('[Webhook Evolution] Payload sem apikey — instance=%s', instance_name)
+    if not apikey:
+        logger.warning(
+            '[Webhook Evolution] Requisição sem apikey rejeitada — instance=%s ip=%s',
+            instance_name, request.META.get('REMOTE_ADDR')
+        )
+        return HttpResponse('Forbidden', status=403)
+
+    config = ConfiguracaoWhatsApp.objects.filter(
+        provedor='EVOLUTION', instancia=instance_name, api_key=apikey, ativo=True
+    ).first()
+    if not config:
+        logger.warning(
+            '[Webhook Evolution] apikey invalida — instance=%s ip=%s',
+            instance_name, request.META.get('REMOTE_ADDR')
+        )
+        return HttpResponse('Forbidden', status=403)
 
     is_update = event in ('messages.update', 'MESSAGES_UPDATE')
     is_upsert = event in ('messages.upsert', 'MESSAGES_UPSERT')
