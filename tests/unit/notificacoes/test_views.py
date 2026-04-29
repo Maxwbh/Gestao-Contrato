@@ -348,3 +348,75 @@ class TestTestarConexaoEmail:
 
         response = client.get(reverse('notificacoes:testar_config_email', args=[99999]))
         assert response.status_code == 404
+
+
+# =============================================================================
+# WEBHOOK EVOLUTION API — Autenticação por apikey (Opção A)
+# =============================================================================
+
+import json
+
+@pytest.mark.django_db
+class TestWebhookEvolution:
+    """Testes do endpoint webhook_evolution — valida apikey obrigatória no header."""
+
+    URL = '/notificacoes/webhook/evolution/'
+
+    def _payload(self, instance='test-inst', event='messages.update', status='READ'):
+        return json.dumps({
+            'event': event,
+            'instance': instance,
+            'data': [{'key': {'id': 'MSGID1', 'fromMe': True,
+                               'remoteJid': '5531999990001@s.whatsapp.net'},
+                      'update': {'status': status}}],
+        })
+
+    def test_sem_apikey_retorna_403(self, client):
+        """Webhook sem apikey deve ser rejeitado com 403."""
+        resp = client.post(self.URL, self._payload(),
+                           content_type='application/json')
+        assert resp.status_code == 403
+
+    def test_apikey_invalida_retorna_403(self, client):
+        """Webhook com apikey que não existe no DB deve retornar 403."""
+        resp = client.post(
+            self.URL, self._payload(instance='inst-x'),
+            content_type='application/json',
+            HTTP_APIKEY='chave-errada',
+        )
+        assert resp.status_code == 403
+
+    def test_apikey_valida_event_ignorado_retorna_200(self, client):
+        """Evento não mapeado com apikey válida deve retornar 200 sem erro."""
+        from tests.fixtures.factories import ConfiguracaoWhatsAppFactory
+        cfg = ConfiguracaoWhatsAppFactory(
+            provedor='EVOLUTION', instancia='inst-ok', api_key='chave-ok', ativo=True,
+        )
+        resp = client.post(
+            self.URL,
+            self._payload(instance='inst-ok', event='connection.update'),
+            content_type='application/json',
+            HTTP_APIKEY='chave-ok',
+        )
+        assert resp.status_code == 200
+        cfg.delete()
+
+    def test_apikey_no_payload_tambem_aceita(self, client):
+        """Evolution pode enviar apikey dentro do payload JSON (fallback)."""
+        from tests.fixtures.factories import ConfiguracaoWhatsAppFactory
+        cfg = ConfiguracaoWhatsAppFactory(
+            provedor='EVOLUTION', instancia='inst-payload', api_key='chave-payload', ativo=True,
+        )
+        body = json.loads(self._payload(instance='inst-payload', event='connection.update'))
+        body['apikey'] = 'chave-payload'
+        resp = client.post(
+            self.URL, json.dumps(body),
+            content_type='application/json',
+        )
+        assert resp.status_code == 200
+        cfg.delete()
+
+    def test_metodo_get_retorna_405(self, client):
+        """Webhook só aceita POST."""
+        resp = client.get(self.URL)
+        assert resp.status_code == 405
