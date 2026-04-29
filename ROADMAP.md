@@ -2,7 +2,7 @@
 
 **Desenvolvedor:** Maxwell da Silva Oliveira (maxwbh@gmail.com)
 **Empresa:** M&S do Brasil LTDA
-**Última atualização:** 2026-04-22 (rev 12)
+**Última atualização:** 2026-04-28 (rev 15)
 
 > Pendentes organizados por prioridade.
 > Para documentação do sistema atual, consulte **[SISTEMA.md](SISTEMA.md)**.
@@ -170,14 +170,14 @@
 
 ## 7. TESTES AUTOMATIZADOS
 
-**Meta:** > 80% de cobertura | **Atual:** 942 testes passando
+**Meta:** > 80% de cobertura | **Atual:** 960 testes passando (947 + 13 novos — revisão HU 2026-04-28)
 
 ### 7.1 P1 — Apps sem nenhum teste (~104 testes) ✅ CONCLUÍDO
 | Arquivo | Escopo | Qtd | Status |
 |---------|--------|-----|--------|
 | `tests/unit/accounts/test_auth_views.py` | login, logout, registro, perfil, alterar senha | 23 | ✅ |
 | `tests/unit/notificacoes/test_models.py` | ConfiguracaoEmail, SMS, WhatsApp, Notificacao | 14 | ✅ |
-| `tests/unit/notificacoes/test_views.py` | CRUD configs e templates, preview | 21 | ✅ |
+| `tests/unit/notificacoes/test_views.py` | CRUD configs e templates, preview, webhook Evolution (apikey) | 26 | ✅ |
 | `tests/unit/notificacoes/test_tasks.py` | envio email/sms, processar pendentes | 8 | ✅ |
 | `tests/unit/portal_comprador/test_models.py` | AcessoComprador, LogAcessoComprador | 5 | ✅ |
 | `tests/unit/portal_comprador/test_auth.py` | auto-cadastro, login/logout | 29 | ✅ |
@@ -196,7 +196,7 @@
 | `tests/unit/contratos/test_indices_views.py` | CRUD índices | 12 | ✅ |
 | `tests/unit/financeiro/test_parcela_views.py` | listar, detalhe, pagar | 19 | ✅ |
 | `tests/unit/financeiro/test_boleto_views.py` | gerar, download, carnê | 20 | ✅ |
-| `tests/unit/financeiro/test_reajuste_views.py` | listar, aplicar, calcular | 15 | ✅ |
+| `tests/unit/financeiro/test_reajuste_views.py` | listar, aplicar, calcular, aplicar_informado_lote (J-09) | 20 | ✅ |
 | `tests/unit/financeiro/test_cnab_views.py` | remessa e retorno | 21 | ✅ |
 | `tests/unit/financeiro/test_dashboard_views.py` | dashboards | 9 | ✅ |
 | `tests/unit/financeiro/test_rest_api_views.py` | APIs REST | 26 | ✅ |
@@ -220,6 +220,8 @@
 | `tests/unit/test_edge_cases.py` | Valores extremos, datas limite, reajuste | 12 | ✅ |
 | `tests/unit/notificacoes/test_management_commands.py` | enviar_notificacoes, processar_pendentes | 4 | ✅ |
 | `tests/unit/financeiro/test_management_commands.py` | processar_reajustes, audit_nosso_numero | 4 | ✅ |
+| `tests/unit/financeiro/test_tasks.py` — **J-08** | `atualizar_indices_sync` (7 índices, tolerância a falhas, endpoint auth) | +3 | ✅ |
+| `tests/unit/financeiro/test_parcela_reajuste.py` — **Sec 25.1** | `calcular_ciclo_pendente(antecipacao_meses=1)` — detecção 1 mês antes | +2 | ✅ |
 
 ### 7.6 Smoke Tests ✅ CONCLUÍDO (P1)
 | Arquivo | Escopo | Qtd | Status |
@@ -227,6 +229,24 @@
 | `tests/test_smoke.py` | Todos os endpoints GET do sistema — core, accounts, contratos, financeiro, notificações, portal comprador | 117 | ✅ |
 
 Detectou e corrigiu 1 bug real: `NoReverseMatch` 500 em `/financeiro/relatorios/posicao-contratos/` — template usava `contratos:detalhe_contrato` (inexistente) em vez de `contratos:detalhe`.
+
+### 7.7 Revisão HU — Auditoria de Cobertura (2026-04-28) ✅
+
+Suite de 947 testes executada integralmente. Todos os cenários HU verificados:
+
+| Seção ROADMAP | Arquivo de Teste | Cenários Cobertos | Resultado |
+|---------------|-----------------|-------------------|-----------|
+| Sec 10 — R-01..R-19 (Reajuste) | `test_parcela_reajuste.py`, `test_reajuste_service.py`, `test_hu_parcelas_reajuste.py` | Ciclo, acumulado, preview, piso/teto, spread, bloqueio, audit, desfazer | ✅ 81/81 pass |
+| Sec 12 — C-01..C-08 (CNAB) | `test_cnab_service.py` | gerar_remessa, parsear_numero_dv, fallback local, processar_retorno CNAB400/240 | ✅ pass |
+| Sec 13 — HU-360 Price/SAC | `test_hu_parcelas_reajuste.py` | Cenários A-E: FIXO+Price, FIXO+SAC, IPCA+Simples, IPCA+TabelaPrice, IGPM+intermediárias | ✅ 24 pass |
+| Sec 15 — B-01..B-05 (Bloqueio) | `test_parcela_reajuste.py` | pode_gerar_boleto cascata, primeiro ciclo livre, após reajuste libera | ✅ pass |
+| Sec 18 — R-01..R-05 (Simulador) | `test_simulador_antecipacao.py` | preview, aplicar, desconto 0/completo, redirect, HistoricoPagamento | ✅ 12 pass |
+| Sec 21 — BoletoService | `test_boleto_service.py`, `test_hu_boleto_remessa.py` | HU 1..14: gerar, carne, OFX, CNAB retorno, WhatsApp, SMS | ✅ 81 pass |
+| Sec 25 — Grid Reajustes Pendentes | `test_reajuste_views.py`, `test_parcela_reajuste.py`, `test_tasks.py` | J-08 (atualizar_indices), J-09 (informado_lote), antecipacao_meses | ✅ +13 novos |
+| Sec 26 — Webhook Evolution | `test_views.py` (notificacoes) | apikey obrigatória, apikey inválida, payload, GET=405 | ✅ 5 pass |
+
+**Gaps confirmados sem cobertura (implementações futuras):**
+- Sec 27 — Chatbot WhatsApp (C-01..C-16): funcionalidade não implementada; testes serão adicionados ao implementar.
 
 ### 7.5 Infraestrutura de Testes ✅ CONCLUÍDO (P2)
 | Prioridade | Item | Status |
@@ -510,6 +530,8 @@ Detectou e corrigiu 1 bug real: `NoReverseMatch` 500 em `/financeiro/relatorios/
 | **19** | Documentação | 9 | — |
 | **20** | ⭐ **Agendamento e Operações — cron-job.org + endpoints HTTP** | 24 | — |
 | **21** | ⭐ **Grid de Reajustes Pendentes — cálculo inline + Aprovar/Editar** | 25 | ✅ |
+| **22** | ⭐ **WhatsApp — Evolução: Cloud API mode + Whapi.cloud sandbox + Templates interativos** | 26 | — |
+| **23** | ⭐ **Chatbot WhatsApp — 2ª via, boletos em atraso, comprovante de pagamento** | 27 | — |
 
 ---
 
@@ -944,7 +966,7 @@ para ciclo = 2..total_ciclos+1:
 | N-01 | E-mail automático D-5 antes do vencimento da parcela | P2 | ✅ `enviar_notificacoes_sync()` em `core/tasks.py` + deduplicação via `Notificacao` model + POST `/api/tasks/enviar-notificacoes/` |
 | N-02 | E-mail de inadimplência após D+3 | P2 | ✅ `enviar_inadimplentes_sync()` em `core/tasks.py` + `task_run_all` inclui N-02 + POST `/api/tasks/enviar-inadimplentes/` + `NOTIFICACAO_DIAS_INADIMPLENCIA=3` |
 | N-03 | Régua de cobrança configurável (D-5, D+3, D+10, D+30) | P3 | ✅ `RegraNotificacao` model em `notificacoes/models.py` + `TipoGatilho` (ANTES/APOS) + admin com `list_editable` + `_processar_regra()` em `core/tasks.py` — fallback automático para N-01/N-02 quando nenhuma regra configurada |
-| N-04 | Integração WhatsApp (Evolution API / Z-API) | P3 | ✅ `ConfiguracaoWhatsApp` agora suporta 4 provedores: Twilio, Meta (Cloud API), Evolution API v2 (`/message/sendText/{instancia}`), Z-API (`/send-text`). `ServicoWhatsApp` despacha pelo `provedor` do config ativo. Migration `0004_add_whatsapp_providers` adiciona `api_url`, `api_key`, `instancia`, `client_token`. Admin com fieldsets colapsáveis por provedor. |
+| N-04 | Integração WhatsApp (4 provedores) | P3 | ✅ `ConfiguracaoWhatsApp` suporta: Twilio, Meta Cloud API, Evolution API v2, Z-API. Webhooks de entrega (Evolution + Twilio). Teste de conexão por provedor. Análise custo/benefício e roadmap de evolução: **ver Seção 26**. |
 | N-05 | Push notification portal comprador | P4 | 🏦 Débito Técnico (pós-2050) |
 | N-08 | **TEST_MODE safeguard** — `_destinatario_email_teste()` e `_destinatario_telefone_teste()` em `BoletoNotificacaoService`: em ambiente não-produção, redireciona todos os envios para endereços de teste configurados em `settings.EMAIL_TESTE` e `settings.TELEFONE_TESTE`; evita notificações acidentais para compradores reais durante desenvolvimento | P2 | ✅ `notificacoes/boleto_notificacao.py` |
 | N-09 | **Normalização E.164 para Twilio** — telefones no formato `(31) 99999-8888` são convertidos para `+5531999998888` antes do envio via Twilio SMS/WhatsApp; `_normalizar_telefone_e164()` strip de caracteres não-numéricos + prefixo `+55` | P2 | ✅ `notificacoes/boleto_notificacao.py` |
@@ -997,10 +1019,12 @@ para ciclo = 2..total_ciclos+1:
 | HU Boleto/Carnê/Remessa (Seção 21) | — | 10 | — | — | 10 | ✅ 10/10 |
 | OFX Extrato Bancário (Seção 22) | — | 5 | — | — | 5 | ✅ 5/5 |
 | Conciliação Bancária (Seção 23) | — | 8 | — | — | 8 | ✅ 8/8 |
+| WhatsApp — Evolução (Seção 26) | — | 3 | 5 | — | 8 | ⏳ 0/8 — análise concluída, implementação pendente |
+| Chatbot WhatsApp (Seção 27) | 2 | 8 | 6 | — | 16 | ⏳ 0/16 — especificado, implementação pendente |
 | Testes | 104 | ~164 | ~37 | ~41+117 | ~463 | ✅ 942 testes passando |
 | CI/CD | — | 2 | 4 | 2 | 8 | — |
 | Documentação | — | — | 1 | 3 | 4 | — |
-| **Total** | **~117** | **~251** | **~107** | **~61** | **~536** | |
+| **Total** | **~117** | **~254** | **~112** | **~61** | **~544** | |
 
 ### ✅ Fases concluídas (2026-04-01)
 
@@ -1270,6 +1294,264 @@ X-Task-Token: <valor de TASK_TOKEN no painel Render>
 | Agenda cron-job.org | J-08: toda segunda 07:00 BRT | — (configurar no cron-job.org) |
 | Sucesso parcial | Sucesso se ao menos 1 de 7 índices importado (tolerante a falhas de API) | ✅ |
 
+---
+
+## 26. WHATSAPP — ANÁLISE DE PROVEDORES E ROADMAP DE INTEGRAÇÃO
+
+> **Contexto:** A Meta alterou seu modelo de cobrança em julho 2025 (por conversa → por mensagem/template).
+> Esta seção documenta os provedores disponíveis, análise custo/benefício e o roteiro de evolução
+> da integração WhatsApp no sistema.
+> **Referência de pesquisa:** https://comunidade.zdg.com.br/geral/api-oficial-whatsapp/
+
+---
+
+### 26.1 Estado Atual da Implementação
+
+Os 4 provedores abaixo já estão implementados em `notificacoes/models.py` (ConfiguracaoWhatsApp) e despachados pelo ServicoWhatsApp em `notificacoes/boleto_notificacao.py`:
+
+| Provedor | Campo `provedor` | Autenticação | Endpoint | Status |
+|----------|------------------|--------------|----------|--------|
+| **Twilio** | `TWILIO` | `account_sid` + `auth_token` | Twilio API REST | ✅ Implementado |
+| **Meta (Cloud API)** | `META` | `account_sid` (token) + `auth_token` | Graph API v18+ | ✅ Implementado |
+| **Evolution API v2** | `EVOLUTION` | `api_url` + `api_key` + `instancia` | `POST /message/sendText/{instancia}` | ✅ Implementado |
+| **Z-API** | `ZAPI` | `api_url` + `api_key` + `instancia` + `client_token` | `POST /send-text` | ✅ Implementado |
+
+**Funcionalidades transversais já implementadas:**
+- Webhook de entrega (Evolution + Twilio) → atualiza `Notificacao.status_entrega`
+- Teste de conexão por provedor (`testar_conexao_whatsapp` view)
+- TEST_MODE safeguard (redireciona envios em dev para `settings.TELEFONE_TESTE`)
+- Normalização E.164: `(31) 99999-8888` → `+5531999998888`
+- CRUD completo de configuração via `/notificacoes/config/whatsapp/`
+
+---
+
+### 26.2 Mudança de Modelo de Cobrança Meta (Julho 2025)
+
+A partir de 01/07/2025, a Meta abandonou a cobrança por janela de conversa (24h) e passou a cobrar **por mensagem de template entregue**:
+
+| Categoria de Template | Custo (USD/msg) | Custo aprox. (BRL) | Janela de Serviço |
+|-----------------------|-----------------|---------------------|-------------------|
+| **Utility** (vencimentos, boletos) | $0,0068 | ~R$ 0,04 | Cobrado só fora da janela 24h |
+| **Marketing** (campanhas) | $0,0625 | ~R$ 0,35 | Sempre cobrado |
+| **Authentication** | $0,0068 | ~R$ 0,04 | Sempre cobrado |
+| **Service** (cliente iniciou) | Grátis | R$ 0,00 | Sempre grátis |
+
+> Para um sistema de gestão de contratos as mensagens de vencimento/boleto se enquadram em **Utility** — o custo unitário mais baixo da API oficial.
+
+---
+
+### 26.3 Tabela Comparativa — Custo/Benefício (2026)
+
+| Provedor | Custo/msg | Mensalidade (BRL) | Aprovação Meta | Self-hosted | Risco de Banimento | LGPD (BR) | Python | Recomendado para |
+|----------|-----------|--------------------|-----------------|-------------|---------------------|-----------|--------|-----------------|
+| **Meta Cloud API** (via BSP BR) | R$ 0,04 (Utility) | R$ 200–600 (BSP fee) | ✅ Obrigatória | ❌ Não | ✅ Zero | ✅ Sim | ✅ SDK `pywa` | Conformidade total, número verificado |
+| **Twilio WhatsApp** | R$ 0,04 + R$ 0,028/msg | R$ 0 (paga por uso) | ✅ Via Twilio | ❌ Não | ✅ Zero | ⚠️ EUA | ✅ SDK maduro | Quem já usa Twilio; equipe enterprise |
+| **Z-API** | R$ 0/msg (flat) | R$ 55–100/instância | ❌ Não | ❌ SaaS BR | ⚠️ Existe | ✅ Brasil | ✅ REST JSON | PMEs brasileiras, custo previsível, prioridade suporte PT-BR |
+| **Evolution API** (Baileys) | R$ 0/msg | R$ 30–150 (só VPS) | ❌ Não | ✅ Sim | ⚠️ Existe | ✅ Brasil | ✅ REST | Devs com DevOps, custo mínimo, controle total |
+| **Evolution API** (Cloud API mode) | R$ 0,04 (Utility) + VPS | R$ 30–150 (VPS) | ✅ Via Meta | ✅ Sim | ✅ Zero | ✅ Brasil | ✅ REST | **Melhor custo/benefício: self-hosted + compliance** |
+| **Whapi.cloud** | R$ 0/msg | R$ 165/instância ($29) | ❌ Não | ❌ SaaS EU | ⚠️ Existe | ⚠️ Europa | ✅ Exemplos prontos | Protótipo/sandbox gratuito para testes |
+| **WPPConnect** | R$ 0/msg | R$ 30–150 (só VPS) | ❌ Não | ✅ Sim | ⚠️ Existe | ✅ Brasil | ✅ REST (Node) | Alternativa ao Evolution, mais Node.js |
+| **Chat-API** | — | — | — | — | — | — | — | ❌ Descontinuado em 2026 |
+
+---
+
+### 26.4 Simulação de Custo Mensal (Sistema Imobiliário)
+
+**Cenário:** 500–5.000 msgs/mês — vencimentos (Utility) + inadimplência + lembretes
+
+| Volume | Meta Cloud API (BSP) | Z-API | Evolution API + VPS R$80 |
+|--------|----------------------|-------|--------------------------|
+| 500 msgs | R$ 220–620 | R$ 55–100 | R$ 80 |
+| 1.000 msgs | R$ 240–640 | R$ 55–100 | R$ 80 |
+| 3.000 msgs | R$ 320–720 | R$ 55–100 | R$ 80–150 |
+| 5.000 msgs | R$ 400–800 | R$ 55–100 | R$ 80–150 |
+
+> **Nota:** BSP Fee é a mensalidade cobrada pelo parceiro BSP (Hablla, Poli Digital, Digisac) além das taxas Meta. Para volume < 5.000 msgs/mês, Evolution API no modo Cloud API próprio é o mais econômico com compliance.
+
+---
+
+
+### 26.5 Quadro Comparativo — 4 Provedores × 4 Ambientes
+
+> **Premissa:** VPS própria disponível (custo já pago). Evolution API pode rodar na VPS sem custo adicional de infraestrutura.
+
+---
+
+#### Ambiente 1 — Desenvolvimento / Homologação
+
+| Critério | Twilio | Meta Cloud API | Evolution API (Baileys) | Z-API |
+|----------|--------|----------------|------------------------|-------|
+| **Custo/mês** | R$ 0 (trial) | R$ 0 (sandbox) | **R$ 0** (VPS já paga) | R$ 0 (2 dias trial) |
+| **Setup (horas)** | 2h | 4h | **1h** (Docker na VPS) | 1h (QR Code) |
+| **Número real necessário** | Não (sandbox) | Não (sandbox) | **Não** (pode usar número pessoal) | Sim |
+| **Reinicialização** | Sem estado | Sem estado | Persiste na VPS | Reconectar QR |
+| **Logs/Debug** | Dashboard Twilio | Meta Developers | **Logs diretos na VPS** | Dashboard web |
+| **Isolamento de dev/prod** | Fácil (2 projetos) | Médio | **Fácil** (2 instâncias Docker) | 2 planos |
+| **Recomendação** | ⭐⭐⭐ | ⭐⭐⭐ | ⭐⭐⭐⭐⭐ | ⭐⭐⭐ |
+| **Veredicto** | Funciona | Funciona | **Melhor: grátis + na VPS** | Funciona |
+
+---
+
+#### Ambiente 2 — Produção Pequena (até 2.000 msgs/mês)
+
+| Critério | Twilio | Meta Cloud API | Evolution API (Baileys) | Z-API |
+|----------|--------|----------------|------------------------|-------|
+| **Custo/mês** | ~R$ 85 (2.000 msgs × R$ 0,04 Meta + markup) | ~R$ 80 (BSP mínimo) | **R$ 0** (VPS já paga) | R$ 55–100 |
+| **Custo/mensagem** | ~R$ 0,07 | ~R$ 0,04 (Utility) | **R$ 0** | R$ 0 (flat) |
+| **Aprovação prévia** | Sim (semanas) | Sim (dias-semanas) | **Não** | **Não** |
+| **Risco de banimento** | ✅ Zero | ✅ Zero | ⚠️ Baixo-médio | ⚠️ Baixo-médio |
+| **Número verificado** | ✅ Sim | ✅ Sim | ❌ Não | ❌ Não |
+| **Botões interativos** | ✅ Sim | ✅ Sim (templates) | Parcial | Parcial |
+| **Suporte PT-BR** | ❌ Inglês | ❌ Inglês | Comunidade | **✅ BR** |
+| **Manutenção** | Zero | Zero | **Baixa** (VPS + Docker) | Zero |
+| **LGPD** | ⚠️ EUA | ⚠️ EUA/EU | **✅ Brasil (VPS)** | **✅ Brasil** |
+| **Recomendação** | ⭐⭐⭐ | ⭐⭐⭐ | **⭐⭐⭐⭐⭐** | ⭐⭐⭐⭐ |
+| **Veredicto** | Caro para volume baixo | Setup burocrático | **Melhor: custo zero na VPS** | Boa alternativa sem DevOps |
+
+---
+
+#### Ambiente 3 — Produção Média (2.000–10.000 msgs/mês)
+
+| Critério | Twilio | Meta Cloud API | Evolution API (Baileys) | Z-API |
+|----------|--------|----------------|------------------------|-------|
+| **Custo/mês (5.000 msgs)** | ~R$ 350 | ~R$ 400 (BSP + msgs) | **R$ 0** (VPS já paga) | R$ 55–100 |
+| **Custo/mês (10.000 msgs)** | ~R$ 700 | ~R$ 600 | **R$ 0** | R$ 55–100 |
+| **Escalabilidade** | Ilimitada | Ilimitada | ✅ Multi-instância VPS | Paga por instância |
+| **Múltiplos números** | Paga por número | Paga por número | **✅ N instâncias grátis** | R$ 55-100/número |
+| **Webhook entrega** | ✅ Robusto | ✅ Robusto | ✅ Implementado | ✅ Implementado |
+| **Uptime** | 99,99% (SLA) | 99,99% | Depende da VPS | 99,9% declarado |
+| **Risco de banimento** | ✅ Zero | ✅ Zero | ⚠️ Médio (volume alto) | ⚠️ Médio |
+| **Recomendação** | ⭐⭐ | ⭐⭐⭐ | **⭐⭐⭐⭐** | ⭐⭐⭐ |
+| **Veredicto** | Muito caro | Custo cresce com volume | **Melhor: sem custo por msg** | Custo fixo previsível |
+
+---
+
+#### Ambiente 4 — Produção Compliance / Escala (>10.000 msgs/mês ou número verificado)
+
+| Critério | Twilio | Meta Cloud API (BSP BR) | Evolution API (Cloud API mode) | Z-API |
+|----------|--------|--------------------------|-------------------------------|-------|
+| **Custo/mês (10.000 msgs)** | ~R$ 700 | ~R$ 600 (BSP + R$0,04/Utility) | **~R$ 400** (VPS já paga + Meta R$0,04/msg) | ❌ Alto risco neste volume |
+| **Conformidade TOS Meta** | ✅ Total | ✅ Total | ✅ Total (sem Baileys) | ❌ Não conforme |
+| **Número verificado** | ✅ Sim | ✅ Sim | ✅ Sim (via Meta direto) | ❌ Não |
+| **Selo de empresa verificada** | ✅ Sim | ✅ Sim | ✅ Sim | ❌ Não |
+| **Risco de banimento** | ✅ Zero | ✅ Zero | ✅ Zero | ⚠️ Alto em escala |
+| **Templates aprovados pela Meta** | ✅ Sim | ✅ Sim | ✅ Sim | ❌ Não suporta |
+| **Botões / Listas / Carousel** | ✅ Completo | ✅ Completo | ✅ Completo | Parcial |
+| **LGPD** | ⚠️ EUA | ⚠️ Depende do BSP | **✅ Brasil (VPS)** | ✅ Brasil |
+| **Suporte enterprise** | ✅ Twilio | ✅ BSP BR (Hablla, Digisac) | Comunidade | Suporte BR |
+| **Setup** | Semanas | Semanas | **1 semana** | ❌ Não indicado |
+| **Recomendação** | ⭐⭐⭐ | ⭐⭐⭐⭐ | **⭐⭐⭐⭐⭐** | ❌ |
+| **Veredicto** | Caro + dados nos EUA | Boa opção com BSP BR | **Melhor: VPS própria + Meta oficial** | Não indicado para este volume |
+
+---
+
+### 26.6 Decisão Recomendada (com VPS própria disponível)
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│  VPS JÁ DISPONÍVEL → Evolution API é a âncora em todos os ambientes    │
+└─────────────────────────────────────────────────────────────────────────┘
+
+DEV/HOMOLOGAÇÃO
+  └─► Evolution API (Baileys) na VPS
+      • Instância Docker separada: evolution-dev
+      • Custo: R$ 0 (VPS já paga)
+      • Setup: 1h
+
+PRODUÇÃO — FASE 1 (até 5.000 msgs/mês, início rápido)
+  └─► Evolution API (Baileys) na VPS
+      • Instância Docker: evolution-prod
+      • Custo: R$ 0 adicional
+      • Risco de banimento: baixo-médio (monitorar)
+      • Setup: 1-2h
+
+PRODUÇÃO — FASE 2 (quando quiser número verificado OU > 5.000 msgs/mês)
+  └─► Evolution API no modo Cloud API oficial na VPS
+      • Mesma VPS, mesmo endpoint, campo extra no config
+      • Custo: R$ 0 (VPS) + R$ 0,04/msg Meta (Utility)
+      • Risco de banimento: ZERO
+      • Setup: 3-5 dias (verificação Meta Business)
+
+FALLBACK (se VPS ficar fora)
+  └─► Z-API (R$ 55-100/mês) — SaaS BR, sem infraestrutura
+```
+
+---
+
+### 26.7 Comparativo Consolidado — Scorecard Final (com VPS disponível)
+
+| Critério (peso) | Twilio | Meta via BSP | Evolution Baileys | Evolution Cloud API | Z-API |
+|-----------------|--------|-------------|-------------------|---------------------|-------|
+| **Custo total (30%)** | ⭐⭐ | ⭐⭐⭐ | ⭐⭐⭐⭐⭐ | ⭐⭐⭐⭐ | ⭐⭐⭐⭐ |
+| **Conformidade TOS (20%)** | ⭐⭐⭐⭐⭐ | ⭐⭐⭐⭐⭐ | ⭐⭐ | ⭐⭐⭐⭐⭐ | ⭐⭐ |
+| **Facilidade setup (15%)** | ⭐⭐⭐ | ⭐⭐ | ⭐⭐⭐⭐⭐ | ⭐⭐⭐ | ⭐⭐⭐⭐⭐ |
+| **LGPD / dados BR (15%)** | ⭐⭐ | ⭐⭐⭐ | ⭐⭐⭐⭐⭐ | ⭐⭐⭐⭐⭐ | ⭐⭐⭐⭐⭐ |
+| **Recursos (templates, botões) (10%)** | ⭐⭐⭐⭐⭐ | ⭐⭐⭐⭐⭐ | ⭐⭐⭐ | ⭐⭐⭐⭐⭐ | ⭐⭐⭐ |
+| **Escalabilidade (10%)** | ⭐⭐⭐⭐⭐ | ⭐⭐⭐⭐⭐ | ⭐⭐⭐⭐ | ⭐⭐⭐⭐⭐ | ⭐⭐⭐ |
+| **Score ponderado** | 3,1 | 3,4 | **4,3** | **4,7** | 3,7 |
+| **Indicado para** | Infra Twilio existente | Empresa com CNPJ verificado | Início rápido + VPS | **Produção ideal** | Sem DevOps |
+
+> **Vencedor com VPS disponível: Evolution API no modo Cloud API oficial** — custo mínimo, compliance total, dados no Brasil, escala ilimitada.
+
+---
+
+### 26.8 Itens Pendentes de Implementação
+
+| # | Item | Prioridade | Provedor | Status |
+|---|------|------------|----------|--------|
+| W-01 | Adicionar `modo_evolution` (`BAILEYS`/`CLOUD_API`) ao model `ConfiguracaoWhatsApp` + migration | P1 | Evolution | — |
+| W-02 | Campos `phone_number_id` + `meta_access_token` no model para modo Cloud API | P1 | Evolution | — |
+| W-03 | `ServicoWhatsApp._enviar_evolution()` — branch por `modo_evolution` (endpoint e payload diferentes) | P1 | Evolution | — |
+| W-04 | **Webhook Evolution modo Cloud API** — payload diferente do Baileys; atualizar `webhook_evolution()` | P2 | Evolution | — |
+| W-05 | **Teste de conexão** para modo Cloud API (`GET /<instancia>/instance/connectionState`) | P2 | Evolution | — |
+| W-06 | **Templates interativos** — `corpo_whatsapp_interativo` (JSON) com botões para Evolution Cloud API e Meta | P3 | Evolution / Meta | — |
+| W-07 | **BSP brasileiro** — testar com Hablla ou Poli Digital como alternativa ao Evolution direto | P3 | Meta via BSP | — |
+| W-08 | **Status de entrega unificado** — normalizar `DELIVERED/READ` entre provedores | P3 | Todos | — |
+
+---
+
+### 26.9 Configuração Docker — Evolution API na VPS
+
+```yaml
+# docker-compose.evolution.yml (na VPS)
+services:
+  evolution-dev:
+    image: atendai/evolution-api:latest
+    ports: ["8080:8080"]
+    environment:
+      - SERVER_URL=http://sua-vps:8080
+      - AUTHENTICATION_API_KEY=sua-chave-dev
+      - DATABASE_ENABLED=true
+    volumes: ["./evolution-dev-data:/evolution/store"]
+
+  evolution-prod:
+    image: atendai/evolution-api:latest
+    ports: ["8081:8080"]
+    environment:
+      - SERVER_URL=http://sua-vps:8081
+      - AUTHENTICATION_API_KEY=sua-chave-prod
+      - DATABASE_ENABLED=true
+      # Modo Cloud API oficial (W-01):
+      # - CLOUD_API_ENABLED=true
+      # - CLOUD_API_PHONE_NUMBER_ID=seu-phone-number-id
+      # - CLOUD_API_ACCESS_TOKEN=seu-access-token-meta
+    volumes: ["./evolution-prod-data:/evolution/store"]
+```
+
+**Custo total na VPS:** R$ 0 adicional (VPS já contratada).
+
+---
+
+### 26.10 Comparativo com Concorrentes
+
+| Sistema | Provedor WhatsApp | Custo estimado |
+|---------|-------------------|----------------|
+| LoteWin | Meta Cloud API via BSP | R$ 400–800/mês |
+| GELOT | Z-API ou Evolution | R$ 80–150/mês |
+| SGL | Twilio | R$ 300–700/mês |
+| SmartIPTU | Meta Cloud API direto | R$ 300–600/mês |
+| **Este Sistema (com VPS)** | **Evolution API (VPS própria)** | **R$ 0–120/mês** |
+
 ### 25.6 Endpoint Dedicado de Notificações (J-09)
 
 | Item | Implementação | Status |
@@ -1277,3 +1559,323 @@ X-Task-Token: <valor de TASK_TOKEN no painel Render>
 | `POST /api/tasks/processar-notificacoes/` | Fila + vencimentos + inadimplentes em sequência | ✅ |
 | `task_processar_notificacoes` | `core/tasks.py` + URL em `core/urls.py` | ✅ |
 | Quando usar | Quando quiser notificações mais frequentes que o `run-all` (ex.: a cada 6h) | ✅ |
+
+---
+
+## 27. CHATBOT WHATSAPP — 2ª VIA, COMPROVANTE E ATENDIMENTO AUTOMÁTICO
+
+> **Contexto:** cliente envia mensagem para o número WhatsApp da imobiliária e recebe
+> automaticamente: 2ª via de boleto, linha digitável, envio de comprovante de pagamento,
+> situação de boletos em atraso e resumo financeiro — sem intervenção humana.
+>
+> **Base técnica:** Evolution API (já implementado). O webhook atual já recebe
+> `messages.upsert` mas ignora `fromMe=False` (linha 478 de `notificacoes/views.py`).
+> Esta seção especifica o que adicionar a partir desse ponto de entrada.
+
+---
+
+### 27.1 Fluxos Implementados
+
+#### Fluxo A — Identificação do Cliente
+
+```
+Cliente envia qualquer mensagem
+        │
+        ▼
+webhook_evolution() ── fromMe=False? ──► WhatsAppBotService.processar()
+        │
+        ▼
+Busca Comprador por telefone E.164
+        │
+    Encontrou? ──Não──► "Olá! Informe seu CPF para acessar seus boletos:"
+        │                      │
+       Sim                     ▼ (cliente responde com CPF)
+        │               Busca por CPF → encontrou → salva sessão → continua
+        ▼
+Exibe menu principal (ver 27.1B)
+```
+
+#### Fluxo B — Menu Principal
+
+```
+🏠 *Gestão de Contratos*
+Olá, [Nome]! Como posso ajudar?
+
+1️⃣ 2ª via de boleto
+2️⃣ Boletos em atraso
+3️⃣ Enviar comprovante de pagamento
+4️⃣ Meu resumo financeiro
+0️⃣ Falar com atendente
+
+Responda com o número da opção.
+```
+
+#### Fluxo C — 2ª Via de Boleto
+
+```
+Cliente escolhe "1" ou digita "segunda via" / "boleto"
+        │
+        ▼
+Lista parcelas PENDENTES + VENCIDAS (até 5):
+  📄 Parc. 3 — Venc. 10/05/2026 — R$ 850,00
+  📄 Parc. 4 — Venc. 10/06/2026 — R$ 850,00
+  ...
+"Qual parcela deseja? Responda com o número."
+        │
+        ▼
+Cliente responde "1" → seleciona parcela
+        │
+        ▼
+BoletoService.gerar_segunda_via() ── sem boleto? ──► gerar novo boleto
+        │
+        ▼
+Envia texto:
+  ✅ *2ª Via — Parcela 3*
+  📋 Linha digitável: 00190.00009 02625...
+  📅 Vencimento: 10/05/2026
+  💰 Valor: R$ 850,00
+
+Envia PDF do boleto via sendMedia (Evolution)
+```
+
+#### Fluxo D — Boletos em Atraso
+
+```
+Cliente escolhe "2" ou digita "atraso" / "vencido" / "atrasado"
+        │
+        ▼
+Lista parcelas VENCIDAS com encargos calculados:
+  ⚠️ *Boletos em Atraso*
+  📄 Parc. 1 — Venc. 10/03/2026
+     Principal: R$ 850,00
+     Juros + Multa: R$ 42,50
+     *Total hoje: R$ 892,50*
+
+  📄 Parc. 2 — Venc. 10/04/2026
+     ...
+
+"Deseja a 2ª via de alguma dessas parcelas? (número ou 0 para voltar)"
+        │
+        ▼
+Segue Fluxo C com a parcela selecionada
+```
+
+#### Fluxo E — Comprovante de Pagamento
+
+```
+Cliente escolhe "3" OU envia imagem/PDF diretamente
+        │
+        ▼
+"Qual parcela este comprovante se refere?"
+Lista parcelas aguardando pagamento
+        │
+        ▼ (cliente seleciona)
+Baixa o arquivo do Evolution API (base64 → arquivo)
+        │
+        ▼
+Salva em HistoricoPagamento.comprovante (FileField)
+Cria Notificacao interna para admin revisar
+        │
+        ▼
+"✅ Comprovante recebido! Nossa equipe confirmará em até 1 dia útil."
+Notificação push para admin (email + painel)
+```
+
+#### Fluxo F — Resumo Financeiro
+
+```
+Cliente escolhe "4"
+        │
+        ▼
+Contrato.get_resumo_financeiro()
+        │
+        ▼
+📊 *Seu Resumo — Contrato #001*
+✅ Parcelas pagas: 12 de 60
+💰 Total pago: R$ 10.200,00
+📅 Próximo vencimento: 10/05/2026 — R$ 850,00
+⚠️ Em atraso: 0 parcelas
+📈 Progresso: 20%
+```
+
+---
+
+### 27.2 Modelo de Sessão de Conversa
+
+```python
+# notificacoes/models.py — novo modelo
+class SessaoConversaWhatsApp(models.Model):
+    """
+    Estado da conversa por número de telefone.
+    Armazenado no banco; Redis seria mais rápido mas requer infra extra.
+    TTL: limpar sessões com updated_at > 30 minutos (management command).
+    """
+    class Estado(models.TextChoices):
+        IDLE                    = 'IDLE',                    'Aguardando'
+        AGUARDANDO_CPF          = 'AGUARDANDO_CPF',          'Aguardando CPF'
+        MENU_PRINCIPAL          = 'MENU_PRINCIPAL',          'Menu principal'
+        AGUARDANDO_PARCELA_2VIA = 'AGUARDANDO_PARCELA_2VIA', 'Seleção 2ª via'
+        AGUARDANDO_PARCELA_COMP = 'AGUARDANDO_PARCELA_COMP', 'Seleção comprovante'
+        AGUARDANDO_COMPROVANTE  = 'AGUARDANDO_COMPROVANTE',  'Enviando comprovante'
+
+    telefone    = models.CharField(max_length=20, unique=True, db_index=True)
+    comprador   = models.ForeignKey('financeiro.Comprador', null=True, blank=True,
+                                    on_delete=models.SET_NULL)
+    estado      = models.CharField(max_length=30, choices=Estado.choices,
+                                    default=Estado.IDLE)
+    contexto    = models.JSONField(default=dict)   # parcelas_ids, contrato_id etc.
+    config_wa   = models.ForeignKey('ConfiguracaoWhatsApp', null=True,
+                                    on_delete=models.SET_NULL)
+    updated_at  = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = 'Sessão WhatsApp'
+```
+
+---
+
+### 27.3 Serviço do Chatbot
+
+```python
+# notificacoes/whatsapp_bot.py — novo arquivo
+class WhatsAppBotService:
+
+    def processar(self, telefone, mensagem, tipo_msg, media_b64, config_wa): ...
+    # Despacha para o estado correto da sessão
+
+    def _identificar_comprador(self, telefone): ...
+    # Busca por Comprador.telefone normalizado E.164
+
+    def _menu_principal(self, sessao): ...
+    def _fluxo_2a_via(self, sessao, mensagem): ...
+    def _fluxo_atraso(self, sessao, mensagem): ...
+    def _fluxo_comprovante(self, sessao, mensagem, media_b64): ...
+    def _fluxo_resumo(self, sessao): ...
+
+    def _responder(self, telefone, texto, config_wa): ...
+    # ServicoWhatsApp._enviar_evolution() já existente
+
+    def _enviar_pdf(self, telefone, pdf_bytes, filename, config_wa): ...
+    # POST /message/sendMedia/{instancia} (base64)
+
+    def _baixar_media(self, message_id, config_wa): ...
+    # GET /message/download-media/{instancia}/{messageId}
+```
+
+---
+
+### 27.4 Mudanças no Webhook Existente
+
+```python
+# notificacoes/views.py — webhook_evolution() — adicionar após linha 478:
+
+# fromMe=False → mensagem recebida do cliente → chatbot
+if not from_me and is_upsert:
+    _processar_mensagem_inbound(item, config, request)
+    continue
+```
+
+```python
+def _processar_mensagem_inbound(item, config, request):
+    """Extrai texto/mídia e despacha para WhatsAppBotService."""
+    remote_jid = item.get('key', {}).get('remoteJid', '')
+    telefone = remote_jid.replace('@s.whatsapp.net', '')
+
+    msg_content = item.get('message', {})
+    texto = (
+        msg_content.get('conversation')
+        or msg_content.get('extendedTextMessage', {}).get('text', '')
+        or ''
+    ).strip()
+
+    # Mídia (imagem/documento = comprovante)
+    tipo_msg = 'text'
+    media_b64 = None
+    if 'imageMessage' in msg_content or 'documentMessage' in msg_content:
+        tipo_msg = 'media'
+        # Download lazy — feito dentro do bot se necessário
+
+    WhatsAppBotService().processar(
+        telefone=telefone,
+        mensagem=texto,
+        tipo_msg=tipo_msg,
+        media_b64=media_b64,
+        config_wa=config,
+    )
+```
+
+---
+
+### 27.5 Plano de Implementação
+
+#### Fase 1 — Infraestrutura (P1)
+
+| # | Item | Arquivo | Status |
+|---|------|---------|--------|
+| C-01 | Model `SessaoConversaWhatsApp` + migration | `notificacoes/models.py` | — |
+| C-02 | Webhook: rotear `fromMe=False` para `_processar_mensagem_inbound()` | `notificacoes/views.py` | — |
+| C-03 | `WhatsAppBotService.processar()` — dispatcher por estado | `notificacoes/whatsapp_bot.py` | — |
+| C-04 | Identificação por telefone + fallback CPF (Fluxo A) | `notificacoes/whatsapp_bot.py` | — |
+| C-05 | Menu principal (Fluxo B) | `notificacoes/whatsapp_bot.py` | — |
+
+#### Fase 2 — 2ª Via e Atraso (P1)
+
+| # | Item | Arquivo | Status |
+|---|------|---------|--------|
+| C-06 | Fluxo C — 2ª via: lista parcelas + `gerar_segunda_via()` + envio PDF | `notificacoes/whatsapp_bot.py` | — |
+| C-07 | Fluxo D — boletos em atraso: encargos calculados + linha digitável | `notificacoes/whatsapp_bot.py` | — |
+| C-08 | `_enviar_pdf()` — `POST /message/sendMedia/{instancia}` (base64) | `notificacoes/whatsapp_bot.py` | — |
+
+#### Fase 3 — Comprovante (P2)
+
+| # | Item | Arquivo | Status |
+|---|------|---------|--------|
+| C-09 | Fluxo E — receber mídia + `_baixar_media()` via Evolution API | `notificacoes/whatsapp_bot.py` | — |
+| C-10 | Salvar em `HistoricoPagamento.comprovante` + notificação admin | `notificacoes/whatsapp_bot.py` | — |
+| C-11 | Admin: fila de comprovantes pendentes de revisão | `notificacoes/admin.py` | — |
+
+#### Fase 4 — UX e Robustez (P2)
+
+| # | Item | Arquivo | Status |
+|---|------|---------|--------|
+| C-12 | Fluxo F — resumo financeiro | `notificacoes/whatsapp_bot.py` | — |
+| C-13 | Management command `limpar_sessoes_whatsapp` — remove sessões > 30 min | `notificacoes/management/` | — |
+| C-14 | Timeout de sessão: mensagem de aviso após 20 min sem resposta | `notificacoes/whatsapp_bot.py` | — |
+| C-15 | Opção "0 — Falar com atendente": pausa bot + notifica staff por email | `notificacoes/whatsapp_bot.py` | — |
+| C-16 | Testes unitários: 20 casos (identificação, fluxos A–F, estados, edge cases) | `tests/unit/notificacoes/test_whatsapp_bot.py` | — |
+
+---
+
+### 27.6 Dependências e Integrações Existentes
+
+| Recurso existente | Reutilizado em |
+|-------------------|----------------|
+| `BoletoService.gerar_segunda_via()` | Fluxo C (2ª via) |
+| `ServicoWhatsApp._enviar_evolution()` | Todos os fluxos (resposta texto) |
+| `ServicoWhatsApp._normalizar_numero()` | Identificação por telefone |
+| `Parcela.calcular_encargos()` | Fluxo D (boletos em atraso) |
+| `Contrato.get_resumo_financeiro()` | Fluxo F |
+| `HistoricoPagamento.comprovante` (FileField) | Fluxo E |
+| `AcessoComprador` (Portal do Comprador) | Identificação alternativa |
+| Redis (já disponível) | Cache de sessão opcional (fase futura) |
+
+---
+
+### 27.7 Palavras-chave Reconhecidas (Intents)
+
+| Intenção | Palavras-chave |
+|----------|---------------|
+| 2ª via | `segunda via`, `2a via`, `boleto`, `2ª via`, `1` |
+| Atraso | `atraso`, `atrasado`, `vencido`, `em atraso`, `2` |
+| Comprovante | `comprovante`, `paguei`, `pagamento`, `enviar comprovante`, `3` |
+| Resumo | `saldo`, `resumo`, `situação`, `meu contrato`, `4` |
+| Atendente | `atendente`, `humano`, `pessoa`, `falar com`, `0` |
+| Cancelar/Voltar | `cancelar`, `voltar`, `sair`, `menu` |
+
+---
+
+### 27.8 Adição ao Execution Order
+
+| Fase | Escopo | Status |
+|------|--------|--------|
+| **23** | ⭐ **Chatbot WhatsApp — 2ª via, atraso, comprovante** | — |

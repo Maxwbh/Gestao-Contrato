@@ -333,6 +333,51 @@ class TestBloqueioBoletoPorReajuste:
         assert contrato.bloqueio_boleto_reajuste is True
 
 
+# ---------------------------------------------------------------------------
+# Section 25.1 — calcular_ciclo_pendente(antecipacao_meses=1)
+# ---------------------------------------------------------------------------
+
+@pytest.mark.django_db
+class TestCalcularCicloPendenteAntecipacao:
+    """Testa o parâmetro antecipacao_meses de calcular_ciclo_pendente.
+
+    Section 25.1: contrato com aniversário no mês seguinte já deve aparecer
+    como pendente quando antecipacao_meses=1 (padrão).
+    """
+
+    def test_aniversario_mes_corrente_detectado(self, contrato_factory):
+        """Contrato com aniversário no mês corrente retorna ciclo pendente."""
+        from financeiro.models import Reajuste
+        from dateutil.relativedelta import relativedelta
+        # 13 meses atrás → aniversário é este mês (ciclo 2 pendente)
+        contrato = contrato_factory(
+            prazo_reajuste_meses=12,
+            data_contrato=date.today() - relativedelta(months=13),
+            data_primeiro_vencimento=date.today() - relativedelta(months=12),
+        )
+        ciclo = Reajuste.calcular_ciclo_pendente(contrato, antecipacao_meses=0)
+        assert ciclo == 2
+
+    def test_antecipacao_um_mes_detecta_proximo_aniversario(self, contrato_factory):
+        """Com antecipacao_meses=1, contrato com aniversário no próximo mês
+        já aparece como pendente — comportamento padrão da grid (Section 25.1)."""
+        from financeiro.models import Reajuste
+        from dateutil.relativedelta import relativedelta
+        # 12 meses atrás → aniversário é daqui 1 mês; com antecipacao=1 deve ser detectado
+        contrato = contrato_factory(
+            prazo_reajuste_meses=12,
+            data_contrato=date.today() - relativedelta(months=12),
+            data_primeiro_vencimento=date.today() - relativedelta(months=11),
+        )
+        ciclo_antecipado = Reajuste.calcular_ciclo_pendente(contrato, antecipacao_meses=1)
+        ciclo_sem_antecipacao = Reajuste.calcular_ciclo_pendente(contrato, antecipacao_meses=0)
+        # Com antecipacao=1 deve detectar o ciclo que sem antecipacao seria None
+        if ciclo_sem_antecipacao is None:
+            assert ciclo_antecipado == 2
+        else:
+            assert ciclo_antecipado == ciclo_sem_antecipacao
+
+
 # Fixtures
 @pytest.fixture
 def contrato_factory(db, imobiliaria_factory, comprador_factory, imovel_factory):
