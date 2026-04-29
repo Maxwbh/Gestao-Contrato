@@ -458,3 +458,60 @@ class TestEnvioEmail(TestCase):
         # Verificar
         # Resultado pode ser True se email foi enviado, False se houve erro
         self.assertIn(resultado, [True, False, None])
+
+
+# ---------------------------------------------------------------------------
+# Section 25.5 — task_atualizar_indices (J-08)
+# ---------------------------------------------------------------------------
+
+class TestAtualizarIndicesTask(TestCase):
+    """Testes para atualizar_indices_sync() e task_atualizar_indices (J-08).
+
+    J-08: toda segunda 07:00 BRT via cron-job.org — importa 7 índices incrementalmente.
+    """
+
+    @patch('financeiro.services.indices_economicos_service.IndicesEconomicosService')
+    def test_atualizar_indices_sync_retorna_result(self, mock_service_cls):
+        """atualizar_indices_sync() retorna TaskResult com campos esperados."""
+        from core.tasks import atualizar_indices_sync
+
+        mock_service = mock_service_cls.return_value
+        mock_service.importar_indices.return_value = {'criados': 3, 'atualizados': 1}
+        mock_service.erros = []
+
+        result = atualizar_indices_sync()
+
+        assert hasattr(result, 'success')
+        assert hasattr(result, 'messages')
+        # 7 índices: IPCA, INPC, IGPM, INCC, IGPDI, SELIC, TR
+        assert mock_service.importar_indices.call_count == 7
+
+    @patch('financeiro.services.indices_economicos_service.IndicesEconomicosService')
+    def test_atualizar_indices_sync_tolerante_a_falhas(self, mock_service_cls):
+        """atualizar_indices_sync() não levanta exception quando 1 índice falha."""
+        from core.tasks import atualizar_indices_sync
+
+        mock_service = mock_service_cls.return_value
+        mock_service.importar_indices.side_effect = [
+            {'criados': 2, 'atualizados': 0},  # IPCA ok
+            Exception('API indisponível'),       # INPC falha
+            {'criados': 1, 'atualizados': 0},  # IGPM ok
+            {'criados': 1, 'atualizados': 0},  # INCC ok
+            {'criados': 1, 'atualizados': 0},  # IGPDI ok
+            {'criados': 1, 'atualizados': 0},  # SELIC ok
+            {'criados': 1, 'atualizados': 0},  # TR ok
+        ]
+        mock_service.erros = []
+
+        # Não deve levantar exception
+        result = atualizar_indices_sync()
+        assert result is not None
+        assert len(result.errors) >= 1  # registrou o erro do INPC
+
+    def test_task_atualizar_indices_endpoint_rejeita_sem_token(self):
+        """task_atualizar_indices rejeita POST sem TASK_TOKEN configurado (→ 401/403/503)."""
+        from django.test import Client
+        c = Client()
+        response = c.post('/api/tasks/atualizar-indices/')
+        # 401/403 = token ausente/inválido; 503 = TASK_TOKEN not configured
+        assert response.status_code in (401, 403, 503)
