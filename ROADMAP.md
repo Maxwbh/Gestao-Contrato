@@ -2,7 +2,7 @@
 
 **Desenvolvedor:** Maxwell da Silva Oliveira (maxwbh@gmail.com)
 **Empresa:** M&S do Brasil LTDA
-**Última atualização:** 2026-04-28 (rev 15)
+**Última atualização:** 2026-05-04 (rev 16)
 
 > Pendentes organizados por prioridade.
 > Para documentação do sistema atual, consulte **[SISTEMA.md](SISTEMA.md)**.
@@ -170,7 +170,7 @@
 
 ## 7. TESTES AUTOMATIZADOS
 
-**Meta:** > 80% de cobertura | **Atual:** 960 testes passando (947 + 13 novos — revisão HU 2026-04-28)
+**Meta:** > 80% de cobertura | **Atual:** 981 testes passando (957 + 24 novos — HU Fluxo Completo 2026-05-04)
 
 ### 7.1 P1 — Apps sem nenhum teste (~104 testes) ✅ CONCLUÍDO
 | Arquivo | Escopo | Qtd | Status |
@@ -247,6 +247,30 @@ Suite de 947 testes executada integralmente. Todos os cenários HU verificados:
 
 **Gaps confirmados sem cobertura (implementações futuras):**
 - Sec 27 — Chatbot WhatsApp (C-01..C-16): funcionalidade não implementada; testes serão adicionados ao implementar.
+
+### 7.8 HU Fluxo Completo — Ciclo de Vida do Contrato (2026-05-04) ✅
+
+Suite de 24 testes cobrindo os 9 marcos de negócio do ciclo de vida completo de um contrato imobiliário:
+
+| Marco | Descrição | Classe de Teste |
+|-------|-----------|----------------|
+| Passo 1-2 | Criação contrato IPCA+Price+TabelaJuros · 36 parcelas · validação PMT | `TestCriacaoContrato` (5 testes) |
+| Passo 3   | Pagamento manual via `pagar_parcela_ajax` · HistoricoPagamento MANUAL | `TestPagamentoManual` (3 testes) |
+| Passo 4   | Reajuste ciclo 2 — 5% modo legado · fórmula Price composta `PMT × (1+IPCA) × (1+taxa)^prazo` | `TestReajusteCiclo2` (3 testes) |
+| Passo 5   | Carnê 20 meses — ciclos 1 e 2 liberados · mock `gerar_boleto` | `TestGeracaoCarne20Meses` (2 testes) |
+| Passo 6   | Bloqueio ciclo 3 em lote (`max_parcela_lote` na view) · `pode_gerar_boleto` True p/ ciclo futuro | `TestBloqueioReajusteCiclo3` (2 testes) |
+| Passo 7   | Carnê PDF 6 meses · mock `BoletoService.gerar_carne` · Content-Type PDF | `TestCarnePDF6Meses` (3 testes) |
+| Passo 8   | Quitação manual 3 parcelas sequencialmente | `TestQuitacaoManualLote` (1 teste) |
+| Passo 9   | Quitação via OFX · mock BRCobrança · `nosso_numero_extraido` · HistoricoPagamento OFX | `TestQuitacaoOFX` (4 testes) |
+| E2E       | Teste sequencial único percorrendo todos os 9 passos em uma transação | `TestHUFluxoCompleto` (1 teste) |
+
+**Arquivo:** `tests/unit/financeiro/test_hu_fluxo_completo.py` · **Total:** 24 testes · **Resultado:** ✅ 24/24 pass
+
+**Insights de comportamento documentados:**
+- Modo Tabela Price: reajuste aplica `PMT × (1 + IPCA) × (1 + taxa_mensal)^prazo` (não simples × IPCA)
+- `pode_gerar_boleto()` retorna `True` para ciclos futuros (bloqueio de lote é feito por `max_parcela_lote` em `gerar_carne`)
+- `pagar_parcela_ajax` lê `request.POST` (form data), `gerar_carne` e `download_carne_pdf` leem corpo JSON
+- OFX reconciliação prioriza `nosso_numero_extraido` para identificar a parcela correta
 
 ### 7.5 Infraestrutura de Testes ✅ CONCLUÍDO (P2)
 | Prioridade | Item | Status |
