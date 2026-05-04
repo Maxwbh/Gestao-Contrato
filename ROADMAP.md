@@ -272,6 +272,168 @@ Suite de 24 testes cobrindo os 9 marcos de negócio do ciclo de vida completo de
 - `pagar_parcela_ajax` lê `request.POST` (form data), `gerar_carne` e `download_carne_pdf` leem corpo JSON
 - OFX reconciliação prioriza `nosso_numero_extraido` para identificar a parcela correta
 
+### 7.9 HU Ciclos Completos Pendentes de Teste E2E — Planejamento (2026-05-04)
+
+Auditoria identificou 4 histórias de usuário totalmente implementadas no sistema mas **sem cobertura de ciclo completo ponta a ponta**. Cada uma exercita caminhos de código radicalmente diferentes do `test_hu_fluxo_completo.py` (básico 36p + 1 TabelaJuros + sem intermediárias).
+
+#### 7.9.1 — HU-360: Juros Escalantes + Intermediárias (PRIORIDADE P1)
+
+> **Referência:** Seções 13 e 14 do ROADMAP. Implementação 100% concluída — falta cobertura E2E.
+
+**Contexto:** `TestCenarioA-E` em `test_hu_parcelas_reajuste.py` testam cenários isolados de amortização, mas nenhum percorre os 4 ciclos com taxa escalante + intermediárias + pagamento + reajuste + bloqueio.
+
+**Arquivo proposto:** `tests/unit/contratos/test_hu_360_juros_escalantes.py`
+
+**Cenário do contrato:**
+- Imóvel R$ 350.000 · Entrada R$ 100.000 · Financiado R$ 250.000
+- 120 parcelas (10 anos) · Dia vencimento: 10 · IPCA · prazo_reajuste: 12 meses
+- `intermediarias_reduzem_pmt = True`
+- `TabelaJurosContrato`: ciclo 1 = 0,00%, ciclo 2 = 0,60%, ciclo 3 = 0,65%, ciclo 4+ = 0,70%
+- Intermediárias: R$ 5.000 a cada 6 meses (semestral), 20 registros
+- Contrato criado há 26 meses → ciclos 1, 2 já vencidos; ciclo 3 vencido há 2 meses
+
+**Passos do fluxo E2E (teste sequencial único):**
+
+| Passo | Marco | Cenários de Teste |
+|-------|-------|-------------------|
+| P1 | Criação do contrato e validação financeira | PMT ciclo 1 = `(PV − Σinter) / n`; 120 parcelas NORMAL criadas; 20 intermediárias criadas; saldo devedor correto |
+| P2 | Ciclo 1 — parcela linear sem juros | Todas as 12 parcelas do ciclo 1 com valor `PV_liquido/n`; amortizacao=None (sem TabelaJuros ciclo 1 taxa=0); boleto ciclo 1 liberado |
+| P3 | Pagamento da 1ª intermediária (mês 6) | POST `gerar_boleto_intermediaria` → Parcela INTERMEDIARIA criada; pagar via `pagar_parcela_ajax`; `PrestacaoIntermediaria.paga=True` |
+| P4 | Reajuste ciclo 2 — IPCA 5% + taxa 0,60% | `preview_reajuste()` com `MODO TABELA PRICE`; PMT_novo = `saldo_atualizado × 0,006 / (1 − (1,006)^-108)`; parcelas 13-120 atualizadas; intermediárias reajustadas em 5% se `intermediarias_reajustadas=True` |
+| P5 | Bloqueio e liberação ciclo 2 | Antes do reajuste ciclo 2: `pode_gerar_boleto(13)` = False; após reajuste: = True; gerar carnê parcelas 13-24 liberado |
+| P6 | Pagamento 2ª intermediária reajustada | Valor da intermediária reflete +5%; pagar → `PrestacaoIntermediaria.paga=True`; `valor_reajustado` preenchido |
+| P7 | Reajuste ciclo 3 — IPCA 4% + taxa 0,65% | PMT recalculado sobre saldo residual com nova taxa 0,65%; parcelas 25-120 atualizadas; ciclo 2 parcelas permanecem no valor do ciclo 2 |
+| P8 | Bloqueio cascata ciclo 2 pendente | Zerar reajuste ciclo 2 → `pode_gerar_boleto(25)` = False por cascata (ciclo 2 pendente bloqueia ciclo 3+) |
+
+**Classes de teste focadas (além do E2E):**
+
+| Classe | Testes | Foco |
+|--------|--------|------|
+| `TestCriacaoHU360` | 5 | PMT com PV_liquido; count parcelas; count intermediárias; saldo devedor; `intermediarias_reduzem_pmt` |
+| `TestTabelaJurosEscalantes` | 4 | `get_juros_para_ciclo(1)` = 0; `(2)` = 0.6; `(3)` = 0.65; `(4+)` = 0.70 |
+| `TestPagamentoIntermediaria` | 4 | Gerar boleto intermediária; pagar; `PrestacaoIntermediaria.paga`; vencida sem boleto → alert |
+| `TestReajusteHU360Ciclo2` | 5 | PMT recalculado corretamente; saldo devedor reflete IPCA; intermediárias reajustadas; ciclo 1 parcelas intactas; `ciclo_reajuste_atual=2` |
+| `TestReajusteHU360Ciclo3` | 4 | PMT ciclo 3 com taxa 0,65%; parcelas 25-120 atualizadas; parcelas 13-24 com valor ciclo 2 preservado; saldo devedor diminui progressivamente |
+| `TestBloqueioHU360Cascata` | 3 | Cascata bloqueia desde ciclo 2; desfazer reajuste ciclo 2 re-bloqueia ciclo 3; `gerar_carne` limita ao ciclo 2 |
+
+**Total estimado:** ~25 testes
+
+---
+
+#### 7.9.2 — HU Rescisão e Cessão Contratual (PRIORIDADE P2)
+
+> **Referência:** Seção 11 gaps G-03, G-04, G-05, G-11, G-12, G-16. Implementação concluída. Cobertura atual: 3 testes superficiais de status HTTP (smoke), sem verificação dos valores calculados.
+
+**Arquivo proposto:** `tests/unit/contratos/test_hu_rescisao_cessao.py`
+
+**Cenário do contrato:**
+- Imóvel R$ 200.000 · Entrada R$ 30.000 · Financiado R$ 170.000 · 48 parcelas · IPCA
+- `percentual_fruicao = 0.5%/mês` · `percentual_multa_rescisao_penal = 10%` · `percentual_multa_rescisao_adm = 12%` · `percentual_cessao = 3%`
+- Contrato criado há 6 meses; 4 parcelas pagas; saldo devedor = 44 parcelas restantes
+
+**Passos do fluxo E2E:**
+
+| Passo | Marco | Cenários de Teste |
+|-------|-------|-------------------|
+| P1 | Setup contrato + pagamento parcial | 4 parcelas pagas; saldo devedor correto |
+| P2 | Calcular rescisão pelo comprador | `calcular_rescisao()` retorna dict com: valor_pago (R$ devolvido), fruicao, multa_penal, multa_adm, mora_pro_rata; valor_a_devolver = pago − fruição − multa_penal − multa_adm |
+| P3 | Validação fórmula fruição | fruicao = `saldo_devedor × percentual_fruicao/100 × meses_ocupacao` |
+| P4 | Validação fórmula mora pro rata | mora = `valor_atraso × taxa_diaria × dias_atraso`; taxa_diaria = `percentual_juros_mora / 30` |
+| P5 | Calcular cessão de direitos | `calcular_cessao()` retorna `taxa_cessao = saldo_devedor × 3%`; view renderiza com dados do contrato |
+| P6 | Rescisão por inadimplência (vendedor) | Múltiplas parcelas em atraso → cálculo inclui mora acumulada; valor_a_devolver menor |
+
+**Classes de teste focadas:**
+
+| Classe | Testes | Foco |
+|--------|--------|------|
+| `TestCalcularRescisao` | 6 | Fórmula fruição; multa penal; multa adm; mora pro rata; total a devolver; view GET retorna valores corretos |
+| `TestCalcularCessao` | 3 | Taxa de cessão = saldo × 3%; view GET renderiza; valor mínimo |
+| `TestRescisaoPorInadimplencia` | 4 | Múltiplas parcelas em atraso; mora pro rata acumulada; valor_a_devolver diminui; histórico de parcelas considerado |
+| `TestRescisaoVendedorIniciativa` | 2 | Rescisão por inadimplência do comprador; retenção máxima; cálculo diferenciado |
+
+**Total estimado:** ~15 testes
+
+---
+
+#### 7.9.3 — HU CNAB Remessa→Retorno E2E (PRIORIDADE P2)
+
+> **Referência:** Seções 12 e 21. Implementação concluída. Cobertura atual: testes unitários por método (`TestCNABServiceBasico`, `TestProcessamentoRetornoCNAB400`, etc.) mas sem E2E que percorre o ciclo completo.
+
+**Arquivo proposto:** `tests/unit/financeiro/test_hu_cnab_e2e.py`
+
+**Cenário:**
+- Contrato com 3 parcelas não pagas; `ContaBancaria` Banco do Brasil (001)
+- Mock do BRCobrança para `/api/remessa` (CNAB 240) e `/api/retorno`
+
+**Passos do fluxo E2E:**
+
+| Passo | Marco | Cenários de Teste |
+|-------|-------|-------------------|
+| P1 | Gerar boletos individuais (mock BRCobrança) | 3 boletos com `nosso_numero`; `tem_boleto=True`; `conta_bancaria` vinculada |
+| P2 | Gerar remessa CNAB 240 | POST `gerar_arquivo_remessa` → `ArquivoRemessa` criado; `ItemRemessa` para cada parcela; status `GERADO`; mock `/api/remessa` |
+| P3 | Controle de duplicata | Segunda tentativa de incluir mesma parcela → filtro `itens_remessa__isnull=True` exclui; aviso UI de "já em remessa pendente" |
+| P4 | Processar retorno CNAB 400 — PAGO | Mock arquivo retorno CNAB 400 com ocorrência 06 (pago); `processar_retorno()` → `Parcela.pago=True`; `HistoricoPagamento` com `origem_pagamento='CNAB'` |
+| P5 | Processar retorno CNAB 400 — INADIMPLENTE | Ocorrência 02 (entrada confirmada); parcela continua pendente; `ArquivoRetorno` criado |
+| P6 | Gerar 2ª via após retorno inadimplente | Parcela não baixada → `gerar_segunda_via()`; juros/multa calculados sobre novo valor; novo `nosso_numero` via BRCobrança |
+
+**Classes de teste focadas:**
+
+| Classe | Testes | Foco |
+|--------|--------|------|
+| `TestCNABGerarRemessa` | 4 | ArquivoRemessa criado; ItemRemessa × 3; controle duplicata; fallback local sem BRCobrança |
+| `TestCNABRetornoPago` | 4 | Ocorrência 06 → pago=True; HistoricoPagamento CNAB; ArquivoRetorno; status PROCESSADO |
+| `TestCNABRetornoInadimplente` | 3 | Ocorrência 02 → parcela pendente; ArquivoRetorno; dados de retorno registrados |
+| `TestCNAB2aVia` | 3 | Após retorno inadimplente; novo valor com juros; novo boleto via mock BRCobrança |
+
+**Total estimado:** ~14 testes
+
+---
+
+#### 7.9.4 — HU Portal do Comprador — Ciclo Completo (PRIORIDADE P3)
+
+> **Referência:** Seção U-05 portal mobile-first. Cobertura atual: testes de auth e views isolados, sem ciclo completo de uso do comprador.
+
+**Arquivo proposto:** `tests/unit/portal_comprador/test_hu_portal_e2e.py`
+
+**Cenário:**
+- Comprador com acesso ativo; contrato com 6 parcelas (1 paga, 1 com boleto, 4 pendentes)
+- `AcessoComprador` válido
+
+**Passos do fluxo E2E:**
+
+| Passo | Marco | Cenários de Teste |
+|-------|-------|-------------------|
+| P1 | Auto-cadastro e login | `AcessoComprador` criado via `auto_cadastro`; login com CPF+email; `LogAcessoComprador` criado |
+| P2 | Dashboard do comprador | KPIs: saldo devedor, próxima parcela, parcelas em atraso; lista de contratos ativos |
+| P3 | Consultar parcelas do contrato | Lista de parcelas com status visual (paga/vencida/futura); dados corretos |
+| P4 | Baixar boleto disponível | GET `baixar_boleto_portal`; parcela com `nosso_numero` → redirect BRCobrança; sem `nosso_numero` → 404 |
+| P5 | Consultar linha digitável | API `api_linha_digitavel`; parcela paga → 404; parcela com boleto → retorna linha |
+| P6 | Verificar próximo vencimento | `api_proximos_vencimentos` retorna lista ordenada com status; parcela paga excluída |
+
+**Classes de teste focadas:**
+
+| Classe | Testes | Foco |
+|--------|--------|------|
+| `TestPortalAutenticacao` | 3 | Auto-cadastro; login CPF+email; logout; `LogAcessoComprador` |
+| `TestPortalDashboard` | 4 | KPIs saldo; próxima parcela; atraso; link para contratos |
+| `TestPortalParcelas` | 4 | Lista parcelas do contrato; status visual; acesso apenas ao próprio contrato |
+| `TestPortalBoleto` | 4 | Download boleto com nosso_numero; sem nosso_numero → 404; linha digitável; parcela paga → indisponível |
+
+**Total estimado:** ~15 testes
+
+---
+
+#### 7.9.5 — Resumo dos Gaps E2E e Priorização
+
+| # | HU | Arquivo Proposto | Prioridade | Testes Est. | Código Crítico não Coberto |
+|---|----|-----------------|------------|-------------|---------------------------|
+| 1 | HU-360 Juros Escalantes + Intermediárias | `test_hu_360_juros_escalantes.py` | **P1** | ~25 | `get_juros_para_ciclo()`, PMT escalante, `PrestacaoIntermediaria`, `intermediarias_reduzem_pmt`, `intermediarias_reajustadas` |
+| 2 | HU Rescisão e Cessão | `test_hu_rescisao_cessao.py` | **P2** | ~15 | `calcular_rescisao()`, `calcular_cessao()`, `calcular_mora_pro_rata()`, fruição, multa penal/adm |
+| 3 | HU CNAB Remessa→Retorno | `test_hu_cnab_e2e.py` | **P2** | ~14 | Ciclo completo remessa→retorno→baixa; `processar_retorno()` integrado com `Parcela.pago`; 2ª via pós-retorno |
+| 4 | HU Portal Comprador | `test_hu_portal_e2e.py` | **P3** | ~15 | Ciclo uso comprador: auto-cadastro → dashboard → boleto → linha digitável |
+
+**Obs. — HU SAC com múltiplos ciclos:** `TestCenarioB` já cobre amortização constante e `test_hu_fluxo_completo.py` cobre reajuste Price. Um E2E SAC + IPCA + 3 ciclos seria P4 — não prioritário.
+
 ### 7.5 Infraestrutura de Testes ✅ CONCLUÍDO (P2)
 | Prioridade | Item | Status |
 |------------|------|--------|
