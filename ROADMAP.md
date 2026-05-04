@@ -170,7 +170,7 @@
 
 ## 7. TESTES AUTOMATIZADOS
 
-**Meta:** > 80% de cobertura | **Atual:** 1014 testes passando (981 + 33 novos — HU-360 Juros Escalantes 2026-05-04)
+**Meta:** > 80% de cobertura | **Atual:** 1048 testes passando (1014 + 34 novos — HU Rescisão e Cessão 2026-05-04)
 
 ### 7.1 P1 — Apps sem nenhum teste (~104 testes) ✅ CONCLUÍDO
 | Arquivo | Escopo | Qtd | Status |
@@ -320,11 +320,11 @@ Auditoria identificou 4 histórias de usuário totalmente implementadas no siste
 
 ---
 
-#### 7.9.2 — HU Rescisão e Cessão Contratual (PRIORIDADE P2)
+#### 7.9.2 — HU Rescisão e Cessão Contratual (PRIORIDADE P2) ✅ IMPLEMENTADO
 
-> **Referência:** Seção 11 gaps G-03, G-04, G-05, G-11, G-12, G-16. Implementação concluída. Cobertura atual: 3 testes superficiais de status HTTP (smoke), sem verificação dos valores calculados.
+> **Referência:** Seção 11 gaps G-03, G-04, G-05, G-11, G-12, G-16. 34 testes implementados em `tests/unit/contratos/test_hu_rescisao_cessao.py` (2026-05-04).
 
-**Arquivo proposto:** `tests/unit/contratos/test_hu_rescisao_cessao.py`
+**Arquivo:** `tests/unit/contratos/test_hu_rescisao_cessao.py`
 
 **Cenário do contrato:**
 - Imóvel R$ 200.000 · Entrada R$ 30.000 · Financiado R$ 170.000 · 48 parcelas · IPCA
