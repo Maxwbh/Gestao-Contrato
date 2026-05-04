@@ -170,7 +170,7 @@
 
 ## 7. TESTES AUTOMATIZADOS
 
-**Meta:** > 80% de cobertura | **Atual:** 1048 testes passando (1014 + 34 novos — HU Rescisão e Cessão 2026-05-04)
+**Meta:** > 80% de cobertura | **Atual:** 1061 testes passando (1048 + 13 novos — HU CNAB E2E 2026-05-04)
 
 ### 7.1 P1 — Apps sem nenhum teste (~104 testes) ✅ CONCLUÍDO
 | Arquivo | Escopo | Qtd | Status |
@@ -355,11 +355,11 @@ Auditoria identificou 4 histórias de usuário totalmente implementadas no siste
 
 ---
 
-#### 7.9.3 — HU CNAB Remessa→Retorno E2E (PRIORIDADE P2)
+#### 7.9.3 — HU CNAB Remessa→Retorno E2E (PRIORIDADE P2) ✅ IMPLEMENTADO
 
-> **Referência:** Seções 12 e 21. Implementação concluída. Cobertura atual: testes unitários por método (`TestCNABServiceBasico`, `TestProcessamentoRetornoCNAB400`, etc.) mas sem E2E que percorre o ciclo completo.
+> **Referência:** Seções 12 e 21. 13 testes implementados em `tests/unit/financeiro/test_hu_cnab_e2e.py` (2026-05-04).
 
-**Arquivo proposto:** `tests/unit/financeiro/test_hu_cnab_e2e.py`
+**Arquivo:** `tests/unit/financeiro/test_hu_cnab_e2e.py`
 
 **Cenário:**
 - Contrato com 3 parcelas não pagas; `ContaBancaria` Banco do Brasil (001)
