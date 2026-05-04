@@ -170,7 +170,7 @@
 
 ## 7. TESTES AUTOMATIZADOS
 
-**Meta:** > 80% de cobertura | **Atual:** 981 testes passando (957 + 24 novos — HU Fluxo Completo 2026-05-04)
+**Meta:** > 80% de cobertura | **Atual:** 1014 testes passando (981 + 33 novos — HU-360 Juros Escalantes 2026-05-04)
 
 ### 7.1 P1 — Apps sem nenhum teste (~104 testes) ✅ CONCLUÍDO
 | Arquivo | Escopo | Qtd | Status |
