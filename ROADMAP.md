@@ -170,7 +170,7 @@
 
 ## 7. TESTES AUTOMATIZADOS
 
-**Meta:** > 80% de cobertura | **Atual:** 1061 testes passando (1048 + 13 novos — HU CNAB E2E 2026-05-04)
+**Meta:** > 80% de cobertura | **Atual:** 1084 testes passando (1061 + 23 novos — HU Portal Comprador E2E 2026-05-04)
 
 ### 7.1 P1 — Apps sem nenhum teste (~104 testes) ✅ CONCLUÍDO
 | Arquivo | Escopo | Qtd | Status |
@@ -389,11 +389,11 @@ Auditoria identificou 4 histórias de usuário totalmente implementadas no siste
 
 ---
 
-#### 7.9.4 — HU Portal do Comprador — Ciclo Completo (PRIORIDADE P3)
+#### 7.9.4 — HU Portal do Comprador — Ciclo Completo (PRIORIDADE P3) ✅ IMPLEMENTADO
 
-> **Referência:** Seção U-05 portal mobile-first. Cobertura atual: testes de auth e views isolados, sem ciclo completo de uso do comprador.
+> **Referência:** Seção U-05 portal mobile-first. 23 testes implementados em `tests/unit/portal/test_hu_portal_e2e.py` (2026-05-04).
 
-**Arquivo proposto:** `tests/unit/portal_comprador/test_hu_portal_e2e.py`
+**Arquivo:** `tests/unit/portal/test_hu_portal_e2e.py`
 
 **Cenário:**
 - Comprador com acesso ativo; contrato com 6 parcelas (1 paga, 1 com boleto, 4 pendentes)
