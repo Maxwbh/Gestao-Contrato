@@ -277,6 +277,8 @@ class TipoTemplate(models.TextChoices):
     LEMBRETE_PARCELA = 'LEMBRETE_PARCELA', 'Lembrete de Parcela'
     RELATORIO_MENSAL = 'RELATORIO_MENSAL', 'Relatório Mensal'
     RELATORIO_SEMANAL = 'RELATORIO_SEMANAL', 'Relatório Semanal'
+    GESTAO_RELATORIO_MENSAL = 'gestao-relatorio-mensal', 'Gestão — Relatório Mensal'
+    GESTAO_RELATORIO_SEMANAL = 'gestao-relatorio-semanal', 'Gestão — Relatório Semanal'
     CUSTOM = 'CUSTOM', 'Personalizado'
 
 
