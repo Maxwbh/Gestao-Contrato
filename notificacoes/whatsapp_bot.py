@@ -567,19 +567,30 @@ class WhatsAppBotService:
     def _identificar_por_telefone(self, telefone):
         from core.models import Comprador
         digitos = _somente_digitos(telefone)
-        ultimos = digitos[-11:] if len(digitos) >= 11 else digitos
+        # Tenta sufixos de 11 dígitos (celular) e 10 dígitos (fixo)
+        sufixos = {digitos[-11:], digitos[-10:]} if len(digitos) >= 11 else {digitos}
         for campo in ('celular', 'telefone'):
-            comp = Comprador.objects.filter(**{f'{campo}__endswith': ultimos}).first()
-            if comp:
-                return comp
+            for sfx in sufixos:
+                comp = Comprador.objects.filter(**{f'{campo}__endswith': sfx}).first()
+                if comp:
+                    return comp
         return None
 
     def _identificar_por_cpf(self, cpf_digits):
+        """Busca Comprador pelo CPF (11 dígitos sem formatação).
+
+        Tenta lookup exato (sem formatação), depois com formatação
+        padrão XXX.XXX.XXX-XX (forma como costuma ser armazenado).
+        """
         from core.models import Comprador
         try:
+            cpf_formatado = (
+                f'{cpf_digits[:3]}.{cpf_digits[3:6]}.{cpf_digits[6:9]}-{cpf_digits[9:]}'
+                if len(cpf_digits) == 11 else cpf_digits
+            )
             return (
                 Comprador.objects.filter(cpf=cpf_digits).first()
-                or Comprador.objects.filter(cpf__icontains=cpf_digits[:9]).first()
+                or Comprador.objects.filter(cpf=cpf_formatado).first()
             )
         except Exception:
             return None

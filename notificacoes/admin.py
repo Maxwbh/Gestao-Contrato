@@ -8,7 +8,8 @@ from django.contrib import admin
 from django.utils.html import format_html
 from .models import (
     ConfiguracaoEmail, ConfiguracaoSMS, ConfiguracaoWhatsApp,
-    Notificacao, TemplateNotificacao, RegraNotificacao, StatusNotificacao
+    Notificacao, TemplateNotificacao, RegraNotificacao, StatusNotificacao,
+    SessaoConversaWhatsApp,
 )
 from .tasks import reenviar_notificacao
 
@@ -242,3 +243,26 @@ class TemplateNotificacaoAdmin(admin.ModelAdmin):
         if obj.tem_whatsapp:
             canais.append('WhatsApp')
         return ', '.join(canais) if canais else '—'
+
+
+@admin.register(SessaoConversaWhatsApp)
+class SessaoConversaWhatsAppAdmin(admin.ModelAdmin):
+    list_display = ['numero_whatsapp', 'comprador', 'estado', 'ativo', 'atualizado_em']
+    list_filter = ['estado', 'ativo']
+    search_fields = ['numero_whatsapp', 'comprador__nome', 'comprador__cpf']
+    readonly_fields = ['criado_em', 'atualizado_em']
+    autocomplete_fields = ['comprador']
+    list_select_related = ['comprador']
+    ordering = ['-atualizado_em']
+    actions = ['encerrar_sessoes']
+
+    @admin.action(description='Encerrar sessões selecionadas')
+    def encerrar_sessoes(self, request, queryset):
+        count = 0
+        for sessao in queryset.filter(ativo=True):
+            sessao.encerrar()
+            count += 1
+        self.message_user(request, f'{count} sessão(ões) encerrada(s).')
+
+    def get_queryset(self, request):
+        return super().get_queryset(request).select_related('comprador')
