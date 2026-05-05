@@ -988,6 +988,9 @@ except Exception as e:
     print(f"Aviso: Nao foi possivel criar templates padrao: {e}")
 TEMPLATEEOF
 
+echo "==> Creating report email templates (semanal/mensal)..."
+python manage.py criar_templates_relatorio || echo "Aviso: criar_templates_relatorio falhou (templates serao criados pelas migrations)"
+
 echo "==> Collecting static files..."
 python manage.py collectstatic --no-input
 
