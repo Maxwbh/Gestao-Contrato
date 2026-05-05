@@ -278,6 +278,43 @@ def testar_conexao_whatsapp(request, pk):
         if provedor == 'EVOLUTION':
             import urllib.request as _req
             import json as _json
+            modo = getattr(config, 'modo_evolution', 'BAILEYS') or 'BAILEYS'
+
+            # W-05: Cloud API mode — verifica token Meta via Graph API
+            if modo == 'CLOUD_API':
+                phone_number_id = getattr(config, 'phone_number_id', '') or ''
+                meta_token = getattr(config, 'meta_access_token', '') or ''
+                if not phone_number_id or not meta_token:
+                    return JsonResponse({
+                        'status': 'error',
+                        'message': 'Modo Cloud API requer phone_number_id e meta_access_token configurados.',
+                    }, status=400)
+                graph_url = (
+                    f"https://graph.facebook.com/v18.0/{phone_number_id}"
+                    f"?fields=display_phone_number,verified_name,quality_rating"
+                    f"&access_token={meta_token}"
+                )
+                req_meta = _req.Request(graph_url)
+                try:
+                    with _req.urlopen(req_meta, timeout=10) as resp_meta:
+                        meta_data = _json.loads(resp_meta.read())
+                    display = meta_data.get('display_phone_number', phone_number_id)
+                    verified = meta_data.get('verified_name', '')
+                    quality = meta_data.get('quality_rating', '')
+                    return JsonResponse({
+                        'status': 'success',
+                        'message': (
+                            f'Cloud API OK — número: {display}, nome: {verified}, '
+                            f'qualidade: {quality}'
+                        ),
+                    })
+                except Exception as meta_err:
+                    return JsonResponse({
+                        'status': 'error',
+                        'message': f'Meta Graph API erro: {meta_err}',
+                    }, status=400)
+
+            # Baileys mode — verifica estado da instância Evolution
             url = f"{config.api_url.rstrip('/')}/instance/connectionState/{config.instancia}"
             req = _req.Request(url, headers={'apikey': config.api_key})
             with _req.urlopen(req, timeout=10) as resp:
@@ -378,14 +415,23 @@ def configurar_webhook_evolution(request, pk):
 # WEBHOOK EVOLUTION API — Confirmação de entrega WhatsApp
 # =============================================================================
 
-# Mapeamento de status Evolution/Baileys → StatusEntrega
+# Mapeamento de status Evolution/Baileys/Cloud API → StatusEntrega
 _EVOLUTION_STATUS_MAP = {
-    # String values (Evolution API v2)
+    # String values (Evolution API v2 — Baileys mode, uppercase)
     'PENDING': 'queued',
     'SERVER_ACK': 'sent',
     'DELIVERY_ACK': 'delivered',
     'READ': 'read',
     'PLAYED': 'read',
+    'ERROR': 'failed',
+    # W-04: Cloud API mode (Meta official) — lowercase strings
+    'sent': 'sent',
+    'delivered': 'delivered',
+    'read': 'read',
+    'failed': 'failed',
+    'error': 'failed',
+    'queued': 'queued',
+    'warning': 'sent',     # Meta "warning" = message sent with quality issues
     # Numeric values (Baileys proto.WebMessageInfo.Status)
     0: 'queued',     # ERROR/PENDING
     1: 'queued',     # PENDING
@@ -405,22 +451,15 @@ _EVOLUTION_STATUS_MAP = {
 @csrf_exempt
 def webhook_evolution(request):
     """
-    Recebe callbacks de status de entrega da Evolution API (MESSAGES_UPDATE).
+    Recebe callbacks de status de entrega da Evolution API (MESSAGES_UPDATE / MESSAGES_UPSERT).
 
-    Evolution posta para esta URL (configurada via /webhook/set/{instance})
-    quando o status de uma mensagem muda.
+    Suporta dois formatos de payload (W-04):
 
-    Payload esperado:
-    {
-      "event": "messages.update",
-      "instance": "nome-instancia",
-      "data": [
-        {
-          "key": {"id": "3EB0...", "fromMe": true, "remoteJid": "55...@s.whatsapp.net"},
-          "update": {"status": "READ"}
-        }
-      ]
-    }
+    1. Evolution API v2 nativo (Baileys e Cloud API):
+       {"event": "messages.update", "instance": "nome", "data": [...]}
+
+    2. Meta Cloud API nativo (relay direto da Evolution no modo Cloud API):
+       {"object": "whatsapp_business_account", "entry": [{"changes": [{"value": {...}}]}]}
 
     Valida apikey recebida no header ou no payload contra ConfiguracaoWhatsApp.
     Atualiza Notificacao.status_entrega e Notificacao.data_confirmacao.
@@ -433,6 +472,11 @@ def webhook_evolution(request):
         body = _json.loads(request.body)
     except Exception:
         return HttpResponse('Bad Request', status=400)
+
+    # W-04: Detectar formato Meta Cloud API nativo
+    # (Evolution em modo Cloud API pode encaminhar o payload bruto do Meta)
+    if body.get('object') == 'whatsapp_business_account':
+        return _webhook_evolution_meta_format(request, body)
 
     event = body.get('event', '')
     instance_name = body.get('instance', '')
@@ -542,6 +586,78 @@ def _processar_mensagem_inbound(item, config, request):
         )
     except Exception:
         logger.exception('[Webhook Evolution] erro no chatbot para %s', telefone)
+
+
+def _webhook_evolution_meta_format(request, body):
+    """
+    W-04: Processa payload no formato nativo Meta Cloud API.
+
+    Estrutura:
+    {
+      "object": "whatsapp_business_account",
+      "entry": [{
+        "id": "<WABA_ID>",
+        "changes": [{
+          "value": {
+            "messaging_product": "whatsapp",
+            "statuses": [{"id": "<wamid>", "status": "delivered", "recipient_id": "55..."}],
+            "messages": [{"from": "55...", "id": "<wamid>", "type": "text", "text": {...}}]
+          },
+          "field": "messages"
+        }]
+      }]
+    }
+    """
+    phone_number_id_header = request.META.get('HTTP_X_PHONE_NUMBER_ID', '')
+    config = None
+    if phone_number_id_header:
+        config = ConfiguracaoWhatsApp.objects.filter(
+            provedor='EVOLUTION',
+            phone_number_id=phone_number_id_header,
+            ativo=True,
+        ).first()
+
+    updated_total = 0
+    for entry in body.get('entry', []):
+        for change in entry.get('changes', []):
+            value = change.get('value', {})
+
+            # Status updates (delivery tracking)
+            for st in value.get('statuses', []):
+                wamid = st.get('id', '').strip()
+                raw_status = st.get('status', '')
+                status_entrega = _EVOLUTION_STATUS_MAP.get(raw_status)
+                if wamid and status_entrega:
+                    updated = Notificacao.objects.filter(external_id=wamid).update(
+                        status_entrega=status_entrega,
+                        data_confirmacao=timezone.now(),
+                    )
+                    updated_total += updated
+
+            # Inbound messages (chatbot)
+            if config:
+                for msg in value.get('messages', []):
+                    telefone = msg.get('from', '').strip()
+                    if not telefone:
+                        continue
+                    msg_type = msg.get('type', 'text')
+                    texto = ''
+                    if msg_type == 'text':
+                        texto = msg.get('text', {}).get('body', '').strip()
+                    tipo_msg = 'text' if msg_type == 'text' else 'media'
+                    try:
+                        from notificacoes.whatsapp_bot import WhatsAppBotService
+                        WhatsAppBotService().processar(
+                            telefone=telefone,
+                            mensagem=texto,
+                            tipo_msg=tipo_msg,
+                            config_wa=config,
+                        )
+                    except Exception:
+                        logger.exception('[Webhook Meta] erro no chatbot para %s', telefone)
+
+    logger.info('[Webhook Meta Cloud API] updated=%d', updated_total)
+    return HttpResponse('OK', status=200)
 
 
 # =============================================================================

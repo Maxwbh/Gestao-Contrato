@@ -1205,7 +1205,7 @@ para ciclo = 2..total_ciclos+1:
 | HU Boleto/Carnê/Remessa (Seção 21) | — | 10 | — | — | 10 | ✅ 10/10 |
 | OFX Extrato Bancário (Seção 22) | — | 5 | — | — | 5 | ✅ 5/5 |
 | Conciliação Bancária (Seção 23) | — | 8 | — | — | 8 | ✅ 8/8 |
-| WhatsApp — Evolução (Seção 26) | — | 3 | 5 | — | 8 | ✅ 3/8 — W-01/02/03 concluídos (Cloud API mode) |
+| WhatsApp — Evolução (Seção 26) | — | 5 | 3 | — | 8 | ✅ 5/8 — W-01..W-05 concluídos (Cloud API mode + webhook + teste conexão) |
 | Chatbot WhatsApp (Seção 27) | 2 | 8 | 6 | — | 16 | ✅ 14/16 — C-01..C-10, C-12, C-13, C-15, C-16 |
 | Testes | 104 | ~164 | ~37 | ~41+117 | ~463 | ✅ 942 testes passando |
 | CI/CD | — | 2 | 4 | 2 | 8 | — |
@@ -1688,8 +1688,8 @@ FALLBACK (se VPS ficar fora)
 | W-01 | Adicionar `modo_evolution` (`BAILEYS`/`CLOUD_API`) ao model `ConfiguracaoWhatsApp` + migration | P1 | Evolution | ✅ migration 0013 |
 | W-02 | Campos `phone_number_id` + `meta_access_token` no model para modo Cloud API | P1 | Evolution | ✅ migration 0013 |
 | W-03 | `ServicoWhatsApp._enviar_evolution()` — branch por `modo_evolution` (endpoint e payload diferentes) | P1 | Evolution | ✅ `_enviar_evolution_cloud_api()` |
-| W-04 | **Webhook Evolution modo Cloud API** — payload diferente do Baileys; atualizar `webhook_evolution()` | P2 | Evolution | — |
-| W-05 | **Teste de conexão** para modo Cloud API (`GET /<instancia>/instance/connectionState`) | P2 | Evolution | — |
+| W-04 | **Webhook Evolution modo Cloud API** — payload diferente do Baileys; atualizar `webhook_evolution()` | P2 | Evolution | ✅ `_EVOLUTION_STATUS_MAP` + `_webhook_evolution_meta_format()` |
+| W-05 | **Teste de conexão** para modo Cloud API (`GET /<instancia>/instance/connectionState`) | P2 | Evolution | ✅ `testar_conexao_whatsapp()` verifica Meta Graph API quando `modo_evolution=CLOUD_API` |
 | W-06 | **Templates interativos** — `corpo_whatsapp_interativo` (JSON) com botões para Evolution Cloud API e Meta | P3 | Evolution / Meta | — |
 | W-07 | **BSP brasileiro** — testar com Hablla ou Poli Digital como alternativa ao Evolution direto | P3 | Meta via BSP | — |
 | W-08 | **Status de entrega unificado** — normalizar `DELIVERED/READ` entre provedores | P3 | Todos | — |
