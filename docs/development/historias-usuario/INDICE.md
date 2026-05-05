@@ -40,6 +40,7 @@
 | [HU-19](HU-19.md) | `HU-19.md` | Chatbot WhatsApp — Atendimento Automático | `notificacoes` | ✅ (parcial) |
 | [HU-20](HU-20.md) | `HU-20.md` | Notificações e Cobrança Automática | `notificacoes` | ✅ |
 | [HU-21](HU-21.md) | `HU-21.md` | Portal do Comprador — Acesso e Autoatendimento Digital | `portal_comprador` | ✅ |
+| [HU-22](HU-22.md) | `HU-22.md` | Mapa Interativo de Lotes | `core` | ✅ (parcial — M-13/M-14 pendentes) |
 
 ---
 
@@ -101,6 +102,10 @@
 | Download e visualização de boleto | HU-21 |
 | APIs JSON: parcelas, resumo, vencimentos, 2ª via | HU-21 |
 | `AcessoComprador` — controle de acesso e auditoria | HU-21 |
+| Mapa Leaflet com marcadores disponível/vendido | HU-22 |
+| Clustering de marcadores por proximidade | HU-22 |
+| Filtros de loteamento e status (client-side) | HU-22 |
+| Página dedicada por loteamento com KPIs | HU-22 |
 
 ---
 
@@ -179,6 +184,7 @@ HU-21 Portal do Comprador ──► auto-cadastro → dashboard → boletos → 
 | HU-19 | `SessaoConversaWhatsApp`, `HistoricoPagamento` | `WhatsAppBotService`, `BoletoService` | `POST /notificacoes/webhook/evolution/` |
 | HU-20 | `RegraNotificacao`, `TemplateNotificacao`, `Notificacao`, `ConfiguracaoWhatsApp` | `enviar_notificacoes_sync()`, `enviar_inadimplentes_sync()` | `POST /api/tasks/enviar-notificacoes/`, `/api/tasks/enviar-inadimplentes/`, `POST /financeiro/parcelas/<pk>/notificar/` |
 | HU-21 | `AcessoComprador`, `LogAcessoComprador` | — | `/portal/cadastro/`, `/portal/login/`, `/portal/`, `/portal/contratos/`, `/portal/boletos/`, `/portal/meus-dados/`, `/portal/api/*` |
+| HU-22 | `Imovel` | — | `/imoveis/` (mapa com marcadores Leaflet + markercluster), `/imoveis/loteamento/<nome>/` |
 
 ---
 
