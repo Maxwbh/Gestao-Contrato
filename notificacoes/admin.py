@@ -196,30 +196,49 @@ class RegraNotificacaoAdmin(admin.ModelAdmin):
 
 @admin.register(TemplateNotificacao)
 class TemplateNotificacaoAdmin(admin.ModelAdmin):
-    list_display = ['nome', 'tipo', 'ativo', 'criado_em']
-    list_filter = ['tipo', 'ativo']
-    search_fields = ['nome', 'assunto', 'corpo']
+    list_display = ['codigo', 'nome', 'imobiliaria', 'canais_ativos', 'ativo', 'criado_em']
+    list_filter = ['codigo', 'ativo', 'imobiliaria']
+    search_fields = ['nome', 'assunto', 'corpo', 'corpo_html']
     readonly_fields = ['criado_em', 'atualizado_em']
+    autocomplete_fields = ['imobiliaria']
 
     fieldsets = (
-        ('Informações do Template', {
-            'fields': (
-                'nome',
-                'tipo',
-                'ativo'
-            )
+        ('Identificação', {
+            'fields': ('codigo', 'nome', 'imobiliaria', 'ativo'),
+            'description': (
+                'Deixe <strong>Imobiliária</strong> em branco para template global '
+                '(usado por todas as imobiliárias).'
+            ),
         }),
-        ('Conteúdo', {
-            'fields': (
-                'assunto',
-                'corpo'
-            )
+        ('E-mail', {
+            'fields': ('assunto', 'corpo_html'),
+        }),
+        ('SMS / Texto simples', {
+            'fields': ('corpo',),
+            'classes': ('collapse',),
+        }),
+        ('WhatsApp', {
+            'fields': ('corpo_whatsapp',),
+            'classes': ('collapse',),
+        }),
+        ('Canal legado', {
+            'fields': ('tipo',),
+            'classes': ('collapse',),
+            'description': 'Campo legado — canal detectado automaticamente pelos campos preenchidos.',
         }),
         ('Metadados', {
-            'fields': (
-                'criado_em',
-                'atualizado_em'
-            ),
-            'classes': ('collapse',)
+            'fields': ('criado_em', 'atualizado_em'),
+            'classes': ('collapse',),
         }),
     )
+
+    @admin.display(description='Canais')
+    def canais_ativos(self, obj):
+        canais = []
+        if obj.tem_email:
+            canais.append('E-mail')
+        if obj.tem_sms:
+            canais.append('SMS')
+        if obj.tem_whatsapp:
+            canais.append('WhatsApp')
+        return ', '.join(canais) if canais else '—'
