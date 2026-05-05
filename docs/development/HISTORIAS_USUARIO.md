@@ -5,7 +5,7 @@
 
 ---
 
-## HUs Disponíveis (18 histórias)
+## HUs Disponíveis (20 histórias)
 
 | ID | Arquivo | Nome | Módulo |
 |----|---------|------|--------|
@@ -27,6 +27,8 @@
 | HU-16 | [HU-16.md](historias-usuario/HU-16.md) | CNAB — Remessa e Retorno Bancário | `financeiro` |
 | HU-17 | [HU-17.md](historias-usuario/HU-17.md) | Renegociação de Parcelas | `financeiro` |
 | HU-18 | [HU-18.md](historias-usuario/HU-18.md) | Relatórios Financeiros e Dashboard | `financeiro` |
+| HU-19 | [HU-19.md](historias-usuario/HU-19.md) | Chatbot WhatsApp — Atendimento Automático | `notificacoes` |
+| HU-20 | [HU-20.md](historias-usuario/HU-20.md) | Notificações e Cobrança Automática | `notificacoes` |
 
 ---
 
@@ -71,5 +73,8 @@
 | CNAB remessa e retorno | HU-16 | ✅ |
 | Renegociação de parcelas | HU-17 | ✅ |
 | Relatórios e dashboard fluxo de caixa | HU-18 | ✅ |
+| Chatbot WhatsApp (fluxos A-F, 2ª via, comprovante) | HU-19 | ✅ (parcial) |
+| Notificações automáticas (e-mail, SMS, WhatsApp) | HU-20 | ✅ |
+| Régua de cobrança configurável | HU-20 | ✅ |
 
 → [Índice completo com matriz de rastreabilidade](historias-usuario/INDICE.md)
