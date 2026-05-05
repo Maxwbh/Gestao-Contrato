@@ -1,7 +1,7 @@
 # Histórias de Usuário (HU) — Sistema de Gestão de Contratos
 
 > Documento consolidado das HUs do fluxo de contrato → parcelas → pagamento → reajuste → carnê → quitação.
-> Atualizado em: 2026-04-29
+> Atualizado em: 2026-05-05
 
 
 ## Índice
@@ -17,6 +17,9 @@
 | [HU-07](#hu-07--gerar-carnê-6-meses) | Gerar Carnê 6 meses | `financeiro` |
 | [HU-08](#hu-08--gerar-quitação-via-manual) | Quitação Manual (Antecipação) | `financeiro` |
 | [HU-09](#hu-09--gerar-quitação-via-ofx) | Quitação via OFX | `financeiro` |
+| [HU-10](#hu-10--calcular-rescisão) | Calcular Rescisão | `contratos` |
+| [HU-11](#hu-11--calcular-cessão-de-direitos) | Calcular Cessão de Direitos | `contratos` |
+| [HU-12](#hu-12--link-público-de-boleto) | Link Público de Boleto | `financeiro` |
 
 ---
 
@@ -24,7 +27,7 @@
 
 - **Operador da Imobiliária**: cadastra contratos, registra pagamentos, aplica reajustes e gera carnês.
 - **Gestor da Contabilidade**: supervisiona contratos de múltiplas imobiliárias, valida bloqueios e fluxo financeiro.
-- **Comprador**: visualiza parcelas via Portal do Comprador (consumidor das saídas).
+- **Comprador**: visualiza parcelas via Portal do Comprador e acessa boletos pelo link público (sem login).
 
 ---
 
@@ -351,6 +354,9 @@
 | HU-07 | `Boleto`, `Parcela` | `carne_service.gerar_carne_pdf` (qty=6) | `gerar_carne` |
 | HU-08 | `HistoricoPagamento (antecipado)` | `recibo_service` | `simulador_antecipacao`, `/recibo-antecipacao.pdf` |
 | HU-09 | `HistoricoPagamento (fitid_ofx)` | `OFXService` | `upload_ofx` |
+| HU-10 | `Contrato` | `Contrato.calcular_rescisao()` | `/contratos/<id>/rescisao/` |
+| HU-11 | `Contrato` | `Contrato.calcular_cessao()` | `/contratos/<id>/cessao/` |
+| HU-12 | `Parcela.token_publico` | — | `/b/<uuid>/`, `/b/<uuid>/download/` |
 
 ---
 
@@ -366,13 +372,146 @@ HU-02 Geração Parcelas
         │                                              │
         │                                              ▼
         ├──────────────► HU-05 Carnê 20m / HU-07 Carnê 6m
+        │                          │
+        │                          ▼
+        │               HU-12 Link Público Boleto (compartilhar)
         │
         ├──► HU-03 Pagamento (manual/sistema)
         │
         ├──► HU-08 Quitação Manual (antecipação)
         │
-        └──► HU-09 Quitação via OFX (em lote)
-                  │
-                  ▼
-            Contrato QUITADO
+        ├──► HU-09 Quitação via OFX (em lote)
+        │         │
+        │         ▼
+        │   Contrato QUITADO
+        │
+        ├──► HU-10 Calcular Rescisão (desistência)
+        │         │
+        │         ▼
+        │   Contrato CANCELADO
+        │
+        └──► HU-11 Calcular Cessão (transferência do contrato)
 ```
+
+---
+
+## HU-10 — Calcular Rescisão
+
+**Como** operador da imobiliária
+**Quero** calcular o valor a devolver ao comprador em caso de rescisão contratual
+**Para** realizar o processo de rescisão de forma transparente e conforme as cláusulas contratuais.
+
+### Pré-condições
+- Contrato em status `ATIVO`.
+- Percentuais de rescisão configurados: `percentual_fruicao`, `percentual_multa_rescisao_penal`, `percentual_multa_rescisao_adm`.
+
+### Critérios de Aceitação
+1. O formulário em `GET /contratos/<id>/rescisao/` exibe campo para informar a **data da rescisão**.
+2. O `POST /contratos/<id>/rescisao/` executa `Contrato.calcular_rescisao(data_rescisao)` e retorna o resultado detalhado.
+3. O botão "Calcular" **não** exibe diálogo de confirmação (classe `no-confirm`).
+4. O resultado **não some automaticamente** — permanece visível até nova ação do usuário.
+5. O breakdown exibido deve conter:
+
+| Item | Fórmula |
+|------|---------|
+| Entrada paga | valor registrado |
+| Parcelas pagas | `SUM(valor_pago)` de parcelas `pago=True` |
+| Intermediárias pagas | soma das intermediárias pagas |
+| **Total pago** | entrada + parcelas + intermediárias |
+| Fruição | `saldo × percentual_fruicao/100 × meses_ocupados` |
+| Multa penal | `saldo × percentual_multa_rescisao_penal/100` |
+| Despesas administrativas | `saldo × percentual_multa_rescisao_adm/100` |
+| **Total retenções** | fruição + multa + desp. adm |
+| **Valor a devolver** | `max(0, total_pago − total_retenções)` |
+
+6. `meses_ocupados = (data_rescisao.year − data_contrato.year) × 12 + (data_rescisao.month − data_contrato.month)`
+7. Se retenções ≥ total pago: exibe aviso "As retenções superam ou igualam o valor pago. Não há valor a devolver." e devolução = R$ 0,00.
+
+### Regras de Negócio
+- RN-34: Devolução nunca é negativa (`max(0, ...)`).
+- RN-35: Percentuais de rescisão são configuráveis por contrato em "Editar Contrato".
+- RN-36: O cálculo é apenas informativo — não altera o status do contrato automaticamente.
+- RN-37: Padrões: fruição 0,5%/mês, multa penal 10%, despesas adm 12% (todos sobre o saldo devedor).
+
+### Definição de Pronto
+- [ ] Resultado exibido com breakdown completo.
+- [ ] Botão sem confirm dialog.
+- [ ] Resultado não desaparece por timeout.
+- [ ] Percentuais configuráveis via formulário de edição do contrato.
+
+---
+
+## HU-11 — Calcular Cessão de Direitos
+
+**Como** operador da imobiliária
+**Quero** calcular a taxa de cessão de direitos de um contrato
+**Para** informar ao comprador o custo de transferência do contrato para terceiros.
+
+### Pré-condições
+- Contrato em status `ATIVO`.
+- `percentual_cessao` configurado no contrato (padrão: 3%).
+
+### Critérios de Aceitação
+1. `GET /contratos/<id>/cessao/` exibe formulário com campo de data de referência (opcional, padrão: hoje).
+2. `POST /contratos/<id>/cessao/` executa `Contrato.calcular_cessao(data_cessao)`.
+3. Fórmula:
+   ```
+   saldo_devedor = calcular_saldo_devedor()
+   taxa_cessao = saldo_devedor × percentual_cessao / 100
+   ```
+4. Resultado exibe: saldo devedor na data, percentual de cessão e valor da taxa em R$.
+
+### Regras de Negócio
+- RN-38: Saldo devedor considera o tipo de amortização (PRICE = PMTs futuros; SAC = principal restante).
+- RN-39: Percentual de cessão padrão é 3%, configurável por contrato.
+- RN-40: O cálculo é informativo — não gera nenhuma cobrança automaticamente.
+
+### Definição de Pronto
+- [ ] Formulário com data opcional.
+- [ ] Resultado com saldo, percentual e valor da taxa.
+
+---
+
+## HU-12 — Link Público de Boleto
+
+**Como** comprador
+**Quero** acessar meu boleto através de um link recebido por WhatsApp ou e-mail
+**Para** visualizar e pagar sem precisar de login no sistema.
+
+### Pré-condições
+- Parcela com boleto gerado.
+- Token público UUID atribuído automaticamente à parcela.
+
+### Critérios de Aceitação
+1. Cada `Parcela` possui campo `token_publico` (UUID v4), gerado automaticamente na criação, único por parcela.
+2. O link tem formato `/b/<uuid>/` — completamente opaco, sem expor IDs internos, CPF ou estrutura do sistema.
+3. `GET /b/<uuid>/` retorna 200 **sem autenticação**. Token inválido → 404.
+4. A página pública exibe:
+   - Nome da imobiliária e logotipo
+   - Nome do comprador (sem CPF)
+   - Número da parcela e data de vencimento
+   - Valor (com juros calculados se vencido)
+   - Linha digitável e código de barras
+   - PIX copia e cola
+   - Botão de download do PDF
+5. A página **não exibe**: CPF, CNPJ, agência/conta bancária, IDs internos, ações administrativas.
+6. `GET /b/<uuid>/download/` serve o PDF do boleto sem autenticação.
+   - Prioridade: `boleto_pdf_db` (BinaryField, persiste em ambiente efêmero)
+   - Fallback: `boleto_pdf` (FileField)
+   - Sem PDF disponível → 404
+7. O administrador pode compartilhar o link pela tela de visualização interna do boleto via botão "Compartilhar":
+   - Mobile: usa Web Share API nativa
+   - Desktop: copia URL para clipboard com feedback visual
+
+### Regras de Negócio
+- RN-41: Token único por parcela (`unique=True`); parcelas diferentes têm tokens diferentes.
+- RN-42: O token não expira — é permanente (vinculado à parcela).
+- RN-43: A URL `/b/<uuid>/` não requer login nem cookie de sessão.
+- RN-44: Juros são calculados em tempo real na página pública se a parcela estiver vencida.
+
+### Definição de Pronto
+- [ ] Token gerado automaticamente para todas as parcelas.
+- [ ] Página pública acessível sem login retornando 200.
+- [ ] CPF e dados sensíveis ausentes do HTML público.
+- [ ] Download de PDF funcionando sem autenticação.
+- [ ] Botão de compartilhamento na tela interna do boleto.
