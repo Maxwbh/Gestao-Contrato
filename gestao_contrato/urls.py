@@ -18,6 +18,9 @@ urlpatterns = [
     path('financeiro/', include('financeiro.urls')),
     path('notificacoes/', include('notificacoes.urls')),
 
+    # Link público de boleto — sem autenticação, URL opaca via UUID
+    path('b/', include('financeiro.public_urls')),
+
     # Portal do Comprador - Acesso para compradores via CPF/CNPJ
     path('portal/', include('portal_comprador.urls')),
 
