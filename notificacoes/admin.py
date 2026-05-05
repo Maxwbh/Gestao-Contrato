@@ -8,7 +8,8 @@ from django.contrib import admin
 from django.utils.html import format_html
 from .models import (
     ConfiguracaoEmail, ConfiguracaoSMS, ConfiguracaoWhatsApp,
-    Notificacao, TemplateNotificacao, RegraNotificacao, StatusNotificacao
+    Notificacao, TemplateNotificacao, RegraNotificacao, StatusNotificacao,
+    SessaoConversaWhatsApp,
 )
 from .tasks import reenviar_notificacao
 
@@ -51,6 +52,14 @@ class ConfiguracaoWhatsAppAdmin(admin.ModelAdmin):
             'description': (
                 'Evolution API v2: api_url = http://servidor:8080, api_key = apikey do servidor, instancia = nome da instância. '
                 'Z-API: api_url = https://api.z-api.io, api_key = token, instancia = instance ID, client_token = Client-Token header.'
+            ),
+            'classes': ('collapse',),
+        }),
+        ('Evolution — Modo Cloud API (Meta oficial)', {
+            'fields': ('modo_evolution', 'phone_number_id', 'meta_access_token'),
+            'description': (
+                'Apenas para Evolution API no modo Cloud API. '
+                'Deixe <strong>modo_evolution = BAILEYS</strong> para uso padrão (self-hosted via QR Code).'
             ),
             'classes': ('collapse',),
         }),
@@ -242,3 +251,26 @@ class TemplateNotificacaoAdmin(admin.ModelAdmin):
         if obj.tem_whatsapp:
             canais.append('WhatsApp')
         return ', '.join(canais) if canais else '—'
+
+
+@admin.register(SessaoConversaWhatsApp)
+class SessaoConversaWhatsAppAdmin(admin.ModelAdmin):
+    list_display = ['numero_whatsapp', 'comprador', 'estado', 'ativo', 'atualizado_em']
+    list_filter = ['estado', 'ativo']
+    search_fields = ['numero_whatsapp', 'comprador__nome', 'comprador__cpf']
+    readonly_fields = ['criado_em', 'atualizado_em']
+    autocomplete_fields = ['comprador']
+    list_select_related = ['comprador']
+    ordering = ['-atualizado_em']
+    actions = ['encerrar_sessoes']
+
+    @admin.action(description='Encerrar sessões selecionadas')
+    def encerrar_sessoes(self, request, queryset):
+        count = 0
+        for sessao in queryset.filter(ativo=True):
+            sessao.encerrar()
+            count += 1
+        self.message_user(request, f'{count} sessão(ões) encerrada(s).')
+
+    def get_queryset(self, request):
+        return super().get_queryset(request).select_related('comprador')

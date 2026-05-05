@@ -145,6 +145,27 @@ class ConfiguracaoWhatsApp(TimeStampedModel):
         verbose_name='Client-Token (Z-API)',
         help_text='Cabeçalho Client-Token exigido pela Z-API'
     )
+    # Evolution Cloud API (W-01, W-02)
+    modo_evolution = models.CharField(
+        max_length=10,
+        choices=[('BAILEYS', 'Baileys (self-hosted padrão)'), ('CLOUD_API', 'Cloud API (Meta oficial)')],
+        default='BAILEYS',
+        blank=True,
+        verbose_name='Modo Evolution',
+        help_text='BAILEYS: instância local via QR Code. CLOUD_API: usa Meta Cloud API oficial.',
+    )
+    phone_number_id = models.CharField(
+        max_length=50,
+        blank=True,
+        verbose_name='Phone Number ID (Cloud API)',
+        help_text='Meta Cloud API: ID do número de telefone no Meta Business.',
+    )
+    meta_access_token = models.CharField(
+        max_length=512,
+        blank=True,
+        verbose_name='Access Token Meta (Cloud API)',
+        help_text='Meta Cloud API: token de acesso permanente do Meta Business.',
+    )
     ativo = models.BooleanField(default=True, verbose_name='Ativo')
 
     class Meta:
