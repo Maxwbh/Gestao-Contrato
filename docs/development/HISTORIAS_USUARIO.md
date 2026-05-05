@@ -1,11 +1,11 @@
 # Histórias de Usuário — Gestão de Contratos
 
 > **Organização**: cada HU tem seu próprio arquivo detalhado em [`historias-usuario/`](historias-usuario/).  
-> Este arquivo é o ponto de entrada; o índice completo e a matriz de rastreabilidade estão em [`historias-usuario/INDICE.md`](historias-usuario/INDICE.md).
+> Índice completo, matriz de rastreabilidade e fluxo macro: [`historias-usuario/INDICE.md`](historias-usuario/INDICE.md).
 
 ---
 
-## HUs Disponíveis
+## HUs Disponíveis (18 histórias)
 
 | ID | Arquivo | Nome | Módulo |
 |----|---------|------|--------|
@@ -22,12 +22,15 @@
 | HU-11 | [HU-11.md](historias-usuario/HU-11.md) | Calcular Rescisão Contratual | `contratos` |
 | HU-12 | [HU-12.md](historias-usuario/HU-12.md) | Calcular Cessão de Direitos | `contratos` |
 | HU-13 | [HU-13.md](historias-usuario/HU-13.md) | Link Público de Boleto | `financeiro` |
+| HU-14 | [HU-14.md](historias-usuario/HU-14.md) | Gestão de Prestações Intermediárias | `contratos` |
+| HU-15 | [HU-15.md](historias-usuario/HU-15.md) | Importação de Índices Econômicos | `contratos` |
+| HU-16 | [HU-16.md](historias-usuario/HU-16.md) | CNAB — Remessa e Retorno Bancário | `financeiro` |
+| HU-17 | [HU-17.md](historias-usuario/HU-17.md) | Renegociação de Parcelas | `financeiro` |
+| HU-18 | [HU-18.md](historias-usuario/HU-18.md) | Relatórios Financeiros e Dashboard | `financeiro` |
 
 ---
 
 ## Estrutura de Cada HU
-
-Cada arquivo segue o template:
 
 ```
 # HU-XX — Nome
@@ -52,27 +55,21 @@ Cada arquivo segue o template:
 | Wizard criação de contrato | HU-01 | ✅ |
 | Tabela de juros escalante | HU-01 | ✅ |
 | Geração automática de parcelas | HU-02 | ✅ |
-| Completar parcelas faltantes | HU-02 | ✅ |
-| Gerar boleto por parcela | HU-03 | ✅ |
-| Cancelar boleto | HU-03 | ✅ |
-| Pagamento (manual + AJAX) | HU-04 | ✅ |
-| Quitação automática do contrato | HU-04 | ✅ |
-| Preview e aplicação de reajuste | HU-05 | ✅ |
-| Índices IPCA/IGPM/INCC/SELIC/TR | HU-05 | ✅ |
-| Reajuste modo Price com tabela | HU-05 | ✅ |
-| Reajuste em lote | HU-05 | ✅ |
+| Gerar boleto individual | HU-03 | ✅ |
+| Pagamento manual + AJAX | HU-04 | ✅ |
+| Reajuste (preview + aplicação) | HU-05 | ✅ |
 | Bloqueio de boleto por reajuste | HU-06 | ✅ |
-| Painel de reajustes pendentes | HU-06 | ✅ |
-| Carnê 20 meses (PDF + ZIP) | HU-07 | ✅ |
-| Carnê 6 meses | HU-07 | ✅ |
-| Segunda via com juros atualizados | HU-08 | ✅ |
+| Carnê PDF + ZIP | HU-07 | ✅ |
+| Segunda via com encargos | HU-08 | ✅ |
 | Simulador de antecipação | HU-09 | ✅ |
-| Recibo PDF de quitação | HU-09 | ✅ |
-| Upload OFX e conciliação | HU-10 | ✅ |
-| Deduplicação por fitid_ofx | HU-10 | ✅ |
+| Quitação via OFX | HU-10 | ✅ |
 | Cálculo de rescisão | HU-11 | ✅ |
-| Cálculo de cessão de direitos | HU-12 | ✅ |
-| Link público UUID sem login | HU-13 | ✅ |
-| Download PDF público | HU-13 | ✅ |
+| Cálculo de cessão | HU-12 | ✅ |
+| Link público de boleto | HU-13 | ✅ |
+| CRUD de intermediárias pós-wizard | HU-14 | ✅ |
+| Importação IBGE/BCB/FGV | HU-15 | ✅ |
+| CNAB remessa e retorno | HU-16 | ✅ |
+| Renegociação de parcelas | HU-17 | ✅ |
+| Relatórios e dashboard fluxo de caixa | HU-18 | ✅ |
 
 → [Índice completo com matriz de rastreabilidade](historias-usuario/INDICE.md)
