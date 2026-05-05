@@ -9,7 +9,7 @@ from django.utils.html import format_html
 from .models import (
     ConfiguracaoEmail, ConfiguracaoSMS, ConfiguracaoWhatsApp,
     Notificacao, TemplateNotificacao, RegraNotificacao, StatusNotificacao,
-    SessaoConversaWhatsApp,
+    SessaoConversaWhatsApp, ComprovantePendente,
 )
 from .tasks import reenviar_notificacao
 
@@ -274,3 +274,51 @@ class SessaoConversaWhatsAppAdmin(admin.ModelAdmin):
 
     def get_queryset(self, request):
         return super().get_queryset(request).select_related('comprador')
+
+
+@admin.register(ComprovantePendente)
+class ComprovantePendenteAdmin(admin.ModelAdmin):
+    """C-11 — Fila de comprovantes recebidos via WhatsApp aguardando revisão."""
+
+    list_display = ['id', 'comprador_nome', 'parcela', 'destinatario', 'criado_em', 'acoes']
+    search_fields = ['destinatario', 'mensagem', 'parcela__contrato__numero_contrato']
+    readonly_fields = ['destinatario', 'assunto', 'mensagem', 'criado_em', 'atualizado_em',
+                       'parcela', 'tipo', 'status', 'erro_mensagem']
+    ordering = ['-criado_em']
+    date_hierarchy = 'criado_em'
+    actions = ['marcar_confirmado', 'marcar_cancelado']
+
+    def get_queryset(self, request):
+        return (
+            super()
+            .get_queryset(request)
+            .filter(assunto__startswith='Comprovante recebido', status=StatusNotificacao.PENDENTE)
+            .select_related('parcela__contrato__comprador')
+        )
+
+    def has_add_permission(self, request):
+        return False
+
+    def comprador_nome(self, obj):
+        if obj.parcela and obj.parcela.contrato and obj.parcela.contrato.comprador:
+            return obj.parcela.contrato.comprador.nome
+        return obj.destinatario
+    comprador_nome.short_description = 'Comprador'
+
+    def acoes(self, obj):
+        return format_html(
+            '<a class="button" href="{}">Ver parcela</a>',
+            f'/admin/financeiro/parcela/{obj.parcela_id}/change/' if obj.parcela_id else '#',
+        )
+    acoes.short_description = 'Ações'
+    acoes.allow_tags = True
+
+    @admin.action(description='Marcar comprovante como confirmado (cancelar notificação)')
+    def marcar_confirmado(self, request, queryset):
+        updated = queryset.update(status=StatusNotificacao.CANCELADA)
+        self.message_user(request, f'{updated} comprovante(s) confirmado(s) — notificações canceladas.')
+
+    @admin.action(description='Marcar como cancelado')
+    def marcar_cancelado(self, request, queryset):
+        updated = queryset.update(status=StatusNotificacao.CANCELADA)
+        self.message_user(request, f'{updated} notificação(ões) cancelada(s).')

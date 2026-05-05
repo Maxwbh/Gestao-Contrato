@@ -17,6 +17,7 @@ Estados de sessão (SessaoConversaWhatsApp):
   AGUARDA_COMPROVANTE → aguarda envio da mídia (imagem/PDF)
 """
 import base64
+import datetime
 import json
 import logging
 import re
@@ -24,6 +25,8 @@ import urllib.error
 import urllib.request
 
 logger = logging.getLogger(__name__)
+
+_TIMEOUT_SESSAO_MINUTOS = 20
 
 
 def _somente_digitos(texto):
@@ -65,11 +68,31 @@ class WhatsAppBotService:
         """
         from notificacoes.models import SessaoConversaWhatsApp
 
-        sessao, _ = SessaoConversaWhatsApp.objects.get_or_create(
+        from django.utils import timezone
+
+        sessao, criada = SessaoConversaWhatsApp.objects.get_or_create(
             numero_whatsapp=telefone,
             ativo=True,
             defaults={'instancia': config_wa.instancia if config_wa else ''},
         )
+
+        # C-14: timeout de sessão — aviso após 20 min de inatividade
+        _estados_sem_timeout = (
+            SessaoConversaWhatsApp.INICIO,
+            SessaoConversaWhatsApp.AGUARDA_CPF,
+        )
+        if not criada and sessao.estado not in _estados_sem_timeout:
+            delta = timezone.now() - sessao.atualizado_em
+            if delta > datetime.timedelta(minutes=_TIMEOUT_SESSAO_MINUTOS):
+                self._responder(
+                    telefone,
+                    '⏱ Sua sessão expirou por inatividade.\nDigite *olá* para começar novamente.',
+                    config_wa,
+                )
+                sessao.estado = SessaoConversaWhatsApp.INICIO
+                sessao.dados = {}
+                sessao.save(update_fields=['estado', 'dados'])
+                return
 
         try:
             txt = (mensagem or '').strip().lower()

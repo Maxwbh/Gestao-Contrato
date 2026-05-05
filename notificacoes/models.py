@@ -636,3 +636,19 @@ class SessaoConversaWhatsApp(TimeStampedModel):
         self.estado = self.ENCERRADA
         self.ativo = False
         self.save(update_fields=['estado', 'ativo'])
+
+
+# =============================================================================
+# PROXY — Fila de Comprovantes Pendentes (C-11)
+# =============================================================================
+
+class ComprovantePendente(Notificacao):
+    """
+    Proxy de Notificacao filtrado para comprovantes enviados via WhatsApp
+    aguardando revisão manual (status=PENDENTE, assunto contém 'Comprovante recebido').
+    """
+
+    class Meta:
+        proxy = True
+        verbose_name = 'Comprovante Pendente'
+        verbose_name_plural = 'Comprovantes Pendentes de Revisão'
