@@ -34,13 +34,15 @@ def _config_wa():
     return cfg
 
 
-def _sessao(comprador=None, estado=SessaoConversaWhatsApp.INICIO, dados=None):
+def _sessao(comprador=None, estado=SessaoConversaWhatsApp.INICIO, dados=None, atualizado_em=None):
+    from django.utils import timezone
     s = MagicMock(spec=SessaoConversaWhatsApp)
     s.numero_whatsapp = '5531999990001'
     s.comprador = comprador
     s.comprador_id = comprador.pk if comprador else None
     s.estado = estado
     s.dados = dados or {}
+    s.atualizado_em = atualizado_em if atualizado_em is not None else timezone.now()
     s.INICIO = SessaoConversaWhatsApp.INICIO
     s.AGUARDA_CPF = SessaoConversaWhatsApp.AGUARDA_CPF
     s.MENU = SessaoConversaWhatsApp.MENU
@@ -415,3 +417,28 @@ class TestEdgeCases(BotTestCase):
         with patch.object(self.bot, '_iniciar_comprovante') as mock_comp:
             self.bot._despachar_menu(sessao, '', 'media', self.config)
         mock_comp.assert_called_once()
+
+    def test_timeout_sessao_envia_aviso_e_reinicia(self):
+        """C-14 — Sessão inativa há >20 min recebe aviso e volta ao INICIO."""
+        import datetime
+        sessao_velha = _sessao(
+            estado=SessaoConversaWhatsApp.MENU,
+            atualizado_em=timezone.now() - datetime.timedelta(minutes=25),
+        )
+        with patch('notificacoes.models.SessaoConversaWhatsApp.objects') as mock_mgr:
+            mock_mgr.get_or_create.return_value = (sessao_velha, False)
+            self.bot.processar('5531999990001', 'oi', 'text', self.config)
+
+        resposta = self.ultima_resposta().lower()
+        self.assertIn('expirou', resposta)
+        self.assertEqual(sessao_velha.estado, SessaoConversaWhatsApp.INICIO)
+
+    def test_sessao_recente_nao_dispara_timeout(self):
+        """C-14 — Sessão ativa recentemente não recebe aviso de timeout."""
+        sessao = _sessao(estado=SessaoConversaWhatsApp.MENU)
+        with patch('notificacoes.models.SessaoConversaWhatsApp.objects') as mock_mgr, \
+             patch.object(self.bot, '_despachar_menu') as mock_menu:
+            mock_mgr.get_or_create.return_value = (sessao, False)
+            self.bot.processar('5531999990001', '1', 'text', self.config)
+
+        mock_menu.assert_called_once()
