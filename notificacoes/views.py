@@ -1102,8 +1102,8 @@ def painel_mensagens(request):
 @login_required
 def reenviar_notificacao_ajax(request, pk):
     """
-    Recoloca a notificação como PENDENTE e enfileira reenvio via Celery (AJAX POST).
-    Limpa external_id e status_entrega anteriores.
+    Reenvia uma notificação com erro diretamente (síncrono).
+    Render Free Tier não suporta Celery workers — execução inline.
     """
     if request.method != 'POST':
         return JsonResponse({'sucesso': False, 'erro': 'Método não permitido'}, status=405)
@@ -1120,10 +1120,19 @@ def reenviar_notificacao_ajax(request, pk):
     ])
 
     from .tasks import reenviar_notificacao as _task
-    _task.delay(pk)
+    try:
+        _task(pk)  # Síncrono — sem Celery no Render Free Tier
+        logger.info("[Painel] Reenvio síncrono concluído para notificacao pk=%s", pk)
+    except Exception as exc:
+        logger.exception("[Painel] Erro no reenvio síncrono pk=%s: %s", pk, exc)
+        return JsonResponse({'sucesso': False, 'erro': str(exc)}, status=500)
 
-    logger.info("[Painel] Reenvio enfileirado para notificacao pk=%s", pk)
-    return JsonResponse({'sucesso': True})
+    notificacao.refresh_from_db(fields=['status', 'erro_mensagem'])
+    return JsonResponse({
+        'sucesso': True,
+        'status': notificacao.status,
+        'erro_mensagem': notificacao.erro_mensagem,
+    })
 
 
 # =============================================================================
