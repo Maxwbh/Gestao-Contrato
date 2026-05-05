@@ -994,7 +994,10 @@ def _enviar_relatorio_semanal(imobiliaria, relatorio: dict) -> None:
         'DATAATUAL': timezone.localdate().strftime('%d/%m/%Y'),
     }
 
-    template = TemplateNotificacao.get_template(TipoTemplate.RELATORIO_SEMANAL, imobiliaria)
+    template = (
+        TemplateNotificacao.get_template('gestao-relatorio-semanal', imobiliaria)
+        or TemplateNotificacao.get_template(TipoTemplate.RELATORIO_SEMANAL, imobiliaria)
+    )
     if template and template.tem_email:
         assunto, _, corpo_html, _ = template.renderizar(contexto)
         send_mail(
@@ -1037,35 +1040,49 @@ def _enviar_relatorio_mensal(contabilidade, dados: dict) -> None:
     imobiliarias = dados['imobiliarias']
 
     # Monta tabela HTML com dados por imobiliária
+    _td = "style='padding:9px 10px;border-bottom:1px solid #e0e7ef;font-size:13px'"
+    _tdc = "style='padding:9px 10px;border-bottom:1px solid #e0e7ef;font-size:13px;text-align:center'"
+    _tdr = "style='padding:9px 10px;border-bottom:1px solid #e0e7ef;font-size:13px;text-align:right'"
     linhas_tabela = ''.join(
-        f"<tr>"
-        f"<td>{i['nome']}</td>"
-        f"<td style='text-align:center'>{i['contratos_ativos']}</td>"
-        f"<td style='text-align:center'>{i['recebimentos']}</td>"
-        f"<td style='text-align:right'>{_fmt_brl(i['valor_recebido'])}</td>"
-        f"<td style='text-align:center'>{i['inadimplentes']}</td>"
-        f"<td style='text-align:right'>{_fmt_brl(i['valor_inadimplente'])}</td>"
-        f"<td style='text-align:center'>{i['reajustes_aplicados']}</td>"
+        f"<tr style='background:{'#f8fafc' if idx % 2 else '#fff'}'>"
+        f"<td {_td}>{i['nome']}</td>"
+        f"<td {_tdc}>{i['contratos_ativos']}</td>"
+        f"<td {_tdc}>{i['recebimentos']}</td>"
+        f"<td {_tdr}>{_fmt_brl(i['valor_recebido'])}</td>"
+        f"<td {_tdc}>{i['inadimplentes']}</td>"
+        f"<td {_tdr}>{_fmt_brl(i['valor_inadimplente'])}</td>"
+        f"<td {_tdc}>{i['reajustes_aplicados']}</td>"
         f"</tr>"
-        for i in imobiliarias
+        for idx, i in enumerate(imobiliarias)
     )
+    _th = ("style='padding:10px;background:#1B5E20;color:#fff;font-size:12px;"
+           "text-transform:uppercase;letter-spacing:.5px;font-weight:700;text-align:left'")
+    _thc = ("style='padding:10px;background:#1B5E20;color:#fff;font-size:12px;"
+            "text-transform:uppercase;letter-spacing:.5px;font-weight:700;text-align:center'")
+    _thr = ("style='padding:10px;background:#1B5E20;color:#fff;font-size:12px;"
+            "text-transform:uppercase;letter-spacing:.5px;font-weight:700;text-align:right'")
     tabela_html = (
-        '<table border="1" cellpadding="6" cellspacing="0" '
-        'style="border-collapse:collapse;width:100%;font-size:13px;">'
-        '<thead><tr style="background:#f0f0f0;font-weight:bold;">'
-        '<th>Imobiliária</th><th>Contratos Ativos</th>'
-        '<th>Recebimentos</th><th>Valor Recebido</th>'
-        '<th>Inadimplentes</th><th>Valor Inadimplente</th>'
-        '<th>Reajustes</th></tr></thead>'
+        '<table cellpadding="0" cellspacing="0" '
+        'style="border-collapse:collapse;width:100%;font-family:Arial,sans-serif;'
+        'border:1px solid #e0e7ef;border-radius:6px;overflow:hidden">'
+        f'<thead><tr>'
+        f'<th {_th}>Imobiliária</th>'
+        f'<th {_thc}>Contratos Ativos</th>'
+        f'<th {_thc}>Recebimentos</th>'
+        f'<th {_thr}>Valor Recebido</th>'
+        f'<th {_thc}>Inadimplentes</th>'
+        f'<th {_thr}>Valor Inadimplente</th>'
+        f'<th {_thc}>Reajustes</th>'
+        f'</tr></thead>'
         f'<tbody>{linhas_tabela}</tbody>'
-        f'<tfoot><tr style="background:#e8f4fd;font-weight:bold;">'
-        f'<td>TOTAL</td>'
-        f'<td style="text-align:center">{totais["contratos_ativos"]}</td>'
-        f'<td style="text-align:center">{totais["recebimentos"]}</td>'
-        f'<td style="text-align:right">{_fmt_brl(totais["valor_recebido"])}</td>'
-        f'<td style="text-align:center">{totais["inadimplentes"]}</td>'
-        f'<td style="text-align:right">{_fmt_brl(totais["valor_inadimplente"])}</td>'
-        f'<td style="text-align:center">{totais["reajustes_aplicados"]}</td>'
+        f'<tfoot><tr style="background:#E8F5E9;font-weight:700">'
+        f'<td style="padding:10px;font-size:13px;border-top:2px solid #2E7D32">TOTAL</td>'
+        f'<td style="padding:10px;font-size:13px;border-top:2px solid #2E7D32;text-align:center">{totais["contratos_ativos"]}</td>'
+        f'<td style="padding:10px;font-size:13px;border-top:2px solid #2E7D32;text-align:center">{totais["recebimentos"]}</td>'
+        f'<td style="padding:10px;font-size:13px;border-top:2px solid #2E7D32;text-align:right">{_fmt_brl(totais["valor_recebido"])}</td>'
+        f'<td style="padding:10px;font-size:13px;border-top:2px solid #2E7D32;text-align:center">{totais["inadimplentes"]}</td>'
+        f'<td style="padding:10px;font-size:13px;border-top:2px solid #2E7D32;text-align:right">{_fmt_brl(totais["valor_inadimplente"])}</td>'
+        f'<td style="padding:10px;font-size:13px;border-top:2px solid #2E7D32;text-align:center">{totais["reajustes_aplicados"]}</td>'
         f'</tr></tfoot>'
         '</table>'
     )
@@ -1092,7 +1109,10 @@ def _enviar_relatorio_mensal(contabilidade, dados: dict) -> None:
         'DATAATUAL': hoje.strftime('%d/%m/%Y'),
     }
 
-    template = TemplateNotificacao.get_template(TipoTemplate.RELATORIO_MENSAL)
+    template = (
+        TemplateNotificacao.get_template('gestao-relatorio-mensal')
+        or TemplateNotificacao.get_template(TipoTemplate.RELATORIO_MENSAL)
+    )
     if template and template.tem_email:
         assunto, _, corpo_html, _ = template.renderizar(contexto)
         send_mail(
