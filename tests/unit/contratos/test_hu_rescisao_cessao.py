@@ -241,8 +241,9 @@ class TestCalcularRescisaoEstrutura:
         assert r['data_rescisao'] == DATA_RESCISAO_4M
 
     def test_sem_data_usa_hoje(self, contrato_com_parcelas):
+        from django.utils import timezone
         r = contrato_com_parcelas.calcular_rescisao()
-        assert r['data_rescisao'] == date.today()
+        assert r['data_rescisao'] == timezone.now().date()
 
 
 # ---------------------------------------------------------------------------
@@ -384,8 +385,9 @@ class TestCalcularCessao:
         assert r['taxa_cessao'] == esperado
 
     def test_sem_data_usa_hoje(self, contrato_com_parcelas):
+        from django.utils import timezone
         r = contrato_com_parcelas.calcular_cessao()
-        assert r['data_cessao'] == date.today()
+        assert r['data_cessao'] == timezone.now().date()
 
 
 # ---------------------------------------------------------------------------
