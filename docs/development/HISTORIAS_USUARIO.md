@@ -5,7 +5,7 @@
 
 ---
 
-## HUs Disponíveis (20 histórias)
+## HUs Disponíveis (21 histórias)
 
 | ID | Arquivo | Nome | Módulo |
 |----|---------|------|--------|
@@ -29,6 +29,7 @@
 | HU-18 | [HU-18.md](historias-usuario/HU-18.md) | Relatórios Financeiros e Dashboard | `financeiro` |
 | HU-19 | [HU-19.md](historias-usuario/HU-19.md) | Chatbot WhatsApp — Atendimento Automático | `notificacoes` |
 | HU-20 | [HU-20.md](historias-usuario/HU-20.md) | Notificações e Cobrança Automática | `notificacoes` |
+| HU-21 | [HU-21.md](historias-usuario/HU-21.md) | Portal do Comprador — Acesso e Autoatendimento Digital | `portal_comprador` |
 
 ---
 
@@ -76,5 +77,7 @@
 | Chatbot WhatsApp (fluxos A-F, 2ª via, comprovante) | HU-19 | ✅ (parcial) |
 | Notificações automáticas (e-mail, SMS, WhatsApp) | HU-20 | ✅ |
 | Régua de cobrança configurável | HU-20 | ✅ |
+| Portal do Comprador — auto-cadastro, login, dashboard | HU-21 | ✅ |
+| Download de boleto pelo comprador | HU-21 | ✅ |
 
 → [Índice completo com matriz de rastreabilidade](historias-usuario/INDICE.md)
