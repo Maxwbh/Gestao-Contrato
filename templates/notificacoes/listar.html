@@ -105,6 +105,15 @@
         <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fechar"></button>
       </div>
       <div class="modal-body p-0">
+        <div id="modalMensagemErro" class="alert alert-danger rounded-0 mb-0 border-0 border-bottom" style="display:none;">
+          <strong><i class="fas fa-exclamation-triangle me-1"></i>Erro de envio:</strong>
+          <span id="modalMensagemErroTexto" style="word-break:break-all;"></span>
+        </div>
+        <div id="modalMensagemPendente" class="alert alert-warning rounded-0 mb-0 border-0 border-bottom" style="display:none;">
+          <i class="fas fa-clock me-1"></i>
+          <strong>Notificação pendente</strong> — ainda não foi processada pelo job de envio.<br>
+          <small>Execute manualmente: <code>POST /api/tasks/enviar-notificacoes/</code> ou <code>/api/tasks/enviar-inadimplentes/</code></small>
+        </div>
         <iframe id="modalMensagemFrame" srcdoc="" style="width:100%;min-height:420px;border:none;" title="Conteúdo"></iframe>
         <pre id="modalMensagemTexto" class="p-3 mb-0 bg-light" style="display:none;white-space:pre-wrap;font-size:13px;"></pre>
       </div>
@@ -144,14 +153,65 @@ function tipoNotifRenderer(params) {
 }
 
 function statusNotifRenderer(params) {
-    const d = params.data;
     const m = {
         'PENDENTE':  '<span class="badge bg-warning text-dark">Pendente</span>',
         'ENVIADA':   '<span class="badge bg-success">Enviada</span>',
-        'ERRO':      `<span class="badge bg-danger" title="${d.erro_mensagem}">Erro</span>`,
+        'ERRO':      '<span class="badge bg-danger">Erro</span>',
         'CANCELADA': '<span class="badge bg-secondary">Cancelada</span>',
     };
     return m[params.value] || '<span class="badge bg-secondary">—</span>';
+}
+
+function causaRenderer(params) {
+    const d = params.data;
+    if (d.erro_mensagem) {
+        const short = d.erro_mensagem.length > 90
+            ? d.erro_mensagem.substring(0, 90) + '…'
+            : d.erro_mensagem;
+        const escaped = d.erro_mensagem.replace(/"/g, '&quot;');
+        return `<span class="text-danger small" title="${escaped}" style="cursor:help">${short}</span>`;
+    }
+    if (d.status === 'PENDENTE' && d.tentativas === 0) {
+        return '<span class="text-muted small"><i class="fas fa-clock me-1"></i>Aguardando execução do job</span>';
+    }
+    if (d.status === 'PENDENTE' && d.tentativas > 0) {
+        return '<span class="text-muted small"><i class="fas fa-redo me-1"></i>Aguardando reenvio</span>';
+    }
+    return '<span class="text-muted">—</span>';
+}
+
+function acoesNotifRenderer(params) {
+    const d = params.data;
+    if (d.status === 'ERRO') {
+        return `<button class="btn btn-sm btn-outline-warning py-0 px-2"
+                        onclick="reenviarNotif(event, ${d.pk})" title="Tentar novamente">
+                    <i class="fas fa-redo me-1"></i>Reenviar
+                </button>`;
+    }
+    return '';
+}
+
+function reenviarNotif(evt, pk) {
+    evt.stopPropagation();
+    if (!confirm('Reenviar esta notificação agora?')) return;
+    const csrf = document.cookie.match(/csrftoken=([^;]+)/)?.[1] || '';
+    fetch(`/notificacoes/${pk}/reenviar/`, {
+        method: 'POST',
+        headers: {'X-CSRFToken': csrf},
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.sucesso) {
+            const msg = data.status === 'ENVIADA'
+                ? 'Notificação enviada com sucesso!'
+                : `Reenvio processado (status: ${data.status})${data.erro_mensagem ? '\n' + data.erro_mensagem : ''}`;
+            alert(msg);
+            location.reload();
+        } else {
+            alert('Erro ao reenviar:\n' + (data.erro || 'desconhecido'));
+        }
+    })
+    .catch(() => alert('Falha na requisição de reenvio.'));
 }
 
 function parcelaRenderer(params) {
@@ -166,6 +226,21 @@ function abrirMensagem(data) {
         data.assunto || ('Mensagem — ' + data.tipo);
     document.getElementById('modalMensagemMeta').textContent =
         data.tipo + ' · ' + data.destinatario + ' · ' + data.data_agendamento_fmt;
+
+    // Painel de erro / pendente
+    const erroDiv = document.getElementById('modalMensagemErro');
+    const pendDiv = document.getElementById('modalMensagemPendente');
+    if (data.erro_mensagem) {
+        document.getElementById('modalMensagemErroTexto').textContent = data.erro_mensagem;
+        erroDiv.style.display = '';
+        pendDiv.style.display = 'none';
+    } else if (data.status === 'PENDENTE') {
+        erroDiv.style.display = 'none';
+        pendDiv.style.display = '';
+    } else {
+        erroDiv.style.display = 'none';
+        pendDiv.style.display = 'none';
+    }
 
     const frame = document.getElementById('modalMensagemFrame');
     const pre = document.getElementById('modalMensagemTexto');
@@ -198,7 +273,11 @@ document.addEventListener('DOMContentLoaded', function() {
                   cellRenderer: parcelaRenderer },
                 { headerName: 'Status', field: 'status', filter: 'agTextColumnFilter', minWidth: 110,
                   cellRenderer: statusNotifRenderer },
-                { headerName: 'Tentativas', field: 'tentativas', filter: 'agNumberColumnFilter', minWidth: 110, type: 'numericColumn' },
+                { headerName: 'Causa / Detalhe', field: 'erro_mensagem', filter: 'agTextColumnFilter', minWidth: 260, flex: 1,
+                  cellRenderer: causaRenderer },
+                { headerName: 'Tentativas', field: 'tentativas', filter: 'agNumberColumnFilter', minWidth: 100, type: 'numericColumn' },
+                { headerName: 'Ações', field: 'pk', sortable: false, filter: false, minWidth: 110,
+                  cellRenderer: acoesNotifRenderer },
             ],
             rowData: notifRowData,
             domLayout: 'autoHeight',

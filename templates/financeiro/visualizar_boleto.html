@@ -220,6 +220,12 @@
                             <i class="fas fa-download me-1"></i>Download PDF
                         </a>
                         {% endif %}
+                        <!-- Link público (sem autenticação) -->
+                        <button type="button" class="btn btn-outline-info"
+                                onclick="compartilharLink('{{ link_publico }}')"
+                                title="Compartilhar link público (sem senha)">
+                            <i class="fas fa-share-alt me-1"></i>Compartilhar
+                        </button>
                         <button type="button" class="btn btn-outline-secondary"
                                 onclick="window.print()">
                             <i class="fas fa-print me-1"></i>Imprimir
@@ -357,6 +363,23 @@ document.addEventListener('DOMContentLoaded', function() {
         if (dialog) modal.style.width = 'min(95vw, 600px)';
     });
 });
+
+function compartilharLink(url) {
+    if (navigator.share) {
+        navigator.share({ title: 'Boleto', url: url }).catch(() => {});
+    } else {
+        navigator.clipboard.writeText(url).then(() => {
+            const btn = event.currentTarget;
+            const orig = btn.innerHTML;
+            btn.innerHTML = '<i class="fas fa-check me-1"></i>Link copiado!';
+            btn.classList.replace('btn-outline-info', 'btn-info');
+            setTimeout(() => {
+                btn.innerHTML = orig;
+                btn.classList.replace('btn-info', 'btn-outline-info');
+            }, 2500);
+        });
+    }
+}
 
 function copiarTexto(elementId) {
     const elemento = document.getElementById(elementId);

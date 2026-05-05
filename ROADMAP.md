@@ -1205,8 +1205,8 @@ para ciclo = 2..total_ciclos+1:
 | HU Boleto/Carnê/Remessa (Seção 21) | — | 10 | — | — | 10 | ✅ 10/10 |
 | OFX Extrato Bancário (Seção 22) | — | 5 | — | — | 5 | ✅ 5/5 |
 | Conciliação Bancária (Seção 23) | — | 8 | — | — | 8 | ✅ 8/8 |
-| WhatsApp — Evolução (Seção 26) | — | 3 | 5 | — | 8 | ⏳ 0/8 — análise concluída, implementação pendente |
-| Chatbot WhatsApp (Seção 27) | 2 | 8 | 6 | — | 16 | ⏳ 0/16 — especificado, implementação pendente |
+| WhatsApp — Evolução (Seção 26) | — | 5 | 3 | — | 8 | ✅ 5/8 — W-01..W-05 concluídos (Cloud API mode + webhook + teste conexão) |
+| Chatbot WhatsApp (Seção 27) | 2 | 8 | 6 | — | 16 | ✅ 14/16 — C-01..C-10, C-12, C-13, C-15, C-16 |
 | Testes | 104 | ~164 | ~37 | ~41+117 | ~463 | ✅ 942 testes passando |
 | CI/CD | — | 2 | 4 | 2 | 8 | — |
 | Documentação | — | — | 1 | 3 | 4 | — |
@@ -1685,11 +1685,11 @@ FALLBACK (se VPS ficar fora)
 
 | # | Item | Prioridade | Provedor | Status |
 |---|------|------------|----------|--------|
-| W-01 | Adicionar `modo_evolution` (`BAILEYS`/`CLOUD_API`) ao model `ConfiguracaoWhatsApp` + migration | P1 | Evolution | — |
-| W-02 | Campos `phone_number_id` + `meta_access_token` no model para modo Cloud API | P1 | Evolution | — |
-| W-03 | `ServicoWhatsApp._enviar_evolution()` — branch por `modo_evolution` (endpoint e payload diferentes) | P1 | Evolution | — |
-| W-04 | **Webhook Evolution modo Cloud API** — payload diferente do Baileys; atualizar `webhook_evolution()` | P2 | Evolution | — |
-| W-05 | **Teste de conexão** para modo Cloud API (`GET /<instancia>/instance/connectionState`) | P2 | Evolution | — |
+| W-01 | Adicionar `modo_evolution` (`BAILEYS`/`CLOUD_API`) ao model `ConfiguracaoWhatsApp` + migration | P1 | Evolution | ✅ migration 0013 |
+| W-02 | Campos `phone_number_id` + `meta_access_token` no model para modo Cloud API | P1 | Evolution | ✅ migration 0013 |
+| W-03 | `ServicoWhatsApp._enviar_evolution()` — branch por `modo_evolution` (endpoint e payload diferentes) | P1 | Evolution | ✅ `_enviar_evolution_cloud_api()` |
+| W-04 | **Webhook Evolution modo Cloud API** — payload diferente do Baileys; atualizar `webhook_evolution()` | P2 | Evolution | ✅ `_EVOLUTION_STATUS_MAP` + `_webhook_evolution_meta_format()` |
+| W-05 | **Teste de conexão** para modo Cloud API (`GET /<instancia>/instance/connectionState`) | P2 | Evolution | ✅ `testar_conexao_whatsapp()` verifica Meta Graph API quando `modo_evolution=CLOUD_API` |
 | W-06 | **Templates interativos** — `corpo_whatsapp_interativo` (JSON) com botões para Evolution Cloud API e Meta | P3 | Evolution / Meta | — |
 | W-07 | **BSP brasileiro** — testar com Hablla ou Poli Digital como alternativa ao Evolution direto | P3 | Meta via BSP | — |
 | W-08 | **Status de entrega unificado** — normalizar `DELIVERED/READ` entre provedores | P3 | Todos | — |
@@ -1998,36 +1998,36 @@ def _processar_mensagem_inbound(item, config, request):
 
 | # | Item | Arquivo | Status |
 |---|------|---------|--------|
-| C-01 | Model `SessaoConversaWhatsApp` + migration | `notificacoes/models.py` | — |
-| C-02 | Webhook: rotear `fromMe=False` para `_processar_mensagem_inbound()` | `notificacoes/views.py` | — |
-| C-03 | `WhatsAppBotService.processar()` — dispatcher por estado | `notificacoes/whatsapp_bot.py` | — |
-| C-04 | Identificação por telefone + fallback CPF (Fluxo A) | `notificacoes/whatsapp_bot.py` | — |
-| C-05 | Menu principal (Fluxo B) | `notificacoes/whatsapp_bot.py` | — |
+| C-01 | Model `SessaoConversaWhatsApp` + migration | `notificacoes/models.py` | ✅ |
+| C-02 | Webhook: rotear `fromMe=False` para `_processar_mensagem_inbound()` | `notificacoes/views.py` | ✅ |
+| C-03 | `WhatsAppBotService.processar()` — dispatcher por estado | `notificacoes/whatsapp_bot.py` | ✅ |
+| C-04 | Identificação por telefone + fallback CPF (Fluxo A) | `notificacoes/whatsapp_bot.py` | ✅ |
+| C-05 | Menu principal (Fluxo B) | `notificacoes/whatsapp_bot.py` | ✅ |
 
 #### Fase 2 — 2ª Via e Atraso (P1)
 
 | # | Item | Arquivo | Status |
 |---|------|---------|--------|
-| C-06 | Fluxo C — 2ª via: lista parcelas + `gerar_segunda_via()` + envio PDF | `notificacoes/whatsapp_bot.py` | — |
-| C-07 | Fluxo D — boletos em atraso: encargos calculados + linha digitável | `notificacoes/whatsapp_bot.py` | — |
-| C-08 | `_enviar_pdf()` — `POST /message/sendMedia/{instancia}` (base64) | `notificacoes/whatsapp_bot.py` | — |
+| C-06 | Fluxo C — 2ª via: lista parcelas + `gerar_segunda_via()` + envio PDF | `notificacoes/whatsapp_bot.py` | ✅ |
+| C-07 | Fluxo D — boletos em atraso: encargos calculados + linha digitável | `notificacoes/whatsapp_bot.py` | ✅ |
+| C-08 | `_enviar_pdf()` — `POST /message/sendMedia/{instancia}` (base64) | `notificacoes/whatsapp_bot.py` | ✅ |
 
 #### Fase 3 — Comprovante (P2)
 
 | # | Item | Arquivo | Status |
 |---|------|---------|--------|
-| C-09 | Fluxo E — receber mídia + `_baixar_media()` via Evolution API | `notificacoes/whatsapp_bot.py` | — |
-| C-10 | Salvar em `HistoricoPagamento.comprovante` + notificação admin | `notificacoes/whatsapp_bot.py` | — |
+| C-09 | Fluxo E — receber mídia + seleção de parcela + notificação admin | `notificacoes/whatsapp_bot.py` | ✅ |
+| C-10 | Criar `Notificacao` para admin revisar + envio de e-mail para imobiliária | `notificacoes/whatsapp_bot.py` | ✅ |
 | C-11 | Admin: fila de comprovantes pendentes de revisão | `notificacoes/admin.py` | — |
 
 #### Fase 4 — UX e Robustez (P2)
 
 | # | Item | Arquivo | Status |
 |---|------|---------|--------|
-| C-12 | Fluxo F — resumo financeiro | `notificacoes/whatsapp_bot.py` | — |
+| C-12 | Fluxo F — resumo financeiro | `notificacoes/whatsapp_bot.py` | ✅ |
 | C-13 | Management command `limpar_sessoes_whatsapp` — remove sessões > 30 min | `notificacoes/management/` | — |
 | C-14 | Timeout de sessão: mensagem de aviso após 20 min sem resposta | `notificacoes/whatsapp_bot.py` | — |
-| C-15 | Opção "0 — Falar com atendente": pausa bot + notifica staff por email | `notificacoes/whatsapp_bot.py` | — |
+| C-15 | Opção "0 — Falar com atendente": pausa bot + notifica staff por email | `notificacoes/whatsapp_bot.py` | ✅ |
 | C-16 | Testes unitários: 20 casos (identificação, fluxos A–F, estados, edge cases) | `tests/unit/notificacoes/test_whatsapp_bot.py` | — |
 
 ---
