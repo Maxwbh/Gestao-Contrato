@@ -489,7 +489,25 @@ pytest --cov=. --cov-report=html
 pytest -v
 ```
 
-**Meta de cobertura:** > 80%
+**Meta de cobertura:** > 80% | **Status atual:** ✅ 981 testes passando
+
+### Cobertura por área
+
+| Área | Arquivo(s) | Testes |
+|------|-----------|--------|
+| Autenticação / Accounts | `test_auth_views.py` | 23 |
+| Notificações (e-mail, SMS, WhatsApp, webhook) | `test_models.py`, `test_views.py`, `test_tasks.py` | 48 |
+| Portal do Comprador | `test_models.py`, `test_auth.py`, `test_views.py`, `test_api.py` | 71 |
+| Core (modelos, CRUD, APIs, dashboard) | `test_models.py`, `test_crud_views.py`, `test_api_views.py`, `test_dashboard.py` | 75 |
+| Contratos (CRUD, formulários, índices) | `test_crud_views.py`, `test_forms.py`, `test_indices_views.py` | 43 |
+| Financeiro — Parcelas e Pagamentos | `test_parcela_views.py`, `test_parcela_reajuste.py` | 40+ |
+| Financeiro — Boletos e CNAB | `test_boleto_views.py`, `test_cnab_views.py`, `test_boleto_service.py`, `test_cnab_service.py` | 80+ |
+| Financeiro — Reajuste | `test_reajuste_views.py`, `test_reajuste_service.py`, `test_hu_parcelas_reajuste.py` | 100+ |
+| Financeiro — Dashboard e REST API | `test_dashboard_views.py`, `test_rest_api_views.py` | 35 |
+| **HU Fluxo Completo** | `test_hu_fluxo_completo.py` | **24** |
+| Smoke Tests (todos os endpoints GET) | `test_smoke.py` | 117 |
+| Segurança e Edge Cases | `test_security.py`, `test_edge_cases.py` | 26 |
+| E2E / Integração | `test_fluxo_contrato_completo.py`, `test_fluxo_boleto.py`, etc. | 14 |
 
 Ver documentação completa em [/tests/README.md](/tests/README.md)
 
@@ -542,4 +560,4 @@ Configurado via `pyproject.toml`
 **Website:** https://msbrasil.inf.br
 **Licença:** Proprietary
 
-**Última atualização:** 2025-11-26 - Reestruturação completa da documentação e testes
+**Última atualização:** 2026-05-04 - HU Fluxo Completo: 24 testes de ciclo de vida do contrato (981 testes total)
