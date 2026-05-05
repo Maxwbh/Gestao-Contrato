@@ -532,3 +532,84 @@ class RegraNotificacao(TimeStampedModel):
     def __str__(self):
         sinal = '−' if self.tipo_gatilho == TipoGatilho.ANTES_VENCIMENTO else '+'
         return f"{self.nome} (D{sinal}{self.dias_offset} · {self.get_tipo_notificacao_display()})"
+
+
+# =============================================================================
+# CHATBOT WHATSAPP — Sessão de Conversa
+# =============================================================================
+
+class SessaoConversaWhatsApp(TimeStampedModel):
+    """
+    Sessão de conversa do comprador com o bot WhatsApp.
+
+    O estado e o contexto temporário (parcelas selecionadas, tentativas de CPF, etc.)
+    são armazenados em ``estado`` e ``dados`` (JSONField).
+    """
+
+    INICIO = 'INICIO'
+    AGUARDA_CPF = 'AGUARDA_CPF'
+    MENU = 'MENU'
+    AGUARDA_SELECAO_BOLETO = 'AGUARDA_SELECAO_BOLETO'
+    AGUARDA_COMPROVANTE = 'AGUARDA_COMPROVANTE'
+    ENCERRADA = 'ENCERRADA'
+
+    ESTADOS = [
+        (INICIO, 'Aguardando identificação'),
+        (AGUARDA_CPF, 'Aguardando CPF'),
+        (MENU, 'Menu principal'),
+        (AGUARDA_SELECAO_BOLETO, 'Aguardando seleção de boleto'),
+        (AGUARDA_COMPROVANTE, 'Aguardando comprovante'),
+        (ENCERRADA, 'Encerrada'),
+    ]
+
+    comprador = models.ForeignKey(
+        'core.Comprador',
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name='sessoes_whatsapp',
+        verbose_name='Comprador',
+    )
+    numero_whatsapp = models.CharField(
+        max_length=30,
+        verbose_name='Número WhatsApp',
+        help_text='E.164 sem "+", ex: 5511999999999',
+        db_index=True,
+    )
+    instancia = models.CharField(
+        max_length=100,
+        verbose_name='Instância Evolution API',
+    )
+    estado = models.CharField(
+        max_length=30,
+        choices=ESTADOS,
+        default=INICIO,
+        verbose_name='Estado',
+    )
+    dados = models.JSONField(
+        default=dict,
+        blank=True,
+        verbose_name='Dados de contexto',
+        help_text='Contexto temporário: ids de parcelas exibidas, tentativas, etc.',
+    )
+    ativo = models.BooleanField(
+        default=True,
+        verbose_name='Ativo',
+        db_index=True,
+    )
+
+    class Meta:
+        verbose_name = 'Sessão de Conversa WhatsApp'
+        verbose_name_plural = 'Sessões de Conversa WhatsApp'
+        indexes = [
+            models.Index(fields=['numero_whatsapp', 'ativo']),
+        ]
+
+    def __str__(self):
+        comp = self.comprador.nome if self.comprador_id else self.numero_whatsapp
+        return f"Sessão {comp} — {self.get_estado_display()}"
+
+    def encerrar(self):
+        self.estado = self.ENCERRADA
+        self.ativo = False
+        self.save(update_fields=['estado', 'ativo'])
