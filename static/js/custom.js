@@ -730,8 +730,10 @@
 
         // ====================================================================
         // AUTO-DISMISS ALERTS
+        // Only dismisses flash-message alerts (alert-dismissible), never
+        // static result cards like the rescisão / cessão calculation output.
         // ====================================================================
-        const alerts = document.querySelectorAll('.alert:not(.alert-permanent)');
+        const alerts = document.querySelectorAll('.alert.alert-dismissible:not(.alert-permanent)');
         alerts.forEach(function(alert) {
             setTimeout(function() {
                 alert.style.transition = 'opacity 0.4s ease';
@@ -742,8 +744,10 @@
 
         // ====================================================================
         // CONFIRM DELETIONS
+        // Targets only btn-danger submit buttons WITHOUT the no-confirm class.
+        // Add class="... no-confirm" to calculation buttons to skip this.
         // ====================================================================
-        const deleteButtons = document.querySelectorAll('.btn-danger[type="submit"]');
+        const deleteButtons = document.querySelectorAll('.btn-danger[type="submit"]:not(.no-confirm)');
         deleteButtons.forEach(button => {
             button.addEventListener('click', function(e) {
                 if (!confirm('Tem certeza que deseja executar esta ação?')) {

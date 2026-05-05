@@ -2,7 +2,8 @@
 Testes das views de boletos do app financeiro.
 
 Escopo: gerar_boleto, download_boleto, cancelar_boleto,
-        download_zip_boletos, segunda_via_boleto, gerar_carne
+        download_zip_boletos, segunda_via_boleto, gerar_carne,
+        boleto_publico (link público sem autenticação)
 """
 import pytest
 from django.urls import reverse
@@ -196,3 +197,72 @@ class TestGerarCarne:
                 assert 'sucesso' in data or 'gerados' in data
             except Exception:
                 pass  # HTML response is also valid
+
+
+@pytest.mark.django_db
+class TestBoletoPublico:
+    """
+    Testes do link público de boleto — sem autenticação.
+    URL: /b/<uuid>/
+    """
+
+    def test_token_gerado_automaticamente(self, parcela):
+        """Toda parcela tem token_publico único."""
+        assert parcela.token_publico is not None
+        import uuid
+        assert isinstance(parcela.token_publico, uuid.UUID)
+
+    def test_token_unico_por_parcela(self, db, contrato):
+        """Parcelas diferentes têm tokens diferentes."""
+        parcelas = list(contrato.parcelas.all())
+        tokens = [p.token_publico for p in parcelas]
+        assert len(tokens) == len(set(tokens))
+
+    def test_get_link_publico_retorna_path(self, parcela):
+        """get_link_publico() retorna path que começa com /b/."""
+        path = parcela.get_link_publico()
+        assert path.startswith('/b/')
+
+    def test_acesso_publico_sem_login_retorna_200(self, client, parcela):
+        """Usuário não autenticado consegue acessar o link público."""
+        url = parcela.get_link_publico()
+        response = client.get(url)
+        assert response.status_code == 200
+
+    def test_acesso_publico_nao_expoe_cpf(self, client, parcela):
+        """A página pública não deve conter o CPF do comprador."""
+        url = parcela.get_link_publico()
+        response = client.get(url)
+        assert response.status_code == 200
+        cpf = parcela.contrato.comprador.cpf
+        if cpf:
+            # CPF formatado (123.456.789-01) ou dígitos não devem aparecer
+            cpf_digits = cpf.replace('.', '').replace('-', '')
+            assert cpf_digits not in response.content.decode()
+
+    def test_token_invalido_retorna_404(self, client):
+        """Token UUID inexistente retorna 404."""
+        import uuid
+        url = f'/b/{uuid.uuid4()}/'
+        response = client.get(url)
+        assert response.status_code == 404
+
+    def test_download_publico_sem_pdf_retorna_404(self, client, parcela):
+        """Download público sem PDF retorna 404."""
+        import uuid
+        url = f'/b/{parcela.token_publico}/download/'
+        response = client.get(url)
+        # Sem PDF gerado → 404
+        assert response.status_code == 404
+
+    def test_download_publico_com_pdf_db(self, client, parcela):
+        """Download público retorna PDF se boleto_pdf_db estiver preenchido."""
+        parcela.boleto_pdf_db = b'%PDF-1.4 fake pdf content'
+        parcela.nosso_numero = '00001'
+        from financeiro.models import StatusBoleto
+        parcela.status_boleto = StatusBoleto.GERADO
+        parcela.save()
+        url = f'/b/{parcela.token_publico}/download/'
+        response = client.get(url)
+        assert response.status_code == 200
+        assert response['Content-Type'] == 'application/pdf'
