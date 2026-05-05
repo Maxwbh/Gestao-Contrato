@@ -13,6 +13,7 @@ from django.db.models import Q
 from decimal import Decimal
 from datetime import timedelta
 import logging
+import uuid
 
 from core.models import TimeStampedModel, ContaBancaria
 
@@ -284,6 +285,15 @@ class Parcela(TimeStampedModel):
         help_text='Motivo de rejeição ou baixa do boleto'
     )
 
+    # Link público (compartilhamento sem autenticação)
+    token_publico = models.UUIDField(
+        default=uuid.uuid4,
+        editable=False,
+        unique=True,
+        verbose_name='Token Público',
+        help_text='Token UUID para link público do boleto (acesso sem senha)'
+    )
+
     # PIX do Boleto (Boleto Híbrido)
     pix_copia_cola = models.TextField(
         blank=True,
@@ -526,6 +536,11 @@ class Parcela(TimeStampedModel):
     def tem_boleto(self):
         """Verifica se a parcela tem boleto gerado"""
         return self.status_boleto != StatusBoleto.NAO_GERADO and bool(self.nosso_numero)
+
+    def get_link_publico(self):
+        """Retorna o caminho URL do link público do boleto (sem autenticação)."""
+        from django.urls import reverse
+        return reverse('boleto_publico:visualizar', kwargs={'token': self.token_publico})
 
     @property
     def boleto_pode_ser_pago(self):

@@ -289,21 +289,26 @@ class ServicoWhatsApp:
     @staticmethod
     def _enviar_evolution(destinatario, mensagem, config):
         """
-        Evolution API v2 — POST /message/sendText/{instancia}
+        Evolution API v2 — dois modos (W-03):
+          BAILEYS   (padrão): POST /message/sendText/{instancia}
+          CLOUD_API          : POST /message/sendText/{instancia}
+                               com phone_number_id + meta_access_token no payload
         Headers: apikey: <config.api_key>
-        Body: {"number": "5511999999999", "text": "...", "delay": 1200, "linkPreview": bool}
         """
         import urllib.request
         import urllib.error
         import json as _json
-        if not all([config.api_url, config.api_key, config.instancia]):
-            raise ValueError("Evolution API: api_url, api_key e instancia são obrigatórios")
-
-        numero = ServicoWhatsApp._normalizar_numero(destinatario)
-        numero = numero.lstrip('+')
-
-        # linkPreview ativo quando mensagem contém URL
         import re as _re
+
+        modo = getattr(config, 'modo_evolution', 'BAILEYS') or 'BAILEYS'
+
+        if modo == 'CLOUD_API':
+            return ServicoWhatsApp._enviar_evolution_cloud_api(destinatario, mensagem, config)
+
+        if not all([config.api_url, config.api_key, config.instancia]):
+            raise ValueError("Evolution API (Baileys): api_url, api_key e instancia são obrigatórios")
+
+        numero = ServicoWhatsApp._normalizar_numero(destinatario).lstrip('+')
         tem_url = bool(_re.search(r'https?://', mensagem))
 
         url = f"{config.api_url.rstrip('/')}/message/sendText/{config.instancia}"
@@ -326,10 +331,55 @@ class ServicoWhatsApp:
             err_body = e.read().decode('utf-8', errors='replace')
             raise ValueError(f"Evolution API HTTP {e.code}: {err_body}") from e
 
-        logger.info("WhatsApp (Evolution) enviado para %s. key.id=%s",
+        logger.info("WhatsApp (Evolution/Baileys) enviado para %s. key.id=%s",
                     numero, body.get('key', {}).get('id', ''))
-        ext_id = body.get('key', {}).get('id', '')
-        return True, ext_id
+        return True, body.get('key', {}).get('id', '')
+
+    @staticmethod
+    def _enviar_evolution_cloud_api(destinatario, mensagem, config):
+        """
+        Evolution API v2 — modo Cloud API (Meta oficial).
+
+        Usa os campos phone_number_id e meta_access_token no payload;
+        endpoint idêntico ao Baileys mas Evolution roteia para Meta Cloud API.
+        """
+        import urllib.request
+        import urllib.error
+        import json as _json
+
+        if not all([config.api_url, config.api_key, config.instancia,
+                    config.phone_number_id, config.meta_access_token]):
+            raise ValueError(
+                "Evolution Cloud API: api_url, api_key, instancia, "
+                "phone_number_id e meta_access_token são obrigatórios"
+            )
+
+        numero = ServicoWhatsApp._normalizar_numero(destinatario).lstrip('+')
+        url = f"{config.api_url.rstrip('/')}/message/sendText/{config.instancia}"
+        payload = {
+            "number": numero,
+            "text": mensagem,
+            "delay": 1200,
+            # Campos adicionais para Cloud API
+            "phoneNumberId": config.phone_number_id,
+            "accessToken": config.meta_access_token,
+        }
+        req = urllib.request.Request(
+            url,
+            data=_json.dumps(payload).encode(),
+            headers={"Content-Type": "application/json", "apikey": config.api_key},
+            method="POST",
+        )
+        try:
+            with urllib.request.urlopen(req, timeout=15) as resp:
+                body = _json.loads(resp.read())
+        except urllib.error.HTTPError as e:
+            err_body = e.read().decode('utf-8', errors='replace')
+            raise ValueError(f"Evolution Cloud API HTTP {e.code}: {err_body}") from e
+
+        logger.info("WhatsApp (Evolution/CloudAPI) enviado para %s. key.id=%s",
+                    numero, body.get('key', {}).get('id', ''))
+        return True, body.get('key', {}).get('id', '')
 
     @staticmethod
     def _enviar_zapi(destinatario, mensagem, config):

@@ -1469,6 +1469,7 @@ def visualizar_boleto(request, pk):
     popup = request.GET.get('popup', 'false').lower() == 'true' or not request.META.get('HTTP_REFERER')
 
     from django.urls import reverse
+    link_publico = request.build_absolute_uri(parcela.get_link_publico())
     context = {
         'parcela': parcela,
         'contrato': contrato,
@@ -1476,6 +1477,7 @@ def visualizar_boleto(request, pk):
         'imobiliaria': imobiliaria,
         'valores_hoje': valores_hoje,
         'popup': popup,
+        'link_publico': link_publico,
         'voltar_url': _voltar_url(
             request, reverse('financeiro:detalhe_parcela', args=[parcela.pk])
         ),
@@ -7307,3 +7309,68 @@ def api_imobiliaria_pendencias(request, imobiliaria_id):
         'pendencias': pendencias,
         'totais': totais,
     })
+
+
+# =============================================================================
+# LINK PÚBLICO DE BOLETO — sem autenticação, sem expor dados internos
+# URL: /b/<uuid:token>/
+# =============================================================================
+
+def boleto_publico(request, token):
+    """
+    Exibe o boleto de uma parcela via token UUID público.
+    Não requer autenticação. Não expõe IDs internos, CPF nem dados bancários.
+    """
+    parcela = get_object_or_404(Parcela, token_publico=token)
+    contrato = parcela.contrato
+    imobiliaria = contrato.imobiliaria
+
+    if not parcela.tem_boleto:
+        return render(request, 'financeiro/boleto_publico.html', {
+            'sem_boleto': True,
+            'imobiliaria': imobiliaria,
+        })
+
+    valores_hoje = parcela.calcular_valores_hoje()
+
+    return render(request, 'financeiro/boleto_publico.html', {
+        'parcela': parcela,
+        'contrato': contrato,
+        'imobiliaria': imobiliaria,
+        'comprador_nome': contrato.comprador.nome,
+        'valores_hoje': valores_hoje,
+        'token': token,
+    })
+
+
+def download_boleto_publico(request, token):
+    """
+    Download do PDF do boleto via token público. Sem autenticação.
+    """
+    parcela = get_object_or_404(Parcela, token_publico=token)
+
+    if not parcela.tem_boleto:
+        return HttpResponse('Boleto não disponível.', status=404)
+
+    filename = f'boleto_parcela_{parcela.numero_parcela}.pdf'
+
+    if parcela.boleto_pdf_db:
+        response = HttpResponse(bytes(parcela.boleto_pdf_db), content_type='application/pdf')
+        response['Content-Disposition'] = f'inline; filename="{filename}"'
+        return response
+
+    if parcela.boleto_pdf:
+        try:
+            storage = parcela.boleto_pdf.storage
+            if storage.exists(parcela.boleto_pdf.name):
+                return FileResponse(
+                    parcela.boleto_pdf.open('rb'),
+                    as_attachment=False,
+                    filename=filename,
+                    content_type='application/pdf',
+                )
+        except Exception:
+            pass
+
+    logger.warning('[boleto_publico] PDF ausente para token=%s parcela_pk=%s', token, parcela.pk)
+    return HttpResponse('PDF do boleto não disponível no momento.', status=404)
