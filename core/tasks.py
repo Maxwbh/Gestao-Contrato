@@ -994,7 +994,10 @@ def _enviar_relatorio_semanal(imobiliaria, relatorio: dict) -> None:
         'DATAATUAL': timezone.localdate().strftime('%d/%m/%Y'),
     }
 
-    template = TemplateNotificacao.get_template(TipoTemplate.RELATORIO_SEMANAL, imobiliaria)
+    template = (
+        TemplateNotificacao.get_template('gestao-relatorio-semanal', imobiliaria)
+        or TemplateNotificacao.get_template(TipoTemplate.RELATORIO_SEMANAL, imobiliaria)
+    )
     if template and template.tem_email:
         assunto, _, corpo_html, _ = template.renderizar(contexto)
         send_mail(
@@ -1106,7 +1109,10 @@ def _enviar_relatorio_mensal(contabilidade, dados: dict) -> None:
         'DATAATUAL': hoje.strftime('%d/%m/%Y'),
     }
 
-    template = TemplateNotificacao.get_template(TipoTemplate.RELATORIO_MENSAL)
+    template = (
+        TemplateNotificacao.get_template('gestao-relatorio-mensal')
+        or TemplateNotificacao.get_template(TipoTemplate.RELATORIO_MENSAL)
+    )
     if template and template.tem_email:
         assunto, _, corpo_html, _ = template.renderizar(contexto)
         send_mail(

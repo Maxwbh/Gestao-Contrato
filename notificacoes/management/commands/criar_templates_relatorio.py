@@ -12,18 +12,12 @@ from notificacoes.relatorio_templates import (
 )
 
 TEMPLATES = [
-    (
-        'RELATORIO_SEMANAL',
-        'Relatório Semanal (padrão)',
-        ASSUNTO_SEMANAL,
-        HTML_SEMANAL,
-    ),
-    (
-        'RELATORIO_MENSAL',
-        'Relatório Mensal Consolidado (padrão)',
-        ASSUNTO_MENSAL,
-        HTML_MENSAL,
-    ),
+    # Códigos legados (fallback)
+    ('RELATORIO_SEMANAL', 'Relatório Semanal (padrão)', ASSUNTO_SEMANAL, HTML_SEMANAL),
+    ('RELATORIO_MENSAL', 'Relatório Mensal Consolidado (padrão)', ASSUNTO_MENSAL, HTML_MENSAL),
+    # Códigos primários usados pelas APIs de tasks
+    ('gestao-relatorio-semanal', 'gestao-relatorio-semanal', ASSUNTO_SEMANAL, HTML_SEMANAL),
+    ('gestao-relatorio-mensal', 'gestao-relatorio-mensal', ASSUNTO_MENSAL, HTML_MENSAL),
 ]
 
 
