@@ -1607,6 +1607,33 @@ def task_limpar_sessoes(request):
     return JsonResponse(result.to_dict(), status=status_code)
 
 
+@require_http_methods(["POST"])
+@task_api_rate_limit
+@task_auth_required
+def task_limpar_sessoes_whatsapp(request):
+    """
+    Endpoint para remover sessões WhatsApp inativas há mais de 30 minutos.
+
+    Wrapper HTTP do management command `limpar_sessoes_whatsapp`.
+    Agende diariamente ou a cada hora no cron-job.org.
+    """
+    from django.core.management import call_command
+
+    result = TaskResult('limpar_sessoes_whatsapp')
+
+    try:
+        call_command('limpar_sessoes_whatsapp', '--minutos', '30')
+        result.add_message('Sessões WhatsApp inativas removidas.')
+        result.finish()
+    except Exception as e:
+        result.add_error(str(e))
+        result.finish(success=False)
+        logger.exception('[task_limpar_sessoes_whatsapp] %s', e)
+
+    status_code = 200 if result.success else 500
+    return JsonResponse(result.to_dict(), status=status_code)
+
+
 def testar_notificacoes_sync(email_destino=None, sms_destino=None, skip_sms=False):
     """
     Diagnóstico completo de e-mail e SMS.

@@ -1205,8 +1205,8 @@ para ciclo = 2..total_ciclos+1:
 | HU Boleto/Carnê/Remessa (Seção 21) | — | 10 | — | — | 10 | ✅ 10/10 |
 | OFX Extrato Bancário (Seção 22) | — | 5 | — | — | 5 | ✅ 5/5 |
 | Conciliação Bancária (Seção 23) | — | 8 | — | — | 8 | ✅ 8/8 |
-| WhatsApp — Evolução (Seção 26) | — | 3 | 5 | — | 8 | ⏳ 0/8 — análise concluída, implementação pendente |
-| Chatbot WhatsApp (Seção 27) | 2 | 8 | 6 | — | 16 | ⏳ 0/16 — especificado, implementação pendente |
+| WhatsApp — Evolução (Seção 26) | — | 3 | 5 | — | 8 | ✅ 3/8 — W-01/02/03 concluídos (Cloud API mode) |
+| Chatbot WhatsApp (Seção 27) | 2 | 8 | 6 | — | 16 | ✅ 14/16 — C-01..C-10, C-12, C-13, C-15, C-16 |
 | Testes | 104 | ~164 | ~37 | ~41+117 | ~463 | ✅ 942 testes passando |
 | CI/CD | — | 2 | 4 | 2 | 8 | — |
 | Documentação | — | — | 1 | 3 | 4 | — |
@@ -1685,9 +1685,9 @@ FALLBACK (se VPS ficar fora)
 
 | # | Item | Prioridade | Provedor | Status |
 |---|------|------------|----------|--------|
-| W-01 | Adicionar `modo_evolution` (`BAILEYS`/`CLOUD_API`) ao model `ConfiguracaoWhatsApp` + migration | P1 | Evolution | — |
-| W-02 | Campos `phone_number_id` + `meta_access_token` no model para modo Cloud API | P1 | Evolution | — |
-| W-03 | `ServicoWhatsApp._enviar_evolution()` — branch por `modo_evolution` (endpoint e payload diferentes) | P1 | Evolution | — |
+| W-01 | Adicionar `modo_evolution` (`BAILEYS`/`CLOUD_API`) ao model `ConfiguracaoWhatsApp` + migration | P1 | Evolution | ✅ migration 0013 |
+| W-02 | Campos `phone_number_id` + `meta_access_token` no model para modo Cloud API | P1 | Evolution | ✅ migration 0013 |
+| W-03 | `ServicoWhatsApp._enviar_evolution()` — branch por `modo_evolution` (endpoint e payload diferentes) | P1 | Evolution | ✅ `_enviar_evolution_cloud_api()` |
 | W-04 | **Webhook Evolution modo Cloud API** — payload diferente do Baileys; atualizar `webhook_evolution()` | P2 | Evolution | — |
 | W-05 | **Teste de conexão** para modo Cloud API (`GET /<instancia>/instance/connectionState`) | P2 | Evolution | — |
 | W-06 | **Templates interativos** — `corpo_whatsapp_interativo` (JSON) com botões para Evolution Cloud API e Meta | P3 | Evolution / Meta | — |

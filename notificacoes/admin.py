@@ -55,6 +55,14 @@ class ConfiguracaoWhatsAppAdmin(admin.ModelAdmin):
             ),
             'classes': ('collapse',),
         }),
+        ('Evolution — Modo Cloud API (Meta oficial)', {
+            'fields': ('modo_evolution', 'phone_number_id', 'meta_access_token'),
+            'description': (
+                'Apenas para Evolution API no modo Cloud API. '
+                'Deixe <strong>modo_evolution = BAILEYS</strong> para uso padrão (self-hosted via QR Code).'
+            ),
+            'classes': ('collapse',),
+        }),
         ('Metadados', {
             'fields': ('criado_em', 'atualizado_em'),
             'classes': ('collapse',),
