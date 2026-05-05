@@ -1998,36 +1998,36 @@ def _processar_mensagem_inbound(item, config, request):
 
 | # | Item | Arquivo | Status |
 |---|------|---------|--------|
-| C-01 | Model `SessaoConversaWhatsApp` + migration | `notificacoes/models.py` | — |
-| C-02 | Webhook: rotear `fromMe=False` para `_processar_mensagem_inbound()` | `notificacoes/views.py` | — |
-| C-03 | `WhatsAppBotService.processar()` — dispatcher por estado | `notificacoes/whatsapp_bot.py` | — |
-| C-04 | Identificação por telefone + fallback CPF (Fluxo A) | `notificacoes/whatsapp_bot.py` | — |
-| C-05 | Menu principal (Fluxo B) | `notificacoes/whatsapp_bot.py` | — |
+| C-01 | Model `SessaoConversaWhatsApp` + migration | `notificacoes/models.py` | ✅ |
+| C-02 | Webhook: rotear `fromMe=False` para `_processar_mensagem_inbound()` | `notificacoes/views.py` | ✅ |
+| C-03 | `WhatsAppBotService.processar()` — dispatcher por estado | `notificacoes/whatsapp_bot.py` | ✅ |
+| C-04 | Identificação por telefone + fallback CPF (Fluxo A) | `notificacoes/whatsapp_bot.py` | ✅ |
+| C-05 | Menu principal (Fluxo B) | `notificacoes/whatsapp_bot.py` | ✅ |
 
 #### Fase 2 — 2ª Via e Atraso (P1)
 
 | # | Item | Arquivo | Status |
 |---|------|---------|--------|
-| C-06 | Fluxo C — 2ª via: lista parcelas + `gerar_segunda_via()` + envio PDF | `notificacoes/whatsapp_bot.py` | — |
-| C-07 | Fluxo D — boletos em atraso: encargos calculados + linha digitável | `notificacoes/whatsapp_bot.py` | — |
-| C-08 | `_enviar_pdf()` — `POST /message/sendMedia/{instancia}` (base64) | `notificacoes/whatsapp_bot.py` | — |
+| C-06 | Fluxo C — 2ª via: lista parcelas + `gerar_segunda_via()` + envio PDF | `notificacoes/whatsapp_bot.py` | ✅ |
+| C-07 | Fluxo D — boletos em atraso: encargos calculados + linha digitável | `notificacoes/whatsapp_bot.py` | ✅ |
+| C-08 | `_enviar_pdf()` — `POST /message/sendMedia/{instancia}` (base64) | `notificacoes/whatsapp_bot.py` | ✅ |
 
 #### Fase 3 — Comprovante (P2)
 
 | # | Item | Arquivo | Status |
 |---|------|---------|--------|
-| C-09 | Fluxo E — receber mídia + `_baixar_media()` via Evolution API | `notificacoes/whatsapp_bot.py` | — |
-| C-10 | Salvar em `HistoricoPagamento.comprovante` + notificação admin | `notificacoes/whatsapp_bot.py` | — |
+| C-09 | Fluxo E — receber mídia + seleção de parcela + notificação admin | `notificacoes/whatsapp_bot.py` | ✅ |
+| C-10 | Criar `Notificacao` para admin revisar + envio de e-mail para imobiliária | `notificacoes/whatsapp_bot.py` | ✅ |
 | C-11 | Admin: fila de comprovantes pendentes de revisão | `notificacoes/admin.py` | — |
 
 #### Fase 4 — UX e Robustez (P2)
 
 | # | Item | Arquivo | Status |
 |---|------|---------|--------|
-| C-12 | Fluxo F — resumo financeiro | `notificacoes/whatsapp_bot.py` | — |
+| C-12 | Fluxo F — resumo financeiro | `notificacoes/whatsapp_bot.py` | ✅ |
 | C-13 | Management command `limpar_sessoes_whatsapp` — remove sessões > 30 min | `notificacoes/management/` | — |
 | C-14 | Timeout de sessão: mensagem de aviso após 20 min sem resposta | `notificacoes/whatsapp_bot.py` | — |
-| C-15 | Opção "0 — Falar com atendente": pausa bot + notifica staff por email | `notificacoes/whatsapp_bot.py` | — |
+| C-15 | Opção "0 — Falar com atendente": pausa bot + notifica staff por email | `notificacoes/whatsapp_bot.py` | ✅ |
 | C-16 | Testes unitários: 20 casos (identificação, fluxos A–F, estados, edge cases) | `tests/unit/notificacoes/test_whatsapp_bot.py` | — |
 
 ---

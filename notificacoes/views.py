@@ -475,7 +475,15 @@ def webhook_evolution(request):
         message_id = key.get('id', '').strip()
         from_me = key.get('fromMe', False)
 
-        if not from_me or not message_id:
+        if not message_id:
+            continue
+
+        # Mensagem recebida do cliente → chatbot (fromMe=False, evento upsert)
+        if not from_me and is_upsert:
+            _processar_mensagem_inbound(item, config, request)
+            continue
+
+        if not from_me:
             continue
 
         if is_update:
@@ -501,6 +509,39 @@ def webhook_evolution(request):
         event, instance_name, len(data_list), updated_total
     )
     return HttpResponse('OK', status=200)
+
+
+def _processar_mensagem_inbound(item, config, request):
+    """Extrai texto/mídia de um item MESSAGES_UPSERT e despacha para o chatbot."""
+    from notificacoes.whatsapp_bot import WhatsAppBotService
+
+    remote_jid = item.get('key', {}).get('remoteJid', '')
+    telefone = remote_jid.replace('@s.whatsapp.net', '').replace('@g.us', '')
+
+    # Ignorar grupos
+    if '@g.us' in remote_jid:
+        return
+
+    msg_content = item.get('message', {})
+    texto = (
+        msg_content.get('conversation')
+        or msg_content.get('extendedTextMessage', {}).get('text', '')
+        or ''
+    ).strip()
+
+    tipo_msg = 'text'
+    if 'imageMessage' in msg_content or 'documentMessage' in msg_content:
+        tipo_msg = 'media'
+
+    try:
+        WhatsAppBotService().processar(
+            telefone=telefone,
+            mensagem=texto,
+            tipo_msg=tipo_msg,
+            config_wa=config,
+        )
+    except Exception:
+        logger.exception('[Webhook Evolution] erro no chatbot para %s', telefone)
 
 
 # =============================================================================
