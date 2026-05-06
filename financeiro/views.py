@@ -23,9 +23,16 @@ import logging
 
 from django.core.cache import cache
 from .models import Parcela, Reajuste, StatusBoleto, HistoricoPagamento, TipoParcela
-from core.models import Imobiliaria, ContaBancaria
+from core.models import Imobiliaria, ContaBancaria, get_imobiliarias_usuario, usuario_tem_permissao_total
 from core.mixins import verificar_acesso_tenant
 from contratos.models import Contrato, StatusContrato, TipoCorrecao
+
+
+def _imobs_para_usuario(user):
+    """Retorna queryset de imobiliárias acessíveis ao usuário (todas para superuser/staff)."""
+    if usuario_tem_permissao_total(user):
+        return Imobiliaria.objects.filter(ativo=True)
+    return get_imobiliarias_usuario(user)
 
 logger = logging.getLogger(__name__)
 
@@ -1564,8 +1571,11 @@ def listar_arquivos_remessa(request):
     from .models import ArquivoRemessa
     from .services.cnab_service import CNABService
 
+    imobs = _imobs_para_usuario(request.user)
     arquivos = ArquivoRemessa.objects.select_related(
         'conta_bancaria', 'conta_bancaria__imobiliaria'
+    ).filter(
+        conta_bancaria__imobiliaria__in=imobs
     ).order_by('-data_geracao')
 
     # Filtros
@@ -1580,8 +1590,8 @@ def listar_arquivos_remessa(request):
     if imobiliaria_id:
         arquivos = arquivos.filter(conta_bancaria__imobiliaria_id=imobiliaria_id)
 
-    contas = ContaBancaria.objects.filter(ativo=True).select_related('imobiliaria')
-    imobiliarias = Imobiliaria.objects.filter(ativo=True).order_by('nome')
+    contas = ContaBancaria.objects.filter(ativo=True, imobiliaria__in=imobs).select_related('imobiliaria')
+    imobiliarias = imobs.order_by('nome')
 
     per_page = request.GET.get('per_page', '25')
     try:
@@ -1624,6 +1634,7 @@ def detalhe_arquivo_remessa(request, pk):
         ),
         pk=pk
     )
+    verificar_acesso_tenant(request, arquivo.conta_bancaria.imobiliaria)
 
     context = {
         'arquivo': arquivo,
@@ -1811,7 +1822,8 @@ def regenerar_arquivo_remessa(request, pk):
     from .models import ArquivoRemessa
     from .services.cnab_service import CNABService
 
-    arquivo = get_object_or_404(ArquivoRemessa, pk=pk)
+    arquivo = get_object_or_404(ArquivoRemessa.objects.select_related('conta_bancaria__imobiliaria'), pk=pk)
+    verificar_acesso_tenant(request, arquivo.conta_bancaria.imobiliaria)
 
     if not arquivo.pode_reenviar:
         return JsonResponse({
@@ -1850,7 +1862,8 @@ def marcar_remessa_enviada(request, pk):
     from .models import ArquivoRemessa
 
     from .models import StatusArquivoRemessa
-    arquivo = get_object_or_404(ArquivoRemessa, pk=pk)
+    arquivo = get_object_or_404(ArquivoRemessa.objects.select_related('conta_bancaria__imobiliaria'), pk=pk)
+    verificar_acesso_tenant(request, arquivo.conta_bancaria.imobiliaria)
 
     if arquivo.status != StatusArquivoRemessa.GERADO:
         return JsonResponse({
@@ -1874,7 +1887,8 @@ def excluir_arquivo_remessa(request, pk):
     """
     from .models import ArquivoRemessa, StatusArquivoRemessa
 
-    arquivo = get_object_or_404(ArquivoRemessa, pk=pk)
+    arquivo = get_object_or_404(ArquivoRemessa.objects.select_related('conta_bancaria__imobiliaria'), pk=pk)
+    verificar_acesso_tenant(request, arquivo.conta_bancaria.imobiliaria)
 
     if arquivo.status in [StatusArquivoRemessa.ENVIADO, StatusArquivoRemessa.PROCESSADO]:
         return JsonResponse({
@@ -1895,7 +1909,8 @@ def download_arquivo_remessa(request, pk):
     """Download do arquivo de remessa"""
     from .models import ArquivoRemessa
 
-    arquivo = get_object_or_404(ArquivoRemessa, pk=pk)
+    arquivo = get_object_or_404(ArquivoRemessa.objects.select_related('conta_bancaria__imobiliaria'), pk=pk)
+    verificar_acesso_tenant(request, arquivo.conta_bancaria.imobiliaria)
 
     if not arquivo.arquivo:
         messages.error(request, 'Arquivo nao disponivel para download.')
@@ -2023,8 +2038,11 @@ def listar_arquivos_retorno(request):
     """Lista todos os arquivos de retorno"""
     from .models import ArquivoRetorno
 
+    imobs = _imobs_para_usuario(request.user)
     arquivos = ArquivoRetorno.objects.select_related(
         'conta_bancaria', 'conta_bancaria__imobiliaria', 'processado_por'
+    ).filter(
+        conta_bancaria__imobiliaria__in=imobs
     ).order_by('-data_upload')
 
     # Filtros
@@ -2036,7 +2054,7 @@ def listar_arquivos_retorno(request):
     if status:
         arquivos = arquivos.filter(status=status)
 
-    contas = ContaBancaria.objects.filter(ativo=True).select_related('imobiliaria')
+    contas = ContaBancaria.objects.filter(ativo=True, imobiliaria__in=imobs).select_related('imobiliaria')
 
     per_page = request.GET.get('per_page', '25')
     try:
@@ -2073,6 +2091,7 @@ def detalhe_arquivo_retorno(request, pk):
         ),
         pk=pk
     )
+    verificar_acesso_tenant(request, arquivo.conta_bancaria.imobiliaria)
 
     # Agrupar itens por tipo de ocorrencia
     itens_por_tipo = {}
@@ -2144,7 +2163,8 @@ def processar_arquivo_retorno(request, pk):
     from .models import ArquivoRetorno
     from .services.cnab_service import CNABService
 
-    arquivo = get_object_or_404(ArquivoRetorno, pk=pk)
+    arquivo = get_object_or_404(ArquivoRetorno.objects.select_related('conta_bancaria__imobiliaria'), pk=pk)
+    verificar_acesso_tenant(request, arquivo.conta_bancaria.imobiliaria)
 
     if not arquivo.pode_reprocessar:
         return JsonResponse({
@@ -2184,7 +2204,8 @@ def download_arquivo_retorno(request, pk):
     """Download do arquivo de retorno"""
     from .models import ArquivoRetorno
 
-    arquivo = get_object_or_404(ArquivoRetorno, pk=pk)
+    arquivo = get_object_or_404(ArquivoRetorno.objects.select_related('conta_bancaria__imobiliaria'), pk=pk)
+    verificar_acesso_tenant(request, arquivo.conta_bancaria.imobiliaria)
 
     if not arquivo.arquivo:
         messages.error(request, 'Arquivo nao disponivel para download.')
