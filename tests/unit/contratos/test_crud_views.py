@@ -7,13 +7,14 @@ Escopo: ContratoListView, ContratoDetailView, ContratoCreateView,
 """
 import pytest
 from django.urls import reverse
+from core.hashids_utils import encode_id
 
-from tests.fixtures.factories import UserFactory, ContratoFactory, ParcelaFactory
+from tests.fixtures.factories import UserFactory, SuperUserFactory, ContratoFactory, ParcelaFactory
 
 
 @pytest.fixture
 def usuario(db):
-    return UserFactory()
+    return SuperUserFactory()
 
 
 @pytest.fixture
@@ -57,22 +58,22 @@ class TestContratoDetailView:
     """Testes da view ContratoDetailView"""
 
     def test_requer_autenticacao(self, client, contrato):
-        url = reverse('contratos:detalhe', kwargs={'pk': contrato.pk})
+        url = reverse('contratos:detalhe', kwargs={'hid': encode_id(contrato.pk)})
         response = client.get(url)
         assert response.status_code in (302, 403)
 
     def test_exibe_detalhe(self, client_logado, contrato):
-        url = reverse('contratos:detalhe', kwargs={'pk': contrato.pk})
+        url = reverse('contratos:detalhe', kwargs={'hid': encode_id(contrato.pk)})
         response = client_logado.get(url)
         assert response.status_code == 200
 
     def test_contrato_inexistente_retorna_404(self, client_logado):
-        url = reverse('contratos:detalhe', kwargs={'pk': 999999})
+        url = reverse('contratos:detalhe', kwargs={'hid': encode_id(999999)})
         response = client_logado.get(url)
         assert response.status_code == 404
 
     def test_contexto_tem_contrato(self, client_logado, contrato):
-        url = reverse('contratos:detalhe', kwargs={'pk': contrato.pk})
+        url = reverse('contratos:detalhe', kwargs={'hid': encode_id(contrato.pk)})
         response = client_logado.get(url)
         assert response.status_code == 200
         assert 'object' in response.context or 'contrato' in response.context
@@ -104,17 +105,17 @@ class TestContratoUpdateView:
     """Testes da view ContratoUpdateView"""
 
     def test_requer_autenticacao(self, client, contrato):
-        url = reverse('contratos:editar', kwargs={'pk': contrato.pk})
+        url = reverse('contratos:editar', kwargs={'hid': encode_id(contrato.pk)})
         response = client.get(url)
         assert response.status_code in (302, 403)
 
     def test_get_exibe_formulario(self, client_logado, contrato):
-        url = reverse('contratos:editar', kwargs={'pk': contrato.pk})
+        url = reverse('contratos:editar', kwargs={'hid': encode_id(contrato.pk)})
         response = client_logado.get(url)
         assert response.status_code == 200
 
     def test_contrato_inexistente_retorna_404(self, client_logado):
-        url = reverse('contratos:editar', kwargs={'pk': 999999})
+        url = reverse('contratos:editar', kwargs={'hid': encode_id(999999)})
         response = client_logado.get(url)
         assert response.status_code == 404
 
@@ -124,18 +125,18 @@ class TestContratoDeleteView:
     """Testes da view ContratoDeleteView (soft delete → status CANCELADO)"""
 
     def test_requer_autenticacao(self, client, contrato):
-        url = reverse('contratos:excluir', kwargs={'pk': contrato.pk})
+        url = reverse('contratos:excluir', kwargs={'hid': encode_id(contrato.pk)})
         response = client.post(url)
         assert response.status_code in (302, 403)
 
     def test_contrato_inexistente_retorna_404(self, client_logado):
-        url = reverse('contratos:excluir', kwargs={'pk': 999999})
+        url = reverse('contratos:excluir', kwargs={'hid': encode_id(999999)})
         response = client_logado.post(url)
         assert response.status_code == 404
 
     def test_cancela_contrato_sem_parcelas_pagas(self, client_logado, contrato):
         from contratos.models import StatusContrato
-        url = reverse('contratos:excluir', kwargs={'pk': contrato.pk})
+        url = reverse('contratos:excluir', kwargs={'hid': encode_id(contrato.pk)})
         response = client_logado.post(url)
         assert response.status_code == 302
         contrato.refresh_from_db()
@@ -143,7 +144,7 @@ class TestContratoDeleteView:
 
     def test_bloqueia_cancelamento_com_parcelas_pagas(self, client_logado, contrato):
         ParcelaFactory(contrato=contrato, pago=True)
-        url = reverse('contratos:excluir', kwargs={'pk': contrato.pk})
+        url = reverse('contratos:excluir', kwargs={'hid': encode_id(contrato.pk)})
         response = client_logado.post(url)
         assert response.status_code == 302
         contrato.refresh_from_db()
@@ -155,17 +156,17 @@ class TestParcelasContrato:
     """Testes da view parcelas_contrato"""
 
     def test_requer_autenticacao(self, client, contrato):
-        url = reverse('contratos:parcelas', kwargs={'pk': contrato.pk})
+        url = reverse('contratos:parcelas', kwargs={'hid': encode_id(contrato.pk)})
         response = client.get(url)
         assert response.status_code in (302, 403)
 
     def test_exibe_parcelas(self, client_logado, contrato):
-        url = reverse('contratos:parcelas', kwargs={'pk': contrato.pk})
+        url = reverse('contratos:parcelas', kwargs={'hid': encode_id(contrato.pk)})
         response = client_logado.get(url)
         assert response.status_code in (200, 302)
 
     def test_contrato_inexistente_retorna_404(self, client_logado):
-        url = reverse('contratos:parcelas', kwargs={'pk': 999999})
+        url = reverse('contratos:parcelas', kwargs={'hid': encode_id(999999)})
         response = client_logado.get(url)
         assert response.status_code == 404
 
@@ -175,16 +176,16 @@ class TestCalcularRescisao:
     """Testes da view calcular_rescisao_view"""
 
     def test_requer_autenticacao(self, client, contrato):
-        url = reverse('contratos:calcular_rescisao', kwargs={'pk': contrato.pk})
+        url = reverse('contratos:calcular_rescisao', kwargs={'hid': encode_id(contrato.pk)})
         response = client.get(url)
         assert response.status_code in (302, 403)
 
     def test_get_retorna_json(self, client_logado, contrato):
-        url = reverse('contratos:calcular_rescisao', kwargs={'pk': contrato.pk})
+        url = reverse('contratos:calcular_rescisao', kwargs={'hid': encode_id(contrato.pk)})
         response = client_logado.get(url)
         assert response.status_code in (200, 302)
 
     def test_contrato_inexistente_retorna_404(self, client_logado):
-        url = reverse('contratos:calcular_rescisao', kwargs={'pk': 999999})
+        url = reverse('contratos:calcular_rescisao', kwargs={'hid': encode_id(999999)})
         response = client_logado.get(url)
         assert response.status_code == 404

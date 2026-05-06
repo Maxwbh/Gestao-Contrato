@@ -25,6 +25,7 @@ from django.core.cache import cache
 from .models import Parcela, Reajuste, StatusBoleto, HistoricoPagamento, TipoParcela
 from core.models import Imobiliaria, ContaBancaria, get_imobiliarias_usuario, usuario_tem_permissao_total
 from core.mixins import verificar_acesso_tenant
+from core.hashids_utils import encode_id as _encode_id
 from contratos.models import Contrato, StatusContrato, TipoCorrecao
 
 
@@ -775,7 +776,7 @@ def registrar_pagamento(request, hid):
                 historico.save(update_fields=['comprovante'])
 
             messages.success(request, 'Pagamento registrado com sucesso!')
-            return redirect('financeiro:detalhe_parcela', pk=pk)
+            return redirect('financeiro:detalhe_parcela', hid=_encode_id(pk))
         except Exception as e:
             logger.exception("Erro ao registrar pagamento parcela pk=%s: %s", pk, e)
             messages.error(request, f'Erro ao registrar pagamento: {str(e)}')
@@ -1321,7 +1322,7 @@ def download_boleto(request, hid):
 
     if not parcela.boleto_pdf:
         messages.error(request, 'Boleto não disponível para download.')
-        return redirect('financeiro:detalhe_parcela', pk=pk)
+        return redirect('financeiro:detalhe_parcela', hid=hid)
 
     # Se o arquivo não existir no disco (storage efêmero do Render), serve do banco de dados
     if not parcela.boleto_pdf.storage.exists(parcela.boleto_pdf.name):
@@ -1349,11 +1350,11 @@ def download_boleto(request, hid):
                     request,
                     'O arquivo do boleto foi perdido. Clique em "Gerar Boleto" para criar um novo.'
                 )
-                return redirect('financeiro:detalhe_parcela', pk=pk)
+                return redirect('financeiro:detalhe_parcela', hid=_encode_id(pk))
         except Exception as e:
             logger.exception("Erro ao regenerar boleto pk=%s: %s", pk, e)
             messages.error(request, 'Não foi possível recuperar o boleto. Gere novamente.')
-            return redirect('financeiro:detalhe_parcela', pk=pk)
+            return redirect('financeiro:detalhe_parcela', hid=_encode_id(pk))
 
     try:
         response = FileResponse(
@@ -1366,7 +1367,7 @@ def download_boleto(request, hid):
     except Exception as e:
         logger.exception(f"Erro ao fazer download do boleto: {e}")
         messages.error(request, 'Erro ao baixar o boleto.')
-        return redirect('financeiro:detalhe_parcela', pk=pk)
+        return redirect('financeiro:detalhe_parcela', hid=_encode_id(pk))
 
 
 @login_required
@@ -1398,7 +1399,7 @@ def download_zip_boletos(request, contrato_id):
 
     if not parcelas:
         messages.error(request, 'Nenhum boleto disponível para download neste contrato.')
-        return redirect('contratos:detalhe', pk=contrato_id)
+        return redirect('contratos:detalhe', hid=_encode_id(contrato_id))
 
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, 'w', zipfile.ZIP_DEFLATED) as zf:
@@ -1434,7 +1435,7 @@ def segunda_via_boleto(request, hid):
 
     if parcela.pago:
         messages.info(request, f'Parcela {parcela.numero_parcela} já foi paga em {parcela.data_pagamento}.')
-        return redirect('financeiro:detalhe_parcela', pk=pk)
+        return redirect('financeiro:detalhe_parcela', hid=_encode_id(pk))
 
     # Calcular juros/multa atualizados
     valor_juros = Decimal('0.00')
@@ -1455,7 +1456,7 @@ def segunda_via_boleto(request, hid):
 
         if not conta_bancaria:
             messages.error(request, 'Nenhuma conta bancária configurada para esta imobiliária.')
-            return redirect('financeiro:detalhe_parcela', pk=pk)
+            return redirect('financeiro:detalhe_parcela', hid=_encode_id(pk))
 
         servico = BoletoService()
         resultado = servico.gerar_segunda_via(parcela, conta_bancaria, data_referencia=hoje)
@@ -1467,7 +1468,7 @@ def segunda_via_boleto(request, hid):
             return response
         else:
             messages.error(request, f"Erro ao gerar segunda via: {resultado.get('erro', 'Erro desconhecido')}")
-            return redirect('financeiro:detalhe_parcela', pk=pk)
+            return redirect('financeiro:detalhe_parcela', hid=_encode_id(pk))
 
     context = {
         'parcela': parcela,
@@ -1495,7 +1496,7 @@ def visualizar_boleto(request, hid):
 
     if not parcela.tem_boleto:
         messages.warning(request, 'Boleto ainda não foi gerado para esta parcela.')
-        return redirect('financeiro:detalhe_parcela', pk=pk)
+        return redirect('financeiro:detalhe_parcela', hid=hid)
 
     contrato = parcela.contrato
     comprador = contrato.comprador
@@ -1774,7 +1775,7 @@ def gerar_arquivo_remessa(request):
 
             # Se gerou apenas 1, vai direto para o detalhe
             if len(remessas) == 1:
-                return redirect('financeiro:detalhe_remessa', pk=remessas[0]['arquivo_remessa'].pk)
+                return redirect('financeiro:detalhe_remessa', hid=_encode_id(remessas[0]['arquivo_remessa'].pk))
 
             return redirect('financeiro:listar_remessas')
 
@@ -1942,7 +1943,7 @@ def download_arquivo_remessa(request, hid):
 
     if not arquivo.arquivo:
         messages.error(request, 'Arquivo nao disponivel para download.')
-        return redirect('financeiro:detalhe_remessa', pk=pk)
+        return redirect('financeiro:detalhe_remessa', hid=_encode_id(pk))
 
     try:
         response = FileResponse(
@@ -1955,7 +1956,7 @@ def download_arquivo_remessa(request, hid):
     except Exception as e:
         logger.exception(f"Erro ao fazer download da remessa: {e}")
         messages.error(request, 'Erro ao baixar o arquivo.')
-        return redirect('financeiro:detalhe_remessa', pk=pk)
+        return redirect('financeiro:detalhe_remessa', hid=_encode_id(pk))
 
 
 # =============================================================================
@@ -2171,7 +2172,7 @@ def upload_arquivo_retorno(request):
                 f"Arquivo '{arquivo_upload.name}' carregado com sucesso! "
                 f"Clique em 'Processar' para realizar a baixa dos boletos."
             )
-            return redirect('financeiro:detalhe_retorno', pk=arquivo_retorno.pk)
+            return redirect('financeiro:detalhe_retorno', hid=_encode_id(arquivo_retorno.pk))
 
         except Exception as e:
             logger.exception(f"Erro ao fazer upload do retorno: {e}")
@@ -2240,7 +2241,7 @@ def download_arquivo_retorno(request, hid):
 
     if not arquivo.arquivo:
         messages.error(request, 'Arquivo nao disponivel para download.')
-        return redirect('financeiro:detalhe_retorno', pk=pk)
+        return redirect('financeiro:detalhe_retorno', hid=_encode_id(pk))
 
     try:
         response = FileResponse(
@@ -2253,7 +2254,7 @@ def download_arquivo_retorno(request, hid):
     except Exception as e:
         logger.exception(f"Erro ao fazer download do retorno: {e}")
         messages.error(request, 'Erro ao baixar o arquivo.')
-        return redirect('financeiro:detalhe_retorno', pk=pk)
+        return redirect('financeiro:detalhe_retorno', hid=_encode_id(pk))
 
 
 # =============================================================================
@@ -2341,12 +2342,12 @@ def pagar_parcela_ajax(request, hid):
 
 @login_required
 @require_GET
-def api_calcular_encargos(request, pk):
+def api_calcular_encargos(request, hid):
     """
     Retorna juros, multa e valor total calculados para uma parcela em uma data de pagamento.
-    GET /financeiro/parcelas/<pk>/calcular-encargos/?data=YYYY-MM-DD
+    GET /financeiro/parcelas/<hid>/calcular-encargos/?data=YYYY-MM-DD
     """
-    parcela = get_object_or_404(Parcela, pk=pk)
+    parcela = get_object_or_404(Parcela, pk=_hid_to_pk(hid))
     data_str = request.GET.get('data', '')
     try:
         from datetime import date as _date
@@ -3224,7 +3225,7 @@ def aplicar_reajuste_pagina(request, contrato_id):
             if is_modal:
                 return JsonResponse({'sucesso': True, 'mensagem': msg})
             messages.success(request, msg)
-            return redirect('contratos:detalhe', pk=contrato_id)
+            return redirect('contratos:detalhe', hid=_encode_id(contrato_id))
 
         except Exception as e:
             logger.exception(f'Erro ao aplicar reajuste: {e}')
@@ -7042,7 +7043,7 @@ def simulador_antecipacao(request, contrato_id):
                 f'{len(preview_itens)} parcela(s) antecipada(s) com sucesso. '
                 f'Economia total: R$ {(total_original - total_antecipado):,.2f}.'
             )
-            return redirect('contratos:detalhe', pk=contrato_id)
+            return redirect('contratos:detalhe', hid=_encode_id(contrato_id))
 
     return render(request, 'financeiro/simulador_antecipacao.html', {
         'contrato': contrato,
@@ -7090,13 +7091,13 @@ def download_recibo_antecipacao(request, contrato_id):
 
     if not historicos.exists():
         messages.error(request, 'Nenhuma antecipação encontrada para este contrato.')
-        return redirect('contratos:detalhe', pk=contrato_id)
+        return redirect('contratos:detalhe', hid=_encode_id(contrato_id))
 
     try:
         pdf_bytes = gerar_recibo_antecipacao_pdf(contrato, historicos)
     except Exception as e:
         messages.error(request, f'Erro ao gerar recibo: {e}')
-        return redirect('contratos:detalhe', pk=contrato_id)
+        return redirect('contratos:detalhe', hid=_encode_id(contrato_id))
 
     filename = f'recibo_antecipacao_{contrato.numero_contrato}.pdf'
     response = HttpResponse(pdf_bytes, content_type='application/pdf')
@@ -7201,7 +7202,7 @@ def renegociar_parcelas(request, contrato_id):
                 f'{alteradas} parcela(s) renegociada(s) com sucesso. '
                 f'Juros e multa foram zerados.'
             )
-        return redirect('contratos:detalhe', pk=contrato_id)
+        return redirect('contratos:detalhe', hid=_encode_id(contrato_id))
 
     # GET — renderiza formulário
     return render(request, 'financeiro/renegociar_parcelas.html', {

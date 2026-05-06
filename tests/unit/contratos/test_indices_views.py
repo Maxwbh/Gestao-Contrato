@@ -7,13 +7,14 @@ Escopo: IndiceReajusteListView, IndiceReajusteCreateView,
 """
 import pytest
 from django.urls import reverse
+from core.hashids_utils import encode_id
 
-from tests.fixtures.factories import UserFactory
+from tests.fixtures.factories import UserFactory, SuperUserFactory
 
 
 @pytest.fixture
 def usuario(db):
-    return UserFactory()
+    return SuperUserFactory()
 
 
 @pytest.fixture
@@ -81,12 +82,12 @@ class TestIndiceReajusteUpdateView:
     """Testes da view IndiceReajusteUpdateView"""
 
     def test_requer_autenticacao(self, client):
-        url = reverse('contratos:indices_editar', kwargs={'pk': 1})
+        url = reverse('contratos:indices_editar', kwargs={'hid': encode_id(1)})
         response = client.get(url)
         assert response.status_code in (302, 403)
 
     def test_indice_inexistente_retorna_404(self, client_logado):
-        url = reverse('contratos:indices_editar', kwargs={'pk': 999999})
+        url = reverse('contratos:indices_editar', kwargs={'hid': encode_id(999999)})
         response = client_logado.get(url)
         assert response.status_code == 404
 
@@ -96,12 +97,12 @@ class TestIndiceReajusteDeleteView:
     """Testes da view IndiceReajusteDeleteView"""
 
     def test_requer_autenticacao(self, client):
-        url = reverse('contratos:indices_excluir', kwargs={'pk': 1})
+        url = reverse('contratos:indices_excluir', kwargs={'hid': encode_id(1)})
         response = client.post(url, {})
         assert response.status_code in (302, 403)
 
     def test_indice_inexistente_retorna_404(self, client_logado):
-        url = reverse('contratos:indices_excluir', kwargs={'pk': 999999})
+        url = reverse('contratos:indices_excluir', kwargs={'hid': encode_id(999999)})
         response = client_logado.post(url, {})
         assert response.status_code == 404
 
@@ -111,7 +112,7 @@ class TestIndiceReajusteDeleteView:
         indice = IndiceReajuste.objects.create(
             tipo_indice='IPCA', ano=date.today().year, mes=1, valor='0.50'
         )
-        url = reverse('contratos:indices_excluir', kwargs={'pk': indice.pk})
+        url = reverse('contratos:indices_excluir', kwargs={'hid': encode_id(indice.pk)})
         response = client_logado.post(url, {})
         assert response.status_code == 302
         assert not IndiceReajuste.objects.filter(pk=indice.pk).exists()
