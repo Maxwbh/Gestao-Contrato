@@ -717,7 +717,7 @@ Auditoria identificou 4 histórias de usuário totalmente implementadas no siste
 | **20** | ⭐ **Agendamento e Operações — cron-job.org + endpoints HTTP** | 24 | — |
 | **21** | ⭐ **Grid de Reajustes Pendentes — cálculo inline + Aprovar/Editar** | 25 | ✅ |
 | **22** | ⭐ **WhatsApp — Evolução: Cloud API mode + Whapi.cloud sandbox + Templates interativos** | 26 | — |
-| **23** | ⭐ **Chatbot WhatsApp — 2ª via, boletos em atraso, comprovante de pagamento** | 27 | — |
+| **23** | ⭐ **Chatbot WhatsApp — 2ª via, boletos em atraso, comprovante de pagamento** | 27 | ✅ |
 
 ---
 
@@ -1692,7 +1692,7 @@ FALLBACK (se VPS ficar fora)
 | W-05 | **Teste de conexão** para modo Cloud API (`GET /<instancia>/instance/connectionState`) | P2 | Evolution | ✅ `testar_conexao_whatsapp()` verifica Meta Graph API quando `modo_evolution=CLOUD_API` |
 | W-06 | **Templates interativos** — `corpo_whatsapp_interativo` (JSON) com botões para Evolution Cloud API e Meta | P3 | Evolution / Meta | — |
 | W-07 | **BSP brasileiro** — testar com Hablla ou Poli Digital como alternativa ao Evolution direto | P3 | Meta via BSP | — |
-| W-08 | **Status de entrega unificado** — normalizar `DELIVERED/READ` entre provedores | P3 | Todos | — |
+| W-08 | **Status de entrega unificado** — normalizar `DELIVERED/READ` entre provedores | P3 | Todos | ✅ `_TWILIO_STATUS_MAP` + `webhook_twilio` normaliza para conjunto canônico `queued/sent/delivered/read/failed`; `_STATUS_ENTREGA_LABELS` e `_STATUS_ENTREGA_CHOICES` unificados |
 
 ---
 
@@ -2064,4 +2064,4 @@ def _processar_mensagem_inbound(item, config, request):
 
 | Fase | Escopo | Status |
 |------|--------|--------|
-| **23** | ⭐ **Chatbot WhatsApp — 2ª via, atraso, comprovante** | — |
+| **23** | ⭐ **Chatbot WhatsApp — 2ª via, atraso, comprovante** | ✅ C-01..C-16 concluídos |
