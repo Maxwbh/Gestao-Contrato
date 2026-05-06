@@ -716,8 +716,8 @@ Auditoria identificou 4 histórias de usuário totalmente implementadas no siste
 | **19** | Documentação | 9 | — |
 | **20** | ⭐ **Agendamento e Operações — cron-job.org + endpoints HTTP** | 24 | — |
 | **21** | ⭐ **Grid de Reajustes Pendentes — cálculo inline + Aprovar/Editar** | 25 | ✅ |
-| **22** | ⭐ **WhatsApp — Evolução: Cloud API mode + Whapi.cloud sandbox + Templates interativos** | 26 | — |
-| **23** | ⭐ **Chatbot WhatsApp — 2ª via, boletos em atraso, comprovante de pagamento** | 27 | — |
+| **22** | ⭐ **WhatsApp — Evolução: Cloud API mode + Whapi.cloud sandbox + Templates interativos** | 26 | ✅ W-01..W-06, W-08 concluídos (W-07 BSP: pesquisa externa, sem código) |
+| **23** | ⭐ **Chatbot WhatsApp — 2ª via, boletos em atraso, comprovante de pagamento** | 27 | ✅ |
 
 ---
 
@@ -1206,7 +1206,7 @@ para ciclo = 2..total_ciclos+1:
 | OFX Extrato Bancário (Seção 22) | — | 5 | — | — | 5 | ✅ 5/5 |
 | Conciliação Bancária (Seção 23) | — | 8 | — | — | 8 | ✅ 8/8 |
 | WhatsApp — Evolução (Seção 26) | — | 5 | 3 | — | 8 | ✅ 5/8 — W-01..W-05 concluídos (Cloud API mode + webhook + teste conexão) |
-| Chatbot WhatsApp (Seção 27) | 2 | 8 | 6 | — | 16 | ✅ 14/16 — C-01..C-10, C-12, C-13, C-15, C-16 |
+| Chatbot WhatsApp (Seção 27) | 2 | 8 | 6 | — | 16 | ✅ 16/16 — C-01..C-16 |
 | Testes | 104 | ~164 | ~37 | ~41+117 | ~463 | ✅ 942 testes passando |
 | CI/CD | — | 2 | 4 | 2 | 8 | — |
 | Documentação | — | — | 1 | 3 | 4 | — |
@@ -1690,9 +1690,9 @@ FALLBACK (se VPS ficar fora)
 | W-03 | `ServicoWhatsApp._enviar_evolution()` — branch por `modo_evolution` (endpoint e payload diferentes) | P1 | Evolution | ✅ `_enviar_evolution_cloud_api()` |
 | W-04 | **Webhook Evolution modo Cloud API** — payload diferente do Baileys; atualizar `webhook_evolution()` | P2 | Evolution | ✅ `_EVOLUTION_STATUS_MAP` + `_webhook_evolution_meta_format()` |
 | W-05 | **Teste de conexão** para modo Cloud API (`GET /<instancia>/instance/connectionState`) | P2 | Evolution | ✅ `testar_conexao_whatsapp()` verifica Meta Graph API quando `modo_evolution=CLOUD_API` |
-| W-06 | **Templates interativos** — `corpo_whatsapp_interativo` (JSON) com botões para Evolution Cloud API e Meta | P3 | Evolution / Meta | — |
+| W-06 | **Templates interativos** — `corpo_whatsapp_interativo` (JSON) com botões para Evolution Cloud API e Meta | P3 | Evolution / Meta | ✅ JSONField em `TemplateNotificacao`; `renderizar_interativo()`; `ServicoWhatsApp.enviar_interativo()` + `_enviar_evolution_interativo()` → `/message/sendButtons/{instancia}`; fallback automático para texto em Cloud API/Meta/Twilio |
 | W-07 | **BSP brasileiro** — testar com Hablla ou Poli Digital como alternativa ao Evolution direto | P3 | Meta via BSP | — |
-| W-08 | **Status de entrega unificado** — normalizar `DELIVERED/READ` entre provedores | P3 | Todos | — |
+| W-08 | **Status de entrega unificado** — normalizar `DELIVERED/READ` entre provedores | P3 | Todos | ✅ `_TWILIO_STATUS_MAP` + `webhook_twilio` normaliza para conjunto canônico `queued/sent/delivered/read/failed`; `_STATUS_ENTREGA_LABELS` e `_STATUS_ENTREGA_CHOICES` unificados |
 
 ---
 
@@ -2018,17 +2018,17 @@ def _processar_mensagem_inbound(item, config, request):
 |---|------|---------|--------|
 | C-09 | Fluxo E — receber mídia + seleção de parcela + notificação admin | `notificacoes/whatsapp_bot.py` | ✅ |
 | C-10 | Criar `Notificacao` para admin revisar + envio de e-mail para imobiliária | `notificacoes/whatsapp_bot.py` | ✅ |
-| C-11 | Admin: fila de comprovantes pendentes de revisão | `notificacoes/admin.py` | — |
+| C-11 | Admin: fila de comprovantes pendentes de revisão | `notificacoes/admin.py` | ✅ `ComprovantePendenteAdmin` proxy com fila filtrada, ações confirmar/cancelar, link para parcela |
 
 #### Fase 4 — UX e Robustez (P2)
 
 | # | Item | Arquivo | Status |
 |---|------|---------|--------|
 | C-12 | Fluxo F — resumo financeiro | `notificacoes/whatsapp_bot.py` | ✅ |
-| C-13 | Management command `limpar_sessoes_whatsapp` — remove sessões > 30 min | `notificacoes/management/` | — |
-| C-14 | Timeout de sessão: mensagem de aviso após 20 min sem resposta | `notificacoes/whatsapp_bot.py` | — |
+| C-13 | Management command `limpar_sessoes_whatsapp` — remove sessões > 30 min | `notificacoes/management/` | ✅ `limpar_sessoes_whatsapp.py` + endpoint `POST /api/tasks/limpar-sessoes/` |
+| C-14 | Timeout de sessão: mensagem de aviso após 20 min sem resposta | `notificacoes/whatsapp_bot.py` | ✅ Verifica `atualizado_em` no início de `processar()` — envia aviso e reinicia sessão para INICIO |
 | C-15 | Opção "0 — Falar com atendente": pausa bot + notifica staff por email | `notificacoes/whatsapp_bot.py` | ✅ |
-| C-16 | Testes unitários: 20 casos (identificação, fluxos A–F, estados, edge cases) | `tests/unit/notificacoes/test_whatsapp_bot.py` | — |
+| C-16 | Testes unitários: 20 casos (identificação, fluxos A–F, estados, edge cases) | `tests/unit/notificacoes/test_whatsapp_bot.py` | ✅ 417 linhas — identificação, fluxos A–F, timeout, estados |
 
 ---
 
@@ -2064,4 +2064,4 @@ def _processar_mensagem_inbound(item, config, request):
 
 | Fase | Escopo | Status |
 |------|--------|--------|
-| **23** | ⭐ **Chatbot WhatsApp — 2ª via, atraso, comprovante** | — |
+| **23** | ⭐ **Chatbot WhatsApp — 2ª via, atraso, comprovante** | ✅ C-01..C-16 concluídos |
