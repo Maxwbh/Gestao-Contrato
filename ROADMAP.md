@@ -1056,7 +1056,7 @@ para ciclo = 2..total_ciclos+1:
 
 ---
 
-## 16. MAPA INTERATIVO DE LOTES ⚙️ EM ANDAMENTO
+## 16. MAPA INTERATIVO DE LOTES ✅ CONCLUÍDO
 
 > **Contexto:** pesquisa de mercado (2026-04-02) identificou mapa interativo como feature central em
 > todos os principais concorrentes (LoteWin, Terravista, LotNet, SmartIPTU). A implementação inicial
@@ -1079,14 +1079,14 @@ para ciclo = 2..total_ciclos+1:
 | M-09 | Contador dinâmico de marcadores visíveis | ✅ |
 | M-10 | Todos os imóveis com coord. passados ao mapa (não paginado) | ✅ |
 
-### 16.2 Página Dedicada por Loteamento — TODO
+### 16.2 Página Dedicada por Loteamento ✅ CONCLUÍDO
 
-| # | Item | Prioridade |
-|---|------|-----------|
+| # | Item | Prioridade | Status |
+|---|------|-----------|--------|
 | M-11 | Página `/imoveis/loteamento/{slug}/` — mapa dedicado do empreendimento | P2 | ✅ `loteamento_detalhe` em `core/views.py` + URL `imoveis/loteamento/<str:nome>/` + template `loteamento_detalhe.html` com mapa Leaflet + lista filtrável por status |
 | M-12 | Estatísticas do loteamento: total, disponíveis %, valor médio por lote | P2 | ✅ KPI cards (total, disponíveis, vendidos, valor médio/min/max) + barra de progresso proporcional na página do loteamento |
-| M-13 | Polígonos de lote (boundaries) com `lat/lng` de cada vértice — modelo `LotePoligono` | P3 |
-| M-14 | Upload de planta baixa (imagem) como overlay no mapa | P3 |
+| M-13 | Polígonos de lote (boundaries) com `lat/lng` de cada vértice — modelo `LotePoligono` | P3 | ✅ `VerticePoligono` model + migration `0006` + `api_poligono_imovel` (GET/POST) + editor interativo no mapa com toolbar Leaflet (clicar = adicionar vértice, Salvar/Cancelar); `poligonos_json` passado ao template; polígonos renderizados em layer separado |
+| M-14 | Upload de planta baixa (imagem) como overlay no mapa | P3 | ✅ `LoteamentoOverlay` model + migration `0010` + admin com preview de imagem + `api_overlay_loteamento` (GET/POST) + `L.imageOverlay` em `loteamento_detalhe.html` (com controle de camadas) e `imovel_list.html` (ao filtrar por loteamento); `overlays_json` passado via contexto |
 | M-15 | Link direto "Ver no Google Maps / Waze" no popup do marcador | P3 | ✅ Links Maps e Waze exibidos no popup quando lat/lng disponíveis |
 | M-16 | Geolocalização do usuário para mostrar lotes próximos | P4 | ✅ Botão "Perto de mim" na toolbar do mapa; `navigator.geolocation` → centraliza mapa na posição do usuário + marcador azul "Você está aqui" + conta lotes num raio de 50 km |
 
@@ -1193,7 +1193,7 @@ para ciclo = 2..total_ciclos+1:
 | HU-360 Tabela Price | 2 | 9 | 2 | — | 13 | ✅ 13/13 |
 | SAC / Tabela Price | 1 | 4 | — | — | 5 | ✅ 5/5 |
 | Bloqueio Boleto (Cascata) | 2 | 3 | — | — | 5 | ✅ 5/5 |
-| Mapa Interativo (Seção 16) | — | 5 | 6 | 1 | 12 | ✅ 10/10 M-01..M-10 |
+| Mapa Interativo (Seção 16) | — | 5 | 6 | 1 | 12 | ✅ 12/12 M-01..M-16 |
 | Dashboard KPIs (Seção 17) | 1 | 5 | 2 | — | 8 | ✅ 8/8 (K-01..K-06, G-01..G-05, D-01..D-04) |
 | Simulador Antecipação (Seção 18) | — | 3 | 2 | — | 5 | ✅ 5/5 (R-01..R-05) |
 | Notificações (Seção 19) | — | 6 | 2 | 1 | 9 | ✅ 8/9 P2+P3 (N-01..N-04, N-06..N-09) · 🏦 N-05 Débito Técnico |

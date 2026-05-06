@@ -6,7 +6,7 @@ Email: maxwbh@gmail.com
 """
 from django.contrib import admin
 from django.utils.html import format_html
-from .models import Contabilidade, Imobiliaria, Imovel, Comprador, ParametroSistema
+from .models import Contabilidade, Imobiliaria, Imovel, Comprador, ParametroSistema, LoteamentoOverlay
 from .parametros import invalidar_cache
 
 
@@ -158,3 +158,31 @@ class ParametroSistemaAdmin(admin.ModelAdmin):
     def delete_model(self, request, obj):
         super().delete_model(request, obj)
         invalidar_cache()
+
+
+@admin.register(LoteamentoOverlay)
+class LoteamentoOverlayAdmin(admin.ModelAdmin):
+    list_display = ['nome_loteamento', 'imagem', 'opacidade', 'ativo', 'atualizado_em']
+    list_filter = ['ativo', 'nome_loteamento']
+    search_fields = ['nome_loteamento']
+    list_editable = ['opacidade', 'ativo']
+    readonly_fields = ['criado_em', 'atualizado_em', 'preview_imagem']
+    fieldsets = (
+        ('Identificação', {
+            'fields': ('nome_loteamento', 'imagem', 'preview_imagem', 'opacidade', 'ativo'),
+        }),
+        ('Limites Geográficos (SW = Sudoeste, NE = Nordeste)', {
+            'description': 'Define o retângulo sobre o qual a imagem será projetada no mapa.',
+            'fields': (('lat_sw', 'lng_sw'), ('lat_ne', 'lng_ne')),
+        }),
+        ('Auditoria', {
+            'fields': ('criado_em', 'atualizado_em'),
+            'classes': ('collapse',),
+        }),
+    )
+
+    def preview_imagem(self, obj):
+        if obj.imagem:
+            return format_html('<img src="{}" style="max-height:120px;max-width:300px;border:1px solid #ddd;border-radius:4px;">', obj.imagem.url)
+        return '—'
+    preview_imagem.short_description = 'Preview'

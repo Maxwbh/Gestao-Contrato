@@ -62,6 +62,8 @@ urlpatterns = [
     path('imoveis/loteamento/<str:nome>/', views.loteamento_detalhe, name='loteamento_detalhe'),
     # M-13: Polígonos de lote
     path('imoveis/<int:pk>/poligono/', views.api_poligono_imovel, name='api_poligono_imovel'),
+    # M-14: Overlay de planta baixa por loteamento
+    path('imoveis/loteamento/<str:nome>/overlay/', views.api_overlay_loteamento, name='api_overlay_loteamento'),
 
     # CRUD Imobiliária
     path('imobiliarias/', views.ImobiliariaListView.as_view(), name='listar_imobiliarias'),
