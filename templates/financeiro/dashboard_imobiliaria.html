@@ -1,5 +1,6 @@
 {% extends 'base.html' %}
 {% load static %}
+{% load hashid_tags %}
 
 {% block title %}Dashboard - {{ imobiliaria.nome }}{% endblock %}
 
@@ -148,7 +149,7 @@
                                     <td>{{ parcela.contrato.comprador.nome|truncatechars:20 }}</td>
                                     <td class="text-end"><strong>R$ {{ parcela.valor_atual|floatformat:2 }}</strong></td>
                                     <td>
-                                        <a href="{% url 'financeiro:registrar_pagamento' parcela.pk %}" class="btn btn-sm btn-success" title="Pagar">
+                                        <a href="{% url 'financeiro:registrar_pagamento' parcela.pk|hashid %}" class="btn btn-sm btn-success" title="Pagar">
                                             <i class="fas fa-dollar-sign"></i>
                                         </a>
                                     </td>
@@ -191,7 +192,7 @@
                                     <td>{{ parcela.contrato.comprador.nome|truncatechars:20 }}</td>
                                     <td class="text-end"><strong>R$ {{ parcela.valor_atual|floatformat:2 }}</strong></td>
                                     <td>
-                                        <a href="{% url 'financeiro:detalhe_parcela' parcela.pk %}" class="btn btn-sm btn-outline-primary" title="Ver">
+                                        <a href="{% url 'financeiro:detalhe_parcela' parcela.pk|hashid %}" class="btn btn-sm btn-outline-primary" title="Ver">
                                             <i class="fas fa-eye"></i>
                                         </a>
                                     </td>
@@ -239,7 +240,7 @@
                                 </a>
                             </td>
                             <td>
-                                <a href="{% url 'contratos:detalhe' item.contrato.pk %}">
+                                <a href="{% url 'contratos:detalhe' item.contrato.pk|hashid %}">
                                     {{ item.contrato.numero }}
                                 </a>
                             </td>

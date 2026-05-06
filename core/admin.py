@@ -6,7 +6,7 @@ Email: maxwbh@gmail.com
 """
 from django.contrib import admin
 from django.utils.html import format_html
-from .models import Contabilidade, Imobiliaria, Imovel, Comprador, ParametroSistema, LoteamentoOverlay
+from .models import Contabilidade, Imobiliaria, Imovel, Comprador, ParametroSistema, LoteamentoOverlay, AcessoNegado
 from .parametros import invalidar_cache
 
 
@@ -186,3 +186,22 @@ class LoteamentoOverlayAdmin(admin.ModelAdmin):
             return format_html('<img src="{}" style="max-height:120px;max-width:300px;border:1px solid #ddd;border-radius:4px;">', obj.imagem.url)
         return '—'
     preview_imagem.short_description = 'Preview'
+
+
+@admin.register(AcessoNegado)
+class AcessoNegadoAdmin(admin.ModelAdmin):
+    list_display = ['ip', 'usuario', 'url_resumida', 'status_code', 'timestamp']
+    list_filter = ['status_code', 'timestamp']
+    search_fields = ['ip', 'url', 'usuario__username']
+    readonly_fields = ['ip', 'usuario', 'url', 'status_code', 'timestamp']
+    date_hierarchy = 'timestamp'
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def url_resumida(self, obj):
+        return obj.url[:80] + '…' if len(obj.url) > 80 else obj.url
+    url_resumida.short_description = 'URL'

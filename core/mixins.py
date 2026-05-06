@@ -93,6 +93,10 @@ class TenantMixin(AcessoMixin):
         return val
 
     def get_object(self, queryset=None):
+        # Fetcha sem filtro de tenant para poder retornar 403 (não 404)
+        # quando o objeto existe mas pertence a outra imobiliária.
+        if queryset is None:
+            queryset = self.model._default_manager.all()
         obj = super().get_object(queryset)
         if not usuario_tem_permissao_total(self.request.user):
             imob = self._resolve_tenant_imobiliaria(obj)
@@ -202,3 +206,23 @@ class FilterMixin:
             if self.request.GET.get(param)
         }
         return context
+
+
+
+class HashidMixin:
+    """
+    U-03: Mixin para CBVs que usam <str:hid> na URL em vez de <int:pk>.
+    Decodifica kwargs['hid'] → pk e injeta em kwargs['pk'] para que as
+    mixins subsequentes (TenantMixin, DetailView) encontrem o objeto
+    normalmente e apliquem suas verificações de permissão.
+    """
+    def get_object(self, queryset=None):
+        from django.http import Http404
+        from core.hashids_utils import decode_id
+        hid = self.kwargs.get('hid', '')
+        pk = decode_id(hid)
+        if pk is None:
+            raise Http404
+        # Injeta pk para que super().get_object() (TenantMixin / DetailView) use
+        self.kwargs['pk'] = pk
+        return super().get_object(queryset)

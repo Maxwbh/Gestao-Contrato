@@ -25,11 +25,14 @@ urlpatterns = [
 
     # Parcelas
     path('parcelas/', views.listar_parcelas, name='listar_parcelas'),
-    path('parcelas/<int:pk>/', views.detalhe_parcela, name='detalhe_parcela'),
-    path('parcelas/<int:pk>/pagar/', views.registrar_pagamento, name='registrar_pagamento'),
-    path('parcelas/<int:pk>/pagar-ajax/', views.pagar_parcela_ajax, name='pagar_parcela_ajax'),
-    path('parcelas/<int:pk>/calcular-encargos/', views.api_calcular_encargos, name='api_calcular_encargos'),
-    path('parcelas/<int:pk>/notificar/', views.notificar_inadimplente, name='notificar_inadimplente'),
+    # U-05: compat redirect int:pk → hid
+    path('parcelas/<int:pk>/compat/', views.parcela_pk_compat, name='parcela_pk_compat'),
+    # U-03: rotas com hashid
+    path('parcelas/<str:hid>/', views.detalhe_parcela, name='detalhe_parcela'),
+    path('parcelas/<str:hid>/pagar/', views.registrar_pagamento, name='registrar_pagamento'),
+    path('parcelas/<str:hid>/pagar-ajax/', views.pagar_parcela_ajax, name='pagar_parcela_ajax'),
+    path('parcelas/<str:hid>/calcular-encargos/', views.api_calcular_encargos, name='api_calcular_encargos'),
+    path('parcelas/<str:hid>/notificar/', views.notificar_inadimplente, name='notificar_inadimplente'),
 
     # Carne (multiplos boletos)
     path('contrato/<int:contrato_id>/gerar-carne/', views.gerar_carne, name='gerar_carne'),
@@ -45,15 +48,15 @@ urlpatterns = [
     # Geracao de boletos por parcelas selecionadas
     path('api/boletos/gerar-parcelas/', views.api_gerar_boletos_parcelas, name='api_gerar_boletos_parcelas'),
 
-    # Boletos
-    path('parcelas/<int:pk>/boleto/gerar/', views.gerar_boleto_parcela, name='gerar_boleto'),
-    path('parcelas/<int:pk>/boleto/download/', views.download_boleto, name='download_boleto'),
-    path('parcelas/<int:pk>/boleto/segunda-via/', views.segunda_via_boleto, name='segunda_via_boleto'),
-    path('parcelas/<int:pk>/boleto/visualizar/', views.visualizar_boleto, name='visualizar_boleto'),
-    path('parcelas/<int:pk>/boleto/cancelar/', views.cancelar_boleto, name='cancelar_boleto'),
-    path('parcelas/<int:pk>/boleto/status/', views.api_status_boleto, name='api_status_boleto'),
-    path('parcelas/<int:pk>/boleto/whatsapp/', views.enviar_boleto_whatsapp, name='boleto_whatsapp'),
-    path('parcelas/<int:pk>/boleto/sms/', views.enviar_boleto_sms, name='boleto_sms'),
+    # Boletos — U-03 hashid routes
+    path('parcelas/<str:hid>/boleto/gerar/', views.gerar_boleto_parcela, name='gerar_boleto'),
+    path('parcelas/<str:hid>/boleto/download/', views.download_boleto, name='download_boleto'),
+    path('parcelas/<str:hid>/boleto/segunda-via/', views.segunda_via_boleto, name='segunda_via_boleto'),
+    path('parcelas/<str:hid>/boleto/visualizar/', views.visualizar_boleto, name='visualizar_boleto'),
+    path('parcelas/<str:hid>/boleto/cancelar/', views.cancelar_boleto, name='cancelar_boleto'),
+    path('parcelas/<str:hid>/boleto/status/', views.api_status_boleto, name='api_status_boleto'),
+    path('parcelas/<str:hid>/boleto/whatsapp/', views.enviar_boleto_whatsapp, name='boleto_whatsapp'),
+    path('parcelas/<str:hid>/boleto/sms/', views.enviar_boleto_sms, name='boleto_sms'),
     path('contrato/<int:contrato_id>/boletos/gerar/', views.gerar_boletos_contrato, name='gerar_boletos_contrato'),
 
     # Reajustes
@@ -63,9 +66,9 @@ urlpatterns = [
     path('contrato/<int:contrato_id>/reajuste/api/', views.aplicar_reajuste_contrato, name='aplicar_reajuste_api'),
     path('contrato/<int:contrato_id>/reajuste/preview/', views.preview_reajuste_contrato, name='preview_reajuste'),
     path('contrato/<int:contrato_id>/reajuste/calcular/', views.calcular_reajuste_proporcional, name='calcular_reajuste'),
-    path('reajuste/<int:pk>/excluir/', views.excluir_reajuste, name='excluir_reajuste'),
-    path('api/reajuste/<int:pk>/', views.api_reajuste_detail, name='api_reajuste_detail'),
-    path('reajuste/<int:pk>/alterar-indice/', views.alterar_indice_reajuste, name='alterar_indice_reajuste'),
+    path('reajuste/<str:hid>/excluir/', views.excluir_reajuste, name='excluir_reajuste'),
+    path('api/reajuste/<str:hid>/', views.api_reajuste_detail, name='api_reajuste_detail'),
+    path('reajuste/<str:hid>/alterar-indice/', views.alterar_indice_reajuste, name='alterar_indice_reajuste'),
     path('reajustes/aplicar-lote/', views.aplicar_reajuste_lote, name='aplicar_reajuste_lote'),
     path('reajustes/aplicar-informado-lote/', views.aplicar_reajuste_informado_lote, name='aplicar_reajuste_informado_lote'),
     path('api/indice-reajuste/', views.obter_indice_reajuste, name='api_indice_reajuste'),
@@ -76,11 +79,14 @@ urlpatterns = [
     # ==========================================================================
     path('cnab/remessa/', views.listar_arquivos_remessa, name='listar_remessas'),
     path('cnab/remessa/gerar/', views.gerar_arquivo_remessa, name='gerar_remessa'),
-    path('cnab/remessa/<int:pk>/', views.detalhe_arquivo_remessa, name='detalhe_remessa'),
-    path('cnab/remessa/<int:pk>/regenerar/', views.regenerar_arquivo_remessa, name='regenerar_remessa'),
-    path('cnab/remessa/<int:pk>/marcar-enviada/', views.marcar_remessa_enviada, name='marcar_remessa_enviada'),
-    path('cnab/remessa/<int:pk>/excluir/', views.excluir_arquivo_remessa, name='excluir_remessa'),
-    path('cnab/remessa/<int:pk>/download/', views.download_arquivo_remessa, name='download_remessa'),
+    # U-05: compat redirect
+    path('cnab/remessa/<int:pk>/compat/', views.remessa_pk_compat, name='remessa_pk_compat'),
+    # U-03: hashid routes
+    path('cnab/remessa/<str:hid>/', views.detalhe_arquivo_remessa, name='detalhe_remessa'),
+    path('cnab/remessa/<str:hid>/regenerar/', views.regenerar_arquivo_remessa, name='regenerar_remessa'),
+    path('cnab/remessa/<str:hid>/marcar-enviada/', views.marcar_remessa_enviada, name='marcar_remessa_enviada'),
+    path('cnab/remessa/<str:hid>/excluir/', views.excluir_arquivo_remessa, name='excluir_remessa'),
+    path('cnab/remessa/<str:hid>/download/', views.download_arquivo_remessa, name='download_remessa'),
 
     # ==========================================================================
     # Conciliação Bancária (hub unificado: CNAB Retorno + OFX + Baixa Manual)
@@ -95,9 +101,12 @@ urlpatterns = [
     # CNAB - Arquivos de Retorno
     path('cnab/retorno/', views.listar_arquivos_retorno, name='listar_retornos'),
     path('cnab/retorno/upload/', views.upload_arquivo_retorno, name='upload_retorno'),
-    path('cnab/retorno/<int:pk>/', views.detalhe_arquivo_retorno, name='detalhe_retorno'),
-    path('cnab/retorno/<int:pk>/processar/', views.processar_arquivo_retorno, name='processar_retorno'),
-    path('cnab/retorno/<int:pk>/download/', views.download_arquivo_retorno, name='download_retorno'),
+    # U-05: compat redirect
+    path('cnab/retorno/<int:pk>/compat/', views.retorno_pk_compat, name='retorno_pk_compat'),
+    # U-03: hashid routes
+    path('cnab/retorno/<str:hid>/', views.detalhe_arquivo_retorno, name='detalhe_retorno'),
+    path('cnab/retorno/<str:hid>/processar/', views.processar_arquivo_retorno, name='processar_retorno'),
+    path('cnab/retorno/<str:hid>/download/', views.download_arquivo_retorno, name='download_retorno'),
 
     # ==========================================================================
     # RELATÓRIOS AVANÇADOS

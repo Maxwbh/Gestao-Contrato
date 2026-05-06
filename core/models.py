@@ -1406,3 +1406,30 @@ class ParametroSistema(models.Model):
         if self.tipo == self.TIPO_BOOL:
             return self.valor.strip().lower() in ('true', '1', 'yes', 'on')
         return self.valor
+
+
+class AcessoNegado(models.Model):
+    """
+    D-02: Registra tentativas de acesso negado (403/404 em rotas protegidas).
+    Usado pelo AntiEnumeracaoMiddleware para detectar varredura de IDs.
+    """
+    ip = models.GenericIPAddressField(verbose_name='IP')
+    usuario = models.ForeignKey(
+        'auth.User', null=True, blank=True, on_delete=models.SET_NULL,
+        verbose_name='Usuário'
+    )
+    url = models.CharField(max_length=500, verbose_name='URL')
+    status_code = models.PositiveSmallIntegerField(verbose_name='Status HTTP')
+    timestamp = models.DateTimeField(auto_now_add=True, verbose_name='Data/Hora')
+
+    class Meta:
+        ordering = ['-timestamp']
+        verbose_name = 'Acesso Negado'
+        verbose_name_plural = 'Acessos Negados'
+        indexes = [
+            models.Index(fields=['ip', 'timestamp']),
+            models.Index(fields=['timestamp']),
+        ]
+
+    def __str__(self):
+        return f'{self.ip} → {self.url} ({self.status_code}) em {self.timestamp:%d/%m/%Y %H:%M}'

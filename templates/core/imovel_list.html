@@ -1,5 +1,6 @@
 {% extends 'base.html' %}
 {% load crispy_forms_tags %}
+{% load hashid_tags %}
 
 {% block title %}Imóveis - Gestão de Contratos{% endblock %}
 
@@ -182,7 +183,7 @@
                                                             <i class="fas fa-map-marker-alt"></i>
                                                         </button>
                                                         {% endif %}
-                                                        {% if not imovel.disponivel %}{% with contrato=imovel.contratos.first %}{% if contrato %}<a href="{% url 'contratos:detalhe' contrato.pk %}" class="btn btn-outline-secondary btn-sm" title="Ver Contrato {{ contrato.numero_contrato }}"><i class="fas fa-file-contract"></i></a>{% endif %}{% endwith %}{% endif %}
+                                                        {% if not imovel.disponivel %}{% with contrato=imovel.contratos.first %}{% if contrato %}<a href="{% url 'contratos:detalhe' contrato.pk|hashid %}" class="btn btn-outline-secondary btn-sm" title="Ver Contrato {{ contrato.numero_contrato }}"><i class="fas fa-file-contract"></i></a>{% endif %}{% endwith %}{% endif %}
                                                         <a href="{% url 'core:editar_imovel' imovel.pk %}"
                                                            class="btn btn-outline-primary"
                                                            title="Editar">

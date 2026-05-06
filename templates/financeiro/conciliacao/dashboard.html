@@ -1,5 +1,6 @@
 {% extends 'base.html' %}
 {% load static %}
+{% load hashid_tags %}
 
 {% block title %}Conciliação Bancária{% endblock %}
 
@@ -156,7 +157,7 @@
                                         {% endif %}
                                     </td>
                                     <td>
-                                        <a href="{% url 'financeiro:detalhe_parcela' p.pk %}" class="btn btn-sm btn-outline-secondary" title="Detalhe">
+                                        <a href="{% url 'financeiro:detalhe_parcela' p.pk|hashid %}" class="btn btn-sm btn-outline-secondary" title="Detalhe">
                                             <i class="fas fa-eye"></i>
                                         </a>
                                     </td>
@@ -232,7 +233,7 @@
                             {% for arq in arquivos_retorno %}
                             <tr>
                                 <td class="small">
-                                    <a href="{% url 'financeiro:detalhe_retorno' arq.pk %}">{{ arq.nome_arquivo }}</a>
+                                    <a href="{% url 'financeiro:detalhe_retorno' arq.pk|hashid %}">{{ arq.nome_arquivo }}</a>
                                     <br><small class="text-muted">{{ arq.conta_bancaria.descricao }}</small>
                                 </td>
                                 <td class="text-end small">{{ arq.data_upload|date:"d/m" }}</td>
