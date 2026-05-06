@@ -1,5 +1,6 @@
 {% extends 'base.html' %}
 {% load static %}
+{% load hashid_tags %}
 
 {% block title %}Parcelas do Mes - {{ mes_atual }}{% endblock %}
 
@@ -203,8 +204,8 @@ const parcelasMesRowData = [
     valor_atual: parseFloat("{{ parcela.valor_atual|default:0|stringformat:'.2f' }}") || 0,
     pago: {{ parcela.pago|yesno:"true,false" }},
     esta_vencida: {{ parcela.esta_vencida|yesno:"true,false" }},
-    detalhe_url: "{% url 'financeiro:detalhe_parcela' parcela.pk %}",
-    {% if not parcela.pago %}pagar_url: "{% url 'financeiro:registrar_pagamento' parcela.pk %}",{% else %}pagar_url: null,{% endif %}
+    detalhe_url: "{% url 'financeiro:detalhe_parcela' parcela.pk|hashid %}",
+    {% if not parcela.pago %}pagar_url: "{% url 'financeiro:registrar_pagamento' parcela.pk|hashid %}",{% else %}pagar_url: null,{% endif %}
 },
 {% endfor %}
 ];

@@ -5,13 +5,14 @@ Cobre: listagem, configuração de e-mail, templates, disparo manual
 """
 import pytest
 from django.urls import reverse
+from core.hashids_utils import encode_id
 
-from tests.fixtures.factories import UserFactory, ContratoFactory
+from tests.fixtures.factories import UserFactory, SuperUserFactory, ContratoFactory
 
 
 @pytest.fixture
 def usuario(db):
-    return UserFactory()
+    return SuperUserFactory()
 
 
 @pytest.fixture
@@ -47,7 +48,7 @@ class TestFluxoNotificacoes:
         parcela.pago = True
         parcela.save()
 
-        url = reverse('financeiro:notificar_inadimplente', kwargs={'pk': parcela.pk})
+        url = reverse('financeiro:notificar_inadimplente', kwargs={'hid': encode_id(parcela.pk)})
         resp = client_logado.post(url, {})
         assert resp.status_code == 400
         data = resp.json()

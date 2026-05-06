@@ -1,5 +1,6 @@
 {% extends 'base.html' %}
 {% load static %}
+{% load hashid_tags %}
 
 {% block title %}Gerar Arquivo de Remessa{% endblock %}
 
@@ -171,7 +172,7 @@
                                 </td>
                                 <td><code>{{ parcela.nosso_numero }}</code></td>
                                 <td>
-                                    <a href="{% url 'contratos:detalhe' parcela.contrato.pk %}" target="_blank">
+                                    <a href="{% url 'contratos:detalhe' parcela.contrato.pk|hashid %}" target="_blank">
                                         {{ parcela.contrato.numero_contrato }}
                                     </a>
                                 </td>

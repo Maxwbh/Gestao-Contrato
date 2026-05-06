@@ -1,5 +1,6 @@
 {% extends 'base.html' %}
 {% load crispy_forms_tags %}
+{% load hashid_tags %}
 
 {% block title %}Imóveis - Gestão de Contratos{% endblock %}
 
@@ -182,7 +183,7 @@
                                                             <i class="fas fa-map-marker-alt"></i>
                                                         </button>
                                                         {% endif %}
-                                                        {% if not imovel.disponivel %}{% with contrato=imovel.contratos.first %}{% if contrato %}<a href="{% url 'contratos:detalhe' contrato.pk %}" class="btn btn-outline-secondary btn-sm" title="Ver Contrato {{ contrato.numero_contrato }}"><i class="fas fa-file-contract"></i></a>{% endif %}{% endwith %}{% endif %}
+                                                        {% if not imovel.disponivel %}{% with contrato=imovel.contratos.first %}{% if contrato %}<a href="{% url 'contratos:detalhe' contrato.pk|hashid %}" class="btn btn-outline-secondary btn-sm" title="Ver Contrato {{ contrato.numero_contrato }}"><i class="fas fa-file-contract"></i></a>{% endif %}{% endwith %}{% endif %}
                                                         <a href="{% url 'core:editar_imovel' imovel.pk %}"
                                                            class="btn btn-outline-primary"
                                                            title="Editar">
@@ -346,6 +347,10 @@ const imoveisData = [
 
 // M-13: dados de polígonos (imovel_id → [{lat,lng}])
 const poligonosData = {{ poligonos_json|safe }};
+
+// M-14: overlays de planta baixa por loteamento (nome → {url, bounds, opacidade})
+const overlaysData = {{ overlays_json|safe }};
+let overlayAtivo = null;
 
 // ─── Tile layers (100% gratuitos, sem API key) ───────────────────────────────
 const TILES = {
@@ -635,10 +640,20 @@ function mudarTiles(nome, btn) {
 }
 
 // ─── Filtros ─────────────────────────────────────────────────────────────────
+function _atualizarOverlay(nomeLoteamento) {
+    if (overlayAtivo) { map.removeLayer(overlayAtivo); overlayAtivo = null; }
+    if (!nomeLoteamento) return;
+    const ov = overlaysData[nomeLoteamento];
+    if (!ov) return;
+    overlayAtivo = L.imageOverlay(ov.url, ov.bounds, {opacity: ov.opacidade, interactive: false});
+    overlayAtivo.addTo(map);
+}
+
 function filtrarPorLoteamento(v) {
     filtroLot = v;
     const n = adicionarMarcadores(imoveisData);
     renderizarPoligonos(imoveisData);
+    _atualizarOverlay(v);
     if (n > 0 && clusterGroup.getLayers().length > 0) {
         map.fitBounds(clusterGroup.getBounds(), { padding: [30, 30] });
     }

@@ -96,6 +96,13 @@ class WhatsAppBotService:
 
         try:
             txt = (mensagem or '').strip().lower()
+            txt_original = (mensagem or '').strip()
+
+            # H-04: salvar mensagem do usuário no histórico da sessão
+            _ia_ativo = self._ia_ativa()
+            if _ia_ativo and txt_original and sessao.estado == SessaoConversaWhatsApp.MENU:
+                from notificacoes.ai_chatbot import _salvar_historico
+                _salvar_historico(sessao, 'user', txt_original)
 
             # Palavra-chave global: reinicia no menu (exceto estados de identificação)
             if txt in _SAUDACOES and sessao.estado not in (
@@ -106,6 +113,14 @@ class WhatsAppBotService:
                 sessao.dados = {}
                 sessao.save(update_fields=['estado', 'dados'])
                 self._menu_principal(sessao, config_wa)
+                return
+
+            # H-02: classificar intent com IA no estado MENU (substitui menu numérico)
+            if (_ia_ativo
+                    and sessao.estado == SessaoConversaWhatsApp.MENU
+                    and txt not in _SAUDACOES
+                    and txt_original):
+                self._processar_com_ia(sessao, txt_original, config_wa)
                 return
 
             dispatch = {
@@ -126,6 +141,154 @@ class WhatsAppBotService:
                 'Ops! Ocorreu um erro. Tente novamente ou responda *0* para falar com um atendente.',
                 config_wa,
             )
+
+    # -------------------------------------------------------------------------
+    # H-10: IA — controle e dispatcher
+    # -------------------------------------------------------------------------
+
+    @staticmethod
+    def _ia_ativa() -> bool:
+        """H-10: retorna True se CHATBOT_IA_ATIVO estiver habilitado."""
+        try:
+            from core.parametros import get_param
+            val = str(get_param('CHATBOT_IA_ATIVO', 'false')).lower()
+            return val in ('true', '1', 'yes', 'sim')
+        except Exception:
+            return False
+
+    def _processar_com_ia(self, sessao, mensagem_original: str, config_wa) -> None:
+        """
+        H-02..H-07: Classifica intent com IA, despacha fluxo estruturado e
+        humaniza a resposta. Fallback silencioso para despachante de regras.
+        """
+        from notificacoes.ai_chatbot import AIIntentClassifier, AIResponseHumanizer, delay_digitacao
+
+        telefone = sessao.numero_whatsapp
+
+        # H-02: classificar intent
+        intent = AIIntentClassifier.classificar(mensagem_original, sessao)
+
+        # H-07: fallback para despachante de regras se IA falhar
+        if intent is None:
+            txt_lower = mensagem_original.lower()
+            self._despachar_menu(sessao, txt_lower, 'text', config_wa)
+            return
+
+        # Mapear intent → ação no despachante existente
+        _intent_para_opcao = {
+            'segunda_via':  '1',
+            'atraso':       '2',
+            'comprovante':  '3',
+            'resumo':       '4',
+            'atendente':    '0',
+        }
+
+        # H-05: pergunta livre — Claude responde diretamente com dados do comprador
+        if intent == 'pergunta_livre':
+            self._responder_pergunta_livre(sessao, mensagem_original, config_wa)
+            return
+
+        opcao = _intent_para_opcao.get(intent, '0')
+
+        # Capturar resposta do despachante de regras (intercept + humanizar)
+        resposta_regras = self._capturar_resposta_menu(sessao, opcao, config_wa)
+
+        # H-03: humanizar resposta
+        nome_imob = ''
+        if config_wa and hasattr(config_wa, 'nome_imobiliaria'):
+            nome_imob = config_wa.nome_imobiliaria or ''
+        elif sessao.comprador:
+            try:
+                nome_imob = sessao.comprador.contratos.first().imobiliaria.nome
+            except Exception:
+                pass
+
+        nome_comprador = ''
+        if sessao.comprador:
+            nome_comprador = sessao.comprador.nome.split()[0]
+
+        resposta_humanizada = AIResponseHumanizer.humanizar(
+            dados_db=resposta_regras,
+            intent=intent,
+            sessao=sessao,
+            nome_imobiliaria=nome_imob,
+            nome_comprador=nome_comprador,
+        )
+
+        # H-06: delay de digitação
+        delay_digitacao(0.6, 1.8)
+
+        texto_final = resposta_humanizada or resposta_regras or ''
+        if texto_final:
+            self._responder(telefone, texto_final, config_wa)
+
+    def _responder_pergunta_livre(self, sessao, pergunta: str, config_wa) -> None:
+        """H-05: Responde perguntas livres sobre o contrato com dados reais."""
+        from notificacoes.ai_chatbot import AIResponseHumanizer, delay_digitacao
+
+        # Montar contexto com dados do comprador
+        contexto_partes = [f'Pergunta: {pergunta}']
+        if sessao.comprador:
+            from django.utils import timezone
+            hoje = timezone.localdate()
+            try:
+                contratos = sessao.comprador.contratos.prefetch_related('parcelas').all()[:3]
+                for c in contratos:
+                    prox = c.parcelas.filter(pago=False, data_vencimento__gte=hoje).order_by('data_vencimento').first()
+                    atrasadas = c.parcelas.filter(pago=False, data_vencimento__lt=hoje).count()
+                    contexto_partes.append(
+                        f'Contrato {c.numero_contrato}: '
+                        f'parcelas em atraso={atrasadas}, '
+                        f'próxima={prox.data_vencimento.strftime("%d/%m/%Y") if prox else "nenhuma"}, '
+                        f'valor próxima=R$ {prox.valor_atual:,.2f}'.replace(',', 'X').replace('.', ',').replace('X', '.')
+                        if prox else ''
+                    )
+            except Exception:
+                pass
+
+        nome_imob = ''
+        if config_wa:
+            nome_imob = getattr(config_wa, 'nome_imobiliaria', '') or ''
+
+        nome_comprador = sessao.comprador.nome.split()[0] if sessao.comprador else 'Cliente'
+
+        resposta = AIResponseHumanizer.humanizar(
+            dados_db='\n'.join(contexto_partes),
+            intent='pergunta_livre',
+            sessao=sessao,
+            nome_imobiliaria=nome_imob,
+            nome_comprador=nome_comprador,
+        )
+
+        delay_digitacao(0.8, 2.0)
+
+        if resposta:
+            self._responder(sessao.numero_whatsapp, resposta, config_wa)
+        else:
+            self._responder(
+                sessao.numero_whatsapp,
+                'Não consegui processar sua pergunta no momento. Digite *menu* para ver as opções.',
+                config_wa,
+            )
+
+    def _capturar_resposta_menu(self, sessao, opcao: str, config_wa) -> str:
+        """
+        Executa o fluxo de regras para a opção e captura a string de resposta
+        sem enviá-la (para posterior humanização).
+        """
+        respostas = []
+        _original = self._responder
+
+        def _intercept(numero, texto, cfg, **kw):
+            respostas.append(texto)
+
+        self._responder = _intercept
+        try:
+            self._despachar_menu(sessao, opcao, 'text', config_wa)
+        finally:
+            self._responder = _original
+
+        return '\n'.join(respostas)
 
     # -------------------------------------------------------------------------
     # Fluxo A — Identificação

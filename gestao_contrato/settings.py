@@ -19,6 +19,10 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # SECURITY WARNING: keep the secret key used in production secret!
 SECRET_KEY = config('SECRET_KEY', default='django-insecure-dev-key-change-in-production')
 
+# ── Hashids URL obfuscation (U-01) ───────────────────────────────────────────
+HASHIDS_SALT = SECRET_KEY[:20]
+HASHIDS_MIN_LENGTH = 6
+
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = config('DEBUG', default=False, cast=bool)
 
@@ -68,7 +72,12 @@ MIDDLEWARE = [
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
+    'core.middleware.AntiEnumeracaoMiddleware',  # D-01: anti-enumeration
 ]
+
+# D-03: Security headers — sempre ativos (não apenas em produção)
+SECURE_CONTENT_TYPE_NOSNIFF = True
+X_FRAME_OPTIONS = 'DENY'
 
 ROOT_URLCONF = 'gestao_contrato.urls'
 
@@ -83,6 +92,7 @@ TEMPLATES = [
                 'django.template.context_processors.request',
                 'django.contrib.auth.context_processors.auth',
                 'django.contrib.messages.context_processors.messages',
+                'core.context_processors.system_info',
             ],
         },
     },
@@ -108,14 +118,28 @@ if config('DATABASE_URL', default=None):
     _is_testing = 'pytest' in _sys.modules or (
         len(_sys.argv) > 1 and _sys.argv[1] == 'test'
     )
+    _db_engine = DATABASES['default'].get('ENGINE', '')
+    _is_pg = 'postgresql' in _db_engine
+    _is_mysql = 'mysql' in _db_engine
+    _is_oracle = 'oracle' in _db_engine
 
     if not _is_testing:
-        # Usar schema separado para esta aplicacao (compartilhamento de banco)
-        # IMPORTANTE: Usar APENAS gestao_contrato (sem public) para evitar
-        # conflito com django_migrations da outra aplicacao
-        DATABASES['default']['OPTIONS'] = {
-            'options': '-c search_path=gestao_contrato'
-        }
+        if _is_pg:
+            # DB-01/DB-03: search_path e opções apenas para PostgreSQL
+            DATABASES['default']['OPTIONS'] = {
+                'options': '-c search_path=gestao_contrato'
+            }
+        elif _is_mysql:
+            # DB-03: opções específicas para MySQL
+            DATABASES['default']['OPTIONS'] = {
+                'charset': 'utf8mb4',
+                'init_command': "SET sql_mode='STRICT_TRANS_TABLES'",
+            }
+        elif _is_oracle:
+            # DB-03: opções específicas para Oracle
+            DATABASES['default']['OPTIONS'] = {'threaded': True}
+        else:
+            DATABASES['default']['OPTIONS'] = {}
     else:
         # Testes: usar schema public (sem multi-tenant; evita erros de schema ausente)
         DATABASES['default']['OPTIONS'] = {}
@@ -125,15 +149,16 @@ if config('DATABASE_URL', default=None):
         'NAME': 'test_gestao_contrato',
     }
 
-    # pgBouncer transaction mode: desabilitar cursores nomeados server-side.
-    # Django usa cursores nomeados para iterar querysets grandes (fetchmany),
-    # mas pgBouncer pode rotear fetchmany() para um backend diferente do cursor,
-    # causando "cursor X does not exist". DISABLE_SERVER_SIDE_CURSORS=True faz
-    # Django buscar todas as linhas de uma vez (sem cursor nomeado).
-    DATABASES['default']['DISABLE_SERVER_SIDE_CURSORS'] = True
+    if _is_pg:
+        # pgBouncer transaction mode: desabilitar cursores nomeados server-side.
+        # Django usa cursores nomeados para iterar querysets grandes (fetchmany),
+        # mas pgBouncer pode rotear fetchmany() para um backend diferente do cursor,
+        # causando "cursor X does not exist". DISABLE_SERVER_SIDE_CURSORS=True faz
+        # Django buscar todas as linhas de uma vez (sem cursor nomeado).
+        DATABASES['default']['DISABLE_SERVER_SIDE_CURSORS'] = True
 
-    # Signal para garantir search_path em cada conexao (desabilitado em testes)
-    if not _is_testing:
+    # DB-01: Signal para garantir search_path em cada conexao (somente PostgreSQL)
+    if _is_pg and not _is_testing:
         from django.db.backends.signals import connection_created
 
         def set_search_path(sender, connection, **kwargs):
@@ -340,6 +365,9 @@ IPCA_SERIE_ID = '433'
 IGPM_SERIE_ID = '189'
 SELIC_SERIE_ID = '432'
 
+# IA — Anthropic / Claude API (H-01)
+ANTHROPIC_API_KEY = config('ANTHROPIC_API_KEY', default='')
+
 # Logging Configuration
 LOGGING = {
     'version': 1,
@@ -440,8 +468,7 @@ if not DEBUG:
     SESSION_COOKIE_SECURE = True
     CSRF_COOKIE_SECURE = True
     SECURE_BROWSER_XSS_FILTER = True
-    SECURE_CONTENT_TYPE_NOSNIFF = True
-    X_FRAME_OPTIONS = 'SAMEORIGIN'
+    # SECURE_CONTENT_TYPE_NOSNIFF e X_FRAME_OPTIONS já definidos globalmente (D-03)
     SECURE_HSTS_SECONDS = 31536000
     SECURE_HSTS_INCLUDE_SUBDOMAINS = True
     SECURE_HSTS_PRELOAD = True

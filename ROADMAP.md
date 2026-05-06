@@ -170,7 +170,7 @@
 
 ## 7. TESTES AUTOMATIZADOS
 
-**Meta:** > 80% de cobertura | **Atual:** 1084 testes passando (1061 + 23 novos — HU Portal Comprador E2E 2026-05-04)
+**Meta:** > 80% de cobertura | **Atual:** 1139 testes passando (1122 + 17 novos — W-07 BSP Brasileiro 2026-05-06)
 
 ### 7.1 P1 — Apps sem nenhum teste (~104 testes) ✅ CONCLUÍDO
 | Arquivo | Escopo | Qtd | Status |
@@ -276,7 +276,7 @@ Suite de 24 testes cobrindo os 9 marcos de negócio do ciclo de vida completo de
 
 Auditoria identificou 4 histórias de usuário totalmente implementadas no sistema mas **sem cobertura de ciclo completo ponta a ponta**. Cada uma exercita caminhos de código radicalmente diferentes do `test_hu_fluxo_completo.py` (básico 36p + 1 TabelaJuros + sem intermediárias).
 
-#### 7.9.1 — HU-360: Juros Escalantes + Intermediárias (PRIORIDADE P1)
+#### 7.9.1 — HU-360: Juros Escalantes + Intermediárias (PRIORIDADE P1) ✅ IMPLEMENTADO
 
 > **Referência:** Seções 13 e 14 do ROADMAP. Implementação 100% concluída — falta cobertura E2E.
 
@@ -427,7 +427,7 @@ Auditoria identificou 4 histórias de usuário totalmente implementadas no siste
 
 | # | HU | Arquivo Proposto | Prioridade | Testes Est. | Código Crítico não Coberto |
 |---|----|-----------------|------------|-------------|---------------------------|
-| 1 | HU-360 Juros Escalantes + Intermediárias | `test_hu_360_juros_escalantes.py` | **P1** | ~25 | `get_juros_para_ciclo()`, PMT escalante, `PrestacaoIntermediaria`, `intermediarias_reduzem_pmt`, `intermediarias_reajustadas` |
+| 1 | HU-360 Juros Escalantes + Intermediárias | `test_hu_360_juros_escalantes.py` | **P1** | 33 | ✅ `get_juros_para_ciclo()`, PMT escalante, `PrestacaoIntermediaria`, `intermediarias_reduzem_pmt`, `intermediarias_reajustadas` |
 | 2 | HU Rescisão e Cessão | `test_hu_rescisao_cessao.py` | **P2** | ~15 | `calcular_rescisao()`, `calcular_cessao()`, `calcular_mora_pro_rata()`, fruição, multa penal/adm |
 | 3 | HU CNAB Remessa→Retorno | `test_hu_cnab_e2e.py` | **P2** | ~14 | Ciclo completo remessa→retorno→baixa; `processar_retorno()` integrado com `Parcela.pago`; 2ª via pós-retorno |
 | 4 | HU Portal Comprador | `test_hu_portal_e2e.py` | **P3** | ~15 | Ciclo uso comprador: auto-cadastro → dashboard → boleto → linha digitável |
@@ -713,11 +713,14 @@ Auditoria identificou 4 histórias de usuário totalmente implementadas no siste
 | **16** | ⭐ **Conciliação Bancária — CNAB Retorno + OFX + Baixa Manual** | 23 | ✅ |
 | **17** | Testes P3/P4 + CI/CD | 7.3, 7.4, 8 | 🏦 Débito Técnico (pós-2050) |
 | **18** | Frontend P3/P4 | 3 (P3, P4) | 🏦 Débito Técnico (pós-2050) |
-| **19** | Documentação | 9 | — |
-| **20** | ⭐ **Agendamento e Operações — cron-job.org + endpoints HTTP** | 24 | — |
+| **19** | Documentação | 9 | ✅ `docs/deployment/CRONJOB.md`, `DEPLOY.md`, `ENV_PARAMETROS.md`, `RENDER.md`, `RENDER_NO_SHELL.md` |
+| **20** | ⭐ **Agendamento e Operações — cron-job.org + endpoints HTTP** | 24 | ✅ Endpoints E-01..E-02 implementados; J-01..J-09 documentados em CRONJOB.md (config externa pendente de ativação no cron-job.org) |
 | **21** | ⭐ **Grid de Reajustes Pendentes — cálculo inline + Aprovar/Editar** | 25 | ✅ |
-| **22** | ⭐ **WhatsApp — Evolução: Cloud API mode + Whapi.cloud sandbox + Templates interativos** | 26 | ✅ W-01..W-06, W-08 concluídos (W-07 BSP: pesquisa externa, sem código) |
+| **22** | ⭐ **WhatsApp — Evolução: Cloud API mode + Whapi.cloud sandbox + Templates interativos** | 26 | ✅ W-01..W-08 concluídos |
 | **23** | ⭐ **Chatbot WhatsApp — 2ª via, boletos em atraso, comprovante de pagamento** | 27 | ✅ |
+| **24** | ⭐ **Segurança — Proteção das URLs Públicas de Boleto** | 28 | ✅ |
+| **25** | ⭐ **Portabilidade de Banco de Dados (PostgreSQL → MySQL / Oracle)** | 29 | ✅ |
+| **26** | ⭐ **Chatbot WhatsApp — Humanização com IA (Claude API)** | 30 | ✅ |
 
 ---
 
@@ -1056,7 +1059,7 @@ para ciclo = 2..total_ciclos+1:
 
 ---
 
-## 16. MAPA INTERATIVO DE LOTES ⚙️ EM ANDAMENTO
+## 16. MAPA INTERATIVO DE LOTES ✅ CONCLUÍDO
 
 > **Contexto:** pesquisa de mercado (2026-04-02) identificou mapa interativo como feature central em
 > todos os principais concorrentes (LoteWin, Terravista, LotNet, SmartIPTU). A implementação inicial
@@ -1079,14 +1082,14 @@ para ciclo = 2..total_ciclos+1:
 | M-09 | Contador dinâmico de marcadores visíveis | ✅ |
 | M-10 | Todos os imóveis com coord. passados ao mapa (não paginado) | ✅ |
 
-### 16.2 Página Dedicada por Loteamento — TODO
+### 16.2 Página Dedicada por Loteamento ✅ CONCLUÍDO
 
-| # | Item | Prioridade |
-|---|------|-----------|
+| # | Item | Prioridade | Status |
+|---|------|-----------|--------|
 | M-11 | Página `/imoveis/loteamento/{slug}/` — mapa dedicado do empreendimento | P2 | ✅ `loteamento_detalhe` em `core/views.py` + URL `imoveis/loteamento/<str:nome>/` + template `loteamento_detalhe.html` com mapa Leaflet + lista filtrável por status |
 | M-12 | Estatísticas do loteamento: total, disponíveis %, valor médio por lote | P2 | ✅ KPI cards (total, disponíveis, vendidos, valor médio/min/max) + barra de progresso proporcional na página do loteamento |
-| M-13 | Polígonos de lote (boundaries) com `lat/lng` de cada vértice — modelo `LotePoligono` | P3 |
-| M-14 | Upload de planta baixa (imagem) como overlay no mapa | P3 |
+| M-13 | Polígonos de lote (boundaries) com `lat/lng` de cada vértice — modelo `LotePoligono` | P3 | ✅ `VerticePoligono` model + migration `0006` + `api_poligono_imovel` (GET/POST) + editor interativo no mapa com toolbar Leaflet (clicar = adicionar vértice, Salvar/Cancelar); `poligonos_json` passado ao template; polígonos renderizados em layer separado |
+| M-14 | Upload de planta baixa (imagem) como overlay no mapa | P3 | ✅ `LoteamentoOverlay` model + migration `0010` + admin com preview de imagem + `api_overlay_loteamento` (GET/POST) + `L.imageOverlay` em `loteamento_detalhe.html` (com controle de camadas) e `imovel_list.html` (ao filtrar por loteamento); `overlays_json` passado via contexto |
 | M-15 | Link direto "Ver no Google Maps / Waze" no popup do marcador | P3 | ✅ Links Maps e Waze exibidos no popup quando lat/lng disponíveis |
 | M-16 | Geolocalização do usuário para mostrar lotes próximos | P4 | ✅ Botão "Perto de mim" na toolbar do mapa; `navigator.geolocation` → centraliza mapa na posição do usuário + marcador azul "Você está aqui" + conta lotes num raio de 50 km |
 
@@ -1193,7 +1196,7 @@ para ciclo = 2..total_ciclos+1:
 | HU-360 Tabela Price | 2 | 9 | 2 | — | 13 | ✅ 13/13 |
 | SAC / Tabela Price | 1 | 4 | — | — | 5 | ✅ 5/5 |
 | Bloqueio Boleto (Cascata) | 2 | 3 | — | — | 5 | ✅ 5/5 |
-| Mapa Interativo (Seção 16) | — | 5 | 6 | 1 | 12 | ✅ 10/10 M-01..M-10 |
+| Mapa Interativo (Seção 16) | — | 5 | 6 | 1 | 12 | ✅ 12/12 M-01..M-16 |
 | Dashboard KPIs (Seção 17) | 1 | 5 | 2 | — | 8 | ✅ 8/8 (K-01..K-06, G-01..G-05, D-01..D-04) |
 | Simulador Antecipação (Seção 18) | — | 3 | 2 | — | 5 | ✅ 5/5 (R-01..R-05) |
 | Notificações (Seção 19) | — | 6 | 2 | 1 | 9 | ✅ 8/9 P2+P3 (N-01..N-04, N-06..N-09) · 🏦 N-05 Débito Técnico |
@@ -1205,7 +1208,7 @@ para ciclo = 2..total_ciclos+1:
 | HU Boleto/Carnê/Remessa (Seção 21) | — | 10 | — | — | 10 | ✅ 10/10 |
 | OFX Extrato Bancário (Seção 22) | — | 5 | — | — | 5 | ✅ 5/5 |
 | Conciliação Bancária (Seção 23) | — | 8 | — | — | 8 | ✅ 8/8 |
-| WhatsApp — Evolução (Seção 26) | — | 5 | 3 | — | 8 | ✅ 5/8 — W-01..W-05 concluídos (Cloud API mode + webhook + teste conexão) |
+| WhatsApp — Evolução (Seção 26) | — | 5 | 3 | — | 8 | ✅ 8/8 — W-01..W-08 concluídos |
 | Chatbot WhatsApp (Seção 27) | 2 | 8 | 6 | — | 16 | ✅ 16/16 — C-01..C-16 |
 | Testes | 104 | ~164 | ~37 | ~41+117 | ~463 | ✅ 942 testes passando |
 | CI/CD | — | 2 | 4 | 2 | 8 | — |
@@ -1691,7 +1694,7 @@ FALLBACK (se VPS ficar fora)
 | W-04 | **Webhook Evolution modo Cloud API** — payload diferente do Baileys; atualizar `webhook_evolution()` | P2 | Evolution | ✅ `_EVOLUTION_STATUS_MAP` + `_webhook_evolution_meta_format()` |
 | W-05 | **Teste de conexão** para modo Cloud API (`GET /<instancia>/instance/connectionState`) | P2 | Evolution | ✅ `testar_conexao_whatsapp()` verifica Meta Graph API quando `modo_evolution=CLOUD_API` |
 | W-06 | **Templates interativos** — `corpo_whatsapp_interativo` (JSON) com botões para Evolution Cloud API e Meta | P3 | Evolution / Meta | ✅ JSONField em `TemplateNotificacao`; `renderizar_interativo()`; `ServicoWhatsApp.enviar_interativo()` + `_enviar_evolution_interativo()` → `/message/sendButtons/{instancia}`; fallback automático para texto em Cloud API/Meta/Twilio |
-| W-07 | **BSP brasileiro** — testar com Hablla ou Poli Digital como alternativa ao Evolution direto | P3 | Meta via BSP | — |
+| W-07 | **BSP brasileiro** — suporte a Hablla / Poli Digital / Digisac como provedor `BSP` | P3 | Meta via BSP | ✅ `_enviar_bsp()` (Meta Cloud API compatível); `webhook_bsp()` (hub verification + X-Hub-Signature-256 + inbound chatbot); fieldset no admin; 17 testes |
 | W-08 | **Status de entrega unificado** — normalizar `DELIVERED/READ` entre provedores | P3 | Todos | ✅ `_TWILIO_STATUS_MAP` + `webhook_twilio` normaliza para conjunto canônico `queued/sent/delivered/read/failed`; `_STATUS_ENTREGA_LABELS` e `_STATUS_ENTREGA_CHOICES` unificados |
 
 ---
@@ -2065,3 +2068,742 @@ def _processar_mensagem_inbound(item, config, request):
 | Fase | Escopo | Status |
 |------|--------|--------|
 | **23** | ⭐ **Chatbot WhatsApp — 2ª via, atraso, comprovante** | ✅ C-01..C-16 concluídos |
+| **24** | ⭐ **Segurança — Proteção das URLs Públicas de Boleto** | 28 | ✅ |
+| **25** | ⭐ **Portabilidade de Banco de Dados (PostgreSQL → MySQL / Oracle)** | 29 | ✅ |
+| **26** | ⭐ **Chatbot WhatsApp — Humanização com IA (Claude API)** | 30 | ✅ |
+| **27** | Versão do Sistema no Rodapé + ID de Página | 31 | ✅ |
+| **28** | ⭐ **Segurança — URLs ofuscadas com Hashids + Anti-enumeração** | 32 | ✅ |
+
+---
+
+## 28. SEGURANÇA — PROTEÇÃO DAS URLs PÚBLICAS DE BOLETO
+
+> **Contexto:** As URLs `/b/<uuid>/` permitem acesso sem autenticação ao boleto do comprador.
+> Atualmente não há limite de requisições, expiração de token ou bloqueio de abuso.
+> O UUID é gerado uma única vez e nunca rotacionado — um token vazado concede acesso permanente.
+
+---
+
+### 28.1 Inventário de Risco Atual
+
+| Risco | Vetor | Severidade |
+|-------|-------|-----------|
+| Token nunca expira | Token vazado em WhatsApp/e-mail arquivado dá acesso por anos | Alta |
+| Sem rate limiting | Enumeração de UUIDs (improvável, mas possível) / scraping em massa | Média |
+| Sem logging de acesso | Impossível auditar quem acessou o boleto e quando | Média |
+| Token não rotacionado | Nova segunda via mantém o mesmo token antigo | Baixa |
+
+---
+
+### 28.2 Proteções a Implementar
+
+| # | Item | Prioridade | Status |
+|---|------|-----------|--------|
+| S-01 | **Expiração de token** — `token_expira_em` (DateTimeField, nullable) em `Parcela`; `token_esta_expirado()` + `renovar_token(dias)`; view retorna 410 + `boleto_expirado.html` | P1 | ✅ |
+| S-02 | **Rate limiting** — 20 req/hora por IP via cache Django (sem dependência externa); retorna 429; limite configurável via `BOLETO_RATE_LIMIT_POR_HORA` | P1 | ✅ |
+| S-03 | **Log de acesso público** — model `AcessoBoletoPublico` (parcela FK, ip, user_agent, acessado_em); index em parcela+data e ip+data; gravado em cada GET bem-sucedido | P2 | ✅ |
+| S-04 | **Rotação de token na geração** — `gerar_boleto_parcela()` chama `parcela.renovar_token()` após sucesso; gera novo UUID + nova expiração a cada boleto gerado | P2 | ✅ |
+| S-05 | **Expiração configurável** — `BOLETO_TOKEN_DIAS_VALIDADE` (padrão 90) e `BOLETO_RATE_LIMIT_POR_HORA` (padrão 20) adicionados a `sync_params_from_env` | P2 | ✅ |
+| S-06 | **Headers de segurança** — `X-Robots-Tag: noindex, nofollow` e `Cache-Control: private, no-store` em `boleto_publico` e `download_boleto_publico` | P2 | ✅ |
+| S-07 | **Admin de monitoramento** — `AcessoBoletoPublicoAdmin` com `list_display`, `list_filter`, `search_fields`, `date_hierarchy`; somente leitura | P3 | ✅ |
+
+---
+
+### 28.3 Implementação S-01 — Expiração de Token
+
+```python
+# financeiro/models.py — Parcela
+token_expira_em = models.DateTimeField(null=True, blank=True, verbose_name='Token expira em')
+
+def get_link_publico(self):
+    """Retorna path público /b/<uuid>/. Levanta ValueError se expirado."""
+    if self.token_expira_em and timezone.now() > self.token_expira_em:
+        raise TokenExpiradoError('Link público expirado. Gere uma nova segunda via.')
+    return reverse('boleto_publico:visualizar', kwargs={'token': self.token_publico})
+```
+
+```python
+# financeiro/views.py — boleto_publico
+@ratelimit(key='ip', rate='20/h', block=True)
+def boleto_publico(request, token):
+    parcela = get_object_or_404(Parcela, token_publico=token)
+    if parcela.token_expira_em and timezone.now() > parcela.token_expira_em:
+        return render(request, 'financeiro/boleto_expirado.html', status=410)
+    # ... resto da view
+```
+
+---
+
+### 28.4 Implementação S-02 — Rate Limiting
+
+```bash
+pip install django-ratelimit==4.1.0
+```
+
+```python
+# settings.py
+RATELIMIT_USE_CACHE = 'default'  # Redis já configurado
+RATELIMIT_FAIL_OPEN = False       # Bloqueia se Redis indisponível
+
+# Limites por ambiente
+BOLETO_RATE_LIMIT = '5/h' if not DEBUG else '1000/h'
+```
+
+---
+
+### 28.5 Implementação S-03 — Log de Acesso
+
+```python
+# financeiro/models.py
+class AcessoBoletoPublico(models.Model):
+    parcela    = models.ForeignKey(Parcela, on_delete=models.CASCADE, related_name='acessos_publicos')
+    ip         = models.GenericIPAddressField()
+    user_agent = models.CharField(max_length=300, blank=True)
+    acessado_em = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-acessado_em']
+        indexes = [models.Index(fields=['parcela', 'acessado_em'])]
+```
+
+---
+
+### 28.6 Dependências
+
+| Pacote | Versão | Uso |
+|--------|--------|-----|
+| `django-ratelimit` | 4.1.0 | Rate limiting por IP/chave |
+
+---
+
+## 29. PORTABILIDADE DE BANCO DE DADOS (PostgreSQL → MySQL / Oracle)
+
+> **Contexto:** O sistema usa exclusivamente PostgreSQL (Supabase/Render). Para clientes
+> corporativos com Oracle ou MySQL já existentes, é necessário remover dependências
+> PostgreSQL-específicas e criar uma camada de compatibilidade.
+>
+> **Estratégia:** Isolar em 2 fases — fase A (remover blockers) e fase B (drivers e testes).
+
+---
+
+### 29.1 Inventário de Incompatibilidades
+
+| Item | Localização | PostgreSQL-específico | Alternativa portável |
+|------|-------------|----------------------|---------------------|
+| `search_path = gestao_contrato` | `settings.py` connection signal | Sim — schema isolation PG | Prefixo de tabela ou banco dedicado por cliente |
+| `JSONField` (nativo PG) | `notificacoes/models.py` (4 campos) | Parcialmente — Django emula em MySQL 5.7+ / Oracle via `TextField` | `django-jsonfield-backport` ou `TextField + json` |
+| `CONN_MAX_AGE=0` + `DISABLE_SERVER_SIDE_CURSORS` | `settings.py` | pgBouncer-specific | Remover para MySQL/Oracle |
+| `psycopg2-binary` | `requirements.txt` | Driver exclusivo PG | Condicional por `DATABASE_ENGINE` |
+
+---
+
+### 29.2 Fases de Implementação
+
+#### Fase A — Remover Blockers (P1)
+
+| # | Item | Prioridade | Status |
+|---|------|-----------|--------|
+| DB-01 | **Isolar `search_path`** — `settings.py` detecta engine via `_is_pg`; search_path, signal e DISABLE_SERVER_SIDE_CURSORS aplicados somente para PG | P1 | ✅ |
+| DB-02 | **`PortableJSONField`** — `core/db_fields.py`: jsonb/json/NCLOB/text; herda JSONField; `from_db_value`/`get_prep_value` para Oracle | P1 | ✅ |
+| DB-03 | **Settings por driver** — `settings.py` detecta engine e aplica OPTIONS: PG=search_path, MySQL=utf8mb4+strict, Oracle=threaded | P1 | ✅ |
+| DB-04 | **Remover `pg_catalog` direto** — verificar e substituir qualquer `RawSQL`/`.raw()` que use sintaxe PG | P2 | ✅ (nenhum `RawSQL`/`.raw()` PG-específico encontrado) |
+
+#### Fase B — Drivers e Testes (P2)
+
+| # | Item | Prioridade | Status |
+|---|------|-----------|--------|
+| DB-05 | **Driver MySQL** — `requirements.txt`: `mysqlclient`/`PyMySQL` como opt-in comentado; OPTIONS MySQL configurado em settings.py | P2 | ✅ |
+| DB-06 | **Driver Oracle** — `requirements.txt`: `python-oracledb` como opt-in comentado; OPTIONS Oracle configurado | P2 | ✅ |
+| DB-07 | **Migration portável** — `uuid.uuid4` já portável; `PortableJSONField` disponível para migração futura de campos JSON | P2 | ✅ |
+| DB-08 | **Test suite multi-banco** — CI GitHub Actions com matrix: `[postgresql, mysql, sqlite]`; Oracle em pipeline separado (licença) | P3 | — |
+| DB-09 | **Documentação de setup** — `docs/deployment/DATABASES.md`: instruções de string de conexão, drivers e variáveis de ambiente para cada banco | P3 | — |
+
+---
+
+### 29.3 Arquitetura `PortableJSONField`
+
+```python
+# core/db_fields.py
+import json
+from django.db import models
+
+class PortableJSONField(models.JSONField):
+    """JSONField portável: usa nativo no PG/MySQL ≥5.7, emula via TextField no Oracle."""
+
+    def db_type(self, connection):
+        vendor = connection.vendor
+        if vendor == 'postgresql':
+            return 'jsonb'
+        if vendor == 'mysql':
+            return 'json'
+        # Oracle, SQLite, outros: TEXT
+        return 'NCLOB' if vendor == 'oracle' else 'text'
+
+    def from_db_value(self, value, expression, connection):
+        if isinstance(value, str):
+            return json.loads(value)
+        return value
+
+    def get_prep_value(self, value):
+        if value is None:
+            return value
+        return json.dumps(value, ensure_ascii=False)
+```
+
+---
+
+### 29.4 Configuração Dinâmica de `settings.py`
+
+```python
+# settings.py — detecção automática de engine
+_DB_ENGINE = env('DATABASE_ENGINE', default='postgresql')
+
+DATABASES = {
+    'default': {
+        'ENGINE': f'django.db.backends.{_DB_ENGINE}',
+        'NAME': env('DB_NAME', default='gestao_contrato'),
+        ...
+    }
+}
+
+# Opções específicas por driver
+if _DB_ENGINE == 'postgresql':
+    DATABASES['default']['OPTIONS'] = {'options': '-c search_path=gestao_contrato'}
+    DATABASES['default']['CONN_MAX_AGE'] = 0
+    DATABASES['default']['DISABLE_SERVER_SIDE_CURSORS'] = True
+elif _DB_ENGINE == 'mysql':
+    DATABASES['default']['OPTIONS'] = {'charset': 'utf8mb4', 'init_command': "SET sql_mode='STRICT_TRANS_TABLES'"}
+elif _DB_ENGINE == 'oracle':
+    DATABASES['default']['OPTIONS'] = {'threaded': True}
+```
+
+---
+
+### 29.5 Variáveis de Ambiente Adicionais
+
+| Variável | Valores | Padrão |
+|----------|---------|--------|
+| `DATABASE_ENGINE` | `postgresql` / `mysql` / `oracle` / `sqlite3` | `postgresql` |
+| `DB_NAME` | Nome do banco / serviço Oracle | `gestao_contrato` |
+| `DB_HOST` | Host do servidor | via `DATABASE_URL` |
+| `DB_PORT` | Porta do servidor | padrão do driver |
+
+---
+
+## 30. CHATBOT WHATSAPP — HUMANIZAÇÃO COM IA (Claude API)
+
+> **Contexto:** O chatbot atual (Seção 27) usa um despachante de regras fixas com 5 intents.
+> Funciona bem para fluxos estruturados, mas respostas são mecânicas e não compreendem
+> perguntas livres ("Quando vence minha próxima?", "Tenho desconto se pagar hoje?").
+>
+> **Estratégia:** Manter os fluxos estruturados existentes como ferramentas (tools) e
+> adicionar uma camada de IA (Claude API) para: entendimento de linguagem natural,
+> respostas humanizadas, contexto de conversa e tratamento de perguntas não mapeadas.
+
+---
+
+### 30.1 Arquitetura Proposta
+
+```
+Mensagem do Cliente
+        │
+        ▼
+ ┌─────────────────────────────┐
+ │   Camada IA (Claude API)    │
+ │   claude-haiku-4-5          │  ← rápido, barato, < 1s
+ │   + system prompt + tools   │
+ └──────────┬──────────────────┘
+            │  tool_use → intent identificado
+            ▼
+ ┌─────────────────────────────┐
+ │   Despachante Existente     │  ← _iniciar_2a_via(),
+ │   (whatsapp_bot.py)         │     _iniciar_atraso(), etc.
+ └──────────┬──────────────────┘
+            │  dados estruturados do DB
+            ▼
+ ┌─────────────────────────────┐
+ │   Claude gera resposta      │  ← humaniza o texto final
+ │   com dados reais do DB     │     com nome, tom, emojis
+ └──────────┬──────────────────┘
+            │
+            ▼
+     Mensagem WhatsApp
+```
+
+---
+
+### 30.2 Items de Implementação
+
+| # | Item | Prioridade | Status |
+|---|------|-----------|--------|
+| H-01 | **Dependência** — `anthropic>=0.40.0` em `requirements.txt`; `ANTHROPIC_API_KEY` em settings.py via `config()`; parâmetro em `sync_params_from_env` | P1 | ✅ |
+| H-02 | **Classificador de intent** — `notificacoes/ai_chatbot.py` `AIIntentClassifier.classificar()`: `claude-haiku-4-5` com `tool_choice='any'`; ferramenta `classificar_intent` com 6 enums + confiança; timeout 3s | P1 | ✅ |
+| H-03 | **Humanizador de resposta** — `AIResponseHumanizer.humanizar()`: recebe dados estruturados do despachante; gera texto natural; max_tokens configurável | P1 | ✅ |
+| H-04 | **Contexto de sessão** — últimas 6 mensagens em `sessao.dados['historico_ia']` passadas como `messages`; histórico assistente salvo após cada resposta | P2 | ✅ |
+| H-05 | **Pergunta livre** — `_responder_pergunta_livre()`: monta contexto com dados reais de contratos/parcelas; Claude responde em linguagem natural sem acionar fluxo estruturado | P2 | ✅ |
+| H-06 | **Delay de digitação** — `delay_digitacao(min, max)`: `time.sleep(random.uniform(...))` antes de enviar; 0.6–1.8s para respostas humanizadas | P2 | ✅ |
+| H-07 | **Fallback gracioso** — timeout 3s no classificador e 4s no humanizador; `except Exception` retorna `None`; `whatsapp_bot.py` cai para `_despachar_menu()` transparentemente | P2 | ✅ |
+| H-08 | **Prompt de sistema** — `CHATBOT_SYSTEM_PROMPT` e `CHATBOT_SYSTEM_PROMPT_CLASSIFIER` em `sync_params_from_env`; prompts padrão embutidos; override via ParametroSistema | P2 | ✅ |
+| H-09 | **Limite de custo** — `CHATBOT_MAX_TOKENS_POR_RESPOSTA=300` e `CHATBOT_MODELO=claude-haiku-4-5-20251001` configuráveis; ≈ R$0,002/conversa | P3 | ✅ |
+| H-10 | **A/B testing** — flag `CHATBOT_IA_ATIVO` em `ParametroSistema`; `_ia_ativa()` lê via `get_param()`; liga/desliga sem deploy | P3 | ✅ |
+| H-11 | **Métricas de qualidade** — `_salvar_metricas()`: grava intent, confiança, modelo, tokens_input, tokens_output, latência em `sessao.dados['metricas_ia']` (rolling 20 entradas) | P3 | ✅ |
+
+---
+
+### 30.3 System Prompt Padrão
+
+```
+Você é o assistente virtual de cobrança da {NOMEIMOBILIARIA}.
+Seu nome é "Assistente {NOMEIMOBILIARIA}".
+
+PERSONALIDADE:
+- Prestativo e cordial, sem ser excessivamente formal
+- Direto ao ponto — o comprador quer resolver, não ler parágrafos
+- Use emojis com moderação (1-2 por mensagem, apenas quando naturais)
+- Idioma: português brasileiro, informal mas profissional
+
+ESCOPO:
+- Responda APENAS sobre: boletos, parcelas, contratos, pagamentos, situação financeira
+- Para assuntos fora do escopo: "Para outros assuntos, fale com um atendente humano"
+- Nunca invente dados — use apenas as informações fornecidas no contexto
+
+FORMATO:
+- Respostas curtas (máx. 3 parágrafos para WhatsApp)
+- Valores sempre em R$ com centavos: "R$ 1.234,56"
+- Datas no formato brasileiro: "15/06/2025"
+- Nunca use markdown (asteriscos, #) — WhatsApp usa *negrito* diferente
+```
+
+---
+
+### 30.4 Integração com Código Existente
+
+```python
+# notificacoes/whatsapp_bot.py — processar()
+from notificacoes.ai_chatbot import AIIntentClassifier, AIResponseHumanizer
+
+class WhatsAppBotService:
+    def processar(self, telefone, mensagem, **kwargs):
+        sessao = self._obter_ou_criar_sessao(telefone)
+
+        # IA: classificar intent (com fallback para regras)
+        if settings.get_param('CHATBOT_IA_ATIVO', 'false') == 'true':
+            intent = AIIntentClassifier.classificar(mensagem, sessao)
+        else:
+            intent = self._classificar_regras(mensagem)  # lógica atual
+
+        # Despachar fluxo estruturado (código existente)
+        dados_db = self._despachar(intent, sessao)
+
+        # IA: humanizar resposta
+        if settings.get_param('CHATBOT_IA_ATIVO', 'false') == 'true':
+            return AIResponseHumanizer.humanizar(dados_db, intent, sessao)
+        return dados_db  # resposta texto atual
+```
+
+---
+
+### 30.5 Modelo e Custo Estimado
+
+| Modelo | Latência | Custo/1k tokens | Custo/mês (500 conv.) |
+|--------|----------|-----------------|----------------------|
+| `claude-haiku-4-5` | ~400ms | Input: $0.80 / Output: $4.00 | ~R$ 8–15 |
+| `claude-sonnet-4-6` | ~1.2s | Input: $3.00 / Output: $15.00 | ~R$ 40–80 |
+
+> **Recomendação:** Usar `claude-haiku-4-5` para classificação de intent (barato, rápido)
+> e `claude-haiku-4-5` para humanização de resposta (volume alto). Reservar Sonnet apenas
+> para perguntas livres complexas (`pergunta_livre` intent com fallback).
+
+---
+
+### 30.6 Variáveis de Ambiente
+
+| Variável | Descrição | Onde configurar |
+|----------|-----------|-----------------|
+| `ANTHROPIC_API_KEY` | Chave da API Claude | Render → Secret (sync: false) |
+| `CHATBOT_IA_ATIVO` | Liga/desliga IA (`true`/`false`) | `ParametroSistema` ou env var |
+| `CHATBOT_MODELO` | Modelo padrão | `ParametroSistema` (padrão: `claude-haiku-4-5`) |
+| `CHATBOT_MAX_TOKENS` | Limite de tokens por resposta | `ParametroSistema` (padrão: `300`) |
+
+---
+
+## 31. VERSÃO DO SISTEMA NO RODAPÉ + ID DE PÁGINA
+
+> **Contexto:** O rodapé atual mostra apenas nome e créditos. O usuário precisa saber
+> em qual versão do sistema está e qual página está vendo (útil para suporte e rastreamento).
+> Cada commit deve incrementar automaticamente o número de versão (patch).
+
+---
+
+### 31.1 Itens de Implementação
+
+| # | Item | Prioridade | Status |
+|---|------|-----------|--------|
+| V-01 | **Arquivo `VERSION`** — arquivo de texto na raiz do projeto com `MAJOR.MINOR` (ex: `3.1`); PATCH = `git rev-list --count HEAD` em runtime | P1 | ✅ |
+| V-02 | **Context processor** — `core/context_processors.py`: `system_info(request)` injeta `system_version`, `page_id` (4 dígitos) e `page_view_name` em todos os templates; registrado em `TEMPLATES[0]['OPTIONS']['context_processors']` | P1 | ✅ |
+| V-03 | **Mapeamento de IDs de página** — `PAGE_ID_MAP` em `core/context_processors.py`: dicionário `'app:view_name' → '0000'`; fallback `'0000'` para páginas sem ID | P1 | ✅ |
+| V-04 | **Rodapé atualizado** — `templates/base.html` e `portal_base.html`: linha `v{{ system_version }} \| Página {{ page_id }}` no footer; estilo discreto (`opacity:0.65`) | P1 | ✅ |
+| V-05 | **Build number automático** — `core/version.py` chama `git rev-list --count HEAD` em subprocess; resultado cacheado por processo (não por request); funciona em Render sem nenhuma variável de ambiente | P2 | ✅ |
+| V-06 | **Git pre-commit hook** — `scripts/hooks/pre-commit` instalado em `.git/hooks/pre-commit`: exibe versão que será registrada (PATCH = git count + 1); compatível com formato MAJOR.MINOR do VERSION file | P2 | ✅ |
+| V-07 | **Claude Code hook** — `.claude/settings.json` `PostToolUse` Bash: detecta `git commit` e exibe aviso de cache de versão; `core/version.py` expõe `reset_cache()` | P2 | ✅ |
+| V-08 | **Tooltip no rodapé** — hover no número de versão mostra: commit hash abreviado (`git rev-parse --short HEAD`), data do build e ambiente (`DEV` / `PROD`); `get_version_info()` em `core/version.py`; `system_version_info` injetado pelo context processor | P3 | ✅ |
+
+---
+
+### 31.2 Estrutura do `VERSION`
+
+```
+# Arquivo: VERSION (na raiz do projeto)
+3.1.0
+```
+
+Leitura em `settings.py`:
+```python
+import pathlib
+_VERSION_FILE = pathlib.Path(BASE_DIR) / 'VERSION'
+APP_VERSION = _VERSION_FILE.read_text(encoding='utf-8').strip() if _VERSION_FILE.exists() else '0.0.0'
+```
+
+---
+
+### 31.3 Context Processor
+
+```python
+# core/context_processors.py
+from django.conf import settings
+
+def system_version(request):
+    page_id = getattr(request, 'page_id', 0)
+    return {
+        'SYSTEM_VERSION': getattr(settings, 'APP_VERSION', '—'),
+        'PAGE_ID': page_id,
+    }
+```
+
+Registrar em `settings.py`:
+```python
+TEMPLATES[0]['OPTIONS']['context_processors'].append(
+    'core.context_processors.system_version'
+)
+```
+
+---
+
+### 31.4 Mapeamento de IDs de Página
+
+```python
+# core/page_ids.py — cada URL name recebe um ID de 4 dígitos único
+PAGE_ID_MAP = {
+    # Core
+    'core:index':                 1000,
+    'core:dashboard':             1001,
+    'core:listar_imoveis':        1010,
+    'core:criar_imovel':          1011,
+    'core:editar_imovel':         1012,
+    'core:listar_imobiliarias':   1020,
+    'core:listar_compradores':    1030,
+    'core:listar_contabilidades': 1040,
+    'core:listar_acessos':        1050,
+    'core:busca_global':          1060,
+    # Contratos
+    'contratos:listar':           2000,
+    'contratos:detalhe':          2001,
+    'contratos:criar':            2002,
+    'contratos:editar':           2003,
+    # Financeiro
+    'financeiro:listar_parcelas': 3000,
+    'financeiro:detalhe_parcela': 3001,
+    'financeiro:listar_boletos':  3010,
+    'financeiro:listar_reajustes':3020,
+    'financeiro:listar_remessas': 3030,
+    'financeiro:listar_retornos': 3040,
+    'financeiro:upload_ofx':      3050,
+    'financeiro:dashboard_conciliacao': 3060,
+    'financeiro:simulador_antecipacao': 3070,
+    'financeiro:visualizar_boleto':     3080,
+    # Notificações
+    'notificacoes:listar':        4000,
+    'notificacoes:painel_mensagens': 4010,
+    'notificacoes:listar_configs_email':    4020,
+    'notificacoes:listar_configs_whatsapp': 4030,
+    'notificacoes:listar_templates':        4040,
+    # Portal Comprador
+    'portal_comprador:dashboard': 5000,
+    'portal_comprador:contratos': 5001,
+    'portal_comprador:boletos':   5002,
+    # Admin
+    'admin:index':                9000,
+    # API / Tasks
+    'core:health_check':          8000,
+    'core:task_run_all':          8010,
+}
+```
+
+Middleware para injetar `request.page_id`:
+```python
+# core/middleware.py
+from core.page_ids import PAGE_ID_MAP
+
+class PageIDMiddleware:
+    def __init__(self, get_response):
+        self.get_response = get_response
+
+    def __call__(self, request):
+        response = self.get_response(request)
+        url_name = getattr(getattr(request, 'resolver_match', None), 'view_name', '')
+        request.page_id = PAGE_ID_MAP.get(url_name, 0)
+        return response
+```
+
+---
+
+### 31.5 Rodapé (`base.html`)
+
+```html
+<footer class="app-footer">
+    <div class="container center-align">
+        <p class="mb-0">
+            <strong>Sistema de Gestão de Contratos de Venda de Imóveis</strong>
+        </p>
+        <p class="mb-0">
+            Desenvolvido por <strong>Maxwell da Silva Oliveira</strong> |
+            <a href="https://msbrasil.inf.br" target="_blank" class="white-text">M&S do Brasil LTDA</a>
+        </p>
+        <p class="mt-1 mb-0 text-muted" style="font-size:0.75rem; opacity:0.7;">
+            v{{ SYSTEM_VERSION }}
+            {% if PAGE_ID %} · PG-{{ PAGE_ID|stringformat:"04d" }}{% endif %}
+        </p>
+    </div>
+</footer>
+```
+
+**Exemplo de exibição:** `v3.1.247 · PG-2001`
+- `3.1` = MAJOR.MINOR (manual)
+- `247` = número de commits (`git rev-list --count HEAD`) — sempre incrementa
+- `2001` = ID da página `contratos:detalhe`
+
+---
+
+### 31.6 Build Number via `build.sh` (Render)
+
+```bash
+# build.sh — adicionar antes do collectstatic
+echo "==> Calculando build number..."
+BUILD_NUMBER=$(git rev-list --count HEAD 2>/dev/null || echo "0")
+MAJOR_MINOR=$(cat VERSION 2>/dev/null | cut -d. -f1,2 || echo "3.1")
+echo "${MAJOR_MINOR}.${BUILD_NUMBER}" > VERSION_BUILD
+echo "Versão do sistema: ${MAJOR_MINOR}.${BUILD_NUMBER}"
+```
+
+```python
+# settings.py
+_VERSION_BUILD = (BASE_DIR / 'VERSION_BUILD')
+APP_VERSION = _VERSION_BUILD.read_text().strip() if _VERSION_BUILD.exists() else (
+    (BASE_DIR / 'VERSION').read_text().strip() if (BASE_DIR / 'VERSION').exists() else '0.0.0'
+)
+```
+
+---
+
+### 31.7 Git Hook — Auto-incremento Local
+
+```bash
+#!/bin/sh
+# .git/hooks/pre-commit
+VERSION_FILE="$(git rev-parse --show-toplevel)/VERSION"
+if [ -f "$VERSION_FILE" ]; then
+    CURRENT=$(cat "$VERSION_FILE")
+    MAJOR=$(echo "$CURRENT" | cut -d. -f1)
+    MINOR=$(echo "$CURRENT" | cut -d. -f2)
+    PATCH=$(echo "$CURRENT" | cut -d. -f3)
+    NEW_PATCH=$((PATCH + 1))
+    echo "${MAJOR}.${MINOR}.${NEW_PATCH}" > "$VERSION_FILE"
+    git add "$VERSION_FILE"
+fi
+```
+
+```bash
+# Ativar o hook
+chmod +x .git/hooks/pre-commit
+```
+
+> No Render, o build number é calculado por `git rev-list --count HEAD` (mais confiável
+> que incremento manual, pois reflete o histórico real de commits).
+
+---
+
+## 32. SEGURANÇA — PROTEÇÃO DE URLs E ISOLAMENTO DE TENANT
+
+> **Contexto:** Auditoria de segurança identificou dois problemas independentes:
+>
+> **Problema 1 — ID sequencial visível:** `/contratos/1055/` expõe o PK inteiro do banco.
+> Um usuário autenticado pode iterar `/contratos/1/`, `/contratos/2/` … até `9999` e
+> tentar acessar contratos de outras imobiliárias.
+>
+> **Problema 2 — Sem isolamento de tenant:** `ContratoDetailView.get_queryset()` e
+> `detalhe_parcela()` não filtram por imobiliária do usuário logado — qualquer usuário
+> autenticado acessa qualquer objeto do banco. As funções `get_imobiliarias_usuario()` e
+> `usuario_tem_acesso_imobiliaria()` já existem em `core/models.py` mas **não são usadas**
+> em `contratos/views.py` nem em `financeiro/views.py`.
+>
+> **Escopo auditado:** 109 URL patterns com `<int:pk>` em 5 apps.
+
+---
+
+### 32.1 Inventário de Risco
+
+| Superfície | URLs | Risco | Auth | Tenant Isolation |
+|-----------|------|-------|------|-----------------|
+| `contratos/` | 20 | Contrato de outra imobiliária visível | ✅ | ❌ |
+| `financeiro/` | 59 | Parcelas, boletos, CNAB de qualquer contrato | ✅ | ❌ |
+| `core/` | 20 | Entidades core (usa `get_imobiliarias_usuario`) | ✅ | ✅ parcial |
+| `notificacoes/` | 16 | Configurações e templates por imobiliária | ✅ | ❌ |
+| `portal_comprador/` | 8 | URLs do comprador | ✅ | ✅ (filtra por comprador) |
+
+---
+
+### 32.2 Fase A — Isolamento de Tenant (P1, crítico)
+
+> Resolver o acesso cruzado **independentemente** da obfuscação de URL.
+> O helper `get_imobiliarias_usuario(user)` já retorna o queryset correto de imobiliárias.
+
+| # | Item | Arquivo | Status |
+|---|------|---------|--------|
+| T-01 | **`ContratoListView`** — `TenantMixin` (get_queryset filtra por imobiliária); contadores e dropdown de imobiliárias limitados ao tenant | `contratos/views.py` | ✅ |
+| T-02 | **`ContratoDetailView / UpdateView / DeleteView`** — `TenantMixin` (get_object verifica imobiliária via dotted tenant_field) | `contratos/views.py` | ✅ |
+| T-03 | **`detalhe_parcela()`** — `verificar_acesso_tenant(request, parcela.contrato.imobiliaria)`; parcela buscada com `select_related('contrato__imobiliaria')` | `financeiro/views.py` | ✅ |
+| T-04 | **Todos os endpoints de parcela/boleto** — 11 views protegidas: `registrar_pagamento`, `gerar_boleto_parcela`, `notificar_inadimplente`, `download_boleto`, `visualizar_boleto`, `cancelar_boleto`, `api_status_boleto`, `segunda_via_boleto`, `gerar_boletos_contrato`, `download_zip_boletos` + mais | `financeiro/views.py` | ✅ |
+| T-05 | **Remessa CNAB** — `listar_arquivos_remessa` filtra por `_imobs_para_usuario()`; `detalhe`, `regenerar`, `marcar_enviada`, `excluir`, `download` verificam `conta_bancaria.imobiliaria` | `financeiro/views.py` | ✅ |
+| T-06 | **Retorno CNAB** — `listar_arquivos_retorno` filtra por `_imobs_para_usuario()`; `detalhe`, `processar`, `download` verificam `conta_bancaria.imobiliaria` | `financeiro/views.py` | ✅ |
+| T-07 | **Notificações** — `reenviar_notificacao` verifica `parcela.contrato.imobiliaria`; `IntermediariasListView/DetailView` com `TenantMixin` | `notificacoes/views.py` | ✅ |
+| T-08 | **`TenantMixin` + `verificar_acesso_tenant()`** — em `core/mixins.py`: `get_object()` e `get_queryset()` com atributos `tenant_field`/`tenant_filter` customizáveis; helper FBV levanta `PermissionDenied` | `core/mixins.py` | ✅ |
+
+**Padrão para T-01/T-02 (Class-based Views):**
+```python
+# core/mixins.py
+class TenantMixin:
+    """Filtra queryset pelas imobiliárias do usuário logado. Superuser vê tudo."""
+    tenant_field = 'imovel__imobiliaria'  # campo de FK para imobiliaria
+
+    def get_queryset(self):
+        qs = super().get_queryset()
+        if self.request.user.is_superuser:
+            return qs
+        imobs = get_imobiliarias_usuario(self.request.user)
+        return qs.filter(**{self.tenant_field + '__in': imobs})
+```
+
+```python
+# contratos/views.py
+class ContratoDetailView(LoginRequiredMixin, TenantMixin, DetailView):
+    model = Contrato
+    tenant_field = 'imovel__imobiliaria'  # herda proteção automática
+```
+
+**Padrão para T-03/T-04 (Function-based Views):**
+```python
+# core/decorators.py
+def tenant_required(get_imobiliaria):
+    """Decorador para function-based views — verifica acesso ao objeto."""
+    def decorator(func):
+        @wraps(func)
+        def wrapper(request, pk, *args, **kwargs):
+            obj = get_object_or_404(get_imobiliaria.__self__.__class__, pk=pk)
+            imob = get_imobiliaria(obj)
+            if not request.user.is_superuser and not usuario_tem_acesso_imobiliaria(request.user, imob):
+                raise PermissionDenied
+            return func(request, pk, *args, **kwargs)
+        return wrapper
+    return decorator
+```
+
+---
+
+### 32.3 Fase B — Obfuscação de URL com Hashids (P2)
+
+> Substituir `/contratos/1055/` por `/contratos/Xk9mP3/` sem mudar modelos.
+> Hashids codifica o inteiro usando uma chave secreta — reversível só pelo servidor.
+> Não elimina Problema 2 (tenant), mas elimina a legibilidade e o risco de enumeração.
+
+| # | Item | Status |
+|---|------|--------|
+| U-01 | **Instalar `hashids==1.3.1`** — `pip install hashids`; adicionar `HASHIDS_SALT = SECRET_KEY[:20]` e `HASHIDS_MIN_LENGTH = 6` em `settings.py` | ✅ |
+| U-02 | **`core/hashids_utils.py`** — funções `encode_id(pk) → str` e `decode_id(h) → int`; usam salt do settings; retornam `None` se hash inválido | ✅ |
+| U-03 | **URL pattern `<str:hid>`** — substituir `<int:pk>` por `<str:hid>` nos apps `contratos/`, `financeiro/`; FBVs usam `_hid_to_pk()`; CBVs usam `HashidMixin`; 23 views financeiro + 10 CBVs/FBVs contratos atualizados | ✅ |
+| U-04 | **Template tag `{% hashid obj.pk %}`** — `core/templatetags/hashid_tags.py` filtro `\|hashid`; 25+ templates atualizados com `{% load hashid_tags %}` | ✅ |
+| U-05 | **Rota de compatibilidade** — `<int:pk>/compat/` redireciona (301) para URL hashid; 3 grupos de compat views (contrato, parcela, remessa/retorno) | ✅ |
+| U-06 | **Admin Django** — admin continua usando PK inteiro (acesso restrito a staff) | ✅ |
+
+**Exemplo de implementação:**
+```python
+# core/hashids_utils.py
+from hashids import Hashids
+from django.conf import settings
+
+_h = Hashids(salt=settings.HASHIDS_SALT, min_length=settings.HASHIDS_MIN_LENGTH)
+
+def encode_id(pk: int) -> str:
+    return _h.encode(pk)
+
+def decode_id(hid: str) -> int | None:
+    decoded = _h.decode(hid)
+    return decoded[0] if decoded else None
+```
+
+```python
+# contratos/views.py — URL: contratos/<str:hid>/
+def detalhe_contrato(request, hid):
+    from core.hashids_utils import decode_id
+    pk = decode_id(hid)
+    if pk is None:
+        raise Http404
+    contrato = get_object_or_404(Contrato, pk=pk)
+    # + verificação de tenant (T-01)
+    ...
+```
+
+```html
+<!-- template: antes -->
+<a href="{% url 'contratos:detalhe' contrato.pk %}">ver</a>
+
+<!-- template: depois -->
+{% load hashids_tags %}
+<a href="{% url 'contratos:detalhe' contrato.pk|hashid %}">ver</a>
+```
+
+---
+
+### 32.4 Fase C — Defesa em Profundidade (P3)
+
+| # | Item | Status |
+|---|------|--------|
+| D-01 | **Middleware anti-enumeração** — `core/middleware.py` `AntiEnumeracaoMiddleware`: cache-based 30 erros/5min por IP; ban 1h → 429; registrado em `settings.py` MIDDLEWARE | ✅ |
+| D-02 | **Log de acesso negado** — model `AcessoNegado` em `core/models.py`: ip, usuario, url, status_code, timestamp; admin filtrável em `core/admin.py`; migration 0011 | ✅ |
+| D-03 | **Header `X-Content-Type-Options: nosniff`** + `X-Frame-Options: DENY` — movidos para fora do bloco `if not DEBUG` em `settings.py`; sempre ativos em dev e prod | ✅ |
+| D-04 | **Teste automatizado de isolamento** — `tests/test_tenant_isolation.py`: 4 testes (contrato e parcela, negado e permitido); `TenantMixin.get_object()` corrigido para retornar 403 não 404 | ✅ |
+
+---
+
+### 32.5 Ordem de Implementação Recomendada
+
+```
+Semana 1: T-01 a T-05 (isolamento tenant — contratos e parcelas principais)
+Semana 2: T-06 a T-08 (APIs e notificações) + D-04 (testes automatizados)
+Semana 3: U-01 a U-04 (hashids nas URLs principais: contratos, parcelas)
+Semana 4: U-05 a U-06 + D-01 a D-03 (compatibilidade + defesa em profundidade)
+```
+
+> **Prioridade absoluta: Fase A (T-01..T-08).**
+> A obfuscação de URL (Fase B) é uma defesa secundária — sem o isolamento de tenant,
+> hashids não impede o acesso cruzado (hash é reversível pelo próprio sistema).
+
+---
+
+### 32.6 Resumo de Risco
+
+| Problema | Impacto | Solução | Fase |
+|---------|---------|---------|------|
+| Usuário vê contratos de outra imobiliária | **CRÍTICO** | TenantMixin + tenant_required | A |
+| IDs sequenciais visíveis na URL | Alto | Hashids `Xk9mP3` | B |
+| Sem log de tentativas de enumeração | Médio | Middleware + AcessoNegado | C |
+| 109 templates com `obj.pk` exposto | Médio | Template tag `{% hashid %}` | B |

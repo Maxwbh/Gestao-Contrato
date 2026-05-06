@@ -1,4 +1,6 @@
+
 {% extends 'base.html' %}
+{% load hashid_tags %}
 {% block title %}Renegociação — {{ contrato.numero_contrato }}{% endblock %}
 
 {% block content %}
@@ -6,7 +8,7 @@
 
   <!-- Cabeçalho -->
   <div class="d-flex align-items-center gap-2 mb-3">
-    <a href="{% url 'contratos:detalhe' pk=contrato.pk %}" class="btn btn-sm btn-outline-secondary">
+    <a href="{% url 'contratos:detalhe' contrato.pk|hashid %}" class="btn btn-sm btn-outline-secondary">
       <i class="fas fa-arrow-left"></i>
     </a>
     <div>
@@ -113,7 +115,7 @@
       <button type="submit" class="btn btn-warning" id="btn-confirmar" disabled>
         <i class="fas fa-handshake me-1"></i>Confirmar Renegociação
       </button>
-      <a href="{% url 'contratos:detalhe' pk=contrato.pk %}" class="btn btn-outline-secondary">
+      <a href="{% url 'contratos:detalhe' contrato.pk|hashid %}" class="btn btn-outline-secondary">
         Cancelar
       </a>
     </div>

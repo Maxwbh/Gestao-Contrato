@@ -22,7 +22,7 @@ from django.utils import timezone
 from .mixins import PaginacaoMixin
 from .models import (
     Contabilidade, Imobiliaria, Imovel, Comprador,
-    ContaBancaria, BancoBrasil, LayoutCNAB, AcessoUsuario, VerticePoligono,
+    ContaBancaria, BancoBrasil, LayoutCNAB, AcessoUsuario, VerticePoligono, LoteamentoOverlay,
     get_contabilidades_usuario, get_imobiliarias_usuario,
     usuario_tem_acesso_imobiliaria, usuario_tem_acesso_contabilidade,
     usuario_tem_permissao_total
@@ -949,11 +949,22 @@ class ImovelListView(LoginRequiredMixin, PaginacaoMixin, ListView):
         context['poligonos_json'] = _json.dumps(poligonos)
 
         # Lista de loteamentos distintos para o filtro do mapa
-        context['loteamentos'] = (
+        loteamentos = list(
             ativos.exclude(loteamento='').exclude(loteamento__isnull=True)
             .values_list('loteamento', flat=True)
             .distinct().order_by('loteamento')
         )
+        context['loteamentos'] = loteamentos
+
+        # M-14: overlays de planta baixa por loteamento
+        overlays = {}
+        for ov in LoteamentoOverlay.objects.filter(ativo=True, nome_loteamento__in=loteamentos):
+            overlays[ov.nome_loteamento] = {
+                'url': request.build_absolute_uri(ov.imagem.url),
+                'bounds': ov.bounds(),
+                'opacidade': ov.opacidade,
+            }
+        context['overlays_json'] = json.dumps(overlays)
         context['imobiliarias'] = Imobiliaria.objects.filter(ativo=True)
         context['search'] = self.request.GET.get('search', '')
         return context
@@ -1060,6 +1071,16 @@ def loteamento_detalhe(request, nome):
     elif filtro_disp == 'false':
         lista_imoveis = imoveis.filter(disponivel=False)
 
+    import json as _json
+    overlay_obj = LoteamentoOverlay.objects.filter(nome_loteamento__iexact=nome, ativo=True).first()
+    overlay_data = None
+    if overlay_obj:
+        overlay_data = _json.dumps({
+            'url': request.build_absolute_uri(overlay_obj.imagem.url),
+            'bounds': overlay_obj.bounds(),
+            'opacidade': overlay_obj.opacidade,
+        })
+
     context = {
         'nome_loteamento': nome,
         'imoveis': lista_imoveis,
@@ -1073,6 +1094,7 @@ def loteamento_detalhe(request, nome):
         'valor_minimo': stats_valor['minimo'],
         'valor_maximo': stats_valor['maximo'],
         'filtro_disp': filtro_disp,
+        'overlay_json': overlay_data,
     }
     return render(request, 'core/loteamento_detalhe.html', context)
 
@@ -1825,3 +1847,60 @@ def api_poligono_imovel(request, pk):
 
     VerticePoligono.objects.bulk_create(novos)
     return JsonResponse({'ok': True, 'salvos': len(novos)})
+
+
+@login_required
+def api_overlay_loteamento(request, nome):
+    """
+    GET  → JSON com dados do overlay ativo para o loteamento.
+    POST → cria/atualiza overlay (staff/superuser; multipart com campos + arquivo).
+    M-14: Planta baixa como overlay no mapa.
+    """
+    import urllib.parse
+    nome = urllib.parse.unquote(nome)
+
+    if request.method == 'GET':
+        overlay = LoteamentoOverlay.objects.filter(
+            nome_loteamento__iexact=nome, ativo=True
+        ).first()
+        if not overlay:
+            return JsonResponse({'overlay': None})
+        return JsonResponse({
+            'overlay': {
+                'url': request.build_absolute_uri(overlay.imagem.url),
+                'bounds': overlay.bounds(),
+                'opacidade': overlay.opacidade,
+            }
+        })
+
+    if not (request.user.is_staff or request.user.is_superuser):
+        return JsonResponse({'erro': 'Sem permissão.'}, status=403)
+
+    if request.method == 'POST':
+        try:
+            lat_sw = float(request.POST.get('lat_sw', ''))
+            lng_sw = float(request.POST.get('lng_sw', ''))
+            lat_ne = float(request.POST.get('lat_ne', ''))
+            lng_ne = float(request.POST.get('lng_ne', ''))
+            opacidade = float(request.POST.get('opacidade', '0.7'))
+        except (TypeError, ValueError):
+            return JsonResponse({'erro': 'Parâmetros inválidos.'}, status=400)
+
+        imagem = request.FILES.get('imagem')
+        overlay, created = LoteamentoOverlay.objects.get_or_create(
+            nome_loteamento=nome,
+            defaults={'lat_sw': lat_sw, 'lng_sw': lng_sw, 'lat_ne': lat_ne, 'lng_ne': lng_ne,
+                      'opacidade': opacidade, 'ativo': True},
+        )
+        overlay.lat_sw = lat_sw
+        overlay.lng_sw = lng_sw
+        overlay.lat_ne = lat_ne
+        overlay.lng_ne = lng_ne
+        overlay.opacidade = opacidade
+        overlay.ativo = True
+        if imagem:
+            overlay.imagem = imagem
+        overlay.save()
+        return JsonResponse({'ok': True, 'created': created, 'id': overlay.pk})
+
+    return JsonResponse({'erro': 'Método não suportado.'}, status=405)

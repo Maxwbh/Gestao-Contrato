@@ -293,6 +293,12 @@ class Parcela(TimeStampedModel):
         verbose_name='Token Público',
         help_text='Token UUID para link público do boleto (acesso sem senha)'
     )
+    token_expira_em = models.DateTimeField(
+        null=True,
+        blank=True,
+        verbose_name='Token expira em',
+        help_text='Deixe em branco para não expirar. Preenchido automaticamente na geração do boleto.'
+    )
 
     # PIX do Boleto (Boleto Híbrido)
     pix_copia_cola = models.TextField(
@@ -541,6 +547,25 @@ class Parcela(TimeStampedModel):
         """Retorna o caminho URL do link público do boleto (sem autenticação)."""
         from django.urls import reverse
         return reverse('boleto_publico:visualizar', kwargs={'token': self.token_publico})
+
+    def token_esta_expirado(self) -> bool:
+        """Retorna True se o token público expirou."""
+        if not self.token_expira_em:
+            return False
+        from django.utils import timezone
+        return timezone.now() > self.token_expira_em
+
+    def renovar_token(self, dias: int | None = None) -> None:
+        """Gera novo token e define nova expiração."""
+        import uuid as _uuid
+        from django.utils import timezone
+        from datetime import timedelta
+        if dias is None:
+            from core.parametros import get_param
+            dias = int(get_param('BOLETO_TOKEN_DIAS_VALIDADE', 90))
+        self.token_publico = _uuid.uuid4()
+        self.token_expira_em = timezone.now() + timedelta(days=dias)
+        self.save(update_fields=['token_publico', 'token_expira_em'])
 
     @property
     def boleto_pode_ser_pago(self):
@@ -2371,3 +2396,28 @@ class ItemRetorno(TimeStampedModel):
             self.erro_processamento = str(e)
             self.save()
             return False
+
+
+class AcessoBoletoPublico(models.Model):
+    """S-03: Log de cada acesso ao boleto público via /b/<token>/."""
+    parcela = models.ForeignKey(
+        Parcela,
+        on_delete=models.CASCADE,
+        related_name='acessos_publicos',
+        verbose_name='Parcela',
+    )
+    ip = models.GenericIPAddressField(verbose_name='IP')
+    user_agent = models.CharField(max_length=300, blank=True, verbose_name='User-Agent')
+    acessado_em = models.DateTimeField(auto_now_add=True, verbose_name='Acessado em')
+
+    class Meta:
+        verbose_name = 'Acesso Boleto Público'
+        verbose_name_plural = 'Acessos Boleto Público'
+        ordering = ['-acessado_em']
+        indexes = [
+            models.Index(fields=['parcela', 'acessado_em']),
+            models.Index(fields=['ip', 'acessado_em']),
+        ]
+
+    def __str__(self):
+        return f'Acesso {self.parcela} por {self.ip} em {self.acessado_em:%d/%m/%Y %H:%M}'

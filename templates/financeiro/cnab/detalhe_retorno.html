@@ -1,5 +1,6 @@
 {% extends 'base.html' %}
 {% load static %}
+{% load hashid_tags %}
 
 {% block title %}Retorno {{ arquivo.nome_arquivo }} - CNAB{% endblock %}
 
@@ -104,7 +105,7 @@
                     <h5 class="mb-0"><i class="fas fa-cog"></i> Acoes</h5>
                 </div>
                 <div class="card-body d-grid gap-2">
-                    <a href="{% url 'financeiro:download_retorno' arquivo.pk %}" class="btn btn-success">
+                    <a href="{% url 'financeiro:download_retorno' arquivo.pk|hashid %}" class="btn btn-success">
                         <i class="fas fa-download"></i> Download do Arquivo
                     </a>
                     {% if arquivo.pode_reprocessar %}
@@ -195,7 +196,7 @@
                                     </td>
                                     <td>
                                         {% if item.parcela %}
-                                        <a href="{% url 'financeiro:detalhe_parcela' item.parcela.pk %}">
+                                        <a href="{% url 'financeiro:detalhe_parcela' item.parcela.pk|hashid %}">
                                             {{ item.parcela.contrato.comprador.nome_completo|truncatechars:25 }}
                                         </a>
                                         {% else %}

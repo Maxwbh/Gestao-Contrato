@@ -1,5 +1,6 @@
 {% extends 'base.html' %}
 {% load static %}
+{% load hashid_tags %}
 {% load humanize %}
 
 {% block title %}Reajustes Pendentes{% endblock %}
@@ -97,7 +98,7 @@
                                    onchange="atualizarSelecao()">
                         </td>
                         <td>
-                            <a href="{% url 'contratos:detalhe' item.contrato.pk %}" class="fw-bold">
+                            <a href="{% url 'contratos:detalhe' item.contrato.pk|hashid %}" class="fw-bold">
                                 {{ item.contrato.numero_contrato }}
                             </a>
                             <br>

@@ -15,7 +15,9 @@ from django.db import models
 from django.db.models import Q, Sum
 from .models import Contrato, StatusContrato, IndiceReajuste, PrestacaoIntermediaria, TabelaJurosContrato, TipoAmortizacao, TipoCorrecao
 from .forms import ContratoForm, IndiceReajusteForm
-from core.mixins import PaginacaoMixin
+from core.mixins import PaginacaoMixin, TenantMixin, HashidMixin
+from core.mixins import verificar_acesso_tenant
+from core.hashids_utils import encode_id, decode_id as _decode_id
 import requests
 from django.http import JsonResponse
 from django.views.decorators.http import require_http_methods
@@ -38,7 +40,7 @@ def _voltar_url(request, default):
     return default
 
 
-class ContratoListView(LoginRequiredMixin, PaginacaoMixin, ListView):
+class ContratoListView(LoginRequiredMixin, TenantMixin, PaginacaoMixin, ListView):
     """Lista todos os contratos"""
     model = Contrato
     template_name = 'contratos/contrato_list.html'
@@ -46,7 +48,7 @@ class ContratoListView(LoginRequiredMixin, PaginacaoMixin, ListView):
     paginate_by = 20
 
     def get_queryset(self):
-        queryset = Contrato.objects.select_related(
+        queryset = super().get_queryset().select_related(
             'imovel', 'imovel__imobiliaria',
             'comprador',
             'imobiliaria'
@@ -80,13 +82,13 @@ class ContratoListView(LoginRequiredMixin, PaginacaoMixin, ListView):
         context['status_filter'] = self.request.GET.get('status', '')
         context['imobiliaria_filter'] = self.request.GET.get('imobiliaria', '')
         context['status_choices'] = StatusContrato.choices
-        context['total_contratos'] = Contrato.objects.count()
-        context['contratos_ativos'] = Contrato.objects.filter(status=StatusContrato.ATIVO).count()
-        context['contratos_quitados'] = Contrato.objects.filter(status=StatusContrato.QUITADO).count()
+        qs_tenant = self.get_queryset()
+        context['total_contratos'] = qs_tenant.count()
+        context['contratos_ativos'] = qs_tenant.filter(status=StatusContrato.ATIVO).count()
+        context['contratos_quitados'] = qs_tenant.filter(status=StatusContrato.QUITADO).count()
 
-        # Lista de imobiliárias para filtro
-        from core.models import Imobiliaria
-        context['imobiliarias'] = Imobiliaria.objects.filter(ativo=True)
+        # Lista de imobiliárias para filtro (apenas as acessíveis ao usuário)
+        context['imobiliarias'] = self.get_imobiliarias_permitidas()
 
         # Contratos que precisam de reajuste no mês corrente
         context['contratos_reajuste'] = self._get_contratos_reajuste_pendente()
@@ -107,8 +109,10 @@ class ContratoListView(LoginRequiredMixin, PaginacaoMixin, ListView):
         hoje = timezone.now().date()
         contratos_pendentes = []
 
+        imobs = self.get_imobiliarias_permitidas()
         contratos_ativos = Contrato.objects.filter(
-            status=StatusContrato.ATIVO
+            status=StatusContrato.ATIVO,
+            imobiliaria__in=imobs
         ).exclude(
             tipo_correcao=TipoCorrecao.FIXO
         ).select_related('comprador', 'imovel', 'imobiliaria')
@@ -168,7 +172,7 @@ class ContratoCreateView(LoginRequiredMixin, CreateView):
         return super().form_invalid(form)
 
 
-class ContratoUpdateView(LoginRequiredMixin, UpdateView):
+class ContratoUpdateView(LoginRequiredMixin, HashidMixin, TenantMixin, UpdateView):
     """Atualiza um contrato existente"""
     model = Contrato
     form_class = ContratoForm
@@ -194,14 +198,14 @@ class ContratoUpdateView(LoginRequiredMixin, UpdateView):
         return super().form_invalid(form)
 
 
-class ContratoDetailView(LoginRequiredMixin, DetailView):
+class ContratoDetailView(LoginRequiredMixin, HashidMixin, TenantMixin, DetailView):
     """Exibe detalhes de um contrato"""
     model = Contrato
     template_name = 'contratos/contrato_detail.html'
     context_object_name = 'contrato'
 
     def get_queryset(self):
-        return Contrato.objects.select_related(
+        return super().get_queryset().select_related(
             'imovel', 'imovel__imobiliaria',
             'comprador',
             'imobiliaria'
@@ -418,7 +422,7 @@ class ContratoDetailView(LoginRequiredMixin, DetailView):
         return context
 
 
-class ContratoDeleteView(LoginRequiredMixin, DeleteView):
+class ContratoDeleteView(LoginRequiredMixin, HashidMixin, TenantMixin, DeleteView):
     """Cancela um contrato (soft delete via status)"""
     model = Contrato
     success_url = reverse_lazy('contratos:listar')
@@ -430,7 +434,7 @@ class ContratoDeleteView(LoginRequiredMixin, DeleteView):
         parcelas_pagas = self.object.parcelas.filter(pago=True).count()
         if parcelas_pagas > 0:
             messages.error(self.request, f'Não é possível cancelar o contrato. Existem {parcelas_pagas} parcela(s) já paga(s).')
-            return redirect('contratos:detalhe', pk=self.object.pk)
+            return redirect('contratos:detalhe', hid=encode_id(self.object.pk))
 
         # Soft delete - apenas muda o status para CANCELADO
         self.object.status = StatusContrato.CANCELADO
@@ -459,9 +463,14 @@ def detalhe_contrato(request, pk):
 
 
 @login_required
-def parcelas_contrato(request, pk):
+def parcelas_contrato(request, hid):
     """Lista todas as parcelas de um contrato"""
-    contrato = get_object_or_404(Contrato, pk=pk)
+    pk = _decode_id(hid)
+    if pk is None:
+        from django.http import Http404
+        raise Http404
+    contrato = get_object_or_404(Contrato.objects.select_related('imobiliaria'), pk=pk)
+    verificar_acesso_tenant(request, contrato.imobiliaria)
     parcelas = contrato.parcelas.all().order_by('numero_parcela')
 
     context = {
@@ -473,11 +482,15 @@ def parcelas_contrato(request, pk):
 
 @login_required
 @require_http_methods(["POST"])
-def api_completar_parcelas(request, pk):
+def api_completar_parcelas(request, hid):
     """
     Cria as parcelas faltantes de um contrato sem recriar as existentes.
     Útil após gerar_dados_teste (que cria só até o mês atual).
     """
+    pk = _decode_id(hid)
+    if pk is None:
+        from django.http import Http404
+        raise Http404
     contrato = get_object_or_404(Contrato, pk=pk)
 
     existentes = contrato.parcelas.count()
@@ -590,7 +603,7 @@ class IndiceReajusteCreateView(LoginRequiredMixin, CreateView):
         return super().form_valid(form)
 
 
-class IndiceReajusteUpdateView(LoginRequiredMixin, UpdateView):
+class IndiceReajusteUpdateView(LoginRequiredMixin, HashidMixin, UpdateView):
     """Atualiza um índice de reajuste"""
     model = IndiceReajuste
     form_class = IndiceReajusteForm
@@ -602,7 +615,7 @@ class IndiceReajusteUpdateView(LoginRequiredMixin, UpdateView):
         return super().form_valid(form)
 
 
-class IndiceReajusteDeleteView(LoginRequiredMixin, DeleteView):
+class IndiceReajusteDeleteView(LoginRequiredMixin, HashidMixin, DeleteView):
     """Exclui um índice de reajuste"""
     model = IndiceReajuste
     success_url = reverse_lazy('contratos:indices_listar')
@@ -1031,7 +1044,10 @@ class IntermediariasListView(LoginRequiredMixin, PaginacaoMixin, ListView):
     paginate_by = 20
 
     def get_queryset(self):
-        self.contrato = get_object_or_404(Contrato, pk=self.kwargs['contrato_id'])
+        self.contrato = get_object_or_404(
+            Contrato.objects.select_related('imobiliaria'), pk=_decode_id(self.kwargs['contrato_hid'])
+        )
+        verificar_acesso_tenant(self.request, self.contrato.imobiliaria)
         return PrestacaoIntermediaria.objects.filter(
             contrato=self.contrato
         ).select_related('contrato', 'parcela_vinculada').order_by('numero_sequencial')
@@ -1060,14 +1076,16 @@ class IntermediariasListView(LoginRequiredMixin, PaginacaoMixin, ListView):
         return context
 
 
-class IntermediariasDetailView(LoginRequiredMixin, DetailView):
+class IntermediariasDetailView(LoginRequiredMixin, HashidMixin, TenantMixin, DetailView):
     """Exibe detalhes de uma prestação intermediária"""
     model = PrestacaoIntermediaria
     template_name = 'contratos/intermediaria_detail.html'
     context_object_name = 'intermediaria'
+    tenant_field = 'contrato.imobiliaria'
+    tenant_filter = 'contrato__imobiliaria__in'
 
     def get_queryset(self):
-        return PrestacaoIntermediaria.objects.select_related(
+        return super().get_queryset().select_related(
             'contrato', 'contrato__comprador', 'contrato__imovel',
             'parcela_vinculada'
         )
@@ -1109,8 +1127,12 @@ def _recalcular_se_necessario(contrato):
 
 @login_required
 @require_http_methods(["POST"])
-def criar_intermediaria(request, contrato_id):
+def criar_intermediaria(request, contrato_hid):
     """Cria uma nova prestação intermediária para um contrato"""
+    contrato_id = _decode_id(contrato_hid)
+    if contrato_id is None:
+        from django.http import Http404
+        raise Http404
     contrato = get_object_or_404(Contrato, pk=contrato_id)
 
     try:
@@ -1164,8 +1186,12 @@ def criar_intermediaria(request, contrato_id):
 
 @login_required
 @require_http_methods(["POST"])
-def atualizar_intermediaria(request, pk):
+def atualizar_intermediaria(request, hid):
     """Atualiza uma prestação intermediária"""
+    pk = _decode_id(hid)
+    if pk is None:
+        from django.http import Http404
+        raise Http404
     intermediaria = get_object_or_404(PrestacaoIntermediaria, pk=pk)
 
     if intermediaria.paga:
@@ -1213,8 +1239,12 @@ def atualizar_intermediaria(request, pk):
 
 @login_required
 @require_http_methods(["POST"])
-def excluir_intermediaria(request, pk):
+def excluir_intermediaria(request, hid):
     """Exclui uma prestação intermediária"""
+    pk = _decode_id(hid)
+    if pk is None:
+        from django.http import Http404
+        raise Http404
     intermediaria = get_object_or_404(PrestacaoIntermediaria, pk=pk)
 
     if intermediaria.paga:
@@ -1253,8 +1283,12 @@ def excluir_intermediaria(request, pk):
 
 @login_required
 @require_http_methods(["POST"])
-def pagar_intermediaria(request, pk):
+def pagar_intermediaria(request, hid):
     """Registra o pagamento de uma prestação intermediária"""
+    pk = _decode_id(hid)
+    if pk is None:
+        from django.http import Http404
+        raise Http404
     intermediaria = get_object_or_404(PrestacaoIntermediaria, pk=pk)
 
     if intermediaria.paga:
@@ -1308,8 +1342,12 @@ def pagar_intermediaria(request, pk):
 
 @login_required
 @require_http_methods(["POST"])
-def gerar_boleto_intermediaria(request, pk):
+def gerar_boleto_intermediaria(request, hid):
     """Gera boleto para uma prestação intermediária"""
+    pk = _decode_id(hid)
+    if pk is None:
+        from django.http import Http404
+        raise Http404
     from financeiro.models import Parcela, TipoParcela
     from core.models import ContaBancaria
 
@@ -1416,8 +1454,12 @@ def gerar_boleto_intermediaria(request, pk):
 
 
 @login_required
-def api_intermediarias_contrato(request, contrato_id):
+def api_intermediarias_contrato(request, contrato_hid):
     """API para retornar lista de intermediárias de um contrato em JSON"""
+    contrato_id = _decode_id(contrato_hid)
+    if contrato_id is None:
+        from django.http import Http404
+        raise Http404
     contrato = get_object_or_404(Contrato, pk=contrato_id)
 
     intermediarias = PrestacaoIntermediaria.objects.filter(
@@ -1836,7 +1878,7 @@ class ContratoWizardView(LoginRequiredMixin, View):
                     f'Contrato {contrato.numero_contrato} criado com sucesso! '
                     f'{contrato.parcelas.count()} parcelas geradas.'
                 )
-                return redirect('contratos:detalhe', pk=contrato.pk)
+                return redirect('contratos:detalhe', hid=encode_id(contrato.pk))
             except Exception as e:
                 logger.exception('Erro ao salvar wizard: %s', e)
                 messages.error(request, f'Erro ao criar contrato: {e}')
@@ -2015,12 +2057,16 @@ class ContratoWizardView(LoginRequiredMixin, View):
 # =============================================================================
 
 @login_required
-def calcular_rescisao_view(request, pk):
+def calcular_rescisao_view(request, hid):
     """
     Calcula o valor de devolução em caso de rescisão pelo comprador.
     GET: exibe formulário com data de rescisão.
     POST: processa cálculo e exibe resultado.
     """
+    pk = _decode_id(hid)
+    if pk is None:
+        from django.http import Http404
+        raise Http404
     contrato = get_object_or_404(Contrato, pk=pk)
 
     from datetime import date as date_type
@@ -2047,12 +2093,16 @@ def calcular_rescisao_view(request, pk):
 # =============================================================================
 
 @login_required
-def calcular_cessao_view(request, pk):
+def calcular_cessao_view(request, hid):
     """
     Calcula a taxa de cessão de direitos.
     GET: exibe formulário com data de cessão.
     POST: processa cálculo e exibe resultado.
     """
+    pk = _decode_id(hid)
+    if pk is None:
+        from django.http import Http404
+        raise Http404
     contrato = get_object_or_404(Contrato, pk=pk)
 
     from datetime import date as date_type
@@ -2082,11 +2132,15 @@ def calcular_cessao_view(request, pk):
 
 @login_required
 @require_http_methods(["GET", "POST"])
-def api_tabela_juros_contrato(request, pk):
+def api_tabela_juros_contrato(request, hid):
     """
     GET  → retorna lista JSON das faixas de juros do contrato.
     POST → cria uma nova faixa (ciclo_inicio, ciclo_fim opcional, juros_mensal, observacoes).
     """
+    pk = _decode_id(hid)
+    if pk is None:
+        from django.http import Http404
+        raise Http404
     contrato = get_object_or_404(Contrato, pk=pk)
 
     if request.method == 'GET':
@@ -2142,7 +2196,7 @@ def api_tabela_juros_contrato(request, pk):
 
 @login_required
 @require_http_methods(["DELETE"])
-def api_tabela_juros_delete(request, pk):
+def api_tabela_juros_delete(request, hid):
     """DELETE → remove uma faixa de juros pelo ID.
 
     Recalcula amortização das parcelas após a remoção para manter
@@ -2150,6 +2204,10 @@ def api_tabela_juros_delete(request, pk):
     Bloqueia se o contrato já possui reajustes aplicados (parcelas
     reajustadas não devem ser recalculadas retroativamente).
     """
+    pk = _decode_id(hid)
+    if pk is None:
+        from django.http import Http404
+        raise Http404
     from financeiro.models import Reajuste
     entry = get_object_or_404(TabelaJurosContrato, pk=pk)
     contrato = entry.contrato
@@ -2180,3 +2238,32 @@ def api_tabela_juros_delete(request, pk):
         contrato.recalcular_amortizacao(base_pv=base_pv)
 
     return JsonResponse({'sucesso': True})
+
+
+# =============================================================================
+# U-05: Compat redirects — PKs inteiros → hashids (manter por 30 dias)
+# =============================================================================
+
+@login_required
+def contrato_pk_compat(request, pk):
+    """Redireciona /contratos/<int:pk>/ → /contratos/<hid>/"""
+    hid = encode_id(pk)
+    return redirect('contratos:detalhe', hid=hid, permanent=True)
+
+
+@login_required
+def contrato_pk_compat_editar(request, pk):
+    hid = encode_id(pk)
+    return redirect('contratos:editar', hid=hid, permanent=True)
+
+
+@login_required
+def contrato_pk_compat_excluir(request, pk):
+    hid = encode_id(pk)
+    return redirect('contratos:excluir', hid=hid, permanent=True)
+
+
+@login_required
+def contrato_pk_compat_parcelas(request, pk):
+    hid = encode_id(pk)
+    return redirect('contratos:parcelas', hid=hid, permanent=True)

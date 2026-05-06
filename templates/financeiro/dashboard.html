@@ -1,5 +1,6 @@
 {% extends 'base.html' %}
 {% load static %}
+{% load hashid_tags %}
 
 {% block title %}Dashboard Financeiro{% endblock %}
 
@@ -293,7 +294,7 @@
                                         </span>
                                     </td>
                                     <td>
-                                        <a href="{% url 'contratos:detalhe' p.contrato.pk %}" class="text-decoration-none fw-semibold">
+                                        <a href="{% url 'contratos:detalhe' p.contrato.pk|hashid %}" class="text-decoration-none fw-semibold">
                                             {{ p.contrato.numero_contrato }}
                                         </a>
                                     </td>
@@ -338,7 +339,7 @@
                                 <tr>
                                     <td class="text-muted fw-bold">{{ forloop.counter }}</td>
                                     <td>
-                                        <a href="{% url 'contratos:detalhe' c.pk %}" class="text-decoration-none">
+                                        <a href="{% url 'contratos:detalhe' c.pk|hashid %}" class="text-decoration-none">
                                             {{ c.numero_contrato }}
                                         </a>
                                     </td>
@@ -505,7 +506,7 @@
                                         R$ {{ item.valor_atraso|floatformat:2 }}
                                     </td>
                                     <td class="text-center">
-                                        <a href="{% url 'contratos:detalhe' item.contrato.pk %}"
+                                        <a href="{% url 'contratos:detalhe' item.contrato.pk|hashid %}"
                                            class="btn btn-sm btn-outline-primary"
                                            title="Ver Contrato">
                                             <i class="fas fa-eye"></i>

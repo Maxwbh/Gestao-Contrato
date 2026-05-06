@@ -23,8 +23,28 @@ import logging
 
 from django.core.cache import cache
 from .models import Parcela, Reajuste, StatusBoleto, HistoricoPagamento, TipoParcela
-from core.models import Imobiliaria, ContaBancaria
+from core.models import Imobiliaria, ContaBancaria, get_imobiliarias_usuario, usuario_tem_permissao_total
+from core.mixins import verificar_acesso_tenant
+from core.hashids_utils import encode_id as _encode_id
 from contratos.models import Contrato, StatusContrato, TipoCorrecao
+
+
+def _imobs_para_usuario(user):
+    """Retorna queryset de imobiliárias acessíveis ao usuário (todas para superuser/staff)."""
+    if usuario_tem_permissao_total(user):
+        return Imobiliaria.objects.filter(ativo=True)
+    return get_imobiliarias_usuario(user)
+
+
+def _hid_to_pk(hid: str) -> int:
+    """U-03: decodifica hashid → pk inteiro; levanta Http404 se inválido."""
+    from django.http import Http404
+    from core.hashids_utils import decode_id
+    pk = decode_id(hid)
+    if pk is None:
+        raise Http404
+    return pk
+
 
 logger = logging.getLogger(__name__)
 
@@ -575,16 +595,19 @@ def listar_parcelas(request):
 
 
 @login_required
-def detalhe_parcela(request, pk):
+def detalhe_parcela(request, hid):
     """Exibe detalhes de uma parcela específica"""
+    pk = _hid_to_pk(hid)
     parcela = get_object_or_404(
         Parcela.objects.select_related(
             'contrato',
+            'contrato__imobiliaria',
             'contrato__comprador',
             'contrato__imovel'
         ),
         pk=pk
     )
+    verificar_acesso_tenant(request, parcela.contrato.imobiliaria)
 
     # Atualizar juros e multa se estiver vencida
     if parcela.esta_vencida and not parcela.pago:
@@ -600,12 +623,14 @@ def detalhe_parcela(request, pk):
 
 @login_required
 @require_POST
-def notificar_inadimplente(request, pk):
+def notificar_inadimplente(request, hid):
     """
     3.25 — Envia notificação de inadimplência manualmente para o comprador de uma parcela.
     Retorna JSON {sucesso, mensagem/erro}.
     """
-    parcela = get_object_or_404(Parcela, pk=pk)
+    pk = _hid_to_pk(hid)
+    parcela = get_object_or_404(Parcela.objects.select_related('contrato__imobiliaria'), pk=pk)
+    verificar_acesso_tenant(request, parcela.contrato.imobiliaria)
 
     if parcela.pago:
         return JsonResponse({'sucesso': False, 'erro': 'Parcela já paga — notificação não aplicável.'}, status=400)
@@ -689,11 +714,13 @@ def notificar_inadimplente(request, pk):
 
 
 @login_required
-def registrar_pagamento(request, pk):
+def registrar_pagamento(request, hid):
     """Registra o pagamento de uma parcela"""
+    pk = _hid_to_pk(hid)
     from datetime import datetime
 
-    parcela = get_object_or_404(Parcela, pk=pk)
+    parcela = get_object_or_404(Parcela.objects.select_related('contrato__imobiliaria'), pk=pk)
+    verificar_acesso_tenant(request, parcela.contrato.imobiliaria)
 
     FORMAS_PAGAMENTO = [
         ('DINHEIRO', 'Dinheiro'),
@@ -749,7 +776,7 @@ def registrar_pagamento(request, pk):
                 historico.save(update_fields=['comprovante'])
 
             messages.success(request, 'Pagamento registrado com sucesso!')
-            return redirect('financeiro:detalhe_parcela', pk=pk)
+            return redirect('financeiro:detalhe_parcela', hid=_encode_id(pk))
         except Exception as e:
             logger.exception("Erro ao registrar pagamento parcela pk=%s: %s", pk, e)
             messages.error(request, f'Erro ao registrar pagamento: {str(e)}')
@@ -1070,7 +1097,7 @@ def dashboard_imobiliaria(request, imobiliaria_id):
 
 @login_required
 @require_POST
-def gerar_boleto_parcela(request, pk):
+def gerar_boleto_parcela(request, hid):
     """
     Gera boleto para uma parcela específica.
 
@@ -1078,7 +1105,9 @@ def gerar_boleto_parcela(request, pk):
     o ciclo de reajuste. Boletos após o 12º mês só podem ser gerados
     após aplicação do reajuste correspondente.
     """
-    parcela = get_object_or_404(Parcela, pk=pk)
+    pk = _hid_to_pk(hid)
+    parcela = get_object_or_404(Parcela.objects.select_related('contrato__imobiliaria'), pk=pk)
+    verificar_acesso_tenant(request, parcela.contrato.imobiliaria)
 
     if parcela.pago:
         return JsonResponse({
@@ -1133,6 +1162,9 @@ def gerar_boleto_parcela(request, pk):
                     contrato.ultimo_mes_boleto_gerado = parcela.numero_parcela
                     contrato.save(update_fields=['ultimo_mes_boleto_gerado'])
 
+            # S-04 — renovar token e expiração a cada nova geração
+            parcela.renovar_token()
+
             return JsonResponse({
                 'sucesso': True,
                 'parcela_id': parcela.id,
@@ -1140,6 +1172,7 @@ def gerar_boleto_parcela(request, pk):
                 'linha_digitavel': resultado.get('linha_digitavel', ''),
                 'codigo_barras': resultado.get('codigo_barras', ''),
                 'tem_pdf': parcela.boleto_pdf.name if parcela.boleto_pdf else False,
+                'token_publico': str(parcela.token_publico),
                 'mensagem': 'Boleto gerado com sucesso'
             })
         else:
@@ -1165,7 +1198,8 @@ def gerar_boletos_contrato(request, contrato_id):
     IMPORTANTE: Verifica o bloqueio por reajuste antes de gerar cada boleto.
     Parcelas de ciclos não reajustados serão marcadas como bloqueadas.
     """
-    contrato = get_object_or_404(Contrato, pk=contrato_id)
+    contrato = get_object_or_404(Contrato.objects.select_related('imobiliaria'), pk=contrato_id)
+    verificar_acesso_tenant(request, contrato.imobiliaria)
 
     # Obter conta bancária
     conta_id = request.POST.get('conta_bancaria_id')
@@ -1277,16 +1311,18 @@ def gerar_boletos_contrato(request, contrato_id):
 
 @login_required
 @require_GET
-def download_boleto(request, pk):
+def download_boleto(request, hid):
     """
     Download do PDF do boleto.
     Regenera automaticamente se o arquivo não existir (storage efêmero no Render).
     """
-    parcela = get_object_or_404(Parcela, pk=pk)
+    pk = _hid_to_pk(hid)
+    parcela = get_object_or_404(Parcela.objects.select_related('contrato__imobiliaria'), pk=pk)
+    verificar_acesso_tenant(request, parcela.contrato.imobiliaria)
 
     if not parcela.boleto_pdf:
         messages.error(request, 'Boleto não disponível para download.')
-        return redirect('financeiro:detalhe_parcela', pk=pk)
+        return redirect('financeiro:detalhe_parcela', hid=hid)
 
     # Se o arquivo não existir no disco (storage efêmero do Render), serve do banco de dados
     if not parcela.boleto_pdf.storage.exists(parcela.boleto_pdf.name):
@@ -1314,11 +1350,11 @@ def download_boleto(request, pk):
                     request,
                     'O arquivo do boleto foi perdido. Clique em "Gerar Boleto" para criar um novo.'
                 )
-                return redirect('financeiro:detalhe_parcela', pk=pk)
+                return redirect('financeiro:detalhe_parcela', hid=_encode_id(pk))
         except Exception as e:
             logger.exception("Erro ao regenerar boleto pk=%s: %s", pk, e)
             messages.error(request, 'Não foi possível recuperar o boleto. Gere novamente.')
-            return redirect('financeiro:detalhe_parcela', pk=pk)
+            return redirect('financeiro:detalhe_parcela', hid=_encode_id(pk))
 
     try:
         response = FileResponse(
@@ -1331,7 +1367,7 @@ def download_boleto(request, pk):
     except Exception as e:
         logger.exception(f"Erro ao fazer download do boleto: {e}")
         messages.error(request, 'Erro ao baixar o boleto.')
-        return redirect('financeiro:detalhe_parcela', pk=pk)
+        return redirect('financeiro:detalhe_parcela', hid=_encode_id(pk))
 
 
 @login_required
@@ -1344,7 +1380,8 @@ def download_zip_boletos(request, contrato_id):
     import zipfile
 
     from contratos.models import Contrato
-    contrato = get_object_or_404(Contrato, pk=contrato_id)
+    contrato = get_object_or_404(Contrato.objects.select_related('imobiliaria'), pk=contrato_id)
+    verificar_acesso_tenant(request, contrato.imobiliaria)
 
     if request.method == 'POST':
         ids_raw = request.POST.getlist('parcela_ids')
@@ -1362,7 +1399,7 @@ def download_zip_boletos(request, contrato_id):
 
     if not parcelas:
         messages.error(request, 'Nenhum boleto disponível para download neste contrato.')
-        return redirect('contratos:detalhe', pk=contrato_id)
+        return redirect('contratos:detalhe', hid=_encode_id(contrato_id))
 
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, 'w', zipfile.ZIP_DEFLATED) as zf:
@@ -1382,21 +1419,23 @@ def download_zip_boletos(request, contrato_id):
 
 
 @login_required
-def segunda_via_boleto(request, pk):
+def segunda_via_boleto(request, hid):
     """
     Segunda via de boleto com juros/multa atualizados para hoje.
     GET → página de preview com valores atualizados.
     GET ?download=1 → gera PDF fresco via BRCobrança e retorna download.
     """
+    pk = _hid_to_pk(hid)
     from financeiro.services.boleto_service import BoletoService
 
-    parcela = get_object_or_404(Parcela, pk=pk)
+    parcela = get_object_or_404(Parcela.objects.select_related('contrato__imobiliaria'), pk=pk)
+    verificar_acesso_tenant(request, parcela.contrato.imobiliaria)
     contrato = parcela.contrato
     hoje = timezone.localdate()
 
     if parcela.pago:
         messages.info(request, f'Parcela {parcela.numero_parcela} já foi paga em {parcela.data_pagamento}.')
-        return redirect('financeiro:detalhe_parcela', pk=pk)
+        return redirect('financeiro:detalhe_parcela', hid=_encode_id(pk))
 
     # Calcular juros/multa atualizados
     valor_juros = Decimal('0.00')
@@ -1417,7 +1456,7 @@ def segunda_via_boleto(request, pk):
 
         if not conta_bancaria:
             messages.error(request, 'Nenhuma conta bancária configurada para esta imobiliária.')
-            return redirect('financeiro:detalhe_parcela', pk=pk)
+            return redirect('financeiro:detalhe_parcela', hid=_encode_id(pk))
 
         servico = BoletoService()
         resultado = servico.gerar_segunda_via(parcela, conta_bancaria, data_referencia=hoje)
@@ -1429,7 +1468,7 @@ def segunda_via_boleto(request, pk):
             return response
         else:
             messages.error(request, f"Erro ao gerar segunda via: {resultado.get('erro', 'Erro desconhecido')}")
-            return redirect('financeiro:detalhe_parcela', pk=pk)
+            return redirect('financeiro:detalhe_parcela', hid=_encode_id(pk))
 
     context = {
         'parcela': parcela,
@@ -1444,19 +1483,20 @@ def segunda_via_boleto(request, pk):
 
 
 @login_required
-@login_required
 @require_GET
 @xframe_options_sameorigin
-def visualizar_boleto(request, pk):
+def visualizar_boleto(request, hid):
     """
     Exibe página com dados do boleto de uma parcela.
     Permite carregamento em iframe do mesmo domínio.
     """
-    parcela = get_object_or_404(Parcela, pk=pk)
+    pk = _hid_to_pk(hid)
+    parcela = get_object_or_404(Parcela.objects.select_related('contrato__imobiliaria'), pk=pk)
+    verificar_acesso_tenant(request, parcela.contrato.imobiliaria)
 
     if not parcela.tem_boleto:
         messages.warning(request, 'Boleto ainda não foi gerado para esta parcela.')
-        return redirect('financeiro:detalhe_parcela', pk=pk)
+        return redirect('financeiro:detalhe_parcela', hid=hid)
 
     contrato = parcela.contrato
     comprador = contrato.comprador
@@ -1488,11 +1528,13 @@ def visualizar_boleto(request, pk):
 
 @login_required
 @require_POST
-def cancelar_boleto(request, pk):
+def cancelar_boleto(request, hid):
     """
     Cancela um boleto.
     """
-    parcela = get_object_or_404(Parcela, pk=pk)
+    pk = _hid_to_pk(hid)
+    parcela = get_object_or_404(Parcela.objects.select_related('contrato__imobiliaria'), pk=pk)
+    verificar_acesso_tenant(request, parcela.contrato.imobiliaria)
 
     if parcela.status_boleto in [StatusBoleto.NAO_GERADO, StatusBoleto.CANCELADO]:
         return JsonResponse({
@@ -1523,11 +1565,13 @@ def cancelar_boleto(request, pk):
 
 
 @login_required
-def api_status_boleto(request, pk):
+def api_status_boleto(request, hid):
     """
     Retorna o status do boleto de uma parcela (para atualização via AJAX).
     """
-    parcela = get_object_or_404(Parcela, pk=pk)
+    pk = _hid_to_pk(hid)
+    parcela = get_object_or_404(Parcela.objects.select_related('contrato__imobiliaria'), pk=pk)
+    verificar_acesso_tenant(request, parcela.contrato.imobiliaria)
 
     return JsonResponse({
         'parcela_id': parcela.id,
@@ -1551,8 +1595,11 @@ def listar_arquivos_remessa(request):
     from .models import ArquivoRemessa
     from .services.cnab_service import CNABService
 
+    imobs = _imobs_para_usuario(request.user)
     arquivos = ArquivoRemessa.objects.select_related(
         'conta_bancaria', 'conta_bancaria__imobiliaria'
+    ).filter(
+        conta_bancaria__imobiliaria__in=imobs
     ).order_by('-data_geracao')
 
     # Filtros
@@ -1567,8 +1614,8 @@ def listar_arquivos_remessa(request):
     if imobiliaria_id:
         arquivos = arquivos.filter(conta_bancaria__imobiliaria_id=imobiliaria_id)
 
-    contas = ContaBancaria.objects.filter(ativo=True).select_related('imobiliaria')
-    imobiliarias = Imobiliaria.objects.filter(ativo=True).order_by('nome')
+    contas = ContaBancaria.objects.filter(ativo=True, imobiliaria__in=imobs).select_related('imobiliaria')
+    imobiliarias = imobs.order_by('nome')
 
     per_page = request.GET.get('per_page', '25')
     try:
@@ -1598,8 +1645,9 @@ def listar_arquivos_remessa(request):
 
 
 @login_required
-def detalhe_arquivo_remessa(request, pk):
+def detalhe_arquivo_remessa(request, hid):
     """Exibe detalhes de um arquivo de remessa"""
+    pk = _hid_to_pk(hid)
     from .models import ArquivoRemessa
 
     arquivo = get_object_or_404(
@@ -1611,6 +1659,7 @@ def detalhe_arquivo_remessa(request, pk):
         ),
         pk=pk
     )
+    verificar_acesso_tenant(request, arquivo.conta_bancaria.imobiliaria)
 
     context = {
         'arquivo': arquivo,
@@ -1726,7 +1775,7 @@ def gerar_arquivo_remessa(request):
 
             # Se gerou apenas 1, vai direto para o detalhe
             if len(remessas) == 1:
-                return redirect('financeiro:detalhe_remessa', pk=remessas[0]['arquivo_remessa'].pk)
+                return redirect('financeiro:detalhe_remessa', hid=_encode_id(remessas[0]['arquivo_remessa'].pk))
 
             return redirect('financeiro:listar_remessas')
 
@@ -1793,12 +1842,14 @@ def gerar_arquivo_remessa(request):
 
 @login_required
 @require_POST
-def regenerar_arquivo_remessa(request, pk):
+def regenerar_arquivo_remessa(request, hid):
     """Regenera um arquivo de remessa existente"""
+    pk = _hid_to_pk(hid)
     from .models import ArquivoRemessa
     from .services.cnab_service import CNABService
 
-    arquivo = get_object_or_404(ArquivoRemessa, pk=pk)
+    arquivo = get_object_or_404(ArquivoRemessa.objects.select_related('conta_bancaria__imobiliaria'), pk=pk)
+    verificar_acesso_tenant(request, arquivo.conta_bancaria.imobiliaria)
 
     if not arquivo.pode_reenviar:
         return JsonResponse({
@@ -1832,12 +1883,14 @@ def regenerar_arquivo_remessa(request, pk):
 
 @login_required
 @require_POST
-def marcar_remessa_enviada(request, pk):
+def marcar_remessa_enviada(request, hid):
     """Marca um arquivo de remessa como enviado ao banco"""
+    pk = _hid_to_pk(hid)
     from .models import ArquivoRemessa
 
     from .models import StatusArquivoRemessa
-    arquivo = get_object_or_404(ArquivoRemessa, pk=pk)
+    arquivo = get_object_or_404(ArquivoRemessa.objects.select_related('conta_bancaria__imobiliaria'), pk=pk)
+    verificar_acesso_tenant(request, arquivo.conta_bancaria.imobiliaria)
 
     if arquivo.status != StatusArquivoRemessa.GERADO:
         return JsonResponse({
@@ -1854,14 +1907,16 @@ def marcar_remessa_enviada(request, pk):
 
 @login_required
 @require_POST
-def excluir_arquivo_remessa(request, pk):
+def excluir_arquivo_remessa(request, hid):
     """
     Exclui um arquivo de remessa que ainda não foi enviado ao banco.
     Parcelas associadas retornam automaticamente ao pool de disponíveis para remessa.
     """
+    pk = _hid_to_pk(hid)
     from .models import ArquivoRemessa, StatusArquivoRemessa
 
-    arquivo = get_object_or_404(ArquivoRemessa, pk=pk)
+    arquivo = get_object_or_404(ArquivoRemessa.objects.select_related('conta_bancaria__imobiliaria'), pk=pk)
+    verificar_acesso_tenant(request, arquivo.conta_bancaria.imobiliaria)
 
     if arquivo.status in [StatusArquivoRemessa.ENVIADO, StatusArquivoRemessa.PROCESSADO]:
         return JsonResponse({
@@ -1878,15 +1933,17 @@ def excluir_arquivo_remessa(request, pk):
 
 
 @login_required
-def download_arquivo_remessa(request, pk):
+def download_arquivo_remessa(request, hid):
     """Download do arquivo de remessa"""
+    pk = _hid_to_pk(hid)
     from .models import ArquivoRemessa
 
-    arquivo = get_object_or_404(ArquivoRemessa, pk=pk)
+    arquivo = get_object_or_404(ArquivoRemessa.objects.select_related('conta_bancaria__imobiliaria'), pk=pk)
+    verificar_acesso_tenant(request, arquivo.conta_bancaria.imobiliaria)
 
     if not arquivo.arquivo:
         messages.error(request, 'Arquivo nao disponivel para download.')
-        return redirect('financeiro:detalhe_remessa', pk=pk)
+        return redirect('financeiro:detalhe_remessa', hid=_encode_id(pk))
 
     try:
         response = FileResponse(
@@ -1899,7 +1956,7 @@ def download_arquivo_remessa(request, pk):
     except Exception as e:
         logger.exception(f"Erro ao fazer download da remessa: {e}")
         messages.error(request, 'Erro ao baixar o arquivo.')
-        return redirect('financeiro:detalhe_remessa', pk=pk)
+        return redirect('financeiro:detalhe_remessa', hid=_encode_id(pk))
 
 
 # =============================================================================
@@ -2010,8 +2067,11 @@ def listar_arquivos_retorno(request):
     """Lista todos os arquivos de retorno"""
     from .models import ArquivoRetorno
 
+    imobs = _imobs_para_usuario(request.user)
     arquivos = ArquivoRetorno.objects.select_related(
         'conta_bancaria', 'conta_bancaria__imobiliaria', 'processado_por'
+    ).filter(
+        conta_bancaria__imobiliaria__in=imobs
     ).order_by('-data_upload')
 
     # Filtros
@@ -2023,7 +2083,7 @@ def listar_arquivos_retorno(request):
     if status:
         arquivos = arquivos.filter(status=status)
 
-    contas = ContaBancaria.objects.filter(ativo=True).select_related('imobiliaria')
+    contas = ContaBancaria.objects.filter(ativo=True, imobiliaria__in=imobs).select_related('imobiliaria')
 
     per_page = request.GET.get('per_page', '25')
     try:
@@ -2047,8 +2107,9 @@ def listar_arquivos_retorno(request):
 
 
 @login_required
-def detalhe_arquivo_retorno(request, pk):
+def detalhe_arquivo_retorno(request, hid):
     """Exibe detalhes de um arquivo de retorno"""
+    pk = _hid_to_pk(hid)
     from .models import ArquivoRetorno
 
     arquivo = get_object_or_404(
@@ -2060,6 +2121,7 @@ def detalhe_arquivo_retorno(request, pk):
         ),
         pk=pk
     )
+    verificar_acesso_tenant(request, arquivo.conta_bancaria.imobiliaria)
 
     # Agrupar itens por tipo de ocorrencia
     itens_por_tipo = {}
@@ -2110,7 +2172,7 @@ def upload_arquivo_retorno(request):
                 f"Arquivo '{arquivo_upload.name}' carregado com sucesso! "
                 f"Clique em 'Processar' para realizar a baixa dos boletos."
             )
-            return redirect('financeiro:detalhe_retorno', pk=arquivo_retorno.pk)
+            return redirect('financeiro:detalhe_retorno', hid=_encode_id(arquivo_retorno.pk))
 
         except Exception as e:
             logger.exception(f"Erro ao fazer upload do retorno: {e}")
@@ -2126,12 +2188,14 @@ def upload_arquivo_retorno(request):
 
 @login_required
 @require_POST
-def processar_arquivo_retorno(request, pk):
+def processar_arquivo_retorno(request, hid):
     """Processa um arquivo de retorno (realiza as baixas)"""
+    pk = _hid_to_pk(hid)
     from .models import ArquivoRetorno
     from .services.cnab_service import CNABService
 
-    arquivo = get_object_or_404(ArquivoRetorno, pk=pk)
+    arquivo = get_object_or_404(ArquivoRetorno.objects.select_related('conta_bancaria__imobiliaria'), pk=pk)
+    verificar_acesso_tenant(request, arquivo.conta_bancaria.imobiliaria)
 
     if not arquivo.pode_reprocessar:
         return JsonResponse({
@@ -2167,15 +2231,17 @@ def processar_arquivo_retorno(request, pk):
 
 
 @login_required
-def download_arquivo_retorno(request, pk):
+def download_arquivo_retorno(request, hid):
     """Download do arquivo de retorno"""
+    pk = _hid_to_pk(hid)
     from .models import ArquivoRetorno
 
-    arquivo = get_object_or_404(ArquivoRetorno, pk=pk)
+    arquivo = get_object_or_404(ArquivoRetorno.objects.select_related('conta_bancaria__imobiliaria'), pk=pk)
+    verificar_acesso_tenant(request, arquivo.conta_bancaria.imobiliaria)
 
     if not arquivo.arquivo:
         messages.error(request, 'Arquivo nao disponivel para download.')
-        return redirect('financeiro:detalhe_retorno', pk=pk)
+        return redirect('financeiro:detalhe_retorno', hid=_encode_id(pk))
 
     try:
         response = FileResponse(
@@ -2188,7 +2254,7 @@ def download_arquivo_retorno(request, pk):
     except Exception as e:
         logger.exception(f"Erro ao fazer download do retorno: {e}")
         messages.error(request, 'Erro ao baixar o arquivo.')
-        return redirect('financeiro:detalhe_retorno', pk=pk)
+        return redirect('financeiro:detalhe_retorno', hid=_encode_id(pk))
 
 
 # =============================================================================
@@ -2197,11 +2263,12 @@ def download_arquivo_retorno(request, pk):
 
 @login_required
 @require_POST
-def pagar_parcela_ajax(request, pk):
+def pagar_parcela_ajax(request, hid):
     """
     Registra o pagamento de uma parcela via AJAX.
     Permite editar juros, multa e desconto manualmente.
     """
+    pk = _hid_to_pk(hid)
     from .models import HistoricoPagamento
 
     parcela = get_object_or_404(Parcela, pk=pk)
@@ -2275,12 +2342,12 @@ def pagar_parcela_ajax(request, pk):
 
 @login_required
 @require_GET
-def api_calcular_encargos(request, pk):
+def api_calcular_encargos(request, hid):
     """
     Retorna juros, multa e valor total calculados para uma parcela em uma data de pagamento.
-    GET /financeiro/parcelas/<pk>/calcular-encargos/?data=YYYY-MM-DD
+    GET /financeiro/parcelas/<hid>/calcular-encargos/?data=YYYY-MM-DD
     """
-    parcela = get_object_or_404(Parcela, pk=pk)
+    parcela = get_object_or_404(Parcela, pk=_hid_to_pk(hid))
     data_str = request.GET.get('data', '')
     try:
         from datetime import date as _date
@@ -3158,7 +3225,7 @@ def aplicar_reajuste_pagina(request, contrato_id):
             if is_modal:
                 return JsonResponse({'sucesso': True, 'mensagem': msg})
             messages.success(request, msg)
-            return redirect('contratos:detalhe', pk=contrato_id)
+            return redirect('contratos:detalhe', hid=_encode_id(contrato_id))
 
         except Exception as e:
             logger.exception(f'Erro ao aplicar reajuste: {e}')
@@ -3762,10 +3829,11 @@ def aplicar_reajuste_informado_lote(request):
 
 @login_required
 @require_POST
-def excluir_reajuste(request, pk):
+def excluir_reajuste(request, hid):
     """
     Exclui um reajuste e reverte os valores das parcelas.
     """
+    pk = _hid_to_pk(hid)
     reajuste = get_object_or_404(Reajuste, pk=pk)
 
     try:
@@ -3821,8 +3889,9 @@ def excluir_reajuste(request, pk):
 
 
 @login_required
-def api_reajuste_detail(request, pk):
+def api_reajuste_detail(request, hid):
     """Retorna JSON completo de um reajuste para os modais Visualizar/Alterar."""
+    pk = _hid_to_pk(hid)
     reajuste = get_object_or_404(Reajuste, pk=pk)
     contrato = reajuste.contrato
 
@@ -3907,12 +3976,13 @@ def api_reajuste_detail(request, pk):
 
 @login_required
 @require_POST
-def alterar_indice_reajuste(request, pk):
+def alterar_indice_reajuste(request, hid):
     """
     Altera o percentual de um reajuste (entrada manual). O tipo de índice é preservado.
     Se o reajuste já foi aplicado, reverte o fator antigo nas parcelas não pagas
     e reaplica automaticamente com o novo percentual.
     """
+    pk = _hid_to_pk(hid)
     import json
 
     try:
@@ -6754,7 +6824,7 @@ def upload_ofx(request):
 
 @login_required
 @require_POST
-def enviar_boleto_whatsapp(request, pk):
+def enviar_boleto_whatsapp(request, hid):
     """
     POST /financeiro/parcelas/<pk>/boleto/whatsapp/
 
@@ -6762,6 +6832,7 @@ def enviar_boleto_whatsapp(request, pk):
     Campos opcionais no body (JSON ou form):
       - telefone: destinatário (ex: +5511999999999). Se omitido, usa comprador.telefone.
     """
+    pk = _hid_to_pk(hid)
     parcela = get_object_or_404(Parcela, pk=pk)
 
     import json as _json
@@ -6813,7 +6884,7 @@ def enviar_boleto_whatsapp(request, pk):
 
 @login_required
 @require_POST
-def enviar_boleto_sms(request, pk):
+def enviar_boleto_sms(request, hid):
     """
     POST /financeiro/parcelas/<pk>/boleto/sms/
 
@@ -6821,6 +6892,7 @@ def enviar_boleto_sms(request, pk):
     Campos opcionais no body (JSON ou form):
       - telefone: destinatário (ex: +5511999999999). Se omitido, usa comprador.telefone.
     """
+    pk = _hid_to_pk(hid)
     parcela = get_object_or_404(Parcela, pk=pk)
 
     import json as _json
@@ -6971,7 +7043,7 @@ def simulador_antecipacao(request, contrato_id):
                 f'{len(preview_itens)} parcela(s) antecipada(s) com sucesso. '
                 f'Economia total: R$ {(total_original - total_antecipado):,.2f}.'
             )
-            return redirect('contratos:detalhe', pk=contrato_id)
+            return redirect('contratos:detalhe', hid=_encode_id(contrato_id))
 
     return render(request, 'financeiro/simulador_antecipacao.html', {
         'contrato': contrato,
@@ -7019,13 +7091,13 @@ def download_recibo_antecipacao(request, contrato_id):
 
     if not historicos.exists():
         messages.error(request, 'Nenhuma antecipação encontrada para este contrato.')
-        return redirect('contratos:detalhe', pk=contrato_id)
+        return redirect('contratos:detalhe', hid=_encode_id(contrato_id))
 
     try:
         pdf_bytes = gerar_recibo_antecipacao_pdf(contrato, historicos)
     except Exception as e:
         messages.error(request, f'Erro ao gerar recibo: {e}')
-        return redirect('contratos:detalhe', pk=contrato_id)
+        return redirect('contratos:detalhe', hid=_encode_id(contrato_id))
 
     filename = f'recibo_antecipacao_{contrato.numero_contrato}.pdf'
     response = HttpResponse(pdf_bytes, content_type='application/pdf')
@@ -7130,7 +7202,7 @@ def renegociar_parcelas(request, contrato_id):
                 f'{alteradas} parcela(s) renegociada(s) com sucesso. '
                 f'Juros e multa foram zerados.'
             )
-        return redirect('contratos:detalhe', pk=contrato_id)
+        return redirect('contratos:detalhe', hid=_encode_id(contrato_id))
 
     # GET — renderiza formulário
     return render(request, 'financeiro/renegociar_parcelas.html', {
@@ -7320,34 +7392,89 @@ def boleto_publico(request, token):
     """
     Exibe o boleto de uma parcela via token UUID público.
     Não requer autenticação. Não expõe IDs internos, CPF nem dados bancários.
+    S-01: verifica expiração do token.
+    S-02: rate limit 20 req/hora por IP (via rate_limit do core).
+    S-03: grava AcessoBoletoPublico em cada acesso bem-sucedido.
+    S-06: headers X-Robots-Tag e Cache-Control.
     """
-    parcela = get_object_or_404(Parcela, token_publico=token)
+    from core.permissions import rate_limit as _rate_limit
+    from .models import AcessoBoletoPublico
+
+    # S-02 — rate limit: 20/hora por IP (cache-based, sem dependência externa)
+    ip = (
+        request.META.get('HTTP_X_FORWARDED_FOR', '').split(',')[0].strip()
+        or request.META.get('REMOTE_ADDR', 'unknown')
+    )
+    import time as _time
+    from django.core.cache import cache as _cache
+    _window = int(_time.time() // 3600)
+    _rl_key = f'boleto_pub_rl:{ip}:{_window}'
+    _count = _cache.get(_rl_key, 0)
+    if _count >= 20:
+        from django.http import HttpResponse as _HR
+        return _HR('Muitos acessos. Tente novamente em até 1 hora.', status=429)
+    _cache.set(_rl_key, _count + 1, timeout=3700)
+
+    parcela = get_object_or_404(
+        Parcela.objects.select_related('contrato', 'contrato__comprador', 'contrato__imobiliaria'),
+        token_publico=token
+    )
+
+    # S-01 — verificar expiração
+    if parcela.token_esta_expirado():
+        response = render(request, 'financeiro/boleto_expirado.html', {
+            'imobiliaria': parcela.contrato.imobiliaria,
+        }, status=410)
+        response['X-Robots-Tag'] = 'noindex, nofollow'
+        return response
+
     contrato = parcela.contrato
     imobiliaria = contrato.imobiliaria
 
+    # S-03 — log de acesso
+    try:
+        AcessoBoletoPublico.objects.create(
+            parcela=parcela,
+            ip=ip,
+            user_agent=request.META.get('HTTP_USER_AGENT', '')[:300],
+        )
+    except Exception:
+        pass  # log nunca bloqueia a resposta
+
     if not parcela.tem_boleto:
-        return render(request, 'financeiro/boleto_publico.html', {
+        response = render(request, 'financeiro/boleto_publico.html', {
             'sem_boleto': True,
             'imobiliaria': imobiliaria,
         })
+    else:
+        valores_hoje = parcela.calcular_valores_hoje()
+        response = render(request, 'financeiro/boleto_publico.html', {
+            'parcela': parcela,
+            'contrato': contrato,
+            'imobiliaria': imobiliaria,
+            'comprador_nome': contrato.comprador.nome,
+            'valores_hoje': valores_hoje,
+            'token': token,
+        })
 
-    valores_hoje = parcela.calcular_valores_hoje()
-
-    return render(request, 'financeiro/boleto_publico.html', {
-        'parcela': parcela,
-        'contrato': contrato,
-        'imobiliaria': imobiliaria,
-        'comprador_nome': contrato.comprador.nome,
-        'valores_hoje': valores_hoje,
-        'token': token,
-    })
+    # S-06 — headers de segurança
+    response['X-Robots-Tag'] = 'noindex, nofollow'
+    response['Cache-Control'] = 'private, no-store'
+    return response
 
 
 def download_boleto_publico(request, token):
     """
     Download do PDF do boleto via token público. Sem autenticação.
+    S-01: verifica expiração. S-06: headers de segurança.
     """
-    parcela = get_object_or_404(Parcela, token_publico=token)
+    parcela = get_object_or_404(
+        Parcela.objects.select_related('contrato__imobiliaria'),
+        token_publico=token
+    )
+    # S-01 — verificar expiração
+    if parcela.token_esta_expirado():
+        return HttpResponse('Link do boleto expirado. Solicite nova segunda via.', status=410)
 
     if not parcela.tem_boleto:
         return HttpResponse('Boleto não disponível.', status=404)
@@ -7357,20 +7484,53 @@ def download_boleto_publico(request, token):
     if parcela.boleto_pdf_db:
         response = HttpResponse(bytes(parcela.boleto_pdf_db), content_type='application/pdf')
         response['Content-Disposition'] = f'inline; filename="{filename}"'
+        response['X-Robots-Tag'] = 'noindex, nofollow'
+        response['Cache-Control'] = 'private, no-store'
         return response
 
     if parcela.boleto_pdf:
         try:
             storage = parcela.boleto_pdf.storage
             if storage.exists(parcela.boleto_pdf.name):
-                return FileResponse(
+                response = FileResponse(
                     parcela.boleto_pdf.open('rb'),
                     as_attachment=False,
                     filename=filename,
                     content_type='application/pdf',
                 )
+                response['X-Robots-Tag'] = 'noindex, nofollow'
+                response['Cache-Control'] = 'private, no-store'
+                return response
         except Exception:
             pass
 
     logger.warning('[boleto_publico] PDF ausente para token=%s parcela_pk=%s', token, parcela.pk)
     return HttpResponse('PDF do boleto não disponível no momento.', status=404)
+
+
+# =============================================================================
+# U-05: Compat redirects — PKs inteiros → hashids (manter por 30 dias)
+# =============================================================================
+
+@login_required
+def parcela_pk_compat(request, pk):
+    """Redireciona URL legada /parcelas/<int:pk>/ para /parcelas/<hid>/."""
+    from core.hashids_utils import encode_id
+    hid = encode_id(pk)
+    return redirect('financeiro:detalhe_parcela', hid=hid, permanent=True)
+
+
+@login_required
+def remessa_pk_compat(request, pk):
+    """Redireciona URL legada /cnab/remessa/<int:pk>/ para hashid."""
+    from core.hashids_utils import encode_id
+    hid = encode_id(pk)
+    return redirect('financeiro:detalhe_remessa', hid=hid, permanent=True)
+
+
+@login_required
+def retorno_pk_compat(request, pk):
+    """Redireciona URL legada /cnab/retorno/<int:pk>/ para hashid."""
+    from core.hashids_utils import encode_id
+    hid = encode_id(pk)
+    return redirect('financeiro:detalhe_retorno', hid=hid, permanent=True)
