@@ -447,6 +447,18 @@ _EVOLUTION_STATUS_MAP = {
     '5': 'read',
 }
 
+# W-08: Mapeamento Twilio → status canônico (mesmo conjunto do Evolution)
+_TWILIO_STATUS_MAP = {
+    'accepted': 'queued',
+    'queued': 'queued',
+    'sending': 'sent',
+    'sent': 'sent',
+    'delivered': 'delivered',
+    'undelivered': 'failed',
+    'failed': 'failed',
+    'read': 'read',
+}
+
 
 @csrf_exempt
 def webhook_evolution(request):
@@ -971,28 +983,26 @@ def toggle_regra_notificacao(request, pk):
 # PAINEL DE CONTROLE DE MENSAGENS
 # =============================================================================
 
-# Mapeamento de status de entrega Twilio → label PT-BR
+# W-08: Labels unificados — conjunto canônico válido para Evolution e Twilio
 _STATUS_ENTREGA_LABELS = {
-    'accepted': 'Aceito',
     'queued': 'Enfileirado',
-    'sending': 'Enviando',
     'sent': 'Enviado',
     'delivered': 'Entregue',
-    'undelivered': 'Não entregue',
-    'failed': 'Falhou',
     'read': 'Lido',
+    'failed': 'Falhou',
+    # E-mail — rastreamento local
+    'clicked': 'Clicado (link)',
+    'bounced': 'Bounce (NDR)',
+    'opened': 'Aberto (pixel)',
 }
 
 _STATUS_ENTREGA_CHOICES = [
-    # Twilio SMS/WhatsApp
-    ('accepted', 'Aceito'),
+    # Conjunto canônico (Evolution + Twilio normalizado)
     ('queued', 'Enfileirado'),
-    ('sending', 'Enviando'),
     ('sent', 'Enviado'),
     ('delivered', 'Entregue'),
-    ('undelivered', 'Não entregue'),
-    ('failed', 'Falhou'),
     ('read', 'Lido'),
+    ('failed', 'Falhou'),
     # E-mail — rastreamento local
     ('clicked', 'Clicado (link)'),
     ('bounced', 'Bounce (NDR)'),
@@ -1223,18 +1233,21 @@ def webhook_twilio(request):
             return HttpResponse('Forbidden', status=403)
 
     message_sid = request.POST.get('MessageSid', '').strip()
-    message_status = request.POST.get('MessageStatus', '').strip()
+    raw_status = request.POST.get('MessageStatus', '').strip()
 
-    if not message_sid or not message_status:
+    if not message_sid or not raw_status:
         return HttpResponse('Bad Request', status=400)
 
+    # W-08: normalizar para o conjunto canônico (mesmo do Evolution)
+    status_entrega = _TWILIO_STATUS_MAP.get(raw_status, raw_status)
+
     updated = Notificacao.objects.filter(external_id=message_sid).update(
-        status_entrega=message_status,
+        status_entrega=status_entrega,
         data_confirmacao=timezone.now(),
     )
 
     logger.info(
-        '[Webhook Twilio] SID=%s status=%s registros_atualizados=%d',
-        message_sid, message_status, updated
+        '[Webhook Twilio] SID=%s raw_status=%s status_entrega=%s registros=%d',
+        message_sid, raw_status, status_entrega, updated
     )
     return HttpResponse('OK', status=200)
