@@ -15,7 +15,7 @@ from django.db.models import Q, Count
 from django.core.paginator import Paginator
 from django.views.decorators.csrf import csrf_exempt
 from django.utils import timezone
-from core.mixins import PaginacaoMixin
+from core.mixins import PaginacaoMixin, verificar_acesso_tenant
 import logging
 
 from .models import (
@@ -1118,7 +1118,11 @@ def reenviar_notificacao_ajax(request, pk):
     if request.method != 'POST':
         return JsonResponse({'sucesso': False, 'erro': 'Método não permitido'}, status=405)
 
-    notificacao = get_object_or_404(Notificacao, pk=pk)
+    notificacao = get_object_or_404(
+        Notificacao.objects.select_related('parcela__contrato__imobiliaria'), pk=pk
+    )
+    if notificacao.parcela_id:
+        verificar_acesso_tenant(request, notificacao.parcela.contrato.imobiliaria)
 
     notificacao.status = StatusNotificacao.PENDENTE
     notificacao.erro_mensagem = ''

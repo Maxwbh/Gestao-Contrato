@@ -330,5 +330,8 @@
 <!-- Materialize JS (local) -->
 <script src="{% static 'vendor/materialize/js/materialize.min.js' %}"></script>
 {% block extra_js %}{% endblock %}
+<footer style="text-align:center; padding:8px 0; font-size:0.7rem; color:#aaa;">
+    v{{ system_version }} &nbsp;|&nbsp; Página {{ page_id }}
+</footer>
 </body>
 </html>
