@@ -107,6 +107,7 @@ class ConfiguracaoWhatsApp(TimeStampedModel):
             ('META', 'Meta (WhatsApp Business API)'),
             ('EVOLUTION', 'Evolution API (self-hosted)'),
             ('ZAPI', 'Z-API'),
+            ('BSP', 'BSP Brasileiro (Hablla / Poli Digital / Digisac)'),
         ],
         default='TWILIO',
         verbose_name='Provedor'

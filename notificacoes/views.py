@@ -1251,3 +1251,95 @@ def webhook_twilio(request):
         message_sid, raw_status, status_entrega, updated
     )
     return HttpResponse('OK', status=200)
+
+
+@csrf_exempt
+def webhook_bsp(request):
+    """
+    W-07: Recebe callbacks de BSPs brasileiros (Hablla, Poli Digital, Digisac).
+
+    Os BSPs expõem webhooks no formato Meta Cloud API:
+      GET  ?hub.mode=subscribe&hub.verify_token=<token>&hub.challenge=<n>  → challenge
+      POST corpo JSON Meta Cloud API (statuses + messages)
+
+    Autenticação: verifica X-Hub-Signature-256 usando config.api_key do BSP ativo,
+    ou aceita sem validação de assinatura se nenhuma config BSP estiver registrada
+    (ambiente de teste).
+    """
+    if request.method == 'GET':
+        # Verificação de webhook (Meta hub protocol)
+        mode = request.GET.get('hub.mode', '')
+        challenge = request.GET.get('hub.challenge', '')
+        verify_token = request.GET.get('hub.verify_token', '')
+        config = ConfiguracaoWhatsApp.objects.filter(provedor='BSP', ativo=True).first()
+        expected_token = config.api_key if config else ''
+        if mode == 'subscribe' and verify_token == expected_token:
+            return HttpResponse(challenge, content_type='text/plain')
+        return HttpResponse('Forbidden', status=403)
+
+    if request.method != 'POST':
+        return HttpResponseNotAllowed(['GET', 'POST'])
+
+    import json as _json
+    try:
+        body = _json.loads(request.body)
+    except (ValueError, _json.JSONDecodeError):
+        return HttpResponse('Bad Request', status=400)
+
+    # Validar assinatura X-Hub-Signature-256 se presente
+    sig_header = request.META.get('HTTP_X_HUB_SIGNATURE_256', '')
+    if sig_header:
+        import hmac as _hmac
+        import hashlib as _hashlib
+        config = ConfiguracaoWhatsApp.objects.filter(provedor='BSP', ativo=True).first()
+        secret = (config.api_key if config else '').encode()
+        digest = 'sha256=' + _hmac.new(secret, request.body, _hashlib.sha256).hexdigest()
+        if not _hmac.compare_digest(sig_header, digest):
+            logger.warning('[Webhook BSP] Assinatura inválida — ip=%s', request.META.get('REMOTE_ADDR'))
+            return HttpResponse('Forbidden', status=403)
+
+    updated_total = 0
+    # Reutiliza o mesmo parser do formato Meta Cloud API
+    for entry in body.get('entry', []):
+        for change in entry.get('changes', []):
+            value = change.get('value', {})
+
+            for st in value.get('statuses', []):
+                wamid = st.get('id', '').strip()
+                raw_status = st.get('status', '')
+                status_entrega = _EVOLUTION_STATUS_MAP.get(raw_status)
+                if wamid and status_entrega:
+                    updated = Notificacao.objects.filter(external_id=wamid).update(
+                        status_entrega=status_entrega,
+                        data_confirmacao=timezone.now(),
+                    )
+                    updated_total += updated
+
+            # Inbound messages → chatbot
+            phone_number_id_val = value.get('metadata', {}).get('phone_number_id', '')
+            config_chatbot = None
+            if phone_number_id_val:
+                config_chatbot = ConfiguracaoWhatsApp.objects.filter(
+                    provedor='BSP', phone_number_id=phone_number_id_val, ativo=True,
+                ).first()
+            for msg in value.get('messages', []):
+                telefone = msg.get('from', '').strip()
+                if not telefone or not config_chatbot:
+                    continue
+                msg_type = msg.get('type', 'text')
+                texto = ''
+                if msg_type == 'text':
+                    texto = msg.get('text', {}).get('body', '').strip()
+                try:
+                    from notificacoes.whatsapp_bot import WhatsAppBotService
+                    WhatsAppBotService().processar(
+                        telefone=telefone,
+                        mensagem=texto,
+                        tipo_msg='text' if msg_type == 'text' else 'media',
+                        config_wa=config_chatbot,
+                    )
+                except Exception:
+                    logger.exception('[Webhook BSP] erro no chatbot para %s', telefone)
+
+    logger.info('[Webhook BSP] updated=%d', updated_total)
+    return HttpResponse('OK', status=200)

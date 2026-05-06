@@ -170,7 +170,7 @@
 
 ## 7. TESTES AUTOMATIZADOS
 
-**Meta:** > 80% de cobertura | **Atual:** 1122 testes passando (1084 + 33 novos — HU-360 Juros Escalantes E2E + 5 restantes 2026-05-06)
+**Meta:** > 80% de cobertura | **Atual:** 1139 testes passando (1122 + 17 novos — W-07 BSP Brasileiro 2026-05-06)
 
 ### 7.1 P1 — Apps sem nenhum teste (~104 testes) ✅ CONCLUÍDO
 | Arquivo | Escopo | Qtd | Status |
@@ -1691,7 +1691,7 @@ FALLBACK (se VPS ficar fora)
 | W-04 | **Webhook Evolution modo Cloud API** — payload diferente do Baileys; atualizar `webhook_evolution()` | P2 | Evolution | ✅ `_EVOLUTION_STATUS_MAP` + `_webhook_evolution_meta_format()` |
 | W-05 | **Teste de conexão** para modo Cloud API (`GET /<instancia>/instance/connectionState`) | P2 | Evolution | ✅ `testar_conexao_whatsapp()` verifica Meta Graph API quando `modo_evolution=CLOUD_API` |
 | W-06 | **Templates interativos** — `corpo_whatsapp_interativo` (JSON) com botões para Evolution Cloud API e Meta | P3 | Evolution / Meta | ✅ JSONField em `TemplateNotificacao`; `renderizar_interativo()`; `ServicoWhatsApp.enviar_interativo()` + `_enviar_evolution_interativo()` → `/message/sendButtons/{instancia}`; fallback automático para texto em Cloud API/Meta/Twilio |
-| W-07 | **BSP brasileiro** — testar com Hablla ou Poli Digital como alternativa ao Evolution direto | P3 | Meta via BSP | — |
+| W-07 | **BSP brasileiro** — suporte a Hablla / Poli Digital / Digisac como provedor `BSP` | P3 | Meta via BSP | ✅ `_enviar_bsp()` (Meta Cloud API compatível); `webhook_bsp()` (hub verification + X-Hub-Signature-256 + inbound chatbot); fieldset no admin; 17 testes |
 | W-08 | **Status de entrega unificado** — normalizar `DELIVERED/READ` entre provedores | P3 | Todos | ✅ `_TWILIO_STATUS_MAP` + `webhook_twilio` normaliza para conjunto canônico `queued/sent/delivered/read/failed`; `_STATUS_ENTREGA_LABELS` e `_STATUS_ENTREGA_CHOICES` unificados |
 
 ---
