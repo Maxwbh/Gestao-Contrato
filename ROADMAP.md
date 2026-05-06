@@ -2628,3 +2628,181 @@ chmod +x .git/hooks/pre-commit
 
 > No Render, o build number é calculado por `git rev-list --count HEAD` (mais confiável
 > que incremento manual, pois reflete o histórico real de commits).
+
+---
+
+## 32. SEGURANÇA — PROTEÇÃO DE URLs E ISOLAMENTO DE TENANT
+
+> **Contexto:** Auditoria de segurança identificou dois problemas independentes:
+>
+> **Problema 1 — ID sequencial visível:** `/contratos/1055/` expõe o PK inteiro do banco.
+> Um usuário autenticado pode iterar `/contratos/1/`, `/contratos/2/` … até `9999` e
+> tentar acessar contratos de outras imobiliárias.
+>
+> **Problema 2 — Sem isolamento de tenant:** `ContratoDetailView.get_queryset()` e
+> `detalhe_parcela()` não filtram por imobiliária do usuário logado — qualquer usuário
+> autenticado acessa qualquer objeto do banco. As funções `get_imobiliarias_usuario()` e
+> `usuario_tem_acesso_imobiliaria()` já existem em `core/models.py` mas **não são usadas**
+> em `contratos/views.py` nem em `financeiro/views.py`.
+>
+> **Escopo auditado:** 109 URL patterns com `<int:pk>` em 5 apps.
+
+---
+
+### 32.1 Inventário de Risco
+
+| Superfície | URLs | Risco | Auth | Tenant Isolation |
+|-----------|------|-------|------|-----------------|
+| `contratos/` | 20 | Contrato de outra imobiliária visível | ✅ | ❌ |
+| `financeiro/` | 59 | Parcelas, boletos, CNAB de qualquer contrato | ✅ | ❌ |
+| `core/` | 20 | Entidades core (usa `get_imobiliarias_usuario`) | ✅ | ✅ parcial |
+| `notificacoes/` | 16 | Configurações e templates por imobiliária | ✅ | ❌ |
+| `portal_comprador/` | 8 | URLs do comprador | ✅ | ✅ (filtra por comprador) |
+
+---
+
+### 32.2 Fase A — Isolamento de Tenant (P1, crítico)
+
+> Resolver o acesso cruzado **independentemente** da obfuscação de URL.
+> O helper `get_imobiliarias_usuario(user)` já retorna o queryset correto de imobiliárias.
+
+| # | Item | Arquivo | Status |
+|---|------|---------|--------|
+| T-01 | **`ContratoDetailView.get_queryset()`** — adicionar `filter(imovel__imobiliaria__in=imobs)` onde `imobs = get_imobiliarias_usuario(request.user)`; superuser vê tudo | `contratos/views.py` | — |
+| T-02 | **`ContratoUpdateView / DeleteView`** — mesmo filtro de T-01 | `contratos/views.py` | — |
+| T-03 | **`detalhe_parcela()`** — após `get_object_or_404(Parcela, pk=pk)`, verificar `usuario_tem_acesso_imobiliaria(user, parcela.contrato.imovel.imobiliaria)`; retornar 403 se não | `financeiro/views.py` | — |
+| T-04 | **`gerar_boleto_parcela()` e todos os `<int:pk>` da parcela** — mesma verificação de T-03 para os ~30 endpoints de parcela/boleto | `financeiro/views.py` | — |
+| T-05 | **`detalhe_remessa()` e `detalhe_retorno()`** — verificar `remessa.imobiliaria` | `financeiro/views.py` | — |
+| T-06 | **APIs REST de financeiro** — `api_gerar_boletos_parcelas`, `api_imobiliaria_*`: checar que `imobiliaria_id` pertence ao usuário antes de processar | `financeiro/views.py` | — |
+| T-07 | **Notificações CRUD** — `ConfiguracaoEmail/WhatsApp` e `TemplateNotificacao` filtrar por imobiliárias do usuário | `notificacoes/views.py` | — |
+| T-08 | **Mixin reutilizável** — criar `TenantMixin` em `core/mixins.py`: `get_queryset()` aplica filtro por imobiliária automaticamente para qualquer model que tenha `imobiliaria` FK | `core/mixins.py` | — |
+
+**Padrão para T-01/T-02 (Class-based Views):**
+```python
+# core/mixins.py
+class TenantMixin:
+    """Filtra queryset pelas imobiliárias do usuário logado. Superuser vê tudo."""
+    tenant_field = 'imovel__imobiliaria'  # campo de FK para imobiliaria
+
+    def get_queryset(self):
+        qs = super().get_queryset()
+        if self.request.user.is_superuser:
+            return qs
+        imobs = get_imobiliarias_usuario(self.request.user)
+        return qs.filter(**{self.tenant_field + '__in': imobs})
+```
+
+```python
+# contratos/views.py
+class ContratoDetailView(LoginRequiredMixin, TenantMixin, DetailView):
+    model = Contrato
+    tenant_field = 'imovel__imobiliaria'  # herda proteção automática
+```
+
+**Padrão para T-03/T-04 (Function-based Views):**
+```python
+# core/decorators.py
+def tenant_required(get_imobiliaria):
+    """Decorador para function-based views — verifica acesso ao objeto."""
+    def decorator(func):
+        @wraps(func)
+        def wrapper(request, pk, *args, **kwargs):
+            obj = get_object_or_404(get_imobiliaria.__self__.__class__, pk=pk)
+            imob = get_imobiliaria(obj)
+            if not request.user.is_superuser and not usuario_tem_acesso_imobiliaria(request.user, imob):
+                raise PermissionDenied
+            return func(request, pk, *args, **kwargs)
+        return wrapper
+    return decorator
+```
+
+---
+
+### 32.3 Fase B — Obfuscação de URL com Hashids (P2)
+
+> Substituir `/contratos/1055/` por `/contratos/Xk9mP3/` sem mudar modelos.
+> Hashids codifica o inteiro usando uma chave secreta — reversível só pelo servidor.
+> Não elimina Problema 2 (tenant), mas elimina a legibilidade e o risco de enumeração.
+
+| # | Item | Status |
+|---|------|--------|
+| U-01 | **Instalar `hashids==1.3.1`** — `pip install hashids`; adicionar `HASHIDS_SALT = SECRET_KEY[:20]` e `HASHIDS_MIN_LENGTH = 6` em `settings.py` | — |
+| U-02 | **`core/hashids_utils.py`** — funções `encode_id(pk) → str` e `decode_id(h) → int`; usam salt do settings; retornam `None` se hash inválido | — |
+| U-03 | **URL pattern `<str:hid>`** — substituir `<int:pk>` por `<str:hid>` nos apps `contratos/`, `financeiro/`, `core/`; view decodifica antes do `get_object_or_404` | — |
+| U-04 | **Template tag `{% hashid obj.pk %}`** — para gerar links nos templates sem expor PK: `{% url 'contratos:detalhe' obj.pk|hashid %}` | — |
+| U-05 | **Rota de compatibilidade** — manter redirecionamento `<int:pk>/` → `<str:hid>/` por 30 dias para não quebrar links antigos em e-mails já enviados | — |
+| U-06 | **Admin Django** — admin continua usando PK inteiro (acesso restrito a staff) | — |
+
+**Exemplo de implementação:**
+```python
+# core/hashids_utils.py
+from hashids import Hashids
+from django.conf import settings
+
+_h = Hashids(salt=settings.HASHIDS_SALT, min_length=settings.HASHIDS_MIN_LENGTH)
+
+def encode_id(pk: int) -> str:
+    return _h.encode(pk)
+
+def decode_id(hid: str) -> int | None:
+    decoded = _h.decode(hid)
+    return decoded[0] if decoded else None
+```
+
+```python
+# contratos/views.py — URL: contratos/<str:hid>/
+def detalhe_contrato(request, hid):
+    from core.hashids_utils import decode_id
+    pk = decode_id(hid)
+    if pk is None:
+        raise Http404
+    contrato = get_object_or_404(Contrato, pk=pk)
+    # + verificação de tenant (T-01)
+    ...
+```
+
+```html
+<!-- template: antes -->
+<a href="{% url 'contratos:detalhe' contrato.pk %}">ver</a>
+
+<!-- template: depois -->
+{% load hashids_tags %}
+<a href="{% url 'contratos:detalhe' contrato.pk|hashid %}">ver</a>
+```
+
+---
+
+### 32.4 Fase C — Defesa em Profundidade (P3)
+
+| # | Item | Status |
+|---|------|--------|
+| D-01 | **Middleware anti-enumeração** — contador Redis por IP: se mesmo IP retornar > 30 respostas 403/404 em 5 min, banir por 1 hora (retornar 429) | — |
+| D-02 | **Log de acesso negado** — model `AcessoNegado`: IP, user, URL, timestamp; admin com lista filtrável | — |
+| D-03 | **Header `X-Content-Type-Options: nosniff`** + `X-Frame-Options: DENY` — `SecurityMiddleware` já configura; confirmar que está ativo | — |
+| D-04 | **Teste automatizado de isolamento** — suite de testes: login como `user_A` (imobiliária X), tentar GET no contrato de `user_B` (imobiliária Y) → deve retornar 403 | — |
+
+---
+
+### 32.5 Ordem de Implementação Recomendada
+
+```
+Semana 1: T-01 a T-05 (isolamento tenant — contratos e parcelas principais)
+Semana 2: T-06 a T-08 (APIs e notificações) + D-04 (testes automatizados)
+Semana 3: U-01 a U-04 (hashids nas URLs principais: contratos, parcelas)
+Semana 4: U-05 a U-06 + D-01 a D-03 (compatibilidade + defesa em profundidade)
+```
+
+> **Prioridade absoluta: Fase A (T-01..T-08).**
+> A obfuscação de URL (Fase B) é uma defesa secundária — sem o isolamento de tenant,
+> hashids não impede o acesso cruzado (hash é reversível pelo próprio sistema).
+
+---
+
+### 32.6 Resumo de Risco
+
+| Problema | Impacto | Solução | Fase |
+|---------|---------|---------|------|
+| Usuário vê contratos de outra imobiliária | **CRÍTICO** | TenantMixin + tenant_required | A |
+| IDs sequenciais visíveis na URL | Alto | Hashids `Xk9mP3` | B |
+| Sem log de tentativas de enumeração | Médio | Middleware + AcessoNegado | C |
+| 109 templates com `obj.pk` exposto | Médio | Template tag `{% hashid %}` | B |
