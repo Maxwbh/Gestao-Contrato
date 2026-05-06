@@ -2438,14 +2438,14 @@ class WhatsAppBotService:
 
 | # | Item | Prioridade | Status |
 |---|------|-----------|--------|
-| V-01 | **Arquivo `VERSION`** — arquivo de texto na raiz do projeto com `MAJOR.MINOR.PATCH` (ex: `3.1.0`); fonte única de verdade; lido em `settings.py` e `build.sh` | P1 | — |
-| V-02 | **Context processor** — `core/context_processors.py`: função `system_version(request)` injeta `SYSTEM_VERSION` (string) e `PAGE_ID` (inteiro 4 dígitos) em todos os templates; registrado em `TEMPLATES[0]['OPTIONS']['context_processors']` | P1 | — |
-| V-03 | **Mapeamento de IDs de página** — `core/page_ids.py`: dicionário `URL_NAME → int(0001..9999)`; middleware lê `request.resolver_match.url_name` e expõe como `request.page_id`; fallback `0000` para páginas sem ID | P1 | — |
-| V-04 | **Rodapé atualizado** — `templates/base.html`: adicionar linha `v{{ SYSTEM_VERSION }} · PG-{{ PAGE_ID|stringformat:"04d" }}` no footer; classe CSS discreta (`text-muted small`) | P1 | — |
-| V-05 | **Build number no Render** — `build.sh`: `BUILD=$(git rev-list --count HEAD); echo "$BUILD" > BUILD_NUMBER`; `settings.py` lê `BUILD_NUMBER` e compõe `SYSTEM_VERSION = f"{MAJOR}.{MINOR}.{BUILD}"` | P2 | — |
+| V-01 | **Arquivo `VERSION`** — arquivo de texto na raiz do projeto com `MAJOR.MINOR` (ex: `3.1`); PATCH = `git rev-list --count HEAD` em runtime | P1 | ✅ |
+| V-02 | **Context processor** — `core/context_processors.py`: `system_info(request)` injeta `system_version`, `page_id` (4 dígitos) e `page_view_name` em todos os templates; registrado em `TEMPLATES[0]['OPTIONS']['context_processors']` | P1 | ✅ |
+| V-03 | **Mapeamento de IDs de página** — `PAGE_ID_MAP` em `core/context_processors.py`: dicionário `'app:view_name' → '0000'`; fallback `'0000'` para páginas sem ID | P1 | ✅ |
+| V-04 | **Rodapé atualizado** — `templates/base.html` e `portal_base.html`: linha `v{{ system_version }} \| Página {{ page_id }}` no footer; estilo discreto (`opacity:0.65`) | P1 | ✅ |
+| V-05 | **Build number automático** — `core/version.py` chama `git rev-list --count HEAD` em subprocess; resultado cacheado por processo (não por request); funciona em Render sem nenhuma variável de ambiente | P2 | ✅ |
 | V-06 | **Git pre-commit hook** — `.git/hooks/pre-commit`: lê `VERSION`, incrementa PATCH, reescreve o arquivo e faz `git add VERSION`; assim cada commit local incrementa automaticamente o patch | P2 | — |
 | V-07 | **Claude Code hook** — `.claude/settings.json` `PostToolUse` em `git commit`: executa `python scripts/bump_version.py patch` que faz o mesmo que V-06, garantindo incremento via Claude Code | P2 | — |
-| V-08 | **Tooltipno rodapé** — hover no número de versão mostra: commit hash abreviado (`git rev-parse --short HEAD`), data do build e ambiente (`DEV` / `PROD`) | P3 | — |
+| V-08 | **Tooltip no rodapé** — hover no número de versão mostra: commit hash abreviado (`git rev-parse --short HEAD`), data do build e ambiente (`DEV` / `PROD`) | P3 | — |
 
 ---
 
@@ -2668,14 +2668,14 @@ chmod +x .git/hooks/pre-commit
 
 | # | Item | Arquivo | Status |
 |---|------|---------|--------|
-| T-01 | **`ContratoDetailView.get_queryset()`** — adicionar `filter(imovel__imobiliaria__in=imobs)` onde `imobs = get_imobiliarias_usuario(request.user)`; superuser vê tudo | `contratos/views.py` | — |
-| T-02 | **`ContratoUpdateView / DeleteView`** — mesmo filtro de T-01 | `contratos/views.py` | — |
-| T-03 | **`detalhe_parcela()`** — após `get_object_or_404(Parcela, pk=pk)`, verificar `usuario_tem_acesso_imobiliaria(user, parcela.contrato.imovel.imobiliaria)`; retornar 403 se não | `financeiro/views.py` | — |
-| T-04 | **`gerar_boleto_parcela()` e todos os `<int:pk>` da parcela** — mesma verificação de T-03 para os ~30 endpoints de parcela/boleto | `financeiro/views.py` | — |
-| T-05 | **`detalhe_remessa()` e `detalhe_retorno()`** — verificar `remessa.imobiliaria` | `financeiro/views.py` | — |
-| T-06 | **APIs REST de financeiro** — `api_gerar_boletos_parcelas`, `api_imobiliaria_*`: checar que `imobiliaria_id` pertence ao usuário antes de processar | `financeiro/views.py` | — |
-| T-07 | **Notificações CRUD** — `ConfiguracaoEmail/WhatsApp` e `TemplateNotificacao` filtrar por imobiliárias do usuário | `notificacoes/views.py` | — |
-| T-08 | **Mixin reutilizável** — criar `TenantMixin` em `core/mixins.py`: `get_queryset()` aplica filtro por imobiliária automaticamente para qualquer model que tenha `imobiliaria` FK | `core/mixins.py` | — |
+| T-01 | **`ContratoListView`** — `TenantMixin` (get_queryset filtra por imobiliária); contadores e dropdown de imobiliárias limitados ao tenant | `contratos/views.py` | ✅ |
+| T-02 | **`ContratoDetailView / UpdateView / DeleteView`** — `TenantMixin` (get_object verifica imobiliária via dotted tenant_field) | `contratos/views.py` | ✅ |
+| T-03 | **`detalhe_parcela()`** — `verificar_acesso_tenant(request, parcela.contrato.imobiliaria)`; parcela buscada com `select_related('contrato__imobiliaria')` | `financeiro/views.py` | ✅ |
+| T-04 | **Todos os endpoints de parcela/boleto** — 11 views protegidas: `registrar_pagamento`, `gerar_boleto_parcela`, `notificar_inadimplente`, `download_boleto`, `visualizar_boleto`, `cancelar_boleto`, `api_status_boleto`, `segunda_via_boleto`, `gerar_boletos_contrato`, `download_zip_boletos` + mais | `financeiro/views.py` | ✅ |
+| T-05 | **Remessa CNAB** — `listar_arquivos_remessa` filtra por `_imobs_para_usuario()`; `detalhe`, `regenerar`, `marcar_enviada`, `excluir`, `download` verificam `conta_bancaria.imobiliaria` | `financeiro/views.py` | ✅ |
+| T-06 | **Retorno CNAB** — `listar_arquivos_retorno` filtra por `_imobs_para_usuario()`; `detalhe`, `processar`, `download` verificam `conta_bancaria.imobiliaria` | `financeiro/views.py` | ✅ |
+| T-07 | **Notificações** — `reenviar_notificacao` verifica `parcela.contrato.imobiliaria`; `IntermediariasListView/DetailView` com `TenantMixin` | `notificacoes/views.py` | ✅ |
+| T-08 | **`TenantMixin` + `verificar_acesso_tenant()`** — em `core/mixins.py`: `get_object()` e `get_queryset()` com atributos `tenant_field`/`tenant_filter` customizáveis; helper FBV levanta `PermissionDenied` | `core/mixins.py` | ✅ |
 
 **Padrão para T-01/T-02 (Class-based Views):**
 ```python
