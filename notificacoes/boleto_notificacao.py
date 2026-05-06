@@ -83,10 +83,10 @@ class BoletoNotificacaoService:
                 partes.append(f" - CEP: {comprador.cep}")
             endereco_comprador = ' '.join(partes)
 
-        # Link para download do boleto
+        # Link para download do boleto — usa URL pública (sem autenticação)
         link_boleto = ''
         if self.base_url and parcela.tem_boleto:
-            link_boleto = f"{self.base_url}/financeiro/parcelas/{parcela.pk}/boleto/download/"
+            link_boleto = f"{self.base_url}{parcela.get_link_publico()}"
 
         contexto = {
             # Dados do Comprador

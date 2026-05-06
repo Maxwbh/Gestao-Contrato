@@ -900,7 +900,7 @@
                                                             <i class="fas fa-eye"></i>
                                                         </button>
                                                         <button type="button" class="btn btn-outline-info"
-                                                                onclick="abrirModalCompartilhar({{ parcela.pk }}, '{{ parcela.linha_digitavel|escapejs }}', {{ parcela.numero_parcela }}, '{{ parcela.data_vencimento|date:"d/m/Y" }}', '{{ parcela.valor_atual|stringformat:"f" }}')"
+                                                                onclick="abrirModalCompartilhar({{ parcela.pk }}, '{{ parcela.linha_digitavel|escapejs }}', {{ parcela.numero_parcela }}, '{{ parcela.data_vencimento|date:"d/m/Y" }}', '{{ parcela.valor_atual|stringformat:"f" }}', '{{ parcela.token_publico }}')"
                                                                 title="Compartilhar Boleto">
                                                             <i class="fas fa-share-alt"></i>
                                                         </button>
@@ -1360,13 +1360,20 @@
                     <label class="form-label fw-bold">Link do Boleto</label>
                     <div class="input-group">
                         <input type="text" class="form-control" id="compartilharLinkBoleto" readonly>
-                        <button class="btn btn-outline-secondary" type="button" onclick="copiarCampo('compartilharLinkBoleto', this)">
+                        <button class="btn btn-outline-secondary" type="button" onclick="copiarCampo('compartilharLinkBoleto', this)"
+                                title="Copiar link">
                             <i class="fas fa-copy"></i>
                         </button>
-                        <a id="btnAbrirBoleto" href="#" target="_blank" class="btn btn-outline-info">
+                        <button class="btn btn-outline-info" type="button" id="btnNativeShare"
+                                onclick="compartilharNativo()" title="Compartilhar">
+                            <i class="fas fa-share-alt"></i>
+                        </button>
+                        <a id="btnAbrirBoleto" href="#" target="_blank" class="btn btn-outline-primary"
+                           title="Abrir boleto">
                             <i class="fas fa-external-link-alt"></i>
                         </a>
                     </div>
+                    <small class="text-muted mt-1 d-block">Link público — comprador pode acessar sem senha.</small>
                 </div>
             </div>
             <div class="modal-footer">
@@ -1815,9 +1822,12 @@ function abrirModalBoleto(parcelaId) {
 
 var _compartilharDados = {};
 
-function abrirModalCompartilhar(parcelaId, linhaDigitavel, numeroParcela, vencimento, valor) {
+function abrirModalCompartilhar(parcelaId, linhaDigitavel, numeroParcela, vencimento, valor, tokenPublico) {
     var baseUrl = window.location.origin;
-    var urlBoleto = baseUrl + '/financeiro/parcelas/' + parcelaId + '/boleto/visualizar/?popup=true';
+    // Usar link público (sem autenticação) quando disponível — mesmo padrão do visualizar_boleto.html
+    var urlBoleto = tokenPublico
+        ? (baseUrl + '/b/' + tokenPublico + '/')
+        : (baseUrl + '/financeiro/parcelas/' + parcelaId + '/boleto/visualizar/?popup=true');
     var compradorEmail = '{{ contrato.comprador.email|escapejs }}';
     var compradorCelular = '{{ contrato.comprador.celular|escapejs }}';
     var compradorNome = '{{ contrato.comprador.nome|escapejs }}';
@@ -1873,6 +1883,26 @@ function abrirModalCompartilhar(parcelaId, linhaDigitavel, numeroParcela, vencim
     document.getElementById('infoEmail').textContent = 'E-mail do comprador: ' + compradorEmail;
 
     new bootstrap.Modal(document.getElementById('modalCompartilhar')).show();
+}
+
+function compartilharNativo() {
+    var url = document.getElementById('compartilharLinkBoleto').value;
+    if (!url) return;
+    if (navigator.share) {
+        navigator.share({ title: 'Boleto', url: url }).catch(function() {});
+    } else {
+        navigator.clipboard.writeText(url).then(function() {
+            var btn = document.getElementById('btnNativeShare');
+            var orig = btn.innerHTML;
+            btn.innerHTML = '<i class="fas fa-check"></i>';
+            btn.classList.replace('btn-outline-info', 'btn-info');
+            setTimeout(function() {
+                btn.innerHTML = orig;
+                btn.classList.replace('btn-info', 'btn-outline-info');
+            }, 2500);
+            showToast('Link copiado!', 'success', 2000);
+        });
+    }
 }
 
 function copiarLinhaDigitavel(texto) {
@@ -1966,15 +1996,19 @@ function gerarBoleto(parcelaId, btn) {
                 var acoesCol = row.querySelector('td:last-child .btn-group');
                 if (acoesCol) {
                     var linhaDigResp = data.linha_digitavel || '';
+                    var tokenResp = data.token_publico || '';
                     acoesCol.innerHTML =
                         '<button type="button" class="btn btn-outline-primary" onclick="abrirModalBoleto(' + parcelaId + ')" title="Ver Boleto"><i class="fas fa-eye"></i></button>' +
-                        '<button type="button" class="btn btn-outline-info" onclick="abrirModalCompartilhar(' + parcelaId + ', \'' + linhaDigResp + '\', \'\', \'\', \'\')" title="Compartilhar Boleto"><i class="fas fa-share-alt"></i></button>' +
+                        '<button type="button" class="btn btn-outline-info" onclick="abrirModalCompartilhar(' + parcelaId + ', \'' + linhaDigResp + '\', \'\', \'\', \'\', \'' + tokenResp + '\')" title="Compartilhar Boleto"><i class="fas fa-share-alt"></i></button>' +
                         '<button type="button" class="btn btn-outline-warning" onclick="regenerarBoleto(' + parcelaId + ', this)" title="Atualizar Boleto"><i class="fas fa-sync"></i></button>' +
                         '<button type="button" class="btn btn-outline-success" onclick="abrirModalPagamento(' + parcelaId + ')" title="Registrar Pagamento"><i class="fas fa-dollar-sign"></i></button>';
                 }
             }
+            var linkPublicoGerado = data.token_publico
+                ? (window.location.origin + '/b/' + data.token_publico + '/')
+                : ('/financeiro/parcelas/' + parcelaId + '/boleto/visualizar/?popup=true');
             setTimeout(function() {
-                window.open('/financeiro/parcelas/' + parcelaId + '/boleto/visualizar/?popup=true', '_blank');
+                window.open(linkPublicoGerado, '_blank');
             }, 500);
         } else {
             showToast('Erro ao gerar boleto: ' + data.erro, 'error', 6000);
