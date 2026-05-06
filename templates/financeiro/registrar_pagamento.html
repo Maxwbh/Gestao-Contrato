@@ -1,5 +1,6 @@
 {% extends 'base.html' %}
 {% load static %}
+{% load hashid_tags %}
 
 {% block title %}Registrar Pagamento - Parcela {{ parcela.numero_parcela }}{% endblock %}
 
@@ -15,13 +16,13 @@
             <nav aria-label="breadcrumb">
                 <ol class="breadcrumb mb-0">
                     <li class="breadcrumb-item"><a href="{% url 'financeiro:listar_parcelas' %}">Parcelas</a></li>
-                    <li class="breadcrumb-item"><a href="{% url 'financeiro:detalhe_parcela' parcela.pk %}">Parcela {{ parcela.numero_parcela }}</a></li>
+                    <li class="breadcrumb-item"><a href="{% url 'financeiro:detalhe_parcela' parcela.pk|hashid %}">Parcela {{ parcela.numero_parcela }}</a></li>
                     <li class="breadcrumb-item active">Registrar Pagamento</li>
                 </ol>
             </nav>
         </div>
         <div>
-            <a href="{% url 'financeiro:detalhe_parcela' parcela.pk %}" class="btn btn-outline-secondary">
+            <a href="{% url 'financeiro:detalhe_parcela' parcela.pk|hashid %}" class="btn btn-outline-secondary">
                 <i class="fas fa-arrow-left me-1"></i> Voltar
             </a>
         </div>
@@ -135,7 +136,7 @@
                         <hr>
 
                         <div class="d-flex justify-content-between">
-                            <a href="{% url 'financeiro:detalhe_parcela' parcela.pk %}" class="btn btn-secondary">
+                            <a href="{% url 'financeiro:detalhe_parcela' parcela.pk|hashid %}" class="btn btn-secondary">
                                 <i class="fas fa-times me-1"></i> Cancelar
                             </a>
                             <button type="submit" class="btn btn-success btn-lg">

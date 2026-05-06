@@ -5,16 +5,18 @@ Cobre: criação → parcelas → reajuste → pagamento
 """
 import pytest
 from django.urls import reverse
+from core.hashids_utils import encode_id
 
 from tests.fixtures.factories import (
     UserFactory,
+    SuperUserFactory,
     ContratoFactory,
 )
 
 
 @pytest.fixture
 def usuario(db):
-    return UserFactory()
+    return SuperUserFactory()
 
 
 @pytest.fixture
@@ -40,7 +42,7 @@ class TestWorkflowContrato:
 
     def test_detalhe_contrato_exibe_parcelas(self, client_logado, contrato):
         """Detalhe do contrato exibe parcelas geradas automaticamente"""
-        url = reverse('contratos:detalhe', kwargs={'pk': contrato.pk})
+        url = reverse('contratos:detalhe', kwargs={'hid': encode_id(contrato.pk)})
         resp = client_logado.get(url)
         assert resp.status_code == 200
         # Contrato tem parcelas (geradas pelo signal)

@@ -1,4 +1,6 @@
+
 {% extends 'base.html' %}
+{% load hashid_tags %}
 
 {% block title %}Dashboard - Gestão de Contratos{% endblock %}
 
@@ -115,7 +117,7 @@
                             <tr>
                                 <td>{{ parcela.contrato.comprador.nome|truncatechars:25 }}</td>
                                 <td>
-                                    <a href="{% url 'contratos:detalhe' parcela.contrato.pk %}">
+                                    <a href="{% url 'contratos:detalhe' parcela.contrato.pk|hashid %}">
                                         {{ parcela.contrato.numero_contrato }}
                                     </a>
                                 </td>

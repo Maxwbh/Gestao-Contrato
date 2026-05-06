@@ -1,5 +1,6 @@
 {% extends 'base.html' %}
 {% load format_filters %}
+{% load hashid_tags %}
 
 {% block title %}Contrato {{ contrato.numero_contrato }} - Gestao de Contratos{% endblock %}
 
@@ -222,7 +223,7 @@
             <i class="fas fa-exclamation-triangle me-2 fs-5"></i>
             <div>
                 <strong>{{ intermediarias_vencidas_sem_boleto|length }} prestação(ões) intermediária(s) vencida(s)</strong> sem boleto gerado.
-                <a href="{% url 'contratos:intermediarias_listar' contrato.pk %}" class="alert-link ms-2">
+                <a href="{% url 'contratos:intermediarias_listar' contrato.pk|hashid %}" class="alert-link ms-2">
                     Ver intermediárias &rarr;
                 </a>
             </div>
@@ -900,7 +901,7 @@
                                                             <i class="fas fa-eye"></i>
                                                         </button>
                                                         <button type="button" class="btn btn-outline-info"
-                                                                onclick="abrirModalCompartilhar({{ parcela.pk }}, '{{ parcela.linha_digitavel|escapejs }}', {{ parcela.numero_parcela }}, '{{ parcela.data_vencimento|date:"d/m/Y" }}', '{{ parcela.valor_atual|stringformat:"f" }}')"
+                                                                onclick="abrirModalCompartilhar({{ parcela.pk }}, '{{ parcela.linha_digitavel|escapejs }}', {{ parcela.numero_parcela }}, '{{ parcela.data_vencimento|date:"d/m/Y" }}', '{{ parcela.valor_atual|stringformat:"f" }}', '{{ parcela.token_publico }}')"
                                                                 title="Compartilhar Boleto">
                                                             <i class="fas fa-share-alt"></i>
                                                         </button>
@@ -951,7 +952,7 @@
                             {% if intermediarias_vencidas_sem_boleto %}
                             <span class="badge bg-danger">{{ intermediarias_vencidas_sem_boleto|length }} vencidas</span>
                             {% endif %}
-                            <a href="{% url 'contratos:intermediarias_listar' contrato.pk %}" class="btn btn-sm btn-outline-dark ms-2">
+                            <a href="{% url 'contratos:intermediarias_listar' contrato.pk|hashid %}" class="btn btn-sm btn-outline-dark ms-2">
                                 <i class="fas fa-list"></i> Ver todas
                             </a>
                         </div>
@@ -996,7 +997,7 @@
                                 {% if total_intermediarias > 10 %}
                                 <tr>
                                     <td colspan="5" class="text-center text-muted small py-2">
-                                        <a href="{% url 'contratos:intermediarias_listar' contrato.pk %}">
+                                        <a href="{% url 'contratos:intermediarias_listar' contrato.pk|hashid %}">
                                             + {{ total_intermediarias|add:"-10" }} mais &rarr;
                                         </a>
                                     </td>
@@ -1087,11 +1088,11 @@
                                 </td>
                                 <td class="text-center">
                                     <div class="btn-group btn-group-sm">
-                                        <a href="{% url 'financeiro:visualizar_boleto' parcela.pk %}"
+                                        <a href="{% url 'financeiro:visualizar_boleto' parcela.pk|hashid %}"
                                            class="btn btn-outline-primary" title="Visualizar" target="_blank">
                                             <i class="fas fa-eye"></i>
                                         </a>
-                                        <a href="{% url 'financeiro:download_boleto' parcela.pk %}"
+                                        <a href="{% url 'financeiro:download_boleto' parcela.pk|hashid %}"
                                            class="btn btn-outline-success" title="Download PDF">
                                             <i class="fas fa-download"></i>
                                         </a>
@@ -1270,7 +1271,7 @@
                     <i class="fas fa-arrow-left"></i> Voltar
                 </a>
                 <div class="d-flex flex-wrap gap-2">
-                    <a href="{% url 'contratos:editar' contrato.pk %}" class="btn btn-primary">
+                    <a href="{% url 'contratos:editar' contrato.pk|hashid %}" class="btn btn-primary">
                         <i class="fas fa-edit"></i> Editar Contrato
                     </a>
                     {% if contrato.status != 'CANCELADO' %}
@@ -1285,10 +1286,10 @@
                        title="Renegociar parcelas em atraso">
                         <i class="fas fa-handshake me-1"></i> Renegociar
                     </a>
-                    <a href="{% url 'contratos:calcular_rescisao' contrato.pk %}" class="btn btn-outline-danger">
+                    <a href="{% url 'contratos:calcular_rescisao' contrato.pk|hashid %}" class="btn btn-outline-danger">
                         <i class="fas fa-file-contract me-1"></i> Calcular Rescisão
                     </a>
-                    <a href="{% url 'contratos:calcular_cessao' contrato.pk %}" class="btn btn-outline-warning">
+                    <a href="{% url 'contratos:calcular_cessao' contrato.pk|hashid %}" class="btn btn-outline-warning">
                         <i class="fas fa-exchange-alt me-1"></i> Calcular Cessão
                     </a>
                     <button type="button" class="btn btn-danger" onclick="confirmarCancelamento()">
@@ -1360,13 +1361,20 @@
                     <label class="form-label fw-bold">Link do Boleto</label>
                     <div class="input-group">
                         <input type="text" class="form-control" id="compartilharLinkBoleto" readonly>
-                        <button class="btn btn-outline-secondary" type="button" onclick="copiarCampo('compartilharLinkBoleto', this)">
+                        <button class="btn btn-outline-secondary" type="button" onclick="copiarCampo('compartilharLinkBoleto', this)"
+                                title="Copiar link">
                             <i class="fas fa-copy"></i>
                         </button>
-                        <a id="btnAbrirBoleto" href="#" target="_blank" class="btn btn-outline-info">
+                        <button class="btn btn-outline-info" type="button" id="btnNativeShare"
+                                onclick="compartilharNativo()" title="Compartilhar">
+                            <i class="fas fa-share-alt"></i>
+                        </button>
+                        <a id="btnAbrirBoleto" href="#" target="_blank" class="btn btn-outline-primary"
+                           title="Abrir boleto">
                             <i class="fas fa-external-link-alt"></i>
                         </a>
                     </div>
+                    <small class="text-muted mt-1 d-block">Link público — comprador pode acessar sem senha.</small>
                 </div>
             </div>
             <div class="modal-footer">
@@ -1405,7 +1413,7 @@
                     Voltar
                 </button>
                 {% if parcelas_pagas == 0 %}
-                <form action="{% url 'contratos:excluir' contrato.pk %}" method="post" style="display: inline;">
+                <form action="{% url 'contratos:excluir' contrato.pk|hashid %}" method="post" style="display: inline;">
                     {% csrf_token %}
                     <button type="submit" class="btn btn-danger">
                         <i class="fas fa-ban"></i> Confirmar Cancelamento
@@ -1815,9 +1823,12 @@ function abrirModalBoleto(parcelaId) {
 
 var _compartilharDados = {};
 
-function abrirModalCompartilhar(parcelaId, linhaDigitavel, numeroParcela, vencimento, valor) {
+function abrirModalCompartilhar(parcelaId, linhaDigitavel, numeroParcela, vencimento, valor, tokenPublico) {
     var baseUrl = window.location.origin;
-    var urlBoleto = baseUrl + '/financeiro/parcelas/' + parcelaId + '/boleto/visualizar/?popup=true';
+    // Usar link público (sem autenticação) quando disponível — mesmo padrão do visualizar_boleto.html
+    var urlBoleto = tokenPublico
+        ? (baseUrl + '/b/' + tokenPublico + '/')
+        : (baseUrl + '/financeiro/parcelas/' + parcelaId + '/boleto/visualizar/?popup=true');
     var compradorEmail = '{{ contrato.comprador.email|escapejs }}';
     var compradorCelular = '{{ contrato.comprador.celular|escapejs }}';
     var compradorNome = '{{ contrato.comprador.nome|escapejs }}';
@@ -1873,6 +1884,26 @@ function abrirModalCompartilhar(parcelaId, linhaDigitavel, numeroParcela, vencim
     document.getElementById('infoEmail').textContent = 'E-mail do comprador: ' + compradorEmail;
 
     new bootstrap.Modal(document.getElementById('modalCompartilhar')).show();
+}
+
+function compartilharNativo() {
+    var url = document.getElementById('compartilharLinkBoleto').value;
+    if (!url) return;
+    if (navigator.share) {
+        navigator.share({ title: 'Boleto', url: url }).catch(function() {});
+    } else {
+        navigator.clipboard.writeText(url).then(function() {
+            var btn = document.getElementById('btnNativeShare');
+            var orig = btn.innerHTML;
+            btn.innerHTML = '<i class="fas fa-check"></i>';
+            btn.classList.replace('btn-outline-info', 'btn-info');
+            setTimeout(function() {
+                btn.innerHTML = orig;
+                btn.classList.replace('btn-info', 'btn-outline-info');
+            }, 2500);
+            showToast('Link copiado!', 'success', 2000);
+        });
+    }
 }
 
 function copiarLinhaDigitavel(texto) {
@@ -1966,15 +1997,19 @@ function gerarBoleto(parcelaId, btn) {
                 var acoesCol = row.querySelector('td:last-child .btn-group');
                 if (acoesCol) {
                     var linhaDigResp = data.linha_digitavel || '';
+                    var tokenResp = data.token_publico || '';
                     acoesCol.innerHTML =
                         '<button type="button" class="btn btn-outline-primary" onclick="abrirModalBoleto(' + parcelaId + ')" title="Ver Boleto"><i class="fas fa-eye"></i></button>' +
-                        '<button type="button" class="btn btn-outline-info" onclick="abrirModalCompartilhar(' + parcelaId + ', \'' + linhaDigResp + '\', \'\', \'\', \'\')" title="Compartilhar Boleto"><i class="fas fa-share-alt"></i></button>' +
+                        '<button type="button" class="btn btn-outline-info" onclick="abrirModalCompartilhar(' + parcelaId + ', \'' + linhaDigResp + '\', \'\', \'\', \'\', \'' + tokenResp + '\')" title="Compartilhar Boleto"><i class="fas fa-share-alt"></i></button>' +
                         '<button type="button" class="btn btn-outline-warning" onclick="regenerarBoleto(' + parcelaId + ', this)" title="Atualizar Boleto"><i class="fas fa-sync"></i></button>' +
                         '<button type="button" class="btn btn-outline-success" onclick="abrirModalPagamento(' + parcelaId + ')" title="Registrar Pagamento"><i class="fas fa-dollar-sign"></i></button>';
                 }
             }
+            var linkPublicoGerado = data.token_publico
+                ? (window.location.origin + '/b/' + data.token_publico + '/')
+                : ('/financeiro/parcelas/' + parcelaId + '/boleto/visualizar/?popup=true');
             setTimeout(function() {
-                window.open('/financeiro/parcelas/' + parcelaId + '/boleto/visualizar/?popup=true', '_blank');
+                window.open(linkPublicoGerado, '_blank');
             }, 500);
         } else {
             showToast('Erro ao gerar boleto: ' + data.erro, 'error', 6000);
@@ -2444,7 +2479,7 @@ function excluirReajuste(reajusteId, ciclo, percentual) {
 }
 
 // ============ Q-04: TABELA DE JUROS ESCALANTES ============
-var urlTabelaJuros = "{% url 'contratos:api_tabela_juros' contrato.pk %}";
+var urlTabelaJuros = "{% url 'contratos:api_tabela_juros' contrato.pk|hashid %}";
 var urlTabelaJurosDeleteBase = "{% url 'contratos:api_tabela_juros_delete' 9999999 %}".replace('9999999/excluir/', '');
 
 function salvarFaixaJuros() {

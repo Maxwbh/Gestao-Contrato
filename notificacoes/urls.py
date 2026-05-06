@@ -41,6 +41,9 @@ urlpatterns = [
     # Webhook Evolution API (sem CSRF — validado por apikey)
     path('webhook/evolution/', views.webhook_evolution, name='webhook_evolution'),
 
+    # Webhook BSP Brasileiro (sem CSRF — validado por X-Hub-Signature-256 / hub.verify_token)
+    path('webhook/bsp/', views.webhook_bsp, name='webhook_bsp'),
+
     # CRUD Templates de Notificacao (Mensagens de Email)
     path('templates/', views.TemplateNotificacaoListView.as_view(), name='listar_templates'),
     path('templates/novo/', views.TemplateNotificacaoCreateView.as_view(), name='criar_template'),

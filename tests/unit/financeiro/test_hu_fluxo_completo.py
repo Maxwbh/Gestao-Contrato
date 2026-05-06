@@ -31,6 +31,7 @@ from unittest.mock import patch, MagicMock
 
 from django.test import Client
 from django.urls import reverse
+from core.hashids_utils import encode_id
 
 # ── Constantes do cenário ──────────────────────────────────────────────────────
 PV = Decimal('120000.00')       # Valor financiado (130k total − 10k entrada)
@@ -225,7 +226,7 @@ class TestHUFluxoCompleto:
         # ================================================================
 
         parcela_1 = parcelas[0]
-        url_pagar = reverse('financeiro:pagar_parcela_ajax', kwargs={'pk': parcela_1.pk})
+        url_pagar = reverse('financeiro:pagar_parcela_ajax', kwargs={'hid': encode_id(parcela_1.pk)})
 
         resp = cli.post(url_pagar, {
             'data_pagamento': str(hoje),
@@ -461,7 +462,7 @@ class TestHUFluxoCompleto:
         )
 
         for p in parcelas_quitar:
-            url = reverse('financeiro:pagar_parcela_ajax', kwargs={'pk': p.pk})
+            url = reverse('financeiro:pagar_parcela_ajax', kwargs={'hid': encode_id(p.pk)})
             resp = cli.post(url, {
                 'data_pagamento': str(hoje),
                 'valor_pago': str(p.valor_atual),
@@ -689,7 +690,7 @@ class TestPagamentoManual:
         from financeiro.models import Parcela, TipoParcela, HistoricoPagamento
         _, cli = usuario_cli
         p = contrato_36m.parcelas.filter(tipo_parcela=TipoParcela.NORMAL).order_by('numero_parcela').first()
-        url = reverse('financeiro:pagar_parcela_ajax', kwargs={'pk': p.pk})
+        url = reverse('financeiro:pagar_parcela_ajax', kwargs={'hid': encode_id(p.pk)})
         resp = cli.post(url, {
             'data_pagamento': str(date.today()),
             'valor_pago': str(p.valor_atual),
@@ -705,7 +706,7 @@ class TestPagamentoManual:
         from financeiro.models import Parcela, TipoParcela, HistoricoPagamento
         _, cli = usuario_cli
         p = contrato_36m.parcelas.filter(tipo_parcela=TipoParcela.NORMAL).order_by('numero_parcela').first()
-        url = reverse('financeiro:pagar_parcela_ajax', kwargs={'pk': p.pk})
+        url = reverse('financeiro:pagar_parcela_ajax', kwargs={'hid': encode_id(p.pk)})
         cli.post(url, {
             'data_pagamento': str(date.today()),
             'valor_pago': str(p.valor_atual),
@@ -720,7 +721,7 @@ class TestPagamentoManual:
         p = contrato_36m.parcelas.filter(tipo_parcela=TipoParcela.NORMAL).first()
         p.pago = True
         p.save()
-        url = reverse('financeiro:pagar_parcela_ajax', kwargs={'pk': p.pk})
+        url = reverse('financeiro:pagar_parcela_ajax', kwargs={'hid': encode_id(p.pk)})
         resp = cli.post(url, {
             'data_pagamento': str(date.today()),
             'valor_pago': str(p.valor_atual),
@@ -948,7 +949,7 @@ class TestQuitacaoManualLote:
             .order_by('numero_parcela')[:3]
         )
         for p in parcelas:
-            url = reverse('financeiro:pagar_parcela_ajax', kwargs={'pk': p.pk})
+            url = reverse('financeiro:pagar_parcela_ajax', kwargs={'hid': encode_id(p.pk)})
             resp = cli.post(url, {
                 'data_pagamento': str(date.today()),
                 'valor_pago': str(p.valor_atual),

@@ -21,6 +21,7 @@ from datetime import date
 
 from django.test import Client
 from django.urls import reverse
+from core.hashids_utils import encode_id
 
 
 # ---------------------------------------------------------------------------
@@ -399,31 +400,31 @@ class TestViewRescisao:
     """Testes da view calcular_rescisao_view."""
 
     def test_get_requer_autenticacao(self, client, contrato_com_parcelas):
-        url = reverse('contratos:calcular_rescisao', kwargs={'pk': contrato_com_parcelas.pk})
+        url = reverse('contratos:calcular_rescisao', kwargs={'hid': encode_id(contrato_com_parcelas.pk)})
         resp = client.get(url)
         assert resp.status_code in (302, 403)
 
     def test_get_retorna_200_logado(self, usuario_cli, contrato_com_parcelas):
         _, cli = usuario_cli
-        url = reverse('contratos:calcular_rescisao', kwargs={'pk': contrato_com_parcelas.pk})
+        url = reverse('contratos:calcular_rescisao', kwargs={'hid': encode_id(contrato_com_parcelas.pk)})
         resp = cli.get(url)
         assert resp.status_code == 200
 
     def test_get_contrato_inexistente_retorna_404(self, usuario_cli):
         _, cli = usuario_cli
-        url = reverse('contratos:calcular_rescisao', kwargs={'pk': 999999})
+        url = reverse('contratos:calcular_rescisao', kwargs={'hid': encode_id(999999)})
         resp = cli.get(url)
         assert resp.status_code == 404
 
     def test_post_com_data_valida_processa_calculo(self, usuario_cli, contrato_com_parcelas):
         _, cli = usuario_cli
-        url = reverse('contratos:calcular_rescisao', kwargs={'pk': contrato_com_parcelas.pk})
+        url = reverse('contratos:calcular_rescisao', kwargs={'hid': encode_id(contrato_com_parcelas.pk)})
         resp = cli.post(url, data={'data_rescisao': '2025-05-01'})
         assert resp.status_code == 200
 
     def test_post_data_invalida_nao_causa_erro_500(self, usuario_cli, contrato_com_parcelas):
         _, cli = usuario_cli
-        url = reverse('contratos:calcular_rescisao', kwargs={'pk': contrato_com_parcelas.pk})
+        url = reverse('contratos:calcular_rescisao', kwargs={'hid': encode_id(contrato_com_parcelas.pk)})
         resp = cli.post(url, data={'data_rescisao': 'data-invalida'})
         assert resp.status_code == 200
 
@@ -437,31 +438,31 @@ class TestViewCessao:
     """Testes da view calcular_cessao_view."""
 
     def test_get_requer_autenticacao(self, client, contrato_com_parcelas):
-        url = reverse('contratos:calcular_cessao', kwargs={'pk': contrato_com_parcelas.pk})
+        url = reverse('contratos:calcular_cessao', kwargs={'hid': encode_id(contrato_com_parcelas.pk)})
         resp = client.get(url)
         assert resp.status_code in (302, 403)
 
     def test_get_retorna_200_logado(self, usuario_cli, contrato_com_parcelas):
         _, cli = usuario_cli
-        url = reverse('contratos:calcular_cessao', kwargs={'pk': contrato_com_parcelas.pk})
+        url = reverse('contratos:calcular_cessao', kwargs={'hid': encode_id(contrato_com_parcelas.pk)})
         resp = cli.get(url)
         assert resp.status_code == 200
 
     def test_get_contrato_inexistente_retorna_404(self, usuario_cli):
         _, cli = usuario_cli
-        url = reverse('contratos:calcular_cessao', kwargs={'pk': 999999})
+        url = reverse('contratos:calcular_cessao', kwargs={'hid': encode_id(999999)})
         resp = cli.get(url)
         assert resp.status_code == 404
 
     def test_post_com_data_valida_processa_calculo(self, usuario_cli, contrato_com_parcelas):
         _, cli = usuario_cli
-        url = reverse('contratos:calcular_cessao', kwargs={'pk': contrato_com_parcelas.pk})
+        url = reverse('contratos:calcular_cessao', kwargs={'hid': encode_id(contrato_com_parcelas.pk)})
         resp = cli.post(url, data={'data_cessao': '2025-05-01'})
         assert resp.status_code == 200
 
     def test_post_data_invalida_nao_causa_erro_500(self, usuario_cli, contrato_com_parcelas):
         _, cli = usuario_cli
-        url = reverse('contratos:calcular_cessao', kwargs={'pk': contrato_com_parcelas.pk})
+        url = reverse('contratos:calcular_cessao', kwargs={'hid': encode_id(contrato_com_parcelas.pk)})
         resp = cli.post(url, data={'data_cessao': 'invalido'})
         assert resp.status_code == 200
 

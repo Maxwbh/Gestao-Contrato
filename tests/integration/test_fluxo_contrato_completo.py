@@ -5,13 +5,14 @@ Cobre: criação de contrato → listagem → detalhe → edição → registrar
 """
 import pytest
 from django.urls import reverse
+from core.hashids_utils import encode_id
 
-from tests.fixtures.factories import UserFactory, ContratoFactory
+from tests.fixtures.factories import UserFactory, SuperUserFactory, ContratoFactory
 
 
 @pytest.fixture
 def usuario(db):
-    return UserFactory()
+    return SuperUserFactory()
 
 
 @pytest.fixture
@@ -36,7 +37,7 @@ class TestFluxoContratoCompleto:
         assert resp.status_code == 200
 
         # Detalhe
-        resp = client_logado.get(reverse('contratos:detalhe', kwargs={'pk': contrato.pk}))
+        resp = client_logado.get(reverse('contratos:detalhe', kwargs={'hid': encode_id(contrato.pk)}))
         assert resp.status_code == 200
 
     def test_fluxo_parcelas_do_contrato(self, client_logado, contrato):
@@ -53,7 +54,7 @@ class TestFluxoContratoCompleto:
     def test_fluxo_detalhe_parcela(self, client_logado, contrato):
         """Acessa detalhe da primeira parcela"""
         parcela = contrato.parcelas.order_by('numero_parcela').first()
-        url = reverse('financeiro:detalhe_parcela', kwargs={'pk': parcela.pk})
+        url = reverse('financeiro:detalhe_parcela', kwargs={'hid': encode_id(parcela.pk)})
         resp = client_logado.get(url)
         assert resp.status_code == 200
 
@@ -62,7 +63,7 @@ class TestFluxoContratoCompleto:
         parcela = contrato.parcelas.filter(pago=False).order_by('numero_parcela').first()
         assert parcela is not None
 
-        url = reverse('financeiro:registrar_pagamento', kwargs={'pk': parcela.pk})
+        url = reverse('financeiro:registrar_pagamento', kwargs={'hid': encode_id(parcela.pk)})
         resp = client_logado.get(url)
         assert resp.status_code == 200
 

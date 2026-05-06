@@ -403,6 +403,11 @@ def configure_test_settings(settings):
     # Add humanize for template tag support
     if 'django.contrib.humanize' not in settings.INSTALLED_APPS:
         settings.INSTALLED_APPS = list(settings.INSTALLED_APPS) + ['django.contrib.humanize']
+    # Disable anti-enumeration middleware in tests to prevent IP banning from 403/404 test cases
+    settings.MIDDLEWARE = [
+        m for m in settings.MIDDLEWARE
+        if 'AntiEnumeracao' not in m
+    ]
     return settings
 
 

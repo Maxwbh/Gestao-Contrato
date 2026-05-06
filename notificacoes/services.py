@@ -217,6 +217,8 @@ class ServicoWhatsApp:
                 return ServicoWhatsApp._enviar_evolution(destinatario, mensagem, config)
             elif provedor == 'ZAPI':
                 return ServicoWhatsApp._enviar_zapi(destinatario, mensagem, config)
+            elif provedor == 'BSP':
+                return ServicoWhatsApp._enviar_bsp(destinatario, mensagem, config)
             else:
                 raise ValueError(f"Provedor WhatsApp desconhecido: {provedor}")
 
@@ -490,6 +492,50 @@ class ServicoWhatsApp:
         ext_id = ''
         try:
             ext_id = body.get('zaapId', '') or body.get('messageId', '')
+        except Exception:
+            pass
+        return True, ext_id
+
+    @staticmethod
+    def _enviar_bsp(destinatario, mensagem, config):
+        """
+        BSP Brasileiro (Hablla, Poli Digital, Digisac) — API compatível com Meta Cloud API.
+
+        Hablla:      POST {api_url}/v1/{phone_number_id}/messages
+        Poli Digital: POST {api_url}/v1/{phone_number_id}/messages
+        Auth: Authorization: Bearer {api_key}
+        Body: {"messaging_product":"whatsapp","to":"5511...","type":"text","text":{"body":"..."}}
+        """
+        import urllib.request
+        import json as _json
+
+        if not all([config.api_url, config.api_key, config.phone_number_id]):
+            raise ValueError("BSP: api_url, api_key e phone_number_id são obrigatórios")
+
+        numero = ServicoWhatsApp._normalizar_numero(destinatario).lstrip('+')
+        base = config.api_url.rstrip('/')
+        url = f"{base}/v1/{config.phone_number_id}/messages"
+        payload = {
+            "messaging_product": "whatsapp",
+            "to": numero,
+            "type": "text",
+            "text": {"body": mensagem},
+        }
+        req = urllib.request.Request(
+            url,
+            data=_json.dumps(payload).encode(),
+            headers={
+                "Content-Type": "application/json",
+                "Authorization": f"Bearer {config.api_key}",
+            },
+            method="POST",
+        )
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            body = _json.loads(resp.read())
+        logger.info("WhatsApp (BSP) enviado para %s. Response: %s", numero, body)
+        ext_id = ''
+        try:
+            ext_id = body.get('messages', [{}])[0].get('id', '')
         except Exception:
             pass
         return True, ext_id

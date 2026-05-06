@@ -17,6 +17,7 @@ from tests.fixtures.factories import (
     RegraNotificacaoFactory, NotificacaoFactory,
 )
 from portal_comprador.models import AcessoComprador
+from core.hashids_utils import encode_id
 
 User = get_user_model()
 
@@ -217,35 +218,35 @@ class TestSmokeContratos:
         check(staff(dados), '/contratos/wizard/step1/')
 
     def test_detalhe(self, dados):
-        pk = dados['contrato'].pk
-        assert check(staff(dados), f'/contratos/{pk}/') == 200
+        hid = encode_id(dados['contrato'].pk)
+        assert check(staff(dados), f'/contratos/{hid}/') == 200
 
     def test_editar(self, dados):
-        pk = dados['contrato'].pk
-        assert check(staff(dados), f'/contratos/{pk}/editar/') == 200
+        hid = encode_id(dados['contrato'].pk)
+        assert check(staff(dados), f'/contratos/{hid}/editar/') == 200
 
     def test_parcelas(self, dados):
-        pk = dados['contrato'].pk
-        check(staff(dados), f'/contratos/{pk}/parcelas/')
+        hid = encode_id(dados['contrato'].pk)
+        check(staff(dados), f'/contratos/{hid}/parcelas/')
 
     def test_rescisao(self, dados):
-        pk = dados['contrato'].pk
-        assert check(staff(dados), f'/contratos/{pk}/rescisao/') == 200
+        hid = encode_id(dados['contrato'].pk)
+        assert check(staff(dados), f'/contratos/{hid}/rescisao/') == 200
 
     def test_cessao(self, dados):
-        pk = dados['contrato'].pk
-        assert check(staff(dados), f'/contratos/{pk}/cessao/') == 200
+        hid = encode_id(dados['contrato'].pk)
+        assert check(staff(dados), f'/contratos/{hid}/cessao/') == 200
 
     def test_intermediarias(self, dados):
-        pk = dados['contrato'].pk
-        assert check(staff(dados), f'/contratos/{pk}/intermediarias/') == 200
+        hid = encode_id(dados['contrato'].pk)
+        assert check(staff(dados), f'/contratos/{hid}/intermediarias/') == 200
 
     def test_indices(self, dados):
         assert check(staff(dados), '/contratos/indices/') == 200
 
     def test_api_tabela_juros(self, dados):
-        pk = dados['contrato'].pk
-        assert check(staff(dados), f'/contratos/{pk}/tabela-juros/') == 200
+        hid = encode_id(dados['contrato'].pk)
+        assert check(staff(dados), f'/contratos/{hid}/tabela-juros/') == 200
 
     def test_api_wizard_imoveis(self, dados):
         assert check(staff(dados), '/contratos/wizard/api/imoveis/') == 200
@@ -288,8 +289,8 @@ class TestSmokeFinanceiroParcelas:
         assert check(staff(dados), '/financeiro/parcelas/') == 200
 
     def test_detalhe(self, dados):
-        pk = dados['parcela'].pk
-        assert check(staff(dados), f'/financeiro/parcelas/{pk}/') == 200
+        hid = encode_id(dados['parcela'].pk)
+        assert check(staff(dados), f'/financeiro/parcelas/{hid}/') == 200
 
     def test_parcelas_mes(self, dados):
         assert check(staff(dados), '/financeiro/parcelas/mes/') == 200
@@ -302,24 +303,24 @@ class TestSmokeFinanceiroParcelas:
         assert check(staff(dados), f'/financeiro/api/contratos/{pk}/parcelas/') == 200
 
     def test_api_calcular_encargos(self, dados):
-        pk = dados['parcela'].pk
-        assert check(staff(dados), f'/financeiro/parcelas/{pk}/calcular-encargos/') == 200
+        hid = encode_id(dados['parcela'].pk)
+        assert check(staff(dados), f'/financeiro/parcelas/{hid}/calcular-encargos/') == 200
 
     def test_api_parcelas_elegibilidade(self, dados):
         pk = dados['contrato'].pk
         assert check(staff(dados), f'/financeiro/api/contrato/{pk}/parcelas-elegibilidade/') == 200
 
     def test_api_status_boleto(self, dados):
-        pk = dados['parcela'].pk
-        assert check(staff(dados), f'/financeiro/parcelas/{pk}/boleto/status/') == 200
+        hid = encode_id(dados['parcela'].pk)
+        assert check(staff(dados), f'/financeiro/parcelas/{hid}/boleto/status/') == 200
 
     def test_boleto_visualizar(self, dados):
-        pk = dados['parcela'].pk
-        check(staff(dados), f'/financeiro/parcelas/{pk}/boleto/visualizar/')
+        hid = encode_id(dados['parcela'].pk)
+        check(staff(dados), f'/financeiro/parcelas/{hid}/boleto/visualizar/')
 
     def test_segunda_via_boleto_get(self, dados):
-        pk = dados['parcela'].pk
-        check(staff(dados), f'/financeiro/parcelas/{pk}/boleto/segunda-via/')
+        hid = encode_id(dados['parcela'].pk)
+        check(staff(dados), f'/financeiro/parcelas/{hid}/boleto/segunda-via/')
 
     def test_simulador_antecipacao(self, dados):
         pk = dados['contrato'].pk
@@ -388,8 +389,8 @@ class TestSmokeFinanceiroCNAB:
         assert check(staff(dados), '/financeiro/cnab/remessa/gerar/') == 200
 
     def test_detalhe_remessa(self, dados):
-        pk = dados['remessa'].pk
-        assert check(staff(dados), f'/financeiro/cnab/remessa/{pk}/') == 200
+        hid = encode_id(dados['remessa'].pk)
+        assert check(staff(dados), f'/financeiro/cnab/remessa/{hid}/') == 200
 
     def test_listar_retornos(self, dados):
         assert check(staff(dados), '/financeiro/cnab/retorno/') == 200
@@ -398,8 +399,8 @@ class TestSmokeFinanceiroCNAB:
         assert check(staff(dados), '/financeiro/cnab/retorno/upload/') == 200
 
     def test_detalhe_retorno(self, dados):
-        pk = dados['retorno'].pk
-        assert check(staff(dados), f'/financeiro/cnab/retorno/{pk}/') == 200
+        hid = encode_id(dados['retorno'].pk)
+        assert check(staff(dados), f'/financeiro/cnab/retorno/{hid}/') == 200
 
     def test_upload_ofx_get(self, dados):
         assert check(staff(dados), '/financeiro/cnab/ofx/upload/') == 200

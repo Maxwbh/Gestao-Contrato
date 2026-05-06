@@ -1,5 +1,6 @@
 {% extends 'base.html' %}
 {% load format_filters %}
+{% load hashid_tags %}
 
 {% block title %}Parcelas — Contrato {{ contrato.numero_contrato }}{% endblock %}
 
@@ -7,7 +8,7 @@
 <div class="container-fluid py-4">
     <div class="d-flex justify-content-between align-items-center mb-3">
         <h4 class="mb-0">Parcelas do Contrato {{ contrato.numero_contrato }}</h4>
-        <a href="{% url 'contratos:detalhe' pk=contrato.pk %}" class="btn btn-secondary btn-sm">
+        <a href="{% url 'contratos:detalhe' contrato.pk|hashid %}" class="btn btn-secondary btn-sm">
             <i class="fas fa-arrow-left"></i> Voltar
         </a>
     </div>

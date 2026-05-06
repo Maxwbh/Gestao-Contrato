@@ -1,5 +1,6 @@
 {% extends 'base.html' %}
 {% load static %}
+{% load hashid_tags %}
 
 {% block title %}Segunda Via — Parcela {{ parcela.numero_parcela }}{% endblock %}
 
@@ -10,7 +11,7 @@
     <nav aria-label="breadcrumb" class="mb-3">
         <ol class="breadcrumb">
             <li class="breadcrumb-item"><a href="{% url 'financeiro:listar_parcelas' %}">Parcelas</a></li>
-            <li class="breadcrumb-item"><a href="{% url 'financeiro:detalhe_parcela' parcela.pk %}">Parcela {{ parcela.numero_parcela }}</a></li>
+            <li class="breadcrumb-item"><a href="{% url 'financeiro:detalhe_parcela' parcela.pk|hashid %}">Parcela {{ parcela.numero_parcela }}</a></li>
             <li class="breadcrumb-item active">Segunda Via</li>
         </ol>
     </nav>
@@ -82,16 +83,16 @@
             <!-- Ações -->
             <div class="card shadow-sm">
                 <div class="card-body d-flex flex-wrap gap-2 justify-content-between">
-                    <a href="{% url 'financeiro:detalhe_parcela' parcela.pk %}" class="btn btn-outline-secondary">
+                    <a href="{% url 'financeiro:detalhe_parcela' parcela.pk|hashid %}" class="btn btn-outline-secondary">
                         <i class="fas fa-arrow-left me-1"></i> Voltar
                     </a>
                     <div class="d-flex flex-wrap gap-2">
                         {% if parcela.tem_boleto %}
-                        <a href="{% url 'financeiro:download_boleto' parcela.pk %}" class="btn btn-outline-primary">
+                        <a href="{% url 'financeiro:download_boleto' parcela.pk|hashid %}" class="btn btn-outline-primary">
                             <i class="fas fa-download me-1"></i> Baixar boleto original
                         </a>
                         {% endif %}
-                        <a href="{% url 'financeiro:segunda_via_boleto' parcela.pk %}?download=1"
+                        <a href="{% url 'financeiro:segunda_via_boleto' parcela.pk|hashid %}?download=1"
                            class="btn btn-warning text-dark fw-semibold">
                             <i class="fas fa-file-pdf me-1"></i> Gerar Segunda Via (PDF atualizado)
                         </a>

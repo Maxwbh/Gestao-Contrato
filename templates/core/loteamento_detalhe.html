@@ -1,5 +1,6 @@
 {% extends 'base.html' %}
 {% load static %}
+{% load hashid_tags %}
 
 {% block title %}{{ nome_loteamento }} — Gestão de Contratos{% endblock %}
 
@@ -156,7 +157,7 @@
                                 <td>
                                     {% if not imovel.disponivel %}
                                         {% for contrato in imovel.contratos.all|slice:":1" %}
-                                        <a href="{% url 'contratos:detalhe' contrato.pk %}"
+                                        <a href="{% url 'contratos:detalhe' contrato.pk|hashid %}"
                                            class="btn btn-xs btn-outline-primary" style="font-size:.75rem;padding:2px 6px;">
                                             <i class="fas fa-file-contract"></i>
                                         </a>
@@ -236,6 +237,16 @@
     if (bounds.length) {
         map.fitBounds(bounds, {padding: [30, 30], maxZoom: 17});
     }
+
+    // M-14: overlay de planta baixa
+    {% if overlay_json %}
+    (function() {
+        var ov = {{ overlay_json|safe }};
+        var imageOverlay = L.imageOverlay(ov.url, ov.bounds, {opacity: ov.opacidade, interactive: false});
+        imageOverlay.addTo(map);
+        L.control.layers(null, {'Planta Baixa': imageOverlay}, {collapsed: false}).addTo(map);
+    })();
+    {% endif %}
 })();
 </script>
 {% endif %}
