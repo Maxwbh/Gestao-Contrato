@@ -106,6 +106,12 @@ PARAMETROS = [
      'Código da série IGP-M no BCB'),
     ('SELIC_SERIE_ID', 'bcb', 'str', '432',
      'Código da série SELIC no BCB'),
+
+    # ── Segurança — Boleto Público ───────────────────────────────────────────
+    ('BOLETO_TOKEN_DIAS_VALIDADE', 'seguranca', 'int', '90',
+     'Validade em dias do link público de boleto (/b/<uuid>/). 0 = sem expiração.'),
+    ('BOLETO_RATE_LIMIT_POR_HORA', 'seguranca', 'int', '20',
+     'Máximo de acessos por IP por hora na URL pública de boleto.'),
 ]
 
 

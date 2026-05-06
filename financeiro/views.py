@@ -1146,6 +1146,9 @@ def gerar_boleto_parcela(request, pk):
                     contrato.ultimo_mes_boleto_gerado = parcela.numero_parcela
                     contrato.save(update_fields=['ultimo_mes_boleto_gerado'])
 
+            # S-04 — renovar token e expiração a cada nova geração
+            parcela.renovar_token()
+
             return JsonResponse({
                 'sucesso': True,
                 'parcela_id': parcela.id,
@@ -7354,34 +7357,89 @@ def boleto_publico(request, token):
     """
     Exibe o boleto de uma parcela via token UUID público.
     Não requer autenticação. Não expõe IDs internos, CPF nem dados bancários.
+    S-01: verifica expiração do token.
+    S-02: rate limit 20 req/hora por IP (via rate_limit do core).
+    S-03: grava AcessoBoletoPublico em cada acesso bem-sucedido.
+    S-06: headers X-Robots-Tag e Cache-Control.
     """
-    parcela = get_object_or_404(Parcela, token_publico=token)
+    from core.permissions import rate_limit as _rate_limit
+    from .models import AcessoBoletoPublico
+
+    # S-02 — rate limit: 20/hora por IP (cache-based, sem dependência externa)
+    ip = (
+        request.META.get('HTTP_X_FORWARDED_FOR', '').split(',')[0].strip()
+        or request.META.get('REMOTE_ADDR', 'unknown')
+    )
+    import time as _time
+    from django.core.cache import cache as _cache
+    _window = int(_time.time() // 3600)
+    _rl_key = f'boleto_pub_rl:{ip}:{_window}'
+    _count = _cache.get(_rl_key, 0)
+    if _count >= 20:
+        from django.http import HttpResponse as _HR
+        return _HR('Muitos acessos. Tente novamente em até 1 hora.', status=429)
+    _cache.set(_rl_key, _count + 1, timeout=3700)
+
+    parcela = get_object_or_404(
+        Parcela.objects.select_related('contrato', 'contrato__comprador', 'contrato__imobiliaria'),
+        token_publico=token
+    )
+
+    # S-01 — verificar expiração
+    if parcela.token_esta_expirado():
+        response = render(request, 'financeiro/boleto_expirado.html', {
+            'imobiliaria': parcela.contrato.imobiliaria,
+        }, status=410)
+        response['X-Robots-Tag'] = 'noindex, nofollow'
+        return response
+
     contrato = parcela.contrato
     imobiliaria = contrato.imobiliaria
 
+    # S-03 — log de acesso
+    try:
+        AcessoBoletoPublico.objects.create(
+            parcela=parcela,
+            ip=ip,
+            user_agent=request.META.get('HTTP_USER_AGENT', '')[:300],
+        )
+    except Exception:
+        pass  # log nunca bloqueia a resposta
+
     if not parcela.tem_boleto:
-        return render(request, 'financeiro/boleto_publico.html', {
+        response = render(request, 'financeiro/boleto_publico.html', {
             'sem_boleto': True,
             'imobiliaria': imobiliaria,
         })
+    else:
+        valores_hoje = parcela.calcular_valores_hoje()
+        response = render(request, 'financeiro/boleto_publico.html', {
+            'parcela': parcela,
+            'contrato': contrato,
+            'imobiliaria': imobiliaria,
+            'comprador_nome': contrato.comprador.nome,
+            'valores_hoje': valores_hoje,
+            'token': token,
+        })
 
-    valores_hoje = parcela.calcular_valores_hoje()
-
-    return render(request, 'financeiro/boleto_publico.html', {
-        'parcela': parcela,
-        'contrato': contrato,
-        'imobiliaria': imobiliaria,
-        'comprador_nome': contrato.comprador.nome,
-        'valores_hoje': valores_hoje,
-        'token': token,
-    })
+    # S-06 — headers de segurança
+    response['X-Robots-Tag'] = 'noindex, nofollow'
+    response['Cache-Control'] = 'private, no-store'
+    return response
 
 
 def download_boleto_publico(request, token):
     """
     Download do PDF do boleto via token público. Sem autenticação.
+    S-01: verifica expiração. S-06: headers de segurança.
     """
-    parcela = get_object_or_404(Parcela, token_publico=token)
+    parcela = get_object_or_404(
+        Parcela.objects.select_related('contrato__imobiliaria'),
+        token_publico=token
+    )
+    # S-01 — verificar expiração
+    if parcela.token_esta_expirado():
+        return HttpResponse('Link do boleto expirado. Solicite nova segunda via.', status=410)
 
     if not parcela.tem_boleto:
         return HttpResponse('Boleto não disponível.', status=404)
@@ -7391,18 +7449,23 @@ def download_boleto_publico(request, token):
     if parcela.boleto_pdf_db:
         response = HttpResponse(bytes(parcela.boleto_pdf_db), content_type='application/pdf')
         response['Content-Disposition'] = f'inline; filename="{filename}"'
+        response['X-Robots-Tag'] = 'noindex, nofollow'
+        response['Cache-Control'] = 'private, no-store'
         return response
 
     if parcela.boleto_pdf:
         try:
             storage = parcela.boleto_pdf.storage
             if storage.exists(parcela.boleto_pdf.name):
-                return FileResponse(
+                response = FileResponse(
                     parcela.boleto_pdf.open('rb'),
                     as_attachment=False,
                     filename=filename,
                     content_type='application/pdf',
                 )
+                response['X-Robots-Tag'] = 'noindex, nofollow'
+                response['Cache-Control'] = 'private, no-store'
+                return response
         except Exception:
             pass
 
