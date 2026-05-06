@@ -9,13 +9,14 @@ Escopo: api_contratos_lista, api_contrato_detalhe, api_contrato_parcelas,
 """
 import pytest
 from django.urls import reverse
+from core.hashids_utils import encode_id
 
-from tests.fixtures.factories import UserFactory, ContratoFactory
+from tests.fixtures.factories import UserFactory, SuperUserFactory, ContratoFactory
 
 
 @pytest.fixture
 def usuario(db):
-    return UserFactory()
+    return SuperUserFactory()
 
 
 @pytest.fixture
@@ -151,12 +152,12 @@ class TestApiStatusBoleto:
     """Testes da view api_status_boleto"""
 
     def test_requer_autenticacao(self, client, parcela):
-        url = reverse('financeiro:api_status_boleto', kwargs={'pk': parcela.pk})
+        url = reverse('financeiro:api_status_boleto', kwargs={'hid': encode_id(parcela.pk)})
         response = client.get(url)
         assert response.status_code in (302, 403)
 
     def test_retorna_status(self, client_logado, parcela):
-        url = reverse('financeiro:api_status_boleto', kwargs={'pk': parcela.pk})
+        url = reverse('financeiro:api_status_boleto', kwargs={'hid': encode_id(parcela.pk)})
         response = client_logado.get(url)
         assert response.status_code == 200
         data = response.json()
@@ -217,16 +218,16 @@ class TestVisualizarBoleto:
     """Testes da view visualizar_boleto — garante que requer autenticação."""
 
     def test_requer_autenticacao(self, client, parcela):
-        url = reverse('financeiro:visualizar_boleto', kwargs={'pk': parcela.pk})
+        url = reverse('financeiro:visualizar_boleto', kwargs={'hid': encode_id(parcela.pk)})
         response = client.get(url)
         assert response.status_code in (302, 403)
 
     def test_parcela_sem_boleto_redireciona(self, client_logado, parcela):
-        url = reverse('financeiro:visualizar_boleto', kwargs={'pk': parcela.pk})
+        url = reverse('financeiro:visualizar_boleto', kwargs={'hid': encode_id(parcela.pk)})
         response = client_logado.get(url)
         assert response.status_code == 302
 
     def test_parcela_inexistente_retorna_404(self, client_logado):
-        url = reverse('financeiro:visualizar_boleto', kwargs={'pk': 999999})
+        url = reverse('financeiro:visualizar_boleto', kwargs={'hid': encode_id(999999)})
         response = client_logado.get(url)
         assert response.status_code == 404

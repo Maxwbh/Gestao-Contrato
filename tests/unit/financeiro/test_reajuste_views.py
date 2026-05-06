@@ -7,13 +7,14 @@ Escopo: listar_reajustes, reajustes_pendentes, aplicar_reajuste_pagina,
 """
 import pytest
 from django.urls import reverse
+from core.hashids_utils import encode_id
 
-from tests.fixtures.factories import UserFactory, ContratoFactory
+from tests.fixtures.factories import UserFactory, SuperUserFactory, ContratoFactory
 
 
 @pytest.fixture
 def usuario(db):
-    return UserFactory()
+    return SuperUserFactory()
 
 
 @pytest.fixture
@@ -105,12 +106,12 @@ class TestExcluirReajuste:
     """Testes da view excluir_reajuste"""
 
     def test_requer_autenticacao(self, client):
-        url = reverse('financeiro:excluir_reajuste', kwargs={'pk': 1})
+        url = reverse('financeiro:excluir_reajuste', kwargs={'hid': encode_id(1)})
         response = client.post(url, {})
         assert response.status_code in (302, 403)
 
     def test_reajuste_inexistente_retorna_404(self, client_logado):
-        url = reverse('financeiro:excluir_reajuste', kwargs={'pk': 999999})
+        url = reverse('financeiro:excluir_reajuste', kwargs={'hid': encode_id(999999)})
         response = client_logado.post(url, {})
         assert response.status_code == 404
 

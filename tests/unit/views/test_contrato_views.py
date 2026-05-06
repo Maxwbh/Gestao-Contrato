@@ -11,6 +11,7 @@ from decimal import Decimal
 from datetime import date, timedelta
 from django.test import Client
 from django.urls import reverse
+from core.hashids_utils import encode_id
 from django.utils import timezone
 
 
@@ -21,7 +22,7 @@ class TestContratoDetailView:
     def test_detalhe_contrato_basico(self, client_autenticado, contrato_factory):
         """Testa acesso básico aos detalhes do contrato"""
         contrato = contrato_factory()
-        url = reverse('contratos:detalhe', kwargs={'pk': contrato.pk})
+        url = reverse('contratos:detalhe', kwargs={'hid': encode_id(contrato.pk)})
 
         response = client_autenticado.get(url)
 
@@ -30,7 +31,7 @@ class TestContratoDetailView:
 
     def test_detalhe_contrato_contexto_intermediarias(self, client_autenticado, contrato_com_intermediarias):
         """Testa que o contexto inclui informações de intermediárias"""
-        url = reverse('contratos:detalhe', kwargs={'pk': contrato_com_intermediarias.pk})
+        url = reverse('contratos:detalhe', kwargs={'hid': encode_id(contrato_com_intermediarias.pk)})
 
         response = client_autenticado.get(url)
 
@@ -42,7 +43,7 @@ class TestContratoDetailView:
     def test_detalhe_contrato_contexto_bloqueio_reajuste(self, client_autenticado, contrato_factory):
         """Testa que o contexto inclui informações de bloqueio de reajuste"""
         contrato = contrato_factory()
-        url = reverse('contratos:detalhe', kwargs={'pk': contrato.pk})
+        url = reverse('contratos:detalhe', kwargs={'hid': encode_id(contrato.pk)})
 
         response = client_autenticado.get(url)
 
@@ -53,7 +54,7 @@ class TestContratoDetailView:
     def test_detalhe_contrato_contexto_resumo_financeiro(self, client_autenticado, contrato_factory):
         """Testa que o contexto inclui resumo financeiro"""
         contrato = contrato_factory()
-        url = reverse('contratos:detalhe', kwargs={'pk': contrato.pk})
+        url = reverse('contratos:detalhe', kwargs={'hid': encode_id(contrato.pk)})
 
         response = client_autenticado.get(url)
 
@@ -63,7 +64,7 @@ class TestContratoDetailView:
     def test_detalhe_contrato_contexto_ciclo_reajuste(self, client_autenticado, contrato_factory):
         """Testa que o contexto inclui informações de ciclo"""
         contrato = contrato_factory()
-        url = reverse('contratos:detalhe', kwargs={'pk': contrato.pk})
+        url = reverse('contratos:detalhe', kwargs={'hid': encode_id(contrato.pk)})
 
         response = client_autenticado.get(url)
 
@@ -78,9 +79,8 @@ class TestIntermediariasViews:
 
     def test_listar_intermediarias(self, client_autenticado, contrato_com_intermediarias):
         """Testa listagem de intermediárias"""
-        url = reverse('contratos:intermediarias_listar', kwargs={
-            'contrato_id': contrato_com_intermediarias.pk
-        })
+        url = reverse('contratos:intermediarias_listar', kwargs={'contrato_hid': encode_id(contrato_com_intermediarias.pk
+        )})
 
         response = client_autenticado.get(url)
 
@@ -91,9 +91,8 @@ class TestIntermediariasViews:
     def test_criar_intermediaria(self, client_autenticado, contrato_factory):
         """Testa criação de intermediária via API"""
         contrato = contrato_factory()
-        url = reverse('contratos:intermediarias_criar', kwargs={
-            'contrato_id': contrato.pk
-        })
+        url = reverse('contratos:intermediarias_criar', kwargs={'contrato_hid': encode_id(contrato.pk
+        )})
 
         response = client_autenticado.post(
             url,
@@ -112,9 +111,8 @@ class TestIntermediariasViews:
 
     def test_criar_intermediaria_limite_maximo(self, client_autenticado, contrato_com_30_intermediarias):
         """Testa que não permite criar mais de 30 intermediárias"""
-        url = reverse('contratos:intermediarias_criar', kwargs={
-            'contrato_id': contrato_com_30_intermediarias.pk
-        })
+        url = reverse('contratos:intermediarias_criar', kwargs={'contrato_hid': encode_id(contrato_com_30_intermediarias.pk
+        )})
 
         response = client_autenticado.post(
             url,
@@ -132,7 +130,7 @@ class TestIntermediariasViews:
     def test_atualizar_intermediaria(self, client_autenticado, contrato_com_intermediarias):
         """Testa atualização de intermediária"""
         intermediaria = contrato_com_intermediarias.intermediarias.first()
-        url = reverse('contratos:intermediarias_atualizar', kwargs={'pk': intermediaria.pk})
+        url = reverse('contratos:intermediarias_atualizar', kwargs={'hid': encode_id(intermediaria.pk)})
 
         response = client_autenticado.post(
             url,
@@ -146,7 +144,7 @@ class TestIntermediariasViews:
     def test_excluir_intermediaria(self, client_autenticado, contrato_com_intermediarias):
         """Testa exclusão de intermediária"""
         intermediaria = contrato_com_intermediarias.intermediarias.first()
-        url = reverse('contratos:intermediarias_excluir', kwargs={'pk': intermediaria.pk})
+        url = reverse('contratos:intermediarias_excluir', kwargs={'hid': encode_id(intermediaria.pk)})
 
         response = client_autenticado.post(url)
 
@@ -155,9 +153,8 @@ class TestIntermediariasViews:
 
     def test_api_intermediarias_contrato(self, client_autenticado, contrato_com_intermediarias):
         """Testa API de listagem de intermediárias em JSON"""
-        url = reverse('contratos:intermediarias_api', kwargs={
-            'contrato_id': contrato_com_intermediarias.pk
-        })
+        url = reverse('contratos:intermediarias_api', kwargs={'contrato_hid': encode_id(contrato_com_intermediarias.pk
+        )})
 
         response = client_autenticado.get(url)
 
@@ -174,7 +171,7 @@ class TestPagamentoIntermediaria:
     def test_pagar_intermediaria(self, client_autenticado, contrato_com_intermediarias):
         """Testa registro de pagamento de intermediária"""
         intermediaria = contrato_com_intermediarias.intermediarias.filter(paga=False).first()
-        url = reverse('contratos:intermediarias_pagar', kwargs={'pk': intermediaria.pk})
+        url = reverse('contratos:intermediarias_pagar', kwargs={'hid': encode_id(intermediaria.pk)})
 
         response = client_autenticado.post(
             url,
@@ -194,7 +191,7 @@ class TestPagamentoIntermediaria:
         intermediaria.paga = True
         intermediaria.save()
 
-        url = reverse('contratos:intermediarias_pagar', kwargs={'pk': intermediaria.pk})
+        url = reverse('contratos:intermediarias_pagar', kwargs={'hid': encode_id(intermediaria.pk)})
 
         response = client_autenticado.post(
             url,
@@ -216,7 +213,8 @@ def client_autenticado(db, django_user_model):
     django_user_model.objects.create_user(
         username='testuser',
         email='test@test.com',
-        password='testpass123'
+        password='testpass123',
+        is_staff=True,
     )
     client = Client()
     client.login(username='testuser', password='testpass123')

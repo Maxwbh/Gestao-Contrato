@@ -12,6 +12,7 @@ from decimal import Decimal
 from datetime import date, timedelta
 from django.test import Client
 from django.urls import reverse
+from core.hashids_utils import encode_id
 from django.utils import timezone
 
 
@@ -126,7 +127,7 @@ class TestBloqueioBoletoPorReajuste:
     def test_gerar_boleto_ciclo_1_liberado(self, client_autenticado, contrato_com_parcelas):
         """Testa que boleto do ciclo 1 é liberado"""
         parcela = contrato_com_parcelas.parcelas.filter(numero_parcela__lte=12).first()
-        url = reverse('financeiro:gerar_boleto', kwargs={'pk': parcela.pk})
+        url = reverse('financeiro:gerar_boleto', kwargs={'hid': encode_id(parcela.pk)})
 
         response = client_autenticado.post(url)
 
@@ -140,7 +141,7 @@ class TestBloqueioBoletoPorReajuste:
         if not parcela:
             pytest.skip("Parcela do ciclo 2 não encontrada")
 
-        url = reverse('financeiro:gerar_boleto', kwargs={'pk': parcela.pk})
+        url = reverse('financeiro:gerar_boleto', kwargs={'hid': encode_id(parcela.pk)})
 
         response = client_autenticado.post(url)
 
@@ -167,7 +168,7 @@ class TestBloqueioBoletoPorReajuste:
         if not parcela:
             pytest.skip("Parcela do ciclo 2 não encontrada")
 
-        url = reverse('financeiro:gerar_boleto', kwargs={'pk': parcela.pk})
+        url = reverse('financeiro:gerar_boleto', kwargs={'hid': encode_id(parcela.pk)})
 
         response = client_autenticado.post(url, data={'force': 'true'})
 
@@ -258,7 +259,8 @@ def client_autenticado(db, django_user_model):
     django_user_model.objects.create_user(
         username='testuser',
         email='test@test.com',
-        password='testpass123'
+        password='testpass123',
+        is_staff=True,
     )
     client = Client()
     client.login(username='testuser', password='testpass123')

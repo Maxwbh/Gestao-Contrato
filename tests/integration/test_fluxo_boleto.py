@@ -5,13 +5,14 @@ Cobre: geração de boleto → status → download → cancelamento
 """
 import pytest
 from django.urls import reverse
+from core.hashids_utils import encode_id
 
-from tests.fixtures.factories import UserFactory, ContratoFactory
+from tests.fixtures.factories import UserFactory, SuperUserFactory, ContratoFactory
 
 
 @pytest.fixture
 def usuario(db):
-    return UserFactory()
+    return SuperUserFactory()
 
 
 @pytest.fixture
@@ -34,7 +35,7 @@ class TestFluxoBoleto:
         parcela = contrato.parcelas.order_by('numero_parcela').first()
         assert not parcela.nosso_numero  # boleto não gerado = sem nosso_numero
 
-        url = reverse('financeiro:api_status_boleto', kwargs={'pk': parcela.pk})
+        url = reverse('financeiro:api_status_boleto', kwargs={'hid': encode_id(parcela.pk)})
         resp = client_logado.get(url)
         assert resp.status_code == 200
         data = resp.json()
@@ -48,7 +49,7 @@ class TestFluxoBoleto:
         if parcela is None:
             pytest.skip('Sem parcela sem boleto')
 
-        url = reverse('financeiro:download_boleto', kwargs={'pk': parcela.pk})
+        url = reverse('financeiro:download_boleto', kwargs={'hid': encode_id(parcela.pk)})
         resp = client_logado.get(url)
         assert resp.status_code == 302
 
@@ -58,6 +59,6 @@ class TestFluxoBoleto:
         if parcela is None:
             pytest.skip('Todas parcelas pagas')
 
-        url = reverse('financeiro:segunda_via_boleto', kwargs={'pk': parcela.pk})
+        url = reverse('financeiro:segunda_via_boleto', kwargs={'hid': encode_id(parcela.pk)})
         resp = client_logado.get(url)
         assert resp.status_code in (200, 302)

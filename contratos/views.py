@@ -434,7 +434,7 @@ class ContratoDeleteView(LoginRequiredMixin, HashidMixin, TenantMixin, DeleteVie
         parcelas_pagas = self.object.parcelas.filter(pago=True).count()
         if parcelas_pagas > 0:
             messages.error(self.request, f'Não é possível cancelar o contrato. Existem {parcelas_pagas} parcela(s) já paga(s).')
-            return redirect('contratos:detalhe', pk=self.object.pk)
+            return redirect('contratos:detalhe', hid=encode_id(self.object.pk))
 
         # Soft delete - apenas muda o status para CANCELADO
         self.object.status = StatusContrato.CANCELADO
@@ -1045,7 +1045,7 @@ class IntermediariasListView(LoginRequiredMixin, PaginacaoMixin, ListView):
 
     def get_queryset(self):
         self.contrato = get_object_or_404(
-            Contrato.objects.select_related('imobiliaria'), pk=self.kwargs['contrato_id']
+            Contrato.objects.select_related('imobiliaria'), pk=_decode_id(self.kwargs['contrato_hid'])
         )
         verificar_acesso_tenant(self.request, self.contrato.imobiliaria)
         return PrestacaoIntermediaria.objects.filter(
@@ -1878,7 +1878,7 @@ class ContratoWizardView(LoginRequiredMixin, View):
                     f'Contrato {contrato.numero_contrato} criado com sucesso! '
                     f'{contrato.parcelas.count()} parcelas geradas.'
                 )
-                return redirect('contratos:detalhe', pk=contrato.pk)
+                return redirect('contratos:detalhe', hid=encode_id(contrato.pk))
             except Exception as e:
                 logger.exception('Erro ao salvar wizard: %s', e)
                 messages.error(request, f'Erro ao criar contrato: {e}')

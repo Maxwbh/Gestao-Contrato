@@ -32,6 +32,7 @@ from unittest.mock import patch
 
 from django.test import Client
 from django.urls import reverse
+from core.hashids_utils import encode_id
 
 # ── Constantes do cenário ──────────────────────────────────────────────────────
 PV_BRUTO = Decimal('110000.00')   # valor_financiado antes de deduzir intermediárias
@@ -252,7 +253,7 @@ class TestHU360FluxoCompleto:
         # ── PASSO 4 — Boleto para intermediária mes=6 ──────────────────────────
         url_inter = reverse(
             'contratos:intermediarias_gerar_boleto',
-            kwargs={'pk': inter1.pk},
+            kwargs={'hid': encode_id(inter1.pk)},
         )
         with patch.object(Parcela, 'gerar_boleto', _mock_gerar_boleto):
             resp = cli.post(url_inter, {})
@@ -508,7 +509,7 @@ class TestBoletoIntermediaria:
         from financeiro.models import Parcela, TipoParcela
         _, cli = usuario_cli
         inter = contrato_hu360.intermediarias.get(numero_sequencial=1)
-        url = reverse('contratos:intermediarias_gerar_boleto', kwargs={'pk': inter.pk})
+        url = reverse('contratos:intermediarias_gerar_boleto', kwargs={'hid': encode_id(inter.pk)})
 
         with patch.object(Parcela, 'gerar_boleto', _mock_gerar_boleto):
             resp = cli.post(url, {})
@@ -524,7 +525,7 @@ class TestBoletoIntermediaria:
         from financeiro.models import Parcela
         _, cli = usuario_cli
         inter = contrato_hu360.intermediarias.get(numero_sequencial=1)
-        url = reverse('contratos:intermediarias_gerar_boleto', kwargs={'pk': inter.pk})
+        url = reverse('contratos:intermediarias_gerar_boleto', kwargs={'hid': encode_id(inter.pk)})
 
         with patch.object(Parcela, 'gerar_boleto', _mock_gerar_boleto):
             cli.post(url, {})
@@ -538,7 +539,7 @@ class TestBoletoIntermediaria:
         from financeiro.models import Parcela
         _, cli = usuario_cli
         inter = contrato_hu360.intermediarias.get(numero_sequencial=1)
-        url = reverse('contratos:intermediarias_gerar_boleto', kwargs={'pk': inter.pk})
+        url = reverse('contratos:intermediarias_gerar_boleto', kwargs={'hid': encode_id(inter.pk)})
 
         with patch.object(Parcela, 'gerar_boleto', _mock_gerar_boleto):
             cli.post(url, {})  # primeira geração
@@ -553,7 +554,7 @@ class TestBoletoIntermediaria:
         inter = contrato_hu360.intermediarias.get(numero_sequencial=1)
         inter.paga = True
         inter.save()
-        url = reverse('contratos:intermediarias_gerar_boleto', kwargs={'pk': inter.pk})
+        url = reverse('contratos:intermediarias_gerar_boleto', kwargs={'hid': encode_id(inter.pk)})
         resp = cli.post(url, {})
         assert resp.status_code == 400
         assert resp.json()['sucesso'] is False
@@ -561,7 +562,7 @@ class TestBoletoIntermediaria:
     def test_requer_autenticacao(self, contrato_hu360, client):
         """View requer autenticação — retorna redirect (302) sem login."""
         inter = contrato_hu360.intermediarias.get(numero_sequencial=1)
-        url = reverse('contratos:intermediarias_gerar_boleto', kwargs={'pk': inter.pk})
+        url = reverse('contratos:intermediarias_gerar_boleto', kwargs={'hid': encode_id(inter.pk)})
         resp = client.post(url, {})
         assert resp.status_code in (302, 403)
 
