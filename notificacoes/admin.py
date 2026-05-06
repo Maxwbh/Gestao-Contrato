@@ -63,6 +63,18 @@ class ConfiguracaoWhatsAppAdmin(admin.ModelAdmin):
             ),
             'classes': ('collapse',),
         }),
+        ('BSP Brasileiro (Hablla / Poli Digital / Digisac)', {
+            'fields': ('api_url', 'api_key', 'phone_number_id'),
+            'description': (
+                'Preencha apenas para provedor <strong>BSP</strong>. '
+                'api_url = URL base do BSP (ex: https://app.hablla.com). '
+                'api_key = Bearer token / API key do BSP. '
+                'phone_number_id = ID do número no BSP / Meta Business. '
+                'Webhook: <code>/notificacoes/webhook/bsp/</code> — '
+                'hub.verify_token = api_key.'
+            ),
+            'classes': ('collapse',),
+        }),
         ('Metadados', {
             'fields': ('criado_em', 'atualizado_em'),
             'classes': ('collapse',),
