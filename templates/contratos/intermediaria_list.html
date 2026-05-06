@@ -1,5 +1,6 @@
 {% extends 'base.html' %}
 {% load humanize %}
+{% load hashid_tags %}
 {% load financeiro_tags %}
 
 {% block title %}Intermediárias — {{ contrato.numero_contrato }}{% endblock %}
@@ -19,7 +20,7 @@
                 &mdash; {{ contrato.comprador.nome }}
             </p>
         </div>
-        <a href="{% url 'contratos:detalhe' contrato.pk %}" class="btn btn-outline-secondary">
+        <a href="{% url 'contratos:detalhe' contrato.pk|hashid %}" class="btn btn-outline-secondary">
             <i class="fas fa-arrow-left"></i> Voltar ao Contrato
         </a>
     </div>
@@ -103,7 +104,7 @@
                         </td>
                         <td>
                             {% if inter.parcela_vinculada %}
-                                <a href="{% url 'contratos:detalhe' contrato.pk %}" class="text-muted small">
+                                <a href="{% url 'contratos:detalhe' contrato.pk|hashid %}" class="text-muted small">
                                     Parcela #{{ inter.parcela_vinculada.numero_parcela }}
                                 </a>
                             {% else %}

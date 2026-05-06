@@ -1,5 +1,6 @@
 {% extends 'base.html' %}
 {% load format_filters %}
+{% load hashid_tags %}
 
 {% block title %}Contrato {{ contrato.numero_contrato }} - Gestao de Contratos{% endblock %}
 
@@ -222,7 +223,7 @@
             <i class="fas fa-exclamation-triangle me-2 fs-5"></i>
             <div>
                 <strong>{{ intermediarias_vencidas_sem_boleto|length }} prestação(ões) intermediária(s) vencida(s)</strong> sem boleto gerado.
-                <a href="{% url 'contratos:intermediarias_listar' contrato.pk %}" class="alert-link ms-2">
+                <a href="{% url 'contratos:intermediarias_listar' contrato.pk|hashid %}" class="alert-link ms-2">
                     Ver intermediárias &rarr;
                 </a>
             </div>
@@ -951,7 +952,7 @@
                             {% if intermediarias_vencidas_sem_boleto %}
                             <span class="badge bg-danger">{{ intermediarias_vencidas_sem_boleto|length }} vencidas</span>
                             {% endif %}
-                            <a href="{% url 'contratos:intermediarias_listar' contrato.pk %}" class="btn btn-sm btn-outline-dark ms-2">
+                            <a href="{% url 'contratos:intermediarias_listar' contrato.pk|hashid %}" class="btn btn-sm btn-outline-dark ms-2">
                                 <i class="fas fa-list"></i> Ver todas
                             </a>
                         </div>
@@ -996,7 +997,7 @@
                                 {% if total_intermediarias > 10 %}
                                 <tr>
                                     <td colspan="5" class="text-center text-muted small py-2">
-                                        <a href="{% url 'contratos:intermediarias_listar' contrato.pk %}">
+                                        <a href="{% url 'contratos:intermediarias_listar' contrato.pk|hashid %}">
                                             + {{ total_intermediarias|add:"-10" }} mais &rarr;
                                         </a>
                                     </td>
@@ -1087,11 +1088,11 @@
                                 </td>
                                 <td class="text-center">
                                     <div class="btn-group btn-group-sm">
-                                        <a href="{% url 'financeiro:visualizar_boleto' parcela.pk %}"
+                                        <a href="{% url 'financeiro:visualizar_boleto' parcela.pk|hashid %}"
                                            class="btn btn-outline-primary" title="Visualizar" target="_blank">
                                             <i class="fas fa-eye"></i>
                                         </a>
-                                        <a href="{% url 'financeiro:download_boleto' parcela.pk %}"
+                                        <a href="{% url 'financeiro:download_boleto' parcela.pk|hashid %}"
                                            class="btn btn-outline-success" title="Download PDF">
                                             <i class="fas fa-download"></i>
                                         </a>
@@ -1270,7 +1271,7 @@
                     <i class="fas fa-arrow-left"></i> Voltar
                 </a>
                 <div class="d-flex flex-wrap gap-2">
-                    <a href="{% url 'contratos:editar' contrato.pk %}" class="btn btn-primary">
+                    <a href="{% url 'contratos:editar' contrato.pk|hashid %}" class="btn btn-primary">
                         <i class="fas fa-edit"></i> Editar Contrato
                     </a>
                     {% if contrato.status != 'CANCELADO' %}
@@ -1285,10 +1286,10 @@
                        title="Renegociar parcelas em atraso">
                         <i class="fas fa-handshake me-1"></i> Renegociar
                     </a>
-                    <a href="{% url 'contratos:calcular_rescisao' contrato.pk %}" class="btn btn-outline-danger">
+                    <a href="{% url 'contratos:calcular_rescisao' contrato.pk|hashid %}" class="btn btn-outline-danger">
                         <i class="fas fa-file-contract me-1"></i> Calcular Rescisão
                     </a>
-                    <a href="{% url 'contratos:calcular_cessao' contrato.pk %}" class="btn btn-outline-warning">
+                    <a href="{% url 'contratos:calcular_cessao' contrato.pk|hashid %}" class="btn btn-outline-warning">
                         <i class="fas fa-exchange-alt me-1"></i> Calcular Cessão
                     </a>
                     <button type="button" class="btn btn-danger" onclick="confirmarCancelamento()">
@@ -1412,7 +1413,7 @@
                     Voltar
                 </button>
                 {% if parcelas_pagas == 0 %}
-                <form action="{% url 'contratos:excluir' contrato.pk %}" method="post" style="display: inline;">
+                <form action="{% url 'contratos:excluir' contrato.pk|hashid %}" method="post" style="display: inline;">
                     {% csrf_token %}
                     <button type="submit" class="btn btn-danger">
                         <i class="fas fa-ban"></i> Confirmar Cancelamento
@@ -2478,7 +2479,7 @@ function excluirReajuste(reajusteId, ciclo, percentual) {
 }
 
 // ============ Q-04: TABELA DE JUROS ESCALANTES ============
-var urlTabelaJuros = "{% url 'contratos:api_tabela_juros' contrato.pk %}";
+var urlTabelaJuros = "{% url 'contratos:api_tabela_juros' contrato.pk|hashid %}";
 var urlTabelaJurosDeleteBase = "{% url 'contratos:api_tabela_juros_delete' 9999999 %}".replace('9999999/excluir/', '');
 
 function salvarFaixaJuros() {

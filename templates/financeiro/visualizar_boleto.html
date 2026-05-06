@@ -1,4 +1,5 @@
 {% load format_filters %}
+{% load hashid_tags %}
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
@@ -28,7 +29,7 @@
             <nav aria-label="breadcrumb">
                 <ol class="breadcrumb mb-0">
                     <li class="breadcrumb-item"><a href="{{ voltar_url }}">Voltar</a></li>
-                    <li class="breadcrumb-item"><a href="{% url 'financeiro:detalhe_parcela' parcela.pk %}">Parcela {{ parcela.numero_parcela }}</a></li>
+                    <li class="breadcrumb-item"><a href="{% url 'financeiro:detalhe_parcela' parcela.pk|hashid %}">Parcela {{ parcela.numero_parcela }}</a></li>
                     <li class="breadcrumb-item active">Boleto</li>
                 </ol>
             </nav>
@@ -215,7 +216,7 @@
                            class="btn btn-success" target="_blank">
                             <i class="fas fa-eye me-1"></i>Visualizar PDF
                         </a>
-                        <a href="{% url 'financeiro:download_boleto' parcela.pk %}"
+                        <a href="{% url 'financeiro:download_boleto' parcela.pk|hashid %}"
                            class="btn btn-primary">
                             <i class="fas fa-download me-1"></i>Download PDF
                         </a>
@@ -251,7 +252,7 @@
                     <dl class="row mb-0">
                         <dt class="col-sm-5">Contrato:</dt>
                         <dd class="col-sm-7">
-                            <a href="{% url 'contratos:detalhe' contrato.pk %}">
+                            <a href="{% url 'contratos:detalhe' contrato.pk|hashid %}">
                                 {{ contrato.numero_contrato }}
                             </a>
                         </dd>
@@ -316,7 +317,7 @@
                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
             <form id="formCancelar" method="post"
-                  action="{% url 'financeiro:cancelar_boleto' parcela.pk %}">
+                  action="{% url 'financeiro:cancelar_boleto' parcela.pk|hashid %}">
                 {% csrf_token %}
                 <div class="modal-body">
                     <p>Tem certeza que deseja cancelar este boleto?</p>

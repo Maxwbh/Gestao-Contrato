@@ -34,6 +34,17 @@ def _imobs_para_usuario(user):
         return Imobiliaria.objects.filter(ativo=True)
     return get_imobiliarias_usuario(user)
 
+
+def _hid_to_pk(hid: str) -> int:
+    """U-03: decodifica hashid → pk inteiro; levanta Http404 se inválido."""
+    from django.http import Http404
+    from core.hashids_utils import decode_id
+    pk = decode_id(hid)
+    if pk is None:
+        raise Http404
+    return pk
+
+
 logger = logging.getLogger(__name__)
 
 
@@ -583,8 +594,9 @@ def listar_parcelas(request):
 
 
 @login_required
-def detalhe_parcela(request, pk):
+def detalhe_parcela(request, hid):
     """Exibe detalhes de uma parcela específica"""
+    pk = _hid_to_pk(hid)
     parcela = get_object_or_404(
         Parcela.objects.select_related(
             'contrato',
@@ -610,11 +622,12 @@ def detalhe_parcela(request, pk):
 
 @login_required
 @require_POST
-def notificar_inadimplente(request, pk):
+def notificar_inadimplente(request, hid):
     """
     3.25 — Envia notificação de inadimplência manualmente para o comprador de uma parcela.
     Retorna JSON {sucesso, mensagem/erro}.
     """
+    pk = _hid_to_pk(hid)
     parcela = get_object_or_404(Parcela.objects.select_related('contrato__imobiliaria'), pk=pk)
     verificar_acesso_tenant(request, parcela.contrato.imobiliaria)
 
@@ -700,8 +713,9 @@ def notificar_inadimplente(request, pk):
 
 
 @login_required
-def registrar_pagamento(request, pk):
+def registrar_pagamento(request, hid):
     """Registra o pagamento de uma parcela"""
+    pk = _hid_to_pk(hid)
     from datetime import datetime
 
     parcela = get_object_or_404(Parcela.objects.select_related('contrato__imobiliaria'), pk=pk)
@@ -1082,7 +1096,7 @@ def dashboard_imobiliaria(request, imobiliaria_id):
 
 @login_required
 @require_POST
-def gerar_boleto_parcela(request, pk):
+def gerar_boleto_parcela(request, hid):
     """
     Gera boleto para uma parcela específica.
 
@@ -1090,6 +1104,7 @@ def gerar_boleto_parcela(request, pk):
     o ciclo de reajuste. Boletos após o 12º mês só podem ser gerados
     após aplicação do reajuste correspondente.
     """
+    pk = _hid_to_pk(hid)
     parcela = get_object_or_404(Parcela.objects.select_related('contrato__imobiliaria'), pk=pk)
     verificar_acesso_tenant(request, parcela.contrato.imobiliaria)
 
@@ -1295,11 +1310,12 @@ def gerar_boletos_contrato(request, contrato_id):
 
 @login_required
 @require_GET
-def download_boleto(request, pk):
+def download_boleto(request, hid):
     """
     Download do PDF do boleto.
     Regenera automaticamente se o arquivo não existir (storage efêmero no Render).
     """
+    pk = _hid_to_pk(hid)
     parcela = get_object_or_404(Parcela.objects.select_related('contrato__imobiliaria'), pk=pk)
     verificar_acesso_tenant(request, parcela.contrato.imobiliaria)
 
@@ -1402,12 +1418,13 @@ def download_zip_boletos(request, contrato_id):
 
 
 @login_required
-def segunda_via_boleto(request, pk):
+def segunda_via_boleto(request, hid):
     """
     Segunda via de boleto com juros/multa atualizados para hoje.
     GET → página de preview com valores atualizados.
     GET ?download=1 → gera PDF fresco via BRCobrança e retorna download.
     """
+    pk = _hid_to_pk(hid)
     from financeiro.services.boleto_service import BoletoService
 
     parcela = get_object_or_404(Parcela.objects.select_related('contrato__imobiliaria'), pk=pk)
@@ -1467,11 +1484,12 @@ def segunda_via_boleto(request, pk):
 @login_required
 @require_GET
 @xframe_options_sameorigin
-def visualizar_boleto(request, pk):
+def visualizar_boleto(request, hid):
     """
     Exibe página com dados do boleto de uma parcela.
     Permite carregamento em iframe do mesmo domínio.
     """
+    pk = _hid_to_pk(hid)
     parcela = get_object_or_404(Parcela.objects.select_related('contrato__imobiliaria'), pk=pk)
     verificar_acesso_tenant(request, parcela.contrato.imobiliaria)
 
@@ -1509,10 +1527,11 @@ def visualizar_boleto(request, pk):
 
 @login_required
 @require_POST
-def cancelar_boleto(request, pk):
+def cancelar_boleto(request, hid):
     """
     Cancela um boleto.
     """
+    pk = _hid_to_pk(hid)
     parcela = get_object_or_404(Parcela.objects.select_related('contrato__imobiliaria'), pk=pk)
     verificar_acesso_tenant(request, parcela.contrato.imobiliaria)
 
@@ -1545,10 +1564,11 @@ def cancelar_boleto(request, pk):
 
 
 @login_required
-def api_status_boleto(request, pk):
+def api_status_boleto(request, hid):
     """
     Retorna o status do boleto de uma parcela (para atualização via AJAX).
     """
+    pk = _hid_to_pk(hid)
     parcela = get_object_or_404(Parcela.objects.select_related('contrato__imobiliaria'), pk=pk)
     verificar_acesso_tenant(request, parcela.contrato.imobiliaria)
 
@@ -1624,8 +1644,9 @@ def listar_arquivos_remessa(request):
 
 
 @login_required
-def detalhe_arquivo_remessa(request, pk):
+def detalhe_arquivo_remessa(request, hid):
     """Exibe detalhes de um arquivo de remessa"""
+    pk = _hid_to_pk(hid)
     from .models import ArquivoRemessa
 
     arquivo = get_object_or_404(
@@ -1820,8 +1841,9 @@ def gerar_arquivo_remessa(request):
 
 @login_required
 @require_POST
-def regenerar_arquivo_remessa(request, pk):
+def regenerar_arquivo_remessa(request, hid):
     """Regenera um arquivo de remessa existente"""
+    pk = _hid_to_pk(hid)
     from .models import ArquivoRemessa
     from .services.cnab_service import CNABService
 
@@ -1860,8 +1882,9 @@ def regenerar_arquivo_remessa(request, pk):
 
 @login_required
 @require_POST
-def marcar_remessa_enviada(request, pk):
+def marcar_remessa_enviada(request, hid):
     """Marca um arquivo de remessa como enviado ao banco"""
+    pk = _hid_to_pk(hid)
     from .models import ArquivoRemessa
 
     from .models import StatusArquivoRemessa
@@ -1883,11 +1906,12 @@ def marcar_remessa_enviada(request, pk):
 
 @login_required
 @require_POST
-def excluir_arquivo_remessa(request, pk):
+def excluir_arquivo_remessa(request, hid):
     """
     Exclui um arquivo de remessa que ainda não foi enviado ao banco.
     Parcelas associadas retornam automaticamente ao pool de disponíveis para remessa.
     """
+    pk = _hid_to_pk(hid)
     from .models import ArquivoRemessa, StatusArquivoRemessa
 
     arquivo = get_object_or_404(ArquivoRemessa.objects.select_related('conta_bancaria__imobiliaria'), pk=pk)
@@ -1908,8 +1932,9 @@ def excluir_arquivo_remessa(request, pk):
 
 
 @login_required
-def download_arquivo_remessa(request, pk):
+def download_arquivo_remessa(request, hid):
     """Download do arquivo de remessa"""
+    pk = _hid_to_pk(hid)
     from .models import ArquivoRemessa
 
     arquivo = get_object_or_404(ArquivoRemessa.objects.select_related('conta_bancaria__imobiliaria'), pk=pk)
@@ -2081,8 +2106,9 @@ def listar_arquivos_retorno(request):
 
 
 @login_required
-def detalhe_arquivo_retorno(request, pk):
+def detalhe_arquivo_retorno(request, hid):
     """Exibe detalhes de um arquivo de retorno"""
+    pk = _hid_to_pk(hid)
     from .models import ArquivoRetorno
 
     arquivo = get_object_or_404(
@@ -2161,8 +2187,9 @@ def upload_arquivo_retorno(request):
 
 @login_required
 @require_POST
-def processar_arquivo_retorno(request, pk):
+def processar_arquivo_retorno(request, hid):
     """Processa um arquivo de retorno (realiza as baixas)"""
+    pk = _hid_to_pk(hid)
     from .models import ArquivoRetorno
     from .services.cnab_service import CNABService
 
@@ -2203,8 +2230,9 @@ def processar_arquivo_retorno(request, pk):
 
 
 @login_required
-def download_arquivo_retorno(request, pk):
+def download_arquivo_retorno(request, hid):
     """Download do arquivo de retorno"""
+    pk = _hid_to_pk(hid)
     from .models import ArquivoRetorno
 
     arquivo = get_object_or_404(ArquivoRetorno.objects.select_related('conta_bancaria__imobiliaria'), pk=pk)
@@ -2234,11 +2262,12 @@ def download_arquivo_retorno(request, pk):
 
 @login_required
 @require_POST
-def pagar_parcela_ajax(request, pk):
+def pagar_parcela_ajax(request, hid):
     """
     Registra o pagamento de uma parcela via AJAX.
     Permite editar juros, multa e desconto manualmente.
     """
+    pk = _hid_to_pk(hid)
     from .models import HistoricoPagamento
 
     parcela = get_object_or_404(Parcela, pk=pk)
@@ -3799,10 +3828,11 @@ def aplicar_reajuste_informado_lote(request):
 
 @login_required
 @require_POST
-def excluir_reajuste(request, pk):
+def excluir_reajuste(request, hid):
     """
     Exclui um reajuste e reverte os valores das parcelas.
     """
+    pk = _hid_to_pk(hid)
     reajuste = get_object_or_404(Reajuste, pk=pk)
 
     try:
@@ -3858,8 +3888,9 @@ def excluir_reajuste(request, pk):
 
 
 @login_required
-def api_reajuste_detail(request, pk):
+def api_reajuste_detail(request, hid):
     """Retorna JSON completo de um reajuste para os modais Visualizar/Alterar."""
+    pk = _hid_to_pk(hid)
     reajuste = get_object_or_404(Reajuste, pk=pk)
     contrato = reajuste.contrato
 
@@ -3944,12 +3975,13 @@ def api_reajuste_detail(request, pk):
 
 @login_required
 @require_POST
-def alterar_indice_reajuste(request, pk):
+def alterar_indice_reajuste(request, hid):
     """
     Altera o percentual de um reajuste (entrada manual). O tipo de índice é preservado.
     Se o reajuste já foi aplicado, reverte o fator antigo nas parcelas não pagas
     e reaplica automaticamente com o novo percentual.
     """
+    pk = _hid_to_pk(hid)
     import json
 
     try:
@@ -6791,7 +6823,7 @@ def upload_ofx(request):
 
 @login_required
 @require_POST
-def enviar_boleto_whatsapp(request, pk):
+def enviar_boleto_whatsapp(request, hid):
     """
     POST /financeiro/parcelas/<pk>/boleto/whatsapp/
 
@@ -6799,6 +6831,7 @@ def enviar_boleto_whatsapp(request, pk):
     Campos opcionais no body (JSON ou form):
       - telefone: destinatário (ex: +5511999999999). Se omitido, usa comprador.telefone.
     """
+    pk = _hid_to_pk(hid)
     parcela = get_object_or_404(Parcela, pk=pk)
 
     import json as _json
@@ -6850,7 +6883,7 @@ def enviar_boleto_whatsapp(request, pk):
 
 @login_required
 @require_POST
-def enviar_boleto_sms(request, pk):
+def enviar_boleto_sms(request, hid):
     """
     POST /financeiro/parcelas/<pk>/boleto/sms/
 
@@ -6858,6 +6891,7 @@ def enviar_boleto_sms(request, pk):
     Campos opcionais no body (JSON ou form):
       - telefone: destinatário (ex: +5511999999999). Se omitido, usa comprador.telefone.
     """
+    pk = _hid_to_pk(hid)
     parcela = get_object_or_404(Parcela, pk=pk)
 
     import json as _json
@@ -7471,3 +7505,31 @@ def download_boleto_publico(request, token):
 
     logger.warning('[boleto_publico] PDF ausente para token=%s parcela_pk=%s', token, parcela.pk)
     return HttpResponse('PDF do boleto não disponível no momento.', status=404)
+
+
+# =============================================================================
+# U-05: Compat redirects — PKs inteiros → hashids (manter por 30 dias)
+# =============================================================================
+
+@login_required
+def parcela_pk_compat(request, pk):
+    """Redireciona URL legada /parcelas/<int:pk>/ para /parcelas/<hid>/."""
+    from core.hashids_utils import encode_id
+    hid = encode_id(pk)
+    return redirect('financeiro:detalhe_parcela', hid=hid, permanent=True)
+
+
+@login_required
+def remessa_pk_compat(request, pk):
+    """Redireciona URL legada /cnab/remessa/<int:pk>/ para hashid."""
+    from core.hashids_utils import encode_id
+    hid = encode_id(pk)
+    return redirect('financeiro:detalhe_remessa', hid=hid, permanent=True)
+
+
+@login_required
+def retorno_pk_compat(request, pk):
+    """Redireciona URL legada /cnab/retorno/<int:pk>/ para hashid."""
+    from core.hashids_utils import encode_id
+    hid = encode_id(pk)
+    return redirect('financeiro:detalhe_retorno', hid=hid, permanent=True)

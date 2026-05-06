@@ -1,5 +1,6 @@
 {% extends 'base.html' %}
 {% load crispy_forms_tags %}
+{% load hashid_tags %}
 
 {% block title %}Contratos - Gestao de Contratos{% endblock %}
 
@@ -274,10 +275,10 @@
                                     {% endwith %}
                                 </div>
                                 <div class="card-footer py-1 px-2 d-flex justify-content-end" style="gap:4px;">
-                                    <a href="{% url 'contratos:detalhe' contrato.pk %}" class="btn btn-sm btn-outline-info" title="Ver detalhes">
+                                    <a href="{% url 'contratos:detalhe' contrato.pk|hashid %}" class="btn btn-sm btn-outline-info" title="Ver detalhes">
                                         <i class="fas fa-eye"></i>
                                     </a>
-                                    <a href="{% url 'contratos:editar' contrato.pk %}" class="btn btn-sm btn-outline-primary" title="Editar">
+                                    <a href="{% url 'contratos:editar' contrato.pk|hashid %}" class="btn btn-sm btn-outline-primary" title="Editar">
                                         <i class="fas fa-edit"></i>
                                     </a>
                                 </div>
@@ -328,9 +329,9 @@
                         is_ativo: {% if contrato.status == 'ATIVO' %}true{% else %}false{% endif %},
                         reajuste_pendente: _reajustePks[{{ contrato.pk }}] !== undefined,
                         meses_atraso: _reajustePks[{{ contrato.pk }}] || 0,
-                        detalhe_url: "{% url 'contratos:detalhe' contrato.pk %}",
-                        editar_url: "{% url 'contratos:editar' contrato.pk %}",
-                        cancelar_url: "{% url 'contratos:excluir' contrato.pk %}",
+                        detalhe_url: "{% url 'contratos:detalhe' contrato.pk|hashid %}",
+                        editar_url: "{% url 'contratos:editar' contrato.pk|hashid %}",
+                        cancelar_url: "{% url 'contratos:excluir' contrato.pk|hashid %}",
                     },
                     {% endfor %}
                     ];

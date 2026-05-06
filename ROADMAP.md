@@ -2071,7 +2071,8 @@ def _processar_mensagem_inbound(item, config, request):
 | **24** | ⭐ **Segurança — Proteção das URLs Públicas de Boleto** | 28 | ✅ |
 | **25** | ⭐ **Portabilidade de Banco de Dados (PostgreSQL → MySQL / Oracle)** | 29 | ✅ |
 | **26** | ⭐ **Chatbot WhatsApp — Humanização com IA (Claude API)** | 30 | ✅ |
-| **27** | Versão do Sistema no Rodapé + ID de Página | 31 | — |
+| **27** | Versão do Sistema no Rodapé + ID de Página | 31 | ✅ |
+| **28** | ⭐ **Segurança — URLs ofuscadas com Hashids + Anti-enumeração** | 32 | ✅ |
 
 ---
 
@@ -2726,12 +2727,12 @@ def tenant_required(get_imobiliaria):
 
 | # | Item | Status |
 |---|------|--------|
-| U-01 | **Instalar `hashids==1.3.1`** — `pip install hashids`; adicionar `HASHIDS_SALT = SECRET_KEY[:20]` e `HASHIDS_MIN_LENGTH = 6` em `settings.py` | — |
-| U-02 | **`core/hashids_utils.py`** — funções `encode_id(pk) → str` e `decode_id(h) → int`; usam salt do settings; retornam `None` se hash inválido | — |
-| U-03 | **URL pattern `<str:hid>`** — substituir `<int:pk>` por `<str:hid>` nos apps `contratos/`, `financeiro/`, `core/`; view decodifica antes do `get_object_or_404` | — |
-| U-04 | **Template tag `{% hashid obj.pk %}`** — para gerar links nos templates sem expor PK: `{% url 'contratos:detalhe' obj.pk|hashid %}` | — |
-| U-05 | **Rota de compatibilidade** — manter redirecionamento `<int:pk>/` → `<str:hid>/` por 30 dias para não quebrar links antigos em e-mails já enviados | — |
-| U-06 | **Admin Django** — admin continua usando PK inteiro (acesso restrito a staff) | — |
+| U-01 | **Instalar `hashids==1.3.1`** — `pip install hashids`; adicionar `HASHIDS_SALT = SECRET_KEY[:20]` e `HASHIDS_MIN_LENGTH = 6` em `settings.py` | ✅ |
+| U-02 | **`core/hashids_utils.py`** — funções `encode_id(pk) → str` e `decode_id(h) → int`; usam salt do settings; retornam `None` se hash inválido | ✅ |
+| U-03 | **URL pattern `<str:hid>`** — substituir `<int:pk>` por `<str:hid>` nos apps `contratos/`, `financeiro/`; FBVs usam `_hid_to_pk()`; CBVs usam `HashidMixin`; 23 views financeiro + 10 CBVs/FBVs contratos atualizados | ✅ |
+| U-04 | **Template tag `{% hashid obj.pk %}`** — `core/templatetags/hashid_tags.py` filtro `\|hashid`; 25+ templates atualizados com `{% load hashid_tags %}` | ✅ |
+| U-05 | **Rota de compatibilidade** — `<int:pk>/compat/` redireciona (301) para URL hashid; 3 grupos de compat views (contrato, parcela, remessa/retorno) | ✅ |
+| U-06 | **Admin Django** — admin continua usando PK inteiro (acesso restrito a staff) | ✅ |
 
 **Exemplo de implementação:**
 ```python
@@ -2776,10 +2777,10 @@ def detalhe_contrato(request, hid):
 
 | # | Item | Status |
 |---|------|--------|
-| D-01 | **Middleware anti-enumeração** — contador Redis por IP: se mesmo IP retornar > 30 respostas 403/404 em 5 min, banir por 1 hora (retornar 429) | — |
-| D-02 | **Log de acesso negado** — model `AcessoNegado`: IP, user, URL, timestamp; admin com lista filtrável | — |
-| D-03 | **Header `X-Content-Type-Options: nosniff`** + `X-Frame-Options: DENY` — `SecurityMiddleware` já configura; confirmar que está ativo | — |
-| D-04 | **Teste automatizado de isolamento** — suite de testes: login como `user_A` (imobiliária X), tentar GET no contrato de `user_B` (imobiliária Y) → deve retornar 403 | — |
+| D-01 | **Middleware anti-enumeração** — `core/middleware.py` `AntiEnumeracaoMiddleware`: cache-based 30 erros/5min por IP; ban 1h → 429; registrado em `settings.py` MIDDLEWARE | ✅ |
+| D-02 | **Log de acesso negado** — model `AcessoNegado` em `core/models.py`: ip, usuario, url, status_code, timestamp; admin filtrável em `core/admin.py`; migration 0011 | ✅ |
+| D-03 | **Header `X-Content-Type-Options: nosniff`** + `X-Frame-Options: DENY` — movidos para fora do bloco `if not DEBUG` em `settings.py`; sempre ativos em dev e prod | ✅ |
+| D-04 | **Teste automatizado de isolamento** — `tests/test_tenant_isolation.py`: 4 testes (contrato e parcela, negado e permitido); `TenantMixin.get_object()` corrigido para retornar 403 não 404 | ✅ |
 
 ---
 
