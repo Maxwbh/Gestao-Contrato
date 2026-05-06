@@ -418,6 +418,16 @@ class TemplateNotificacao(TimeStampedModel):
         verbose_name='Corpo WhatsApp',
         help_text='Texto para mensagem WhatsApp. Suporta TAGs %%TAG%%.'
     )
+    corpo_whatsapp_interativo = models.JSONField(
+        null=True,
+        blank=True,
+        verbose_name='WhatsApp Interativo (botões)',
+        help_text=(
+            'Opcional — substitui "Corpo WhatsApp" em provedores que suportam botões. '
+            'Schema: {"title": "...", "body": "... %%TAG%%", "footer": "...", '
+            '"buttons": [{"id": "btn1", "title": "Texto"}, ...]} (máx. 3 botões).'
+        ),
+    )
 
     # Configurações
     imobiliaria = models.ForeignKey(
@@ -458,7 +468,31 @@ class TemplateNotificacao(TimeStampedModel):
 
     @property
     def tem_whatsapp(self):
-        return bool(self.corpo_whatsapp)
+        return bool(self.corpo_whatsapp or self.corpo_whatsapp_interativo)
+
+    @property
+    def tem_whatsapp_interativo(self):
+        return bool(self.corpo_whatsapp_interativo)
+
+    def renderizar_interativo(self, contexto):
+        """
+        Renderiza o campo corpo_whatsapp_interativo substituindo TAGs.
+
+        Returns:
+            dict | None: payload pronto para _enviar_evolution_interativo, ou None se
+                         o campo não estiver preenchido.
+        """
+        if not self.corpo_whatsapp_interativo:
+            return None
+        import copy
+        payload = copy.deepcopy(self.corpo_whatsapp_interativo)
+        for tag, valor in contexto.items():
+            placeholder = f"%%{tag}%%"
+            valor_str = str(valor) if valor is not None else ''
+            for chave in ('title', 'body', 'footer'):
+                if chave in payload and isinstance(payload[chave], str):
+                    payload[chave] = payload[chave].replace(placeholder, valor_str)
+        return payload
 
     def renderizar(self, contexto):
         """

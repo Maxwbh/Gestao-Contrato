@@ -227,8 +227,14 @@ class TemplateNotificacaoAdmin(admin.ModelAdmin):
             'classes': ('collapse',),
         }),
         ('WhatsApp', {
-            'fields': ('corpo_whatsapp',),
+            'fields': ('corpo_whatsapp', 'corpo_whatsapp_interativo'),
             'classes': ('collapse',),
+            'description': (
+                'corpo_whatsapp_interativo (W-06): JSON com botões — '
+                '{"title": "...", "body": "...", "footer": "...", '
+                '"buttons": [{"id": "btn1", "title": "Texto"}]} (máx. 3). '
+                'Suportado apenas em Evolution API modo Baileys.'
+            ),
         }),
         ('Canal legado', {
             'fields': ('tipo',),

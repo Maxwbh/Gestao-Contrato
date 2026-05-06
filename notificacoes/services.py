@@ -225,6 +225,82 @@ class ServicoWhatsApp:
             raise
 
     @staticmethod
+    def enviar_interativo(destinatario, interativo):
+        """
+        W-06 — Envia mensagem WhatsApp com botões interativos (Evolution Baileys).
+
+        Args:
+            destinatario (str): Número do destinatário.
+            interativo (dict): Payload com schema:
+                {"title": str, "body": str, "footer": str,
+                 "buttons": [{"id": str, "title": str}, ...]}  # máx. 3 botões
+        Returns:
+            bool: True se enviado com sucesso. Retorna False (sem exceção) se
+                  o provedor não suportar mensagens interativas (Cloud API / Meta / Twilio)
+                  — chamador deve fazer fallback para envio de texto plano.
+        """
+        try:
+            destinatario = _destinatario_telefone_teste(destinatario)
+            config = ConfiguracaoWhatsApp.objects.filter(ativo=True).first()
+            if not config or config.provedor != 'EVOLUTION':
+                return False
+            modo = getattr(config, 'modo_evolution', 'BAILEYS') or 'BAILEYS'
+            if modo != 'BAILEYS':
+                return False
+            return ServicoWhatsApp._enviar_evolution_interativo(destinatario, interativo, config)
+        except Exception as e:
+            logger.exception("Erro ao enviar WhatsApp interativo para %s: %s", destinatario, e)
+            raise
+
+    @staticmethod
+    def _enviar_evolution_interativo(destinatario, interativo, config):
+        """
+        W-06 — Evolution API v2 Baileys: POST /message/sendButtons/{instancia}.
+
+        Converte o schema interno {title, body, footer, buttons[{id, title}]}
+        para o formato esperado pela Evolution API.
+        """
+        import urllib.request
+        import urllib.error
+        import json as _json
+
+        if not all([config.api_url, config.api_key, config.instancia]):
+            raise ValueError("Evolution API (Baileys interativo): api_url, api_key e instancia são obrigatórios")
+
+        numero = ServicoWhatsApp._normalizar_numero(destinatario).lstrip('+')
+        botoes = interativo.get('buttons', [])[:3]  # máx. 3 botões
+
+        payload = {
+            "number": numero,
+            "title": interativo.get('title', ''),
+            "description": interativo.get('body', ''),
+            "footer": interativo.get('footer', ''),
+            "buttons": [
+                {"buttonId": b.get('id', str(i)), "buttonText": {"displayText": b.get('title', '')}, "type": 1}
+                for i, b in enumerate(botoes)
+            ],
+            "delay": 1200,
+        }
+
+        url = f"{config.api_url.rstrip('/')}/message/sendButtons/{config.instancia}"
+        req = urllib.request.Request(
+            url,
+            data=_json.dumps(payload).encode(),
+            headers={"Content-Type": "application/json", "apikey": config.api_key},
+            method="POST",
+        )
+        try:
+            with urllib.request.urlopen(req, timeout=15) as resp:
+                body = _json.loads(resp.read())
+        except urllib.error.HTTPError as e:
+            err_body = e.read().decode('utf-8', errors='replace')
+            raise ValueError(f"Evolution API sendButtons HTTP {e.code}: {err_body}") from e
+
+        logger.info("WhatsApp interativo (Evolution/Baileys) enviado para %s. key.id=%s",
+                    numero, body.get('key', {}).get('id', ''))
+        return True
+
+    @staticmethod
     def _normalizar_numero(numero):
         """Remove tudo exceto dígitos e o '+' inicial."""
         import re
