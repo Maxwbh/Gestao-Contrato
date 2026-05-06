@@ -7,7 +7,7 @@ Email: maxwbh@gmail.com
 from django.contrib import admin
 from django.utils.html import format_html
 from django.utils import timezone
-from .models import Parcela, Reajuste, HistoricoPagamento
+from .models import Parcela, Reajuste, HistoricoPagamento, AcessoBoletoPublico
 
 
 @admin.register(Parcela)
@@ -293,3 +293,31 @@ class HistoricoPagamentoAdmin(admin.ModelAdmin):
         return f"R$ {obj.valor_pago:,.2f}".replace(',', 'X').replace('.', ',').replace('X', '.')
     valor_pago_display.short_description = 'Valor Pago'
     valor_pago_display.admin_order_field = 'valor_pago'
+
+
+@admin.register(AcessoBoletoPublico)
+class AcessoBoletoPublicoAdmin(admin.ModelAdmin):
+    """S-07: Monitoramento de acessos ao boleto público."""
+    list_display = ['parcela_link', 'ip', 'user_agent_resumido', 'acessado_em']
+    list_filter = ['acessado_em', 'ip']
+    search_fields = ['ip', 'parcela__contrato__numero_contrato', 'parcela__contrato__comprador__nome']
+    readonly_fields = ['parcela', 'ip', 'user_agent', 'acessado_em']
+    date_hierarchy = 'acessado_em'
+    ordering = ['-acessado_em']
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def parcela_link(self, obj):
+        from django.urls import reverse
+        from django.utils.html import format_html
+        url = reverse('admin:financeiro_parcela_change', args=[obj.parcela_id])
+        return format_html('<a href="{}">{}</a>', url, obj.parcela)
+    parcela_link.short_description = 'Parcela'
+
+    def user_agent_resumido(self, obj):
+        return obj.user_agent[:60] + '…' if len(obj.user_agent) > 60 else obj.user_agent
+    user_agent_resumido.short_description = 'User-Agent'

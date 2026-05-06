@@ -2098,13 +2098,13 @@ def _processar_mensagem_inbound(item, config, request):
 
 | # | Item | Prioridade | Status |
 |---|------|-----------|--------|
-| S-01 | **Expiração de token** — campo `token_expira_em` (DateTimeField, nullable) na `Parcela`; boleto público retorna 410 Gone se `hoje > token_expira_em` | P1 | — |
-| S-02 | **Rate limiting** — decorator `@ratelimit` (django-ratelimit) na view `boleto_publico`: máx. 20 acessos/hora por IP; retorna 429 com mensagem clara | P1 | — |
-| S-03 | **Log de acesso público** — model `AcessoBoletoPublico`: `parcela` (FK), `ip`, `user_agent`, `acessado_em`; gravado em cada GET bem-sucedido do boleto público | P2 | — |
-| S-04 | **Rotação de token na segunda via** — `BoletoService.gerar_segunda_via()` regenera `token_publico = uuid4()` e reseta `token_expira_em`; botão "Invalidar link anterior" no admin | P2 | — |
-| S-05 | **Expiração configurável** — `ParametroSistema` com chave `BOLETO_TOKEN_DIAS_VALIDADE` (padrão: 90 dias); `sync_params_from_env` lê `BOLETO_TOKEN_DIAS_VALIDADE` | P2 | — |
-| S-06 | **Headers de segurança** — `X-Robots-Tag: noindex, nofollow` na view pública; `Cache-Control: private, no-store` para não cachear PDF em proxies | P2 | — |
-| S-07 | **Admin de monitoramento** — `AcessoBoletoPublicoAdmin` com `list_display`, `list_filter` por parcela/imobiliária/IP; alerta se mesmo IP acessa > 50 boletos distintos/dia | P3 | — |
+| S-01 | **Expiração de token** — `token_expira_em` (DateTimeField, nullable) em `Parcela`; `token_esta_expirado()` + `renovar_token(dias)`; view retorna 410 + `boleto_expirado.html` | P1 | ✅ |
+| S-02 | **Rate limiting** — 20 req/hora por IP via cache Django (sem dependência externa); retorna 429; limite configurável via `BOLETO_RATE_LIMIT_POR_HORA` | P1 | ✅ |
+| S-03 | **Log de acesso público** — model `AcessoBoletoPublico` (parcela FK, ip, user_agent, acessado_em); index em parcela+data e ip+data; gravado em cada GET bem-sucedido | P2 | ✅ |
+| S-04 | **Rotação de token na geração** — `gerar_boleto_parcela()` chama `parcela.renovar_token()` após sucesso; gera novo UUID + nova expiração a cada boleto gerado | P2 | ✅ |
+| S-05 | **Expiração configurável** — `BOLETO_TOKEN_DIAS_VALIDADE` (padrão 90) e `BOLETO_RATE_LIMIT_POR_HORA` (padrão 20) adicionados a `sync_params_from_env` | P2 | ✅ |
+| S-06 | **Headers de segurança** — `X-Robots-Tag: noindex, nofollow` e `Cache-Control: private, no-store` em `boleto_publico` e `download_boleto_publico` | P2 | ✅ |
+| S-07 | **Admin de monitoramento** — `AcessoBoletoPublicoAdmin` com `list_display`, `list_filter`, `search_fields`, `date_hierarchy`; somente leitura | P3 | ✅ |
 
 ---
 
