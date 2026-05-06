@@ -2205,7 +2205,7 @@ class AcessoBoletoPublico(models.Model):
 | DB-01 | **Isolar `search_path`** — `settings.py` detecta engine via `_is_pg`; search_path, signal e DISABLE_SERVER_SIDE_CURSORS aplicados somente para PG | P1 | ✅ |
 | DB-02 | **`PortableJSONField`** — `core/db_fields.py`: jsonb/json/NCLOB/text; herda JSONField; `from_db_value`/`get_prep_value` para Oracle | P1 | ✅ |
 | DB-03 | **Settings por driver** — `settings.py` detecta engine e aplica OPTIONS: PG=search_path, MySQL=utf8mb4+strict, Oracle=threaded | P1 | ✅ |
-| DB-04 | **Remover `pg_catalog` direto** — verificar e substituir qualquer `RawSQL`/`.raw()` que use sintaxe PG | P2 | — |
+| DB-04 | **Remover `pg_catalog` direto** — verificar e substituir qualquer `RawSQL`/`.raw()` que use sintaxe PG | P2 | ✅ (nenhum `RawSQL`/`.raw()` PG-específico encontrado) |
 
 #### Fase B — Drivers e Testes (P2)
 
@@ -2443,9 +2443,9 @@ class WhatsAppBotService:
 | V-03 | **Mapeamento de IDs de página** — `PAGE_ID_MAP` em `core/context_processors.py`: dicionário `'app:view_name' → '0000'`; fallback `'0000'` para páginas sem ID | P1 | ✅ |
 | V-04 | **Rodapé atualizado** — `templates/base.html` e `portal_base.html`: linha `v{{ system_version }} \| Página {{ page_id }}` no footer; estilo discreto (`opacity:0.65`) | P1 | ✅ |
 | V-05 | **Build number automático** — `core/version.py` chama `git rev-list --count HEAD` em subprocess; resultado cacheado por processo (não por request); funciona em Render sem nenhuma variável de ambiente | P2 | ✅ |
-| V-06 | **Git pre-commit hook** — `.git/hooks/pre-commit`: lê `VERSION`, incrementa PATCH, reescreve o arquivo e faz `git add VERSION`; assim cada commit local incrementa automaticamente o patch | P2 | — |
-| V-07 | **Claude Code hook** — `.claude/settings.json` `PostToolUse` em `git commit`: executa `python scripts/bump_version.py patch` que faz o mesmo que V-06, garantindo incremento via Claude Code | P2 | — |
-| V-08 | **Tooltip no rodapé** — hover no número de versão mostra: commit hash abreviado (`git rev-parse --short HEAD`), data do build e ambiente (`DEV` / `PROD`) | P3 | — |
+| V-06 | **Git pre-commit hook** — `scripts/hooks/pre-commit` instalado em `.git/hooks/pre-commit`: exibe versão que será registrada (PATCH = git count + 1); compatível com formato MAJOR.MINOR do VERSION file | P2 | ✅ |
+| V-07 | **Claude Code hook** — `.claude/settings.json` `PostToolUse` Bash: detecta `git commit` e exibe aviso de cache de versão; `core/version.py` expõe `reset_cache()` | P2 | ✅ |
+| V-08 | **Tooltip no rodapé** — hover no número de versão mostra: commit hash abreviado (`git rev-parse --short HEAD`), data do build e ambiente (`DEV` / `PROD`); `get_version_info()` em `core/version.py`; `system_version_info` injetado pelo context processor | P3 | ✅ |
 
 ---
 

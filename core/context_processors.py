@@ -5,7 +5,7 @@ Injeta em todos os templates:
   - system_version: versão completa (ex: "1.0.294")
   - page_id: código de 4 dígitos da página atual (ex: "1001")
 """
-from .version import get_version
+from .version import get_version, get_version_info
 
 # Mapa de view_name → page_id de 4 dígitos
 # Formato: 'app:view_name' ou 'view_name' para views sem namespace
@@ -97,6 +97,7 @@ def system_info(request) -> dict:
 
     return {
         'system_version': get_version(),
+        'system_version_info': get_version_info(),
         'page_id': PAGE_ID_MAP.get(view_name, '0000'),
         'page_view_name': view_name,
     }
