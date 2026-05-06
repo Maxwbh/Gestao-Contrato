@@ -77,10 +77,10 @@ services:
       # ==========================================================================
       # MODO DE TESTE — Safeguard de ambiente
       # TEST_MODE=True: todos os e-mails e SMS/WhatsApp vão para os endereços abaixo
-      # False em produção — True apenas em homologação/testes
+      # Mantém True no ambiente de teste para não disparar notificações reais
       # ==========================================================================
       - key: TEST_MODE
-        value: "False"
+        value: "True"
       - key: TEST_RECIPIENT_EMAIL
         value: "receber@msbrasil.inf.br"
       - key: TEST_RECIPIENT_PHONE
