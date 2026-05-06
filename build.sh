@@ -991,6 +991,11 @@ TEMPLATEEOF
 echo "==> Creating report email templates (semanal/mensal)..."
 python manage.py criar_templates_relatorio || echo "Aviso: criar_templates_relatorio falhou (templates serao criados pelas migrations)"
 
+echo "==> Syncing operational params from env vars to DB..."
+# Popula ParametroSistema com os valores das env vars do Render.
+# Não sobrescreve registros já alterados manualmente pelo admin (sem --force).
+python manage.py sync_params_from_env || echo "Aviso: sync_params_from_env falhou (parâmetros permanecem com valores anteriores)"
+
 echo "==> Collecting static files..."
 python manage.py collectstatic --no-input
 

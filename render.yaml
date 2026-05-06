@@ -49,9 +49,11 @@ services:
         value: "False"
       - key: ALLOWED_HOSTS
         value: ".onrender.com,localhost,127.0.0.1"
-      # DATABASE_URL - Supabase PostgreSQL (usando Pooler porta 6543)
+      # DATABASE_URL - Supabase PostgreSQL (usar porta 6543 do pooler)
+      # Definir manualmente no painel do Render (não versionar senha em texto claro)
+      # Formato: postgresql://postgres.<project>:<senha>@<pooler-host>:6543/postgres
       - key: DATABASE_URL
-        value: "postgresql://postgres.szyouijmxhlbavkzibxa:123ewqasdcxz%21%40%23@aws-1-us-east-2.pooler.supabase.com:6543/postgres"
+        sync: false
       - key: REDIS_URL
         fromService:
           name: gestao-contrato-redis
@@ -66,19 +68,19 @@ services:
       # URL do servico BRCobranca
       - key: BRCOBRANCA_URL
         value: "https://brcobranca-api-m4q9.onrender.com"
-      # Supabase API
+      # Supabase API (definir manualmente no painel — evitar expor tokens no git)
       - key: SUPABASE_URL
-        value: "https://szyouijmxhlbavkzibxa.supabase.co"
+        sync: false
       - key: SUPABASE_KEY
-        value: "sb_publishable_aswPuvIXjzcejBTyYWObdQ_BpC5l903"
+        sync: false
 
       # ==========================================================================
       # MODO DE TESTE — Safeguard de ambiente
       # TEST_MODE=True: todos os e-mails e SMS/WhatsApp vão para os endereços abaixo
-      # Alterar para False em produção
+      # False em produção — True apenas em homologação/testes
       # ==========================================================================
       - key: TEST_MODE
-        value: "True"
+        value: "False"
       - key: TEST_RECIPIENT_EMAIL
         value: "receber@msbrasil.inf.br"
       - key: TEST_RECIPIENT_PHONE
@@ -232,8 +234,9 @@ services:
         value: "true"
       - key: DATABASE_PROVIDER
         value: "postgresql"
+      # Mesma connection string do Django (definir manualmente no painel)
       - key: DATABASE_CONNECTION_URI
-        value: "postgresql://postgres.szyouijmxhlbavkzibxa:123ewqasdcxz%21%40%23@aws-1-us-east-2.pooler.supabase.com:6543/postgres"
+        sync: false
       - key: DATABASE_CONNECTION_CLIENT_NAME
         value: "evolution_test"
 
