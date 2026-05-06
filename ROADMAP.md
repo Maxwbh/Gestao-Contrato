@@ -713,10 +713,10 @@ Auditoria identificou 4 histórias de usuário totalmente implementadas no siste
 | **16** | ⭐ **Conciliação Bancária — CNAB Retorno + OFX + Baixa Manual** | 23 | ✅ |
 | **17** | Testes P3/P4 + CI/CD | 7.3, 7.4, 8 | 🏦 Débito Técnico (pós-2050) |
 | **18** | Frontend P3/P4 | 3 (P3, P4) | 🏦 Débito Técnico (pós-2050) |
-| **19** | Documentação | 9 | — |
-| **20** | ⭐ **Agendamento e Operações — cron-job.org + endpoints HTTP** | 24 | — |
+| **19** | Documentação | 9 | ✅ `docs/deployment/CRONJOB.md`, `DEPLOY.md`, `ENV_PARAMETROS.md`, `RENDER.md`, `RENDER_NO_SHELL.md` |
+| **20** | ⭐ **Agendamento e Operações — cron-job.org + endpoints HTTP** | 24 | ✅ Endpoints E-01..E-02 implementados; J-01..J-09 documentados em CRONJOB.md (config externa pendente de ativação no cron-job.org) |
 | **21** | ⭐ **Grid de Reajustes Pendentes — cálculo inline + Aprovar/Editar** | 25 | ✅ |
-| **22** | ⭐ **WhatsApp — Evolução: Cloud API mode + Whapi.cloud sandbox + Templates interativos** | 26 | ✅ W-01..W-06, W-08 concluídos (W-07 BSP: pesquisa externa, sem código) |
+| **22** | ⭐ **WhatsApp — Evolução: Cloud API mode + Whapi.cloud sandbox + Templates interativos** | 26 | ✅ W-01..W-08 concluídos |
 | **23** | ⭐ **Chatbot WhatsApp — 2ª via, boletos em atraso, comprovante de pagamento** | 27 | ✅ |
 
 ---
@@ -1205,7 +1205,7 @@ para ciclo = 2..total_ciclos+1:
 | HU Boleto/Carnê/Remessa (Seção 21) | — | 10 | — | — | 10 | ✅ 10/10 |
 | OFX Extrato Bancário (Seção 22) | — | 5 | — | — | 5 | ✅ 5/5 |
 | Conciliação Bancária (Seção 23) | — | 8 | — | — | 8 | ✅ 8/8 |
-| WhatsApp — Evolução (Seção 26) | — | 5 | 3 | — | 8 | ✅ 5/8 — W-01..W-05 concluídos (Cloud API mode + webhook + teste conexão) |
+| WhatsApp — Evolução (Seção 26) | — | 5 | 3 | — | 8 | ✅ 8/8 — W-01..W-08 concluídos |
 | Chatbot WhatsApp (Seção 27) | 2 | 8 | 6 | — | 16 | ✅ 16/16 — C-01..C-16 |
 | Testes | 104 | ~164 | ~37 | ~41+117 | ~463 | ✅ 942 testes passando |
 | CI/CD | — | 2 | 4 | 2 | 8 | — |

@@ -343,7 +343,8 @@ Todos requerem header `X-Task-Token` e método `POST`.
 
 | Endpoint | Método | Auth | Descrição |
 |----------|--------|------|-----------|
-| `/notificacoes/webhook/twilio/` | POST | Assinatura Twilio | Confirmação de entrega SMS/WhatsApp |
+| `/notificacoes/webhook/twilio/` | POST | Assinatura Twilio | Confirmação de entrega SMS/WhatsApp (Twilio) |
+| `/notificacoes/webhook/bsp/` | GET/POST | hub.verify_token / X-Hub-Signature-256 | Verificação hub + status/mensagens recebidas (BSP Brasileiro) |
 | `/notificacoes/track/<uuid>/click/` | GET | Nenhuma | Rastreamento de clique em e-mail |
 
 ### Endpoint de Status (diagnóstico)
