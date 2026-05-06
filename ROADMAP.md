@@ -170,7 +170,7 @@
 
 ## 7. TESTES AUTOMATIZADOS
 
-**Meta:** > 80% de cobertura | **Atual:** 1084 testes passando (1061 + 23 novos — HU Portal Comprador E2E 2026-05-04)
+**Meta:** > 80% de cobertura | **Atual:** 1122 testes passando (1084 + 33 novos — HU-360 Juros Escalantes E2E + 5 restantes 2026-05-06)
 
 ### 7.1 P1 — Apps sem nenhum teste (~104 testes) ✅ CONCLUÍDO
 | Arquivo | Escopo | Qtd | Status |
@@ -276,7 +276,7 @@ Suite de 24 testes cobrindo os 9 marcos de negócio do ciclo de vida completo de
 
 Auditoria identificou 4 histórias de usuário totalmente implementadas no sistema mas **sem cobertura de ciclo completo ponta a ponta**. Cada uma exercita caminhos de código radicalmente diferentes do `test_hu_fluxo_completo.py` (básico 36p + 1 TabelaJuros + sem intermediárias).
 
-#### 7.9.1 — HU-360: Juros Escalantes + Intermediárias (PRIORIDADE P1)
+#### 7.9.1 — HU-360: Juros Escalantes + Intermediárias (PRIORIDADE P1) ✅ IMPLEMENTADO
 
 > **Referência:** Seções 13 e 14 do ROADMAP. Implementação 100% concluída — falta cobertura E2E.
 
@@ -427,7 +427,7 @@ Auditoria identificou 4 histórias de usuário totalmente implementadas no siste
 
 | # | HU | Arquivo Proposto | Prioridade | Testes Est. | Código Crítico não Coberto |
 |---|----|-----------------|------------|-------------|---------------------------|
-| 1 | HU-360 Juros Escalantes + Intermediárias | `test_hu_360_juros_escalantes.py` | **P1** | ~25 | `get_juros_para_ciclo()`, PMT escalante, `PrestacaoIntermediaria`, `intermediarias_reduzem_pmt`, `intermediarias_reajustadas` |
+| 1 | HU-360 Juros Escalantes + Intermediárias | `test_hu_360_juros_escalantes.py` | **P1** | 33 | ✅ `get_juros_para_ciclo()`, PMT escalante, `PrestacaoIntermediaria`, `intermediarias_reduzem_pmt`, `intermediarias_reajustadas` |
 | 2 | HU Rescisão e Cessão | `test_hu_rescisao_cessao.py` | **P2** | ~15 | `calcular_rescisao()`, `calcular_cessao()`, `calcular_mora_pro_rata()`, fruição, multa penal/adm |
 | 3 | HU CNAB Remessa→Retorno | `test_hu_cnab_e2e.py` | **P2** | ~14 | Ciclo completo remessa→retorno→baixa; `processar_retorno()` integrado com `Parcela.pago`; 2ª via pós-retorno |
 | 4 | HU Portal Comprador | `test_hu_portal_e2e.py` | **P3** | ~15 | Ciclo uso comprador: auto-cadastro → dashboard → boleto → linha digitável |
