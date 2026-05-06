@@ -24,6 +24,7 @@ import logging
 from django.core.cache import cache
 from .models import Parcela, Reajuste, StatusBoleto, HistoricoPagamento, TipoParcela
 from core.models import Imobiliaria, ContaBancaria
+from core.mixins import verificar_acesso_tenant
 from contratos.models import Contrato, StatusContrato, TipoCorrecao
 
 logger = logging.getLogger(__name__)
@@ -580,11 +581,13 @@ def detalhe_parcela(request, pk):
     parcela = get_object_or_404(
         Parcela.objects.select_related(
             'contrato',
+            'contrato__imobiliaria',
             'contrato__comprador',
             'contrato__imovel'
         ),
         pk=pk
     )
+    verificar_acesso_tenant(request, parcela.contrato.imobiliaria)
 
     # Atualizar juros e multa se estiver vencida
     if parcela.esta_vencida and not parcela.pago:
@@ -605,7 +608,8 @@ def notificar_inadimplente(request, pk):
     3.25 — Envia notificação de inadimplência manualmente para o comprador de uma parcela.
     Retorna JSON {sucesso, mensagem/erro}.
     """
-    parcela = get_object_or_404(Parcela, pk=pk)
+    parcela = get_object_or_404(Parcela.objects.select_related('contrato__imobiliaria'), pk=pk)
+    verificar_acesso_tenant(request, parcela.contrato.imobiliaria)
 
     if parcela.pago:
         return JsonResponse({'sucesso': False, 'erro': 'Parcela já paga — notificação não aplicável.'}, status=400)
@@ -693,7 +697,8 @@ def registrar_pagamento(request, pk):
     """Registra o pagamento de uma parcela"""
     from datetime import datetime
 
-    parcela = get_object_or_404(Parcela, pk=pk)
+    parcela = get_object_or_404(Parcela.objects.select_related('contrato__imobiliaria'), pk=pk)
+    verificar_acesso_tenant(request, parcela.contrato.imobiliaria)
 
     FORMAS_PAGAMENTO = [
         ('DINHEIRO', 'Dinheiro'),
@@ -1078,7 +1083,8 @@ def gerar_boleto_parcela(request, pk):
     o ciclo de reajuste. Boletos após o 12º mês só podem ser gerados
     após aplicação do reajuste correspondente.
     """
-    parcela = get_object_or_404(Parcela, pk=pk)
+    parcela = get_object_or_404(Parcela.objects.select_related('contrato__imobiliaria'), pk=pk)
+    verificar_acesso_tenant(request, parcela.contrato.imobiliaria)
 
     if parcela.pago:
         return JsonResponse({
@@ -1166,7 +1172,8 @@ def gerar_boletos_contrato(request, contrato_id):
     IMPORTANTE: Verifica o bloqueio por reajuste antes de gerar cada boleto.
     Parcelas de ciclos não reajustados serão marcadas como bloqueadas.
     """
-    contrato = get_object_or_404(Contrato, pk=contrato_id)
+    contrato = get_object_or_404(Contrato.objects.select_related('imobiliaria'), pk=contrato_id)
+    verificar_acesso_tenant(request, contrato.imobiliaria)
 
     # Obter conta bancária
     conta_id = request.POST.get('conta_bancaria_id')
@@ -1283,7 +1290,8 @@ def download_boleto(request, pk):
     Download do PDF do boleto.
     Regenera automaticamente se o arquivo não existir (storage efêmero no Render).
     """
-    parcela = get_object_or_404(Parcela, pk=pk)
+    parcela = get_object_or_404(Parcela.objects.select_related('contrato__imobiliaria'), pk=pk)
+    verificar_acesso_tenant(request, parcela.contrato.imobiliaria)
 
     if not parcela.boleto_pdf:
         messages.error(request, 'Boleto não disponível para download.')
@@ -1345,7 +1353,8 @@ def download_zip_boletos(request, contrato_id):
     import zipfile
 
     from contratos.models import Contrato
-    contrato = get_object_or_404(Contrato, pk=contrato_id)
+    contrato = get_object_or_404(Contrato.objects.select_related('imobiliaria'), pk=contrato_id)
+    verificar_acesso_tenant(request, contrato.imobiliaria)
 
     if request.method == 'POST':
         ids_raw = request.POST.getlist('parcela_ids')
@@ -1391,7 +1400,8 @@ def segunda_via_boleto(request, pk):
     """
     from financeiro.services.boleto_service import BoletoService
 
-    parcela = get_object_or_404(Parcela, pk=pk)
+    parcela = get_object_or_404(Parcela.objects.select_related('contrato__imobiliaria'), pk=pk)
+    verificar_acesso_tenant(request, parcela.contrato.imobiliaria)
     contrato = parcela.contrato
     hoje = timezone.localdate()
 
@@ -1445,7 +1455,6 @@ def segunda_via_boleto(request, pk):
 
 
 @login_required
-@login_required
 @require_GET
 @xframe_options_sameorigin
 def visualizar_boleto(request, pk):
@@ -1453,7 +1462,8 @@ def visualizar_boleto(request, pk):
     Exibe página com dados do boleto de uma parcela.
     Permite carregamento em iframe do mesmo domínio.
     """
-    parcela = get_object_or_404(Parcela, pk=pk)
+    parcela = get_object_or_404(Parcela.objects.select_related('contrato__imobiliaria'), pk=pk)
+    verificar_acesso_tenant(request, parcela.contrato.imobiliaria)
 
     if not parcela.tem_boleto:
         messages.warning(request, 'Boleto ainda não foi gerado para esta parcela.')
@@ -1493,7 +1503,8 @@ def cancelar_boleto(request, pk):
     """
     Cancela um boleto.
     """
-    parcela = get_object_or_404(Parcela, pk=pk)
+    parcela = get_object_or_404(Parcela.objects.select_related('contrato__imobiliaria'), pk=pk)
+    verificar_acesso_tenant(request, parcela.contrato.imobiliaria)
 
     if parcela.status_boleto in [StatusBoleto.NAO_GERADO, StatusBoleto.CANCELADO]:
         return JsonResponse({
@@ -1528,7 +1539,8 @@ def api_status_boleto(request, pk):
     """
     Retorna o status do boleto de uma parcela (para atualização via AJAX).
     """
-    parcela = get_object_or_404(Parcela, pk=pk)
+    parcela = get_object_or_404(Parcela.objects.select_related('contrato__imobiliaria'), pk=pk)
+    verificar_acesso_tenant(request, parcela.contrato.imobiliaria)
 
     return JsonResponse({
         'parcela_id': parcela.id,
