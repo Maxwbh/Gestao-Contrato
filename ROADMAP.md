@@ -2071,6 +2071,7 @@ def _processar_mensagem_inbound(item, config, request):
 | **24** | ⭐ **Segurança — Proteção das URLs Públicas de Boleto** | 28 | — |
 | **25** | ⭐ **Portabilidade de Banco de Dados (PostgreSQL → MySQL / Oracle)** | 29 | — |
 | **26** | ⭐ **Chatbot WhatsApp — Humanização com IA (Claude API)** | 30 | — |
+| **27** | Versão do Sistema no Rodapé + ID de Página | 31 | — |
 
 ---
 
@@ -2422,3 +2423,208 @@ class WhatsAppBotService:
 | `CHATBOT_IA_ATIVO` | Liga/desliga IA (`true`/`false`) | `ParametroSistema` ou env var |
 | `CHATBOT_MODELO` | Modelo padrão | `ParametroSistema` (padrão: `claude-haiku-4-5`) |
 | `CHATBOT_MAX_TOKENS` | Limite de tokens por resposta | `ParametroSistema` (padrão: `300`) |
+
+---
+
+## 31. VERSÃO DO SISTEMA NO RODAPÉ + ID DE PÁGINA
+
+> **Contexto:** O rodapé atual mostra apenas nome e créditos. O usuário precisa saber
+> em qual versão do sistema está e qual página está vendo (útil para suporte e rastreamento).
+> Cada commit deve incrementar automaticamente o número de versão (patch).
+
+---
+
+### 31.1 Itens de Implementação
+
+| # | Item | Prioridade | Status |
+|---|------|-----------|--------|
+| V-01 | **Arquivo `VERSION`** — arquivo de texto na raiz do projeto com `MAJOR.MINOR.PATCH` (ex: `3.1.0`); fonte única de verdade; lido em `settings.py` e `build.sh` | P1 | — |
+| V-02 | **Context processor** — `core/context_processors.py`: função `system_version(request)` injeta `SYSTEM_VERSION` (string) e `PAGE_ID` (inteiro 4 dígitos) em todos os templates; registrado em `TEMPLATES[0]['OPTIONS']['context_processors']` | P1 | — |
+| V-03 | **Mapeamento de IDs de página** — `core/page_ids.py`: dicionário `URL_NAME → int(0001..9999)`; middleware lê `request.resolver_match.url_name` e expõe como `request.page_id`; fallback `0000` para páginas sem ID | P1 | — |
+| V-04 | **Rodapé atualizado** — `templates/base.html`: adicionar linha `v{{ SYSTEM_VERSION }} · PG-{{ PAGE_ID|stringformat:"04d" }}` no footer; classe CSS discreta (`text-muted small`) | P1 | — |
+| V-05 | **Build number no Render** — `build.sh`: `BUILD=$(git rev-list --count HEAD); echo "$BUILD" > BUILD_NUMBER`; `settings.py` lê `BUILD_NUMBER` e compõe `SYSTEM_VERSION = f"{MAJOR}.{MINOR}.{BUILD}"` | P2 | — |
+| V-06 | **Git pre-commit hook** — `.git/hooks/pre-commit`: lê `VERSION`, incrementa PATCH, reescreve o arquivo e faz `git add VERSION`; assim cada commit local incrementa automaticamente o patch | P2 | — |
+| V-07 | **Claude Code hook** — `.claude/settings.json` `PostToolUse` em `git commit`: executa `python scripts/bump_version.py patch` que faz o mesmo que V-06, garantindo incremento via Claude Code | P2 | — |
+| V-08 | **Tooltipno rodapé** — hover no número de versão mostra: commit hash abreviado (`git rev-parse --short HEAD`), data do build e ambiente (`DEV` / `PROD`) | P3 | — |
+
+---
+
+### 31.2 Estrutura do `VERSION`
+
+```
+# Arquivo: VERSION (na raiz do projeto)
+3.1.0
+```
+
+Leitura em `settings.py`:
+```python
+import pathlib
+_VERSION_FILE = pathlib.Path(BASE_DIR) / 'VERSION'
+APP_VERSION = _VERSION_FILE.read_text(encoding='utf-8').strip() if _VERSION_FILE.exists() else '0.0.0'
+```
+
+---
+
+### 31.3 Context Processor
+
+```python
+# core/context_processors.py
+from django.conf import settings
+
+def system_version(request):
+    page_id = getattr(request, 'page_id', 0)
+    return {
+        'SYSTEM_VERSION': getattr(settings, 'APP_VERSION', '—'),
+        'PAGE_ID': page_id,
+    }
+```
+
+Registrar em `settings.py`:
+```python
+TEMPLATES[0]['OPTIONS']['context_processors'].append(
+    'core.context_processors.system_version'
+)
+```
+
+---
+
+### 31.4 Mapeamento de IDs de Página
+
+```python
+# core/page_ids.py — cada URL name recebe um ID de 4 dígitos único
+PAGE_ID_MAP = {
+    # Core
+    'core:index':                 1000,
+    'core:dashboard':             1001,
+    'core:listar_imoveis':        1010,
+    'core:criar_imovel':          1011,
+    'core:editar_imovel':         1012,
+    'core:listar_imobiliarias':   1020,
+    'core:listar_compradores':    1030,
+    'core:listar_contabilidades': 1040,
+    'core:listar_acessos':        1050,
+    'core:busca_global':          1060,
+    # Contratos
+    'contratos:listar':           2000,
+    'contratos:detalhe':          2001,
+    'contratos:criar':            2002,
+    'contratos:editar':           2003,
+    # Financeiro
+    'financeiro:listar_parcelas': 3000,
+    'financeiro:detalhe_parcela': 3001,
+    'financeiro:listar_boletos':  3010,
+    'financeiro:listar_reajustes':3020,
+    'financeiro:listar_remessas': 3030,
+    'financeiro:listar_retornos': 3040,
+    'financeiro:upload_ofx':      3050,
+    'financeiro:dashboard_conciliacao': 3060,
+    'financeiro:simulador_antecipacao': 3070,
+    'financeiro:visualizar_boleto':     3080,
+    # Notificações
+    'notificacoes:listar':        4000,
+    'notificacoes:painel_mensagens': 4010,
+    'notificacoes:listar_configs_email':    4020,
+    'notificacoes:listar_configs_whatsapp': 4030,
+    'notificacoes:listar_templates':        4040,
+    # Portal Comprador
+    'portal_comprador:dashboard': 5000,
+    'portal_comprador:contratos': 5001,
+    'portal_comprador:boletos':   5002,
+    # Admin
+    'admin:index':                9000,
+    # API / Tasks
+    'core:health_check':          8000,
+    'core:task_run_all':          8010,
+}
+```
+
+Middleware para injetar `request.page_id`:
+```python
+# core/middleware.py
+from core.page_ids import PAGE_ID_MAP
+
+class PageIDMiddleware:
+    def __init__(self, get_response):
+        self.get_response = get_response
+
+    def __call__(self, request):
+        response = self.get_response(request)
+        url_name = getattr(getattr(request, 'resolver_match', None), 'view_name', '')
+        request.page_id = PAGE_ID_MAP.get(url_name, 0)
+        return response
+```
+
+---
+
+### 31.5 Rodapé (`base.html`)
+
+```html
+<footer class="app-footer">
+    <div class="container center-align">
+        <p class="mb-0">
+            <strong>Sistema de Gestão de Contratos de Venda de Imóveis</strong>
+        </p>
+        <p class="mb-0">
+            Desenvolvido por <strong>Maxwell da Silva Oliveira</strong> |
+            <a href="https://msbrasil.inf.br" target="_blank" class="white-text">M&S do Brasil LTDA</a>
+        </p>
+        <p class="mt-1 mb-0 text-muted" style="font-size:0.75rem; opacity:0.7;">
+            v{{ SYSTEM_VERSION }}
+            {% if PAGE_ID %} · PG-{{ PAGE_ID|stringformat:"04d" }}{% endif %}
+        </p>
+    </div>
+</footer>
+```
+
+**Exemplo de exibição:** `v3.1.247 · PG-2001`
+- `3.1` = MAJOR.MINOR (manual)
+- `247` = número de commits (`git rev-list --count HEAD`) — sempre incrementa
+- `2001` = ID da página `contratos:detalhe`
+
+---
+
+### 31.6 Build Number via `build.sh` (Render)
+
+```bash
+# build.sh — adicionar antes do collectstatic
+echo "==> Calculando build number..."
+BUILD_NUMBER=$(git rev-list --count HEAD 2>/dev/null || echo "0")
+MAJOR_MINOR=$(cat VERSION 2>/dev/null | cut -d. -f1,2 || echo "3.1")
+echo "${MAJOR_MINOR}.${BUILD_NUMBER}" > VERSION_BUILD
+echo "Versão do sistema: ${MAJOR_MINOR}.${BUILD_NUMBER}"
+```
+
+```python
+# settings.py
+_VERSION_BUILD = (BASE_DIR / 'VERSION_BUILD')
+APP_VERSION = _VERSION_BUILD.read_text().strip() if _VERSION_BUILD.exists() else (
+    (BASE_DIR / 'VERSION').read_text().strip() if (BASE_DIR / 'VERSION').exists() else '0.0.0'
+)
+```
+
+---
+
+### 31.7 Git Hook — Auto-incremento Local
+
+```bash
+#!/bin/sh
+# .git/hooks/pre-commit
+VERSION_FILE="$(git rev-parse --show-toplevel)/VERSION"
+if [ -f "$VERSION_FILE" ]; then
+    CURRENT=$(cat "$VERSION_FILE")
+    MAJOR=$(echo "$CURRENT" | cut -d. -f1)
+    MINOR=$(echo "$CURRENT" | cut -d. -f2)
+    PATCH=$(echo "$CURRENT" | cut -d. -f3)
+    NEW_PATCH=$((PATCH + 1))
+    echo "${MAJOR}.${MINOR}.${NEW_PATCH}" > "$VERSION_FILE"
+    git add "$VERSION_FILE"
+fi
+```
+
+```bash
+# Ativar o hook
+chmod +x .git/hooks/pre-commit
+```
+
+> No Render, o build number é calculado por `git rev-list --count HEAD` (mais confiável
+> que incremento manual, pois reflete o histórico real de commits).
