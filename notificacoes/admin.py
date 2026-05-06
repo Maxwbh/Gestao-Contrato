@@ -42,36 +42,20 @@ class ConfiguracaoWhatsAppAdmin(admin.ModelAdmin):
         ('Identificação', {
             'fields': ('nome', 'provedor', 'ativo'),
         }),
-        ('Twilio / Meta', {
+        ('Twilio', {
             'fields': ('account_sid', 'auth_token', 'numero_remetente'),
-            'description': 'Preencha apenas para provedores Twilio ou Meta.',
+            'description': 'Preencha apenas para provedor <strong>TWILIO</strong>.',
             'classes': ('collapse',),
         }),
-        ('Evolution API / Z-API', {
-            'fields': ('api_url', 'api_key', 'instancia', 'client_token'),
+        ('API Config — Evolution / Z-API / BSP', {
+            'fields': ('api_url', 'api_key', 'instancia', 'client_token',
+                       'modo_evolution', 'phone_number_id', 'meta_access_token'),
             'description': (
-                'Evolution API v2: api_url = http://servidor:8080, api_key = apikey do servidor, instancia = nome da instância. '
-                'Z-API: api_url = https://api.z-api.io, api_key = token, instancia = instance ID, client_token = Client-Token header.'
-            ),
-            'classes': ('collapse',),
-        }),
-        ('Evolution — Modo Cloud API (Meta oficial)', {
-            'fields': ('modo_evolution', 'phone_number_id', 'meta_access_token'),
-            'description': (
-                'Apenas para Evolution API no modo Cloud API. '
-                'Deixe <strong>modo_evolution = BAILEYS</strong> para uso padrão (self-hosted via QR Code).'
-            ),
-            'classes': ('collapse',),
-        }),
-        ('BSP Brasileiro (Hablla / Poli Digital / Digisac)', {
-            'fields': ('api_url', 'api_key', 'phone_number_id'),
-            'description': (
-                'Preencha apenas para provedor <strong>BSP</strong>. '
-                'api_url = URL base do BSP (ex: https://app.hablla.com). '
-                'api_key = Bearer token / API key do BSP. '
-                'phone_number_id = ID do número no BSP / Meta Business. '
-                'Webhook: <code>/notificacoes/webhook/bsp/</code> — '
-                'hub.verify_token = api_key.'
+                '<strong>Evolution API v2 (Baileys):</strong> api_url = http://servidor:8080, api_key = apikey, instancia = nome da instância. '
+                'Modo Cloud API: modo_evolution = CLOUD_API, phone_number_id = número no Meta, meta_access_token = token permanent.<br>'
+                '<strong>Z-API:</strong> api_url = https://api.z-api.io, api_key = token, instancia = instance ID, client_token = Client-Token header.<br>'
+                '<strong>BSP Brasileiro (Hablla / Poli Digital / Digisac):</strong> api_url = https://app.hablla.com, api_key = Bearer token, phone_number_id = ID do número no Meta. '
+                'Webhook: <code>/notificacoes/webhook/bsp/</code> — hub.verify_token = api_key.'
             ),
             'classes': ('collapse',),
         }),

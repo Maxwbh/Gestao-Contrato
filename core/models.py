@@ -800,6 +800,44 @@ class VerticePoligono(models.Model):
         return f"{self.imovel} — V{self.ordem} ({self.latitude}, {self.longitude})"
 
 
+class LoteamentoOverlay(TimeStampedModel):
+    """Planta baixa (imagem) georreferenciada para exibir como overlay no mapa de um loteamento.
+    Os 4 campos lat/lng_sw/ne definem o retângulo de sobreposição (SW = sudoeste, NE = nordeste).
+    """
+    nome_loteamento = models.CharField(
+        max_length=200,
+        verbose_name='Nome do Loteamento',
+        help_text='Deve corresponder exatamente ao campo loteamento dos imóveis.',
+        db_index=True,
+    )
+    imagem = models.ImageField(
+        upload_to='loteamento/overlays/',
+        verbose_name='Planta Baixa',
+        help_text='Imagem da planta baixa (PNG/JPG). Recomendado: fundo transparente (PNG).',
+    )
+    lat_sw = models.DecimalField(max_digits=10, decimal_places=7, verbose_name='Latitude SW')
+    lng_sw = models.DecimalField(max_digits=10, decimal_places=7, verbose_name='Longitude SW')
+    lat_ne = models.DecimalField(max_digits=10, decimal_places=7, verbose_name='Latitude NE')
+    lng_ne = models.DecimalField(max_digits=10, decimal_places=7, verbose_name='Longitude NE')
+    opacidade = models.FloatField(
+        default=0.7,
+        verbose_name='Opacidade (0–1)',
+        help_text='0 = invisível, 1 = opaco. Padrão: 0.7',
+    )
+    ativo = models.BooleanField(default=True, verbose_name='Ativo')
+
+    class Meta:
+        verbose_name = 'Overlay de Loteamento'
+        verbose_name_plural = 'Overlays de Loteamento'
+        ordering = ['nome_loteamento']
+
+    def __str__(self):
+        return f"Overlay — {self.nome_loteamento}"
+
+    def bounds(self):
+        return [[float(self.lat_sw), float(self.lng_sw)], [float(self.lat_ne), float(self.lng_ne)]]
+
+
 class Comprador(TimeStampedModel):
     """Modelo para representar o Comprador do imóvel (Pessoa Física ou Jurídica)"""
 
