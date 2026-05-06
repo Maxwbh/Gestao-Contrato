@@ -718,6 +718,9 @@ Auditoria identificou 4 histórias de usuário totalmente implementadas no siste
 | **21** | ⭐ **Grid de Reajustes Pendentes — cálculo inline + Aprovar/Editar** | 25 | ✅ |
 | **22** | ⭐ **WhatsApp — Evolução: Cloud API mode + Whapi.cloud sandbox + Templates interativos** | 26 | ✅ W-01..W-08 concluídos |
 | **23** | ⭐ **Chatbot WhatsApp — 2ª via, boletos em atraso, comprovante de pagamento** | 27 | ✅ |
+| **24** | ⭐ **Segurança — Proteção das URLs Públicas de Boleto** | 28 | — |
+| **25** | ⭐ **Portabilidade de Banco de Dados (PostgreSQL → MySQL / Oracle)** | 29 | — |
+| **26** | ⭐ **Chatbot WhatsApp — Humanização com IA (Claude API)** | 30 | — |
 
 ---
 
@@ -2065,3 +2068,357 @@ def _processar_mensagem_inbound(item, config, request):
 | Fase | Escopo | Status |
 |------|--------|--------|
 | **23** | ⭐ **Chatbot WhatsApp — 2ª via, atraso, comprovante** | ✅ C-01..C-16 concluídos |
+| **24** | ⭐ **Segurança — Proteção das URLs Públicas de Boleto** | 28 | — |
+| **25** | ⭐ **Portabilidade de Banco de Dados (PostgreSQL → MySQL / Oracle)** | 29 | — |
+| **26** | ⭐ **Chatbot WhatsApp — Humanização com IA (Claude API)** | 30 | — |
+
+---
+
+## 28. SEGURANÇA — PROTEÇÃO DAS URLs PÚBLICAS DE BOLETO
+
+> **Contexto:** As URLs `/b/<uuid>/` permitem acesso sem autenticação ao boleto do comprador.
+> Atualmente não há limite de requisições, expiração de token ou bloqueio de abuso.
+> O UUID é gerado uma única vez e nunca rotacionado — um token vazado concede acesso permanente.
+
+---
+
+### 28.1 Inventário de Risco Atual
+
+| Risco | Vetor | Severidade |
+|-------|-------|-----------|
+| Token nunca expira | Token vazado em WhatsApp/e-mail arquivado dá acesso por anos | Alta |
+| Sem rate limiting | Enumeração de UUIDs (improvável, mas possível) / scraping em massa | Média |
+| Sem logging de acesso | Impossível auditar quem acessou o boleto e quando | Média |
+| Token não rotacionado | Nova segunda via mantém o mesmo token antigo | Baixa |
+
+---
+
+### 28.2 Proteções a Implementar
+
+| # | Item | Prioridade | Status |
+|---|------|-----------|--------|
+| S-01 | **Expiração de token** — campo `token_expira_em` (DateTimeField, nullable) na `Parcela`; boleto público retorna 410 Gone se `hoje > token_expira_em` | P1 | — |
+| S-02 | **Rate limiting** — decorator `@ratelimit` (django-ratelimit) na view `boleto_publico`: máx. 20 acessos/hora por IP; retorna 429 com mensagem clara | P1 | — |
+| S-03 | **Log de acesso público** — model `AcessoBoletoPublico`: `parcela` (FK), `ip`, `user_agent`, `acessado_em`; gravado em cada GET bem-sucedido do boleto público | P2 | — |
+| S-04 | **Rotação de token na segunda via** — `BoletoService.gerar_segunda_via()` regenera `token_publico = uuid4()` e reseta `token_expira_em`; botão "Invalidar link anterior" no admin | P2 | — |
+| S-05 | **Expiração configurável** — `ParametroSistema` com chave `BOLETO_TOKEN_DIAS_VALIDADE` (padrão: 90 dias); `sync_params_from_env` lê `BOLETO_TOKEN_DIAS_VALIDADE` | P2 | — |
+| S-06 | **Headers de segurança** — `X-Robots-Tag: noindex, nofollow` na view pública; `Cache-Control: private, no-store` para não cachear PDF em proxies | P2 | — |
+| S-07 | **Admin de monitoramento** — `AcessoBoletoPublicoAdmin` com `list_display`, `list_filter` por parcela/imobiliária/IP; alerta se mesmo IP acessa > 50 boletos distintos/dia | P3 | — |
+
+---
+
+### 28.3 Implementação S-01 — Expiração de Token
+
+```python
+# financeiro/models.py — Parcela
+token_expira_em = models.DateTimeField(null=True, blank=True, verbose_name='Token expira em')
+
+def get_link_publico(self):
+    """Retorna path público /b/<uuid>/. Levanta ValueError se expirado."""
+    if self.token_expira_em and timezone.now() > self.token_expira_em:
+        raise TokenExpiradoError('Link público expirado. Gere uma nova segunda via.')
+    return reverse('boleto_publico:visualizar', kwargs={'token': self.token_publico})
+```
+
+```python
+# financeiro/views.py — boleto_publico
+@ratelimit(key='ip', rate='20/h', block=True)
+def boleto_publico(request, token):
+    parcela = get_object_or_404(Parcela, token_publico=token)
+    if parcela.token_expira_em and timezone.now() > parcela.token_expira_em:
+        return render(request, 'financeiro/boleto_expirado.html', status=410)
+    # ... resto da view
+```
+
+---
+
+### 28.4 Implementação S-02 — Rate Limiting
+
+```bash
+pip install django-ratelimit==4.1.0
+```
+
+```python
+# settings.py
+RATELIMIT_USE_CACHE = 'default'  # Redis já configurado
+RATELIMIT_FAIL_OPEN = False       # Bloqueia se Redis indisponível
+
+# Limites por ambiente
+BOLETO_RATE_LIMIT = '5/h' if not DEBUG else '1000/h'
+```
+
+---
+
+### 28.5 Implementação S-03 — Log de Acesso
+
+```python
+# financeiro/models.py
+class AcessoBoletoPublico(models.Model):
+    parcela    = models.ForeignKey(Parcela, on_delete=models.CASCADE, related_name='acessos_publicos')
+    ip         = models.GenericIPAddressField()
+    user_agent = models.CharField(max_length=300, blank=True)
+    acessado_em = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-acessado_em']
+        indexes = [models.Index(fields=['parcela', 'acessado_em'])]
+```
+
+---
+
+### 28.6 Dependências
+
+| Pacote | Versão | Uso |
+|--------|--------|-----|
+| `django-ratelimit` | 4.1.0 | Rate limiting por IP/chave |
+
+---
+
+## 29. PORTABILIDADE DE BANCO DE DADOS (PostgreSQL → MySQL / Oracle)
+
+> **Contexto:** O sistema usa exclusivamente PostgreSQL (Supabase/Render). Para clientes
+> corporativos com Oracle ou MySQL já existentes, é necessário remover dependências
+> PostgreSQL-específicas e criar uma camada de compatibilidade.
+>
+> **Estratégia:** Isolar em 2 fases — fase A (remover blockers) e fase B (drivers e testes).
+
+---
+
+### 29.1 Inventário de Incompatibilidades
+
+| Item | Localização | PostgreSQL-específico | Alternativa portável |
+|------|-------------|----------------------|---------------------|
+| `search_path = gestao_contrato` | `settings.py` connection signal | Sim — schema isolation PG | Prefixo de tabela ou banco dedicado por cliente |
+| `JSONField` (nativo PG) | `notificacoes/models.py` (4 campos) | Parcialmente — Django emula em MySQL 5.7+ / Oracle via `TextField` | `django-jsonfield-backport` ou `TextField + json` |
+| `CONN_MAX_AGE=0` + `DISABLE_SERVER_SIDE_CURSORS` | `settings.py` | pgBouncer-specific | Remover para MySQL/Oracle |
+| `psycopg2-binary` | `requirements.txt` | Driver exclusivo PG | Condicional por `DATABASE_ENGINE` |
+
+---
+
+### 29.2 Fases de Implementação
+
+#### Fase A — Remover Blockers (P1)
+
+| # | Item | Prioridade | Status |
+|---|------|-----------|--------|
+| DB-01 | **Isolar `search_path`** — envolver signal `connection_created` em `if 'postgresql' in settings.DATABASES['default']['ENGINE']`; remover para MySQL/Oracle | P1 | — |
+| DB-02 | **`JSONField` portável** — criar `core/db_fields.py` com `PortableJSONField`: usa `JSONField` para PG/MySQL 5.7+, `TextField` com `from_db_value`/`get_prep_value` para Oracle | P1 | — |
+| DB-03 | **Settings por driver** — `DATABASE_ENGINE` env var; `settings.py` detecta e ajusta `CONN_MAX_AGE`, `DISABLE_SERVER_SIDE_CURSORS`, `OPTIONS` automaticamente | P1 | — |
+| DB-04 | **Remover `pg_catalog` direto** — verificar e substituir qualquer `RawSQL`/`.raw()` que use sintaxe PG | P2 | — |
+
+#### Fase B — Drivers e Testes (P2)
+
+| # | Item | Prioridade | Status |
+|---|------|-----------|--------|
+| DB-05 | **Driver MySQL** — adicionar `mysqlclient==2.2.*` e `PyMySQL==1.1.*` em `requirements.txt`; configurar `DATABASES` para MySQL com charset `utf8mb4` | P2 | — |
+| DB-06 | **Driver Oracle** — adicionar `cx_Oracle==8.*` (ou `python-oracledb==2.*`); configurar `NLS_LANG`, `BLOB` para campos `FileField` em Oracle | P2 | — |
+| DB-07 | **Migration portável** — revisar todas as migrations; substituir `default=uuid.uuid4` por `default=uuid.uuid4` (já portável); garantir que `TextField` mínimo seja `VARCHAR(max)` compatível com Oracle | P2 | — |
+| DB-08 | **Test suite multi-banco** — CI GitHub Actions com matrix: `[postgresql, mysql, sqlite]`; Oracle em pipeline separado (licença) | P3 | — |
+| DB-09 | **Documentação de setup** — `docs/deployment/DATABASES.md`: instruções de string de conexão, drivers e variáveis de ambiente para cada banco | P3 | — |
+
+---
+
+### 29.3 Arquitetura `PortableJSONField`
+
+```python
+# core/db_fields.py
+import json
+from django.db import models
+
+class PortableJSONField(models.JSONField):
+    """JSONField portável: usa nativo no PG/MySQL ≥5.7, emula via TextField no Oracle."""
+
+    def db_type(self, connection):
+        vendor = connection.vendor
+        if vendor == 'postgresql':
+            return 'jsonb'
+        if vendor == 'mysql':
+            return 'json'
+        # Oracle, SQLite, outros: TEXT
+        return 'NCLOB' if vendor == 'oracle' else 'text'
+
+    def from_db_value(self, value, expression, connection):
+        if isinstance(value, str):
+            return json.loads(value)
+        return value
+
+    def get_prep_value(self, value):
+        if value is None:
+            return value
+        return json.dumps(value, ensure_ascii=False)
+```
+
+---
+
+### 29.4 Configuração Dinâmica de `settings.py`
+
+```python
+# settings.py — detecção automática de engine
+_DB_ENGINE = env('DATABASE_ENGINE', default='postgresql')
+
+DATABASES = {
+    'default': {
+        'ENGINE': f'django.db.backends.{_DB_ENGINE}',
+        'NAME': env('DB_NAME', default='gestao_contrato'),
+        ...
+    }
+}
+
+# Opções específicas por driver
+if _DB_ENGINE == 'postgresql':
+    DATABASES['default']['OPTIONS'] = {'options': '-c search_path=gestao_contrato'}
+    DATABASES['default']['CONN_MAX_AGE'] = 0
+    DATABASES['default']['DISABLE_SERVER_SIDE_CURSORS'] = True
+elif _DB_ENGINE == 'mysql':
+    DATABASES['default']['OPTIONS'] = {'charset': 'utf8mb4', 'init_command': "SET sql_mode='STRICT_TRANS_TABLES'"}
+elif _DB_ENGINE == 'oracle':
+    DATABASES['default']['OPTIONS'] = {'threaded': True}
+```
+
+---
+
+### 29.5 Variáveis de Ambiente Adicionais
+
+| Variável | Valores | Padrão |
+|----------|---------|--------|
+| `DATABASE_ENGINE` | `postgresql` / `mysql` / `oracle` / `sqlite3` | `postgresql` |
+| `DB_NAME` | Nome do banco / serviço Oracle | `gestao_contrato` |
+| `DB_HOST` | Host do servidor | via `DATABASE_URL` |
+| `DB_PORT` | Porta do servidor | padrão do driver |
+
+---
+
+## 30. CHATBOT WHATSAPP — HUMANIZAÇÃO COM IA (Claude API)
+
+> **Contexto:** O chatbot atual (Seção 27) usa um despachante de regras fixas com 5 intents.
+> Funciona bem para fluxos estruturados, mas respostas são mecânicas e não compreendem
+> perguntas livres ("Quando vence minha próxima?", "Tenho desconto se pagar hoje?").
+>
+> **Estratégia:** Manter os fluxos estruturados existentes como ferramentas (tools) e
+> adicionar uma camada de IA (Claude API) para: entendimento de linguagem natural,
+> respostas humanizadas, contexto de conversa e tratamento de perguntas não mapeadas.
+
+---
+
+### 30.1 Arquitetura Proposta
+
+```
+Mensagem do Cliente
+        │
+        ▼
+ ┌─────────────────────────────┐
+ │   Camada IA (Claude API)    │
+ │   claude-haiku-4-5          │  ← rápido, barato, < 1s
+ │   + system prompt + tools   │
+ └──────────┬──────────────────┘
+            │  tool_use → intent identificado
+            ▼
+ ┌─────────────────────────────┐
+ │   Despachante Existente     │  ← _iniciar_2a_via(),
+ │   (whatsapp_bot.py)         │     _iniciar_atraso(), etc.
+ └──────────┬──────────────────┘
+            │  dados estruturados do DB
+            ▼
+ ┌─────────────────────────────┐
+ │   Claude gera resposta      │  ← humaniza o texto final
+ │   com dados reais do DB     │     com nome, tom, emojis
+ └──────────┬──────────────────┘
+            │
+            ▼
+     Mensagem WhatsApp
+```
+
+---
+
+### 30.2 Items de Implementação
+
+| # | Item | Prioridade | Status |
+|---|------|-----------|--------|
+| H-01 | **Dependência** — `anthropic>=0.34` em `requirements.txt`; `ANTHROPIC_API_KEY` no Render | P1 | — |
+| H-02 | **Classificador de intent** — `AIIntentClassifier.classificar(texto, contexto_sessao)`: chama `claude-haiku-4-5` com tool_use; tools = `["segunda_via", "atraso", "comprovante", "resumo", "atendente", "pergunta_livre"]`; fallback para despachante atual se API indisponível | P1 | — |
+| H-03 | **Humanizador de resposta** — `AIResponseHumanizer.humanizar(dados_db, intent, nome_comprador)`: recebe dados estruturados (parcela, valores, datas) e gera texto natural; tom: prestativo, direto, sem formalidade excessiva | P1 | — |
+| H-04 | **Contexto de sessão** — salvar últimas 6 mensagens em `SessaoConversaWhatsApp.dados` (JSON); passadas ao Claude como `messages` para manter contexto | P2 | — |
+| H-05 | **Pergunta livre** — quando intent = `pergunta_livre`, Claude responde com base nos dados do comprador (contratos, parcelas) sem acionar fluxo estruturado; limita resposta a tópicos financeiros/contratuais | P2 | — |
+| H-06 | **Delay de digitação** — `asyncio.sleep(random.uniform(0.8, 2.0))` antes de enviar resposta; simula tempo de leitura/digitação humana via Evolution API `typing indicator` | P2 | — |
+| H-07 | **Fallback gracioso** — se Claude API retornar erro/timeout (>3s), cair silenciosamente para despachante de regras atual; usuário não percebe a troca | P2 | — |
+| H-08 | **Prompt de sistema** — `SYSTEM_PROMPT` configurável em `ParametroSistema` com chave `CHATBOT_SYSTEM_PROMPT`; padrão define tom, limites (só assuntos do contrato), idioma (pt-BR) e persona | P2 | — |
+| H-09 | **Limite de custo** — `CHATBOT_MAX_TOKENS_POR_RESPOSTA = 300`; `CHATBOT_MODELO = 'claude-haiku-4-5'` (≈ R$0,002/conversa); alertar admin se > R$50/mês via log | P3 | — |
+| H-10 | **A/B testing** — flag `CHATBOT_IA_ATIVO` em `ParametroSistema`; permite ligar/desligar IA sem deploy | P3 | — |
+| H-11 | **Métricas de qualidade** — gravar `intent_detectado`, `confianca`, `modelo_usado`, `tokens_usados`, `latencia_ms` em `SessaoConversaWhatsApp.dados`; dashboard admin com médias mensais | P3 | — |
+
+---
+
+### 30.3 System Prompt Padrão
+
+```
+Você é o assistente virtual de cobrança da {NOMEIMOBILIARIA}.
+Seu nome é "Assistente {NOMEIMOBILIARIA}".
+
+PERSONALIDADE:
+- Prestativo e cordial, sem ser excessivamente formal
+- Direto ao ponto — o comprador quer resolver, não ler parágrafos
+- Use emojis com moderação (1-2 por mensagem, apenas quando naturais)
+- Idioma: português brasileiro, informal mas profissional
+
+ESCOPO:
+- Responda APENAS sobre: boletos, parcelas, contratos, pagamentos, situação financeira
+- Para assuntos fora do escopo: "Para outros assuntos, fale com um atendente humano"
+- Nunca invente dados — use apenas as informações fornecidas no contexto
+
+FORMATO:
+- Respostas curtas (máx. 3 parágrafos para WhatsApp)
+- Valores sempre em R$ com centavos: "R$ 1.234,56"
+- Datas no formato brasileiro: "15/06/2025"
+- Nunca use markdown (asteriscos, #) — WhatsApp usa *negrito* diferente
+```
+
+---
+
+### 30.4 Integração com Código Existente
+
+```python
+# notificacoes/whatsapp_bot.py — processar()
+from notificacoes.ai_chatbot import AIIntentClassifier, AIResponseHumanizer
+
+class WhatsAppBotService:
+    def processar(self, telefone, mensagem, **kwargs):
+        sessao = self._obter_ou_criar_sessao(telefone)
+
+        # IA: classificar intent (com fallback para regras)
+        if settings.get_param('CHATBOT_IA_ATIVO', 'false') == 'true':
+            intent = AIIntentClassifier.classificar(mensagem, sessao)
+        else:
+            intent = self._classificar_regras(mensagem)  # lógica atual
+
+        # Despachar fluxo estruturado (código existente)
+        dados_db = self._despachar(intent, sessao)
+
+        # IA: humanizar resposta
+        if settings.get_param('CHATBOT_IA_ATIVO', 'false') == 'true':
+            return AIResponseHumanizer.humanizar(dados_db, intent, sessao)
+        return dados_db  # resposta texto atual
+```
+
+---
+
+### 30.5 Modelo e Custo Estimado
+
+| Modelo | Latência | Custo/1k tokens | Custo/mês (500 conv.) |
+|--------|----------|-----------------|----------------------|
+| `claude-haiku-4-5` | ~400ms | Input: $0.80 / Output: $4.00 | ~R$ 8–15 |
+| `claude-sonnet-4-6` | ~1.2s | Input: $3.00 / Output: $15.00 | ~R$ 40–80 |
+
+> **Recomendação:** Usar `claude-haiku-4-5` para classificação de intent (barato, rápido)
+> e `claude-haiku-4-5` para humanização de resposta (volume alto). Reservar Sonnet apenas
+> para perguntas livres complexas (`pergunta_livre` intent com fallback).
+
+---
+
+### 30.6 Variáveis de Ambiente
+
+| Variável | Descrição | Onde configurar |
+|----------|-----------|-----------------|
+| `ANTHROPIC_API_KEY` | Chave da API Claude | Render → Secret (sync: false) |
+| `CHATBOT_IA_ATIVO` | Liga/desliga IA (`true`/`false`) | `ParametroSistema` ou env var |
+| `CHATBOT_MODELO` | Modelo padrão | `ParametroSistema` (padrão: `claude-haiku-4-5`) |
+| `CHATBOT_MAX_TOKENS` | Limite de tokens por resposta | `ParametroSistema` (padrão: `300`) |
