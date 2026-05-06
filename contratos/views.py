@@ -15,7 +15,8 @@ from django.db import models
 from django.db.models import Q, Sum
 from .models import Contrato, StatusContrato, IndiceReajuste, PrestacaoIntermediaria, TabelaJurosContrato, TipoAmortizacao, TipoCorrecao
 from .forms import ContratoForm, IndiceReajusteForm
-from core.mixins import PaginacaoMixin
+from core.mixins import PaginacaoMixin, TenantMixin
+from core.mixins import verificar_acesso_tenant
 import requests
 from django.http import JsonResponse
 from django.views.decorators.http import require_http_methods
@@ -38,7 +39,7 @@ def _voltar_url(request, default):
     return default
 
 
-class ContratoListView(LoginRequiredMixin, PaginacaoMixin, ListView):
+class ContratoListView(LoginRequiredMixin, TenantMixin, PaginacaoMixin, ListView):
     """Lista todos os contratos"""
     model = Contrato
     template_name = 'contratos/contrato_list.html'
@@ -46,7 +47,7 @@ class ContratoListView(LoginRequiredMixin, PaginacaoMixin, ListView):
     paginate_by = 20
 
     def get_queryset(self):
-        queryset = Contrato.objects.select_related(
+        queryset = super().get_queryset().select_related(
             'imovel', 'imovel__imobiliaria',
             'comprador',
             'imobiliaria'
@@ -80,13 +81,13 @@ class ContratoListView(LoginRequiredMixin, PaginacaoMixin, ListView):
         context['status_filter'] = self.request.GET.get('status', '')
         context['imobiliaria_filter'] = self.request.GET.get('imobiliaria', '')
         context['status_choices'] = StatusContrato.choices
-        context['total_contratos'] = Contrato.objects.count()
-        context['contratos_ativos'] = Contrato.objects.filter(status=StatusContrato.ATIVO).count()
-        context['contratos_quitados'] = Contrato.objects.filter(status=StatusContrato.QUITADO).count()
+        qs_tenant = self.get_queryset()
+        context['total_contratos'] = qs_tenant.count()
+        context['contratos_ativos'] = qs_tenant.filter(status=StatusContrato.ATIVO).count()
+        context['contratos_quitados'] = qs_tenant.filter(status=StatusContrato.QUITADO).count()
 
-        # Lista de imobiliárias para filtro
-        from core.models import Imobiliaria
-        context['imobiliarias'] = Imobiliaria.objects.filter(ativo=True)
+        # Lista de imobiliárias para filtro (apenas as acessíveis ao usuário)
+        context['imobiliarias'] = self.get_imobiliarias_permitidas()
 
         # Contratos que precisam de reajuste no mês corrente
         context['contratos_reajuste'] = self._get_contratos_reajuste_pendente()
@@ -107,8 +108,10 @@ class ContratoListView(LoginRequiredMixin, PaginacaoMixin, ListView):
         hoje = timezone.now().date()
         contratos_pendentes = []
 
+        imobs = self.get_imobiliarias_permitidas()
         contratos_ativos = Contrato.objects.filter(
-            status=StatusContrato.ATIVO
+            status=StatusContrato.ATIVO,
+            imobiliaria__in=imobs
         ).exclude(
             tipo_correcao=TipoCorrecao.FIXO
         ).select_related('comprador', 'imovel', 'imobiliaria')
@@ -168,7 +171,7 @@ class ContratoCreateView(LoginRequiredMixin, CreateView):
         return super().form_invalid(form)
 
 
-class ContratoUpdateView(LoginRequiredMixin, UpdateView):
+class ContratoUpdateView(LoginRequiredMixin, TenantMixin, UpdateView):
     """Atualiza um contrato existente"""
     model = Contrato
     form_class = ContratoForm
@@ -194,14 +197,14 @@ class ContratoUpdateView(LoginRequiredMixin, UpdateView):
         return super().form_invalid(form)
 
 
-class ContratoDetailView(LoginRequiredMixin, DetailView):
+class ContratoDetailView(LoginRequiredMixin, TenantMixin, DetailView):
     """Exibe detalhes de um contrato"""
     model = Contrato
     template_name = 'contratos/contrato_detail.html'
     context_object_name = 'contrato'
 
     def get_queryset(self):
-        return Contrato.objects.select_related(
+        return super().get_queryset().select_related(
             'imovel', 'imovel__imobiliaria',
             'comprador',
             'imobiliaria'
@@ -418,7 +421,7 @@ class ContratoDetailView(LoginRequiredMixin, DetailView):
         return context
 
 
-class ContratoDeleteView(LoginRequiredMixin, DeleteView):
+class ContratoDeleteView(LoginRequiredMixin, TenantMixin, DeleteView):
     """Cancela um contrato (soft delete via status)"""
     model = Contrato
     success_url = reverse_lazy('contratos:listar')
@@ -461,7 +464,8 @@ def detalhe_contrato(request, pk):
 @login_required
 def parcelas_contrato(request, pk):
     """Lista todas as parcelas de um contrato"""
-    contrato = get_object_or_404(Contrato, pk=pk)
+    contrato = get_object_or_404(Contrato.objects.select_related('imobiliaria'), pk=pk)
+    verificar_acesso_tenant(request, contrato.imobiliaria)
     parcelas = contrato.parcelas.all().order_by('numero_parcela')
 
     context = {
@@ -1031,7 +1035,10 @@ class IntermediariasListView(LoginRequiredMixin, PaginacaoMixin, ListView):
     paginate_by = 20
 
     def get_queryset(self):
-        self.contrato = get_object_or_404(Contrato, pk=self.kwargs['contrato_id'])
+        self.contrato = get_object_or_404(
+            Contrato.objects.select_related('imobiliaria'), pk=self.kwargs['contrato_id']
+        )
+        verificar_acesso_tenant(self.request, self.contrato.imobiliaria)
         return PrestacaoIntermediaria.objects.filter(
             contrato=self.contrato
         ).select_related('contrato', 'parcela_vinculada').order_by('numero_sequencial')
@@ -1060,14 +1067,16 @@ class IntermediariasListView(LoginRequiredMixin, PaginacaoMixin, ListView):
         return context
 
 
-class IntermediariasDetailView(LoginRequiredMixin, DetailView):
+class IntermediariasDetailView(LoginRequiredMixin, TenantMixin, DetailView):
     """Exibe detalhes de uma prestação intermediária"""
     model = PrestacaoIntermediaria
     template_name = 'contratos/intermediaria_detail.html'
     context_object_name = 'intermediaria'
+    tenant_field = 'contrato.imobiliaria'
+    tenant_filter = 'contrato__imobiliaria__in'
 
     def get_queryset(self):
-        return PrestacaoIntermediaria.objects.select_related(
+        return super().get_queryset().select_related(
             'contrato', 'contrato__comprador', 'contrato__imovel',
             'parcela_vinculada'
         )

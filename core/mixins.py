@@ -3,15 +3,38 @@ Mixins reutilizáveis para views do sistema Gestão de Contratos.
 
 Inclui mixins para:
 - Controle de acesso
+- Isolamento de tenant (imobiliária)
 - Otimização de queries
 - Paginação
 """
+from django.core.exceptions import PermissionDenied
 from .models import (
     get_contabilidades_usuario,
     get_imobiliarias_usuario,
     usuario_tem_acesso_imobiliaria,
-    usuario_tem_acesso_contabilidade
+    usuario_tem_acesso_contabilidade,
+    usuario_tem_permissao_total,
 )
+
+
+def verificar_acesso_tenant(request, imobiliaria):
+    """
+    Helper para function-based views: levanta PermissionDenied se o usuário
+    não tiver acesso à imobiliária do objeto.
+
+    Uso típico (FBV):
+        contrato = get_object_or_404(Contrato, pk=pk)
+        verificar_acesso_tenant(request, contrato.imobiliaria)
+
+        parcela = get_object_or_404(Parcela.objects.select_related('contrato'), pk=pk)
+        verificar_acesso_tenant(request, parcela.contrato.imobiliaria)
+    """
+    if not request.user.is_authenticated:
+        raise PermissionDenied
+    if usuario_tem_permissao_total(request.user):
+        return
+    if not usuario_tem_acesso_imobiliaria(request.user, imobiliaria):
+        raise PermissionDenied
 
 
 class AcessoMixin:
@@ -39,6 +62,50 @@ class AcessoMixin:
     def pode_acessar_imobiliaria(self, imobiliaria):
         """Verifica se o usuário pode acessar uma imobiliária específica."""
         return usuario_tem_acesso_imobiliaria(self.request.user, imobiliaria)
+
+
+class TenantMixin(AcessoMixin):
+    """
+    Isolamento de tenant para class-based views (Detail/Update/Delete/List).
+
+    Para Detail/Update/Delete: sobrescreve get_object() — retorna 403 se o objeto
+    pertencer a uma imobiliária à qual o usuário não tem acesso.
+
+    Para List: sobrescreve get_queryset() — filtra automaticamente pela(s)
+    imobiliária(s) que o usuário pode acessar.
+
+    Atributo `tenant_field`: atributo dotted-path a partir do objeto até Imobiliaria.
+      - Contrato:               'imobiliaria'
+      - Parcela:                'contrato.imobiliaria'
+      - PrestacaoIntermediaria: 'contrato.imobiliaria'
+    Atributo `tenant_filter`:   lookup ORM equivalente (para filtro no queryset).
+      - Contrato:               'imobiliaria__in'
+      - Parcela:                'contrato__imobiliaria__in'
+    """
+    tenant_field = 'imobiliaria'
+    tenant_filter = 'imobiliaria__in'
+
+    def _resolve_tenant_imobiliaria(self, obj):
+        """Navega o dotted path no objeto para obter a Imobiliaria."""
+        val = obj
+        for part in self.tenant_field.split('.'):
+            val = getattr(val, part)
+        return val
+
+    def get_object(self, queryset=None):
+        obj = super().get_object(queryset)
+        if not usuario_tem_permissao_total(self.request.user):
+            imob = self._resolve_tenant_imobiliaria(obj)
+            if not usuario_tem_acesso_imobiliaria(self.request.user, imob):
+                raise PermissionDenied
+        return obj
+
+    def get_queryset(self):
+        qs = super().get_queryset()
+        if usuario_tem_permissao_total(self.request.user):
+            return qs
+        imobs = self.get_imobiliarias_permitidas()
+        return qs.filter(**{self.tenant_filter: imobs})
 
 
 class QuerysetOptimizationMixin:
