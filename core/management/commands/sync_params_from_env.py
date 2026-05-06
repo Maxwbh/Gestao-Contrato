@@ -112,6 +112,20 @@ PARAMETROS = [
      'Validade em dias do link público de boleto (/b/<uuid>/). 0 = sem expiração.'),
     ('BOLETO_RATE_LIMIT_POR_HORA', 'seguranca', 'int', '20',
      'Máximo de acessos por IP por hora na URL pública de boleto.'),
+
+    # ── Chatbot IA (Seção 30) ────────────────────────────────────────────────
+    ('ANTHROPIC_API_KEY', 'chatbot_ia', 'secret', '',
+     'Chave de API da Anthropic para o chatbot humanizado. Obtenha em console.anthropic.com'),
+    ('CHATBOT_IA_ATIVO', 'chatbot_ia', 'str', 'false',
+     'H-10: ativa/desativa IA no chatbot sem deploy. Valores: true | false'),
+    ('CHATBOT_MODELO', 'chatbot_ia', 'str', 'claude-haiku-4-5-20251001',
+     'H-09: modelo Claude a usar. Padrão: claude-haiku-4-5-20251001 (rápido e barato)'),
+    ('CHATBOT_MAX_TOKENS_POR_RESPOSTA', 'chatbot_ia', 'int', '300',
+     'H-09: limite de tokens na resposta humanizada (~200-300 palavras)'),
+    ('CHATBOT_SYSTEM_PROMPT', 'chatbot_ia', 'str', '',
+     'H-08: prompt de sistema para humanizador. Deixe vazio para usar o padrão embutido.'),
+    ('CHATBOT_SYSTEM_PROMPT_CLASSIFIER', 'chatbot_ia', 'str', '',
+     'H-08: prompt para classificador de intent. Deixe vazio para usar o padrão embutido.'),
 ]
 
 

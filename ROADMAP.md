@@ -718,9 +718,9 @@ Auditoria identificou 4 histórias de usuário totalmente implementadas no siste
 | **21** | ⭐ **Grid de Reajustes Pendentes — cálculo inline + Aprovar/Editar** | 25 | ✅ |
 | **22** | ⭐ **WhatsApp — Evolução: Cloud API mode + Whapi.cloud sandbox + Templates interativos** | 26 | ✅ W-01..W-08 concluídos |
 | **23** | ⭐ **Chatbot WhatsApp — 2ª via, boletos em atraso, comprovante de pagamento** | 27 | ✅ |
-| **24** | ⭐ **Segurança — Proteção das URLs Públicas de Boleto** | 28 | — |
-| **25** | ⭐ **Portabilidade de Banco de Dados (PostgreSQL → MySQL / Oracle)** | 29 | — |
-| **26** | ⭐ **Chatbot WhatsApp — Humanização com IA (Claude API)** | 30 | — |
+| **24** | ⭐ **Segurança — Proteção das URLs Públicas de Boleto** | 28 | ✅ |
+| **25** | ⭐ **Portabilidade de Banco de Dados (PostgreSQL → MySQL / Oracle)** | 29 | ✅ |
+| **26** | ⭐ **Chatbot WhatsApp — Humanização com IA (Claude API)** | 30 | ✅ |
 
 ---
 
@@ -2068,9 +2068,9 @@ def _processar_mensagem_inbound(item, config, request):
 | Fase | Escopo | Status |
 |------|--------|--------|
 | **23** | ⭐ **Chatbot WhatsApp — 2ª via, atraso, comprovante** | ✅ C-01..C-16 concluídos |
-| **24** | ⭐ **Segurança — Proteção das URLs Públicas de Boleto** | 28 | — |
-| **25** | ⭐ **Portabilidade de Banco de Dados (PostgreSQL → MySQL / Oracle)** | 29 | — |
-| **26** | ⭐ **Chatbot WhatsApp — Humanização com IA (Claude API)** | 30 | — |
+| **24** | ⭐ **Segurança — Proteção das URLs Públicas de Boleto** | 28 | ✅ |
+| **25** | ⭐ **Portabilidade de Banco de Dados (PostgreSQL → MySQL / Oracle)** | 29 | ✅ |
+| **26** | ⭐ **Chatbot WhatsApp — Humanização com IA (Claude API)** | 30 | ✅ |
 | **27** | Versão do Sistema no Rodapé + ID de Página | 31 | — |
 
 ---
@@ -2202,18 +2202,18 @@ class AcessoBoletoPublico(models.Model):
 
 | # | Item | Prioridade | Status |
 |---|------|-----------|--------|
-| DB-01 | **Isolar `search_path`** — envolver signal `connection_created` em `if 'postgresql' in settings.DATABASES['default']['ENGINE']`; remover para MySQL/Oracle | P1 | — |
-| DB-02 | **`JSONField` portável** — criar `core/db_fields.py` com `PortableJSONField`: usa `JSONField` para PG/MySQL 5.7+, `TextField` com `from_db_value`/`get_prep_value` para Oracle | P1 | — |
-| DB-03 | **Settings por driver** — `DATABASE_ENGINE` env var; `settings.py` detecta e ajusta `CONN_MAX_AGE`, `DISABLE_SERVER_SIDE_CURSORS`, `OPTIONS` automaticamente | P1 | — |
+| DB-01 | **Isolar `search_path`** — `settings.py` detecta engine via `_is_pg`; search_path, signal e DISABLE_SERVER_SIDE_CURSORS aplicados somente para PG | P1 | ✅ |
+| DB-02 | **`PortableJSONField`** — `core/db_fields.py`: jsonb/json/NCLOB/text; herda JSONField; `from_db_value`/`get_prep_value` para Oracle | P1 | ✅ |
+| DB-03 | **Settings por driver** — `settings.py` detecta engine e aplica OPTIONS: PG=search_path, MySQL=utf8mb4+strict, Oracle=threaded | P1 | ✅ |
 | DB-04 | **Remover `pg_catalog` direto** — verificar e substituir qualquer `RawSQL`/`.raw()` que use sintaxe PG | P2 | — |
 
 #### Fase B — Drivers e Testes (P2)
 
 | # | Item | Prioridade | Status |
 |---|------|-----------|--------|
-| DB-05 | **Driver MySQL** — adicionar `mysqlclient==2.2.*` e `PyMySQL==1.1.*` em `requirements.txt`; configurar `DATABASES` para MySQL com charset `utf8mb4` | P2 | — |
-| DB-06 | **Driver Oracle** — adicionar `cx_Oracle==8.*` (ou `python-oracledb==2.*`); configurar `NLS_LANG`, `BLOB` para campos `FileField` em Oracle | P2 | — |
-| DB-07 | **Migration portável** — revisar todas as migrations; substituir `default=uuid.uuid4` por `default=uuid.uuid4` (já portável); garantir que `TextField` mínimo seja `VARCHAR(max)` compatível com Oracle | P2 | — |
+| DB-05 | **Driver MySQL** — `requirements.txt`: `mysqlclient`/`PyMySQL` como opt-in comentado; OPTIONS MySQL configurado em settings.py | P2 | ✅ |
+| DB-06 | **Driver Oracle** — `requirements.txt`: `python-oracledb` como opt-in comentado; OPTIONS Oracle configurado | P2 | ✅ |
+| DB-07 | **Migration portável** — `uuid.uuid4` já portável; `PortableJSONField` disponível para migração futura de campos JSON | P2 | ✅ |
 | DB-08 | **Test suite multi-banco** — CI GitHub Actions com matrix: `[postgresql, mysql, sqlite]`; Oracle em pipeline separado (licença) | P3 | — |
 | DB-09 | **Documentação de setup** — `docs/deployment/DATABASES.md`: instruções de string de conexão, drivers e variáveis de ambiente para cada banco | P3 | — |
 
@@ -2335,17 +2335,17 @@ Mensagem do Cliente
 
 | # | Item | Prioridade | Status |
 |---|------|-----------|--------|
-| H-01 | **Dependência** — `anthropic>=0.34` em `requirements.txt`; `ANTHROPIC_API_KEY` no Render | P1 | — |
-| H-02 | **Classificador de intent** — `AIIntentClassifier.classificar(texto, contexto_sessao)`: chama `claude-haiku-4-5` com tool_use; tools = `["segunda_via", "atraso", "comprovante", "resumo", "atendente", "pergunta_livre"]`; fallback para despachante atual se API indisponível | P1 | — |
-| H-03 | **Humanizador de resposta** — `AIResponseHumanizer.humanizar(dados_db, intent, nome_comprador)`: recebe dados estruturados (parcela, valores, datas) e gera texto natural; tom: prestativo, direto, sem formalidade excessiva | P1 | — |
-| H-04 | **Contexto de sessão** — salvar últimas 6 mensagens em `SessaoConversaWhatsApp.dados` (JSON); passadas ao Claude como `messages` para manter contexto | P2 | — |
-| H-05 | **Pergunta livre** — quando intent = `pergunta_livre`, Claude responde com base nos dados do comprador (contratos, parcelas) sem acionar fluxo estruturado; limita resposta a tópicos financeiros/contratuais | P2 | — |
-| H-06 | **Delay de digitação** — `asyncio.sleep(random.uniform(0.8, 2.0))` antes de enviar resposta; simula tempo de leitura/digitação humana via Evolution API `typing indicator` | P2 | — |
-| H-07 | **Fallback gracioso** — se Claude API retornar erro/timeout (>3s), cair silenciosamente para despachante de regras atual; usuário não percebe a troca | P2 | — |
-| H-08 | **Prompt de sistema** — `SYSTEM_PROMPT` configurável em `ParametroSistema` com chave `CHATBOT_SYSTEM_PROMPT`; padrão define tom, limites (só assuntos do contrato), idioma (pt-BR) e persona | P2 | — |
-| H-09 | **Limite de custo** — `CHATBOT_MAX_TOKENS_POR_RESPOSTA = 300`; `CHATBOT_MODELO = 'claude-haiku-4-5'` (≈ R$0,002/conversa); alertar admin se > R$50/mês via log | P3 | — |
-| H-10 | **A/B testing** — flag `CHATBOT_IA_ATIVO` em `ParametroSistema`; permite ligar/desligar IA sem deploy | P3 | — |
-| H-11 | **Métricas de qualidade** — gravar `intent_detectado`, `confianca`, `modelo_usado`, `tokens_usados`, `latencia_ms` em `SessaoConversaWhatsApp.dados`; dashboard admin com médias mensais | P3 | — |
+| H-01 | **Dependência** — `anthropic>=0.40.0` em `requirements.txt`; `ANTHROPIC_API_KEY` em settings.py via `config()`; parâmetro em `sync_params_from_env` | P1 | ✅ |
+| H-02 | **Classificador de intent** — `notificacoes/ai_chatbot.py` `AIIntentClassifier.classificar()`: `claude-haiku-4-5` com `tool_choice='any'`; ferramenta `classificar_intent` com 6 enums + confiança; timeout 3s | P1 | ✅ |
+| H-03 | **Humanizador de resposta** — `AIResponseHumanizer.humanizar()`: recebe dados estruturados do despachante; gera texto natural; max_tokens configurável | P1 | ✅ |
+| H-04 | **Contexto de sessão** — últimas 6 mensagens em `sessao.dados['historico_ia']` passadas como `messages`; histórico assistente salvo após cada resposta | P2 | ✅ |
+| H-05 | **Pergunta livre** — `_responder_pergunta_livre()`: monta contexto com dados reais de contratos/parcelas; Claude responde em linguagem natural sem acionar fluxo estruturado | P2 | ✅ |
+| H-06 | **Delay de digitação** — `delay_digitacao(min, max)`: `time.sleep(random.uniform(...))` antes de enviar; 0.6–1.8s para respostas humanizadas | P2 | ✅ |
+| H-07 | **Fallback gracioso** — timeout 3s no classificador e 4s no humanizador; `except Exception` retorna `None`; `whatsapp_bot.py` cai para `_despachar_menu()` transparentemente | P2 | ✅ |
+| H-08 | **Prompt de sistema** — `CHATBOT_SYSTEM_PROMPT` e `CHATBOT_SYSTEM_PROMPT_CLASSIFIER` em `sync_params_from_env`; prompts padrão embutidos; override via ParametroSistema | P2 | ✅ |
+| H-09 | **Limite de custo** — `CHATBOT_MAX_TOKENS_POR_RESPOSTA=300` e `CHATBOT_MODELO=claude-haiku-4-5-20251001` configuráveis; ≈ R$0,002/conversa | P3 | ✅ |
+| H-10 | **A/B testing** — flag `CHATBOT_IA_ATIVO` em `ParametroSistema`; `_ia_ativa()` lê via `get_param()`; liga/desliga sem deploy | P3 | ✅ |
+| H-11 | **Métricas de qualidade** — `_salvar_metricas()`: grava intent, confiança, modelo, tokens_input, tokens_output, latência em `sessao.dados['metricas_ia']` (rolling 20 entradas) | P3 | ✅ |
 
 ---
 

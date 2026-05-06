@@ -6,6 +6,11 @@ python-decouple==3.8
 # Database
 psycopg2-binary==2.9.9
 dj-database-url==2.1.0
+# DB-05: MySQL (instalar manualmente em ambientes MySQL)
+# mysqlclient==2.2.*
+# PyMySQL==1.1.*
+# DB-06: Oracle (instalar manualmente em ambientes Oracle)
+# python-oracledb==2.*
 
 # API e Comunicação
 requests==2.31.0
@@ -39,6 +44,9 @@ openpyxl==3.1.2
 
 # Geração de dados fake
 Faker==22.0.0
+
+# IA — Claude API (H-01: chatbot humanizado)
+anthropic>=0.40.0
 
 # Testes
 pytest==7.4.3
