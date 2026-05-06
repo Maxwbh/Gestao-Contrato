@@ -309,7 +309,11 @@
                 </a>
             </p>
             <p class="mt-1 mb-0" style="font-size:0.75rem; opacity:0.65;">
-                v{{ system_version }} &nbsp;|&nbsp; Página <span class="font-monospace">{{ page_id }}</span>
+                <span title="Commit: {{ system_version_info.commit }} | Build: {{ system_version_info.date }} | {{ system_version_info.env }}"
+                      style="cursor:help; border-bottom:1px dotted rgba(255,255,255,0.4);">
+                    v{{ system_version }}
+                </span>
+                &nbsp;|&nbsp; Página <span class="font-monospace">{{ page_id }}</span>
             </p>
         </div>
     </footer>

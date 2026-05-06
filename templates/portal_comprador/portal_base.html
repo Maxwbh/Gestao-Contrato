@@ -331,7 +331,11 @@
 <script src="{% static 'vendor/materialize/js/materialize.min.js' %}"></script>
 {% block extra_js %}{% endblock %}
 <footer style="text-align:center; padding:8px 0; font-size:0.7rem; color:#aaa;">
-    v{{ system_version }} &nbsp;|&nbsp; Página {{ page_id }}
+    <span title="Commit: {{ system_version_info.commit }} | Build: {{ system_version_info.date }} | {{ system_version_info.env }}"
+          style="cursor:help; border-bottom:1px dotted #ccc;">
+        v{{ system_version }}
+    </span>
+    &nbsp;|&nbsp; Página {{ page_id }}
 </footer>
 </body>
 </html>
