@@ -7,13 +7,14 @@ Escopo: listar_remessas, detalhe_remessa, gerar_remessa,
 """
 import pytest
 from django.urls import reverse
+from core.hashids_utils import encode_id
 
-from tests.fixtures.factories import UserFactory, ContratoFactory
+from tests.fixtures.factories import UserFactory, SuperUserFactory, ContratoFactory
 
 
 @pytest.fixture
 def usuario(db):
-    return UserFactory()
+    return SuperUserFactory()
 
 
 @pytest.fixture
@@ -61,12 +62,12 @@ class TestDetalheRemessa:
     """Testes da view detalhe_arquivo_remessa"""
 
     def test_requer_autenticacao(self, client):
-        url = reverse('financeiro:detalhe_remessa', kwargs={'pk': 1})
+        url = reverse('financeiro:detalhe_remessa', kwargs={'hid': encode_id(1)})
         response = client.get(url)
         assert response.status_code in (302, 403)
 
     def test_remessa_inexistente_retorna_404(self, client_logado):
-        url = reverse('financeiro:detalhe_remessa', kwargs={'pk': 999999})
+        url = reverse('financeiro:detalhe_remessa', kwargs={'hid': encode_id(999999)})
         response = client_logado.get(url)
         assert response.status_code == 404
 
@@ -105,12 +106,12 @@ class TestDownloadRemessa:
     """Testes da view download_arquivo_remessa"""
 
     def test_requer_autenticacao(self, client):
-        url = reverse('financeiro:download_remessa', kwargs={'pk': 1})
+        url = reverse('financeiro:download_remessa', kwargs={'hid': encode_id(1)})
         response = client.get(url)
         assert response.status_code in (302, 403)
 
     def test_remessa_inexistente_retorna_404(self, client_logado):
-        url = reverse('financeiro:download_remessa', kwargs={'pk': 999999})
+        url = reverse('financeiro:download_remessa', kwargs={'hid': encode_id(999999)})
         response = client_logado.get(url)
         assert response.status_code == 404
 
@@ -120,18 +121,18 @@ class TestMarcarRemessaEnviada:
     """Testes da view marcar_remessa_enviada"""
 
     def test_requer_autenticacao(self, client):
-        url = reverse('financeiro:marcar_remessa_enviada', kwargs={'pk': 1})
+        url = reverse('financeiro:marcar_remessa_enviada', kwargs={'hid': encode_id(1)})
         response = client.post(url, {})
         assert response.status_code in (302, 403)
 
     def test_get_nao_permitido(self, client_logado):
         """GET retorna 405 (require_POST)"""
-        url = reverse('financeiro:marcar_remessa_enviada', kwargs={'pk': 1})
+        url = reverse('financeiro:marcar_remessa_enviada', kwargs={'hid': encode_id(1)})
         response = client_logado.get(url)
         assert response.status_code == 405
 
     def test_remessa_inexistente_retorna_404(self, client_logado):
-        url = reverse('financeiro:marcar_remessa_enviada', kwargs={'pk': 999999})
+        url = reverse('financeiro:marcar_remessa_enviada', kwargs={'hid': encode_id(999999)})
         response = client_logado.post(url, {})
         assert response.status_code == 404
 
@@ -174,11 +175,11 @@ class TestProcessarRetorno:
     """Testes da view processar_arquivo_retorno"""
 
     def test_requer_autenticacao(self, client):
-        url = reverse('financeiro:processar_retorno', kwargs={'pk': 1})
+        url = reverse('financeiro:processar_retorno', kwargs={'hid': encode_id(1)})
         response = client.post(url, {})
         assert response.status_code in (302, 403)
 
     def test_retorno_inexistente_retorna_404(self, client_logado):
-        url = reverse('financeiro:processar_retorno', kwargs={'pk': 999999})
+        url = reverse('financeiro:processar_retorno', kwargs={'hid': encode_id(999999)})
         response = client_logado.post(url, {})
         assert response.status_code == 404

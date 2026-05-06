@@ -28,6 +28,7 @@ from unittest.mock import patch, MagicMock
 
 from django.test import Client
 from django.urls import reverse
+from core.hashids_utils import encode_id
 
 
 # ---------------------------------------------------------------------------
@@ -37,7 +38,7 @@ from django.urls import reverse
 @pytest.fixture
 def usuario(db, django_user_model):
     return django_user_model.objects.create_user(
-        username='hu_user', email='hu@test.com', password='pass123'
+        username='hu_user', email='hu@test.com', password='pass123', is_staff=True
     )
 
 
@@ -130,7 +131,7 @@ class TestHU01_GerarBoletoUnico:
 
         with patch('financeiro.models.Parcela.gerar_boleto',
                    return_value=_mock_brcobranca_sucesso()):
-            url = reverse('financeiro:gerar_boleto', kwargs={'pk': parcela.pk})
+            url = reverse('financeiro:gerar_boleto', kwargs={'hid': encode_id(parcela.pk)})
             resp = cli.post(url, content_type='application/json', data=json.dumps({}))
 
         assert resp.status_code == 200
@@ -144,7 +145,7 @@ class TestHU01_GerarBoletoUnico:
         parcela.pago = True
         parcela.save()
 
-        url = reverse('financeiro:gerar_boleto', kwargs={'pk': parcela.pk})
+        url = reverse('financeiro:gerar_boleto', kwargs={'hid': encode_id(parcela.pk)})
         resp = cli.post(url, content_type='application/json', data=json.dumps({}))
 
         assert resp.status_code in (400, 200)
@@ -389,7 +390,7 @@ class TestHU09_10_QuitarBoleto:
         """POST em pagar_parcela_ajax deve marcar parcela como paga."""
         parcela = contrato_com_parcelas.parcelas.first()
 
-        url = reverse('financeiro:pagar_parcela_ajax', kwargs={'pk': parcela.pk})
+        url = reverse('financeiro:pagar_parcela_ajax', kwargs={'hid': encode_id(parcela.pk)})
         resp = cli.post(
             url,
             content_type='application/json',
@@ -410,7 +411,7 @@ class TestHU09_10_QuitarBoleto:
         """Quitar múltiplas parcelas uma por uma."""
         parcelas = list(contrato_com_parcelas.parcelas.order_by('numero_parcela')[:3])
         for parcela in parcelas:
-            url = reverse('financeiro:pagar_parcela_ajax', kwargs={'pk': parcela.pk})
+            url = reverse('financeiro:pagar_parcela_ajax', kwargs={'hid': encode_id(parcela.pk)})
             resp = cli.post(
                 url,
                 content_type='application/json',
@@ -434,7 +435,7 @@ class TestHU09_10_QuitarBoleto:
         parcela.pago = True
         parcela.save()
 
-        url = reverse('financeiro:pagar_parcela_ajax', kwargs={'pk': parcela.pk})
+        url = reverse('financeiro:pagar_parcela_ajax', kwargs={'hid': encode_id(parcela.pk)})
         resp = cli.post(
             url,
             content_type='application/json',
@@ -480,7 +481,7 @@ class TestHU11_RetornoCNAB:
 
         with patch('financeiro.services.cnab_service.CNABService') as mock_cnab:
             mock_cnab.return_value.processar_retorno.return_value = mock_result
-            url = reverse('financeiro:processar_retorno', kwargs={'pk': retorno.pk})
+            url = reverse('financeiro:processar_retorno', kwargs={'hid': encode_id(retorno.pk)})
             resp = cli.post(url, content_type='application/json', data=json.dumps({}))
 
         assert resp.status_code == 200
@@ -504,7 +505,7 @@ class TestHU12_EnvioEmail:
         mock_result = _mock_brcobranca_sucesso()
 
         with patch('financeiro.models.Parcela.gerar_boleto', return_value=mock_result):
-            url = reverse('financeiro:gerar_boleto', kwargs={'pk': parcela.pk})
+            url = reverse('financeiro:gerar_boleto', kwargs={'hid': encode_id(parcela.pk)})
             resp = cli.post(
                 url,
                 content_type='application/json',
@@ -1149,7 +1150,7 @@ class TestHU13_EnvioWhatsApp:
         from django.urls import reverse
         from unittest.mock import patch
         p = self._parcela_com_boleto(contrato_com_parcelas)
-        url = reverse('financeiro:boleto_whatsapp', args=[p.pk])
+        url = reverse('financeiro:boleto_whatsapp', kwargs={'hid': encode_id(p.pk)})
 
         with patch('financeiro.views.Parcela.tem_boleto', new_callable=lambda: property(lambda self: True)):
             with patch('notificacoes.services.ServicoWhatsApp.enviar', return_value=True) as mock_wa:
@@ -1171,7 +1172,7 @@ class TestHU13_EnvioWhatsApp:
         """Parcela sem boleto retorna 400."""
         from django.urls import reverse
         p = contrato_com_parcelas.parcelas.first()
-        url = reverse('financeiro:boleto_whatsapp', args=[p.pk])
+        url = reverse('financeiro:boleto_whatsapp', kwargs={'hid': encode_id(p.pk)})
 
         with patch('financeiro.views.Parcela.tem_boleto', new_callable=lambda: property(lambda self: False)):
             resp = cli.post(url, data='{"telefone": "+5511999999999"}',
@@ -1185,7 +1186,7 @@ class TestHU13_EnvioWhatsApp:
         from django.urls import reverse
         from unittest.mock import PropertyMock
         p = self._parcela_com_boleto(contrato_com_parcelas)
-        url = reverse('financeiro:boleto_whatsapp', args=[p.pk])
+        url = reverse('financeiro:boleto_whatsapp', kwargs={'hid': encode_id(p.pk)})
 
         # Patch tem_boleto=True e comprador.telefone=None
         with patch('financeiro.views.Parcela.tem_boleto',
@@ -1202,7 +1203,7 @@ class TestHU13_EnvioWhatsApp:
         """Erro na chamada Twilio retorna 500."""
         from django.urls import reverse
         p = self._parcela_com_boleto(contrato_com_parcelas)
-        url = reverse('financeiro:boleto_whatsapp', args=[p.pk])
+        url = reverse('financeiro:boleto_whatsapp', kwargs={'hid': encode_id(p.pk)})
 
         with patch('financeiro.views.Parcela.tem_boleto', new_callable=lambda: property(lambda self: True)):
             with patch('notificacoes.services.ServicoWhatsApp.enviar',
@@ -1229,7 +1230,7 @@ class TestHU14_EnvioSMS:
         """POST com telefone no body envia SMS e retorna sucesso."""
         from django.urls import reverse
         p = self._parcela_com_boleto(contrato_com_parcelas)
-        url = reverse('financeiro:boleto_sms', args=[p.pk])
+        url = reverse('financeiro:boleto_sms', kwargs={'hid': encode_id(p.pk)})
 
         with patch('financeiro.views.Parcela.tem_boleto', new_callable=lambda: property(lambda self: True)):
             with patch('notificacoes.services.ServicoSMS.enviar', return_value=True) as mock_sms:
@@ -1250,7 +1251,7 @@ class TestHU14_EnvioSMS:
         """Mensagem SMS inclui a linha digitável do boleto."""
         from django.urls import reverse
         p = self._parcela_com_boleto(contrato_com_parcelas)
-        url = reverse('financeiro:boleto_sms', args=[p.pk])
+        url = reverse('financeiro:boleto_sms', kwargs={'hid': encode_id(p.pk)})
 
         with patch('financeiro.views.Parcela.tem_boleto', new_callable=lambda: property(lambda self: True)):
             with patch('notificacoes.services.ServicoSMS.enviar', return_value=True) as mock_sms:
@@ -1264,7 +1265,7 @@ class TestHU14_EnvioSMS:
         """Parcela sem boleto retorna 400."""
         from django.urls import reverse
         p = contrato_com_parcelas.parcelas.first()
-        url = reverse('financeiro:boleto_sms', args=[p.pk])
+        url = reverse('financeiro:boleto_sms', kwargs={'hid': encode_id(p.pk)})
 
         with patch('financeiro.views.Parcela.tem_boleto', new_callable=lambda: property(lambda self: False)):
             resp = cli.post(url, data='{"telefone": "+5511999999999"}',
@@ -1276,7 +1277,7 @@ class TestHU14_EnvioSMS:
         """Telefone pode ser enviado como form data (não JSON)."""
         from django.urls import reverse
         p = self._parcela_com_boleto(contrato_com_parcelas)
-        url = reverse('financeiro:boleto_sms', args=[p.pk])
+        url = reverse('financeiro:boleto_sms', kwargs={'hid': encode_id(p.pk)})
 
         with patch('financeiro.views.Parcela.tem_boleto', new_callable=lambda: property(lambda self: True)):
             with patch('notificacoes.services.ServicoSMS.enviar', return_value=True) as mock_sms:

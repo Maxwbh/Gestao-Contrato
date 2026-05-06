@@ -20,12 +20,13 @@ from datetime import date, timedelta
 from django.test import Client
 from django.urls import reverse
 from financeiro.models import TipoParcela
+from core.hashids_utils import encode_id
 
 
 @pytest.fixture
 def usuario(db, django_user_model):
     return django_user_model.objects.create_user(
-        username='sim_user', password='pass123'
+        username='sim_user', password='pass123', is_staff=True
     )
 
 
@@ -241,7 +242,7 @@ class TestSimuladorAplicar:
             'desconto': '5',
         })
         assert resp.status_code == 302
-        assert f'/contratos/{contrato_com_parcelas.pk}/' in resp['Location']
+        assert f'/contratos/{encode_id(contrato_com_parcelas.pk)}/' in resp['Location']
 
     def test_desconto_fora_de_range_truncado(self, cli, contrato_com_parcelas):
         from financeiro.models import Parcela

@@ -6,6 +6,7 @@ não causam erros inesperados nem exposição de dados.
 """
 import pytest
 from django.urls import reverse
+from core.hashids_utils import encode_id
 from tests.fixtures.factories import UserFactory, ContratoFactory
 
 
@@ -56,7 +57,7 @@ class TestAutenticacaoObrigatoria:
 
     def test_gerar_boleto_exige_login(self, client, contrato):
         parcela = contrato.parcelas.order_by('numero_parcela').first()
-        url = reverse('financeiro:gerar_boleto', kwargs={'pk': parcela.pk})
+        url = reverse('financeiro:gerar_boleto', kwargs={'hid': encode_id(parcela.pk)})
         resp = client.get(url)
         assert resp.status_code == 302
 
@@ -80,17 +81,17 @@ class TestParametrosInvalidos:
     """IDs inexistentes devem retornar 404, não 500"""
 
     def test_detalhe_contrato_inexistente_retorna_404(self, client_logado):
-        url = reverse('contratos:detalhe', kwargs={'pk': 999999})
+        url = reverse('contratos:detalhe', kwargs={'hid': encode_id(999999)})
         resp = client_logado.get(url)
         assert resp.status_code == 404
 
     def test_detalhe_parcela_inexistente_retorna_404(self, client_logado):
-        url = reverse('financeiro:detalhe_parcela', kwargs={'pk': 999999})
+        url = reverse('financeiro:detalhe_parcela', kwargs={'hid': encode_id(999999)})
         resp = client_logado.get(url)
         assert resp.status_code == 404
 
     def test_download_boleto_inexistente_retorna_302_ou_404(self, client_logado):
-        url = reverse('financeiro:download_boleto', kwargs={'pk': 999999})
+        url = reverse('financeiro:download_boleto', kwargs={'hid': encode_id(999999)})
         resp = client_logado.get(url)
         assert resp.status_code in (302, 404)
 

@@ -7,10 +7,11 @@ Escopo: listar_parcelas, detalhe_parcela, registrar_pagamento,
 import pytest
 from datetime import date, timedelta
 from django.urls import reverse
+from core.hashids_utils import encode_id
 from django.contrib.auth import get_user_model
 
 from tests.fixtures.factories import (
-    UserFactory, ContratoFactory,
+    UserFactory, SuperUserFactory, ContratoFactory,
 )
 
 User = get_user_model()
@@ -18,7 +19,7 @@ User = get_user_model()
 
 @pytest.fixture
 def usuario(db):
-    return UserFactory()
+    return SuperUserFactory()
 
 
 @pytest.fixture
@@ -97,25 +98,25 @@ class TestDetalheParcela:
     """Testes da view detalhe_parcela"""
 
     def test_requer_autenticacao(self, client, parcela):
-        url = reverse('financeiro:detalhe_parcela', kwargs={'pk': parcela.pk})
+        url = reverse('financeiro:detalhe_parcela', kwargs={'hid': encode_id(parcela.pk)})
         response = client.get(url)
         assert response.status_code in (302, 403)
 
     def test_exibe_detalhe(self, client_logado, parcela):
         """Detalhe da parcela retorna 200"""
-        url = reverse('financeiro:detalhe_parcela', kwargs={'pk': parcela.pk})
+        url = reverse('financeiro:detalhe_parcela', kwargs={'hid': encode_id(parcela.pk)})
         response = client_logado.get(url)
         assert response.status_code == 200
 
     def test_parcela_inexistente_retorna_404(self, client_logado):
         """ID inexistente retorna 404"""
-        url = reverse('financeiro:detalhe_parcela', kwargs={'pk': 999999})
+        url = reverse('financeiro:detalhe_parcela', kwargs={'hid': encode_id(999999)})
         response = client_logado.get(url)
         assert response.status_code == 404
 
     def test_contexto_tem_parcela(self, client_logado, parcela):
         """Contexto da view contém a parcela"""
-        url = reverse('financeiro:detalhe_parcela', kwargs={'pk': parcela.pk})
+        url = reverse('financeiro:detalhe_parcela', kwargs={'hid': encode_id(parcela.pk)})
         response = client_logado.get(url)
         assert 'parcela' in response.context
         assert response.context['parcela'] == parcela
@@ -126,19 +127,19 @@ class TestRegistrarPagamento:
     """Testes da view registrar_pagamento"""
 
     def test_requer_autenticacao(self, client, parcela):
-        url = reverse('financeiro:registrar_pagamento', kwargs={'pk': parcela.pk})
+        url = reverse('financeiro:registrar_pagamento', kwargs={'hid': encode_id(parcela.pk)})
         response = client.get(url)
         assert response.status_code in (302, 403)
 
     def test_get_exibe_formulario(self, client_logado, parcela):
         """GET retorna formulário de pagamento"""
-        url = reverse('financeiro:registrar_pagamento', kwargs={'pk': parcela.pk})
+        url = reverse('financeiro:registrar_pagamento', kwargs={'hid': encode_id(parcela.pk)})
         response = client_logado.get(url)
         assert response.status_code == 200
 
     def test_post_registra_pagamento(self, client_logado, parcela):
         """POST válido registra o pagamento"""
-        url = reverse('financeiro:registrar_pagamento', kwargs={'pk': parcela.pk})
+        url = reverse('financeiro:registrar_pagamento', kwargs={'hid': encode_id(parcela.pk)})
         data = {
             'data_pagamento': date.today().strftime('%d/%m/%Y'),
             'valor_pago': str(parcela.valor_atual),
@@ -152,7 +153,7 @@ class TestRegistrarPagamento:
         """Parcela já paga não pode ser paga novamente"""
         parcela.pago = True
         parcela.save()
-        url = reverse('financeiro:registrar_pagamento', kwargs={'pk': parcela.pk})
+        url = reverse('financeiro:registrar_pagamento', kwargs={'hid': encode_id(parcela.pk)})
         response = client_logado.get(url)
         # Deve redirecionar ou exibir mensagem de erro
         assert response.status_code in (200, 302)
@@ -163,7 +164,7 @@ class TestNotificarInadimplente:
     """Testes da view notificar_inadimplente (3.25)"""
 
     def test_requer_autenticacao(self, client, parcela_vencida):
-        url = reverse('financeiro:notificar_inadimplente', kwargs={'pk': parcela_vencida.pk})
+        url = reverse('financeiro:notificar_inadimplente', kwargs={'hid': encode_id(parcela_vencida.pk)})
         response = client.post(url)
         assert response.status_code in (302, 403)
 
@@ -171,7 +172,7 @@ class TestNotificarInadimplente:
         """Parcela já paga não pode ser notificada como inadimplente"""
         parcela.pago = True
         parcela.save()
-        url = reverse('financeiro:notificar_inadimplente', kwargs={'pk': parcela.pk})
+        url = reverse('financeiro:notificar_inadimplente', kwargs={'hid': encode_id(parcela.pk)})
         response = client_logado.post(url, {})
         assert response.status_code == 400
         data = response.json()
@@ -182,19 +183,19 @@ class TestNotificarInadimplente:
         parcela.pago = False
         parcela.data_vencimento = date.today() + timedelta(days=5)
         parcela.save()
-        url = reverse('financeiro:notificar_inadimplente', kwargs={'pk': parcela.pk})
+        url = reverse('financeiro:notificar_inadimplente', kwargs={'hid': encode_id(parcela.pk)})
         response = client_logado.post(url, {})
         assert response.status_code == 400
 
     def test_get_nao_permitido(self, client_logado, parcela_vencida):
         """GET retorna 405"""
-        url = reverse('financeiro:notificar_inadimplente', kwargs={'pk': parcela_vencida.pk})
+        url = reverse('financeiro:notificar_inadimplente', kwargs={'hid': encode_id(parcela_vencida.pk)})
         response = client_logado.get(url)
         assert response.status_code == 405
 
     def test_parcela_vencida_tenta_notificar(self, client_logado, parcela_vencida):
         """POST em parcela vencida retorna JSON (sucesso, erro, ou 500 se sem config)"""
-        url = reverse('financeiro:notificar_inadimplente', kwargs={'pk': parcela_vencida.pk})
+        url = reverse('financeiro:notificar_inadimplente', kwargs={'hid': encode_id(parcela_vencida.pk)})
         response = client_logado.post(url, {})
         # 200=enviado, 400=sem canal, 500=erro de configuração (sem Twilio/SMTP no teste)
         assert response.status_code in (200, 400, 500)
