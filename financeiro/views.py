@@ -450,12 +450,26 @@ def listar_parcelas(request):
     """
     from core.models import Comprador
 
+    _SORT_FIELDS = {
+        'vencimento':   'data_vencimento',
+        'contrato':     'contrato__numero_contrato',
+        'comprador':    'contrato__comprador__nome',
+        'numero_parcela': 'numero_parcela',
+        'valor_atual':  'valor_atual',
+        'status_boleto':'status_boleto',
+        'pago':         'pago',
+    }
+    sort_field = request.GET.get('sort', 'vencimento')
+    sort_order = request.GET.get('order', 'desc')
+    db_field = _SORT_FIELDS.get(sort_field, 'data_vencimento')
+    ordering = db_field if sort_order == 'asc' else f'-{db_field}'
+
     parcelas = Parcela.objects.select_related(
         'contrato',
         'contrato__comprador',
         'contrato__imovel',
         'contrato__imovel__imobiliaria'
-    ).order_by('-data_vencimento')
+    ).order_by(ordering)
 
     # Dados para os filtros
     imobiliarias = Imobiliaria.objects.filter(ativo=True).order_by('nome')
@@ -590,6 +604,8 @@ def listar_parcelas(request):
         'total_parcelas': total_parcelas,
         'valor_total': valor_total,
         'parcelas_vencidas_count': parcelas_vencidas_count,
+        'sort_field': sort_field,
+        'sort_order': sort_order,
     }
     return render(request, 'financeiro/listar_parcelas.html', context)
 

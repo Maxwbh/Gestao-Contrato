@@ -227,7 +227,7 @@ function gerarBoletoDetalhe() {
     const fd = new FormData();
     fd.append('csrfmiddlewaretoken', '{{ csrf_token }}');
 
-    fetch('{% url "financeiro:gerar_boleto" parcela.pk %}', {method: 'POST', body: fd})
+    fetch('{% url "financeiro:gerar_boleto" parcela.pk|hashid %}', {method: 'POST', body: fd})
         .then(r => r.json())
         .then(data => {
             if (data.sucesso) {
@@ -257,7 +257,7 @@ function notificarInadimplente() {
     const fd = new FormData();
     fd.append('csrfmiddlewaretoken', '{{ csrf_token }}');
 
-    fetch('{% url "financeiro:notificar_inadimplente" parcela.pk %}', {method: 'POST', body: fd})
+    fetch('{% url "financeiro:notificar_inadimplente" parcela.pk|hashid %}', {method: 'POST', body: fd})
         .then(r => r.json())
         .then(data => {
             btn.disabled = false;
