@@ -1,5 +1,5 @@
 {% extends 'base.html' %}
-{% load crispy_forms_tags %}
+{% load crispy_forms_tags hashid_tags %}
 
 {% block title %}Indices de Reajuste - Gestao de Contratos{% endblock %}
 
@@ -311,8 +311,8 @@
         valor_acum_ano: {% if indice.valor_acumulado_ano %}parseFloat("{{ indice.valor_acumulado_ano|floatformat:4 }}") || 0{% else %}null{% endif %},
         valor_acum_12m: {% if indice.valor_acumulado_12m %}parseFloat("{{ indice.valor_acumulado_12m|floatformat:4 }}") || 0{% else %}null{% endif %},
         fonte: "{{ indice.fonte|default:'-'|escapejs }}",
-        edit_url: "{% url 'contratos:indices_editar' indice.pk %}",
-        del_url: "{% url 'contratos:indices_excluir' indice.pk %}",
+        edit_url: "{% url 'contratos:indices_editar' indice.pk|hashid %}",
+        del_url: "{% url 'contratos:indices_excluir' indice.pk|hashid %}",
         label: "{{ indice|escapejs }}",
     },
     {% endfor %}
