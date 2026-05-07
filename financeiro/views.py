@@ -3955,6 +3955,7 @@ def api_reajuste_detail(request, hid):
         'pk': reajuste.pk,
         'contrato': contrato.numero_contrato,
         'contrato_pk': contrato.pk,
+        'contrato_hid': _encode_id(contrato.pk),
         'comprador': contrato.comprador.nome,
         'data_reajuste': reajuste.data_reajuste.strftime('%d/%m/%Y'),
         'ciclo': reajuste.ciclo,
