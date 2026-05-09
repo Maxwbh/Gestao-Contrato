@@ -338,6 +338,7 @@ document.addEventListener('DOMContentLoaded', function() {
         {
             columnDefs: reajustesColumnDefs,
             rowData: reajustesRowData,
+            getRowId: params => String(params.data.hid),
             domLayout: 'autoHeight',
             defaultColDef: { sortable: true, resizable: true },
             rowHeight: 42,
