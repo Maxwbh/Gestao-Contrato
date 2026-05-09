@@ -1060,8 +1060,11 @@ function gerarCarneSelecionados() {
             if (bloqueados) msg += ' &nbsp; <span class="text-warning">' + bloqueados + ' bloqueado(s)</span>';
             if (erros) msg += ' &nbsp; <span class="text-danger">' + erros + ' erro(s)</span>';
             resultado.className = 'alert ' + cls;
+            let btnPdf = gerados > 0
+                ? ' <button class="btn btn-sm btn-outline-primary ms-2" onclick="baixarCarnePdf(' + contratoId + ',[' + ids.join(',') + '])"><i class="fas fa-file-pdf me-1"></i>Baixar Carnê PDF</button>'
+                : '';
             resultado.innerHTML = msg + '<br><small class="text-muted">Recarregue para ver os status atualizados.</small>' +
-                ' <button class="btn btn-sm btn-outline-secondary ms-2" onclick="location.reload()">Recarregar</button>';
+                ' <button class="btn btn-sm btn-outline-secondary ms-2" onclick="location.reload()">Recarregar</button>' + btnPdf;
         } else {
             resultado.className = 'alert alert-danger';
             resultado.innerHTML = '<i class="fas fa-exclamation-triangle me-1"></i> ' + (data.erro || 'Erro ao gerar carnê.');
@@ -1072,6 +1075,29 @@ function gerarCarneSelecionados() {
         resultado.className = 'alert alert-danger';
         resultado.innerHTML = '<i class="fas fa-exclamation-triangle me-1"></i> Erro: ' + err.message;
     });
+}
+
+function baixarCarnePdf(contratoId, parcela_ids) {
+    fetch('/financeiro/contrato/' + contratoId + '/carne/pdf/', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json', 'X-CSRFToken': CSRF_TOKEN},
+        body: JSON.stringify({parcela_ids: parcela_ids, apenas_com_boleto: true}),
+    })
+    .then(function(r) {
+        if (!r.ok) return r.json().then(function(d) { throw new Error(d.erro || 'Erro ao gerar PDF'); });
+        return r.blob();
+    })
+    .then(function(blob) {
+        var url = URL.createObjectURL(blob);
+        var a = document.createElement('a');
+        a.href = url;
+        a.download = 'carne.pdf';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+    })
+    .catch(function(err) { alert('Erro ao baixar carnê PDF: ' + err.message); });
 }
 
 // ===== GERAR REMESSA CNAB =====
