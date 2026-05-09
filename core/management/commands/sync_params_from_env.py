@@ -74,6 +74,8 @@ PARAMETROS = [
      'Dias de antecedência para notificar vencimento próximo'),
     ('NOTIFICACAO_DIAS_INADIMPLENCIA', 'notificacao', 'int', '3',
      'Dias após vencimento para alertar inadimplência'),
+    ('NOTIFICACAO_EMAIL_AO_GERAR_BOLETO', 'notificacao', 'str', '0',
+     'Envia e-mail ao comprador automaticamente ao gerar boleto: 1 = Sim, 0 = Não'),
 
     # ── Tarefas Agendadas ────────────────────────────────────────────────────
     ('TASK_TOKEN', 'tarefa', 'secret', '',
@@ -92,6 +94,16 @@ PARAMETROS = [
     # ── Portal do Comprador ──────────────────────────────────────────────────
     ('PORTAL_EMAIL_VERIFICACAO', 'portal', 'bool', 'False',
      'Exige confirmação de e-mail após cadastro no portal'),
+    ('PORTAL_NOME', 'portal', 'str', 'Portal do Comprador',
+     'Nome exibido no portal do comprador'),
+    ('PORTAL_URL_BASE', 'portal', 'str', '',
+     'URL pública do portal do comprador (ex.: https://portal.suaempresa.com.br)'),
+    ('PORTAL_TOKEN_DIAS', 'portal', 'int', '30',
+     'Validade em dias do token de acesso do comprador ao portal'),
+    ('PORTAL_AUTO_CADASTRO', 'portal', 'str', '0',
+     'Permite auto-cadastro no portal: 1 = Sim, 0 = Não'),
+    ('PORTAL_MSG_BOAS_VINDAS', 'portal', 'str', '',
+     'Mensagem de boas-vindas exibida ao comprador no portal'),
 
     # ── Aplicação ────────────────────────────────────────────────────────────
     ('SITE_URL', 'aplicacao', 'str', 'http://localhost:8000',

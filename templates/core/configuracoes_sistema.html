@@ -269,16 +269,23 @@
                             </div>
                         </div>
                         <div class="col-md-6">
-                            <label class="form-label form-label-sm fw-semibold">Número Remetente</label>
+                            <label class="form-label form-label-sm fw-semibold">Número SMS (E.164)</label>
                             <input type="text" class="form-control form-control-sm"
-                                   value="{{ params_twilio.TWILIO_NUMERO_REMETENTE|default:'' }}"
-                                   placeholder="+5511999999999" data-param="TWILIO_NUMERO_REMETENTE">
+                                   value="{{ params_twilio.TWILIO_PHONE_NUMBER|default:'' }}"
+                                   placeholder="+15551234567" data-param="TWILIO_PHONE_NUMBER">
                         </div>
                         <div class="col-md-6">
-                            <label class="form-label form-label-sm fw-semibold">Número de Teste</label>
+                            <label class="form-label form-label-sm fw-semibold">Número WhatsApp</label>
                             <input type="text" class="form-control form-control-sm"
-                                   value="{{ params_twilio.TWILIO_NUMERO_TESTE|default:'' }}"
-                                   placeholder="+5511999999999" data-param="TWILIO_NUMERO_TESTE">
+                                   value="{{ params_twilio.TWILIO_WHATSAPP_NUMBER|default:'' }}"
+                                   placeholder="whatsapp:+15551234567" data-param="TWILIO_WHATSAPP_NUMBER">
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label form-label-sm fw-semibold">Status Callback URL</label>
+                            <input type="url" class="form-control form-control-sm"
+                                   value="{{ params_twilio.TWILIO_STATUS_CALLBACK_URL|default:'' }}"
+                                   placeholder="https://seu-app.com/notificacoes/webhook/twilio/"
+                                   data-param="TWILIO_STATUS_CALLBACK_URL">
                         </div>
                         <div class="col-12 d-flex gap-2">
                             <button class="btn btn-sm btn-primary" onclick="salvarParametros('twilio', this)">
@@ -325,13 +332,6 @@
                             <input type="number" class="form-control form-control-sm" min="1" max="60"
                                    value="{{ params_brcobranca.BRCOBRANCA_DELAY_INICIAL|default:2 }}"
                                    data-param="BRCOBRANCA_DELAY_INICIAL">
-                        </div>
-                        <div class="col-md-4">
-                            <label class="form-label form-label-sm fw-semibold">Modo</label>
-                            <select class="form-select form-select-sm" data-param="BRCOBRANCA_MODO">
-                                <option value="producao" {% if params_brcobranca.BRCOBRANCA_MODO == 'producao' %}selected{% endif %}>Produção</option>
-                                <option value="homologacao" {% if params_brcobranca.BRCOBRANCA_MODO == 'homologacao' %}selected{% endif %}>Homologação</option>
-                            </select>
                         </div>
                         <div class="col-12 d-flex gap-2">
                             <button class="btn btn-sm btn-primary" onclick="salvarParametros('brcobranca', this)">
@@ -418,20 +418,20 @@
                         <div class="col-md-4">
                             <label class="form-label form-label-sm fw-semibold">Dias antecedência alerta vencimento</label>
                             <input type="number" class="form-control form-control-sm" min="1" max="30"
-                                   value="{{ params_notif.NOTIF_DIAS_ANTECEDENCIA_VENCIMENTO|default:3 }}"
-                                   data-param="NOTIF_DIAS_ANTECEDENCIA_VENCIMENTO">
+                                   value="{{ params_notif.NOTIFICACAO_DIAS_ANTECEDENCIA|default:5 }}"
+                                   data-param="NOTIFICACAO_DIAS_ANTECEDENCIA">
                         </div>
                         <div class="col-md-4">
                             <label class="form-label form-label-sm fw-semibold">Dias para alerta inadimplência</label>
                             <input type="number" class="form-control form-control-sm" min="1" max="90"
-                                   value="{{ params_notif.NOTIF_DIAS_INADIMPLENCIA|default:5 }}"
-                                   data-param="NOTIF_DIAS_INADIMPLENCIA">
+                                   value="{{ params_notif.NOTIFICACAO_DIAS_INADIMPLENCIA|default:3 }}"
+                                   data-param="NOTIFICACAO_DIAS_INADIMPLENCIA">
                         </div>
                         <div class="col-md-4">
                             <label class="form-label form-label-sm fw-semibold">Enviar boleto por e-mail ao gerar</label>
-                            <select class="form-select form-select-sm" data-param="NOTIF_EMAIL_AO_GERAR_BOLETO">
-                                <option value="1" {% if params_notif.NOTIF_EMAIL_AO_GERAR_BOLETO == '1' %}selected{% endif %}>Sim</option>
-                                <option value="0" {% if params_notif.NOTIF_EMAIL_AO_GERAR_BOLETO != '1' %}selected{% endif %}>Não</option>
+                            <select class="form-select form-select-sm" data-param="NOTIFICACAO_EMAIL_AO_GERAR_BOLETO">
+                                <option value="1" {% if params_notif.NOTIFICACAO_EMAIL_AO_GERAR_BOLETO == '1' %}selected{% endif %}>Sim</option>
+                                <option value="0" {% if params_notif.NOTIFICACAO_EMAIL_AO_GERAR_BOLETO != '1' %}selected{% endif %}>Não</option>
                             </select>
                         </div>
                         <div class="col-12 d-flex gap-2">

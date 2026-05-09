@@ -1930,7 +1930,7 @@ def configuracoes_sistema(request):
     params_twilio = _params_por_prefixo('TWILIO_')
     params_brcobranca = _params_por_prefixo('BRCOBRANCA_')
     params_portal = _params_por_prefixo('PORTAL_')
-    params_notif = _params_por_prefixo('NOTIF_')
+    params_notif = _params_por_prefixo('NOTIFICACAO_')
 
     brcobranca_url = (
         params_brcobranca.get('BRCOBRANCA_URL')
