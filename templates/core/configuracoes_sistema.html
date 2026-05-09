@@ -121,11 +121,6 @@
                     BRCobrança
                     <span class="ms-auto {% if status_brcobranca %}status-ok{% else %}status-warn{% endif %}"></span>
                 </a>
-                <a class="cfg-nav-item" data-panel="bancos" onclick="showPanel('bancos',this)">
-                    <span class="cfg-nav-icon"><i class="fas fa-university text-secondary"></i></span>
-                    Bancos / Contas
-                    <span class="ms-auto {% if contas_bancarias %}status-ok{% else %}status-warn{% endif %}"></span>
-                </a>
 
                 <div class="cfg-nav-sep mt-2">Portal / Sistema</div>
 
@@ -366,73 +361,6 @@
                 </div>
 
                 {# ──────────────── Bancos / Contas ──────────────── #}
-                <div id="panel-bancos" class="cfg-panel">
-                    <div class="cfg-section-header">
-                        <h4><i class="fas fa-university text-secondary"></i> Bancos e Contas Bancárias</h4>
-                        <a href="{% url 'core:listar_imobiliarias' %}" class="btn btn-sm btn-outline-secondary">
-                            <i class="fas fa-external-link-alt me-1"></i>Gerenciar via Imobiliárias
-                        </a>
-                    </div>
-
-                    {% if contas_bancarias %}
-                        <div class="table-responsive">
-                            <table class="table table-sm table-hover" style="font-size:.82rem;">
-                                <thead class="table-dark">
-                                    <tr>
-                                        <th>Imobiliária</th>
-                                        <th>Banco</th>
-                                        <th>Ag / Conta</th>
-                                        <th>Convênio</th>
-                                        <th>Layout CNAB</th>
-                                        <th>Pix</th>
-                                        <th class="text-center">Principal</th>
-                                        <th class="text-center">Status</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {% for conta in contas_bancarias %}
-                                    <tr>
-                                        <td>{{ conta.imobiliaria.nome }}</td>
-                                        <td>
-                                            <span class="badge bg-secondary" style="font-size:.7rem;">{{ conta.banco }}</span>
-                                        </td>
-                                        <td class="font-monospace">{{ conta.agencia }} / {{ conta.conta }}</td>
-                                        <td class="font-monospace">{{ conta.convenio }}</td>
-                                        <td><span class="badge bg-info text-dark" style="font-size:.68rem;">{{ conta.layout_cnab|default:'—' }}</span></td>
-                                        <td>
-                                            {% if conta.chave_pix %}
-                                                <span class="text-success" title="{{ conta.chave_pix }}"><i class="fas fa-check"></i></span>
-                                            {% else %}
-                                                <span class="text-muted">—</span>
-                                            {% endif %}
-                                        </td>
-                                        <td class="text-center">
-                                            {% if conta.principal %}<i class="fas fa-star text-warning" title="Conta principal"></i>{% else %}<span class="text-muted">—</span>{% endif %}
-                                        </td>
-                                        <td class="text-center">
-                                            {% if conta.ativo %}<span class="pill-ok">Ativo</span>{% else %}<span class="pill-err">Inativo</span>{% endif %}
-                                        </td>
-                                    </tr>
-                                    {% endfor %}
-                                </tbody>
-                            </table>
-                        </div>
-                        <p class="text-muted small mt-1">
-                            <i class="fas fa-info-circle me-1"></i>
-                            Gerencie as contas em <strong>Configurações → Imobiliárias</strong> → aba <em>Bancos</em>.
-                            {# TODO P3: adicionar CRUD inline aqui #}
-                        </p>
-                    {% else %}
-                        <div class="empty-cfg">
-                            <i class="fas fa-university d-block"></i>
-                            <p class="mb-2">Nenhuma conta bancária cadastrada</p>
-                            <a href="{% url 'core:listar_imobiliarias' %}" class="btn btn-secondary btn-sm">
-                                Configurar via Imobiliárias
-                            </a>
-                        </div>
-                    {% endif %}
-                </div>
-
                 {# ──────────────── Portal do Comprador ──────────────── #}
                 <div id="panel-portal" class="cfg-panel">
                     <div class="cfg-section-header">

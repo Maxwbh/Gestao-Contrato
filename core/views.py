@@ -1914,7 +1914,7 @@ def api_overlay_loteamento(request, nome):
 def configuracoes_sistema(request):
     """Hub centralizado de configurações globais da plataforma."""
     from django.conf import settings as django_settings
-    from .models import ParametroSistema, ContaBancaria
+    from .models import ParametroSistema
     from notificacoes.models import (
         ConfiguracaoEmail, ConfiguracaoSMS, ConfiguracaoWhatsApp, RegraNotificacao
     )
@@ -1950,7 +1950,6 @@ def configuracoes_sistema(request):
         'config_whatsapp': ConfiguracaoWhatsApp.objects.filter(ativo=True).first(),
         'config_sms': ConfiguracaoSMS.objects.filter(ativo=True).first(),
         'status_brcobranca': bool(params_brcobranca.get('BRCOBRANCA_URL')),
-        'contas_bancarias': ContaBancaria.objects.select_related('imobiliaria').filter(ativo=True).order_by('imobiliaria__nome', 'banco'),
         'params_twilio': params_twilio,
         'params_brcobranca': params_brcobranca,
         'params_portal': params_portal,
