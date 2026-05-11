@@ -689,7 +689,7 @@
                                         </td>
                                         <td>
                                             <button type="button" class="btn btn-sm btn-outline-danger"
-                                                    onclick="excluirReajuste({{ reajuste.pk }}, '{{ reajuste.ciclo }}', '{{ reajuste.percentual|floatformat:2 }}')"
+                                                    onclick="excluirReajuste('{{ reajuste.pk|hashid }}', '{{ reajuste.ciclo }}', '{{ reajuste.percentual|floatformat:2 }}')"
                                                     title="Desfazer reajuste e reverter parcelas">
                                                 <i class="fas fa-undo"></i>
                                             </button>
@@ -766,7 +766,7 @@
                                         <td class="text-muted small">{{ faixa.observacoes|default:"—" }}</td>
                                         <td class="text-center">
                                             <button type="button" class="btn btn-xs btn-outline-danger"
-                                                    onclick="excluirFaixaJuros({{ faixa.pk }})"
+                                                    onclick="excluirFaixaJuros('{{ faixa.pk|hashid }}')"
                                                     title="Remover faixa">
                                                 <i class="fas fa-trash"></i>
                                             </button>
@@ -897,26 +897,26 @@
                                                 {% if not parcela.pago %}
                                                     {% if parcela.tem_boleto %}
                                                         <button type="button" class="btn btn-outline-primary"
-                                                                onclick="abrirModalBoleto({{ parcela.pk }})" title="Ver Boleto">
+                                                                onclick="abrirModalBoleto('{{ parcela.pk|hashid }}')" title="Ver Boleto">
                                                             <i class="fas fa-eye"></i>
                                                         </button>
                                                         <button type="button" class="btn btn-outline-info"
-                                                                onclick="abrirModalCompartilhar({{ parcela.pk }}, '{{ parcela.linha_digitavel|escapejs }}', {{ parcela.numero_parcela }}, '{{ parcela.data_vencimento|date:"d/m/Y" }}', '{{ parcela.valor_atual|stringformat:"f" }}', '{{ parcela.token_publico }}')"
+                                                                onclick="abrirModalCompartilhar('{{ parcela.pk|hashid }}', '{{ parcela.linha_digitavel|escapejs }}', {{ parcela.numero_parcela }}, '{{ parcela.data_vencimento|date:"d/m/Y" }}', '{{ parcela.valor_atual|stringformat:"f" }}', '{{ parcela.token_publico }}')"
                                                                 title="Compartilhar Boleto">
                                                             <i class="fas fa-share-alt"></i>
                                                         </button>
                                                         <button type="button" class="btn btn-outline-warning"
-                                                                onclick="regenerarBoleto({{ parcela.pk }}, this)" title="Atualizar Boleto">
+                                                                onclick="regenerarBoleto('{{ parcela.pk|hashid }}', this)" title="Atualizar Boleto">
                                                             <i class="fas fa-sync"></i>
                                                         </button>
                                                     {% else %}
                                                         <button type="button" class="btn btn-outline-success"
-                                                                onclick="gerarBoleto({{ parcela.pk }}, this)" title="Gerar Boleto">
+                                                                onclick="gerarBoleto('{{ parcela.pk|hashid }}', this)" title="Gerar Boleto">
                                                             <i class="fas fa-barcode"></i>
                                                         </button>
                                                     {% endif %}
                                                     <button type="button" class="btn btn-outline-success"
-                                                            onclick="abrirModalPagamento({{ parcela.pk }}, '{{ parcela.data_vencimento|date:"Y-m-d" }}', '{{ parcela.valor_atual|stringformat:"f" }}', '{{ contrato.percentual_juros_mora|stringformat:"f" }}', '{{ contrato.percentual_multa|stringformat:"f" }}')"
+                                                            onclick="abrirModalPagamento('{{ parcela.pk|hashid }}', '{{ parcela.data_vencimento|date:"Y-m-d" }}', '{{ parcela.valor_atual|stringformat:"f" }}', '{{ contrato.percentual_juros_mora|stringformat:"f" }}', '{{ contrato.percentual_multa|stringformat:"f" }}')"
                                                             title="Registrar Pagamento">
                                                         <i class="fas fa-dollar-sign"></i>
                                                     </button>
@@ -986,7 +986,7 @@
                                     <td>
                                         {% if not inter.paga and not inter.parcela_vinculada %}
                                         <button class="btn btn-xs btn-outline-primary btn-gerar-boleto-inter"
-                                                data-inter-id="{{ inter.pk }}"
+                                                data-inter-id="{{ inter.pk|hashid }}"
                                                 title="Gerar boleto">
                                             <i class="fas fa-barcode"></i>
                                         </button>
@@ -1098,7 +1098,7 @@
                                         </a>
                                         {% if parcela.status_boleto != 'CANCELADO' and parcela.status_boleto != 'PAGO' %}
                                         <button type="button" class="btn btn-outline-danger"
-                                                onclick="cancelarBoleto({{ parcela.pk }})" title="Cancelar Boleto">
+                                                onclick="cancelarBoleto('{{ parcela.pk|hashid }}')" title="Cancelar Boleto">
                                             <i class="fas fa-times"></i>
                                         </button>
                                         {% endif %}
@@ -1999,10 +1999,10 @@ function gerarBoleto(parcelaId, btn) {
                     var linhaDigResp = data.linha_digitavel || '';
                     var tokenResp = data.token_publico || '';
                     acoesCol.innerHTML =
-                        '<button type="button" class="btn btn-outline-primary" onclick="abrirModalBoleto(' + parcelaId + ')" title="Ver Boleto"><i class="fas fa-eye"></i></button>' +
-                        '<button type="button" class="btn btn-outline-info" onclick="abrirModalCompartilhar(' + parcelaId + ', \'' + linhaDigResp + '\', \'\', \'\', \'\', \'' + tokenResp + '\')" title="Compartilhar Boleto"><i class="fas fa-share-alt"></i></button>' +
-                        '<button type="button" class="btn btn-outline-warning" onclick="regenerarBoleto(' + parcelaId + ', this)" title="Atualizar Boleto"><i class="fas fa-sync"></i></button>' +
-                        '<button type="button" class="btn btn-outline-success" onclick="abrirModalPagamento(' + parcelaId + ')" title="Registrar Pagamento"><i class="fas fa-dollar-sign"></i></button>';
+                        '<button type="button" class="btn btn-outline-primary" onclick="abrirModalBoleto(\'' + parcelaId + '\')" title="Ver Boleto"><i class="fas fa-eye"></i></button>' +
+                        '<button type="button" class="btn btn-outline-info" onclick="abrirModalCompartilhar(\'' + parcelaId + '\', \'' + linhaDigResp + '\', \'\', \'\', \'\', \'' + tokenResp + '\')" title="Compartilhar Boleto"><i class="fas fa-share-alt"></i></button>' +
+                        '<button type="button" class="btn btn-outline-warning" onclick="regenerarBoleto(\'' + parcelaId + '\', this)" title="Atualizar Boleto"><i class="fas fa-sync"></i></button>' +
+                        '<button type="button" class="btn btn-outline-success" onclick="abrirModalPagamento(\'' + parcelaId + '\')" title="Registrar Pagamento"><i class="fas fa-dollar-sign"></i></button>';
                 }
             }
             var linkPublicoGerado = data.token_publico
@@ -2614,86 +2614,47 @@ function abrirModalReajuste(contratoId) {
     });
 }
 
-function _bindReajusteModal(contratoId) {
-    // Recalcular com desconto (submete GET e recarrega o conteúdo do modal)
-    var formDesc = document.getElementById('formDescontoModal');
-    if (formDesc) {
-        formDesc.addEventListener('submit', function(e) {
-            e.preventDefault();
-            var params = new URLSearchParams(new FormData(formDesc));
-            var body = document.getElementById('modalReajusteBody');
-            body.innerHTML = '<div class="text-center py-4 text-muted"><i class="fas fa-sync fa-spin fa-2x"></i></div>';
-            fetch('/financeiro/contrato/' + contratoId + '/reajuste/?' + params.toString(), {
-                headers: {'X-Requested-With': 'XMLHttpRequest'}
-            })
-            .then(function(r) { return r.text(); })
-            .then(function(html) {
-                body.innerHTML = html;
-                _bindReajusteModal(contratoId);
-            })
-            .catch(function() {
-                body.innerHTML = '<div class="alert alert-danger">Erro ao recalcular prévia.</div>';
-            });
-        });
-    }
+function _reajusteRecalcular(contratoId, params) {
+    var body = document.getElementById('modalReajusteBody');
+    var status = document.getElementById('recalcStatus');
+    if (status) status.textContent = 'Calculando...';
+    fetch('/financeiro/contrato/' + contratoId + '/reajuste/?' + params.toString(), {
+        headers: {'X-Requested-With': 'XMLHttpRequest'}
+    })
+    .then(function(r) { return r.text(); })
+    .then(function(html) {
+        body.innerHTML = html;
+        _bindReajusteModal(contratoId);
+    })
+    .catch(function() {
+        body.innerHTML = '<div class="alert alert-danger">Erro ao recalcular prévia.</div>';
+    });
+}
 
-    // Aplicar reajuste (POST AJAX)
+function _submeterReajuste() {
     var formApl = document.getElementById('formAplicarModal');
-    if (formApl) {
-        formApl.addEventListener('submit', function(e) {
-            e.preventDefault();
-            var btn = document.getElementById('btnAplicarModal');
-            if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Aplicando...'; }
-
-            fetch(formApl.action, {
-                method: 'POST',
-                headers: {'X-Requested-With': 'XMLHttpRequest'},
-                body: new FormData(formApl)
-            })
-            .then(function(r) { return r.json(); })
-            .then(function(data) {
-                if (data.sucesso) {
-                    var inst = M.Modal.getInstance(document.getElementById('modalReajuste'));
-                    if (inst) inst.close();
-                    // Exibir mensagem de sucesso e recarregar a página
-                    if (window.showToast) {
-                        showToast(data.mensagem || 'Reajuste aplicado!', 'success', 3000);
-                    }
-                    setTimeout(function() { location.reload(); }, 1500);
-                } else {
-                    if (window.showErrorModal) {
-                        showErrorModal(data.erro || 'Erro ao aplicar reajuste.');
-                    }
-                    if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-check me-1"></i>Aplicar Reajuste'; }
-                }
-            })
-            .catch(function() {
-                if (window.showErrorModal) showErrorModal('Erro de conexão.');
-                if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-check me-1"></i>Aplicar Reajuste'; }
-            });
-        });
-    }
+    if (formApl) formApl.requestSubmit ? formApl.requestSubmit() : formApl.submit();
 }
 
 function _bindReajusteModal(contratoId) {
-    // Recalcular com desconto (submete GET e recarrega o conteúdo do modal)
     var formDesc = document.getElementById('formDescontoModal');
     if (formDesc) {
+        // Submit (Enter) support
         formDesc.addEventListener('submit', function(e) {
             e.preventDefault();
-            var params = new URLSearchParams(new FormData(formDesc));
-            var body = document.getElementById('modalReajusteBody');
-            body.innerHTML = '<div class="text-center py-4 text-muted"><i class="fas fa-sync fa-spin fa-2x"></i></div>';
-            fetch('/financeiro/contrato/' + contratoId + '/reajuste/?' + params.toString(), {
-                headers: {'X-Requested-With': 'XMLHttpRequest'}
-            })
-            .then(function(r) { return r.text(); })
-            .then(function(html) {
-                body.innerHTML = html;
-                _bindReajusteModal(contratoId);
-            })
-            .catch(function() {
-                body.innerHTML = '<div class="alert alert-danger">Erro ao recalcular prévia.</div>';
+            _reajusteRecalcular(contratoId, new URLSearchParams(new FormData(formDesc)));
+        });
+
+        // Auto-recalculate on input change (debounced 700ms)
+        var _debTimer = null;
+        formDesc.querySelectorAll('input[type="number"]').forEach(function(inp) {
+            inp.addEventListener('input', function() {
+                clearTimeout(_debTimer);
+                var status = document.getElementById('recalcStatus');
+                if (status) status.textContent = 'Aguardando...';
+                _debTimer = setTimeout(function() {
+                    _reajusteRecalcular(contratoId, new URLSearchParams(new FormData(formDesc)));
+                }, 700);
             });
         });
     }
@@ -2703,9 +2664,17 @@ function _bindReajusteModal(contratoId) {
     if (formApl) {
         formApl.addEventListener('submit', function(e) {
             e.preventDefault();
+            var btnModal = document.getElementById('btnConfirmarReajuste');
             var btn = document.getElementById('btnAplicarModal');
-            if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Aplicando...'; }
-
+            var setLoading = function() {
+                if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Aplicando...'; }
+                if (btnModal) { btnModal.disabled = true; btnModal.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Aplicando...'; }
+            };
+            var resetBtns = function() {
+                if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-check me-1"></i>Aplicar Reajuste'; }
+                if (btnModal) { btnModal.disabled = false; btnModal.innerHTML = '<i class="fas fa-check me-1"></i>Confirmar Reajuste'; }
+            };
+            setLoading();
             fetch(formApl.action, {
                 method: 'POST',
                 headers: {'X-Requested-With': 'XMLHttpRequest'},
@@ -2716,21 +2685,16 @@ function _bindReajusteModal(contratoId) {
                 if (data.sucesso) {
                     var inst = M.Modal.getInstance(document.getElementById('modalReajuste'));
                     if (inst) inst.close();
-                    // Exibir mensagem de sucesso e recarregar a página
-                    if (window.showToast) {
-                        showToast(data.mensagem || 'Reajuste aplicado!', 'success', 3000);
-                    }
+                    if (window.showToast) showToast(data.mensagem || 'Reajuste aplicado!', 'success', 3000);
                     setTimeout(function() { location.reload(); }, 1500);
                 } else {
-                    if (window.showErrorModal) {
-                        showErrorModal(data.erro || 'Erro ao aplicar reajuste.');
-                    }
-                    if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-check me-1"></i>Aplicar Reajuste'; }
+                    if (window.showErrorModal) showErrorModal(data.erro || 'Erro ao aplicar reajuste.');
+                    resetBtns();
                 }
             })
             .catch(function() {
                 if (window.showErrorModal) showErrorModal('Erro de conexão.');
-                if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-check me-1"></i>Aplicar Reajuste'; }
+                resetBtns();
             });
         });
     }
@@ -2750,14 +2714,19 @@ function _bindReajusteModal(contratoId) {
             <div class="text-center py-4 text-muted">Carregando...</div>
         </div>
     </div>
-    <div class="modal-footer">
+    <div class="modal-footer d-flex justify-content-between align-items-center px-3 py-2" style="gap:8px;">
         <a href="{% url 'financeiro:aplicar_reajuste' contrato_id=contrato.pk %}" target="_blank"
-           class="modal-action waves-effect waves-green btn-flat left" style="margin-left:0;">
-            <i class="fas fa-external-link-alt me-1"></i>Abrir página completa
+           class="btn btn-sm btn-outline-secondary">
+            <i class="fas fa-external-link-alt me-1"></i>Página completa
         </a>
-        <a href="#!" class="modal-action modal-close waves-effect waves-red btn-flat">
-            <i class="fas fa-times me-1"></i>Fechar
-        </a>
+        <div class="d-flex gap-2">
+            <a href="#!" id="btnFecharReajuste" class="modal-action modal-close btn btn-sm btn-outline-danger">
+                <i class="fas fa-times me-1"></i>Cancelar
+            </a>
+            <button type="button" id="btnConfirmarReajuste" class="btn btn-sm btn-success" onclick="_submeterReajuste()">
+                <i class="fas fa-check me-1"></i>Confirmar Reajuste
+            </button>
+        </div>
     </div>
 </div>
 

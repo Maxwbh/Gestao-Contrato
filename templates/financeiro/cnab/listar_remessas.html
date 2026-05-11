@@ -1,5 +1,5 @@
 {% extends 'base.html' %}
-{% load static %}
+{% load static hashid_tags %}
 
 {% block title %}Arquivos de Remessa - CNAB{% endblock %}
 
@@ -65,6 +65,7 @@ const remessasRowData = [
 {% for arquivo in arquivos %}
 {
     pk: {{ arquivo.pk }},
+    hid: "{{ arquivo.pk|hashid }}",
     numero_remessa: "{{ arquivo.numero_remessa|escapejs }}",
     nome_arquivo: "{{ arquivo.nome_arquivo|escapejs }}",
     conta: "{{ arquivo.conta_bancaria.descricao|escapejs }}",
@@ -92,8 +93,8 @@ function statusRemessaRenderer(params) {
 function acoesRemessaRenderer(params) {
     const d = params.data;
     return `<div class="ag-grid-actions">
-        <a href="/financeiro/cnab/remessa/${d.pk}/" class="btn btn-sm btn-outline-primary" title="Detalhes"><i class="fas fa-eye"></i></a>
-        <a href="/financeiro/cnab/remessa/${d.pk}/download/" class="btn btn-sm btn-outline-success" title="Download"><i class="fas fa-download"></i></a>
+        <a href="/financeiro/cnab/remessa/${d.hid}/" class="btn btn-sm btn-outline-primary" title="Detalhes"><i class="fas fa-eye"></i></a>
+        <a href="/financeiro/cnab/remessa/${d.hid}/download/" class="btn btn-sm btn-outline-success" title="Download"><i class="fas fa-download"></i></a>
     </div>`;
 }
 
@@ -103,7 +104,7 @@ document.addEventListener('DOMContentLoaded', function() {
         {
             columnDefs: [
                 { headerName: 'Remessa', field: 'numero_remessa', filter: 'agTextColumnFilter', minWidth: 120,
-                  cellRenderer: p => `<a href="/financeiro/cnab/remessa/${p.data.pk}/"><strong>${p.value}</strong></a><br><small class="text-muted">${p.data.nome_arquivo}</small>` },
+                  cellRenderer: p => `<a href="/financeiro/cnab/remessa/${p.data.hid}/"><strong>${p.value}</strong></a><br><small class="text-muted">${p.data.nome_arquivo}</small>` },
                 { headerName: 'Conta / Imobiliária', field: 'conta', filter: 'agTextColumnFilter', minWidth: 180,
                   cellRenderer: p => `${p.value}<br><small class="text-muted">${p.data.imobiliaria}</small>` },
                 { headerName: 'Layout', field: 'layout', filter: 'agTextColumnFilter', minWidth: 90 },

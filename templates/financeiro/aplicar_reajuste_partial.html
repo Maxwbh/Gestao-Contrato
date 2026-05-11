@@ -4,9 +4,9 @@
 
 {% if sem_pendente %}
 <div class="text-center py-4">
-    <i class="fas fa-check-circle text-success" style="font-size:3rem;"></i>
+    <i class="fas fa-check-circle text-success" style="font-size:2.5rem;"></i>
     <h5 class="mt-3 text-success">Nenhum reajuste pendente</h5>
-    <p class="text-muted mb-0">
+    <p class="text-muted mb-0 small">
         Este contrato está em dia.
         {% if proximo_reajuste %}
             Próximo reajuste: <strong>{{ proximo_reajuste|date:"d/m/Y" }}</strong>.
@@ -16,86 +16,129 @@
 
 {% elif tem_erro %}
 <div class="alert alert-warning mb-3">
-    <h6><i class="fas fa-exclamation-triangle me-2"></i>Índice não disponível</h6>
-    <p class="mb-1">{{ preview.erro }}</p>
+    <h6 class="mb-1"><i class="fas fa-exclamation-triangle me-2"></i>Índice não disponível</h6>
+    <p class="mb-1 small">{{ preview.erro }}</p>
     <small>Importe os índices em <a href="{% url 'contratos:indices_listar' %}">Índices de Reajuste</a>.</small>
 </div>
 <div class="row g-2 text-center">
-    <div class="col-6"><div class="text-muted small">Ciclo</div><div class="fw-bold">{{ ciclo }}</div></div>
-    <div class="col-6"><div class="text-muted small">Índice</div><div class="fw-bold">{{ preview.indice_tipo }}</div></div>
+    <div class="col-4">
+        <div class="text-muted" style="font-size:0.75rem;">Ciclo</div>
+        <div class="fw-bold">{{ ciclo }}</div>
+    </div>
+    <div class="col-4">
+        <div class="text-muted" style="font-size:0.75rem;">Índice</div>
+        <div class="fw-bold">{{ preview.indice_tipo }}</div>
+    </div>
+    <div class="col-4">
+        <div class="text-muted" style="font-size:0.75rem;">Parcelas</div>
+        <div class="fw-bold">{{ preview.parcela_inicial }}–{{ preview.parcela_final }}</div>
+    </div>
     <div class="col-12">
-        <div class="text-muted small">Período</div>
-        <div class="fw-bold">{{ preview.periodo_referencia_inicio|date:"m/Y" }} – {{ preview.periodo_referencia_fim|date:"m/Y" }}</div>
+        <div class="text-muted" style="font-size:0.75rem;">Período</div>
+        <div class="fw-bold small">{{ preview.periodo_referencia_inicio|date:"m/Y" }} – {{ preview.periodo_referencia_fim|date:"m/Y" }}</div>
     </div>
 </div>
 
 {% else %}
 <div class="row g-3">
 
-    {# Coluna esquerda: info + desconto + form #}
-    <div class="col-lg-5">
-        {# Ciclo info #}
-        <div class="p-3 mb-3 rounded" style="background:#f8f9fa; border-left:4px solid #6c757d;">
-            <div class="row g-2 text-center">
+    {# ── Coluna esquerda ── #}
+    <div class="col-lg-5 d-flex flex-column gap-3">
+
+        {# Bloco 1: Identificação do ciclo #}
+        <div class="rounded-3 p-3" style="background:#f1f3f5; border-left:4px solid #6c757d;">
+            <div class="row g-1 text-center mb-2">
                 <div class="col-4">
-                    <div class="text-muted" style="font-size:0.78rem;">Ciclo</div>
-                    <div class="fw-bold fs-5">{{ ciclo }}</div>
+                    <div class="text-muted" style="font-size:0.72rem; text-transform:uppercase; letter-spacing:.04em;">Ciclo</div>
+                    <div class="fw-bold" style="font-size:1.1rem;">{{ ciclo }}</div>
                 </div>
                 <div class="col-4">
-                    <div class="text-muted" style="font-size:0.78rem;">Índice</div>
-                    <div class="fw-bold fs-5">{{ preview.indice_tipo }}</div>
+                    <div class="text-muted" style="font-size:0.72rem; text-transform:uppercase; letter-spacing:.04em;">Índice</div>
+                    <div class="fw-bold" style="font-size:1.1rem;">{{ preview.indice_tipo }}</div>
                 </div>
                 <div class="col-4">
-                    <div class="text-muted" style="font-size:0.78rem;">Parcelas</div>
-                    <div class="fw-bold">{{ preview.parcela_inicial }}–{{ preview.parcela_final }}</div>
-                </div>
-                <div class="col-12">
-                    <div class="text-muted" style="font-size:0.78rem;">Período de referência</div>
-                    <div class="fw-bold">{{ preview.periodo_referencia_inicio|date:"m/Y" }} a {{ preview.periodo_referencia_fim|date:"m/Y" }}</div>
+                    <div class="text-muted" style="font-size:0.72rem; text-transform:uppercase; letter-spacing:.04em;">Parcelas</div>
+                    <div class="fw-bold small">{{ preview.parcela_inicial }}–{{ preview.parcela_final }}</div>
                 </div>
             </div>
-            <hr class="my-2">
-            <div class="text-center">
-                <div class="text-muted" style="font-size:0.78rem;">% Bruto (índice acumulado)</div>
-                <div style="font-size:1.8rem; font-weight:700; color:#0d6efd;">{{ preview.percentual_bruto|floatformat:4 }}%</div>
-                {% if preview.teto_ativado %}<span class="badge bg-warning text-dark">Teto {{ preview.teto|floatformat:2 }}% aplicado</span>{% endif %}
-                {% if preview.piso_ativado %}<span class="badge bg-info text-dark">Piso {{ preview.piso|floatformat:2 }}% aplicado</span>{% endif %}
+            <div class="text-center small text-muted mb-2">
+                Referência: <strong>{{ preview.periodo_referencia_inicio|date:"m/Y" }}</strong> a <strong>{{ preview.periodo_referencia_fim|date:"m/Y" }}</strong>
             </div>
-            <div class="text-center mt-2">
-                <div class="text-muted" style="font-size:0.78rem;">% Final às parcelas</div>
-                <div style="font-size:1.4rem; font-weight:700; color:#198754;">
-                    {% if preview.percentual_final >= 0 %}+{% endif %}{{ preview.percentual_final|floatformat:4 }}%
+
+            {# Fluxo de percentual #}
+            <div class="d-flex align-items-center justify-content-center gap-1 flex-wrap">
+                <div class="text-center px-2">
+                    <div class="text-muted" style="font-size:0.68rem; text-transform:uppercase;">Índice bruto</div>
+                    <div style="font-size:1.6rem; font-weight:800; color:#0d6efd; line-height:1.1;">
+                        {{ preview.percentual_bruto|floatformat:4 }}%
+                    </div>
+                    {% if preview.teto_ativado %}
+                    <span class="badge bg-warning text-dark" style="font-size:0.65rem;">Teto {{ preview.teto|floatformat:2 }}%</span>
+                    {% endif %}
+                    {% if preview.piso_ativado %}
+                    <span class="badge bg-info text-dark" style="font-size:0.65rem;">Piso {{ preview.piso|floatformat:2 }}%</span>
+                    {% endif %}
+                </div>
+                {% if preview.desconto_percentual and preview.desconto_percentual != 0 %}
+                <div class="text-muted" style="font-size:1rem;">→</div>
+                <div class="text-center px-2">
+                    <div class="text-muted" style="font-size:0.68rem; text-transform:uppercase;">Ajuste</div>
+                    <div class="fw-bold" style="font-size:0.95rem; color:{% if preview.desconto_percentual > 0 %}#dc3545{% else %}#198754{% endif %};">
+                        {% if preview.desconto_percentual > 0 %}-{% else %}+{% endif %}{{ preview.desconto_percentual|floatformat:4 }}p.p.
+                    </div>
+                </div>
+                {% endif %}
+                {% if preview.desconto_valor and preview.desconto_valor != 0 %}
+                <div class="text-muted" style="font-size:1rem;">→</div>
+                <div class="text-center px-2">
+                    <div class="text-muted" style="font-size:0.68rem; text-transform:uppercase;">Ajuste R$</div>
+                    <div class="fw-bold" style="font-size:0.95rem; color:{% if preview.desconto_valor > 0 %}#dc3545{% else %}#198754{% endif %};">
+                        {% if preview.desconto_valor > 0 %}-{% else %}+{% endif %}R$ {{ preview.desconto_valor|floatformat:2 }}
+                    </div>
+                </div>
+                {% endif %}
+                <div class="text-muted" style="font-size:1rem;">→</div>
+                <div class="text-center px-2">
+                    <div class="text-muted" style="font-size:0.68rem; text-transform:uppercase;">% Final</div>
+                    <div style="font-size:1.3rem; font-weight:800; color:#198754; line-height:1.1;">
+                        {% if preview.percentual_final >= 0 %}+{% endif %}{{ preview.percentual_final|floatformat:4 }}%
+                    </div>
                 </div>
             </div>
         </div>
 
-        {# Recalcular com desconto #}
+        {# Bloco 2: Ajuste sobre o índice #}
         <form id="formDescontoModal" method="get" action="{% url 'financeiro:aplicar_reajuste' contrato_id=contrato.pk %}">
             <input type="hidden" name="modal" value="1">
-            <div class="mb-2">
-                <label class="form-label" style="font-size:0.82rem;">Desconto em p.p.</label>
-                <div class="input-group input-group-sm">
-                    <input type="number" step="0.0001" min="0" name="desconto_percentual"
-                        class="form-control" value="{{ desconto_percentual }}" placeholder="0.0000">
-                    <span class="input-group-text">p.p.</span>
+            <div class="rounded-3 p-3" style="background:#fff; border:1px solid #dee2e6;">
+                <div class="mb-1 fw-semibold" style="font-size:0.8rem; color:#495057;">
+                    <i class="fas fa-sliders-h me-1 text-muted"></i> Ajuste sobre o índice
                 </div>
-            </div>
-            <div class="mb-2">
-                <label class="form-label" style="font-size:0.82rem;">Desconto em R$/parcela</label>
-                <div class="input-group input-group-sm">
-                    <span class="input-group-text">R$</span>
-                    <input type="number" step="0.01" min="0" name="desconto_valor"
-                        class="form-control" value="{{ desconto_valor }}" placeholder="0,00">
+                <div class="row g-2">
+                    <div class="col-6">
+                        <label class="form-label mb-1" style="font-size:0.75rem; color:#6c757d;">em p.p. <span class="text-muted">(− desc · + acrés)</span></label>
+                        <div class="input-group input-group-sm">
+                            <input type="number" step="0.0001" id="inputAjustePP" name="desconto_percentual"
+                                class="form-control" value="{{ desconto_percentual }}" placeholder="0.0000"
+                                autocomplete="off">
+                            <span class="input-group-text">p.p.</span>
+                        </div>
+                    </div>
+                    <div class="col-6">
+                        <label class="form-label mb-1" style="font-size:0.75rem; color:#6c757d;">em R$/parcela <span class="text-muted">(− desc · + acrés)</span></label>
+                        <div class="input-group input-group-sm">
+                            <span class="input-group-text">R$</span>
+                            <input type="number" step="0.01" id="inputAjusteValor" name="desconto_valor"
+                                class="form-control" value="{{ desconto_valor }}" placeholder="0,00"
+                                autocomplete="off">
+                        </div>
+                    </div>
                 </div>
+                <div id="recalcStatus" class="text-center mt-1" style="font-size:0.72rem; min-height:1.1rem; color:#6c757d;"></div>
             </div>
-            <button type="submit" class="btn btn-outline-secondary btn-sm w-100 mb-3" id="btnRecalcularModal">
-                <i class="fas fa-sync me-1"></i> Recalcular Prévia
-            </button>
         </form>
 
-        <hr>
-
-        {# Formulário de aplicação #}
+        {# Bloco 3: Formulário de aplicação #}
         <form id="formAplicarModal" method="post" action="{% url 'financeiro:aplicar_reajuste' contrato_id=contrato.pk %}">
             {% csrf_token %}
             <input type="hidden" name="modal" value="1">
@@ -103,72 +146,100 @@
             <input type="hidden" name="desconto_percentual" value="{{ desconto_percentual }}">
             <input type="hidden" name="desconto_valor" value="{{ desconto_valor }}">
 
-            <div class="mb-2">
-                <label class="form-label" style="font-size:0.82rem;">Observações <small class="text-muted">(opcional)</small></label>
-                <textarea name="observacoes" class="form-control form-control-sm" rows="2"
-                    placeholder="Ex: Reajuste anual — IPCA acumulado..."></textarea>
-            </div>
-
-            <div class="p-2 mb-2 rounded" style="background:#e8f4ff; font-size:0.82rem;">
-                <div class="d-flex justify-content-between">
-                    <span>Total antes:</span><strong>R$ {{ preview.valor_anterior_total|floatformat:2 }}</strong>
+            {# Resumo financeiro #}
+            <div class="rounded-3 p-3 mb-2" style="background:#eaf4ff; border:1px solid #b8d9f5;">
+                <div class="row g-1 text-center">
+                    <div class="col-4">
+                        <div class="text-muted" style="font-size:0.7rem; text-transform:uppercase;">Total Atual</div>
+                        <div class="fw-bold" style="font-size:0.9rem;">R$ {{ preview.valor_anterior_total|floatformat:2 }}</div>
+                    </div>
+                    <div class="col-4">
+                        <div class="text-muted" style="font-size:0.7rem; text-transform:uppercase;">Total Novo</div>
+                        <div class="fw-bold text-success" style="font-size:0.9rem;">R$ {{ preview.valor_novo_total|floatformat:2 }}</div>
+                    </div>
+                    <div class="col-4">
+                        <div class="text-muted" style="font-size:0.7rem; text-transform:uppercase;">Variação</div>
+                        <div class="fw-bold {% if preview.diferenca_total >= 0 %}text-primary{% else %}text-danger{% endif %}" style="font-size:0.9rem;">
+                            {% if preview.diferenca_total >= 0 %}+{% endif %}R$ {{ preview.diferenca_total|floatformat:2 }}
+                        </div>
+                    </div>
                 </div>
-                <div class="d-flex justify-content-between">
-                    <span>Total depois:</span><strong class="text-success">R$ {{ preview.valor_novo_total|floatformat:2 }}</strong>
-                </div>
-                <div class="d-flex justify-content-between border-top mt-1 pt-1">
-                    <span>Variação:</span>
-                    <strong class="{% if preview.diferenca_total >= 0 %}text-primary{% else %}text-danger{% endif %}">
-                        {% if preview.diferenca_total >= 0 %}+{% endif %}R$ {{ preview.diferenca_total|floatformat:2 }}
-                    </strong>
+                <div class="text-center mt-2 text-muted" style="font-size:0.72rem;">
+                    {{ preview.total_parcelas }} parcela(s) afetada(s)
                 </div>
             </div>
 
             {% if preview.boletos_emitidos %}
-            <div class="alert alert-warning py-1 mb-2 small">
-                <i class="fas fa-exclamation-triangle me-1"></i>
-                Parcelas <strong>{{ preview.boletos_emitidos|join:", " }}</strong> têm boleto — precisarão ser regeneradas.
+            <div class="alert alert-warning py-2 mb-2" style="font-size:0.78rem;">
+                <i class="fas fa-barcode me-1"></i>
+                Parcelas <strong>{{ preview.boletos_emitidos|join:", " }}</strong> têm boleto emitido e precisarão ser regeneradas.
             </div>
             {% endif %}
 
-            <button type="submit" class="btn btn-success w-100" id="btnAplicarModal">
-                <i class="fas fa-check me-1"></i>
-                Aplicar {{ preview.percentual_final|floatformat:4 }}% em {{ preview.total_parcelas }} parcela(s)
-            </button>
+            <div class="mb-2">
+                <label class="form-label mb-1" style="font-size:0.78rem;">Observações <span class="text-muted">(opcional)</span></label>
+                <textarea name="observacoes" class="form-control form-control-sm" rows="2"
+                    placeholder="Ex: Reajuste anual — IPCA acumulado..."></textarea>
+            </div>
         </form>
+
     </div>
 
-    {# Coluna direita: tabela prévia #}
+    {# ── Coluna direita: tabela prévia ── #}
     <div class="col-lg-7">
-        <div style="max-height: 420px; overflow-y: auto; border: 1px solid #dee2e6; border-radius: 6px;">
-            <table class="table table-sm table-hover mb-0" style="font-size:0.8rem;">
-                <thead class="table-light" style="position:sticky; top:0; z-index:1;">
+        <div class="d-flex justify-content-between align-items-center mb-1">
+            <span class="fw-semibold text-muted" style="font-size:0.8rem;">
+                <i class="fas fa-table me-1"></i> Prévia por parcela
+            </span>
+            <span class="badge bg-secondary">{{ preview.total_parcelas }} parcela(s)</span>
+        </div>
+        <div style="max-height: 440px; overflow-y: auto; border: 1px solid #dee2e6; border-radius: 6px;">
+            <table class="table table-sm table-hover mb-0" style="font-size:0.78rem;">
+                <thead class="table-dark" style="position:sticky; top:0; z-index:1;">
                     <tr>
-                        <th class="text-center">#</th>
-                        <th>Venc.</th>
+                        <th class="text-center" style="width:36px;">#</th>
+                        <th style="width:75px;">Venc.</th>
                         <th class="text-end">Atual</th>
-                        <th class="text-end text-success">Novo</th>
+                        <th class="text-end">Novo</th>
                         <th class="text-end">Dif.</th>
-                        <th class="text-center">Boleto</th>
+                        <th class="text-center" style="width:40px;" title="Boleto emitido"><i class="fas fa-barcode"></i></th>
                     </tr>
                 </thead>
                 <tbody>
                     {% for p in preview.parcelas %}
                     <tr{% if p.tem_boleto %} class="table-warning"{% endif %}>
-                        <td class="text-center font-monospace">{{ p.numero_parcela }}</td>
-                        <td>{{ p.data_vencimento|date:"d/m/Y" }}</td>
-                        <td class="text-end font-monospace">R$ {{ p.valor_atual|floatformat:2 }}</td>
-                        <td class="text-end font-monospace text-success fw-bold">R$ {{ p.valor_novo|floatformat:2 }}</td>
-                        <td class="text-end font-monospace text-primary">+R$ {{ p.diferenca|floatformat:2 }}</td>
+                        <td class="text-center font-monospace text-muted">{{ p.numero_parcela }}</td>
+                        <td class="text-muted">{{ p.data_vencimento|date:"d/m/y" }}</td>
+                        <td class="text-end font-monospace">{{ p.valor_atual|floatformat:2 }}</td>
+                        <td class="text-end font-monospace fw-bold text-success">{{ p.valor_novo|floatformat:2 }}</td>
+                        <td class="text-end font-monospace text-primary small">
+                            {% if p.diferenca >= 0 %}+{% endif %}{{ p.diferenca|floatformat:2 }}
+                        </td>
                         <td class="text-center">
-                            {% if p.tem_boleto %}<span class="badge bg-warning text-dark"><i class="fas fa-barcode"></i></span>
-                            {% else %}<span class="text-muted">—</span>{% endif %}
+                            {% if p.tem_boleto %}
+                                <i class="fas fa-barcode text-warning" title="Boleto emitido"></i>
+                            {% else %}
+                                <span class="text-muted">—</span>
+                            {% endif %}
                         </td>
                     </tr>
                     {% empty %}
                     <tr><td colspan="6" class="text-center text-muted py-3">Nenhuma parcela pendente.</td></tr>
                     {% endfor %}
                 </tbody>
+                {% if preview.parcelas %}
+                <tfoot class="table-secondary" style="position:sticky; bottom:0;">
+                    <tr>
+                        <td colspan="2" class="text-end small fw-bold">Totais:</td>
+                        <td class="text-end font-monospace fw-bold">{{ preview.valor_anterior_total|floatformat:2 }}</td>
+                        <td class="text-end font-monospace fw-bold text-success">{{ preview.valor_novo_total|floatformat:2 }}</td>
+                        <td class="text-end font-monospace fw-bold text-primary small">
+                            {% if preview.diferenca_total >= 0 %}+{% endif %}{{ preview.diferenca_total|floatformat:2 }}
+                        </td>
+                        <td></td>
+                    </tr>
+                </tfoot>
+                {% endif %}
             </table>
         </div>
     </div>

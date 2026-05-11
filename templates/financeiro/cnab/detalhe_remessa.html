@@ -202,7 +202,7 @@
 function marcarEnviada() {
     if (!confirm('Deseja marcar esta remessa como enviada ao banco?')) return;
 
-    fetch('{% url "financeiro:marcar_remessa_enviada" arquivo.pk %}', {
+    fetch('{% url "financeiro:marcar_remessa_enviada" arquivo.pk|hashid %}', {
         method: 'POST',
         headers: {
             'X-CSRFToken': '{{ csrf_token }}',
@@ -223,7 +223,7 @@ function marcarEnviada() {
 function regenerarRemessa() {
     if (!confirm('Deseja regenerar este arquivo de remessa?\n\nO registro atual será atualizado com o novo arquivo.')) return;
 
-    fetch('{% url "financeiro:regenerar_remessa" arquivo.pk %}', {
+    fetch('{% url "financeiro:regenerar_remessa" arquivo.pk|hashid %}', {
         method: 'POST',
         headers: {
             'X-CSRFToken': '{{ csrf_token }}',
@@ -244,7 +244,7 @@ function regenerarRemessa() {
 function excluirRemessa() {
     if (!confirm('ATENÇÃO: Excluir esta remessa irá remover o arquivo CNAB.\n\nOs boletos voltarão a ficar disponíveis para nova remessa.\n\nDeseja continuar?')) return;
 
-    fetch('{% url "financeiro:excluir_remessa" arquivo.pk %}', {
+    fetch('{% url "financeiro:excluir_remessa" arquivo.pk|hashid %}', {
         method: 'POST',
         headers: {
             'X-CSRFToken': '{{ csrf_token }}',
