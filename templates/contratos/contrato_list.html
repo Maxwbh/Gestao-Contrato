@@ -646,6 +646,10 @@
     ];
 
     document.addEventListener('DOMContentLoaded', function() {
+        const _currentSort = '{{ sort_field }}';
+        const _currentOrder = '{{ sort_order }}';
+        const _initialSortModel = _currentSort ? [{colId: _currentSort, sort: _currentOrder}] : [];
+
         window.contratosGridApi = agGrid.createGrid(
             document.getElementById('contratosGrid'),
             {
@@ -658,11 +662,24 @@
                     sortable: true,
                     resizable: true,
                 },
+                initialState: { sort: { sortModel: _initialSortModel } },
                 rowHeight: 52,
                 headerHeight: 48,
-               
                 suppressCellFocus: true,
                 enableCellTextSelection: true,
+                onSortChanged: function(event) {
+                    const model = event.api.getSortModel ? event.api.getSortModel() : (event.api.getColumnState ? event.api.getColumnState().filter(c => c.sort) : []);
+                    const params = new URLSearchParams(window.location.search);
+                    if (model && model.length > 0) {
+                        params.set('sort', model[0].colId);
+                        params.set('order', model[0].sort);
+                    } else {
+                        params.delete('sort');
+                        params.delete('order');
+                    }
+                    params.set('page', '1');
+                    window.location.search = params.toString();
+                },
                 onSelectionChanged: function() {
                     const rows = window.contratosGridApi.getSelectedRows();
                     const qtd = rows.length;

@@ -121,7 +121,7 @@
                         <td>
                             {% if not inter.paga and not inter.parcela_vinculada %}
                             <button class="btn btn-sm btn-outline-primary btn-gerar-boleto-inter"
-                                    data-inter-id="{{ inter.pk }}"
+                                    data-inter-id="{{ inter.pk|hashid }}"
                                     title="Gerar boleto">
                                 <i class="fas fa-barcode"></i> Gerar Boleto
                             </button>

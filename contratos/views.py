@@ -47,12 +47,27 @@ class ContratoListView(LoginRequiredMixin, TenantMixin, PaginacaoMixin, ListView
     context_object_name = 'contratos'
     paginate_by = 20
 
+    _SORT_FIELDS = {
+        'data_contrato': 'data_contrato',
+        'numero':        'numero_contrato',
+        'comprador':     'comprador__nome',
+        'imovel':        'imovel__identificacao',
+        'valor_total':   'valor_total',
+        'status':        'status',
+    }
+
     def get_queryset(self):
         queryset = super().get_queryset().select_related(
             'imovel', 'imovel__imobiliaria',
             'comprador',
             'imobiliaria'
-        ).order_by('-data_contrato')
+        )
+
+        sort_field = self.request.GET.get('sort', 'data_contrato')
+        sort_order = self.request.GET.get('order', 'desc')
+        db_field = self._SORT_FIELDS.get(sort_field, 'data_contrato')
+        ordering = db_field if sort_order == 'asc' else f'-{db_field}'
+        queryset = queryset.order_by(ordering)
 
         # Filtro de busca
         search = self.request.GET.get('search')
@@ -81,6 +96,8 @@ class ContratoListView(LoginRequiredMixin, TenantMixin, PaginacaoMixin, ListView
         context['search'] = self.request.GET.get('search', '')
         context['status_filter'] = self.request.GET.get('status', '')
         context['imobiliaria_filter'] = self.request.GET.get('imobiliaria', '')
+        context['sort_field'] = self.request.GET.get('sort', 'data_contrato')
+        context['sort_order'] = self.request.GET.get('order', 'desc')
         context['status_choices'] = StatusContrato.choices
         qs_tenant = self.get_queryset()
         context['total_contratos'] = qs_tenant.count()

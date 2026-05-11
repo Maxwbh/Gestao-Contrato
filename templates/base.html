@@ -221,6 +221,7 @@
 
     {% if user.is_staff or user.is_superuser %}
     <ul id="dd-admin" class="dropdown-content app-dropdown">
+        <li><a href="{% url 'core:configuracoes_sistema' %}"><i class="fas fa-sliders-h"></i> Configurações do Sistema</a></li>
         <li><a href="{% url 'core:listar_acessos' %}"><i class="fas fa-key"></i> Acessos de Usuários</a></li>
         <li><a href="{% url 'core:pagina_dados_teste' %}"><i class="fas fa-database"></i> Dados de Teste</a></li>
         <li class="divider" tabindex="-1"></li>

@@ -1,5 +1,5 @@
 {% extends 'base.html' %}
-{% load format_filters %}
+{% load format_filters hashid_tags %}
 
 {% block title %}Intermediária #{{ intermediaria.numero_sequencial }} — Contrato {{ contrato.numero_contrato }}{% endblock %}
 
@@ -9,7 +9,7 @@
         <h4 class="mb-0">
             Prestação Intermediária #{{ intermediaria.numero_sequencial }}
         </h4>
-        <a href="{% url 'contratos:intermediarias' pk=contrato.pk %}" class="btn btn-secondary btn-sm">
+        <a href="{% url 'contratos:intermediarias_listar' contrato.pk|hashid %}" class="btn btn-secondary btn-sm">
             <i class="fas fa-arrow-left"></i> Voltar
         </a>
     </div>

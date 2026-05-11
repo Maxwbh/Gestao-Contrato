@@ -1904,3 +1904,128 @@ def api_overlay_loteamento(request, nome):
         return JsonResponse({'ok': True, 'created': created, 'id': overlay.pk})
 
     return JsonResponse({'erro': 'Método não suportado.'}, status=405)
+
+
+# =============================================================================
+# CONFIGURAÇÕES DO SISTEMA — HUB CENTRALIZADO
+# =============================================================================
+
+@login_required
+def configuracoes_sistema(request):
+    """Hub centralizado de configurações globais da plataforma."""
+    from django.conf import settings as django_settings
+    from .models import ParametroSistema
+    from notificacoes.models import (
+        ConfiguracaoEmail, ConfiguracaoSMS, ConfiguracaoWhatsApp, RegraNotificacao
+    )
+    from collections import defaultdict
+
+    def _params_por_prefixo(prefixo):
+        """Retorna dict {chave: valor} para params cujas chaves começam com prefixo."""
+        return {
+            p.chave: p.valor
+            for p in ParametroSistema.objects.filter(chave__startswith=prefixo)
+        }
+
+    params_twilio = _params_por_prefixo('TWILIO_')
+    params_brcobranca = _params_por_prefixo('BRCOBRANCA_')
+    params_portal = _params_por_prefixo('PORTAL_')
+    params_notif = _params_por_prefixo('NOTIFICACAO_')
+
+    brcobranca_url = (
+        params_brcobranca.get('BRCOBRANCA_URL')
+        or getattr(django_settings, 'BRCOBRANCA_URL', 'http://localhost:9292')
+    )
+
+    todos = ParametroSistema.objects.all().order_by('grupo', 'chave')
+    grupo_display = dict(ParametroSistema.GRUPO_CHOICES)
+    parametros_por_grupo = defaultdict(list)
+    for p in todos:
+        parametros_por_grupo[grupo_display.get(p.grupo, p.grupo)].append(p)
+
+    context = {
+        'configs_email': ConfiguracaoEmail.objects.all().order_by('-ativo', 'nome'),
+        'configs_whatsapp': ConfiguracaoWhatsApp.objects.all().order_by('-ativo', 'nome'),
+        'config_email': ConfiguracaoEmail.objects.filter(ativo=True).first(),
+        'config_whatsapp': ConfiguracaoWhatsApp.objects.filter(ativo=True).first(),
+        'config_sms': ConfiguracaoSMS.objects.filter(ativo=True).first(),
+        'status_brcobranca': bool(params_brcobranca.get('BRCOBRANCA_URL')),
+        'params_twilio': params_twilio,
+        'params_brcobranca': params_brcobranca,
+        'params_portal': params_portal,
+        'params_notif': params_notif,
+        'parametros_por_grupo': dict(parametros_por_grupo),
+        'regras_notificacao': RegraNotificacao.objects.filter(ativo=True).order_by('nome')[:10],
+        'brcobranca_url': brcobranca_url,
+        'brcobranca_ok': False,
+    }
+    return render(request, 'core/configuracoes_sistema.html', context)
+
+
+@login_required
+@require_http_methods(['POST'])
+def api_parametros_salvar_grupo(request):
+    """POST /core/api/parametros/ — salva múltiplos ParametroSistema de um grupo."""
+    from .models import ParametroSistema
+    try:
+        data = json.loads(request.body)
+        grupo = data.get('grupo', '')
+        parametros = data.get('parametros', {})
+        if not isinstance(parametros, dict):
+            return JsonResponse({'sucesso': False, 'erro': 'Formato inválido.'}, status=400)
+        salvos = 0
+        for chave, valor in parametros.items():
+            obj, _ = ParametroSistema.objects.get_or_create(
+                chave=chave,
+                defaults={'grupo': grupo, 'valor': str(valor)},
+            )
+            obj.valor = str(valor)
+            obj.modificado_manualmente = True
+            if grupo and obj.grupo != grupo:
+                obj.grupo = grupo
+            obj.save()
+            salvos += 1
+        return JsonResponse({'sucesso': True, 'mensagem': f'{salvos} parâmetro(s) salvos.'})
+    except Exception as e:
+        logger.exception('Erro ao salvar parâmetros: %s', e)
+        return JsonResponse({'sucesso': False, 'erro': str(e)}, status=500)
+
+
+@login_required
+@require_http_methods(['PATCH'])
+def api_parametro_atualizar(request, parametro_id):
+    """PATCH /core/api/parametros/<id>/ — atualiza valor de um ParametroSistema."""
+    from .models import ParametroSistema
+    try:
+        param = get_object_or_404(ParametroSistema, pk=parametro_id)
+        data = json.loads(request.body)
+        param.valor = str(data.get('valor', ''))
+        param.modificado_manualmente = True
+        param.save()
+        return JsonResponse({'sucesso': True, 'mensagem': f'"{param.chave}" atualizado.'})
+    except Exception as e:
+        logger.exception('Erro ao atualizar parâmetro %s: %s', parametro_id, e)
+        return JsonResponse({'sucesso': False, 'erro': str(e)}, status=500)
+
+
+@login_required
+@require_http_methods(['GET'])
+def api_parametros_exportar(request):
+    """GET /core/api/parametros/exportar/ — exporta todos os ParametroSistema como JSON."""
+    from .models import ParametroSistema
+    from django.http import HttpResponse
+    import datetime
+    params = list(
+        ParametroSistema.objects.values('chave', 'valor', 'tipo', 'grupo', 'descricao', 'modificado_manualmente')
+    )
+    payload = {
+        'exportado_em': datetime.datetime.utcnow().isoformat() + 'Z',
+        'total': len(params),
+        'parametros': params,
+    }
+    response = HttpResponse(
+        json.dumps(payload, indent=2, ensure_ascii=False),
+        content_type='application/json',
+    )
+    response['Content-Disposition'] = 'attachment; filename="config_sistema.json"'
+    return response

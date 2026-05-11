@@ -258,7 +258,7 @@ function processarRetorno() {
     btn.disabled = true;
     btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Processando...';
 
-    fetch('{% url "financeiro:processar_retorno" arquivo.pk %}', {
+    fetch('{% url "financeiro:processar_retorno" arquivo.pk|hashid %}', {
         method: 'POST',
         headers: {
             'X-CSRFToken': '{{ csrf_token }}',

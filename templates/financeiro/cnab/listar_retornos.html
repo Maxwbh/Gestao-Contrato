@@ -1,5 +1,5 @@
 {% extends 'base.html' %}
-{% load static %}
+{% load static hashid_tags %}
 
 {% block title %}Arquivos de Retorno - CNAB{% endblock %}
 
@@ -96,6 +96,7 @@ const retornosRowData = [
 {% for arquivo in arquivos %}
 {
     pk: {{ arquivo.pk }},
+    hid: "{{ arquivo.pk|hashid }}",
     nome_arquivo: "{{ arquivo.nome_arquivo|escapejs }}",
     conta: "{{ arquivo.conta_bancaria.descricao|escapejs }}",
     imobiliaria: "{{ arquivo.conta_bancaria.imobiliaria.nome|escapejs }}",
@@ -133,8 +134,8 @@ function registrosRenderer(params) {
 function acoesRetornoRenderer(params) {
     const d = params.data;
     return `<div class="ag-grid-actions">
-        <a href="/financeiro/cnab/retorno/${d.pk}/" class="btn btn-sm btn-outline-primary" title="Detalhes"><i class="fas fa-eye"></i></a>
-        <a href="/financeiro/cnab/retorno/${d.pk}/download/" class="btn btn-sm btn-outline-success" title="Download"><i class="fas fa-download"></i></a>
+        <a href="/financeiro/cnab/retorno/${d.hid}/" class="btn btn-sm btn-outline-primary" title="Detalhes"><i class="fas fa-eye"></i></a>
+        <a href="/financeiro/cnab/retorno/${d.hid}/download/" class="btn btn-sm btn-outline-success" title="Download"><i class="fas fa-download"></i></a>
     </div>`;
 }
 
@@ -144,7 +145,7 @@ document.addEventListener('DOMContentLoaded', function() {
         {
             columnDefs: [
                 { headerName: 'Arquivo', field: 'nome_arquivo', filter: 'agTextColumnFilter', minWidth: 200,
-                  cellRenderer: p => `<a href="/financeiro/cnab/retorno/${p.data.pk}/"><strong>${p.value}</strong></a>` },
+                  cellRenderer: p => `<a href="/financeiro/cnab/retorno/${p.data.hid}/"><strong>${p.value}</strong></a>` },
                 { headerName: 'Conta / Imobiliária', field: 'conta', filter: 'agTextColumnFilter', minWidth: 180,
                   cellRenderer: p => `${p.value}<br><small class="text-muted">${p.data.imobiliaria}</small>` },
                 { headerName: 'Layout', field: 'layout', filter: 'agTextColumnFilter', minWidth: 90 },

@@ -95,4 +95,10 @@ urlpatterns = [
     # API BrasilAPI (CEP e CNPJ)
     path('api/cep/<str:cep>/', views.api_buscar_cep, name='api_buscar_cep'),
     path('api/cnpj/<str:cnpj>/', views.api_buscar_cnpj, name='api_buscar_cnpj'),
+
+    # Hub de Configurações do Sistema
+    path('configuracoes/', views.configuracoes_sistema, name='configuracoes_sistema'),
+    path('api/parametros/', views.api_parametros_salvar_grupo, name='api_parametros_salvar'),
+    path('api/parametros/exportar/', views.api_parametros_exportar, name='api_parametros_exportar'),
+    path('api/parametros/<int:parametro_id>/', views.api_parametro_atualizar, name='api_parametro_atualizar'),
 ]

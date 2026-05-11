@@ -1,6 +1,6 @@
 {% extends 'base.html' %}
 {% load static %}
-{% load format_filters %}
+{% load format_filters hashid_tags %}
 
 {% block title %}Histórico de Reajustes{% endblock %}
 
@@ -197,8 +197,10 @@ const reajustesRowData = [
 {% for r in reajustes %}
 {
     pk: {{ r.pk }},
+    hid: "{{ r.pk|hashid }}",
     contrato: "{{ r.contrato.numero_contrato|escapejs }}",
     contrato_pk: {{ r.contrato.pk }},
+    contrato_hid: "{{ r.contrato.pk|hashid }}",
     data_reajuste: "{{ r.data_reajuste|date:'d/m/Y' }}",
     ciclo: {{ r.ciclo }},
     indice_tipo: "{{ r.indice_tipo|escapejs }}",
@@ -230,12 +232,12 @@ function statusRenderer(params) {
 }
 
 function acoesRenderer(params) {
-    const pk = params.data.pk;
+    const hid = params.data.hid;
     return `<div class="ag-grid-actions">
-        <button class="btn btn-sm btn-outline-info" onclick="abrirVisualizar(${pk})" title="Visualizar detalhes">
+        <button class="btn btn-sm btn-outline-info" onclick="abrirVisualizar('${hid}')" title="Visualizar detalhes">
             <i class="fas fa-eye"></i>
         </button>
-        <button class="btn btn-sm btn-outline-warning ms-1" onclick="abrirAlterar(${pk})" title="Alterar índice">
+        <button class="btn btn-sm btn-outline-warning ms-1" onclick="abrirAlterar('${hid}')" title="Alterar índice">
             <i class="fas fa-edit"></i>
         </button>
     </div>`;
@@ -247,7 +249,7 @@ const reajustesColumnDefs = [
         field: 'contrato',
         filter: 'agTextColumnFilter',
         minWidth: 120,
-        cellRenderer: params => `<a href="/contratos/${params.data.contrato_pk}/">${params.value}</a>`,
+        cellRenderer: params => `<a href="/contratos/${params.data.contrato_hid}/">${params.value}</a>`,
     },
     {
         headerName: 'Data',
@@ -336,6 +338,7 @@ document.addEventListener('DOMContentLoaded', function() {
         {
             columnDefs: reajustesColumnDefs,
             rowData: reajustesRowData,
+            getRowId: params => String(params.data.hid),
             domLayout: 'autoHeight',
             defaultColDef: { sortable: true, resizable: true },
             rowHeight: 42,
@@ -377,13 +380,13 @@ function getMModal(id) {
 }
 
 // ===== VISUALIZAR =====
-function abrirVisualizar(pk) {
-    _reajustePkAtual = pk;
+function abrirVisualizar(hid) {
+    _reajustePkAtual = hid;
     document.getElementById('vizBody').innerHTML =
         '<div class="text-center py-4"><i class="fas fa-spinner fa-spin fa-2x text-muted"></i></div>';
     getMModal('modalVisualizarReajuste').open();
 
-    fetch(`/financeiro/api/reajuste/${pk}/`, {
+    fetch(`/financeiro/api/reajuste/${hid}/`, {
         headers: {'X-CSRFToken': CSRF_TOKEN},
     })
     .then(r => r.json())
@@ -466,7 +469,7 @@ function renderVisualizarBody(d) {
         <div class="col-md-5">
             <span class="label-detalhe">Contrato</span>
             <div class="valor-detalhe">
-                <a href="/contratos/${d.contrato_pk}/" target="_blank">${d.contrato}</a>
+                <a href="/contratos/${d.contrato_hid}/" target="_blank">${d.contrato}</a>
                 <small class="text-muted ms-1">${d.comprador}</small>
             </div>
         </div>
@@ -559,8 +562,8 @@ function renderVisualizarBody(d) {
 // Estado global do reajuste em edição para recálculo ao vivo
 let _alterarState = { percAtual: 0, prestacaoAtual: null, valorAtualTotal: null, qtdAbertas: 0 };
 
-function abrirAlterar(pk) {
-    _reajustePkAtual = pk;
+function abrirAlterar(hid) {
+    _reajustePkAtual = hid;
     document.getElementById('altResultado').className = 'd-none';
     document.getElementById('altResultado').innerHTML = '';
     document.getElementById('percFormatado').textContent = '';
@@ -573,7 +576,7 @@ function abrirAlterar(pk) {
     btn.onclick = confirmarAlterar;
 
     // Preenche dados básicos da linha do grid
-    const row = reajustesRowData.find(r => r.pk === pk);
+    const row = reajustesRowData.find(r => r.hid === hid);
     if (row) {
         document.getElementById('altContrato').textContent = row.contrato;
         document.getElementById('altCiclo').textContent = row.ciclo;
@@ -593,7 +596,7 @@ function abrirAlterar(pk) {
     setTimeout(() => document.getElementById('altNovoPercentual').select(), 150);
 
     // Carrega dados completos via API para preview (prestação atual + qtd abertas)
-    fetch(`/financeiro/api/reajuste/${pk}/`, { headers: {'X-CSRFToken': CSRF_TOKEN} })
+    fetch(`/financeiro/api/reajuste/${hid}/`, { headers: {'X-CSRFToken': CSRF_TOKEN} })
         .then(r => r.json())
         .then(d => {
             if (!d.pk) return;
@@ -725,7 +728,7 @@ function confirmarAlterar() {
                 rowNode.setDataValue('aplicado_manual', true);
             }
             // Atualizar também no rowData em memória
-            const row = reajustesRowData.find(r => r.pk === _reajustePkAtual);
+            const row = reajustesRowData.find(r => r.hid === _reajustePkAtual);
             if (row) {
                 row.indice_tipo = data.novo_indice_tipo;
                 row.percentual_bruto = data.novo_percentual_bruto;
