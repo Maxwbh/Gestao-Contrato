@@ -4642,50 +4642,56 @@ def api_dashboard_contabilidade(request):
     # Dados para gráficos
     meses = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez']
 
-    # Recebimentos por mês (últimos 12 meses)
+    # Recebimentos por mês (últimos 12 meses) — 1 query com TruncMonth
+    inicio_12m = (hoje - relativedelta(months=11)).replace(day=1)
+    recebimentos_por_mes = {
+        row['mes']: row
+        for row in parcelas_qs.filter(data_vencimento__gte=inicio_12m).annotate(
+            mes=TruncMonth('data_vencimento')
+        ).values('mes').annotate(
+            recebido=Sum('valor_pago', filter=Q(pago=True)),
+            esperado=Sum('valor_atual'),
+        ).order_by('mes')
+    }
     recebimentos_mensais = {'labels': [], 'recebido': [], 'esperado': []}
     for i in range(11, -1, -1):
         data = hoje - relativedelta(months=i)
-        primeiro_dia = data.replace(day=1)
-        ultimo_dia = (primeiro_dia + relativedelta(months=1)) - timedelta(days=1)
-
-        parcelas_mes = parcelas_qs.filter(
-            data_vencimento__gte=primeiro_dia,
-            data_vencimento__lte=ultimo_dia
-        )
-
-        recebido = parcelas_mes.filter(pago=True).aggregate(
-            total=Sum('valor_pago')
-        )['total'] or 0
-        esperado = parcelas_mes.aggregate(
-            total=Sum('valor_atual')
-        )['total'] or 0
-
+        chave = data.replace(day=1)
+        row = recebimentos_por_mes.get(chave) or {}
         recebimentos_mensais['labels'].append(f"{meses[data.month-1]}/{data.year % 100}")
-        recebimentos_mensais['recebido'].append(float(recebido))
-        recebimentos_mensais['esperado'].append(float(esperado))
+        recebimentos_mensais['recebido'].append(float(row.get('recebido') or 0))
+        recebimentos_mensais['esperado'].append(float(row.get('esperado') or 0))
 
-    # Distribuição por imobiliária
-    distribuicao_imobiliarias = {'labels': [], 'valores': [], 'cores': []}
+    # Distribuição por imobiliária — 1 query com GROUP BY
     cores = ['#007bff', '#28a745', '#dc3545', '#ffc107', '#17a2b8', '#6c757d', '#fd7e14', '#6610f2']
-
-    for i, imob in enumerate(imobiliarias[:8]):  # Máximo 8 imobiliárias
-        valor = parcelas_qs.filter(
-            contrato__imobiliaria=imob, pago=False
-        ).aggregate(total=Sum('valor_atual'))['total'] or 0
-
+    imobs_list = list(imobiliarias[:8])
+    imob_ids_top8 = [im.id for im in imobs_list]
+    dist_por_imob = {
+        row['contrato__imobiliaria']: row['total']
+        for row in parcelas_qs.filter(
+            contrato__imobiliaria__in=imob_ids_top8, pago=False
+        ).values('contrato__imobiliaria').annotate(total=Sum('valor_atual'))
+    }
+    distribuicao_imobiliarias = {'labels': [], 'valores': [], 'cores': []}
+    for i, imob in enumerate(imobs_list):
         distribuicao_imobiliarias['labels'].append(imob.nome_fantasia or imob.razao_social[:20])
-        distribuicao_imobiliarias['valores'].append(float(valor))
+        distribuicao_imobiliarias['valores'].append(float(dist_por_imob.get(imob.id) or 0))
         distribuicao_imobiliarias['cores'].append(cores[i % len(cores)])
 
-    # Status dos contratos
+    # Status dos contratos — 1 aggregate em vez de 4 counts
+    contrato_counts = contratos_qs.aggregate(
+        ativos=Count('id', filter=Q(status=StatusContrato.ATIVO)),
+        quitados=Count('id', filter=Q(status=StatusContrato.QUITADO)),
+        cancelados=Count('id', filter=Q(status=StatusContrato.CANCELADO)),
+        suspensos=Count('id', filter=Q(status=StatusContrato.SUSPENSO)),
+    )
     status_contratos = {
         'labels': ['Ativos', 'Quitados', 'Cancelados', 'Suspensos'],
         'data': [
-            contratos_qs.filter(status=StatusContrato.ATIVO).count(),
-            contratos_qs.filter(status=StatusContrato.QUITADO).count(),
-            contratos_qs.filter(status=StatusContrato.CANCELADO).count(),
-            contratos_qs.filter(status=StatusContrato.SUSPENSO).count(),
+            contrato_counts['ativos'],
+            contrato_counts['quitados'],
+            contrato_counts['cancelados'],
+            contrato_counts['suspensos'],
         ],
         'cores': ['#28a745', '#007bff', '#dc3545', '#6c757d']
     }
