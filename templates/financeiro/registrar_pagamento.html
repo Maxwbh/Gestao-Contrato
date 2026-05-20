@@ -1,6 +1,7 @@
 {% extends 'base.html' %}
 {% load static %}
 {% load hashid_tags %}
+{% load format_filters %}
 
 {% block title %}Registrar Pagamento - Parcela {{ parcela.numero_parcela }}{% endblock %}
 
@@ -51,8 +52,8 @@
                                     <span class="badge bg-danger">Vencida</span>
                                 {% endif %}
                             </p>
-                            <p><strong>Valor Original:</strong> R$ {{ parcela.valor_original|floatformat:2 }}</p>
-                            <p><strong>Valor Atual:</strong> R$ {{ parcela.valor_atual|floatformat:2 }}</p>
+                            <p><strong>Valor Original:</strong> {{ parcela.valor_original|moeda }}</p>
+                            <p><strong>Valor Atual:</strong> {{ parcela.valor_atual|moeda }}</p>
                         </div>
                     </div>
 
@@ -61,22 +62,22 @@
                     <div class="row">
                         <div class="col-md-4">
                             <p class="mb-1"><strong>Juros:</strong></p>
-                            <p class="text-danger fs-5">R$ {{ parcela.valor_juros|floatformat:2 }}</p>
+                            <p class="text-danger fs-5">{{ parcela.valor_juros|moeda }}</p>
                         </div>
                         <div class="col-md-4">
                             <p class="mb-1"><strong>Multa:</strong></p>
-                            <p class="text-danger fs-5">R$ {{ parcela.valor_multa|floatformat:2 }}</p>
+                            <p class="text-danger fs-5">{{ parcela.valor_multa|moeda }}</p>
                         </div>
                         <div class="col-md-4">
                             <p class="mb-1"><strong>Total a Pagar:</strong></p>
-                            <p class="text-primary fs-4 fw-bold">R$ {{ parcela.valor_total|floatformat:2 }}</p>
+                            <p class="text-primary fs-4 fw-bold">{{ parcela.valor_total|moeda }}</p>
                         </div>
                     </div>
                     {% else %}
                     <hr>
                     <div class="text-center">
                         <p class="mb-1"><strong>Total a Pagar:</strong></p>
-                        <p class="text-primary fs-3 fw-bold">R$ {{ parcela.valor_total|floatformat:2 }}</p>
+                        <p class="text-primary fs-3 fw-bold">{{ parcela.valor_total|moeda }}</p>
                     </div>
                     {% endif %}
                 </div>

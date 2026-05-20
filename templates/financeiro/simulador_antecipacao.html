@@ -1,6 +1,7 @@
 {% extends 'base.html' %}
 {% load static %}
 {% load hashid_tags %}
+{% load format_filters %}
 
 {% block title %}Simulador de Antecipação — {{ contrato.numero_contrato }}{% endblock %}
 
@@ -109,7 +110,7 @@
                                             <span class="badge bg-danger ms-1">Vencida</span>
                                             {% endif %}
                                         </td>
-                                        <td class="text-end font-monospace">R$ {{ p.valor_atual|floatformat:2 }}</td>
+                                        <td class="text-end font-monospace">{{ p.valor_atual|moeda }}</td>
                                         <td class="text-end font-monospace text-success col-desconto">—</td>
                                         <td class="text-end font-monospace text-primary col-antecipado">—</td>
                                     </tr>
@@ -153,21 +154,21 @@
                     <div class="row text-center mb-3">
                         <div class="col-4">
                             <div class="text-muted small">Total Original</div>
-                            <div class="fw-bold font-monospace">R$ {{ preview.total_original|floatformat:2 }}</div>
+                            <div class="fw-bold font-monospace">{{ preview.total_original|moeda }}</div>
                         </div>
                         <div class="col-4">
                             <div class="text-muted small">Desconto ({{ preview.desconto_perc }}%)</div>
-                            <div class="fw-bold font-monospace text-danger">− R$ {{ preview.economia|floatformat:2 }}</div>
+                            <div class="fw-bold font-monospace text-danger">− {{ preview.economia|moeda }}</div>
                         </div>
                         <div class="col-4">
                             <div class="text-muted small">A Pagar</div>
-                            <div class="fw-bold font-monospace text-primary">R$ {{ preview.total_antecipado|floatformat:2 }}</div>
+                            <div class="fw-bold font-monospace text-primary">{{ preview.total_antecipado|moeda }}</div>
                         </div>
                     </div>
 
                     <div class="text-center mb-3 p-2 bg-light rounded">
                         <div class="text-muted small">Economia Total</div>
-                        <div class="economia-destaque">R$ {{ preview.economia|floatformat:2 }}</div>
+                        <div class="economia-destaque">{{ preview.economia|moeda }}</div>
                         <div class="text-muted small">em {{ preview.qtd }} parcela(s)</div>
                     </div>
 
@@ -187,9 +188,9 @@
                                 <tr>
                                     <td><span class="badge bg-secondary">{{ item.parcela.numero_parcela }}</span></td>
                                     <td class="font-monospace small">{{ item.parcela.data_vencimento|date:"d/m/Y" }}</td>
-                                    <td class="text-end font-monospace small">R$ {{ item.valor_original|floatformat:2 }}</td>
-                                    <td class="text-end font-monospace small text-success">− R$ {{ item.desconto_valor|floatformat:2 }}</td>
-                                    <td class="text-end font-monospace small text-primary fw-bold">R$ {{ item.valor_antecipado|floatformat:2 }}</td>
+                                    <td class="text-end font-monospace small">{{ item.valor_original|moeda }}</td>
+                                    <td class="text-end font-monospace small text-success">− {{ item.desconto_valor|moeda }}</td>
+                                    <td class="text-end font-monospace small text-primary fw-bold">{{ item.valor_antecipado|moeda }}</td>
                                 </tr>
                                 {% endfor %}
                             </tbody>
@@ -206,7 +207,7 @@
                         <button type="submit" class="btn btn-success w-100"
                                 onclick="return confirm('Confirmar antecipação de {{ preview.qtd }} parcela(s) com {{ preview.desconto_perc }}% de desconto? Esta ação não pode ser desfeita.')">
                             <i class="fas fa-check-circle"></i>
-                            Confirmar Antecipação — Pagar R$ {{ preview.total_antecipado|floatformat:2 }}
+                            Confirmar Antecipação — Pagar {{ preview.total_antecipado|moeda }}
                         </button>
                     </form>
                 </div>
