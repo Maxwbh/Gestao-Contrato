@@ -258,7 +258,7 @@ class ContratoDetailView(LoginRequiredMixin, HashidMixin, TenantMixin, DetailVie
             'imovel', 'imovel__imobiliaria',
             'comprador',
             'imobiliaria'
-        )
+        ).prefetch_related('parcelas', 'intermediarias')
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
@@ -269,22 +269,17 @@ class ContratoDetailView(LoginRequiredMixin, HashidMixin, TenantMixin, DetailVie
         context['valor_pago'] = contrato.calcular_valor_pago()
         context['saldo_devedor'] = contrato.calcular_saldo_devedor()
 
-        # Parcelas
-        context['parcelas'] = contrato.parcelas.all().order_by('numero_parcela')
-        context['parcelas_pagas'] = contrato.parcelas.filter(pago=True).count()
-        context['parcelas_pendentes'] = contrato.parcelas.filter(pago=False).count()
+        # Parcelas — compute counts from prefetch cache to avoid extra queries
+        hoje = timezone.now().date()
+        todas_parcelas = sorted(contrato.parcelas.all(), key=lambda p: p.numero_parcela)
+        context['parcelas'] = todas_parcelas
+        context['parcelas_pagas'] = sum(1 for p in todas_parcelas if p.pago)
+        context['parcelas_pendentes'] = sum(1 for p in todas_parcelas if not p.pago)
 
-        # Próxima parcela a vencer
-        context['proxima_parcela'] = contrato.parcelas.filter(
-            pago=False,
-            data_vencimento__gte=timezone.now().date()
-        ).order_by('data_vencimento').first()
-
-        # Parcelas em atraso
-        context['parcelas_atrasadas'] = contrato.parcelas.filter(
-            pago=False,
-            data_vencimento__lt=timezone.now().date()
-        ).count()
+        pendentes = [p for p in todas_parcelas if not p.pago]
+        proximas = sorted((p for p in pendentes if p.data_vencimento >= hoje), key=lambda p: p.data_vencimento)
+        context['proxima_parcela'] = proximas[0] if proximas else None
+        context['parcelas_atrasadas'] = sum(1 for p in pendentes if p.data_vencimento < hoje)
 
         # Reajuste pendente no mês exato do aniversário (antecipacao_meses=0)
         from financeiro.models import Reajuste
@@ -333,18 +328,22 @@ class ContratoDetailView(LoginRequiredMixin, HashidMixin, TenantMixin, DetailVie
         if hasattr(contrato, 'intermediarias'):
             from django.utils import timezone as tz
             from dateutil.relativedelta import relativedelta
-            todas = contrato.intermediarias.all().order_by('numero_sequencial')
-            context['intermediarias'] = todas
-            context['total_intermediarias'] = todas.count()
-            context['intermediarias_pagas'] = todas.filter(paga=True).count()
-            context['intermediarias_pendentes'] = todas.filter(paga=False).count()
-            # Intermediárias vencidas sem boleto gerado
-            hoje = tz.now().date()
+            # Use prefetch cache — sort in Python to avoid extra queries
+            todas_intermediarias = sorted(
+                contrato.intermediarias.all(), key=lambda i: i.numero_sequencial
+            )
+            context['intermediarias'] = todas_intermediarias
+            context['total_intermediarias'] = len(todas_intermediarias)
+            context['intermediarias_pagas'] = sum(1 for i in todas_intermediarias if i.paga)
+            context['intermediarias_pendentes'] = sum(1 for i in todas_intermediarias if not i.paga)
+            # Intermediárias vencidas sem boleto gerado — filter in Python
+            hoje_inter = tz.now().date()
             vencidas_sem_boleto = [
-                inter for inter in todas.filter(paga=False, parcela_vinculada__isnull=True)
-                if (contrato.data_primeiro_vencimento + relativedelta(months=inter.mes_vencimento - 1)).replace(
+                inter for inter in todas_intermediarias
+                if not inter.paga and inter.parcela_vinculada_id is None
+                and (contrato.data_primeiro_vencimento + relativedelta(months=inter.mes_vencimento - 1)).replace(
                     day=min(contrato.dia_vencimento, 28)
-                ) <= hoje
+                ) <= hoje_inter
             ]
             context['intermediarias_vencidas_sem_boleto'] = vencidas_sem_boleto
         else:
