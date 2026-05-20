@@ -3951,22 +3951,23 @@ def excluir_reajuste(request, hid):
                 pago=False
             )
 
-            for parcela in parcelas:
-                # Reverter o valor (dividir pelo fator aplicado)
-                if fator_reajuste != 0:
+            from contratos.models import PrestacaoIntermediaria
+            parcelas_list = list(parcelas)
+            if fator_reajuste != 0:
+                for parcela in parcelas_list:
                     parcela.valor_atual = (parcela.valor_atual / fator_reajuste).quantize(Decimal('0.01'))
-                parcela.save(update_fields=['valor_atual'])
+            Parcela.objects.bulk_update(parcelas_list, ['valor_atual'])
 
             # Reverter intermediárias
-            intermediarias = contrato.intermediarias.filter(
+            intermediarias = list(contrato.intermediarias.filter(
                 paga=False,
                 mes_vencimento__gte=reajuste.parcela_inicial,
                 mes_vencimento__lte=reajuste.parcela_final,
-            )
-            for inter in intermediarias:
-                if fator_reajuste != 0:
+            ))
+            if fator_reajuste != 0:
+                for inter in intermediarias:
                     inter.valor_atual = (inter.valor_atual / fator_reajuste).quantize(Decimal('0.01'))
-                inter.save(update_fields=['valor_atual'])
+            PrestacaoIntermediaria.objects.bulk_update(intermediarias, ['valor_atual'])
 
             # Restaurar ciclo_reajuste_atual do contrato
             if contrato.ciclo_reajuste_atual >= reajuste.ciclo:
@@ -4115,26 +4116,27 @@ def alterar_indice_reajuste(request, hid):
 
             if reajuste.aplicado:
                 # Reverter o fator antigo nas parcelas não pagas do intervalo
+                from contratos.models import PrestacaoIntermediaria
                 fator_antigo = 1 + (reajuste.percentual / 100)
-                parcelas = contrato.parcelas.filter(
+                parcelas_list = list(contrato.parcelas.filter(
                     numero_parcela__gte=reajuste.parcela_inicial,
                     numero_parcela__lte=reajuste.parcela_final,
                     pago=False,
-                )
-                for p in parcelas:
-                    if fator_antigo != 0:
+                ))
+                if fator_antigo != 0:
+                    for p in parcelas_list:
                         p.valor_atual = (p.valor_atual / fator_antigo).quantize(Decimal('0.01'))
-                    p.save(update_fields=['valor_atual'])
+                Parcela.objects.bulk_update(parcelas_list, ['valor_atual'])
 
-                intermediarias = contrato.intermediarias.filter(
+                intermediarias = list(contrato.intermediarias.filter(
                     paga=False,
                     mes_vencimento__gte=reajuste.parcela_inicial,
                     mes_vencimento__lte=reajuste.parcela_final,
-                )
-                for inter in intermediarias:
-                    if fator_antigo != 0:
+                ))
+                if fator_antigo != 0:
+                    for inter in intermediarias:
                         inter.valor_atual = (inter.valor_atual / fator_antigo).quantize(Decimal('0.01'))
-                    inter.save(update_fields=['valor_atual'])
+                PrestacaoIntermediaria.objects.bulk_update(intermediarias, ['valor_atual'])
 
                 # Atualiza só o percentual (índice preservado) e reaplica
                 reajuste.percentual = novo_percentual
