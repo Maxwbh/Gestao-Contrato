@@ -169,6 +169,21 @@ class DashboardFinanceiroView(LoginRequiredMixin, TemplateView):
             parcelas_qs, primeiro_dia_ano, hoje
         )
 
+        # F3-02: MoM variação — % de valor_recebido e pagas vs mês anterior
+        rec_atual = context['parcelas_mes_atual']['valor_recebido']
+        rec_passado = context['parcelas_mes_passado']['valor_recebido']
+        pag_atual = context['parcelas_mes_atual']['pagas']
+        pag_passado = context['parcelas_mes_passado']['pagas']
+
+        def _mom_pct(atual, anterior):
+            if not anterior:
+                return None
+            delta = float(atual - anterior) / float(anterior) * 100
+            return round(delta, 1)
+
+        context['mom_recebido'] = _mom_pct(rec_atual, rec_passado)
+        context['mom_pagas'] = _mom_pct(pag_atual, pag_passado)
+
         # Top 10 contratos com mais atraso
         context['contratos_mais_atraso'] = self._get_contratos_mais_atraso(
             contratos_qs, limite=10
@@ -648,6 +663,33 @@ def detalhe_parcela(request, hid):
         ],
     }
     return render(request, 'financeiro/detalhe_parcela.html', context)
+
+
+@login_required
+@require_GET
+def api_parcela_quickview(request, hid):
+    """F3-01: Retorna HTML parcial para o modal de quick-view da parcela."""
+    pk = _hid_to_pk(hid)
+    parcela = get_object_or_404(
+        Parcela.objects.select_related(
+            'contrato', 'contrato__imobiliaria', 'contrato__comprador', 'contrato__imovel'
+        ),
+        pk=pk
+    )
+    verificar_acesso_tenant(request, parcela.contrato.imobiliaria)
+
+    from notificacoes.models import Notificacao
+    notificacoes = (
+        Notificacao.objects
+        .filter(parcela=parcela)
+        .order_by('-data_agendamento')[:5]
+    )
+
+    context = {
+        'parcela': parcela,
+        'notificacoes': notificacoes,
+    }
+    return render(request, 'financeiro/parcela_quickview_partial.html', context)
 
 
 @login_required

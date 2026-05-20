@@ -498,6 +498,25 @@
     </div>
 </div>
 
+<!-- F3-01: Modal Quick-view de parcela -->
+<div class="modal fade" id="modalQuickview" tabindex="-1" aria-labelledby="modalQuickviewLabel" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header bg-dark text-white py-2">
+        <h6 class="modal-title mb-0" id="modalQuickviewLabel">
+          <i class="fas fa-eye me-2"></i>Quick-view da Parcela
+        </h6>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Fechar"></button>
+      </div>
+      <div class="modal-body" id="modalQuickviewBody">
+        <div class="text-center py-4">
+          <div class="spinner-border text-primary" role="status"><span class="visually-hidden">Carregando…</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
 {% endblock %}
 
 {% block extra_js %}
@@ -641,7 +660,7 @@ function acoesRenderer(params) {
     const d = params.data;
     const sp = "event.stopPropagation();";
     let html = '<div class="ag-grid-actions">';
-    html += `<a href="/financeiro/parcelas/${d.hid}/" class="btn btn-sm btn-outline-secondary" title="Ver detalhes" onclick="${sp}"><i class="fas fa-eye"></i></a>`;
+    html += `<button class="btn btn-sm btn-outline-secondary" title="Quick-view" onclick="${sp}abrirQuickview('${d.hid}')"><i class="fas fa-eye"></i></button>`;
     html += `<a href="/contratos/${d.contrato_hid}/" class="btn btn-sm btn-outline-info" title="Ver contrato" onclick="${sp}"><i class="fas fa-file-contract"></i></a>`;
     if (!d.pago) {
         html += `<button class="btn btn-sm btn-outline-primary" title="Gerar boleto" onclick="${sp}abrirModalBoleto('${d.hid}', '${d.contrato.replace(/'/g,"\\'")}', ${d.numero_parcela})"><i class="fas fa-barcode"></i></button>`;
@@ -1305,5 +1324,21 @@ function revalidarBoletos() {
     });
 }
 {% endif %}
+
+// F3-01: Quick-view da parcela
+function abrirQuickview(hid) {
+    const modal = new bootstrap.Modal(document.getElementById('modalQuickview'));
+    const body = document.getElementById('modalQuickviewBody');
+    body.innerHTML = '<div class="text-center py-4"><div class="spinner-border text-primary" role="status"><span class="visually-hidden">Carregando…</span></div></div>';
+    modal.show();
+    fetch(`/financeiro/parcelas/${hid}/quickview/`, {
+        headers: { 'X-Requested-With': 'XMLHttpRequest' }
+    })
+    .then(r => r.ok ? r.text() : Promise.reject(r.status))
+    .then(html => { body.innerHTML = html; })
+    .catch(() => {
+        body.innerHTML = '<div class="alert alert-danger">Erro ao carregar os dados da parcela.</div>';
+    });
+}
 </script>
 {% endblock %}

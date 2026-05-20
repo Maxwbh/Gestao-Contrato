@@ -783,6 +783,16 @@
                         </div>
                     </div>
                 </div>
+            <!-- F3-03: Resumo Financeiro por Mês (Chart.js) -->
+            <div class="card mb-3" id="card-resumo-financeiro">
+                <div class="card-header py-2 d-flex justify-content-between align-items-center">
+                    <span><i class="fas fa-chart-bar me-2 text-info"></i><strong>Resumo Financeiro</strong></span>
+                    <small class="text-muted">últimos 12 meses</small>
+                </div>
+                <div class="card-body p-2">
+                    <canvas id="chartResumoFinanceiro" height="160"></canvas>
+                </div>
+            </div>
             </div>
 
             <!-- Coluna Direita: Parcelas -->
@@ -1680,7 +1690,89 @@
 {% endblock %}
 
 {% block extra_js %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
 <script>
+// ── F3-03: Resumo Financeiro — Chart.js barras por mês ────────────────────────
+(function () {
+    var canvas = document.getElementById('chartResumoFinanceiro');
+    if (!canvas || typeof Chart === 'undefined') return;
+
+    // Build last-12-months labels and buckets from parcelas data
+    var today = new Date();
+    var labels = [], pagas = [], pendentes = [];
+    for (var i = 11; i >= 0; i--) {
+        var d = new Date(today.getFullYear(), today.getMonth() - i, 1);
+        var key = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
+        var meses = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
+        labels.push(meses[d.getMonth()] + '/' + String(d.getFullYear()).slice(2));
+        pagas.push(0);
+        pendentes.push(0);
+    }
+
+    {% for p in parcelas %}
+    (function() {
+        var venc = '{{ p.data_vencimento|date:"Y-m" }}';
+        var idx = labels.findIndex(function(_, i) {
+            var d = new Date(today.getFullYear(), today.getMonth() - (11 - i), 1);
+            var k = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
+            return k === venc;
+        });
+        if (idx === -1) return;
+        {% if p.pago %}
+        pagas[idx] += parseFloat('{{ p.valor_pago|default:p.valor_atual|stringformat:".2f" }}') || 0;
+        {% else %}
+        pendentes[idx] += parseFloat('{{ p.valor_atual|stringformat:".2f" }}') || 0;
+        {% endif %}
+    })();
+    {% endfor %}
+
+    new Chart(canvas, {
+        type: 'bar',
+        data: {
+            labels: labels,
+            datasets: [
+                {
+                    label: 'Pago',
+                    data: pagas,
+                    backgroundColor: 'rgba(25, 135, 84, 0.75)',
+                    borderColor: '#198754',
+                    borderWidth: 1,
+                },
+                {
+                    label: 'Pendente',
+                    data: pendentes,
+                    backgroundColor: 'rgba(13, 110, 253, 0.45)',
+                    borderColor: '#0d6efd',
+                    borderWidth: 1,
+                },
+            ],
+        },
+        options: {
+            responsive: true,
+            plugins: {
+                legend: { position: 'bottom', labels: { boxWidth: 12, font: { size: 11 } } },
+                tooltip: {
+                    callbacks: {
+                        label: function(ctx) {
+                            var v = ctx.parsed.y;
+                            return ctx.dataset.label + ': R$ ' + v.toLocaleString('pt-BR', {minimumFractionDigits: 2});
+                        }
+                    }
+                }
+            },
+            scales: {
+                x: { stacked: false, ticks: { font: { size: 10 } } },
+                y: {
+                    ticks: {
+                        font: { size: 10 },
+                        callback: function(v) { return 'R$ ' + v.toLocaleString('pt-BR', {minimumFractionDigits: 0}); }
+                    }
+                }
+            }
+        }
+    });
+})();
+
 // ── U-02: Timeline Visual de Ciclos ──────────────────────────────────────────
 (function() {
     var container = document.getElementById('ciclos-timeline');

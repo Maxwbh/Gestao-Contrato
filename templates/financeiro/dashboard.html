@@ -107,9 +107,26 @@
             <div class="card card-stats success h-100">
                 <div class="card-body">
                     <div class="stat-value text-success" style="font-size:1.4rem;">R$ {{ parcelas_mes_atual.valor_recebido|floatformat:2 }}</div>
-                    <div class="stat-label">Arrecadação Mês</div>
+                    <div class="stat-label d-flex align-items-center gap-1">
+                      Arrecadação Mês
+                      {% if mom_recebido is not None %}
+                        {% if mom_recebido >= 0 %}
+                          <span class="badge bg-success" style="font-size:0.65rem;" title="vs mês anterior">&#8593; +{{ mom_recebido }}%</span>
+                        {% else %}
+                          <span class="badge bg-danger" style="font-size:0.65rem;" title="vs mês anterior">&#8595; {{ mom_recebido }}%</span>
+                        {% endif %}
+                      {% endif %}
+                    </div>
                     <hr class="my-2">
-                    <small class="text-muted">{{ parcelas_mes_atual.pagas }} pagas este mês</small>
+                    <small class="text-muted">{{ parcelas_mes_atual.pagas }} pagas este mês
+                      {% if mom_pagas is not None %}
+                        {% if mom_pagas >= 0 %}
+                          <span class="text-success ms-1 fw-semibold">&#8593; +{{ mom_pagas }}%</span>
+                        {% else %}
+                          <span class="text-danger ms-1 fw-semibold">&#8595; {{ mom_pagas }}%</span>
+                        {% endif %}
+                      {% endif %}
+                    </small>
                 </div>
             </div>
         </div>
@@ -157,8 +174,15 @@
     <div class="row mb-4">
         <div class="col-md-3">
             <div class="card periodo-card h-100">
-                <div class="card-header bg-primary text-white">
-                    <i class="fas fa-calendar-day"></i> Mes Atual
+                <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
+                    <span><i class="fas fa-calendar-day"></i> Mes Atual</span>
+                    {% if mom_recebido is not None %}
+                      {% if mom_recebido >= 0 %}
+                        <span class="badge bg-success" title="Arrecadação vs mês anterior">&#8593; +{{ mom_recebido }}%</span>
+                      {% else %}
+                        <span class="badge bg-danger" title="Arrecadação vs mês anterior">&#8595; {{ mom_recebido }}%</span>
+                      {% endif %}
+                    {% endif %}
                 </div>
                 <div class="card-body">
                     <div class="d-flex justify-content-between mb-2">

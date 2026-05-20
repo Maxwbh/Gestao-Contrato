@@ -884,12 +884,19 @@ class CompradorUpdateView(LoginRequiredMixin, UpdateView):
 
     def get_context_data(self, **kwargs):
         from core.breadcrumbs import bc, bc_dashboard
+        from notificacoes.models import Notificacao
         context = super().get_context_data(**kwargs)
         context['breadcrumb'] = [
             bc_dashboard(),
             bc('Compradores', 'core:listar_compradores'),
             bc(self.object.nome),
         ]
+        context['notificacoes_recentes'] = (
+            Notificacao.objects
+            .filter(parcela__contrato__comprador=self.object)
+            .select_related('parcela')
+            .order_by('-data_agendamento')[:10]
+        )
         return context
 
     def form_valid(self, form):
