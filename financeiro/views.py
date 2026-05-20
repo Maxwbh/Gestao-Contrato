@@ -12,6 +12,7 @@ from django.http import JsonResponse, HttpResponse, FileResponse
 from django.utils import timezone
 from django.db import transaction
 from django.db.models import Sum, Count, Q, Min, F, Exists, OuterRef
+from django.db.models.functions import TruncMonth
 from django.views.generic import TemplateView
 from django.views.decorators.http import require_POST, require_GET
 from django.core.paginator import Paginator
@@ -329,69 +330,75 @@ def api_dashboard_dados(request):
     }
 
     # Dados para gráfico de barras - Recebimentos por mês (últimos 12 meses)
-    recebimentos_mensais = {'labels': [], 'recebido': [], 'esperado': []}
+    # 1 query com TruncMonth em vez de 2 queries × 12 meses
     meses = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez']
+    inicio_12m = (hoje - relativedelta(months=11)).replace(day=1)
+    receb_por_mes = {
+        row['mes']: row
+        for row in parcelas_qs.filter(
+            data_vencimento__gte=inicio_12m,
+            data_vencimento__lte=hoje,
+        ).annotate(mes=TruncMonth('data_vencimento')).values('mes').annotate(
+            recebido=Sum('valor_pago', filter=Q(pago=True)),
+            esperado=Sum('valor_atual'),
+        ).order_by('mes')
+    }
 
+    recebimentos_mensais = {'labels': [], 'recebido': [], 'esperado': []}
     for i in range(11, -1, -1):
         data = hoje - relativedelta(months=i)
-        primeiro_dia = data.replace(day=1)
-        ultimo_dia = (primeiro_dia + relativedelta(months=1)) - timedelta(days=1)
-
-        parcelas_mes = parcelas_qs.filter(
-            data_vencimento__gte=primeiro_dia,
-            data_vencimento__lte=ultimo_dia
-        )
-
-        recebido = parcelas_mes.filter(pago=True).aggregate(
-            total=Sum('valor_pago')
-        )['total'] or 0
-        esperado = parcelas_mes.aggregate(
-            total=Sum('valor_atual')
-        )['total'] or 0
-
+        chave = data.replace(day=1)
+        row = receb_por_mes.get(chave, {})
         recebimentos_mensais['labels'].append(f"{meses[data.month-1]}/{data.year % 100}")
-        recebimentos_mensais['recebido'].append(float(recebido))
-        recebimentos_mensais['esperado'].append(float(esperado))
+        recebimentos_mensais['recebido'].append(float(row.get('recebido') or 0))
+        recebimentos_mensais['esperado'].append(float(row.get('esperado') or 0))
 
-    # Dados para gráfico de linha - Inadimplência por mês — 1 aggregate/mês (sem .count() extra)
+    # Dados para gráfico de linha - Inadimplência por mês
+    # 1 query com TruncMonth em vez de 1 query × 12 meses
+    inad_por_mes = {
+        row['mes']: row
+        for row in parcelas_qs.filter(
+            pago=False,
+            data_vencimento__gte=inicio_12m,
+            data_vencimento__lt=hoje,
+        ).annotate(mes=TruncMonth('data_vencimento')).values('mes').annotate(
+            total=Sum('valor_atual'),
+            quantidade=Count('id'),
+        ).order_by('mes')
+    }
+
     inadimplencia_mensal = {'labels': [], 'valores': [], 'quantidades': []}
-
     for i in range(11, -1, -1):
         data = hoje - relativedelta(months=i)
-        primeiro_dia = data.replace(day=1)
-        ultimo_dia = (primeiro_dia + relativedelta(months=1)) - timedelta(days=1)
-
-        agg_inad = parcelas_qs.filter(
-            pago=False,
-            data_vencimento__gte=primeiro_dia,
-            data_vencimento__lte=ultimo_dia,
-            data_vencimento__lt=hoje,
-        ).aggregate(total=Sum('valor_atual'), quantidade=Count('id'))
-
+        chave = data.replace(day=1)
+        row = inad_por_mes.get(chave, {})
         inadimplencia_mensal['labels'].append(f"{meses[data.month-1]}/{data.year % 100}")
-        inadimplencia_mensal['valores'].append(float(agg_inad['total'] or 0))
-        inadimplencia_mensal['quantidades'].append(agg_inad['quantidade'])
+        inadimplencia_mensal['valores'].append(float(row.get('total') or 0))
+        inadimplencia_mensal['quantidades'].append(row.get('quantidade') or 0)
 
-    # Tabela vencimentos consolidados - próximos 3 meses (3.6)
+    # Tabela vencimentos consolidados - próximos 3 meses — 1 query com TruncMonth
+    inicio_3m = hoje.replace(day=1)
+    fim_3m = (inicio_3m + relativedelta(months=3)) - timedelta(days=1)
+    venc_por_mes = {
+        row['mes']: row
+        for row in parcelas_qs.filter(
+            pago=False,
+            data_vencimento__gte=inicio_3m,
+            data_vencimento__lte=fim_3m,
+        ).annotate(mes=TruncMonth('data_vencimento')).values('mes').annotate(
+            total_valor=Sum('valor_atual'),
+            quantidade=Count('id'),
+        ).order_by('mes')
+    }
     vencimentos_proximos = []
     for i in range(3):
         data = hoje + relativedelta(months=i)
-        primeiro_dia = data.replace(day=1)
-        ultimo_dia = (primeiro_dia + relativedelta(months=1)) - timedelta(days=1)
-
-        parcelas_mes = parcelas_qs.filter(
-            pago=False,
-            data_vencimento__gte=primeiro_dia,
-            data_vencimento__lte=ultimo_dia
-        )
-        agg = parcelas_mes.aggregate(
-            total_valor=Sum('valor_atual'),
-            quantidade=Count('id')
-        )
+        chave = data.replace(day=1)
+        row = venc_por_mes.get(chave, {})
         vencimentos_proximos.append({
             'mes': f"{meses[data.month - 1]}/{data.year}",
-            'quantidade': agg['quantidade'] or 0,
-            'valor_total': float(agg['total_valor'] or 0),
+            'quantidade': row.get('quantidade') or 0,
+            'valor_total': float(row.get('total_valor') or 0),
         })
 
     # G-02: Inadimplência por faixa de atraso — 1 aggregate em vez de 4 queries
@@ -413,22 +420,27 @@ def api_dashboard_dados(request):
         'colors': ['#ffc107', '#fd7e14', '#dc3545', '#6f1212'],
     }
 
-    # G-03: Fluxo de caixa previsto vs. realizado (6 meses passados + mês atual + 6 futuros)
+    # G-03: Fluxo de caixa previsto vs. realizado — 1 query com TruncMonth (12 queries → 1)
+    inicio_fluxo = (hoje - relativedelta(months=5)).replace(day=1)
+    fim_fluxo = (hoje + relativedelta(months=6, day=1)) - timedelta(days=1)
+    fluxo_por_mes = {
+        row['mes']: row
+        for row in parcelas_qs.filter(
+            data_vencimento__gte=inicio_fluxo,
+            data_vencimento__lte=fim_fluxo,
+        ).annotate(mes=TruncMonth('data_vencimento')).values('mes').annotate(
+            previsto=Sum('valor_atual'),
+            realizado=Sum('valor_pago', filter=Q(pago=True)),
+        ).order_by('mes')
+    }
     fluxo_caixa = {'labels': [], 'realizado': [], 'previsto': [], 'is_future': []}
     for i in range(-5, 7):
         ref = hoje + relativedelta(months=i)
-        primeiro_dia = ref.replace(day=1)
-        ultimo_dia = (primeiro_dia + relativedelta(months=1)) - timedelta(days=1)
-
-        qs_mes = parcelas_qs.filter(data_vencimento__gte=primeiro_dia, data_vencimento__lte=ultimo_dia)
-        agg = qs_mes.aggregate(
-            previsto=Sum('valor_atual'),
-            realizado=Sum('valor_pago', filter=Q(pago=True)),
-        )
-
+        chave = ref.replace(day=1)
+        row = fluxo_por_mes.get(chave, {})
         fluxo_caixa['labels'].append(f"{meses[ref.month - 1]}/{ref.year % 100}")
-        fluxo_caixa['previsto'].append(float(agg['previsto'] or 0))
-        fluxo_caixa['realizado'].append(float(agg['realizado'] or 0) if i <= 0 else None)
+        fluxo_caixa['previsto'].append(float(row.get('previsto') or 0))
+        fluxo_caixa['realizado'].append(float(row.get('realizado') or 0) if i <= 0 else None)
         fluxo_caixa['is_future'].append(i > 0)
 
     data = {
@@ -6781,33 +6793,42 @@ def api_imobiliaria_fluxo_caixa(request, imobiliaria_id):
 
     base_qs = Parcela.objects.filter(contrato__imobiliaria=imobiliaria)
 
-    meses = []
-    for i in range(-5, 7):  # -5 (5 meses atrás) até +6 (6 meses à frente)
-        ref = hoje + relativedelta(months=i)
-        primeiro = ref.replace(day=1)
-        ultimo = (primeiro + relativedelta(months=1)) - timedelta(days=1)
-
-        qs_mes = base_qs.filter(data_vencimento__gte=primeiro, data_vencimento__lte=ultimo)
-        agg = qs_mes.aggregate(
+    # 1 query com TruncMonth em vez de 12 aggregates individuais
+    inicio_fluxo = (hoje - relativedelta(months=5)).replace(day=1)
+    fim_fluxo = (hoje + relativedelta(months=6, day=1)) - timedelta(days=1)
+    fluxo_por_mes = {
+        row['mes']: row
+        for row in base_qs.filter(
+            data_vencimento__gte=inicio_fluxo,
+            data_vencimento__lte=fim_fluxo,
+        ).annotate(mes=TruncMonth('data_vencimento')).values('mes').annotate(
             esperado=Sum('valor_atual'),
             recebido=Sum('valor_pago', filter=Q(pago=True)),
             qtd_total=Count('id'),
             qtd_pago=Count('id', filter=Q(pago=True)),
             qtd_vencido=Count('id', filter=Q(pago=False, data_vencimento__lt=hoje)),
-        )
+        ).order_by('mes')
+    }
 
+    meses = []
+    for i in range(-5, 7):
+        ref = hoje + relativedelta(months=i)
+        chave = ref.replace(day=1)
+        row = fluxo_por_mes.get(chave, {})
+        esp = row.get('esperado') or 0
+        rec = row.get('recebido') or 0
         meses.append({
             'mes': f"{meses_nomes[ref.month - 1]}/{ref.year}",
             'ano_mes': ref.strftime('%Y-%m'),
             'passado': i < 0,
             'corrente': i == 0,
             'futuro': i > 0,
-            'esperado': float(agg['esperado'] or 0),
-            'recebido': float(agg['recebido'] or 0),
-            'pendente': float((agg['esperado'] or 0) - (agg['recebido'] or 0)),
-            'qtd_total': agg['qtd_total'] or 0,
-            'qtd_pago': agg['qtd_pago'] or 0,
-            'qtd_vencido': agg['qtd_vencido'] or 0,
+            'esperado': float(esp),
+            'recebido': float(rec),
+            'pendente': float(esp - rec),
+            'qtd_total': row.get('qtd_total') or 0,
+            'qtd_pago': row.get('qtd_pago') or 0,
+            'qtd_vencido': row.get('qtd_vencido') or 0,
         })
 
     return JsonResponse({
