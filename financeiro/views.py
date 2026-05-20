@@ -5714,15 +5714,15 @@ def api_parcelas_lista(request):
         except ValueError:
             pass
 
-    total = queryset.count()
-    offset = (page - 1) * per_page
-    parcelas_page = queryset.order_by('data_vencimento')[offset:offset + per_page]
-
-    # Totalizadores
+    # Totalizadores + count em 1 query
     totais = queryset.aggregate(
+        total=Count('id'),
         valor_total=Sum('valor_atual'),
         valor_pago=Sum('valor_pago', filter=Q(pago=True)),
     )
+    total = totais['total']
+    offset = (page - 1) * per_page
+    parcelas_page = queryset.order_by('data_vencimento')[offset:offset + per_page]
 
     parcelas = [{
         'id': p.id,
@@ -6555,22 +6555,17 @@ def api_sidebar_pendencias(request):
 
     hoje = timezone.localdate()
 
-    # 1. Parcelas vencidas não pagas
+    # 1+2. Parcelas vencidas e boletos não gerados — 1 aggregate em vez de 2 counts
     try:
-        parcelas_vencidas = Parcela.objects.filter(
-            pago=False, data_vencimento__lt=hoje
-        ).count()
+        _prazo = hoje + relativedelta(days=30)
+        _p_agg = Parcela.objects.filter(pago=False).aggregate(
+            vencidas=Count('id', filter=Q(data_vencimento__lt=hoje)),
+            sem_boleto=Count('id', filter=Q(boleto_gerado=False, data_vencimento__lte=_prazo)),
+        )
+        parcelas_vencidas = _p_agg['vencidas']
+        boletos_nao_gerados = _p_agg['sem_boleto']
     except Exception:
         parcelas_vencidas = 0
-
-    # 2. Boletos não gerados (parcelas em aberto, vencimento nos próximos 30 dias)
-    try:
-        boletos_nao_gerados = Parcela.objects.filter(
-            pago=False,
-            boleto_gerado=False,
-            data_vencimento__lte=hoje + relativedelta(days=30),
-        ).count()
-    except Exception:
         boletos_nao_gerados = 0
 
     # 3. Boletos aguardando remessa CNAB
