@@ -569,15 +569,15 @@ class BoletoNotificacaoService:
             status_boleto__in=[StatusBoleto.GERADO, StatusBoleto.REGISTRADO]
         ).select_related('contrato', 'contrato__comprador')
 
-        for parcela in parcelas_5_dias:
-            # Verificar se já enviou notificação hoje
-            ja_enviou = Notificacao.objects.filter(
-                parcela=parcela,
-                status=StatusNotificacao.ENVIADA,
-                assunto__icontains='5 dias'
-            ).exists()
+        ids_5_dias = [p.id for p in parcelas_5_dias]
+        ja_enviou_5d = set(Notificacao.objects.filter(
+            parcela_id__in=ids_5_dias,
+            status=StatusNotificacao.ENVIADA,
+            assunto__icontains='5 dias',
+        ).values_list('parcela_id', flat=True))
 
-            if not ja_enviou:
+        for parcela in parcelas_5_dias:
+            if parcela.id not in ja_enviou_5d:
                 resultado = self.notificar_boleto_5_dias(parcela)
                 if resultado.get('sucesso'):
                     stats['5_dias']['enviados'] += 1
@@ -591,14 +591,15 @@ class BoletoNotificacaoService:
             status_boleto__in=[StatusBoleto.GERADO, StatusBoleto.REGISTRADO]
         ).select_related('contrato', 'contrato__comprador')
 
-        for parcela in parcelas_amanha:
-            ja_enviou = Notificacao.objects.filter(
-                parcela=parcela,
-                status=StatusNotificacao.ENVIADA,
-                assunto__icontains='amanhã'
-            ).exists()
+        ids_amanha = [p.id for p in parcelas_amanha]
+        ja_enviou_amanha = set(Notificacao.objects.filter(
+            parcela_id__in=ids_amanha,
+            status=StatusNotificacao.ENVIADA,
+            assunto__icontains='amanhã',
+        ).values_list('parcela_id', flat=True))
 
-            if not ja_enviou:
+        for parcela in parcelas_amanha:
+            if parcela.id not in ja_enviou_amanha:
                 resultado = self.notificar_boleto_vence_amanha(parcela)
                 if resultado.get('sucesso'):
                     stats['amanha']['enviados'] += 1
@@ -612,14 +613,15 @@ class BoletoNotificacaoService:
             status_boleto__in=[StatusBoleto.GERADO, StatusBoleto.REGISTRADO, StatusBoleto.VENCIDO]
         ).select_related('contrato', 'contrato__comprador')
 
-        for parcela in parcelas_ontem:
-            ja_enviou = Notificacao.objects.filter(
-                parcela=parcela,
-                status=StatusNotificacao.ENVIADA,
-                assunto__icontains='venceu'
-            ).exists()
+        ids_ontem = [p.id for p in parcelas_ontem]
+        ja_enviou_ontem = set(Notificacao.objects.filter(
+            parcela_id__in=ids_ontem,
+            status=StatusNotificacao.ENVIADA,
+            assunto__icontains='venceu',
+        ).values_list('parcela_id', flat=True))
 
-            if not ja_enviou:
+        for parcela in parcelas_ontem:
+            if parcela.id not in ja_enviou_ontem:
                 resultado = self.notificar_boleto_venceu_ontem(parcela)
                 if resultado.get('sucesso'):
                     stats['ontem']['enviados'] += 1
