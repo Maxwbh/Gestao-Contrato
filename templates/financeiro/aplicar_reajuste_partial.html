@@ -93,7 +93,7 @@
                 <div class="text-center px-2">
                     <div class="text-muted" style="font-size:0.68rem; text-transform:uppercase;">Ajuste R$</div>
                     <div class="fw-bold" style="font-size:0.95rem; color:{% if preview.desconto_valor > 0 %}#dc3545{% else %}#198754{% endif %};">
-                        {% if preview.desconto_valor > 0 %}-{% else %}+{% endif %}R$ {{ preview.desconto_valor|floatformat:2 }}
+                        {% if preview.desconto_valor > 0 %}-{% else %}+{% endif %}{{ preview.desconto_valor|moeda }}
                     </div>
                 </div>
                 {% endif %}
@@ -151,16 +151,16 @@
                 <div class="row g-1 text-center">
                     <div class="col-4">
                         <div class="text-muted" style="font-size:0.7rem; text-transform:uppercase;">Total Atual</div>
-                        <div class="fw-bold" style="font-size:0.9rem;">R$ {{ preview.valor_anterior_total|floatformat:2 }}</div>
+                        <div class="fw-bold" style="font-size:0.9rem;">{{ preview.valor_anterior_total|moeda }}</div>
                     </div>
                     <div class="col-4">
                         <div class="text-muted" style="font-size:0.7rem; text-transform:uppercase;">Total Novo</div>
-                        <div class="fw-bold text-success" style="font-size:0.9rem;">R$ {{ preview.valor_novo_total|floatformat:2 }}</div>
+                        <div class="fw-bold text-success" style="font-size:0.9rem;">{{ preview.valor_novo_total|moeda }}</div>
                     </div>
                     <div class="col-4">
                         <div class="text-muted" style="font-size:0.7rem; text-transform:uppercase;">Variação</div>
                         <div class="fw-bold {% if preview.diferenca_total >= 0 %}text-primary{% else %}text-danger{% endif %}" style="font-size:0.9rem;">
-                            {% if preview.diferenca_total >= 0 %}+{% endif %}R$ {{ preview.diferenca_total|floatformat:2 }}
+                            {% if preview.diferenca_total >= 0 %}+{% endif %}{{ preview.diferenca_total|moeda }}
                         </div>
                     </div>
                 </div>
