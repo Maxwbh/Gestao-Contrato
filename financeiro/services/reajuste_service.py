@@ -738,15 +738,18 @@ class ReajusteService:
             percentual_medio=Avg('percentual'),
         )
 
-        # Agrupar por índice
-        por_indice = {}
-        for tipo in ['IPCA', 'IGPM', 'INPC', 'INCC', 'IGPDI', 'TR', 'SELIC']:
-            reaj_tipo = reajustes.filter(indice_tipo=tipo)
-            if reaj_tipo.exists():
-                por_indice[tipo] = {
-                    'quantidade': reaj_tipo.count(),
-                    'percentual_medio': reaj_tipo.aggregate(Avg('percentual'))['percentual__avg']
-                }
+        # Agrupar por índice — 1 query em vez de 3 por tipo
+        por_indice = {
+            row['indice_tipo']: {
+                'quantidade': row['quantidade'],
+                'percentual_medio': row['percentual_medio'],
+            }
+            for row in reajustes.values('indice_tipo').annotate(
+                quantidade=Count('id'),
+                percentual_medio=Avg('percentual'),
+            )
+            if row['indice_tipo']
+        }
 
         # Lista detalhada
         lista = []
