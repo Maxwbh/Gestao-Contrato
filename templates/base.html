@@ -96,14 +96,15 @@
 
             <!-- Desktop nav links -->
             <ul class="right hide-on-med-and-down">
-                <li>
+                {% with app=request.resolver_match.app_name url_name=request.resolver_match.url_name %}
+                <li{% if url_name == 'dashboard' and app == 'core' %} class="nav-active"{% endif %}>
                     <a href="{% url 'core:dashboard' %}">
                         <i class="fas fa-tachometer-alt"></i> Dashboard
                     </a>
                 </li>
 
                 <!-- Financeiro dropdown -->
-                <li>
+                <li{% if app == 'financeiro' %} class="nav-active"{% endif %}>
                     <a class="dropdown-trigger" href="#!" data-target="dd-financeiro">
                         <i class="fas fa-dollar-sign"></i> Financeiro
                         <i class="material-icons right">arrow_drop_down</i>
@@ -111,7 +112,7 @@
                 </li>
 
                 <!-- Contratos dropdown -->
-                <li>
+                <li{% if app == 'contratos' %} class="nav-active"{% endif %}>
                     <a class="dropdown-trigger" href="#!" data-target="dd-contratos">
                         <i class="fas fa-file-contract"></i> Contratos
                         <i class="material-icons right">arrow_drop_down</i>
@@ -119,7 +120,7 @@
                 </li>
 
                 <!-- Cadastros dropdown -->
-                <li>
+                <li{% if app == 'core' and url_name != 'dashboard' and 'configuracoes' not in url_name and 'acesso' not in url_name and 'dados_teste' not in url_name %} class="nav-active"{% endif %}>
                     <a class="dropdown-trigger" href="#!" data-target="dd-cadastros">
                         <i class="fas fa-database"></i> Cadastros
                         <i class="material-icons right">arrow_drop_down</i>
@@ -128,7 +129,7 @@
 
 
                 <!-- Notificações dropdown -->
-                <li>
+                <li{% if app == 'notificacoes' %} class="nav-active"{% endif %}>
                     <a class="dropdown-trigger" href="#!" data-target="dd-notificacoes" id="notificacoesDropdown">
                         <i class="fas fa-bell"></i> Notificações
                         <i class="material-icons right">arrow_drop_down</i>
@@ -137,13 +138,14 @@
 
                 {% if user.is_staff or user.is_superuser %}
                 <!-- Admin dropdown -->
-                <li>
+                <li{% if 'configuracoes_sistema' in url_name or 'acesso' in url_name or 'dados_teste' in url_name %} class="nav-active"{% endif %}>
                     <a class="dropdown-trigger" href="#!" data-target="dd-admin">
                         <i class="fas fa-cog"></i> Admin
                         <i class="material-icons right">arrow_drop_down</i>
                     </a>
                 </li>
                 {% endif %}
+                {% endwith %}
 
                 {% if user.is_authenticated %}
                 <!-- U-01: Dark mode toggle -->
@@ -286,6 +288,10 @@
                         {% endif %}
                     {% endfor %}
                 {% endif %}
+
+                {% block breadcrumb_block %}
+                    {% if breadcrumb %}{% include 'includes/breadcrumb.html' with items=breadcrumb %}{% endif %}
+                {% endblock %}
 
                 {% block content %}{% endblock %}
             </div>

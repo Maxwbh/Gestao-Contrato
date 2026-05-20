@@ -110,6 +110,11 @@ class ContratoListView(LoginRequiredMixin, TenantMixin, PaginacaoMixin, ListView
         # Contratos que precisam de reajuste no mês corrente
         context['contratos_reajuste'] = self._get_contratos_reajuste_pendente()
 
+        from core.breadcrumbs import bc, bc_dashboard
+        context['breadcrumb'] = [
+            bc_dashboard(),
+            bc('Contratos'),
+        ]
         return context
 
     def _get_contratos_reajuste_pendente(self):
@@ -170,6 +175,16 @@ class ContratoCreateView(LoginRequiredMixin, CreateView):
     template_name = 'contratos/contrato_form.html'
     success_url = reverse_lazy('contratos:listar')
 
+    def get_context_data(self, **kwargs):
+        from core.breadcrumbs import bc, bc_dashboard
+        context = super().get_context_data(**kwargs)
+        context['breadcrumb'] = [
+            bc_dashboard(),
+            bc('Contratos', 'contratos:listar'),
+            bc('Novo'),
+        ]
+        return context
+
     def form_valid(self, form):
         messages.success(self.request, f'Contrato {form.instance.numero_contrato} criado com sucesso! Parcelas geradas automaticamente.')
         return super().form_valid(form)
@@ -195,6 +210,18 @@ class ContratoUpdateView(LoginRequiredMixin, HashidMixin, TenantMixin, UpdateVie
     form_class = ContratoForm
     template_name = 'contratos/contrato_form.html'
     success_url = reverse_lazy('contratos:listar')
+
+    def get_context_data(self, **kwargs):
+        from core.breadcrumbs import bc, bc_dashboard
+        from core.templatetags.hashid_tags import hashid as hashid_filter
+        context = super().get_context_data(**kwargs)
+        context['breadcrumb'] = [
+            bc_dashboard(),
+            bc('Contratos', 'contratos:listar'),
+            bc(self.object.numero_contrato, 'contratos:detalhe', hashid_filter(self.object.pk)),
+            bc('Editar'),
+        ]
+        return context
 
     def form_valid(self, form):
         messages.success(self.request, f'Contrato {form.instance.numero_contrato} atualizado com sucesso!')
@@ -435,6 +462,13 @@ class ContratoDetailView(LoginRequiredMixin, HashidMixin, TenantMixin, DetailVie
         context['voltar_url'] = _voltar_url(
             self.request, reverse('contratos:listar')
         )
+
+        from core.breadcrumbs import bc, bc_dashboard
+        context['breadcrumb'] = [
+            bc_dashboard(),
+            bc('Contratos', 'contratos:listar'),
+            bc(contrato.numero_contrato),
+        ]
 
         return context
 

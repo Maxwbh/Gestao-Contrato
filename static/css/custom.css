@@ -565,8 +565,22 @@ nav.app-navbar ul a:hover {
     color: #fff;
     border-bottom-color: rgba(52,152,219,0.7);
 }
+nav.app-navbar ul li.nav-active > a {
+    background: rgba(255,255,255,0.12);
+    color: #fff;
+    border-bottom-color: #3498db;
+}
 nav.app-navbar .sidenav-trigger {
     color: #fff;
+}
+
+/* ── Breadcrumb ─────────────────────────────────────────────────────────── */
+.app-breadcrumb .breadcrumb-item a { color: var(--primary-color); }
+.app-breadcrumb .breadcrumb-item.active { color: #6c757d; }
+.app-breadcrumb .breadcrumb-item + .breadcrumb-item::before {
+    content: "›";
+    color: #adb5bd;
+    padding: 0 .35rem;
 }
 
 /* ── Dropdown (sub-menus) ───────────────────────────────────────────────── */

@@ -607,6 +607,12 @@ def listar_parcelas(request):
         'sort_field': sort_field,
         'sort_order': sort_order,
     }
+    from core.breadcrumbs import bc, bc_dashboard
+    context['breadcrumb'] = [
+        bc_dashboard(),
+        bc('Financeiro'),
+        bc('Parcelas'),
+    ]
     return render(request, 'financeiro/listar_parcelas.html', context)
 
 
@@ -630,9 +636,16 @@ def detalhe_parcela(request, hid):
         parcela.atualizar_juros_multa()
 
     from django.urls import reverse
+    from core.breadcrumbs import bc, bc_dashboard
     context = {
         'parcela': parcela,
         'voltar_url': _voltar_url(request, reverse('financeiro:listar_parcelas')),
+        'breadcrumb': [
+            bc_dashboard(),
+            bc('Financeiro'),
+            bc('Parcelas', 'financeiro:listar_parcelas'),
+            bc(f'Parcela {parcela.numero_parcela}/{parcela.contrato.numero_parcelas}'),
+        ],
     }
     return render(request, 'financeiro/detalhe_parcela.html', context)
 
@@ -818,11 +831,17 @@ def listar_reajustes(request):
     paginator = Paginator(reajustes, per_page)
     page_obj = paginator.get_page(request.GET.get('page', 1))
 
+    from core.breadcrumbs import bc, bc_dashboard
     context = {
         'reajustes': page_obj,
         'page_obj': page_obj,
         'paginator': paginator,
         'is_paginated': paginator.num_pages > 1,
+        'breadcrumb': [
+            bc_dashboard(),
+            bc('Financeiro'),
+            bc('Reajustes'),
+        ],
     }
     return render(request, 'financeiro/listar_reajustes.html', context)
 

@@ -2807,3 +2807,81 @@ Semana 4: U-05 a U-06 + D-01 a D-03 (compatibilidade + defesa em profundidade)
 | IDs sequenciais visíveis na URL | Alto | Hashids `Xk9mP3` | B |
 | Sem log de tentativas de enumeração | Médio | Middleware + AcessoNegado | C |
 | 109 templates com `obj.pk` exposto | Médio | Template tag `{% hashid %}` | B |
+
+---
+
+## 33. UX — FLUIDEZ NOS CADASTROS E VISUALIZAÇÃO DE DADOS
+
+> **Objetivo:** reduzir cliques, retrabalho e atrito visual em todos os fluxos de
+> cadastro e visualização de dados. Sem mudanças de modelo de dados; apenas
+> melhorias de UI, navegação e feedback ao usuário.
+
+### 33.1 Diagnóstico
+
+| Categoria | Estado atual | Lacuna |
+|-----------|--------------|--------|
+| Validação de formulários | Só server-side | Sem feedback em tempo real |
+| Breadcrumbs | Apenas em Registrar Pagamento | Ausente nos demais fluxos |
+| Filtro de Contratos | Card view sem busca/filtro | Não há como filtrar por status, comprador, imobiliária |
+| Quick-view | Inexistente | Toda visualização de detalhe exige navegação |
+| Dashboard | KPIs estáticos | Sem comparação MoM / indicadores de tendência |
+| Formulário Imobiliária | 700+ linhas em página única | Seções CNAB e Bancos sem acordeão |
+| Atalhos de teclado | Ausentes | Não há `Ctrl+S` para salvar, `/` para buscar |
+| Pagamento de parcela | 2 cliques + navegação | Sem ação inline na lista |
+
+### 33.2 Fase 1 — Navegação e Orientação (P1) ✅ CONCLUÍDA
+
+| # | Item | Status |
+|---|------|--------|
+| F1-01 | **Breadcrumb universal** — `templates/includes/breadcrumb.html` + helper `core/breadcrumbs.py`; bloco `{% block breadcrumb_block %}` em base.html; aplicado em Comprador, Imóvel, Imobiliária, Contrato, Parcela, Reajuste (list/create/update/detail) | ✅ |
+| F1-02 | **Filtro na lista de contratos** — já existente: busca por número/comprador/imóvel + dropdown status + filtro imobiliária + sorting server-side (confirmado em `contrato_list.html`) | ✅ |
+| F1-03 | **`<title>` dinâmico nas páginas de detalhe** — já existente: Parcela "Parcela X — C-NNN", Contrato "Contrato C-NNN", Comprador form dinâmico | ✅ |
+| F1-04 | **Indicador visual de página ativa no navbar** — classe `.nav-active` aplicada via `request.resolver_match.app_name` em todos os dropdowns (Dashboard, Financeiro, Contratos, Cadastros, Notificações, Admin); CSS com background + border-bottom destacado | ✅ |
+| F1-05 | **Testes**: 15 testes cobrindo helper `bc()`/`bc_dashboard()`, presença de breadcrumb no contexto de 8 views, renderização HTML | ✅ |
+
+### 33.3 Fase 2 — Formulários Mais Fluidos (P2)
+
+| # | Item | Status |
+|---|------|--------|
+| F2-01 | **Validação inline client-side** — biblioteca leve (HTMLConstraintValidation API + custom Bootstrap classes); feedback `is-valid`/`is-invalid` ao sair do campo (`blur`) | ⏳ |
+| F2-02 | **Acordeão CNAB em Imobiliária** — colapsar seções Boleto Defaults, Bancos, Juros/Multa/Desconto; estado persiste em localStorage | ⏳ |
+| F2-03 | **Auto-save de rascunho no wizard de contrato** — salvar `step1..step3` em localStorage; banner "Você tem um rascunho de DD/MM HH:MM — continuar?" ao abrir wizard | ⏳ |
+| F2-04 | **Máscara automática em inputs** — CPF/CNPJ, telefone, CEP, valor monetário usam IMask.js; aplicado via classes `.mask-cpf`, `.mask-money` | ⏳ |
+| F2-05 | **Testes**: 4 testes cobrindo localStorage auto-save, máscara em servidor (ignora) | ⏳ |
+
+### 33.4 Fase 3 — Visualização de Dados (P2)
+
+| # | Item | Status |
+|---|------|--------|
+| F3-01 | **Quick-view de parcela em modal** — botão "olho" na lista abre modal com vencimento, valor, status, link do boleto, histórico de notificações; sem navegar | ⏳ |
+| F3-02 | **Dashboard: variação MoM** — cada KPI card mostra ↑ +12% / ↓ -3% vs mês anterior; cores: verde positivo, vermelho negativo | ⏳ |
+| F3-03 | **Aba Resumo Financeiro no contrato_detail** — Chart.js: barras de parcelas pagas/pendentes por mês; total pago × total previsto | ⏳ |
+| F3-04 | **Comprador detail: timeline de notificações** — últimas 10 mensagens enviadas (canal, status, data) em vertical timeline | ⏳ |
+| F3-05 | **Testes**: 5 testes cobrindo modal quick-view (HTML retornado por endpoint), cálculo MoM no contexto da view | ⏳ |
+
+### 33.5 Fase 4 — Ações Rápidas (P3)
+
+| # | Item | Status |
+|---|------|--------|
+| F4-01 | **Registrar pagamento inline na lista** — botão "✓ Pago" na linha; abre modal compacto com data e valor; submit AJAX recarrega só a linha | ⏳ |
+| F4-02 | **`Ctrl+S` para salvar formulário aberto** — listener global em `base.html`; intercepta submit do form principal da página | ⏳ |
+| F4-03 | **`/` foca o campo de busca global** — sem precisar do `Ctrl+K` (mantém ambos) | ⏳ |
+| F4-04 | **Bulk pagamento de parcelas** — selecionar várias na lista → barra de ações → "Marcar como pagas" → modal de data única → AJAX | ⏳ |
+| F4-05 | **Testes**: 6 testes cobrindo pagamento inline (1 parcela / N parcelas), atalhos via Selenium opcional | ⏳ |
+
+### 33.6 Ordem de Implementação
+
+```
+Semana 1: F1-01..F1-05 (navegação)
+Semana 2: F2-01..F2-05 (formulários)
+Semana 3: F3-01..F3-05 (visualização)
+Semana 4: F4-01..F4-05 (ações rápidas)
+```
+
+### 33.7 Critérios de Aceitação
+
+- ✅ Nenhuma regressão na suite de testes (1143+ passando)
+- ✅ Tempo médio para "Registrar Pagamento" < 5s (hoje: ~12s com navegação)
+- ✅ Todas as páginas de detalhe têm breadcrumb e `<title>` específico
+- ✅ Formulários reportam erro de validação antes do submit (sem ida ao servidor)
+
