@@ -1,6 +1,7 @@
 
 {% extends 'base.html' %}
 {% load hashid_tags %}
+{% load format_filters %}
 
 {% block title %}Dashboard - Gestão de Contratos{% endblock %}
 
@@ -131,7 +132,7 @@
                                         {{ parcela.data_vencimento|date:"d/m/Y" }}
                                     {% endif %}
                                 </td>
-                                <td class="text-end">R$ {{ parcela.valor_atual|floatformat:2 }}</td>
+                                <td class="text-end">{{ parcela.valor_atual|moeda }}</td>
                                 <td>
                                     {% if parcela.tem_boleto %}
                                         <span class="badge bg-success">Boleto</span>
@@ -182,7 +183,7 @@
                                 <td>{{ parcela.numero_parcela }}/{{ parcela.contrato.numero_parcelas }}</td>
                                 <td>{{ parcela.data_vencimento|date:"d/m/Y" }}</td>
                                 <td><span class="badge bg-danger">{{ parcela.dias_atraso }} dias</span></td>
-                                <td class="text-end fw-bold text-danger">R$ {{ parcela.valor_total|floatformat:2 }}</td>
+                                <td class="text-end fw-bold text-danger">{{ parcela.valor_total|moeda }}</td>
                             </tr>
                             {% endfor %}
                         </tbody>

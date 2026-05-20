@@ -2849,25 +2849,25 @@ Semana 4: U-05 a U-06 + D-01 a D-03 (compatibilidade + defesa em profundidade)
 | F2-04 | **Máscara automática em inputs** — CPF/CNPJ, telefone, CEP via `static/js/masks.js` (sem dependência externa); classes `.mask-cpf`, `.mask-cnpj`, `.mask-phone`, `.mask-cep` nos widgets Django | ✅ |
 | F2-05 | **Testes**: 8 testes cobrindo classes mask-* no HTML renderizado, banner de rascunho e accordion no formulário de imobiliária | ✅ |
 
-### 33.4 Fase 3 — Visualização de Dados (P2)
+### 33.4 Fase 3 — Visualização de Dados (P2) ✅
 
 | # | Item | Status |
 |---|------|--------|
-| F3-01 | **Quick-view de parcela em modal** — botão "olho" na lista abre modal com vencimento, valor, status, link do boleto, histórico de notificações; sem navegar | ⏳ |
-| F3-02 | **Dashboard: variação MoM** — cada KPI card mostra ↑ +12% / ↓ -3% vs mês anterior; cores: verde positivo, vermelho negativo | ⏳ |
-| F3-03 | **Aba Resumo Financeiro no contrato_detail** — Chart.js: barras de parcelas pagas/pendentes por mês; total pago × total previsto | ⏳ |
-| F3-04 | **Comprador detail: timeline de notificações** — últimas 10 mensagens enviadas (canal, status, data) em vertical timeline | ⏳ |
-| F3-05 | **Testes**: 5 testes cobrindo modal quick-view (HTML retornado por endpoint), cálculo MoM no contexto da view | ⏳ |
+| F3-01 | **Quick-view de parcela em modal** — botão "olho" na lista abre modal com vencimento, valor, status, link do boleto, histórico de notificações; sem navegar | ✅ |
+| F3-02 | **Dashboard: variação MoM** — cada KPI card mostra ↑ +12% / ↓ -3% vs mês anterior; cores: verde positivo, vermelho negativo | ✅ |
+| F3-03 | **Aba Resumo Financeiro no contrato_detail** — Chart.js: barras de parcelas pagas/pendentes por mês; total pago × total previsto | ✅ |
+| F3-04 | **Comprador detail: timeline de notificações** — últimas 10 mensagens enviadas (canal, status, data) em vertical timeline | ✅ |
+| F3-05 | **Testes**: 6 testes cobrindo modal quick-view (HTML retornado por endpoint), cálculo MoM no contexto da view | ✅ |
 
-### 33.5 Fase 4 — Ações Rápidas (P3)
+### 33.5 Fase 4 — Ações Rápidas (P3) ✅
 
 | # | Item | Status |
 |---|------|--------|
-| F4-01 | **Registrar pagamento inline na lista** — botão "✓ Pago" na linha; abre modal compacto com data e valor; submit AJAX recarrega só a linha | ⏳ |
-| F4-02 | **`Ctrl+S` para salvar formulário aberto** — listener global em `base.html`; intercepta submit do form principal da página | ⏳ |
-| F4-03 | **`/` foca o campo de busca global** — sem precisar do `Ctrl+K` (mantém ambos) | ⏳ |
-| F4-04 | **Bulk pagamento de parcelas** — selecionar várias na lista → barra de ações → "Marcar como pagas" → modal de data única → AJAX | ⏳ |
-| F4-05 | **Testes**: 6 testes cobrindo pagamento inline (1 parcela / N parcelas), atalhos via Selenium opcional | ⏳ |
+| F4-01 | **Registrar pagamento inline na lista** — botão "✓ Pago" na linha; abre modal compacto com data e valor; submit AJAX atualiza só a linha no AG Grid | ✅ |
+| F4-02 | **`Ctrl+S` para salvar formulário aberto** — listener global em `base.html`; intercepta submit do form principal da página | ✅ |
+| F4-03 | **`/` foca o campo de busca global** — sem precisar do `Ctrl+K` (mantém ambos) | ✅ |
+| F4-04 | **Bulk pagamento de parcelas** — selecionar várias na lista → barra de ações → "Marcar como pagas" → modal de data única → AJAX; atualiza linhas no grid sem reload | ✅ |
+| F4-05 | **Testes**: 6 testes cobrindo pagamento inline (sucesso, marca paga, duplicado 400, auth, GET→405), bulk de 3 parcelas | ✅ |
 
 ### 33.6 Ordem de Implementação
 

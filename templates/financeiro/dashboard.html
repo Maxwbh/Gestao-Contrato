@@ -1,6 +1,7 @@
 {% extends 'base.html' %}
 {% load static %}
 {% load hashid_tags %}
+{% load format_filters %}
 
 {% block title %}Dashboard Financeiro{% endblock %}
 
@@ -106,7 +107,7 @@
         <div class="col-md-2">
             <div class="card card-stats success h-100">
                 <div class="card-body">
-                    <div class="stat-value text-success" style="font-size:1.4rem;">R$ {{ parcelas_mes_atual.valor_recebido|floatformat:2 }}</div>
+                    <div class="stat-value text-success" style="font-size:1.4rem;">{{ parcelas_mes_atual.valor_recebido|moeda }}</div>
                     <div class="stat-label d-flex align-items-center gap-1">
                       Arrecadação Mês
                       {% if mom_recebido is not None %}
@@ -133,7 +134,7 @@
         <div class="col-md-2">
             <div class="card card-stats warning h-100">
                 <div class="card-body">
-                    <div class="stat-value text-warning" style="font-size:1.4rem;">R$ {{ valor_a_receber|floatformat:2 }}</div>
+                    <div class="stat-value text-warning" style="font-size:1.4rem;">{{ valor_a_receber|moeda }}</div>
                     <div class="stat-label">Saldo Carteira</div>
                     <hr class="my-2">
                     <small class="text-muted">{{ parcelas_pendentes }} parcelas pendentes</small>
@@ -143,7 +144,7 @@
         <div class="col-md-2">
             <div class="card card-stats danger h-100">
                 <div class="card-body">
-                    <div class="stat-value text-danger" style="font-size:1.4rem;">R$ {{ valor_em_atraso|floatformat:2 }}</div>
+                    <div class="stat-value text-danger" style="font-size:1.4rem;">{{ valor_em_atraso|moeda }}</div>
                     <div class="stat-label">Em Atraso</div>
                     <hr class="my-2">
                     <small class="text-muted">{{ parcelas_vencidas }} vencidas</small>
@@ -200,7 +201,7 @@
                     <hr>
                     <div class="d-flex justify-content-between">
                         <span>Recebido:</span>
-                        <strong class="text-success">R$ {{ parcelas_mes_atual.valor_recebido|floatformat:2 }}</strong>
+                        <strong class="text-success">{{ parcelas_mes_atual.valor_recebido|moeda }}</strong>
                     </div>
                 </div>
             </div>
@@ -226,7 +227,7 @@
                     <hr>
                     <div class="d-flex justify-content-between">
                         <span>Recebido:</span>
-                        <strong class="text-success">R$ {{ parcelas_mes_passado.valor_recebido|floatformat:2 }}</strong>
+                        <strong class="text-success">{{ parcelas_mes_passado.valor_recebido|moeda }}</strong>
                     </div>
                 </div>
             </div>
@@ -252,7 +253,7 @@
                     <hr>
                     <div class="d-flex justify-content-between">
                         <span>Recebido:</span>
-                        <strong class="text-success">R$ {{ parcelas_6_meses.valor_recebido|floatformat:2 }}</strong>
+                        <strong class="text-success">{{ parcelas_6_meses.valor_recebido|moeda }}</strong>
                     </div>
                 </div>
             </div>
@@ -278,7 +279,7 @@
                     <hr>
                     <div class="d-flex justify-content-between">
                         <span>Recebido:</span>
-                        <strong class="text-success">R$ {{ parcelas_ano.valor_recebido|floatformat:2 }}</strong>
+                        <strong class="text-success">{{ parcelas_ano.valor_recebido|moeda }}</strong>
                     </div>
                 </div>
             </div>
@@ -323,7 +324,7 @@
                                         </a>
                                     </td>
                                     <td class="text-truncate" style="max-width:140px;">{{ p.contrato.comprador.nome }}</td>
-                                    <td class="text-end font-monospace fw-bold">R$ {{ p.valor_atual|floatformat:2 }}</td>
+                                    <td class="text-end font-monospace fw-bold">{{ p.valor_atual|moeda }}</td>
                                     <td class="text-center">
                                         <span class="badge bg-secondary">{{ p.numero_parcela }}/{{ p.contrato.numero_parcelas }}</span>
                                     </td>
@@ -369,7 +370,7 @@
                                     </td>
                                     <td class="text-truncate" style="max-width:110px;">{{ c.comprador.nome }}</td>
                                     <td class="text-end font-monospace fw-bold text-danger">
-                                        R$ {{ c.saldo_est|floatformat:2 }}
+                                        {{ c.saldo_est|moeda }}
                                     </td>
                                 </tr>
                                 {% endfor %}
@@ -527,7 +528,7 @@
                                         </span>
                                     </td>
                                     <td class="text-end text-danger fw-bold">
-                                        R$ {{ item.valor_atraso|floatformat:2 }}
+                                        {{ item.valor_atraso|moeda }}
                                     </td>
                                     <td class="text-center">
                                         <a href="{% url 'contratos:detalhe' item.contrato.pk|hashid %}"
