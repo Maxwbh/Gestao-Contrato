@@ -1,6 +1,7 @@
 {% extends 'base.html' %}
 {% load static %}
 {% load hashid_tags %}
+{% load format_filters %}
 
 {% block title %}Dashboard - {{ imobiliaria.nome }}{% endblock %}
 
@@ -89,7 +90,7 @@
                 <div class="card-body">
                     <div class="stat-value text-info">{{ stats_mes.total|default:0 }}</div>
                     <div class="stat-label">Parcelas do Mes</div>
-                    <small class="text-muted">R$ {{ stats_mes.valor_total|floatformat:2|default:"0,00" }}</small>
+                    <small class="text-muted">{{ stats_mes.valor_total|moeda }}</small>
                 </div>
             </div>
         </div>
@@ -98,7 +99,7 @@
                 <div class="card-body">
                     <div class="stat-value text-success">{{ stats_mes.pagas|default:0 }}</div>
                     <div class="stat-label">Pagas</div>
-                    <small class="text-muted">R$ {{ stats_mes.valor_recebido|floatformat:2|default:"0,00" }}</small>
+                    <small class="text-muted">{{ stats_mes.valor_recebido|moeda }}</small>
                 </div>
             </div>
         </div>
@@ -107,7 +108,7 @@
                 <div class="card-body">
                     <div class="stat-value text-warning">{{ stats_mes.pendentes|default:0 }}</div>
                     <div class="stat-label">Pendentes</div>
-                    <small class="text-muted">R$ {{ stats_mes.valor_pendente|floatformat:2|default:"0,00" }}</small>
+                    <small class="text-muted">{{ stats_mes.valor_pendente|moeda }}</small>
                 </div>
             </div>
         </div>
@@ -147,7 +148,7 @@
                                         <br><span class="badge bg-danger badge-atraso">{{ parcela.dias_atraso }}d</span>
                                     </td>
                                     <td>{{ parcela.contrato.comprador.nome|truncatechars:20 }}</td>
-                                    <td class="text-end"><strong>R$ {{ parcela.valor_atual|floatformat:2 }}</strong></td>
+                                    <td class="text-end"><strong>{{ parcela.valor_atual|moeda }}</strong></td>
                                     <td>
                                         <a href="{% url 'financeiro:registrar_pagamento' parcela.pk|hashid %}" class="btn btn-sm btn-success" title="Pagar">
                                             <i class="fas fa-dollar-sign"></i>
@@ -190,7 +191,7 @@
                                 <tr class="parcela-row">
                                     <td>{{ parcela.data_vencimento|date:"d/m/Y" }}</td>
                                     <td>{{ parcela.contrato.comprador.nome|truncatechars:20 }}</td>
-                                    <td class="text-end"><strong>R$ {{ parcela.valor_atual|floatformat:2 }}</strong></td>
+                                    <td class="text-end"><strong>{{ parcela.valor_atual|moeda }}</strong></td>
                                     <td>
                                         <a href="{% url 'financeiro:detalhe_parcela' parcela.pk|hashid %}" class="btn btn-sm btn-outline-primary" title="Ver">
                                             <i class="fas fa-eye"></i>
@@ -251,7 +252,7 @@
                                 <span class="badge bg-warning text-dark">{{ item.dias_atraso }} dias</span>
                             </td>
                             <td class="text-end">
-                                <strong class="text-danger">R$ {{ item.valor_atraso|floatformat:2 }}</strong>
+                                <strong class="text-danger">{{ item.valor_atraso|moeda }}</strong>
                             </td>
                             <td>
                                 <a href="{% url 'financeiro:listar_parcelas' %}?comprador={{ item.comprador.pk }}&status=vencidas" class="btn btn-sm btn-outline-danger">

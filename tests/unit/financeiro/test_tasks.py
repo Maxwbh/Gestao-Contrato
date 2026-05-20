@@ -9,7 +9,7 @@ from decimal import Decimal
 from datetime import date, timedelta
 from unittest.mock import patch, MagicMock
 
-from django.test import TestCase
+from django.test import TestCase, override_settings
 
 
 class TestFinanceiroTasks(TestCase):
@@ -464,6 +464,7 @@ class TestEnvioEmail(TestCase):
 # Section 25.5 — task_atualizar_indices (J-08)
 # ---------------------------------------------------------------------------
 
+@override_settings(SECURE_SSL_REDIRECT=False)
 class TestAtualizarIndicesTask(TestCase):
     """Testes para atualizar_indices_sync() e task_atualizar_indices (J-08).
 

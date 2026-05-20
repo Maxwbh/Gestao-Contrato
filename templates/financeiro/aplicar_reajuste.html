@@ -269,16 +269,16 @@
                         <div class="alert alert-primary py-2 small mb-3">
                             <div class="d-flex justify-content-between">
                                 <span>Total antes:</span>
-                                <strong>R$ {{ preview.valor_anterior_total|floatformat:2 }}</strong>
+                                <strong>{{ preview.valor_anterior_total|moeda }}</strong>
                             </div>
                             <div class="d-flex justify-content-between">
                                 <span>Total depois:</span>
-                                <strong class="text-success">R$ {{ preview.valor_novo_total|floatformat:2 }}</strong>
+                                <strong class="text-success">{{ preview.valor_novo_total|moeda }}</strong>
                             </div>
                             <div class="d-flex justify-content-between border-top mt-1 pt-1">
                                 <span>Variação total:</span>
                                 <strong class="{% if preview.diferenca_total >= 0 %}text-primary{% else %}text-danger{% endif %}">
-                                    {% if preview.diferenca_total >= 0 %}+{% endif %}R$ {{ preview.diferenca_total|floatformat:2 }}
+                                    {% if preview.diferenca_total >= 0 %}+{% endif %}{{ preview.diferenca_total|moeda }}
                                 </strong>
                             </div>
                         </div>
@@ -328,13 +328,13 @@
                                 <tr{% if p.tem_boleto %} class="table-warning"{% endif %}>
                                     <td class="text-center font-monospace">{{ p.numero_parcela }}</td>
                                     <td>{{ p.data_vencimento|date:"d/m/Y" }}</td>
-                                    <td class="text-end font-monospace">R$ {{ p.valor_atual|floatformat:2 }}</td>
+                                    <td class="text-end font-monospace">{{ p.valor_atual|moeda }}</td>
                                     <td class="text-center">
                                         <span class="badge bg-primary">{{ preview.percentual_final|floatformat:4 }}%</span>
                                     </td>
-                                    <td class="text-end font-monospace text-success fw-bold">R$ {{ p.valor_novo|floatformat:2 }}</td>
+                                    <td class="text-end font-monospace text-success fw-bold">{{ p.valor_novo|moeda }}</td>
                                     <td class="text-end font-monospace text-primary">
-                                        +R$ {{ p.diferenca|floatformat:2 }}
+                                        +{{ p.diferenca|moeda }}
                                     </td>
                                     <td class="text-center">
                                         {% if p.tem_boleto %}
@@ -366,7 +366,7 @@
                             Intermediárias afetadas ({{ preview.total_intermediarias }})
                             — impacto total:
                             <span class="text-primary">
-                                {% if preview.diferenca_inter_total >= 0 %}+{% endif %}R$ {{ preview.diferenca_inter_total|floatformat:2 }}
+                                {% if preview.diferenca_inter_total >= 0 %}+{% endif %}{{ preview.diferenca_inter_total|moeda }}
                             </span>
                         </summary>
                         <table class="table table-sm mb-0" style="font-size:0.82rem;">
@@ -386,9 +386,9 @@
                                     <td class="font-monospace">{{ inter.numero_sequencial }}</td>
                                     <td class="font-monospace">{{ inter.mes_vencimento }}</td>
                                     <td>{{ inter.data_vencimento|date:"d/m/Y" }}</td>
-                                    <td class="text-end font-monospace">R$ {{ inter.valor_atual|floatformat:2 }}</td>
-                                    <td class="text-end font-monospace text-success fw-bold">R$ {{ inter.valor_novo|floatformat:2 }}</td>
-                                    <td class="text-end font-monospace text-primary">+R$ {{ inter.diferenca|floatformat:2 }}</td>
+                                    <td class="text-end font-monospace">{{ inter.valor_atual|moeda }}</td>
+                                    <td class="text-end font-monospace text-success fw-bold">{{ inter.valor_novo|moeda }}</td>
+                                    <td class="text-end font-monospace text-primary">+{{ inter.diferenca|moeda }}</td>
                                 </tr>
                                 {% endfor %}
                             </tbody>

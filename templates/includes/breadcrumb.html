@@ -1,0 +1,27 @@
+{# Breadcrumb reutilizável. Uso:
+
+   Passe `breadcrumb` no contexto da view como lista de dicts:
+     [{'label': 'Cadastros'}, {'label': 'Compradores', 'url': '...'}, {'label': 'Maria'}]
+
+   O base.html já renderiza automaticamente quando `breadcrumb` está no contexto.
+   Itens sem 'url' viram texto não-clicável (último item = página atual).
+#}
+{% if items %}
+<nav aria-label="breadcrumb" class="app-breadcrumb mb-2">
+    <ol class="breadcrumb mb-0" style="font-size: 0.85rem; background: transparent; padding: 0;">
+        {% for item in items %}
+            {% if item.url and not forloop.last %}
+                <li class="breadcrumb-item">
+                    <a href="{{ item.url }}" class="text-decoration-none">
+                        {% if item.icon %}<i class="{{ item.icon }} me-1"></i>{% endif %}{{ item.label }}
+                    </a>
+                </li>
+            {% else %}
+                <li class="breadcrumb-item active" aria-current="page">
+                    {% if item.icon %}<i class="{{ item.icon }} me-1"></i>{% endif %}{{ item.label }}
+                </li>
+            {% endif %}
+        {% endfor %}
+    </ol>
+</nav>
+{% endif %}

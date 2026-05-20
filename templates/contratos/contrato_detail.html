@@ -673,7 +673,7 @@
                                             <br><small class="text-danger fw-normal">−{{ reajuste.desconto_percentual|floatformat:2 }} p.p.</small>
                                             {% endif %}
                                             {% if reajuste.desconto_valor %}
-                                            <br><small class="text-danger fw-normal">−R${{ reajuste.desconto_valor|floatformat:2 }}</small>
+                                            <br><small class="text-danger fw-normal">− {{ reajuste.desconto_valor|moeda }}</small>
                                             {% endif %}
                                             {% if reajuste.teto_aplicado and reajuste.percentual_bruto and reajuste.percentual < reajuste.percentual_bruto %}
                                             <br><small class="text-warning fw-normal" title="Teto de {{ reajuste.teto_aplicado }}% aplicado"><i class="fas fa-arrow-down"></i> teto</small>
@@ -783,6 +783,16 @@
                         </div>
                     </div>
                 </div>
+            <!-- F3-03: Resumo Financeiro por Mês (Chart.js) -->
+            <div class="card mb-3" id="card-resumo-financeiro">
+                <div class="card-header py-2 d-flex justify-content-between align-items-center">
+                    <span><i class="fas fa-chart-bar me-2 text-info"></i><strong>Resumo Financeiro</strong></span>
+                    <small class="text-muted">últimos 12 meses</small>
+                </div>
+                <div class="card-body p-2">
+                    <canvas id="chartResumoFinanceiro" height="160"></canvas>
+                </div>
+            </div>
             </div>
 
             <!-- Coluna Direita: Parcelas -->
@@ -844,10 +854,10 @@
                                             {% endif %}
                                         </td>
                                         <td class="text-end font-monospace col-amort d-none" style="font-size:0.8rem;">
-                                            {% if parcela.amortizacao %}{{ parcela.amortizacao|floatformat:2 }}{% else %}—{% endif %}
+                                            {% if parcela.amortizacao %}{{ parcela.amortizacao|moeda }}{% else %}—{% endif %}
                                         </td>
                                         <td class="text-end font-monospace col-amort d-none" style="font-size:0.8rem;color:#6c757d;">
-                                            {% if parcela.juros_embutido %}{{ parcela.juros_embutido|floatformat:2 }}{% else %}—{% endif %}
+                                            {% if parcela.juros_embutido %}{{ parcela.juros_embutido|moeda }}{% else %}—{% endif %}
                                         </td>
                                         <td class="text-center">
                                             {% if parcela.tem_boleto %}
@@ -1146,12 +1156,12 @@
                             <tr>
                                 <td class="text-center text-muted">{{ h.parcela.numero_parcela }}</td>
                                 <td>{{ h.data_pagamento|date:"d/m/Y" }}</td>
-                                <td class="text-end fw-semibold text-success">R$ {{ h.valor_pago|floatformat:2 }}</td>
+                                <td class="text-end fw-semibold text-success">{{ h.valor_pago|moeda }}</td>
                                 <td class="text-end {% if h.valor_juros %}text-danger{% else %}text-muted{% endif %}">
-                                    {% if h.valor_juros %}R$ {{ h.valor_juros|floatformat:2 }}{% else %}—{% endif %}
+                                    {% if h.valor_juros %}{{ h.valor_juros|moeda }}{% else %}—{% endif %}
                                 </td>
                                 <td class="text-end {% if h.valor_multa %}text-danger{% else %}text-muted{% endif %}">
-                                    {% if h.valor_multa %}R$ {{ h.valor_multa|floatformat:2 }}{% else %}—{% endif %}
+                                    {% if h.valor_multa %}{{ h.valor_multa|moeda }}{% else %}—{% endif %}
                                 </td>
                                 <td>
                                     <span class="badge bg-secondary">{{ h.get_forma_pagamento_display }}</span>
@@ -1193,7 +1203,7 @@
                         <div class="col-6 col-md-3">
                             <div class="text-center p-3 rounded" style="background:#e8f5e9;">
                                 <div class="fs-5 fw-bold text-success">
-                                    R$ {{ contrato.valor_total_contrato|floatformat:2|default:"—" }}
+                                    {% if contrato.valor_total_contrato %}{{ contrato.valor_total_contrato|moeda }}{% else %}—{% endif %}
                                 </div>
                                 <div class="small text-muted mt-1">Valor Total do Contrato</div>
                             </div>
@@ -1201,7 +1211,7 @@
                         <div class="col-6 col-md-3">
                             <div class="text-center p-3 rounded" style="background:#e3f2fd;">
                                 <div class="fs-5 fw-bold text-primary">
-                                    R$ {{ valor_pago|floatformat:2|default:"—" }}
+                                    {% if valor_pago %}{{ valor_pago|moeda }}{% else %}—{% endif %}
                                 </div>
                                 <div class="small text-muted mt-1">Total Pago</div>
                             </div>
@@ -1209,7 +1219,7 @@
                         <div class="col-6 col-md-3">
                             <div class="text-center p-3 rounded" style="background:#fff3e0;">
                                 <div class="fs-5 fw-bold text-warning">
-                                    R$ {{ saldo_devedor|floatformat:2|default:"—" }}
+                                    {% if saldo_devedor %}{{ saldo_devedor|moeda }}{% else %}—{% endif %}
                                 </div>
                                 <div class="small text-muted mt-1">Saldo Devedor</div>
                             </div>
@@ -1680,7 +1690,89 @@
 {% endblock %}
 
 {% block extra_js %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
 <script>
+// ── F3-03: Resumo Financeiro — Chart.js barras por mês ────────────────────────
+(function () {
+    var canvas = document.getElementById('chartResumoFinanceiro');
+    if (!canvas || typeof Chart === 'undefined') return;
+
+    // Build last-12-months labels and buckets from parcelas data
+    var today = new Date();
+    var labels = [], pagas = [], pendentes = [];
+    for (var i = 11; i >= 0; i--) {
+        var d = new Date(today.getFullYear(), today.getMonth() - i, 1);
+        var key = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
+        var meses = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
+        labels.push(meses[d.getMonth()] + '/' + String(d.getFullYear()).slice(2));
+        pagas.push(0);
+        pendentes.push(0);
+    }
+
+    {% for p in parcelas %}
+    (function() {
+        var venc = '{{ p.data_vencimento|date:"Y-m" }}';
+        var idx = labels.findIndex(function(_, i) {
+            var d = new Date(today.getFullYear(), today.getMonth() - (11 - i), 1);
+            var k = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
+            return k === venc;
+        });
+        if (idx === -1) return;
+        {% if p.pago %}
+        pagas[idx] += parseFloat('{{ p.valor_pago|default:p.valor_atual|stringformat:".2f" }}') || 0;
+        {% else %}
+        pendentes[idx] += parseFloat('{{ p.valor_atual|stringformat:".2f" }}') || 0;
+        {% endif %}
+    })();
+    {% endfor %}
+
+    new Chart(canvas, {
+        type: 'bar',
+        data: {
+            labels: labels,
+            datasets: [
+                {
+                    label: 'Pago',
+                    data: pagas,
+                    backgroundColor: 'rgba(25, 135, 84, 0.75)',
+                    borderColor: '#198754',
+                    borderWidth: 1,
+                },
+                {
+                    label: 'Pendente',
+                    data: pendentes,
+                    backgroundColor: 'rgba(13, 110, 253, 0.45)',
+                    borderColor: '#0d6efd',
+                    borderWidth: 1,
+                },
+            ],
+        },
+        options: {
+            responsive: true,
+            plugins: {
+                legend: { position: 'bottom', labels: { boxWidth: 12, font: { size: 11 } } },
+                tooltip: {
+                    callbacks: {
+                        label: function(ctx) {
+                            var v = ctx.parsed.y;
+                            return ctx.dataset.label + ': R$ ' + v.toLocaleString('pt-BR', {minimumFractionDigits: 2});
+                        }
+                    }
+                }
+            },
+            scales: {
+                x: { stacked: false, ticks: { font: { size: 10 } } },
+                y: {
+                    ticks: {
+                        font: { size: 10 },
+                        callback: function(v) { return 'R$ ' + v.toLocaleString('pt-BR', {minimumFractionDigits: 0}); }
+                    }
+                }
+            }
+        }
+    });
+})();
+
 // ── U-02: Timeline Visual de Ciclos ──────────────────────────────────────────
 (function() {
     var container = document.getElementById('ciclos-timeline');

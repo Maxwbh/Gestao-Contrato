@@ -1,6 +1,7 @@
 {% extends 'base.html' %}
 {% load crispy_forms_tags %}
 {% load hashid_tags %}
+{% load format_filters %}
 
 {% block title %}Imóveis - Gestão de Contratos{% endblock %}
 
@@ -154,7 +155,7 @@
                                                     {% if imovel.valor %}
                                                         <i class="fas fa-dollar-sign text-success"></i>
                                                         <strong>Valor:</strong>
-                                                        R$ {{ imovel.valor|floatformat:2 }}<br>
+                                                        {{ imovel.valor|moeda }}<br>
                                                     {% endif %}
 
                                                     {% if imovel.cidade %}

@@ -1,6 +1,7 @@
 {% extends 'base.html' %}
 {% load static %}
 {% load hashid_tags %}
+{% load format_filters %}
 
 {% block title %}Remessa {{ arquivo.numero_remessa }} - CNAB{% endblock %}
 
@@ -75,7 +76,7 @@
                         </tr>
                         <tr>
                             <th>Valor Total:</th>
-                            <td><strong>R$ {{ arquivo.valor_total|floatformat:2 }}</strong></td>
+                            <td><strong>{{ arquivo.valor_total|moeda }}</strong></td>
                         </tr>
                         <tr>
                             <th>Data Geracao:</th>
@@ -174,7 +175,7 @@
                                         {% endif %}
                                     </td>
                                     <td>{{ item.data_vencimento|date:"d/m/Y" }}</td>
-                                    <td>R$ {{ item.valor|floatformat:2 }}</td>
+                                    <td>{{ item.valor|moeda }}</td>
                                     <td>
                                         {% if item.processado %}
                                         <span class="badge bg-success">Processado</span>

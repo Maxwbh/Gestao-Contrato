@@ -1,6 +1,7 @@
 {% extends 'base.html' %}
 {% load static %}
 {% load hashid_tags %}
+{% load format_filters %}
 
 {% block title %}Segunda Via — Parcela {{ parcela.numero_parcela }}{% endblock %}
 
@@ -57,23 +58,23 @@
                         <tbody>
                             <tr>
                                 <td class="text-muted">Valor da parcela</td>
-                                <td class="text-end">R$ {{ parcela.valor_atual|floatformat:2 }}</td>
+                                <td class="text-end">{{ parcela.valor_atual|moeda }}</td>
                             </tr>
                             {% if valor_juros %}
                             <tr class="text-danger">
                                 <td>Juros de mora</td>
-                                <td class="text-end">R$ {{ valor_juros|floatformat:2 }}</td>
+                                <td class="text-end">{{ valor_juros|moeda }}</td>
                             </tr>
                             {% endif %}
                             {% if valor_multa %}
                             <tr class="text-danger">
                                 <td>Multa</td>
-                                <td class="text-end">R$ {{ valor_multa|floatformat:2 }}</td>
+                                <td class="text-end">{{ valor_multa|moeda }}</td>
                             </tr>
                             {% endif %}
                             <tr class="table-primary fw-bold fs-5">
                                 <td>Total a pagar</td>
-                                <td class="text-end">R$ {{ valor_total|floatformat:2 }}</td>
+                                <td class="text-end">{{ valor_total|moeda }}</td>
                             </tr>
                         </tbody>
                     </table>

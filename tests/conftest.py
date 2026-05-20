@@ -397,7 +397,12 @@ def configure_test_settings(settings):
     settings.CELERY_TASK_EAGER_PROPAGATES = True
     settings.EMAIL_BACKEND = 'django.core.mail.backends.locmem.EmailBackend'
     # Use simpler static files storage to avoid collectstatic requirement
-    settings.STATICFILES_STORAGE = 'django.contrib.staticfiles.storage.StaticFilesStorage'
+    settings.STORAGES = {
+        **settings.STORAGES,
+        "staticfiles": {
+            "BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage",
+        },
+    }
     # Disable HTTPS redirect for tests
     settings.SECURE_SSL_REDIRECT = False
     # Add humanize for template tag support

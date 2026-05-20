@@ -39,12 +39,12 @@ class ContratoForm(forms.ModelForm):
         ]
         widgets = {
             'data_contrato': forms.DateInput(
-                attrs={'type': 'date'},
-                format='%Y-%m-%d'
+                attrs={'type': 'text', 'class': 'form-control mask-date', 'placeholder': 'DD/MM/AAAA', 'maxlength': '10'},
+                format='%d/%m/%Y'
             ),
             'data_primeiro_vencimento': forms.DateInput(
-                attrs={'type': 'date'},
-                format='%Y-%m-%d'
+                attrs={'type': 'text', 'class': 'form-control mask-date', 'placeholder': 'DD/MM/AAAA', 'maxlength': '10'},
+                format='%d/%m/%Y'
             ),
             'valor_total': forms.TextInput(attrs={
                 'data-mask': 'moeda', 'placeholder': 'R$ 350.000,00'
@@ -536,12 +536,12 @@ class ContratoWizardBasicoForm(forms.ModelForm):
         ]
         widgets = {
             'data_contrato': forms.DateInput(
-                attrs={'type': 'date', 'title': 'Data de assinatura do contrato'},
-                format='%Y-%m-%d',
+                attrs={'type': 'text', 'class': 'form-control mask-date', 'placeholder': 'DD/MM/AAAA', 'maxlength': '10', 'title': 'Data de assinatura do contrato'},
+                format='%d/%m/%Y',
             ),
             'data_primeiro_vencimento': forms.DateInput(
-                attrs={'type': 'date', 'title': 'Data de vencimento da primeira parcela'},
-                format='%Y-%m-%d',
+                attrs={'type': 'text', 'class': 'form-control mask-date', 'placeholder': 'DD/MM/AAAA', 'maxlength': '10', 'title': 'Data de vencimento da primeira parcela'},
+                format='%d/%m/%Y',
             ),
             'numero_contrato': forms.TextInput(attrs={
                 'title': 'Gerado automaticamente no formato CTR-ANO-SEQUÊNCIA. '

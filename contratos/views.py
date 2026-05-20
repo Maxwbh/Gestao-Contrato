@@ -12,7 +12,7 @@ from django.views.generic import ListView, CreateView, UpdateView, DeleteView, D
 from django.urls import reverse_lazy
 from django.contrib import messages
 from django.db import models
-from django.db.models import Q, Sum
+from django.db.models import Q, Sum, Count
 from .models import Contrato, StatusContrato, IndiceReajuste, PrestacaoIntermediaria, TabelaJurosContrato, TipoAmortizacao, TipoCorrecao
 from .forms import ContratoForm, IndiceReajusteForm
 from core.mixins import PaginacaoMixin, TenantMixin, HashidMixin
@@ -100,9 +100,14 @@ class ContratoListView(LoginRequiredMixin, TenantMixin, PaginacaoMixin, ListView
         context['sort_order'] = self.request.GET.get('order', 'desc')
         context['status_choices'] = StatusContrato.choices
         qs_tenant = self.get_queryset()
-        context['total_contratos'] = qs_tenant.count()
-        context['contratos_ativos'] = qs_tenant.filter(status=StatusContrato.ATIVO).count()
-        context['contratos_quitados'] = qs_tenant.filter(status=StatusContrato.QUITADO).count()
+        counts = qs_tenant.aggregate(
+            total=Count('id'),
+            ativos=Count('id', filter=Q(status=StatusContrato.ATIVO)),
+            quitados=Count('id', filter=Q(status=StatusContrato.QUITADO)),
+        )
+        context['total_contratos'] = counts['total']
+        context['contratos_ativos'] = counts['ativos']
+        context['contratos_quitados'] = counts['quitados']
 
         # Lista de imobiliárias para filtro (apenas as acessíveis ao usuário)
         context['imobiliarias'] = self.get_imobiliarias_permitidas()
@@ -110,6 +115,11 @@ class ContratoListView(LoginRequiredMixin, TenantMixin, PaginacaoMixin, ListView
         # Contratos que precisam de reajuste no mês corrente
         context['contratos_reajuste'] = self._get_contratos_reajuste_pendente()
 
+        from core.breadcrumbs import bc, bc_dashboard
+        context['breadcrumb'] = [
+            bc_dashboard(),
+            bc('Contratos'),
+        ]
         return context
 
     def _get_contratos_reajuste_pendente(self):
@@ -170,6 +180,16 @@ class ContratoCreateView(LoginRequiredMixin, CreateView):
     template_name = 'contratos/contrato_form.html'
     success_url = reverse_lazy('contratos:listar')
 
+    def get_context_data(self, **kwargs):
+        from core.breadcrumbs import bc, bc_dashboard
+        context = super().get_context_data(**kwargs)
+        context['breadcrumb'] = [
+            bc_dashboard(),
+            bc('Contratos', 'contratos:listar'),
+            bc('Novo'),
+        ]
+        return context
+
     def form_valid(self, form):
         messages.success(self.request, f'Contrato {form.instance.numero_contrato} criado com sucesso! Parcelas geradas automaticamente.')
         return super().form_valid(form)
@@ -195,6 +215,18 @@ class ContratoUpdateView(LoginRequiredMixin, HashidMixin, TenantMixin, UpdateVie
     form_class = ContratoForm
     template_name = 'contratos/contrato_form.html'
     success_url = reverse_lazy('contratos:listar')
+
+    def get_context_data(self, **kwargs):
+        from core.breadcrumbs import bc, bc_dashboard
+        from core.templatetags.hashid_tags import hashid_filter
+        context = super().get_context_data(**kwargs)
+        context['breadcrumb'] = [
+            bc_dashboard(),
+            bc('Contratos', 'contratos:listar'),
+            bc(self.object.numero_contrato, 'contratos:detalhe', hashid_filter(self.object.pk)),
+            bc('Editar'),
+        ]
+        return context
 
     def form_valid(self, form):
         messages.success(self.request, f'Contrato {form.instance.numero_contrato} atualizado com sucesso!')
@@ -435,6 +467,13 @@ class ContratoDetailView(LoginRequiredMixin, HashidMixin, TenantMixin, DetailVie
         context['voltar_url'] = _voltar_url(
             self.request, reverse('contratos:listar')
         )
+
+        from core.breadcrumbs import bc, bc_dashboard
+        context['breadcrumb'] = [
+            bc_dashboard(),
+            bc('Contratos', 'contratos:listar'),
+            bc(contrato.numero_contrato),
+        ]
 
         return context
 

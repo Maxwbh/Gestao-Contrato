@@ -1,6 +1,7 @@
 {% extends 'base.html' %}
 {% load static %}
 {% load hashid_tags %}
+{% load format_filters %}
 
 {% block title %}Conciliação Bancária{% endblock %}
 
@@ -77,7 +78,7 @@
                 <div class="card-body py-3">
                     <div class="text-muted small mb-1"><i class="fas fa-clock me-1"></i>Aguardando Conciliação</div>
                     <div class="fs-3 fw-bold text-danger">{{ total_pendentes }}</div>
-                    <div class="text-muted small">R$ {{ valor_pendente|floatformat:2 }}</div>
+                    <div class="text-muted small">{{ valor_pendente|moeda }}</div>
                 </div>
             </div>
         </div>
@@ -86,7 +87,7 @@
                 <div class="card-body py-3">
                     <div class="text-muted small mb-1"><i class="fas fa-file-import me-1"></i>Retorno CNAB <span class="badge bg-secondary ms-1">{{ periodo }}d</span></div>
                     <div class="fs-3 fw-bold text-primary">{{ origem_stats.CNAB.total }}</div>
-                    <div class="text-muted small">R$ {{ origem_stats.CNAB.valor|floatformat:2 }}</div>
+                    <div class="text-muted small">{{ origem_stats.CNAB.valor|moeda }}</div>
                 </div>
             </div>
         </div>
@@ -95,7 +96,7 @@
                 <div class="card-body py-3">
                     <div class="text-muted small mb-1"><i class="fas fa-file-alt me-1"></i>Extrato OFX <span class="badge bg-secondary ms-1">{{ periodo }}d</span></div>
                     <div class="fs-3 fw-bold" style="color:#0dcaf0;">{{ origem_stats.OFX.total }}</div>
-                    <div class="text-muted small">R$ {{ origem_stats.OFX.valor|floatformat:2 }}</div>
+                    <div class="text-muted small">{{ origem_stats.OFX.valor|moeda }}</div>
                 </div>
             </div>
         </div>
@@ -104,7 +105,7 @@
                 <div class="card-body py-3">
                     <div class="text-muted small mb-1"><i class="fas fa-hand-paper me-1"></i>Baixa Manual <span class="badge bg-secondary ms-1">{{ periodo }}d</span></div>
                     <div class="fs-3 fw-bold text-secondary">{{ origem_stats.MANUAL.total }}</div>
-                    <div class="text-muted small">R$ {{ origem_stats.MANUAL.valor|floatformat:2 }}</div>
+                    <div class="text-muted small">{{ origem_stats.MANUAL.valor|moeda }}</div>
                 </div>
             </div>
         </div>
@@ -146,7 +147,7 @@
                                             <span class="small">{{ p.data_vencimento|date:"d/m/Y" }}</span>
                                         {% endif %}
                                     </td>
-                                    <td class="text-end small"><strong>R$ {{ p.valor_boleto|default:p.valor_atual|floatformat:2 }}</strong></td>
+                                    <td class="text-end small"><strong>{{ p.valor_boleto|default:p.valor_atual|moeda }}</strong></td>
                                     <td>
                                         {% if p.status_boleto == 'VENCIDO' %}
                                             <span class="badge bg-danger">Vencido</span>
@@ -205,7 +206,7 @@
                                 <tr>
                                     <td class="small">{{ h.data_pagamento|date:"d/m/Y" }}</td>
                                     <td class="small">{{ h.parcela.contrato.comprador.nome|truncatechars:20 }}</td>
-                                    <td class="text-end small">R$ {{ h.valor_pago|floatformat:2 }}</td>
+                                    <td class="text-end small">{{ h.valor_pago|moeda }}</td>
                                     <td>
                                         <span class="badge origem-badge-{{ h.origem_pagamento }} small">
                                             {{ h.get_origem_pagamento_display }}
