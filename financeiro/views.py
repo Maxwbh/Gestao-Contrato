@@ -957,27 +957,28 @@ def parcelas_mes_atual(request):
         valor_vencido=Sum('valor_atual', filter=Q(pago=False, data_vencimento__lt=hoje)),
     )
 
-    # Agrupar por imobiliária para resumo
-    parcelas_por_imobiliaria = {}
-    for parcela in parcelas:
-        imob_nome = parcela.contrato.imovel.imobiliaria.nome if parcela.contrato.imovel.imobiliaria else 'Sem Imobiliária'
-        if imob_nome not in parcelas_por_imobiliaria:
-            parcelas_por_imobiliaria[imob_nome] = {
-                'total': 0,
-                'pagas': 0,
-                'pendentes': 0,
-                'valor_total': Decimal('0.00'),
-                'valor_pago': Decimal('0.00'),
-                'valor_pendente': Decimal('0.00'),
-            }
-        parcelas_por_imobiliaria[imob_nome]['total'] += 1
-        parcelas_por_imobiliaria[imob_nome]['valor_total'] += parcela.valor_atual
-        if parcela.pago:
-            parcelas_por_imobiliaria[imob_nome]['pagas'] += 1
-            parcelas_por_imobiliaria[imob_nome]['valor_pago'] += parcela.valor_pago or Decimal('0.00')
-        else:
-            parcelas_por_imobiliaria[imob_nome]['pendentes'] += 1
-            parcelas_por_imobiliaria[imob_nome]['valor_pendente'] += parcela.valor_atual
+    # Resumo por imobiliária — 1 GROUP BY query em vez de iterar todas as parcelas
+    parcelas_por_imobiliaria_raw = parcelas.values(
+        'contrato__imovel__imobiliaria__nome'
+    ).annotate(
+        total=Count('id'),
+        pagas=Count('id', filter=Q(pago=True)),
+        pendentes=Count('id', filter=Q(pago=False)),
+        valor_total=Sum('valor_atual'),
+        valor_pago_total=Sum('valor_pago', filter=Q(pago=True)),
+        valor_pendente=Sum('valor_atual', filter=Q(pago=False)),
+    ).order_by('contrato__imovel__imobiliaria__nome')
+    parcelas_por_imobiliaria = {
+        (row['contrato__imovel__imobiliaria__nome'] or 'Sem Imobiliária'): {
+            'total': row['total'],
+            'pagas': row['pagas'],
+            'pendentes': row['pendentes'],
+            'valor_total': row['valor_total'] or Decimal('0.00'),
+            'valor_pago': row['valor_pago_total'] or Decimal('0.00'),
+            'valor_pendente': row['valor_pendente'] or Decimal('0.00'),
+        }
+        for row in parcelas_por_imobiliaria_raw
+    }
 
     per_page = request.GET.get('per_page', '25')
     try:
