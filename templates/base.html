@@ -796,6 +796,13 @@
         });
 
         document.addEventListener('keydown', function(e) {
+            // F4-03: '/' also opens global search (when not typing in a field)
+            var _inField = ['INPUT','TEXTAREA','SELECT'].indexOf(document.activeElement && document.activeElement.tagName) !== -1;
+            if (e.key === '/' && !e.ctrlKey && !e.metaKey && !_inField) {
+                e.preventDefault();
+                if (overlay.style.display === 'flex') close(); else open();
+                return;
+            }
             if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
                 e.preventDefault();
                 if (overlay.style.display === 'flex') close(); else open();
@@ -954,6 +961,28 @@
             if (btnM) btnM.addEventListener('click', toggle);
         });
     })();
+    </script>
+
+    <!-- F4-02: Ctrl+S — salva o primeiro formulário POST visível na página -->
+    <script>
+    document.addEventListener('keydown', function(e) {
+        if (!((e.ctrlKey || e.metaKey) && e.key === 's')) return;
+        var forms = document.querySelectorAll('form[method="post"]:not([data-no-ctrl-s])');
+        var form = null;
+        for (var i = 0; i < forms.length; i++) {
+            var f = forms[i];
+            if (f.offsetParent !== null && !f.closest('.modal:not(.show)')) {
+                form = f;
+                break;
+            }
+        }
+        if (!form) return;
+        e.preventDefault();
+        var btn = form.querySelector('[type="submit"]:not(:disabled)');
+        if (btn) btn.click();
+        else if (form.requestSubmit) form.requestSubmit();
+        else form.submit();
+    });
     </script>
 
     <!-- hint_id_ tooltips: converte help_text do crispy-forms em tooltip no label -->

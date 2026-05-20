@@ -1025,7 +1025,21 @@ function confirmarPagar() {
     .then(resp => {
         if (resp.sucesso) {
             getMModal('modalPagar').close();
-            window.location.reload();
+            // F4-01: atualizar a linha no grid sem recarregar a página
+            if (window.parcelasGridApi) {
+                const dataFmt = document.getElementById('pagarData').value.split('-').reverse().join('/');
+                window.parcelasGridApi.forEachNode(function(node) {
+                    if (node.data && node.data.hid === parcelaAtualId) {
+                        const updated = Object.assign({}, node.data, {
+                            pago: true,
+                            data_pagamento: dataFmt,
+                        });
+                        window.parcelasGridApi.applyTransaction({update: [updated]});
+                    }
+                });
+            } else {
+                window.location.reload();
+            }
         } else {
             btn.disabled = false;
             btn.innerHTML = '<i class="fas fa-check me-1"></i> Confirmar Pagamento';
@@ -1249,15 +1263,23 @@ function confirmarPagamentoMassa() {
         res.classList.remove('d-none');
         if (falhas.length === 0) {
             res.className = 'alert alert-success';
-            res.innerHTML = '<i class="fas fa-check-circle me-1"></i> ' + ok + ' pagamento(s) registrado(s) com sucesso!' +
-                ' <button class="btn btn-sm btn-outline-success ms-2" onclick="location.reload()">Recarregar</button>';
+            res.innerHTML = '<i class="fas fa-check-circle me-1"></i> ' + ok + ' pagamento(s) registrado(s) com sucesso!';
         } else {
             res.className = 'alert alert-warning';
             res.innerHTML = '<strong>' + ok + ' registrado(s), ' + falhas.length + ' erro(s):</strong><ul class="mb-0 mt-1">' +
-                falhas.map(f => '<li>Parcela #' + f.pk + ': ' + (f.erro || 'Erro desconhecido') + '</li>').join('') + '</ul>' +
-                (ok > 0 ? ' <button class="btn btn-sm btn-outline-secondary ms-2 mt-2" onclick="location.reload()">Recarregar</button>' : '');
+                falhas.map(f => '<li>Parcela #' + f.pk + ': ' + (f.erro || 'Erro desconhecido') + '</li>').join('') + '</ul>';
         }
-        if (ok > 0) window.parcelasGridApi.deselectAll();
+        // F4-04: atualizar linhas pagas no grid sem recarregar
+        if (ok > 0 && window.parcelasGridApi) {
+            const dataFmt = dataVal.split('-').reverse().join('/');
+            const okHids = new Set(resultados.filter(r => r.sucesso).map(r => naoPagas.find(p => p.pk === r.pk)).filter(Boolean).map(p => p.hid));
+            window.parcelasGridApi.forEachNode(function(node) {
+                if (node.data && okHids.has(node.data.hid)) {
+                    window.parcelasGridApi.applyTransaction({update: [Object.assign({}, node.data, {pago: true, data_pagamento: dataFmt})]});
+                }
+            });
+            window.parcelasGridApi.deselectAll();
+        }
     });
 }
 
