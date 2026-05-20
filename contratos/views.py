@@ -624,18 +624,19 @@ class IndiceReajusteListView(LoginRequiredMixin, PaginacaoMixin, ListView):
         # Total de índices
         context['total_indices'] = IndiceReajuste.objects.count()
 
-        # Estatísticas por tipo
+        # Estatísticas por tipo — 1 query em vez de 2 por tipo
         tipos = ['IPCA', 'IGPM', 'INCC', 'IGPDI', 'INPC', 'TR', 'SELIC']
-        context['estatisticas_indices'] = []
-        for tipo in tipos:
-            total = IndiceReajuste.objects.filter(tipo_indice=tipo).count()
-            if total > 0:  # Só mostrar tipos que têm registros
-                ultimo = IndiceReajuste.objects.filter(tipo_indice=tipo).order_by('-ano', '-mes').first()
-                context['estatisticas_indices'].append({
-                    'tipo': tipo,
-                    'total': total,
-                    'ultimo': ultimo,
-                })
+        counts_por_tipo = {}
+        ultimos_por_tipo = {}
+        for idx in IndiceReajuste.objects.filter(tipo_indice__in=tipos).order_by('tipo_indice', '-ano', '-mes'):
+            counts_por_tipo[idx.tipo_indice] = counts_por_tipo.get(idx.tipo_indice, 0) + 1
+            if idx.tipo_indice not in ultimos_por_tipo:
+                ultimos_por_tipo[idx.tipo_indice] = idx
+        context['estatisticas_indices'] = [
+            {'tipo': tipo, 'total': counts_por_tipo[tipo], 'ultimo': ultimos_por_tipo[tipo]}
+            for tipo in tipos
+            if tipo in counts_por_tipo
+        ]
 
         # Data do contrato mais antigo (para limite de importação)
         contrato_mais_antigo = Contrato.objects.order_by('data_contrato').first()
