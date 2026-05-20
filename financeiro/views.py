@@ -2101,8 +2101,9 @@ def dashboard_conciliacao(request):
     if imob_id:
         qs_pendentes = qs_pendentes.filter(contrato__imobiliaria_id=imob_id)
 
-    total_pendentes = qs_pendentes.count()
-    valor_pendente = qs_pendentes.aggregate(s=Sum('valor_boleto'))['s'] or 0
+    _pend_agg = qs_pendentes.aggregate(total=Count('id'), s=Sum('valor_boleto'))
+    total_pendentes = _pend_agg['total']
+    valor_pendente = _pend_agg['s'] or 0
 
     # ── Histórico de conciliações (últimos N dias) ────────────────────────────
     qs_hist = HistoricoPagamento.objects.filter(
@@ -4002,18 +4003,20 @@ def api_reajuste_detail(request, hid):
         numero_parcela__gte=reajuste.parcela_inicial,
         numero_parcela__lte=reajuste.parcela_final,
     )
-    total_parcelas = parcelas_no_range.count()
-
-    valor_original_total = parcelas_no_range.filter(pago=False).aggregate(
-        s=Sum('valor_original')
-    )['s'] or Decimal('0')
-    valor_atual_total = parcelas_no_range.filter(pago=False).aggregate(
-        s=Sum('valor_atual')
-    )['s'] or Decimal('0')
+    # 5 queries → 2: aggregate + first
+    _range_agg = parcelas_no_range.aggregate(
+        total=Count('id'),
+        abertas=Count('id', filter=Q(pago=False)),
+        valor_original_total=Sum('valor_original', filter=Q(pago=False)),
+        valor_atual_total=Sum('valor_atual', filter=Q(pago=False)),
+    )
+    total_parcelas = _range_agg['total']
+    qtd_parcelas_abertas = _range_agg['abertas']
+    valor_original_total = _range_agg['valor_original_total'] or Decimal('0')
+    valor_atual_total = _range_agg['valor_atual_total'] or Decimal('0')
 
     primeira_aberta = parcelas_no_range.filter(pago=False).order_by('numero_parcela').first()
     prestacao_atual = float(primeira_aberta.valor_atual) if primeira_aberta else None
-    qtd_parcelas_abertas = parcelas_no_range.filter(pago=False).count()
 
     # Ciclos afetados — determina pelo range de parcelas e prazo_reajuste_meses
     prazo = contrato.prazo_reajuste_meses or 12
