@@ -834,9 +834,15 @@ class CompradorListView(LoginRequiredMixin, PaginacaoMixin, ListView):
         return queryset
 
     def get_context_data(self, **kwargs):
+        from core.breadcrumbs import bc, bc_dashboard
         context = super().get_context_data(**kwargs)
         context['total_compradores'] = Comprador.objects.filter(ativo=True).count()
         context['search'] = self.request.GET.get('search', '')
+        context['breadcrumb'] = [
+            bc_dashboard(),
+            bc('Cadastros'),
+            bc('Compradores'),
+        ]
         return context
 
 
@@ -846,6 +852,16 @@ class CompradorCreateView(LoginRequiredMixin, CreateView):
     form_class = CompradorForm
     template_name = 'core/comprador_form.html'
     success_url = reverse_lazy('core:listar_compradores')
+
+    def get_context_data(self, **kwargs):
+        from core.breadcrumbs import bc, bc_dashboard
+        context = super().get_context_data(**kwargs)
+        context['breadcrumb'] = [
+            bc_dashboard(),
+            bc('Compradores', 'core:listar_compradores'),
+            bc('Novo'),
+        ]
+        return context
 
     def form_valid(self, form):
         messages.success(self.request, f'Comprador {form.instance.nome} cadastrado com sucesso!')
@@ -865,6 +881,23 @@ class CompradorUpdateView(LoginRequiredMixin, UpdateView):
 
     def get_queryset(self):
         return Comprador.objects.filter(ativo=True)
+
+    def get_context_data(self, **kwargs):
+        from core.breadcrumbs import bc, bc_dashboard
+        from notificacoes.models import Notificacao
+        context = super().get_context_data(**kwargs)
+        context['breadcrumb'] = [
+            bc_dashboard(),
+            bc('Compradores', 'core:listar_compradores'),
+            bc(self.object.nome),
+        ]
+        context['notificacoes_recentes'] = (
+            Notificacao.objects
+            .filter(parcela__contrato__comprador=self.object)
+            .select_related('parcela')
+            .order_by('-data_agendamento')[:10]
+        )
+        return context
 
     def form_valid(self, form):
         messages.success(self.request, f'Comprador {form.instance.nome} atualizado com sucesso!')
@@ -967,6 +1000,13 @@ class ImovelListView(LoginRequiredMixin, PaginacaoMixin, ListView):
         context['overlays_json'] = json.dumps(overlays)
         context['imobiliarias'] = Imobiliaria.objects.filter(ativo=True)
         context['search'] = self.request.GET.get('search', '')
+
+        from core.breadcrumbs import bc, bc_dashboard
+        context['breadcrumb'] = [
+            bc_dashboard(),
+            bc('Cadastros'),
+            bc('Imóveis'),
+        ]
         return context
 
 
@@ -976,6 +1016,16 @@ class ImovelCreateView(LoginRequiredMixin, CreateView):
     form_class = ImovelForm
     template_name = 'core/imovel_form.html'
     success_url = reverse_lazy('core:listar_imoveis')
+
+    def get_context_data(self, **kwargs):
+        from core.breadcrumbs import bc, bc_dashboard
+        context = super().get_context_data(**kwargs)
+        context['breadcrumb'] = [
+            bc_dashboard(),
+            bc('Imóveis', 'core:listar_imoveis'),
+            bc('Novo'),
+        ]
+        return context
 
     def form_valid(self, form):
         messages.success(self.request, f'Imóvel {form.instance.identificacao} cadastrado com sucesso!')
@@ -995,6 +1045,16 @@ class ImovelUpdateView(LoginRequiredMixin, UpdateView):
 
     def get_queryset(self):
         return Imovel.objects.filter(ativo=True)
+
+    def get_context_data(self, **kwargs):
+        from core.breadcrumbs import bc, bc_dashboard
+        context = super().get_context_data(**kwargs)
+        context['breadcrumb'] = [
+            bc_dashboard(),
+            bc('Imóveis', 'core:listar_imoveis'),
+            bc(self.object.identificacao or f'#{self.object.pk}'),
+        ]
+        return context
 
     def form_valid(self, form):
         messages.success(self.request, f'Imóvel {form.instance.identificacao} atualizado com sucesso!')
@@ -1129,11 +1189,20 @@ class ImobiliariaListView(LoginRequiredMixin, PaginacaoMixin, ListView):
         context['total_imobiliarias'] = Imobiliaria.objects.filter(ativo=True).count()
         context['search'] = self.request.GET.get('search', '')
 
-        # Adicionar conta principal para cada imobiliária
+        # Adicionar conta principal — usa o cache do prefetch_related (sem N+1)
         imobiliarias = context.get('imobiliarias', [])
         for imobiliaria in imobiliarias:
-            imobiliaria.conta_principal = imobiliaria.contas_bancarias.filter(principal=True, ativo=True).first()
+            imobiliaria.conta_principal = next(
+                (c for c in imobiliaria.contas_bancarias.all() if c.principal and c.ativo),
+                None
+            )
 
+        from core.breadcrumbs import bc, bc_dashboard
+        context['breadcrumb'] = [
+            bc_dashboard(),
+            bc('Cadastros'),
+            bc('Imobiliárias'),
+        ]
         return context
 
 
@@ -1143,6 +1212,16 @@ class ImobiliariaCreateView(LoginRequiredMixin, CreateView):
     form_class = ImobiliariaForm
     template_name = 'core/imobiliaria_form.html'
     success_url = reverse_lazy('core:listar_imobiliarias')
+
+    def get_context_data(self, **kwargs):
+        from core.breadcrumbs import bc, bc_dashboard
+        context = super().get_context_data(**kwargs)
+        context['breadcrumb'] = [
+            bc_dashboard(),
+            bc('Imobiliárias', 'core:listar_imobiliarias'),
+            bc('Nova'),
+        ]
+        return context
 
     def form_valid(self, form):
         super().form_valid(form)
@@ -1225,6 +1304,16 @@ class ImobiliariaUpdateView(LoginRequiredMixin, UpdateView):
 
     def get_queryset(self):
         return Imobiliaria.objects.filter(ativo=True)
+
+    def get_context_data(self, **kwargs):
+        from core.breadcrumbs import bc, bc_dashboard
+        context = super().get_context_data(**kwargs)
+        context['breadcrumb'] = [
+            bc_dashboard(),
+            bc('Imobiliárias', 'core:listar_imobiliarias'),
+            bc(self.object.nome),
+        ]
+        return context
 
     def form_valid(self, form):
         messages.success(self.request, f'Imobiliária {form.instance.nome} atualizada com sucesso!')
@@ -1912,7 +2001,10 @@ def api_overlay_loteamento(request, nome):
 
 @login_required
 def configuracoes_sistema(request):
-    """Hub centralizado de configurações globais da plataforma."""
+    """Hub centralizado de configurações globais da plataforma. Restrito a staff."""
+    if not (request.user.is_staff or request.user.is_superuser):
+        from django.core.exceptions import PermissionDenied
+        raise PermissionDenied
     from django.conf import settings as django_settings
     from .models import ParametroSistema
     from notificacoes.models import (
@@ -1996,13 +2088,16 @@ def api_parametros_salvar_grupo(request):
 def api_parametro_atualizar(request, parametro_id):
     """PATCH /core/api/parametros/<id>/ — atualiza valor de um ParametroSistema."""
     from .models import ParametroSistema
+    from django.http import Http404
+    param = get_object_or_404(ParametroSistema, pk=parametro_id)
     try:
-        param = get_object_or_404(ParametroSistema, pk=parametro_id)
         data = json.loads(request.body)
         param.valor = str(data.get('valor', ''))
         param.modificado_manualmente = True
         param.save()
         return JsonResponse({'sucesso': True, 'mensagem': f'"{param.chave}" atualizado.'})
+    except Http404:
+        raise
     except Exception as e:
         logger.exception('Erro ao atualizar parâmetro %s: %s', parametro_id, e)
         return JsonResponse({'sucesso': False, 'erro': str(e)}, status=500)

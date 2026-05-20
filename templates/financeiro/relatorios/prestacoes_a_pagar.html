@@ -1,4 +1,5 @@
 {% extends 'base.html' %}
+{% load format_filters %}
 {% block title %}Relatório — Prestações a Pagar{% endblock %}
 
 {% block content %}
@@ -73,20 +74,20 @@
     </div>
     <div class="col-6 col-md-3">
       <div class="card border-0 bg-info text-white text-center py-2">
-        <div class="fs-5 fw-bold">R$ {{ tot.valor_total|floatformat:2 }}</div>
+        <div class="fs-5 fw-bold">{{ tot.valor_total|moeda }}</div>
         <small>Valor Total</small>
       </div>
     </div>
     <div class="col-6 col-md-3">
       <div class="card border-0 bg-danger text-white text-center py-2">
         <div class="fs-5 fw-bold">{{ tot.parcelas_vencidas }}</div>
-        <small>Vencidas — R$ {{ tot.valor_vencido|floatformat:2 }}</small>
+        <small>Vencidas — {{ tot.valor_vencido|moeda }}</small>
       </div>
     </div>
     <div class="col-6 col-md-3">
       <div class="card border-0 bg-warning text-dark text-center py-2">
         <div class="fs-5 fw-bold">{{ tot.parcelas_a_vencer }}</div>
-        <small>A vencer — R$ {{ tot.valor_a_vencer|floatformat:2 }}</small>
+        <small>A vencer — {{ tot.valor_a_vencer|moeda }}</small>
       </div>
     </div>
   </div>
@@ -112,10 +113,10 @@
               <td><small>{{ item.comprador_nome }}</small></td>
               <td class="text-center"><small>{{ item.numero_parcela }}</small></td>
               <td><small>{{ item.data_vencimento|date:"d/m/Y" }}</small></td>
-              <td class="text-end"><small>R$ {{ item.valor_atual|floatformat:2 }}</small></td>
-              <td class="text-end"><small>R$ {{ item.valor_juros|floatformat:2 }}</small></td>
-              <td class="text-end"><small>R$ {{ item.valor_multa|floatformat:2 }}</small></td>
-              <td class="text-end fw-bold"><small>R$ {{ item.valor_total|floatformat:2 }}</small></td>
+              <td class="text-end"><small>{{ item.valor_atual|moeda }}</small></td>
+              <td class="text-end"><small>{{ item.valor_juros|moeda }}</small></td>
+              <td class="text-end"><small>{{ item.valor_multa|moeda }}</small></td>
+              <td class="text-end fw-bold"><small>{{ item.valor_total|moeda }}</small></td>
               <td class="text-center">
                 {% if item.dias_atraso > 0 %}
                   <span class="badge bg-danger">{{ item.dias_atraso }}d</span>

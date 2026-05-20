@@ -1,6 +1,7 @@
 
 {% extends 'base.html' %}
 {% load hashid_tags %}
+{% load format_filters %}
 {% block title %}Relatório — Posição de Contratos{% endblock %}
 
 {% block content %}
@@ -61,19 +62,19 @@
     </div>
     <div class="col-6 col-md-3">
       <div class="card border-0 bg-info text-white text-center py-2">
-        <div class="fs-5 fw-bold">R$&nbsp;{{ tot.valor_total_contratos|floatformat:2 }}</div>
+        <div class="fs-5 fw-bold">{{ tot.valor_total_contratos|moeda }}</div>
         <small>Valor Total</small>
       </div>
     </div>
     <div class="col-6 col-md-3">
       <div class="card border-0 bg-success text-white text-center py-2">
-        <div class="fs-5 fw-bold">R$&nbsp;{{ tot.total_pago|floatformat:2 }}</div>
+        <div class="fs-5 fw-bold">{{ tot.total_pago|moeda }}</div>
         <small>Total Recebido</small>
       </div>
     </div>
     <div class="col-6 col-md-3">
       <div class="card border-0 bg-warning text-dark text-center py-2">
-        <div class="fs-5 fw-bold">R$&nbsp;{{ tot.total_saldo_devedor|floatformat:2 }}</div>
+        <div class="fs-5 fw-bold">{{ tot.total_saldo_devedor|moeda }}</div>
         <small>Saldo Devedor</small>
       </div>
     </div>
@@ -112,8 +113,8 @@
                 <span class="badge bg-danger">{{ item.parcelas_vencidas }}</span>
                 {% else %}<span class="badge bg-light text-muted">0</span>{% endif %}
               </td>
-              <td class="text-end"><small>R$&nbsp;{{ item.total_pago|floatformat:2 }}</small></td>
-              <td class="text-end fw-bold"><small>R$&nbsp;{{ item.saldo_devedor|floatformat:2 }}</small></td>
+              <td class="text-end"><small>{{ item.total_pago|moeda }}</small></td>
+              <td class="text-end fw-bold"><small>{{ item.saldo_devedor|moeda }}</small></td>
               <td><small>{{ item.proxima_parcela_vencimento|date:"d/m/Y"|default:"—" }}</small></td>
             </tr>
             {% empty %}

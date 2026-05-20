@@ -1,6 +1,7 @@
 {% extends 'base.html' %}
 {% load static %}
 {% load hashid_tags %}
+{% load format_filters %}
 
 {% block title %}Parcelas do Mes - {{ mes_atual }}{% endblock %}
 
@@ -46,7 +47,7 @@
                 <div class="card-body text-center">
                     <div class="stat-value text-primary">{{ stats.total|default:0 }}</div>
                     <div class="stat-label">Total Parcelas</div>
-                    <small class="text-muted">R$ {{ stats.valor_total|floatformat:2|default:"0,00" }}</small>
+                    <small class="text-muted">{{ stats.valor_total|moeda }}</small>
                 </div>
             </div>
         </div>
@@ -55,7 +56,7 @@
                 <div class="card-body text-center">
                     <div class="stat-value text-success">{{ stats.pagas|default:0 }}</div>
                     <div class="stat-label">Pagas</div>
-                    <small class="text-muted">R$ {{ stats.valor_pago|floatformat:2|default:"0,00" }}</small>
+                    <small class="text-muted">{{ stats.valor_pago|moeda }}</small>
                 </div>
             </div>
         </div>
@@ -64,7 +65,7 @@
                 <div class="card-body text-center">
                     <div class="stat-value" style="color:#0d6efd;">{{ stats.pendentes|default:0 }}</div>
                     <div class="stat-label">A Vencer</div>
-                    <small class="text-muted">R$ {{ stats.valor_pendente|floatformat:2|default:"0,00" }}</small>
+                    <small class="text-muted">{{ stats.valor_pendente|moeda }}</small>
                 </div>
             </div>
         </div>
@@ -73,7 +74,7 @@
                 <div class="card-body text-center">
                     <div class="stat-value text-danger">{{ stats.vencidas|default:0 }}</div>
                     <div class="stat-label">Vencidas</div>
-                    <small class="text-muted">R$ {{ stats.valor_vencido|floatformat:2|default:"0,00" }}</small>
+                    <small class="text-muted">{{ stats.valor_vencido|moeda }}</small>
                 </div>
             </div>
         </div>
@@ -140,7 +141,7 @@
                             <hr>
                             <div class="d-flex justify-content-between small">
                                 <span>A Receber:</span>
-                                <strong class="text-primary">R$ {{ dados.valor_pendente|floatformat:2 }}</strong>
+                                <strong class="text-primary">{{ dados.valor_pendente|moeda }}</strong>
                             </div>
                         </div>
                     </div>

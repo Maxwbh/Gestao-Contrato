@@ -9,7 +9,7 @@ import json
 from decimal import Decimal
 from datetime import date, timedelta
 
-from django.test import TestCase, Client
+from django.test import TestCase, Client, override_settings
 from django.urls import reverse
 from django.contrib.auth.models import User
 
@@ -18,6 +18,7 @@ from contratos.models import Contrato, TipoCorrecao, StatusContrato
 from financeiro.models import Parcela
 
 
+@override_settings(SECURE_SSL_REDIRECT=False)
 class TestAPIBaseSetup(TestCase):
     """Base para testes de API com dados comuns"""
 
@@ -354,6 +355,7 @@ class TestAPIParcelas(TestAPIBaseSetup):
         self.assertFalse(data['sucesso'])
 
 
+@override_settings(SECURE_SSL_REDIRECT=False)
 class TestAPIAutenticacao(TestCase):
     """Testes para verificar autenticação das APIs"""
 

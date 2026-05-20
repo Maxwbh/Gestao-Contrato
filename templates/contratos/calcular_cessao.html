@@ -1,6 +1,7 @@
 
 {% extends 'base.html' %}
 {% load hashid_tags %}
+{% load format_filters %}
 
 {% block title %}Cálculo de Cessão de Direitos — Contrato {{ contrato.numero_contrato }}{% endblock %}
 
@@ -65,7 +66,7 @@
         <table class="table table-bordered mb-3">
           <tr>
             <td>Saldo Devedor Atualizado</td>
-            <td class="text-end fw-bold">R$ {{ resultado.saldo_devedor|floatformat:2 }}</td>
+            <td class="text-end fw-bold">{{ resultado.saldo_devedor|moeda }}</td>
           </tr>
           <tr>
             <td>Percentual de Cessão</td>
@@ -73,14 +74,14 @@
           </tr>
           <tr class="table-warning">
             <td><strong>Taxa de Cessão a Pagar ao Vendedor</strong></td>
-            <td class="text-end fw-bold fs-5">R$ {{ resultado.taxa_cessao|floatformat:2 }}</td>
+            <td class="text-end fw-bold fs-5">{{ resultado.taxa_cessao|moeda }}</td>
           </tr>
         </table>
 
         <div class="alert alert-info small">
           <i class="fas fa-info-circle me-1"></i>
           Após o pagamento da taxa de cessão ao vendedor ({{ contrato.imobiliaria.nome }}),
-          o saldo devedor de <strong>R$ {{ resultado.saldo_devedor|floatformat:2 }}</strong>
+          o saldo devedor de <strong>{{ resultado.saldo_devedor|moeda }}</strong>
           permanece vinculado ao contrato e será assumido pelo novo titular.
         </div>
 

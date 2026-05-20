@@ -89,14 +89,19 @@ class DashboardFinanceiroView(LoginRequiredMixin, TemplateView):
         if imobiliaria_selecionada:
             parcelas_qs = parcelas_qs.filter(contrato__imobiliaria=imobiliaria_selecionada)
 
-        # K-01: Lotes
+        # K-01: Lotes — 1 aggregate em vez de 3 counts
         from core.models import Imovel
         imoveis_qs = Imovel.objects.all()
         if imobiliaria_selecionada:
             imoveis_qs = imoveis_qs.filter(imobiliaria=imobiliaria_selecionada)
-        context['total_lotes'] = imoveis_qs.count()
-        context['lotes_disponiveis'] = imoveis_qs.filter(disponivel=True).count()
-        context['lotes_vendidos'] = imoveis_qs.filter(disponivel=False).count()
+        imovel_counts = imoveis_qs.aggregate(
+            total=Count('id'),
+            disponiveis=Count('id', filter=Q(disponivel=True)),
+            vendidos=Count('id', filter=Q(disponivel=False)),
+        )
+        context['total_lotes'] = imovel_counts['total']
+        context['lotes_disponiveis'] = imovel_counts['disponiveis']
+        context['lotes_vendidos'] = imovel_counts['vendidos']
 
         # K-06: Reajustes pendentes
         contratos_nao_fixo = contratos_qs.filter(
@@ -110,37 +115,37 @@ class DashboardFinanceiroView(LoginRequiredMixin, TemplateView):
         )
         context['reajustes_pendentes'] = reajustes_pendentes
 
-        # Estatísticas de Contratos
-        context['total_contratos'] = contratos_qs.count()
-        context['contratos_ativos'] = contratos_qs.filter(status=StatusContrato.ATIVO).count()
-        context['contratos_quitados'] = contratos_qs.filter(status=StatusContrato.QUITADO).count()
-        context['contratos_cancelados'] = contratos_qs.filter(status=StatusContrato.CANCELADO).count()
+        # Estatísticas de Contratos — 1 aggregate em vez de 5 queries
+        contrato_agg = contratos_qs.aggregate(
+            total=Count('id'),
+            ativos=Count('id', filter=Q(status=StatusContrato.ATIVO)),
+            quitados=Count('id', filter=Q(status=StatusContrato.QUITADO)),
+            cancelados=Count('id', filter=Q(status=StatusContrato.CANCELADO)),
+            valor_total=Sum('valor_total'),
+        )
+        context['total_contratos'] = contrato_agg['total']
+        context['contratos_ativos'] = contrato_agg['ativos']
+        context['contratos_quitados'] = contrato_agg['quitados']
+        context['contratos_cancelados'] = contrato_agg['cancelados']
+        context['valor_total_contratos'] = contrato_agg['valor_total'] or Decimal('0.00')
 
-        # Valor total dos contratos
-        context['valor_total_contratos'] = contratos_qs.aggregate(
-            total=Sum('valor_total')
-        )['total'] or Decimal('0.00')
-
-        # Estatísticas de Parcelas
-        context['total_parcelas'] = parcelas_qs.count()
-        context['parcelas_pagas'] = parcelas_qs.filter(pago=True).count()
-        context['parcelas_pendentes'] = parcelas_qs.filter(pago=False).count()
-        context['parcelas_vencidas'] = parcelas_qs.filter(
-            pago=False, data_vencimento__lt=hoje
-        ).count()
-
-        # Valores
-        context['valor_recebido'] = parcelas_qs.filter(pago=True).aggregate(
-            total=Sum('valor_pago')
-        )['total'] or Decimal('0.00')
-
-        context['valor_a_receber'] = parcelas_qs.filter(pago=False).aggregate(
-            total=Sum('valor_atual')
-        )['total'] or Decimal('0.00')
-
-        context['valor_em_atraso'] = parcelas_qs.filter(
-            pago=False, data_vencimento__lt=hoje
-        ).aggregate(total=Sum('valor_atual'))['total'] or Decimal('0.00')
+        # Estatísticas de Parcelas — 1 aggregate em vez de 7 queries
+        parcela_agg = parcelas_qs.aggregate(
+            total=Count('id'),
+            pagas=Count('id', filter=Q(pago=True)),
+            pendentes=Count('id', filter=Q(pago=False)),
+            vencidas=Count('id', filter=Q(pago=False, data_vencimento__lt=hoje)),
+            valor_recebido=Sum('valor_pago', filter=Q(pago=True)),
+            valor_a_receber=Sum('valor_atual', filter=Q(pago=False)),
+            valor_em_atraso=Sum('valor_atual', filter=Q(pago=False, data_vencimento__lt=hoje)),
+        )
+        context['total_parcelas'] = parcela_agg['total']
+        context['parcelas_pagas'] = parcela_agg['pagas']
+        context['parcelas_pendentes'] = parcela_agg['pendentes']
+        context['parcelas_vencidas'] = parcela_agg['vencidas']
+        context['valor_recebido'] = parcela_agg['valor_recebido'] or Decimal('0.00')
+        context['valor_a_receber'] = parcela_agg['valor_a_receber'] or Decimal('0.00')
+        context['valor_em_atraso'] = parcela_agg['valor_em_atraso'] or Decimal('0.00')
 
         # Períodos para filtros
         primeiro_dia_mes = hoje.replace(day=1)
@@ -168,6 +173,21 @@ class DashboardFinanceiroView(LoginRequiredMixin, TemplateView):
         context['parcelas_ano'] = self._get_estatisticas_periodo(
             parcelas_qs, primeiro_dia_ano, hoje
         )
+
+        # F3-02: MoM variação — % de valor_recebido e pagas vs mês anterior
+        rec_atual = context['parcelas_mes_atual']['valor_recebido']
+        rec_passado = context['parcelas_mes_passado']['valor_recebido']
+        pag_atual = context['parcelas_mes_atual']['pagas']
+        pag_passado = context['parcelas_mes_passado']['pagas']
+
+        def _mom_pct(atual, anterior):
+            if not anterior:
+                return None
+            delta = float(atual - anterior) / float(anterior) * 100
+            return round(delta, 1)
+
+        context['mom_recebido'] = _mom_pct(rec_atual, rec_passado)
+        context['mom_pagas'] = _mom_pct(pag_atual, pag_passado)
 
         # Top 10 contratos com mais atraso
         context['contratos_mais_atraso'] = self._get_contratos_mais_atraso(
@@ -208,25 +228,26 @@ class DashboardFinanceiroView(LoginRequiredMixin, TemplateView):
         return context
 
     def _get_estatisticas_periodo(self, parcelas_qs, data_inicio, data_fim):
-        """Retorna estatísticas de parcelas em um período"""
-        parcelas_periodo = parcelas_qs.filter(
+        """Retorna estatísticas de parcelas em um período — 1 aggregate em vez de 6 queries"""
+        hoje = timezone.now().date()
+        resultado = parcelas_qs.filter(
             data_vencimento__gte=data_inicio,
-            data_vencimento__lte=data_fim
+            data_vencimento__lte=data_fim,
+        ).aggregate(
+            total=Count('id'),
+            pagas=Count('id', filter=Q(pago=True)),
+            pendentes=Count('id', filter=Q(pago=False)),
+            vencidas=Count('id', filter=Q(pago=False, data_vencimento__lt=hoje)),
+            valor_esperado=Sum('valor_atual'),
+            valor_recebido=Sum('valor_pago', filter=Q(pago=True)),
         )
-
         return {
-            'total': parcelas_periodo.count(),
-            'pagas': parcelas_periodo.filter(pago=True).count(),
-            'pendentes': parcelas_periodo.filter(pago=False).count(),
-            'vencidas': parcelas_periodo.filter(
-                pago=False, data_vencimento__lt=timezone.now().date()
-            ).count(),
-            'valor_esperado': parcelas_periodo.aggregate(
-                total=Sum('valor_atual')
-            )['total'] or Decimal('0.00'),
-            'valor_recebido': parcelas_periodo.filter(pago=True).aggregate(
-                total=Sum('valor_pago')
-            )['total'] or Decimal('0.00'),
+            'total': resultado['total'],
+            'pagas': resultado['pagas'],
+            'pendentes': resultado['pendentes'],
+            'vencidas': resultado['vencidas'],
+            'valor_esperado': resultado['valor_esperado'] or Decimal('0.00'),
+            'valor_recebido': resultado['valor_recebido'] or Decimal('0.00'),
         }
 
     def _get_contratos_mais_atraso(self, contratos_qs, limite=10):
@@ -283,27 +304,28 @@ def api_dashboard_dados(request):
         parcelas_qs = parcelas_qs.filter(contrato__imobiliaria_id=imobiliaria_id)
         contratos_qs = contratos_qs.filter(imobiliaria_id=imobiliaria_id)
 
-    # Dados para gráfico de pizza - Status das parcelas
+    # Dados para gráficos de pizza — 2 aggregates em vez de 7 queries
+    p_counts = parcelas_qs.aggregate(
+        pagas=Count('id', filter=Q(pago=True)),
+        pendentes=Count('id', filter=Q(pago=False, data_vencimento__gte=hoje)),
+        vencidas=Count('id', filter=Q(pago=False, data_vencimento__lt=hoje)),
+    )
     status_parcelas = {
         'labels': ['Pagas', 'Pendentes', 'Vencidas'],
-        'data': [
-            parcelas_qs.filter(pago=True).count(),
-            parcelas_qs.filter(pago=False, data_vencimento__gte=hoje).count(),
-            parcelas_qs.filter(pago=False, data_vencimento__lt=hoje).count(),
-        ],
-        'colors': ['#28a745', '#ffc107', '#dc3545']
+        'data': [p_counts['pagas'], p_counts['pendentes'], p_counts['vencidas']],
+        'colors': ['#28a745', '#ffc107', '#dc3545'],
     }
 
-    # Dados para gráfico de pizza - Status dos contratos
+    c_counts = contratos_qs.aggregate(
+        ativos=Count('id', filter=Q(status=StatusContrato.ATIVO)),
+        quitados=Count('id', filter=Q(status=StatusContrato.QUITADO)),
+        cancelados=Count('id', filter=Q(status=StatusContrato.CANCELADO)),
+        suspensos=Count('id', filter=Q(status=StatusContrato.SUSPENSO)),
+    )
     status_contratos = {
         'labels': ['Ativos', 'Quitados', 'Cancelados', 'Suspensos'],
-        'data': [
-            contratos_qs.filter(status=StatusContrato.ATIVO).count(),
-            contratos_qs.filter(status=StatusContrato.QUITADO).count(),
-            contratos_qs.filter(status=StatusContrato.CANCELADO).count(),
-            contratos_qs.filter(status=StatusContrato.SUSPENSO).count(),
-        ],
-        'colors': ['#007bff', '#28a745', '#dc3545', '#6c757d']
+        'data': [c_counts['ativos'], c_counts['quitados'], c_counts['cancelados'], c_counts['suspensos']],
+        'colors': ['#007bff', '#28a745', '#dc3545', '#6c757d'],
     }
 
     # Dados para gráfico de barras - Recebimentos por mês (últimos 12 meses)
@@ -331,7 +353,7 @@ def api_dashboard_dados(request):
         recebimentos_mensais['recebido'].append(float(recebido))
         recebimentos_mensais['esperado'].append(float(esperado))
 
-    # Dados para gráfico de linha - Inadimplência por mês
+    # Dados para gráfico de linha - Inadimplência por mês — 1 aggregate/mês (sem .count() extra)
     inadimplencia_mensal = {'labels': [], 'valores': [], 'quantidades': []}
 
     for i in range(11, -1, -1):
@@ -339,20 +361,16 @@ def api_dashboard_dados(request):
         primeiro_dia = data.replace(day=1)
         ultimo_dia = (primeiro_dia + relativedelta(months=1)) - timedelta(days=1)
 
-        parcelas_vencidas = parcelas_qs.filter(
+        agg_inad = parcelas_qs.filter(
             pago=False,
             data_vencimento__gte=primeiro_dia,
             data_vencimento__lte=ultimo_dia,
-            data_vencimento__lt=hoje
-        )
-
-        valor_inadimplente = parcelas_vencidas.aggregate(
-            total=Sum('valor_atual')
-        )['total'] or 0
+            data_vencimento__lt=hoje,
+        ).aggregate(total=Sum('valor_atual'), quantidade=Count('id'))
 
         inadimplencia_mensal['labels'].append(f"{meses[data.month-1]}/{data.year % 100}")
-        inadimplencia_mensal['valores'].append(float(valor_inadimplente))
-        inadimplencia_mensal['quantidades'].append(parcelas_vencidas.count())
+        inadimplencia_mensal['valores'].append(float(agg_inad['total'] or 0))
+        inadimplencia_mensal['quantidades'].append(agg_inad['quantidade'])
 
     # Tabela vencimentos consolidados - próximos 3 meses (3.6)
     vencimentos_proximos = []
@@ -376,30 +394,22 @@ def api_dashboard_dados(request):
             'valor_total': float(agg['total_valor'] or 0),
         })
 
-    # G-02: Inadimplência por faixa de atraso
+    # G-02: Inadimplência por faixa de atraso — 1 aggregate em vez de 4 queries
+    faixas_agg = parcelas_qs.filter(pago=False, data_vencimento__lt=hoje).aggregate(
+        f30=Count('id', filter=Q(data_vencimento__gte=hoje - timedelta(days=30))),
+        f60=Count('id', filter=Q(
+            data_vencimento__gte=hoje - timedelta(days=60),
+            data_vencimento__lt=hoje - timedelta(days=30),
+        )),
+        f90=Count('id', filter=Q(
+            data_vencimento__gte=hoje - timedelta(days=90),
+            data_vencimento__lt=hoje - timedelta(days=60),
+        )),
+        f90plus=Count('id', filter=Q(data_vencimento__lt=hoje - timedelta(days=90))),
+    )
     inadimplencia_faixas = {
         'labels': ['1–30 dias', '31–60 dias', '61–90 dias', '90+ dias'],
-        'data': [
-            parcelas_qs.filter(
-                pago=False,
-                data_vencimento__gte=hoje - timedelta(days=30),
-                data_vencimento__lt=hoje
-            ).count(),
-            parcelas_qs.filter(
-                pago=False,
-                data_vencimento__gte=hoje - timedelta(days=60),
-                data_vencimento__lt=hoje - timedelta(days=30)
-            ).count(),
-            parcelas_qs.filter(
-                pago=False,
-                data_vencimento__gte=hoje - timedelta(days=90),
-                data_vencimento__lt=hoje - timedelta(days=60)
-            ).count(),
-            parcelas_qs.filter(
-                pago=False,
-                data_vencimento__lt=hoje - timedelta(days=90)
-            ).count(),
-        ],
+        'data': [faixas_agg['f30'], faixas_agg['f60'], faixas_agg['f90'], faixas_agg['f90plus']],
         'colors': ['#ffc107', '#fd7e14', '#dc3545', '#6f1212'],
     }
 
@@ -551,11 +561,16 @@ def listar_parcelas(request):
             Q(contrato__numero_contrato__icontains=busca)
         )
 
-    # Estatísticas (sobre o queryset filtrado completo)
+    # Estatísticas — 1 aggregate em vez de 3 queries
     hoje = timezone.now().date()
-    total_parcelas = parcelas.count()
-    valor_total = parcelas.aggregate(total=Sum('valor_atual'))['total'] or Decimal('0.00')
-    parcelas_vencidas_count = parcelas.filter(pago=False, data_vencimento__lt=hoje).count()
+    parcela_stats = parcelas.aggregate(
+        total=Count('id'),
+        valor_total=Sum('valor_atual'),
+        vencidas=Count('id', filter=Q(pago=False, data_vencimento__lt=hoje)),
+    )
+    total_parcelas = parcela_stats['total']
+    valor_total = parcela_stats['valor_total'] or Decimal('0.00')
+    parcelas_vencidas_count = parcela_stats['vencidas']
 
     # Paginação
     per_page = request.GET.get('per_page', '25')
@@ -607,6 +622,12 @@ def listar_parcelas(request):
         'sort_field': sort_field,
         'sort_order': sort_order,
     }
+    from core.breadcrumbs import bc, bc_dashboard
+    context['breadcrumb'] = [
+        bc_dashboard(),
+        bc('Financeiro'),
+        bc('Parcelas'),
+    ]
     return render(request, 'financeiro/listar_parcelas.html', context)
 
 
@@ -630,11 +651,45 @@ def detalhe_parcela(request, hid):
         parcela.atualizar_juros_multa()
 
     from django.urls import reverse
+    from core.breadcrumbs import bc, bc_dashboard
     context = {
         'parcela': parcela,
         'voltar_url': _voltar_url(request, reverse('financeiro:listar_parcelas')),
+        'breadcrumb': [
+            bc_dashboard(),
+            bc('Financeiro'),
+            bc('Parcelas', 'financeiro:listar_parcelas'),
+            bc(f'Parcela {parcela.numero_parcela}/{parcela.contrato.numero_parcelas}'),
+        ],
     }
     return render(request, 'financeiro/detalhe_parcela.html', context)
+
+
+@login_required
+@require_GET
+def api_parcela_quickview(request, hid):
+    """F3-01: Retorna HTML parcial para o modal de quick-view da parcela."""
+    pk = _hid_to_pk(hid)
+    parcela = get_object_or_404(
+        Parcela.objects.select_related(
+            'contrato', 'contrato__imobiliaria', 'contrato__comprador', 'contrato__imovel'
+        ),
+        pk=pk
+    )
+    verificar_acesso_tenant(request, parcela.contrato.imobiliaria)
+
+    from notificacoes.models import Notificacao
+    notificacoes = (
+        Notificacao.objects
+        .filter(parcela=parcela)
+        .order_by('-data_agendamento')[:5]
+    )
+
+    context = {
+        'parcela': parcela,
+        'notificacoes': notificacoes,
+    }
+    return render(request, 'financeiro/parcela_quickview_partial.html', context)
 
 
 @login_required
@@ -818,11 +873,17 @@ def listar_reajustes(request):
     paginator = Paginator(reajustes, per_page)
     page_obj = paginator.get_page(request.GET.get('page', 1))
 
+    from core.breadcrumbs import bc, bc_dashboard
     context = {
         'reajustes': page_obj,
         'page_obj': page_obj,
         'paginator': paginator,
         'is_paginated': paginator.num_pages > 1,
+        'breadcrumb': [
+            bc_dashboard(),
+            bc('Financeiro'),
+            bc('Reajustes'),
+        ],
     }
     return render(request, 'financeiro/listar_reajustes.html', context)
 
@@ -1072,20 +1133,32 @@ def dashboard_imobiliaria(request, imobiliaria_id):
         valor_pendente=Sum('valor', filter=Q(paga=False)),
     )
 
-    # Top 10 compradores com mais atraso
-    compradores_atraso = []
-    for contrato in contratos.filter(status=StatusContrato.ATIVO):
-        parcelas_atraso = contrato.parcelas.filter(pago=False, data_vencimento__lt=hoje)
-        if parcelas_atraso.exists():
-            valor_atraso = parcelas_atraso.aggregate(total=Sum('valor_atual'))['total'] or Decimal('0.00')
-            compradores_atraso.append({
-                'comprador': contrato.comprador,
-                'contrato': contrato,
-                'qtd_parcelas': parcelas_atraso.count(),
-                'valor_atraso': valor_atraso,
-                'dias_atraso': (hoje - parcelas_atraso.first().data_vencimento).days,
-            })
-    compradores_atraso.sort(key=lambda x: x['valor_atraso'], reverse=True)
+    # Top 10 compradores com mais atraso — consulta única com annotate (evita N+1)
+    contratos_em_atraso = contratos.filter(status=StatusContrato.ATIVO).annotate(
+        qtd_parcelas_atraso=Count(
+            'parcelas',
+            filter=Q(parcelas__pago=False, parcelas__data_vencimento__lt=hoje)
+        ),
+        valor_atraso=Sum(
+            'parcelas__valor_atual',
+            filter=Q(parcelas__pago=False, parcelas__data_vencimento__lt=hoje)
+        ),
+        primeiro_vencimento_atraso=Min(
+            'parcelas__data_vencimento',
+            filter=Q(parcelas__pago=False, parcelas__data_vencimento__lt=hoje)
+        ),
+    ).filter(qtd_parcelas_atraso__gt=0).order_by('-valor_atraso').select_related('comprador')[:10]
+
+    compradores_atraso = [
+        {
+            'comprador': c.comprador,
+            'contrato': c,
+            'qtd_parcelas': c.qtd_parcelas_atraso,
+            'valor_atraso': c.valor_atraso or Decimal('0.00'),
+            'dias_atraso': (hoje - c.primeiro_vencimento_atraso).days,
+        }
+        for c in contratos_em_atraso
+    ]
 
     context = {
         'imobiliaria': imobiliaria,

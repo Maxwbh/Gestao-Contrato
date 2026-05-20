@@ -1,6 +1,7 @@
 
 {% extends 'base.html' %}
 {% load hashid_tags %}
+{% load format_filters %}
 {% block title %}Renegociação — {{ contrato.numero_contrato }}{% endblock %}
 
 {% block content %}
@@ -66,10 +67,10 @@
                   {{ p.data_vencimento|date:"d/m/Y" }}
                   <br><small class="text-danger"><i class="fas fa-clock"></i> {{ dias }} dia(s) atrás</small>
                 </td>
-                <td class="text-end">R$&nbsp;{{ p.valor_atual|floatformat:2 }}</td>
+                <td class="text-end">{{ p.valor_atual|moeda }}</td>
                 <td class="text-end text-danger">
-                  R$&nbsp;{{ p.valor_juros|floatformat:2 }}
-                  + R$&nbsp;{{ p.valor_multa|floatformat:2 }}
+                  {{ p.valor_juros|moeda }}
+                  + {{ p.valor_multa|moeda }}
                 </td>
                 <td>
                   <input type="date" name="nova_data_{{ p.pk }}"

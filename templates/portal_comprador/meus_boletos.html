@@ -1,4 +1,5 @@
 {% extends 'portal_comprador/portal_base.html' %}
+{% load format_filters %}
 
 {% block title %}Meus Boletos{% endblock %}
 {% block nav_boletos %}active{% endblock %}
@@ -82,7 +83,7 @@
 
         <div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px;">
             <div class="parcela-valor {% if not parcela.pago and parcela.data_vencimento < hoje %}vencida{% endif %}">
-                R$ {{ parcela.valor_atual|floatformat:2 }}
+                {{ parcela.valor_atual|moeda }}
             </div>
             {% if parcela.pago or parcela.status_boleto == 'PAGO' %}
             <span style="font-size:.72rem;color:#4caf50;"><i class="fas fa-check"></i> Quitado</span>

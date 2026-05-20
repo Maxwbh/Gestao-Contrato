@@ -1,4 +1,5 @@
 {% extends 'portal_comprador/portal_base.html' %}
+{% load format_filters %}
 
 {% block title %}Contrato {{ contrato.numero_contrato }}{% endblock %}
 {% block nav_contratos %}active{% endblock %}
@@ -62,22 +63,22 @@
         <table style="width:100%;font-size:.85rem;border-collapse:collapse;">
             <tr style="border-bottom:1px solid #f5f5f5;">
                 <td style="padding:10px 16px;color:#757575;">Valor Total</td>
-                <td style="padding:10px 16px;text-align:right;font-weight:600;">R$ {{ contrato.valor_total|floatformat:2 }}</td>
+                <td style="padding:10px 16px;text-align:right;font-weight:600;">{{ contrato.valor_total|moeda }}</td>
             </tr>
             <tr style="border-bottom:1px solid #f5f5f5;">
                 <td style="padding:10px 16px;color:#757575;">Entrada</td>
-                <td style="padding:10px 16px;text-align:right;font-weight:600;">R$ {{ contrato.valor_entrada|floatformat:2 }}</td>
+                <td style="padding:10px 16px;text-align:right;font-weight:600;">{{ contrato.valor_entrada|moeda }}</td>
             </tr>
             {% if r.valor_pago %}
             <tr style="border-bottom:1px solid #f5f5f5;">
                 <td style="padding:10px 16px;color:#757575;">Já Pago</td>
-                <td style="padding:10px 16px;text-align:right;font-weight:600;color:#4caf50;">R$ {{ r.valor_pago|floatformat:2 }}</td>
+                <td style="padding:10px 16px;text-align:right;font-weight:600;color:#4caf50;">{{ r.valor_pago|moeda }}</td>
             </tr>
             {% endif %}
             {% if r.saldo_devedor %}
             <tr>
                 <td style="padding:10px 16px;color:#757575;">Saldo Devedor</td>
-                <td style="padding:10px 16px;text-align:right;font-weight:700;color:var(--portal-primary);">R$ {{ r.saldo_devedor|floatformat:2 }}</td>
+                <td style="padding:10px 16px;text-align:right;font-weight:700;color:var(--portal-primary);">{{ r.saldo_devedor|moeda }}</td>
             </tr>
             {% else %}
             <tr>
@@ -119,7 +120,7 @@
             </div>
         </div>
         <div class="parcela-valor {% if not parcela.pago and parcela.data_vencimento < hoje %}vencida{% endif %}">
-            R$ {{ parcela.valor_atual|floatformat:2 }}
+            {{ parcela.valor_atual|moeda }}
         </div>
     </div>
     {% endfor %}

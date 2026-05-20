@@ -96,14 +96,15 @@
 
             <!-- Desktop nav links -->
             <ul class="right hide-on-med-and-down">
-                <li>
+                {% with app=request.resolver_match.app_name url_name=request.resolver_match.url_name %}
+                <li{% if url_name == 'dashboard' and app == 'core' %} class="nav-active"{% endif %}>
                     <a href="{% url 'core:dashboard' %}">
                         <i class="fas fa-tachometer-alt"></i> Dashboard
                     </a>
                 </li>
 
                 <!-- Financeiro dropdown -->
-                <li>
+                <li{% if app == 'financeiro' %} class="nav-active"{% endif %}>
                     <a class="dropdown-trigger" href="#!" data-target="dd-financeiro">
                         <i class="fas fa-dollar-sign"></i> Financeiro
                         <i class="material-icons right">arrow_drop_down</i>
@@ -111,7 +112,7 @@
                 </li>
 
                 <!-- Contratos dropdown -->
-                <li>
+                <li{% if app == 'contratos' %} class="nav-active"{% endif %}>
                     <a class="dropdown-trigger" href="#!" data-target="dd-contratos">
                         <i class="fas fa-file-contract"></i> Contratos
                         <i class="material-icons right">arrow_drop_down</i>
@@ -119,7 +120,7 @@
                 </li>
 
                 <!-- Cadastros dropdown -->
-                <li>
+                <li{% if app == 'core' and url_name != 'dashboard' and 'configuracoes' not in url_name and 'acesso' not in url_name and 'dados_teste' not in url_name %} class="nav-active"{% endif %}>
                     <a class="dropdown-trigger" href="#!" data-target="dd-cadastros">
                         <i class="fas fa-database"></i> Cadastros
                         <i class="material-icons right">arrow_drop_down</i>
@@ -128,7 +129,7 @@
 
 
                 <!-- Notificações dropdown -->
-                <li>
+                <li{% if app == 'notificacoes' %} class="nav-active"{% endif %}>
                     <a class="dropdown-trigger" href="#!" data-target="dd-notificacoes" id="notificacoesDropdown">
                         <i class="fas fa-bell"></i> Notificações
                         <i class="material-icons right">arrow_drop_down</i>
@@ -137,13 +138,14 @@
 
                 {% if user.is_staff or user.is_superuser %}
                 <!-- Admin dropdown -->
-                <li>
+                <li{% if 'configuracoes_sistema' in url_name or 'acesso' in url_name or 'dados_teste' in url_name %} class="nav-active"{% endif %}>
                     <a class="dropdown-trigger" href="#!" data-target="dd-admin">
                         <i class="fas fa-cog"></i> Admin
                         <i class="material-icons right">arrow_drop_down</i>
                     </a>
                 </li>
                 {% endif %}
+                {% endwith %}
 
                 {% if user.is_authenticated %}
                 <!-- U-01: Dark mode toggle -->
@@ -213,18 +215,20 @@
 
     <ul id="dd-notificacoes" class="dropdown-content app-dropdown">
         <li><a href="{% url 'notificacoes:listar' %}"><i class="fas fa-history"></i> Histórico de Envios</a></li>
+        <li><a href="{% url 'notificacoes:painel_mensagens' %}"><i class="fas fa-comments"></i> Painel de Mensagens</a></li>
         <li><a class="dropdown-header-item"><i class="fas fa-cogs"></i> Configurações</a></li>
         <li><a href="{% url 'notificacoes:listar_regras' %}"><i class="fas fa-sliders-h"></i> Régua de Cobrança</a></li>
-        <li><a href="{% url 'notificacoes:listar_config_email' %}"><i class="fas fa-envelope"></i> Servidores de E-mail</a></li>
         <li><a href="{% url 'notificacoes:listar_templates' %}"><i class="fas fa-file-alt"></i> Templates de Mensagens</a></li>
+        <li><a href="{% url 'notificacoes:listar_config_email' %}"><i class="fas fa-envelope"></i> Servidores de E-mail</a></li>
+        <li><a href="{% url 'notificacoes:listar_config_whatsapp' %}"><i class="fab fa-whatsapp"></i> WhatsApp</a></li>
     </ul>
 
     {% if user.is_staff or user.is_superuser %}
     <ul id="dd-admin" class="dropdown-content app-dropdown">
         <li><a href="{% url 'core:configuracoes_sistema' %}"><i class="fas fa-sliders-h"></i> Configurações do Sistema</a></li>
         <li><a href="{% url 'core:listar_acessos' %}"><i class="fas fa-key"></i> Acessos de Usuários</a></li>
-        <li><a href="{% url 'core:pagina_dados_teste' %}"><i class="fas fa-database"></i> Dados de Teste</a></li>
         <li class="divider" tabindex="-1"></li>
+        <li><a href="{% url 'core:pagina_dados_teste' %}"><i class="fas fa-database"></i> Dados de Teste</a></li>
         <li><a href="/admin/"><i class="fas fa-tools"></i> Django Admin</a></li>
     </ul>
     {% endif %}
@@ -284,6 +288,10 @@
                         {% endif %}
                     {% endfor %}
                 {% endif %}
+
+                {% block breadcrumb_block %}
+                    {% if breadcrumb %}{% include 'includes/breadcrumb.html' with items=breadcrumb %}{% endif %}
+                {% endblock %}
 
                 {% block content %}{% endblock %}
             </div>
@@ -347,6 +355,29 @@
     <script src="{% static 'js/custom.js' %}"></script>
     <!-- Máscaras de entrada numérica -->
     <script src="{% static 'js/numeric-masks.js' %}"></script>
+    <!-- Máscaras de CPF, CNPJ, telefone e CEP -->
+    <script src="{% static 'js/masks.js' %}"></script>
+
+    <!-- F2-01: Validação inline (is-valid / is-invalid no blur) -->
+    <script>
+    (function () {
+        function validateField(el) {
+            if (!el.value.trim() && !el.required) return; // campo vazio e opcional → sem feedback
+            el.classList.toggle('is-invalid', !el.checkValidity());
+            el.classList.toggle('is-valid', el.checkValidity());
+        }
+        document.addEventListener('DOMContentLoaded', function () {
+            document.addEventListener('blur', function (e) {
+                var el = e.target;
+                if (el.matches('.form-control, .form-select')) validateField(el);
+            }, true);
+            document.addEventListener('change', function (e) {
+                var el = e.target;
+                if (el.matches('.form-select')) validateField(el);
+            }, true);
+        });
+    })();
+    </script>
 
     <!-- Toast Container (keeping our custom system) -->
     <div id="globalToastContainer" style="
@@ -765,6 +796,13 @@
         });
 
         document.addEventListener('keydown', function(e) {
+            // F4-03: '/' also opens global search (when not typing in a field)
+            var _inField = ['INPUT','TEXTAREA','SELECT'].indexOf(document.activeElement && document.activeElement.tagName) !== -1;
+            if (e.key === '/' && !e.ctrlKey && !e.metaKey && !_inField) {
+                e.preventDefault();
+                if (overlay.style.display === 'flex') close(); else open();
+                return;
+            }
             if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
                 e.preventDefault();
                 if (overlay.style.display === 'flex') close(); else open();
@@ -923,6 +961,28 @@
             if (btnM) btnM.addEventListener('click', toggle);
         });
     })();
+    </script>
+
+    <!-- F4-02: Ctrl+S — salva o primeiro formulário POST visível na página -->
+    <script>
+    document.addEventListener('keydown', function(e) {
+        if (!((e.ctrlKey || e.metaKey) && e.key === 's')) return;
+        var forms = document.querySelectorAll('form[method="post"]:not([data-no-ctrl-s])');
+        var form = null;
+        for (var i = 0; i < forms.length; i++) {
+            var f = forms[i];
+            if (f.offsetParent !== null && !f.closest('.modal:not(.show)')) {
+                form = f;
+                break;
+            }
+        }
+        if (!form) return;
+        e.preventDefault();
+        var btn = form.querySelector('[type="submit"]:not(:disabled)');
+        if (btn) btn.click();
+        else if (form.requestSubmit) form.requestSubmit();
+        else form.submit();
+    });
     </script>
 
     <!-- hint_id_ tooltips: converte help_text do crispy-forms em tooltip no label -->

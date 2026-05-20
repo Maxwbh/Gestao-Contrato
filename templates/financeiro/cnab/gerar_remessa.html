@@ -1,6 +1,7 @@
 {% extends 'base.html' %}
 {% load static %}
 {% load hashid_tags %}
+{% load format_filters %}
 
 {% block title %}Gerar Arquivo de Remessa{% endblock %}
 
@@ -187,7 +188,7 @@
                                     {% endif %}
                                 </td>
                                 <td class="text-end">
-                                    <strong>R$ {{ parcela.valor_boleto|default:parcela.valor_atual|floatformat:2 }}</strong>
+                                    <strong>{{ parcela.valor_boleto|default:parcela.valor_atual|moeda }}</strong>
                                 </td>
                             </tr>
                             {% endfor %}

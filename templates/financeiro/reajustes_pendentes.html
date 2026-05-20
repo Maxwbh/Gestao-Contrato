@@ -2,6 +2,7 @@
 {% load static %}
 {% load hashid_tags %}
 {% load humanize %}
+{% load format_filters %}
 
 {% block title %}Reajustes Pendentes{% endblock %}
 
@@ -129,7 +130,7 @@
                         </td>
                         <td class="text-end font-monospace">
                             {% if item.prestacao_atual %}
-                                R$ {{ item.prestacao_atual|floatformat:2|intcomma }}
+                                {{ item.prestacao_atual|moeda }}
                             {% else %}
                                 <span class="text-muted small">—</span>
                             {% endif %}
@@ -145,7 +146,7 @@
                         </td>
                         <td class="text-end font-monospace">
                             {% if item.dados_disponiveis and item.prestacao_nova %}
-                                R$ {{ item.prestacao_nova|floatformat:2|intcomma }}
+                                {{ item.prestacao_nova|moeda }}
                                 {% if item.usa_price %}
                                 <br><small class="text-muted" style="font-size:0.7rem;">*Price recalcula PMT</small>
                                 {% endif %}

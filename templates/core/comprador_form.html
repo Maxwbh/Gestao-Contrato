@@ -120,6 +120,62 @@
                 {% csrf_token %}
                 {% crispy form %}
             </form>
+
+            {% if object and notificacoes_recentes %}
+            <!-- F3-04: Timeline de Notificações -->
+            <div class="card mt-4">
+                <div class="card-header py-2">
+                    <i class="fas fa-bell me-2 text-primary"></i>
+                    <strong>Histórico de Notificações</strong>
+                    <small class="text-muted ms-2">últimas {{ notificacoes_recentes|length }}</small>
+                </div>
+                <div class="card-body p-3">
+                    <div class="notif-timeline">
+                        {% for n in notificacoes_recentes %}
+                        <div class="notif-item d-flex gap-3 mb-3">
+                            <div class="notif-dot flex-shrink-0 d-flex flex-column align-items-center">
+                                <div class="rounded-circle d-flex align-items-center justify-content-center text-white
+                                    {% if n.tipo == 'EMAIL' %}bg-primary
+                                    {% elif n.tipo == 'WHATSAPP' %}bg-success
+                                    {% elif n.tipo == 'SMS' %}bg-info
+                                    {% else %}bg-secondary{% endif %}"
+                                    style="width:32px;height:32px;font-size:0.85rem;">
+                                    {% if n.tipo == 'EMAIL' %}<i class="fas fa-envelope"></i>
+                                    {% elif n.tipo == 'WHATSAPP' %}<i class="fab fa-whatsapp"></i>
+                                    {% elif n.tipo == 'SMS' %}<i class="fas fa-sms"></i>
+                                    {% else %}<i class="fas fa-bell"></i>{% endif %}
+                                </div>
+                                {% if not forloop.last %}
+                                <div style="width:2px;flex:1;min-height:16px;background:#dee2e6;margin-top:3px;"></div>
+                                {% endif %}
+                            </div>
+                            <div class="flex-grow-1 pb-1">
+                                <div class="d-flex justify-content-between align-items-start">
+                                    <span class="fw-semibold" style="font-size:0.88rem;">{{ n.get_tipo_display }}</span>
+                                    <span class="text-muted" style="font-size:0.78rem;">{{ n.data_agendamento|date:"d/m/Y H:i" }}</span>
+                                </div>
+                                <div class="text-muted" style="font-size:0.82rem;">
+                                    {% if n.parcela %}Parcela {{ n.parcela.numero_parcela }} — {% endif %}
+                                    {{ n.destinatario }}
+                                </div>
+                                <span class="badge
+                                    {% if n.status == 'ENVIADA' %}bg-success
+                                    {% elif n.status == 'ERRO' %}bg-danger
+                                    {% elif n.status == 'PENDENTE' %}bg-warning text-dark
+                                    {% else %}bg-secondary{% endif %}"
+                                    style="font-size:0.72rem;">
+                                    {{ n.get_status_display }}
+                                </span>
+                                {% if n.status_entrega %}
+                                <span class="badge bg-light text-dark border ms-1" style="font-size:0.72rem;">{{ n.status_entrega }}</span>
+                                {% endif %}
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+            {% endif %}
         </div>
     </div>
 </div>
