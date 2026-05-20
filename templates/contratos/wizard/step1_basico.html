@@ -42,7 +42,19 @@
           {% endfor %}
         {% endif %}
 
-        <form method="post" action="{% url 'contratos:wizard' step='basico' %}">
+        <!-- F2-03: Banner de rascunho salvo automaticamente -->
+        <div id="draft-banner" class="alert alert-info alert-permanent d-none mb-3" role="alert">
+          <i class="fas fa-save me-2"></i>
+          <strong>Rascunho encontrado</strong> — você começou a preencher este formulário anteriormente.
+          <button type="button" class="btn btn-sm btn-info ms-2" onclick="resumeDraft()">
+            <i class="fas fa-play me-1"></i>Retomar
+          </button>
+          <button type="button" class="btn btn-sm btn-outline-secondary ms-1" onclick="discardDraft()">
+            <i class="fas fa-trash me-1"></i>Descartar
+          </button>
+        </div>
+
+        <form method="post" action="{% url 'contratos:wizard' step='basico' %}" id="wizard-step1-form">
           {% csrf_token %}
 
           {% if form.non_field_errors %}
@@ -522,6 +534,96 @@
     body.style.display = hidden ? '' : 'none';
     chev.className = hidden ? 'fas fa-chevron-down text-info' : 'fas fa-chevron-right text-info';
   };
+})();
+</script>
+
+<!-- F2-03: Auto-save draft para wizard step1 -->
+<script>
+(function () {
+  var DRAFT_KEY = 'wizard_step1_draft';
+  var DRAFT_TTL = 24 * 60 * 60 * 1000; // 24h em ms
+  var FIELDS = [
+    'imobiliaria', 'comprador', 'imovel',
+    'numero_contrato', 'data_contrato', 'data_primeiro_vencimento',
+    'valor_total', 'valor_entrada', 'numero_parcelas', 'dia_vencimento',
+    'tipo_amortizacao', 'tipo_correcao', 'prazo_reajuste_meses',
+    'tipo_correcao_fallback', 'spread_reajuste', 'reajuste_piso', 'reajuste_teto',
+    'percentual_juros_mora', 'percentual_multa', 'observacoes'
+  ];
+
+  function readForm() {
+    var data = {};
+    FIELDS.forEach(function (name) {
+      var el = document.querySelector('[name="' + name + '"]');
+      if (el) data[name] = el.value;
+    });
+    return data;
+  }
+
+  function fillForm(data) {
+    FIELDS.forEach(function (name) {
+      var el = document.querySelector('[name="' + name + '"]');
+      if (el && data[name] !== undefined) {
+        el.value = data[name];
+        el.dispatchEvent(new Event('change'));
+      }
+    });
+  }
+
+  function saveDraft() {
+    try {
+      var data = readForm();
+      var hasData = Object.values(data).some(function (v) { return v && v.trim && v.trim() !== ''; });
+      if (!hasData) return;
+      localStorage.setItem(DRAFT_KEY, JSON.stringify({ ts: Date.now(), data: data }));
+    } catch (e) {}
+  }
+
+  window.resumeDraft = function () {
+    try {
+      var raw = localStorage.getItem(DRAFT_KEY);
+      if (!raw) return;
+      var saved = JSON.parse(raw);
+      fillForm(saved.data);
+      document.getElementById('draft-banner').classList.add('d-none');
+    } catch (e) {}
+  };
+
+  window.discardDraft = function () {
+    try { localStorage.removeItem(DRAFT_KEY); } catch (e) {}
+    document.getElementById('draft-banner').classList.add('d-none');
+  };
+
+  document.addEventListener('DOMContentLoaded', function () {
+    // Check for existing draft
+    try {
+      var raw = localStorage.getItem(DRAFT_KEY);
+      if (raw) {
+        var saved = JSON.parse(raw);
+        if (Date.now() - saved.ts < DRAFT_TTL) {
+          document.getElementById('draft-banner').classList.remove('d-none');
+        } else {
+          localStorage.removeItem(DRAFT_KEY);
+        }
+      }
+    } catch (e) {}
+
+    // Auto-save on input
+    var timer;
+    document.getElementById('wizard-step1-form').addEventListener('input', function () {
+      clearTimeout(timer);
+      timer = setTimeout(saveDraft, 800);
+    });
+    document.getElementById('wizard-step1-form').addEventListener('change', function () {
+      clearTimeout(timer);
+      timer = setTimeout(saveDraft, 800);
+    });
+
+    // Clear draft on successful submit
+    document.getElementById('wizard-step1-form').addEventListener('submit', function () {
+      try { localStorage.removeItem(DRAFT_KEY); } catch (e) {}
+    });
+  });
 })();
 </script>
 {% endblock %}

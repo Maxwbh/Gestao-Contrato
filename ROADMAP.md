@@ -2839,15 +2839,15 @@ Semana 4: U-05 a U-06 + D-01 a D-03 (compatibilidade + defesa em profundidade)
 | F1-04 | **Indicador visual de página ativa no navbar** — classe `.nav-active` aplicada via `request.resolver_match.app_name` em todos os dropdowns (Dashboard, Financeiro, Contratos, Cadastros, Notificações, Admin); CSS com background + border-bottom destacado | ✅ |
 | F1-05 | **Testes**: 15 testes cobrindo helper `bc()`/`bc_dashboard()`, presença de breadcrumb no contexto de 8 views, renderização HTML | ✅ |
 
-### 33.3 Fase 2 — Formulários Mais Fluidos (P2)
+### 33.3 Fase 2 — Formulários Mais Fluidos (P2) ✅
 
 | # | Item | Status |
 |---|------|--------|
-| F2-01 | **Validação inline client-side** — biblioteca leve (HTMLConstraintValidation API + custom Bootstrap classes); feedback `is-valid`/`is-invalid` ao sair do campo (`blur`) | ⏳ |
-| F2-02 | **Acordeão CNAB em Imobiliária** — colapsar seções Boleto Defaults, Bancos, Juros/Multa/Desconto; estado persiste em localStorage | ⏳ |
-| F2-03 | **Auto-save de rascunho no wizard de contrato** — salvar `step1..step3` em localStorage; banner "Você tem um rascunho de DD/MM HH:MM — continuar?" ao abrir wizard | ⏳ |
-| F2-04 | **Máscara automática em inputs** — CPF/CNPJ, telefone, CEP, valor monetário usam IMask.js; aplicado via classes `.mask-cpf`, `.mask-money` | ⏳ |
-| F2-05 | **Testes**: 4 testes cobrindo localStorage auto-save, máscara em servidor (ignora) | ⏳ |
+| F2-01 | **Validação inline client-side** — HTMLConstraintValidation API; feedback `is-valid`/`is-invalid` ao sair do campo (`blur`); aplicado globalmente via `base.html` | ✅ |
+| F2-02 | **Acordeão Boleto em Imobiliária** — seção "Configurações Padrão de Boleto" collapsível com toggle chevron; estado persiste em localStorage (`imob_acc_acc-boleto`) | ✅ |
+| F2-03 | **Auto-save de rascunho no wizard de contrato** — auto-save em localStorage ao digitar (debounce 800ms); banner "Rascunho encontrado" com botões Retomar/Descartar; limpa ao submeter | ✅ |
+| F2-04 | **Máscara automática em inputs** — CPF/CNPJ, telefone, CEP via `static/js/masks.js` (sem dependência externa); classes `.mask-cpf`, `.mask-cnpj`, `.mask-phone`, `.mask-cep` nos widgets Django | ✅ |
+| F2-05 | **Testes**: 8 testes cobrindo classes mask-* no HTML renderizado, banner de rascunho e accordion no formulário de imobiliária | ✅ |
 
 ### 33.4 Fase 3 — Visualização de Dados (P2)
 

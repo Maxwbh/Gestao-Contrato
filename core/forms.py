@@ -134,15 +134,15 @@ class CompradorForm(forms.ModelForm):
             'cep': forms.TextInput(attrs={
                 'placeholder': '00000-000',
                 'data-viacep': 'true',
-                'class': 'form-control cep-input',
+                'class': 'form-control cep-input mask-cep',
                 'maxlength': '9'
             }),
-            'cpf': forms.TextInput(attrs={'placeholder': '000.000.000-00', 'maxlength': '14'}),
-            'cnpj': forms.TextInput(attrs={'placeholder': '00.000.000/0000-00', 'maxlength': '20'}),
-            'responsavel_cpf': forms.TextInput(attrs={'placeholder': '000.000.000-00', 'maxlength': '14'}),
-            'conjuge_cpf': forms.TextInput(attrs={'placeholder': '000.000.000-00', 'maxlength': '14'}),
-            'telefone': forms.TextInput(attrs={'placeholder': '(00) 0000-0000'}),
-            'celular': forms.TextInput(attrs={'placeholder': '(00) 00000-0000'}),
+            'cpf': forms.TextInput(attrs={'placeholder': '000.000.000-00', 'maxlength': '14', 'class': 'form-control mask-cpf'}),
+            'cnpj': forms.TextInput(attrs={'placeholder': '00.000.000/0000-00', 'maxlength': '20', 'class': 'form-control mask-cnpj'}),
+            'responsavel_cpf': forms.TextInput(attrs={'placeholder': '000.000.000-00', 'maxlength': '14', 'class': 'form-control mask-cpf'}),
+            'conjuge_cpf': forms.TextInput(attrs={'placeholder': '000.000.000-00', 'maxlength': '14', 'class': 'form-control mask-cpf'}),
+            'telefone': forms.TextInput(attrs={'placeholder': '(00) 0000-0000', 'class': 'form-control mask-phone'}),
+            'celular': forms.TextInput(attrs={'placeholder': '(00) 00000-0000', 'class': 'form-control mask-phone'}),
             'email': forms.EmailInput(attrs={'placeholder': 'email@exemplo.com'}),
             'numero': forms.TextInput(attrs={'placeholder': 'Nº'}),
             'estado': forms.Select(attrs={'class': 'form-select'}),
@@ -629,10 +629,11 @@ class ImobiliariaForm(forms.ModelForm):
             'cep': forms.TextInput(attrs={
                 'placeholder': '00000-000',
                 'data-viacep': 'true',
-                'class': 'form-control cep-input',
+                'class': 'form-control cep-input mask-cep',
                 'maxlength': '9'
             }),
-            'cnpj': forms.TextInput(attrs={'placeholder': '00.000.000/0000-00', 'maxlength': '20'}),
+            'cnpj': forms.TextInput(attrs={'placeholder': '00.000.000/0000-00', 'maxlength': '20', 'class': 'form-control mask-cnpj'}),
+            'telefone': forms.TextInput(attrs={'placeholder': '(00) 0000-0000', 'class': 'form-control mask-phone'}),
             'percentual_multa_padrao': forms.TextInput(attrs={
                 'data-mask': 'pct2',
                 'data-mask-switch': 'id_tipo_valor_multa',

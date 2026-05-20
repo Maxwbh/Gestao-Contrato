@@ -355,6 +355,29 @@
     <script src="{% static 'js/custom.js' %}"></script>
     <!-- Máscaras de entrada numérica -->
     <script src="{% static 'js/numeric-masks.js' %}"></script>
+    <!-- Máscaras de CPF, CNPJ, telefone e CEP -->
+    <script src="{% static 'js/masks.js' %}"></script>
+
+    <!-- F2-01: Validação inline (is-valid / is-invalid no blur) -->
+    <script>
+    (function () {
+        function validateField(el) {
+            if (!el.value.trim() && !el.required) return; // campo vazio e opcional → sem feedback
+            el.classList.toggle('is-invalid', !el.checkValidity());
+            el.classList.toggle('is-valid', el.checkValidity());
+        }
+        document.addEventListener('DOMContentLoaded', function () {
+            document.addEventListener('blur', function (e) {
+                var el = e.target;
+                if (el.matches('.form-control, .form-select')) validateField(el);
+            }, true);
+            document.addEventListener('change', function (e) {
+                var el = e.target;
+                if (el.matches('.form-select')) validateField(el);
+            }, true);
+        });
+    })();
+    </script>
 
     <!-- Toast Container (keeping our custom system) -->
     <div id="globalToastContainer" style="
