@@ -1912,7 +1912,10 @@ def api_overlay_loteamento(request, nome):
 
 @login_required
 def configuracoes_sistema(request):
-    """Hub centralizado de configurações globais da plataforma."""
+    """Hub centralizado de configurações globais da plataforma. Restrito a staff."""
+    if not (request.user.is_staff or request.user.is_superuser):
+        from django.core.exceptions import PermissionDenied
+        raise PermissionDenied
     from django.conf import settings as django_settings
     from .models import ParametroSistema
     from notificacoes.models import (
@@ -1996,13 +1999,16 @@ def api_parametros_salvar_grupo(request):
 def api_parametro_atualizar(request, parametro_id):
     """PATCH /core/api/parametros/<id>/ — atualiza valor de um ParametroSistema."""
     from .models import ParametroSistema
+    from django.http import Http404
+    param = get_object_or_404(ParametroSistema, pk=parametro_id)
     try:
-        param = get_object_or_404(ParametroSistema, pk=parametro_id)
         data = json.loads(request.body)
         param.valor = str(data.get('valor', ''))
         param.modificado_manualmente = True
         param.save()
         return JsonResponse({'sucesso': True, 'mensagem': f'"{param.chave}" atualizado.'})
+    except Http404:
+        raise
     except Exception as e:
         logger.exception('Erro ao atualizar parâmetro %s: %s', parametro_id, e)
         return JsonResponse({'sucesso': False, 'erro': str(e)}, status=500)
