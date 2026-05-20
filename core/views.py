@@ -1189,10 +1189,13 @@ class ImobiliariaListView(LoginRequiredMixin, PaginacaoMixin, ListView):
         context['total_imobiliarias'] = Imobiliaria.objects.filter(ativo=True).count()
         context['search'] = self.request.GET.get('search', '')
 
-        # Adicionar conta principal para cada imobiliária
+        # Adicionar conta principal — usa o cache do prefetch_related (sem N+1)
         imobiliarias = context.get('imobiliarias', [])
         for imobiliaria in imobiliarias:
-            imobiliaria.conta_principal = imobiliaria.contas_bancarias.filter(principal=True, ativo=True).first()
+            imobiliaria.conta_principal = next(
+                (c for c in imobiliaria.contas_bancarias.all() if c.principal and c.ativo),
+                None
+            )
 
         from core.breadcrumbs import bc, bc_dashboard
         context['breadcrumb'] = [

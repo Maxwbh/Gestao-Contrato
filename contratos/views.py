@@ -12,7 +12,7 @@ from django.views.generic import ListView, CreateView, UpdateView, DeleteView, D
 from django.urls import reverse_lazy
 from django.contrib import messages
 from django.db import models
-from django.db.models import Q, Sum
+from django.db.models import Q, Sum, Count
 from .models import Contrato, StatusContrato, IndiceReajuste, PrestacaoIntermediaria, TabelaJurosContrato, TipoAmortizacao, TipoCorrecao
 from .forms import ContratoForm, IndiceReajusteForm
 from core.mixins import PaginacaoMixin, TenantMixin, HashidMixin
@@ -100,9 +100,14 @@ class ContratoListView(LoginRequiredMixin, TenantMixin, PaginacaoMixin, ListView
         context['sort_order'] = self.request.GET.get('order', 'desc')
         context['status_choices'] = StatusContrato.choices
         qs_tenant = self.get_queryset()
-        context['total_contratos'] = qs_tenant.count()
-        context['contratos_ativos'] = qs_tenant.filter(status=StatusContrato.ATIVO).count()
-        context['contratos_quitados'] = qs_tenant.filter(status=StatusContrato.QUITADO).count()
+        counts = qs_tenant.aggregate(
+            total=Count('id'),
+            ativos=Count('id', filter=Q(status=StatusContrato.ATIVO)),
+            quitados=Count('id', filter=Q(status=StatusContrato.QUITADO)),
+        )
+        context['total_contratos'] = counts['total']
+        context['contratos_ativos'] = counts['ativos']
+        context['contratos_quitados'] = counts['quitados']
 
         # Lista de imobiliárias para filtro (apenas as acessíveis ao usuário)
         context['imobiliarias'] = self.get_imobiliarias_permitidas()

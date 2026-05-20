@@ -1133,20 +1133,32 @@ def dashboard_imobiliaria(request, imobiliaria_id):
         valor_pendente=Sum('valor', filter=Q(paga=False)),
     )
 
-    # Top 10 compradores com mais atraso
-    compradores_atraso = []
-    for contrato in contratos.filter(status=StatusContrato.ATIVO):
-        parcelas_atraso = contrato.parcelas.filter(pago=False, data_vencimento__lt=hoje)
-        if parcelas_atraso.exists():
-            valor_atraso = parcelas_atraso.aggregate(total=Sum('valor_atual'))['total'] or Decimal('0.00')
-            compradores_atraso.append({
-                'comprador': contrato.comprador,
-                'contrato': contrato,
-                'qtd_parcelas': parcelas_atraso.count(),
-                'valor_atraso': valor_atraso,
-                'dias_atraso': (hoje - parcelas_atraso.first().data_vencimento).days,
-            })
-    compradores_atraso.sort(key=lambda x: x['valor_atraso'], reverse=True)
+    # Top 10 compradores com mais atraso — consulta única com annotate (evita N+1)
+    contratos_em_atraso = contratos.filter(status=StatusContrato.ATIVO).annotate(
+        qtd_parcelas_atraso=Count(
+            'parcelas',
+            filter=Q(parcelas__pago=False, parcelas__data_vencimento__lt=hoje)
+        ),
+        valor_atraso=Sum(
+            'parcelas__valor_atual',
+            filter=Q(parcelas__pago=False, parcelas__data_vencimento__lt=hoje)
+        ),
+        primeiro_vencimento_atraso=Min(
+            'parcelas__data_vencimento',
+            filter=Q(parcelas__pago=False, parcelas__data_vencimento__lt=hoje)
+        ),
+    ).filter(qtd_parcelas_atraso__gt=0).order_by('-valor_atraso').select_related('comprador')[:10]
+
+    compradores_atraso = [
+        {
+            'comprador': c.comprador,
+            'contrato': c,
+            'qtd_parcelas': c.qtd_parcelas_atraso,
+            'valor_atraso': c.valor_atraso or Decimal('0.00'),
+            'dias_atraso': (hoje - c.primeiro_vencimento_atraso).days,
+        }
+        for c in contratos_em_atraso
+    ]
 
     context = {
         'imobiliaria': imobiliaria,
