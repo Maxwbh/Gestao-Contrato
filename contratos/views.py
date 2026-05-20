@@ -213,7 +213,7 @@ class ContratoUpdateView(LoginRequiredMixin, HashidMixin, TenantMixin, UpdateVie
 
     def get_context_data(self, **kwargs):
         from core.breadcrumbs import bc, bc_dashboard
-        from core.templatetags.hashid_tags import hashid as hashid_filter
+        from core.templatetags.hashid_tags import hashid_filter
         context = super().get_context_data(**kwargs)
         context['breadcrumb'] = [
             bc_dashboard(),

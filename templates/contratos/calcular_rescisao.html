@@ -1,6 +1,7 @@
 
 {% extends 'base.html' %}
 {% load hashid_tags %}
+{% load format_filters %}
 
 {% block title %}Cálculo de Rescisão — Contrato {{ contrato.numero_contrato }}{% endblock %}
 
@@ -67,51 +68,51 @@
         <table class="table table-sm mb-3">
           <tr>
             <td>Entrada paga</td>
-            <td class="text-end fw-bold">R$ {{ resultado.valor_entrada|floatformat:2 }}</td>
+            <td class="text-end fw-bold">{{ resultado.valor_entrada|moeda }}</td>
           </tr>
           <tr>
             <td>Parcelas pagas</td>
-            <td class="text-end fw-bold">R$ {{ resultado.valor_pago_parcelas|floatformat:2 }}</td>
+            <td class="text-end fw-bold">{{ resultado.valor_pago_parcelas|moeda }}</td>
           </tr>
           {% if resultado.valor_pago_intermediarias %}
           <tr>
             <td>Intermediárias pagas</td>
-            <td class="text-end fw-bold">R$ {{ resultado.valor_pago_intermediarias|floatformat:2 }}</td>
+            <td class="text-end fw-bold">{{ resultado.valor_pago_intermediarias|moeda }}</td>
           </tr>
           {% endif %}
           <tr class="table-success">
             <td><strong>Total pago</strong></td>
-            <td class="text-end fw-bold">R$ {{ resultado.valor_pago_total|floatformat:2 }}</td>
+            <td class="text-end fw-bold">{{ resultado.valor_pago_total|moeda }}</td>
           </tr>
         </table>
 
         <!-- Retenções -->
-        <h6 class="text-danger">Retenções (sobre saldo devedor de R$ {{ resultado.saldo_devedor|floatformat:2 }})</h6>
+        <h6 class="text-danger">Retenções (sobre saldo devedor de {{ resultado.saldo_devedor|moeda }})</h6>
         <table class="table table-sm mb-3">
           <tr>
             <td>
               Fruição ({{ resultado.percentual_fruicao }}%/mês × {{ resultado.meses_ocupados }} meses)
               <small class="text-muted d-block">Uso do imóvel pelo comprador</small>
             </td>
-            <td class="text-end text-danger fw-bold">− R$ {{ resultado.fruicao|floatformat:2 }}</td>
+            <td class="text-end text-danger fw-bold">− {{ resultado.fruicao|moeda }}</td>
           </tr>
           <tr>
             <td>
               Multa Penal ({{ resultado.percentual_multa_penal }}%)
               <small class="text-muted d-block">Cláusula penal contratual</small>
             </td>
-            <td class="text-end text-danger fw-bold">− R$ {{ resultado.multa_penal|floatformat:2 }}</td>
+            <td class="text-end text-danger fw-bold">− {{ resultado.multa_penal|moeda }}</td>
           </tr>
           <tr>
             <td>
               Despesas Administrativas ({{ resultado.percentual_desp_adm }}%)
               <small class="text-muted d-block">Custos administrativos de rescisão</small>
             </td>
-            <td class="text-end text-danger fw-bold">− R$ {{ resultado.desp_adm|floatformat:2 }}</td>
+            <td class="text-end text-danger fw-bold">− {{ resultado.desp_adm|moeda }}</td>
           </tr>
           <tr class="table-danger">
             <td><strong>Total de Retenções</strong></td>
-            <td class="text-end fw-bold">R$ {{ resultado.total_retencoes|floatformat:2 }}</td>
+            <td class="text-end fw-bold">{{ resultado.total_retencoes|moeda }}</td>
           </tr>
         </table>
 
@@ -122,7 +123,7 @@
             <strong>Valor a Devolver ao Comprador</strong>
             <small class="d-block text-muted">Total Pago − Total Retenções</small>
           </div>
-          <span class="fs-4 fw-bold">R$ {{ resultado.devolucao|floatformat:2 }}</span>
+          <span class="fs-4 fw-bold">{{ resultado.devolucao|moeda }}</span>
         </div>
 
         {% if resultado.devolucao == 0 %}

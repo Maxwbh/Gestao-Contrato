@@ -1,6 +1,7 @@
 {% extends 'base.html' %}
 {% load crispy_forms_tags %}
 {% load hashid_tags %}
+{% load format_filters %}
 
 {% block title %}Contratos - Gestao de Contratos{% endblock %}
 
@@ -263,7 +264,7 @@
                                     </div>
                                     <div class="d-flex gap-3 mb-2 flex-wrap">
                                         <span class="text-muted"><i class="fas fa-calendar me-1"></i>{{ contrato.data_contrato|date:"d/m/Y" }}</span>
-                                        <strong>R$ {{ contrato.valor_total|floatformat:2 }}</strong>
+                                        <strong>{{ contrato.valor_total|moeda }}</strong>
                                         <span class="badge bg-secondary">{{ contrato.numero_parcelas }}x</span>
                                     </div>
                                     {% with progresso=contrato.calcular_progresso %}

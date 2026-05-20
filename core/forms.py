@@ -129,7 +129,10 @@ class CompradorForm(forms.ModelForm):
         ]
         widgets = {
             'tipo_pessoa': forms.RadioSelect(attrs={'class': 'form-check-input'}),
-            'data_nascimento': forms.DateInput(attrs={'type': 'date', 'class': 'form-control'}),
+            'data_nascimento': forms.DateInput(
+                attrs={'type': 'text', 'class': 'form-control mask-date', 'placeholder': 'DD/MM/AAAA', 'maxlength': '10'},
+                format='%d/%m/%Y'
+            ),
             'observacoes': forms.Textarea(attrs={'rows': 2, 'class': 'form-control'}),
             'cep': forms.TextInput(attrs={
                 'placeholder': '00000-000',

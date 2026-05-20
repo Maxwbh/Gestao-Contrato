@@ -1,6 +1,7 @@
 {% extends 'base.html' %}
 {% load static %}
 {% load hashid_tags %}
+{% load financeiro_tags %}
 
 {% block title %}Parcela {{ parcela.numero_parcela }} - {{ parcela.contrato.numero_contrato }}{% endblock %}
 
@@ -78,28 +79,28 @@
                     <div class="row mb-3">
                         <div class="col-6">
                             <span class="info-label">Valor Original:</span><br>
-                            <span class="info-value">R$ {{ parcela.valor_original|floatformat:2 }}</span>
+                            <span class="info-value">{{ parcela.valor_original|moeda }}</span>
                         </div>
                         <div class="col-6">
                             <span class="info-label">Valor Atual:</span><br>
-                            <span class="info-value">R$ {{ parcela.valor_atual|floatformat:2 }}</span>
+                            <span class="info-value">{{ parcela.valor_atual|moeda }}</span>
                         </div>
                     </div>
                     <div class="row mb-3">
                         <div class="col-6">
                             <span class="info-label">Juros:</span><br>
-                            <span class="info-value text-warning">R$ {{ parcela.valor_juros|floatformat:2|default:"0.00" }}</span>
+                            <span class="info-value text-warning">{{ parcela.valor_juros|default:0|moeda }}</span>
                         </div>
                         <div class="col-6">
                             <span class="info-label">Multa:</span><br>
-                            <span class="info-value text-danger">R$ {{ parcela.valor_multa|floatformat:2|default:"0.00" }}</span>
+                            <span class="info-value text-danger">{{ parcela.valor_multa|default:0|moeda }}</span>
                         </div>
                     </div>
                     <hr>
                     <div class="row">
                         <div class="col-12 text-center">
                             <span class="info-label">Valor Total a Pagar:</span><br>
-                            <span class="valor-total text-primary">R$ {{ parcela.valor_total|floatformat:2 }}</span>
+                            <span class="valor-total text-primary">{{ parcela.valor_total|moeda }}</span>
                         </div>
                     </div>
                     {% if parcela.pago %}
@@ -107,7 +108,7 @@
                     <div class="row">
                         <div class="col-12 text-center">
                             <span class="info-label">Valor Pago:</span><br>
-                            <span class="valor-total text-success">R$ {{ parcela.valor_pago|floatformat:2 }}</span>
+                            <span class="valor-total text-success">{{ parcela.valor_pago|moeda }}</span>
                         </div>
                     </div>
                     {% endif %}
@@ -172,6 +173,56 @@
                 </div>
                 <div class="card-body">
                     {{ parcela.observacoes }}
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Código de Barras e Linha Digitável -->
+    {% if parcela.codigo_barras or parcela.linha_digitavel %}
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">
+                    <strong><i class="fas fa-barcode me-2"></i>Dados do Boleto</strong>
+                </div>
+                <div class="card-body">
+                    {% if parcela.linha_digitavel %}
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold small text-muted">LINHA DIGITÁVEL</label>
+                        <div class="input-group">
+                            <input type="text" class="form-control font-monospace"
+                                   id="linhaDigitavelDetalhe"
+                                   value="{{ parcela.linha_digitavel }}" readonly>
+                            <button class="btn btn-outline-secondary" type="button"
+                                    onclick="copiarCampo('linhaDigitavelDetalhe', this)" title="Copiar">
+                                <i class="far fa-copy"></i>
+                            </button>
+                        </div>
+                    </div>
+                    {% endif %}
+                    {% if parcela.codigo_barras %}
+                    <div class="mb-2">
+                        <label class="form-label fw-semibold small text-muted">CÓDIGO DE BARRAS</label>
+                        <div class="input-group mb-2">
+                            <input type="text" class="form-control font-monospace"
+                                   id="codigoBarrasDetalhe"
+                                   value="{{ parcela.codigo_barras }}" readonly>
+                            <button class="btn btn-outline-secondary" type="button"
+                                    onclick="copiarCampo('codigoBarrasDetalhe', this)" title="Copiar">
+                                <i class="far fa-copy"></i>
+                            </button>
+                        </div>
+                        <!-- Barcode visual para leitura por scanner -->
+                        <div class="text-center py-3 bg-white border rounded" id="barcode-detalhe-wrap">
+                            <svg id="barcode-detalhe"></svg>
+                            <div class="text-muted small mt-1" style="font-family:monospace;letter-spacing:0.15em;">
+                                {{ parcela.codigo_barras }}
+                            </div>
+                        </div>
+                    </div>
+                    {% endif %}
                 </div>
             </div>
         </div>
@@ -277,5 +328,33 @@ function notificarInadimplente() {
         });
 }
 {% endif %}
+
+function copiarCampo(id, btn) {
+    var el = document.getElementById(id);
+    if (!el) return;
+    navigator.clipboard.writeText(el.value).then(function () {
+        var orig = btn.innerHTML;
+        btn.innerHTML = '<i class="fas fa-check"></i>';
+        setTimeout(function () { btn.innerHTML = orig; }, 2000);
+    });
+}
+</script>
+<script src="{% static 'vendor/jsbarcode/JsBarcode.all.min.js' %}"></script>
+<script>
+(function () {
+    var el = document.getElementById('barcode-detalhe');
+    var wrap = document.getElementById('barcode-detalhe-wrap');
+    var input = document.getElementById('codigoBarrasDetalhe');
+    if (!el || !input || !input.value) return;
+    try {
+        JsBarcode(el, input.value, {
+            format: 'ITF',
+            width: 1.8,
+            height: 60,
+            displayValue: false,
+            margin: 10,
+        });
+    } catch (e) { if (wrap) wrap.style.display = 'none'; }
+})();
 </script>
 {% endblock %}
