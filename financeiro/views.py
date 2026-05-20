@@ -4495,31 +4495,45 @@ class DashboardContabilidadeView(LoginRequiredMixin, TemplateView):
         # =========================================================================
         # ESTATÍSTICAS POR IMOBILIÁRIA
         # =========================================================================
+        # Pre-compute per-imobiliária contract and parcel stats in 2 GROUP BY queries
+        contrato_por_imob = {
+            row['imobiliaria_id']: row
+            for row in contratos_qs.values('imobiliaria_id').annotate(
+                total=Count('id'),
+                ativos=Count('id', filter=Q(status=StatusContrato.ATIVO)),
+            )
+        }
+        parcela_por_imob = {
+            row['contrato__imobiliaria_id']: row
+            for row in parcelas_qs.values('contrato__imobiliaria_id').annotate(
+                pendentes=Count('id', filter=Q(pago=False)),
+                vencidas=Count('id', filter=Q(pago=False, data_vencimento__lt=hoje)),
+                valor_pendente=Sum('valor_atual', filter=Q(pago=False)),
+                valor_vencido=Sum('valor_atual', filter=Q(pago=False, data_vencimento__lt=hoje)),
+            )
+        }
+
         stats_por_imobiliaria = []
         for imob in imobiliarias:
-            parcelas_imob = parcelas_qs.filter(contrato__imobiliaria=imob)
-            contratos_imob = contratos_qs.filter(imobiliaria=imob)
+            c = contrato_por_imob.get(imob.id, {})
+            p = parcela_por_imob.get(imob.id, {})
 
-            # Contar contratos com bloqueio por reajuste
-            # verificar_bloqueio_reajuste() retorna bool (True = bloqueado)
+            # verificar_bloqueio_reajuste() has intentional side-effects (save); kept per-item
+            contratos_ativos_qs = contratos_qs.filter(imobiliaria=imob, status=StatusContrato.ATIVO)
             contratos_bloqueados = sum(
-                1 for contrato in contratos_imob.filter(status=StatusContrato.ATIVO)
+                1 for contrato in contratos_ativos_qs
                 if hasattr(contrato, 'verificar_bloqueio_reajuste') and contrato.verificar_bloqueio_reajuste()
             )
 
             stats = {
                 'imobiliaria': imob,
-                'total_contratos': contratos_imob.count(),
-                'contratos_ativos': contratos_imob.filter(status=StatusContrato.ATIVO).count(),
+                'total_contratos': c.get('total', 0),
+                'contratos_ativos': c.get('ativos', 0),
                 'contratos_bloqueados': contratos_bloqueados,
-                'parcelas_pendentes': parcelas_imob.filter(pago=False).count(),
-                'parcelas_vencidas': parcelas_imob.filter(pago=False, data_vencimento__lt=hoje).count(),
-                'valor_pendente': parcelas_imob.filter(pago=False).aggregate(
-                    total=Sum('valor_atual')
-                )['total'] or Decimal('0.00'),
-                'valor_vencido': parcelas_imob.filter(pago=False, data_vencimento__lt=hoje).aggregate(
-                    total=Sum('valor_atual')
-                )['total'] or Decimal('0.00'),
+                'parcelas_pendentes': p.get('pendentes', 0),
+                'parcelas_vencidas': p.get('vencidas', 0),
+                'valor_pendente': p.get('valor_pendente') or Decimal('0.00'),
+                'valor_vencido': p.get('valor_vencido') or Decimal('0.00'),
             }
             stats_por_imobiliaria.append(stats)
 
@@ -5221,16 +5235,24 @@ def api_imobiliarias_lista(request):
     if ativo is not None:
         queryset = queryset.filter(ativo=ativo)
 
+    imob_ids = list(queryset.values_list('id', flat=True))
+
+    # Pre-compute per-imobiliária stats in 2 queries instead of 2N
+    contratos_ativos_map = {
+        row['imobiliaria_id']: row['total']
+        for row in Contrato.objects.filter(
+            imobiliaria_id__in=imob_ids, status=StatusContrato.ATIVO
+        ).values('imobiliaria_id').annotate(total=Count('id'))
+    }
+    valor_a_receber_map = {
+        row['contrato__imobiliaria_id']: row['total']
+        for row in Parcela.objects.filter(
+            contrato__imobiliaria_id__in=imob_ids, pago=False
+        ).values('contrato__imobiliaria_id').annotate(total=Sum('valor_atual'))
+    }
+
     imobiliarias = []
     for imob in queryset.select_related('contabilidade'):
-        # Estatísticas básicas
-        contratos_ativos = Contrato.objects.filter(
-            imobiliaria=imob, status=StatusContrato.ATIVO
-        ).count()
-        valor_a_receber = Parcela.objects.filter(
-            contrato__imobiliaria=imob, pago=False
-        ).aggregate(total=Sum('valor_atual'))['total'] or Decimal('0.00')
-
         imobiliarias.append({
             'id': imob.id,
             'razao_social': imob.razao_social,
@@ -5243,8 +5265,8 @@ def api_imobiliarias_lista(request):
                 'id': imob.contabilidade.id,
                 'nome': imob.contabilidade.razao_social,
             } if imob.contabilidade else None,
-            'contratos_ativos': contratos_ativos,
-            'valor_a_receber': float(valor_a_receber),
+            'contratos_ativos': contratos_ativos_map.get(imob.id, 0),
+            'valor_a_receber': float(valor_a_receber_map.get(imob.id) or 0),
         })
 
     return JsonResponse({
@@ -7405,23 +7427,28 @@ def api_contabilidade_relatorios_vencimentos(request):
                 'valor': float(total['valor'] or 0),
             })
     else:
-        # Mensal (default)
+        # Mensal (default) — 1 TruncMonth query em vez de N queries
+        inicio_mensal = hoje.replace(day=1)
+        fim_mensal = inicio_mensal + relativedelta(months=meses) - timedelta(days=1)
+        mensal_por_mes = {
+            row['mes']: row
+            for row in qs.filter(
+                data_vencimento__gte=inicio_mensal,
+                data_vencimento__lte=fim_mensal,
+            ).annotate(mes=TruncMonth('data_vencimento')).values('mes').annotate(
+                valor=Sum('valor_atual'), qtd=Count('id'),
+            ).order_by('mes')
+        }
         for i in range(meses):
-            inicio = hoje.replace(day=1) + relativedelta(months=i)
+            inicio = inicio_mensal + relativedelta(months=i)
             fim = inicio + relativedelta(months=1) - timedelta(days=1)
-            parcelas_periodo = qs.filter(
-                data_vencimento__gte=inicio,
-                data_vencimento__lte=fim,
-            )
-            total = parcelas_periodo.aggregate(
-                valor=Sum('valor_atual'), qtd=Count('id')
-            )
+            row = mensal_por_mes.get(inicio) or {}
             grupos.append({
                 'periodo': inicio.strftime('%B/%Y'),
                 'data_inicio': inicio.isoformat(),
                 'data_fim': fim.isoformat(),
-                'quantidade': total['qtd'] or 0,
-                'valor': float(total['valor'] or 0),
+                'quantidade': row.get('qtd') or 0,
+                'valor': float(row.get('valor') or 0),
             })
 
     vencidas = qs.filter(data_vencimento__lt=hoje).aggregate(
