@@ -38,17 +38,20 @@ def enviar_notificacoes_vencimento():
 
     notificacoes_criadas = 0
 
+    # Pre-fetch parcela IDs que já têm notificação pendente/enviada — 1 query
+    parcela_ids = [p.id for p in parcelas_a_vencer]
+    ja_notificadas = set(
+        Notificacao.objects.filter(
+            parcela_id__in=parcela_ids,
+            status__in=[StatusNotificacao.PENDENTE, StatusNotificacao.ENVIADA],
+        ).values_list('parcela_id', flat=True)
+    )
+
     for parcela in parcelas_a_vencer:
-        comprador = parcela.contrato.comprador
-
-        # Verificar se já existe notificação pendente ou enviada para esta parcela
-        notificacao_existente = Notificacao.objects.filter(
-            parcela=parcela,
-            status__in=[StatusNotificacao.PENDENTE, StatusNotificacao.ENVIADA]
-        ).exists()
-
-        if notificacao_existente:
+        if parcela.id in ja_notificadas:
             continue
+
+        comprador = parcela.contrato.comprador
 
         # Criar notificações baseadas nas preferências do comprador
         if comprador.notificar_email:
