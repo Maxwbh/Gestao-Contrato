@@ -950,8 +950,12 @@ class ImovelListView(LoginRequiredMixin, PaginacaoMixin, ListView):
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         ativos = Imovel.objects.filter(ativo=True)
-        context['total_imoveis'] = ativos.count()
-        context['imoveis_disponiveis'] = ativos.filter(disponivel=True).count()
+        _agg = ativos.aggregate(
+            total=Count('id'),
+            disponiveis=Count('id', filter=Q(disponivel=True)),
+        )
+        context['total_imoveis'] = _agg['total']
+        context['imoveis_disponiveis'] = _agg['disponiveis']
 
         # Todos os imóveis com coordenadas — passados ao mapa (não paginado)
         todos_mapa = list(
@@ -2059,18 +2063,31 @@ def api_parametros_salvar_grupo(request):
         parametros = data.get('parametros', {})
         if not isinstance(parametros, dict):
             return JsonResponse({'sucesso': False, 'erro': 'Formato inválido.'}, status=400)
-        salvos = 0
+        chaves = list(parametros.keys())
+        existentes = {p.chave: p for p in ParametroSistema.objects.filter(chave__in=chaves)}
+        to_create = []
+        to_update = []
         for chave, valor in parametros.items():
-            obj, _ = ParametroSistema.objects.get_or_create(
-                chave=chave,
-                defaults={'grupo': grupo, 'valor': str(valor)},
-            )
-            obj.valor = str(valor)
-            obj.modificado_manualmente = True
-            if grupo and obj.grupo != grupo:
-                obj.grupo = grupo
-            obj.save()
-            salvos += 1
+            valor_str = str(valor)
+            if chave in existentes:
+                obj = existentes[chave]
+                obj.valor = valor_str
+                obj.modificado_manualmente = True
+                if grupo and obj.grupo != grupo:
+                    obj.grupo = grupo
+                to_update.append(obj)
+            else:
+                to_create.append(ParametroSistema(
+                    chave=chave,
+                    valor=valor_str,
+                    grupo=grupo,
+                    modificado_manualmente=True,
+                ))
+        if to_update:
+            ParametroSistema.objects.bulk_update(to_update, ['valor', 'modificado_manualmente', 'grupo'])
+        if to_create:
+            ParametroSistema.objects.bulk_create(to_create, ignore_conflicts=True)
+        salvos = len(to_update) + len(to_create)
         return JsonResponse({'sucesso': True, 'mensagem': f'{salvos} parâmetro(s) salvos.'})
     except Exception as e:
         logger.exception('Erro ao salvar parâmetros: %s', e)

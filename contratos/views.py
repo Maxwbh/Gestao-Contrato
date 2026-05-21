@@ -1541,13 +1541,36 @@ def api_intermediarias_contrato(request, contrato_hid):
         contrato=contrato
     ).select_related('parcela_vinculada').order_by('numero_sequencial')
 
+    # Pre-fetch Reajuste aplicados para este contrato — 1 query em vez de N×M
+    from financeiro.models import Reajuste as _ReajusteM
+    from django.utils import timezone as _tz
+    from dateutil.relativedelta import relativedelta
+    _hoje = _tz.now().date()
+    _prazo = contrato.prazo_reajuste_meses or 12
+    _reajustes_aplicados = set(
+        _ReajusteM.objects.filter(contrato=contrato, aplicado=True).values_list('ciclo', flat=True)
+    )
+
+    def _pode_gerar(mes_vencimento):
+        if contrato.tipo_correcao == TipoCorrecao.FIXO:
+            return True, ""
+        ciclo_parcela = (mes_vencimento - 1) // _prazo + 1
+        if ciclo_parcela <= 1:
+            return True, ""
+        for ciclo_check in range(2, ciclo_parcela + 1):
+            data_reajuste = contrato.data_contrato + relativedelta(months=(ciclo_check - 1) * _prazo)
+            if _hoje < data_reajuste:
+                break
+            if ciclo_check not in _reajustes_aplicados:
+                return False, (
+                    f"Reajuste do ciclo {ciclo_check} pendente desde "
+                    f"{data_reajuste.strftime('%d/%m/%Y')}."
+                )
+        return True, ""
+
     data = []
     for inter in intermediarias:
-        # Verificar bloqueio por reajuste
-        if hasattr(contrato, 'pode_gerar_boleto'):
-            pode_gerar, motivo = contrato.pode_gerar_boleto(inter.mes_vencimento)
-        else:
-            pode_gerar, motivo = True, ""
+        pode_gerar, motivo = _pode_gerar(inter.mes_vencimento)
 
         data.append({
             'id': inter.id,
