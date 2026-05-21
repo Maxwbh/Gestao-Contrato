@@ -918,13 +918,15 @@ class Contrato(TimeStampedModel):
 
     def calcular_progresso(self):
         """Calcula o progresso de pagamento do contrato"""
-        total_parcelas = self.parcelas.count()
-        parcelas_pagas = self.parcelas.filter(pago=True).count()
-
-        if total_parcelas == 0:
+        from django.db.models import Count, Q
+        agg = self.parcelas.aggregate(
+            total=Count('id'),
+            pagas=Count('id', filter=Q(pago=True)),
+        )
+        total = agg['total'] or 0
+        if not total:
             return 0
-
-        return (parcelas_pagas / total_parcelas) * 100
+        return (agg['pagas'] / total) * 100
 
     def calcular_valor_pago(self):
         """Calcula o valor total já pago"""
@@ -948,9 +950,8 @@ class Contrato(TimeStampedModel):
         from financeiro.models import TipoParcela
         qs = self.parcelas.filter(pago=False, tipo_parcela=TipoParcela.NORMAL)
         if self.tipo_amortizacao == TipoAmortizacao.SAC:
-            saldo = qs.aggregate(total=Sum('amortizacao'))['total']
-            if saldo is None:
-                saldo = qs.aggregate(total=Sum('valor_atual'))['total'] or Decimal('0.00')
+            agg = qs.aggregate(amort=Sum('amortizacao'), valor=Sum('valor_atual'))
+            saldo = agg['amort'] if agg['amort'] is not None else (agg['valor'] or Decimal('0.00'))
         else:
             saldo = qs.aggregate(total=Sum('valor_atual'))['total'] or Decimal('0.00')
         return saldo or Decimal('0.00')
@@ -1194,36 +1195,48 @@ class Contrato(TimeStampedModel):
         Returns:
             dict: Resumo com totais e estatísticas
         """
-        from django.db.models import Sum
+        from django.db.models import Sum, Count, Q
+        from financeiro.models import TipoParcela
 
-        parcelas = self.parcelas.all()
-        pagas = parcelas.filter(pago=True)
-        a_pagar = parcelas.filter(pago=False)
-        vencidas = a_pagar.filter(data_vencimento__lt=timezone.now().date())
+        hoje = timezone.now().date()
+        agg = self.parcelas.aggregate(
+            total=Count('id'),
+            pagas=Count('id', filter=Q(pago=True)),
+            a_pagar=Count('id', filter=Q(pago=False)),
+            vencidas=Count('id', filter=Q(pago=False, data_vencimento__lt=hoje)),
+            total_pago=Sum('valor_pago', filter=Q(pago=True)),
+            total_a_pagar=Sum('valor_atual', filter=Q(pago=False)),
+            total_vencido=Sum('valor_atual', filter=Q(pago=False, data_vencimento__lt=hoje)),
+            total_juros=Sum('valor_juros', filter=Q(pago=False, data_vencimento__lt=hoje)),
+            total_multa=Sum('valor_multa', filter=Q(pago=False, data_vencimento__lt=hoje)),
+            saldo_normal_valor=Sum('valor_atual', filter=Q(pago=False, tipo_parcela=TipoParcela.NORMAL)),
+            saldo_normal_amort=Sum('amortizacao', filter=Q(pago=False, tipo_parcela=TipoParcela.NORMAL)),
+        )
 
-        total_pago = pagas.aggregate(total=Sum('valor_pago'))['total'] or Decimal('0.00')
-        total_a_pagar = a_pagar.aggregate(total=Sum('valor_atual'))['total'] or Decimal('0.00')
-        total_vencido = vencidas.aggregate(total=Sum('valor_atual'))['total'] or Decimal('0.00')
+        total = agg['total'] or 0
+        pagas_qt = agg['pagas'] or 0
+        progresso = (pagas_qt / total * 100) if total else 0
 
-        # Calcular juros e multa acumulados em parcelas vencidas
-        total_juros = vencidas.aggregate(total=Sum('valor_juros'))['total'] or Decimal('0.00')
-        total_multa = vencidas.aggregate(total=Sum('valor_multa'))['total'] or Decimal('0.00')
+        if self.tipo_amortizacao == TipoAmortizacao.SAC:
+            saldo = agg['saldo_normal_amort'] or agg['saldo_normal_valor'] or Decimal('0.00')
+        else:
+            saldo = agg['saldo_normal_valor'] or Decimal('0.00')
 
         return {
             'valor_contrato': self.valor_total,
             'valor_entrada': self.valor_entrada,
             'valor_financiado': self.valor_financiado,
-            'total_parcelas': parcelas.count(),
-            'parcelas_pagas': pagas.count(),
-            'parcelas_a_pagar': a_pagar.count(),
-            'parcelas_vencidas': vencidas.count(),
-            'total_pago': total_pago + self.valor_entrada,
-            'total_a_pagar': total_a_pagar,
-            'total_vencido': total_vencido,
-            'total_juros_acumulado': total_juros,
-            'total_multa_acumulada': total_multa,
-            'saldo_devedor': self.calcular_saldo_devedor(),
-            'progresso_percentual': self.calcular_progresso(),
+            'total_parcelas': total,
+            'parcelas_pagas': pagas_qt,
+            'parcelas_a_pagar': agg['a_pagar'] or 0,
+            'parcelas_vencidas': agg['vencidas'] or 0,
+            'total_pago': (agg['total_pago'] or Decimal('0.00')) + self.valor_entrada,
+            'total_a_pagar': agg['total_a_pagar'] or Decimal('0.00'),
+            'total_vencido': agg['total_vencido'] or Decimal('0.00'),
+            'total_juros_acumulado': agg['total_juros'] or Decimal('0.00'),
+            'total_multa_acumulada': agg['total_multa'] or Decimal('0.00'),
+            'saldo_devedor': saldo,
+            'progresso_percentual': progresso,
             'ciclo_atual': self.ciclo_reajuste_atual,
             'bloqueio_reajuste': self.bloqueio_boleto_reajuste,
         }
