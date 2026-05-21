@@ -155,16 +155,23 @@ def atualizar_juros_multa_parcelas_vencidas():
 
     logger.info("Iniciando atualização de juros e multa de parcelas vencidas...")
 
-    parcelas_vencidas = Parcela.objects.filter(
-        pago=False,
-        data_vencimento__lt=timezone.now().date()
+    hoje = timezone.now().date()
+    parcelas_vencidas = list(
+        Parcela.objects.filter(pago=False, data_vencimento__lt=hoje)
+        .select_related('contrato')
     )
 
-    count = 0
+    to_update = []
     for parcela in parcelas_vencidas:
-        parcela.atualizar_juros_multa()
-        count += 1
+        juros, multa = parcela.calcular_juros_multa(hoje)
+        parcela.valor_juros = juros
+        parcela.valor_multa = multa
+        to_update.append(parcela)
 
+    if to_update:
+        Parcela.objects.bulk_update(to_update, ['valor_juros', 'valor_multa'])
+
+    count = len(to_update)
     logger.info(f"Atualização concluída. {count} parcelas atualizadas.")
 
     return count
@@ -350,16 +357,22 @@ def gerar_boletos_automaticos():
     ultimo_dia_proximo_mes = (primeiro_dia_proximo_mes + timedelta(days=32)).replace(day=1) - timedelta(days=1)
 
     # Buscar parcelas elegíveis
-    parcelas = Parcela.objects.filter(
+    parcelas = list(Parcela.objects.filter(
         contrato__status=StatusContrato.ATIVO,
         data_vencimento__gte=primeiro_dia_proximo_mes,
         data_vencimento__lte=ultimo_dia_proximo_mes,
         pago=False,
         status_boleto=StatusBoleto.NAO_GERADO
-    ).select_related('contrato', 'contrato__imobiliaria')
+    ).select_related(
+        'contrato',
+        'contrato__comprador',
+        'contrato__imovel__imobiliaria',
+        'contrato__imobiliaria',
+        'conta_bancaria',
+    ))
 
     resultados = {
-        'total': parcelas.count(),
+        'total': len(parcelas),
         'gerados': 0,
         'bloqueados': 0,
         'erros': 0,
@@ -433,23 +446,21 @@ def enviar_lembretes_vencimento():
     hoje = timezone.now().date()
     lembretes_enviados = 0
 
-    # Configurar dias de antecedência
     dias_lembrete = [7, 3, 1]
+    datas_lembrete = [hoje + timedelta(days=d) for d in dias_lembrete]
 
-    for dias in dias_lembrete:
-        data_vencimento = hoje + timedelta(days=dias)
+    parcelas = Parcela.objects.filter(
+        pago=False,
+        data_vencimento__in=datas_lembrete
+    ).select_related('contrato', 'contrato__comprador')
 
-        parcelas = Parcela.objects.filter(
-            pago=False,
-            data_vencimento=data_vencimento
-        ).select_related('contrato', 'contrato__comprador')
-
-        for parcela in parcelas:
-            try:
-                enviar_lembrete_parcela.delay(parcela.id, dias)
-                lembretes_enviados += 1
-            except Exception as e:
-                logger.exception("Erro ao agendar lembrete para parcela %s: %s", parcela.id, e)
+    for parcela in parcelas:
+        dias = (parcela.data_vencimento - hoje).days
+        try:
+            enviar_lembrete_parcela.delay(parcela.id, dias)
+            lembretes_enviados += 1
+        except Exception as e:
+            logger.exception("Erro ao agendar lembrete para parcela %s: %s", parcela.id, e)
 
     logger.info(f"Lembretes agendados: {lembretes_enviados}")
 
@@ -535,9 +546,9 @@ def processar_arquivos_retorno_pendentes():
     processados = 0
     erros = 0
 
+    service = CNABService()
     for arquivo in arquivos:
         try:
-            service = CNABService()
             resultado = service.processar_retorno(arquivo)
 
             if resultado.get('sucesso'):
@@ -585,64 +596,39 @@ def gerar_relatorio_diario():
     Gera relatório diário consolidado.
     Executar diariamente (final do dia).
     """
-    from django.db.models import Sum, Count
+    from django.db.models import Sum, Count, Q
     from .models import Parcela
     from contratos.models import Contrato, StatusContrato
 
     hoje = timezone.now().date()
     ontem = hoje - timedelta(days=1)
 
-    # Estatísticas de pagamentos do dia
-    pagamentos_dia = Parcela.objects.filter(
-        pago=True,
-        data_pagamento=ontem
-    ).aggregate(
-        total=Count('id'),
-        valor=Sum('valor_pago')
+    agg = Parcela.objects.aggregate(
+        pag_total=Count('id', filter=Q(pago=True, data_pagamento=ontem)),
+        pag_valor=Sum('valor_pago', filter=Q(pago=True, data_pagamento=ontem)),
+        boletos_dia=Count('id', filter=Q(data_geracao_boleto__date=ontem)),
+        venc_hoje_total=Count('id', filter=Q(pago=False, data_vencimento=hoje)),
+        venc_hoje_valor=Sum('valor_atual', filter=Q(pago=False, data_vencimento=hoje)),
+        vencidas_total=Count('id', filter=Q(pago=False, data_vencimento__lt=hoje)),
+        vencidas_valor=Sum('valor_atual', filter=Q(pago=False, data_vencimento__lt=hoje)),
     )
 
-    # Boletos gerados no dia
-    boletos_dia = Parcela.objects.filter(
-        data_geracao_boleto__date=ontem
-    ).count()
-
-    # Parcelas vencendo hoje
-    vencendo_hoje = Parcela.objects.filter(
-        pago=False,
-        data_vencimento=hoje
-    ).aggregate(
-        total=Count('id'),
-        valor=Sum('valor_atual')
-    )
-
-    # Parcelas vencidas
-    vencidas = Parcela.objects.filter(
-        pago=False,
-        data_vencimento__lt=hoje
-    ).aggregate(
-        total=Count('id'),
-        valor=Sum('valor_atual')
-    )
-
-    # Contratos ativos
-    contratos_ativos = Contrato.objects.filter(
-        status=StatusContrato.ATIVO
-    ).count()
+    contratos_ativos = Contrato.objects.filter(status=StatusContrato.ATIVO).count()
 
     relatorio = {
         'data': str(ontem),
         'pagamentos': {
-            'quantidade': pagamentos_dia['total'] or 0,
-            'valor': float(pagamentos_dia['valor'] or 0)
+            'quantidade': agg['pag_total'] or 0,
+            'valor': float(agg['pag_valor'] or 0)
         },
-        'boletos_gerados': boletos_dia,
+        'boletos_gerados': agg['boletos_dia'] or 0,
         'vencendo_hoje': {
-            'quantidade': vencendo_hoje['total'] or 0,
-            'valor': float(vencendo_hoje['valor'] or 0)
+            'quantidade': agg['venc_hoje_total'] or 0,
+            'valor': float(agg['venc_hoje_valor'] or 0)
         },
         'vencidas': {
-            'quantidade': vencidas['total'] or 0,
-            'valor': float(vencidas['valor'] or 0)
+            'quantidade': agg['vencidas_total'] or 0,
+            'valor': float(agg['vencidas_valor'] or 0)
         },
         'contratos_ativos': contratos_ativos
     }
