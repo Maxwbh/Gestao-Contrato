@@ -7154,6 +7154,7 @@ def simulador_antecipacao(request, contrato_id):
             data_pagamento = timezone.now().date()
             obs = f'Antecipação com {desconto_perc}% de desconto'
             with transaction.atomic():
+                historicos = []
                 for item in preview_itens:
                     p = item['parcela']
                     p.pago = True
@@ -7164,9 +7165,7 @@ def simulador_antecipacao(request, contrato_id):
                         p.status_boleto = StatusBoleto.PAGO
                         p.data_pagamento_boleto = timezone.now()
                         p.valor_pago_boleto = item['valor_antecipado']
-                    p.save()
-
-                    HistoricoPagamento.objects.create(
+                    historicos.append(HistoricoPagamento(
                         parcela=p,
                         data_pagamento=data_pagamento,
                         valor_pago=item['valor_antecipado'],
@@ -7176,7 +7175,14 @@ def simulador_antecipacao(request, contrato_id):
                         antecipado=True,
                         observacoes=obs,
                         origem_pagamento='ANTECIPACAO',
-                    )
+                    ))
+
+                Parcela.objects.bulk_update(
+                    [item['parcela'] for item in preview_itens],
+                    ['pago', 'data_pagamento', 'valor_pago', 'valor_desconto',
+                     'status_boleto', 'data_pagamento_boleto', 'valor_pago_boleto'],
+                )
+                HistoricoPagamento.objects.bulk_create(historicos)
 
             messages.success(
                 request,

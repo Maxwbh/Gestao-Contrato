@@ -1562,13 +1562,13 @@ class Reajuste(TimeStampedModel):
             if desc_val and novo_pmt > desc_val:
                 novo_pmt = (novo_pmt - desc_val).quantize(Decimal('0.01'))
 
-            for parcela in parcelas:
-                valor_anterior = parcela.valor_atual
-                parcela.valor_atual = novo_pmt
-                parcela.save(update_fields=['valor_atual'])
-                valor_anterior_total += valor_anterior
-                valor_novo_total += novo_pmt
-                parcelas_reajustadas += 1
+            # Todos os PMTs são iguais — aggregate + bulk update
+            from django.db.models import Sum as _Sum, Count as _Count
+            _agg = parcelas.aggregate(total_ant=_Sum('valor_atual'), qtd=_Count('id'))
+            valor_anterior_total += _agg['total_ant'] or Decimal('0')
+            parcelas_reajustadas += _agg['qtd'] or 0
+            valor_novo_total += novo_pmt * (_agg['qtd'] or 0)
+            parcelas.update(valor_atual=novo_pmt)
 
         elif usa_sac:
             # MODO SAC — recalcula amortização constante sobre saldo corrigido
@@ -1588,14 +1588,13 @@ class Reajuste(TimeStampedModel):
             for parcela, (pmt_k, amort_k, juros_k) in zip(parcelas, tabela_sac):
                 if desc_val and pmt_k > desc_val:
                     pmt_k = (pmt_k - desc_val).quantize(Decimal('0.01'))
-                valor_anterior = parcela.valor_atual
+                valor_anterior_total += parcela.valor_atual
                 parcela.valor_atual = pmt_k
                 parcela.amortizacao = amort_k
                 parcela.juros_embutido = juros_k
-                parcela.save(update_fields=['valor_atual', 'amortizacao', 'juros_embutido'])
-                valor_anterior_total += valor_anterior
                 valor_novo_total += pmt_k
                 parcelas_reajustadas += 1
+            Parcela.objects.bulk_update(parcelas, ['valor_atual', 'amortizacao', 'juros_embutido'])
 
         else:
             # MODO SIMPLES: aplica fator a TODAS as parcelas a partir da inicial.
@@ -1614,10 +1613,10 @@ class Reajuste(TimeStampedModel):
                 if desc_val:
                     novo_valor = max(parcela.valor_atual, novo_valor - desc_val)
                 parcela.valor_atual = novo_valor.quantize(Decimal('0.01'))
-                parcela.save(update_fields=['valor_atual'])
                 valor_anterior_total += valor_anterior
                 valor_novo_total += parcela.valor_atual
                 parcelas_reajustadas += 1
+            Parcela.objects.bulk_update(parcelas, ['valor_atual'])
 
             # Atualiza parcela_final para refletir o escopo real aplicado
             if parcelas:
@@ -1625,20 +1624,17 @@ class Reajuste(TimeStampedModel):
 
         # Cancelar boletos das parcelas afetadas cujo valor mudou.
         # O PDF/código de barras foi gerado com o valor antigo — deve ser regenerado.
-        boletos_cancelados = 0
-        parcelas_boleto_qs = self.contrato.parcelas.filter(
+        boletos_cancelados = self.contrato.parcelas.filter(
             numero_parcela__gte=self.parcela_inicial,
             pago=False,
             status_boleto__in=[StatusBoleto.GERADO, StatusBoleto.REGISTRADO],
-        )
-        for p_boleto in parcelas_boleto_qs:
-            p_boleto.status_boleto = StatusBoleto.CANCELADO
-            p_boleto.motivo_rejeicao = (
+        ).update(
+            status_boleto=StatusBoleto.CANCELADO,
+            motivo_rejeicao=(
                 f"Cancelado — reajuste ciclo {self.ciclo} ({perc_final:+.2f}%) "
                 f"alterou o valor da parcela. Regenere o boleto."
-            )
-            p_boleto.save(update_fields=['status_boleto', 'motivo_rejeicao'])
-            boletos_cancelados += 1
+            ),
+        )
 
         # Reajustar intermediárias do ciclo com perc_final (corrigido: era self.percentual)
         intermediarias = self.contrato.intermediarias.filter(
@@ -1650,12 +1646,21 @@ class Reajuste(TimeStampedModel):
         valor_intermediarias_anterior = Decimal('0.00')
         valor_intermediarias_novo = Decimal('0.00')
 
-        for inter in intermediarias:
+        from contratos.models import PrestacaoIntermediaria as _PI
+        intermediarias_list = list(intermediarias)
+        fator_inter = 1 + (Decimal(str(perc_final)) / 100)
+        for inter in intermediarias_list:
+            if inter.paga:
+                continue
             valor_anterior_inter = inter.valor_atual
-            inter.aplicar_reajuste(perc_final)  # era self.percentual — corrigido
+            valor_base = inter.valor_reajustado if inter.valor_reajustado else inter.valor
+            inter.valor_reajustado = (valor_base * fator_inter).quantize(Decimal('0.01'))
             valor_intermediarias_anterior += valor_anterior_inter
-            valor_intermediarias_novo += inter.valor_atual
+            valor_intermediarias_novo += inter.valor_reajustado
             intermediarias_reajustadas += 1
+        _PI.objects.bulk_update(
+            [i for i in intermediarias_list if not i.paga], ['valor_reajustado']
+        )
 
         # Marcar como aplicado (salva parcela_final atualizado para MODO SIMPLES)
         self.aplicado = True

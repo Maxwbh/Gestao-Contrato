@@ -2025,23 +2025,27 @@ class ContratoWizardView(LoginRequiredMixin, View):
         contrato = self._criar_contrato_from_session(basico)
 
         # TabelaJuros rows
-        for row in sess.get('juros', []):
-            TabelaJurosContrato.objects.create(
+        TabelaJurosContrato.objects.bulk_create([
+            TabelaJurosContrato(
                 contrato=contrato,
                 ciclo_inicio=row['ciclo_inicio'],
                 ciclo_fim=row.get('ciclo_fim'),
                 juros_mensal=D(str(row['juros_mensal'])),
                 observacoes=row.get('observacoes', ''),
             )
+            for row in sess.get('juros', [])
+        ])
 
         # Intermediárias
-        for row in sess.get('intermediarias_lista', []):
-            PrestacaoIntermediaria.objects.create(
+        PrestacaoIntermediaria.objects.bulk_create([
+            PrestacaoIntermediaria(
                 contrato=contrato,
                 numero_sequencial=row['numero_sequencial'],
                 mes_vencimento=row['mes_vencimento'],
                 valor=D(str(row['valor'])),
             )
+            for row in sess.get('intermediarias_lista', [])
+        ])
 
         # Recalcula amortização (Price ou SAC) com base na TabelaJuros recém-criada.
         # Também trata intermediarias_reduzem_pmt.
