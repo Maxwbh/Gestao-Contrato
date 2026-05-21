@@ -20,6 +20,7 @@ class ParcelaAdmin(admin.ModelAdmin):
         'status_badge',
         'dias_atraso_display'
     ]
+    list_select_related = ['contrato']
     list_filter = [
         'pago',
         'data_vencimento',
@@ -157,6 +158,7 @@ class ReajusteAdmin(admin.ModelAdmin):
         'parcelas_afetadas',
         'aplicado_manual'
     ]
+    list_select_related = ['contrato']
     list_filter = [
         'indice_tipo',
         'aplicado_manual',
@@ -234,6 +236,7 @@ class HistoricoPagamentoAdmin(admin.ModelAdmin):
         'origem_pagamento',
         'criado_em'
     ]
+    list_select_related = ['parcela', 'parcela__contrato']
     list_filter = [
         'forma_pagamento',
         'origem_pagamento',
@@ -299,6 +302,7 @@ class HistoricoPagamentoAdmin(admin.ModelAdmin):
 class AcessoBoletoPublicoAdmin(admin.ModelAdmin):
     """S-07: Monitoramento de acessos ao boleto público."""
     list_display = ['parcela_link', 'ip', 'user_agent_resumido', 'acessado_em']
+    list_select_related = ['parcela']
     list_filter = ['acessado_em', 'ip']
     search_fields = ['ip', 'parcela__contrato__numero_contrato', 'parcela__contrato__comprador__nome']
     readonly_fields = ['parcela', 'ip', 'user_agent', 'acessado_em']

@@ -861,7 +861,12 @@ def api_portal_vencimentos(request):
         per_page = min(max(1, int(request.GET.get('per_page', 50))), 100)
     except (ValueError, TypeError):
         page, per_page = 1, 50
-    total = qs.count()
+    totais = qs.aggregate(
+        total=Count('id'),
+        valor_total=Sum('valor_atual'),
+        vencidas=Count('id', filter=Q(pago=False, data_vencimento__lt=hoje)),
+    )
+    total = totais['total'] or 0
     offset = (page - 1) * per_page
     parcelas_page = qs[offset:offset + per_page]
 
@@ -886,11 +891,6 @@ def api_portal_vencimentos(request):
             'status_boleto': p.status_boleto,
             'linha_digitavel': p.linha_digitavel or '',
         })
-
-    totais = qs.aggregate(
-        valor_total=Sum('valor_atual'),
-        vencidas=Count('id', filter=Q(pago=False, data_vencimento__lt=hoje)),
-    )
 
     return JsonResponse({
         'sucesso': True,

@@ -13,7 +13,7 @@ from django.views.decorators.http import require_http_methods
 from django.core.management import call_command
 from django.db import connection
 from django.contrib.auth import get_user_model
-from django.db.models import Sum, Q
+from django.db.models import Count, Sum, Q
 from django.views.generic import ListView, CreateView, UpdateView, DeleteView
 from django.urls import reverse_lazy
 from django.contrib import messages
@@ -196,38 +196,30 @@ def dashboard(request):
     if stats is None:
         total_contabilidades = Contabilidade.objects.filter(ativo=True).count()
         total_imobiliarias = Imobiliaria.objects.filter(ativo=True).count()
-        total_imoveis = Imovel.objects.filter(ativo=True).count()
-        imoveis_disponiveis = Imovel.objects.filter(ativo=True, disponivel=True).count()
         total_compradores = Comprador.objects.filter(ativo=True).count()
         total_contratos = Contrato.objects.filter(status=StatusContrato.ATIVO).count()
 
-        parcelas_vencidas = Parcela.objects.filter(
-            pago=False, data_vencimento__lt=hoje
-        ).count()
+        imovel_agg = Imovel.objects.filter(ativo=True).aggregate(
+            total=Count('id'),
+            disponiveis=Count('id', filter=Q(disponivel=True)),
+        )
+        total_imoveis = imovel_agg['total']
+        imoveis_disponiveis = imovel_agg['disponiveis']
 
-        parcelas_mes = Parcela.objects.filter(
-            pago=False,
-            data_vencimento__gte=inicio_mes,
-            data_vencimento__lte=fim_mes,
-        ).count()
-
-        valor_recebido = Parcela.objects.filter(
-            pago=True,
-            data_pagamento__gte=inicio_mes,
-            data_pagamento__lte=fim_mes,
-        ).aggregate(total=Sum('valor_pago'))['total'] or 0
-
-        boletos_pendentes = Parcela.objects.filter(
-            pago=False, status_boleto=StatusBoleto.NAO_GERADO
-        ).count()
-        boletos_gerados = Parcela.objects.filter(
-            pago=False, status_boleto__in=[StatusBoleto.GERADO, StatusBoleto.REGISTRADO]
-        ).count()
-        boletos_vencidos = Parcela.objects.filter(
-            pago=False,
-            status_boleto__in=[StatusBoleto.GERADO, StatusBoleto.REGISTRADO, StatusBoleto.VENCIDO],
-            data_vencimento__lt=hoje,
-        ).count()
+        parcela_agg = Parcela.objects.aggregate(
+            vencidas=Count('id', filter=Q(pago=False, data_vencimento__lt=hoje)),
+            mes=Count('id', filter=Q(pago=False, data_vencimento__gte=inicio_mes, data_vencimento__lte=fim_mes)),
+            valor_recebido=Sum('valor_pago', filter=Q(pago=True, data_pagamento__gte=inicio_mes, data_pagamento__lte=fim_mes)),
+            boletos_pend=Count('id', filter=Q(pago=False, status_boleto=StatusBoleto.NAO_GERADO)),
+            boletos_ger=Count('id', filter=Q(pago=False, status_boleto__in=[StatusBoleto.GERADO, StatusBoleto.REGISTRADO])),
+            boletos_venc=Count('id', filter=Q(pago=False, data_vencimento__lt=hoje, status_boleto__in=[StatusBoleto.GERADO, StatusBoleto.REGISTRADO, StatusBoleto.VENCIDO])),
+        )
+        parcelas_vencidas = parcela_agg['vencidas']
+        parcelas_mes = parcela_agg['mes']
+        valor_recebido = parcela_agg['valor_recebido'] or 0
+        boletos_pendentes = parcela_agg['boletos_pend']
+        boletos_gerados = parcela_agg['boletos_ger']
+        boletos_vencidos = parcela_agg['boletos_venc']
 
         valor_recebido_formatado = (
             f"{valor_recebido:,.2f}".replace(',', 'X').replace('.', ',').replace('X', '.')
@@ -962,12 +954,14 @@ class ImovelListView(LoginRequiredMixin, PaginacaoMixin, ListView):
         context['imoveis_disponiveis'] = ativos.filter(disponivel=True).count()
 
         # Todos os imóveis com coordenadas — passados ao mapa (não paginado)
-        todos_mapa = ativos.filter(
-            latitude__isnull=False,
-            longitude__isnull=False
-        ).select_related('imobiliaria').prefetch_related('vertices').order_by('loteamento', 'identificacao')
+        todos_mapa = list(
+            ativos.filter(
+                latitude__isnull=False,
+                longitude__isnull=False
+            ).select_related('imobiliaria').prefetch_related('vertices').order_by('loteamento', 'identificacao')
+        )
         context['todos_imoveis_mapa'] = todos_mapa
-        context['imoveis_com_coordenadas'] = todos_mapa.count()
+        context['imoveis_com_coordenadas'] = len(todos_mapa)
 
         # M-13: dados de polígonos serializados para o mapa
         poligonos = {}

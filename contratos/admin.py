@@ -20,6 +20,7 @@ class TabelaJurosInline(admin.TabularInline):
 @admin.register(TabelaJurosContrato)
 class TabelaJurosContratoAdmin(admin.ModelAdmin):
     list_display = ['contrato', 'ciclo_inicio', 'ciclo_fim', 'juros_mensal', 'observacoes']
+    list_select_related = ['contrato']
     list_filter = ['contrato__imobiliaria']
     search_fields = ['contrato__numero_contrato']
     autocomplete_fields = ['contrato']
@@ -38,6 +39,7 @@ class ContratoAdmin(admin.ModelAdmin):
         'status_badge',
         'data_contrato'
     ]
+    list_select_related = ['comprador', 'imovel', 'imobiliaria']
     list_filter = [
         'status',
         'tipo_correcao',
