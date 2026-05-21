@@ -36,9 +36,8 @@ def enviar_notificacoes_vencimento():
         data_vencimento__gte=timezone.now().date()
     ).select_related('contrato', 'contrato__comprador')
 
-    notificacoes_criadas = 0
-
     # Pre-fetch parcela IDs que já têm notificação pendente/enviada — 1 query
+    parcelas_a_vencer = list(parcelas_a_vencer)
     parcela_ids = [p.id for p in parcelas_a_vencer]
     ja_notificadas = set(
         Notificacao.objects.filter(
@@ -47,25 +46,36 @@ def enviar_notificacoes_vencimento():
         ).values_list('parcela_id', flat=True)
     )
 
+    # Pre-fetch templates ativos por tipo — 1 query em vez de N×3
+    templates_cache = {}
+    for t in TemplateNotificacao.objects.filter(ativo=True):
+        if t.tipo not in templates_cache:
+            templates_cache[t.tipo] = t
+
+    notificacoes_to_create = []
+
     for parcela in parcelas_a_vencer:
         if parcela.id in ja_notificadas:
             continue
 
         comprador = parcela.contrato.comprador
 
-        # Criar notificações baseadas nas preferências do comprador
-        if comprador.notificar_email:
-            criar_notificacao_vencimento(parcela, TipoNotificacao.EMAIL)
-            notificacoes_criadas += 1
+        for tipo, attr in [
+            (TipoNotificacao.EMAIL, 'notificar_email'),
+            (TipoNotificacao.SMS, 'notificar_sms'),
+            (TipoNotificacao.WHATSAPP, 'notificar_whatsapp'),
+        ]:
+            if getattr(comprador, attr, False):
+                notif = _preparar_notificacao_vencimento(
+                    parcela, tipo, templates_cache.get(tipo)
+                )
+                if notif:
+                    notificacoes_to_create.append(notif)
 
-        if comprador.notificar_sms:
-            criar_notificacao_vencimento(parcela, TipoNotificacao.SMS)
-            notificacoes_criadas += 1
+    if notificacoes_to_create:
+        Notificacao.objects.bulk_create(notificacoes_to_create)
 
-        if comprador.notificar_whatsapp:
-            criar_notificacao_vencimento(parcela, TipoNotificacao.WHATSAPP)
-            notificacoes_criadas += 1
-
+    notificacoes_criadas = len(notificacoes_to_create)
     logger.info(f"{notificacoes_criadas} notificações criadas.")
 
     # Processar notificações pendentes
@@ -74,23 +84,19 @@ def enviar_notificacoes_vencimento():
     return notificacoes_criadas
 
 
-def criar_notificacao_vencimento(parcela, tipo_notificacao):
+def _preparar_notificacao_vencimento(parcela, tipo_notificacao, template=None):
     """
-    Cria uma notificação de vencimento para uma parcela
-
-    Args:
-        parcela: Objeto Parcela
-        tipo_notificacao: Tipo da notificação (EMAIL, SMS, WHATSAPP)
+    Prepara (sem salvar) um objeto Notificacao de vencimento para bulk_create.
+    Retorna None se não houver destinatário válido.
     """
     comprador = parcela.contrato.comprador
 
-    # Buscar template ativo para o tipo de notificação
-    template = TemplateNotificacao.objects.filter(
-        tipo=tipo_notificacao,
-        ativo=True
-    ).first()
+    if template is None:
+        template = TemplateNotificacao.objects.filter(
+            tipo=tipo_notificacao,
+            ativo=True
+        ).first()
 
-    # Preparar contexto para renderização do template
     contexto = {
         'comprador': comprador.nome,
         'numero_parcela': parcela.numero_parcela,
@@ -101,7 +107,6 @@ def criar_notificacao_vencimento(parcela, tipo_notificacao):
         'imovel': str(parcela.contrato.imovel),
     }
 
-    # Renderizar template ou usar mensagem padrão
     if template:
         assunto, mensagem, _ = template.renderizar(contexto)
     else:
@@ -116,29 +121,36 @@ def criar_notificacao_vencimento(parcela, tipo_notificacao):
             f"Equipe de Gestão de Contratos"
         )
 
-    # Determinar destinatário
     if tipo_notificacao == TipoNotificacao.EMAIL:
         destinatario = comprador.email
     elif tipo_notificacao == TipoNotificacao.SMS:
         destinatario = comprador.celular
     elif tipo_notificacao == TipoNotificacao.WHATSAPP:
-        # Formatar número para WhatsApp (adicionar +55 se necessário)
         numero = comprador.celular.replace('(', '').replace(')', '').replace('-', '').replace(' ', '')
         if not numero.startswith('+'):
             numero = f'+55{numero}'
         destinatario = numero
     else:
-        return
+        return None
 
-    # Criar notificação
-    Notificacao.objects.create(
+    if not destinatario:
+        return None
+
+    return Notificacao(
         parcela=parcela,
         tipo=tipo_notificacao,
         destinatario=destinatario,
         assunto=assunto,
         mensagem=mensagem,
-        status=StatusNotificacao.PENDENTE
+        status=StatusNotificacao.PENDENTE,
     )
+
+
+def criar_notificacao_vencimento(parcela, tipo_notificacao):
+    """Cria uma notificação de vencimento para uma parcela (compatibilidade)."""
+    notif = _preparar_notificacao_vencimento(parcela, tipo_notificacao)
+    if notif:
+        notif.save()
 
 
 @shared_task
