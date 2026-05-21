@@ -1064,7 +1064,7 @@ def painel_mensagens(request):
     for row in qs.exclude(status_entrega='').values('status_entrega').annotate(c=Count('id')):
         stats_entrega[row['status_entrega']] = row['c']
 
-    total = qs.count()
+    total = sum(stats_status.values())
     total_entregues = stats_entrega.get('delivered', 0) + stats_entrega.get('read', 0)
     total_falhos = stats_entrega.get('failed', 0) + stats_entrega.get('undelivered', 0)
     total_sem_confirmacao = qs.filter(
