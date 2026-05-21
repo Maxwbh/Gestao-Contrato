@@ -1005,6 +1005,7 @@ class Reajuste(TimeStampedModel):
         ordering = ['-data_reajuste']
         indexes = [
             models.Index(fields=['contrato', 'data_reajuste']),
+            models.Index(fields=['contrato', 'ciclo', 'aplicado'], name='fin_reajuste_ciclo_aplic'),
         ]
 
     def __str__(self):
