@@ -254,11 +254,17 @@ class ContratoDetailView(LoginRequiredMixin, HashidMixin, TenantMixin, DetailVie
     context_object_name = 'contrato'
 
     def get_queryset(self):
+        from django.db.models import Prefetch
+        from financeiro.models import Reajuste as _Reajuste
         return super().get_queryset().select_related(
             'imovel', 'imovel__imobiliaria',
             'comprador',
             'imobiliaria'
-        ).prefetch_related('parcelas', 'intermediarias')
+        ).prefetch_related(
+            'parcelas',
+            'intermediarias',
+            Prefetch('reajustes', queryset=_Reajuste.objects.order_by('-data_reajuste'), to_attr='_reajustes_pre'),
+        )
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
@@ -303,7 +309,7 @@ class ContratoDetailView(LoginRequiredMixin, HashidMixin, TenantMixin, DetailVie
             context['reajuste_pendente_desde_parcela'] = None
 
         # Reajustes do contrato
-        context['reajustes'] = contrato.reajustes.all().order_by('-data_reajuste')
+        context['reajustes'] = getattr(contrato, '_reajustes_pre', None) or []
 
         # Índices disponíveis para reajuste manual
         context['indices_reajuste'] = IndiceReajuste.objects.filter(
@@ -1126,20 +1132,21 @@ class IntermediariasListView(LoginRequiredMixin, PaginacaoMixin, ListView):
 
         # Estatísticas
         intermediarias = self.get_queryset()
-        context['total_intermediarias'] = intermediarias.count()
-        context['intermediarias_pagas'] = intermediarias.filter(paga=True).count()
-        context['intermediarias_pendentes'] = intermediarias.filter(paga=False).count()
-
-        from django.db.models import Sum
-        context['valor_total'] = intermediarias.aggregate(
-            total=Sum('valor')
-        )['total'] or Decimal('0.00')
-        context['valor_pago'] = intermediarias.filter(paga=True).aggregate(
-            total=Sum('valor_pago')
-        )['total'] or Decimal('0.00')
-        context['valor_pendente'] = intermediarias.filter(paga=False).aggregate(
-            total=Sum('valor')
-        )['total'] or Decimal('0.00')
+        from django.db.models import Sum, Count, Q
+        agg = intermediarias.aggregate(
+            total=Count('id'),
+            pagas=Count('id', filter=Q(paga=True)),
+            pendentes=Count('id', filter=Q(paga=False)),
+            valor_total=Sum('valor'),
+            valor_pago=Sum('valor_pago', filter=Q(paga=True)),
+            valor_pendente=Sum('valor', filter=Q(paga=False)),
+        )
+        context['total_intermediarias'] = agg['total'] or 0
+        context['intermediarias_pagas'] = agg['pagas'] or 0
+        context['intermediarias_pendentes'] = agg['pendentes'] or 0
+        context['valor_total'] = agg['valor_total'] or Decimal('0.00')
+        context['valor_pago'] = agg['valor_pago'] or Decimal('0.00')
+        context['valor_pendente'] = agg['valor_pendente'] or Decimal('0.00')
 
         return context
 
@@ -1944,7 +1951,7 @@ class ContratoWizardView(LoginRequiredMixin, View):
                 messages.success(
                     request,
                     f'Contrato {contrato.numero_contrato} criado com sucesso! '
-                    f'{contrato.parcelas.count()} parcelas geradas.'
+                    f'{contrato.numero_parcelas} parcelas geradas.'
                 )
                 return redirect('contratos:detalhe', hid=encode_id(contrato.pk))
             except Exception as e:

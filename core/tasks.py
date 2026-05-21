@@ -123,12 +123,12 @@ def processar_reajustes_sync():
         hoje = date.today()
 
         # Buscar contratos ativos que usam índice econômico para reajuste
-        contratos = Contrato.objects.filter(
+        contratos = list(Contrato.objects.filter(
             status=StatusContrato.ATIVO,
             tipo_correcao__in=['IPCA', 'IGPM', 'INCC', 'IGPDI', 'INPC', 'TR', 'SELIC']
-        ).select_related('imobiliaria', 'comprador')
+        ).select_related('imobiliaria', 'comprador'))
 
-        result.add_message(f"Verificando {contratos.count()} contratos ativos")
+        result.add_message(f"Verificando {len(contratos)} contratos ativos")
 
         for contrato in contratos:
             try:
@@ -150,12 +150,12 @@ def processar_reajustes_sync():
                     with transaction.atomic():
                         for parcela in parcelas_pendentes:
                             percentual = Decimal(str(indice.get('valor', 0)))
-                            novo_valor = ReajusteService.calcular_reajuste(
+                            parcela.valor_atual = ReajusteService.calcular_reajuste(
                                 parcela.valor_atual, percentual
                             )
-                            parcela.valor_atual = novo_valor
-                            parcela.save(update_fields=['valor_atual', 'atualizado_em'])
-                            result.items_processed += 1
+                        from financeiro.models import Parcela as _Parcela
+                        _Parcela.objects.bulk_update(parcelas_pendentes, ['valor_atual'])
+                        result.items_processed += len(parcelas_pendentes)
 
                     result.add_message(
                         f"Contrato {contrato.numero_contrato}: {len(parcelas_pendentes)} parcelas reajustadas"
@@ -343,18 +343,16 @@ def _processar_regra(regra, result):
     if regra.tipo_gatilho == TipoGatilho.ANTES_VENCIMENTO:
         data_alvo = hoje + timedelta(days=regra.dias_offset)
         label = f"D-{regra.dias_offset}"
-        parcelas = Parcela.objects.filter(
-            pago=False, tipo_parcela=TipoParcela.NORMAL, data_vencimento=data_alvo,
-        ).select_related('contrato', 'contrato__comprador', 'contrato__imobiliaria')
     else:  # APOS_VENCIMENTO
         data_alvo = hoje - timedelta(days=regra.dias_offset)
         label = f"D+{regra.dias_offset}"
-        parcelas = Parcela.objects.filter(
-            pago=False, tipo_parcela=TipoParcela.NORMAL, data_vencimento=data_alvo,
-        ).select_related('contrato', 'contrato__comprador', 'contrato__imobiliaria')
+
+    parcelas = list(Parcela.objects.filter(
+        pago=False, tipo_parcela=TipoParcela.NORMAL, data_vencimento=data_alvo,
+    ).select_related('contrato', 'contrato__comprador', 'contrato__imobiliaria'))
 
     result.add_message(
-        f"Regra '{regra.nome}' ({label}): {parcelas.count()} parcelas em {data_alvo}"
+        f"Regra '{regra.nome}' ({label}): {len(parcelas)} parcelas em {data_alvo}"
     )
 
     for parcela in parcelas:
@@ -467,14 +465,14 @@ def enviar_notificacoes_sync():
             hoje = date.today()
             data_alvo = hoje + timedelta(days=dias_antecedencia)
 
-            parcelas = Parcela.objects.filter(
+            parcelas = list(Parcela.objects.filter(
                 pago=False,
                 tipo_parcela=TipoParcela.NORMAL,
                 data_vencimento=data_alvo,
-            ).select_related('contrato', 'contrato__comprador', 'contrato__imobiliaria')
+            ).select_related('contrato', 'contrato__comprador', 'contrato__imobiliaria'))
 
             result.add_message(
-                f"N-01 (padrão): {parcelas.count()} parcelas vencendo em "
+                f"N-01 (padrão): {len(parcelas)} parcelas vencendo em "
                 f"{dias_antecedencia} dia(s) ({data_alvo.strftime('%d/%m/%Y')})"
             )
 
@@ -581,14 +579,14 @@ def enviar_inadimplentes_sync():
             hoje = date.today()
             data_corte = hoje - timedelta(days=dias_carencia)
 
-            parcelas = Parcela.objects.filter(
+            parcelas = list(Parcela.objects.filter(
                 pago=False,
                 tipo_parcela=TipoParcela.NORMAL,
                 data_vencimento=data_corte,
-            ).select_related('contrato', 'contrato__comprador', 'contrato__imobiliaria')
+            ).select_related('contrato', 'contrato__comprador', 'contrato__imobiliaria'))
 
             result.add_message(
-                f"N-02 (padrão): {parcelas.count()} parcelas em atraso (D+{dias_carencia})"
+                f"N-02 (padrão): {len(parcelas)} parcelas em atraso (D+{dias_carencia})"
             )
 
             for parcela in parcelas:
