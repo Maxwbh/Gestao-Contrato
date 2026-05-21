@@ -37,6 +37,29 @@ def _imobs_para_usuario(user):
     return get_imobiliarias_usuario(user)
 
 
+def _calcular_bloqueio_reajuste(contrato, reajustes_set, hoje):
+    """
+    Replica verificar_bloqueio_reajuste() sem tocar no banco.
+    reajustes_set: set of (contrato_id, ciclo) pre-fetched from Reajuste(aplicado=True).
+    """
+    if contrato.tipo_correcao == TipoCorrecao.FIXO:
+        return False
+    proxima_parcela = contrato.ultimo_mes_boleto_gerado + 1
+    if proxima_parcela > contrato.numero_parcelas:
+        return False
+    prazo = contrato.prazo_reajuste_meses or 12
+    ciclo_proxima = (proxima_parcela - 1) // prazo + 1
+    if ciclo_proxima <= 1:
+        return False
+    for ciclo_check in range(2, ciclo_proxima + 1):
+        data_reajuste = contrato.data_contrato + relativedelta(months=(ciclo_check - 1) * prazo)
+        if hoje < data_reajuste:
+            break
+        if (contrato.id, ciclo_check) not in reajustes_set:
+            return True
+    return False
+
+
 def _hid_to_pk(hid: str) -> int:
     """U-03: decodifica hashid → pk inteiro; levanta Http404 se inválido."""
     from django.http import Http404
@@ -1096,10 +1119,22 @@ def dashboard_imobiliaria(request, imobiliaria_id):
     contratos_reajuste_pendente = []
     contratos_com_boleto_bloqueado = []
 
-    for contrato in contratos.filter(status=StatusContrato.ATIVO):
-        # Verificar se tem bloqueio de reajuste
-        # verificar_bloqueio_reajuste() retorna bool (True = bloqueado)
-        if hasattr(contrato, 'verificar_bloqueio_reajuste') and contrato.verificar_bloqueio_reajuste():
+    # Pre-fetch active contratos + Reajuste records — 2 queries instead of N×M+N
+    _contratos_ativos = list(contratos.filter(status=StatusContrato.ATIVO))
+    _reajustes_set = set(
+        Reajuste.objects.filter(
+            contrato__in=_contratos_ativos,
+            aplicado=True,
+        ).values_list('contrato_id', 'ciclo')
+    )
+    _contratos_bloqueio_upd = []
+
+    for contrato in _contratos_ativos:
+        bloqueado = _calcular_bloqueio_reajuste(contrato, _reajustes_set, hoje)
+        if contrato.bloqueio_boleto_reajuste != bloqueado:
+            contrato.bloqueio_boleto_reajuste = bloqueado
+            _contratos_bloqueio_upd.append(contrato)
+        if bloqueado:
             contratos_com_boleto_bloqueado.append({
                 'contrato': contrato,
                 'ciclo_atual': 1,
@@ -1121,6 +1156,9 @@ def dashboard_imobiliaria(request, imobiliaria_id):
                     'meses_atraso': meses_atraso,
                     'tipo_correcao': contrato.get_tipo_correcao_display() if hasattr(contrato, 'get_tipo_correcao_display') else 'N/A',
                 })
+
+    if _contratos_bloqueio_upd:
+        Contrato.objects.bulk_update(_contratos_bloqueio_upd, ['bloqueio_boleto_reajuste'])
 
     # Ordenar por meses em atraso
     contratos_reajuste_pendente.sort(key=lambda x: x['meses_atraso'], reverse=True)
@@ -4530,17 +4568,32 @@ class DashboardContabilidadeView(LoginRequiredMixin, TemplateView):
             )
         }
 
+        # Pre-fetch all active contratos + Reajuste records — 2 queries instead of N×M+N
+        _todos_ativos = list(contratos_qs.filter(status=StatusContrato.ATIVO))
+        _reaj_set = set(
+            Reajuste.objects.filter(
+                contrato__in=_todos_ativos,
+                aplicado=True,
+            ).values_list('contrato_id', 'ciclo')
+        )
+        _bloqueados_por_imob: dict = {}
+        _upd_contratos = []
+        for _c in _todos_ativos:
+            _bloq = _calcular_bloqueio_reajuste(_c, _reaj_set, hoje)
+            if _c.bloqueio_boleto_reajuste != _bloq:
+                _c.bloqueio_boleto_reajuste = _bloq
+                _upd_contratos.append(_c)
+            if _bloq:
+                _bloqueados_por_imob[_c.imobiliaria_id] = _bloqueados_por_imob.get(_c.imobiliaria_id, 0) + 1
+        if _upd_contratos:
+            Contrato.objects.bulk_update(_upd_contratos, ['bloqueio_boleto_reajuste'])
+
         stats_por_imobiliaria = []
         for imob in imobiliarias:
             c = contrato_por_imob.get(imob.id, {})
             p = parcela_por_imob.get(imob.id, {})
 
-            # verificar_bloqueio_reajuste() has intentional side-effects (save); kept per-item
-            contratos_ativos_qs = contratos_qs.filter(imobiliaria=imob, status=StatusContrato.ATIVO)
-            contratos_bloqueados = sum(
-                1 for contrato in contratos_ativos_qs
-                if hasattr(contrato, 'verificar_bloqueio_reajuste') and contrato.verificar_bloqueio_reajuste()
-            )
+            contratos_bloqueados = _bloqueados_por_imob.get(imob.id, 0)
 
             stats = {
                 'imobiliaria': imob,
