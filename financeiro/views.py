@@ -2503,6 +2503,12 @@ def gerar_carne(request, contrato_id):
             pk__in=parcela_ids,
             contrato=contrato,
             pago=False
+        ).select_related(
+            'contrato',
+            'contrato__comprador',
+            'contrato__imovel__imobiliaria',
+            'contrato__imobiliaria',
+            'conta_bancaria',
         ).order_by('numero_parcela')
 
         if not parcelas.exists():
@@ -3019,6 +3025,11 @@ def api_gerar_boletos_lote(request):
             parcelas = contrato.parcelas.filter(
                 pago=False,
                 status_boleto=StatusBoleto.NAO_GERADO
+            ).select_related(
+                'contrato__comprador',
+                'contrato__imovel__imobiliaria',
+                'contrato__imobiliaria',
+                'conta_bancaria',
             ).order_by('numero_parcela')
 
             gerados_contrato = 0
