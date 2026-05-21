@@ -1162,63 +1162,65 @@ def relatorio_semanal_incorporadoras_sync():
     try:
         from core.models import Imobiliaria
         from django.utils import timezone
+        from django.db.models import Q
 
         hoje = timezone.now().date()
         inicio_semana = hoje - timedelta(days=hoje.weekday())  # segunda-feira
+        prox_semana = hoje + timedelta(days=7)
 
-        imobiliarias = Imobiliaria.objects.filter(ativo=True)
+        imobiliarias = list(Imobiliaria.objects.filter(ativo=True))
+        imob_ids = [im.id for im in imobiliarias]
         relatorios_gerados = 0
 
+        # Pre-compute all 3 aggregates in 3 GROUP BY queries instead of 3N
+        base_qs = Parcela.objects.filter(
+            contrato__imobiliaria_id__in=imob_ids,
+            contrato__status=StatusContrato.ATIVO,
+        )
+        recebimentos_map = {
+            row['contrato__imobiliaria_id']: row
+            for row in base_qs.filter(
+                pago=True, data_pagamento__gte=inicio_semana, data_pagamento__lte=hoje,
+            ).values('contrato__imobiliaria_id').annotate(
+                quantidade=Count('id'), valor=Sum('valor_pago'),
+            )
+        }
+        vencidas_map = {
+            row['contrato__imobiliaria_id']: row
+            for row in base_qs.filter(
+                pago=False, data_vencimento__lt=hoje,
+            ).values('contrato__imobiliaria_id').annotate(
+                quantidade=Count('id'), valor=Sum('valor_atual'),
+            )
+        }
+        a_vencer_map = {
+            row['contrato__imobiliaria_id']: row
+            for row in base_qs.filter(
+                pago=False, data_vencimento__gte=hoje, data_vencimento__lte=prox_semana,
+            ).values('contrato__imobiliaria_id').annotate(
+                quantidade=Count('id'), valor=Sum('valor_atual'),
+            )
+        }
+
         for imobiliaria in imobiliarias:
-            parcelas_qs = Parcela.objects.filter(
-                contrato__imobiliaria=imobiliaria,
-                contrato__status=StatusContrato.ATIVO,
-            )
-
-            # Recebimentos da semana
-            recebimentos = parcelas_qs.filter(
-                pago=True,
-                data_pagamento__gte=inicio_semana,
-                data_pagamento__lte=hoje,
-            ).aggregate(
-                quantidade=Count('id'),
-                valor=Sum('valor_pago'),
-            )
-
-            # Inadimplência atual
-            vencidas = parcelas_qs.filter(
-                pago=False,
-                data_vencimento__lt=hoje,
-            ).aggregate(
-                quantidade=Count('id'),
-                valor=Sum('valor_atual'),
-            )
-
-            # Vencendo na próxima semana
-            prox_semana = hoje + timedelta(days=7)
-            a_vencer = parcelas_qs.filter(
-                pago=False,
-                data_vencimento__gte=hoje,
-                data_vencimento__lte=prox_semana,
-            ).aggregate(
-                quantidade=Count('id'),
-                valor=Sum('valor_atual'),
-            )
+            rec = recebimentos_map.get(imobiliaria.id, {})
+            venc = vencidas_map.get(imobiliaria.id, {})
+            av = a_vencer_map.get(imobiliaria.id, {})
 
             relatorio = {
                 'imobiliaria': imobiliaria.nome,
                 'periodo': f'{inicio_semana} a {hoje}',
                 'recebimentos': {
-                    'quantidade': recebimentos['quantidade'] or 0,
-                    'valor': float(recebimentos['valor'] or 0),
+                    'quantidade': rec.get('quantidade') or 0,
+                    'valor': float(rec.get('valor') or 0),
                 },
                 'inadimplencia': {
-                    'quantidade': vencidas['quantidade'] or 0,
-                    'valor': float(vencidas['valor'] or 0),
+                    'quantidade': venc.get('quantidade') or 0,
+                    'valor': float(venc.get('valor') or 0),
                 },
                 'a_vencer_7_dias': {
-                    'quantidade': a_vencer['quantidade'] or 0,
-                    'valor': float(a_vencer['valor'] or 0),
+                    'quantidade': av.get('quantidade') or 0,
+                    'valor': float(av.get('valor') or 0),
                 },
             }
 
@@ -1291,47 +1293,57 @@ def relatorio_mensal_consolidado_sync():
                 },
             }
 
-            for imobiliaria in imobiliarias:
-                parcelas_qs = Parcela.objects.filter(
-                    contrato__imobiliaria=imobiliaria,
-                )
+            imob_ids_mes = [im.id for im in imobiliarias]
 
-                contratos_ativos = Contrato.objects.filter(
-                    imobiliaria=imobiliaria,
-                    status=StatusContrato.ATIVO,
-                ).count()
-
-                recebimentos = parcelas_qs.filter(
+            # Pre-compute 4 aggregates in 4 GROUP BY queries instead of 4N
+            contratos_map = {
+                row['imobiliaria_id']: row['total']
+                for row in Contrato.objects.filter(
+                    imobiliaria_id__in=imob_ids_mes, status=StatusContrato.ATIVO,
+                ).values('imobiliaria_id').annotate(total=Count('id'))
+            }
+            recebimentos_map_m = {
+                row['contrato__imobiliaria_id']: row
+                for row in Parcela.objects.filter(
+                    contrato__imobiliaria_id__in=imob_ids_mes,
                     pago=True,
                     data_pagamento__gte=primeiro_dia_mes_anterior,
                     data_pagamento__lte=ultimo_dia_mes_anterior,
-                ).aggregate(
-                    quantidade=Count('id'),
-                    valor=Sum('valor_pago'),
+                ).values('contrato__imobiliaria_id').annotate(
+                    quantidade=Count('id'), valor=Sum('valor_pago'),
                 )
-
-                inadimplentes = parcelas_qs.filter(
+            }
+            inadimplentes_map = {
+                row['contrato__imobiliaria_id']: row
+                for row in Parcela.objects.filter(
+                    contrato__imobiliaria_id__in=imob_ids_mes,
                     pago=False,
                     data_vencimento__lt=hoje,
-                ).aggregate(
-                    quantidade=Count('id'),
-                    valor=Sum('valor_atual'),
+                ).values('contrato__imobiliaria_id').annotate(
+                    quantidade=Count('id'), valor=Sum('valor_atual'),
                 )
-
-                reajustes = Reajuste.objects.filter(
-                    contrato__imobiliaria=imobiliaria,
+            }
+            reajustes_map = {
+                row['contrato__imobiliaria_id']: row['total']
+                for row in Reajuste.objects.filter(
+                    contrato__imobiliaria_id__in=imob_ids_mes,
                     data_reajuste__gte=primeiro_dia_mes_anterior,
                     data_reajuste__lte=ultimo_dia_mes_anterior,
-                ).count()
+                ).values('contrato__imobiliaria_id').annotate(total=Count('id'))
+            }
+
+            for imobiliaria in imobiliarias:
+                rec = recebimentos_map_m.get(imobiliaria.id, {})
+                inad = inadimplentes_map.get(imobiliaria.id, {})
 
                 dados_imob = {
                     'nome': imobiliaria.nome,
-                    'contratos_ativos': contratos_ativos,
-                    'recebimentos': recebimentos['quantidade'] or 0,
-                    'valor_recebido': float(recebimentos['valor'] or 0),
-                    'inadimplentes': inadimplentes['quantidade'] or 0,
-                    'valor_inadimplente': float(inadimplentes['valor'] or 0),
-                    'reajustes_aplicados': reajustes,
+                    'contratos_ativos': contratos_map.get(imobiliaria.id, 0),
+                    'recebimentos': rec.get('quantidade') or 0,
+                    'valor_recebido': float(rec.get('valor') or 0),
+                    'inadimplentes': inad.get('quantidade') or 0,
+                    'valor_inadimplente': float(inad.get('valor') or 0),
+                    'reajustes_aplicados': reajustes_map.get(imobiliaria.id, 0),
                 }
 
                 dados_contabilidade['imobiliarias'].append(dados_imob)
