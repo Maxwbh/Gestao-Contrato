@@ -265,21 +265,33 @@ class ContratoDetailView(LoginRequiredMixin, HashidMixin, TenantMixin, DetailVie
         contrato = self.object
         from django.utils import timezone
 
-        context['progresso'] = contrato.calcular_progresso()
-        context['valor_pago'] = contrato.calcular_valor_pago()
-        context['saldo_devedor'] = contrato.calcular_saldo_devedor()
-
-        # Parcelas — compute counts from prefetch cache to avoid extra queries
+        # Parcelas — compute from prefetch cache to avoid extra queries
         hoje = timezone.now().date()
         todas_parcelas = sorted(contrato.parcelas.all(), key=lambda p: p.numero_parcela)
         context['parcelas'] = todas_parcelas
-        context['parcelas_pagas'] = sum(1 for p in todas_parcelas if p.pago)
-        context['parcelas_pendentes'] = sum(1 for p in todas_parcelas if not p.pago)
-
+        pagas = [p for p in todas_parcelas if p.pago]
         pendentes = [p for p in todas_parcelas if not p.pago]
+        context['parcelas_pagas'] = len(pagas)
+        context['parcelas_pendentes'] = len(pendentes)
+
         proximas = sorted((p for p in pendentes if p.data_vencimento >= hoje), key=lambda p: p.data_vencimento)
         context['proxima_parcela'] = proximas[0] if proximas else None
         context['parcelas_atrasadas'] = sum(1 for p in pendentes if p.data_vencimento < hoje)
+
+        # Computed from prefetch cache — avoids 5 extra DB queries
+        total_p = len(todas_parcelas)
+        context['progresso'] = (len(pagas) / total_p * 100) if total_p else 0
+        context['valor_pago'] = (
+            sum(p.valor_pago or Decimal('0') for p in pagas) + contrato.valor_entrada
+        )
+        from financeiro.models import TipoParcela as _TP
+        from contratos.models import TipoAmortizacao as _TA
+        pendentes_normais = [p for p in pendentes if p.tipo_parcela == _TP.NORMAL]
+        if contrato.tipo_amortizacao == _TA.SAC:
+            saldo = sum((p.amortizacao or p.valor_atual) for p in pendentes_normais)
+        else:
+            saldo = sum(p.valor_atual for p in pendentes_normais)
+        context['saldo_devedor'] = saldo or Decimal('0.00')
 
         # Reajuste pendente no mês exato do aniversário (antecipacao_meses=0)
         from financeiro.models import Reajuste
