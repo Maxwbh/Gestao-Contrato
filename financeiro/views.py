@@ -3054,10 +3054,16 @@ def api_gerar_boletos_lote(request):
         total_bloqueados = 0
         total_erros = 0
 
+        # Pre-fetch todos os contratos ativos em 1 query em vez de N .get() individuais
+        _contratos_map = {
+            c.id: c for c in Contrato.objects.filter(
+                pk__in=contrato_ids, status=StatusContrato.ATIVO
+            )
+        }
+
         for contrato_id in contrato_ids:
-            try:
-                contrato = Contrato.objects.get(pk=contrato_id, status=StatusContrato.ATIVO)
-            except Contrato.DoesNotExist:
+            contrato = _contratos_map.get(contrato_id)
+            if contrato is None:
                 resultados.append({
                     'contrato_id': contrato_id,
                     'sucesso': False,

@@ -305,9 +305,50 @@ class RelatorioService:
         if filtro.comprador_id:
             queryset = queryset.filter(comprador_id=filtro.comprador_id)
 
+        # Materializar queryset e pre-computar resumos em 1 GROUP BY — evita N aggregate queries
+        from django.db.models import Sum, Count, Q
+        from contratos.models import TipoAmortizacao
+        from financeiro.models import TipoParcela
+
+        contratos_list = list(queryset)
+        hoje_rel = timezone.now().date()
+
+        _resumos_map: dict = {}
+        for row in _Parcela.objects.filter(
+            contrato_id__in=[c.id for c in contratos_list]
+        ).values('contrato_id').annotate(
+            total=Count('id'),
+            pagas=Count('id', filter=Q(pago=True)),
+            a_pagar=Count('id', filter=Q(pago=False)),
+            vencidas=Count('id', filter=Q(pago=False, data_vencimento__lt=hoje_rel)),
+            total_pago=Sum('valor_pago', filter=Q(pago=True)),
+            saldo_normal_valor=Sum('valor_atual', filter=Q(pago=False, tipo_parcela=TipoParcela.NORMAL)),
+            saldo_normal_amort=Sum('amortizacao', filter=Q(pago=False, tipo_parcela=TipoParcela.NORMAL)),
+        ):
+            _resumos_map[row['contrato_id']] = row
+
         itens = []
-        for contrato in queryset:
-            resumo = contrato.get_resumo_financeiro()
+        for contrato in contratos_list:
+            _agg = _resumos_map.get(contrato.id, {})
+            _total = _agg.get('total') or 0
+            _pagas = _agg.get('pagas') or 0
+            _progresso = (_pagas / _total * 100) if _total else 0
+            if contrato.tipo_amortizacao == TipoAmortizacao.SAC:
+                _saldo = _agg.get('saldo_normal_amort') or _agg.get('saldo_normal_valor') or Decimal('0.00')
+            else:
+                _saldo = _agg.get('saldo_normal_valor') or Decimal('0.00')
+            resumo = {
+                'total_parcelas': _total,
+                'parcelas_pagas': _pagas,
+                'parcelas_a_pagar': _agg.get('a_pagar') or 0,
+                'parcelas_vencidas': _agg.get('vencidas') or 0,
+                'total_pago': (_agg.get('total_pago') or Decimal('0.00')) + contrato.valor_entrada,
+                'saldo_devedor': _saldo,
+                'progresso_percentual': _progresso,
+                'ciclo_atual': contrato.ciclo_reajuste_atual,
+                'bloqueio_reajuste': contrato.bloqueio_boleto_reajuste,
+            }
+
             _pend = getattr(contrato, '_parcelas_pendentes_pre', None) or []
             proxima_parcela = _pend[0] if _pend else None
 
