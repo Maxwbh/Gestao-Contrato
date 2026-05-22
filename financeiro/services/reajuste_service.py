@@ -506,13 +506,13 @@ class ReajusteService:
             'indice_tipo': contrato.tipo_correcao,
             'parcela_inicial': parcela_inicial,
             'parcela_final': parcela_final,
-            'total_parcelas': parcelas.count(),
+            'total_parcelas': len(simulacao_parcelas),
             'parcelas': simulacao_parcelas,
             'intermediarias': simulacao_intermediarias,
             'valor_anterior_total': valor_anterior_total,
             'valor_novo_total': valor_novo_total,
             'diferenca_total': valor_novo_total - valor_anterior_total,
-            'impacto_mensal_medio': (valor_novo_total - valor_anterior_total) / max(parcelas.count(), 1)
+            'impacto_mensal_medio': (valor_novo_total - valor_anterior_total) / max(len(simulacao_parcelas), 1)
         }
 
     # =========================================================================
