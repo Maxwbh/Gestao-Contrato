@@ -567,7 +567,7 @@ class BoletoNotificacaoService:
             data_vencimento=em_5_dias,
             pago=False,
             status_boleto__in=[StatusBoleto.GERADO, StatusBoleto.REGISTRADO]
-        ).select_related('contrato', 'contrato__comprador')
+        ).select_related('contrato', 'contrato__comprador', 'contrato__imovel__imobiliaria')
 
         ids_5_dias = [p.id for p in parcelas_5_dias]
         ja_enviou_5d = set(Notificacao.objects.filter(
@@ -589,7 +589,7 @@ class BoletoNotificacaoService:
             data_vencimento=amanha,
             pago=False,
             status_boleto__in=[StatusBoleto.GERADO, StatusBoleto.REGISTRADO]
-        ).select_related('contrato', 'contrato__comprador')
+        ).select_related('contrato', 'contrato__comprador', 'contrato__imovel__imobiliaria')
 
         ids_amanha = [p.id for p in parcelas_amanha]
         ja_enviou_amanha = set(Notificacao.objects.filter(
@@ -611,7 +611,7 @@ class BoletoNotificacaoService:
             data_vencimento=ontem,
             pago=False,
             status_boleto__in=[StatusBoleto.GERADO, StatusBoleto.REGISTRADO, StatusBoleto.VENCIDO]
-        ).select_related('contrato', 'contrato__comprador')
+        ).select_related('contrato', 'contrato__comprador', 'contrato__imovel__imobiliaria')
 
         ids_ontem = [p.id for p in parcelas_ontem]
         ja_enviou_ontem = set(Notificacao.objects.filter(

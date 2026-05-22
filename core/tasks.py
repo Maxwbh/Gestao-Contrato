@@ -355,6 +355,17 @@ def _processar_regra(regra, result):
         f"Regra '{regra.nome}' ({label}): {len(parcelas)} parcelas em {data_alvo}"
     )
 
+    # Pre-fetch parcelas já notificadas hoje — 1 query em vez de N .exists()
+    from notificacoes.models import Notificacao as _Notif, StatusNotificacao as _SN
+    _ja_notificadas_hoje = set(
+        _Notif.objects.filter(
+            parcela_id__in=[p.id for p in parcelas],
+            assunto__startswith=PREFIXO,
+            status__in=[_SN.PENDENTE, _SN.ENVIADA],
+            data_agendamento__date=date.today(),
+        ).values_list('parcela_id', flat=True)
+    )
+
     for parcela in parcelas:
         try:
             comprador = parcela.contrato.comprador
@@ -362,7 +373,7 @@ def _processar_regra(regra, result):
             if not destinatario:
                 continue
 
-            if _notificacao_ja_enviada_hoje(parcela, PREFIXO):
+            if parcela.id in _ja_notificadas_hoje:
                 continue
 
             imob_nome = getattr(parcela.contrato.imobiliaria, 'nome', 'Gestão de Contratos')
@@ -476,12 +487,23 @@ def enviar_notificacoes_sync():
                 f"{dias_antecedencia} dia(s) ({data_alvo.strftime('%d/%m/%Y')})"
             )
 
+            # Pre-fetch parcelas já notificadas hoje — 1 query em vez de N .exists()
+            from notificacoes.models import Notificacao as _Notif01, StatusNotificacao as _SN01
+            _n01_ja_hoje = set(
+                _Notif01.objects.filter(
+                    parcela_id__in=[p.id for p in parcelas],
+                    assunto__startswith=PREFIXO,
+                    status__in=[_SN01.PENDENTE, _SN01.ENVIADA],
+                    data_agendamento__date=date.today(),
+                ).values_list('parcela_id', flat=True)
+            )
+
             for parcela in parcelas:
                 try:
                     comprador = parcela.contrato.comprador
                     if not (getattr(comprador, 'notificar_email', True) and comprador.email):
                         continue
-                    if _notificacao_ja_enviada_hoje(parcela, PREFIXO):
+                    if parcela.id in _n01_ja_hoje:
                         continue
 
                     assunto = (
@@ -589,13 +611,23 @@ def enviar_inadimplentes_sync():
                 f"N-02 (padrão): {len(parcelas)} parcelas em atraso (D+{dias_carencia})"
             )
 
+            # Pre-fetch parcelas já notificadas (all-time dedup) — 1 query em vez de N .exists()
+            from notificacoes.models import Notificacao as _Notif02, StatusNotificacao as _SN02
+            _n02_ja_enviadas = set(
+                _Notif02.objects.filter(
+                    parcela_id__in=[p.id for p in parcelas],
+                    assunto__startswith=PREFIXO,
+                    status__in=[_SN02.PENDENTE, _SN02.ENVIADA],
+                ).values_list('parcela_id', flat=True)
+            )
+
             for parcela in parcelas:
                 try:
                     comprador = parcela.contrato.comprador
                     if not (getattr(comprador, 'notificar_email', True) and comprador.email):
                         continue
                     # Dedup all-time: N-02 dispara UMA única vez por parcela
-                    if _notificacao_ja_enviada(parcela, PREFIXO):
+                    if parcela.id in _n02_ja_enviadas:
                         continue
 
                     dias_atraso = (hoje - parcela.data_vencimento).days
