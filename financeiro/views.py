@@ -3060,6 +3060,7 @@ def api_gerar_boletos_lote(request):
                 pk__in=contrato_ids, status=StatusContrato.ATIVO
             )
         }
+        _contratos_to_save = []
 
         for contrato_id in contrato_ids:
             contrato = _contratos_map.get(contrato_id)
@@ -3140,9 +3141,9 @@ def api_gerar_boletos_lote(request):
                         'erro': str(e)
                     })
 
-            # Salvar atualizacao do contrato
+            # Salvar atualizacao do contrato (acumular para bulk_update ao final)
             if gerados_contrato > 0:
-                contrato.save(update_fields=['ultimo_mes_boleto_gerado'])
+                _contratos_to_save.append(contrato)
 
             total_bloqueados += bloqueados_contrato
 
@@ -3154,6 +3155,9 @@ def api_gerar_boletos_lote(request):
                 'bloqueados': bloqueados_contrato,
                 'parcelas': parcelas_resultado
             })
+
+        if _contratos_to_save:
+            Contrato.objects.bulk_update(_contratos_to_save, ['ultimo_mes_boleto_gerado'])
 
         return JsonResponse({
             'sucesso': True,
@@ -3744,14 +3748,28 @@ def aplicar_reajuste_lote(request):
             return x_forwarded.split(',')[0].strip()
         return req.META.get('REMOTE_ADDR')
 
+    # Pre-fetch contratos em 1 query
+    _ids_validos = []
+    for cid in contrato_ids:
+        try:
+            _ids_validos.append(int(cid))
+        except (ValueError, TypeError):
+            pass
+    _contratos_map_lote = {c.id: c for c in Contrato.objects.filter(pk__in=_ids_validos)}
+
     resultados = []
     total_ok = 0
     total_erro = 0
 
     for contrato_id in contrato_ids:
         try:
-            contrato = Contrato.objects.get(pk=int(contrato_id))
-        except (Contrato.DoesNotExist, ValueError):
+            _cid_int = int(contrato_id)
+        except (ValueError, TypeError):
+            resultados.append({'contrato_id': contrato_id, 'sucesso': False, 'erro': 'Contrato não encontrado'})
+            total_erro += 1
+            continue
+        contrato = _contratos_map_lote.get(_cid_int)
+        if contrato is None:
             resultados.append({'contrato_id': contrato_id, 'sucesso': False, 'erro': 'Contrato não encontrado'})
             total_erro += 1
             continue
@@ -3903,14 +3921,28 @@ def aplicar_reajuste_informado_lote(request):
             return x_forwarded.split(',')[0].strip()
         return req.META.get('REMOTE_ADDR')
 
+    # Pre-fetch contratos em 1 query
+    _ids_v2 = []
+    for cid in contrato_ids:
+        try:
+            _ids_v2.append(int(cid))
+        except (ValueError, TypeError):
+            pass
+    _contratos_map_v2 = {c.id: c for c in Contrato.objects.filter(pk__in=_ids_v2)}
+
     resultados = []
     total_ok = 0
     total_erro = 0
 
     for contrato_id in contrato_ids:
         try:
-            contrato = Contrato.objects.get(pk=int(contrato_id))
-        except (Contrato.DoesNotExist, ValueError):
+            _cid2 = int(contrato_id)
+        except (ValueError, TypeError):
+            resultados.append({'contrato_id': contrato_id, 'sucesso': False, 'erro': 'Contrato não encontrado'})
+            total_erro += 1
+            continue
+        contrato = _contratos_map_v2.get(_cid2)
+        if contrato is None:
             resultados.append({'contrato_id': contrato_id, 'sucesso': False, 'erro': 'Contrato não encontrado'})
             total_erro += 1
             continue
