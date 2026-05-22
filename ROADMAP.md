@@ -2887,170 +2887,192 @@ Semana 4: F4-01..F4-05 (ações rápidas)
 
 ---
 
-## 34. BENCHMARK DE MERCADO 2026 — NOVAS MELHORIAS 🆕
+## 34. MELHORIAS DE PRODUTO 2026 — PÓS-VENDA E CONFORMIDADE 🆕
 
-> **Origem:** pesquisa de referências de mercado (2026-05-22) — concorrentes
-> brasileiros de gestão de loteamentos (Lotewin, Lote Mobile, LOTEAR, LotNet,
-> Terravista, SGL, SIVI, CV CRM) e tendências internacionais de CLM imobiliário.
-> Itens abaixo são lacunas confirmadas do sistema atual frente ao mercado.
+> **Origem:** benchmark de mercado (2026-05-22) + análise do sistema atual.
+> Foco: aperfeiçoar o pós-venda (gestão de contratos, cobranças, portal do
+> comprador) e garantir conformidade legal. CRM, assinatura eletrônica,
+> comissões de corretores e NFS-e estão fora do escopo deste sistema.
 
-### 34.1 Diagnóstico — O Que o Sistema Já Tem vs. Mercado
+### 34.1 Diagnóstico — Status Atual vs. Oportunidades
 
-O sistema é **maduro no pós-venda** (contratos, parcelas, reajuste, boleto,
-CNAB/OFX, notificações, portal do comprador, mapa de lotes, dashboards). As
-lacunas concentram-se no **pré-venda (comercial)** e em **conformidade/integração**:
+| Capacidade | Status |
+|---|---|
+| Gestão de contratos e parcelas | ✅ Maduro |
+| Reajuste monetário (IPCA/IGPM/SELIC) | ✅ Maduro |
+| Boleto bancário (BRCobrança) | ✅ Maduro |
+| PIX Copia e Cola na parcela/portal | ✅ Implementado |
+| CNAB 240/400 remessa e retorno | ✅ Maduro |
+| Conciliação OFX | ✅ Implementado |
+| Notificações (email/SMS/WhatsApp) | ✅ Maduro |
+| Portal do comprador (autoatendimento) | ✅ Implementado |
+| PIX — confirmação automática via webhook | 🟡 Parcial (manual hoje) |
+| Régua de cobrança configurável por imobiliária | 🟡 Parcial (hard-coded) |
+| Portal — upload de comprovante pelo comprador | ❌ Ausente |
+| Portal — renegociação/antecipação self-service | 🟡 Parcial (só admin) |
+| Relatórios agendados e exportação para BI | 🟡 Parcial |
+| PWA — portal instalável no celular | ❌ Ausente |
+| Trilha de auditoria (create/update/delete) | 🟡 Parcial (só login portal) |
+| Conformidade LGPD | 🟡 Parcial |
+| Conformidade Lei 13.786 / quadro-resumo Lei 6.766 | 🟡 Não verificado |
+| Assistente IA no portal do comprador | ❌ Ausente (base já existe) |
 
-| Capacidade | Status atual | Mercado 2026 |
-|---|---|---|
-| Pós-venda financeiro | ✅ Forte | Paridade |
-| Funil de vendas / CRM | ❌ Ausente | Padrão em todos os concorrentes |
-| Assinatura eletrônica | ❌ Ausente | 84% consideram crítico |
-| Cobrança PIX | ❌ Só boleto | PIX dominante no Brasil |
-| Comissão de corretores | ❌ Ausente | Padrão (LotNet, SGL) |
-| Trilha de auditoria | 🟡 Parcial (só login portal) | Exigido (LGPD + CLM) |
-| Conformidade LGPD | 🟡 Parcial | Obrigatório |
-| App mobile / PWA | ❌ Ausente | Lote Mobile, Imobzi, Imobilead |
+---
 
-### 34.2 P1 — CRM e Funil de Vendas (novo app `comercial`)
+### 34.2 P1 — Trilha de Auditoria Completa
 
-**Por quê:** maior lacuna competitiva. Todos os concorrentes oferecem captura de
-leads, pipeline e reserva de lote. Sem isso o sistema só atua depois da venda
-fechada.
-
-| # | Item |
-|---|------|
-| 34.2.1 | Novo app `comercial` — modelos `Lead`, `Atendimento`, `Proposta`, `ReservaLote` |
-| 34.2.2 | Pipeline Kanban: estágios Interesse → Visita → Proposta → Reserva → Contrato |
-| 34.2.3 | Captura de leads: formulário público + endpoint webhook (portais/landing pages) |
-| 34.2.4 | Reserva de lote com expiração automática (libera `Imovel` se não converter) |
-| 34.2.5 | Proposta comercial (PDF) — desconto, condição de pagamento, validade |
-| 34.2.6 | Conversão Proposta → Contrato (reaproveita wizard da Seção 3.3) |
-| 34.2.7 | Distribuição de leads por corretor (round-robin / por loteamento) |
-| 34.2.8 | Dashboard comercial: taxa de conversão por etapa, leads por origem |
-
-### 34.3 P1 — Assinatura Eletrônica de Contratos
-
-**Por quê:** STJ validou assinatura eletrônica; mercado a trata como essencial.
-Hoje o contrato é gerado mas assinado fora do sistema.
+**Por quê:** hoje só há `LogAcessoComprador`. Toda alteração em Contrato,
+Parcela ou Pagamento precisa ser rastreável — exigência de LGPD e boa prática
+de CLM (Contract Lifecycle Management).
 
 | # | Item |
 |---|------|
-| 34.3.1 | Serviço `assinatura_service.py` com adaptador para ClickSign ou ZapSign (API REST, melhor custo-benefício no Brasil) |
-| 34.3.2 | Modelo `EnvelopeAssinatura` (contrato, signatários, status, data, hash) |
-| 34.3.3 | Envio do PDF do contrato para assinatura direto da tela de detalhe |
-| 34.3.4 | Webhook de retorno de status (enviado → visualizado → assinado) |
-| 34.3.5 | Armazenamento do PDF assinado + log de auditoria com hash |
-| 34.3.6 | Suporte opcional a certificado ICP-Brasil (assinatura qualificada) |
+| 34.2.1 | Modelo `RegistroAuditoria` genérico via `ContentType` (`app_auditoria` ou mixin) |
+| 34.2.2 | Signal `post_save` / `post_delete` para Contrato, Parcela, Reajuste, HistoricoPagamento |
+| 34.2.3 | Registrar: usuário, IP, ação (CREATE/UPDATE/DELETE), campos alterados (antes/depois), timestamp |
+| 34.2.4 | Tela de consulta de auditoria na aba do contrato e no admin |
+| 34.2.5 | Exportar histórico de auditoria em CSV por solicitação do titular (LGPD) |
 
-### 34.4 P2 — Cobrança via PIX
+---
 
-**Por quê:** PIX é o meio de cobrança dominante no Brasil, com custo muito menor
-que boleto. Sistema gera só boleto via BRCobrança.
+### 34.3 P1 — Conformidade LGPD
 
-| # | Item |
-|---|------|
-| 34.4.1 | Integração PIX Cobrança (API do banco / PSP) — QR Code dinâmico por parcela |
-| 34.4.2 | Boleto híbrido (boleto + QR PIX no mesmo documento) |
-| 34.4.3 | Webhook de confirmação PIX → baixa automática da parcela |
-| 34.4.4 | Exibir QR Code PIX no portal do comprador e nas notificações |
-
-### 34.5 P2 — Gestão de Comissões de Corretores
-
-**Por quê:** concorrentes (LotNet, SGL) cadastram corretores e controlam
-comissão. Sistema não tem entidade de corretor nem cálculo de comissão.
+**Por quê:** o sistema armazena CPF, endereço, telefone e e-mail de compradores
+— dados pessoais sujeitos à Lei 13.709/2019 (LGPD).
 
 | # | Item |
 |---|------|
-| 34.5.1 | Modelo `Corretor` e `Comissao` (contrato, corretor, %, valor, parcelamento) |
-| 34.5.2 | Regra de liberação: comissão paga conforme entrada/parcelas recebidas |
-| 34.5.3 | Relatório de comissões a pagar / pagas por corretor e por período |
-| 34.5.4 | Painel do corretor (reaproveita padrão do portal do comprador) |
+| 34.3.1 | Registro de consentimento do titular com finalidade, data e versão do termo |
+| 34.3.2 | Endpoint de portabilidade: exportar todos os dados do comprador (JSON/PDF) |
+| 34.3.3 | Fluxo de anonimização: substituir dados pessoais por `ANONIMIZADO` sem apagar obrigações fiscais |
+| 34.3.4 | Prazo de retenção configurável por tipo de dado; rotina de limpeza automática |
+| 34.3.5 | Banner de cookies e link para política de privacidade no portal do comprador |
 
-### 34.6 P2 — Trilha de Auditoria Completa (Audit Log)
+---
 
-**Por quê:** hoje só há `LogAcessoComprador`. Auditoria de alterações é
-exigência de LGPD e prática padrão de CLM.
+### 34.4 P1 — Conformidade Legal (Lei 13.786 / Lei 6.766)
 
-| # | Item |
-|---|------|
-| 34.6.1 | App/serviço de auditoria com modelo `RegistroAuditoria` (genérico via `ContentType`) |
-| 34.6.2 | Capturar create/update/delete de Contrato, Parcela, Reajuste, Pagamento (signals) |
-| 34.6.3 | Guardar usuário, IP, campos alterados (antes/depois), timestamp |
-| 34.6.4 | Tela de consulta de auditoria por entidade no admin e no detalhe do contrato |
-
-### 34.7 P2 — Conformidade LGPD
-
-**Por quê:** o sistema trata dados pessoais de compradores (CPF, endereço,
-contatos). Conformidade LGPD é obrigação legal.
+**Por quê:** a Lei 6.766 art. 26 exige **quadro-resumo** no contrato de
+loteamento; a Lei 13.786/2018 regula distrato e retenção. Necessário auditar
+aderência.
 
 | # | Item |
 |---|------|
-| 34.7.1 | Registro de consentimento do titular (finalidade, data, versão do termo) |
-| 34.7.2 | Exportação de dados pessoais do comprador (portabilidade — JSON/PDF) |
-| 34.7.3 | Anonimização/exclusão de dados sob solicitação (preservando obrigações fiscais) |
-| 34.7.4 | Política de retenção e banner de cookies/termos no portal |
+| 34.4.1 | Quadro-resumo padronizado no PDF do contrato (preço total, índice, taxa de juros, prazo, multa, fruição) |
+| 34.4.2 | Revisar e documentar cálculo de rescisão à luz da Lei 13.786 (retenção até 50% para loteamento) |
+| 34.4.3 | Alertar quando o distrato geraria retenção acima do limite legal |
+| 34.4.4 | Versionamento de minutas de contrato (histórico de modelos por imobiliária) |
 
-### 34.8 P2 — Conformidade Legal do Contrato (Lei 13.786 / Lei 6.766)
+---
 
-**Por quê:** a Lei 6.766 art. 26 exige "quadro-resumo" no contrato de loteamento;
-a Lei 13.786 define regras de distrato (retenção, devolução). Verificar aderência.
+### 34.5 P2 — PIX: Confirmação Automática via Webhook
 
-| # | Item |
-|---|------|
-| 34.8.1 | Quadro-resumo padronizado no PDF do contrato (preço, índice, juros, prazos, penalidades) |
-| 34.8.2 | Revisar cálculo de distrato/rescisão à luz da Lei 13.786 (retenção, restituição) |
-| 34.8.3 | Modelos de cláusula versionados (controle de versão da minuta) |
-
-### 34.9 P3 — App Mobile / PWA para Corretores
-
-**Por quê:** Lote Mobile, Imobzi e Imobilead oferecem app. Um PWA aproveita os
-templates atuais sem app nativo.
+**Por quê:** o sistema já armazena `pix_copia_cola` e `pix_qrcode` na `Parcela`
+e exibe no portal/boleto. Falta o fechamento do ciclo: confirmar o pagamento PIX
+automaticamente sem depender do arquivo CNAB de retorno.
 
 | # | Item |
 |---|------|
-| 34.9.1 | Transformar portal em PWA (manifest, service worker, instalável, offline básico) |
-| 34.9.2 | Mapa de lotes mobile-first com status em tempo real (disponível/reservado/vendido) |
-| 34.9.3 | Atalho do corretor: registrar lead/visita pelo celular no loteamento |
+| 34.5.1 | Webhook endpoint `POST /financeiro/webhook/pix/` para receber notificações do banco/PSP |
+| 34.5.2 | Identificar parcela pelo `txid` (nosso_numero ou ID do QR dinâmico) |
+| 34.5.3 | Baixar parcela automaticamente ao receber confirmação PIX (reaproveitar `registrar_pagamento`) |
+| 34.5.4 | Log de eventos PIX recebidos (deduplicação por `EndToEndId`) |
 
-### 34.10 P3 — Documentos Fiscais (NF-e de Serviço)
+---
 
-| # | Item |
-|---|------|
-| 34.10.1 | Emissão de NFS-e (nota de serviço) integrada a provedor (ex.: Focus NF-e) |
-| 34.10.2 | Vincular NFS-e ao recibo de pagamento já existente |
+### 34.6 P2 — Régua de Cobrança Configurável por Imobiliária
 
-### 34.11 P3 — Integração com Portais Imobiliários
-
-| # | Item |
-|---|------|
-| 34.11.1 | Exportação de lotes disponíveis para ZAP/VivaReal (feed XML padrão) |
-| 34.11.2 | Importação automática de leads dos portais para o app `comercial` |
-
-### 34.12 P4 — Inteligência Artificial (já há base com Claude API)
-
-> O sistema já usa Claude API no chatbot WhatsApp (Seção 30). Estender o uso:
+**Por quê:** hoje os gatilhos de notificação (D+3, D+7, D+15) estão
+hard-coded em `core/tasks.py`. Cada imobiliária deveria definir sua própria
+régua (dias, canais, templates).
 
 | # | Item |
 |---|------|
-| 34.12.1 | Extração/conferência de cláusulas e quadro-resumo via IA antes do envio para assinatura |
-| 34.12.2 | Análise de risco de inadimplência (score por histórico de pagamento) |
-| 34.12.3 | Resumo automático do contrato em linguagem simples no portal do comprador |
+| 34.6.1 | Modelo `RegraCobranca` (imobiliária, dias_apos_vencimento, canal, template) |
+| 34.6.2 | `core/tasks.py` passa a consultar `RegraCobranca` em vez de constantes |
+| 34.6.3 | Interface de cadastro da régua no painel da imobiliária |
+| 34.6.4 | Suporte a múltiplas réguas por imobiliária (ex.: D+1 WhatsApp, D+7 SMS, D+15 email) |
 
-### 34.13 Ordem de Execução Recomendada
+---
+
+### 34.7 P2 — Portal do Comprador — Autoatendimento Expandido
+
+**Por quê:** o portal já exibe contratos, parcelas e boletos. Falta permitir que
+o comprador realize ações sem passar pela imobiliária.
+
+| # | Item |
+|---|------|
+| 34.7.1 | **Upload de comprovante de pagamento** — comprador envia PDF/imagem; imobiliária confirma |
+| 34.7.2 | **Simulação de antecipação self-service** — calcular desconto e emitir boleto/PIX de quitação antecipada |
+| 34.7.3 | **Solicitação de segunda via** sem precisar ligar para a imobiliária |
+| 34.7.4 | **Histórico unificado** de pagamentos, reajustes e notificações recebidas em linha do tempo |
+| 34.7.5 | **Atualização de cadastro** pelo comprador (endereço, telefone, e-mail) com aprovação da imobiliária |
+
+---
+
+### 34.8 P3 — Relatórios Agendados e Exportação para BI
+
+**Por quê:** hoje os relatórios são gerados sob demanda. Imobiliárias precisam
+de relatórios automáticos periódicos e integração com ferramentas de BI.
+
+| # | Item |
+|---|------|
+| 34.8.1 | Relatório de inadimplência enviado por e-mail (diário/semanal) configurável |
+| 34.8.2 | Relatório de posição de contratos (saldo devedor total) em PDF/Excel agendado |
+| 34.8.3 | Endpoint `GET /api/relatorios/posicao/?formato=json` para consumo por Power BI / Looker |
+| 34.8.4 | Dashboard executivo consolidado para Contabilidade: receita prevista × realizada × inadimplência |
+
+---
+
+### 34.9 P3 — PWA — Portal do Comprador Instalável
+
+**Por quê:** compradores acessam majoritariamente pelo celular. Um PWA transforma
+o portal existente em app instalável sem desenvolver app nativo.
+
+| # | Item |
+|---|------|
+| 34.9.1 | `manifest.json` com ícones, tema e `start_url` apontando para o portal |
+| 34.9.2 | Service worker com cache dos assets estáticos (offline para telas já visitadas) |
+| 34.9.3 | Notificações push via Web Push API (vencimento, boleto disponível, reajuste aplicado) |
+| 34.9.4 | Layout mobile-first nas telas críticas: parcelas, boleto, comprovante |
+
+---
+
+### 34.10 P3/P4 — Inteligência Artificial (base já existe via Claude API)
+
+> O sistema já integra Claude API no chatbot WhatsApp (Seção 30). Extensões
+> dentro do escopo de pós-venda:
+
+| # | Item | Prioridade |
+|---|------|---|
+| 34.10.1 | **Score de inadimplência** — prever risco de atraso por histórico de pagamento do comprador | P3 |
+| 34.10.2 | **Assistente no portal** — responder dúvidas do comprador (saldo, próximo vencimento, reajuste) sem abrir chamado | P3 |
+| 34.10.3 | **Sugestão de régua de cobrança** — analisar padrão de pagamentos e recomendar dias/canais mais efetivos | P4 |
+| 34.10.4 | **Resumo do contrato em linguagem simples** — exibir no portal para compradores com menor escolaridade financeira | P4 |
+
+---
+
+### 34.11 Ordem de Execução Recomendada
 
 ```
-Fase A (P1 — competitividade):  34.2 CRM/Funil  →  34.3 Assinatura Eletrônica
-Fase B (P2 — receita/conformidade): 34.4 PIX  →  34.5 Comissões
-                                    34.6 Auditoria  →  34.7 LGPD  →  34.8 Legal
-Fase C (P3 — alcance):  34.9 PWA  →  34.10 NFS-e  →  34.11 Portais
-Fase D (P4 — diferenciação):  34.12 IA
+Fase A — P1 (conformidade obrigatória):
+  34.2 Auditoria  →  34.3 LGPD  →  34.4 Conformidade Legal
+
+Fase B — P2 (receita e operação):
+  34.5 PIX Webhook  →  34.6 Régua Configurável  →  34.7 Portal Comprador
+
+Fase C — P3 (alcance e BI):
+  34.8 Relatórios  →  34.9 PWA
+
+Fase D — P3/P4 (diferenciação):
+  34.10 IA
 ```
 
-### 34.14 Critérios de Aceitação
+### 34.12 Critérios de Aceitação
 
-- Cada novo app/serviço entra com testes (manter padrão de cobertura atual ~1197)
-- Integrações externas (assinatura, PIX, NFS-e) com modo de teste/sandbox e
-  fallback gracioso quando o provedor estiver indisponível (padrão BRCobrança)
-- Multi-tenancy preservado: isolamento por imobiliária em todas as entidades novas
-- Sem regressão na suite de testes existente
+- Cada novo modelo/serviço entra com testes (manter padrão ≥ 1197 passando)
+- Integrações externas (webhook PIX, push notifications) com modo sandbox e
+  fallback gracioso quando o provedor estiver indisponível
+- Multi-tenancy preservado: todas as entidades novas isoladas por imobiliária
+- Funcionalidades LGPD (portabilidade, anonimização) acessíveis sem intervenção técnica
 
