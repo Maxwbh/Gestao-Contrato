@@ -2887,12 +2887,14 @@ Semana 4: F4-01..F4-05 (ações rápidas)
 
 ---
 
-## 34. MELHORIAS DE PRODUTO 2026 — PÓS-VENDA E CONFORMIDADE 🆕
+## 34. MELHORIAS DE PRODUTO 2026 — PÓS-VENDA 🆕
 
 > **Origem:** benchmark de mercado (2026-05-22) + análise do sistema atual.
 > Foco: aperfeiçoar o pós-venda (gestão de contratos, cobranças, portal do
-> comprador) e garantir conformidade legal. CRM, assinatura eletrônica,
-> comissões de corretores e NFS-e estão fora do escopo deste sistema.
+> comprador). Fora do escopo deste sistema: CRM/funil, assinatura eletrônica,
+> comissões de corretores, NFS-e, conformidade LGPD e régua de cobrança
+> configurável. Adiados (débito técnico pós-2050, ver 34.7): trilha de
+> auditoria completa e funcionalidades de IA.
 
 ### 34.1 Diagnóstico — Status Atual vs. Oportunidades
 
@@ -2907,50 +2909,15 @@ Semana 4: F4-01..F4-05 (ações rápidas)
 | Notificações (email/SMS/WhatsApp) | ✅ Maduro |
 | Portal do comprador (autoatendimento) | ✅ Implementado |
 | PIX — confirmação automática via webhook | 🟡 Parcial (manual hoje) |
-| Régua de cobrança configurável por imobiliária | 🟡 Parcial (hard-coded) |
 | Portal — upload de comprovante pelo comprador | ❌ Ausente |
 | Portal — renegociação/antecipação self-service | 🟡 Parcial (só admin) |
 | Relatórios agendados e exportação para BI | 🟡 Parcial |
 | PWA — portal instalável no celular | ❌ Ausente |
-| Trilha de auditoria (create/update/delete) | 🟡 Parcial (só login portal) |
-| Conformidade LGPD | 🟡 Parcial |
 | Conformidade Lei 13.786 / quadro-resumo Lei 6.766 | 🟡 Não verificado |
-| Assistente IA no portal do comprador | ❌ Ausente (base já existe) |
 
 ---
 
-### 34.2 P1 — Trilha de Auditoria Completa
-
-**Por quê:** hoje só há `LogAcessoComprador`. Toda alteração em Contrato,
-Parcela ou Pagamento precisa ser rastreável — exigência de LGPD e boa prática
-de CLM (Contract Lifecycle Management).
-
-| # | Item |
-|---|------|
-| 34.2.1 | Modelo `RegistroAuditoria` genérico via `ContentType` (`app_auditoria` ou mixin) |
-| 34.2.2 | Signal `post_save` / `post_delete` para Contrato, Parcela, Reajuste, HistoricoPagamento |
-| 34.2.3 | Registrar: usuário, IP, ação (CREATE/UPDATE/DELETE), campos alterados (antes/depois), timestamp |
-| 34.2.4 | Tela de consulta de auditoria na aba do contrato e no admin |
-| 34.2.5 | Exportar histórico de auditoria em CSV por solicitação do titular (LGPD) |
-
----
-
-### 34.3 P1 — Conformidade LGPD
-
-**Por quê:** o sistema armazena CPF, endereço, telefone e e-mail de compradores
-— dados pessoais sujeitos à Lei 13.709/2019 (LGPD).
-
-| # | Item |
-|---|------|
-| 34.3.1 | Registro de consentimento do titular com finalidade, data e versão do termo |
-| 34.3.2 | Endpoint de portabilidade: exportar todos os dados do comprador (JSON/PDF) |
-| 34.3.3 | Fluxo de anonimização: substituir dados pessoais por `ANONIMIZADO` sem apagar obrigações fiscais |
-| 34.3.4 | Prazo de retenção configurável por tipo de dado; rotina de limpeza automática |
-| 34.3.5 | Banner de cookies e link para política de privacidade no portal do comprador |
-
----
-
-### 34.4 P1 — Conformidade Legal (Lei 13.786 / Lei 6.766)
+### 34.2 P1 — Conformidade Legal (Lei 13.786 / Lei 6.766)
 
 **Por quê:** a Lei 6.766 art. 26 exige **quadro-resumo** no contrato de
 loteamento; a Lei 13.786/2018 regula distrato e retenção. Necessário auditar
@@ -2958,14 +2925,14 @@ aderência.
 
 | # | Item |
 |---|------|
-| 34.4.1 | Quadro-resumo padronizado no PDF do contrato (preço total, índice, taxa de juros, prazo, multa, fruição) |
-| 34.4.2 | Revisar e documentar cálculo de rescisão à luz da Lei 13.786 (retenção até 50% para loteamento) |
-| 34.4.3 | Alertar quando o distrato geraria retenção acima do limite legal |
-| 34.4.4 | Versionamento de minutas de contrato (histórico de modelos por imobiliária) |
+| 34.2.1 | Quadro-resumo padronizado no PDF do contrato (preço total, índice, taxa de juros, prazo, multa, fruição) |
+| 34.2.2 | Revisar e documentar cálculo de rescisão à luz da Lei 13.786 (retenção até 50% para loteamento) |
+| 34.2.3 | Alertar quando o distrato geraria retenção acima do limite legal |
+| 34.2.4 | Versionamento de minutas de contrato (histórico de modelos por imobiliária) |
 
 ---
 
-### 34.5 P2 — PIX: Confirmação Automática via Webhook
+### 34.3 P2 — PIX: Confirmação Automática via Webhook
 
 **Por quê:** o sistema já armazena `pix_copia_cola` e `pix_qrcode` na `Parcela`
 e exibe no portal/boleto. Falta o fechamento do ciclo: confirmar o pagamento PIX
@@ -2973,106 +2940,79 @@ automaticamente sem depender do arquivo CNAB de retorno.
 
 | # | Item |
 |---|------|
-| 34.5.1 | Webhook endpoint `POST /financeiro/webhook/pix/` para receber notificações do banco/PSP |
-| 34.5.2 | Identificar parcela pelo `txid` (nosso_numero ou ID do QR dinâmico) |
-| 34.5.3 | Baixar parcela automaticamente ao receber confirmação PIX (reaproveitar `registrar_pagamento`) |
-| 34.5.4 | Log de eventos PIX recebidos (deduplicação por `EndToEndId`) |
+| 34.3.1 | Webhook endpoint `POST /financeiro/webhook/pix/` para receber notificações do banco/PSP |
+| 34.3.2 | Identificar parcela pelo `txid` (nosso_numero ou ID do QR dinâmico) |
+| 34.3.3 | Baixar parcela automaticamente ao receber confirmação PIX (reaproveitar `registrar_pagamento`) |
+| 34.3.4 | Log de eventos PIX recebidos (deduplicação por `EndToEndId`) |
 
 ---
 
-### 34.6 P2 — Régua de Cobrança Configurável por Imobiliária
-
-**Por quê:** hoje os gatilhos de notificação (D+3, D+7, D+15) estão
-hard-coded em `core/tasks.py`. Cada imobiliária deveria definir sua própria
-régua (dias, canais, templates).
-
-| # | Item |
-|---|------|
-| 34.6.1 | Modelo `RegraCobranca` (imobiliária, dias_apos_vencimento, canal, template) |
-| 34.6.2 | `core/tasks.py` passa a consultar `RegraCobranca` em vez de constantes |
-| 34.6.3 | Interface de cadastro da régua no painel da imobiliária |
-| 34.6.4 | Suporte a múltiplas réguas por imobiliária (ex.: D+1 WhatsApp, D+7 SMS, D+15 email) |
-
----
-
-### 34.7 P2 — Portal do Comprador — Autoatendimento Expandido
+### 34.4 P2 — Portal do Comprador — Autoatendimento Expandido
 
 **Por quê:** o portal já exibe contratos, parcelas e boletos. Falta permitir que
 o comprador realize ações sem passar pela imobiliária.
 
 | # | Item |
 |---|------|
-| 34.7.1 | **Upload de comprovante de pagamento** — comprador envia PDF/imagem; imobiliária confirma |
-| 34.7.2 | **Simulação de antecipação self-service** — calcular desconto e emitir boleto/PIX de quitação antecipada |
-| 34.7.3 | **Solicitação de segunda via** sem precisar ligar para a imobiliária |
-| 34.7.4 | **Histórico unificado** de pagamentos, reajustes e notificações recebidas em linha do tempo |
-| 34.7.5 | **Atualização de cadastro** pelo comprador (endereço, telefone, e-mail) com aprovação da imobiliária |
+| 34.4.1 | **Upload de comprovante de pagamento** — comprador envia PDF/imagem; imobiliária confirma |
+| 34.4.2 | **Simulação de antecipação self-service** — calcular desconto e emitir boleto/PIX de quitação antecipada |
+| 34.4.3 | **Solicitação de segunda via** sem precisar ligar para a imobiliária |
+| 34.4.4 | **Histórico unificado** de pagamentos, reajustes e notificações recebidas em linha do tempo |
+| 34.4.5 | **Atualização de cadastro** pelo comprador (endereço, telefone, e-mail) com aprovação da imobiliária |
 
 ---
 
-### 34.8 P3 — Relatórios Agendados e Exportação para BI
+### 34.5 P3 — Relatórios Agendados e Exportação para BI
 
 **Por quê:** hoje os relatórios são gerados sob demanda. Imobiliárias precisam
 de relatórios automáticos periódicos e integração com ferramentas de BI.
 
 | # | Item |
 |---|------|
-| 34.8.1 | Relatório de inadimplência enviado por e-mail (diário/semanal) configurável |
-| 34.8.2 | Relatório de posição de contratos (saldo devedor total) em PDF/Excel agendado |
-| 34.8.3 | Endpoint `GET /api/relatorios/posicao/?formato=json` para consumo por Power BI / Looker |
-| 34.8.4 | Dashboard executivo consolidado para Contabilidade: receita prevista × realizada × inadimplência |
+| 34.5.1 | Relatório de inadimplência enviado por e-mail (diário/semanal) configurável |
+| 34.5.2 | Relatório de posição de contratos (saldo devedor total) em PDF/Excel agendado |
+| 34.5.3 | Endpoint `GET /api/relatorios/posicao/?formato=json` para consumo por Power BI / Looker |
+| 34.5.4 | Dashboard executivo consolidado para Contabilidade: receita prevista × realizada × inadimplência |
 
 ---
 
-### 34.9 P3 — PWA — Portal do Comprador Instalável
+### 34.6 P3 — PWA — Portal do Comprador Instalável
 
 **Por quê:** compradores acessam majoritariamente pelo celular. Um PWA transforma
 o portal existente em app instalável sem desenvolver app nativo.
 
 | # | Item |
 |---|------|
-| 34.9.1 | `manifest.json` com ícones, tema e `start_url` apontando para o portal |
-| 34.9.2 | Service worker com cache dos assets estáticos (offline para telas já visitadas) |
-| 34.9.3 | Notificações push via Web Push API (vencimento, boleto disponível, reajuste aplicado) |
-| 34.9.4 | Layout mobile-first nas telas críticas: parcelas, boleto, comprovante |
+| 34.6.1 | `manifest.json` com ícones, tema e `start_url` apontando para o portal |
+| 34.6.2 | Service worker com cache dos assets estáticos (offline para telas já visitadas) |
+| 34.6.3 | Notificações push via Web Push API (vencimento, boleto disponível, reajuste aplicado) |
+| 34.6.4 | Layout mobile-first nas telas críticas: parcelas, boleto, comprovante |
 
 ---
 
-### 34.10 P3/P4 — Inteligência Artificial (base já existe via Claude API)
+### 34.7 Itens Adiados — Débito Técnico (pós-2050)
 
-> O sistema já integra Claude API no chatbot WhatsApp (Seção 30). Extensões
-> dentro do escopo de pós-venda:
-
-| # | Item | Prioridade |
-|---|------|---|
-| 34.10.1 | **Score de inadimplência** — prever risco de atraso por histórico de pagamento do comprador | P3 |
-| 34.10.2 | **Assistente no portal** — responder dúvidas do comprador (saldo, próximo vencimento, reajuste) sem abrir chamado | P3 |
-| 34.10.3 | **Sugestão de régua de cobrança** — analisar padrão de pagamentos e recomendar dias/canais mais efetivos | P4 |
-| 34.10.4 | **Resumo do contrato em linguagem simples** — exibir no portal para compradores com menor escolaridade financeira | P4 |
+| # | Item | Motivo |
+|---|------|--------|
+| 34.7.1 | **Trilha de auditoria completa** (create/update/delete de Contrato, Parcela, Reajuste, Pagamento via signals) | Fora do escopo prioritário |
+| 34.7.2 | **Inteligência Artificial** — score de inadimplência, assistente no portal, resumo de contrato em linguagem simples (base já existe via Claude API, Seção 30) | Fora do escopo prioritário |
 
 ---
 
-### 34.11 Ordem de Execução Recomendada
+### 34.8 Ordem de Execução Recomendada
 
 ```
-Fase A — P1 (conformidade obrigatória):
-  34.2 Auditoria  →  34.3 LGPD  →  34.4 Conformidade Legal
+Fase A — P1:  34.2 Conformidade Legal
 
-Fase B — P2 (receita e operação):
-  34.5 PIX Webhook  →  34.6 Régua Configurável  →  34.7 Portal Comprador
+Fase B — P2:  34.3 PIX Webhook  →  34.4 Portal Comprador
 
-Fase C — P3 (alcance e BI):
-  34.8 Relatórios  →  34.9 PWA
-
-Fase D — P3/P4 (diferenciação):
-  34.10 IA
+Fase C — P3:  34.5 Relatórios  →  34.6 PWA
 ```
 
-### 34.12 Critérios de Aceitação
+### 34.9 Critérios de Aceitação
 
 - Cada novo modelo/serviço entra com testes (manter padrão ≥ 1197 passando)
 - Integrações externas (webhook PIX, push notifications) com modo sandbox e
   fallback gracioso quando o provedor estiver indisponível
 - Multi-tenancy preservado: todas as entidades novas isoladas por imobiliária
-- Funcionalidades LGPD (portabilidade, anonimização) acessíveis sem intervenção técnica
 
