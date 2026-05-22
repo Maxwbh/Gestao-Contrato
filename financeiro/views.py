@@ -2567,14 +2567,17 @@ def gerar_carne(request, contrato_id):
             prazo_lote = contrato.prazo_reajuste_meses or 12
             hoje_lote = timezone.now().date()
             total_ciclos_lote = (contrato.numero_parcelas - 1) // prazo_lote + 1
+            # Pre-fetch todos os ciclos aplicados — 1 query em vez de N .exists()
+            _ciclos_aplicados = set(
+                Reajuste.objects.filter(contrato=contrato, aplicado=True).values_list('ciclo', flat=True)
+            )
             for _ciclo in range(2, total_ciclos_lote + 2):
                 data_rd = contrato.data_contrato + _rd(months=(_ciclo - 1) * prazo_lote)
                 if hoje_lote < data_rd:
                     # Ciclo ainda futuro → lote só até o ciclo anterior
                     max_parcela_lote = (_ciclo - 1) * prazo_lote
                     break
-                from financeiro.models import Reajuste as _Reaj
-                if not _Reaj.objects.filter(contrato=contrato, ciclo=_ciclo, aplicado=True).exists():
+                if _ciclo not in _ciclos_aplicados:
                     # Ciclo vencido mas não reajustado → lote só até o ciclo anterior
                     max_parcela_lote = (_ciclo - 1) * prazo_lote
                     break
@@ -2946,12 +2949,16 @@ def api_gerar_boletos_parcelas(request):
     gerados, bloqueados, erros = 0, 0, 0
     detalhes = []
 
+    # Pre-fetch todas as parcelas em 1 query em vez de N .get() individuais
+    _parcelas_map = {
+        p.id: p for p in Parcela.objects.select_related(
+            'contrato', 'contrato__imovel', 'contrato__imovel__imobiliaria'
+        ).filter(pk__in=parcela_ids)
+    }
+
     for parcela_id in parcela_ids:
-        try:
-            parcela = Parcela.objects.select_related(
-                'contrato', 'contrato__imovel', 'contrato__imovel__imobiliaria'
-            ).get(pk=parcela_id)
-        except Parcela.DoesNotExist:
+        parcela = _parcelas_map.get(parcela_id)
+        if parcela is None:
             erros += 1
             detalhes.append({'parcela_id': parcela_id, 'sucesso': False, 'erro': 'Parcela não encontrada'})
             continue
