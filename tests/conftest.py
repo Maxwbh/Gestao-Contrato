@@ -230,34 +230,30 @@ def parcela_paga(db, parcela_factory, historico_pagamento_factory):
 @pytest.fixture
 def mock_brcobranca_success(requests_mock):
     """Mock da API BRCobranca retornando sucesso"""
-    # Service uses BRCOBRANCA_URL setting (defaults to http://localhost:9292)
-    requests_mock.get(
-        'http://localhost:9292/api/boleto',
-        content=b'%PDF-1.4 Mock PDF Content',
-        status_code=200
-    )
-    # Also register legacy URL in case settings override
-    requests_mock.get(
-        'https://brcobranca-api.onrender.com/api/boleto',
-        content=b'%PDF-1.4 Mock PDF Content',
-        status_code=200
-    )
+    from django.conf import settings
+    brcobranca_url = getattr(settings, 'BRCOBRANCA_URL', 'http://localhost:9292')
+    for url in {brcobranca_url, 'http://localhost:9292', 'https://brcobranca-api.onrender.com',
+                'https://brcobranca-api-m4q9.onrender.com'}:
+        requests_mock.get(
+            f'{url}/api/boleto',
+            content=b'%PDF-1.4 Mock PDF Content',
+            status_code=200
+        )
     return requests_mock
 
 
 @pytest.fixture
 def mock_brcobranca_error(requests_mock):
     """Mock da API BRCobranca retornando erro 500"""
-    requests_mock.get(
-        'http://localhost:9292/api/boleto',
-        json={'erro': 'Erro interno do servidor'},
-        status_code=500
-    )
-    requests_mock.get(
-        'https://brcobranca-api.onrender.com/api/boleto',
-        json={'erro': 'Erro interno do servidor'},
-        status_code=500
-    )
+    from django.conf import settings
+    brcobranca_url = getattr(settings, 'BRCOBRANCA_URL', 'http://localhost:9292')
+    for url in {brcobranca_url, 'http://localhost:9292', 'https://brcobranca-api.onrender.com',
+                'https://brcobranca-api-m4q9.onrender.com'}:
+        requests_mock.get(
+            f'{url}/api/boleto',
+            json={'erro': 'Erro interno do servidor'},
+            status_code=500
+        )
     return requests_mock
 
 

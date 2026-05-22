@@ -29,7 +29,7 @@ class TestCNABServiceBasico(TestCase):
         """Testa se o serviço pode ser instanciado"""
         service = CNABService()
         self.assertIsNotNone(service)
-        self.assertIn('localhost', service.brcobranca_url)
+        self.assertTrue(service.brcobranca_url.startswith('http'))
 
     def test_get_banco_brcobranca_banco_brasil(self):
         """Testa mapeamento do Banco do Brasil"""

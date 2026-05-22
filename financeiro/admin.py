@@ -126,11 +126,15 @@ class ParcelaAdmin(admin.ModelAdmin):
 
     def atualizar_juros_multa(self, request, queryset):
         """Atualiza juros e multa das parcelas selecionadas"""
-        count = 0
-        for parcela in queryset.filter(pago=False):
-            parcela.atualizar_juros_multa()
-            count += 1
-        self.message_user(request, f'{count} parcela(s) atualizada(s).')
+        to_update = []
+        for parcela in queryset.filter(pago=False).select_related('contrato'):
+            juros, multa = parcela.calcular_juros_multa()
+            parcela.valor_juros = juros
+            parcela.valor_multa = multa
+            to_update.append(parcela)
+        if to_update:
+            Parcela.objects.bulk_update(to_update, ['valor_juros', 'valor_multa'])
+        self.message_user(request, f'{len(to_update)} parcela(s) atualizada(s).')
     atualizar_juros_multa.short_description = 'Atualizar Juros e Multa'
 
     def marcar_como_pago(self, request, queryset):
