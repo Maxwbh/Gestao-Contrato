@@ -1051,26 +1051,22 @@ def painel_mensagens(request):
 
     qs = qs.order_by('-data_agendamento')
 
-    # --- Agregações (sobre o queryset filtrado) ---
-    stats_status = {}
-    for row in qs.values('status').annotate(c=Count('id')):
-        stats_status[row['status']] = row['c']
-
-    stats_tipo = {}
-    for row in qs.values('tipo').annotate(c=Count('id')):
-        stats_tipo[row['tipo']] = row['c']
-
-    stats_entrega = {}
-    for row in qs.exclude(status_entrega='').values('status_entrega').annotate(c=Count('id')):
-        stats_entrega[row['status_entrega']] = row['c']
+    # --- Agregações (sobre o queryset filtrado) — 1 GROUP BY em vez de 4 queries ---
+    stats_status: dict = {}
+    stats_tipo: dict = {}
+    stats_entrega: dict = {}
+    total_sem_confirmacao = 0
+    for row in qs.values('status', 'tipo', 'status_entrega').annotate(c=Count('id')):
+        stats_status[row['status']] = stats_status.get(row['status'], 0) + row['c']
+        stats_tipo[row['tipo']] = stats_tipo.get(row['tipo'], 0) + row['c']
+        if row['status_entrega']:
+            stats_entrega[row['status_entrega']] = stats_entrega.get(row['status_entrega'], 0) + row['c']
+        if row['status'] == StatusNotificacao.ENVIADA and not row['status_entrega']:
+            total_sem_confirmacao += row['c']
 
     total = sum(stats_status.values())
     total_entregues = stats_entrega.get('delivered', 0) + stats_entrega.get('read', 0)
     total_falhos = stats_entrega.get('failed', 0) + stats_entrega.get('undelivered', 0)
-    total_sem_confirmacao = qs.filter(
-        status=StatusNotificacao.ENVIADA,
-        status_entrega=''
-    ).count()
 
     # --- Paginação ---
     per_page = request.GET.get('per_page', '25')
