@@ -148,6 +148,38 @@ class TestUploadComprovante:
         assert resp.status_code == 200
         assert not ComprovantePagamentoUpload.objects.filter(parcela=parcela).exists()
 
+    def test_html_disfarcado_de_pdf_rejeitado(self, comprador_com_contrato):
+        # Code-review fix: extensão sem magic bytes permite XSS armazenado
+        ctx = comprador_com_contrato
+        parcela = ctx['contrato'].parcelas.first()
+        html_malicioso = SimpleUploadedFile(
+            'evil.pdf',
+            b'<html><script>alert("xss")</script></html>',
+            content_type='application/pdf',
+        )
+        url = reverse('portal_comprador:upload_comprovante', args=[parcela.pk])
+        resp = ctx['client'].post(url, data={
+            'valor_informado': '1000.00',
+            'data_pagamento_informada': '2025-02-01',
+            'forma_pagamento': 'PIX',
+            'comprovante': html_malicioso,
+        })
+        assert resp.status_code == 200  # re-renderiza form com erro
+        assert not ComprovantePagamentoUpload.objects.filter(parcela=parcela).exists()
+
+    def test_pdf_com_magic_bytes_aceito(self, comprador_com_contrato):
+        ctx = comprador_com_contrato
+        parcela = ctx['contrato'].parcelas.first()
+        url = reverse('portal_comprador:upload_comprovante', args=[parcela.pk])
+        resp = ctx['client'].post(url, data={
+            'valor_informado': '1000.00',
+            'data_pagamento_informada': '2025-02-01',
+            'forma_pagamento': 'PIX',
+            'comprovante': _arquivo_pdf_falso(),
+        })
+        assert resp.status_code == 302
+        assert ComprovantePagamentoUpload.objects.filter(parcela=parcela).exists()
+
     def test_formato_invalido_rejeitado(self, comprador_com_contrato):
         ctx = comprador_com_contrato
         parcela = ctx['contrato'].parcelas.first()

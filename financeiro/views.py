@@ -7812,10 +7812,7 @@ def _processar_evento_pix(end_to_end_id, txid, valor_str, horario_str,
     from .models import EventoPIX
     from django.utils.dateparse import parse_datetime
     from django.utils import timezone as _tz
-
-    # Deduplicação por EndToEndId
-    if EventoPIX.objects.filter(end_to_end_id=end_to_end_id).exists():
-        return {'endToEndId': end_to_end_id, 'status': EventoPIX.STATUS_DUPLICADO}
+    from django.db import IntegrityError
 
     try:
         valor = Decimal(valor_str)
@@ -7831,27 +7828,35 @@ def _processar_evento_pix(end_to_end_id, txid, valor_str, horario_str,
     pagador_nome = pagador.get('nome', '') if isinstance(pagador, dict) else ''
     pagador_doc = (pagador.get('cpf', '') or pagador.get('cnpj', '')) if isinstance(pagador, dict) else ''
 
-    # Localiza parcela pelo pix_txid
+    # Localiza parcela pelo pix_txid + trava a linha (evita dupla-baixa concorrente)
     parcela = None
     if txid:
         try:
-            parcela = Parcela.objects.get(pix_txid=txid, pago=False)
+            with transaction.atomic():
+                parcela = Parcela.objects.select_for_update().get(pix_txid=txid, pago=False)
         except Parcela.DoesNotExist:
             pass
 
     status_inicial = EventoPIX.STATUS_RECEBIDO if parcela else EventoPIX.STATUS_SEM_PARCELA
-    evento = EventoPIX.objects.create(
-        end_to_end_id=end_to_end_id,
-        txid=txid,
-        parcela=parcela,
-        valor=valor,
-        horario_pix=horario,
-        pagador_nome=pagador_nome,
-        pagador_documento=pagador_doc,
-        info_pagador=info_pagador,
-        status=status_inicial,
-        payload_raw=payload_raw,
-    )
+
+    # Deduplicação atômica por EndToEndId: create dentro de transação,
+    # captura IntegrityError do constraint unique.
+    try:
+        with transaction.atomic():
+            evento = EventoPIX.objects.create(
+                end_to_end_id=end_to_end_id,
+                txid=txid,
+                parcela=parcela,
+                valor=valor,
+                horario_pix=horario,
+                pagador_nome=pagador_nome,
+                pagador_documento=pagador_doc,
+                info_pagador=info_pagador,
+                status=status_inicial,
+                payload_raw=payload_raw,
+            )
+    except IntegrityError:
+        return {'endToEndId': end_to_end_id, 'status': EventoPIX.STATUS_DUPLICADO}
 
     if parcela is None:
         return {
@@ -7914,13 +7919,15 @@ def webhook_pix(request):
     Quando PIX_WEBHOOK_TOKEN está vazio, a validação é pulada (dev/staging).
     """
     from .models import EventoPIX
+    import hmac as _hmac
 
     token_esperado = getattr(_settings, 'PIX_WEBHOOK_TOKEN', '')
     if token_esperado:
         auth = request.headers.get('Authorization', '')
         api_key = request.headers.get('x-api-key', '')
         bearer = auth[7:].strip() if auth.startswith('Bearer ') else auth.strip()
-        if bearer != token_esperado and api_key != token_esperado:
+        if not (_hmac.compare_digest(bearer, token_esperado)
+                or _hmac.compare_digest(api_key, token_esperado)):
             return JsonResponse({'erro': 'Não autorizado'}, status=401)
 
     try:
@@ -7976,23 +7983,33 @@ def api_relatorio_posicao_bi(request):
     from .services import RelatorioService, FiltroRelatorio
     import json as _json
     import csv as _csv
+    import hmac as _hmac
     from io import StringIO
     from decimal import Decimal as _Decimal
 
     token_esperado = getattr(_settings, 'BI_API_TOKEN', '')
+    # Fail-closed em produção: token vazio ⇒ 503 (em vez de servir todos os contratos sem auth)
+    if not token_esperado and not getattr(_settings, 'DEBUG', False):
+        return JsonResponse({'erro': 'BI API não configurada'}, status=503)
     if token_esperado:
         auth = request.headers.get('Authorization', '')
         api_key = request.headers.get('x-api-key', '')
         bearer = auth[7:].strip() if auth.startswith('Bearer ') else auth.strip()
-        if bearer != token_esperado and api_key != token_esperado:
+        if not (_hmac.compare_digest(bearer, token_esperado)
+                or _hmac.compare_digest(api_key, token_esperado)):
             return JsonResponse({'erro': 'Não autorizado'}, status=401)
 
-    imobiliaria_id = request.GET.get('imobiliaria_id')
+    imobiliaria_id_raw = request.GET.get('imobiliaria_id')
     formato = request.GET.get('formato', 'json').lower()
 
-    filtro = FiltroRelatorio(
-        imobiliaria_id=int(imobiliaria_id) if imobiliaria_id else None,
-    )
+    imobiliaria_id = None
+    if imobiliaria_id_raw:
+        try:
+            imobiliaria_id = int(imobiliaria_id_raw)
+        except ValueError:
+            return JsonResponse({'erro': 'imobiliaria_id inválido'}, status=400)
+
+    filtro = FiltroRelatorio(imobiliaria_id=imobiliaria_id)
 
     service = RelatorioService()
     relatorio = service.gerar_relatorio_posicao_contratos(filtro)
@@ -8050,10 +8067,18 @@ def api_dashboard_executivo(request):
 
     hoje = timezone.now().date()
 
-    imobiliarias_qs = Imobiliaria.objects.filter(ativo=True)
-    imobiliaria_id = request.GET.get('imobiliaria_id')
-    if imobiliaria_id:
-        imobiliarias_qs = imobiliarias_qs.filter(id=imobiliaria_id)
+    # Filtra por imobiliárias acessíveis ao usuário (tenant isolation)
+    if usuario_tem_permissao_total(request.user):
+        imobiliarias_qs = Imobiliaria.objects.filter(ativo=True)
+    else:
+        imobiliarias_qs = get_imobiliarias_usuario(request.user).filter(ativo=True)
+
+    imobiliaria_id_raw = request.GET.get('imobiliaria_id')
+    if imobiliaria_id_raw:
+        try:
+            imobiliarias_qs = imobiliarias_qs.filter(id=int(imobiliaria_id_raw))
+        except ValueError:
+            return JsonResponse({'erro': 'imobiliaria_id inválido'}, status=400)
     imobiliaria_ids = imobiliarias_qs.values_list('id', flat=True)
 
     parcelas_qs = Parcela.objects.filter(contrato__imobiliaria__in=imobiliaria_ids)

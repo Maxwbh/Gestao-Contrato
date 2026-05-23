@@ -119,6 +119,18 @@ class TestServiceWorker:
         content = resp.content.decode('utf-8')
         assert 'push' in content
 
+    def test_404_se_arquivo_nao_encontrado(self, monkeypatch):
+        # Code-review fix: SW vazio quebraria PWA permanentemente (cache do browser)
+        import os
+        original_exists = os.path.exists
+        def fake_exists(p):
+            if 'portal-sw.js' in p:
+                return False
+            return original_exists(p)
+        monkeypatch.setattr(os.path, 'exists', fake_exists)
+        resp = Client().get(reverse('portal_comprador:service_worker'))
+        assert resp.status_code == 404
+
 
 # ---------------------------------------------------------------------------
 # 34.6.3 — API Web Push subscribe/unsubscribe

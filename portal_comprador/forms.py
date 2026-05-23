@@ -394,4 +394,25 @@ class ComprovanteUploadForm(forms.Form):
             raise ValidationError(
                 'Formato não suportado. Envie PDF, JPG, PNG ou WebP.'
             )
+
+        # Valida magic bytes (cabeçalho real do arquivo), não só a extensão.
+        # Defesa contra upload de HTML/SVG renomeado para .pdf que poderia
+        # causar XSS armazenado quando servido pelo MEDIA.
+        cabecalho = arquivo.read(12)
+        arquivo.seek(0)
+        assinaturas = (
+            b'%PDF-',                 # PDF
+            b'\xff\xd8\xff',          # JPEG
+            b'\x89PNG\r\n\x1a\n',     # PNG
+            b'RIFF',                  # WEBP (RIFF....WEBP)
+        )
+        if not any(cabecalho.startswith(sig) for sig in assinaturas):
+            raise ValidationError(
+                'Conteúdo do arquivo não corresponde à extensão. '
+                'Envie um PDF, JPG, PNG ou WebP válido.'
+            )
+        # WebP exige confirmação adicional do marker WEBP no byte 8
+        if cabecalho.startswith(b'RIFF') and not cabecalho[8:12] == b'WEBP':
+            raise ValidationError('Arquivo WebP inválido.')
+
         return arquivo

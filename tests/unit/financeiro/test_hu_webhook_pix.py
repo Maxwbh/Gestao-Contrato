@@ -320,3 +320,72 @@ class TestFormatoPayloadPIX:
         data = resp.json()
         statuses = [p['status'] for p in data['processados']]
         assert all(s == 'BAIXADO' for s in statuses)
+
+
+# ---------------------------------------------------------------------------
+# Code-review fix: dedup atômico + comparação constant-time
+# ---------------------------------------------------------------------------
+
+@pytest.mark.django_db
+class TestWebhookPixDedupAtomico:
+    """O check existência + create devem estar no mesmo transaction.atomic.
+    IntegrityError do constraint unique deve virar STATUS_DUPLICADO."""
+
+    def test_evento_unique_constraint_existe(self):
+        from financeiro.models import EventoPIX
+        end_to_end_field = EventoPIX._meta.get_field('end_to_end_id')
+        assert end_to_end_field.unique, 'end_to_end_id deve ser unique no DB'
+
+    def test_dedup_via_integrity_error_retorna_duplicado(self, parcela_pix, client_pix):
+        """Simula race criando manualmente o EventoPIX antes do segundo POST."""
+        from financeiro.models import EventoPIX
+        EventoPIX.objects.create(
+            end_to_end_id='E_RACE_001',
+            txid='TXID-TESTE-001',
+            valor=Decimal('1000.00'),
+            horario_pix='2025-02-01T12:00:00-03:00',
+            status=EventoPIX.STATUS_RECEBIDO,
+        )
+        payload = {
+            'pix': [{
+                'endToEndId': 'E_RACE_001',
+                'txid': 'TXID-TESTE-001',
+                'valor': '1000.00',
+                'horario': '2025-02-01T12:00:00-03:00',
+            }]
+        }
+        resp = _post(client_pix, payload)
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data['processados'][0]['status'] == EventoPIX.STATUS_DUPLICADO
+        # Apenas 1 evento persistido (constraint absorveu o segundo)
+        assert EventoPIX.objects.filter(end_to_end_id='E_RACE_001').count() == 1
+
+
+@pytest.mark.django_db
+class TestWebhookPixConstantTimeCompare:
+    """Auth deve usar hmac.compare_digest (não vulnerável a timing-attack)."""
+
+    @pytest.fixture(autouse=True)
+    def _settings(self, settings):
+        settings.PIX_WEBHOOK_TOKEN = 'token-secreto-longo-12345'
+
+    def test_token_correto_passa(self, parcela_pix, client_pix):
+        payload = {'pix': [{'endToEndId': 'E_AUTH_OK', 'txid': 'TXID-TESTE-001',
+                            'valor': '1000.00', 'horario': '2025-02-01T12:00:00-03:00'}]}
+        resp = client_pix.post(
+            reverse('financeiro:webhook_pix'),
+            data=json.dumps(payload), content_type='application/json',
+            HTTP_AUTHORIZATION='Bearer token-secreto-longo-12345',
+        )
+        assert resp.status_code == 200
+
+    def test_token_errado_rejeita_401(self, parcela_pix, client_pix):
+        payload = {'pix': [{'endToEndId': 'E_AUTH_BAD', 'txid': 'TXID-TESTE-001',
+                            'valor': '1000.00', 'horario': '2025-02-01T12:00:00-03:00'}]}
+        resp = client_pix.post(
+            reverse('financeiro:webhook_pix'),
+            data=json.dumps(payload), content_type='application/json',
+            HTTP_AUTHORIZATION='Bearer token-errado',
+        )
+        assert resp.status_code == 401

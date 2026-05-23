@@ -1776,8 +1776,20 @@ class MinutaContrato(TimeStampedModel):
         return f"Minuta {self.versao}{ativa_str} — {self.contrato.numero_contrato}"
 
     def save(self, *args, **kwargs):
+        from django.db import transaction
         if self.ativa:
-            MinutaContrato.objects.filter(
-                contrato=self.contrato, ativa=True
-            ).exclude(pk=self.pk).update(ativa=False)
-        super().save(*args, **kwargs)
+            with transaction.atomic():
+                # Trava as minutas ativas do contrato antes de desativá-las
+                # para evitar que duas chamadas concorrentes resultem em
+                # múltiplas minutas com ativa=True.
+                list(
+                    MinutaContrato.objects.select_for_update().filter(
+                        contrato=self.contrato, ativa=True
+                    ).exclude(pk=self.pk)
+                )
+                MinutaContrato.objects.filter(
+                    contrato=self.contrato, ativa=True
+                ).exclude(pk=self.pk).update(ativa=False)
+                super().save(*args, **kwargs)
+        else:
+            super().save(*args, **kwargs)

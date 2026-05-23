@@ -1327,12 +1327,20 @@ def portal_service_worker(request):
         os.path.join(settings.BASE_DIR, 'static', 'js', 'portal-sw.js'),
         os.path.join(settings.BASE_DIR, 'staticfiles', 'js', 'portal-sw.js'),
     ]
-    sw_content = ''
+    sw_content = None
     for path in sw_paths:
         if os.path.exists(path):
             with open(path, encoding='utf-8') as f:
                 sw_content = f.read()
             break
+
+    if sw_content is None:
+        # Falha-fechado: não devolve SW vazio (browser cachearia e quebraria
+        # silenciosamente a instalação do PWA).
+        return HttpResponse(
+            '// portal-sw.js não encontrado no servidor', status=404,
+            content_type='application/javascript',
+        )
 
     return HttpResponse(
         sw_content,

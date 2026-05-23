@@ -187,26 +187,30 @@ class ComprovantePagamentoUpload(models.Model):
 
     def aprovar(self, usuario):
         """Aprova o comprovante e registra o pagamento na parcela vinculada."""
-        from financeiro.models import HistoricoPagamento
+        from financeiro.models import HistoricoPagamento, Parcela
         if self.status != self.STATUS_PENDENTE:
             return False
-        if self.parcela.pago:
-            self.status = self.STATUS_REJEITADO
-            self.motivo_rejeicao = 'Parcela já está paga (validação automática)'
-            self.validado_em = timezone.now()
-            self.validado_por = usuario
-            self.save()
-            return False
         with transaction.atomic():
-            valor_parcela = self.parcela.valor_atual
-            self.parcela.registrar_pagamento(
+            # Trava a parcela e relê o estado dentro do transação para evitar
+            # double-payment se dois admins clicarem aprovar concorrentemente.
+            parcela = Parcela.objects.select_for_update().get(pk=self.parcela_id)
+            if parcela.pago:
+                self.status = self.STATUS_REJEITADO
+                self.motivo_rejeicao = 'Parcela já está paga (validação automática)'
+                self.validado_em = timezone.now()
+                self.validado_por = usuario
+                self.save()
+                return False
+            valor_parcela = parcela.valor_atual
+            parcela.registrar_pagamento(
                 valor_pago=self.valor_informado,
                 data_pagamento=self.data_pagamento_informada,
                 observacoes=f'Comprovante validado via portal (upload #{self.pk})',
                 validar_minimo=False,
             )
+            self.parcela = parcela
             HistoricoPagamento.objects.create(
-                parcela=self.parcela,
+                parcela=parcela,
                 data_pagamento=self.data_pagamento_informada,
                 valor_pago=self.valor_informado,
                 valor_parcela=valor_parcela,

@@ -183,13 +183,22 @@ class TestApiRelatorioPosicaoBI:
         self.client = Client()
         self.url = reverse('financeiro:api_relatorio_posicao_bi')
 
+    @patch('django.conf.settings.DEBUG', True)
     @patch('django.conf.settings.BI_API_TOKEN', '')
-    def test_retorna_json_sem_token_quando_token_vazio(self):
+    def test_retorna_json_sem_token_apenas_em_debug(self):
+        # Em DEBUG, token vazio é tolerado (dev/staging)
         resp = self.client.get(self.url)
         assert resp.status_code == 200
         data = resp.json()
         assert 'itens' in data
         assert 'totalizadores' in data
+
+    @patch('django.conf.settings.DEBUG', False)
+    @patch('django.conf.settings.BI_API_TOKEN', '')
+    def test_fail_closed_em_producao_sem_token(self):
+        # Fail-closed: em produção sem token configurado, retorna 503
+        resp = self.client.get(self.url)
+        assert resp.status_code == 503
 
     @patch('django.conf.settings.BI_API_TOKEN', 'secret123')
     def test_rejeita_sem_token(self):
@@ -206,6 +215,7 @@ class TestApiRelatorioPosicaoBI:
         resp = self.client.get(self.url, HTTP_X_API_KEY='secret123')
         assert resp.status_code == 200
 
+    @patch('django.conf.settings.DEBUG', True)
     @patch('django.conf.settings.BI_API_TOKEN', '')
     def test_formato_json_tem_campos_obrigatorios(self):
         resp = self.client.get(self.url + '?formato=json')
@@ -218,6 +228,7 @@ class TestApiRelatorioPosicaoBI:
         assert 'total_contratos' in totais
         assert 'total_saldo_devedor' in totais
 
+    @patch('django.conf.settings.DEBUG', True)
     @patch('django.conf.settings.BI_API_TOKEN', '')
     def test_itens_tem_campos_do_contrato(self):
         resp = self.client.get(self.url)
@@ -227,6 +238,7 @@ class TestApiRelatorioPosicaoBI:
         for campo in ['contrato_numero', 'comprador_nome', 'saldo_devedor', 'progresso_percentual']:
             assert campo in item, f'Campo ausente: {campo}'
 
+    @patch('django.conf.settings.DEBUG', True)
     @patch('django.conf.settings.BI_API_TOKEN', '')
     def test_formato_csv_retorna_content_type_correto(self):
         resp = self.client.get(self.url + '?formato=csv')
@@ -234,12 +246,19 @@ class TestApiRelatorioPosicaoBI:
         assert 'text/csv' in resp['Content-Type']
         assert 'posicao_contratos.csv' in resp.get('Content-Disposition', '')
 
+    @patch('django.conf.settings.DEBUG', True)
     @patch('django.conf.settings.BI_API_TOKEN', '')
     def test_formato_csv_tem_cabecalho(self):
         resp = self.client.get(self.url + '?formato=csv')
         content = resp.content.decode('utf-8')
         assert 'contrato_numero' in content
         assert 'saldo_devedor' in content
+
+    @patch('django.conf.settings.DEBUG', True)
+    @patch('django.conf.settings.BI_API_TOKEN', '')
+    def test_imobiliaria_id_invalido_retorna_400(self):
+        resp = self.client.get(self.url + '?imobiliaria_id=abc')
+        assert resp.status_code == 400
 
     def test_recusa_post(self):
         resp = self.client.post(self.url, {})
@@ -301,3 +320,27 @@ class TestApiDashboardExecutivo:
         data = resp.json()
         for v in data['inadimplencia']:
             assert v >= 0
+
+    def test_imobiliaria_id_invalido_retorna_400(self):
+        resp = self.client.get(self.url + '?imobiliaria_id=abc')
+        assert resp.status_code == 400
+
+
+@pytest.mark.django_db
+class TestApiDashboardExecutivoTenantIsolation:
+    """Code-review fix: usuário não-staff só vê suas imobiliárias."""
+
+    def test_usuario_sem_permissao_total_ve_zero_se_nao_pertence_a_imobiliaria(self, contrato_com_parcelas):
+        # Usuário comum (não staff, sem AcessoUsuario) → get_imobiliarias_usuario retorna vazio
+        from tests.fixtures.factories import UserFactory
+        user = UserFactory(is_staff=False, is_superuser=False)
+        client = Client()
+        client.force_login(user)
+        url = reverse('financeiro:api_dashboard_executivo')
+        resp = client.get(url)
+        assert resp.status_code == 200
+        data = resp.json()
+        # Sem acesso a nenhuma imobiliária, KPIs devem ser zero
+        assert data['kpis']['contratos_ativos'] == 0
+        assert data['kpis']['total_recebido'] == 0
+        assert data['kpis']['total_previsto'] == 0
