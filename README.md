@@ -64,6 +64,10 @@ Sistema desenvolvido para contabilidades que gerenciam múltiplos loteamentos, p
 - ✅ Segunda via de boletos diretamente no portal
 - ✅ APIs JSON para linha digitável, PDF e status de parcelas
 - ✅ Isolamento de segurança: comprador só acessa seus próprios dados
+- ✅ **Upload de comprovantes de pagamento** com validação magic bytes (PDF/JPG/PNG/WebP)
+- ✅ **PWA Instalável** (34.6): manifest.json + service worker com cache offline
+- ✅ **Web Push Notifications** (34.6): alertas de vencimento via VAPID/browser push
+- ✅ **Mobile-first**: meta tags Apple/Android, theme-color, `display: standalone`
 
 ### 6. Sistema de Notificações e Relatórios
 - ✅ Notificações por **E-mail**
@@ -75,6 +79,10 @@ Sistema desenvolvido para contabilidades que gerenciam múltiplos loteamentos, p
 - ✅ **Relatório Semanal** por imobiliária: KPIs de recebimentos, inadimplência e a vencer
 - ✅ **Relatório Mensal Consolidado** por contabilidade: tabela por imobiliária com totais
 - ✅ Templates HTML responsivos configuráveis pelo Admin
+- ✅ **Relatório Agendado de Inadimplência** (34.5): e-mail diário/semanal automático com tabela de parcelas vencidas
+- ✅ **Relatório de Posição de Contratos** (34.5): e-mail com anexo Excel ou PDF gerado por `RelatorioService`
+- ✅ **API BI** `GET /financeiro/api/relatorios/posicao/` (34.5): JSON/CSV para Power BI, Looker, Metabase — autenticada por Bearer token
+- ✅ **Dashboard Executivo** (34.5): gráfico de barras+linha receita prevista/realizada/inadimplência 12 meses, KPIs consolidados, tenant isolation
 
 ### 7. Tarefas Automáticas via API (cron-job.org)
 - ✅ Endpoints `POST /api/tasks/` autenticados com `X-Task-Token`
@@ -85,7 +93,15 @@ Sistema desenvolvido para contabilidades que gerenciam múltiplos loteamentos, p
 - ✅ **Reajustes** → `POST /api/tasks/reajustes/`
 - ✅ **Boletos** → `POST /api/tasks/boletos/`
 
-### 8. Recursos Adicionais
+### 8. Segurança Reforçada
+- ✅ Comparação de tokens em tempo constante (`hmac.compare_digest`) — previne timing attacks no webhook PIX e API BI
+- ✅ `select_for_update()` + `transaction.atomic()` em pagamentos, aprovações de comprovantes e minutas de contrato
+- ✅ Deduplicação atômica de eventos PIX via `IntegrityError` (constraint única no BD)
+- ✅ Validação de magic bytes em uploads de comprovantes (detecta arquivos disfarçados por extensão)
+- ✅ Isolamento de tenant em todas as views financeiras (`get_imobiliarias_usuario()`)
+- ✅ API BI fail-closed: retorna 503 quando `BI_API_TOKEN` não configurado em produção
+
+### 9. Recursos Adicionais
 - ✅ Dashboard com estatísticas
 - ✅ Interface administrativa completa (Django Admin)
 - ✅ Sistema de busca e filtros avançados
@@ -169,6 +185,20 @@ TWILIO_ACCOUNT_SID=seu-account-sid
 TWILIO_AUTH_TOKEN=seu-auth-token
 TWILIO_PHONE_NUMBER=+5511999999999
 TWILIO_WHATSAPP_NUMBER=whatsapp:+5511999999999
+
+# Webhook PIX (token de autenticação para POST /financeiro/api/webhook/pix/)
+PIX_WEBHOOK_TOKEN=seu-token-pix
+
+# API BI — Power BI / Looker / Metabase (34.5)
+BI_API_TOKEN=seu-token-bi-secreto
+RELATORIO_INADIMPLENCIA_EMAILS=financeiro@empresa.com,diretoria@empresa.com
+RELATORIO_POSICAO_EMAILS=financeiro@empresa.com
+
+# PWA Web Push — VAPID (34.6)
+# Gerar: python -c "from py_vapid import Vapid; v=Vapid(); v.generate_keys(); print(v.public_key, v.private_key)"
+VAPID_PUBLIC_KEY=sua-chave-publica-vapid
+VAPID_PRIVATE_KEY=sua-chave-privada-vapid
+VAPID_CLAIMS_EMAIL=admin@suaempresa.com
 ```
 
 ### 5. Execute as Migrações
@@ -263,6 +293,19 @@ TWILIO_ACCOUNT_SID=seu-account-sid
 TWILIO_AUTH_TOKEN=seu-auth-token
 TWILIO_PHONE_NUMBER=+5511999999999
 TWILIO_WHATSAPP_NUMBER=whatsapp:+5511999999999
+
+# PIX Webhook
+PIX_WEBHOOK_TOKEN=token-secreto-gerado-aleatoriamente
+
+# API BI (Power BI / Looker / Metabase)
+BI_API_TOKEN=token-secreto-bi
+RELATORIO_INADIMPLENCIA_EMAILS=financeiro@empresa.com
+RELATORIO_POSICAO_EMAILS=financeiro@empresa.com
+
+# PWA Web Push (VAPID)
+VAPID_PUBLIC_KEY=...
+VAPID_PRIVATE_KEY=...
+VAPID_CLAIMS_EMAIL=admin@empresa.com
 ```
 
 ## 📖 Estrutura do Projeto
@@ -279,15 +322,20 @@ Gestao-Contrato/
 │   ├── views.py
 │   └── urls.py
 ├── contratos/                 # App de contratos
-│   ├── models.py             # Contrato, parcelas, reajustes
+│   ├── models.py             # Contrato, MinutaContrato, PrestacaoIntermediaria
 │   └── services/
 │       ├── rescisao_service.py
 │       └── cessao_service.py
 ├── financeiro/                # App financeiro
-│   ├── models.py             # Parcela, Reajuste, HistoricoPagamento
+│   ├── models.py             # Parcela, Reajuste, HistoricoPagamento, EventoPIX
+│   ├── tasks.py              # Celery: relatório inadimplência e posição contratos (34.5)
 │   ├── services/
 │   │   ├── boleto_service.py
-│   │   └── cnab_service.py   # Remessa e Retorno CNAB
+│   │   ├── cnab_service.py   # Remessa e Retorno CNAB
+│   │   └── relatorio_service.py  # RelatorioService + FiltroRelatorio + exports Excel/PDF
+│   ├── management/commands/
+│   │   ├── enviar_relatorio_inadimplencia.py  # --frequencia diario|semanal
+│   │   └── enviar_relatorio_posicao.py        # --formato excel|pdf
 │   └── urls.py
 ├── notificacoes/              # App de notificações
 │   ├── models.py             # Notificacao, TemplateNotificacao, RegraNotificacao
@@ -296,18 +344,21 @@ Gestao-Contrato/
 │   │   └── criar_templates_relatorio.py
 │   └── urls.py
 ├── portal_comprador/          # Portal web para compradores
-│   ├── models.py             # AcessoComprador
-│   ├── views.py              # Dashboard, contratos, boletos
+│   ├── models.py             # AcessoComprador, PushSubscriptionPortal (34.6)
+│   ├── tasks.py              # Celery: push de vencimentos via VAPID (34.6)
+│   ├── views.py              # Dashboard, contratos, boletos, manifest, SW, push API
 │   └── urls.py
 ├── accounts/                  # Autenticação e permissões
 ├── docs/                      # Documentação organizada
-├── tests/                     # 1085 testes
+├── tests/                     # 1300 testes
 │   ├── unit/                  # Testes unitários por app
 │   ├── integration/           # Testes de integração
 │   ├── functional/            # Testes end-to-end
 │   └── fixtures/              # Factories e dados de teste
 ├── templates/                 # Templates HTML
-├── static/                    # Arquivos estáticos
+├── static/
+│   └── js/
+│       └── portal-sw.js      # Service worker PWA (cache offline + Web Push)
 ├── build.sh                   # Script de build (Render)
 ├── render.yaml               # Configuração Render
 ├── docker-compose.yml         # Desenvolvimento local
@@ -427,7 +478,7 @@ pytest --cov=. --cov-report=html
 pytest -v
 ```
 
-**Meta de cobertura:** > 80% | **Status atual:** ✅ 1085 testes passando
+**Meta de cobertura:** > 80% | **Status atual:** ✅ 1300 testes passando
 
 ### Cobertura por área
 
@@ -453,6 +504,10 @@ pytest -v
 | Financeiro — Parcela/Reajuste | `test_parcela_reajuste.py` | 21 |
 | Financeiro — CNAB Views | `test_cnab_views.py` | 21 |
 | **HU CNAB Remessa→Retorno E2E** | `test_hu_cnab_e2e.py` | **13** |
+| **Relatórios BI — API + Dashboard** | `test_hu_relatorios_bi.py` | **27** |
+| **Webhook PIX — Dedup + Timing** | `test_hu_webhook_pix.py` | **32** |
+| **Portal Expandido — Comprovantes** | `test_hu_portal_expandido.py` | **24** |
+| **PWA — Manifest + SW + Push** | `test_hu_pwa.py` | **16** |
 | E2E / Integração | `test_fluxo_contrato_completo.py`, etc. | 14+ |
 | Demais testes unitários | (outros arquivos) | 200+ |
 
@@ -516,4 +571,4 @@ Configurado via `pyproject.toml`
 **Website:** https://msbrasil.inf.br
 **Licença:** Proprietary
 
-**Última atualização:** 2026-05-05 — 1085 testes | Portal do Comprador | CNAB E2E | Rescisão/Cessão | Juros Escalantes | Relatórios automáticos via cron-job.org
+**Última atualização:** 2026-05-23 — 1300 testes | PWA Portal do Comprador (34.6) | Relatórios BI + Dashboard Executivo (34.5) | Segurança: timing attack, race conditions, magic bytes | CNAB E2E | Rescisão/Cessão | Juros Escalantes
