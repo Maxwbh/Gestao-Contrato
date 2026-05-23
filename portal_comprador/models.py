@@ -232,3 +232,37 @@ class ComprovantePagamentoUpload(models.Model):
         self.validado_por = usuario
         self.save(update_fields=['status', 'motivo_rejeicao', 'validado_em', 'validado_por'])
         return True
+
+
+# =============================================================================
+# 34.6 P3 — PWA: Web Push Subscriptions
+# =============================================================================
+
+class PushSubscriptionPortal(models.Model):
+    """
+    Armazena as assinaturas Web Push dos compradores para envio de notificações push.
+
+    O endpoint, p256dh e auth são fornecidos pelo browser ao chamar
+    PushManager.subscribe() no service worker.
+    """
+    acesso_comprador = models.ForeignKey(
+        AcessoComprador,
+        on_delete=models.CASCADE,
+        related_name='push_subscriptions',
+        verbose_name='Acesso do comprador',
+    )
+    endpoint = models.TextField(verbose_name='Endpoint Push')
+    p256dh = models.TextField(verbose_name='Chave p256dh')
+    auth = models.TextField(verbose_name='Auth secret')
+    user_agent = models.CharField(max_length=200, blank=True, verbose_name='User-Agent')
+    ativo = models.BooleanField(default=True)
+    criado_em = models.DateTimeField(auto_now_add=True)
+    atualizado_em = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = 'Assinatura Push'
+        verbose_name_plural = 'Assinaturas Push'
+        unique_together = [('acesso_comprador', 'endpoint')]
+
+    def __str__(self):
+        return f'Push #{self.pk} — {self.acesso_comprador.comprador.nome}'

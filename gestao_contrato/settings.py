@@ -357,6 +357,19 @@ BRCOBRANCA_DELAY_INICIAL = 2
 # Deixe vazio para desabilitar a validação (não recomendado em produção)
 PIX_WEBHOOK_TOKEN = config('PIX_WEBHOOK_TOKEN', default='')
 
+# 34.5 — Relatórios agendados e BI
+# Token para o endpoint público de exportação para Power BI / Looker
+BI_API_TOKEN = config('BI_API_TOKEN', default='')
+# Destinatários dos relatórios automáticos por e-mail (separados por vírgula)
+RELATORIO_INADIMPLENCIA_EMAILS = config('RELATORIO_INADIMPLENCIA_EMAILS', default='', cast=Csv())
+RELATORIO_POSICAO_EMAILS = config('RELATORIO_POSICAO_EMAILS', default='', cast=Csv())
+
+# 34.6 — PWA: Web Push (VAPID)
+# Gere com: python -c "from py_vapid import Vapid; v=Vapid(); v.generate_keys(); print(v.public_key, v.private_key)"
+VAPID_PUBLIC_KEY = config('VAPID_PUBLIC_KEY', default='')
+VAPID_PRIVATE_KEY = config('VAPID_PRIVATE_KEY', default='')
+VAPID_CLAIMS_EMAIL = config('VAPID_CLAIMS_EMAIL', default='admin@example.com')
+
 # Portal do Comprador
 PORTAL_EMAIL_VERIFICACAO = False
 

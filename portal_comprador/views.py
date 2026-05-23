@@ -1256,3 +1256,150 @@ def simulador_antecipacao_portal(request, contrato_id):
         'parcelas_selecionadas_ids': [str(x) for x in parcelas_selecionadas_ids],
         'desconto_perc': desconto_perc,
     })
+
+
+# =============================================================================
+# 34.6 P3 — PWA: manifest, service worker, Web Push subscriptions
+# =============================================================================
+
+import json as _json_pwa  # noqa: E402
+
+
+def portal_manifest(request):
+    """
+    34.6.1 — Serve o manifest.json do PWA do Portal do Comprador.
+    """
+    site_url = getattr(settings, 'SITE_URL', 'https://example.com')
+    manifest = {
+        'name': 'Portal do Comprador',
+        'short_name': 'Portal GC',
+        'description': 'Acesse seus contratos, boletos e histórico de pagamentos.',
+        'start_url': '/portal/',
+        'scope': '/portal/',
+        'display': 'standalone',
+        'orientation': 'portrait',
+        'theme_color': '#00897b',
+        'background_color': '#f5f5f5',
+        'lang': 'pt-BR',
+        'icons': [
+            {
+                'src': '/static/img/icon-192.png',
+                'sizes': '192x192',
+                'type': 'image/png',
+                'purpose': 'any maskable',
+            },
+            {
+                'src': '/static/img/icon-512.png',
+                'sizes': '512x512',
+                'type': 'image/png',
+                'purpose': 'any maskable',
+            },
+        ],
+        'shortcuts': [
+            {
+                'name': 'Meus Boletos',
+                'short_name': 'Boletos',
+                'url': '/portal/boletos/',
+                'icons': [{'src': '/static/img/icon-192.png', 'sizes': '192x192'}],
+            },
+            {
+                'name': 'Meus Contratos',
+                'short_name': 'Contratos',
+                'url': '/portal/contratos/',
+                'icons': [{'src': '/static/img/icon-192.png', 'sizes': '192x192'}],
+            },
+        ],
+    }
+    return HttpResponse(
+        _json_pwa.dumps(manifest, ensure_ascii=False, indent=2),
+        content_type='application/manifest+json',
+    )
+
+
+def portal_service_worker(request):
+    """
+    34.6.2 — Serve o service worker do Portal.
+    Deve ser acessível no root do scope (/portal/sw.js).
+    """
+    import os
+
+    sw_paths = [
+        os.path.join(settings.BASE_DIR, 'static', 'js', 'portal-sw.js'),
+        os.path.join(settings.BASE_DIR, 'staticfiles', 'js', 'portal-sw.js'),
+    ]
+    sw_content = ''
+    for path in sw_paths:
+        if os.path.exists(path):
+            with open(path, encoding='utf-8') as f:
+                sw_content = f.read()
+            break
+
+    return HttpResponse(
+        sw_content,
+        content_type='application/javascript',
+        headers={'Service-Worker-Allowed': '/portal/'},
+    )
+
+
+@require_POST
+@login_required
+def api_push_subscribe(request):
+    """
+    34.6.3 — Salva ou atualiza a assinatura Web Push do comprador.
+
+    Body JSON:
+        { "endpoint": "...", "keys": { "p256dh": "...", "auth": "..." } }
+    """
+    from .models import PushSubscriptionPortal, AcessoComprador
+
+    try:
+        acesso = request.user.acesso_comprador
+    except AcessoComprador.DoesNotExist:
+        return JsonResponse({'erro': 'Acesso de comprador não encontrado'}, status=403)
+
+    try:
+        payload = _json_pwa.loads(request.body)
+        endpoint = payload['endpoint']
+        keys = payload.get('keys', {})
+        p256dh = keys['p256dh']
+        auth = keys['auth']
+    except (ValueError, KeyError):
+        return JsonResponse({'erro': 'Payload inválido'}, status=400)
+
+    sub, created = PushSubscriptionPortal.objects.update_or_create(
+        acesso_comprador=acesso,
+        endpoint=endpoint,
+        defaults={
+            'p256dh': p256dh,
+            'auth': auth,
+            'user_agent': request.META.get('HTTP_USER_AGENT', '')[:200],
+            'ativo': True,
+        },
+    )
+    return JsonResponse({'sucesso': True, 'criado': created})
+
+
+@require_POST
+@login_required
+def api_push_unsubscribe(request):
+    """
+    34.6.3 — Remove a assinatura Web Push do comprador.
+    Body JSON: { "endpoint": "..." }
+    """
+    from .models import PushSubscriptionPortal, AcessoComprador
+
+    try:
+        acesso = request.user.acesso_comprador
+    except AcessoComprador.DoesNotExist:
+        return JsonResponse({'erro': 'Acesso não encontrado'}, status=403)
+
+    try:
+        payload = _json_pwa.loads(request.body)
+        endpoint = payload['endpoint']
+    except (ValueError, KeyError):
+        return JsonResponse({'erro': 'Payload inválido'}, status=400)
+
+    count, _ = PushSubscriptionPortal.objects.filter(
+        acesso_comprador=acesso, endpoint=endpoint
+    ).delete()
+    return JsonResponse({'sucesso': True, 'removidas': count})

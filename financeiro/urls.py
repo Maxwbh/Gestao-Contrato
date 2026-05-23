@@ -200,4 +200,12 @@ urlpatterns = [
     # 34.3 P2 — PIX Webhook (POST público, autenticado por token)
     # ==========================================================================
     path('webhook/pix/', views.webhook_pix, name='webhook_pix'),
+
+    # ==========================================================================
+    # 34.5 P3 — Relatórios Agendados e Exportação para BI
+    # ==========================================================================
+    # 34.5.3: endpoint público (token) para Power BI / Looker
+    path('api/relatorios/posicao/', views.api_relatorio_posicao_bi, name='api_relatorio_posicao_bi'),
+    # 34.5.4: dashboard executivo — série mensal para gráficos
+    path('api/dashboard-executivo/', views.api_dashboard_executivo, name='api_dashboard_executivo'),
 ]

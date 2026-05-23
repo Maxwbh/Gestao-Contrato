@@ -636,3 +636,201 @@ def gerar_relatorio_diario():
     logger.info(f"Relatório diário gerado: {relatorio}")
 
     return relatorio
+
+
+# =============================================================================
+# 34.5 P3 — Relatórios Agendados e Exportação para BI
+# =============================================================================
+
+@shared_task
+def enviar_relatorio_inadimplencia(frequencia='diario'):
+    """
+    34.5.1 — Envia relatório de inadimplência por e-mail.
+
+    frequencia: 'diario' (padrão) ou 'semanal'
+    Destinatários: settings.RELATORIO_INADIMPLENCIA_EMAILS
+    """
+    from django.core.mail import EmailMultiAlternatives
+    from django.db.models import Sum, Count, Q
+    from django.template.loader import render_to_string
+    from .models import Parcela
+    from contratos.models import StatusContrato
+
+    emails_destino = getattr(settings, 'RELATORIO_INADIMPLENCIA_EMAILS', [])
+    if not emails_destino:
+        logger.info('enviar_relatorio_inadimplencia: nenhum destinatário configurado (RELATORIO_INADIMPLENCIA_EMAILS).')
+        return {'enviado': False, 'motivo': 'sem_destinatarios'}
+
+    hoje = timezone.now().date()
+    limiar_dias = 1 if frequencia == 'diario' else 7
+
+    # Parcelas vencidas (>0 dias) e não pagas
+    vencidas_qs = Parcela.objects.filter(
+        pago=False,
+        data_vencimento__lt=hoje,
+        contrato__status=StatusContrato.ATIVO,
+    ).select_related('contrato', 'contrato__comprador', 'contrato__imobiliaria')
+
+    agg = vencidas_qs.aggregate(
+        total=Count('id'),
+        valor_total=Sum('valor_atual'),
+        vencidas_30d=Count('id', filter=Q(data_vencimento__lte=hoje - timedelta(days=30))),
+        vencidas_60d=Count('id', filter=Q(data_vencimento__lte=hoje - timedelta(days=60))),
+        vencidas_90d=Count('id', filter=Q(data_vencimento__lte=hoje - timedelta(days=90))),
+    )
+
+    # Top 20 parcelas mais antigas
+    top_inadimplentes = list(
+        vencidas_qs.order_by('data_vencimento')[:20].values(
+            'contrato__numero_contrato',
+            'contrato__comprador__nome',
+            'contrato__imobiliaria__nome',
+            'numero_parcela',
+            'data_vencimento',
+            'valor_atual',
+        )
+    )
+
+    contexto = {
+        'data_referencia': hoje,
+        'frequencia': frequencia,
+        'agg': agg,
+        'top_inadimplentes': top_inadimplentes,
+        'valor_total': agg['valor_total'] or 0,
+    }
+
+    titulo = f"[{'Diário' if frequencia == 'diario' else 'Semanal'}] Relatório de Inadimplência — {hoje.strftime('%d/%m/%Y')}"
+
+    html_body = _render_relatorio_inadimplencia_html(contexto)
+    text_body = _render_relatorio_inadimplencia_text(contexto)
+
+    msg = EmailMultiAlternatives(
+        subject=titulo,
+        body=text_body,
+        from_email=getattr(settings, 'DEFAULT_FROM_EMAIL', 'noreply@example.com'),
+        to=list(emails_destino),
+    )
+    msg.attach_alternative(html_body, 'text/html')
+
+    try:
+        msg.send()
+        logger.info('Relatório de inadimplência enviado para %s destinatários.', len(emails_destino))
+        return {'enviado': True, 'destinatarios': len(emails_destino), 'total_vencidas': agg['total']}
+    except Exception as exc:
+        logger.exception('Erro ao enviar relatório de inadimplência: %s', exc)
+        return {'enviado': False, 'erro': str(exc)}
+
+
+def _render_relatorio_inadimplencia_html(ctx):
+    hoje = ctx['data_referencia']
+    agg = ctx['agg']
+    top = ctx['top_inadimplentes']
+    linhas = ''
+    for row in top:
+        linhas += (
+            f'<tr>'
+            f'<td>{row["contrato__numero_contrato"]}</td>'
+            f'<td>{row["contrato__comprador__nome"]}</td>'
+            f'<td>{(row["contrato__imobiliaria__nome"] or "")[:25]}</td>'
+            f'<td>{row["numero_parcela"]}</td>'
+            f'<td>{row["data_vencimento"].strftime("%d/%m/%Y")}</td>'
+            f'<td>R$ {float(row["valor_atual"]):,.2f}</td>'
+            f'</tr>'
+        )
+    return f"""
+<html><body style="font-family:Arial,sans-serif;font-size:14px;">
+<h2 style="color:#c62828;">Relatório de Inadimplência — {hoje.strftime('%d/%m/%Y')}</h2>
+<table cellspacing="4" style="border-collapse:collapse;">
+  <tr><td style="padding:4px 12px;"><strong>Total vencidas:</strong></td><td>{agg['total'] or 0}</td></tr>
+  <tr><td style="padding:4px 12px;"><strong>Valor total:</strong></td><td>R$ {float(agg['valor_total'] or 0):,.2f}</td></tr>
+  <tr><td style="padding:4px 12px;"><strong>Venc. >30 dias:</strong></td><td>{agg['vencidas_30d'] or 0}</td></tr>
+  <tr><td style="padding:4px 12px;"><strong>Venc. >60 dias:</strong></td><td>{agg['vencidas_60d'] or 0}</td></tr>
+  <tr><td style="padding:4px 12px;"><strong>Venc. >90 dias:</strong></td><td>{agg['vencidas_90d'] or 0}</td></tr>
+</table>
+<br>
+<h3>Top inadimplentes (mais antigas)</h3>
+<table border="1" cellspacing="0" cellpadding="6" style="border-collapse:collapse;font-size:13px;">
+<thead style="background:#ffebee;">
+  <tr><th>Contrato</th><th>Comprador</th><th>Imobiliária</th><th>Parcela</th><th>Vencimento</th><th>Valor</th></tr>
+</thead>
+<tbody>{linhas}</tbody>
+</table>
+</body></html>"""
+
+
+def _render_relatorio_inadimplencia_text(ctx):
+    agg = ctx['agg']
+    hoje = ctx['data_referencia']
+    linhas = [f"Relatório de Inadimplência — {hoje.strftime('%d/%m/%Y')}",
+              f"Total vencidas: {agg['total'] or 0}",
+              f"Valor total: R$ {float(agg['valor_total'] or 0):,.2f}",
+              f"Venc. >30 dias: {agg['vencidas_30d'] or 0}",
+              f"Venc. >60 dias: {agg['vencidas_60d'] or 0}",
+              f"Venc. >90 dias: {agg['vencidas_90d'] or 0}", '']
+    for row in ctx['top_inadimplentes']:
+        linhas.append(
+            f"{row['contrato__numero_contrato']} | {row['contrato__comprador__nome'][:30]} | "
+            f"Parc.{row['numero_parcela']} | {row['data_vencimento'].strftime('%d/%m/%Y')} | "
+            f"R$ {float(row['valor_atual'] or 0):,.2f}"
+        )
+    return '\n'.join(linhas)
+
+
+@shared_task
+def enviar_relatorio_posicao_contratos(formato='excel'):
+    """
+    34.5.2 — Gera e envia por e-mail o relatório de posição de contratos.
+
+    formato: 'excel' (padrão) ou 'pdf'
+    Destinatários: settings.RELATORIO_POSICAO_EMAILS
+    """
+    from django.core.mail import EmailMessage
+    from .services import RelatorioService, FiltroRelatorio
+
+    emails_destino = getattr(settings, 'RELATORIO_POSICAO_EMAILS', [])
+    if not emails_destino:
+        logger.info('enviar_relatorio_posicao_contratos: nenhum destinatário configurado.')
+        return {'enviado': False, 'motivo': 'sem_destinatarios'}
+
+    hoje = timezone.now().date()
+    service = RelatorioService()
+    filtro = FiltroRelatorio()
+    relatorio = service.gerar_relatorio_posicao_contratos(filtro)
+
+    if formato == 'pdf':
+        try:
+            conteudo = service.exportar_para_pdf(relatorio)
+            mime = 'application/pdf'
+            ext = 'pdf'
+        except Exception:
+            conteudo = service.exportar_para_excel(relatorio)
+            mime = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+            ext = 'xlsx'
+    else:
+        conteudo = service.exportar_para_excel(relatorio)
+        mime = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+        ext = 'xlsx'
+
+    total = relatorio['totalizadores']['total_contratos']
+    titulo = f"Posição de Contratos — {hoje.strftime('%d/%m/%Y')} ({total} contratos)"
+
+    msg = EmailMessage(
+        subject=titulo,
+        body=(
+            f"Relatório de posição de contratos em anexo.\n\n"
+            f"Total de contratos ativos: {total}\n"
+            f"Saldo devedor total: R$ {float(relatorio['totalizadores']['total_saldo_devedor'] or 0):,.2f}\n"
+            f"Total pago: R$ {float(relatorio['totalizadores']['total_pago'] or 0):,.2f}\n"
+        ),
+        from_email=getattr(settings, 'DEFAULT_FROM_EMAIL', 'noreply@example.com'),
+        to=list(emails_destino),
+    )
+    msg.attach(f'posicao_contratos_{hoje.isoformat()}.{ext}', conteudo, mime)
+
+    try:
+        msg.send()
+        logger.info('Relatório de posição enviado para %s destinatários.', len(emails_destino))
+        return {'enviado': True, 'destinatarios': len(emails_destino), 'total_contratos': total}
+    except Exception as exc:
+        logger.exception('Erro ao enviar relatório de posição: %s', exc)
+        return {'enviado': False, 'erro': str(exc)}

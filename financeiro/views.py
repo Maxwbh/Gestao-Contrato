@@ -7953,3 +7953,162 @@ def webhook_pix(request):
         resultados.append(resultado)
 
     return JsonResponse({'processados': resultados}, status=200)
+
+
+# =============================================================================
+# 34.5 P3 — Relatórios Agendados e Exportação para BI
+# =============================================================================
+
+from django.views.decorators.csrf import csrf_exempt as _csrf_exempt_bi  # noqa: E402 already imported above
+
+
+@require_GET
+def api_relatorio_posicao_bi(request):
+    """
+    34.5.3 — Endpoint público autenticado para consumo por Power BI / Looker / Metabase.
+
+    GET /financeiro/api/relatorios/posicao/
+    Query params:
+        formato: json (padrão) | csv
+        imobiliaria_id: filtro opcional
+    Auth: Authorization: Bearer <BI_API_TOKEN>  ou  x-api-key: <BI_API_TOKEN>
+    """
+    from .services import RelatorioService, FiltroRelatorio
+    import json as _json
+    import csv as _csv
+    from io import StringIO
+    from decimal import Decimal as _Decimal
+
+    token_esperado = getattr(_settings, 'BI_API_TOKEN', '')
+    if token_esperado:
+        auth = request.headers.get('Authorization', '')
+        api_key = request.headers.get('x-api-key', '')
+        bearer = auth[7:].strip() if auth.startswith('Bearer ') else auth.strip()
+        if bearer != token_esperado and api_key != token_esperado:
+            return JsonResponse({'erro': 'Não autorizado'}, status=401)
+
+    imobiliaria_id = request.GET.get('imobiliaria_id')
+    formato = request.GET.get('formato', 'json').lower()
+
+    filtro = FiltroRelatorio(
+        imobiliaria_id=int(imobiliaria_id) if imobiliaria_id else None,
+    )
+
+    service = RelatorioService()
+    relatorio = service.gerar_relatorio_posicao_contratos(filtro)
+
+    def _serializar(obj):
+        if isinstance(obj, _Decimal):
+            return str(obj)
+        if hasattr(obj, 'isoformat'):
+            return obj.isoformat()
+        return str(obj)
+
+    if formato == 'csv':
+        buf = StringIO()
+        campos = [
+            'contrato_numero', 'comprador_nome', 'imovel',
+            'data_contrato', 'valor_total', 'valor_entrada', 'valor_financiado',
+            'total_parcelas', 'parcelas_pagas', 'parcelas_a_pagar', 'parcelas_vencidas',
+            'total_pago', 'saldo_devedor', 'progresso_percentual',
+            'proxima_parcela_vencimento', 'proxima_parcela_valor',
+            'tipo_correcao', 'data_proximo_reajuste',
+        ]
+        writer = _csv.DictWriter(buf, fieldnames=campos, extrasaction='ignore')
+        writer.writeheader()
+        for item in relatorio['itens']:
+            row = {k: _serializar(item.get(k)) for k in campos}
+            writer.writerow(row)
+        return HttpResponse(
+            buf.getvalue(),
+            content_type='text/csv; charset=utf-8',
+            headers={'Content-Disposition': f'attachment; filename="posicao_contratos.csv"'},
+        )
+
+    payload = {
+        'gerado_em': relatorio['data_geracao'].isoformat(),
+        'totalizadores': {k: _serializar(v) for k, v in relatorio['totalizadores'].items()},
+        'itens': [
+            {k: _serializar(v) for k, v in item.items()}
+            for item in relatorio['itens']
+        ],
+    }
+    return HttpResponse(
+        _json.dumps(payload, ensure_ascii=False, default=_serializar),
+        content_type='application/json; charset=utf-8',
+    )
+
+
+@require_GET
+@login_required
+def api_dashboard_executivo(request):
+    """
+    34.5.4 — API para o dashboard executivo: receita prevista × realizada × inadimplência (12 meses).
+    """
+    from django.db.models import Sum, Count, Q
+    from django.db.models.functions import TruncMonth
+
+    hoje = timezone.now().date()
+
+    imobiliarias_qs = Imobiliaria.objects.filter(ativo=True)
+    imobiliaria_id = request.GET.get('imobiliaria_id')
+    if imobiliaria_id:
+        imobiliarias_qs = imobiliarias_qs.filter(id=imobiliaria_id)
+    imobiliaria_ids = imobiliarias_qs.values_list('id', flat=True)
+
+    parcelas_qs = Parcela.objects.filter(contrato__imobiliaria__in=imobiliaria_ids)
+
+    inicio_12m = (hoje - relativedelta(months=11)).replace(day=1)
+    meses_labels = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez']
+
+    # Receita prevista × realizada por mês (12 meses anteriores incluindo atual)
+    por_mes = {
+        row['mes']: row
+        for row in parcelas_qs.filter(
+            data_vencimento__gte=inicio_12m,
+            data_vencimento__lte=hoje,
+        ).annotate(mes=TruncMonth('data_vencimento')).values('mes').annotate(
+            realizado=Sum('valor_pago', filter=Q(pago=True)),
+            previsto=Sum('valor_atual'),
+            inadimplente=Sum('valor_atual', filter=Q(pago=False, data_vencimento__lt=hoje)),
+        )
+    }
+
+    receita_prevista = []
+    receita_realizada = []
+    inadimplencia_serie = []
+    labels = []
+
+    for i in range(11, -1, -1):
+        data = hoje - relativedelta(months=i)
+        chave = data.replace(day=1)
+        row = por_mes.get(chave) or {}
+        labels.append(f"{meses_labels[data.month - 1]}/{data.year % 100}")
+        receita_prevista.append(float(row.get('previsto') or 0))
+        receita_realizada.append(float(row.get('realizado') or 0))
+        inadimplencia_serie.append(float(row.get('inadimplente') or 0))
+
+    # KPIs consolidados
+    agg = parcelas_qs.aggregate(
+        total_previsto=Sum('valor_atual', filter=Q(pago=False)),
+        total_recebido=Sum('valor_pago', filter=Q(pago=True)),
+        total_vencido=Sum('valor_atual', filter=Q(pago=False, data_vencimento__lt=hoje)),
+        count_vencido=Count('id', filter=Q(pago=False, data_vencimento__lt=hoje)),
+    )
+    contratos_ativos = Contrato.objects.filter(
+        imobiliaria__in=imobiliaria_ids, status=StatusContrato.ATIVO
+    ).count()
+
+    return JsonResponse({
+        'labels': labels,
+        'receita_prevista': receita_prevista,
+        'receita_realizada': receita_realizada,
+        'inadimplencia': inadimplencia_serie,
+        'kpis': {
+            'contratos_ativos': contratos_ativos,
+            'total_previsto': float(agg['total_previsto'] or 0),
+            'total_recebido': float(agg['total_recebido'] or 0),
+            'total_vencido': float(agg['total_vencido'] or 0),
+            'count_vencido': agg['count_vencido'] or 0,
+        },
+    })

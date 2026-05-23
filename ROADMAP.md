@@ -2908,12 +2908,12 @@ Semana 4: F4-01..F4-05 (ações rápidas)
 | Conciliação OFX | ✅ Implementado |
 | Notificações (email/SMS/WhatsApp) | ✅ Maduro |
 | Portal do comprador (autoatendimento) | ✅ Implementado |
-| PIX — confirmação automática via webhook | 🟡 Parcial (manual hoje) |
-| Portal — upload de comprovante pelo comprador | ❌ Ausente |
+| PIX — confirmação automática via webhook | ✅ Implementado (34.3) |
+| Portal — upload de comprovante pelo comprador | ✅ Implementado (34.4) |
 | Portal — renegociação/antecipação self-service | 🟡 Parcial (só admin) |
-| Relatórios agendados e exportação para BI | 🟡 Parcial |
-| PWA — portal instalável no celular | ❌ Ausente |
-| Conformidade Lei 13.786 / quadro-resumo Lei 6.766 | 🟡 Não verificado |
+| Relatórios agendados e exportação para BI | ✅ Implementado (34.5) |
+| PWA — portal instalável no celular | ✅ Implementado (34.6) |
+| Conformidade Lei 13.786 / quadro-resumo Lei 6.766 | ✅ Implementado (34.2) |
 
 ---
 
