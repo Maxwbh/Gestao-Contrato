@@ -195,4 +195,9 @@ urlpatterns = [
     # R-04 — RENEGOCIAÇÃO DE PARCELAS
     # ==========================================================================
     path('contrato/<int:contrato_id>/renegociar/', views.renegociar_parcelas, name='renegociar_parcelas'),
+
+    # ==========================================================================
+    # 34.3 P2 — PIX Webhook (POST público, autenticado por token)
+    # ==========================================================================
+    path('webhook/pix/', views.webhook_pix, name='webhook_pix'),
 ]

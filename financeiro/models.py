@@ -311,6 +311,13 @@ class Parcela(TimeStampedModel):
         verbose_name='PIX QR Code',
         help_text='Dados do QR Code PIX em base64'
     )
+    pix_txid = models.CharField(
+        max_length=35,
+        blank=True,
+        db_index=True,
+        verbose_name='PIX txid',
+        help_text='ID de transação PIX (até 35 chars — padrão BCB) usado para reconciliação via webhook'
+    )
 
     class Meta:
         verbose_name = 'Parcela'
@@ -787,6 +794,9 @@ class Parcela(TimeStampedModel):
                 self.pix_copia_cola = resultado['pix_copia_cola']
             if resultado.get('pix_qrcode'):
                 self.pix_qrcode = resultado['pix_qrcode']
+            # Garante txid único para reconciliação via webhook
+            if not self.pix_txid:
+                self.pix_txid = f'GC{self.contrato_id:07d}P{self.numero_parcela:04d}'
 
             self.save()
 
@@ -1836,11 +1846,12 @@ class HistoricoPagamento(TimeStampedModel):
 
     # ── Conciliação bancária ──────────────────────────────────────────────────
     ORIGEM_CHOICES = [
-        ('MANUAL',      'Manual'),
-        ('CNAB',        'Retorno CNAB'),
-        ('OFX',         'Extrato OFX'),
-        ('ANTECIPACAO', 'Antecipação'),
-        ('SISTEMA',     'Sistema'),
+        ('MANUAL',       'Manual'),
+        ('CNAB',         'Retorno CNAB'),
+        ('OFX',          'Extrato OFX'),
+        ('ANTECIPACAO',  'Antecipação'),
+        ('PIX_WEBHOOK',  'PIX Webhook'),
+        ('SISTEMA',      'Sistema'),
     ]
     origem_pagamento = models.CharField(
         max_length=20,
@@ -2427,3 +2438,74 @@ class AcessoBoletoPublico(models.Model):
 
     def __str__(self):
         return f'Acesso {self.parcela} por {self.ip} em {self.acessado_em:%d/%m/%Y %H:%M}'
+
+
+class EventoPIX(models.Model):
+    """
+    Roadmap 34.3: Log de eventos PIX recebidos via webhook do PSP.
+    Garante idempotência por EndToEndId (deduplicação).
+    """
+    STATUS_RECEBIDO = 'RECEBIDO'
+    STATUS_BAIXADO = 'BAIXADO'
+    STATUS_DUPLICADO = 'DUPLICADO'
+    STATUS_SEM_PARCELA = 'SEM_PARCELA'
+    STATUS_ERRO = 'ERRO'
+    STATUS_CHOICES = [
+        (STATUS_RECEBIDO, 'Recebido'),
+        (STATUS_BAIXADO, 'Parcela Baixada'),
+        (STATUS_DUPLICADO, 'Duplicado (ignorado)'),
+        (STATUS_SEM_PARCELA, 'Sem Parcela Vinculada'),
+        (STATUS_ERRO, 'Erro no Processamento'),
+    ]
+
+    end_to_end_id = models.CharField(
+        max_length=35,
+        unique=True,
+        db_index=True,
+        verbose_name='EndToEndId',
+        help_text='Identificador único da transação PIX — usado para deduplicação'
+    )
+    txid = models.CharField(
+        max_length=35,
+        blank=True,
+        db_index=True,
+        verbose_name='txid'
+    )
+    parcela = models.ForeignKey(
+        Parcela,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='eventos_pix',
+        verbose_name='Parcela'
+    )
+    valor = models.DecimalField(max_digits=12, decimal_places=2, verbose_name='Valor')
+    horario_pix = models.DateTimeField(verbose_name='Horário do PIX')
+    pagador_nome = models.CharField(max_length=200, blank=True, verbose_name='Pagador')
+    pagador_documento = models.CharField(max_length=20, blank=True, verbose_name='CPF/CNPJ Pagador')
+    info_pagador = models.TextField(blank=True, verbose_name='Info Pagador')
+    status = models.CharField(
+        max_length=20,
+        choices=STATUS_CHOICES,
+        default=STATUS_RECEBIDO,
+        verbose_name='Status'
+    )
+    erro = models.TextField(blank=True, verbose_name='Erro')
+    payload_raw = models.TextField(
+        verbose_name='Payload Raw',
+        help_text='JSON completo enviado pelo PSP para fins de auditoria'
+    )
+    recebido_em = models.DateTimeField(auto_now_add=True, verbose_name='Recebido em')
+
+    class Meta:
+        verbose_name = 'Evento PIX'
+        verbose_name_plural = 'Eventos PIX'
+        ordering = ['-recebido_em']
+        indexes = [
+            models.Index(fields=['txid']),
+            models.Index(fields=['status']),
+            models.Index(fields=['recebido_em']),
+        ]
+
+    def __str__(self):
+        return f'PIX {self.end_to_end_id[:16]}… {self.valor} — {self.get_status_display()}'

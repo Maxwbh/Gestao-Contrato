@@ -7,7 +7,7 @@ Email: maxwbh@gmail.com
 from django.contrib import admin
 from django.utils.html import format_html
 from django.utils import timezone
-from .models import Parcela, Reajuste, HistoricoPagamento, AcessoBoletoPublico
+from .models import Parcela, Reajuste, HistoricoPagamento, AcessoBoletoPublico, EventoPIX
 
 
 @admin.register(Parcela)
@@ -329,3 +329,43 @@ class AcessoBoletoPublicoAdmin(admin.ModelAdmin):
     def user_agent_resumido(self, obj):
         return obj.user_agent[:60] + '…' if len(obj.user_agent) > 60 else obj.user_agent
     user_agent_resumido.short_description = 'User-Agent'
+
+
+@admin.register(EventoPIX)
+class EventoPIXAdmin(admin.ModelAdmin):
+    list_display = ['end_to_end_id_curto', 'txid', 'parcela', 'valor', 'status_badge', 'recebido_em']
+    list_select_related = ['parcela', 'parcela__contrato']
+    list_filter = ['status', 'recebido_em']
+    search_fields = ['end_to_end_id', 'txid', 'pagador_nome', 'pagador_documento']
+    readonly_fields = [
+        'end_to_end_id', 'txid', 'parcela', 'valor', 'horario_pix',
+        'pagador_nome', 'pagador_documento', 'info_pagador',
+        'status', 'erro', 'payload_raw', 'recebido_em',
+    ]
+    ordering = ['-recebido_em']
+    date_hierarchy = 'recebido_em'
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def end_to_end_id_curto(self, obj):
+        return obj.end_to_end_id[:20] + '…' if len(obj.end_to_end_id) > 20 else obj.end_to_end_id
+    end_to_end_id_curto.short_description = 'EndToEndId'
+
+    def status_badge(self, obj):
+        cores = {
+            'BAIXADO': '#28a745',
+            'DUPLICADO': '#6c757d',
+            'SEM_PARCELA': '#ffc107',
+            'ERRO': '#dc3545',
+            'RECEBIDO': '#007bff',
+        }
+        cor = cores.get(obj.status, '#6c757d')
+        return format_html(
+            '<span style="background:{};color:white;padding:2px 8px;border-radius:3px">{}</span>',
+            cor, obj.get_status_display(),
+        )
+    status_badge.short_description = 'Status'

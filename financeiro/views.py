@@ -7794,3 +7794,162 @@ def retorno_pk_compat(request, pk):
     from core.hashids_utils import encode_id
     hid = encode_id(pk)
     return redirect('financeiro:detalhe_retorno', hid=hid, permanent=True)
+
+
+# =============================================================================
+# 34.3 P2 — Webhook PIX (confirmação automática de pagamento)
+# =============================================================================
+
+import json as _json_module
+
+from django.views.decorators.csrf import csrf_exempt
+from django.conf import settings as _settings
+
+
+def _processar_evento_pix(end_to_end_id, txid, valor_str, horario_str,
+                           pagador, info_pagador, payload_raw):
+    """Processa um evento PIX individual com deduplicação por EndToEndId."""
+    from .models import EventoPIX
+    from django.utils.dateparse import parse_datetime
+    from django.utils import timezone as _tz
+
+    # Deduplicação por EndToEndId
+    if EventoPIX.objects.filter(end_to_end_id=end_to_end_id).exists():
+        return {'endToEndId': end_to_end_id, 'status': EventoPIX.STATUS_DUPLICADO}
+
+    try:
+        valor = Decimal(valor_str)
+    except Exception:
+        valor = Decimal('0')
+
+    horario = parse_datetime(horario_str) if horario_str else None
+    if horario is not None and horario.tzinfo is None:
+        horario = _tz.make_aware(horario)
+    if horario is None:
+        horario = _tz.now()
+
+    pagador_nome = pagador.get('nome', '') if isinstance(pagador, dict) else ''
+    pagador_doc = (pagador.get('cpf', '') or pagador.get('cnpj', '')) if isinstance(pagador, dict) else ''
+
+    # Localiza parcela pelo pix_txid
+    parcela = None
+    if txid:
+        try:
+            parcela = Parcela.objects.get(pix_txid=txid, pago=False)
+        except Parcela.DoesNotExist:
+            pass
+
+    status_inicial = EventoPIX.STATUS_RECEBIDO if parcela else EventoPIX.STATUS_SEM_PARCELA
+    evento = EventoPIX.objects.create(
+        end_to_end_id=end_to_end_id,
+        txid=txid,
+        parcela=parcela,
+        valor=valor,
+        horario_pix=horario,
+        pagador_nome=pagador_nome,
+        pagador_documento=pagador_doc,
+        info_pagador=info_pagador,
+        status=status_inicial,
+        payload_raw=payload_raw,
+    )
+
+    if parcela is None:
+        return {
+            'endToEndId': end_to_end_id,
+            'txid': txid,
+            'status': EventoPIX.STATUS_SEM_PARCELA,
+            'mensagem': f'Nenhuma parcela não paga com txid={txid!r}',
+        }
+
+    try:
+        from .models import HistoricoPagamento
+        data_pagamento = horario.date()
+        obs = f'PIX automático — EndToEndId: {end_to_end_id}'
+        parcela.registrar_pagamento(
+            valor_pago=valor,
+            data_pagamento=data_pagamento,
+            observacoes=obs,
+            validar_minimo=False,
+        )
+        HistoricoPagamento.objects.create(
+            parcela=parcela,
+            data_pagamento=data_pagamento,
+            valor_pago=valor,
+            valor_parcela=parcela.valor_atual,
+            valor_juros=parcela.valor_juros,
+            valor_multa=parcela.valor_multa,
+            forma_pagamento='PIX',
+            observacoes=obs,
+            origem_pagamento='PIX_WEBHOOK',
+        )
+        evento.status = EventoPIX.STATUS_BAIXADO
+        evento.save(update_fields=['status'])
+        return {
+            'endToEndId': end_to_end_id,
+            'txid': txid,
+            'status': EventoPIX.STATUS_BAIXADO,
+            'parcela_id': parcela.pk,
+        }
+    except Exception as exc:
+        logger.exception('Erro ao baixar parcela via webhook PIX end_to_end_id=%s: %s', end_to_end_id, exc)
+        evento.status = EventoPIX.STATUS_ERRO
+        evento.erro = str(exc)
+        evento.save(update_fields=['status', 'erro'])
+        return {
+            'endToEndId': end_to_end_id,
+            'txid': txid,
+            'status': EventoPIX.STATUS_ERRO,
+            'erro': str(exc),
+        }
+
+
+@csrf_exempt
+@require_POST
+def webhook_pix(request):
+    """
+    34.3 P2: Recebe notificações PIX do PSP e baixa a parcela automaticamente.
+
+    Suporta o formato padrão Banco Central (array "pix" de eventos).
+    Autenticação: Authorization: Bearer <PIX_WEBHOOK_TOKEN> ou x-api-key header.
+    Quando PIX_WEBHOOK_TOKEN está vazio, a validação é pulada (dev/staging).
+    """
+    from .models import EventoPIX
+
+    token_esperado = getattr(_settings, 'PIX_WEBHOOK_TOKEN', '')
+    if token_esperado:
+        auth = request.headers.get('Authorization', '')
+        api_key = request.headers.get('x-api-key', '')
+        bearer = auth[7:].strip() if auth.startswith('Bearer ') else auth.strip()
+        if bearer != token_esperado and api_key != token_esperado:
+            return JsonResponse({'erro': 'Não autorizado'}, status=401)
+
+    try:
+        payload = _json_module.loads(request.body)
+    except (ValueError, _json_module.JSONDecodeError):
+        return JsonResponse({'erro': 'Payload JSON inválido'}, status=400)
+
+    # BCB padrão: {"pix": [...]}; alguns PSPs enviam evento único diretamente
+    eventos_pix = payload.get('pix', None)
+    if eventos_pix is None:
+        eventos_pix = [payload]
+    if not isinstance(eventos_pix, list):
+        eventos_pix = [eventos_pix]
+
+    resultados = []
+    for evento in eventos_pix:
+        end_to_end_id = str(evento.get('endToEndId', '')).strip()
+        if not end_to_end_id:
+            resultados.append({'erro': 'endToEndId ausente no evento'})
+            continue
+        resultado = _processar_evento_pix(
+            end_to_end_id=end_to_end_id,
+            txid=str(evento.get('txid', '')).strip(),
+            valor_str=str(evento.get('valor', '0')).strip(),
+            horario_str=str(evento.get('horario', '')).strip(),
+            pagador=evento.get('pagador', {}),
+            info_pagador=str(evento.get('infoPagador', '')).strip(),
+            payload_raw=_json_module.dumps(evento, ensure_ascii=False),
+        )
+        resultados.append(resultado)
+
+    return JsonResponse({'processados': resultados}, status=200)

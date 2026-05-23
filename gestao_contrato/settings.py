@@ -353,6 +353,10 @@ BRCOBRANCA_TIMEOUT = 30
 BRCOBRANCA_MAX_TENTATIVAS = 3
 BRCOBRANCA_DELAY_INICIAL = 2
 
+# PIX Webhook — token compartilhado enviado pelo PSP no header Authorization: Bearer <token>
+# Deixe vazio para desabilitar a validação (não recomendado em produção)
+PIX_WEBHOOK_TOKEN = config('PIX_WEBHOOK_TOKEN', default='')
+
 # Portal do Comprador
 PORTAL_EMAIL_VERIFICACAO = False
 
