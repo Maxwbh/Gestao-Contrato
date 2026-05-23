@@ -2910,7 +2910,7 @@ Semana 4: F4-01..F4-05 (ações rápidas)
 | Portal do comprador (autoatendimento) | ✅ Implementado |
 | PIX — confirmação automática via webhook | ✅ Implementado (34.3) |
 | Portal — upload de comprovante pelo comprador | ✅ Implementado (34.4) |
-| Portal — renegociação/antecipação self-service | 🟡 Parcial (só admin) |
+| Portal — renegociação/antecipação self-service | ⚙️ Por design — só admin (simulador read-only no portal em 34.4) |
 | Relatórios agendados e exportação para BI | ✅ Implementado (34.5) |
 | PWA — portal instalável no celular | ✅ Implementado (34.6) |
 | Conformidade Lei 13.786 / quadro-resumo Lei 6.766 | ✅ Implementado (34.2) |
