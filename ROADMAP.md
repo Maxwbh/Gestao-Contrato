@@ -1156,7 +1156,7 @@ para ciclo = 2..total_ciclos+1:
 | N-02 | E-mail de inadimplência após D+3 | P2 | ✅ `enviar_inadimplentes_sync()` em `core/tasks.py` + `task_run_all` inclui N-02 + POST `/api/tasks/enviar-inadimplentes/` + `NOTIFICACAO_DIAS_INADIMPLENCIA=3` |
 | N-03 | Régua de cobrança configurável (D-5, D+3, D+10, D+30) | P3 | ✅ `RegraNotificacao` model em `notificacoes/models.py` + `TipoGatilho` (ANTES/APOS) + admin com `list_editable` + `_processar_regra()` em `core/tasks.py` — fallback automático para N-01/N-02 quando nenhuma regra configurada |
 | N-04 | Integração WhatsApp (4 provedores) | P3 | ✅ `ConfiguracaoWhatsApp` suporta: Twilio, Meta Cloud API, Evolution API v2, Z-API. Webhooks de entrega (Evolution + Twilio). Teste de conexão por provedor. Análise custo/benefício e roadmap de evolução: **ver Seção 26**. |
-| N-05 | Push notification portal comprador | P4 | 🏦 Débito Técnico (pós-2050) |
+| N-05 | Push notification portal comprador | P4 | ✅ Implementado (34.6) — `PushSubscriptionPortal` model (unique por acesso+endpoint), `portal_comprador/tasks.py` (`enviar_push_comprador`, `notificar_push_vencimento_amanha`), API subscribe/unsubscribe em `/portal/api/push/`, service worker com listener `push` + `notificationclick`, VAPID via `py-vapid` |
 | N-08 | **TEST_MODE safeguard** — `_destinatario_email_teste()` e `_destinatario_telefone_teste()` em `BoletoNotificacaoService`: em ambiente não-produção, redireciona todos os envios para endereços de teste configurados em `settings.EMAIL_TESTE` e `settings.TELEFONE_TESTE`; evita notificações acidentais para compradores reais durante desenvolvimento | P2 | ✅ `notificacoes/boleto_notificacao.py` |
 | N-09 | **Normalização E.164 para Twilio** — telefones no formato `(31) 99999-8888` são convertidos para `+5531999998888` antes do envio via Twilio SMS/WhatsApp; `_normalizar_telefone_e164()` strip de caracteres não-numéricos + prefixo `+55` | P2 | ✅ `notificacoes/boleto_notificacao.py` |
 | N-06 | **Template unificado** — 1 registro por `(codigo, imobiliaria)` com 3 canais: `corpo_html` (Email HTML via TinyMCE 5), `corpo` (SMS ≤255 chars), `corpo_whatsapp`; campo `tipo` removido do form; badges de canal baseados nos campos preenchidos; `renderizar()` retorna 4-tuple `(assunto, corpo, corpo_html, corpo_whatsapp)` | P2 | ✅ Migration `0005_template_unificado` + forms + views + template_form/list atualizados |
@@ -1199,7 +1199,7 @@ para ciclo = 2..total_ciclos+1:
 | Mapa Interativo (Seção 16) | — | 5 | 6 | 1 | 12 | ✅ 12/12 M-01..M-16 |
 | Dashboard KPIs (Seção 17) | 1 | 5 | 2 | — | 8 | ✅ 8/8 (K-01..K-06, G-01..G-05, D-01..D-04) |
 | Simulador Antecipação (Seção 18) | — | 3 | 2 | — | 5 | ✅ 5/5 (R-01..R-05) |
-| Notificações (Seção 19) | — | 6 | 2 | 1 | 9 | ✅ 8/9 P2+P3 (N-01..N-04, N-06..N-09) · 🏦 N-05 Débito Técnico |
+| Notificações (Seção 19) | — | 6 | 2 | 1 | 9 | ✅ 9/9 (N-01..N-09) — N-05 implementado em 34.6 |
 | UX / Interface (Seção 20) | — | 6 | 5 | — | 11 | ✅ 11/11 (U-01..U-11) |
 | Frontend | — | 17 | 15 | 3 | 35 | ✅ 17/17 P2 · ✅ 15/15 P3 · ⏳ 3.33 P4 |
 | APIs | — | 6 | 5 | — | 11 | ✅ 11/11 |
