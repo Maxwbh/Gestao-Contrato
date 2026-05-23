@@ -1082,3 +1082,177 @@ def api_portal_linha_digitavel(request, parcela_id):
         'data_vencimento': parcela.data_vencimento.isoformat(),
         'pago': parcela.pago,
     })
+
+
+# =============================================================================
+# 34.4 P2 — Portal expandido: upload de comprovante, histórico unificado e
+# simulador de antecipação read-only
+# =============================================================================
+
+
+def upload_comprovante(request, parcela_id):
+    """Permite ao comprador enviar comprovante de pagamento de uma parcela."""
+    from financeiro.models import Parcela
+    from .forms import ComprovanteUploadForm
+    from .models import ComprovantePagamentoUpload
+
+    comprador = get_comprador_from_request(request)
+    if not comprador:
+        messages.error(request, 'Acesso não autorizado.')
+        return redirect('portal_comprador:login')
+
+    parcela = get_object_or_404(
+        Parcela.objects.select_related('contrato', 'contrato__imovel'),
+        pk=parcela_id,
+        contrato__comprador=comprador,
+        pago=False,
+    )
+
+    pendente_existente = ComprovantePagamentoUpload.objects.filter(
+        parcela=parcela,
+        status=ComprovantePagamentoUpload.STATUS_PENDENTE,
+    ).first()
+
+    if request.method == 'POST':
+        form = ComprovanteUploadForm(request.POST, request.FILES)
+        if form.is_valid():
+            ComprovantePagamentoUpload.objects.create(
+                parcela=parcela,
+                acesso_comprador=getattr(request.user, 'acesso_comprador', None),
+                comprovante=form.cleaned_data['comprovante'],
+                valor_informado=form.cleaned_data['valor_informado'],
+                data_pagamento_informada=form.cleaned_data['data_pagamento_informada'],
+                forma_pagamento=form.cleaned_data['forma_pagamento'],
+                observacoes_comprador=form.cleaned_data.get('observacoes_comprador', ''),
+            )
+            messages.success(
+                request,
+                'Comprovante enviado com sucesso. Aguarde a validação pela administração.'
+            )
+            return redirect('portal_comprador:meus_boletos')
+    else:
+        form = ComprovanteUploadForm(initial={
+            'valor_informado': parcela.valor_total,
+            'data_pagamento_informada': timezone.now().date(),
+            'forma_pagamento': 'PIX',
+        })
+
+    return render(request, 'portal_comprador/upload_comprovante.html', {
+        'form': form,
+        'parcela': parcela,
+        'pendente_existente': pendente_existente,
+    })
+
+
+def historico_unificado(request):
+    """
+    Histórico unificado: pagamentos confirmados, comprovantes enviados e reajustes
+    aplicados em todos os contratos do comprador.
+    """
+    from financeiro.models import HistoricoPagamento, Reajuste
+    from .models import ComprovantePagamentoUpload
+
+    comprador = get_comprador_from_request(request)
+    if not comprador:
+        messages.error(request, 'Acesso não autorizado.')
+        return redirect('portal_comprador:login')
+
+    pagamentos = (
+        HistoricoPagamento.objects
+        .filter(parcela__contrato__comprador=comprador)
+        .select_related('parcela', 'parcela__contrato', 'parcela__contrato__imovel')
+        .order_by('-data_pagamento', '-criado_em')[:200]
+    )
+
+    comprovantes = (
+        ComprovantePagamentoUpload.objects
+        .filter(parcela__contrato__comprador=comprador)
+        .select_related('parcela', 'parcela__contrato')
+        .order_by('-criado_em')[:50]
+    )
+
+    reajustes = (
+        Reajuste.objects
+        .filter(contrato__comprador=comprador)
+        .select_related('contrato')
+        .order_by('-data_reajuste')[:50]
+    )
+
+    return render(request, 'portal_comprador/historico_unificado.html', {
+        'pagamentos': pagamentos,
+        'comprovantes': comprovantes,
+        'reajustes': reajustes,
+    })
+
+
+def simulador_antecipacao_portal(request, contrato_id):
+    """
+    Roadmap 34.4: Simulador de antecipação read-only para o comprador.
+    Permite calcular preview mas não aplica — solicitação efetiva fica com admin.
+    """
+    from contratos.models import Contrato
+    from financeiro.models import Parcela, TipoParcela
+    from decimal import Decimal
+
+    comprador = get_comprador_from_request(request)
+    if not comprador:
+        messages.error(request, 'Acesso não autorizado.')
+        return redirect('portal_comprador:login')
+
+    contrato = get_object_or_404(Contrato, pk=contrato_id, comprador=comprador)
+
+    parcelas_disponiveis = (
+        Parcela.objects.filter(
+            contrato=contrato,
+            pago=False,
+            tipo_parcela=TipoParcela.NORMAL,
+        ).order_by('numero_parcela')
+    )
+
+    preview = None
+    parcelas_selecionadas_ids = []
+    desconto_perc = Decimal('0')
+
+    if request.method == 'POST':
+        parcelas_selecionadas_ids = request.POST.getlist('parcelas')
+        desconto_str = request.POST.get('desconto', '0').replace(',', '.')
+        try:
+            desconto_perc = Decimal(desconto_str)
+        except Exception:
+            desconto_perc = Decimal('0')
+        desconto_perc = max(Decimal('0'), min(Decimal('100'), desconto_perc))
+
+        parcelas_sel = list(
+            parcelas_disponiveis.filter(id__in=parcelas_selecionadas_ids).order_by('numero_parcela')
+        )
+        itens = []
+        total_original = Decimal('0')
+        total_antecipado = Decimal('0')
+        for p in parcelas_sel:
+            vo = p.valor_atual
+            dv = (vo * desconto_perc / 100).quantize(Decimal('0.01'))
+            va = vo - dv
+            itens.append({
+                'parcela': p,
+                'valor_original': vo,
+                'desconto_valor': dv,
+                'valor_antecipado': va,
+            })
+            total_original += vo
+            total_antecipado += va
+        preview = {
+            'itens': itens,
+            'total_original': total_original,
+            'total_antecipado': total_antecipado,
+            'economia': total_original - total_antecipado,
+            'desconto_perc': desconto_perc,
+            'qtd': len(itens),
+        }
+
+    return render(request, 'portal_comprador/simulador_antecipacao.html', {
+        'contrato': contrato,
+        'parcelas_disponiveis': parcelas_disponiveis,
+        'preview': preview,
+        'parcelas_selecionadas_ids': [str(x) for x in parcelas_selecionadas_ids],
+        'desconto_perc': desconto_perc,
+    })

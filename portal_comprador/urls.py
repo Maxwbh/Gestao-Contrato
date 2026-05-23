@@ -59,4 +59,11 @@ urlpatterns = [
     # 4-P3: segunda via e linha digitável
     path('api/boletos/<int:parcela_id>/segunda-via/', views.api_portal_segunda_via, name='api_portal_segunda_via'),
     path('api/boletos/<int:parcela_id>/linha-digitavel/', views.api_portal_linha_digitavel, name='api_portal_linha_digitavel'),
+
+    # ==========================================================================
+    # 34.4 P2 — Portal expandido (autoatendimento)
+    # ==========================================================================
+    path('boletos/<int:parcela_id>/comprovante/', views.upload_comprovante, name='upload_comprovante'),
+    path('historico/', views.historico_unificado, name='historico_unificado'),
+    path('contratos/<int:contrato_id>/simulador/', views.simulador_antecipacao_portal, name='simulador_antecipacao'),
 ]

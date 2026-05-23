@@ -1846,12 +1846,13 @@ class HistoricoPagamento(TimeStampedModel):
 
     # ── Conciliação bancária ──────────────────────────────────────────────────
     ORIGEM_CHOICES = [
-        ('MANUAL',       'Manual'),
-        ('CNAB',         'Retorno CNAB'),
-        ('OFX',          'Extrato OFX'),
-        ('ANTECIPACAO',  'Antecipação'),
-        ('PIX_WEBHOOK',  'PIX Webhook'),
-        ('SISTEMA',      'Sistema'),
+        ('MANUAL',        'Manual'),
+        ('CNAB',          'Retorno CNAB'),
+        ('OFX',           'Extrato OFX'),
+        ('ANTECIPACAO',   'Antecipação'),
+        ('PIX_WEBHOOK',   'PIX Webhook'),
+        ('PORTAL_UPLOAD', 'Upload pelo Portal do Comprador'),
+        ('SISTEMA',       'Sistema'),
     ]
     origem_pagamento = models.CharField(
         max_length=20,

@@ -320,6 +320,11 @@
         <span class="material-icons">receipt_long</span>
         Boletos
     </a>
+    <a href="{% url 'portal_comprador:historico_unificado' %}"
+       class="{% block nav_historico %}{% endblock %}">
+        <span class="material-icons">history</span>
+        Histórico
+    </a>
     <a href="{% url 'portal_comprador:meus_dados' %}"
        class="{% block nav_dados %}{% endblock %}">
         <span class="material-icons">person</span>
