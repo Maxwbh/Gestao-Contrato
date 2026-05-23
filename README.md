@@ -322,17 +322,22 @@ Gestao-Contrato/
 │   ├── views.py
 │   └── urls.py
 ├── contratos/                 # App de contratos
-│   ├── models.py             # Contrato, MinutaContrato, PrestacaoIntermediaria
+│   ├── models.py             # Contrato, TabelaJurosContrato, PrestacaoIntermediaria, MinutaContrato, TipoAmortizacao
 │   └── services/
 │       ├── rescisao_service.py
 │       └── cessao_service.py
 ├── financeiro/                # App financeiro
-│   ├── models.py             # Parcela, Reajuste, HistoricoPagamento, EventoPIX
+│   ├── models.py             # Parcela, Reajuste, HistoricoPagamento, EventoPIX, ArquivoRemessa, ArquivoRetorno, AcessoBoletoPublico
 │   ├── tasks.py              # Celery: relatório inadimplência e posição contratos (34.5)
 │   ├── services/
 │   │   ├── boleto_service.py
-│   │   ├── cnab_service.py   # Remessa e Retorno CNAB
-│   │   └── relatorio_service.py  # RelatorioService + FiltroRelatorio + exports Excel/PDF
+│   │   ├── carne_service.py          # Geração de carnê PDF
+│   │   ├── cnab_service.py           # Remessa e Retorno CNAB
+│   │   ├── indices_economicos_service.py  # Busca BCB (IPCA/IGP-M/SELIC)
+│   │   ├── ofx_service.py            # Importação de extrato OFX
+│   │   ├── reajuste_service.py       # Simulação e aplicação de reajuste
+│   │   ├── recibo_service.py         # Geração de recibo PDF
+│   │   └── relatorio_service.py      # RelatorioService + FiltroRelatorio + exports Excel/PDF
 │   ├── management/commands/
 │   │   ├── enviar_relatorio_inadimplencia.py  # --frequencia diario|semanal
 │   │   └── enviar_relatorio_posicao.py        # --formato excel|pdf

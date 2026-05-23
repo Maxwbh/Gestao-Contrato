@@ -55,11 +55,15 @@ gestao_contrato/          # Configuração do projeto
 | Modelo | Descrição |
 |--------|-----------|
 | `TipoCorrecao` | Choices: IPCA, IGPM, SELIC, FIXO |
+| `TipoAmortizacao` | Choices: PRICE, SAC |
 | `IndiceReajuste` | Histórico de índices econômicos |
 | `StatusContrato` | Choices: ATIVO, QUITADO, CANCELADO, SUSPENSO |
 | `TipoPrestacao` | Choices: NORMAL, INTERMEDIARIA, ENTRADA |
 | `Contrato` | Contrato de venda com configurações de reajuste |
+| `TabelaJurosContrato` | Tabela de juros escalantes por ciclo (HU-360) |
 | `PrestacaoIntermediaria` | Parcelas intermediárias (máx. 30) |
+| `HistoricoReajusteIntermediaria` | Log de reajustes aplicados às intermediárias |
+| `MinutaContrato` | Versões de minuta com controle de minuta ativa (única por contrato) |
 
 ### 3.3 Financeiro (`financeiro/models.py`)
 | Modelo | Descrição |
@@ -69,10 +73,14 @@ gestao_contrato/          # Configuração do projeto
 | `Parcela` | Parcela mensal com ciclo de reajuste |
 | `Reajuste` | Registro de reajuste aplicado |
 | `HistoricoPagamento` | Log de pagamentos |
+| `StatusArquivoRemessa` | Choices: PENDENTE, ENVIADO, PROCESSADO |
 | `ArquivoRemessa` | CNAB remessa |
 | `ItemRemessa` | Itens da remessa |
+| `StatusArquivoRetorno` | Choices: PENDENTE, PROCESSADO, ERRO |
 | `ArquivoRetorno` | CNAB retorno |
 | `ItemRetorno` | Itens do retorno |
+| `AcessoBoletoPublico` | Token de acesso público a boleto (link sem autenticação) |
+| `EventoPIX` | Log de eventos recebidos via webhook PIX (dedup por `EndToEndId`) |
 
 ### 3.4 Notificações (`notificacoes/models.py`)
 | Modelo | Descrição |
@@ -119,6 +127,24 @@ gestao_contrato/          # Configuração do projeto
 - Relatório de Posição de Contratos (`gerar_relatorio_posicao_contratos(FiltroRelatorio)`)
 - Relatório de Previsão de Reajustes
 - Exportação: CSV, JSON, PDF, Excel (`exportar_para_excel`, `exportar_para_pdf`)
+
+### 4.5 CarneService (`financeiro/services/carne_service.py`)
+- Geração de carnê PDF multi-página (seleção de parcelas)
+- Download via `download_carne_pdf`
+
+### 4.6 IndicesEconomicosService (`financeiro/services/indices_economicos_service.py`)
+- Busca de índices IPCA (série 433), IGP-M (série 189) e SELIC (série 432) na API BCB
+- Cache e fallback para último índice conhecido
+
+### 4.7 OFXService (`financeiro/services/ofx_service.py`)
+- Importação de extrato bancário no formato OFX
+- Conciliação com parcelas e histórico de pagamentos
+
+### 4.8 ReciboService (`financeiro/services/recibo_service.py`)
+- Geração de recibo PDF de pagamento de parcela
+
+### 4.9 bancos.py (`financeiro/services/bancos.py`)
+- Catálogo de bancos suportados com código, nome e configurações de boleto
 
 ---
 

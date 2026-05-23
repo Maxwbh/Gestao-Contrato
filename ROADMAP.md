@@ -170,7 +170,7 @@
 
 ## 7. TESTES AUTOMATIZADOS
 
-**Meta:** > 80% de cobertura | **Atual:** 1139 testes passando (1122 + 17 novos — W-07 BSP Brasileiro 2026-05-06)
+**Meta:** > 80% de cobertura | **Atual:** 1300 testes passando
 
 ### 7.1 P1 — Apps sem nenhum teste (~104 testes) ✅ CONCLUÍDO
 | Arquivo | Escopo | Qtd | Status |
@@ -724,7 +724,7 @@ Auditoria identificou 4 histórias de usuário totalmente implementadas no siste
 
 ---
 
-## 13. HU-360 — CONTRATO TABELA PRICE COM JUROS ESCALANTES E INTERMEDIÁRIAS
+## 13. HU-360 — CONTRATO TABELA PRICE COM JUROS ESCALANTES E INTERMEDIÁRIAS ✅ CONCLUÍDO
 
 > **História de Usuário (HU-360):**
 > Como usuário quero criar um contrato de 360 parcelas com:
@@ -1210,7 +1210,8 @@ para ciclo = 2..total_ciclos+1:
 | Conciliação Bancária (Seção 23) | — | 8 | — | — | 8 | ✅ 8/8 |
 | WhatsApp — Evolução (Seção 26) | — | 5 | 3 | — | 8 | ✅ 8/8 — W-01..W-08 concluídos |
 | Chatbot WhatsApp (Seção 27) | 2 | 8 | 6 | — | 16 | ✅ 16/16 — C-01..C-16 |
-| Testes | 104 | ~164 | ~37 | ~41+117 | ~463 | ✅ 942 testes passando |
+| Melhorias Pós-Venda 2026 (Seção 34) | 4 | 9 | 8 | — | 21 | ✅ 21/21 — 34.2..34.6 ⚙️ 34.4.2 por design |
+| Testes | 104 | ~164 | ~37 | ~41+117 | ~463 | ✅ 1300 testes passando |
 | CI/CD | — | 2 | 4 | 2 | 8 | — |
 | Documentação | — | — | 1 | 3 | 4 | — |
 | **Total** | **~117** | **~254** | **~112** | **~61** | **~544** | |
@@ -2880,7 +2881,7 @@ Semana 4: F4-01..F4-05 (ações rápidas)
 
 ### 33.7 Critérios de Aceitação
 
-- ✅ Nenhuma regressão na suite de testes (1143+ passando)
+- ✅ Nenhuma regressão na suite de testes (1300 passando)
 - ✅ Tempo médio para "Registrar Pagamento" < 5s (hoje: ~12s com navegação)
 - ✅ Todas as páginas de detalhe têm breadcrumb e `<title>` específico
 - ✅ Formulários reportam erro de validação antes do submit (sem ida ao servidor)
@@ -2923,12 +2924,12 @@ Semana 4: F4-01..F4-05 (ações rápidas)
 loteamento; a Lei 13.786/2018 regula distrato e retenção. Necessário auditar
 aderência.
 
-| # | Item |
-|---|------|
-| 34.2.1 | Quadro-resumo padronizado no PDF do contrato (preço total, índice, taxa de juros, prazo, multa, fruição) |
-| 34.2.2 | Revisar e documentar cálculo de rescisão à luz da Lei 13.786 (retenção até 50% para loteamento) |
-| 34.2.3 | Alertar quando o distrato geraria retenção acima do limite legal |
-| 34.2.4 | Versionamento de minutas de contrato (histórico de modelos por imobiliária) |
+| # | Item | Status |
+|---|------|--------|
+| 34.2.1 | Quadro-resumo padronizado no PDF do contrato (preço total, índice, taxa de juros, prazo, multa, fruição) | ✅ |
+| 34.2.2 | Revisar e documentar cálculo de rescisão à luz da Lei 13.786 (retenção até 50% para loteamento) | ✅ |
+| 34.2.3 | Alertar quando o distrato geraria retenção acima do limite legal | ✅ |
+| 34.2.4 | Versionamento de minutas de contrato (histórico de modelos por imobiliária) | ✅ |
 
 ---
 
@@ -2938,12 +2939,12 @@ aderência.
 e exibe no portal/boleto. Falta o fechamento do ciclo: confirmar o pagamento PIX
 automaticamente sem depender do arquivo CNAB de retorno.
 
-| # | Item |
-|---|------|
-| 34.3.1 | Webhook endpoint `POST /financeiro/webhook/pix/` para receber notificações do banco/PSP |
-| 34.3.2 | Identificar parcela pelo `txid` (nosso_numero ou ID do QR dinâmico) |
-| 34.3.3 | Baixar parcela automaticamente ao receber confirmação PIX (reaproveitar `registrar_pagamento`) |
-| 34.3.4 | Log de eventos PIX recebidos (deduplicação por `EndToEndId`) |
+| # | Item | Status |
+|---|------|--------|
+| 34.3.1 | Webhook endpoint `POST /financeiro/webhook/pix/` para receber notificações do banco/PSP | ✅ |
+| 34.3.2 | Identificar parcela pelo `txid` (nosso_numero ou ID do QR dinâmico) | ✅ |
+| 34.3.3 | Baixar parcela automaticamente ao receber confirmação PIX (reaproveitar `registrar_pagamento`) | ✅ |
+| 34.3.4 | Log de eventos PIX recebidos (deduplicação por `EndToEndId`) | ✅ |
 
 ---
 
@@ -2952,13 +2953,13 @@ automaticamente sem depender do arquivo CNAB de retorno.
 **Por quê:** o portal já exibe contratos, parcelas e boletos. Falta permitir que
 o comprador realize ações sem passar pela imobiliária.
 
-| # | Item |
-|---|------|
-| 34.4.1 | **Upload de comprovante de pagamento** — comprador envia PDF/imagem; imobiliária confirma |
-| 34.4.2 | **Simulação de antecipação self-service** — calcular desconto e emitir boleto/PIX de quitação antecipada |
-| 34.4.3 | **Solicitação de segunda via** sem precisar ligar para a imobiliária |
-| 34.4.4 | **Histórico unificado** de pagamentos, reajustes e notificações recebidas em linha do tempo |
-| 34.4.5 | **Atualização de cadastro** pelo comprador (endereço, telefone, e-mail) com aprovação da imobiliária |
+| # | Item | Status |
+|---|------|--------|
+| 34.4.1 | **Upload de comprovante de pagamento** — comprador envia PDF/imagem; imobiliária confirma | ✅ |
+| 34.4.2 | **Simulação de antecipação self-service** — calcular desconto e emitir boleto/PIX de quitação antecipada | ⚙️ Por design — simulador read-only disponível; emissão só pelo admin |
+| 34.4.3 | **Solicitação de segunda via** sem precisar ligar para a imobiliária | ✅ |
+| 34.4.4 | **Histórico unificado** de pagamentos, reajustes e notificações recebidas em linha do tempo | ✅ |
+| 34.4.5 | **Atualização de cadastro** pelo comprador (endereço, telefone, e-mail) com aprovação da imobiliária | ✅ |
 
 ---
 
@@ -2967,12 +2968,12 @@ o comprador realize ações sem passar pela imobiliária.
 **Por quê:** hoje os relatórios são gerados sob demanda. Imobiliárias precisam
 de relatórios automáticos periódicos e integração com ferramentas de BI.
 
-| # | Item |
-|---|------|
-| 34.5.1 | Relatório de inadimplência enviado por e-mail (diário/semanal) configurável |
-| 34.5.2 | Relatório de posição de contratos (saldo devedor total) em PDF/Excel agendado |
-| 34.5.3 | Endpoint `GET /api/relatorios/posicao/?formato=json` para consumo por Power BI / Looker |
-| 34.5.4 | Dashboard executivo consolidado para Contabilidade: receita prevista × realizada × inadimplência |
+| # | Item | Status |
+|---|------|--------|
+| 34.5.1 | Relatório de inadimplência enviado por e-mail (diário/semanal) configurável | ✅ |
+| 34.5.2 | Relatório de posição de contratos (saldo devedor total) em PDF/Excel agendado | ✅ |
+| 34.5.3 | Endpoint `GET /api/relatorios/posicao/?formato=json` para consumo por Power BI / Looker | ✅ |
+| 34.5.4 | Dashboard executivo consolidado para Contabilidade: receita prevista × realizada × inadimplência | ✅ |
 
 ---
 
@@ -2981,12 +2982,12 @@ de relatórios automáticos periódicos e integração com ferramentas de BI.
 **Por quê:** compradores acessam majoritariamente pelo celular. Um PWA transforma
 o portal existente em app instalável sem desenvolver app nativo.
 
-| # | Item |
-|---|------|
-| 34.6.1 | `manifest.json` com ícones, tema e `start_url` apontando para o portal |
-| 34.6.2 | Service worker com cache dos assets estáticos (offline para telas já visitadas) |
-| 34.6.3 | Notificações push via Web Push API (vencimento, boleto disponível, reajuste aplicado) |
-| 34.6.4 | Layout mobile-first nas telas críticas: parcelas, boleto, comprovante |
+| # | Item | Status |
+|---|------|--------|
+| 34.6.1 | `manifest.json` com ícones, tema e `start_url` apontando para o portal | ✅ |
+| 34.6.2 | Service worker com cache dos assets estáticos (offline para telas já visitadas) | ✅ |
+| 34.6.3 | Notificações push via Web Push API (vencimento, boleto disponível, reajuste aplicado) | ✅ |
+| 34.6.4 | Layout mobile-first nas telas críticas: parcelas, boleto, comprovante | ✅ |
 
 ---
 
@@ -2999,19 +3000,19 @@ o portal existente em app instalável sem desenvolver app nativo.
 
 ---
 
-### 34.8 Ordem de Execução Recomendada
+### 34.8 Ordem de Execução — ✅ CONCLUÍDO
 
 ```
-Fase A — P1:  34.2 Conformidade Legal
-
-Fase B — P2:  34.3 PIX Webhook  →  34.4 Portal Comprador
-
-Fase C — P3:  34.5 Relatórios  →  34.6 PWA
+Fase A — P1:  34.2 Conformidade Legal          ✅ CONCLUÍDO
+Fase B — P2:  34.3 PIX Webhook                 ✅ CONCLUÍDO
+              34.4 Portal Comprador             ✅ CONCLUÍDO
+Fase C — P3:  34.5 Relatórios BI               ✅ CONCLUÍDO
+              34.6 PWA Portal Instalável        ✅ CONCLUÍDO
 ```
 
 ### 34.9 Critérios de Aceitação
 
-- Cada novo modelo/serviço entra com testes (manter padrão ≥ 1197 passando)
+- ✅ Suite mantida com ≥ 1300 testes passando (critério atingido)
 - Integrações externas (webhook PIX, push notifications) com modo sandbox e
   fallback gracioso quando o provedor estiver indisponível
 - Multi-tenancy preservado: todas as entidades novas isoladas por imobiliária
