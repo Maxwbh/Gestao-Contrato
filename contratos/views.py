@@ -2227,6 +2227,174 @@ def calcular_cessao_view(request, hid):
 
 
 # =============================================================================
+# 34.2 P1: Quadro-Resumo (Lei 6.766 art. 26) e Minutas de Contrato
+# =============================================================================
+
+
+@login_required
+def quadro_resumo_view(request, hid):
+    """Exibe o quadro-resumo do contrato conforme Lei 6.766/79 art. 26."""
+    from django.utils import timezone as tz
+    pk = _decode_id(hid)
+    if pk is None:
+        from django.http import Http404
+        raise Http404
+    contrato = get_object_or_404(
+        Contrato.objects.select_related('imobiliaria', 'comprador', 'imovel'),
+        pk=pk,
+    )
+    saldo_financiado = (contrato.valor_total or Decimal('0')) - (contrato.valor_entrada or Decimal('0'))
+    return render(request, 'contratos/quadro_resumo.html', {
+        'contrato': contrato,
+        'saldo_financiado': saldo_financiado,
+        'hoje': tz.now().date(),
+    })
+
+
+@login_required
+def minutas_listar(request, hid):
+    """Lista todas as minutas registradas para um contrato."""
+    pk = _decode_id(hid)
+    if pk is None:
+        from django.http import Http404
+        raise Http404
+    contrato = get_object_or_404(Contrato, pk=pk)
+    from .models import MinutaContrato
+    minutas = MinutaContrato.objects.filter(contrato=contrato).order_by('-criado_em')
+    return render(request, 'contratos/minutas_list.html', {
+        'contrato': contrato,
+        'minutas': minutas,
+    })
+
+
+@login_required
+def minutas_criar(request, hid):
+    """Cria uma nova minuta para um contrato."""
+    pk = _decode_id(hid)
+    if pk is None:
+        from django.http import Http404
+        raise Http404
+    contrato = get_object_or_404(Contrato, pk=pk)
+    from .models import MinutaContrato
+    from django.contrib import messages
+
+    errors = {}
+    form_data = {'ativa': True}
+
+    if request.method == 'POST':
+        versao = request.POST.get('versao', '').strip()
+        titulo = request.POST.get('titulo', '').strip()
+        conteudo = request.POST.get('conteudo', '').strip()
+        ativa = 'ativa' in request.POST
+        form_data = {'versao': versao, 'titulo': titulo, 'conteudo': conteudo, 'ativa': ativa}
+
+        if not versao:
+            errors['versao'] = 'Versão é obrigatória.'
+        elif MinutaContrato.objects.filter(contrato=contrato, versao=versao).exists():
+            errors['versao'] = f'Já existe uma minuta com versão "{versao}" para este contrato.'
+        if not titulo:
+            errors['titulo'] = 'Título é obrigatório.'
+        if not conteudo:
+            errors['conteudo'] = 'Conteúdo é obrigatório.'
+
+        if not errors:
+            MinutaContrato.objects.create(
+                contrato=contrato,
+                versao=versao,
+                titulo=titulo,
+                conteudo=conteudo,
+                ativa=ativa,
+            )
+            messages.success(request, f'Minuta {versao} registrada com sucesso.')
+            from django.shortcuts import redirect
+            from core.hashids_utils import encode_id
+            return redirect('contratos:minutas_listar', hid=encode_id(contrato.pk))
+
+    return render(request, 'contratos/minuta_form.html', {
+        'contrato': contrato,
+        'minuta': None,
+        'form_data': form_data,
+        'errors': errors,
+    })
+
+
+@login_required
+def minutas_editar(request, hid):
+    """Edita uma minuta existente."""
+    from .models import MinutaContrato
+    from django.contrib import messages
+    pk = _decode_id(hid)
+    if pk is None:
+        from django.http import Http404
+        raise Http404
+    minuta = get_object_or_404(MinutaContrato.objects.select_related('contrato'), pk=pk)
+    contrato = minuta.contrato
+
+    errors = {}
+    form_data = {
+        'versao': minuta.versao,
+        'titulo': minuta.titulo,
+        'conteudo': minuta.conteudo,
+        'ativa': minuta.ativa,
+    }
+
+    if request.method == 'POST':
+        versao = request.POST.get('versao', '').strip()
+        titulo = request.POST.get('titulo', '').strip()
+        conteudo = request.POST.get('conteudo', '').strip()
+        ativa = 'ativa' in request.POST
+        form_data = {'versao': versao, 'titulo': titulo, 'conteudo': conteudo, 'ativa': ativa}
+
+        if not versao:
+            errors['versao'] = 'Versão é obrigatória.'
+        elif (MinutaContrato.objects.filter(contrato=contrato, versao=versao)
+                                    .exclude(pk=minuta.pk).exists()):
+            errors['versao'] = f'Já existe uma minuta com versão "{versao}" para este contrato.'
+        if not titulo:
+            errors['titulo'] = 'Título é obrigatório.'
+        if not conteudo:
+            errors['conteudo'] = 'Conteúdo é obrigatório.'
+
+        if not errors:
+            minuta.versao = versao
+            minuta.titulo = titulo
+            minuta.conteudo = conteudo
+            minuta.ativa = ativa
+            minuta.save()
+            messages.success(request, f'Minuta {versao} atualizada com sucesso.')
+            from django.shortcuts import redirect
+            from core.hashids_utils import encode_id
+            return redirect('contratos:minutas_listar', hid=encode_id(contrato.pk))
+
+    return render(request, 'contratos/minuta_form.html', {
+        'contrato': contrato,
+        'minuta': minuta,
+        'form_data': form_data,
+        'errors': errors,
+    })
+
+
+@login_required
+@require_http_methods(["POST"])
+def minutas_excluir(request, hid):
+    """Exclui uma minuta."""
+    from .models import MinutaContrato
+    from django.contrib import messages
+    pk = _decode_id(hid)
+    if pk is None:
+        from django.http import Http404
+        raise Http404
+    minuta = get_object_or_404(MinutaContrato.objects.select_related('contrato'), pk=pk)
+    contrato = minuta.contrato
+    versao = minuta.versao
+    minuta.delete()
+    messages.success(request, f'Minuta {versao} excluída.')
+    from django.shortcuts import redirect
+    from core.hashids_utils import encode_id
+    return redirect('contratos:minutas_listar', hid=encode_id(contrato.pk))
+
+
+# =============================================================================
 # TabelaJurosContrato — CRUD inline (Q-04 / HU-360)
 # Permite gerenciar juros escalantes diretamente na tela do contrato.
 # =============================================================================

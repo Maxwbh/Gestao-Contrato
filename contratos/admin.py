@@ -6,7 +6,7 @@ Email: maxwbh@gmail.com
 """
 from django.contrib import admin
 from django.utils.html import format_html
-from .models import Contrato, TabelaJurosContrato, StatusContrato
+from .models import Contrato, TabelaJurosContrato, StatusContrato, MinutaContrato
 
 
 class TabelaJurosInline(admin.TabularInline):
@@ -237,3 +237,28 @@ class ContratoAdmin(admin.ModelAdmin):
         updated = queryset.update(status=StatusContrato.QUITADO)
         self.message_user(request, f'{updated} contrato(s) marcado(s) como quitado.')
     marcar_como_quitado.short_description = 'Marcar como Quitado'
+
+
+@admin.register(MinutaContrato)
+class MinutaContratoAdmin(admin.ModelAdmin):
+    list_display = ['contrato', 'versao', 'titulo', 'ativa', 'criado_em']
+    list_select_related = ['contrato']
+    list_filter = ['ativa', 'criado_em', 'contrato__imobiliaria']
+    search_fields = ['contrato__numero_contrato', 'versao', 'titulo']
+    autocomplete_fields = ['contrato']
+    readonly_fields = ['criado_em', 'atualizado_em']
+    date_hierarchy = 'criado_em'
+    ordering = ['-criado_em']
+
+    fieldsets = (
+        ('Identificação', {
+            'fields': ('contrato', 'versao', 'titulo', 'ativa')
+        }),
+        ('Conteúdo', {
+            'fields': ('conteudo',)
+        }),
+        ('Metadados', {
+            'fields': ('criado_em', 'atualizado_em'),
+            'classes': ('collapse',)
+        }),
+    )

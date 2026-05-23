@@ -1326,6 +1326,16 @@ class Contrato(TimeStampedModel):
         total_retencoes = fruicao + multa_penal + desp_adm
         devolucao = max(Decimal('0.00'), (total_pago - total_retencoes).quantize(Decimal('0.01')))
 
+        # Lei 13.786/2018 art. 67-A §2°: pena convencional ≤ 25% do total pago
+        pena_convencional = multa_penal + desp_adm
+        retencao_penal_maxima_legal = (total_pago * Decimal('0.25')).quantize(Decimal('0.01'))
+        alerta_limite_legal = bool(total_pago > Decimal('0') and pena_convencional > retencao_penal_maxima_legal)
+        pena_limitada_legal = min(pena_convencional, retencao_penal_maxima_legal)
+        devolucao_legal = max(
+            Decimal('0.00'),
+            (total_pago - fruicao - pena_limitada_legal).quantize(Decimal('0.01'))
+        )
+
         return {
             'data_rescisao': data_ref,
             'saldo_devedor': saldo,
@@ -1342,6 +1352,10 @@ class Contrato(TimeStampedModel):
             'desp_adm': desp_adm,
             'total_retencoes': total_retencoes,
             'devolucao': devolucao,
+            'pena_convencional': pena_convencional,
+            'retencao_penal_maxima_legal': retencao_penal_maxima_legal,
+            'alerta_limite_legal': alerta_limite_legal,
+            'devolucao_legal': devolucao_legal,
         }
 
     def calcular_cessao(self, data_cessao=None):
@@ -1717,3 +1731,53 @@ class HistoricoReajusteIntermediaria(models.Model):
         if self.valor_anterior == 0:
             return Decimal('1')
         return self.valor_novo / self.valor_anterior
+
+
+class MinutaContrato(TimeStampedModel):
+    """
+    Roadmap 34.2: Versionamento de minutas de contrato.
+
+    Permite registrar versões da minuta do contrato para rastreabilidade legal,
+    atendendo ao requisito de versionamento de cláusulas contratuais.
+    """
+    contrato = models.ForeignKey(
+        Contrato,
+        on_delete=models.CASCADE,
+        related_name='minutas',
+        verbose_name='Contrato'
+    )
+    versao = models.CharField(
+        max_length=20,
+        verbose_name='Versão',
+        help_text='Ex: v1, v2, 2024-01'
+    )
+    titulo = models.CharField(
+        max_length=200,
+        verbose_name='Título'
+    )
+    conteudo = models.TextField(
+        verbose_name='Conteúdo',
+        help_text='Texto completo da minuta ou descrição das alterações desta versão'
+    )
+    ativa = models.BooleanField(
+        default=True,
+        verbose_name='Versão Ativa',
+        help_text='Somente a versão ativa é considerada a minuta vigente do contrato'
+    )
+
+    class Meta:
+        verbose_name = 'Minuta de Contrato'
+        verbose_name_plural = 'Minutas de Contrato'
+        ordering = ['-criado_em']
+        unique_together = [('contrato', 'versao')]
+
+    def __str__(self):
+        ativa_str = ' ✓' if self.ativa else ''
+        return f"Minuta {self.versao}{ativa_str} — {self.contrato.numero_contrato}"
+
+    def save(self, *args, **kwargs):
+        if self.ativa:
+            MinutaContrato.objects.filter(
+                contrato=self.contrato, ativa=True
+            ).exclude(pk=self.pk).update(ativa=False)
+        super().save(*args, **kwargs)

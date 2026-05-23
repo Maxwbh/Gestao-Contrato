@@ -69,4 +69,14 @@ urlpatterns = [
     # Q-04: Tabela de Juros Escalantes
     # ===========================================================================
     path('<str:hid>/tabela-juros/', views.api_tabela_juros_contrato, name='api_tabela_juros'),
+
+    # ===========================================================================
+    # 34.2 P1: Quadro-Resumo (Lei 6.766 art. 26) e Minutas de Contrato
+    # ===========================================================================
+    path('<str:hid>/quadro-resumo/', views.quadro_resumo_view, name='quadro_resumo'),
+    path('<str:hid>/minutas/', views.minutas_listar, name='minutas_listar'),
+    path('<str:hid>/minutas/nova/', views.minutas_criar, name='minutas_criar'),
+    # Minuta-level routes use minuta pk (not contrato hid)
+    path('minutas/<str:hid>/editar/', views.minutas_editar, name='minutas_editar'),
+    path('minutas/<str:hid>/excluir/', views.minutas_excluir, name='minutas_excluir'),
 ]
