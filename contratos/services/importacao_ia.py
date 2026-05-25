@@ -266,13 +266,20 @@ def confirmar_importacao(importacao, post, user):
                     'Usuário não tem acesso a nenhuma contabilidade. '
                     'Contate o administrador para configurar o acesso.'
                 )
+            imob_tipo   = post.get('imob_tipo_pessoa', 'PJ')
+            imob_cpf    = post.get('imob_cpf', '').strip() or None
+            imob_cnpj   = post.get('imob_cnpj', '').strip() or None
+            if imob_tipo == 'PF' and not imob_cpf:
+                raise ValueError('CPF é obrigatório para vendedor/imobiliária Pessoa Física.')
+            if imob_tipo == 'PJ' and not imob_cnpj:
+                raise ValueError('CNPJ é obrigatório para vendedor/imobiliária Pessoa Jurídica.')
             imobiliaria = Imobiliaria.objects.create(
                 contabilidade=contabilidade,
-                tipo_pessoa=post.get('imob_tipo_pessoa', 'PJ'),
+                tipo_pessoa=imob_tipo,
                 nome=post.get('imob_nome', '').strip(),
                 razao_social=post.get('imob_razao_social', '').strip(),
-                cnpj=post.get('imob_cnpj', '').strip() or None,
-                cpf=post.get('imob_cpf', '').strip() or None,
+                cnpj=imob_cnpj,
+                cpf=imob_cpf,
             )
 
         # ── Comprador ─────────────────────────────────────────────────────────

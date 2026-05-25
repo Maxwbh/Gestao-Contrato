@@ -180,18 +180,23 @@ select.form-select.campo-incerto { border-color: #ffc107 !important; background:
             </div>
             <div class="col-md-3">
               <label class="form-label">Tipo de Pessoa</label>
-              <select name="imob_tipo_pessoa" class="form-select">
+              <select name="imob_tipo_pessoa" id="imob_tipo_pessoa" class="form-select"
+                      onchange="toggleImobTipo(this.value)">
                 <option value="PJ" {% if d.tipo_pessoa != 'PF' %}selected{% endif %}>Pessoa Jurídica</option>
                 <option value="PF" {% if d.tipo_pessoa == 'PF' %}selected{% endif %}>Pessoa Física</option>
               </select>
             </div>
-            <div class="col-md-5">
-              <label class="form-label">CNPJ</label>
-              <input type="text" name="imob_cnpj" class="form-control" value="{{ d.cnpj|default:'' }}">
+            <div class="col-md-5" id="imob_cnpj_wrap">
+              <label class="form-label" id="imob_cnpj_label">CNPJ *</label>
+              <input type="text" name="imob_cnpj" id="imob_cnpj" class="form-control"
+                     value="{{ d.cnpj|default:'' }}"
+                     {% if d.tipo_pessoa != 'PF' %}required{% endif %}>
             </div>
-            <div class="col-md-4">
-              <label class="form-label">CPF (se PF)</label>
-              <input type="text" name="imob_cpf" class="form-control" value="{{ d.cpf|default:'' }}">
+            <div class="col-md-4" id="imob_cpf_wrap">
+              <label class="form-label" id="imob_cpf_label">CPF *</label>
+              <input type="text" name="imob_cpf" id="imob_cpf" class="form-control"
+                     value="{{ d.cpf|default:'' }}"
+                     {% if d.tipo_pessoa == 'PF' %}required{% endif %}>
             </div>
           </div>
           {% endwith %}
@@ -443,6 +448,35 @@ select.form-select.campo-incerto { border-color: #ffc107 !important; background:
 
 {% block extra_js %}
 <script>
+// ── Imobiliária PF/PJ toggle ──────────────────────────────────────────────────
+function toggleImobTipo(tipo) {
+    const cnpjWrap = document.getElementById('imob_cnpj_wrap');
+    const cpfWrap  = document.getElementById('imob_cpf_wrap');
+    const cnpjInp  = document.getElementById('imob_cnpj');
+    const cpfInp   = document.getElementById('imob_cpf');
+    if (!cnpjWrap) return;  // imobiliária já matched — campos não existem
+
+    if (tipo === 'PF') {
+        cnpjWrap.style.display = 'none';
+        cpfWrap.style.display  = '';
+        cnpjInp.required = false;
+        cpfInp.required  = true;
+        cnpjInp.value    = '';
+    } else {
+        cpfWrap.style.display  = 'none';
+        cnpjWrap.style.display = '';
+        cpfInp.required  = false;
+        cnpjInp.required = true;
+        cpfInp.value     = '';
+    }
+}
+// Inicializa conforme valor já selecionado
+(function() {
+    const sel = document.getElementById('imob_tipo_pessoa');
+    if (sel) toggleImobTipo(sel.value);
+})();
+
+// ── Prestações intermediárias ─────────────────────────────────────────────────
 let intermCount = parseInt(document.getElementById('interm_count').value);
 
 function removerInterm(idx) {
