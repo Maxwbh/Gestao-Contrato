@@ -2,7 +2,7 @@
 
 **Desenvolvedor:** Maxwell da Silva Oliveira (maxwbh@gmail.com)
 **Empresa:** M&S do Brasil LTDA
-**Última atualização:** 2026-05-23
+**Última atualização:** 2026-05-25
 
 > Documentação completa do que está implementado no sistema.
 > Para novas funcionalidades, consulte **[ROADMAP.md](ROADMAP.md)**.
@@ -343,9 +343,9 @@ tests/
 └── functional/              # test_fluxo_contrato_completo.py, etc.
 ```
 
-**Total:** 1328 testes | **Executar:**
+**Total:** 1335 testes | **Executar:**
 ```bash
-pytest                              # Todos os 1328 testes
+pytest                              # Todos os 1335 testes
 pytest tests/unit/                  # Apenas unitários
 pytest --cov=. --cov-report=html    # Com cobertura
 ```

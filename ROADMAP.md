@@ -170,7 +170,7 @@
 
 ## 7. TESTES AUTOMATIZADOS
 
-**Meta:** > 80% de cobertura | **Atual:** 1328 testes passando
+**Meta:** > 80% de cobertura | **Atual:** 1335 testes passando
 
 ### 7.1 P1 — Apps sem nenhum teste (~104 testes) ✅ CONCLUÍDO
 | Arquivo | Escopo | Qtd | Status |
@@ -594,6 +594,7 @@ Auditoria identificou 4 histórias de usuário totalmente implementadas no siste
 | G-11 | **Cálculo de rescisão** — `Contrato.calcular_rescisao()` (fruição × meses + multa penal + desp. adm.); view `calcular_rescisao_view`; template `calcular_rescisao.html`; URL `<pk>/rescisao/`; botão na tela do contrato | Alta | P3 | ✅ |
 | G-12 | **Cálculo de cessão** — `Contrato.calcular_cessao()`; view `calcular_cessao_view`; template `calcular_cessao.html`; URL `<pk>/cessao/`; botão na tela do contrato | Média | P3 | ✅ |
 | G-16 | **Juros de mora pro rata die** — `Contrato.calcular_mora_pro_rata()`: `taxa_diaria = percentual_juros_mora / 30`; usado em `calcular_rescisao()` para base de cálculo correto | Média | P3 | ✅ |
+| G-17 | **CNPJ alfanumérico 2026 (IN RFB nº 2229/2024)** — posições 1-12 aceitam letras A-Z (A=17…Z=42 no cálculo mod-11); `_CNPJ_CHAR_VALUES` em `core/validators.py`; `validar_cnpj`, `formatar_cnpj`, `validar_cpf_cnpj` atualizados; máscara JS `maskCnpj` aceita alfanumérico com auto-uppercase; campos de formulário CNPJ com placeholder atualizado | Média | P2 | ✅ |
 
 ---
 
@@ -1212,7 +1213,7 @@ para ciclo = 2..total_ciclos+1:
 | Chatbot WhatsApp (Seção 27) | 2 | 8 | 6 | — | 16 | ✅ 16/16 — C-01..C-16 |
 | Melhorias Pós-Venda 2026 (Seção 34) | 4 | 9 | 8 | — | 21 | ✅ 21/21 — 34.2..34.6 ⚙️ 34.4.2 por design |
 | Importação de Contratos via IA (Seção 34.7) | — | 1 | — | — | 1 | ✅ 1/1 — upload PDF/imagens → Claude extrai → revisão → cadastro |
-| Testes | 104 | ~164 | ~37 | ~41+117 | ~463 | ✅ 1328 testes passando |
+| Testes | 104 | ~164 | ~37 | ~41+117 | ~463 | ✅ 1335 testes passando |
 | CI/CD | — | 2 | 4 | 2 | 8 | — |
 | Documentação | — | — | 1 | 3 | 4 | — |
 | **Total** | **~117** | **~254** | **~112** | **~61** | **~544** | |
@@ -3039,7 +3040,7 @@ Fase D — P2:  34.7 Importação via IA           ✅ CONCLUÍDO
 
 ### 34.10 Critérios de Aceitação
 
-- ✅ Suite mantida com ≥ 1328 testes passando (critério atingido)
+- ✅ Suite mantida com ≥ 1335 testes passando (critério atingido)
 - Integrações externas (webhook PIX, push notifications) com modo sandbox e
   fallback gracioso quando o provedor estiver indisponível
 - Multi-tenancy preservado: todas as entidades novas isoladas por imobiliária

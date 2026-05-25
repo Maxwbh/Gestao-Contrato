@@ -364,7 +364,7 @@ Gestao-Contrato/
 │   └── urls.py
 ├── accounts/                  # Autenticação e permissões
 ├── docs/                      # Documentação organizada
-├── tests/                     # 1328 testes
+├── tests/                     # 1335 testes
 │   ├── unit/                  # Testes unitários por app
 │   ├── integration/           # Testes de integração
 │   ├── functional/            # Testes end-to-end
@@ -492,7 +492,7 @@ pytest --cov=. --cov-report=html
 pytest -v
 ```
 
-**Meta de cobertura:** > 80% | **Status atual:** ✅ 1328 testes passando
+**Meta de cobertura:** > 80% | **Status atual:** ✅ 1335 testes passando
 
 ### Cobertura por área
 
@@ -585,4 +585,4 @@ Configurado via `pyproject.toml`
 **Website:** https://msbrasil.inf.br
 **Licença:** Proprietary
 
-**Última atualização:** 2026-05-25 — 1328 testes | Importação de Contratos via IA (34.7) — upload PDF/imagens → Claude extrai → revisão → cadastro completo | PWA Portal do Comprador (34.6) | Relatórios BI + Dashboard Executivo (34.5)
+**Última atualização:** 2026-05-25 — 1335 testes | CNPJ alfanumérico 2026 (IN RFB 2229/2024) | Importação de Contratos via IA (34.7) — upload PDF/imagens → Claude extrai → revisão → cadastro completo | PWA Portal do Comprador (34.6) | Relatórios BI + Dashboard Executivo (34.5)
