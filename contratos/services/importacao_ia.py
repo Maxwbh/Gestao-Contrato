@@ -92,6 +92,15 @@ Regras:
 - tipo_correcao: IGPM para IGP-M/FGV, IPCA para IBGE, SELIC para taxa básica, FIXO para sem índice
 - percentual_juros_mora: valor mensal em % (ex: 1.00 para 1% ao mês)
 - Campo ausente no documento → null
+- IMPORTANTE — campo "imobiliaria": deve ser preenchido com os dados do VENDEDOR
+  (quem está vendendo o imóvel), seja ele PJ (imobiliária/construtora/loteadora) ou
+  PF (pessoa física vendendo diretamente). NÃO use dados de intermediadora/corretor/
+  imobiliária que recebeu comissão — esses são apenas facilitadores do negócio.
+  Exemplo: se o contrato tem VENDEDOR: João Silva CPF 123... e INTERMEDIADORA: XYZ Ltda,
+  preencha imobiliaria com João Silva (tipo_pessoa: PF, cpf: 123...).
+- prestacoes_intermediarias: parcelas com vencimentos em datas específicas (anuais,
+  semestrais etc.) distintas das parcelas mensais do financiamento principal.
+  Informe o mês relativo ao início do contrato (ex: parcela anual do ano 1 = mês 12).
 """
 
 
