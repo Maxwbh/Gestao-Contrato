@@ -321,7 +321,10 @@ def confirmar_importacao(importacao, post, user):
         # ── Contrato ──────────────────────────────────────────────────────────
         data_pv = _date(post.get('data_primeiro_vencimento'))
         if data_pv is None:
-            raise ValueError('Data do primeiro vencimento é obrigatória.')
+            # Auto-calcular: 30 dias após data_contrato ou hoje
+            from datetime import timedelta
+            base = _date(post.get('data_contrato')) or date.today()
+            data_pv = base + timedelta(days=30)
 
         contrato = Contrato.objects.create(
             imobiliaria=imobiliaria,
