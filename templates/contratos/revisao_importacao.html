@@ -10,7 +10,12 @@
 .secao-card.amarelo { border-left-color: #ffc107; }
 .badge-match { background: #d1e7dd; color: #0a3622; font-size:.8rem; }
 .badge-novo  { background: #fff3cd; color: #664d03; font-size:.8rem; }
-.campo-incerto { border-color: #ffc107 !important; background: #fffbf0; }
+.campo-incerto,
+input.form-control.campo-incerto,
+input.form-control[type="text"].campo-incerto,
+input.form-control[type="date"].campo-incerto,
+input.form-control[type="number"].campo-incerto,
+select.form-select.campo-incerto { border-color: #ffc107 !important; background: #fffbf0 !important; }
 .campo-incerto-label::after { content:" ⚠"; color:#ffc107; }
 .interm-row { background: #f8f9fa; border-radius: 8px; padding: 12px; margin-bottom: 8px; }
 </style>
