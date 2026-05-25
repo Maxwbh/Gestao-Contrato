@@ -2537,3 +2537,125 @@ def contrato_pk_compat_excluir(request, pk):
 def contrato_pk_compat_parcelas(request, pk):
     hid = encode_id(pk)
     return redirect('contratos:parcelas', hid=hid, permanent=True)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Importação de Contratos via IA
+# ─────────────────────────────────────────────────────────────────────────────
+
+_TIPOS_PERMITIDOS = {
+    'application/pdf': 'pdf',
+    'image/jpeg': 'imagem',
+    'image/jpg': 'imagem',
+    'image/png': 'imagem',
+    'image/webp': 'imagem',
+}
+_MAX_ARQUIVO_MB = 20
+
+
+@login_required
+def upload_importacao(request):
+    from contratos.models import ContratoImportacao
+    from contratos.services.importacao_ia import ImportacaoIA
+    from core.models import get_imobiliarias_usuario
+
+    imobiliarias = get_imobiliarias_usuario(request.user)
+
+    if request.method == 'GET':
+        return render(request, 'contratos/importar_pdf.html', {'imobiliarias': imobiliarias})
+
+    arquivos = request.FILES.getlist('arquivo')
+    if not arquivos:
+        messages.error(request, 'Nenhum arquivo enviado.')
+        return render(request, 'contratos/importar_pdf.html', {'imobiliarias': imobiliarias})
+
+    # Valida tipos e tamanhos
+    for f in arquivos:
+        ct = f.content_type or ''
+        if ct not in _TIPOS_PERMITIDOS and not f.name.lower().endswith(('.pdf', '.jpg', '.jpeg', '.png', '.webp')):
+            messages.error(request, f'Tipo de arquivo não suportado: {f.name}')
+            return render(request, 'contratos/importar_pdf.html', {'imobiliarias': imobiliarias})
+        if f.size > _MAX_ARQUIVO_MB * 1024 * 1024:
+            messages.error(request, f'Arquivo muito grande (máx {_MAX_ARQUIVO_MB} MB): {f.name}')
+            return render(request, 'contratos/importar_pdf.html', {'imobiliarias': imobiliarias})
+
+    # Persiste o primeiro arquivo (para histórico)
+    importacao = ContratoImportacao.objects.create(
+        arquivo=arquivos[0],
+        status='EXTRAINDO',
+        criado_por=request.user,
+    )
+
+    try:
+        ia = ImportacaoIA()
+        primeiro = arquivos[0]
+        ct_primeiro = primeiro.content_type or ''
+
+        if ct_primeiro == 'application/pdf' or primeiro.name.lower().endswith('.pdf'):
+            dados = ia.extrair_de_pdf(primeiro.read())
+        else:
+            pares = []
+            for f in arquivos:
+                ct = f.content_type or 'image/jpeg'
+                if not ct.startswith('image/'):
+                    ct = 'image/jpeg'
+                pares.append((f.read(), ct))
+            dados = ia.extrair_de_imagens(pares)
+
+        importacao.dados_extraidos = dados
+        importacao.status = 'REVISAO'
+        importacao.save(update_fields=['dados_extraidos', 'status'])
+        return redirect('contratos:revisao_importacao', pk=importacao.pk)
+
+    except Exception as exc:
+        logger.exception('Erro na extração IA para importacao #%s', importacao.pk)
+        importacao.status = 'ERRO'
+        importacao.erros_extracao = str(exc)
+        importacao.save(update_fields=['status', 'erros_extracao'])
+        messages.error(request, f'Erro ao extrair dados do documento: {exc}')
+        return redirect('contratos:upload_importacao')
+
+
+@login_required
+def revisao_importacao(request, pk):
+    from contratos.models import ContratoImportacao, TipoCorrecao
+    from contratos.services.importacao_ia import ProcessadorImportacao
+    from core.models import TipoImovel
+
+    importacao = get_object_or_404(ContratoImportacao, pk=pk, criado_por=request.user)
+    if importacao.status == 'CONCLUIDO':
+        messages.info(request, 'Esta importação já foi concluída.')
+        return redirect('contratos:detalhe', hid=encode_id(importacao.contrato_criado_id))
+
+    dados = importacao.dados_extraidos or {}
+    matches = ProcessadorImportacao().processar(dados, request.user)
+
+    return render(request, 'contratos/revisao_importacao.html', {
+        'importacao': importacao,
+        'dados': dados,
+        'matches': matches,
+        'tipo_correcao_choices': TipoCorrecao.choices,
+        'tipo_imovel_choices': TipoImovel.choices,
+        'campos_incertos': set((dados.get('confianca') or {}).get('campos_incertos') or []),
+    })
+
+
+@login_required
+@require_http_methods(['POST'])
+def confirmar_importacao(request, pk):
+    from contratos.models import ContratoImportacao
+    from contratos.services.importacao_ia import confirmar_importacao as _confirmar
+
+    importacao = get_object_or_404(ContratoImportacao, pk=pk, criado_por=request.user)
+    if importacao.status == 'CONCLUIDO':
+        messages.warning(request, 'Esta importação já foi concluída.')
+        return redirect('contratos:detalhe', hid=encode_id(importacao.contrato_criado_id))
+
+    try:
+        contrato = _confirmar(importacao, request.POST, request.user)
+        messages.success(request, f'Contrato {contrato.numero_contrato} importado com sucesso!')
+        return redirect('contratos:detalhe', hid=encode_id(contrato.pk))
+    except Exception as exc:
+        logger.exception('Erro ao confirmar importacao #%s', pk)
+        messages.error(request, f'Erro ao criar contrato: {exc}')
+        return redirect('contratos:revisao_importacao', pk=pk)

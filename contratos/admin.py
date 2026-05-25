@@ -6,7 +6,7 @@ Email: maxwbh@gmail.com
 """
 from django.contrib import admin
 from django.utils.html import format_html
-from .models import Contrato, TabelaJurosContrato, StatusContrato, MinutaContrato
+from .models import Contrato, TabelaJurosContrato, StatusContrato, MinutaContrato, ContratoImportacao
 
 
 class TabelaJurosInline(admin.TabularInline):
@@ -262,3 +262,13 @@ class MinutaContratoAdmin(admin.ModelAdmin):
             'classes': ('collapse',)
         }),
     )
+
+
+@admin.register(ContratoImportacao)
+class ContratoImportacaoAdmin(admin.ModelAdmin):
+    list_display = ['pk', 'status', 'criado_por', 'criado_em', 'contrato_criado']
+    list_filter = ['status', 'criado_em']
+    search_fields = ['criado_por__username', 'erros_extracao']
+    readonly_fields = ['dados_extraidos', 'erros_extracao', 'criado_em', 'atualizado_em', 'criado_por', 'contrato_criado']
+    date_hierarchy = 'criado_em'
+    ordering = ['-criado_em']

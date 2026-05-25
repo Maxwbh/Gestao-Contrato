@@ -1,0 +1,206 @@
+{% extends 'base.html' %}
+{% load format_filters %}
+
+{% block title %}Importar Contrato via IA{% endblock %}
+
+{% block extra_css %}
+<style>
+.upload-zone {
+    border: 2px dashed #6c757d;
+    border-radius: 12px;
+    background: #f8f9fa;
+    transition: border-color .2s, background .2s;
+    cursor: pointer;
+    min-height: 200px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+}
+.upload-zone.drag-over {
+    border-color: #0d6efd;
+    background: #e8f0ff;
+}
+.upload-zone.has-files {
+    border-color: #198754;
+    background: #f0fff4;
+}
+.file-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: #fff;
+    border: 1px solid #dee2e6;
+    border-radius: 20px;
+    padding: 4px 12px;
+    font-size: .85rem;
+    margin: 4px;
+}
+.file-chip .remove-file {
+    cursor: pointer;
+    color: #dc3545;
+    font-weight: bold;
+}
+.spinner-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,.45);
+    z-index: 9999;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    color: #fff;
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container py-4" style="max-width: 680px;">
+
+  <div class="d-flex align-items-center gap-3 mb-4">
+    <a href="{% url 'contratos:listar' %}" class="btn btn-sm btn-outline-secondary">
+      <i class="fas fa-arrow-left"></i>
+    </a>
+    <div>
+      <h4 class="mb-0"><i class="fas fa-file-import text-primary me-2"></i>Importar Contrato via IA</h4>
+      <small class="text-muted">Envie o PDF ou fotos do contrato — a IA extrai os dados automaticamente</small>
+    </div>
+  </div>
+
+  {% if messages %}
+    {% for msg in messages %}
+      <div class="alert alert-{{ msg.tags }} alert-dismissible fade show">
+        {{ msg }} <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+      </div>
+    {% endfor %}
+  {% endif %}
+
+  <form id="form-upload" method="post" enctype="multipart/form-data" action="{% url 'contratos:upload_importacao' %}">
+    {% csrf_token %}
+
+    <!-- Upload zone -->
+    <div class="card shadow-sm mb-4">
+      <div class="card-body">
+        <label class="form-label fw-semibold">Documento do Contrato</label>
+
+        <div class="upload-zone p-4" id="upload-zone" onclick="document.getElementById('arquivo-input').click()">
+          <i class="fas fa-cloud-upload-alt fa-3x text-secondary mb-3" id="upload-icon"></i>
+          <p class="text-secondary mb-1" id="upload-label">Clique ou arraste os arquivos aqui</p>
+          <small class="text-muted">PDF ou imagens JPG/PNG (máx 20 MB por arquivo)<br>
+            Para contratos com múltiplas páginas, selecione todas as imagens de uma vez</small>
+        </div>
+
+        <input type="file" id="arquivo-input" name="arquivo" multiple
+               accept="application/pdf,image/jpeg,image/jpg,image/png,image/webp"
+               class="d-none">
+
+        <div id="file-list" class="mt-3 d-flex flex-wrap"></div>
+      </div>
+    </div>
+
+    <!-- Como funciona -->
+    <div class="card border-0 bg-light mb-4">
+      <div class="card-body">
+        <h6 class="fw-semibold mb-3"><i class="fas fa-info-circle text-primary me-2"></i>Como funciona</h6>
+        <div class="row g-2 text-center">
+          <div class="col-4">
+            <div class="p-2">
+              <i class="fas fa-upload fa-2x text-primary mb-2"></i>
+              <p class="small mb-0"><strong>1. Upload</strong><br>PDF ou fotos do contrato</p>
+            </div>
+          </div>
+          <div class="col-4">
+            <div class="p-2">
+              <i class="fas fa-robot fa-2x text-warning mb-2"></i>
+              <p class="small mb-0"><strong>2. Extração IA</strong><br>Claude lê e estrutura os dados</p>
+            </div>
+          </div>
+          <div class="col-4">
+            <div class="p-2">
+              <i class="fas fa-check-circle fa-2x text-success mb-2"></i>
+              <p class="small mb-0"><strong>3. Revisão</strong><br>Você confere e confirma</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="d-grid">
+      <button type="submit" class="btn btn-primary btn-lg" id="btn-submit" disabled>
+        <i class="fas fa-magic me-2"></i>Extrair dados com IA
+      </button>
+    </div>
+  </form>
+</div>
+
+<!-- Spinner overlay (durante processamento) -->
+<div class="spinner-overlay" id="spinner">
+  <div class="spinner-border text-light mb-3" style="width:3rem;height:3rem;"></div>
+  <h5>Analisando o contrato...</h5>
+  <p class="text-white-50 small">Isso pode levar até 30 segundos</p>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+const zone     = document.getElementById('upload-zone');
+const input    = document.getElementById('arquivo-input');
+const fileList = document.getElementById('file-list');
+const btnSubmit = document.getElementById('btn-submit');
+const form     = document.getElementById('form-upload');
+const spinner  = document.getElementById('spinner');
+let selectedFiles = [];
+
+function renderFiles() {
+    fileList.innerHTML = '';
+    selectedFiles.forEach((f, i) => {
+        const chip = document.createElement('span');
+        chip.className = 'file-chip';
+        const icon = f.type === 'application/pdf' ? 'fa-file-pdf text-danger' : 'fa-file-image text-primary';
+        chip.innerHTML = `<i class="fas ${icon}"></i>${f.name}
+            <span class="remove-file" data-idx="${i}">&times;</span>`;
+        fileList.appendChild(chip);
+    });
+    zone.classList.toggle('has-files', selectedFiles.length > 0);
+    document.getElementById('upload-label').textContent =
+        selectedFiles.length ? `${selectedFiles.length} arquivo(s) selecionado(s)` : 'Clique ou arraste os arquivos aqui';
+    btnSubmit.disabled = selectedFiles.length === 0;
+}
+
+fileList.addEventListener('click', e => {
+    if (e.target.classList.contains('remove-file')) {
+        selectedFiles.splice(parseInt(e.target.dataset.idx), 1);
+        syncInput();
+        renderFiles();
+    }
+});
+
+function syncInput() {
+    const dt = new DataTransfer();
+    selectedFiles.forEach(f => dt.items.add(f));
+    input.files = dt.files;
+}
+
+input.addEventListener('change', () => {
+    selectedFiles = Array.from(input.files);
+    renderFiles();
+});
+
+zone.addEventListener('dragover', e => { e.preventDefault(); zone.classList.add('drag-over'); });
+zone.addEventListener('dragleave', () => zone.classList.remove('drag-over'));
+zone.addEventListener('drop', e => {
+    e.preventDefault();
+    zone.classList.remove('drag-over');
+    selectedFiles = [...selectedFiles, ...Array.from(e.dataTransfer.files)];
+    syncInput();
+    renderFiles();
+});
+
+form.addEventListener('submit', e => {
+    if (selectedFiles.length === 0) { e.preventDefault(); return; }
+    spinner.style.display = 'flex';
+    btnSubmit.disabled = true;
+});
+</script>
+{% endblock %}

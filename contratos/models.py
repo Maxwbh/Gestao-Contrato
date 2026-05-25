@@ -1793,3 +1793,61 @@ class MinutaContrato(TimeStampedModel):
                 super().save(*args, **kwargs)
         else:
             super().save(*args, **kwargs)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Importação de Contratos via IA
+# ─────────────────────────────────────────────────────────────────────────────
+
+class StatusImportacao(models.TextChoices):
+    PENDENTE  = 'PENDENTE',  'Aguardando extração'
+    EXTRAINDO = 'EXTRAINDO', 'Extraindo dados...'
+    REVISAO   = 'REVISAO',   'Aguardando revisão'
+    CONCLUIDO = 'CONCLUIDO', 'Concluído'
+    ERRO      = 'ERRO',      'Erro na extração'
+
+
+class ContratoImportacao(TimeStampedModel):
+    """Controla o ciclo de importação de contratos via IA (upload → extração → revisão → criação)."""
+
+    arquivo = models.FileField(
+        upload_to='importacoes_contrato/%Y/%m/',
+        verbose_name='Arquivo',
+        help_text='PDF ou imagem do contrato',
+    )
+    status = models.CharField(
+        max_length=20,
+        choices=StatusImportacao.choices,
+        default=StatusImportacao.PENDENTE,
+        verbose_name='Status',
+    )
+    dados_extraidos = models.JSONField(
+        null=True, blank=True,
+        verbose_name='Dados Extraídos',
+    )
+    erros_extracao = models.TextField(
+        blank=True,
+        verbose_name='Erros de Extração',
+    )
+    contrato_criado = models.OneToOneField(
+        'Contrato',
+        null=True, blank=True,
+        on_delete=models.SET_NULL,
+        related_name='importacao_origem',
+        verbose_name='Contrato Criado',
+    )
+    criado_por = models.ForeignKey(
+        'auth.User',
+        on_delete=models.SET_NULL,
+        null=True,
+        related_name='importacoes_contrato',
+        verbose_name='Importado por',
+    )
+
+    class Meta:
+        verbose_name = 'Importação de Contrato'
+        verbose_name_plural = 'Importações de Contratos'
+        ordering = ['-criado_em']
+
+    def __str__(self):
+        return f'Importação #{self.pk} — {self.get_status_display()}'
