@@ -87,7 +87,7 @@ Retorne APENAS o JSON, sem texto adicional, markdown ou explicações.
 Regras:
 - Valores monetários: "R$ 150.000,00" → 150000.00 (decimal sem vírgula)
 - Datas: "10 de março de 2024" → "2024-03-10"
-- CPF/CNPJ: manter formatação com pontos e traços
+- CPF/CNPJ: manter formatação com pontos e traços. CNPJ pode ter letras (A-Z) nas posições 1-12 (formato alfanumérico 2026); preserve exatamente como aparece no documento.
 - Estado: 2 letras maiúsculas (SP, MG, GO, etc.)
 - tipo_correcao: IGPM para IGP-M/FGV, IPCA para IBGE, SELIC para taxa básica, FIXO para sem índice
 - percentual_juros_mora: valor mensal em % (ex: 1.00 para 1% ao mês)

@@ -2,9 +2,16 @@
 Validadores customizados para o sistema de Gestão de Contratos
 
 Inclui validação completa de CPF e CNPJ com dígitos verificadores.
+Suporta o novo formato alfanumérico de CNPJ (IN RFB nº 2229/2024, vigente 2026):
+  posições 1-12 → alfanumérico (0-9, A-Z); posições 13-14 → dígitos verificadores numéricos.
+  Valores para cálculo: dígitos mantêm valor numérico, letras A=17 … Z=42.
 """
 from django.core.exceptions import ValidationError
 import re
+
+# Valor numérico de cada caractere válido de CNPJ no cálculo dos dígitos verificadores
+_CNPJ_CHAR_VALUES: dict[str, int] = {str(i): i for i in range(10)}
+_CNPJ_CHAR_VALUES.update({chr(ord('A') + i): 17 + i for i in range(26)})
 
 
 def validar_cpf(cpf: str) -> None:
@@ -47,39 +54,33 @@ def validar_cpf(cpf: str) -> None:
 
 def validar_cnpj(cnpj: str) -> None:
     """
-    Valida CNPJ brasileiro com verificação de dígitos verificadores.
+    Valida CNPJ brasileiro (formato clássico numérico e novo formato alfanumérico 2026).
 
     Args:
-        cnpj: CNPJ a ser validado (pode conter formatação)
+        cnpj: CNPJ a ser validado (pode conter formatação XX.XXX.XXX/XXXX-XX)
 
     Raises:
         ValidationError: Se o CNPJ for inválido
     """
-    # Remove formatação
-    cnpj = re.sub(r'[^0-9]', '', cnpj)
+    cnpj = re.sub(r'[^0-9A-Za-z]', '', cnpj).upper()
 
-    # Verifica se tem 14 dígitos
     if len(cnpj) != 14:
-        raise ValidationError('CNPJ deve conter 14 dígitos.')
+        raise ValidationError('CNPJ deve conter 14 caracteres.')
 
-    # Verifica se todos os dígitos são iguais (CNPJs inválidos conhecidos)
     if cnpj == cnpj[0] * 14:
         raise ValidationError('CNPJ inválido.')
 
-    # Pesos para cálculo dos dígitos verificadores
     pesos1 = [5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2]
     pesos2 = [6, 5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2]
 
-    # Calcula primeiro dígito verificador
-    soma = sum(int(cnpj[i]) * pesos1[i] for i in range(12))
+    soma = sum(_CNPJ_CHAR_VALUES.get(cnpj[i], 0) * pesos1[i] for i in range(12))
     resto = soma % 11
     digito1 = 0 if resto < 2 else 11 - resto
 
     if int(cnpj[12]) != digito1:
         raise ValidationError('CNPJ inválido.')
 
-    # Calcula segundo dígito verificador
-    soma = sum(int(cnpj[i]) * pesos2[i] for i in range(13))
+    soma = sum(_CNPJ_CHAR_VALUES.get(cnpj[i], 0) * pesos2[i] for i in range(13))
     resto = soma % 11
     digito2 = 0 if resto < 2 else 11 - resto
 
@@ -90,6 +91,7 @@ def validar_cnpj(cnpj: str) -> None:
 def validar_cpf_cnpj(valor: str, tipo: str = None) -> None:
     """
     Valida CPF ou CNPJ baseado no tipo ou tamanho.
+    Suporta CNPJ alfanumérico 2026 (posições 1-12 podem ter letras).
 
     Args:
         valor: CPF ou CNPJ a ser validado
@@ -98,15 +100,16 @@ def validar_cpf_cnpj(valor: str, tipo: str = None) -> None:
     Raises:
         ValidationError: Se o documento for inválido
     """
-    # Remove formatação
-    valor_limpo = re.sub(r'[^0-9]', '', valor)
+    digits_only = re.sub(r'[^0-9]', '', valor)
+    alnum_only = re.sub(r'[^0-9A-Za-z]', '', valor)
 
-    if tipo == 'PF' or (tipo is None and len(valor_limpo) == 11):
-        validar_cpf(valor)
-    elif tipo == 'PJ' or (tipo is None and len(valor_limpo) == 14):
+    # Check CNPJ first: 14 alphanumeric chars covers both classic (all digits) and 2026 (letters+digits)
+    if tipo == 'PJ' or (tipo is None and len(alnum_only) == 14):
         validar_cnpj(valor)
+    elif tipo == 'PF' or (tipo is None and len(digits_only) == 11):
+        validar_cpf(valor)
     else:
-        raise ValidationError('Documento deve ser CPF (11 dígitos) ou CNPJ (14 dígitos).')
+        raise ValidationError('Documento deve ser CPF (11 dígitos) ou CNPJ (14 caracteres).')
 
 
 def formatar_cpf(cpf: str) -> str:
@@ -127,15 +130,15 @@ def formatar_cpf(cpf: str) -> str:
 
 def formatar_cnpj(cnpj: str) -> str:
     """
-    Formata CNPJ no padrão XX.XXX.XXX/XXXX-XX
+    Formata CNPJ no padrão XX.XXX.XXX/XXXX-XX (suporta alfanumérico 2026).
 
     Args:
-        cnpj: CNPJ apenas com dígitos
+        cnpj: CNPJ com ou sem formatação (dígitos ou alfanumérico)
 
     Returns:
         CNPJ formatado
     """
-    cnpj = re.sub(r'[^0-9]', '', cnpj)
+    cnpj = re.sub(r'[^0-9A-Za-z]', '', cnpj).upper()
     if len(cnpj) != 14:
         return cnpj
     return f'{cnpj[:2]}.{cnpj[2:5]}.{cnpj[5:8]}/{cnpj[8:12]}-{cnpj[12:]}'
