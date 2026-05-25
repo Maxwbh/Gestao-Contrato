@@ -237,7 +237,7 @@ def confirmar_importacao(importacao, post, user):
     """
     from core.models import (
         Imobiliaria, Comprador, Imovel, TipoImovel,
-        get_contabilidades_usuario,
+        get_contabilidades_usuario, get_imobiliarias_usuario,
     )
     from contratos.models import Contrato, PrestacaoIntermediaria, TipoCorrecao
 
@@ -245,9 +245,18 @@ def confirmar_importacao(importacao, post, user):
         # ── Imobiliária ───────────────────────────────────────────────────────
         imob_id = post.get('imobiliaria_match_id')
         if imob_id:
-            imobiliaria = Imobiliaria.objects.get(pk=int(imob_id))
+            # Tenant check: only allow imobiliarias the user can access
+            try:
+                imobiliaria = get_imobiliarias_usuario(user).get(pk=_int(imob_id))
+            except Imobiliaria.DoesNotExist:
+                raise ValueError(f'Imobiliária #{imob_id} não encontrada ou sem permissão de acesso.')
         else:
             contabilidade = get_contabilidades_usuario(user).first()
+            if contabilidade is None:
+                raise ValueError(
+                    'Usuário não tem acesso a nenhuma contabilidade. '
+                    'Contate o administrador para configurar o acesso.'
+                )
             imobiliaria = Imobiliaria.objects.create(
                 contabilidade=contabilidade,
                 tipo_pessoa=post.get('imob_tipo_pessoa', 'PJ'),
@@ -260,7 +269,10 @@ def confirmar_importacao(importacao, post, user):
         # ── Comprador ─────────────────────────────────────────────────────────
         comp_id = post.get('comprador_match_id')
         if comp_id:
-            comprador = Comprador.objects.get(pk=int(comp_id))
+            try:
+                comprador = Comprador.objects.get(pk=_int(comp_id))
+            except Comprador.DoesNotExist:
+                raise ValueError(f'Comprador #{comp_id} não encontrado.')
         else:
             comprador = Comprador.objects.create(
                 tipo_pessoa=post.get('comp_tipo_pessoa', 'PF'),
@@ -283,7 +295,12 @@ def confirmar_importacao(importacao, post, user):
         # ── Imóvel ────────────────────────────────────────────────────────────
         imov_id = post.get('imovel_match_id')
         if imov_id:
-            imovel = Imovel.objects.get(pk=int(imov_id))
+            # Tenant check: only allow imoveis linked to accessible imobiliarias
+            accessible_imobs = get_imobiliarias_usuario(user).values_list('pk', flat=True)
+            try:
+                imovel = Imovel.objects.get(pk=_int(imov_id), imobiliaria__in=accessible_imobs)
+            except Imovel.DoesNotExist:
+                raise ValueError(f'Imóvel #{imov_id} não encontrado ou sem permissão de acesso.')
         else:
             imovel = Imovel.objects.create(
                 imobiliaria=imobiliaria,
@@ -302,25 +319,29 @@ def confirmar_importacao(importacao, post, user):
             )
 
         # ── Contrato ──────────────────────────────────────────────────────────
+        data_pv = _date(post.get('data_primeiro_vencimento'))
+        if data_pv is None:
+            raise ValueError('Data do primeiro vencimento é obrigatória.')
+
         contrato = Contrato.objects.create(
             imobiliaria=imobiliaria,
             comprador=comprador,
             imovel=imovel,
             numero_contrato=post.get('numero_contrato', '').strip(),
             data_contrato=_date(post.get('data_contrato')),
-            data_primeiro_vencimento=_date(post.get('data_primeiro_vencimento')),
+            data_primeiro_vencimento=data_pv,
             valor_total=_dec(post.get('valor_total')) or Decimal('0'),
             valor_entrada=_dec(post.get('valor_entrada')) or Decimal('0'),
-            numero_parcelas=int(post.get('numero_parcelas') or 1),
-            dia_vencimento=int(post.get('dia_vencimento') or 1),
+            numero_parcelas=_int(post.get('numero_parcelas'), default=1),
+            dia_vencimento=_int(post.get('dia_vencimento'), default=1),
             tipo_correcao=post.get('tipo_correcao', TipoCorrecao.IPCA),
-            prazo_reajuste_meses=int(post.get('prazo_reajuste_meses') or 12),
+            prazo_reajuste_meses=_int(post.get('prazo_reajuste_meses'), default=12),
             percentual_juros_mora=_dec(post.get('percentual_juros_mora')) or Decimal('1.00'),
             percentual_multa=_dec(post.get('percentual_multa')) or Decimal('2.00'),
         )
 
         # ── Prestações Intermediárias ──────────────────────────────────────────
-        count = int(post.get('interm_count') or 0)
+        count = _int(post.get('interm_count'), default=0)
         for i in range(count):
             mes = post.get(f'interm_{i}_mes_vencimento')
             valor = _dec(post.get(f'interm_{i}_valor'))
@@ -328,7 +349,7 @@ def confirmar_importacao(importacao, post, user):
                 PrestacaoIntermediaria.objects.create(
                     contrato=contrato,
                     numero_sequencial=i + 1,
-                    mes_vencimento=int(mes),
+                    mes_vencimento=_int(mes),
                     valor=valor,
                 )
 
@@ -368,3 +389,10 @@ def _date(val) -> date | None:
         return date.fromisoformat(str(val))
     except (ValueError, TypeError):
         return None
+
+
+def _int(val, default: int = 0) -> int:
+    try:
+        return int(val)
+    except (TypeError, ValueError):
+        return default

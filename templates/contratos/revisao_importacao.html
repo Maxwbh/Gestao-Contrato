@@ -85,9 +85,9 @@ select.form-select.campo-incerto { border-color: #ffc107 !important; background:
           </div>
 
           <div class="col-md-3">
-            <label class="form-label {% if 'data_primeiro_vencimento' in campos_incertos %}campo-incerto-label{% endif %}">1º Vencimento</label>
+            <label class="form-label {% if 'data_primeiro_vencimento' in campos_incertos %}campo-incerto-label{% endif %}">1º Vencimento *</label>
             <input type="date" name="data_primeiro_vencimento" class="form-control {% if 'data_primeiro_vencimento' in campos_incertos %}campo-incerto{% endif %}"
-                   value="{{ campos.data_primeiro_vencimento|default:'' }}">
+                   value="{{ campos.data_primeiro_vencimento|default:'' }}" required>
           </div>
 
           <div class="col-md-4">
@@ -246,16 +246,16 @@ select.form-select.campo-incerto { border-color: #ffc107 !important; background:
               <input type="text" name="comp_cnpj" class="form-control" value="{{ d.cnpj|default:'' }}">
             </div>
             <div class="col-md-6">
-              <label class="form-label">E-mail</label>
-              <input type="email" name="comp_email" class="form-control" value="{{ d.email|default:'' }}">
+              <label class="form-label">E-mail *</label>
+              <input type="email" name="comp_email" class="form-control" value="{{ d.email|default:'' }}" required>
             </div>
             <div class="col-md-3">
-              <label class="form-label">Telefone</label>
-              <input type="text" name="comp_telefone" class="form-control" value="{{ d.telefone|default:'' }}">
+              <label class="form-label">Telefone *</label>
+              <input type="text" name="comp_telefone" class="form-control" value="{{ d.telefone|default:'' }}" required>
             </div>
             <div class="col-md-3">
-              <label class="form-label">Celular</label>
-              <input type="text" name="comp_celular" class="form-control" value="{{ d.celular|default:'' }}">
+              <label class="form-label">Celular *</label>
+              <input type="text" name="comp_celular" class="form-control" value="{{ d.celular|default:'' }}" required>
             </div>
             <div class="col-md-6">
               <label class="form-label">Logradouro</label>
