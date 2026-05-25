@@ -59,6 +59,15 @@ services:
           name: gestao-contrato-redis
           type: redis
           property: connectionString
+      # ==========================================================================
+      # ANTHROPIC — Importação de Contratos via IA (34.7)
+      # Chave obtida em: https://console.anthropic.com/settings/keys
+      # Modelo usado: claude-opus-4-7 (extrair dados de PDF/imagens)
+      # Definir manualmente no painel do Render
+      # ==========================================================================
+      - key: ANTHROPIC_API_KEY
+        sync: false
+
       # Token para API de tarefas
       - key: TASK_TOKEN
         generateValue: true

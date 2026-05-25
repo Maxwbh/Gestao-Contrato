@@ -1810,10 +1810,16 @@ class StatusImportacao(models.TextChoices):
 class ContratoImportacao(TimeStampedModel):
     """Controla o ciclo de importação de contratos via IA (upload → extração → revisão → criação)."""
 
-    arquivo = models.FileField(
-        upload_to='importacoes_contrato/%Y/%m/',
-        verbose_name='Arquivo',
-        help_text='PDF ou imagem do contrato',
+    arquivo_bytes = models.BinaryField(
+        null=True,
+        blank=True,
+        verbose_name='Arquivo (bytes)',
+        help_text='Bytes do primeiro arquivo enviado — armazenado em BD (sem dependência de disco)',
+    )
+    arquivo_nome = models.CharField(
+        max_length=255,
+        blank=True,
+        verbose_name='Nome do arquivo original',
     )
     status = models.CharField(
         max_length=20,

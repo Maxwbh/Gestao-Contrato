@@ -2579,23 +2579,27 @@ def upload_importacao(request):
             messages.error(request, f'Arquivo muito grande (máx {_MAX_ARQUIVO_MB} MB): {f.name}')
             return render(request, 'contratos/importar_pdf.html', {'imobiliarias': imobiliarias})
 
-    # Persiste o primeiro arquivo (para histórico)
+    # Lê bytes antes de criar o registro (FileField substituído por BinaryField — sem disco)
+    primeiro = arquivos[0]
+    ct_primeiro = primeiro.content_type or ''
+    primeiro_bytes = primeiro.read()
+
     importacao = ContratoImportacao.objects.create(
-        arquivo=arquivos[0],
+        arquivo_bytes=primeiro_bytes,
+        arquivo_nome=primeiro.name,
         status='EXTRAINDO',
         criado_por=request.user,
     )
 
     try:
         ia = ImportacaoIA()
-        primeiro = arquivos[0]
-        ct_primeiro = primeiro.content_type or ''
 
         if ct_primeiro == 'application/pdf' or primeiro.name.lower().endswith('.pdf'):
-            dados = ia.extrair_de_pdf(primeiro.read())
+            dados = ia.extrair_de_pdf(primeiro_bytes)
         else:
-            pares = []
-            for f in arquivos:
+            # Múltiplas imagens: lê restantes (primeiro já foi lido)
+            pares = [(primeiro_bytes, ct_primeiro if ct_primeiro.startswith('image/') else 'image/jpeg')]
+            for f in arquivos[1:]:
                 ct = f.content_type or 'image/jpeg'
                 if not ct.startswith('image/'):
                     ct = 'image/jpeg'

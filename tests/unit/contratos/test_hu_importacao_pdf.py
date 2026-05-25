@@ -267,7 +267,7 @@ class TestRevisaoImportacao:
         from contratos.models import ContratoImportacao
         user, _, _, _ = usuario_logado
         return ContratoImportacao.objects.create(
-            arquivo='importacoes_contrato/2024/01/fake.pdf',
+            arquivo_nome='fake.pdf',
             status='REVISAO',
             dados_extraidos=dados_extraidos_exemplo,
             criado_por=user,
@@ -286,7 +286,7 @@ class TestRevisaoImportacao:
         user, client, _, _ = usuario_logado
         contrato = ContratoFactory()
         imp = ContratoImportacao.objects.create(
-            arquivo='importacoes_contrato/2024/01/fake.pdf',
+            arquivo_nome='fake.pdf',
             status='CONCLUIDO',
             dados_extraidos=dados_extraidos_exemplo,
             contrato_criado=contrato,
@@ -301,7 +301,7 @@ class TestRevisaoImportacao:
         outro_user = UserFactory()
         from contratos.models import ContratoImportacao
         imp = ContratoImportacao.objects.create(
-            arquivo='importacoes_contrato/2024/01/fake.pdf',
+            arquivo_nome='fake.pdf',
             status='REVISAO',
             dados_extraidos=dados_extraidos_exemplo,
             criado_por=user,
@@ -320,7 +320,7 @@ class TestConfirmarImportacao:
     def _importacao_em_revisao(self, user, dados):
         from contratos.models import ContratoImportacao
         return ContratoImportacao.objects.create(
-            arquivo='importacoes_contrato/2024/01/fake.pdf',
+            arquivo_nome='fake.pdf',
             status='REVISAO',
             dados_extraidos=dados,
             criado_por=user,

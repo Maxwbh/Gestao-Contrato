@@ -266,9 +266,9 @@ class MinutaContratoAdmin(admin.ModelAdmin):
 
 @admin.register(ContratoImportacao)
 class ContratoImportacaoAdmin(admin.ModelAdmin):
-    list_display = ['pk', 'status', 'criado_por', 'criado_em', 'contrato_criado']
+    list_display = ['pk', 'arquivo_nome', 'status', 'criado_por', 'criado_em', 'contrato_criado']
     list_filter = ['status', 'criado_em']
-    search_fields = ['criado_por__username', 'erros_extracao']
-    readonly_fields = ['dados_extraidos', 'erros_extracao', 'criado_em', 'atualizado_em', 'criado_por', 'contrato_criado']
+    search_fields = ['criado_por__username', 'arquivo_nome', 'erros_extracao']
+    readonly_fields = ['arquivo_nome', 'dados_extraidos', 'erros_extracao', 'criado_em', 'atualizado_em', 'criado_por', 'contrato_criado']
     date_hierarchy = 'criado_em'
     ordering = ['-criado_em']
