@@ -64,6 +64,8 @@ gestao_contrato/          # Configuração do projeto
 | `PrestacaoIntermediaria` | Parcelas intermediárias (máx. 30) |
 | `HistoricoReajusteIntermediaria` | Log de reajustes aplicados às intermediárias |
 | `MinutaContrato` | Versões de minuta com controle de minuta ativa (única por contrato) |
+| `StatusImportacao` | Choices: PENDENTE, EXTRAINDO, REVISAO, CONCLUIDO, ERRO |
+| `ContratoImportacao` | Lifecycle de importação via IA: arquivo, dados extraídos (JSON), contrato criado |
 
 ### 3.3 Financeiro (`financeiro/models.py`)
 | Modelo | Descrição |
@@ -145,6 +147,12 @@ gestao_contrato/          # Configuração do projeto
 
 ### 4.9 bancos.py (`financeiro/services/bancos.py`)
 - Catálogo de bancos suportados com código, nome e configurações de boleto
+
+### 4.10 ImportacaoIA (`contratos/services/importacao_ia.py`)
+- `ImportacaoIA.extrair_de_pdf(bytes)` — envia PDF nativo via Claude Documents API
+- `ImportacaoIA.extrair_de_imagens(pares)` — múltiplas imagens via Claude Vision API
+- `ProcessadorImportacao.processar(dados, user)` — match de entidades existentes por CNPJ/CPF/matrícula
+- `confirmar_importacao(importacao, post, user)` — criação atômica em `transaction.atomic()`
 
 ---
 
@@ -335,9 +343,9 @@ tests/
 └── functional/              # test_fluxo_contrato_completo.py, etc.
 ```
 
-**Total:** 1300 testes | **Executar:**
+**Total:** 1328 testes | **Executar:**
 ```bash
-pytest                              # Todos os 1300 testes
+pytest                              # Todos os 1328 testes
 pytest tests/unit/                  # Apenas unitários
 pytest --cov=. --cov-report=html    # Com cobertura
 ```
