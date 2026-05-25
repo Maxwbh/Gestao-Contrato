@@ -1,83 +1,260 @@
 {% extends 'base.html' %}
 {% load static %}
+{% load format_filters %}
 
-{% block title %}Dashboard Contabilidade{% endblock %}
+{% block title %}Dashboard Executivo — Contabilidade{% endblock %}
+
+{% block extra_head %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+  .kpi-card { border-radius:10px; padding:18px 20px; color:#fff; margin-bottom:16px; }
+  .kpi-card .val { font-size:1.8rem; font-weight:700; line-height:1.2; }
+  .kpi-card .lbl { font-size:.82rem; opacity:.85; margin-top:4px; }
+  .kpi-blue   { background: linear-gradient(135deg,#1565c0,#1e88e5); }
+  .kpi-green  { background: linear-gradient(135deg,#2e7d32,#43a047); }
+  .kpi-amber  { background: linear-gradient(135deg,#e65100,#fb8c00); }
+  .kpi-red    { background: linear-gradient(135deg,#b71c1c,#e53935); }
+  .chart-card { background:#fff; border-radius:10px; box-shadow:0 1px 4px rgba(0,0,0,.1); padding:20px; margin-bottom:20px; }
+  .chart-card h6 { font-weight:700; margin-bottom:14px; color:#424242; }
+  .imob-row:hover { background:#f5f5f5; }
+</style>
+{% endblock %}
 
 {% block content %}
-<div class="container-fluid">
-    <h1>Dashboard Contabilidade</h1>
+<div class="container-fluid py-3">
 
+  <!-- Cabeçalho + filtro contabilidade -->
+  <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+    <h4 class="mb-0">
+      <i class="fas fa-chart-line text-primary me-2"></i>
+      Dashboard Executivo
+    </h4>
     {% if contabilidades %}
-    <div class="row mb-3">
-        <div class="col">
-            <form method="get">
-                <select name="contabilidade" class="form-select" onchange="this.form.submit()">
-                    <option value="">Todas as Contabilidades</option>
-                    {% for c in contabilidades %}
-                    <option value="{{ c.pk }}" {% if contabilidade_selecionada.pk == c.pk %}selected{% endif %}>{{ c.nome }}</option>
-                    {% endfor %}
-                </select>
-            </form>
-        </div>
-    </div>
+    <form method="get" class="d-flex gap-2 align-items-center">
+      <select name="contabilidade" class="form-select form-select-sm" style="min-width:200px;" onchange="this.form.submit()">
+        <option value="">Todas as Contabilidades</option>
+        {% for c in contabilidades %}
+        <option value="{{ c.pk }}" {% if contabilidade_selecionada.pk == c.pk %}selected{% endif %}>{{ c.nome }}</option>
+        {% endfor %}
+      </select>
+    </form>
     {% endif %}
+  </div>
 
-    <div class="row">
-        <div class="col-md-3">
-            <div class="card">
-                <div class="card-body">
-                    <h5>Imobiliárias</h5>
-                    <h2>{{ total_imobiliarias }}</h2>
-                </div>
-            </div>
-        </div>
+  <!-- KPI Cards -->
+  <div class="row" id="kpi-row">
+    <div class="col-6 col-md-3">
+      <div class="kpi-card kpi-blue">
+        <div class="val" id="kpi-ativos">{{ stats_contratos.ativos|default:0 }}</div>
+        <div class="lbl">Contratos ativos</div>
+      </div>
     </div>
+    <div class="col-6 col-md-3">
+      <div class="kpi-card kpi-green">
+        <div class="val" id="kpi-recebido">{{ stats_parcelas.valor_recebido|moeda|default:"—" }}</div>
+        <div class="lbl">Total recebido</div>
+      </div>
+    </div>
+    <div class="col-6 col-md-3">
+      <div class="kpi-card kpi-amber">
+        <div class="val" id="kpi-previsto">{{ receita_prevista_30d|moeda|default:"—" }}</div>
+        <div class="lbl">A receber (30 dias)</div>
+      </div>
+    </div>
+    <div class="col-6 col-md-3">
+      <div class="kpi-card kpi-red">
+        <div class="val" id="kpi-vencido">{{ stats_parcelas.valor_vencido|moeda|default:"—" }}</div>
+        <div class="lbl">Vencido (inadimplência)</div>
+      </div>
+    </div>
+  </div>
 
-    <div class="row mt-3">
-        <div class="col-md-6">
-            <div class="card">
-                <div class="card-header">Contratos</div>
-                <div class="card-body">
-                    <p>Total: {{ stats_contratos.total }}</p>
-                    <p>Ativos: {{ stats_contratos.ativos }}</p>
-                    <p>Quitados: {{ stats_contratos.quitados }}</p>
-                </div>
-            </div>
-        </div>
-        <div class="col-md-6">
-            <div class="card">
-                <div class="card-header">Parcelas</div>
-                <div class="card-body">
-                    <p>Total: {{ stats_parcelas.total }}</p>
-                </div>
-            </div>
-        </div>
+  <!-- Gráficos -->
+  <div class="row">
+    <div class="col-lg-8">
+      <div class="chart-card">
+        <h6><i class="fas fa-chart-bar me-2 text-primary"></i>Receita Prevista × Realizada × Inadimplência (12 meses)</h6>
+        <canvas id="chartReceita" height="90"></canvas>
+      </div>
     </div>
+    <div class="col-lg-4">
+      <div class="chart-card">
+        <h6><i class="fas fa-chart-pie me-2 text-success"></i>Status dos Contratos</h6>
+        <canvas id="chartStatus" height="200"></canvas>
+      </div>
+    </div>
+  </div>
 
-    {% if stats_por_imobiliaria %}
-    <div class="row mt-3">
-        <div class="col">
-            <div class="card">
-                <div class="card-header">Por Imobiliária</div>
-                <div class="card-body">
-                    <table class="table">
-                        <thead>
-                            <tr><th>Imobiliária</th><th>Contratos</th><th>Parcelas</th></tr>
-                        </thead>
-                        <tbody>
-                            {% for stat in stats_por_imobiliaria %}
-                            <tr>
-                                <td>{{ stat.nome }}</td>
-                                <td>{{ stat.total_contratos }}</td>
-                                <td>{{ stat.total_parcelas }}</td>
-                            </tr>
-                            {% endfor %}
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-        </div>
+  <!-- Por Imobiliária -->
+  {% if stats_por_imobiliaria %}
+  <div class="chart-card">
+    <h6><i class="fas fa-building me-2 text-info"></i>Por Imobiliária</h6>
+    <div class="table-responsive">
+      <table class="table table-sm table-hover">
+        <thead class="table-light">
+          <tr>
+            <th>Imobiliária</th>
+            <th class="text-center">Contratos ativos</th>
+            <th class="text-center">Parcelas vencidas</th>
+            <th class="text-end">Valor vencido</th>
+            <th class="text-end">Valor pendente</th>
+            <th class="text-center">Bloqueados</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for stat in stats_por_imobiliaria %}
+          <tr class="imob-row">
+            <td><strong>{{ stat.imobiliaria.nome_fantasia|default:stat.imobiliaria.razao_social }}</strong></td>
+            <td class="text-center">{{ stat.contratos_ativos }}</td>
+            <td class="text-center {% if stat.parcelas_vencidas > 0 %}text-danger fw-bold{% endif %}">{{ stat.parcelas_vencidas }}</td>
+            <td class="text-end {% if stat.valor_vencido > 0 %}text-danger{% endif %}">{{ stat.valor_vencido|moeda }}</td>
+            <td class="text-end">{{ stat.valor_pendente|moeda }}</td>
+            <td class="text-center {% if stat.contratos_bloqueados > 0 %}text-warning fw-bold{% endif %}">{{ stat.contratos_bloqueados }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
     </div>
-    {% endif %}
-</div>
+  </div>
+  {% endif %}
+
+  <!-- Mês atual -->
+  <div class="row">
+    <div class="col-md-6">
+      <div class="chart-card">
+        <h6><i class="fas fa-calendar-alt me-2 text-secondary"></i>{{ mes_atual }}</h6>
+        <div class="row text-center">
+          <div class="col">
+            <div class="fw-bold fs-4">{{ stats_mes.total|default:0 }}</div>
+            <small class="text-muted">Total</small>
+          </div>
+          <div class="col">
+            <div class="fw-bold fs-4 text-success">{{ stats_mes.pagas|default:0 }}</div>
+            <small class="text-muted">Pagas</small>
+          </div>
+          <div class="col">
+            <div class="fw-bold fs-4 text-warning">{{ stats_mes.pendentes|default:0 }}</div>
+            <small class="text-muted">Pendentes</small>
+          </div>
+        </div>
+        <hr>
+        <div class="row text-center">
+          <div class="col">
+            <small class="text-muted d-block">Previsto</small>
+            <strong>{{ stats_mes.valor_total|moeda|default:"—" }}</strong>
+          </div>
+          <div class="col">
+            <small class="text-muted d-block">Recebido</small>
+            <strong class="text-success">{{ stats_mes.valor_recebido|moeda|default:"—" }}</strong>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-6">
+      <div class="chart-card">
+        <h6><i class="fas fa-exclamation-triangle me-2 text-warning"></i>Alertas</h6>
+        <div class="d-flex align-items-center mb-2">
+          <span class="badge bg-danger me-2">{{ parcelas_inadimplentes }}</span>
+          <span>Parcelas inadimplentes (>30 dias)</span>
+        </div>
+        <div class="d-flex align-items-center mb-2">
+          <span class="badge bg-warning text-dark me-2">{{ total_reajustes_pendentes }}</span>
+          <span>Contratos com reajuste pendente</span>
+        </div>
+        <div class="d-flex align-items-center">
+          <span class="badge bg-info me-2">{{ taxa_inadimplencia|floatformat:1 }}%</span>
+          <span>Taxa de inadimplência</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div><!-- /container -->
+
+<script>
+(function () {
+  const apiUrl = "{% url 'financeiro:api_dashboard_executivo' %}{% if contabilidade_selecionada %}?imobiliaria_id={% endif %}";
+
+  fetch(apiUrl)
+    .then(r => r.json())
+    .then(data => {
+      // Atualizar KPIs (valores em reais formatados)
+      const fmt = v => 'R$ ' + v.toLocaleString('pt-BR', {minimumFractionDigits:2});
+      if (data.kpis) {
+        document.getElementById('kpi-ativos').textContent  = data.kpis.contratos_ativos;
+        document.getElementById('kpi-recebido').textContent = fmt(data.kpis.total_recebido);
+        document.getElementById('kpi-previsto').textContent = fmt(data.kpis.total_previsto);
+        document.getElementById('kpi-vencido').textContent  = fmt(data.kpis.total_vencido);
+      }
+
+      // Gráfico de barras — receita 12 meses
+      new Chart(document.getElementById('chartReceita'), {
+        type: 'bar',
+        data: {
+          labels: data.labels || [],
+          datasets: [
+            {
+              label: 'Previsto',
+              data: data.receita_prevista || [],
+              backgroundColor: 'rgba(33,150,243,.25)',
+              borderColor: '#2196f3',
+              borderWidth: 1,
+              type: 'bar',
+            },
+            {
+              label: 'Realizado',
+              data: data.receita_realizada || [],
+              backgroundColor: 'rgba(76,175,80,.7)',
+              borderColor: '#4caf50',
+              borderWidth: 1,
+              type: 'bar',
+            },
+            {
+              label: 'Inadimplência',
+              data: data.inadimplencia || [],
+              backgroundColor: 'rgba(244,67,54,.15)',
+              borderColor: '#f44336',
+              borderWidth: 2,
+              type: 'line',
+              tension: 0.3,
+              fill: true,
+              yAxisID: 'y',
+            },
+          ],
+        },
+        options: {
+          responsive: true,
+          interaction: { mode: 'index', intersect: false },
+          plugins: { legend: { position: 'top' } },
+          scales: { y: { beginAtZero: true } },
+        },
+      });
+    })
+    .catch(err => console.warn('Dashboard executivo: erro ao carregar dados', err));
+
+  // Gráfico de pizza — status contratos (dados do servidor via API existente)
+  fetch("{% url 'financeiro:api_dashboard_contabilidade' %}{% if contabilidade_selecionada %}?contabilidade={{ contabilidade_selecionada.pk }}{% endif %}")
+    .then(r => r.json())
+    .then(data => {
+      if (!data.status_contratos) return;
+      new Chart(document.getElementById('chartStatus'), {
+        type: 'doughnut',
+        data: {
+          labels: data.status_contratos.labels,
+          datasets: [{
+            data: data.status_contratos.data,
+            backgroundColor: data.status_contratos.cores,
+          }],
+        },
+        options: {
+          responsive: true,
+          plugins: {
+            legend: { position: 'bottom' },
+          },
+        },
+      });
+    })
+    .catch(err => console.warn('Dashboard status: erro ao carregar dados', err));
+})();
+</script>
 {% endblock %}

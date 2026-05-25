@@ -133,6 +133,34 @@
         </div>
         {% endif %}
 
+        <!-- Verificação Lei 13.786/2018 art. 67-A §2° -->
+        {% if resultado.alerta_limite_legal %}
+        <div class="alert alert-danger mt-2">
+          <i class="fas fa-balance-scale me-2"></i>
+          <strong>Atenção — Lei 13.786/2018 (art. 67-A, §2°)</strong>
+          <p class="mb-1 mt-1 small">
+            A pena convencional calculada
+            (<strong>{{ resultado.pena_convencional|moeda }}</strong>
+            = multa penal + desp. adm.)
+            supera o limite legal de <strong>25% do valor pago</strong>
+            ({{ resultado.retencao_penal_maxima_legal|moeda }}).
+          </p>
+          <p class="mb-0 small">
+            Aplicando o teto legal, o valor a devolver seria
+            <strong class="text-success">{{ resultado.devolucao_legal|moeda }}</strong>
+            em vez de {{ resultado.devolucao|moeda }}.
+            Recomenda-se revisar os percentuais contratuais.
+          </p>
+        </div>
+        {% else %}
+        <div class="alert alert-success mt-2 small py-2">
+          <i class="fas fa-check-circle me-1"></i>
+          <strong>Conforme Lei 13.786/2018:</strong>
+          A pena convencional ({{ resultado.pena_convencional|moeda }}) está dentro
+          do limite de 25% do valor pago ({{ resultado.retencao_penal_maxima_legal|moeda }}).
+        </div>
+        {% endif %}
+
         <p class="text-muted small mt-2 mb-0">
           <i class="fas fa-info-circle me-1"></i>
           Cálculo baseado nas cláusulas contratuais. Percentuais configuráveis em

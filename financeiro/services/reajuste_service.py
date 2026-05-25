@@ -295,16 +295,24 @@ class ReajusteService:
 
         resultado = []
 
-        for contrato in contratos:
+        # Pre-fetch applied reajuste cycles for all candidate contracts (1 query)
+        contratos_list = list(contratos)
+        candidatos_ids = [
+            c.id for c in contratos_list
+            if c.data_proximo_reajuste and c.data_proximo_reajuste <= data_limite
+        ]
+        reajustes_aplicados = set(
+            Reajuste.objects.filter(
+                contrato_id__in=candidatos_ids,
+                aplicado=True,
+            ).values_list('contrato_id', 'ciclo')
+        )
+
+        for contrato in contratos_list:
             data_proximo = contrato.data_proximo_reajuste
             if data_proximo and data_proximo <= data_limite:
-                # Verificar se reajuste já foi aplicado
                 ciclo_necessario = contrato.ciclo_reajuste_atual + 1
-                reajuste_existente = Reajuste.objects.filter(
-                    contrato=contrato,
-                    ciclo=ciclo_necessario,
-                    aplicado=True
-                ).exists()
+                reajuste_existente = (contrato.id, ciclo_necessario) in reajustes_aplicados
 
                 if not reajuste_existente:
                     # Calcular dias restantes
@@ -498,13 +506,13 @@ class ReajusteService:
             'indice_tipo': contrato.tipo_correcao,
             'parcela_inicial': parcela_inicial,
             'parcela_final': parcela_final,
-            'total_parcelas': parcelas.count(),
+            'total_parcelas': len(simulacao_parcelas),
             'parcelas': simulacao_parcelas,
             'intermediarias': simulacao_intermediarias,
             'valor_anterior_total': valor_anterior_total,
             'valor_novo_total': valor_novo_total,
             'diferenca_total': valor_novo_total - valor_anterior_total,
-            'impacto_mensal_medio': (valor_novo_total - valor_anterior_total) / max(parcelas.count(), 1)
+            'impacto_mensal_medio': (valor_novo_total - valor_anterior_total) / max(len(simulacao_parcelas), 1)
         }
 
     # =========================================================================
@@ -738,15 +746,18 @@ class ReajusteService:
             percentual_medio=Avg('percentual'),
         )
 
-        # Agrupar por índice
-        por_indice = {}
-        for tipo in ['IPCA', 'IGPM', 'INPC', 'INCC', 'IGPDI', 'TR', 'SELIC']:
-            reaj_tipo = reajustes.filter(indice_tipo=tipo)
-            if reaj_tipo.exists():
-                por_indice[tipo] = {
-                    'quantidade': reaj_tipo.count(),
-                    'percentual_medio': reaj_tipo.aggregate(Avg('percentual'))['percentual__avg']
-                }
+        # Agrupar por índice — 1 query em vez de 3 por tipo
+        por_indice = {
+            row['indice_tipo']: {
+                'quantidade': row['quantidade'],
+                'percentual_medio': row['percentual_medio'],
+            }
+            for row in reajustes.values('indice_tipo').annotate(
+                quantidade=Count('id'),
+                percentual_medio=Avg('percentual'),
+            )
+            if row['indice_tipo']
+        }
 
         # Lista detalhada
         lista = []

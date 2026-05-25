@@ -340,3 +340,79 @@ class RedefinirSenhaForm(forms.Form):
         if cleaned_data.get('nova_senha') != cleaned_data.get('confirmar_senha'):
             raise ValidationError('As senhas não coincidem')
         return cleaned_data
+
+
+class ComprovanteUploadForm(forms.Form):
+    """
+    Roadmap 34.4: formulário para o comprador enviar comprovante de pagamento.
+    """
+    FORMA_CHOICES = [
+        ('PIX', 'PIX'),
+        ('TED', 'Transferência (TED/DOC)'),
+        ('DINHEIRO', 'Dinheiro'),
+        ('BOLETO', 'Boleto Bancário'),
+        ('OUTRO', 'Outro'),
+    ]
+
+    valor_informado = forms.DecimalField(
+        label='Valor pago (R$)',
+        max_digits=12,
+        decimal_places=2,
+        min_value=0.01,
+        widget=forms.NumberInput(attrs={'class': 'form-control', 'step': '0.01'}),
+    )
+    data_pagamento_informada = forms.DateField(
+        label='Data do pagamento',
+        widget=forms.DateInput(attrs={'class': 'form-control', 'type': 'date'}),
+    )
+    forma_pagamento = forms.ChoiceField(
+        label='Forma de pagamento',
+        choices=FORMA_CHOICES,
+        initial='PIX',
+        widget=forms.Select(attrs={'class': 'form-select'}),
+    )
+    comprovante = forms.FileField(
+        label='Comprovante (PDF ou imagem)',
+        widget=forms.ClearableFileInput(attrs={'class': 'form-control', 'accept': 'image/*,.pdf'}),
+    )
+    observacoes_comprador = forms.CharField(
+        label='Observações',
+        required=False,
+        widget=forms.Textarea(attrs={'class': 'form-control', 'rows': 3}),
+    )
+
+    def clean_comprovante(self):
+        arquivo = self.cleaned_data.get('comprovante')
+        if not arquivo:
+            return arquivo
+        # Limite: 10 MB
+        if arquivo.size > 10 * 1024 * 1024:
+            raise ValidationError('Arquivo muito grande (máx 10 MB).')
+        nome_lower = arquivo.name.lower()
+        extensoes_validas = ('.pdf', '.jpg', '.jpeg', '.png', '.webp')
+        if not nome_lower.endswith(extensoes_validas):
+            raise ValidationError(
+                'Formato não suportado. Envie PDF, JPG, PNG ou WebP.'
+            )
+
+        # Valida magic bytes (cabeçalho real do arquivo), não só a extensão.
+        # Defesa contra upload de HTML/SVG renomeado para .pdf que poderia
+        # causar XSS armazenado quando servido pelo MEDIA.
+        cabecalho = arquivo.read(12)
+        arquivo.seek(0)
+        assinaturas = (
+            b'%PDF-',                 # PDF
+            b'\xff\xd8\xff',          # JPEG
+            b'\x89PNG\r\n\x1a\n',     # PNG
+            b'RIFF',                  # WEBP (RIFF....WEBP)
+        )
+        if not any(cabecalho.startswith(sig) for sig in assinaturas):
+            raise ValidationError(
+                'Conteúdo do arquivo não corresponde à extensão. '
+                'Envie um PDF, JPG, PNG ou WebP válido.'
+            )
+        # WebP exige confirmação adicional do marker WEBP no byte 8
+        if cabecalho.startswith(b'RIFF') and not cabecalho[8:12] == b'WEBP':
+            raise ValidationError('Arquivo WebP inválido.')
+
+        return arquivo

@@ -520,14 +520,16 @@ class CNABService:
                             )
 
                         # Criar itens
-                        for parcela in parcelas_validas:
-                            ItemRemessa.objects.create(
+                        ItemRemessa.objects.bulk_create([
+                            ItemRemessa(
                                 arquivo_remessa=arquivo_remessa,
                                 parcela=parcela,
                                 nosso_numero=parcela.nosso_numero,
                                 valor=parcela.valor_boleto or parcela.valor_atual,
                                 data_vencimento=parcela.data_vencimento,
                             )
+                            for parcela in parcelas_validas
+                        ])
 
                     logger.info(
                         "[Remessa] #%d gerada via BRCobranca: conta=%s boletos=%d "

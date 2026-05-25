@@ -13,7 +13,7 @@ from django.views.decorators.http import require_http_methods
 from django.core.management import call_command
 from django.db import connection
 from django.contrib.auth import get_user_model
-from django.db.models import Sum, Q
+from django.db.models import Count, Sum, Q
 from django.views.generic import ListView, CreateView, UpdateView, DeleteView
 from django.urls import reverse_lazy
 from django.contrib import messages
@@ -196,38 +196,30 @@ def dashboard(request):
     if stats is None:
         total_contabilidades = Contabilidade.objects.filter(ativo=True).count()
         total_imobiliarias = Imobiliaria.objects.filter(ativo=True).count()
-        total_imoveis = Imovel.objects.filter(ativo=True).count()
-        imoveis_disponiveis = Imovel.objects.filter(ativo=True, disponivel=True).count()
         total_compradores = Comprador.objects.filter(ativo=True).count()
         total_contratos = Contrato.objects.filter(status=StatusContrato.ATIVO).count()
 
-        parcelas_vencidas = Parcela.objects.filter(
-            pago=False, data_vencimento__lt=hoje
-        ).count()
+        imovel_agg = Imovel.objects.filter(ativo=True).aggregate(
+            total=Count('id'),
+            disponiveis=Count('id', filter=Q(disponivel=True)),
+        )
+        total_imoveis = imovel_agg['total']
+        imoveis_disponiveis = imovel_agg['disponiveis']
 
-        parcelas_mes = Parcela.objects.filter(
-            pago=False,
-            data_vencimento__gte=inicio_mes,
-            data_vencimento__lte=fim_mes,
-        ).count()
-
-        valor_recebido = Parcela.objects.filter(
-            pago=True,
-            data_pagamento__gte=inicio_mes,
-            data_pagamento__lte=fim_mes,
-        ).aggregate(total=Sum('valor_pago'))['total'] or 0
-
-        boletos_pendentes = Parcela.objects.filter(
-            pago=False, status_boleto=StatusBoleto.NAO_GERADO
-        ).count()
-        boletos_gerados = Parcela.objects.filter(
-            pago=False, status_boleto__in=[StatusBoleto.GERADO, StatusBoleto.REGISTRADO]
-        ).count()
-        boletos_vencidos = Parcela.objects.filter(
-            pago=False,
-            status_boleto__in=[StatusBoleto.GERADO, StatusBoleto.REGISTRADO, StatusBoleto.VENCIDO],
-            data_vencimento__lt=hoje,
-        ).count()
+        parcela_agg = Parcela.objects.aggregate(
+            vencidas=Count('id', filter=Q(pago=False, data_vencimento__lt=hoje)),
+            mes=Count('id', filter=Q(pago=False, data_vencimento__gte=inicio_mes, data_vencimento__lte=fim_mes)),
+            valor_recebido=Sum('valor_pago', filter=Q(pago=True, data_pagamento__gte=inicio_mes, data_pagamento__lte=fim_mes)),
+            boletos_pend=Count('id', filter=Q(pago=False, status_boleto=StatusBoleto.NAO_GERADO)),
+            boletos_ger=Count('id', filter=Q(pago=False, status_boleto__in=[StatusBoleto.GERADO, StatusBoleto.REGISTRADO])),
+            boletos_venc=Count('id', filter=Q(pago=False, data_vencimento__lt=hoje, status_boleto__in=[StatusBoleto.GERADO, StatusBoleto.REGISTRADO, StatusBoleto.VENCIDO])),
+        )
+        parcelas_vencidas = parcela_agg['vencidas']
+        parcelas_mes = parcela_agg['mes']
+        valor_recebido = parcela_agg['valor_recebido'] or 0
+        boletos_pendentes = parcela_agg['boletos_pend']
+        boletos_gerados = parcela_agg['boletos_ger']
+        boletos_vencidos = parcela_agg['boletos_venc']
 
         valor_recebido_formatado = (
             f"{valor_recebido:,.2f}".replace(',', 'X').replace('.', ',').replace('X', '.')
@@ -958,16 +950,22 @@ class ImovelListView(LoginRequiredMixin, PaginacaoMixin, ListView):
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         ativos = Imovel.objects.filter(ativo=True)
-        context['total_imoveis'] = ativos.count()
-        context['imoveis_disponiveis'] = ativos.filter(disponivel=True).count()
+        _agg = ativos.aggregate(
+            total=Count('id'),
+            disponiveis=Count('id', filter=Q(disponivel=True)),
+        )
+        context['total_imoveis'] = _agg['total']
+        context['imoveis_disponiveis'] = _agg['disponiveis']
 
         # Todos os imóveis com coordenadas — passados ao mapa (não paginado)
-        todos_mapa = ativos.filter(
-            latitude__isnull=False,
-            longitude__isnull=False
-        ).select_related('imobiliaria').prefetch_related('vertices').order_by('loteamento', 'identificacao')
+        todos_mapa = list(
+            ativos.filter(
+                latitude__isnull=False,
+                longitude__isnull=False
+            ).select_related('imobiliaria').prefetch_related('vertices').order_by('loteamento', 'identificacao')
+        )
         context['todos_imoveis_mapa'] = todos_mapa
-        context['imoveis_com_coordenadas'] = todos_mapa.count()
+        context['imoveis_com_coordenadas'] = len(todos_mapa)
 
         # M-13: dados de polígonos serializados para o mapa
         poligonos = {}
@@ -1247,24 +1245,17 @@ class ImobiliariaCreateView(LoginRequiredMixin, CreateView):
             import json
             try:
                 contas = json.loads(contas_json)
+                novas_contas = []
                 for conta_data in contas:
-                    # Mesclar agencia_dv com agencia se fornecido
                     agencia = conta_data.get('agencia', '')
                     agencia_dv = conta_data.get('agencia_dv', '')
-                    if agencia and agencia_dv:
-                        agencia_completa = f"{agencia}-{agencia_dv}"
-                    else:
-                        agencia_completa = agencia
+                    agencia_completa = f"{agencia}-{agencia_dv}" if agencia and agencia_dv else agencia
 
-                    # Mesclar conta_dv com conta se fornecido
                     conta = conta_data.get('conta', '')
                     conta_dv = conta_data.get('conta_dv', '')
-                    if conta and conta_dv:
-                        conta_completa = f"{conta}-{conta_dv}"
-                    else:
-                        conta_completa = conta
+                    conta_completa = f"{conta}-{conta_dv}" if conta and conta_dv else conta
 
-                    ContaBancaria.objects.create(
+                    novas_contas.append(ContaBancaria(
                         imobiliaria=self.object,
                         banco=conta_data.get('banco', ''),
                         descricao=conta_data.get('descricao', ''),
@@ -1273,7 +1264,9 @@ class ImobiliariaCreateView(LoginRequiredMixin, CreateView):
                         convenio=conta_data.get('convenio', ''),
                         carteira=conta_data.get('carteira', ''),
                         principal=conta_data.get('principal', False),
-                    )
+                    ))
+                if novas_contas:
+                    ContaBancaria.objects.bulk_create(novas_contas)
             except (json.JSONDecodeError, Exception) as e:
                 logger.exception("Erro ao salvar contas bancárias na criação da imobiliária: %s", e)
                 messages.warning(self.request, f'Imobiliária criada, mas houve erro ao salvar contas bancárias: {e}')
@@ -2065,18 +2058,31 @@ def api_parametros_salvar_grupo(request):
         parametros = data.get('parametros', {})
         if not isinstance(parametros, dict):
             return JsonResponse({'sucesso': False, 'erro': 'Formato inválido.'}, status=400)
-        salvos = 0
+        chaves = list(parametros.keys())
+        existentes = {p.chave: p for p in ParametroSistema.objects.filter(chave__in=chaves)}
+        to_create = []
+        to_update = []
         for chave, valor in parametros.items():
-            obj, _ = ParametroSistema.objects.get_or_create(
-                chave=chave,
-                defaults={'grupo': grupo, 'valor': str(valor)},
-            )
-            obj.valor = str(valor)
-            obj.modificado_manualmente = True
-            if grupo and obj.grupo != grupo:
-                obj.grupo = grupo
-            obj.save()
-            salvos += 1
+            valor_str = str(valor)
+            if chave in existentes:
+                obj = existentes[chave]
+                obj.valor = valor_str
+                obj.modificado_manualmente = True
+                if grupo and obj.grupo != grupo:
+                    obj.grupo = grupo
+                to_update.append(obj)
+            else:
+                to_create.append(ParametroSistema(
+                    chave=chave,
+                    valor=valor_str,
+                    grupo=grupo,
+                    modificado_manualmente=True,
+                ))
+        if to_update:
+            ParametroSistema.objects.bulk_update(to_update, ['valor', 'modificado_manualmente', 'grupo'])
+        if to_create:
+            ParametroSistema.objects.bulk_create(to_create, ignore_conflicts=True)
+        salvos = len(to_update) + len(to_create)
         return JsonResponse({'sucesso': True, 'mensagem': f'{salvos} parâmetro(s) salvos.'})
     except Exception as e:
         logger.exception('Erro ao salvar parâmetros: %s', e)

@@ -260,6 +260,7 @@ class Notificacao(TimeStampedModel):
             models.Index(fields=['status', 'data_agendamento']),
             models.Index(fields=['parcela']),
             models.Index(fields=['external_id'], name='notif_external_id_idx'),
+            models.Index(fields=['parcela', 'status'], name='notif_parcela_status_idx'),
         ]
 
     def __str__(self):

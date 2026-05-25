@@ -6,7 +6,7 @@ Email: maxwbh@gmail.com
 """
 from django.contrib import admin
 from django.utils.html import format_html
-from .models import Contrato, TabelaJurosContrato, StatusContrato
+from .models import Contrato, TabelaJurosContrato, StatusContrato, MinutaContrato
 
 
 class TabelaJurosInline(admin.TabularInline):
@@ -20,6 +20,7 @@ class TabelaJurosInline(admin.TabularInline):
 @admin.register(TabelaJurosContrato)
 class TabelaJurosContratoAdmin(admin.ModelAdmin):
     list_display = ['contrato', 'ciclo_inicio', 'ciclo_fim', 'juros_mensal', 'observacoes']
+    list_select_related = ['contrato']
     list_filter = ['contrato__imobiliaria']
     search_fields = ['contrato__numero_contrato']
     autocomplete_fields = ['contrato']
@@ -38,6 +39,7 @@ class ContratoAdmin(admin.ModelAdmin):
         'status_badge',
         'data_contrato'
     ]
+    list_select_related = ['comprador', 'imovel', 'imobiliaria']
     list_filter = [
         'status',
         'tipo_correcao',
@@ -235,3 +237,28 @@ class ContratoAdmin(admin.ModelAdmin):
         updated = queryset.update(status=StatusContrato.QUITADO)
         self.message_user(request, f'{updated} contrato(s) marcado(s) como quitado.')
     marcar_como_quitado.short_description = 'Marcar como Quitado'
+
+
+@admin.register(MinutaContrato)
+class MinutaContratoAdmin(admin.ModelAdmin):
+    list_display = ['contrato', 'versao', 'titulo', 'ativa', 'criado_em']
+    list_select_related = ['contrato']
+    list_filter = ['ativa', 'criado_em', 'contrato__imobiliaria']
+    search_fields = ['contrato__numero_contrato', 'versao', 'titulo']
+    autocomplete_fields = ['contrato']
+    readonly_fields = ['criado_em', 'atualizado_em']
+    date_hierarchy = 'criado_em'
+    ordering = ['-criado_em']
+
+    fieldsets = (
+        ('Identificação', {
+            'fields': ('contrato', 'versao', 'titulo', 'ativa')
+        }),
+        ('Conteúdo', {
+            'fields': ('conteudo',)
+        }),
+        ('Metadados', {
+            'fields': ('criado_em', 'atualizado_em'),
+            'classes': ('collapse',)
+        }),
+    )

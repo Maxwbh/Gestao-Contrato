@@ -1296,6 +1296,12 @@
                        title="Renegociar parcelas em atraso">
                         <i class="fas fa-handshake me-1"></i> Renegociar
                     </a>
+                    <a href="{% url 'contratos:quadro_resumo' contrato.pk|hashid %}" class="btn btn-outline-info">
+                        <i class="fas fa-table me-1"></i> Quadro-Resumo
+                    </a>
+                    <a href="{% url 'contratos:minutas_listar' contrato.pk|hashid %}" class="btn btn-outline-secondary">
+                        <i class="fas fa-file-alt me-1"></i> Minutas
+                    </a>
                     <a href="{% url 'contratos:calcular_rescisao' contrato.pk|hashid %}" class="btn btn-outline-danger">
                         <i class="fas fa-file-contract me-1"></i> Calcular Rescisão
                     </a>

@@ -2,7 +2,7 @@
 
 **Desenvolvedor:** Maxwell da Silva Oliveira (maxwbh@gmail.com)
 **Empresa:** M&S do Brasil LTDA
-**Última atualização:** 2026-03-30
+**Última atualização:** 2026-05-23
 
 > Documentação completa do que está implementado no sistema.
 > Para novas funcionalidades, consulte **[ROADMAP.md](ROADMAP.md)**.
@@ -55,11 +55,15 @@ gestao_contrato/          # Configuração do projeto
 | Modelo | Descrição |
 |--------|-----------|
 | `TipoCorrecao` | Choices: IPCA, IGPM, SELIC, FIXO |
+| `TipoAmortizacao` | Choices: PRICE, SAC |
 | `IndiceReajuste` | Histórico de índices econômicos |
 | `StatusContrato` | Choices: ATIVO, QUITADO, CANCELADO, SUSPENSO |
 | `TipoPrestacao` | Choices: NORMAL, INTERMEDIARIA, ENTRADA |
 | `Contrato` | Contrato de venda com configurações de reajuste |
+| `TabelaJurosContrato` | Tabela de juros escalantes por ciclo (HU-360) |
 | `PrestacaoIntermediaria` | Parcelas intermediárias (máx. 30) |
+| `HistoricoReajusteIntermediaria` | Log de reajustes aplicados às intermediárias |
+| `MinutaContrato` | Versões de minuta com controle de minuta ativa (única por contrato) |
 
 ### 3.3 Financeiro (`financeiro/models.py`)
 | Modelo | Descrição |
@@ -69,10 +73,14 @@ gestao_contrato/          # Configuração do projeto
 | `Parcela` | Parcela mensal com ciclo de reajuste |
 | `Reajuste` | Registro de reajuste aplicado |
 | `HistoricoPagamento` | Log de pagamentos |
+| `StatusArquivoRemessa` | Choices: PENDENTE, ENVIADO, PROCESSADO |
 | `ArquivoRemessa` | CNAB remessa |
 | `ItemRemessa` | Itens da remessa |
+| `StatusArquivoRetorno` | Choices: PENDENTE, PROCESSADO, ERRO |
 | `ArquivoRetorno` | CNAB retorno |
 | `ItemRetorno` | Itens do retorno |
+| `AcessoBoletoPublico` | Token de acesso público a boleto (link sem autenticação) |
+| `EventoPIX` | Log de eventos recebidos via webhook PIX (dedup por `EndToEndId`) |
 
 ### 3.4 Notificações (`notificacoes/models.py`)
 | Modelo | Descrição |
@@ -88,6 +96,8 @@ gestao_contrato/          # Configuração do projeto
 |--------|-----------|
 | `AcessoComprador` | Vincula `Comprador` ao `User` Django |
 | `LogAcessoComprador` | Registro de acessos com IP e data |
+| `ComprovantePagamentoUpload` | Upload de comprovante com aprovação/rejeição e bloqueio anti-duplo-pagamento |
+| `PushSubscriptionPortal` | Assinatura Web Push por comprador (VAPID); unique por `(acesso_comprador, endpoint)` |
 
 ---
 
@@ -114,9 +124,27 @@ gestao_contrato/          # Configuração do projeto
 ### 4.4 RelatorioService (`financeiro/services/relatorio_service.py`)
 - Relatório de Prestações a Pagar
 - Relatório de Prestações Pagas
-- Relatório de Posição de Contratos
+- Relatório de Posição de Contratos (`gerar_relatorio_posicao_contratos(FiltroRelatorio)`)
 - Relatório de Previsão de Reajustes
-- Exportação: CSV, JSON, PDF, Excel
+- Exportação: CSV, JSON, PDF, Excel (`exportar_para_excel`, `exportar_para_pdf`)
+
+### 4.5 CarneService (`financeiro/services/carne_service.py`)
+- Geração de carnê PDF multi-página (seleção de parcelas)
+- Download via `download_carne_pdf`
+
+### 4.6 IndicesEconomicosService (`financeiro/services/indices_economicos_service.py`)
+- Busca de índices IPCA (série 433), IGP-M (série 189) e SELIC (série 432) na API BCB
+- Cache e fallback para último índice conhecido
+
+### 4.7 OFXService (`financeiro/services/ofx_service.py`)
+- Importação de extrato bancário no formato OFX
+- Conciliação com parcelas e histórico de pagamentos
+
+### 4.8 ReciboService (`financeiro/services/recibo_service.py`)
+- Geração de recibo PDF de pagamento de parcela
+
+### 4.9 bancos.py (`financeiro/services/bancos.py`)
+- Catálogo de bancos suportados com código, nome e configurações de boleto
 
 ---
 
@@ -177,6 +205,9 @@ gestao_contrato/          # Configuração do projeto
 | `relatorios/prestacoes-pagas/` | `RelatorioPrestacoesPageasView` | Relatório |
 | `relatorios/posicao-contratos/` | `RelatorioPosicaoContratosView` | Relatório |
 | `relatorios/previsao-reajustes/` | `RelatorioPrevisaoReajustesView` | Relatório |
+| `api/relatorios/posicao/` | `api_relatorio_posicao_bi` | **API BI** — JSON/CSV autenticado por Bearer token |
+| `api/dashboard-executivo/` | `api_dashboard_executivo` | **Dashboard executivo** — série 12 meses, KPIs, tenant isolation |
+| `api/webhook/pix/` | `webhook_pix` | Webhook PIX com dedup atômico e timing-safe auth |
 
 ### 5.5 Notificações (`/notificacoes/`)
 | Rota | View | Descrição |
@@ -201,27 +232,49 @@ gestao_contrato/          # Configuração do projeto
 | `alterar-senha/` | `alterar_senha` | Alterar senha |
 | `api/contratos/<id>/parcelas/` | `api_parcelas_contrato` | API parcelas |
 | `api/resumo-financeiro/` | `api_resumo_financeiro` | API resumo |
+| `manifest.json` | `portal_manifest` | **PWA** manifest JSON |
+| `sw.js` | `portal_service_worker` | **PWA** service worker (scope `/portal/`) |
+| `api/push/subscribe/` | `api_push_subscribe` | **Web Push** — cadastrar assinatura VAPID |
+| `api/push/unsubscribe/` | `api_push_unsubscribe` | **Web Push** — remover assinatura |
 
 ---
 
 ## 6. TAREFAS CELERY IMPLEMENTADAS
 
-| Task | Frequência | Descrição |
-|------|------------|-----------|
-| `buscar_indices_economicos` | Diário | Busca índices do BCB |
-| `verificar_alertas_reajuste` | Diário | Alertas de reajuste pendente |
-| `gerar_boletos_automaticos` | Mensal | Gera boletos do próximo mês |
-| `enviar_lembretes_vencimento` | Diário | Lembretes 7, 3 e 1 dia antes |
-| `atualizar_juros_multa_parcelas_vencidas` | Diário | Atualiza encargos |
-| `limpar_boletos_vencidos` | Diário | Atualiza status de boletos |
-| `gerar_relatorio_diario` | Diário | Estatísticas consolidadas |
-| `processar_arquivos_retorno_pendentes` | Diário | Processa retornos CNAB |
+| Task | Módulo | Frequência | Descrição |
+|------|--------|------------|-----------|
+| `buscar_indices_economicos` | `financeiro` | Diário | Busca índices do BCB |
+| `verificar_alertas_reajuste` | `financeiro` | Diário | Alertas de reajuste pendente |
+| `gerar_boletos_automaticos` | `financeiro` | Mensal | Gera boletos do próximo mês |
+| `enviar_lembretes_vencimento` | `financeiro` | Diário | Lembretes 7, 3 e 1 dia antes |
+| `atualizar_juros_multa_parcelas_vencidas` | `financeiro` | Diário | Atualiza encargos |
+| `limpar_boletos_vencidos` | `financeiro` | Diário | Atualiza status de boletos |
+| `gerar_relatorio_diario` | `financeiro` | Diário | Estatísticas consolidadas |
+| `processar_arquivos_retorno_pendentes` | `financeiro` | Diário | Processa retornos CNAB |
+| `enviar_relatorio_inadimplencia` | `financeiro` | Diário/Semanal | E-mail com tabela de parcelas vencidas (34.5) |
+| `enviar_relatorio_posicao_contratos` | `financeiro` | Configurável | E-mail com anexo Excel/PDF de posição (34.5) |
+| `enviar_push_comprador` | `portal_comprador` | On-demand | Envia notificação push via VAPID (34.6) |
+| `notificar_push_vencimento_amanha` | `portal_comprador` | Diário | Push para parcelas com vencimento amanhã (34.6) |
 
 ---
 
-## 7. REGRAS DE NEGÓCIO IMPLEMENTADAS
+## 7. SEGURANÇA IMPLEMENTADA
 
-### 7.1 Contratos
+| Área | Mecanismo | Onde |
+|------|-----------|------|
+| Timing attack | `hmac.compare_digest` (tempo constante) | Webhook PIX, API BI |
+| Race condition — pagamento | `select_for_update()` + `transaction.atomic()` | `ComprovantePagamentoUpload.aprovar()` |
+| Race condition — EventoPIX | `create()` dentro de `atomic()` + catch `IntegrityError` | `_processar_evento_pix()` |
+| Race condition — minuta ativa | `select_for_update()` dentro de `atomic()` | `MinutaContrato.save()` |
+| Upload malicioso | Validação de magic bytes (PDF/JPEG/PNG/WebP) | `ComprovantePagamentoUploadForm.clean_comprovante()` |
+| Tenant isolation | `get_imobiliarias_usuario()` em todas as views | `api_dashboard_executivo`, views financeiras |
+| API BI fail-closed | Retorna 503 quando `BI_API_TOKEN` vazio em produção | `api_relatorio_posicao_bi` |
+
+---
+
+## 8. REGRAS DE NEGÓCIO IMPLEMENTADAS
+
+### 8.1 Contratos
 - Máximo 360 parcelas (30 anos)
 - Máximo 30 prestações intermediárias
 - Prazo de reajuste: 1–24 meses (padrão 12)
@@ -230,7 +283,7 @@ gestao_contrato/          # Configuração do projeto
 - Multa máxima 2%
 - Primeiro vencimento após data do contrato
 
-### 7.2 Bloqueio de Boleto por Reajuste
+### 8.2 Bloqueio de Boleto por Reajuste
 ```python
 def pode_gerar_boleto(parcela):
     if parcela.paga:
@@ -245,14 +298,14 @@ def pode_gerar_boleto(parcela):
     ).exists()
 ```
 
-### 7.3 Cálculo de Reajuste
+### 8.3 Cálculo de Reajuste
 ```python
 valor_reajustado = valor_atual * (1 + indice_percentual / 100)
 ```
 
 ---
 
-## 8. INTEGRAÇÕES ATIVAS
+## 9. INTEGRAÇÕES ATIVAS
 
 | Serviço | Uso | Status |
 |---------|-----|--------|
@@ -264,7 +317,7 @@ valor_reajustado = valor_atual * (1 + indice_percentual / 100)
 
 ---
 
-## 9. ESTRUTURA DE TESTES
+## 10. ESTRUTURA DE TESTES
 
 ```
 tests/
@@ -273,32 +326,33 @@ tests/
 ├── fixtures/
 │   └── factories.py         # 12 factories (User, Contrato, Parcela, etc.)
 ├── unit/
-│   ├── contratos/           # test_contrato_models.py, test_validations.py
-│   ├── financeiro/          # 7 arquivos (boleto, cnab, reajuste, etc.)
+│   ├── contratos/           # test_contrato_models.py, test_validations.py, test_hu_*
+│   ├── financeiro/          # test_hu_boleto_remessa.py, test_hu_relatorios_bi.py, test_hu_webhook_pix.py, ...
+│   ├── portal_comprador/    # test_hu_portal_expandido.py, test_hu_pwa.py, test_hu_portal_e2e.py, ...
 │   └── views/               # test_contrato_views.py, test_financeiro_views.py
 ├── integration/
 │   └── test_contrato_reajuste_integration.py
-└── functional/              # (vazio — E2E pendentes)
+└── functional/              # test_fluxo_contrato_completo.py, etc.
 ```
 
-**Executar testes:**
+**Total:** 1300 testes | **Executar:**
 ```bash
-pytest                              # Todos
+pytest                              # Todos os 1300 testes
 pytest tests/unit/                  # Apenas unitários
 pytest --cov=. --cov-report=html    # Com cobertura
 ```
 
 ---
 
-## 10. DEPLOY
+## 11. DEPLOY
 
-### 10.1 Render.com (Produção)
+### 11.1 Render.com (Produção)
 - Web Service: Gunicorn + Django
 - PostgreSQL: Schema `gestao_contrato`
 - Redis: Cache e broker Celery
 - BRCobrança: Docker service separado
 
-### 10.2 Docker (Desenvolvimento)
+### 11.2 Docker (Desenvolvimento)
 ```bash
 docker-compose up -d   # PostgreSQL, Redis, BRCobrança
 python manage.py migrate
@@ -306,12 +360,12 @@ python manage.py createsuperuser
 python manage.py runserver
 ```
 
-### 10.3 Variáveis de Ambiente
+### 11.3 Variáveis de Ambiente
 Veja `.env.example` para lista completa.
 
 ---
 
-## 11. REFERÊNCIAS
+## 12. REFERÊNCIAS
 
 - **Documentação completa:** `/docs/README.md`
 - **API BRCobrança:** `/docs/api/BRCOBRANCA.md`

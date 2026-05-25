@@ -284,9 +284,18 @@ class RelatorioService:
 
         logger.info("Gerando relatório de posição de contratos")
 
+        from django.db.models import Prefetch
+        from financeiro.models import Parcela as _Parcela
+
         queryset = Contrato.objects.filter(
             status=StatusContrato.ATIVO
-        ).select_related('comprador', 'imobiliaria', 'imovel')
+        ).select_related('comprador', 'imobiliaria', 'imovel').prefetch_related(
+            Prefetch(
+                'parcelas',
+                queryset=_Parcela.objects.filter(pago=False).order_by('data_vencimento'),
+                to_attr='_parcelas_pendentes_pre',
+            )
+        )
 
         # Aplicar filtros
         if filtro.contrato_id:
@@ -296,10 +305,52 @@ class RelatorioService:
         if filtro.comprador_id:
             queryset = queryset.filter(comprador_id=filtro.comprador_id)
 
+        # Materializar queryset e pre-computar resumos em 1 GROUP BY — evita N aggregate queries
+        from django.db.models import Sum, Count, Q
+        from contratos.models import TipoAmortizacao
+        from financeiro.models import TipoParcela
+
+        contratos_list = list(queryset)
+        hoje_rel = timezone.now().date()
+
+        _resumos_map: dict = {}
+        for row in _Parcela.objects.filter(
+            contrato_id__in=[c.id for c in contratos_list]
+        ).values('contrato_id').annotate(
+            total=Count('id'),
+            pagas=Count('id', filter=Q(pago=True)),
+            a_pagar=Count('id', filter=Q(pago=False)),
+            vencidas=Count('id', filter=Q(pago=False, data_vencimento__lt=hoje_rel)),
+            total_pago=Sum('valor_pago', filter=Q(pago=True)),
+            saldo_normal_valor=Sum('valor_atual', filter=Q(pago=False, tipo_parcela=TipoParcela.NORMAL)),
+            saldo_normal_amort=Sum('amortizacao', filter=Q(pago=False, tipo_parcela=TipoParcela.NORMAL)),
+        ):
+            _resumos_map[row['contrato_id']] = row
+
         itens = []
-        for contrato in queryset:
-            resumo = contrato.get_resumo_financeiro()
-            proxima_parcela = contrato.get_parcelas_a_pagar().first()
+        for contrato in contratos_list:
+            _agg = _resumos_map.get(contrato.id, {})
+            _total = _agg.get('total') or 0
+            _pagas = _agg.get('pagas') or 0
+            _progresso = (_pagas / _total * 100) if _total else 0
+            if contrato.tipo_amortizacao == TipoAmortizacao.SAC:
+                _saldo = _agg.get('saldo_normal_amort') or _agg.get('saldo_normal_valor') or Decimal('0.00')
+            else:
+                _saldo = _agg.get('saldo_normal_valor') or Decimal('0.00')
+            resumo = {
+                'total_parcelas': _total,
+                'parcelas_pagas': _pagas,
+                'parcelas_a_pagar': _agg.get('a_pagar') or 0,
+                'parcelas_vencidas': _agg.get('vencidas') or 0,
+                'total_pago': (_agg.get('total_pago') or Decimal('0.00')) + contrato.valor_entrada,
+                'saldo_devedor': _saldo,
+                'progresso_percentual': _progresso,
+                'ciclo_atual': contrato.ciclo_reajuste_atual,
+                'bloqueio_reajuste': contrato.bloqueio_boleto_reajuste,
+            }
+
+            _pend = getattr(contrato, '_parcelas_pendentes_pre', None) or []
+            proxima_parcela = _pend[0] if _pend else None
 
             itens.append({
                 'contrato_id': contrato.pk,
@@ -365,53 +416,70 @@ class RelatorioService:
         hoje = date.today()
         data_limite = hoje + timedelta(days=dias_antecedencia)
 
+        from financeiro.models import Parcela
+
         # Buscar contratos ativos que não usam valor fixo
-        contratos = Contrato.objects.filter(
+        contratos = list(Contrato.objects.filter(
             status=StatusContrato.ATIVO
         ).exclude(
             tipo_correcao=TipoCorrecao.FIXO
-        ).select_related('comprador', 'imobiliaria')
+        ).select_related('comprador', 'imobiliaria'))
+
+        # Filtrar candidatos dentro do período de alerta (Python — evita N+1)
+        candidatos = [
+            (c, c.ciclo_reajuste_atual + 1)
+            for c in contratos
+            if c.data_proximo_reajuste and c.data_proximo_reajuste <= data_limite
+        ]
+
+        if candidatos:
+            # Pre-fetch: reajustes existentes para os próximos ciclos
+            cand_ids = [c.id for c, _ in candidatos]
+            ciclos_por_contrato = {c.id: ciclo for c, ciclo in candidatos}
+            reajuste_map = {}
+            for r in Reajuste.objects.filter(contrato_id__in=cand_ids):
+                key = (r.contrato_id, r.ciclo)
+                if key not in reajuste_map:
+                    reajuste_map[key] = r
+
+            # Pre-fetch: parcelas não pagas para os contratos candidatos
+            parcelas_map: dict = {}
+            for row in Parcela.objects.filter(
+                contrato_id__in=cand_ids, pago=False,
+            ).values('contrato_id', 'numero_parcela'):
+                parcelas_map.setdefault(row['contrato_id'], []).append(row['numero_parcela'])
+        else:
+            reajuste_map = {}
+            parcelas_map = {}
 
         itens = []
-        for contrato in contratos:
+        for contrato, proximo_ciclo in candidatos:
             data_proximo = contrato.data_proximo_reajuste
-            if not data_proximo:
-                continue
 
-            # Verificar se está dentro do período de alerta
-            if data_proximo <= data_limite:
-                # Verificar se reajuste já foi aplicado
-                proximo_ciclo = contrato.ciclo_reajuste_atual + 1
-                reajuste_existente = Reajuste.objects.filter(
-                    contrato=contrato,
-                    ciclo=proximo_ciclo
-                ).first()
+            # Verificar se reajuste já foi aplicado
+            reajuste_existente = reajuste_map.get((contrato.id, proximo_ciclo))
+            status_reajuste = 'PENDENTE'
+            if reajuste_existente:
+                status_reajuste = 'APLICADO' if reajuste_existente.aplicado else 'CRIADO'
 
-                status_reajuste = 'PENDENTE'
-                if reajuste_existente:
-                    status_reajuste = 'APLICADO' if reajuste_existente.aplicado else 'CRIADO'
+            # Calcular parcelas afetadas (Python filtering from pre-fetch)
+            parcela_inicial = (proximo_ciclo - 1) * contrato.prazo_reajuste_meses + 1
+            parcela_final = min(proximo_ciclo * contrato.prazo_reajuste_meses, contrato.numero_parcelas)
+            nums = parcelas_map.get(contrato.id, [])
+            parcelas_afetadas = sum(1 for n in nums if parcela_inicial <= n <= parcela_final)
 
-                # Calcular parcelas afetadas
-                parcela_inicial = (proximo_ciclo - 1) * contrato.prazo_reajuste_meses + 1
-                parcela_final = min(proximo_ciclo * contrato.prazo_reajuste_meses, contrato.numero_parcelas)
-                parcelas_afetadas = contrato.parcelas.filter(
-                    numero_parcela__gte=parcela_inicial,
-                    numero_parcela__lte=parcela_final,
-                    pago=False
-                ).count()
-
-                itens.append({
-                    'contrato_numero': contrato.numero_contrato,
-                    'comprador_nome': contrato.comprador.nome,
-                    'tipo_correcao': contrato.tipo_correcao,
-                    'data_proximo_reajuste': data_proximo,
-                    'dias_para_reajuste': (data_proximo - hoje).days,
-                    'ciclo_proximo': proximo_ciclo,
-                    'status_reajuste': status_reajuste,
-                    'parcelas_afetadas': parcelas_afetadas,
-                    'bloqueio_ativo': contrato.bloqueio_boleto_reajuste,
-                    'ultimo_reajuste': contrato.data_ultimo_reajuste,
-                })
+            itens.append({
+                'contrato_numero': contrato.numero_contrato,
+                'comprador_nome': contrato.comprador.nome,
+                'tipo_correcao': contrato.tipo_correcao,
+                'data_proximo_reajuste': data_proximo,
+                'dias_para_reajuste': (data_proximo - hoje).days,
+                'ciclo_proximo': proximo_ciclo,
+                'status_reajuste': status_reajuste,
+                'parcelas_afetadas': parcelas_afetadas,
+                'bloqueio_ativo': contrato.bloqueio_boleto_reajuste,
+                'ultimo_reajuste': contrato.data_ultimo_reajuste,
+            })
 
         # Ordenar por data de reajuste
         itens.sort(key=lambda x: x['data_proximo_reajuste'])
