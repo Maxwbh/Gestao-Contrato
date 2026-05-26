@@ -16,7 +16,7 @@ from unittest.mock import MagicMock, patch
 from io import BytesIO
 from decimal import Decimal
 
-from django.test import Client
+from django.test import Client, override_settings
 from django.urls import reverse
 from django.contrib.auth import get_user_model
 
@@ -162,6 +162,118 @@ class TestEstrategiaHibrida:
         ia = ImportacaoIA()
         ia._client = MagicMock()
         return ia
+
+    # ── Tier 0: Gemini ───────────────────────────────────────────────────────
+
+    def _mock_gemini(self, dados: dict):
+        """
+        Retorna (mock_genai, mock_model, sys_modules_patch) prontos para uso em
+        patch.dict(sys.modules, ...). Garante que google.generativeai e
+        google.generativeai (acessado via google.generativeai) apontem para o
+        mesmo objeto.
+        """
+        mock_model = MagicMock()
+        mock_model.generate_content.return_value = MagicMock(text=json.dumps(dados))
+        mock_genai = MagicMock()
+        mock_genai.GenerativeModel.return_value = mock_model
+        # google namespace package deve expor .generativeai = mock_genai
+        mock_google = MagicMock()
+        mock_google.generativeai = mock_genai
+        sys_patch = {'google': mock_google, 'google.generativeai': mock_genai}
+        return mock_genai, mock_model, sys_patch
+
+    def test_gemini_alto_retorna_sem_chamar_claude(self):
+        """Gemini ALTO → retorna imediatamente; nenhum modelo Claude é chamado."""
+        from contratos.services.importacao_ia import ImportacaoIA
+        ia = ImportacaoIA()
+        dados = {'numero_contrato': 'X', 'confianca': {'nivel': 'ALTO', 'campos_incertos': []}}
+        mock_genai, mock_model, sys_patch = self._mock_gemini(dados)
+
+        with patch.dict('sys.modules', sys_patch):
+            with override_settings(GEMINI_API_KEY='fake-key'):
+                resultado = ia._tentar_gemini([{'mime_type': 'application/pdf', 'data': b'%PDF'}])
+
+        assert resultado == dados
+        mock_model.generate_content.assert_called_once()
+
+    def test_gemini_medio_retorna_none_e_escala_para_claude(self):
+        """Gemini MEDIO → _tentar_gemini retorna None → cadeia Claude é acionada."""
+        from contratos.services.importacao_ia import ImportacaoIA
+        ia = ImportacaoIA()
+        mock_genai, _, sys_patch = self._mock_gemini({'confianca': {'nivel': 'MEDIO', 'campos_incertos': ['valor_total']}})
+
+        with patch.dict('sys.modules', sys_patch):
+            with override_settings(GEMINI_API_KEY='fake-key'):
+                resultado = ia._tentar_gemini([{'mime_type': 'application/pdf', 'data': b'%PDF'}])
+
+        assert resultado is None
+
+    def test_gemini_erro_retorna_none(self):
+        """Quota esgotada ou qualquer exceção → retorna None sem lançar."""
+        from contratos.services.importacao_ia import ImportacaoIA
+        ia = ImportacaoIA()
+        mock_model = MagicMock()
+        mock_model.generate_content.side_effect = Exception('quota exceeded')
+        mock_genai = MagicMock()
+        mock_genai.GenerativeModel.return_value = mock_model
+        mock_google = MagicMock()
+        mock_google.generativeai = mock_genai
+
+        with patch.dict('sys.modules', {'google': mock_google, 'google.generativeai': mock_genai}):
+            with override_settings(GEMINI_API_KEY='fake-key'):
+                resultado = ia._tentar_gemini([{'mime_type': 'application/pdf', 'data': b'%PDF'}])
+
+        assert resultado is None
+
+    def test_gemini_sem_api_key_retorna_none(self):
+        """Sem GEMINI_API_KEY configurada → pula Tier 0 silenciosamente."""
+        from contratos.services.importacao_ia import ImportacaoIA
+        ia = ImportacaoIA()
+
+        with override_settings(GEMINI_API_KEY=''):
+            resultado = ia._tentar_gemini([{'mime_type': 'application/pdf', 'data': b'%PDF'}])
+
+        assert resultado is None
+
+    def test_gemini_sem_pacote_retorna_none(self):
+        """google-generativeai não instalado → pula Tier 0 sem erro."""
+        from contratos.services.importacao_ia import ImportacaoIA
+        ia = ImportacaoIA()
+        mock_google = MagicMock()
+        mock_google.generativeai = None
+
+        with patch.dict('sys.modules', {'google': mock_google, 'google.generativeai': None}):
+            with override_settings(GEMINI_API_KEY='fake-key'):
+                resultado = ia._tentar_gemini([{'mime_type': 'application/pdf', 'data': b'%PDF'}])
+
+        assert resultado is None
+
+    def test_extrair_de_pdf_usa_gemini_quando_alto(self):
+        """extrair_de_pdf retorna resultado Gemini sem acionar nenhum modelo Claude."""
+        from contratos.services.importacao_ia import ImportacaoIA
+        ia = ImportacaoIA()
+        ia._client = MagicMock()  # garante que Claude não seja chamado
+        dados_gemini = {'numero_contrato': 'GEM-01', 'confianca': {'nivel': 'ALTO', 'campos_incertos': []}}
+
+        with patch.object(ia, '_tentar_gemini', return_value=dados_gemini):
+            resultado = ia.extrair_de_pdf(b'%PDF-fake')
+
+        assert resultado == dados_gemini
+        ia._client.messages.create.assert_not_called()
+
+    def test_extrair_de_pdf_cai_para_claude_quando_gemini_none(self):
+        """Quando _tentar_gemini retorna None, a cadeia Claude é acionada normalmente."""
+        from contratos.services.importacao_ia import ImportacaoIA
+        ia = ImportacaoIA()
+        dados_haiku = {'numero_contrato': 'HAI-01', 'confianca': {'nivel': 'ALTO', 'campos_incertos': []}}
+        ia._client = MagicMock()
+        ia._client.messages.create.return_value = self._api_resp(dados_haiku)
+
+        with patch.object(ia, '_tentar_gemini', return_value=None):
+            resultado = ia.extrair_de_pdf(b'%PDF-fake')
+
+        assert resultado == dados_haiku
+        assert ia._client.messages.create.call_count == 1
 
     # ── Tier 1: Haiku ────────────────────────────────────────────────────────
 

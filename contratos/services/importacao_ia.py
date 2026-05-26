@@ -1,7 +1,13 @@
 """
-Serviço de importação de contratos via IA (Claude API).
+Serviço de importação de contratos via IA.
 
-Fluxo: arquivo (PDF ou imagens) → Claude extrai JSON → match/create entities → Contrato
+Fluxo: arquivo (PDF ou imagens) → IA extrai JSON → match/create entities → Contrato
+
+Cadeia de modelos (custo crescente, acionados apenas se necessário):
+  Tier 0 — Gemini 2.0 Flash  (gratuito, 1.500 req/dia) — requer GEMINI_API_KEY
+  Tier 1 — Claude Haiku 4.5  (~$0,01–0,02/contrato)
+  Tier 2 — Claude Sonnet 4.6 (~$0,05–0,08/contrato)
+  Tier 3 — Claude Opus 4.7   (~$0,30–0,45/contrato)  — último recurso
 """
 import base64
 import json
@@ -109,7 +115,7 @@ Regras:
 # ─────────────────────────────────────────────────────────────────────────────
 
 class ImportacaoIA:
-    """Chama Claude API para extrair dados estruturados de documentos de contrato."""
+    """Extrai dados estruturados de contratos usando cadeia de modelos Gemini → Claude."""
 
     def __init__(self):
         self._client = None
@@ -128,6 +134,11 @@ class ImportacaoIA:
         return self._client
 
     def extrair_de_pdf(self, pdf_bytes: bytes) -> dict:
+        # Tier 0 — Gemini (gratuito)
+        dados = self._tentar_gemini([{'mime_type': 'application/pdf', 'data': pdf_bytes}])
+        if dados is not None:
+            return dados
+        # Tiers 1-3 — Claude
         pdf_b64 = base64.standard_b64encode(pdf_bytes).decode('utf-8')
         return self._call([
             {
@@ -139,6 +150,11 @@ class ImportacaoIA:
 
     def extrair_de_imagens(self, pares: list) -> dict:
         """pares = [(bytes, 'image/jpeg'), ...]"""
+        # Tier 0 — Gemini (gratuito)
+        dados = self._tentar_gemini([{'mime_type': mime, 'data': img} for img, mime in pares])
+        if dados is not None:
+            return dados
+        # Tiers 1-3 — Claude
         content = []
         for img_bytes, mime in pares:
             content.append({
@@ -151,6 +167,40 @@ class ImportacaoIA:
             })
         content.append({'type': 'text', 'text': _PROMPT})
         return self._call(content)
+
+    def _tentar_gemini(self, partes: list) -> dict | None:
+        """
+        Tier 0: Gemini 2.0 Flash gratuito (1.500 req/dia).
+        Retorna dados se confiança ALTO; None se quota esgotada, erro ou confiança < ALTO.
+        partes = [{'mime_type': str, 'data': bytes}, ...]
+        """
+        api_key = getattr(settings, 'GEMINI_API_KEY', '').strip()
+        if not api_key:
+            return None
+        try:
+            import google.generativeai as genai
+        except ImportError:
+            logger.debug('google-generativeai não instalado — pulando Tier 0 Gemini')
+            return None
+        try:
+            genai.configure(api_key=api_key)
+            model = genai.GenerativeModel('gemini-2.0-flash')
+            content = [{'mime_type': p['mime_type'], 'data': p['data']} for p in partes]
+            content.append(_PROMPT)
+            resposta = model.generate_content(content)
+            dados = _parse_json(resposta.text)
+            nivel = dados.get('confianca', {}).get('nivel')
+            if nivel == 'ALTO':
+                return dados
+            logger.info(
+                'Gemini confiança=%s campos_incertos=%s — escalando para cadeia Claude',
+                nivel,
+                dados.get('confianca', {}).get('campos_incertos', []),
+            )
+            return None
+        except Exception as exc:
+            logger.warning('Gemini falhou (%s) — usando cadeia Claude', type(exc).__name__)
+            return None
 
     def _call(self, content: list) -> dict:
         # Tier 1 — Haiku (barato): basta para contratos legíveis e padronizados

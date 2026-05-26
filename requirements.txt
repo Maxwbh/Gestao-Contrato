@@ -49,6 +49,9 @@ Faker==22.0.0
 # IA — Claude API (H-01: chatbot humanizado)
 anthropic>=0.40.0
 
+# IA — Google Gemini (Tier 0 gratuito na importação de contratos; 1.500 req/dia)
+google-generativeai>=0.8.0
+
 # Testes
 pytest==7.4.3
 pytest-django==4.7.0
