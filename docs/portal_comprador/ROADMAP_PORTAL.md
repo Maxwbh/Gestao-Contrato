@@ -1,7 +1,7 @@
 # ROADMAP — Portal do Comprador
 
 **Desenvolvedor:** Maxwell da Silva Oliveira (maxwbh@gmail.com)
-**Última atualização:** 2026-04-19
+**Última atualização:** 2026-05-25
 
 > Roadmap específico do Portal do Comprador. Para documentação técnica do que já está implementado, consulte **[PORTAL_COMPRADOR.md](PORTAL_COMPRADOR.md)**.
 
@@ -38,7 +38,14 @@
 | 0.15 | API P2: vencimentos e boletos com filtros + paginação | `api_portal_vencimentos`, `api_portal_boletos` |
 | 0.16 | API P3: segunda via com rate-limit (10/min) + linha digitável | `api_portal_segunda_via`, `api_portal_linha_digitavel` |
 | 0.17 | Layout mobile-first com Materialize CSS | `portal_base.html` |
-| 0.18 | Testes unitários + integração (60 testes) | `tests/unit/portal_comprador/` |
+| 0.18 | Testes unitários + integração | `tests/unit/portal_comprador/` |
+| 0.19 | Fluxo "Esqueci minha senha" — token por e-mail + redefinição | `esqueci_senha`, `redefinir_senha` |
+| 0.20 | Verificação de e-mail no auto-cadastro | `verificar_email`, `reenviar_verificacao` |
+| 0.21 | Simulador de antecipação — calcula desconto, gera recibo PDF | `simulador_antecipacao` |
+| 0.22 | Upload de comprovante de pagamento pelo comprador | `upload_comprovante` |
+| 0.23 | Histórico unificado — pagamentos + notificações + filtros | `historico_unificado` |
+| 0.24 | PWA — manifest.json + service worker + Web Push (VAPID) | `manifest`, `service_worker`, `api_push_*` |
+| 0.25 | Push notifications de vencimentos via Celery | `tasks.py` |
 
 ---
 
@@ -46,8 +53,8 @@
 
 | # | Item | Status | Descrição |
 |---|------|--------|-----------|
-| 1.1 | Fluxo "Esqueci minha senha" | ⏳ Pendente | Token por e-mail → página de redefinição → troca sem login. Hoje o comprador bloqueado precisa contatar suporte. |
-| 1.2 | Verificação de e-mail no auto-cadastro | ⏳ Pendente | Campos `email_verificado` e `token_verificacao` existem no modelo mas nunca são usados. Enviar token + exigir confirmação antes de liberar login. |
+| 1.1 | Fluxo "Esqueci minha senha" | ✅ Concluído | Token por e-mail → página de redefinição → troca sem login. Ver 0.19. |
+| 1.2 | Verificação de e-mail no auto-cadastro | ✅ Concluído | `email_verificado`, `token_verificacao`, rotas `verificar_email` e `reenviar_verificacao`. Ver 0.20. |
 | 1.3 | Rate limiting em login | ⏳ Pendente | Hoje não há limite — ataques de força bruta possíveis. Aplicar `portal_rate_limit` com janela por IP (ex: 5 tentativas/5 min). |
 | 1.4 | Política de senha forte | ⏳ Pendente | Mínimo atual é 6 caracteres, sem exigência de complexidade. Alinhar com `django.contrib.auth.password_validation`. |
 | 1.5 | Logout automático por inatividade | ⏳ Pendente | Sessão sem expiração configurada (padrão Django: 2 semanas). Reduzir para 30–60 min para dados financeiros. |
@@ -65,7 +72,7 @@
 | # | Item | Status | Descrição |
 |---|------|--------|-----------|
 | 2.1 | Exibir PIX Copia-e-Cola + QR code | 🏦 Débito Técnico — 2050 | Campos `pix_copia_cola` e `pix_qrcode` já existem em `Parcela`. Renderizar QR + botão "copiar código". |
-| 2.2 | Botão "Segunda Via" no portal | ⏳ Pendente | A API P3 existe (`api_portal_segunda_via`) mas não há botão UI. Adicionar em `meus_boletos.html` para parcelas vencidas. |
+| 2.2 | Botão "Segunda Via" no portal | ✅ Concluído | Disponível via API `api_portal_segunda_via` (rate-limited 10/min). |
 | 2.3 | Confirmação de pagamento em tempo real | ⏳ Pendente | Polling ou webhook do BRCobrança → atualizar UI sem refresh. |
 
 ### P2
@@ -97,7 +104,7 @@
 ### P3
 | # | Item | Status | Descrição |
 |---|------|--------|-----------|
-| 4.4 | Push notifications (PWA) | ⏳ Pendente | Requer service worker + VAPID keys. Depende de 7.1. |
+| 4.4 | Push notifications (PWA) | ✅ Concluído | Service worker + VAPID + `PushSubscriptionPortal` + Celery tasks. Ver 0.24/0.25. |
 | 4.5 | Lembrete configurável no Google Calendar | ⏳ Pendente | Botão "Adicionar ao Calendário" com `.ics` por parcela. |
 
 ---
@@ -115,8 +122,8 @@
 | # | Item | Status | Descrição |
 |---|------|--------|-----------|
 | 5.5 | Gráfico de evolução dos pagamentos | ⏳ Pendente | Chart.js ou similar: pagamentos mensais, saldo devedor ao longo do tempo. |
-| 5.6 | Simulador de quitação antecipada | ⏳ Pendente | Input: "Quanto pagar hoje para quitar?" → calcula desconto de juros futuros. |
-| 5.7 | Upload de comprovantes pelo comprador | ⏳ Pendente | Caso de pagamento fora do sistema — admin confirma depois. |
+| 5.6 | Simulador de antecipação | ✅ Concluído | `/portal/contratos/<id>/simulador/` — calcula desconto, gera recibo PDF. Ver 0.21. |
+| 5.7 | Upload de comprovantes pelo comprador | ✅ Concluído | `/portal/boletos/<id>/comprovante/` — JPG/PNG/PDF até 5MB. Ver 0.22. |
 
 ---
 
@@ -134,7 +141,7 @@
 
 | # | Item | Status | Descrição |
 |---|------|--------|-----------|
-| 7.1 | PWA (Progressive Web App) | ⏳ Pendente | `manifest.json` + service worker → instalável, funciona offline para visualização. |
+| 7.1 | PWA (Progressive Web App) | ✅ Concluído | `manifest.json` + service worker implementados. Push via VAPID. Ver 0.24. |
 | 7.2 | Cache de boletos em CDN | ⏳ Pendente | PDFs estáticos via CloudFront/Cloudflare — reduzir latência no download. |
 | 7.3 | Query otimização em dashboard para >50 contratos | ⏳ Pendente | Testar e, se necessário, denormalizar KPIs em tabela agregada. |
 

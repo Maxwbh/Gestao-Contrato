@@ -1,0 +1,146 @@
+{% extends 'portal_comprador/portal_base.html' %}
+{% load format_filters %}
+
+{% block title %}Simulador de Antecipação — Contrato {{ contrato.numero_contrato }}{% endblock %}
+
+{% block content %}
+<div class="row">
+  <div class="col-12 col-lg-10 mx-auto">
+
+    <div class="d-flex justify-content-between align-items-center mb-3">
+      <h4 class="mb-0">
+        <i class="fas fa-forward me-2 text-success"></i>
+        Simulador de Antecipação
+      </h4>
+      <a href="{% url 'portal_comprador:detalhe_contrato' contrato.id %}" class="btn btn-outline-secondary btn-sm">
+        <i class="fas fa-arrow-left me-1"></i> Voltar ao Contrato
+      </a>
+    </div>
+
+    <div class="alert alert-info small">
+      <i class="fas fa-info-circle me-1"></i>
+      Esta é uma simulação. Para efetivar a antecipação com desconto,
+      entre em contato com a administração informando as parcelas selecionadas.
+    </div>
+
+    <div class="card mb-3">
+      <div class="card-header py-2">
+        <i class="fas fa-cogs me-2"></i><strong>Configurar Simulação</strong>
+      </div>
+      <div class="card-body">
+        <form method="post">
+          {% csrf_token %}
+          <div class="row g-3 mb-3">
+            <div class="col-md-3">
+              <label class="form-label">Desconto (%)</label>
+              <input type="number"
+                     name="desconto"
+                     class="form-control"
+                     min="0" max="100" step="0.01"
+                     value="{{ desconto_perc|default:0 }}"
+                     placeholder="Ex: 5">
+            </div>
+            <div class="col-md-9 d-flex align-items-end">
+              <button type="submit" class="btn btn-success">
+                <i class="fas fa-calculator me-1"></i> Simular
+              </button>
+            </div>
+          </div>
+
+          {% if parcelas_disponiveis %}
+          <div class="table-responsive" style="max-height: 400px; overflow-y: auto;">
+            <table class="table table-sm table-hover">
+              <thead class="sticky-top bg-light">
+                <tr>
+                  <th style="width: 40px;">
+                    <input type="checkbox" id="checkAll" class="form-check-input">
+                  </th>
+                  <th>#</th>
+                  <th>Vencimento</th>
+                  <th class="text-end">Valor</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for p in parcelas_disponiveis %}
+                <tr>
+                  <td>
+                    <input type="checkbox"
+                           name="parcelas"
+                           value="{{ p.id }}"
+                           class="form-check-input parcela-check"
+                           {% if p.id|stringformat:"s" in parcelas_selecionadas_ids %}checked{% endif %}>
+                  </td>
+                  <td>{{ p.numero_parcela }}/{{ contrato.numero_parcelas }}</td>
+                  <td>{{ p.data_vencimento|date:"d/m/Y" }}</td>
+                  <td class="text-end">{{ p.valor_total|moeda }}</td>
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+          {% else %}
+          <div class="text-center text-muted py-4">
+            <i class="fas fa-check-circle fa-2x mb-2 d-block opacity-25"></i>
+            Nenhuma parcela pendente neste contrato.
+          </div>
+          {% endif %}
+        </form>
+      </div>
+    </div>
+
+    {% if preview %}
+    <div class="card border-success">
+      <div class="card-header bg-success text-white py-2">
+        <i class="fas fa-chart-bar me-2"></i><strong>Resultado da Simulação</strong>
+      </div>
+      <div class="card-body">
+        <div class="row text-center mb-3">
+          <div class="col-md-4">
+            <small class="text-muted d-block">Total Original</small>
+            <strong class="fs-5">{{ preview.total_original|moeda }}</strong>
+          </div>
+          <div class="col-md-4">
+            <small class="text-muted d-block">Com Desconto ({{ preview.desconto_perc }}%)</small>
+            <strong class="fs-5 text-success">{{ preview.total_antecipado|moeda }}</strong>
+          </div>
+          <div class="col-md-4">
+            <small class="text-muted d-block">Economia</small>
+            <strong class="fs-5 text-success">{{ preview.economia|moeda }}</strong>
+          </div>
+        </div>
+
+        {% if preview.itens %}
+        <table class="table table-sm">
+          <thead>
+            <tr>
+              <th>Parcela</th>
+              <th class="text-end">Valor Original</th>
+              <th class="text-end">Desconto</th>
+              <th class="text-end">Valor Antecipado</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for item in preview.itens %}
+            <tr>
+              <td>{{ item.parcela.numero_parcela }}/{{ contrato.numero_parcelas }}</td>
+              <td class="text-end">{{ item.valor_original|moeda }}</td>
+              <td class="text-end text-success">− {{ item.desconto_valor|moeda }}</td>
+              <td class="text-end fw-bold">{{ item.valor_antecipado|moeda }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+        {% endif %}
+      </div>
+    </div>
+    {% endif %}
+
+  </div>
+</div>
+
+<script>
+  document.getElementById('checkAll')?.addEventListener('change', function(e){
+    document.querySelectorAll('.parcela-check').forEach(c => c.checked = e.target.checked);
+  });
+</script>
+{% endblock %}

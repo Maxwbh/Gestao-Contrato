@@ -3,9 +3,16 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+    <meta name="theme-color" content="#00897b">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <meta name="apple-mobile-web-app-title" content="Portal GC">
     <title>{% block title %}Portal do Comprador{% endblock %} | Gestão de Contratos</title>
 
     {% load static %}
+    <!-- 34.6.1 PWA Manifest -->
+    <link rel="manifest" href="{% url 'portal_comprador:manifest' %}">
     <!-- Materialize CSS (local) -->
     <link rel="stylesheet" href="{% static 'vendor/materialize/css/materialize.min.css' %}">
     <!-- Material Icons (Google Fonts CDN — required for icon font) -->
@@ -320,6 +327,11 @@
         <span class="material-icons">receipt_long</span>
         Boletos
     </a>
+    <a href="{% url 'portal_comprador:historico_unificado' %}"
+       class="{% block nav_historico %}{% endblock %}">
+        <span class="material-icons">history</span>
+        Histórico
+    </a>
     <a href="{% url 'portal_comprador:meus_dados' %}"
        class="{% block nav_dados %}{% endblock %}">
         <span class="material-icons">person</span>
@@ -330,6 +342,64 @@
 <!-- Materialize JS (local) -->
 <script src="{% static 'vendor/materialize/js/materialize.min.js' %}"></script>
 {% block extra_js %}{% endblock %}
+
+<!-- 34.6.2/34.6.3 — Service Worker + Web Push registration -->
+{% if request.user.is_authenticated %}
+<script>
+(function () {
+  if (!('serviceWorker' in navigator)) return;
+
+  const SW_URL = '{% url "portal_comprador:service_worker" %}';
+  const VAPID_PUBLIC_KEY = '{{ vapid_public_key|default:"" }}';
+  const SUBSCRIBE_URL   = '{% url "portal_comprador:api_push_subscribe" %}';
+  const UNSUBSCRIBE_URL = '{% url "portal_comprador:api_push_unsubscribe" %}';
+  const CSRF_TOKEN      = '{{ csrf_token }}';
+
+  navigator.serviceWorker.register(SW_URL, { scope: '/portal/' })
+    .then(reg => {
+      if (!VAPID_PUBLIC_KEY || !('PushManager' in window)) return;
+
+      // Verificar/solicitar permissão de notificações
+      if (Notification.permission === 'granted') {
+        _assinarPush(reg);
+      } else if (Notification.permission !== 'denied') {
+        Notification.requestPermission().then(perm => {
+          if (perm === 'granted') _assinarPush(reg);
+        });
+      }
+    })
+    .catch(() => {});
+
+  function _urlBase64ToUint8Array(base64String) {
+    const padding = '='.repeat((4 - base64String.length % 4) % 4);
+    const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+    const raw = window.atob(base64);
+    return new Uint8Array([...raw].map(c => c.charCodeAt(0)));
+  }
+
+  function _assinarPush(registration) {
+    registration.pushManager.getSubscription().then(existing => {
+      if (existing) return _salvarSubscription(existing);
+      return registration.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: _urlBase64ToUint8Array(VAPID_PUBLIC_KEY),
+      }).then(_salvarSubscription);
+    }).catch(() => {});
+  }
+
+  function _salvarSubscription(sub) {
+    if (!sub) return;
+    const subJson = sub.toJSON();
+    fetch(SUBSCRIBE_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-CSRFToken': CSRF_TOKEN },
+      body: JSON.stringify({ endpoint: subJson.endpoint, keys: subJson.keys }),
+    }).catch(() => {});
+  }
+})();
+</script>
+{% endif %}
+
 <footer style="text-align:center; padding:8px 0; font-size:0.7rem; color:#aaa;">
     <span title="Commit: {{ system_version_info.commit }} | Build: {{ system_version_info.date }} | {{ system_version_info.env }}"
           style="cursor:help; border-bottom:1px dotted #ccc;">

@@ -1,7 +1,7 @@
 # Portal do Comprador — Guia do Usuário
 
 **Sistema:** Gestão de Contratos — M&S do Brasil LTDA
-**Última atualização:** 2026-04-20
+**Última atualização:** 2026-05-25
 
 > Este guia é destinado ao **comprador** (cliente final) que deseja acessar o portal para
 > consultar seus contratos, baixar boletos e atualizar seus dados.
@@ -14,10 +14,13 @@ O Portal do Comprador é um ambiente online exclusivo onde você pode:
 
 - Consultar todos os seus contratos de compra de imóvel
 - Ver o andamento dos pagamentos e o saldo devedor
-- Baixar ou visualizar seus boletos
-- Registrar pagamentos e ver o histórico
+- Baixar ou visualizar seus boletos e a linha digitável para pagar por PIX/internet banking
+- Enviar comprovante de pagamento diretamente pelo portal
+- Simular a antecipação de parcelas e calcular o desconto
+- Ver o histórico completo de pagamentos e notificações recebidas
 - Atualizar seus dados de contato e endereço
 - Configurar como quer receber notificações (e-mail, SMS, WhatsApp)
+- Instalar o portal como aplicativo no celular (PWA)
 
 ---
 
@@ -234,6 +237,46 @@ Clique em **"Confirmar Alteração"**. Você permanecerá logado após a troca.
 
 ---
 
+### Simulador de Antecipação
+
+**URL:** `/portal/contratos/<id>/simulador/`
+
+Descubra quanto economiza pagando parcelas futuras antecipadamente:
+
+1. Informe até qual parcela quer antecipar
+2. Clique em **Calcular**
+3. Veja o total a pagar com e sem desconto
+4. Baixe o **Recibo de Simulação** para apresentar à imobiliária
+
+> Para efetivar a antecipação, entre em contato com a imobiliária com o recibo em mãos.
+
+---
+
+### Histórico Unificado
+
+**URL:** `/portal/historico/`
+
+Tela com o histórico completo de:
+- Pagamentos realizados (data, valor, parcela)
+- Notificações recebidas (e-mail, SMS, WhatsApp)
+
+Use os filtros de período e tipo para localizar movimentações específicas.
+
+---
+
+### Enviar Comprovante de Pagamento
+
+**URL:** `/portal/boletos/<id>/comprovante/`
+
+Se fez um pagamento por depósito ou transferência e o sistema ainda não confirmou:
+
+1. Em **Meus Boletos** → clique no boleto → **Enviar Comprovante**
+2. Selecione o arquivo (JPG, PNG ou PDF — máx. 5MB)
+3. Clique em **Enviar**
+4. A imobiliária receberá o comprovante e confirmará o pagamento
+
+---
+
 ### Sair do Portal (Logout)
 
 **URL:** `/portal/logout/`
@@ -243,23 +286,47 @@ Você será redirecionado para a tela de login.
 
 ---
 
+### Instalar o Portal no Celular (PWA)
+
+O portal pode ser instalado como um aplicativo no seu celular — sem precisar de app store.
+
+**iPhone (Safari):**
+1. Abra o portal no Safari
+2. Toque no ícone de compartilhar (quadrado com seta para cima)
+3. Role e toque em **"Adicionar à Tela de Início"**
+4. Confirme o nome e toque em **Adicionar**
+
+**Android (Chrome):**
+1. Abra o portal no Chrome
+2. Toque nos três pontinhos (⋮) no canto superior direito
+3. Toque em **"Adicionar à tela inicial"**
+4. Confirme
+
+Após instalado, o portal abre em tela cheia, como um app nativo. Você também pode receber **notificações push** de vencimentos (se habilitar nas configurações).
+
+---
+
 ## Resumo de Todas as Telas
 
-| Tela                  | URL                                    | Acesso         |
-|-----------------------|----------------------------------------|----------------|
-| Login                 | `/portal/login/`                       | Público        |
-| Criar conta           | `/portal/cadastro/`                    | Público        |
-| Esqueci minha senha   | `/portal/esqueci-senha/`              | Público        |
-| Redefinir senha       | `/portal/redefinir-senha/<token>/`    | Link por e-mail |
-| Dashboard             | `/portal/`                             | Login obrigatório |
-| Meus Contratos        | `/portal/contratos/`                   | Login obrigatório |
-| Detalhe do Contrato   | `/portal/contratos/<id>/`             | Login obrigatório |
-| Meus Boletos          | `/portal/boletos/`                     | Login obrigatório |
-| Download do Boleto    | `/portal/boletos/<id>/download/`      | Login obrigatório |
-| Visualizar Boleto     | `/portal/boletos/<id>/visualizar/`    | Login obrigatório |
-| Meus Dados            | `/portal/meus-dados/`                  | Login obrigatório |
-| Alterar Senha         | `/portal/alterar-senha/`              | Login obrigatório |
-| Sair                  | `/portal/logout/`                      | Login obrigatório |
+| Tela                        | URL                                        | Acesso            |
+|-----------------------------|--------------------------------------------|-------------------|
+| Login                       | `/portal/login/`                           | Público           |
+| Criar conta                 | `/portal/cadastro/`                        | Público           |
+| Esqueci minha senha         | `/portal/esqueci-senha/`                   | Público           |
+| Redefinir senha             | `/portal/redefinir-senha/<token>/`         | Link por e-mail   |
+| Verificar e-mail            | `/portal/verificar-email/<token>/`         | Link por e-mail   |
+| Dashboard                   | `/portal/`                                 | Login obrigatório |
+| Meus Contratos              | `/portal/contratos/`                       | Login obrigatório |
+| Detalhe do Contrato         | `/portal/contratos/<id>/`                  | Login obrigatório |
+| Simulador de Antecipação    | `/portal/contratos/<id>/simulador/`        | Login obrigatório |
+| Meus Boletos                | `/portal/boletos/`                         | Login obrigatório |
+| Download do Boleto          | `/portal/boletos/<id>/download/`           | Login obrigatório |
+| Visualizar Boleto           | `/portal/boletos/<id>/visualizar/`         | Login obrigatório |
+| Enviar Comprovante          | `/portal/boletos/<id>/comprovante/`        | Login obrigatório |
+| Histórico Unificado         | `/portal/historico/`                       | Login obrigatório |
+| Meus Dados                  | `/portal/meus-dados/`                      | Login obrigatório |
+| Alterar Senha               | `/portal/alterar-senha/`                   | Login obrigatório |
+| Sair                        | `/portal/logout/`                          | Login obrigatório |
 
 ---
 

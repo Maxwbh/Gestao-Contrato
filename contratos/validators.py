@@ -7,6 +7,7 @@ Empresa: M&S do Brasil LTDA
 """
 from decimal import Decimal
 from django.core.exceptions import ValidationError
+from django.db.models import Sum
 
 
 def validar_soma_intermediarias(contrato):
@@ -26,9 +27,9 @@ def validar_soma_intermediarias(contrato):
     if not hasattr(contrato, 'intermediarias'):
         return
 
-    soma_intermediarias = sum(
-        inter.valor for inter in contrato.intermediarias.all()
-    )
+    soma_intermediarias = contrato.intermediarias.aggregate(
+        total=Sum('valor')
+    )['total'] or Decimal('0.00')
 
     valor_financiado = contrato.valor_financiado or (
         contrato.valor_total - contrato.valor_entrada
@@ -119,9 +120,9 @@ def calcular_percentual_intermediarias(contrato):
             'dentro_limite': True
         }
 
-    soma_intermediarias = sum(
-        inter.valor for inter in contrato.intermediarias.all()
-    ) or Decimal('0.00')
+    soma_intermediarias = contrato.intermediarias.aggregate(
+        total=Sum('valor')
+    )['total'] or Decimal('0.00')
 
     valor_financiado = contrato.valor_financiado or Decimal('0.01')
     percentual = (soma_intermediarias / valor_financiado) * 100

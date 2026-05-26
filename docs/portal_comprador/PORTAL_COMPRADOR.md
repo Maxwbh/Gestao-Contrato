@@ -12,21 +12,27 @@ Um comprador pode ter **múltiplos contratos** simultâneos. Toda a navegação 
 
 ```
 portal_comprador/
-├── models.py          # AcessoComprador, LogAcessoComprador
-├── views.py           # 16 views + 4 endpoints de API
+├── models.py          # AcessoComprador, LogAcessoComprador, PushSubscriptionPortal
+├── views.py           # 20+ views + APIs (boletos, parcelas, push, comprovante, simulador)
 ├── forms.py           # AutoCadastroForm, LoginCompradorForm,
 │                      # DadosPessoaisForm, AlterarSenhaCompradorForm
-├── urls.py            # 14 rotas /portal/...
+├── tasks.py           # Celery: push de vencimentos via VAPID (34.6)
+├── urls.py            # 30+ rotas /portal/...
 └── admin.py           # Painel admin para gestão de acessos e logs
 
 templates/portal_comprador/
-├── portal_base.html   # Layout base com navbar topo + nav inferior
+├── portal_base.html          # Layout base com navbar topo + nav inferior
 ├── login.html
 ├── auto_cadastro.html
+├── esqueci_senha.html        # Recuperação de senha por e-mail
+├── redefinir_senha.html      # Redefinição via token
 ├── dashboard.html
 ├── meus_contratos.html
 ├── detalhe_contrato.html
 ├── meus_boletos.html
+├── upload_comprovante.html   # Upload de comprovante pelo comprador
+├── historico_unificado.html  # Histórico de pagamentos + notificações
+├── simulador_antecipacao.html# Simulador de antecipação de parcelas
 ├── meus_dados.html
 └── alterar_senha.html
 ```
@@ -308,23 +314,34 @@ Com `ativo=False` o comprador não consegue fazer login. A conta pode ser reativ
 ## URLs
 
 ```
-/portal/                               dashboard
-/portal/cadastro/                      auto-cadastro
-/portal/login/                         login
-/portal/logout/                        logout
-/portal/contratos/                     lista de contratos (todos, N contratos)
-/portal/contratos/<id>/                detalhe de um contrato
-/portal/boletos/                       lista de boletos (todos os contratos, paginado)
-/portal/boletos/<id>/download/         download PDF
-/portal/boletos/<id>/visualizar/       visualização inline PDF
-/portal/meus-dados/                    editar dados pessoais
-/portal/alterar-senha/                 trocar senha
-/portal/api/contratos/<id>/parcelas/   JSON parcelas de um contrato
-/portal/api/resumo-financeiro/         JSON resumo agregado
-/portal/api/vencimentos/               JSON vencimentos com filtros (P2)
-/portal/api/boletos/                   JSON boletos gerados com filtros (P2)
-/portal/api/boletos/<id>/segunda-via/  POST gerar segunda via (P3, rate-limited)
-/portal/api/boletos/<id>/linha-digitavel/  GET linha digitável (P3)
+/portal/                                   dashboard
+/portal/cadastro/                          auto-cadastro
+/portal/login/                             login
+/portal/logout/                            logout
+/portal/esqueci-senha/                     recuperação de senha (envio de token por e-mail)
+/portal/redefinir-senha/<token>/           redefinição de senha via token
+/portal/verificar-email/<token>/           verificação de e-mail
+/portal/reenviar-verificacao/              reenvio de token de verificação
+/portal/contratos/                         lista de contratos (todos, N contratos)
+/portal/contratos/<id>/                    detalhe de um contrato
+/portal/contratos/<id>/simulador/          simulador de antecipação de parcelas
+/portal/boletos/                           lista de boletos (todos os contratos, paginado)
+/portal/boletos/<id>/download/             download PDF
+/portal/boletos/<id>/visualizar/           visualização inline PDF
+/portal/boletos/<id>/comprovante/          upload de comprovante de pagamento
+/portal/historico/                         histórico unificado (pagamentos + notificações)
+/portal/meus-dados/                        editar dados pessoais
+/portal/alterar-senha/                     trocar senha
+/portal/manifest.json                      PWA manifest
+/portal/sw.js                              Service Worker (PWA)
+/portal/api/contratos/<id>/parcelas/       JSON parcelas de um contrato
+/portal/api/resumo-financeiro/             JSON resumo agregado
+/portal/api/vencimentos/                   JSON vencimentos com filtros
+/portal/api/boletos/                       JSON boletos gerados com filtros
+/portal/api/boletos/<id>/segunda-via/      POST gerar segunda via (rate-limited 10/min)
+/portal/api/boletos/<id>/linha-digitavel/  GET linha digitável
+/portal/api/push/subscribe/               POST registrar dispositivo para Web Push
+/portal/api/push/unsubscribe/             POST remover registro de push
 ```
 
 ---
@@ -338,14 +355,43 @@ Com `ativo=False` o comprador não consegue fazer login. A conta pode ser reativ
 
 ---
 
+## PWA — Progressive Web App
+
+O portal suporta instalação como app nativo no celular/desktop:
+
+- **`manifest.json`** — nome, ícones, cores, orientação
+- **`sw.js`** — Service Worker para cache offline e push notifications
+- **Web Push (VAPID)** — `PushSubscriptionPortal` armazena subscriptions; `tasks.py` envia push de vencimentos via Celery
+- **Instalação:** iOS Safari → compartilhar → "Adicionar à tela inicial"; Android Chrome → três pontos → "Adicionar à tela inicial"
+
+## Histórico Unificado (`/portal/historico/`)
+
+Combina em uma única tela:
+- Parcelas pagas (com data e valor)
+- Notificações recebidas (e-mail, SMS, WhatsApp)
+- Filtro por período e tipo
+
+## Simulador de Antecipação (`/portal/contratos/<id>/simulador/`)
+
+- Input: parcela alvo da antecipação
+- Calcula desconto de juros futuros (juros não cobrados sobre parcelas quitadas antes)
+- Gera recibo PDF para apresentar à imobiliária
+- Implementa a mesma lógica de `financeiro:simulador_antecipacao`
+
+## Upload de Comprovante (`/portal/boletos/<id>/comprovante/`)
+
+- Comprador faz upload de foto/PDF do comprovante de pagamento
+- Imobiliária recebe notificação e confirma manualmente
+- Suporta JPG, PNG, PDF até 5MB
+
 ## Testes
 
 Cobertura em `tests/unit/portal_comprador/` e `tests/integration/`:
 
 | Arquivo | O que testa |
 |---------|-------------|
-| `test_models.py` | `AcessoComprador`, `LogAcessoComprador` |
-| `test_auth.py` | Login, logout, auto-cadastro, flag `ativo`, helpers |
-| `test_views.py` | Dashboard, contratos, boletos, dados, senha |
-| `test_api.py` | APIs P1/P2/P3: parcelas, resumo, vencimentos, boletos, linha-digitável |
-| `test_portal_comprador.py` | Integração: fluxo login → dashboard → contratos |
+| `test_models.py` | `AcessoComprador`, `LogAcessoComprador`, `PushSubscriptionPortal` |
+| `test_auth.py` | Login, logout, auto-cadastro, esqueci senha, verificação e-mail, flag `ativo` |
+| `test_views.py` | Dashboard, contratos, boletos, dados, senha, histórico, simulador, comprovante |
+| `test_api.py` | APIs: parcelas, resumo, vencimentos, boletos, linha-digitável, push subscribe |
+| `test_portal_comprador.py` | Integração: fluxo login → dashboard → contratos → boleto |

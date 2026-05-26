@@ -123,12 +123,12 @@ def processar_reajustes_sync():
         hoje = date.today()
 
         # Buscar contratos ativos que usam índice econômico para reajuste
-        contratos = Contrato.objects.filter(
+        contratos = list(Contrato.objects.filter(
             status=StatusContrato.ATIVO,
             tipo_correcao__in=['IPCA', 'IGPM', 'INCC', 'IGPDI', 'INPC', 'TR', 'SELIC']
-        ).select_related('imobiliaria', 'comprador')
+        ).select_related('imobiliaria', 'comprador'))
 
-        result.add_message(f"Verificando {contratos.count()} contratos ativos")
+        result.add_message(f"Verificando {len(contratos)} contratos ativos")
 
         for contrato in contratos:
             try:
@@ -150,12 +150,12 @@ def processar_reajustes_sync():
                     with transaction.atomic():
                         for parcela in parcelas_pendentes:
                             percentual = Decimal(str(indice.get('valor', 0)))
-                            novo_valor = ReajusteService.calcular_reajuste(
+                            parcela.valor_atual = ReajusteService.calcular_reajuste(
                                 parcela.valor_atual, percentual
                             )
-                            parcela.valor_atual = novo_valor
-                            parcela.save(update_fields=['valor_atual', 'atualizado_em'])
-                            result.items_processed += 1
+                        from financeiro.models import Parcela as _Parcela
+                        _Parcela.objects.bulk_update(parcelas_pendentes, ['valor_atual'])
+                        result.items_processed += len(parcelas_pendentes)
 
                     result.add_message(
                         f"Contrato {contrato.numero_contrato}: {len(parcelas_pendentes)} parcelas reajustadas"
@@ -343,18 +343,27 @@ def _processar_regra(regra, result):
     if regra.tipo_gatilho == TipoGatilho.ANTES_VENCIMENTO:
         data_alvo = hoje + timedelta(days=regra.dias_offset)
         label = f"D-{regra.dias_offset}"
-        parcelas = Parcela.objects.filter(
-            pago=False, tipo_parcela=TipoParcela.NORMAL, data_vencimento=data_alvo,
-        ).select_related('contrato', 'contrato__comprador', 'contrato__imobiliaria')
     else:  # APOS_VENCIMENTO
         data_alvo = hoje - timedelta(days=regra.dias_offset)
         label = f"D+{regra.dias_offset}"
-        parcelas = Parcela.objects.filter(
-            pago=False, tipo_parcela=TipoParcela.NORMAL, data_vencimento=data_alvo,
-        ).select_related('contrato', 'contrato__comprador', 'contrato__imobiliaria')
+
+    parcelas = list(Parcela.objects.filter(
+        pago=False, tipo_parcela=TipoParcela.NORMAL, data_vencimento=data_alvo,
+    ).select_related('contrato', 'contrato__comprador', 'contrato__imobiliaria'))
 
     result.add_message(
-        f"Regra '{regra.nome}' ({label}): {parcelas.count()} parcelas em {data_alvo}"
+        f"Regra '{regra.nome}' ({label}): {len(parcelas)} parcelas em {data_alvo}"
+    )
+
+    # Pre-fetch parcelas já notificadas hoje — 1 query em vez de N .exists()
+    from notificacoes.models import Notificacao as _Notif, StatusNotificacao as _SN
+    _ja_notificadas_hoje = set(
+        _Notif.objects.filter(
+            parcela_id__in=[p.id for p in parcelas],
+            assunto__startswith=PREFIXO,
+            status__in=[_SN.PENDENTE, _SN.ENVIADA],
+            data_agendamento__date=date.today(),
+        ).values_list('parcela_id', flat=True)
     )
 
     for parcela in parcelas:
@@ -364,7 +373,7 @@ def _processar_regra(regra, result):
             if not destinatario:
                 continue
 
-            if _notificacao_ja_enviada_hoje(parcela, PREFIXO):
+            if parcela.id in _ja_notificadas_hoje:
                 continue
 
             imob_nome = getattr(parcela.contrato.imobiliaria, 'nome', 'Gestão de Contratos')
@@ -467,15 +476,26 @@ def enviar_notificacoes_sync():
             hoje = date.today()
             data_alvo = hoje + timedelta(days=dias_antecedencia)
 
-            parcelas = Parcela.objects.filter(
+            parcelas = list(Parcela.objects.filter(
                 pago=False,
                 tipo_parcela=TipoParcela.NORMAL,
                 data_vencimento=data_alvo,
-            ).select_related('contrato', 'contrato__comprador', 'contrato__imobiliaria')
+            ).select_related('contrato', 'contrato__comprador', 'contrato__imobiliaria'))
 
             result.add_message(
-                f"N-01 (padrão): {parcelas.count()} parcelas vencendo em "
+                f"N-01 (padrão): {len(parcelas)} parcelas vencendo em "
                 f"{dias_antecedencia} dia(s) ({data_alvo.strftime('%d/%m/%Y')})"
+            )
+
+            # Pre-fetch parcelas já notificadas hoje — 1 query em vez de N .exists()
+            from notificacoes.models import Notificacao as _Notif01, StatusNotificacao as _SN01
+            _n01_ja_hoje = set(
+                _Notif01.objects.filter(
+                    parcela_id__in=[p.id for p in parcelas],
+                    assunto__startswith=PREFIXO,
+                    status__in=[_SN01.PENDENTE, _SN01.ENVIADA],
+                    data_agendamento__date=date.today(),
+                ).values_list('parcela_id', flat=True)
             )
 
             for parcela in parcelas:
@@ -483,7 +503,7 @@ def enviar_notificacoes_sync():
                     comprador = parcela.contrato.comprador
                     if not (getattr(comprador, 'notificar_email', True) and comprador.email):
                         continue
-                    if _notificacao_ja_enviada_hoje(parcela, PREFIXO):
+                    if parcela.id in _n01_ja_hoje:
                         continue
 
                     assunto = (
@@ -581,14 +601,24 @@ def enviar_inadimplentes_sync():
             hoje = date.today()
             data_corte = hoje - timedelta(days=dias_carencia)
 
-            parcelas = Parcela.objects.filter(
+            parcelas = list(Parcela.objects.filter(
                 pago=False,
                 tipo_parcela=TipoParcela.NORMAL,
                 data_vencimento=data_corte,
-            ).select_related('contrato', 'contrato__comprador', 'contrato__imobiliaria')
+            ).select_related('contrato', 'contrato__comprador', 'contrato__imobiliaria'))
 
             result.add_message(
-                f"N-02 (padrão): {parcelas.count()} parcelas em atraso (D+{dias_carencia})"
+                f"N-02 (padrão): {len(parcelas)} parcelas em atraso (D+{dias_carencia})"
+            )
+
+            # Pre-fetch parcelas já notificadas (all-time dedup) — 1 query em vez de N .exists()
+            from notificacoes.models import Notificacao as _Notif02, StatusNotificacao as _SN02
+            _n02_ja_enviadas = set(
+                _Notif02.objects.filter(
+                    parcela_id__in=[p.id for p in parcelas],
+                    assunto__startswith=PREFIXO,
+                    status__in=[_SN02.PENDENTE, _SN02.ENVIADA],
+                ).values_list('parcela_id', flat=True)
             )
 
             for parcela in parcelas:
@@ -597,7 +627,7 @@ def enviar_inadimplentes_sync():
                     if not (getattr(comprador, 'notificar_email', True) and comprador.email):
                         continue
                     # Dedup all-time: N-02 dispara UMA única vez por parcela
-                    if _notificacao_ja_enviada(parcela, PREFIXO):
+                    if parcela.id in _n02_ja_enviadas:
                         continue
 
                     dias_atraso = (hoje - parcela.data_vencimento).days
@@ -1162,63 +1192,65 @@ def relatorio_semanal_incorporadoras_sync():
     try:
         from core.models import Imobiliaria
         from django.utils import timezone
+        from django.db.models import Q
 
         hoje = timezone.now().date()
         inicio_semana = hoje - timedelta(days=hoje.weekday())  # segunda-feira
+        prox_semana = hoje + timedelta(days=7)
 
-        imobiliarias = Imobiliaria.objects.filter(ativo=True)
+        imobiliarias = list(Imobiliaria.objects.filter(ativo=True))
+        imob_ids = [im.id for im in imobiliarias]
         relatorios_gerados = 0
 
+        # Pre-compute all 3 aggregates in 3 GROUP BY queries instead of 3N
+        base_qs = Parcela.objects.filter(
+            contrato__imobiliaria_id__in=imob_ids,
+            contrato__status=StatusContrato.ATIVO,
+        )
+        recebimentos_map = {
+            row['contrato__imobiliaria_id']: row
+            for row in base_qs.filter(
+                pago=True, data_pagamento__gte=inicio_semana, data_pagamento__lte=hoje,
+            ).values('contrato__imobiliaria_id').annotate(
+                quantidade=Count('id'), valor=Sum('valor_pago'),
+            )
+        }
+        vencidas_map = {
+            row['contrato__imobiliaria_id']: row
+            for row in base_qs.filter(
+                pago=False, data_vencimento__lt=hoje,
+            ).values('contrato__imobiliaria_id').annotate(
+                quantidade=Count('id'), valor=Sum('valor_atual'),
+            )
+        }
+        a_vencer_map = {
+            row['contrato__imobiliaria_id']: row
+            for row in base_qs.filter(
+                pago=False, data_vencimento__gte=hoje, data_vencimento__lte=prox_semana,
+            ).values('contrato__imobiliaria_id').annotate(
+                quantidade=Count('id'), valor=Sum('valor_atual'),
+            )
+        }
+
         for imobiliaria in imobiliarias:
-            parcelas_qs = Parcela.objects.filter(
-                contrato__imobiliaria=imobiliaria,
-                contrato__status=StatusContrato.ATIVO,
-            )
-
-            # Recebimentos da semana
-            recebimentos = parcelas_qs.filter(
-                pago=True,
-                data_pagamento__gte=inicio_semana,
-                data_pagamento__lte=hoje,
-            ).aggregate(
-                quantidade=Count('id'),
-                valor=Sum('valor_pago'),
-            )
-
-            # Inadimplência atual
-            vencidas = parcelas_qs.filter(
-                pago=False,
-                data_vencimento__lt=hoje,
-            ).aggregate(
-                quantidade=Count('id'),
-                valor=Sum('valor_atual'),
-            )
-
-            # Vencendo na próxima semana
-            prox_semana = hoje + timedelta(days=7)
-            a_vencer = parcelas_qs.filter(
-                pago=False,
-                data_vencimento__gte=hoje,
-                data_vencimento__lte=prox_semana,
-            ).aggregate(
-                quantidade=Count('id'),
-                valor=Sum('valor_atual'),
-            )
+            rec = recebimentos_map.get(imobiliaria.id, {})
+            venc = vencidas_map.get(imobiliaria.id, {})
+            av = a_vencer_map.get(imobiliaria.id, {})
 
             relatorio = {
                 'imobiliaria': imobiliaria.nome,
                 'periodo': f'{inicio_semana} a {hoje}',
                 'recebimentos': {
-                    'quantidade': recebimentos['quantidade'] or 0,
-                    'valor': float(recebimentos['valor'] or 0),
+                    'quantidade': rec.get('quantidade') or 0,
+                    'valor': float(rec.get('valor') or 0),
                 },
                 'inadimplencia': {
-                    'quantidade': vencidas['quantidade'] or 0,
-                    'valor': float(vencidas['valor'] or 0),
+                    'quantidade': venc.get('quantidade') or 0,
+                    'valor': float(venc.get('valor') or 0),
                 },
                 'a_vencer_7_dias': {
-                    'quantidade': a_vencer['quantidade'] or 0,
-                    'valor': float(a_vencer['valor'] or 0),
+                    'quantidade': av.get('quantidade') or 0,
+                    'valor': float(av.get('valor') or 0),
                 },
             }
 
@@ -1291,47 +1323,57 @@ def relatorio_mensal_consolidado_sync():
                 },
             }
 
-            for imobiliaria in imobiliarias:
-                parcelas_qs = Parcela.objects.filter(
-                    contrato__imobiliaria=imobiliaria,
-                )
+            imob_ids_mes = [im.id for im in imobiliarias]
 
-                contratos_ativos = Contrato.objects.filter(
-                    imobiliaria=imobiliaria,
-                    status=StatusContrato.ATIVO,
-                ).count()
-
-                recebimentos = parcelas_qs.filter(
+            # Pre-compute 4 aggregates in 4 GROUP BY queries instead of 4N
+            contratos_map = {
+                row['imobiliaria_id']: row['total']
+                for row in Contrato.objects.filter(
+                    imobiliaria_id__in=imob_ids_mes, status=StatusContrato.ATIVO,
+                ).values('imobiliaria_id').annotate(total=Count('id'))
+            }
+            recebimentos_map_m = {
+                row['contrato__imobiliaria_id']: row
+                for row in Parcela.objects.filter(
+                    contrato__imobiliaria_id__in=imob_ids_mes,
                     pago=True,
                     data_pagamento__gte=primeiro_dia_mes_anterior,
                     data_pagamento__lte=ultimo_dia_mes_anterior,
-                ).aggregate(
-                    quantidade=Count('id'),
-                    valor=Sum('valor_pago'),
+                ).values('contrato__imobiliaria_id').annotate(
+                    quantidade=Count('id'), valor=Sum('valor_pago'),
                 )
-
-                inadimplentes = parcelas_qs.filter(
+            }
+            inadimplentes_map = {
+                row['contrato__imobiliaria_id']: row
+                for row in Parcela.objects.filter(
+                    contrato__imobiliaria_id__in=imob_ids_mes,
                     pago=False,
                     data_vencimento__lt=hoje,
-                ).aggregate(
-                    quantidade=Count('id'),
-                    valor=Sum('valor_atual'),
+                ).values('contrato__imobiliaria_id').annotate(
+                    quantidade=Count('id'), valor=Sum('valor_atual'),
                 )
-
-                reajustes = Reajuste.objects.filter(
-                    contrato__imobiliaria=imobiliaria,
+            }
+            reajustes_map = {
+                row['contrato__imobiliaria_id']: row['total']
+                for row in Reajuste.objects.filter(
+                    contrato__imobiliaria_id__in=imob_ids_mes,
                     data_reajuste__gte=primeiro_dia_mes_anterior,
                     data_reajuste__lte=ultimo_dia_mes_anterior,
-                ).count()
+                ).values('contrato__imobiliaria_id').annotate(total=Count('id'))
+            }
+
+            for imobiliaria in imobiliarias:
+                rec = recebimentos_map_m.get(imobiliaria.id, {})
+                inad = inadimplentes_map.get(imobiliaria.id, {})
 
                 dados_imob = {
                     'nome': imobiliaria.nome,
-                    'contratos_ativos': contratos_ativos,
-                    'recebimentos': recebimentos['quantidade'] or 0,
-                    'valor_recebido': float(recebimentos['valor'] or 0),
-                    'inadimplentes': inadimplentes['quantidade'] or 0,
-                    'valor_inadimplente': float(inadimplentes['valor'] or 0),
-                    'reajustes_aplicados': reajustes,
+                    'contratos_ativos': contratos_map.get(imobiliaria.id, 0),
+                    'recebimentos': rec.get('quantidade') or 0,
+                    'valor_recebido': float(rec.get('valor') or 0),
+                    'inadimplentes': inad.get('quantidade') or 0,
+                    'valor_inadimplente': float(inad.get('valor') or 0),
+                    'reajustes_aplicados': reajustes_map.get(imobiliaria.id, 0),
                 }
 
                 dados_contabilidade['imobiliarias'].append(dados_imob)

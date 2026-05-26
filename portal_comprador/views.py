@@ -861,7 +861,12 @@ def api_portal_vencimentos(request):
         per_page = min(max(1, int(request.GET.get('per_page', 50))), 100)
     except (ValueError, TypeError):
         page, per_page = 1, 50
-    total = qs.count()
+    totais = qs.aggregate(
+        total=Count('id'),
+        valor_total=Sum('valor_atual'),
+        vencidas=Count('id', filter=Q(pago=False, data_vencimento__lt=hoje)),
+    )
+    total = totais['total'] or 0
     offset = (page - 1) * per_page
     parcelas_page = qs[offset:offset + per_page]
 
@@ -886,11 +891,6 @@ def api_portal_vencimentos(request):
             'status_boleto': p.status_boleto,
             'linha_digitavel': p.linha_digitavel or '',
         })
-
-    totais = qs.aggregate(
-        valor_total=Sum('valor_atual'),
-        vencidas=Count('id', filter=Q(pago=False, data_vencimento__lt=hoje)),
-    )
 
     return JsonResponse({
         'sucesso': True,
@@ -1082,3 +1082,332 @@ def api_portal_linha_digitavel(request, parcela_id):
         'data_vencimento': parcela.data_vencimento.isoformat(),
         'pago': parcela.pago,
     })
+
+
+# =============================================================================
+# 34.4 P2 — Portal expandido: upload de comprovante, histórico unificado e
+# simulador de antecipação read-only
+# =============================================================================
+
+
+def upload_comprovante(request, parcela_id):
+    """Permite ao comprador enviar comprovante de pagamento de uma parcela."""
+    from financeiro.models import Parcela
+    from .forms import ComprovanteUploadForm
+    from .models import ComprovantePagamentoUpload
+
+    comprador = get_comprador_from_request(request)
+    if not comprador:
+        messages.error(request, 'Acesso não autorizado.')
+        return redirect('portal_comprador:login')
+
+    parcela = get_object_or_404(
+        Parcela.objects.select_related('contrato', 'contrato__imovel'),
+        pk=parcela_id,
+        contrato__comprador=comprador,
+        pago=False,
+    )
+
+    pendente_existente = ComprovantePagamentoUpload.objects.filter(
+        parcela=parcela,
+        status=ComprovantePagamentoUpload.STATUS_PENDENTE,
+    ).first()
+
+    if request.method == 'POST':
+        form = ComprovanteUploadForm(request.POST, request.FILES)
+        if form.is_valid():
+            ComprovantePagamentoUpload.objects.create(
+                parcela=parcela,
+                acesso_comprador=getattr(request.user, 'acesso_comprador', None),
+                comprovante=form.cleaned_data['comprovante'],
+                valor_informado=form.cleaned_data['valor_informado'],
+                data_pagamento_informada=form.cleaned_data['data_pagamento_informada'],
+                forma_pagamento=form.cleaned_data['forma_pagamento'],
+                observacoes_comprador=form.cleaned_data.get('observacoes_comprador', ''),
+            )
+            messages.success(
+                request,
+                'Comprovante enviado com sucesso. Aguarde a validação pela administração.'
+            )
+            return redirect('portal_comprador:meus_boletos')
+    else:
+        form = ComprovanteUploadForm(initial={
+            'valor_informado': parcela.valor_total,
+            'data_pagamento_informada': timezone.now().date(),
+            'forma_pagamento': 'PIX',
+        })
+
+    return render(request, 'portal_comprador/upload_comprovante.html', {
+        'form': form,
+        'parcela': parcela,
+        'pendente_existente': pendente_existente,
+    })
+
+
+def historico_unificado(request):
+    """
+    Histórico unificado: pagamentos confirmados, comprovantes enviados e reajustes
+    aplicados em todos os contratos do comprador.
+    """
+    from financeiro.models import HistoricoPagamento, Reajuste
+    from .models import ComprovantePagamentoUpload
+
+    comprador = get_comprador_from_request(request)
+    if not comprador:
+        messages.error(request, 'Acesso não autorizado.')
+        return redirect('portal_comprador:login')
+
+    pagamentos = (
+        HistoricoPagamento.objects
+        .filter(parcela__contrato__comprador=comprador)
+        .select_related('parcela', 'parcela__contrato', 'parcela__contrato__imovel')
+        .order_by('-data_pagamento', '-criado_em')[:200]
+    )
+
+    comprovantes = (
+        ComprovantePagamentoUpload.objects
+        .filter(parcela__contrato__comprador=comprador)
+        .select_related('parcela', 'parcela__contrato')
+        .order_by('-criado_em')[:50]
+    )
+
+    reajustes = (
+        Reajuste.objects
+        .filter(contrato__comprador=comprador)
+        .select_related('contrato')
+        .order_by('-data_reajuste')[:50]
+    )
+
+    return render(request, 'portal_comprador/historico_unificado.html', {
+        'pagamentos': pagamentos,
+        'comprovantes': comprovantes,
+        'reajustes': reajustes,
+    })
+
+
+def simulador_antecipacao_portal(request, contrato_id):
+    """
+    Roadmap 34.4: Simulador de antecipação read-only para o comprador.
+    Permite calcular preview mas não aplica — solicitação efetiva fica com admin.
+    """
+    from contratos.models import Contrato
+    from financeiro.models import Parcela, TipoParcela
+    from decimal import Decimal
+
+    comprador = get_comprador_from_request(request)
+    if not comprador:
+        messages.error(request, 'Acesso não autorizado.')
+        return redirect('portal_comprador:login')
+
+    contrato = get_object_or_404(Contrato, pk=contrato_id, comprador=comprador)
+
+    parcelas_disponiveis = (
+        Parcela.objects.filter(
+            contrato=contrato,
+            pago=False,
+            tipo_parcela=TipoParcela.NORMAL,
+        ).order_by('numero_parcela')
+    )
+
+    preview = None
+    parcelas_selecionadas_ids = []
+    desconto_perc = Decimal('0')
+
+    if request.method == 'POST':
+        parcelas_selecionadas_ids = request.POST.getlist('parcelas')
+        desconto_str = request.POST.get('desconto', '0').replace(',', '.')
+        try:
+            desconto_perc = Decimal(desconto_str)
+        except Exception:
+            desconto_perc = Decimal('0')
+        desconto_perc = max(Decimal('0'), min(Decimal('100'), desconto_perc))
+
+        parcelas_sel = list(
+            parcelas_disponiveis.filter(id__in=parcelas_selecionadas_ids).order_by('numero_parcela')
+        )
+        itens = []
+        total_original = Decimal('0')
+        total_antecipado = Decimal('0')
+        for p in parcelas_sel:
+            vo = p.valor_atual
+            dv = (vo * desconto_perc / 100).quantize(Decimal('0.01'))
+            va = vo - dv
+            itens.append({
+                'parcela': p,
+                'valor_original': vo,
+                'desconto_valor': dv,
+                'valor_antecipado': va,
+            })
+            total_original += vo
+            total_antecipado += va
+        preview = {
+            'itens': itens,
+            'total_original': total_original,
+            'total_antecipado': total_antecipado,
+            'economia': total_original - total_antecipado,
+            'desconto_perc': desconto_perc,
+            'qtd': len(itens),
+        }
+
+    return render(request, 'portal_comprador/simulador_antecipacao.html', {
+        'contrato': contrato,
+        'parcelas_disponiveis': parcelas_disponiveis,
+        'preview': preview,
+        'parcelas_selecionadas_ids': [str(x) for x in parcelas_selecionadas_ids],
+        'desconto_perc': desconto_perc,
+    })
+
+
+# =============================================================================
+# 34.6 P3 — PWA: manifest, service worker, Web Push subscriptions
+# =============================================================================
+
+import json as _json_pwa  # noqa: E402
+
+
+def portal_manifest(request):
+    """
+    34.6.1 — Serve o manifest.json do PWA do Portal do Comprador.
+    """
+    site_url = getattr(settings, 'SITE_URL', 'https://example.com')
+    manifest = {
+        'name': 'Portal do Comprador',
+        'short_name': 'Portal GC',
+        'description': 'Acesse seus contratos, boletos e histórico de pagamentos.',
+        'start_url': '/portal/',
+        'scope': '/portal/',
+        'display': 'standalone',
+        'orientation': 'portrait',
+        'theme_color': '#00897b',
+        'background_color': '#f5f5f5',
+        'lang': 'pt-BR',
+        'icons': [
+            {
+                'src': '/static/img/icon-192.png',
+                'sizes': '192x192',
+                'type': 'image/png',
+                'purpose': 'any maskable',
+            },
+            {
+                'src': '/static/img/icon-512.png',
+                'sizes': '512x512',
+                'type': 'image/png',
+                'purpose': 'any maskable',
+            },
+        ],
+        'shortcuts': [
+            {
+                'name': 'Meus Boletos',
+                'short_name': 'Boletos',
+                'url': '/portal/boletos/',
+                'icons': [{'src': '/static/img/icon-192.png', 'sizes': '192x192'}],
+            },
+            {
+                'name': 'Meus Contratos',
+                'short_name': 'Contratos',
+                'url': '/portal/contratos/',
+                'icons': [{'src': '/static/img/icon-192.png', 'sizes': '192x192'}],
+            },
+        ],
+    }
+    return HttpResponse(
+        _json_pwa.dumps(manifest, ensure_ascii=False, indent=2),
+        content_type='application/manifest+json',
+    )
+
+
+def portal_service_worker(request):
+    """
+    34.6.2 — Serve o service worker do Portal.
+    Deve ser acessível no root do scope (/portal/sw.js).
+    """
+    import os
+
+    sw_paths = [
+        os.path.join(settings.BASE_DIR, 'static', 'js', 'portal-sw.js'),
+        os.path.join(settings.BASE_DIR, 'staticfiles', 'js', 'portal-sw.js'),
+    ]
+    sw_content = None
+    for path in sw_paths:
+        if os.path.exists(path):
+            with open(path, encoding='utf-8') as f:
+                sw_content = f.read()
+            break
+
+    if sw_content is None:
+        # Falha-fechado: não devolve SW vazio (browser cachearia e quebraria
+        # silenciosamente a instalação do PWA).
+        return HttpResponse(
+            '// portal-sw.js não encontrado no servidor', status=404,
+            content_type='application/javascript',
+        )
+
+    return HttpResponse(
+        sw_content,
+        content_type='application/javascript',
+        headers={'Service-Worker-Allowed': '/portal/'},
+    )
+
+
+@require_POST
+@login_required
+def api_push_subscribe(request):
+    """
+    34.6.3 — Salva ou atualiza a assinatura Web Push do comprador.
+
+    Body JSON:
+        { "endpoint": "...", "keys": { "p256dh": "...", "auth": "..." } }
+    """
+    from .models import PushSubscriptionPortal, AcessoComprador
+
+    try:
+        acesso = request.user.acesso_comprador
+    except AcessoComprador.DoesNotExist:
+        return JsonResponse({'erro': 'Acesso de comprador não encontrado'}, status=403)
+
+    try:
+        payload = _json_pwa.loads(request.body)
+        endpoint = payload['endpoint']
+        keys = payload.get('keys', {})
+        p256dh = keys['p256dh']
+        auth = keys['auth']
+    except (ValueError, KeyError):
+        return JsonResponse({'erro': 'Payload inválido'}, status=400)
+
+    sub, created = PushSubscriptionPortal.objects.update_or_create(
+        acesso_comprador=acesso,
+        endpoint=endpoint,
+        defaults={
+            'p256dh': p256dh,
+            'auth': auth,
+            'user_agent': request.META.get('HTTP_USER_AGENT', '')[:200],
+            'ativo': True,
+        },
+    )
+    return JsonResponse({'sucesso': True, 'criado': created})
+
+
+@require_POST
+@login_required
+def api_push_unsubscribe(request):
+    """
+    34.6.3 — Remove a assinatura Web Push do comprador.
+    Body JSON: { "endpoint": "..." }
+    """
+    from .models import PushSubscriptionPortal, AcessoComprador
+
+    try:
+        acesso = request.user.acesso_comprador
+    except AcessoComprador.DoesNotExist:
+        return JsonResponse({'erro': 'Acesso não encontrado'}, status=403)
+
+    try:
+        payload = _json_pwa.loads(request.body)
+        endpoint = payload['endpoint']
+    except (ValueError, KeyError):
+        return JsonResponse({'erro': 'Payload inválido'}, status=400)
+
+    count, _ = PushSubscriptionPortal.objects.filter(
+        acesso_comprador=acesso, endpoint=endpoint
+    ).delete()
+    return JsonResponse({'sucesso': True, 'removidas': count})

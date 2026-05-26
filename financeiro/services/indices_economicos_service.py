@@ -443,19 +443,24 @@ class IndicesEconomicosService:
         Returns:
             Tuple (completo, lista_meses_faltantes)
         """
-        meses_faltantes = []
-        data_atual = data_inicio.replace(day=1)
+        meses_range = []
+        d = data_inicio.replace(day=1)
+        while d <= data_fim:
+            meses_range.append(d)
+            d += relativedelta(months=1)
 
-        while data_atual <= data_fim:
-            existe = IndiceReajuste.objects.filter(
+        anos = {d.year for d in meses_range}
+        existentes = set(
+            IndiceReajuste.objects.filter(
                 tipo_indice=tipo_indice.upper(),
-                ano=data_atual.year,
-                mes=data_atual.month
-            ).exists()
+                ano__in=anos,
+            ).values_list('ano', 'mes')
+        )
 
-            if not existe:
-                meses_faltantes.append(f"{data_atual.month:02d}/{data_atual.year}")
-
-            data_atual += relativedelta(months=1)
+        meses_faltantes = [
+            f"{d.month:02d}/{d.year}"
+            for d in meses_range
+            if (d.year, d.month) not in existentes
+        ]
 
         return len(meses_faltantes) == 0, meses_faltantes

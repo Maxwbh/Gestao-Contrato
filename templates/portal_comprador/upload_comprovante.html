@@ -1,0 +1,102 @@
+{% extends 'portal_comprador/portal_base.html' %}
+{% load format_filters %}
+
+{% block title %}Enviar Comprovante — Parcela {{ parcela.numero_parcela }}{% endblock %}
+
+{% block content %}
+<div class="row">
+  <div class="col-12 col-lg-8 mx-auto">
+
+    <div class="d-flex justify-content-between align-items-center mb-3">
+      <h4 class="mb-0">
+        <i class="fas fa-receipt me-2 text-primary"></i>
+        Enviar Comprovante de Pagamento
+      </h4>
+      <a href="{% url 'portal_comprador:meus_boletos' %}" class="btn btn-outline-secondary btn-sm">
+        <i class="fas fa-arrow-left me-1"></i> Voltar
+      </a>
+    </div>
+
+    <div class="card mb-3">
+      <div class="card-body py-2">
+        <div class="row g-2 small text-muted">
+          <div class="col-auto"><strong>Contrato:</strong> {{ parcela.contrato.numero_contrato }}</div>
+          <div class="col-auto"><strong>Parcela:</strong> {{ parcela.numero_parcela }}/{{ parcela.contrato.numero_parcelas }}</div>
+          <div class="col-auto"><strong>Vencimento:</strong> {{ parcela.data_vencimento|date:"d/m/Y" }}</div>
+          <div class="col-auto"><strong>Valor:</strong> {{ parcela.valor_total|moeda }}</div>
+        </div>
+      </div>
+    </div>
+
+    {% if pendente_existente %}
+    <div class="alert alert-warning">
+      <i class="fas fa-clock me-2"></i>
+      <strong>Já existe um comprovante pendente</strong> para esta parcela
+      (enviado em {{ pendente_existente.criado_em|date:"d/m/Y H:i" }}).
+      Você pode enviar um novo, mas aguarde a validação da administração.
+    </div>
+    {% endif %}
+
+    <div class="card">
+      <div class="card-header py-2">
+        <i class="fas fa-upload me-2"></i><strong>Dados do Pagamento</strong>
+      </div>
+      <div class="card-body">
+        <form method="post" enctype="multipart/form-data" novalidate>
+          {% csrf_token %}
+
+          <div class="row g-3">
+            <div class="col-md-6">
+              <label class="form-label">{{ form.valor_informado.label }} <span class="text-danger">*</span></label>
+              {{ form.valor_informado }}
+              {% if form.valor_informado.errors %}
+              <div class="invalid-feedback d-block">{{ form.valor_informado.errors|join:", " }}</div>
+              {% endif %}
+            </div>
+            <div class="col-md-6">
+              <label class="form-label">{{ form.data_pagamento_informada.label }} <span class="text-danger">*</span></label>
+              {{ form.data_pagamento_informada }}
+              {% if form.data_pagamento_informada.errors %}
+              <div class="invalid-feedback d-block">{{ form.data_pagamento_informada.errors|join:", " }}</div>
+              {% endif %}
+            </div>
+            <div class="col-md-6">
+              <label class="form-label">{{ form.forma_pagamento.label }}</label>
+              {{ form.forma_pagamento }}
+            </div>
+            <div class="col-12">
+              <label class="form-label">{{ form.comprovante.label }} <span class="text-danger">*</span></label>
+              {{ form.comprovante }}
+              <div class="form-text">PDF, JPG, PNG ou WebP — máx 10 MB.</div>
+              {% if form.comprovante.errors %}
+              <div class="invalid-feedback d-block">{{ form.comprovante.errors|join:", " }}</div>
+              {% endif %}
+            </div>
+            <div class="col-12">
+              <label class="form-label">{{ form.observacoes_comprador.label }}</label>
+              {{ form.observacoes_comprador }}
+              <div class="form-text">Opcional — adicione qualquer informação útil para a validação.</div>
+            </div>
+          </div>
+
+          <div class="alert alert-info mt-3 small mb-3">
+            <i class="fas fa-info-circle me-1"></i>
+            Após o envio, a administração validará o comprovante. A parcela só será
+            marcada como paga depois dessa validação.
+          </div>
+
+          <div class="d-flex gap-2">
+            <button type="submit" class="btn btn-primary">
+              <i class="fas fa-paper-plane me-1"></i> Enviar Comprovante
+            </button>
+            <a href="{% url 'portal_comprador:meus_boletos' %}" class="btn btn-outline-secondary">
+              Cancelar
+            </a>
+          </div>
+        </form>
+      </div>
+    </div>
+
+  </div>
+</div>
+{% endblock %}

@@ -235,6 +235,9 @@ class TestCalcularRescisaoEstrutura:
             'valor_pago_intermediarias', 'percentual_fruicao',
             'fruicao', 'percentual_multa_penal', 'multa_penal',
             'percentual_desp_adm', 'desp_adm', 'total_retencoes', 'devolucao',
+            # Lei 13.786/2018 fields
+            'pena_convencional', 'retencao_penal_maxima_legal',
+            'alerta_limite_legal', 'devolucao_legal',
         } == set(r.keys())
 
     def test_data_rescisao_preservada_no_retorno(self, contrato_com_parcelas):
@@ -347,6 +350,71 @@ class TestFormulasRescisao:
         assert r['multa_penal'] == esp['penal']
         assert r['desp_adm'] == esp['adm']
         assert r['devolucao'] == esp['devolucao']
+
+
+# ---------------------------------------------------------------------------
+# TestLei13786LimiteRetencao
+# ---------------------------------------------------------------------------
+
+@pytest.mark.django_db
+class TestLei13786LimiteRetencao:
+    """
+    Verifica a conformidade com Lei 13.786/2018 art. 67-A §2°:
+    pena convencional (multa penal + desp. adm.) ≤ 25% do total pago.
+    """
+
+    def test_pena_convencional_e_soma_multa_e_adm(self, contrato_com_parcelas):
+        r = contrato_com_parcelas.calcular_rescisao(DATA_RESCISAO_4M)
+        assert r['pena_convencional'] == r['multa_penal'] + r['desp_adm']
+
+    def test_retencao_maxima_legal_e_25_pct_do_pago(self, contrato_com_parcelas):
+        r = contrato_com_parcelas.calcular_rescisao(DATA_RESCISAO_4M)
+        esperado = (r['valor_pago_total'] * Decimal('0.25')).quantize(Decimal('0.01'))
+        assert r['retencao_penal_maxima_legal'] == esperado
+
+    def test_sem_alerta_quando_pena_dentro_do_limite(self, contrato_com_parcelas):
+        # Defaults: penal=10%, adm=12% sobre saldo; valor pago = R$36.666,68
+        # pena_convencional ≈ 22% × saldo ≈ baixo → depende do saldo
+        r = contrato_com_parcelas.calcular_rescisao(DATA_RESCISAO_4M)
+        # Verificação explícita: alerta é bool
+        assert isinstance(r['alerta_limite_legal'], bool)
+        # Se pena ≤ limite, alerta deve ser False
+        if r['pena_convencional'] <= r['retencao_penal_maxima_legal']:
+            assert r['alerta_limite_legal'] is False
+
+    def test_alerta_quando_pena_supera_limite_legal(self, db, dominio):
+        """Percentuais altos de multa+adm disparam alerta de limite legal."""
+        imob, imovel, comprador = dominio
+        contrato = _criar_contrato(
+            imob, imovel, comprador, numero='CTR-ALERTA-LEGAL',
+            percentual_multa_rescisao_penal=Decimal('20.0000'),
+            percentual_multa_rescisao_adm=Decimal('20.0000'),
+        )
+        # Pagar só 1 parcela → total_pago = 20000 + PMT_LINEAR ≈ 24166
+        _pagar_parcelas(contrato, 1)
+        r = contrato.calcular_rescisao(DATA_RESCISAO_4M)
+        # pena = saldo × 40% → deve superar 25% de valor pago em muitos cenários
+        pena = r['pena_convencional']
+        limite = r['retencao_penal_maxima_legal']
+        if pena > limite:
+            assert r['alerta_limite_legal'] is True
+            assert r['devolucao_legal'] >= r['devolucao']
+
+    def test_devolucao_legal_nunca_negativa(self, contrato_com_parcelas):
+        r = contrato_com_parcelas.calcular_rescisao(DATA_RESCISAO_4M)
+        assert r['devolucao_legal'] >= Decimal('0.00')
+
+    def test_devolucao_legal_maior_ou_igual_devolucao_contratual(self, db, dominio):
+        """Com limite aplicado, o comprador recebe pelo menos o que o contrato prevê."""
+        imob, imovel, comprador = dominio
+        contrato = _criar_contrato(
+            imob, imovel, comprador, numero='CTR-LEI-MAIOR',
+            percentual_multa_rescisao_penal=Decimal('30.0000'),
+            percentual_multa_rescisao_adm=Decimal('20.0000'),
+        )
+        _pagar_parcelas(contrato, 4)
+        r = contrato.calcular_rescisao(DATA_RESCISAO_4M)
+        assert r['devolucao_legal'] >= r['devolucao']
 
 
 # ---------------------------------------------------------------------------

@@ -37,6 +37,14 @@ urlpatterns = [
     path('intermediarias/<str:hid>/pagar/', views.pagar_intermediaria, name='intermediarias_pagar'),
     path('intermediarias/<str:hid>/gerar-boleto/', views.gerar_boleto_intermediaria, name='intermediarias_gerar_boleto'),
 
+    # ===========================================================================
+    # Importação de Contratos via IA (Upload PDF → Claude → Revisão → Criação)
+    # Must come before <str:hid> catch-all to avoid shadowing
+    # ===========================================================================
+    path('importar-pdf/', views.upload_importacao, name='upload_importacao'),
+    path('importar-pdf/<int:pk>/revisao/', views.revisao_importacao, name='revisao_importacao'),
+    path('importar-pdf/<int:pk>/confirmar/', views.confirmar_importacao, name='confirmar_importacao'),
+
     # U-05: compat redirects (int:pk → hid) — manter por 30 dias
     path('<int:pk>/compat/', views.contrato_pk_compat, name='contrato_pk_compat'),
     path('<int:pk>/editar/compat/', views.contrato_pk_compat_editar, name='contrato_pk_compat_editar'),
@@ -69,4 +77,15 @@ urlpatterns = [
     # Q-04: Tabela de Juros Escalantes
     # ===========================================================================
     path('<str:hid>/tabela-juros/', views.api_tabela_juros_contrato, name='api_tabela_juros'),
+
+    # ===========================================================================
+    # 34.2 P1: Quadro-Resumo (Lei 6.766 art. 26) e Minutas de Contrato
+    # ===========================================================================
+    path('<str:hid>/quadro-resumo/', views.quadro_resumo_view, name='quadro_resumo'),
+    path('<str:hid>/minutas/', views.minutas_listar, name='minutas_listar'),
+    path('<str:hid>/minutas/nova/', views.minutas_criar, name='minutas_criar'),
+    # Minuta-level routes use minuta pk (not contrato hid)
+    path('minutas/<str:hid>/editar/', views.minutas_editar, name='minutas_editar'),
+    path('minutas/<str:hid>/excluir/', views.minutas_excluir, name='minutas_excluir'),
+
 ]

@@ -254,10 +254,16 @@ class ContratoDetailView(LoginRequiredMixin, HashidMixin, TenantMixin, DetailVie
     context_object_name = 'contrato'
 
     def get_queryset(self):
+        from django.db.models import Prefetch
+        from financeiro.models import Reajuste as _Reajuste
         return super().get_queryset().select_related(
             'imovel', 'imovel__imobiliaria',
             'comprador',
             'imobiliaria'
+        ).prefetch_related(
+            'parcelas',
+            'intermediarias',
+            Prefetch('reajustes', queryset=_Reajuste.objects.order_by('-data_reajuste'), to_attr='_reajustes_pre'),
         )
 
     def get_context_data(self, **kwargs):
@@ -265,26 +271,33 @@ class ContratoDetailView(LoginRequiredMixin, HashidMixin, TenantMixin, DetailVie
         contrato = self.object
         from django.utils import timezone
 
-        context['progresso'] = contrato.calcular_progresso()
-        context['valor_pago'] = contrato.calcular_valor_pago()
-        context['saldo_devedor'] = contrato.calcular_saldo_devedor()
+        # Parcelas — compute from prefetch cache to avoid extra queries
+        hoje = timezone.now().date()
+        todas_parcelas = sorted(contrato.parcelas.all(), key=lambda p: p.numero_parcela)
+        context['parcelas'] = todas_parcelas
+        pagas = [p for p in todas_parcelas if p.pago]
+        pendentes = [p for p in todas_parcelas if not p.pago]
+        context['parcelas_pagas'] = len(pagas)
+        context['parcelas_pendentes'] = len(pendentes)
 
-        # Parcelas
-        context['parcelas'] = contrato.parcelas.all().order_by('numero_parcela')
-        context['parcelas_pagas'] = contrato.parcelas.filter(pago=True).count()
-        context['parcelas_pendentes'] = contrato.parcelas.filter(pago=False).count()
+        proximas = sorted((p for p in pendentes if p.data_vencimento >= hoje), key=lambda p: p.data_vencimento)
+        context['proxima_parcela'] = proximas[0] if proximas else None
+        context['parcelas_atrasadas'] = sum(1 for p in pendentes if p.data_vencimento < hoje)
 
-        # Próxima parcela a vencer
-        context['proxima_parcela'] = contrato.parcelas.filter(
-            pago=False,
-            data_vencimento__gte=timezone.now().date()
-        ).order_by('data_vencimento').first()
-
-        # Parcelas em atraso
-        context['parcelas_atrasadas'] = contrato.parcelas.filter(
-            pago=False,
-            data_vencimento__lt=timezone.now().date()
-        ).count()
+        # Computed from prefetch cache — avoids 5 extra DB queries
+        total_p = len(todas_parcelas)
+        context['progresso'] = (len(pagas) / total_p * 100) if total_p else 0
+        context['valor_pago'] = (
+            sum(p.valor_pago or Decimal('0') for p in pagas) + contrato.valor_entrada
+        )
+        from financeiro.models import TipoParcela as _TP
+        from contratos.models import TipoAmortizacao as _TA
+        pendentes_normais = [p for p in pendentes if p.tipo_parcela == _TP.NORMAL]
+        if contrato.tipo_amortizacao == _TA.SAC:
+            saldo = sum((p.amortizacao or p.valor_atual) for p in pendentes_normais)
+        else:
+            saldo = sum(p.valor_atual for p in pendentes_normais)
+        context['saldo_devedor'] = saldo or Decimal('0.00')
 
         # Reajuste pendente no mês exato do aniversário (antecipacao_meses=0)
         from financeiro.models import Reajuste
@@ -296,7 +309,7 @@ class ContratoDetailView(LoginRequiredMixin, HashidMixin, TenantMixin, DetailVie
             context['reajuste_pendente_desde_parcela'] = None
 
         # Reajustes do contrato
-        context['reajustes'] = contrato.reajustes.all().order_by('-data_reajuste')
+        context['reajustes'] = getattr(contrato, '_reajustes_pre', None) or []
 
         # Índices disponíveis para reajuste manual
         context['indices_reajuste'] = IndiceReajuste.objects.filter(
@@ -333,18 +346,22 @@ class ContratoDetailView(LoginRequiredMixin, HashidMixin, TenantMixin, DetailVie
         if hasattr(contrato, 'intermediarias'):
             from django.utils import timezone as tz
             from dateutil.relativedelta import relativedelta
-            todas = contrato.intermediarias.all().order_by('numero_sequencial')
-            context['intermediarias'] = todas
-            context['total_intermediarias'] = todas.count()
-            context['intermediarias_pagas'] = todas.filter(paga=True).count()
-            context['intermediarias_pendentes'] = todas.filter(paga=False).count()
-            # Intermediárias vencidas sem boleto gerado
-            hoje = tz.now().date()
+            # Use prefetch cache — sort in Python to avoid extra queries
+            todas_intermediarias = sorted(
+                contrato.intermediarias.all(), key=lambda i: i.numero_sequencial
+            )
+            context['intermediarias'] = todas_intermediarias
+            context['total_intermediarias'] = len(todas_intermediarias)
+            context['intermediarias_pagas'] = sum(1 for i in todas_intermediarias if i.paga)
+            context['intermediarias_pendentes'] = sum(1 for i in todas_intermediarias if not i.paga)
+            # Intermediárias vencidas sem boleto gerado — filter in Python
+            hoje_inter = tz.now().date()
             vencidas_sem_boleto = [
-                inter for inter in todas.filter(paga=False, parcela_vinculada__isnull=True)
-                if (contrato.data_primeiro_vencimento + relativedelta(months=inter.mes_vencimento - 1)).replace(
+                inter for inter in todas_intermediarias
+                if not inter.paga and inter.parcela_vinculada_id is None
+                and (contrato.data_primeiro_vencimento + relativedelta(months=inter.mes_vencimento - 1)).replace(
                     day=min(contrato.dia_vencimento, 28)
-                ) <= hoje
+                ) <= hoje_inter
             ]
             context['intermediarias_vencidas_sem_boleto'] = vencidas_sem_boleto
         else:
@@ -624,18 +641,19 @@ class IndiceReajusteListView(LoginRequiredMixin, PaginacaoMixin, ListView):
         # Total de índices
         context['total_indices'] = IndiceReajuste.objects.count()
 
-        # Estatísticas por tipo
+        # Estatísticas por tipo — 1 query em vez de 2 por tipo
         tipos = ['IPCA', 'IGPM', 'INCC', 'IGPDI', 'INPC', 'TR', 'SELIC']
-        context['estatisticas_indices'] = []
-        for tipo in tipos:
-            total = IndiceReajuste.objects.filter(tipo_indice=tipo).count()
-            if total > 0:  # Só mostrar tipos que têm registros
-                ultimo = IndiceReajuste.objects.filter(tipo_indice=tipo).order_by('-ano', '-mes').first()
-                context['estatisticas_indices'].append({
-                    'tipo': tipo,
-                    'total': total,
-                    'ultimo': ultimo,
-                })
+        counts_por_tipo = {}
+        ultimos_por_tipo = {}
+        for idx in IndiceReajuste.objects.filter(tipo_indice__in=tipos).order_by('tipo_indice', '-ano', '-mes'):
+            counts_por_tipo[idx.tipo_indice] = counts_por_tipo.get(idx.tipo_indice, 0) + 1
+            if idx.tipo_indice not in ultimos_por_tipo:
+                ultimos_por_tipo[idx.tipo_indice] = idx
+        context['estatisticas_indices'] = [
+            {'tipo': tipo, 'total': counts_por_tipo[tipo], 'ultimo': ultimos_por_tipo[tipo]}
+            for tipo in tipos
+            if tipo in counts_por_tipo
+        ]
 
         # Data do contrato mais antigo (para limite de importação)
         contrato_mais_antigo = Contrato.objects.order_by('data_contrato').first()
@@ -1114,20 +1132,21 @@ class IntermediariasListView(LoginRequiredMixin, PaginacaoMixin, ListView):
 
         # Estatísticas
         intermediarias = self.get_queryset()
-        context['total_intermediarias'] = intermediarias.count()
-        context['intermediarias_pagas'] = intermediarias.filter(paga=True).count()
-        context['intermediarias_pendentes'] = intermediarias.filter(paga=False).count()
-
-        from django.db.models import Sum
-        context['valor_total'] = intermediarias.aggregate(
-            total=Sum('valor')
-        )['total'] or Decimal('0.00')
-        context['valor_pago'] = intermediarias.filter(paga=True).aggregate(
-            total=Sum('valor_pago')
-        )['total'] or Decimal('0.00')
-        context['valor_pendente'] = intermediarias.filter(paga=False).aggregate(
-            total=Sum('valor')
-        )['total'] or Decimal('0.00')
+        from django.db.models import Sum, Count, Q
+        agg = intermediarias.aggregate(
+            total=Count('id'),
+            pagas=Count('id', filter=Q(paga=True)),
+            pendentes=Count('id', filter=Q(paga=False)),
+            valor_total=Sum('valor'),
+            valor_pago=Sum('valor_pago', filter=Q(paga=True)),
+            valor_pendente=Sum('valor', filter=Q(paga=False)),
+        )
+        context['total_intermediarias'] = agg['total'] or 0
+        context['intermediarias_pagas'] = agg['pagas'] or 0
+        context['intermediarias_pendentes'] = agg['pendentes'] or 0
+        context['valor_total'] = agg['valor_total'] or Decimal('0.00')
+        context['valor_pago'] = agg['valor_pago'] or Decimal('0.00')
+        context['valor_pendente'] = agg['valor_pendente'] or Decimal('0.00')
 
         return context
 
@@ -1522,13 +1541,36 @@ def api_intermediarias_contrato(request, contrato_hid):
         contrato=contrato
     ).select_related('parcela_vinculada').order_by('numero_sequencial')
 
+    # Pre-fetch Reajuste aplicados para este contrato — 1 query em vez de N×M
+    from financeiro.models import Reajuste as _ReajusteM
+    from django.utils import timezone as _tz
+    from dateutil.relativedelta import relativedelta
+    _hoje = _tz.now().date()
+    _prazo = contrato.prazo_reajuste_meses or 12
+    _reajustes_aplicados = set(
+        _ReajusteM.objects.filter(contrato=contrato, aplicado=True).values_list('ciclo', flat=True)
+    )
+
+    def _pode_gerar(mes_vencimento):
+        if contrato.tipo_correcao == TipoCorrecao.FIXO:
+            return True, ""
+        ciclo_parcela = (mes_vencimento - 1) // _prazo + 1
+        if ciclo_parcela <= 1:
+            return True, ""
+        for ciclo_check in range(2, ciclo_parcela + 1):
+            data_reajuste = contrato.data_contrato + relativedelta(months=(ciclo_check - 1) * _prazo)
+            if _hoje < data_reajuste:
+                break
+            if ciclo_check not in _reajustes_aplicados:
+                return False, (
+                    f"Reajuste do ciclo {ciclo_check} pendente desde "
+                    f"{data_reajuste.strftime('%d/%m/%Y')}."
+                )
+        return True, ""
+
     data = []
     for inter in intermediarias:
-        # Verificar bloqueio por reajuste
-        if hasattr(contrato, 'pode_gerar_boleto'):
-            pode_gerar, motivo = contrato.pode_gerar_boleto(inter.mes_vencimento)
-        else:
-            pode_gerar, motivo = True, ""
+        pode_gerar, motivo = _pode_gerar(inter.mes_vencimento)
 
         data.append({
             'id': inter.id,
@@ -1932,7 +1974,7 @@ class ContratoWizardView(LoginRequiredMixin, View):
                 messages.success(
                     request,
                     f'Contrato {contrato.numero_contrato} criado com sucesso! '
-                    f'{contrato.parcelas.count()} parcelas geradas.'
+                    f'{contrato.numero_parcelas} parcelas geradas.'
                 )
                 return redirect('contratos:detalhe', hid=encode_id(contrato.pk))
             except Exception as e:
@@ -2025,23 +2067,27 @@ class ContratoWizardView(LoginRequiredMixin, View):
         contrato = self._criar_contrato_from_session(basico)
 
         # TabelaJuros rows
-        for row in sess.get('juros', []):
-            TabelaJurosContrato.objects.create(
+        TabelaJurosContrato.objects.bulk_create([
+            TabelaJurosContrato(
                 contrato=contrato,
                 ciclo_inicio=row['ciclo_inicio'],
                 ciclo_fim=row.get('ciclo_fim'),
                 juros_mensal=D(str(row['juros_mensal'])),
                 observacoes=row.get('observacoes', ''),
             )
+            for row in sess.get('juros', [])
+        ])
 
         # Intermediárias
-        for row in sess.get('intermediarias_lista', []):
-            PrestacaoIntermediaria.objects.create(
+        PrestacaoIntermediaria.objects.bulk_create([
+            PrestacaoIntermediaria(
                 contrato=contrato,
                 numero_sequencial=row['numero_sequencial'],
                 mes_vencimento=row['mes_vencimento'],
                 valor=D(str(row['valor'])),
             )
+            for row in sess.get('intermediarias_lista', [])
+        ])
 
         # Recalcula amortização (Price ou SAC) com base na TabelaJuros recém-criada.
         # Também trata intermediarias_reduzem_pmt.
@@ -2178,6 +2224,174 @@ def calcular_cessao_view(request, hid):
         'resultado': resultado,
         'data_cessao': data_cessao,
     })
+
+
+# =============================================================================
+# 34.2 P1: Quadro-Resumo (Lei 6.766 art. 26) e Minutas de Contrato
+# =============================================================================
+
+
+@login_required
+def quadro_resumo_view(request, hid):
+    """Exibe o quadro-resumo do contrato conforme Lei 6.766/79 art. 26."""
+    from django.utils import timezone as tz
+    pk = _decode_id(hid)
+    if pk is None:
+        from django.http import Http404
+        raise Http404
+    contrato = get_object_or_404(
+        Contrato.objects.select_related('imobiliaria', 'comprador', 'imovel'),
+        pk=pk,
+    )
+    saldo_financiado = (contrato.valor_total or Decimal('0')) - (contrato.valor_entrada or Decimal('0'))
+    return render(request, 'contratos/quadro_resumo.html', {
+        'contrato': contrato,
+        'saldo_financiado': saldo_financiado,
+        'hoje': tz.now().date(),
+    })
+
+
+@login_required
+def minutas_listar(request, hid):
+    """Lista todas as minutas registradas para um contrato."""
+    pk = _decode_id(hid)
+    if pk is None:
+        from django.http import Http404
+        raise Http404
+    contrato = get_object_or_404(Contrato, pk=pk)
+    from .models import MinutaContrato
+    minutas = MinutaContrato.objects.filter(contrato=contrato).order_by('-criado_em')
+    return render(request, 'contratos/minutas_list.html', {
+        'contrato': contrato,
+        'minutas': minutas,
+    })
+
+
+@login_required
+def minutas_criar(request, hid):
+    """Cria uma nova minuta para um contrato."""
+    pk = _decode_id(hid)
+    if pk is None:
+        from django.http import Http404
+        raise Http404
+    contrato = get_object_or_404(Contrato, pk=pk)
+    from .models import MinutaContrato
+    from django.contrib import messages
+
+    errors = {}
+    form_data = {'ativa': True}
+
+    if request.method == 'POST':
+        versao = request.POST.get('versao', '').strip()
+        titulo = request.POST.get('titulo', '').strip()
+        conteudo = request.POST.get('conteudo', '').strip()
+        ativa = 'ativa' in request.POST
+        form_data = {'versao': versao, 'titulo': titulo, 'conteudo': conteudo, 'ativa': ativa}
+
+        if not versao:
+            errors['versao'] = 'Versão é obrigatória.'
+        elif MinutaContrato.objects.filter(contrato=contrato, versao=versao).exists():
+            errors['versao'] = f'Já existe uma minuta com versão "{versao}" para este contrato.'
+        if not titulo:
+            errors['titulo'] = 'Título é obrigatório.'
+        if not conteudo:
+            errors['conteudo'] = 'Conteúdo é obrigatório.'
+
+        if not errors:
+            MinutaContrato.objects.create(
+                contrato=contrato,
+                versao=versao,
+                titulo=titulo,
+                conteudo=conteudo,
+                ativa=ativa,
+            )
+            messages.success(request, f'Minuta {versao} registrada com sucesso.')
+            from django.shortcuts import redirect
+            from core.hashids_utils import encode_id
+            return redirect('contratos:minutas_listar', hid=encode_id(contrato.pk))
+
+    return render(request, 'contratos/minuta_form.html', {
+        'contrato': contrato,
+        'minuta': None,
+        'form_data': form_data,
+        'errors': errors,
+    })
+
+
+@login_required
+def minutas_editar(request, hid):
+    """Edita uma minuta existente."""
+    from .models import MinutaContrato
+    from django.contrib import messages
+    pk = _decode_id(hid)
+    if pk is None:
+        from django.http import Http404
+        raise Http404
+    minuta = get_object_or_404(MinutaContrato.objects.select_related('contrato'), pk=pk)
+    contrato = minuta.contrato
+
+    errors = {}
+    form_data = {
+        'versao': minuta.versao,
+        'titulo': minuta.titulo,
+        'conteudo': minuta.conteudo,
+        'ativa': minuta.ativa,
+    }
+
+    if request.method == 'POST':
+        versao = request.POST.get('versao', '').strip()
+        titulo = request.POST.get('titulo', '').strip()
+        conteudo = request.POST.get('conteudo', '').strip()
+        ativa = 'ativa' in request.POST
+        form_data = {'versao': versao, 'titulo': titulo, 'conteudo': conteudo, 'ativa': ativa}
+
+        if not versao:
+            errors['versao'] = 'Versão é obrigatória.'
+        elif (MinutaContrato.objects.filter(contrato=contrato, versao=versao)
+                                    .exclude(pk=minuta.pk).exists()):
+            errors['versao'] = f'Já existe uma minuta com versão "{versao}" para este contrato.'
+        if not titulo:
+            errors['titulo'] = 'Título é obrigatório.'
+        if not conteudo:
+            errors['conteudo'] = 'Conteúdo é obrigatório.'
+
+        if not errors:
+            minuta.versao = versao
+            minuta.titulo = titulo
+            minuta.conteudo = conteudo
+            minuta.ativa = ativa
+            minuta.save()
+            messages.success(request, f'Minuta {versao} atualizada com sucesso.')
+            from django.shortcuts import redirect
+            from core.hashids_utils import encode_id
+            return redirect('contratos:minutas_listar', hid=encode_id(contrato.pk))
+
+    return render(request, 'contratos/minuta_form.html', {
+        'contrato': contrato,
+        'minuta': minuta,
+        'form_data': form_data,
+        'errors': errors,
+    })
+
+
+@login_required
+@require_http_methods(["POST"])
+def minutas_excluir(request, hid):
+    """Exclui uma minuta."""
+    from .models import MinutaContrato
+    from django.contrib import messages
+    pk = _decode_id(hid)
+    if pk is None:
+        from django.http import Http404
+        raise Http404
+    minuta = get_object_or_404(MinutaContrato.objects.select_related('contrato'), pk=pk)
+    contrato = minuta.contrato
+    versao = minuta.versao
+    minuta.delete()
+    messages.success(request, f'Minuta {versao} excluída.')
+    from django.shortcuts import redirect
+    from core.hashids_utils import encode_id
+    return redirect('contratos:minutas_listar', hid=encode_id(contrato.pk))
 
 
 # =============================================================================
@@ -2323,3 +2537,129 @@ def contrato_pk_compat_excluir(request, pk):
 def contrato_pk_compat_parcelas(request, pk):
     hid = encode_id(pk)
     return redirect('contratos:parcelas', hid=hid, permanent=True)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Importação de Contratos via IA
+# ─────────────────────────────────────────────────────────────────────────────
+
+_TIPOS_PERMITIDOS = {
+    'application/pdf': 'pdf',
+    'image/jpeg': 'imagem',
+    'image/jpg': 'imagem',
+    'image/png': 'imagem',
+    'image/webp': 'imagem',
+}
+_MAX_ARQUIVO_MB = 20
+
+
+@login_required
+def upload_importacao(request):
+    from contratos.models import ContratoImportacao
+    from contratos.services.importacao_ia import ImportacaoIA
+    from core.models import get_imobiliarias_usuario
+
+    imobiliarias = get_imobiliarias_usuario(request.user)
+
+    if request.method == 'GET':
+        return render(request, 'contratos/importar_pdf.html', {'imobiliarias': imobiliarias})
+
+    arquivos = request.FILES.getlist('arquivo')
+    if not arquivos:
+        messages.error(request, 'Nenhum arquivo enviado.')
+        return render(request, 'contratos/importar_pdf.html', {'imobiliarias': imobiliarias})
+
+    # Valida tipos e tamanhos
+    for f in arquivos:
+        ct = f.content_type or ''
+        if ct not in _TIPOS_PERMITIDOS and not f.name.lower().endswith(('.pdf', '.jpg', '.jpeg', '.png', '.webp')):
+            messages.error(request, f'Tipo de arquivo não suportado: {f.name}')
+            return render(request, 'contratos/importar_pdf.html', {'imobiliarias': imobiliarias})
+        if f.size > _MAX_ARQUIVO_MB * 1024 * 1024:
+            messages.error(request, f'Arquivo muito grande (máx {_MAX_ARQUIVO_MB} MB): {f.name}')
+            return render(request, 'contratos/importar_pdf.html', {'imobiliarias': imobiliarias})
+
+    # Lê bytes antes de criar o registro (FileField substituído por BinaryField — sem disco)
+    primeiro = arquivos[0]
+    ct_primeiro = primeiro.content_type or ''
+    primeiro_bytes = primeiro.read()
+
+    importacao = ContratoImportacao.objects.create(
+        arquivo_bytes=primeiro_bytes,
+        arquivo_nome=primeiro.name,
+        status='EXTRAINDO',
+        criado_por=request.user,
+    )
+
+    try:
+        ia = ImportacaoIA()
+
+        if ct_primeiro == 'application/pdf' or primeiro.name.lower().endswith('.pdf'):
+            dados = ia.extrair_de_pdf(primeiro_bytes)
+        else:
+            # Múltiplas imagens: lê restantes (primeiro já foi lido)
+            pares = [(primeiro_bytes, ct_primeiro if ct_primeiro.startswith('image/') else 'image/jpeg')]
+            for f in arquivos[1:]:
+                ct = f.content_type or 'image/jpeg'
+                if not ct.startswith('image/'):
+                    ct = 'image/jpeg'
+                pares.append((f.read(), ct))
+            dados = ia.extrair_de_imagens(pares)
+
+        importacao.dados_extraidos = dados
+        importacao.status = 'REVISAO'
+        importacao.save(update_fields=['dados_extraidos', 'status'])
+        return redirect('contratos:revisao_importacao', pk=importacao.pk)
+
+    except Exception as exc:
+        logger.exception('Erro na extração IA para importacao #%s', importacao.pk)
+        importacao.status = 'ERRO'
+        importacao.erros_extracao = str(exc)
+        importacao.save(update_fields=['status', 'erros_extracao'])
+        messages.error(request, f'Erro ao extrair dados do documento: {exc}')
+        return redirect('contratos:upload_importacao')
+
+
+@login_required
+def revisao_importacao(request, pk):
+    from contratos.models import ContratoImportacao, TipoCorrecao
+    from contratos.services.importacao_ia import ProcessadorImportacao
+    from core.models import TipoImovel
+
+    importacao = get_object_or_404(ContratoImportacao, pk=pk, criado_por=request.user)
+    if importacao.status == 'CONCLUIDO':
+        messages.info(request, 'Esta importação já foi concluída.')
+        return redirect('contratos:detalhe', hid=encode_id(importacao.contrato_criado_id))
+
+    dados = importacao.dados_extraidos or {}
+    matches = ProcessadorImportacao().processar(dados, request.user)
+
+    return render(request, 'contratos/revisao_importacao.html', {
+        'importacao': importacao,
+        'dados': dados,
+        'matches': matches,
+        'tipo_correcao_choices': TipoCorrecao.choices,
+        'tipo_imovel_choices': TipoImovel.choices,
+        'campos_incertos': set((dados.get('confianca') or {}).get('campos_incertos') or []),
+    })
+
+
+@login_required
+@require_http_methods(['POST'])
+def confirmar_importacao(request, pk):
+    from contratos.models import ContratoImportacao
+    from contratos.services.importacao_ia import confirmar_importacao as _confirmar
+
+    importacao = get_object_or_404(ContratoImportacao, pk=pk, criado_por=request.user)
+    if importacao.status == 'CONCLUIDO':
+        messages.warning(request, 'Esta importação já foi concluída.')
+        return redirect('contratos:detalhe', hid=encode_id(importacao.contrato_criado_id))
+
+    try:
+        contrato = _confirmar(importacao, request.POST, request.user)
+        messages.success(request, f'Contrato {contrato.numero_contrato} importado com sucesso!')
+        return redirect('contratos:detalhe', hid=encode_id(contrato.pk))
+    except Exception as exc:
+        logger.exception('Erro ao confirmar importacao #%s', pk)
+        messages.error(request, f'Erro ao criar contrato: {exc}')
+        return redirect('contratos:revisao_importacao', pk=pk)

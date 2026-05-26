@@ -32,6 +32,7 @@ class ContabilidadeAdmin(admin.ModelAdmin):
 @admin.register(Imobiliaria)
 class ImobiliariaAdmin(admin.ModelAdmin):
     list_display = ['nome', 'tipo_pessoa', 'documento_display', 'contabilidade', 'responsavel_financeiro', 'ativo']
+    list_select_related = ['contabilidade']
     list_filter = ['ativo', 'tipo_pessoa', 'contabilidade', 'criado_em']
     search_fields = ['nome', 'razao_social', 'cnpj', 'cpf', 'responsavel_financeiro']
     readonly_fields = ['criado_em', 'atualizado_em']
@@ -64,6 +65,7 @@ class ImobiliariaAdmin(admin.ModelAdmin):
 @admin.register(Imovel)
 class ImovelAdmin(admin.ModelAdmin):
     list_display = ['identificacao', 'loteamento', 'tipo', 'imobiliaria', 'area', 'disponivel', 'ativo']
+    list_select_related = ['imobiliaria']
     list_filter = ['tipo', 'disponivel', 'ativo', 'imobiliaria', 'criado_em']
     search_fields = ['identificacao', 'loteamento', 'endereco', 'matricula']
     readonly_fields = ['criado_em', 'atualizado_em']
@@ -191,6 +193,7 @@ class LoteamentoOverlayAdmin(admin.ModelAdmin):
 @admin.register(AcessoNegado)
 class AcessoNegadoAdmin(admin.ModelAdmin):
     list_display = ['ip', 'usuario', 'url_resumida', 'status_code', 'timestamp']
+    list_select_related = ['usuario']
     list_filter = ['status_code', 'timestamp']
     search_fields = ['ip', 'url', 'usuario__username']
     readonly_fields = ['ip', 'usuario', 'url', 'status_code', 'timestamp']

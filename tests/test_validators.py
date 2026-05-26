@@ -64,11 +64,40 @@ class TestValidarCNPJ:
 
     def test_cnpj_tamanho_incorreto(self):
         """CNPJ com tamanho incorreto deve falhar."""
-        with pytest.raises(ValidationError, match='14 dígitos'):
-            validar_cnpj('1122233300018')  # 13 dígitos
+        with pytest.raises(ValidationError, match='14 caracteres'):
+            validar_cnpj('1122233300018')  # 13 chars
 
-        with pytest.raises(ValidationError, match='14 dígitos'):
-            validar_cnpj('112223330001810')  # 15 dígitos
+        with pytest.raises(ValidationError, match='14 caracteres'):
+            validar_cnpj('112223330001810')  # 15 chars
+
+    # ── Alphanumeric CNPJ 2026 (IN RFB nº 2229/2024) ─────────────────────────
+
+    def test_cnpj_alfanumerico_valido(self):
+        """CNPJ alfanumérico 2026 válido não deve levantar exceção.
+        AB.000.000/000X-58  (A=17,B=18,X=40 → dígitos verificadores 5 e 8)
+        """
+        validar_cnpj('AB000000000X58')
+
+    def test_cnpj_alfanumerico_formatado_valido(self):
+        """CNPJ alfanumérico formatado deve ser aceito."""
+        validar_cnpj('AB.000.000/000X-58')
+
+    def test_cnpj_alfanumerico_minusculo_valido(self):
+        """CNPJ alfanumérico em minúsculas deve ser normalizado e aceito."""
+        validar_cnpj('ab.000.000/000x-58')
+
+    def test_cnpj_alfanumerico_invalido_digito(self):
+        """CNPJ alfanumérico com dígito verificador errado deve falhar."""
+        with pytest.raises(ValidationError, match='CNPJ inválido'):
+            validar_cnpj('AB000000000X99')  # dígitos errados
+
+    def test_cnpj_alfanumerico_autodetectar(self):
+        """validar_cpf_cnpj deve detectar CNPJ alfanumérico pelo comprimento."""
+        validar_cpf_cnpj('AB.000.000/000X-58')
+
+    def test_formatar_cnpj_alfanumerico(self):
+        """formatar_cnpj deve formatar CNPJ alfanumérico corretamente."""
+        assert formatar_cnpj('AB000000000X58') == 'AB.000.000/000X-58'
 
 
 class TestValidarCpfCnpj:

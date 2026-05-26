@@ -7,7 +7,7 @@ Email: maxwbh@gmail.com
 from django.contrib import admin
 from django.utils.html import format_html
 from django.utils import timezone
-from .models import Parcela, Reajuste, HistoricoPagamento, AcessoBoletoPublico
+from .models import Parcela, Reajuste, HistoricoPagamento, AcessoBoletoPublico, EventoPIX
 
 
 @admin.register(Parcela)
@@ -20,6 +20,7 @@ class ParcelaAdmin(admin.ModelAdmin):
         'status_badge',
         'dias_atraso_display'
     ]
+    list_select_related = ['contrato']
     list_filter = [
         'pago',
         'data_vencimento',
@@ -125,11 +126,15 @@ class ParcelaAdmin(admin.ModelAdmin):
 
     def atualizar_juros_multa(self, request, queryset):
         """Atualiza juros e multa das parcelas selecionadas"""
-        count = 0
-        for parcela in queryset.filter(pago=False):
-            parcela.atualizar_juros_multa()
-            count += 1
-        self.message_user(request, f'{count} parcela(s) atualizada(s).')
+        to_update = []
+        for parcela in queryset.filter(pago=False).select_related('contrato'):
+            juros, multa = parcela.calcular_juros_multa()
+            parcela.valor_juros = juros
+            parcela.valor_multa = multa
+            to_update.append(parcela)
+        if to_update:
+            Parcela.objects.bulk_update(to_update, ['valor_juros', 'valor_multa'])
+        self.message_user(request, f'{len(to_update)} parcela(s) atualizada(s).')
     atualizar_juros_multa.short_description = 'Atualizar Juros e Multa'
 
     def marcar_como_pago(self, request, queryset):
@@ -157,6 +162,7 @@ class ReajusteAdmin(admin.ModelAdmin):
         'parcelas_afetadas',
         'aplicado_manual'
     ]
+    list_select_related = ['contrato']
     list_filter = [
         'indice_tipo',
         'aplicado_manual',
@@ -234,6 +240,7 @@ class HistoricoPagamentoAdmin(admin.ModelAdmin):
         'origem_pagamento',
         'criado_em'
     ]
+    list_select_related = ['parcela', 'parcela__contrato']
     list_filter = [
         'forma_pagamento',
         'origem_pagamento',
@@ -299,6 +306,7 @@ class HistoricoPagamentoAdmin(admin.ModelAdmin):
 class AcessoBoletoPublicoAdmin(admin.ModelAdmin):
     """S-07: Monitoramento de acessos ao boleto público."""
     list_display = ['parcela_link', 'ip', 'user_agent_resumido', 'acessado_em']
+    list_select_related = ['parcela']
     list_filter = ['acessado_em', 'ip']
     search_fields = ['ip', 'parcela__contrato__numero_contrato', 'parcela__contrato__comprador__nome']
     readonly_fields = ['parcela', 'ip', 'user_agent', 'acessado_em']
@@ -321,3 +329,43 @@ class AcessoBoletoPublicoAdmin(admin.ModelAdmin):
     def user_agent_resumido(self, obj):
         return obj.user_agent[:60] + '…' if len(obj.user_agent) > 60 else obj.user_agent
     user_agent_resumido.short_description = 'User-Agent'
+
+
+@admin.register(EventoPIX)
+class EventoPIXAdmin(admin.ModelAdmin):
+    list_display = ['end_to_end_id_curto', 'txid', 'parcela', 'valor', 'status_badge', 'recebido_em']
+    list_select_related = ['parcela', 'parcela__contrato']
+    list_filter = ['status', 'recebido_em']
+    search_fields = ['end_to_end_id', 'txid', 'pagador_nome', 'pagador_documento']
+    readonly_fields = [
+        'end_to_end_id', 'txid', 'parcela', 'valor', 'horario_pix',
+        'pagador_nome', 'pagador_documento', 'info_pagador',
+        'status', 'erro', 'payload_raw', 'recebido_em',
+    ]
+    ordering = ['-recebido_em']
+    date_hierarchy = 'recebido_em'
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def end_to_end_id_curto(self, obj):
+        return obj.end_to_end_id[:20] + '…' if len(obj.end_to_end_id) > 20 else obj.end_to_end_id
+    end_to_end_id_curto.short_description = 'EndToEndId'
+
+    def status_badge(self, obj):
+        cores = {
+            'BAIXADO': '#28a745',
+            'DUPLICADO': '#6c757d',
+            'SEM_PARCELA': '#ffc107',
+            'ERRO': '#dc3545',
+            'RECEBIDO': '#007bff',
+        }
+        cor = cores.get(obj.status, '#6c757d')
+        return format_html(
+            '<span style="background:{};color:white;padding:2px 8px;border-radius:3px">{}</span>',
+            cor, obj.get_status_display(),
+        )
+    status_badge.short_description = 'Status'

@@ -234,8 +234,13 @@ class WhatsAppBotService:
             try:
                 contratos = sessao.comprador.contratos.prefetch_related('parcelas').all()[:3]
                 for c in contratos:
-                    prox = c.parcelas.filter(pago=False, data_vencimento__gte=hoje).order_by('data_vencimento').first()
-                    atrasadas = c.parcelas.filter(pago=False, data_vencimento__lt=hoje).count()
+                    # Filter in Python to use prefetch cache instead of extra queries
+                    pendentes = sorted(
+                        (p for p in c.parcelas.all() if not p.pago),
+                        key=lambda p: p.data_vencimento
+                    )
+                    prox = next((p for p in pendentes if p.data_vencimento >= hoje), None)
+                    atrasadas = sum(1 for p in pendentes if p.data_vencimento < hoje)
                     contexto_partes.append(
                         f'Contrato {c.numero_contrato}: '
                         f'parcelas em atraso={atrasadas}, '
@@ -633,9 +638,17 @@ class WhatsAppBotService:
 
     def _fluxo_resumo(self, sessao, config_wa):
         from contratos.models import Contrato
+        from financeiro.models import Parcela as _Parcela
+        from django.db.models import Prefetch
 
         contratos = list(Contrato.objects.filter(
             comprador=sessao.comprador, ativo=True
+        ).prefetch_related(
+            Prefetch(
+                'parcelas',
+                queryset=_Parcela.objects.filter(pago=False).order_by('data_vencimento'),
+                to_attr='_proximas_pre',
+            )
         ).order_by('id')[:3])
 
         if not contratos:
@@ -649,7 +662,8 @@ class WhatsAppBotService:
         linhas = []
         for contrato in contratos:
             r = contrato.get_resumo_financeiro()
-            prox = contrato.parcelas.filter(pago=False).order_by('data_vencimento').first()
+            _pend = getattr(contrato, '_proximas_pre', None) or []
+            prox = _pend[0] if _pend else None
             prox_txt = (
                 f"📅 Próx. venc.: {prox.data_vencimento.strftime('%d/%m/%Y')} — {_fmt_brl(prox.valor_atual)}"
                 if prox else '✅ Sem parcelas abertas'

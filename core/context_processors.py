@@ -86,6 +86,8 @@ PAGE_ID_MAP: dict[str, str] = {
 
 def system_info(request) -> dict:
     """Injeta versão do sistema e ID da página em todos os templates."""
+    from django.conf import settings as _s
+
     view_name = ''
     try:
         if request.resolver_match:
@@ -100,4 +102,5 @@ def system_info(request) -> dict:
         'system_version_info': get_version_info(),
         'page_id': PAGE_ID_MAP.get(view_name, '0000'),
         'page_view_name': view_name,
+        'vapid_public_key': getattr(_s, 'VAPID_PUBLIC_KEY', ''),
     }

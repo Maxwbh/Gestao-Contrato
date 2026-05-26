@@ -141,7 +141,7 @@ class CompradorForm(forms.ModelForm):
                 'maxlength': '9'
             }),
             'cpf': forms.TextInput(attrs={'placeholder': '000.000.000-00', 'maxlength': '14', 'class': 'form-control mask-cpf'}),
-            'cnpj': forms.TextInput(attrs={'placeholder': '00.000.000/0000-00', 'maxlength': '20', 'class': 'form-control mask-cnpj'}),
+            'cnpj': forms.TextInput(attrs={'placeholder': 'AA.BBB.000/0001-00', 'maxlength': '18', 'class': 'form-control mask-cnpj'}),
             'responsavel_cpf': forms.TextInput(attrs={'placeholder': '000.000.000-00', 'maxlength': '14', 'class': 'form-control mask-cpf'}),
             'conjuge_cpf': forms.TextInput(attrs={'placeholder': '000.000.000-00', 'maxlength': '14', 'class': 'form-control mask-cpf'}),
             'telefone': forms.TextInput(attrs={'placeholder': '(00) 0000-0000', 'class': 'form-control mask-phone'}),
@@ -635,7 +635,7 @@ class ImobiliariaForm(forms.ModelForm):
                 'class': 'form-control cep-input mask-cep',
                 'maxlength': '9'
             }),
-            'cnpj': forms.TextInput(attrs={'placeholder': '00.000.000/0000-00', 'maxlength': '20', 'class': 'form-control mask-cnpj'}),
+            'cnpj': forms.TextInput(attrs={'placeholder': 'AA.BBB.000/0001-00', 'maxlength': '18', 'class': 'form-control mask-cnpj'}),
             'telefone': forms.TextInput(attrs={'placeholder': '(00) 0000-0000', 'class': 'form-control mask-phone'}),
             'percentual_multa_padrao': forms.TextInput(attrs={
                 'data-mask': 'pct2',

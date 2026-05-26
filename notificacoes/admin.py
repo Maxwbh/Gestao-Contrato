@@ -78,6 +78,7 @@ class NotificacaoAdmin(admin.ModelAdmin):
         'data_envio',
         'tentativas'
     ]
+    list_select_related = ['parcela']
     list_filter = [
         'tipo',
         'status',
@@ -180,6 +181,7 @@ class NotificacaoAdmin(admin.ModelAdmin):
 @admin.register(RegraNotificacao)
 class RegraNotificacaoAdmin(admin.ModelAdmin):
     list_display = ['nome', 'tipo_gatilho', 'dias_offset', 'tipo_notificacao', 'template', 'ativo']
+    list_select_related = ['template']
     list_filter = ['tipo_gatilho', 'tipo_notificacao', 'ativo']
     search_fields = ['nome']
     list_editable = ['ativo']
@@ -202,6 +204,7 @@ class RegraNotificacaoAdmin(admin.ModelAdmin):
 @admin.register(TemplateNotificacao)
 class TemplateNotificacaoAdmin(admin.ModelAdmin):
     list_display = ['codigo', 'nome', 'imobiliaria', 'canais_ativos', 'ativo', 'criado_em']
+    list_select_related = ['imobiliaria']
     list_filter = ['codigo', 'ativo', 'imobiliaria']
     search_fields = ['nome', 'assunto', 'corpo', 'corpo_html']
     readonly_fields = ['criado_em', 'atualizado_em']

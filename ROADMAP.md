@@ -170,7 +170,7 @@
 
 ## 7. TESTES AUTOMATIZADOS
 
-**Meta:** > 80% de cobertura | **Atual:** 1139 testes passando (1122 + 17 novos — W-07 BSP Brasileiro 2026-05-06)
+**Meta:** > 80% de cobertura | **Atual:** 1335 testes passando
 
 ### 7.1 P1 — Apps sem nenhum teste (~104 testes) ✅ CONCLUÍDO
 | Arquivo | Escopo | Qtd | Status |
@@ -594,6 +594,7 @@ Auditoria identificou 4 histórias de usuário totalmente implementadas no siste
 | G-11 | **Cálculo de rescisão** — `Contrato.calcular_rescisao()` (fruição × meses + multa penal + desp. adm.); view `calcular_rescisao_view`; template `calcular_rescisao.html`; URL `<pk>/rescisao/`; botão na tela do contrato | Alta | P3 | ✅ |
 | G-12 | **Cálculo de cessão** — `Contrato.calcular_cessao()`; view `calcular_cessao_view`; template `calcular_cessao.html`; URL `<pk>/cessao/`; botão na tela do contrato | Média | P3 | ✅ |
 | G-16 | **Juros de mora pro rata die** — `Contrato.calcular_mora_pro_rata()`: `taxa_diaria = percentual_juros_mora / 30`; usado em `calcular_rescisao()` para base de cálculo correto | Média | P3 | ✅ |
+| G-17 | **CNPJ alfanumérico 2026 (IN RFB nº 2229/2024)** — posições 1-12 aceitam letras A-Z (A=17…Z=42 no cálculo mod-11); `_CNPJ_CHAR_VALUES` em `core/validators.py`; `validar_cnpj`, `formatar_cnpj`, `validar_cpf_cnpj` atualizados; máscara JS `maskCnpj` aceita alfanumérico com auto-uppercase; campos de formulário CNPJ com placeholder atualizado | Média | P2 | ✅ |
 
 ---
 
@@ -724,7 +725,7 @@ Auditoria identificou 4 histórias de usuário totalmente implementadas no siste
 
 ---
 
-## 13. HU-360 — CONTRATO TABELA PRICE COM JUROS ESCALANTES E INTERMEDIÁRIAS
+## 13. HU-360 — CONTRATO TABELA PRICE COM JUROS ESCALANTES E INTERMEDIÁRIAS ✅ CONCLUÍDO
 
 > **História de Usuário (HU-360):**
 > Como usuário quero criar um contrato de 360 parcelas com:
@@ -1156,7 +1157,7 @@ para ciclo = 2..total_ciclos+1:
 | N-02 | E-mail de inadimplência após D+3 | P2 | ✅ `enviar_inadimplentes_sync()` em `core/tasks.py` + `task_run_all` inclui N-02 + POST `/api/tasks/enviar-inadimplentes/` + `NOTIFICACAO_DIAS_INADIMPLENCIA=3` |
 | N-03 | Régua de cobrança configurável (D-5, D+3, D+10, D+30) | P3 | ✅ `RegraNotificacao` model em `notificacoes/models.py` + `TipoGatilho` (ANTES/APOS) + admin com `list_editable` + `_processar_regra()` em `core/tasks.py` — fallback automático para N-01/N-02 quando nenhuma regra configurada |
 | N-04 | Integração WhatsApp (4 provedores) | P3 | ✅ `ConfiguracaoWhatsApp` suporta: Twilio, Meta Cloud API, Evolution API v2, Z-API. Webhooks de entrega (Evolution + Twilio). Teste de conexão por provedor. Análise custo/benefício e roadmap de evolução: **ver Seção 26**. |
-| N-05 | Push notification portal comprador | P4 | 🏦 Débito Técnico (pós-2050) |
+| N-05 | Push notification portal comprador | P4 | ✅ Implementado (34.6) — `PushSubscriptionPortal` model (unique por acesso+endpoint), `portal_comprador/tasks.py` (`enviar_push_comprador`, `notificar_push_vencimento_amanha`), API subscribe/unsubscribe em `/portal/api/push/`, service worker com listener `push` + `notificationclick`, VAPID via `py-vapid` |
 | N-08 | **TEST_MODE safeguard** — `_destinatario_email_teste()` e `_destinatario_telefone_teste()` em `BoletoNotificacaoService`: em ambiente não-produção, redireciona todos os envios para endereços de teste configurados em `settings.EMAIL_TESTE` e `settings.TELEFONE_TESTE`; evita notificações acidentais para compradores reais durante desenvolvimento | P2 | ✅ `notificacoes/boleto_notificacao.py` |
 | N-09 | **Normalização E.164 para Twilio** — telefones no formato `(31) 99999-8888` são convertidos para `+5531999998888` antes do envio via Twilio SMS/WhatsApp; `_normalizar_telefone_e164()` strip de caracteres não-numéricos + prefixo `+55` | P2 | ✅ `notificacoes/boleto_notificacao.py` |
 | N-06 | **Template unificado** — 1 registro por `(codigo, imobiliaria)` com 3 canais: `corpo_html` (Email HTML via TinyMCE 5), `corpo` (SMS ≤255 chars), `corpo_whatsapp`; campo `tipo` removido do form; badges de canal baseados nos campos preenchidos; `renderizar()` retorna 4-tuple `(assunto, corpo, corpo_html, corpo_whatsapp)` | P2 | ✅ Migration `0005_template_unificado` + forms + views + template_form/list atualizados |
@@ -1199,7 +1200,7 @@ para ciclo = 2..total_ciclos+1:
 | Mapa Interativo (Seção 16) | — | 5 | 6 | 1 | 12 | ✅ 12/12 M-01..M-16 |
 | Dashboard KPIs (Seção 17) | 1 | 5 | 2 | — | 8 | ✅ 8/8 (K-01..K-06, G-01..G-05, D-01..D-04) |
 | Simulador Antecipação (Seção 18) | — | 3 | 2 | — | 5 | ✅ 5/5 (R-01..R-05) |
-| Notificações (Seção 19) | — | 6 | 2 | 1 | 9 | ✅ 8/9 P2+P3 (N-01..N-04, N-06..N-09) · 🏦 N-05 Débito Técnico |
+| Notificações (Seção 19) | — | 6 | 2 | 1 | 9 | ✅ 9/9 (N-01..N-09) — N-05 implementado em 34.6 |
 | UX / Interface (Seção 20) | — | 6 | 5 | — | 11 | ✅ 11/11 (U-01..U-11) |
 | Frontend | — | 17 | 15 | 3 | 35 | ✅ 17/17 P2 · ✅ 15/15 P3 · ⏳ 3.33 P4 |
 | APIs | — | 6 | 5 | — | 11 | ✅ 11/11 |
@@ -1210,7 +1211,9 @@ para ciclo = 2..total_ciclos+1:
 | Conciliação Bancária (Seção 23) | — | 8 | — | — | 8 | ✅ 8/8 |
 | WhatsApp — Evolução (Seção 26) | — | 5 | 3 | — | 8 | ✅ 8/8 — W-01..W-08 concluídos |
 | Chatbot WhatsApp (Seção 27) | 2 | 8 | 6 | — | 16 | ✅ 16/16 — C-01..C-16 |
-| Testes | 104 | ~164 | ~37 | ~41+117 | ~463 | ✅ 942 testes passando |
+| Melhorias Pós-Venda 2026 (Seção 34) | 4 | 9 | 8 | — | 21 | ✅ 21/21 — 34.2..34.6 ⚙️ 34.4.2 por design |
+| Importação de Contratos via IA (Seção 34.7) | — | 1 | — | — | 1 | ✅ 1/1 — upload PDF/imagens → Claude extrai → revisão → cadastro |
+| Testes | 104 | ~164 | ~37 | ~41+117 | ~463 | ✅ 1335 testes passando |
 | CI/CD | — | 2 | 4 | 2 | 8 | — |
 | Documentação | — | — | 1 | 3 | 4 | — |
 | **Total** | **~117** | **~254** | **~112** | **~61** | **~544** | |
@@ -2880,8 +2883,165 @@ Semana 4: F4-01..F4-05 (ações rápidas)
 
 ### 33.7 Critérios de Aceitação
 
-- ✅ Nenhuma regressão na suite de testes (1143+ passando)
+- ✅ Nenhuma regressão na suite de testes (1300 passando)
 - ✅ Tempo médio para "Registrar Pagamento" < 5s (hoje: ~12s com navegação)
 - ✅ Todas as páginas de detalhe têm breadcrumb e `<title>` específico
 - ✅ Formulários reportam erro de validação antes do submit (sem ida ao servidor)
+
+---
+
+## 34. MELHORIAS DE PRODUTO 2026 — PÓS-VENDA 🆕
+
+> **Origem:** benchmark de mercado (2026-05-22) + análise do sistema atual.
+> Foco: aperfeiçoar o pós-venda (gestão de contratos, cobranças, portal do
+> comprador). Fora do escopo deste sistema: CRM/funil, assinatura eletrônica,
+> comissões de corretores, NFS-e, conformidade LGPD e régua de cobrança
+> configurável. Adiados (débito técnico pós-2050, ver 34.8): trilha de
+> auditoria completa. Importação de contratos via IA implementada em 34.7.
+
+### 34.1 Diagnóstico — Status Atual vs. Oportunidades
+
+| Capacidade | Status |
+|---|---|
+| Gestão de contratos e parcelas | ✅ Maduro |
+| Reajuste monetário (IPCA/IGPM/SELIC) | ✅ Maduro |
+| Boleto bancário (BRCobrança) | ✅ Maduro |
+| PIX Copia e Cola na parcela/portal | ✅ Implementado |
+| CNAB 240/400 remessa e retorno | ✅ Maduro |
+| Conciliação OFX | ✅ Implementado |
+| Notificações (email/SMS/WhatsApp) | ✅ Maduro |
+| Portal do comprador (autoatendimento) | ✅ Implementado |
+| PIX — confirmação automática via webhook | ✅ Implementado (34.3) |
+| Portal — upload de comprovante pelo comprador | ✅ Implementado (34.4) |
+| Portal — renegociação/antecipação self-service | ⚙️ Por design — só admin (simulador read-only no portal em 34.4) |
+| Relatórios agendados e exportação para BI | ✅ Implementado (34.5) |
+| PWA — portal instalável no celular | ✅ Implementado (34.6) |
+| Conformidade Lei 13.786 / quadro-resumo Lei 6.766 | ✅ Implementado (34.2) |
+| Importação de contratos via IA (PDF/imagens → cadastro) | ✅ Implementado (34.7) |
+
+---
+
+### 34.2 P1 — Conformidade Legal (Lei 13.786 / Lei 6.766)
+
+**Por quê:** a Lei 6.766 art. 26 exige **quadro-resumo** no contrato de
+loteamento; a Lei 13.786/2018 regula distrato e retenção. Necessário auditar
+aderência.
+
+| # | Item | Status |
+|---|------|--------|
+| 34.2.1 | Quadro-resumo padronizado no PDF do contrato (preço total, índice, taxa de juros, prazo, multa, fruição) | ✅ |
+| 34.2.2 | Revisar e documentar cálculo de rescisão à luz da Lei 13.786 (retenção até 50% para loteamento) | ✅ |
+| 34.2.3 | Alertar quando o distrato geraria retenção acima do limite legal | ✅ |
+| 34.2.4 | Versionamento de minutas de contrato (histórico de modelos por imobiliária) | ✅ |
+
+---
+
+### 34.3 P2 — PIX: Confirmação Automática via Webhook
+
+**Por quê:** o sistema já armazena `pix_copia_cola` e `pix_qrcode` na `Parcela`
+e exibe no portal/boleto. Falta o fechamento do ciclo: confirmar o pagamento PIX
+automaticamente sem depender do arquivo CNAB de retorno.
+
+| # | Item | Status |
+|---|------|--------|
+| 34.3.1 | Webhook endpoint `POST /financeiro/webhook/pix/` para receber notificações do banco/PSP | ✅ |
+| 34.3.2 | Identificar parcela pelo `txid` (nosso_numero ou ID do QR dinâmico) | ✅ |
+| 34.3.3 | Baixar parcela automaticamente ao receber confirmação PIX (reaproveitar `registrar_pagamento`) | ✅ |
+| 34.3.4 | Log de eventos PIX recebidos (deduplicação por `EndToEndId`) | ✅ |
+
+---
+
+### 34.4 P2 — Portal do Comprador — Autoatendimento Expandido
+
+**Por quê:** o portal já exibe contratos, parcelas e boletos. Falta permitir que
+o comprador realize ações sem passar pela imobiliária.
+
+| # | Item | Status |
+|---|------|--------|
+| 34.4.1 | **Upload de comprovante de pagamento** — comprador envia PDF/imagem; imobiliária confirma | ✅ |
+| 34.4.2 | **Simulação de antecipação self-service** — calcular desconto e emitir boleto/PIX de quitação antecipada | ⚙️ Por design — simulador read-only disponível; emissão só pelo admin |
+| 34.4.3 | **Solicitação de segunda via** sem precisar ligar para a imobiliária | ✅ |
+| 34.4.4 | **Histórico unificado** de pagamentos, reajustes e notificações recebidas em linha do tempo | ✅ |
+| 34.4.5 | **Atualização de cadastro** pelo comprador (endereço, telefone, e-mail) com aprovação da imobiliária | ✅ |
+
+---
+
+### 34.5 P3 — Relatórios Agendados e Exportação para BI
+
+**Por quê:** hoje os relatórios são gerados sob demanda. Imobiliárias precisam
+de relatórios automáticos periódicos e integração com ferramentas de BI.
+
+| # | Item | Status |
+|---|------|--------|
+| 34.5.1 | Relatório de inadimplência enviado por e-mail (diário/semanal) configurável | ✅ |
+| 34.5.2 | Relatório de posição de contratos (saldo devedor total) em PDF/Excel agendado | ✅ |
+| 34.5.3 | Endpoint `GET /api/relatorios/posicao/?formato=json` para consumo por Power BI / Looker | ✅ |
+| 34.5.4 | Dashboard executivo consolidado para Contabilidade: receita prevista × realizada × inadimplência | ✅ |
+
+---
+
+### 34.6 P3 — PWA — Portal do Comprador Instalável
+
+**Por quê:** compradores acessam majoritariamente pelo celular. Um PWA transforma
+o portal existente em app instalável sem desenvolver app nativo.
+
+| # | Item | Status |
+|---|------|--------|
+| 34.6.1 | `manifest.json` com ícones, tema e `start_url` apontando para o portal | ✅ |
+| 34.6.2 | Service worker com cache dos assets estáticos (offline para telas já visitadas) | ✅ |
+| 34.6.3 | Notificações push via Web Push API (vencimento, boleto disponível, reajuste aplicado) | ✅ |
+| 34.6.4 | Layout mobile-first nas telas críticas: parcelas, boleto, comprovante | ✅ |
+
+---
+
+### 34.7 P2 — Importação de Contratos via IA ✅ CONCLUÍDO
+
+Fluxo completo de cadastro de contrato a partir de um PDF ou fotos: o usuário faz upload, a IA extrai todos os dados, o operador revisa e confirma — e o sistema cria todas as entidades automaticamente.
+
+| # | Item | Status |
+|---|------|--------|
+| 34.7.1 | Upload de PDF ou múltiplas imagens (drag-and-drop, multi-arquivo, validação de tipo/tamanho) | ✅ |
+| 34.7.2 | Extração via Claude API (`claude-opus-4-7`) — prompt estruturado retorna JSON com todos os campos do contrato, dados de Imobiliária, Comprador, Imóvel e Prestações Intermediárias | ✅ |
+| 34.7.3 | Nível de confiança por campo (`ALTO/MEDIO/BAIXO`) — campos incertos destacados com borda amarela na revisão | ✅ |
+| 34.7.4 | `ProcessadorImportacao`: match de entidades existentes por CNPJ/CPF/matrícula antes de propor criação | ✅ |
+| 34.7.5 | Formulário de revisão pré-preenchido — operador corrige e confirma antes do cadastro | ✅ |
+| 34.7.6 | `confirmar_importacao()`: criação atômica (Imobiliária → Comprador → Imóvel → Contrato → Intermediárias) em `transaction.atomic()` | ✅ |
+| 34.7.7 | Idempotência — duplo-submit redireciona sem duplicar entidades | ✅ |
+| 34.7.8 | `ContratoImportacao` model com lifecycle `PENDENTE → EXTRAINDO → REVISAO → CONCLUIDO / ERRO` | ✅ |
+| 34.7.9 | 29 testes unitários cobrindo parser JSON, matching, views e criação de entidades | ✅ |
+
+**Arquivos principais:**
+- `contratos/services/importacao_ia.py` — `ImportacaoIA`, `ProcessadorImportacao`, `confirmar_importacao`
+- `contratos/models.py` — `ContratoImportacao`
+- `templates/contratos/importar_pdf.html` — upload com drag-and-drop e spinner
+- `templates/contratos/revisao_importacao.html` — revisão com badges de match e campos incertos
+
+---
+
+### 34.8 Itens Adiados — Débito Técnico (pós-2050)
+
+| # | Item | Motivo |
+|---|------|--------|
+| 34.8.1 | **Trilha de auditoria completa** (create/update/delete de Contrato, Parcela, Reajuste, Pagamento via signals) | Fora do escopo prioritário |
+| 34.8.2 | **IA avançada** — score de inadimplência, assistente conversacional no portal, resumo em linguagem simples (base existe via importação 34.7) | Fora do escopo prioritário |
+
+---
+
+### 34.9 Ordem de Execução — ✅ CONCLUÍDO
+
+```
+Fase A — P1:  34.2 Conformidade Legal          ✅ CONCLUÍDO
+Fase B — P2:  34.3 PIX Webhook                 ✅ CONCLUÍDO
+              34.4 Portal Comprador             ✅ CONCLUÍDO
+Fase C — P3:  34.5 Relatórios BI               ✅ CONCLUÍDO
+              34.6 PWA Portal Instalável        ✅ CONCLUÍDO
+Fase D — P2:  34.7 Importação via IA           ✅ CONCLUÍDO
+```
+
+### 34.10 Critérios de Aceitação
+
+- ✅ Suite mantida com ≥ 1335 testes passando (critério atingido)
+- Integrações externas (webhook PIX, push notifications) com modo sandbox e
+  fallback gracioso quando o provedor estiver indisponível
+- Multi-tenancy preservado: todas as entidades novas isoladas por imobiliária
 
