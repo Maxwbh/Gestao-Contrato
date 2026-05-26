@@ -153,28 +153,36 @@ class ImportacaoIA:
         return self._call(content)
 
     def _call(self, content: list) -> dict:
-        # Tenta extração barata com Haiku; escala para Opus se confiança < ALTO
+        # Tier 1 — Haiku (barato): basta para contratos legíveis e padronizados
+        dados = self._invocar('claude-haiku-4-5-20251001', content)
+        if dados.get('confianca', {}).get('nivel') == 'ALTO':
+            return dados
+
+        # Tier 2 — Sonnet (intermediário): cobre a maioria dos casos difíceis
+        logger.info(
+            'Haiku confiança=%s campos_incertos=%s — escalando para Sonnet',
+            dados.get('confianca', {}).get('nivel'),
+            dados.get('confianca', {}).get('campos_incertos', []),
+        )
+        dados = self._invocar('claude-sonnet-4-6', content)
+        if dados.get('confianca', {}).get('nivel') == 'ALTO':
+            return dados
+
+        # Tier 3 — Opus (caro): reservado para documentos muito difíceis
+        logger.info(
+            'Sonnet confiança=%s campos_incertos=%s — escalando para Opus',
+            dados.get('confianca', {}).get('nivel'),
+            dados.get('confianca', {}).get('campos_incertos', []),
+        )
+        return self._invocar('claude-opus-4-7', content)
+
+    def _invocar(self, model: str, content: list) -> dict:
         resposta = self.client.messages.create(
-            model='claude-haiku-4-5-20251001',
+            model=model,
             max_tokens=4096,
             messages=[{'role': 'user', 'content': content}],
         )
-        dados = _parse_json(resposta.content[0].text)
-
-        if dados.get('confianca', {}).get('nivel') != 'ALTO':
-            logger.info(
-                'Confiança Haiku: %s — escalando para Opus. Campos incertos: %s',
-                dados.get('confianca', {}).get('nivel'),
-                dados.get('confianca', {}).get('campos_incertos', []),
-            )
-            resposta = self.client.messages.create(
-                model='claude-opus-4-7',
-                max_tokens=4096,
-                messages=[{'role': 'user', 'content': content}],
-            )
-            dados = _parse_json(resposta.content[0].text)
-
-        return dados
+        return _parse_json(resposta.content[0].text)
 
 
 # ─────────────────────────────────────────────────────────────────────────────

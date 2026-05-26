@@ -143,13 +143,16 @@ class TestHelpers:
         assert _date('nao-e-data') is None
 
 
-# ─── Estratégia híbrida Haiku → Opus ─────────────────────────────────────────
+# ─── Estratégia híbrida Haiku → Sonnet → Opus ────────────────────────────────
 
 class TestEstrategiaHibrida:
-    """Verifica o roteamento de modelos: Haiku barato primeiro, Opus só quando necessário."""
+    """
+    Verifica o roteamento de modelos em 3 camadas:
+      Haiku (barato) → Sonnet (intermediário) → Opus (último recurso)
+    Cada camada só é acionada se a anterior retornar confiança < ALTO.
+    """
 
     def _api_resp(self, data: dict):
-        """Cria mock de resposta da API Anthropic."""
         resp = MagicMock()
         resp.content = [MagicMock(text=json.dumps(data))]
         return resp
@@ -160,10 +163,12 @@ class TestEstrategiaHibrida:
         ia._client = MagicMock()
         return ia
 
-    def test_haiku_confianca_alto_nao_chama_opus(self):
-        """Contrato legível → Haiku basta, Opus não deve ser acionado."""
+    # ── Tier 1: Haiku ────────────────────────────────────────────────────────
+
+    def test_haiku_alto_retorna_sem_escalar(self):
+        """Contrato legível → Haiku basta, Sonnet e Opus não são chamados."""
         ia = self._ia_com_mock_client()
-        dados = {'numero_contrato': 'X', 'confianca': {'nivel': 'ALTO', 'campos_incertos': []}}
+        dados = {'confianca': {'nivel': 'ALTO', 'campos_incertos': []}}
         ia._client.messages.create.return_value = self._api_resp(dados)
 
         resultado = ia._call([])
@@ -172,68 +177,109 @@ class TestEstrategiaHibrida:
         assert ia._client.messages.create.call_count == 1
         assert ia._client.messages.create.call_args.kwargs['model'] == 'claude-haiku-4-5-20251001'
 
-    def test_haiku_confianca_medio_escala_para_opus(self):
-        """Campos incertos → Haiku informa MEDIO e Opus refaz a extração."""
+    def test_haiku_medio_escala_para_sonnet(self):
+        """Haiku MEDIO → Sonnet retorna ALTO → Opus não chamado."""
         ia = self._ia_com_mock_client()
-        dados_haiku = {'confianca': {'nivel': 'MEDIO', 'campos_incertos': ['valor_total']}}
-        dados_opus  = {'confianca': {'nivel': 'ALTO',  'campos_incertos': []}, 'valor_total': 150000}
+        dados_haiku  = {'confianca': {'nivel': 'MEDIO', 'campos_incertos': ['valor_total']}}
+        dados_sonnet = {'confianca': {'nivel': 'ALTO',  'campos_incertos': []}, 'valor_total': 150000}
         ia._client.messages.create.side_effect = [
             self._api_resp(dados_haiku),
-            self._api_resp(dados_opus),
+            self._api_resp(dados_sonnet),
         ]
 
         resultado = ia._call([])
 
-        assert resultado == dados_opus
+        assert resultado == dados_sonnet
         assert ia._client.messages.create.call_count == 2
         modelos = [c.kwargs['model'] for c in ia._client.messages.create.call_args_list]
-        assert modelos == ['claude-haiku-4-5-20251001', 'claude-opus-4-7']
+        assert modelos == ['claude-haiku-4-5-20251001', 'claude-sonnet-4-6']
 
-    def test_haiku_confianca_baixo_escala_para_opus(self):
-        """Documento difícil (escaneado, ilegível) → Haiku retorna BAIXO → Opus chamado."""
+    def test_haiku_baixo_escala_para_sonnet(self):
+        """Haiku BAIXO → Sonnet resolve → Opus não chamado."""
         ia = self._ia_com_mock_client()
-        dados_haiku = {'confianca': {'nivel': 'BAIXO', 'campos_incertos': ['cpf', 'data_contrato']}}
-        dados_opus  = {'confianca': {'nivel': 'ALTO',  'campos_incertos': []}}
+        dados_haiku  = {'confianca': {'nivel': 'BAIXO', 'campos_incertos': ['cpf', 'data_contrato']}}
+        dados_sonnet = {'confianca': {'nivel': 'ALTO',  'campos_incertos': []}}
         ia._client.messages.create.side_effect = [
             self._api_resp(dados_haiku),
-            self._api_resp(dados_opus),
+            self._api_resp(dados_sonnet),
         ]
 
         resultado = ia._call([])
 
-        assert resultado == dados_opus
+        assert resultado == dados_sonnet
         assert ia._client.messages.create.call_count == 2
-        assert ia._client.messages.create.call_args.kwargs['model'] == 'claude-opus-4-7'
+        assert ia._client.messages.create.call_args.kwargs['model'] == 'claude-sonnet-4-6'
 
-    def test_haiku_sem_campo_confianca_escala_para_opus(self):
-        """JSON sem 'confianca' é tratado como não-ALTO → escalada preventiva para Opus."""
+    def test_haiku_sem_campo_confianca_escala_para_sonnet(self):
+        """JSON sem 'confianca' é não-ALTO → escala preventiva para Sonnet."""
         ia = self._ia_com_mock_client()
-        dados_haiku = {'valor_total': 100000}  # campo ausente
-        dados_opus  = {'valor_total': 100000, 'confianca': {'nivel': 'ALTO', 'campos_incertos': []}}
+        dados_haiku  = {'valor_total': 100000}
+        dados_sonnet = {'valor_total': 100000, 'confianca': {'nivel': 'ALTO', 'campos_incertos': []}}
         ia._client.messages.create.side_effect = [
             self._api_resp(dados_haiku),
-            self._api_resp(dados_opus),
+            self._api_resp(dados_sonnet),
+        ]
+
+        ia._call([])
+
+        modelos = [c.kwargs['model'] for c in ia._client.messages.create.call_args_list]
+        assert modelos[1] == 'claude-sonnet-4-6'
+
+    # ── Tier 2: Sonnet ───────────────────────────────────────────────────────
+
+    def test_sonnet_alto_nao_chama_opus(self):
+        """Haiku MEDIO → Sonnet ALTO → Opus poupado."""
+        ia = self._ia_com_mock_client()
+        dados_haiku  = {'confianca': {'nivel': 'MEDIO', 'campos_incertos': ['valor_total']}}
+        dados_sonnet = {'confianca': {'nivel': 'ALTO',  'campos_incertos': []}}
+        ia._client.messages.create.side_effect = [
+            self._api_resp(dados_haiku),
+            self._api_resp(dados_sonnet),
         ]
 
         ia._call([])
 
         assert ia._client.messages.create.call_count == 2
+        modelos = [c.kwargs['model'] for c in ia._client.messages.create.call_args_list]
+        assert 'claude-opus-4-7' not in modelos
 
-    def test_opus_resultado_retornado_mesmo_se_confianca_medio(self):
-        """Opus pode retornar MEDIO também — o resultado é aceito sem nova chamada."""
+    def test_sonnet_medio_escala_para_opus(self):
+        """Haiku BAIXO → Sonnet MEDIO → Opus chamado como último recurso."""
         ia = self._ia_com_mock_client()
-        dados_haiku = {'confianca': {'nivel': 'BAIXO', 'campos_incertos': ['cpf']}}
-        dados_opus  = {'confianca': {'nivel': 'MEDIO', 'campos_incertos': ['cpf']}}
+        dados_haiku  = {'confianca': {'nivel': 'BAIXO', 'campos_incertos': ['cpf']}}
+        dados_sonnet = {'confianca': {'nivel': 'MEDIO', 'campos_incertos': ['cpf']}}
+        dados_opus   = {'confianca': {'nivel': 'ALTO',  'campos_incertos': []}}
         ia._client.messages.create.side_effect = [
             self._api_resp(dados_haiku),
+            self._api_resp(dados_sonnet),
             self._api_resp(dados_opus),
         ]
 
         resultado = ia._call([])
 
-        # Opus é última instância — retorna o que tiver, sem nova chamada
         assert resultado == dados_opus
-        assert ia._client.messages.create.call_count == 2
+        assert ia._client.messages.create.call_count == 3
+        modelos = [c.kwargs['model'] for c in ia._client.messages.create.call_args_list]
+        assert modelos == ['claude-haiku-4-5-20251001', 'claude-sonnet-4-6', 'claude-opus-4-7']
+
+    # ── Tier 3: Opus ─────────────────────────────────────────────────────────
+
+    def test_opus_resultado_aceito_independente_de_confianca(self):
+        """Opus é última instância — retorna o resultado sem nova tentativa."""
+        ia = self._ia_com_mock_client()
+        dados_haiku  = {'confianca': {'nivel': 'BAIXO', 'campos_incertos': ['cpf']}}
+        dados_sonnet = {'confianca': {'nivel': 'BAIXO', 'campos_incertos': ['cpf']}}
+        dados_opus   = {'confianca': {'nivel': 'MEDIO', 'campos_incertos': ['cpf']}}
+        ia._client.messages.create.side_effect = [
+            self._api_resp(dados_haiku),
+            self._api_resp(dados_sonnet),
+            self._api_resp(dados_opus),
+        ]
+
+        resultado = ia._call([])
+
+        assert resultado == dados_opus
+        assert ia._client.messages.create.call_count == 3
 
 
 # ─── Matching de entidades ────────────────────────────────────────────────────
