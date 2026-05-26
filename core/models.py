@@ -1434,3 +1434,54 @@ class AcessoNegado(models.Model):
 
     def __str__(self):
         return f'{self.ip} → {self.url} ({self.status_code}) em {self.timestamp:%d/%m/%Y %H:%M}'
+
+
+# ─── Monitor de Uso de IA ──────────────────────────────────────────────────────
+
+class RegistroUsoIA(models.Model):
+    """Registra cada chamada a APIs de IA com tokens consumidos e custo estimado."""
+
+    PROVIDER_ANTHROPIC = 'ANTHROPIC'
+    PROVIDER_GOOGLE    = 'GOOGLE'
+    PROVIDER_CHOICES   = [
+        (PROVIDER_ANTHROPIC, 'Anthropic Claude'),
+        (PROVIDER_GOOGLE,    'Google Gemini'),
+    ]
+
+    OP_IMPORTACAO_PDF   = 'IMPORTACAO_PDF'
+    OP_CHATBOT_INTENT   = 'CHATBOT_INTENT'
+    OP_CHATBOT_HUMANIZE = 'CHATBOT_HUMANIZE'
+    OP_CHOICES = [
+        (OP_IMPORTACAO_PDF,   'Importação de Contrato PDF'),
+        (OP_CHATBOT_INTENT,   'Chatbot — Classificação de Intent'),
+        (OP_CHATBOT_HUMANIZE, 'Chatbot — Humanização de Resposta'),
+    ]
+
+    provider   = models.CharField(max_length=20, choices=PROVIDER_CHOICES, verbose_name='Provedor')
+    modelo     = models.CharField(max_length=60, verbose_name='Modelo')
+    operacao   = models.CharField(max_length=30, choices=OP_CHOICES, verbose_name='Operação')
+    tokens_input  = models.PositiveIntegerField(default=0, verbose_name='Tokens entrada')
+    tokens_output = models.PositiveIntegerField(default=0, verbose_name='Tokens saída')
+    custo_usd  = models.DecimalField(max_digits=10, decimal_places=6, default=0, verbose_name='Custo (USD)')
+    usuario    = models.ForeignKey(
+        'auth.User', null=True, blank=True, on_delete=models.SET_NULL,
+        related_name='registros_uso_ia', verbose_name='Usuário',
+    )
+    contrato_importacao = models.ForeignKey(
+        'contratos.ContratoImportacao', null=True, blank=True, on_delete=models.SET_NULL,
+        related_name='registros_uso_ia', verbose_name='Importação',
+    )
+    criado_em  = models.DateTimeField(auto_now_add=True, verbose_name='Data/Hora')
+
+    class Meta:
+        ordering = ['-criado_em']
+        verbose_name = 'Registro de Uso de IA'
+        verbose_name_plural = 'Registros de Uso de IA'
+        indexes = [
+            models.Index(fields=['criado_em']),
+            models.Index(fields=['operacao', 'criado_em']),
+            models.Index(fields=['usuario', 'criado_em']),
+        ]
+
+    def __str__(self):
+        return f'{self.modelo} | {self.get_operacao_display()} | ${self.custo_usd:.4f}'

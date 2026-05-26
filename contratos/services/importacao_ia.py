@@ -117,8 +117,10 @@ Regras:
 class ImportacaoIA:
     """Extrai dados estruturados de contratos usando cadeia de modelos Gemini → Claude."""
 
-    def __init__(self):
+    def __init__(self, usuario=None, contrato_importacao=None):
         self._client = None
+        self._usuario = usuario
+        self._contrato_importacao = contrato_importacao
 
     @property
     def client(self):
@@ -189,6 +191,20 @@ class ImportacaoIA:
             content.append(_PROMPT)
             resposta = model.generate_content(content)
             dados = _parse_json(resposta.text)
+            # Registra uso (tokens via usage_metadata quando disponível)
+            meta = getattr(resposta, 'usage_metadata', None)
+            tok_in  = getattr(meta, 'prompt_token_count', 0) or 0
+            tok_out = getattr(meta, 'candidates_token_count', 0) or 0
+            from core.services.ia_monitor import registrar, PROVIDER_GOOGLE, OP_IMPORTACAO_PDF
+            registrar(
+                provider=PROVIDER_GOOGLE,
+                modelo='gemini-2.0-flash',
+                operacao=OP_IMPORTACAO_PDF,
+                tokens_input=tok_in,
+                tokens_output=tok_out,
+                usuario=self._usuario,
+                contrato_importacao=self._contrato_importacao,
+            )
             nivel = dados.get('confianca', {}).get('nivel')
             if nivel == 'ALTO':
                 return dados
@@ -231,6 +247,16 @@ class ImportacaoIA:
             model=model,
             max_tokens=4096,
             messages=[{'role': 'user', 'content': content}],
+        )
+        from core.services.ia_monitor import registrar, PROVIDER_ANTHROPIC, OP_IMPORTACAO_PDF
+        registrar(
+            provider=PROVIDER_ANTHROPIC,
+            modelo=model,
+            operacao=OP_IMPORTACAO_PDF,
+            tokens_input=resposta.usage.input_tokens,
+            tokens_output=resposta.usage.output_tokens,
+            usuario=self._usuario,
+            contrato_importacao=self._contrato_importacao,
         )
         return _parse_json(resposta.content[0].text)
 

@@ -1,0 +1,295 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Custos de IA{% endblock %}
+
+{% block extra_css %}
+<style>
+    .card-stats {
+        border-left: 4px solid;
+        transition: transform 0.2s;
+    }
+    .card-stats:hover { transform: translateY(-3px); }
+    .card-stats.primary  { border-color: #007bff; }
+    .card-stats.success  { border-color: #28a745; }
+    .card-stats.warning  { border-color: #ffc107; }
+    .card-stats.info     { border-color: #17a2b8; }
+
+    .stat-value {
+        font-size: 1.8rem;
+        font-weight: bold;
+    }
+    .stat-label { color: #6c757d; font-size: 0.9rem; }
+
+    .chart-container { position: relative; height: 280px; }
+
+    .periodo-btn.active {
+        background-color: #007bff !important;
+        color: #fff !important;
+    }
+
+    .badge-provider-ANTHROPIC { background-color: #cc785c; color: #fff; }
+    .badge-provider-GOOGLE    { background-color: #4285f4; color: #fff; }
+
+    .op-label {
+        font-size: 0.78rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: .05em;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+
+    <!-- Cabeçalho -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h2><i class="fas fa-robot"></i> Custos de IA</h2>
+            <p class="text-muted mb-0">Monitoramento de uso e custo das APIs de inteligência artificial</p>
+        </div>
+        <div class="btn-group" role="group">
+            <a href="?periodo=7"  class="btn btn-outline-primary periodo-btn {% if periodo == 7  %}active{% endif %}">7d</a>
+            <a href="?periodo=30" class="btn btn-outline-primary periodo-btn {% if periodo == 30 %}active{% endif %}">30d</a>
+            <a href="?periodo=90" class="btn btn-outline-primary periodo-btn {% if periodo == 90 %}active{% endif %}">90d</a>
+        </div>
+    </div>
+
+    <!-- Cards de Resumo -->
+    <div class="row mb-4">
+        <div class="col-sm-6 col-xl-3 mb-3">
+            <div class="card card-stats primary h-100">
+                <div class="card-body">
+                    <div class="stat-value text-primary">U$ {{ total_custo|floatformat:4 }}</div>
+                    <div class="stat-label">Custo total ({{ periodo }} dias)</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-sm-6 col-xl-3 mb-3">
+            <div class="card card-stats success h-100">
+                <div class="card-body">
+                    <div class="stat-value text-success">{{ total_chamadas }}</div>
+                    <div class="stat-label">Chamadas de API</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-sm-6 col-xl-3 mb-3">
+            <div class="card card-stats info h-100">
+                <div class="card-body">
+                    <div class="stat-value text-info">{{ total_tokens|floatformat:0 }}</div>
+                    <div class="stat-label">Tokens consumidos</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-sm-6 col-xl-3 mb-3">
+            <div class="card card-stats warning h-100">
+                <div class="card-body">
+                    {% if total_chamadas %}
+                        <div class="stat-value text-warning">U$ {{ total_custo|floatformat:6 }}</div>
+                        <div class="stat-label">Custo médio / chamada</div>
+                    {% else %}
+                        <div class="stat-value text-warning">—</div>
+                        <div class="stat-label">Custo médio / chamada</div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Gráficos: Distribuição + Tendência -->
+    <div class="row mb-4">
+        <!-- Doughnut: por modelo -->
+        <div class="col-md-4 mb-3">
+            <div class="card h-100">
+                <div class="card-header">
+                    <i class="fas fa-chart-pie"></i> Custo por Modelo
+                </div>
+                <div class="card-body">
+                    <div class="chart-container">
+                        <canvas id="chartModelo"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Doughnut: por operação -->
+        <div class="col-md-4 mb-3">
+            <div class="card h-100">
+                <div class="card-header">
+                    <i class="fas fa-chart-pie"></i> Custo por Operação
+                </div>
+                <div class="card-body">
+                    <div class="chart-container">
+                        <canvas id="chartOperacao"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Linha: tendência diária -->
+        <div class="col-md-4 mb-3">
+            <div class="card h-100">
+                <div class="card-header">
+                    <i class="fas fa-chart-line"></i> Tendência Diária (USD)
+                </div>
+                <div class="card-body">
+                    <div class="chart-container">
+                        <canvas id="chartTendencia"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Tabela de operações recentes -->
+    <div class="row">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">
+                    <i class="fas fa-list"></i> Últimas Operações
+                </div>
+                <div class="card-body p-0">
+                    <div class="table-responsive">
+                        <table class="table table-hover mb-0">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Data/Hora</th>
+                                    <th>Provider</th>
+                                    <th>Modelo</th>
+                                    <th>Operação</th>
+                                    <th class="text-end">Tokens In</th>
+                                    <th class="text-end">Tokens Out</th>
+                                    <th class="text-end">Custo (USD)</th>
+                                    <th>Usuário</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for r in recentes %}
+                                <tr>
+                                    <td class="text-nowrap">{{ r.criado_em|date:"d/m/Y H:i" }}</td>
+                                    <td>
+                                        <span class="badge badge-provider-{{ r.provider }}">{{ r.provider }}</span>
+                                    </td>
+                                    <td><small class="font-monospace">{{ r.modelo }}</small></td>
+                                    <td><span class="op-label text-secondary">{{ r.operacao }}</span></td>
+                                    <td class="text-end">{{ r.tokens_input }}</td>
+                                    <td class="text-end">{{ r.tokens_output }}</td>
+                                    <td class="text-end font-monospace">{{ r.custo_usd }}</td>
+                                    <td>{{ r.usuario|default:"—" }}</td>
+                                </tr>
+                                {% empty %}
+                                <tr>
+                                    <td colspan="8" class="text-center text-muted py-4">
+                                        Nenhuma operação registrada nos últimos {{ periodo }} dias.
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function () {
+    const CORES = [
+        '#007bff','#28a745','#ffc107','#dc3545','#17a2b8',
+        '#6f42c1','#fd7e14','#20c997','#6c757d','#343a40',
+    ];
+
+    // --- dados do servidor ---
+    const dadosModelo = [
+        {% for r in por_modelo %}
+        { label: "{{ r.modelo }}", custo: {{ r.custo|default:0 }}, chamadas: {{ r.chamadas }} },
+        {% endfor %}
+    ];
+    const dadosOperacao = [
+        {% for r in por_operacao %}
+        { label: "{{ r.operacao }}", custo: {{ r.custo|default:0 }}, chamadas: {{ r.chamadas }} },
+        {% endfor %}
+    ];
+    const dadosTendencia = [
+        {% for r in tendencia %}
+        { dia: "{{ r.dia|date:'d/m' }}", custo: {{ r.custo|default:0 }}, chamadas: {{ r.chamadas }} },
+        {% endfor %}
+    ];
+
+    // --- helper ---
+    function doughnut(canvasId, dados) {
+        const ctx = document.getElementById(canvasId);
+        if (!ctx) return;
+        new Chart(ctx, {
+            type: 'doughnut',
+            data: {
+                labels: dados.map(d => d.label),
+                datasets: [{
+                    data: dados.map(d => d.custo),
+                    backgroundColor: CORES.slice(0, dados.length),
+                    borderWidth: 1,
+                }],
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { position: 'bottom', labels: { font: { size: 11 } } },
+                    tooltip: {
+                        callbacks: {
+                            label: ctx => {
+                                const d = dados[ctx.dataIndex];
+                                return ` U$ ${d.custo.toFixed(4)}  (${d.chamadas} chamadas)`;
+                            }
+                        }
+                    }
+                }
+            }
+        });
+    }
+
+    doughnut('chartModelo', dadosModelo);
+    doughnut('chartOperacao', dadosOperacao);
+
+    // --- linha tendência ---
+    const ctxTend = document.getElementById('chartTendencia');
+    if (ctxTend && dadosTendencia.length) {
+        new Chart(ctxTend, {
+            type: 'line',
+            data: {
+                labels: dadosTendencia.map(d => d.dia),
+                datasets: [{
+                    label: 'Custo USD',
+                    data: dadosTendencia.map(d => d.custo),
+                    borderColor: '#007bff',
+                    backgroundColor: 'rgba(0,123,255,0.08)',
+                    fill: true,
+                    tension: 0.3,
+                    pointRadius: 3,
+                }],
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    y: { beginAtZero: true, ticks: { callback: v => 'U$' + v.toFixed(4) } }
+                },
+                plugins: {
+                    legend: { display: false },
+                    tooltip: {
+                        callbacks: {
+                            label: ctx => ` U$ ${ctx.parsed.y.toFixed(6)}`
+                        }
+                    }
+                }
+            }
+        });
+    }
+})();
+</script>
+{% endblock %}

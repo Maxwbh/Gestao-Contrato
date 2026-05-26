@@ -2130,3 +2130,115 @@ def api_parametros_exportar(request):
     )
     response['Content-Disposition'] = 'attachment; filename="config_sistema.json"'
     return response
+
+
+# ─── Painel de Custos de IA ────────────────────────────────────────────────
+
+@login_required
+def ia_custos(request):
+    """Painel de controle de uso e custo das APIs de IA."""
+    from .models import RegistroUsoIA
+    from django.db.models import Sum, Count
+    from django.db.models.functions import TruncDate
+    from datetime import date, timedelta
+    from decimal import Decimal
+
+    periodo = int(request.GET.get('periodo', 30))
+    data_inicio = date.today() - timedelta(days=periodo - 1)
+    qs = RegistroUsoIA.objects.filter(criado_em__date__gte=data_inicio)
+
+    # Cards de resumo
+    totais = qs.aggregate(
+        total_custo=Sum('custo_usd'),
+        total_chamadas=Count('id'),
+        total_tokens_input=Sum('tokens_input'),
+        total_tokens_output=Sum('tokens_output'),
+    )
+    total_custo = totais['total_custo'] or Decimal('0')
+    total_chamadas = totais['total_chamadas'] or 0
+    total_tokens = (totais['total_tokens_input'] or 0) + (totais['total_tokens_output'] or 0)
+
+    # Distribuição por modelo
+    por_modelo = list(
+        qs.values('modelo')
+        .annotate(custo=Sum('custo_usd'), chamadas=Count('id'))
+        .order_by('-custo')
+    )
+
+    # Distribuição por operação
+    por_operacao = list(
+        qs.values('operacao')
+        .annotate(custo=Sum('custo_usd'), chamadas=Count('id'))
+        .order_by('-custo')
+    )
+
+    # Tendência diária
+    tendencia = list(
+        qs.annotate(dia=TruncDate('criado_em'))
+        .values('dia')
+        .annotate(custo=Sum('custo_usd'), chamadas=Count('id'))
+        .order_by('dia')
+    )
+
+    # Últimas 20 operações
+    recentes = qs.select_related('usuario').order_by('-criado_em')[:20]
+
+    context = {
+        'periodo': periodo,
+        'data_inicio': data_inicio,
+        'total_custo': total_custo,
+        'total_chamadas': total_chamadas,
+        'total_tokens': total_tokens,
+        'por_modelo': por_modelo,
+        'por_operacao': por_operacao,
+        'tendencia': tendencia,
+        'recentes': recentes,
+    }
+    return render(request, 'core/ia_custos.html', context)
+
+
+@login_required
+@require_http_methods(['GET'])
+def api_ia_custos_dados(request):
+    """GET /core/ia/custos/dados/ — JSON para os gráficos do painel IA."""
+    from .models import RegistroUsoIA
+    from django.db.models import Sum, Count
+    from django.db.models.functions import TruncDate
+    from datetime import date, timedelta
+
+    periodo = int(request.GET.get('periodo', 30))
+    data_inicio = date.today() - timedelta(days=periodo - 1)
+    qs = RegistroUsoIA.objects.filter(criado_em__date__gte=data_inicio)
+
+    por_modelo = list(
+        qs.values('modelo')
+        .annotate(custo=Sum('custo_usd'), chamadas=Count('id'))
+        .order_by('-custo')
+    )
+    por_operacao = list(
+        qs.values('operacao')
+        .annotate(custo=Sum('custo_usd'), chamadas=Count('id'))
+        .order_by('-custo')
+    )
+    tendencia = list(
+        qs.annotate(dia=TruncDate('criado_em'))
+        .values('dia')
+        .annotate(custo=Sum('custo_usd'), chamadas=Count('id'))
+        .order_by('dia')
+    )
+
+    payload = {
+        'por_modelo': [
+            {'modelo': r['modelo'], 'custo': float(r['custo'] or 0), 'chamadas': r['chamadas']}
+            for r in por_modelo
+        ],
+        'por_operacao': [
+            {'operacao': r['operacao'], 'custo': float(r['custo'] or 0), 'chamadas': r['chamadas']}
+            for r in por_operacao
+        ],
+        'tendencia': [
+            {'dia': r['dia'].isoformat(), 'custo': float(r['custo'] or 0), 'chamadas': r['chamadas']}
+            for r in tendencia
+        ],
+    }
+    return JsonResponse(payload)
