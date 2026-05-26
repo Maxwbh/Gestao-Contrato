@@ -4,7 +4,7 @@ Documentação da estrutura de dados do sistema de gestão de contratos imobili�
 
 **Desenvolvedor:** Maxwell da Silva Oliveira
 **Empresa:** M&S do Brasil LTDA
-**Última atualização:** Novembro 2025
+**Última atualização:** 2026-05-25
 
 ---
 
@@ -39,15 +39,18 @@ Representa um escritório de contabilidade que gerencia múltiplas imobiliárias
 | atualizado_em | DateTimeField | Data de atualização |
 
 ### Imobiliária
-Representa uma imobiliária vinculada a uma contabilidade.
+Representa uma imobiliária ou vendedor vinculado a uma contabilidade. Aceita Pessoa Física (PF) ou Pessoa Jurídica (PJ).
 
 | Campo | Tipo | Descrição |
 |-------|------|-----------|
 | id | AutoField | Chave primária |
 | contabilidade | ForeignKey | Ref. para Contabilidade |
+| tipo_pessoa | CharField(2) | PF ou PJ (padrão: PJ) |
 | nome | CharField(200) | Nome fantasia |
-| razao_social | CharField(200) | Razão social |
-| cnpj | CharField(20) | CNPJ formatado |
+| razao_social | CharField(200) | Razão social (opcional para PF) |
+| cnpj | CharField(20) | CNPJ — obrigatório para PJ; suporta alfanumérico 2026 |
+| cpf | CharField(14) | CPF — obrigatório para PF |
+| nome_fantasia | CharField(200) | Nome fantasia alternativo |
 | cep | CharField(10) | CEP |
 | logradouro | CharField(255) | Logradouro |
 | numero | CharField(10) | Número |
@@ -58,6 +61,8 @@ Representa uma imobiliária vinculada a uma contabilidade.
 | telefone | CharField(20) | Telefone |
 | email | EmailField | E-mail |
 | responsavel_financeiro | CharField(200) | Responsável financeiro |
+
+**Nota:** O campo `clean()` valida que PJ tem CNPJ e PF tem CPF. A propriedade `documento` retorna CPF para PF, CNPJ para PJ.
 
 **Configurações de Boleto Padrão:**
 
@@ -133,9 +138,9 @@ Pessoa física ou jurídica que adquire um imóvel.
 | bairro | CharField(100) | Bairro |
 | cidade | CharField(100) | Cidade |
 | estado | CharField(2) | UF |
-| telefone | CharField(20) | Telefone |
-| celular | CharField(20) | Celular |
-| email | EmailField | E-mail |
+| telefone | CharField(20) | Telefone (opcional — blank=True) |
+| celular | CharField(20) | Celular (opcional — blank=True) |
+| email | EmailField | E-mail (opcional — blank=True) |
 | notificar_email | BooleanField | Receber notificações por e-mail |
 | notificar_sms | BooleanField | Receber notificações por SMS |
 | notificar_whatsapp | BooleanField | Receber notificações por WhatsApp |
