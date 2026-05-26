@@ -153,12 +153,28 @@ class ImportacaoIA:
         return self._call(content)
 
     def _call(self, content: list) -> dict:
+        # Tenta extração barata com Haiku; escala para Opus se confiança < ALTO
         resposta = self.client.messages.create(
-            model='claude-opus-4-7',
+            model='claude-haiku-4-5-20251001',
             max_tokens=4096,
             messages=[{'role': 'user', 'content': content}],
         )
-        return _parse_json(resposta.content[0].text)
+        dados = _parse_json(resposta.content[0].text)
+
+        if dados.get('confianca', {}).get('nivel') != 'ALTO':
+            logger.info(
+                'Confiança Haiku: %s — escalando para Opus. Campos incertos: %s',
+                dados.get('confianca', {}).get('nivel'),
+                dados.get('confianca', {}).get('campos_incertos', []),
+            )
+            resposta = self.client.messages.create(
+                model='claude-opus-4-7',
+                max_tokens=4096,
+                messages=[{'role': 'user', 'content': content}],
+            )
+            dados = _parse_json(resposta.content[0].text)
+
+        return dados
 
 
 # ─────────────────────────────────────────────────────────────────────────────
