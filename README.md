@@ -101,7 +101,16 @@ Sistema desenvolvido para contabilidades que gerenciam múltiplos loteamentos, p
 - ✅ Isolamento de tenant em todas as views financeiras (`get_imobiliarias_usuario()`)
 - ✅ API BI fail-closed: retorna 503 quando `BI_API_TOKEN` não configurado em produção
 
-### 9. Recursos Adicionais
+### 9. Importação de Contratos via IA
+- ✅ **Upload de PDF ou fotos** (múltiplas imagens) via drag-and-drop — máx 20 MB por arquivo
+- ✅ **Extração automática** por Claude API (`claude-opus-4-7`): todos os campos do contrato, Imobiliária, Comprador, Imóvel e Prestações Intermediárias extraídos como JSON estruturado
+- ✅ **Nível de confiança** por campo (`ALTO/MEDIO/BAIXO`) — campos incertos destacados no formulário de revisão
+- ✅ **Match inteligente** de entidades existentes por CNPJ/CPF/matrícula antes de propor criação de novas
+- ✅ **Revisão humana** obrigatória antes do cadastro — formulário pré-preenchido editável
+- ✅ **Criação atômica** de todas as entidades em `transaction.atomic()` (Imobiliária → Comprador → Imóvel → Contrato → Intermediárias)
+- ✅ **Idempotente** — duplo-submit redireciona sem duplicar entidades
+
+### 10. Recursos Adicionais
 - ✅ Dashboard com estatísticas
 - ✅ Interface administrativa completa (Django Admin)
 - ✅ Sistema de busca e filtros avançados
@@ -355,7 +364,7 @@ Gestao-Contrato/
 │   └── urls.py
 ├── accounts/                  # Autenticação e permissões
 ├── docs/                      # Documentação organizada
-├── tests/                     # 1300 testes
+├── tests/                     # 1335 testes
 │   ├── unit/                  # Testes unitários por app
 │   ├── integration/           # Testes de integração
 │   ├── functional/            # Testes end-to-end
@@ -483,7 +492,7 @@ pytest --cov=. --cov-report=html
 pytest -v
 ```
 
-**Meta de cobertura:** > 80% | **Status atual:** ✅ 1300 testes passando
+**Meta de cobertura:** > 80% | **Status atual:** ✅ 1335 testes passando
 
 ### Cobertura por área
 
@@ -576,4 +585,4 @@ Configurado via `pyproject.toml`
 **Website:** https://msbrasil.inf.br
 **Licença:** Proprietary
 
-**Última atualização:** 2026-05-23 — 1300 testes | PWA Portal do Comprador (34.6) | Relatórios BI + Dashboard Executivo (34.5) | Segurança: timing attack, race conditions, magic bytes | CNAB E2E | Rescisão/Cessão | Juros Escalantes
+**Última atualização:** 2026-05-25 — 1335 testes | CNPJ alfanumérico 2026 (IN RFB 2229/2024) | Importação de Contratos via IA (34.7) — upload PDF/imagens → Claude extrai → revisão → cadastro completo | PWA Portal do Comprador (34.6) | Relatórios BI + Dashboard Executivo (34.5)

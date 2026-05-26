@@ -21,7 +21,8 @@
     }
 
     function maskCnpj(v) {
-        var d = onlyDigits(v).slice(0, 14);
+        // Alphanumeric CNPJ 2026 (IN RFB 2229/2024): positions 1-12 alphanumeric, 13-14 numeric check digits
+        var d = v.replace(/[^0-9A-Za-z]/g, '').toUpperCase().slice(0, 14);
         if (d.length <= 2) return d;
         if (d.length <= 5) return d.slice(0,2) + '.' + d.slice(2);
         if (d.length <= 8) return d.slice(0,2) + '.' + d.slice(2,5) + '.' + d.slice(5);

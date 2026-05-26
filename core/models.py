@@ -997,9 +997,10 @@ class Comprador(TimeStampedModel):
         verbose_name='Endereço Completo (legacy)',
         help_text='Campo legado - use os campos separados acima'
     )
-    telefone = models.CharField(max_length=20, verbose_name='Telefone')
-    celular = models.CharField(max_length=20, verbose_name='Celular')
+    telefone = models.CharField(max_length=20, blank=True, verbose_name='Telefone')
+    celular = models.CharField(max_length=20, blank=True, verbose_name='Celular')
     email = models.EmailField(
+        blank=True,
         validators=[EmailValidator()],
         verbose_name='E-mail',
         help_text='E-mail para envio de notificações'

@@ -170,7 +170,7 @@
 
 ## 7. TESTES AUTOMATIZADOS
 
-**Meta:** > 80% de cobertura | **Atual:** 1300 testes passando
+**Meta:** > 80% de cobertura | **Atual:** 1335 testes passando
 
 ### 7.1 P1 — Apps sem nenhum teste (~104 testes) ✅ CONCLUÍDO
 | Arquivo | Escopo | Qtd | Status |
@@ -594,6 +594,7 @@ Auditoria identificou 4 histórias de usuário totalmente implementadas no siste
 | G-11 | **Cálculo de rescisão** — `Contrato.calcular_rescisao()` (fruição × meses + multa penal + desp. adm.); view `calcular_rescisao_view`; template `calcular_rescisao.html`; URL `<pk>/rescisao/`; botão na tela do contrato | Alta | P3 | ✅ |
 | G-12 | **Cálculo de cessão** — `Contrato.calcular_cessao()`; view `calcular_cessao_view`; template `calcular_cessao.html`; URL `<pk>/cessao/`; botão na tela do contrato | Média | P3 | ✅ |
 | G-16 | **Juros de mora pro rata die** — `Contrato.calcular_mora_pro_rata()`: `taxa_diaria = percentual_juros_mora / 30`; usado em `calcular_rescisao()` para base de cálculo correto | Média | P3 | ✅ |
+| G-17 | **CNPJ alfanumérico 2026 (IN RFB nº 2229/2024)** — posições 1-12 aceitam letras A-Z (A=17…Z=42 no cálculo mod-11); `_CNPJ_CHAR_VALUES` em `core/validators.py`; `validar_cnpj`, `formatar_cnpj`, `validar_cpf_cnpj` atualizados; máscara JS `maskCnpj` aceita alfanumérico com auto-uppercase; campos de formulário CNPJ com placeholder atualizado | Média | P2 | ✅ |
 
 ---
 
@@ -1211,7 +1212,8 @@ para ciclo = 2..total_ciclos+1:
 | WhatsApp — Evolução (Seção 26) | — | 5 | 3 | — | 8 | ✅ 8/8 — W-01..W-08 concluídos |
 | Chatbot WhatsApp (Seção 27) | 2 | 8 | 6 | — | 16 | ✅ 16/16 — C-01..C-16 |
 | Melhorias Pós-Venda 2026 (Seção 34) | 4 | 9 | 8 | — | 21 | ✅ 21/21 — 34.2..34.6 ⚙️ 34.4.2 por design |
-| Testes | 104 | ~164 | ~37 | ~41+117 | ~463 | ✅ 1300 testes passando |
+| Importação de Contratos via IA (Seção 34.7) | — | 1 | — | — | 1 | ✅ 1/1 — upload PDF/imagens → Claude extrai → revisão → cadastro |
+| Testes | 104 | ~164 | ~37 | ~41+117 | ~463 | ✅ 1335 testes passando |
 | CI/CD | — | 2 | 4 | 2 | 8 | — |
 | Documentação | — | — | 1 | 3 | 4 | — |
 | **Total** | **~117** | **~254** | **~112** | **~61** | **~544** | |
@@ -2894,8 +2896,8 @@ Semana 4: F4-01..F4-05 (ações rápidas)
 > Foco: aperfeiçoar o pós-venda (gestão de contratos, cobranças, portal do
 > comprador). Fora do escopo deste sistema: CRM/funil, assinatura eletrônica,
 > comissões de corretores, NFS-e, conformidade LGPD e régua de cobrança
-> configurável. Adiados (débito técnico pós-2050, ver 34.7): trilha de
-> auditoria completa e funcionalidades de IA.
+> configurável. Adiados (débito técnico pós-2050, ver 34.8): trilha de
+> auditoria completa. Importação de contratos via IA implementada em 34.7.
 
 ### 34.1 Diagnóstico — Status Atual vs. Oportunidades
 
@@ -2915,6 +2917,7 @@ Semana 4: F4-01..F4-05 (ações rápidas)
 | Relatórios agendados e exportação para BI | ✅ Implementado (34.5) |
 | PWA — portal instalável no celular | ✅ Implementado (34.6) |
 | Conformidade Lei 13.786 / quadro-resumo Lei 6.766 | ✅ Implementado (34.2) |
+| Importação de contratos via IA (PDF/imagens → cadastro) | ✅ Implementado (34.7) |
 
 ---
 
@@ -2991,16 +2994,40 @@ o portal existente em app instalável sem desenvolver app nativo.
 
 ---
 
-### 34.7 Itens Adiados — Débito Técnico (pós-2050)
+### 34.7 P2 — Importação de Contratos via IA ✅ CONCLUÍDO
 
-| # | Item | Motivo |
+Fluxo completo de cadastro de contrato a partir de um PDF ou fotos: o usuário faz upload, a IA extrai todos os dados, o operador revisa e confirma — e o sistema cria todas as entidades automaticamente.
+
+| # | Item | Status |
 |---|------|--------|
-| 34.7.1 | **Trilha de auditoria completa** (create/update/delete de Contrato, Parcela, Reajuste, Pagamento via signals) | Fora do escopo prioritário |
-| 34.7.2 | **Inteligência Artificial** — score de inadimplência, assistente no portal, resumo de contrato em linguagem simples (base já existe via Claude API, Seção 30) | Fora do escopo prioritário |
+| 34.7.1 | Upload de PDF ou múltiplas imagens (drag-and-drop, multi-arquivo, validação de tipo/tamanho) | ✅ |
+| 34.7.2 | Extração via Claude API (`claude-opus-4-7`) — prompt estruturado retorna JSON com todos os campos do contrato, dados de Imobiliária, Comprador, Imóvel e Prestações Intermediárias | ✅ |
+| 34.7.3 | Nível de confiança por campo (`ALTO/MEDIO/BAIXO`) — campos incertos destacados com borda amarela na revisão | ✅ |
+| 34.7.4 | `ProcessadorImportacao`: match de entidades existentes por CNPJ/CPF/matrícula antes de propor criação | ✅ |
+| 34.7.5 | Formulário de revisão pré-preenchido — operador corrige e confirma antes do cadastro | ✅ |
+| 34.7.6 | `confirmar_importacao()`: criação atômica (Imobiliária → Comprador → Imóvel → Contrato → Intermediárias) em `transaction.atomic()` | ✅ |
+| 34.7.7 | Idempotência — duplo-submit redireciona sem duplicar entidades | ✅ |
+| 34.7.8 | `ContratoImportacao` model com lifecycle `PENDENTE → EXTRAINDO → REVISAO → CONCLUIDO / ERRO` | ✅ |
+| 34.7.9 | 29 testes unitários cobrindo parser JSON, matching, views e criação de entidades | ✅ |
+
+**Arquivos principais:**
+- `contratos/services/importacao_ia.py` — `ImportacaoIA`, `ProcessadorImportacao`, `confirmar_importacao`
+- `contratos/models.py` — `ContratoImportacao`
+- `templates/contratos/importar_pdf.html` — upload com drag-and-drop e spinner
+- `templates/contratos/revisao_importacao.html` — revisão com badges de match e campos incertos
 
 ---
 
-### 34.8 Ordem de Execução — ✅ CONCLUÍDO
+### 34.8 Itens Adiados — Débito Técnico (pós-2050)
+
+| # | Item | Motivo |
+|---|------|--------|
+| 34.8.1 | **Trilha de auditoria completa** (create/update/delete de Contrato, Parcela, Reajuste, Pagamento via signals) | Fora do escopo prioritário |
+| 34.8.2 | **IA avançada** — score de inadimplência, assistente conversacional no portal, resumo em linguagem simples (base existe via importação 34.7) | Fora do escopo prioritário |
+
+---
+
+### 34.9 Ordem de Execução — ✅ CONCLUÍDO
 
 ```
 Fase A — P1:  34.2 Conformidade Legal          ✅ CONCLUÍDO
@@ -3008,11 +3035,12 @@ Fase B — P2:  34.3 PIX Webhook                 ✅ CONCLUÍDO
               34.4 Portal Comprador             ✅ CONCLUÍDO
 Fase C — P3:  34.5 Relatórios BI               ✅ CONCLUÍDO
               34.6 PWA Portal Instalável        ✅ CONCLUÍDO
+Fase D — P2:  34.7 Importação via IA           ✅ CONCLUÍDO
 ```
 
-### 34.9 Critérios de Aceitação
+### 34.10 Critérios de Aceitação
 
-- ✅ Suite mantida com ≥ 1300 testes passando (critério atingido)
+- ✅ Suite mantida com ≥ 1335 testes passando (critério atingido)
 - Integrações externas (webhook PIX, push notifications) com modo sandbox e
   fallback gracioso quando o provedor estiver indisponível
 - Multi-tenancy preservado: todas as entidades novas isoladas por imobiliária
