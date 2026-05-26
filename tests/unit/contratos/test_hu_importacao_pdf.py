@@ -4,6 +4,7 @@ HU — Importação de Contratos via IA
 Testa:
   - Parser JSON da resposta da IA (incluindo markdown code blocks)
   - ProcessadorImportacao: match de entidades existentes
+  - Estratégia híbrida: Haiku → Opus (escala apenas quando confiança < ALTO)
   - View de upload: validações de tipo e tamanho
   - View de revisão: renderiza dados extraídos e matches
   - confirmar_importacao: criação atômica de todas as entidades
@@ -11,7 +12,7 @@ Testa:
 """
 import json
 import pytest
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
 from io import BytesIO
 from decimal import Decimal
 
@@ -26,7 +27,7 @@ User = get_user_model()
 @pytest.fixture
 def usuario_logado(db):
     from tests.fixtures.factories import UserFactory, ImobiliariaFactory, ContabilidadeFactory
-    from core.models import AcessoUsuario, Contabilidade, Imobiliaria
+    from core.models import AcessoUsuario
     contabilidade = ContabilidadeFactory()
     imobiliaria = ImobiliariaFactory(contabilidade=contabilidade)
     user = UserFactory()
@@ -93,18 +94,15 @@ def dados_extraidos_exemplo():
 class TestParseJson:
     def test_json_puro(self):
         from contratos.services.importacao_ia import _parse_json
-        resultado = _parse_json('{"chave": "valor"}')
-        assert resultado == {'chave': 'valor'}
+        assert _parse_json('{"chave": "valor"}') == {'chave': 'valor'}
 
     def test_json_em_markdown(self):
         from contratos.services.importacao_ia import _parse_json
-        texto = '```json\n{"chave": "valor"}\n```'
-        assert _parse_json(texto) == {'chave': 'valor'}
+        assert _parse_json('```json\n{"chave": "valor"}\n```') == {'chave': 'valor'}
 
     def test_json_em_markdown_sem_tipo(self):
         from contratos.services.importacao_ia import _parse_json
-        texto = '```\n{"chave": "valor"}\n```'
-        assert _parse_json(texto) == {'chave': 'valor'}
+        assert _parse_json('```\n{"chave": "valor"}\n```') == {'chave': 'valor'}
 
     def test_json_invalido_lanca_valueerror(self):
         from contratos.services.importacao_ia import _parse_json
@@ -145,6 +143,99 @@ class TestHelpers:
         assert _date('nao-e-data') is None
 
 
+# ─── Estratégia híbrida Haiku → Opus ─────────────────────────────────────────
+
+class TestEstrategiaHibrida:
+    """Verifica o roteamento de modelos: Haiku barato primeiro, Opus só quando necessário."""
+
+    def _api_resp(self, data: dict):
+        """Cria mock de resposta da API Anthropic."""
+        resp = MagicMock()
+        resp.content = [MagicMock(text=json.dumps(data))]
+        return resp
+
+    def _ia_com_mock_client(self):
+        from contratos.services.importacao_ia import ImportacaoIA
+        ia = ImportacaoIA()
+        ia._client = MagicMock()
+        return ia
+
+    def test_haiku_confianca_alto_nao_chama_opus(self):
+        """Contrato legível → Haiku basta, Opus não deve ser acionado."""
+        ia = self._ia_com_mock_client()
+        dados = {'numero_contrato': 'X', 'confianca': {'nivel': 'ALTO', 'campos_incertos': []}}
+        ia._client.messages.create.return_value = self._api_resp(dados)
+
+        resultado = ia._call([])
+
+        assert resultado == dados
+        assert ia._client.messages.create.call_count == 1
+        assert ia._client.messages.create.call_args.kwargs['model'] == 'claude-haiku-4-5-20251001'
+
+    def test_haiku_confianca_medio_escala_para_opus(self):
+        """Campos incertos → Haiku informa MEDIO e Opus refaz a extração."""
+        ia = self._ia_com_mock_client()
+        dados_haiku = {'confianca': {'nivel': 'MEDIO', 'campos_incertos': ['valor_total']}}
+        dados_opus  = {'confianca': {'nivel': 'ALTO',  'campos_incertos': []}, 'valor_total': 150000}
+        ia._client.messages.create.side_effect = [
+            self._api_resp(dados_haiku),
+            self._api_resp(dados_opus),
+        ]
+
+        resultado = ia._call([])
+
+        assert resultado == dados_opus
+        assert ia._client.messages.create.call_count == 2
+        modelos = [c.kwargs['model'] for c in ia._client.messages.create.call_args_list]
+        assert modelos == ['claude-haiku-4-5-20251001', 'claude-opus-4-7']
+
+    def test_haiku_confianca_baixo_escala_para_opus(self):
+        """Documento difícil (escaneado, ilegível) → Haiku retorna BAIXO → Opus chamado."""
+        ia = self._ia_com_mock_client()
+        dados_haiku = {'confianca': {'nivel': 'BAIXO', 'campos_incertos': ['cpf', 'data_contrato']}}
+        dados_opus  = {'confianca': {'nivel': 'ALTO',  'campos_incertos': []}}
+        ia._client.messages.create.side_effect = [
+            self._api_resp(dados_haiku),
+            self._api_resp(dados_opus),
+        ]
+
+        resultado = ia._call([])
+
+        assert resultado == dados_opus
+        assert ia._client.messages.create.call_count == 2
+        assert ia._client.messages.create.call_args.kwargs['model'] == 'claude-opus-4-7'
+
+    def test_haiku_sem_campo_confianca_escala_para_opus(self):
+        """JSON sem 'confianca' é tratado como não-ALTO → escalada preventiva para Opus."""
+        ia = self._ia_com_mock_client()
+        dados_haiku = {'valor_total': 100000}  # campo ausente
+        dados_opus  = {'valor_total': 100000, 'confianca': {'nivel': 'ALTO', 'campos_incertos': []}}
+        ia._client.messages.create.side_effect = [
+            self._api_resp(dados_haiku),
+            self._api_resp(dados_opus),
+        ]
+
+        ia._call([])
+
+        assert ia._client.messages.create.call_count == 2
+
+    def test_opus_resultado_retornado_mesmo_se_confianca_medio(self):
+        """Opus pode retornar MEDIO também — o resultado é aceito sem nova chamada."""
+        ia = self._ia_com_mock_client()
+        dados_haiku = {'confianca': {'nivel': 'BAIXO', 'campos_incertos': ['cpf']}}
+        dados_opus  = {'confianca': {'nivel': 'MEDIO', 'campos_incertos': ['cpf']}}
+        ia._client.messages.create.side_effect = [
+            self._api_resp(dados_haiku),
+            self._api_resp(dados_opus),
+        ]
+
+        resultado = ia._call([])
+
+        # Opus é última instância — retorna o que tiver, sem nova chamada
+        assert resultado == dados_opus
+        assert ia._client.messages.create.call_count == 2
+
+
 # ─── Matching de entidades ────────────────────────────────────────────────────
 
 @pytest.mark.django_db
@@ -153,9 +244,7 @@ class TestProcessadorImportacao:
     def test_match_imobiliaria_por_cnpj(self, usuario_logado):
         from contratos.services.importacao_ia import ProcessadorImportacao
         user, _, imobiliaria, _ = usuario_logado
-        dados = {
-            'imobiliaria': {'cnpj': imobiliaria.cnpj, 'nome': imobiliaria.nome, 'tipo_pessoa': 'PJ'},
-        }
+        dados = {'imobiliaria': {'cnpj': imobiliaria.cnpj, 'nome': imobiliaria.nome, 'tipo_pessoa': 'PJ'}}
         resultado = ProcessadorImportacao().processar(dados, user)
         assert resultado['imobiliaria_match'] == imobiliaria
 
@@ -216,14 +305,13 @@ class TestUploadImportacao:
         _, client, _, _ = usuario_logado
         big = BytesIO(b'%PDF-' + b'x' * (21 * 1024 * 1024))
         big.name = 'contrato.pdf'
-        big.content_type = 'application/pdf'
         resp = client.post(reverse('contratos:upload_importacao'), {'arquivo': big})
         assert resp.status_code == 200
         assert 'grande' in resp.content.decode().lower()
 
     def test_pdf_valido_chama_ia_e_redireciona(self, usuario_logado):
         from contratos.services.importacao_ia import ImportacaoIA
-        user, client, _, _ = usuario_logado
+        _, client, _, _ = usuario_logado
         dados_mock = {
             'numero_contrato': 'CTR-001', 'data_contrato': '2024-01-01',
             'valor_total': 100000, 'numero_parcelas': 120, 'dia_vencimento': 10,
@@ -236,10 +324,7 @@ class TestUploadImportacao:
         with patch.object(ImportacaoIA, 'extrair_de_pdf', return_value=dados_mock):
             pdf = BytesIO(b'%PDF-1.4 fake content')
             pdf.name = 'contrato.pdf'
-            resp = client.post(
-                reverse('contratos:upload_importacao'),
-                {'arquivo': pdf},
-            )
+            resp = client.post(reverse('contratos:upload_importacao'), {'arquivo': pdf})
         assert resp.status_code == 302
         assert 'revisao' in resp['Location']
 
@@ -274,7 +359,7 @@ class TestRevisaoImportacao:
         )
 
     def test_retorna_200_com_dados(self, usuario_logado, dados_extraidos_exemplo):
-        user, client, _, _ = usuario_logado
+        _, client, _, _ = usuario_logado
         imp = self._criar_importacao(usuario_logado, dados_extraidos_exemplo)
         resp = client.get(reverse('contratos:revisao_importacao', kwargs={'pk': imp.pk}))
         assert resp.status_code == 200
@@ -296,10 +381,10 @@ class TestRevisaoImportacao:
         assert resp.status_code == 302
 
     def test_outro_usuario_nao_acessa(self, db, usuario_logado, dados_extraidos_exemplo):
+        from contratos.models import ContratoImportacao
         from tests.fixtures.factories import UserFactory
         user, _, _, _ = usuario_logado
         outro_user = UserFactory()
-        from contratos.models import ContratoImportacao
         imp = ContratoImportacao.objects.create(
             arquivo_nome='fake.pdf',
             status='REVISAO',
@@ -346,7 +431,7 @@ class TestConfirmarImportacao:
         }
 
     def test_criacao_completa_com_entidades_existentes(self, usuario_logado, dados_extraidos_exemplo):
-        from contratos.models import Contrato, ContratoImportacao
+        from contratos.models import Contrato
         from tests.fixtures.factories import CompradorFactory, ImovelFactory
         user, client, imobiliaria, _ = usuario_logado
         comprador = CompradorFactory()
@@ -367,7 +452,7 @@ class TestConfirmarImportacao:
         assert contrato.comprador == comprador
 
     def test_confirmacao_dupla_nao_cria_duplicata(self, usuario_logado, dados_extraidos_exemplo):
-        from contratos.models import Contrato, ContratoImportacao
+        from contratos.models import Contrato
         from tests.fixtures.factories import CompradorFactory, ImovelFactory
         user, client, imobiliaria, _ = usuario_logado
         comprador = CompradorFactory()
@@ -378,14 +463,12 @@ class TestConfirmarImportacao:
 
         client.post(reverse('contratos:confirmar_importacao', kwargs={'pk': imp.pk}), post)
         count_antes = Contrato.objects.count()
-        # Segunda tentativa deve redirecionar sem criar novo contrato
         resp = client.post(reverse('contratos:confirmar_importacao', kwargs={'pk': imp.pk}), post)
         assert resp.status_code == 302
         assert Contrato.objects.count() == count_antes
 
     def test_criacao_cria_novas_entidades_quando_sem_match(self, usuario_logado, dados_extraidos_exemplo):
-        from contratos.models import Contrato
-        from core.models import Comprador, Imovel, Imobiliaria
+        from core.models import Comprador, Imobiliaria
         user, client, _, _ = usuario_logado
 
         imp = self._importacao_em_revisao(user, dados_extraidos_exemplo)
@@ -421,6 +504,26 @@ class TestConfirmarImportacao:
         assert resp.status_code == 302
         assert Comprador.objects.filter(nome='Maria Nova').exists()
         assert Imobiliaria.objects.filter(nome='Nova Imobiliária LTDA').exists()
+
+    def test_data_primeiro_vencimento_calculada_automaticamente(self, usuario_logado, dados_extraidos_exemplo):
+        """Quando data_primeiro_vencimento não é informada, calcula data_contrato + 30 dias."""
+        from contratos.models import Contrato
+        from datetime import date, timedelta
+        from tests.fixtures.factories import CompradorFactory, ImovelFactory
+        user, client, imobiliaria, _ = usuario_logado
+        comprador = CompradorFactory()
+        imovel = ImovelFactory(imobiliaria=imobiliaria)
+
+        imp = self._importacao_em_revisao(user, dados_extraidos_exemplo)
+        post = self._post_revisao(imobiliaria.pk, comprador.pk, imovel.pk)
+        post['data_primeiro_vencimento'] = ''
+        post['data_contrato'] = '2024-03-01'
+
+        client.post(reverse('contratos:confirmar_importacao', kwargs={'pk': imp.pk}), post)
+        imp.refresh_from_db()
+        contrato = Contrato.objects.get(pk=imp.contrato_criado_id)
+        esperado = date(2024, 3, 1) + timedelta(days=30)
+        assert contrato.data_primeiro_vencimento == esperado
 
     def test_intermediarias_criadas(self, usuario_logado, dados_extraidos_exemplo):
         from contratos.models import PrestacaoIntermediaria
