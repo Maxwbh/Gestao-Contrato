@@ -2130,3 +2130,340 @@ def api_parametros_exportar(request):
     )
     response['Content-Disposition'] = 'attachment; filename="config_sistema.json"'
     return response
+
+
+# ─── Painel de Custos de IA ────────────────────────────────────────────────
+
+@login_required
+def ia_custos(request):
+    """Painel de controle de uso e custo das APIs de IA."""
+    from .models import RegistroUsoIA
+    from django.db.models import Sum, Count
+    from django.db.models.functions import TruncDate
+    from datetime import date, timedelta
+    from decimal import Decimal
+
+    periodo = int(request.GET.get('periodo', 30))
+    data_inicio = date.today() - timedelta(days=periodo - 1)
+    qs = RegistroUsoIA.objects.filter(criado_em__date__gte=data_inicio)
+
+    # Cards de resumo
+    totais = qs.aggregate(
+        total_custo=Sum('custo_usd'),
+        total_chamadas=Count('id'),
+        total_tokens_input=Sum('tokens_input'),
+        total_tokens_output=Sum('tokens_output'),
+    )
+    total_custo = totais['total_custo'] or Decimal('0')
+    total_chamadas = totais['total_chamadas'] or 0
+    total_tokens = (totais['total_tokens_input'] or 0) + (totais['total_tokens_output'] or 0)
+
+    # Distribuição por modelo
+    por_modelo = list(
+        qs.values('modelo')
+        .annotate(custo=Sum('custo_usd'), chamadas=Count('id'))
+        .order_by('-custo')
+    )
+
+    # Distribuição por operação
+    por_operacao = list(
+        qs.values('operacao')
+        .annotate(custo=Sum('custo_usd'), chamadas=Count('id'))
+        .order_by('-custo')
+    )
+
+    # Tendência diária
+    tendencia = list(
+        qs.annotate(dia=TruncDate('criado_em'))
+        .values('dia')
+        .annotate(custo=Sum('custo_usd'), chamadas=Count('id'))
+        .order_by('dia')
+    )
+
+    # Últimas 20 operações
+    recentes = qs.select_related('usuario').order_by('-criado_em')[:20]
+
+    context = {
+        'periodo': periodo,
+        'data_inicio': data_inicio,
+        'total_custo': total_custo,
+        'total_chamadas': total_chamadas,
+        'total_tokens': total_tokens,
+        'por_modelo': por_modelo,
+        'por_operacao': por_operacao,
+        'tendencia': tendencia,
+        'recentes': recentes,
+    }
+    return render(request, 'core/ia_custos.html', context)
+
+
+@login_required
+@require_http_methods(['GET'])
+def api_ia_custos_dados(request):
+    """GET /core/ia/custos/dados/ — JSON para os gráficos do painel IA."""
+    from .models import RegistroUsoIA
+    from django.db.models import Sum, Count
+    from django.db.models.functions import TruncDate
+    from datetime import date, timedelta
+
+    periodo = int(request.GET.get('periodo', 30))
+    data_inicio = date.today() - timedelta(days=periodo - 1)
+    qs = RegistroUsoIA.objects.filter(criado_em__date__gte=data_inicio)
+
+    por_modelo = list(
+        qs.values('modelo')
+        .annotate(custo=Sum('custo_usd'), chamadas=Count('id'))
+        .order_by('-custo')
+    )
+    por_operacao = list(
+        qs.values('operacao')
+        .annotate(custo=Sum('custo_usd'), chamadas=Count('id'))
+        .order_by('-custo')
+    )
+    tendencia = list(
+        qs.annotate(dia=TruncDate('criado_em'))
+        .values('dia')
+        .annotate(custo=Sum('custo_usd'), chamadas=Count('id'))
+        .order_by('dia')
+    )
+
+    payload = {
+        'por_modelo': [
+            {'modelo': r['modelo'], 'custo': float(r['custo'] or 0), 'chamadas': r['chamadas']}
+            for r in por_modelo
+        ],
+        'por_operacao': [
+            {'operacao': r['operacao'], 'custo': float(r['custo'] or 0), 'chamadas': r['chamadas']}
+            for r in por_operacao
+        ],
+        'tendencia': [
+            {'dia': r['dia'].isoformat(), 'custo': float(r['custo'] or 0), 'chamadas': r['chamadas']}
+            for r in tendencia
+        ],
+    }
+    return JsonResponse(payload)
+
+
+# ─── Configuração Gráfica de Tokens ────────────────────────────────────────
+
+@login_required
+def ia_tokens_config(request):
+    """Tela gráfica de configuração de cotas de tokens por modelo."""
+    from .models import LimiteUsoIA, RegistroUsoIA
+    from core.services.ia_monitor import consumo_periodo, get_cotacao_usd_brl
+    from django.db.models import Sum
+    from datetime import date
+
+    try:
+        cotacao = get_cotacao_usd_brl()
+    except Exception:
+        cotacao = 5.80
+
+    # Tabela de preços: (input USD/MTok, output USD/MTok)
+    precos_map = {
+        'gemini-2.0-flash':          (0.0,    0.0),
+        'claude-haiku-4-5-20251001': (0.80,   4.00),
+        'claude-sonnet-4-6':         (3.00,  15.00),
+        'claude-opus-4-7':           (15.00, 75.00),
+    }
+
+    inicio = date.today().replace(day=1)
+    modelos_data = []
+    for modelo in _MODELOS_IA:
+        preco_in, preco_out = precos_map.get(modelo, (0.0, 0.0))
+        consumo_tokens = consumo_periodo('MENSAL', modelo=modelo, tipo_limite='TOKENS')
+
+        # Custo real do mês para este modelo
+        agg = RegistroUsoIA.objects.filter(
+            criado_em__date__gte=inicio, modelo=modelo,
+        ).aggregate(custo=Sum('custo_usd'))
+        custo_usd = float(agg['custo'] or 0)
+
+        # Limites configurados (mensal tokens e mensal R$)
+        lim_token = LimiteUsoIA.objects.filter(
+            tipo_escopo='MODELO', escopo_valor=modelo,
+            tipo_limite='TOKENS', periodo='MENSAL', ativo=True,
+        ).first()
+        lim_reais = LimiteUsoIA.objects.filter(
+            tipo_escopo='MODELO', escopo_valor=modelo,
+            tipo_limite='REAIS', periodo='MENSAL', ativo=True,
+        ).first()
+
+        limite_tokens = float(lim_token.valor_limite) if lim_token else None
+        limite_reais_val = float(lim_reais.valor_limite) if lim_reais else None
+        pct_tokens = min(100, int(consumo_tokens / limite_tokens * 100)) if limite_tokens else 0
+
+        modelos_data.append({
+            'modelo': modelo,
+            'preco_in': preco_in,
+            'preco_out': preco_out,
+            'preco_in_brl': round(preco_in * cotacao, 4),
+            'preco_out_brl': round(preco_out * cotacao, 4),
+            'gratuito': preco_in == 0 and preco_out == 0,
+            'consumo_tokens': int(consumo_tokens),
+            'custo_usd': round(custo_usd, 4),
+            'custo_brl': round(custo_usd * cotacao, 2),
+            'limite_tokens': limite_tokens,
+            'limite_reais': limite_reais_val,
+            'pct_tokens': pct_tokens,
+            'lim_token_pk': lim_token.pk if lim_token else '',
+            'lim_reais_pk': lim_reais.pk if lim_reais else '',
+        })
+
+    return render(request, 'core/ia_tokens_config.html', {
+        'modelos_data': modelos_data,
+        'cotacao_usd_brl': cotacao,
+        'periodo_choices': LimiteUsoIA.PERIODO_CHOICES,
+    })
+
+
+# ─── Configuração de Limites de Uso de IA ──────────────────────────────────
+
+_MODELOS_IA = [
+    'claude-haiku-4-5-20251001',
+    'claude-sonnet-4-6',
+    'claude-opus-4-7',
+    'gemini-2.0-flash',
+]
+_OPERACOES_IA = ['IMPORTACAO_PDF', 'CHATBOT_INTENT', 'CHATBOT_HUMANIZE']
+
+# Preços de referência USD/MTok para exibição na tela — (input, output)
+_PRECOS_REFERENCIA = [
+    {'modelo': 'gemini-2.0-flash',          'input': 0.00,  'output': 0.00,  'obs': 'Gratuito (cota diária)'},
+    {'modelo': 'claude-haiku-4-5-20251001', 'input': 0.80,  'output': 4.00,  'obs': ''},
+    {'modelo': 'claude-sonnet-4-6',         'input': 3.00,  'output': 15.00, 'obs': ''},
+    {'modelo': 'claude-opus-4-7',           'input': 15.00, 'output': 75.00, 'obs': 'Máximo custo'},
+]
+
+
+@login_required
+def ia_limites(request):
+    """Tela de configuração de limites de uso de IA com período configurável."""
+    from .models import LimiteUsoIA
+    from core.services.ia_monitor import consumo_periodo, get_cotacao_usd_brl
+
+    try:
+        cotacao = get_cotacao_usd_brl()
+    except Exception:
+        cotacao = 5.80
+
+    limites_raw = LimiteUsoIA.objects.all()
+    limites_com_consumo = []
+    for lim in limites_raw:
+        if lim.tipo_escopo == LimiteUsoIA.ESCOPO_MODELO:
+            atual = consumo_periodo(lim.periodo, modelo=lim.escopo_valor, tipo_limite=lim.tipo_limite)
+        else:
+            atual = consumo_periodo(lim.periodo, operacao=lim.escopo_valor, tipo_limite=lim.tipo_limite)
+        pct = min(100, int(atual / float(lim.valor_limite) * 100)) if lim.valor_limite else 0
+        limites_com_consumo.append({
+            'limite': lim,
+            'consumido': atual,
+            'percentual': pct,
+        })
+
+    # Enriquecer preços de referência com valor em R$
+    precos_ref = []
+    for p in _PRECOS_REFERENCIA:
+        precos_ref.append({
+            **p,
+            'input_brl':  round(p['input']  * cotacao, 4),
+            'output_brl': round(p['output'] * cotacao, 4),
+        })
+
+    return render(request, 'core/ia_limites.html', {
+        'limites_com_consumo': limites_com_consumo,
+        'modelos': _MODELOS_IA,
+        'operacoes': _OPERACOES_IA,
+        'periodo_choices': LimiteUsoIA.PERIODO_CHOICES,
+        'cotacao_usd_brl': cotacao,
+        'precos_ref': precos_ref,
+    })
+
+
+@login_required
+@require_http_methods(['POST'])
+def ia_limite_salvar(request):
+    """Cria ou atualiza um LimiteUsoIA."""
+    from .models import LimiteUsoIA
+    from decimal import Decimal as _Decimal, InvalidOperation
+
+    pk = request.POST.get('pk', '').strip()
+    tipo_escopo = request.POST.get('tipo_escopo', '').strip()
+    escopo_valor = request.POST.get('escopo_valor', '').strip()
+    tipo_limite = request.POST.get('tipo_limite', '').strip()
+    periodo = request.POST.get('periodo', LimiteUsoIA.PERIODO_MENSAL).strip()
+    valor_str = request.POST.get('valor_limite', '').replace(',', '.').strip()
+    ativo = request.POST.get('ativo', 'true') != 'false'
+
+    if not all([tipo_escopo, escopo_valor, tipo_limite, periodo, valor_str]):
+        messages.error(request, 'Preencha todos os campos.')
+        return redirect('core:ia_limites')
+
+    try:
+        valor = _Decimal(valor_str)
+        if valor <= 0:
+            raise ValueError('Valor deve ser positivo.')
+    except (InvalidOperation, ValueError) as exc:
+        messages.error(request, f'Valor inválido: {exc}')
+        return redirect('core:ia_limites')
+
+    try:
+        if pk:
+            updated = LimiteUsoIA.objects.filter(pk=pk).update(
+                tipo_escopo=tipo_escopo, escopo_valor=escopo_valor,
+                tipo_limite=tipo_limite, periodo=periodo,
+                valor_limite=valor, ativo=ativo,
+            )
+            if updated:
+                messages.success(request, 'Limite atualizado com sucesso.')
+            else:
+                messages.warning(request, 'Limite não encontrado.')
+        else:
+            _, created = LimiteUsoIA.objects.update_or_create(
+                tipo_escopo=tipo_escopo,
+                escopo_valor=escopo_valor,
+                tipo_limite=tipo_limite,
+                periodo=periodo,
+                defaults={'valor_limite': valor, 'ativo': ativo},
+            )
+            messages.success(request, 'Limite criado.' if created else 'Limite atualizado.')
+    except Exception as exc:
+        messages.error(request, f'Erro ao salvar limite: {exc}')
+
+    return redirect('core:ia_limites')
+
+
+@login_required
+@require_http_methods(['POST'])
+def ia_limite_excluir(request, pk):
+    """Remove um LimiteUsoIA."""
+    from .models import LimiteUsoIA
+    LimiteUsoIA.objects.filter(pk=pk).delete()
+    messages.success(request, 'Limite removido.')
+    return redirect('core:ia_limites')
+
+
+@login_required
+@require_http_methods(['POST'])
+def ia_limite_toggle(request, pk):
+    """Ativa/desativa um LimiteUsoIA sem excluir."""
+    from .models import LimiteUsoIA
+    lim = LimiteUsoIA.objects.filter(pk=pk).first()
+    if lim:
+        lim.ativo = not lim.ativo
+        lim.save(update_fields=['ativo'])
+        estado = 'ativado' if lim.ativo else 'desativado'
+        messages.success(request, f'Limite {estado}.')
+    return redirect('core:ia_limites')
+
+
+@login_required
+@require_http_methods(['GET'])
+def api_cotacao_usd_brl(request):
+    """GET /core/ia/cotacao/ — retorna cotação USD→BRL atual."""
+    from core.services.ia_monitor import get_cotacao_usd_brl
+    try:
+        cotacao = get_cotacao_usd_brl()
+        return JsonResponse({'cotacao': cotacao, 'status': 'ok'})
+    except Exception as exc:
+        return JsonResponse({'cotacao': 5.80, 'status': 'fallback', 'erro': str(exc)})

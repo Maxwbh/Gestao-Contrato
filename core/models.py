@@ -1434,3 +1434,112 @@ class AcessoNegado(models.Model):
 
     def __str__(self):
         return f'{self.ip} → {self.url} ({self.status_code}) em {self.timestamp:%d/%m/%Y %H:%M}'
+
+
+# ─── Monitor de Uso de IA ──────────────────────────────────────────────────────
+
+class RegistroUsoIA(models.Model):
+    """Registra cada chamada a APIs de IA com tokens consumidos e custo estimado."""
+
+    PROVIDER_ANTHROPIC = 'ANTHROPIC'
+    PROVIDER_GOOGLE    = 'GOOGLE'
+    PROVIDER_CHOICES   = [
+        (PROVIDER_ANTHROPIC, 'Anthropic Claude'),
+        (PROVIDER_GOOGLE,    'Google Gemini'),
+    ]
+
+    OP_IMPORTACAO_PDF   = 'IMPORTACAO_PDF'
+    OP_CHATBOT_INTENT   = 'CHATBOT_INTENT'
+    OP_CHATBOT_HUMANIZE = 'CHATBOT_HUMANIZE'
+    OP_CHOICES = [
+        (OP_IMPORTACAO_PDF,   'Importação de Contrato PDF'),
+        (OP_CHATBOT_INTENT,   'Chatbot — Classificação de Intent'),
+        (OP_CHATBOT_HUMANIZE, 'Chatbot — Humanização de Resposta'),
+    ]
+
+    provider   = models.CharField(max_length=20, choices=PROVIDER_CHOICES, verbose_name='Provedor')
+    modelo     = models.CharField(max_length=60, verbose_name='Modelo')
+    operacao   = models.CharField(max_length=30, choices=OP_CHOICES, verbose_name='Operação')
+    tokens_input  = models.PositiveIntegerField(default=0, verbose_name='Tokens entrada')
+    tokens_output = models.PositiveIntegerField(default=0, verbose_name='Tokens saída')
+    custo_usd  = models.DecimalField(max_digits=10, decimal_places=6, default=0, verbose_name='Custo (USD)')
+    usuario    = models.ForeignKey(
+        'auth.User', null=True, blank=True, on_delete=models.SET_NULL,
+        related_name='registros_uso_ia', verbose_name='Usuário',
+    )
+    contrato_importacao = models.ForeignKey(
+        'contratos.ContratoImportacao', null=True, blank=True, on_delete=models.SET_NULL,
+        related_name='registros_uso_ia', verbose_name='Importação',
+    )
+    criado_em  = models.DateTimeField(auto_now_add=True, verbose_name='Data/Hora')
+
+    class Meta:
+        ordering = ['-criado_em']
+        verbose_name = 'Registro de Uso de IA'
+        verbose_name_plural = 'Registros de Uso de IA'
+        indexes = [
+            models.Index(fields=['criado_em']),
+            models.Index(fields=['operacao', 'criado_em']),
+            models.Index(fields=['usuario', 'criado_em']),
+        ]
+
+    def __str__(self):
+        return f'{self.modelo} | {self.get_operacao_display()} | ${self.custo_usd:.4f}'
+
+
+class LimiteUsoIA(models.Model):
+    """Limite de uso das APIs de IA — por modelo ou por operação, com período configurável."""
+
+    ESCOPO_MODELO   = 'MODELO'
+    ESCOPO_OPERACAO = 'OPERACAO'
+    TIPO_TOKENS = 'TOKENS'
+    TIPO_REAIS  = 'REAIS'
+
+    PERIODO_DIARIO     = 'DIARIO'
+    PERIODO_SEMANAL    = 'SEMANAL'
+    PERIODO_QUINZENAL  = 'QUINZENAL'
+    PERIODO_MENSAL     = 'MENSAL'
+    PERIODO_BIMESTRAL  = 'BIMESTRAL'
+    PERIODO_SEMESTRAL  = 'SEMESTRAL'
+    PERIODO_ANUAL      = 'ANUAL'
+
+    ESCOPO_CHOICES = [
+        (ESCOPO_MODELO,   'Modelo de IA'),
+        (ESCOPO_OPERACAO, 'Operação'),
+    ]
+    TIPO_CHOICES = [
+        (TIPO_TOKENS, 'Tokens'),
+        (TIPO_REAIS,  'R$ (Reais)'),
+    ]
+    PERIODO_CHOICES = [
+        (PERIODO_DIARIO,    'Diário'),
+        (PERIODO_SEMANAL,   'Semanal'),
+        (PERIODO_QUINZENAL, 'Quinzenal (15 dias)'),
+        (PERIODO_MENSAL,    'Mensal'),
+        (PERIODO_BIMESTRAL, 'Bimestral (2 meses)'),
+        (PERIODO_SEMESTRAL, 'Semestral (6 meses)'),
+        (PERIODO_ANUAL,     'Anual'),
+    ]
+
+    tipo_escopo  = models.CharField(max_length=10, choices=ESCOPO_CHOICES, verbose_name='Escopo')
+    escopo_valor = models.CharField(max_length=60, verbose_name='Modelo / Operação')
+    tipo_limite  = models.CharField(max_length=10, choices=TIPO_CHOICES, verbose_name='Tipo de limite')
+    periodo      = models.CharField(
+        max_length=12, choices=PERIODO_CHOICES, default=PERIODO_MENSAL, verbose_name='Período de reset',
+    )
+    valor_limite = models.DecimalField(max_digits=14, decimal_places=2, verbose_name='Limite')
+    ativo        = models.BooleanField(default=True, verbose_name='Ativo')
+    criado_em    = models.DateTimeField(auto_now_add=True)
+    modificado_em = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        unique_together = [('tipo_escopo', 'escopo_valor', 'tipo_limite', 'periodo')]
+        ordering = ['tipo_escopo', 'escopo_valor', 'periodo']
+        verbose_name = 'Limite de Uso de IA'
+        verbose_name_plural = 'Limites de Uso de IA'
+
+    def __str__(self):
+        return (
+            f'{self.get_tipo_escopo_display()} {self.escopo_valor} — '
+            f'{self.valor_limite} {self.tipo_limite}/{self.get_periodo_display()}'
+        )

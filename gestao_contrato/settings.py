@@ -385,6 +385,9 @@ SELIC_SERIE_ID = '432'
 # IA — Anthropic / Claude API (H-01)
 ANTHROPIC_API_KEY = config('ANTHROPIC_API_KEY', default='')
 
+# IA — Google Gemini (Tier 0 gratuito; opcional — sem esta chave usa apenas Claude)
+GEMINI_API_KEY = config('GEMINI_API_KEY', default='')
+
 # Logging Configuration
 LOGGING = {
     'version': 1,

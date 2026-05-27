@@ -2592,7 +2592,7 @@ def upload_importacao(request):
     )
 
     try:
-        ia = ImportacaoIA()
+        ia = ImportacaoIA(usuario=request.user, contrato_importacao=importacao)
 
         if ct_primeiro == 'application/pdf' or primeiro.name.lower().endswith('.pdf'):
             dados = ia.extrair_de_pdf(primeiro_bytes)

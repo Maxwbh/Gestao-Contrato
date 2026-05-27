@@ -1,7 +1,13 @@
 """
-Serviço de importação de contratos via IA (Claude API).
+Serviço de importação de contratos via IA.
 
-Fluxo: arquivo (PDF ou imagens) → Claude extrai JSON → match/create entities → Contrato
+Fluxo: arquivo (PDF ou imagens) → IA extrai JSON → match/create entities → Contrato
+
+Cadeia de modelos (custo crescente, acionados apenas se necessário):
+  Tier 0 — Gemini 2.0 Flash  (gratuito, 1.500 req/dia) — requer GEMINI_API_KEY
+  Tier 1 — Claude Haiku 4.5  (~$0,01–0,02/contrato)
+  Tier 2 — Claude Sonnet 4.6 (~$0,05–0,08/contrato)
+  Tier 3 — Claude Opus 4.7   (~$0,30–0,45/contrato)  — último recurso
 """
 import base64
 import json
@@ -109,10 +115,12 @@ Regras:
 # ─────────────────────────────────────────────────────────────────────────────
 
 class ImportacaoIA:
-    """Chama Claude API para extrair dados estruturados de documentos de contrato."""
+    """Extrai dados estruturados de contratos usando cadeia de modelos Gemini → Claude."""
 
-    def __init__(self):
+    def __init__(self, usuario=None, contrato_importacao=None):
         self._client = None
+        self._usuario = usuario
+        self._contrato_importacao = contrato_importacao
 
     @property
     def client(self):
@@ -128,6 +136,11 @@ class ImportacaoIA:
         return self._client
 
     def extrair_de_pdf(self, pdf_bytes: bytes) -> dict:
+        # Tier 0 — Gemini (gratuito)
+        dados = self._tentar_gemini([{'mime_type': 'application/pdf', 'data': pdf_bytes}])
+        if dados is not None:
+            return dados
+        # Tiers 1-3 — Claude
         pdf_b64 = base64.standard_b64encode(pdf_bytes).decode('utf-8')
         return self._call([
             {
@@ -139,6 +152,11 @@ class ImportacaoIA:
 
     def extrair_de_imagens(self, pares: list) -> dict:
         """pares = [(bytes, 'image/jpeg'), ...]"""
+        # Tier 0 — Gemini (gratuito)
+        dados = self._tentar_gemini([{'mime_type': mime, 'data': img} for img, mime in pares])
+        if dados is not None:
+            return dados
+        # Tiers 1-3 — Claude
         content = []
         for img_bytes, mime in pares:
             content.append({
@@ -152,11 +170,111 @@ class ImportacaoIA:
         content.append({'type': 'text', 'text': _PROMPT})
         return self._call(content)
 
+    def _tentar_gemini(self, partes: list) -> dict | None:
+        """
+        Tier 0: Gemini 2.0 Flash gratuito (1.500 req/dia).
+        Retorna dados se confiança ALTO; None se quota esgotada, erro ou confiança < ALTO.
+        partes = [{'mime_type': str, 'data': bytes}, ...]
+        """
+        api_key = getattr(settings, 'GEMINI_API_KEY', '').strip()
+        if not api_key:
+            return None
+        try:
+            from core.services.ia_monitor import checar_limite, LimiteUsoIAExcedido
+            checar_limite(modelo='gemini-2.0-flash', operacao='IMPORTACAO_PDF')
+        except LimiteUsoIAExcedido as e:
+            logger.info('Gemini bloqueado por limite mensal (%s) — escalando para cadeia Claude', e)
+            return None
+        try:
+            import google.generativeai as genai
+        except ImportError:
+            logger.debug('google-generativeai não instalado — pulando Tier 0 Gemini')
+            return None
+        try:
+            genai.configure(api_key=api_key)
+            model = genai.GenerativeModel('gemini-2.0-flash')
+            content = [{'mime_type': p['mime_type'], 'data': p['data']} for p in partes]
+            content.append(_PROMPT)
+            resposta = model.generate_content(content)
+            dados = _parse_json(resposta.text)
+            # Registra uso (tokens via usage_metadata quando disponível)
+            meta = getattr(resposta, 'usage_metadata', None)
+            tok_in  = getattr(meta, 'prompt_token_count', 0) or 0
+            tok_out = getattr(meta, 'candidates_token_count', 0) or 0
+            from core.services.ia_monitor import registrar, PROVIDER_GOOGLE, OP_IMPORTACAO_PDF
+            registrar(
+                provider=PROVIDER_GOOGLE,
+                modelo='gemini-2.0-flash',
+                operacao=OP_IMPORTACAO_PDF,
+                tokens_input=tok_in,
+                tokens_output=tok_out,
+                usuario=self._usuario,
+                contrato_importacao=self._contrato_importacao,
+            )
+            nivel = dados.get('confianca', {}).get('nivel')
+            if nivel == 'ALTO':
+                return dados
+            logger.info(
+                'Gemini confiança=%s campos_incertos=%s — escalando para cadeia Claude',
+                nivel,
+                dados.get('confianca', {}).get('campos_incertos', []),
+            )
+            return None
+        except Exception as exc:
+            logger.warning('Gemini falhou (%s) — usando cadeia Claude', type(exc).__name__)
+            return None
+
     def _call(self, content: list) -> dict:
+        from core.services.ia_monitor import LimiteUsoIAExcedido
+
+        # Tier 1 — Haiku (barato): basta para contratos legíveis e padronizados
+        try:
+            dados = self._invocar('claude-haiku-4-5-20251001', content)
+            if dados.get('confianca', {}).get('nivel') == 'ALTO':
+                return dados
+        except LimiteUsoIAExcedido:
+            logger.info('Haiku bloqueado por limite mensal — escalando para Sonnet')
+            dados = {}
+
+        # Tier 2 — Sonnet (intermediário): cobre a maioria dos casos difíceis
+        logger.info(
+            'Haiku confiança=%s campos_incertos=%s — escalando para Sonnet',
+            dados.get('confianca', {}).get('nivel'),
+            dados.get('confianca', {}).get('campos_incertos', []),
+        )
+        try:
+            dados = self._invocar('claude-sonnet-4-6', content)
+            if dados.get('confianca', {}).get('nivel') == 'ALTO':
+                return dados
+        except LimiteUsoIAExcedido:
+            logger.info('Sonnet bloqueado por limite mensal — escalando para Opus')
+            dados = {}
+
+        # Tier 3 — Opus (caro): reservado para documentos muito difíceis
+        logger.info(
+            'Sonnet confiança=%s campos_incertos=%s — escalando para Opus',
+            dados.get('confianca', {}).get('nivel'),
+            dados.get('confianca', {}).get('campos_incertos', []),
+        )
+        return self._invocar('claude-opus-4-7', content)  # LimiteUsoIAExcedido propaga
+
+    def _invocar(self, model: str, content: list) -> dict:
+        from core.services.ia_monitor import checar_limite, LimiteUsoIAExcedido
+        checar_limite(modelo=model, operacao='IMPORTACAO_PDF')
         resposta = self.client.messages.create(
-            model='claude-opus-4-7',
+            model=model,
             max_tokens=4096,
             messages=[{'role': 'user', 'content': content}],
+        )
+        from core.services.ia_monitor import registrar, PROVIDER_ANTHROPIC, OP_IMPORTACAO_PDF
+        registrar(
+            provider=PROVIDER_ANTHROPIC,
+            modelo=model,
+            operacao=OP_IMPORTACAO_PDF,
+            tokens_input=resposta.usage.input_tokens,
+            tokens_output=resposta.usage.output_tokens,
+            usuario=self._usuario,
+            contrato_importacao=self._contrato_importacao,
         )
         return _parse_json(resposta.content[0].text)
 
