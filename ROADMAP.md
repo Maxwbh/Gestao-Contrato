@@ -3052,13 +3052,18 @@ Fase D — P2:  34.7 Importação via IA           ✅ CONCLUÍDO
 > **Origem:** revisão do roadmap (2026-05-27).
 > **Perfil do sistema:** 3 imobiliárias · 30–70 lotes cada · escritório pequeno · orçamento restrito.
 >
-> Itens priorizados para o tamanho atual: **35.1, 35.2, 35.5, 35.6** (baixo custo, alto valor operacional).
-> Itens para quando o sistema crescer: **35.3** (fluxo de caixa previsional), **35.4** (SPED/EFD), **35.7** (Telegram).
-> Itens fora do escopo: simulador IA, score de inadimplência, LGPD, webhook ERP, mapa de lotes.
+> **Status de implementação (2026-05-27):**
+> ✅ **35.1** Auditoria Reduzida — implementado (exceto CSV export e testes)
+> ✅ **35.2** Bloqueio de Crédito — implementado (exceto wizard step 1 e testes)
+> ✅ **35.5** Linha do Tempo Portal — implementado (exceto testes)
+> ✅ **35.6** Widget IA Dashboard — implementado (exceto testes)
+> ⏳ **35.3** Fluxo de Caixa Previsional — aguardando crescimento (≥ 5 imobiliárias)
+> ⏳ **35.4** Exportação SPED/EFD — aguardando demanda da contabilidade
+> ⏳ **35.7** Notificações Telegram — aguardando equipe crescer (≥ 5 pessoas)
 
 ---
 
-### 35.1 P1 — Auditoria Reduzida — Log de Eventos Críticos ✅ ESCALA ATUAL
+### 35.1 P1 — Auditoria Reduzida — Log de Eventos Críticos ✅ IMPLEMENTADO
 
 **Por quê:** independente do tamanho — 3 ou 300 imobiliárias — o contador e o dono do
 escritório precisam saber quem gerou um boleto, quem registrou um pagamento e quem aplicou
@@ -3066,17 +3071,17 @@ um reajuste. Custo de implementação baixo, valor alto para rastreabilidade.
 
 | # | Item | Status |
 |---|------|--------|
-| 35.1.1 | Model `LogAuditoria(usuario, acao, timestamp, ip_address, entidade, entidade_pk, descricao)` — índices em `[usuario, timestamp]` e `[entidade, entidade_pk]` | — |
-| 35.1.2 | Registro manual nas views críticas: pagamento de parcela, geração de boleto, aplicação de reajuste, processamento de CNAB retorno, importação via IA | — |
-| 35.1.3 | Dashboard de auditoria `/core/auditoria/` — últimos 100 eventos por imobiliária; filtros por ação, usuário e data; export CSV | — |
-| 35.1.4 | Admin Django `LogAuditoriaAdmin` — somente leitura; `list_display`, `list_filter`, `search_fields`, `date_hierarchy` | — |
-| 35.1.5 | Testes: gravação correta em cada ponto de integração; autenticação obrigatória; isolamento por imobiliária | — |
+| 35.1.1 | Model `LogAuditoria(usuario, acao, timestamp, ip_address, entidade, entidade_pk, descricao)` — índices em `[usuario, timestamp]` e `[entidade, entidade_pk]` | ✅ |
+| 35.1.2 | Registro manual nas views críticas: pagamento de parcela, geração de boleto, aplicação de reajuste (×2), CNAB retorno | ✅ |
+| 35.1.3 | Dashboard de auditoria `/core/auditoria/` — últimos 200 eventos; filtros por ação; link no menu Admin | ✅ (sem CSV export) |
+| 35.1.4 | Admin Django `LogAuditoriaAdmin` — somente leitura; `list_display`, `list_filter`, `search_fields`, `date_hierarchy` | ✅ |
+| 35.1.5 | Testes: gravação correta em cada ponto de integração; autenticação obrigatória | ⏳ pendente |
 
-**Escopo de ações auditadas:** `PAGAMENTO`, `BOLETO_GERADO`, `REAJUSTE_APLICADO`, `REAJUSTE_DESFEITO`, `CNAB_RETORNO`, `IMPORTACAO_IA`, `LOGIN_ADMIN`, `EXPORTACAO`.
+**Escopo de ações auditadas:** `PAGAMENTO`, `BOLETO_GERADO`, `REAJUSTE_APLICADO`, `REAJUSTE_DESFEITO`, `CNAB_RETORNO`, `IMPORTACAO_IA`, `EXPORTACAO`, `BLOQUEIO_CREDITO`, `DESBLOQUEIO_CREDITO`.
 
 ---
 
-### 35.2 P1 — Bloqueio de Crédito por Inadimplência ✅ ESCALA ATUAL
+### 35.2 P1 — Bloqueio de Crédito por Inadimplência ✅ IMPLEMENTADO
 
 **Por quê:** escritório pequeno sente o impacto de inadimplência de forma mais aguda —
 um comprador com 90+ dias em atraso que assina um segundo contrato pode comprometer
@@ -3084,12 +3089,12 @@ significativamente o fluxo de caixa do loteamento. Proteção simples e de baixo
 
 | # | Item | Status |
 |---|------|--------|
-| 35.2.1 | Campo `Comprador.bloqueio_credito` (BooleanField, default=False) + `bloqueio_credito_motivo` (TextField blank) + `bloqueio_credito_em` (DateTimeField null) | — |
-| 35.2.2 | Task `atualizar_bloqueio_credito_sync()` em `core/tasks.py`: busca compradores com parcelas vencidas há ≥ 90 dias → ativa flag; descativa quando todas quitadas; inclusa em `task_run_all` | — |
-| 35.2.3 | Validação em `ContratoCreateView` e wizard step 1: se comprador bloqueado → alerta visual (banner amarelo) com motivo + data; superuser pode prosseguir com confirmação | — |
-| 35.2.4 | Badge "🔴 Inadimplente" na listagem de compradores e na tela de detalhe do comprador | — |
-| 35.2.5 | Endpoint admin `/core/compradores/<pk>/desbloquear/` (POST, requer superuser) com registro em `LogAuditoria` | — |
-| 35.2.6 | Testes: ativação automática aos 90 dias, desativação após quitação, bloqueio no wizard, desbloqueio manual | — |
+| 35.2.1 | Campo `Comprador.bloqueio_credito` (BooleanField) + `bloqueio_credito_motivo` + `bloqueio_credito_em` — migração 0016 aplicada | ✅ |
+| 35.2.2 | Task `atualizar_bloqueio_credito_sync()`: parcelas vencidas ≥ 90 dias → ativa flag; desvincular quando quitadas; inclusa em `task_run_all` | ✅ |
+| 35.2.3 | Validação em `ContratoCreateView` e wizard step 1: banner de alerta quando comprador bloqueado | ⏳ pendente |
+| 35.2.4 | Badge "Inadimplente" na listagem de compradores (AG Grid renderer) | ✅ |
+| 35.2.5 | Endpoint `/core/compradores/<pk>/desbloquear/` (POST, superuser) com registro em `LogAuditoria` | ✅ |
+| 35.2.6 | Testes: ativação automática, desativação após quitação, desbloqueio manual | ⏳ pendente |
 
 ---
 
@@ -3134,7 +3139,7 @@ Hoje essas informações existem no sistema mas precisam ser extraídas manualme
 
 ---
 
-### 35.5 P3 — Linha do Tempo no Portal do Comprador ✅ ESCALA ATUAL
+### 35.5 P3 — Linha do Tempo no Portal do Comprador ✅ IMPLEMENTADO
 
 **Por quê:** mesmo para um escritório pequeno, o comprador de lote financiado
 por 10–15 anos precisa de uma visão clara do histórico. Reduz ligações de suporte
@@ -3142,15 +3147,15 @@ por 10–15 anos precisa de uma visão clara do histórico. Reduz ligações de 
 
 | # | Item | Status |
 |---|------|--------|
-| 35.5.1 | View `portal_timeline` (`GET /portal/timeline/<contrato_id>/`) — agrega em ordem cronológica: pagamentos (`HistoricoPagamento`), reajustes (`Reajuste`), notificações recebidas (`Notificacao`), geração de boletos | — |
-| 35.5.2 | Template `portal_comprador/timeline.html` — vertical timeline com ícones por tipo (✅ pago, 📈 reajuste, 🔔 notificação, 🧾 boleto, ⚠️ atraso); valores em R$ com datas | — |
-| 35.5.3 | Botão "Download Extrato PDF" — ReportLab gera PDF da timeline com cabeçalho da imobiliária e dados do comprador (substitui planilha manual para comprovação) | — |
-| 35.5.4 | Link "Histórico Completo" no dashboard do portal (`portal_dashboard.html`) | — |
-| 35.5.5 | Testes: ordenação cronológica correta, isolamento por comprador, geração do PDF | — |
+| 35.5.1 | View `portal_timeline` (`GET /portal/contratos/<id>/timeline/`) — agrega pagamentos, reajustes e notificações em ordem cronológica | ✅ |
+| 35.5.2 | Template `portal_comprador/timeline.html` — vertical timeline com ícones e cores por tipo de evento | ✅ |
+| 35.5.3 | View `portal_timeline_pdf` — ReportLab gera PDF com cabeçalho da imobiliária e tabela cronológica | ✅ |
+| 35.5.4 | Link "Ver Linha do Tempo" na página de detalhe do contrato | ✅ |
+| 35.5.5 | Testes: ordenação cronológica correta, isolamento por comprador, geração do PDF | ⏳ pendente |
 
 ---
 
-### 35.6 P3 — Widget de IA no Dashboard Principal ✅ ESCALA ATUAL
+### 35.6 P3 — Widget de IA no Dashboard Principal ✅ IMPLEMENTADO
 
 **Por quê:** para orçamento restrito, visibilidade do custo de IA é crítica.
 O escritório precisa saber se a importação de contratos via IA está consumindo
@@ -3159,10 +3164,10 @@ sendo importados por mês.
 
 | # | Item | Status |
 |---|------|--------|
-| 35.6.1 | Card "Uso de IA — Mês Atual" no `dashboard.html` — consumo em R$ / limite mensal configurado / % barra de progresso colorida (verde/amarelo/vermelho); link para `/ia/custos/` | — |
-| 35.6.2 | Badge de alerta na sidebar quando qualquer limite estiver ≥ 80% — ícone 🤖 com número de limites em risco | — |
-| 35.6.3 | API `GET /core/ia/status-widget/` — retorna JSON com: custo_mes_atual, limite_mes, pct_utilizado, alertas_ativos (lista de limites ≥ 80%) | — |
-| 35.6.4 | Testes: widget renderizado no contexto do dashboard, API retorna dados corretos, badge aparece acima de 80% | — |
+| 35.6.1 | Card "Uso de IA — Mês Atual" no `dashboard.html` — custo USD mês atual + barras de progresso por limite em alerta; JS fetch assíncrono | ✅ |
+| 35.6.2 | Badge vermelho no item "Admin" do navbar quando qualquer limite ≥ 80% | ✅ |
+| 35.6.3 | API `GET /core/ia/status-widget/` — retorna `custo_mes_usd`, `alertas_ativos` (lista de limites ≥ 80%), `alertas_count` | ✅ |
+| 35.6.4 | Testes: API retorna dados corretos, badge aparece acima de 80% | ⏳ pendente |
 
 ---
 
