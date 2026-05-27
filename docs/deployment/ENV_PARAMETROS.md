@@ -24,6 +24,8 @@ Apenas o que não pode estar no banco de dados (precede a conexão com o DB).
 | `REDIS_URL` | `redis://localhost:6379/0` | `str` | Não | URL do Redis para Celery |
 | `SENTRY_DSN` | `None` | `str` | Não | DSN do Sentry. Omitir ou deixar vazio para desativar |
 | `CSRF_TRUSTED_ORIGINS` | `https://*.onrender.com` | CSV | Não | Origens CSRF confiáveis. Necessário atrás de proxy HTTPS |
+| `ANTHROPIC_API_KEY` | `""` | `str` | Não | Chave de API Anthropic para Claude. Obrigatória para importação PDF via IA e chatbot inteligente. Gere em [console.anthropic.com](https://console.anthropic.com) |
+| `GEMINI_API_KEY` | `""` | `str` | Não | Chave de API Google Gemini (tier gratuito). Opcional — quando ausente o sistema usa diretamente a cadeia Claude. Gere em [aistudio.google.com](https://aistudio.google.com) |
 
 > **Geração de `SECRET_KEY`:**
 > ```bash
@@ -127,6 +129,17 @@ A tabela abaixo documenta todos os parâmetros com seus grupos, tipos e defaults
 | `IPCA_SERIE_ID` | str | `433` | Código da série IPCA |
 | `IGPM_SERIE_ID` | str | `189` | Código da série IGP-M |
 | `SELIC_SERIE_ID` | str | `432` | Código da série SELIC |
+
+### Grupo: IA e Modelos de Linguagem (`ia`)
+
+| Chave | Tipo | Padrão | Descrição |
+|-------|------|--------|-----------|
+| `CHATBOT_IA_ATIVO` | bool | `True` | Liga/desliga o chatbot com IA. Quando `False`, o sistema usa apenas o despachante de regras sem nenhuma chamada de API |
+| `CHATBOT_MODELO` | str | `claude-haiku-4-5-20251001` | Modelo Claude utilizado em ambos os estágios do chatbot (classificador de intent e humanizador de resposta) |
+| `CHATBOT_MAX_TOKENS_POR_RESPOSTA` | int | `300` | Limite de tokens gerados por resposta do chatbot. Controla custo e comprimento das mensagens enviadas ao comprador |
+| `CHATBOT_SYSTEM_PROMPT_CLASSIFIER` | str | *(prompt interno)* | System prompt completo do classificador de intent (estágio `tool_use`). O valor padrão é gerenciado pelo código; só altere para customizar o comportamento de classificação |
+| `CHATBOT_SYSTEM_PROMPT` | str | *(prompt interno)* | System prompt completo do humanizador de resposta. O valor padrão é gerenciado pelo código; só altere para ajustar tom ou formato das respostas |
+| `_COTACAO_USD_BRL_CACHE` | str | `""` | Cache interno da cotação USD/BRL usado para converter custos de IA. Atualizado automaticamente via AwesomeAPI ao acessar `/core/ia/cotacao/`. **Não editar manualmente** |
 
 ---
 

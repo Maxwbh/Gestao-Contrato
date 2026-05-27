@@ -2244,6 +2244,79 @@ def api_ia_custos_dados(request):
     return JsonResponse(payload)
 
 
+# ─── Configuração Gráfica de Tokens ────────────────────────────────────────
+
+@login_required
+def ia_tokens_config(request):
+    """Tela gráfica de configuração de cotas de tokens por modelo."""
+    from .models import LimiteUsoIA, RegistroUsoIA
+    from core.services.ia_monitor import consumo_periodo, get_cotacao_usd_brl
+    from django.db.models import Sum
+    from datetime import date
+
+    try:
+        cotacao = get_cotacao_usd_brl()
+    except Exception:
+        cotacao = 5.80
+
+    # Tabela de preços: (input USD/MTok, output USD/MTok)
+    precos_map = {
+        'gemini-2.0-flash':          (0.0,    0.0),
+        'claude-haiku-4-5-20251001': (0.80,   4.00),
+        'claude-sonnet-4-6':         (3.00,  15.00),
+        'claude-opus-4-7':           (15.00, 75.00),
+    }
+
+    inicio = date.today().replace(day=1)
+    modelos_data = []
+    for modelo in _MODELOS_IA:
+        preco_in, preco_out = precos_map.get(modelo, (0.0, 0.0))
+        consumo_tokens = consumo_periodo('MENSAL', modelo=modelo, tipo_limite='TOKENS')
+
+        # Custo real do mês para este modelo
+        agg = RegistroUsoIA.objects.filter(
+            criado_em__date__gte=inicio, modelo=modelo,
+        ).aggregate(custo=Sum('custo_usd'))
+        custo_usd = float(agg['custo'] or 0)
+
+        # Limites configurados (mensal tokens e mensal R$)
+        lim_token = LimiteUsoIA.objects.filter(
+            tipo_escopo='MODELO', escopo_valor=modelo,
+            tipo_limite='TOKENS', periodo='MENSAL', ativo=True,
+        ).first()
+        lim_reais = LimiteUsoIA.objects.filter(
+            tipo_escopo='MODELO', escopo_valor=modelo,
+            tipo_limite='REAIS', periodo='MENSAL', ativo=True,
+        ).first()
+
+        limite_tokens = float(lim_token.valor_limite) if lim_token else None
+        limite_reais_val = float(lim_reais.valor_limite) if lim_reais else None
+        pct_tokens = min(100, int(consumo_tokens / limite_tokens * 100)) if limite_tokens else 0
+
+        modelos_data.append({
+            'modelo': modelo,
+            'preco_in': preco_in,
+            'preco_out': preco_out,
+            'preco_in_brl': round(preco_in * cotacao, 4),
+            'preco_out_brl': round(preco_out * cotacao, 4),
+            'gratuito': preco_in == 0 and preco_out == 0,
+            'consumo_tokens': int(consumo_tokens),
+            'custo_usd': round(custo_usd, 4),
+            'custo_brl': round(custo_usd * cotacao, 2),
+            'limite_tokens': limite_tokens,
+            'limite_reais': limite_reais_val,
+            'pct_tokens': pct_tokens,
+            'lim_token_pk': lim_token.pk if lim_token else '',
+            'lim_reais_pk': lim_reais.pk if lim_reais else '',
+        })
+
+    return render(request, 'core/ia_tokens_config.html', {
+        'modelos_data': modelos_data,
+        'cotacao_usd_brl': cotacao,
+        'periodo_choices': LimiteUsoIA.PERIODO_CHOICES,
+    })
+
+
 # ─── Configuração de Limites de Uso de IA ──────────────────────────────────
 
 _MODELOS_IA = [

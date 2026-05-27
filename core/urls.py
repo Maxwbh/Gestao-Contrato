@@ -106,6 +106,9 @@ urlpatterns = [
     path('ia/custos/', views.ia_custos, name='ia_custos'),
     path('ia/custos/dados/', views.api_ia_custos_dados, name='api_ia_custos_dados'),
 
+    # Configuração Gráfica de Tokens
+    path('ia/tokens/', views.ia_tokens_config, name='ia_tokens_config'),
+
     # Configuração de Limites de IA
     path('ia/limites/', views.ia_limites, name='ia_limites'),
     path('ia/limites/salvar/', views.ia_limite_salvar, name='ia_limite_salvar'),
