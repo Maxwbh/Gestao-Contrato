@@ -1861,6 +1861,23 @@ class ContratoWizardView(LoginRequiredMixin, View):
         if step == 'basico':
             form = ContratoWizardBasicoForm(request.POST)
             if form.is_valid():
+                comprador = form.cleaned_data.get('comprador')
+                if comprador and comprador.bloqueio_credito:
+                    if not request.user.is_superuser:
+                        messages.error(
+                            request,
+                            f'{comprador.nome} possui bloqueio de crédito ativo. '
+                            'Contate o administrador para desbloqueio antes de criar o contrato.',
+                        )
+                        return render(request, 'contratos/wizard/step1_basico.html', {
+                            'form': form, 'step': step, 'step_num': 1,
+                            'comprador_bloqueado': comprador,
+                        })
+                    elif not request.POST.get('confirmar_bloqueio'):
+                        return render(request, 'contratos/wizard/step1_basico.html', {
+                            'form': form, 'step': step, 'step_num': 1,
+                            'comprador_bloqueado': comprador,
+                        })
                 sess['basico'] = form.cleaned_data_serializable()
                 request.session.modified = True
                 return redirect('contratos:wizard', step='juros')

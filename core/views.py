@@ -2512,6 +2512,18 @@ def comprador_desbloquear(request, pk):
     return redirect('core:editar_comprador', pk=pk)
 
 
+@login_required
+def api_comprador_status(request, pk):
+    """GET /core/api/compradores/<pk>/status/ — retorna bloqueio_credito para o wizard."""
+    comprador = get_object_or_404(Comprador, pk=pk)
+    return JsonResponse({
+        'bloqueio_credito': comprador.bloqueio_credito,
+        'motivo': comprador.bloqueio_credito_motivo or '',
+        'bloqueio_em': comprador.bloqueio_credito_em.strftime('%d/%m/%Y') if comprador.bloqueio_credito_em else '',
+        'nome': comprador.nome,
+    })
+
+
 # =============================================================================
 # 35.6 — Widget de IA no Dashboard
 # =============================================================================
