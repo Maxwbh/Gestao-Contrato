@@ -101,4 +101,18 @@ urlpatterns = [
     path('api/parametros/', views.api_parametros_salvar_grupo, name='api_parametros_salvar'),
     path('api/parametros/exportar/', views.api_parametros_exportar, name='api_parametros_exportar'),
     path('api/parametros/<int:parametro_id>/', views.api_parametro_atualizar, name='api_parametro_atualizar'),
+
+    # Painel de Custos de IA
+    path('ia/custos/', views.ia_custos, name='ia_custos'),
+    path('ia/custos/dados/', views.api_ia_custos_dados, name='api_ia_custos_dados'),
+
+    # Configuração Gráfica de Tokens
+    path('ia/tokens/', views.ia_tokens_config, name='ia_tokens_config'),
+
+    # Configuração de Limites de IA
+    path('ia/limites/', views.ia_limites, name='ia_limites'),
+    path('ia/limites/salvar/', views.ia_limite_salvar, name='ia_limite_salvar'),
+    path('ia/limites/<int:pk>/excluir/', views.ia_limite_excluir, name='ia_limite_excluir'),
+    path('ia/limites/<int:pk>/toggle/', views.ia_limite_toggle, name='ia_limite_toggle'),
+    path('ia/cotacao/', views.api_cotacao_usd_brl, name='api_cotacao_usd_brl'),
 ]

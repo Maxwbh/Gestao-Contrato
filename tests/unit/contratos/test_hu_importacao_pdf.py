@@ -4,6 +4,7 @@ HU — Importação de Contratos via IA
 Testa:
   - Parser JSON da resposta da IA (incluindo markdown code blocks)
   - ProcessadorImportacao: match de entidades existentes
+  - Estratégia híbrida: Haiku → Opus (escala apenas quando confiança < ALTO)
   - View de upload: validações de tipo e tamanho
   - View de revisão: renderiza dados extraídos e matches
   - confirmar_importacao: criação atômica de todas as entidades
@@ -11,11 +12,11 @@ Testa:
 """
 import json
 import pytest
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
 from io import BytesIO
 from decimal import Decimal
 
-from django.test import Client
+from django.test import Client, override_settings
 from django.urls import reverse
 from django.contrib.auth import get_user_model
 
@@ -26,7 +27,7 @@ User = get_user_model()
 @pytest.fixture
 def usuario_logado(db):
     from tests.fixtures.factories import UserFactory, ImobiliariaFactory, ContabilidadeFactory
-    from core.models import AcessoUsuario, Contabilidade, Imobiliaria
+    from core.models import AcessoUsuario
     contabilidade = ContabilidadeFactory()
     imobiliaria = ImobiliariaFactory(contabilidade=contabilidade)
     user = UserFactory()
@@ -93,18 +94,15 @@ def dados_extraidos_exemplo():
 class TestParseJson:
     def test_json_puro(self):
         from contratos.services.importacao_ia import _parse_json
-        resultado = _parse_json('{"chave": "valor"}')
-        assert resultado == {'chave': 'valor'}
+        assert _parse_json('{"chave": "valor"}') == {'chave': 'valor'}
 
     def test_json_em_markdown(self):
         from contratos.services.importacao_ia import _parse_json
-        texto = '```json\n{"chave": "valor"}\n```'
-        assert _parse_json(texto) == {'chave': 'valor'}
+        assert _parse_json('```json\n{"chave": "valor"}\n```') == {'chave': 'valor'}
 
     def test_json_em_markdown_sem_tipo(self):
         from contratos.services.importacao_ia import _parse_json
-        texto = '```\n{"chave": "valor"}\n```'
-        assert _parse_json(texto) == {'chave': 'valor'}
+        assert _parse_json('```\n{"chave": "valor"}\n```') == {'chave': 'valor'}
 
     def test_json_invalido_lanca_valueerror(self):
         from contratos.services.importacao_ia import _parse_json
@@ -145,6 +143,257 @@ class TestHelpers:
         assert _date('nao-e-data') is None
 
 
+# ─── Estratégia híbrida Haiku → Sonnet → Opus ────────────────────────────────
+
+class TestEstrategiaHibrida:
+    """
+    Verifica o roteamento de modelos em 3 camadas:
+      Haiku (barato) → Sonnet (intermediário) → Opus (último recurso)
+    Cada camada só é acionada se a anterior retornar confiança < ALTO.
+    """
+
+    def _api_resp(self, data: dict):
+        resp = MagicMock()
+        resp.content = [MagicMock(text=json.dumps(data))]
+        return resp
+
+    def _ia_com_mock_client(self):
+        from contratos.services.importacao_ia import ImportacaoIA
+        ia = ImportacaoIA()
+        ia._client = MagicMock()
+        return ia
+
+    # ── Tier 0: Gemini ───────────────────────────────────────────────────────
+
+    def _mock_gemini(self, dados: dict):
+        """
+        Retorna (mock_genai, mock_model, sys_modules_patch) prontos para uso em
+        patch.dict(sys.modules, ...). Garante que google.generativeai e
+        google.generativeai (acessado via google.generativeai) apontem para o
+        mesmo objeto.
+        """
+        mock_model = MagicMock()
+        mock_model.generate_content.return_value = MagicMock(text=json.dumps(dados))
+        mock_genai = MagicMock()
+        mock_genai.GenerativeModel.return_value = mock_model
+        # google namespace package deve expor .generativeai = mock_genai
+        mock_google = MagicMock()
+        mock_google.generativeai = mock_genai
+        sys_patch = {'google': mock_google, 'google.generativeai': mock_genai}
+        return mock_genai, mock_model, sys_patch
+
+    def test_gemini_alto_retorna_sem_chamar_claude(self):
+        """Gemini ALTO → retorna imediatamente; nenhum modelo Claude é chamado."""
+        from contratos.services.importacao_ia import ImportacaoIA
+        ia = ImportacaoIA()
+        dados = {'numero_contrato': 'X', 'confianca': {'nivel': 'ALTO', 'campos_incertos': []}}
+        mock_genai, mock_model, sys_patch = self._mock_gemini(dados)
+
+        with patch.dict('sys.modules', sys_patch):
+            with override_settings(GEMINI_API_KEY='fake-key'):
+                resultado = ia._tentar_gemini([{'mime_type': 'application/pdf', 'data': b'%PDF'}])
+
+        assert resultado == dados
+        mock_model.generate_content.assert_called_once()
+
+    def test_gemini_medio_retorna_none_e_escala_para_claude(self):
+        """Gemini MEDIO → _tentar_gemini retorna None → cadeia Claude é acionada."""
+        from contratos.services.importacao_ia import ImportacaoIA
+        ia = ImportacaoIA()
+        mock_genai, _, sys_patch = self._mock_gemini({'confianca': {'nivel': 'MEDIO', 'campos_incertos': ['valor_total']}})
+
+        with patch.dict('sys.modules', sys_patch):
+            with override_settings(GEMINI_API_KEY='fake-key'):
+                resultado = ia._tentar_gemini([{'mime_type': 'application/pdf', 'data': b'%PDF'}])
+
+        assert resultado is None
+
+    def test_gemini_erro_retorna_none(self):
+        """Quota esgotada ou qualquer exceção → retorna None sem lançar."""
+        from contratos.services.importacao_ia import ImportacaoIA
+        ia = ImportacaoIA()
+        mock_model = MagicMock()
+        mock_model.generate_content.side_effect = Exception('quota exceeded')
+        mock_genai = MagicMock()
+        mock_genai.GenerativeModel.return_value = mock_model
+        mock_google = MagicMock()
+        mock_google.generativeai = mock_genai
+
+        with patch.dict('sys.modules', {'google': mock_google, 'google.generativeai': mock_genai}):
+            with override_settings(GEMINI_API_KEY='fake-key'):
+                resultado = ia._tentar_gemini([{'mime_type': 'application/pdf', 'data': b'%PDF'}])
+
+        assert resultado is None
+
+    def test_gemini_sem_api_key_retorna_none(self):
+        """Sem GEMINI_API_KEY configurada → pula Tier 0 silenciosamente."""
+        from contratos.services.importacao_ia import ImportacaoIA
+        ia = ImportacaoIA()
+
+        with override_settings(GEMINI_API_KEY=''):
+            resultado = ia._tentar_gemini([{'mime_type': 'application/pdf', 'data': b'%PDF'}])
+
+        assert resultado is None
+
+    def test_gemini_sem_pacote_retorna_none(self):
+        """google-generativeai não instalado → pula Tier 0 sem erro."""
+        from contratos.services.importacao_ia import ImportacaoIA
+        ia = ImportacaoIA()
+        mock_google = MagicMock()
+        mock_google.generativeai = None
+
+        with patch.dict('sys.modules', {'google': mock_google, 'google.generativeai': None}):
+            with override_settings(GEMINI_API_KEY='fake-key'):
+                resultado = ia._tentar_gemini([{'mime_type': 'application/pdf', 'data': b'%PDF'}])
+
+        assert resultado is None
+
+    def test_extrair_de_pdf_usa_gemini_quando_alto(self):
+        """extrair_de_pdf retorna resultado Gemini sem acionar nenhum modelo Claude."""
+        from contratos.services.importacao_ia import ImportacaoIA
+        ia = ImportacaoIA()
+        ia._client = MagicMock()  # garante que Claude não seja chamado
+        dados_gemini = {'numero_contrato': 'GEM-01', 'confianca': {'nivel': 'ALTO', 'campos_incertos': []}}
+
+        with patch.object(ia, '_tentar_gemini', return_value=dados_gemini):
+            resultado = ia.extrair_de_pdf(b'%PDF-fake')
+
+        assert resultado == dados_gemini
+        ia._client.messages.create.assert_not_called()
+
+    def test_extrair_de_pdf_cai_para_claude_quando_gemini_none(self):
+        """Quando _tentar_gemini retorna None, a cadeia Claude é acionada normalmente."""
+        from contratos.services.importacao_ia import ImportacaoIA
+        ia = ImportacaoIA()
+        dados_haiku = {'numero_contrato': 'HAI-01', 'confianca': {'nivel': 'ALTO', 'campos_incertos': []}}
+        ia._client = MagicMock()
+        ia._client.messages.create.return_value = self._api_resp(dados_haiku)
+
+        with patch.object(ia, '_tentar_gemini', return_value=None):
+            resultado = ia.extrair_de_pdf(b'%PDF-fake')
+
+        assert resultado == dados_haiku
+        assert ia._client.messages.create.call_count == 1
+
+    # ── Tier 1: Haiku ────────────────────────────────────────────────────────
+
+    def test_haiku_alto_retorna_sem_escalar(self):
+        """Contrato legível → Haiku basta, Sonnet e Opus não são chamados."""
+        ia = self._ia_com_mock_client()
+        dados = {'confianca': {'nivel': 'ALTO', 'campos_incertos': []}}
+        ia._client.messages.create.return_value = self._api_resp(dados)
+
+        resultado = ia._call([])
+
+        assert resultado == dados
+        assert ia._client.messages.create.call_count == 1
+        assert ia._client.messages.create.call_args.kwargs['model'] == 'claude-haiku-4-5-20251001'
+
+    def test_haiku_medio_escala_para_sonnet(self):
+        """Haiku MEDIO → Sonnet retorna ALTO → Opus não chamado."""
+        ia = self._ia_com_mock_client()
+        dados_haiku  = {'confianca': {'nivel': 'MEDIO', 'campos_incertos': ['valor_total']}}
+        dados_sonnet = {'confianca': {'nivel': 'ALTO',  'campos_incertos': []}, 'valor_total': 150000}
+        ia._client.messages.create.side_effect = [
+            self._api_resp(dados_haiku),
+            self._api_resp(dados_sonnet),
+        ]
+
+        resultado = ia._call([])
+
+        assert resultado == dados_sonnet
+        assert ia._client.messages.create.call_count == 2
+        modelos = [c.kwargs['model'] for c in ia._client.messages.create.call_args_list]
+        assert modelos == ['claude-haiku-4-5-20251001', 'claude-sonnet-4-6']
+
+    def test_haiku_baixo_escala_para_sonnet(self):
+        """Haiku BAIXO → Sonnet resolve → Opus não chamado."""
+        ia = self._ia_com_mock_client()
+        dados_haiku  = {'confianca': {'nivel': 'BAIXO', 'campos_incertos': ['cpf', 'data_contrato']}}
+        dados_sonnet = {'confianca': {'nivel': 'ALTO',  'campos_incertos': []}}
+        ia._client.messages.create.side_effect = [
+            self._api_resp(dados_haiku),
+            self._api_resp(dados_sonnet),
+        ]
+
+        resultado = ia._call([])
+
+        assert resultado == dados_sonnet
+        assert ia._client.messages.create.call_count == 2
+        assert ia._client.messages.create.call_args.kwargs['model'] == 'claude-sonnet-4-6'
+
+    def test_haiku_sem_campo_confianca_escala_para_sonnet(self):
+        """JSON sem 'confianca' é não-ALTO → escala preventiva para Sonnet."""
+        ia = self._ia_com_mock_client()
+        dados_haiku  = {'valor_total': 100000}
+        dados_sonnet = {'valor_total': 100000, 'confianca': {'nivel': 'ALTO', 'campos_incertos': []}}
+        ia._client.messages.create.side_effect = [
+            self._api_resp(dados_haiku),
+            self._api_resp(dados_sonnet),
+        ]
+
+        ia._call([])
+
+        modelos = [c.kwargs['model'] for c in ia._client.messages.create.call_args_list]
+        assert modelos[1] == 'claude-sonnet-4-6'
+
+    # ── Tier 2: Sonnet ───────────────────────────────────────────────────────
+
+    def test_sonnet_alto_nao_chama_opus(self):
+        """Haiku MEDIO → Sonnet ALTO → Opus poupado."""
+        ia = self._ia_com_mock_client()
+        dados_haiku  = {'confianca': {'nivel': 'MEDIO', 'campos_incertos': ['valor_total']}}
+        dados_sonnet = {'confianca': {'nivel': 'ALTO',  'campos_incertos': []}}
+        ia._client.messages.create.side_effect = [
+            self._api_resp(dados_haiku),
+            self._api_resp(dados_sonnet),
+        ]
+
+        ia._call([])
+
+        assert ia._client.messages.create.call_count == 2
+        modelos = [c.kwargs['model'] for c in ia._client.messages.create.call_args_list]
+        assert 'claude-opus-4-7' not in modelos
+
+    def test_sonnet_medio_escala_para_opus(self):
+        """Haiku BAIXO → Sonnet MEDIO → Opus chamado como último recurso."""
+        ia = self._ia_com_mock_client()
+        dados_haiku  = {'confianca': {'nivel': 'BAIXO', 'campos_incertos': ['cpf']}}
+        dados_sonnet = {'confianca': {'nivel': 'MEDIO', 'campos_incertos': ['cpf']}}
+        dados_opus   = {'confianca': {'nivel': 'ALTO',  'campos_incertos': []}}
+        ia._client.messages.create.side_effect = [
+            self._api_resp(dados_haiku),
+            self._api_resp(dados_sonnet),
+            self._api_resp(dados_opus),
+        ]
+
+        resultado = ia._call([])
+
+        assert resultado == dados_opus
+        assert ia._client.messages.create.call_count == 3
+        modelos = [c.kwargs['model'] for c in ia._client.messages.create.call_args_list]
+        assert modelos == ['claude-haiku-4-5-20251001', 'claude-sonnet-4-6', 'claude-opus-4-7']
+
+    # ── Tier 3: Opus ─────────────────────────────────────────────────────────
+
+    def test_opus_resultado_aceito_independente_de_confianca(self):
+        """Opus é última instância — retorna o resultado sem nova tentativa."""
+        ia = self._ia_com_mock_client()
+        dados_haiku  = {'confianca': {'nivel': 'BAIXO', 'campos_incertos': ['cpf']}}
+        dados_sonnet = {'confianca': {'nivel': 'BAIXO', 'campos_incertos': ['cpf']}}
+        dados_opus   = {'confianca': {'nivel': 'MEDIO', 'campos_incertos': ['cpf']}}
+        ia._client.messages.create.side_effect = [
+            self._api_resp(dados_haiku),
+            self._api_resp(dados_sonnet),
+            self._api_resp(dados_opus),
+        ]
+
+        resultado = ia._call([])
+
+        assert resultado == dados_opus
+        assert ia._client.messages.create.call_count == 3
+
+
 # ─── Matching de entidades ────────────────────────────────────────────────────
 
 @pytest.mark.django_db
@@ -153,9 +402,7 @@ class TestProcessadorImportacao:
     def test_match_imobiliaria_por_cnpj(self, usuario_logado):
         from contratos.services.importacao_ia import ProcessadorImportacao
         user, _, imobiliaria, _ = usuario_logado
-        dados = {
-            'imobiliaria': {'cnpj': imobiliaria.cnpj, 'nome': imobiliaria.nome, 'tipo_pessoa': 'PJ'},
-        }
+        dados = {'imobiliaria': {'cnpj': imobiliaria.cnpj, 'nome': imobiliaria.nome, 'tipo_pessoa': 'PJ'}}
         resultado = ProcessadorImportacao().processar(dados, user)
         assert resultado['imobiliaria_match'] == imobiliaria
 
@@ -216,14 +463,13 @@ class TestUploadImportacao:
         _, client, _, _ = usuario_logado
         big = BytesIO(b'%PDF-' + b'x' * (21 * 1024 * 1024))
         big.name = 'contrato.pdf'
-        big.content_type = 'application/pdf'
         resp = client.post(reverse('contratos:upload_importacao'), {'arquivo': big})
         assert resp.status_code == 200
         assert 'grande' in resp.content.decode().lower()
 
     def test_pdf_valido_chama_ia_e_redireciona(self, usuario_logado):
         from contratos.services.importacao_ia import ImportacaoIA
-        user, client, _, _ = usuario_logado
+        _, client, _, _ = usuario_logado
         dados_mock = {
             'numero_contrato': 'CTR-001', 'data_contrato': '2024-01-01',
             'valor_total': 100000, 'numero_parcelas': 120, 'dia_vencimento': 10,
@@ -236,10 +482,7 @@ class TestUploadImportacao:
         with patch.object(ImportacaoIA, 'extrair_de_pdf', return_value=dados_mock):
             pdf = BytesIO(b'%PDF-1.4 fake content')
             pdf.name = 'contrato.pdf'
-            resp = client.post(
-                reverse('contratos:upload_importacao'),
-                {'arquivo': pdf},
-            )
+            resp = client.post(reverse('contratos:upload_importacao'), {'arquivo': pdf})
         assert resp.status_code == 302
         assert 'revisao' in resp['Location']
 
@@ -274,7 +517,7 @@ class TestRevisaoImportacao:
         )
 
     def test_retorna_200_com_dados(self, usuario_logado, dados_extraidos_exemplo):
-        user, client, _, _ = usuario_logado
+        _, client, _, _ = usuario_logado
         imp = self._criar_importacao(usuario_logado, dados_extraidos_exemplo)
         resp = client.get(reverse('contratos:revisao_importacao', kwargs={'pk': imp.pk}))
         assert resp.status_code == 200
@@ -296,10 +539,10 @@ class TestRevisaoImportacao:
         assert resp.status_code == 302
 
     def test_outro_usuario_nao_acessa(self, db, usuario_logado, dados_extraidos_exemplo):
+        from contratos.models import ContratoImportacao
         from tests.fixtures.factories import UserFactory
         user, _, _, _ = usuario_logado
         outro_user = UserFactory()
-        from contratos.models import ContratoImportacao
         imp = ContratoImportacao.objects.create(
             arquivo_nome='fake.pdf',
             status='REVISAO',
@@ -346,7 +589,7 @@ class TestConfirmarImportacao:
         }
 
     def test_criacao_completa_com_entidades_existentes(self, usuario_logado, dados_extraidos_exemplo):
-        from contratos.models import Contrato, ContratoImportacao
+        from contratos.models import Contrato
         from tests.fixtures.factories import CompradorFactory, ImovelFactory
         user, client, imobiliaria, _ = usuario_logado
         comprador = CompradorFactory()
@@ -367,7 +610,7 @@ class TestConfirmarImportacao:
         assert contrato.comprador == comprador
 
     def test_confirmacao_dupla_nao_cria_duplicata(self, usuario_logado, dados_extraidos_exemplo):
-        from contratos.models import Contrato, ContratoImportacao
+        from contratos.models import Contrato
         from tests.fixtures.factories import CompradorFactory, ImovelFactory
         user, client, imobiliaria, _ = usuario_logado
         comprador = CompradorFactory()
@@ -378,14 +621,12 @@ class TestConfirmarImportacao:
 
         client.post(reverse('contratos:confirmar_importacao', kwargs={'pk': imp.pk}), post)
         count_antes = Contrato.objects.count()
-        # Segunda tentativa deve redirecionar sem criar novo contrato
         resp = client.post(reverse('contratos:confirmar_importacao', kwargs={'pk': imp.pk}), post)
         assert resp.status_code == 302
         assert Contrato.objects.count() == count_antes
 
     def test_criacao_cria_novas_entidades_quando_sem_match(self, usuario_logado, dados_extraidos_exemplo):
-        from contratos.models import Contrato
-        from core.models import Comprador, Imovel, Imobiliaria
+        from core.models import Comprador, Imobiliaria
         user, client, _, _ = usuario_logado
 
         imp = self._importacao_em_revisao(user, dados_extraidos_exemplo)
@@ -421,6 +662,26 @@ class TestConfirmarImportacao:
         assert resp.status_code == 302
         assert Comprador.objects.filter(nome='Maria Nova').exists()
         assert Imobiliaria.objects.filter(nome='Nova Imobiliária LTDA').exists()
+
+    def test_data_primeiro_vencimento_calculada_automaticamente(self, usuario_logado, dados_extraidos_exemplo):
+        """Quando data_primeiro_vencimento não é informada, calcula data_contrato + 30 dias."""
+        from contratos.models import Contrato
+        from datetime import date, timedelta
+        from tests.fixtures.factories import CompradorFactory, ImovelFactory
+        user, client, imobiliaria, _ = usuario_logado
+        comprador = CompradorFactory()
+        imovel = ImovelFactory(imobiliaria=imobiliaria)
+
+        imp = self._importacao_em_revisao(user, dados_extraidos_exemplo)
+        post = self._post_revisao(imobiliaria.pk, comprador.pk, imovel.pk)
+        post['data_primeiro_vencimento'] = ''
+        post['data_contrato'] = '2024-03-01'
+
+        client.post(reverse('contratos:confirmar_importacao', kwargs={'pk': imp.pk}), post)
+        imp.refresh_from_db()
+        contrato = Contrato.objects.get(pk=imp.contrato_criado_id)
+        esperado = date(2024, 3, 1) + timedelta(days=30)
+        assert contrato.data_primeiro_vencimento == esperado
 
     def test_intermediarias_criadas(self, usuario_logado, dados_extraidos_exemplo):
         from contratos.models import PrestacaoIntermediaria

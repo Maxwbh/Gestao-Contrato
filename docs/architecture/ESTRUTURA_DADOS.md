@@ -330,6 +330,58 @@ Registra tentativas de acesso negado (403/404) para detecção de varredura de I
 
 ---
 
+### 1.12 RegistroUsoIA
+
+Registra cada chamada a modelos de IA (Gemini, Claude) para rastreamento de consumo de tokens e custo.
+
+| Campo | Tipo | Regras |
+|---|---|---|
+| `provider` | CharField(50) | Ex: `google`, `anthropic` |
+| `modelo` | CharField(100) | Ex: `gemini-2.0-flash`, `claude-haiku-4-5-20251001` |
+| `operacao` | CharField(100) | Ex: `IMPORTACAO_PDF`, `CHATBOT_INTENT`, `CHATBOT_HUMANIZE` |
+| `tokens_input` | PositiveIntegerField | Tokens de entrada (prompt) |
+| `tokens_output` | PositiveIntegerField | Tokens de saída (completion) |
+| `custo_usd` | DecimalField(12,8) | Custo em USD calculado no momento do registro |
+| `usuario` | FK(auth.User, null, blank, SET_NULL) | Usuário que disparou a operação (null = sistema) |
+| `contrato_importacao` | FK(ContratoImportacao, null, blank, SET_NULL) | Vínculo opcional à importação que originou o uso |
+| `criado_em` | DateTimeField(auto_now_add) | Data/hora do registro |
+
+**Índices:** `[modelo, criado_em]`, `[operacao, criado_em]`, `[usuario]`
+
+**Cálculo de custo:** `(tokens_input × preco_in + tokens_output × preco_out) / 1_000_000` onde preços são por 1M tokens (USD). Gemini Flash = R$0,00 (gratuito).
+
+---
+
+### 1.13 LimiteUsoIA
+
+Define limites máximos de consumo de IA por modelo ou operação, com período configurável. Múltiplos limites para o mesmo escopo/período são avaliados simultaneamente (o mais restritivo bloqueia).
+
+| Campo | Tipo | Regras |
+|---|---|---|
+| `tipo_escopo` | CharField(20) | `MODELO` ou `OPERACAO` |
+| `escopo_valor` | CharField(100) | Nome do modelo ou operação (ex: `claude-opus-4-7`) |
+| `tipo_limite` | CharField(10) | `TOKENS` ou `REAIS` |
+| `valor_limite` | DecimalField(15,4) | Valor máximo permitido no período |
+| `periodo` | CharField(20) | `DIARIO`, `SEMANAL`, `QUINZENAL`, `MENSAL`, `BIMESTRAL`, `SEMESTRAL` ou `ANUAL` |
+| `ativo` | BooleanField | default=True; falso = limite ignorado |
+| `descricao` | CharField(200, blank) | Rótulo opcional para identificação |
+| *(TimeStampedModel)* | | `criado_em`, `atualizado_em` |
+
+**Restrição única:** `unique_together = [('tipo_escopo', 'escopo_valor', 'tipo_limite', 'periodo')]` — apenas um limite por combinação escopo+tipo+período.
+
+**Funcionamento:** `checar_limite(modelo, operacao)` em `core/services/ia_monitor.py` consulta todos os limites ativos correspondentes, calcula o consumo atual via `consumo_periodo(periodo)` e lança `LimiteUsoIAExcedido` se qualquer limite for ultrapassado. Nas cadeias de importação de IA, o tier bloqueado é pulado e o próximo é tentado; no chatbot, o fallback é resposta baseada em regras.
+
+**Exemplo de configuração com acumuladores:**
+
+| Escopo | Tipo | Valor | Período |
+|---|---|---|---|
+| OPERACAO / IMPORTACAO_PDF | REAIS | R$ 100,00 | MENSAL |
+| OPERACAO / IMPORTACAO_PDF | REAIS | R$ 300,00 | SEMESTRAL |
+| OPERACAO / IMPORTACAO_PDF | REAIS | R$ 1.000,00 | ANUAL |
+| MODELO / gemini-2.0-flash | TOKENS | 1.500 | DIARIO |
+
+---
+
 ## 2. Módulo Contratos
 
 `contratos/models.py` — Contratos de venda, índices de reajuste e entidades auxiliares.
@@ -1083,6 +1135,8 @@ Comprador ◄── SessaoConversaWhatsApp (Notificacoes)
 
 ParametroSistema        (configurações globais do sistema)
 AcessoNegado            (log de segurança — varredura de IDs)
+RegistroUsoIA           (histórico de consumo de tokens por chamada de IA)
+LimiteUsoIA             (limites configuráveis de tokens/R$ por modelo/operação/período)
 ConfiguracaoEmail       (SMTP — escopo global)
 ConfiguracaoSMS         (SMS — escopo global)
 ConfiguracaoWhatsApp    (WA — escopo global)

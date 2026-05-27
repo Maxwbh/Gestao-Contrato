@@ -2,7 +2,7 @@
 
 **Desenvolvedor:** Maxwell da Silva Oliveira (maxwbh@gmail.com)
 **Empresa:** M&S do Brasil LTDA
-**Última atualização:** 2026-05-25
+**Última atualização:** 2026-05-27
 
 > Documentação completa do que está implementado no sistema.
 > Para novas funcionalidades, consulte **[ROADMAP.md](ROADMAP.md)**.
@@ -29,9 +29,14 @@ Sistema para contabilidades que gerenciam múltiplos loteamentos/imobiliárias:
 gestao_contrato/          # Configuração do projeto
 ├── accounts/             # Autenticação (login, logout, registro, perfil)
 ├── core/                 # Entidades base (Contabilidade, Imobiliária, Imóvel, Comprador)
+│   └── services/
+│       └── ia_monitor.py         # Monitoramento de uso e custo de IA
 ├── contratos/            # Gestão de contratos e prestações intermediárias
+│   └── services/
+│       └── importacao_ia.py      # Cadeia de importação PDF via IA (4 níveis)
 ├── financeiro/           # Parcelas, boletos, reajustes, CNAB
 ├── notificacoes/         # Email, SMS, WhatsApp (configurações e templates)
+│   └── ai_chatbot.py             # Chatbot WhatsApp com IA (Claude)
 └── portal_comprador/     # Portal de autoatendimento do comprador
 ```
 
@@ -373,7 +378,131 @@ Veja `.env.example` para lista completa.
 
 ---
 
-## 12. REFERÊNCIAS
+## 12. MÓDULO DE INTELIGÊNCIA ARTIFICIAL
+
+### 12.1 Importação de Contrato via IA
+
+A importação de contratos em PDF utiliza uma cadeia de 4 níveis ordenados por custo crescente. O sistema tenta o nível mais barato primeiro e só escala para o próximo quando há falha ou resultado insuficiente.
+
+| Nível | Modelo | Custo | Condição de escalonamento |
+|-------|--------|-------|--------------------------|
+| 1 | Gemini 2.0 Flash (Google) | Gratuito (tier free) | Falha na API ou extração incompleta |
+| 2 | Claude Haiku (Anthropic) | ~US$ 0,25/MTok input | Extração incompleta ou confiança baixa |
+| 3 | Claude Sonnet (Anthropic) | ~US$ 3,00/MTok input | Extração incompleta ou confiança baixa |
+| 4 | Claude Opus (Anthropic) | ~US$ 15,00/MTok input | Último recurso; falha gera erro ao usuário |
+
+**Entry point:** `contratos/services/importacao_ia.py`  
+**View de upload:** `contratos/views.py → upload_importacao`  
+**Modelo de lifecycle:** `ContratoImportacao` — persiste arquivo, dados JSON extraídos e status (`PENDENTE → EXTRAINDO → REVISAO → CONCLUIDO / ERRO`)
+
+**Configuração:**
+
+```env
+GEMINI_API_KEY=...        # Tier gratuito do Google AI Studio; opcional — sem essa chave o sistema pula direto para Claude Haiku
+ANTHROPIC_API_KEY=...     # Obrigatória para os níveis 2–4
+```
+
+O Gemini é chamado via REST puro (sem SDK). Se a chave estiver ausente ou a chamada retornar erro, o sistema avança imediatamente para o nível Claude Haiku sem exibir erro ao usuário. Todos os modelos recebem o PDF como documento nativo (Claude Documents API / Gemini inline_data), portanto não é feita conversão para imagem antes do envio.
+
+Após a extração, `ProcessadorImportacao.processar()` faz match das entidades extraídas (imobiliária, comprador, imóvel) por CNPJ, CPF ou matrícula antes de apresentar a tela de revisão. A confirmação chama `confirmar_importacao()` dentro de `transaction.atomic()`.
+
+---
+
+### 12.2 Chatbot WhatsApp com IA
+
+**Arquivo:** `notificacoes/ai_chatbot.py`
+
+O chatbot recebe mensagens WhatsApp via webhook Twilio e segue dois estágios com Claude:
+
+1. **Classificador de intent** — usa `tool_use` (function calling) para identificar a intent da mensagem entre as opções registradas. Permite que o modelo devolva parâmetros estruturados (ex.: número do contrato consultado).
+2. **Humanizador de resposta** — recebe a resposta técnica gerada pelas regras de negócio e a reformula com tom conversacional adequado ao contexto do comprador.
+
+**Fallbacks:**
+- Se a chamada à API Claude falhar, o chatbot cai para o despachante de regras puro (sem IA), garantindo continuidade do atendimento.
+- Intent não reconhecida pelo classificador desencadeia a resposta H-07 (mensagem padrão de não entendimento).
+
+**Configuração via `ParametroSistema`:**
+
+| Parâmetro | Default | Descrição |
+|-----------|---------|-----------|
+| `CHATBOT_IA_ATIVO` | `True` | Liga/desliga a camada IA; `False` usa apenas regras |
+| `CHATBOT_MODELO` | `claude-haiku-4-5-20251001` | Modelo usado em ambos os estágios |
+| `CHATBOT_MAX_TOKENS_POR_RESPOSTA` | `300` | Limite de tokens por resposta |
+| `CHATBOT_SYSTEM_PROMPT_CLASSIFIER` | *(interno)* | System prompt do classificador |
+| `CHATBOT_SYSTEM_PROMPT` | *(interno)* | System prompt do humanizador |
+
+---
+
+### 12.3 Monitor de Custo (`ia_monitor`)
+
+**Arquivo:** `core/services/ia_monitor.py`  
+**Modelo:** `core/models.py → RegistroUsoIA`
+
+Toda chamada a um modelo de IA registra automaticamente um `RegistroUsoIA` com:
+
+| Campo | Descrição |
+|-------|-----------|
+| `modelo` | Identificador do modelo (ex.: `claude-haiku-4-5-20251001`) |
+| `operacao` | Tipo de operação (ex.: `importacao_pdf`, `chatbot_classifier`) |
+| `tokens_input` | Tokens enviados ao modelo |
+| `tokens_output` | Tokens gerados pelo modelo |
+| `custo_usd` | Custo calculado em dólares no momento da chamada |
+| `custo_brl` | Custo convertido para BRL usando cotação em cache |
+| `imobiliaria` | FK opcional para isolar custos por tenant |
+| `created_at` | Timestamp da chamada |
+
+**Cálculo de custo:** a tabela de preços por MTok é mantida em `ia_monitor.py` para cada modelo suportado. O custo em BRL é obtido multiplicando `custo_usd` pela cotação USD/BRL armazenada em `_COTACAO_USD_BRL_CACHE` (parâmetro do sistema), que é atualizada automaticamente via [AwesomeAPI](https://docs.awesomeapi.com.br/api-de-moedas).
+
+**Tabela de preços de referência (por milhão de tokens):**
+
+| Modelo | Input (US$/MTok) | Output (US$/MTok) |
+|--------|-----------------|-------------------|
+| Gemini 2.0 Flash | 0,00 (free tier) | 0,00 |
+| Claude Haiku | 0,25 | 1,25 |
+| Claude Sonnet | 3,00 | 15,00 |
+| Claude Opus | 15,00 | 75,00 |
+
+**Dashboard:** `/core/ia/custos/` — exibe gasto total, gasto por modelo, gasto por operação e histórico de chamadas com paginação.
+
+---
+
+### 12.4 Limites de Uso (`LimiteUsoIA`)
+
+**Modelo:** `core/models.py → LimiteUsoIA`  
+**Função de guarda:** `core/services/ia_monitor.py → checar_limite()`  
+**Configuração:** `/core/ia/limites/`
+
+Antes de toda chamada à IA, `checar_limite()` é invocada. Se qualquer limite ativo for excedido, a chamada é bloqueada e um erro descritivo é retornado ao usuário sem consumir tokens.
+
+**Campos do modelo `LimiteUsoIA`:**
+
+| Campo | Descrição |
+|-------|-----------|
+| `modelo` | Modelo ao qual o limite se aplica (pode ser `*` para todos) |
+| `operacao` | Operação ao qual o limite se aplica (pode ser `*` para todas) |
+| `periodo` | `diario`, `semanal`, `mensal`, `total` |
+| `limite_chamadas` | Número máximo de chamadas no período (opcional) |
+| `limite_tokens_input` | Máximo de tokens de entrada no período (opcional) |
+| `limite_custo_usd` | Máximo de custo em USD no período (opcional) |
+| `ativo` | Liga/desliga o limite sem excluir o registro |
+
+**Comportamento com múltiplos limites:** quando existem vários limites ativos para o mesmo escopo (mesmo modelo + operação), **todos são avaliados simultaneamente**. A chamada é bloqueada se *qualquer* limite for excedido — não há prioridade ou hierarquia entre eles.
+
+---
+
+### 12.5 Rotas da IA
+
+| URL | View | Descrição |
+|-----|------|-----------|
+| `/core/ia/custos/` | `ia_custos_dashboard` | Dashboard de custos com gráficos e histórico |
+| `/core/ia/limites/` | `ia_limites_lista` | CRUD de limites de uso (`LimiteUsoIA`) |
+| `/core/ia/tokens/` | `ia_tokens_lista` | Listagem detalhada de registros de uso (`RegistroUsoIA`) |
+| `/core/ia/cotacao/` | `ia_atualizar_cotacao` | Atualiza manualmente a cotação USD/BRL via AwesomeAPI |
+| `/contratos/importacao/upload/` | `upload_importacao` | Upload de PDF para importação via cadeia IA |
+
+---
+
+## 13. REFERÊNCIAS
 
 - **Documentação completa:** `/docs/README.md`
 - **API BRCobrança:** `/docs/api/BRCOBRANCA.md`

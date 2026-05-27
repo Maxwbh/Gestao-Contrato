@@ -154,6 +154,13 @@ class AIIntentClassifier:
             messages.extend(_extrair_historico(sessao))
         messages.append({'role': 'user', 'content': texto})
 
+        try:
+            from core.services.ia_monitor import checar_limite, LimiteUsoIAExcedido
+            checar_limite(modelo=_get_modelo(), operacao='CHATBOT_INTENT')
+        except LimiteUsoIAExcedido as e:
+            logger.info('[AI Chatbot] intent bloqueado por limite mensal (%s)', e)
+            return None
+
         t0 = time.monotonic()
         try:
             resposta = client.messages.create(
@@ -174,6 +181,15 @@ class AIIntentClassifier:
                     intent = bloco.input.get('intent')
                     confianca = bloco.input.get('confianca', 0.0)
 
+                    # Monitor de custo
+                    from core.services.ia_monitor import registrar, PROVIDER_ANTHROPIC, OP_CHATBOT_INTENT
+                    registrar(
+                        provider=PROVIDER_ANTHROPIC,
+                        modelo=_get_modelo(),
+                        operacao=OP_CHATBOT_INTENT,
+                        tokens_input=resposta.usage.input_tokens,
+                        tokens_output=resposta.usage.output_tokens,
+                    )
                     # H-11: gravar métricas
                     if sessao:
                         _salvar_metricas(sessao, {
@@ -243,6 +259,13 @@ class AIResponseHumanizer:
             messages.extend(_extrair_historico(sessao))
         messages.append({'role': 'user', 'content': contexto})
 
+        try:
+            from core.services.ia_monitor import checar_limite, LimiteUsoIAExcedido
+            checar_limite(modelo=_get_modelo(), operacao='CHATBOT_HUMANIZE')
+        except LimiteUsoIAExcedido as e:
+            logger.info('[AI Chatbot] humanização bloqueada por limite mensal (%s)', e)
+            return None
+
         t0 = time.monotonic()
         try:
             resposta = client.messages.create(
@@ -256,6 +279,16 @@ class AIResponseHumanizer:
             latencia_ms = int((time.monotonic() - t0) * 1000)
             texto = resposta.content[0].text if resposta.content else None
 
+            if texto:
+                # Monitor de custo
+                from core.services.ia_monitor import registrar, PROVIDER_ANTHROPIC, OP_CHATBOT_HUMANIZE
+                registrar(
+                    provider=PROVIDER_ANTHROPIC,
+                    modelo=_get_modelo(),
+                    operacao=OP_CHATBOT_HUMANIZE,
+                    tokens_input=resposta.usage.input_tokens,
+                    tokens_output=resposta.usage.output_tokens,
+                )
             if texto and sessao:
                 # H-11: métricas + H-04: salvar no histórico
                 _salvar_metricas(sessao, {
