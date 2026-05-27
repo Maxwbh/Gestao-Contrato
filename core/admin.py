@@ -6,7 +6,7 @@ Email: maxwbh@gmail.com
 """
 from django.contrib import admin
 from django.utils.html import format_html
-from .models import Contabilidade, Imobiliaria, Imovel, Comprador, ParametroSistema, LoteamentoOverlay, AcessoNegado
+from .models import Contabilidade, Imobiliaria, Imovel, Comprador, ParametroSistema, LoteamentoOverlay, AcessoNegado, LogAuditoria
 from .parametros import invalidar_cache
 
 
@@ -208,3 +208,19 @@ class AcessoNegadoAdmin(admin.ModelAdmin):
     def url_resumida(self, obj):
         return obj.url[:80] + '…' if len(obj.url) > 80 else obj.url
     url_resumida.short_description = 'URL'
+
+
+@admin.register(LogAuditoria)
+class LogAuditoriaAdmin(admin.ModelAdmin):
+    list_display = ['timestamp', 'acao', 'usuario', 'entidade', 'entidade_pk', 'ip_address']
+    list_select_related = ['usuario']
+    list_filter = ['acao']
+    search_fields = ['usuario__username', 'descricao', 'entidade_pk']
+    date_hierarchy = 'timestamp'
+    readonly_fields = ['timestamp', 'acao', 'usuario', 'entidade', 'entidade_pk', 'descricao', 'ip_address']
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False

@@ -25,7 +25,7 @@ from .models import (
     ContaBancaria, BancoBrasil, LayoutCNAB, AcessoUsuario, VerticePoligono, LoteamentoOverlay,
     get_contabilidades_usuario, get_imobiliarias_usuario,
     usuario_tem_acesso_imobiliaria, usuario_tem_acesso_contabilidade,
-    usuario_tem_permissao_total
+    usuario_tem_permissao_total, registrar_auditoria, LogAuditoria,
 )
 from .forms import ContabilidadeForm, CompradorForm, ImovelForm, ImobiliariaForm, AcessoUsuarioForm
 from django.core.cache import cache
@@ -2458,7 +2458,26 @@ def ia_limite_toggle(request, pk):
 
 
 @login_required
-@require_http_methods(['GET'])
+def auditoria_log(request):
+    """GET /auditoria/ — lista os últimos 200 eventos de auditoria."""
+    if not (request.user.is_staff or request.user.is_superuser):
+        from django.core.exceptions import PermissionDenied
+        raise PermissionDenied
+
+    acao_filter = request.GET.get('acao', '')
+    logs = LogAuditoria.objects.select_related('usuario').order_by('-timestamp')
+    if acao_filter:
+        logs = logs.filter(acao=acao_filter)
+    logs = logs[:200]
+
+    return render(request, 'core/auditoria_log.html', {
+        'logs': logs,
+        'acao_filter': acao_filter,
+        'acoes': LogAuditoria.ACOES,
+    })
+
+
+@login_required
 def api_cotacao_usd_brl(request):
     """GET /core/ia/cotacao/ — retorna cotação USD→BRL atual."""
     from core.services.ia_monitor import get_cotacao_usd_brl
@@ -2467,3 +2486,81 @@ def api_cotacao_usd_brl(request):
         return JsonResponse({'cotacao': cotacao, 'status': 'ok'})
     except Exception as exc:
         return JsonResponse({'cotacao': 5.80, 'status': 'fallback', 'erro': str(exc)})
+
+
+# =============================================================================
+# 35.2 — Desbloqueio Manual de Crédito
+# =============================================================================
+
+@login_required
+def comprador_desbloquear(request, pk):
+    """Desbloqueio manual de crédito (somente superuser)."""
+    from django.core.exceptions import PermissionDenied
+    from core.models import registrar_auditoria
+    if not request.user.is_superuser:
+        raise PermissionDenied
+    comprador = get_object_or_404(Comprador, pk=pk)
+    comprador.bloqueio_credito = False
+    comprador.bloqueio_credito_motivo = ''
+    comprador.bloqueio_credito_em = None
+    comprador.save(update_fields=['bloqueio_credito', 'bloqueio_credito_motivo', 'bloqueio_credito_em'])
+    registrar_auditoria(
+        request, 'DESBLOQUEIO_CREDITO', 'Comprador', pk,
+        f'Desbloqueio manual de {comprador.nome}'
+    )
+    messages.success(request, f'{comprador.nome} desbloqueado com sucesso.')
+    return redirect('core:editar_comprador', pk=pk)
+
+
+# =============================================================================
+# 35.6 — Widget de IA no Dashboard
+# =============================================================================
+
+@login_required
+def api_ia_status_widget(request):
+    """GET /core/ia/status-widget/ — custo mês atual, limites, alertas ≥ 80%."""
+    from datetime import date
+    from .models import RegistroUsoIA, LimiteUsoIA
+    from django.db.models import Sum as DbSum
+
+    hoje = date.today()
+    inicio_mes = hoje.replace(day=1)
+
+    custo_mes = RegistroUsoIA.objects.filter(
+        criado_em__date__gte=inicio_mes
+    ).aggregate(total=DbSum('custo_usd'))['total'] or 0
+
+    alertas = []
+    for lim in LimiteUsoIA.objects.filter(ativo=True):
+        try:
+            from datetime import timedelta
+            if lim.periodo == 'MENSAL':
+                data_inicio = inicio_mes
+            elif lim.periodo == 'SEMANAL':
+                data_inicio = hoje - timedelta(days=hoje.weekday())
+            else:
+                data_inicio = hoje
+
+            qs = RegistroUsoIA.objects.filter(criado_em__date__gte=data_inicio)
+            if lim.tipo_escopo == 'MODELO' and lim.escopo_valor:
+                qs = qs.filter(modelo=lim.escopo_valor)
+            elif lim.tipo_escopo == 'OPERACAO' and lim.escopo_valor:
+                qs = qs.filter(operacao=lim.escopo_valor)
+
+            if lim.tipo_limite == 'TOKENS':
+                consumo = (qs.aggregate(t=DbSum('tokens_total'))['t'] or 0)
+            else:
+                consumo = float(qs.aggregate(t=DbSum('custo_usd'))['t'] or 0)
+
+            limite_val = float(lim.valor_limite)
+            pct = round(consumo / limite_val * 100, 1) if limite_val > 0 else 0
+            if pct >= 80:
+                alertas.append({'descricao': lim.descricao or str(lim), 'pct': pct})
+        except Exception:
+            pass
+
+    return JsonResponse({
+        'custo_mes_usd': round(float(custo_mes), 4),
+        'alertas_ativos': alertas,
+        'alertas_count': len(alertas),
+    })

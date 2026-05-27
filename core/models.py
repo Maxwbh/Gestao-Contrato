@@ -1040,6 +1040,22 @@ class Comprador(TimeStampedModel):
     observacoes = models.TextField(blank=True, verbose_name='Observações')
     ativo = models.BooleanField(default=True, verbose_name='Ativo')
 
+    # Bloqueio de Crédito por Inadimplência (35.2)
+    bloqueio_credito = models.BooleanField(
+        default=False,
+        verbose_name='Bloqueio de Crédito',
+        help_text='Comprador está bloqueado por inadimplência'
+    )
+    bloqueio_credito_motivo = models.TextField(
+        blank=True,
+        verbose_name='Motivo do Bloqueio',
+    )
+    bloqueio_credito_em = models.DateTimeField(
+        null=True,
+        blank=True,
+        verbose_name='Bloqueado em',
+    )
+
     class Meta:
         verbose_name = 'Comprador'
         verbose_name_plural = 'Compradores'
@@ -1048,6 +1064,7 @@ class Comprador(TimeStampedModel):
             models.Index(fields=['tipo_pessoa']),
             models.Index(fields=['cpf']),
             models.Index(fields=['cnpj']),
+            models.Index(fields=['bloqueio_credito']),
         ]
 
     def __str__(self):
@@ -1434,6 +1451,73 @@ class AcessoNegado(models.Model):
 
     def __str__(self):
         return f'{self.ip} → {self.url} ({self.status_code}) em {self.timestamp:%d/%m/%Y %H:%M}'
+
+
+# =============================================================================
+# LOG DE AUDITORIA (35.1)
+# =============================================================================
+
+class LogAuditoria(models.Model):
+    """Registra eventos críticos do sistema para fins de auditoria."""
+
+    ACOES = [
+        ('PAGAMENTO',           'Pagamento registrado'),
+        ('BOLETO_GERADO',       'Boleto gerado'),
+        ('REAJUSTE_APLICADO',   'Reajuste aplicado'),
+        ('REAJUSTE_DESFEITO',   'Reajuste desfeito'),
+        ('CNAB_RETORNO',        'CNAB retorno processado'),
+        ('IMPORTACAO_IA',       'Importação via IA'),
+        ('EXPORTACAO',          'Exportação de relatório'),
+        ('BLOQUEIO_CREDITO',    'Bloqueio de crédito ativado'),
+        ('DESBLOQUEIO_CREDITO', 'Bloqueio de crédito removido'),
+    ]
+
+    usuario = models.ForeignKey(
+        'auth.User', null=True, blank=True, on_delete=models.SET_NULL,
+        verbose_name='Usuário'
+    )
+    acao = models.CharField(max_length=50, choices=ACOES, verbose_name='Ação')
+    entidade = models.CharField(max_length=50, blank=True, verbose_name='Entidade')
+    entidade_pk = models.PositiveIntegerField(null=True, blank=True, verbose_name='PK da Entidade')
+    descricao = models.TextField(blank=True, verbose_name='Descrição')
+    ip_address = models.GenericIPAddressField(null=True, blank=True, verbose_name='IP')
+    timestamp = models.DateTimeField(auto_now_add=True, verbose_name='Data/Hora')
+
+    class Meta:
+        ordering = ['-timestamp']
+        verbose_name = 'Log de Auditoria'
+        verbose_name_plural = 'Logs de Auditoria'
+        indexes = [
+            models.Index(fields=['usuario', 'timestamp']),
+            models.Index(fields=['entidade', 'entidade_pk']),
+            models.Index(fields=['acao', 'timestamp']),
+        ]
+
+    def __str__(self):
+        usuario_str = self.usuario.username if self.usuario else 'Sistema'
+        return f'{self.timestamp:%d/%m/%Y %H:%M} — {self.get_acao_display()} por {usuario_str}'
+
+
+def registrar_auditoria(request_or_user, acao, entidade='', entidade_pk=None, descricao=''):
+    """Registra evento de auditoria. Falha silenciosa para não interromper a operação."""
+    try:
+        usuario = None
+        ip = None
+        if hasattr(request_or_user, 'user'):  # é um request
+            req = request_or_user
+            u = req.user
+            usuario = u if u.is_authenticated else None
+            ip = req.META.get('HTTP_X_FORWARDED_FOR', req.META.get('REMOTE_ADDR', ''))
+            if ip and ',' in ip:
+                ip = ip.split(',')[0].strip()
+        elif hasattr(request_or_user, 'pk'):  # é um User
+            usuario = request_or_user
+        LogAuditoria.objects.create(
+            usuario=usuario, acao=acao, entidade=entidade,
+            entidade_pk=entidade_pk, descricao=descricao, ip_address=ip or None
+        )
+    except Exception:
+        pass
 
 
 # ─── Monitor de Uso de IA ──────────────────────────────────────────────────────

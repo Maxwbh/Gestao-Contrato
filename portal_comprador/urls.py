@@ -74,4 +74,8 @@ urlpatterns = [
     path('sw.js', views.portal_service_worker, name='service_worker'),
     path('api/push/subscribe/', views.api_push_subscribe, name='api_push_subscribe'),
     path('api/push/unsubscribe/', views.api_push_unsubscribe, name='api_push_unsubscribe'),
+
+    # 35.5 — Linha do Tempo por Contrato
+    path('contratos/<int:contrato_id>/timeline/', views.portal_timeline, name='portal_timeline'),
+    path('contratos/<int:contrato_id>/timeline/pdf/', views.portal_timeline_pdf, name='portal_timeline_pdf'),
 ]

@@ -141,6 +141,7 @@
                 <li{% if 'configuracoes_sistema' in url_name or 'acesso' in url_name or 'dados_teste' in url_name %} class="nav-active"{% endif %}>
                     <a class="dropdown-trigger" href="#!" data-target="dd-admin">
                         <i class="fas fa-cog"></i> Admin
+                        <span id="ia-alerta-badge" class="badge-ia-alerta" style="display:none;background:#e53935;color:#fff;border-radius:10px;font-size:.65rem;padding:1px 5px;margin-left:3px;vertical-align:middle;"></span>
                         <i class="material-icons right">arrow_drop_down</i>
                     </a>
                 </li>
@@ -230,6 +231,7 @@
         <li><a href="{% url 'core:ia_custos' %}"><i class="fas fa-robot"></i> Custos de IA</a></li>
         <li><a href="{% url 'core:ia_limites' %}"><i class="fas fa-shield-alt"></i> Limites de IA</a></li>
         <li><a href="{% url 'core:ia_tokens_config' %}"><i class="fas fa-sliders-h"></i> Configuração de Tokens</a></li>
+        <li><a href="{% url 'core:auditoria_log' %}"><i class="fas fa-clipboard-list"></i> Log de Auditoria</a></li>
         <li class="divider" tabindex="-1"></li>
         <li><a href="{% url 'core:pagina_dados_teste' %}"><i class="fas fa-database"></i> Dados de Teste</a></li>
         <li><a href="/admin/"><i class="fas fa-tools"></i> Django Admin</a></li>
@@ -741,6 +743,24 @@
     </script>
 
     {% block extra_js %}{% endblock %}
+
+    {% if user.is_staff or user.is_superuser %}
+    <script>
+    (function() {
+        var badge = document.getElementById('ia-alerta-badge');
+        if (!badge) return;
+        fetch('{% url "core:api_ia_status_widget" %}')
+            .then(function(r){ return r.json(); })
+            .then(function(d) {
+                if (d.alertas_count > 0) {
+                    badge.textContent = d.alertas_count;
+                    badge.style.display = 'inline';
+                }
+            })
+            .catch(function(){});
+    })();
+    </script>
+    {% endif %}
 
     <!-- U-06: Modal de Busca Global -->
     <div id="busca-global-overlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:9000;align-items:flex-start;justify-content:center;padding-top:80px;">

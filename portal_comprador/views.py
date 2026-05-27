@@ -1411,3 +1411,135 @@ def api_push_unsubscribe(request):
         acesso_comprador=acesso, endpoint=endpoint
     ).delete()
     return JsonResponse({'sucesso': True, 'removidas': count})
+
+
+# =============================================================================
+# 35.5 — Linha do Tempo por Contrato
+# =============================================================================
+
+def portal_timeline(request, contrato_id):
+    from contratos.models import Contrato
+    from financeiro.models import HistoricoPagamento, Reajuste
+    from notificacoes.models import Notificacao
+
+    comprador = get_comprador_from_request(request)
+    if not comprador:
+        messages.error(request, 'Acesso não autorizado.')
+        return redirect('portal_comprador:login')
+
+    contrato = get_object_or_404(Contrato, pk=contrato_id, comprador=comprador)
+
+    eventos = []
+
+    for p in (HistoricoPagamento.objects
+              .filter(parcela__contrato=contrato)
+              .select_related('parcela')
+              .order_by('data_pagamento')):
+        eventos.append({
+            'tipo': 'pagamento',
+            'data': p.data_pagamento,
+            'titulo': f'Parcela {p.parcela.numero_parcela} paga',
+            'detalhe': f'R$ {p.valor_pago:,.2f}',
+            'icone': 'fas fa-check-circle',
+            'cor': '#2e7d32',
+        })
+
+    for r in (Reajuste.objects
+              .filter(contrato=contrato)
+              .order_by('data_reajuste')):
+        eventos.append({
+            'tipo': 'reajuste',
+            'data': r.data_reajuste,
+            'titulo': f'Reajuste {r.indice_tipo} aplicado',
+            'detalhe': f'{r.percentual:+.2f}% — parcelas {r.parcela_inicial}–{r.parcela_final}',
+            'icone': 'fas fa-chart-line',
+            'cor': '#e65100',
+        })
+
+    for n in (Notificacao.objects
+              .filter(parcela__contrato=contrato)
+              .select_related('parcela')
+              .order_by('criado_em')[:100]):
+        eventos.append({
+            'tipo': 'notificacao',
+            'data': n.criado_em.date() if n.criado_em else None,
+            'titulo': f'Notificação — {n.get_tipo_display() if hasattr(n, "get_tipo_display") else "Aviso"}',
+            'detalhe': (n.assunto or '')[:80],
+            'icone': 'fas fa-bell',
+            'cor': '#1565c0',
+        })
+
+    eventos.sort(key=lambda e: e['data'] or __import__('datetime').date.min)
+
+    return render(request, 'portal_comprador/timeline.html', {
+        'contrato': contrato,
+        'eventos': eventos,
+    })
+
+
+def portal_timeline_pdf(request, contrato_id):
+    from contratos.models import Contrato
+    from financeiro.models import HistoricoPagamento, Reajuste
+    from reportlab.lib.pagesizes import A4
+    from reportlab.lib import colors
+    from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
+    from reportlab.lib.styles import getSampleStyleSheet
+    import io
+
+    comprador = get_comprador_from_request(request)
+    if not comprador:
+        return redirect('portal_comprador:login')
+
+    contrato = get_object_or_404(Contrato, pk=contrato_id, comprador=comprador)
+
+    buf = io.BytesIO()
+    doc = SimpleDocTemplate(buf, pagesize=A4, leftMargin=40, rightMargin=40, topMargin=50, bottomMargin=40)
+    styles = getSampleStyleSheet()
+    elementos = []
+
+    imob = contrato.imobiliaria
+    elementos.append(Paragraph(imob.nome if imob else 'Imobiliária', styles['Title']))
+    elementos.append(Paragraph(f'Extrato do Contrato {contrato.numero_contrato}', styles['Heading2']))
+    elementos.append(Paragraph(f'Comprador: {comprador.nome}', styles['Normal']))
+    elementos.append(Spacer(1, 12))
+
+    dados = [['Data', 'Tipo', 'Descrição', 'Valor / Detalhe']]
+
+    for p in (HistoricoPagamento.objects
+              .filter(parcela__contrato=contrato)
+              .select_related('parcela')
+              .order_by('data_pagamento')):
+        dados.append([
+            p.data_pagamento.strftime('%d/%m/%Y'),
+            'Pagamento',
+            f'Parcela {p.parcela.numero_parcela}',
+            f'R$ {p.valor_pago:,.2f}',
+        ])
+
+    for r in (Reajuste.objects.filter(contrato=contrato).order_by('data_reajuste')):
+        dados.append([
+            r.data_reajuste.strftime('%d/%m/%Y'),
+            'Reajuste',
+            f'{r.indice_tipo}',
+            f'{r.percentual:+.2f}%',
+        ])
+
+    dados.sort(key=lambda row: row[0] if row[0] != 'Data' else '')
+
+    t = Table(dados, colWidths=[70, 70, 220, 100])
+    t.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#1565c0')),
+        ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
+        ('FONTSIZE', (0, 0), (-1, -1), 9),
+        ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#f5f5f5')]),
+        ('GRID', (0, 0), (-1, -1), 0.3, colors.HexColor('#cccccc')),
+        ('LEFTPADDING', (0, 0), (-1, -1), 6),
+        ('RIGHTPADDING', (0, 0), (-1, -1), 6),
+    ]))
+    elementos.append(t)
+
+    doc.build(elementos)
+    buf.seek(0)
+    nome_arquivo = f'extrato_{contrato.numero_contrato}.pdf'
+    return HttpResponse(buf, content_type='application/pdf',
+                        headers={'Content-Disposition': f'attachment; filename="{nome_arquivo}"'})
