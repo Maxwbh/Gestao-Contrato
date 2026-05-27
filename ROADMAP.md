@@ -2,7 +2,7 @@
 
 **Desenvolvedor:** Maxwell da Silva Oliveira (maxwbh@gmail.com)
 **Empresa:** M&S do Brasil LTDA
-**Última atualização:** 2026-05-27 (rev 17)
+**Última atualização:** 2026-05-27 (rev 18)
 
 > Pendentes organizados por prioridade.
 > Para documentação do sistema atual, consulte **[SISTEMA.md](SISTEMA.md)**.
@@ -3191,4 +3191,171 @@ Fase D — P4:  35.7 Notificações Telegram           — Q4/2026
 - Multi-tenancy preservado: todas as novas entidades isoladas por imobiliária
 - Nenhuma view nova sem `@login_required` e verificação de tenant
 - Exportações (SPED, PDF) testadas com dados reais de homologação
+
+---
+
+## 36. FOCO EM COBRANÇA — TecnoSpeed (Boleto / PIX / Conciliação) 🔒 GATILHADO POR VOLUME
+
+> **Contexto:** O sistema atual usa BRCobrança para boleto (CNAB 240/400 remessa + retorno) e
+> geração de PIX copia-e-cola. A conciliação bancária depende de upload manual de OFX e
+> processamento de arquivos CNAB retorno — fluxo funcional mas com latência de 24–48h e
+> intervenção manual do operador.
+>
+> A TecnoSpeed oferece três produtos complementares — PlugBank (boleto com registro instantâneo
+> + webhook), API PIX (QR Code dinâmico multi-banco) e Extrato Open Finance (conciliação
+> automática sem OFX) — que eliminam a maior parte da operação manual de cobrança.
+>
+> **Política de ativação:** esta seção **não deve ser implementada imediatamente**.
+> A integração com a TecnoSpeed tem custo mensal sob consulta e justifica-se apenas quando
+> o volume de uso atingir os gatilhos definidos na Seção 36.1. Até lá, BRCobrança permanece
+> como solução principal e nenhuma mudança deve ser feita na infraestrutura de cobrança.
+
+---
+
+### 36.1 Gatilhos de Ativação — Quando Iniciar
+
+> Implementar **apenas quando pelo menos um** dos critérios abaixo for atingido e
+> o custo da TecnoSpeed for validado em cotação formal.
+
+| # | Gatilho | Métrica | Justificativa |
+|---|---------|---------|---------------|
+| G-01 | **Volume de boletos** | ≥ 300 boletos gerados/mês (média 3 meses) | Custo fixo TecnoSpeed diluído em < R$10/boleto |
+| G-02 | **Imobiliárias ativas** | ≥ 8 imobiliárias com contratos ativos | Overhead operacional (OFX manual + CNAB) justifica automação |
+| G-03 | **Volume financeiro** | ≥ R$ 500.000 em parcelas geradas/mês | Risco operacional de atraso na conciliação torna-se relevante |
+| G-04 | **Reclamação operacional** | ≥ 3 imobiliárias relatando dificuldade com OFX/CNAB manual | Demanda explícita do usuário |
+| G-05 | **Custo de suporte** | > 20% do tempo de suporte gasto em problemas de CNAB/OFX | Custo indireto supera custo da TecnoSpeed |
+
+**Ação ao atingir gatilho:** solicitar cotação formal à TecnoSpeed (0800 006 9500 / comercial@tecnospeed.com.br), validar preço vs. economia operacional estimada e autorizar implementação da Fase A.
+
+---
+
+### 36.2 Situação Atual — O que Permanece Inalterado até o Gatilho
+
+| Componente | Solução atual | Status |
+|-----------|--------------|--------|
+| Geração de boleto | BRCobrança REST API | ✅ Mantido |
+| Registro bancário | CNAB 240/400 remessa | ✅ Mantido |
+| Confirmação de pagamento boleto | CNAB retorno processado | ✅ Mantido |
+| PIX copia-e-cola | BRCobrança gera código | ✅ Mantido |
+| Webhook PIX | `EventoPIX` + endpoint `/api/webhook/pix/` | ✅ Mantido |
+| Conciliação OFX | Upload manual + `OFXService` | ✅ Mantido |
+| Conciliação CNAB | `CNABService.processar_retorno()` | ✅ Mantido |
+
+---
+
+### 36.3 O que a TecnoSpeed Resolve (referência para decisão)
+
+| Problema atual | Solução TecnoSpeed | Produto |
+|---------------|-------------------|---------|
+| CNAB remessa: gerado e enviado manualmente | Registro instantâneo via WebService bancário | PlugBank Boleto |
+| CNAB retorno: operador precisa baixar e importar arquivo | Webhook automático confirma pagamento em tempo real | PlugBank Boleto |
+| PIX webhook: configurado separadamente em cada banco | API unificada multi-banco com webhook padronizado | API PIX |
+| OFX: operador baixa extrato no internet banking e faz upload | API Open Finance busca transações automaticamente | Extrato Open Finance |
+| Latência de conciliação: 24–48h | Near real-time (minutos) | Boleto + PIX + Open Finance |
+
+**Bancos homologados TecnoSpeed (referência pesquisa 2026-05):**
+- PlugBank Boleto: 40+ bancos (cresce 1 banco a cada 2 meses)
+- API PIX: BB, Bradesco, Itaú, Santander, Sicredi, Sicoob, GerenciaNet/Efí, TecnoPay (8 bancos)
+- Extrato Open Finance: 44 bancos PF / 47 bancos PJ (todos os mandatórios BCB acima de R$1bi)
+
+**TecnoPay:** conta transacional própria da TecnoSpeed — a imobiliária recebe PIX na conta TecnoPay sem precisar ter conta nos bancos parceiros.
+
+---
+
+### 36.4 Fases de Implementação (pós-gatilho)
+
+> Executar **sequencialmente**. Cada fase é independente e não exige a próxima.
+> Fase A tem menor risco e maior ganho imediato — iniciar sempre por ela.
+
+#### Fase A — Extrato Open Finance (P2 — menor risco)
+
+**O que muda:** substituir upload manual de OFX por API automática.
+**O que NÃO muda:** boleto, CNAB, PIX — tudo permanece intacto.
+
+| # | Item | Status |
+|---|------|--------|
+| A-01 | Contratar TecnoSpeed e obter credenciais de homologação para Extrato Open Finance | — |
+| A-02 | `core/services/tecnospeed_extrato.py` — client HTTP: `GET /extratos/` com token OAuth; retorna lista de transações JSON por conta bancária e período | — |
+| A-03 | Fluxo de consentimento para Imobiliária: tela `/financeiro/openfinance/autorizar/<imobiliaria_id>/` — redireciona para banco via TecnoSpeed; callback salva `token_consentimento` em `ContaBancaria` | — |
+| A-04 | Campo `ContaBancaria.token_openfinance` (CharField, encrypted) + `openfinance_ativo` (BooleanField) + `openfinance_expira_em` (DateTimeField — 12 meses) | — |
+| A-05 | Task `sincronizar_extratos_openfinance_sync()` em `core/tasks.py`: para cada conta com `openfinance_ativo=True`, busca transações do dia; tenta conciliar por `pix_txid` e `nosso_numero_formatado`; cria `HistoricoPagamento` com `origem_pagamento='OPENFINANCE'` | — |
+| A-06 | Endpoint `POST /api/tasks/sincronizar-extratos/` acionado pelo cron-job.org às 07:00 e 19:00 | — |
+| A-07 | Dashboard de conciliação: indicador "Última sincronização" por conta bancária; botão "Sincronizar agora" (manual) | — |
+| A-08 | Testes: mock da API TecnoSpeed, conciliação por txid, conciliação por nosso_numero, consentimento expirado → alerta | — |
+
+#### Fase B — API PIX Unificada (P2)
+
+**O que muda:** QR Code PIX gerado pela TecnoSpeed (nos 8 bancos homologados) em vez do BRCobrança. Fallback automático para BRCobrança nos bancos não cobertos.
+**O que NÃO muda:** boleto, CNAB remessa/retorno.
+
+| # | Item | Status |
+|---|------|--------|
+| B-01 | `financeiro/services/tecnospeed_pix.py` — gerar QR Code dinâmico, consultar status, registrar webhook | — |
+| B-02 | Lógica de roteamento em `gerar_boleto_parcela()`: se banco da conta está na lista de 8 homologados TecnoSpeed → usa TecnoSpeed PIX; caso contrário → mantém BRCobrança copia-e-cola | — |
+| B-03 | Webhook unificado `POST /financeiro/webhook/tecnospeed/pix/` — recebe confirmação, cria `EventoPIX`, aciona `_processar_evento_pix()` existente | — |
+| B-04 | `ParametroSistema`: `TECNOSPEED_PIX_ATIVO` (liga/desliga sem deploy) + `TECNOSPEED_BANCOS_PIX` (lista JSON dos bancos habilitados) | — |
+| B-05 | Testes: mock TecnoSpeed, fallback BRCobrança, webhook de confirmação, deduplicação EndToEndId | — |
+
+#### Fase C — PlugBank Boleto (P3 — maior esforço, maior recompensa)
+
+**O que muda:** boleto gerado e registrado via TecnoSpeed PlugBank (registro instantâneo + webhook). CNAB de remessa e retorno tornam-se desnecessários para bancos cobertos.
+**Pré-requisito:** Fase A e B validadas em produção por ≥ 60 dias.
+
+| # | Item | Status |
+|---|------|--------|
+| C-01 | `financeiro/services/tecnospeed_boleto.py` — gerar boleto, registrar, cancelar, consultar status | — |
+| C-02 | Migração de convênios bancários: cada `ContaBancaria` recebe `tecnospeed_convenio_id` (CharField) preenchido durante onboarding com TecnoSpeed | — |
+| C-03 | Webhook `POST /financeiro/webhook/tecnospeed/boleto/` — recebe status (REGISTRADO, PAGO, CANCELADO, VENCIDO); aciona fluxo de baixa existente (`registrar_pagamento`) | — |
+| C-04 | Roteamento em `gerar_boleto_parcela()`: se `ContaBancaria.tecnospeed_convenio_id` preenchido → PlugBank; caso contrário → BRCobrança (coexistência durante migração) | — |
+| C-05 | `ParametroSistema`: `TECNOSPEED_BOLETO_ATIVO` (flag global) — permite rollback sem deploy | — |
+| C-06 | CNAB de remessa/retorno: mantido como fallback para bancos não migrados; `ArquivoRemessa`/`ArquivoRetorno` não deprecados | — |
+| C-07 | Testes: geração, registro instantâneo, webhook pago, fallback BRCobrança, coexistência de nosso_numero entre os dois sistemas | — |
+
+---
+
+### 36.5 Impacto na Arquitetura Atual
+
+```
+HOJE (BRCobrança):
+  Parcela → gerar_boleto_parcela() → BRCobrança API → nosso_numero
+         → ArquivoRemessa (CNAB) → banco → ArquivoRetorno → processar_retorno()
+         → HistoricoPagamento (origem: CNAB)
+
+FASE A (apenas Open Finance):
+  Parcela → [inalterado acima]
+  ContaBancaria (openfinance_ativo=True) → task diária → TecnoSpeed Extrato API
+         → conciliar por txid/nosso_numero → HistoricoPagamento (origem: OPENFINANCE)
+
+FASE B (+ PIX TecnoSpeed):
+  Parcela → gerar_boleto_parcela()
+         → banco ∈ lista TecnoSpeed? → TecnoSpeed PIX → QR dinâmico + webhook
+         → banco ∉ lista?            → BRCobrança copia-e-cola [fallback]
+
+FASE C (+ PlugBank Boleto):
+  Parcela → gerar_boleto_parcela()
+         → ContaBancaria.tecnospeed_convenio_id preenchido?
+              Sim → TecnoSpeed PlugBank → registro instantâneo → webhook
+              Não → BRCobrança + CNAB [fallback — bancos não migrados]
+```
+
+---
+
+### 36.6 Ordem de Execução
+
+```
+[BLOQUEADO] Aguardando gatilho da Seção 36.1
+
+Após gatilho:
+  Fase A — Extrato Open Finance     — Semana 1–4   (risco baixo, sem impacto em boleto)
+  Fase B — API PIX Unificada        — Semana 5–8   (risco médio, fallback automático)
+  Fase C — PlugBank Boleto          — Semana 9–16  (risco alto; apenas após 60 dias Fase A+B)
+```
+
+### 36.7 Critérios de Aceitação
+
+- BRCobrança permanece funcional durante toda a migração (coexistência obrigatória)
+- Fase A não altera nenhum modelo de boleto ou PIX existente
+- Toda nova rota de pagamento tem flag on/off via `ParametroSistema` (rollback sem deploy)
+- Testes de regressão completos antes de cada fase entrar em produção
+- `nosso_numero` existente preservado (boletos já emitidos não são afetados pela migração)
 
