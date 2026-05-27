@@ -1,0 +1,252 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Limites de Uso de IA{% endblock %}
+
+{% block extra_css %}
+<style>
+    .progress { height: 18px; border-radius: 4px; }
+    .progress-bar { font-size: 0.75rem; line-height: 18px; }
+
+    .limit-card {
+        border-left: 4px solid;
+        transition: transform .15s;
+    }
+    .limit-card:hover { transform: translateY(-2px); }
+    .limit-card.ok      { border-color: #28a745; }
+    .limit-card.aviso   { border-color: #ffc107; }
+    .limit-card.critico { border-color: #dc3545; }
+    .limit-card.inativo { border-color: #adb5bd; opacity: .75; }
+
+    .badge-escopo-MODELO   { background-color: #6f42c1; color:#fff; }
+    .badge-escopo-OPERACAO { background-color: #17a2b8; color:#fff; }
+    .badge-tipo-TOKENS { background-color: #343a40; color:#fff; }
+    .badge-tipo-REAIS  { background-color: #28a745; color:#fff; }
+
+    .form-section {
+        background: #f8f9fa;
+        border: 1px solid #dee2e6;
+        border-radius: .5rem;
+        padding: 1.25rem;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+
+    <!-- Cabeçalho -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h2><i class="fas fa-shield-alt"></i> Limites de Uso de IA</h2>
+            <p class="text-muted mb-0">
+                Defina limites mensais por modelo ou operação — em tokens ou R$.
+                Ao atingir o limite, as chamadas à API são bloqueadas automaticamente.
+            </p>
+        </div>
+        <div class="d-flex gap-2">
+            <span class="text-muted small align-self-center">
+                USD 1 = R$ <strong id="cotacao-val">{{ cotacao_usd_brl|floatformat:2 }}</strong>
+                <button class="btn btn-link btn-sm p-0 ms-1" id="btn-refresh-cotacao" title="Atualizar cotação">
+                    <i class="fas fa-sync-alt fa-xs"></i>
+                </button>
+            </span>
+            <a href="{% url 'core:ia_custos' %}" class="btn btn-outline-secondary btn-sm">
+                <i class="fas fa-chart-line"></i> Painel de Custos
+            </a>
+        </div>
+    </div>
+
+    {% if messages %}
+    {% for msg in messages %}
+    <div class="alert alert-{{ msg.tags|default:'info' }} alert-dismissible fade show" role="alert">
+        {{ msg }}
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+    {% endfor %}
+    {% endif %}
+
+    <!-- Limites configurados -->
+    <div class="row mb-4">
+        {% for item in limites_com_consumo %}
+        {% with lim=item.limite pct=item.percentual consumido=item.consumido %}
+        {% if not lim.ativo %}
+        {% with classe="inativo" %}
+        {% include "core/partials/_limite_card.html" with lim=lim pct=pct consumido=consumido classe=classe %}
+        {% endwith %}
+        {% elif pct >= 90 %}
+        {% with classe="critico" %}
+        {% include "core/partials/_limite_card.html" with lim=lim pct=pct consumido=consumido classe=classe %}
+        {% endwith %}
+        {% elif pct >= 70 %}
+        {% with classe="aviso" %}
+        {% include "core/partials/_limite_card.html" with lim=lim pct=pct consumido=consumido classe=classe %}
+        {% endwith %}
+        {% else %}
+        {% with classe="ok" %}
+        {% include "core/partials/_limite_card.html" with lim=lim pct=pct consumido=consumido classe=classe %}
+        {% endwith %}
+        {% endif %}
+        {% endwith %}
+        {% empty %}
+        <div class="col-12">
+            <div class="alert alert-info">
+                <i class="fas fa-info-circle"></i>
+                Nenhum limite configurado ainda. Use o formulário abaixo para adicionar o primeiro.
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+
+    <!-- Formulário de novo limite -->
+    <div class="card">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <span><i class="fas fa-plus-circle"></i> Novo Limite</span>
+        </div>
+        <div class="card-body">
+            <form method="post" action="{% url 'core:ia_limite_salvar' %}" id="form-novo-limite">
+                {% csrf_token %}
+                <input type="hidden" name="pk" value="">
+                <div class="row g-3 align-items-end">
+                    <div class="col-md-3">
+                        <label class="form-label fw-semibold">Escopo</label>
+                        <select name="tipo_escopo" class="form-select" id="sel-escopo" required>
+                            <option value="">Selecione...</option>
+                            <option value="MODELO">Modelo de IA</option>
+                            <option value="OPERACAO">Operação</option>
+                        </select>
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label fw-semibold">Valor do escopo</label>
+                        <select name="escopo_valor" class="form-select" id="sel-escopo-valor" required disabled>
+                            <option value="">Selecione o escopo primeiro</option>
+                        </select>
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label fw-semibold">Tipo de limite</label>
+                        <select name="tipo_limite" class="form-select" required>
+                            <option value="TOKENS">Tokens</option>
+                            <option value="REAIS">R$ (Reais)</option>
+                        </select>
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label fw-semibold">Valor mensal</label>
+                        <input type="text" name="valor_limite" class="form-control"
+                               placeholder="Ex: 100000 ou 50.00" required>
+                    </div>
+                    <div class="col-md-2">
+                        <button type="submit" class="btn btn-primary w-100">
+                            <i class="fas fa-save"></i> Salvar
+                        </button>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Legenda -->
+    <div class="mt-3 text-muted small">
+        <i class="fas fa-circle text-success"></i> &lt; 70% &nbsp;
+        <i class="fas fa-circle text-warning"></i> 70–90% &nbsp;
+        <i class="fas fa-circle text-danger"></i> ≥ 90% &nbsp;
+        <i class="fas fa-circle text-secondary"></i> Desativado &nbsp;|&nbsp;
+        O período de apuração é <strong>mensal</strong> — reseta no dia 1 de cada mês.
+    </div>
+
+</div>
+
+<!-- Modal de edição -->
+<div class="modal fade" id="modalEditar" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="fas fa-edit"></i> Editar Limite</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form method="post" action="{% url 'core:ia_limite_salvar' %}">
+                {% csrf_token %}
+                <div class="modal-body">
+                    <input type="hidden" name="pk" id="edit-pk">
+                    <div class="mb-3">
+                        <label class="form-label">Escopo</label>
+                        <select name="tipo_escopo" id="edit-escopo" class="form-select">
+                            <option value="MODELO">Modelo de IA</option>
+                            <option value="OPERACAO">Operação</option>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Valor do escopo</label>
+                        <input type="text" name="escopo_valor" id="edit-escopo-valor" class="form-control">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Tipo de limite</label>
+                        <select name="tipo_limite" id="edit-tipo" class="form-select">
+                            <option value="TOKENS">Tokens</option>
+                            <option value="REAIS">R$ (Reais)</option>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Valor mensal</label>
+                        <input type="text" name="valor_limite" id="edit-valor" class="form-control">
+                    </div>
+                    <div class="form-check">
+                        <input type="hidden" name="ativo" value="false">
+                        <input class="form-check-input" type="checkbox" name="ativo" value="true" id="edit-ativo">
+                        <label class="form-check-label" for="edit-ativo">Ativo</label>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-primary">Salvar</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{{ modelos|json_script:"data-modelos" }}
+{{ operacoes|json_script:"data-operacoes" }}
+
+{% block extra_js %}
+<script>
+// Dropdown dinâmico: modelos x operações
+const MODELOS = JSON.parse(document.getElementById('data-modelos').textContent);
+const OPERACOES = JSON.parse(document.getElementById('data-operacoes').textContent);
+
+document.getElementById('sel-escopo').addEventListener('change', function () {
+    const sel = document.getElementById('sel-escopo-valor');
+    sel.innerHTML = '<option value="">Selecione...</option>';
+    const lista = this.value === 'MODELO' ? MODELOS : (this.value === 'OPERACAO' ? OPERACOES : []);
+    lista.forEach(v => {
+        const opt = document.createElement('option');
+        opt.value = v; opt.textContent = v;
+        sel.appendChild(opt);
+    });
+    sel.disabled = lista.length === 0;
+});
+
+// Abrir modal de edição
+document.querySelectorAll('.btn-editar').forEach(btn => {
+    btn.addEventListener('click', function () {
+        document.getElementById('edit-pk').value = this.dataset.pk;
+        document.getElementById('edit-escopo').value = this.dataset.escopo;
+        document.getElementById('edit-escopo-valor').value = this.dataset.escopoValor;
+        document.getElementById('edit-tipo').value = this.dataset.tipo;
+        document.getElementById('edit-valor').value = this.dataset.valor;
+        document.getElementById('edit-ativo').checked = this.dataset.ativo === 'True';
+        new bootstrap.Modal(document.getElementById('modalEditar')).show();
+    });
+});
+
+// Atualizar cotação USD/BRL
+document.getElementById('btn-refresh-cotacao').addEventListener('click', function () {
+    fetch('{% url "core:api_cotacao_usd_brl" %}')
+        .then(r => r.json())
+        .then(d => {
+            document.getElementById('cotacao-val').textContent = d.cotacao.toFixed(2);
+        })
+        .catch(() => {});
+});
+</script>
+{% endblock %}

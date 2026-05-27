@@ -154,6 +154,13 @@ class AIIntentClassifier:
             messages.extend(_extrair_historico(sessao))
         messages.append({'role': 'user', 'content': texto})
 
+        try:
+            from core.services.ia_monitor import checar_limite, LimiteUsoIAExcedido
+            checar_limite(modelo=_get_modelo(), operacao='CHATBOT_INTENT')
+        except LimiteUsoIAExcedido as e:
+            logger.info('[AI Chatbot] intent bloqueado por limite mensal (%s)', e)
+            return None
+
         t0 = time.monotonic()
         try:
             resposta = client.messages.create(
@@ -251,6 +258,13 @@ class AIResponseHumanizer:
         if sessao:
             messages.extend(_extrair_historico(sessao))
         messages.append({'role': 'user', 'content': contexto})
+
+        try:
+            from core.services.ia_monitor import checar_limite, LimiteUsoIAExcedido
+            checar_limite(modelo=_get_modelo(), operacao='CHATBOT_HUMANIZE')
+        except LimiteUsoIAExcedido as e:
+            logger.info('[AI Chatbot] humanização bloqueada por limite mensal (%s)', e)
+            return None
 
         t0 = time.monotonic()
         try:

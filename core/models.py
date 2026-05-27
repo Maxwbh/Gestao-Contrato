@@ -1485,3 +1485,41 @@ class RegistroUsoIA(models.Model):
 
     def __str__(self):
         return f'{self.modelo} | {self.get_operacao_display()} | ${self.custo_usd:.4f}'
+
+
+class LimiteUsoIA(models.Model):
+    """Limite mensal de uso das APIs de IA — por modelo ou por operação."""
+
+    ESCOPO_MODELO   = 'MODELO'
+    ESCOPO_OPERACAO = 'OPERACAO'
+    TIPO_TOKENS = 'TOKENS'
+    TIPO_REAIS  = 'REAIS'
+
+    ESCOPO_CHOICES = [
+        (ESCOPO_MODELO,   'Modelo de IA'),
+        (ESCOPO_OPERACAO, 'Operação'),
+    ]
+    TIPO_CHOICES = [
+        (TIPO_TOKENS, 'Tokens'),
+        (TIPO_REAIS,  'R$ (Reais)'),
+    ]
+
+    tipo_escopo  = models.CharField(max_length=10, choices=ESCOPO_CHOICES, verbose_name='Escopo')
+    escopo_valor = models.CharField(max_length=60, verbose_name='Modelo / Operação')
+    tipo_limite  = models.CharField(max_length=10, choices=TIPO_CHOICES, verbose_name='Tipo de limite')
+    valor_limite = models.DecimalField(max_digits=14, decimal_places=2, verbose_name='Limite')
+    ativo        = models.BooleanField(default=True, verbose_name='Ativo')
+    criado_em    = models.DateTimeField(auto_now_add=True)
+    modificado_em = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        unique_together = [('tipo_escopo', 'escopo_valor', 'tipo_limite')]
+        ordering = ['tipo_escopo', 'escopo_valor']
+        verbose_name = 'Limite de Uso de IA'
+        verbose_name_plural = 'Limites de Uso de IA'
+
+    def __str__(self):
+        return (
+            f'{self.get_tipo_escopo_display()} {self.escopo_valor} — '
+            f'{self.valor_limite} {self.tipo_limite}'
+        )

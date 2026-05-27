@@ -3,6 +3,9 @@ Monitor de uso e custo das APIs de IA.
 
 Registra cada chamada com tokens consumidos e custo estimado em USD.
 Falha silenciosamente para nunca interromper o fluxo principal.
+
+checar_limite() é a exceção: levanta LimiteUsoIAExcedido quando um
+limite mensal configurado é atingido — isso deve bloquear a chamada.
 """
 import logging
 from decimal import Decimal
@@ -26,11 +29,141 @@ OP_IMPORTACAO_PDF   = 'IMPORTACAO_PDF'
 OP_CHATBOT_INTENT   = 'CHATBOT_INTENT'
 OP_CHATBOT_HUMANIZE = 'CHATBOT_HUMANIZE'
 
+# Cache em memória para cotação USD/BRL (evita chamada à API a cada requisição)
+_cotacao_cache: dict = {}
+
+
+class LimiteUsoIAExcedido(Exception):
+    """Levantada quando um limite mensal de uso de IA é atingido."""
+
 
 def calcular_custo(modelo: str, tokens_input: int, tokens_output: int) -> Decimal:
     preco_in, preco_out = _PRECOS.get(modelo, (0.0, 0.0))
     custo = (tokens_input * preco_in + tokens_output * preco_out) / 1_000_000
     return Decimal(str(round(custo, 6)))
+
+
+def get_cotacao_usd_brl() -> float:
+    """
+    Retorna cotação USD→BRL.
+    Ordem: cache em memória → ParametroSistema (cache diário) → AwesomeAPI → fallback 5.80.
+    """
+    from datetime import date
+    hoje = date.today().isoformat()
+
+    if _cotacao_cache.get('data') == hoje:
+        return _cotacao_cache['valor']
+
+    # Tenta cache persistido em ParametroSistema
+    try:
+        from core.parametros import get_param
+        salvo = get_param('_COTACAO_USD_BRL_CACHE', '')
+        if salvo and '|' in salvo:
+            data_salva, val_str = salvo.split('|', 1)
+            if data_salva == hoje:
+                val = float(val_str)
+                _cotacao_cache.update({'data': hoje, 'valor': val})
+                return val
+    except Exception:
+        pass
+
+    # Busca na AwesomeAPI (gratuita, sem autenticação)
+    try:
+        import urllib.request
+        import json as _json
+        req = urllib.request.Request(
+            'https://economia.awesomeapi.com.br/json/last/USD-BRL',
+            headers={'User-Agent': 'gestao-contrato/1.0'},
+        )
+        with urllib.request.urlopen(req, timeout=4) as resp:
+            data = _json.loads(resp.read())
+        val = float(data['USDBRL']['bid'])
+        _salvar_cotacao_cache(hoje, val)
+        logger.info('ia_monitor: cotação USD/BRL atualizada: %.4f', val)
+        return val
+    except Exception as exc:
+        logger.debug('ia_monitor: cotação USD/BRL indisponível (%s) — usando 5.80', exc)
+
+    fallback = 5.80
+    _cotacao_cache.update({'data': hoje, 'valor': fallback})
+    return fallback
+
+
+def _salvar_cotacao_cache(hoje: str, val: float) -> None:
+    _cotacao_cache.update({'data': hoje, 'valor': val})
+    try:
+        from core.models import ParametroSistema
+        ParametroSistema.objects.update_or_create(
+            chave='_COTACAO_USD_BRL_CACHE',
+            defaults={
+                'valor': f'{hoje}|{val}',
+                'tipo': 'str',
+                'grupo': 'aplicacao',
+                'descricao': 'Cache interno — cotação USD/BRL (atualizado diariamente)',
+            },
+        )
+    except Exception:
+        pass
+
+
+def consumo_mes(modelo: str = '', operacao: str = '', tipo_limite: str = 'TOKENS') -> float:
+    """Retorna o consumo do mês corrente para o escopo dado."""
+    from core.models import RegistroUsoIA
+    from django.db.models import Sum
+    from datetime import date
+
+    inicio = date.today().replace(day=1)
+    qs = RegistroUsoIA.objects.filter(criado_em__date__gte=inicio)
+    if modelo:
+        qs = qs.filter(modelo=modelo)
+    if operacao:
+        qs = qs.filter(operacao=operacao)
+
+    if tipo_limite == 'TOKENS':
+        totais = qs.aggregate(ti=Sum('tokens_input'), to=Sum('tokens_output'))
+        return float((totais['ti'] or 0) + (totais['to'] or 0))
+    else:  # REAIS
+        totais = qs.aggregate(custo=Sum('custo_usd'))
+        return float(totais['custo'] or 0) * get_cotacao_usd_brl()
+
+
+def checar_limite(modelo: str = '', operacao: str = '') -> None:
+    """
+    Verifica os limites mensais ativos para o modelo e/ou operação.
+    Levanta LimiteUsoIAExcedido se qualquer limite ativo for ultrapassado.
+    Não lança nenhuma outra exceção — erros de DB são ignorados.
+    """
+    try:
+        from core.models import LimiteUsoIA
+        from django.db.models import Q
+
+        filtros = Q()
+        if modelo:
+            filtros |= Q(tipo_escopo=LimiteUsoIA.ESCOPO_MODELO, escopo_valor=modelo)
+        if operacao:
+            filtros |= Q(tipo_escopo=LimiteUsoIA.ESCOPO_OPERACAO, escopo_valor=operacao)
+        if not filtros:
+            return
+
+        limites = list(LimiteUsoIA.objects.filter(ativo=True).filter(filtros))
+    except LimiteUsoIAExcedido:
+        raise
+    except Exception as exc:
+        logger.debug('ia_monitor.checar_limite: erro ao consultar limites (%s) — ignorado', exc)
+        return
+
+    for limite in limites:
+        if limite.tipo_escopo == LimiteUsoIA.ESCOPO_MODELO:
+            atual = consumo_mes(modelo=limite.escopo_valor, tipo_limite=limite.tipo_limite)
+        else:
+            atual = consumo_mes(operacao=limite.escopo_valor, tipo_limite=limite.tipo_limite)
+
+        if atual >= float(limite.valor_limite):
+            unidade = 'tokens' if limite.tipo_limite == 'TOKENS' else 'R$'
+            raise LimiteUsoIAExcedido(
+                f'Limite mensal atingido: {limite.get_tipo_escopo_display()} '
+                f'"{limite.escopo_valor}" — {atual:.2f}/{float(limite.valor_limite):.2f} {unidade}'
+            )
 
 
 def registrar(

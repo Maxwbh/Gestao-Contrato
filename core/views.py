@@ -2242,3 +2242,133 @@ def api_ia_custos_dados(request):
         ],
     }
     return JsonResponse(payload)
+
+
+# ─── Configuração de Limites de Uso de IA ──────────────────────────────────
+
+_MODELOS_IA = [
+    'claude-haiku-4-5-20251001',
+    'claude-sonnet-4-6',
+    'claude-opus-4-7',
+    'gemini-2.0-flash',
+]
+_OPERACOES_IA = ['IMPORTACAO_PDF', 'CHATBOT_INTENT', 'CHATBOT_HUMANIZE']
+
+
+@login_required
+def ia_limites(request):
+    """Tela de configuração de limites mensais de uso de IA."""
+    from .models import LimiteUsoIA
+    from core.services.ia_monitor import consumo_mes, get_cotacao_usd_brl
+
+    try:
+        cotacao = get_cotacao_usd_brl()
+    except Exception:
+        cotacao = 5.80
+
+    limites_raw = LimiteUsoIA.objects.all()
+    limites_com_consumo = []
+    for lim in limites_raw:
+        if lim.tipo_escopo == LimiteUsoIA.ESCOPO_MODELO:
+            atual = consumo_mes(modelo=lim.escopo_valor, tipo_limite=lim.tipo_limite)
+        else:
+            atual = consumo_mes(operacao=lim.escopo_valor, tipo_limite=lim.tipo_limite)
+        pct = min(100, int(atual / float(lim.valor_limite) * 100)) if lim.valor_limite else 0
+        limites_com_consumo.append({
+            'limite': lim,
+            'consumido': atual,
+            'percentual': pct,
+        })
+
+    return render(request, 'core/ia_limites.html', {
+        'limites_com_consumo': limites_com_consumo,
+        'modelos': _MODELOS_IA,
+        'operacoes': _OPERACOES_IA,
+        'cotacao_usd_brl': cotacao,
+    })
+
+
+@login_required
+@require_http_methods(['POST'])
+def ia_limite_salvar(request):
+    """Cria ou atualiza um LimiteUsoIA."""
+    from .models import LimiteUsoIA
+    from decimal import Decimal as _Decimal, InvalidOperation
+
+    pk = request.POST.get('pk', '').strip()
+    tipo_escopo = request.POST.get('tipo_escopo', '').strip()
+    escopo_valor = request.POST.get('escopo_valor', '').strip()
+    tipo_limite = request.POST.get('tipo_limite', '').strip()
+    valor_str = request.POST.get('valor_limite', '').replace(',', '.').strip()
+    ativo = request.POST.get('ativo', 'true') != 'false'
+
+    if not all([tipo_escopo, escopo_valor, tipo_limite, valor_str]):
+        messages.error(request, 'Preencha todos os campos.')
+        return redirect('core:ia_limites')
+
+    try:
+        valor = _Decimal(valor_str)
+        if valor <= 0:
+            raise ValueError('Valor deve ser positivo.')
+    except (InvalidOperation, ValueError) as exc:
+        messages.error(request, f'Valor inválido: {exc}')
+        return redirect('core:ia_limites')
+
+    try:
+        if pk:
+            updated = LimiteUsoIA.objects.filter(pk=pk).update(
+                tipo_escopo=tipo_escopo, escopo_valor=escopo_valor,
+                tipo_limite=tipo_limite, valor_limite=valor, ativo=ativo,
+            )
+            if updated:
+                messages.success(request, 'Limite atualizado com sucesso.')
+            else:
+                messages.warning(request, 'Limite não encontrado.')
+        else:
+            _, created = LimiteUsoIA.objects.update_or_create(
+                tipo_escopo=tipo_escopo,
+                escopo_valor=escopo_valor,
+                tipo_limite=tipo_limite,
+                defaults={'valor_limite': valor, 'ativo': ativo},
+            )
+            messages.success(request, 'Limite criado.' if created else 'Limite atualizado.')
+    except Exception as exc:
+        messages.error(request, f'Erro ao salvar limite: {exc}')
+
+    return redirect('core:ia_limites')
+
+
+@login_required
+@require_http_methods(['POST'])
+def ia_limite_excluir(request, pk):
+    """Remove um LimiteUsoIA."""
+    from .models import LimiteUsoIA
+    LimiteUsoIA.objects.filter(pk=pk).delete()
+    messages.success(request, 'Limite removido.')
+    return redirect('core:ia_limites')
+
+
+@login_required
+@require_http_methods(['POST'])
+def ia_limite_toggle(request, pk):
+    """Ativa/desativa um LimiteUsoIA sem excluir."""
+    from .models import LimiteUsoIA
+    lim = LimiteUsoIA.objects.filter(pk=pk).first()
+    if lim:
+        lim.ativo = not lim.ativo
+        lim.save(update_fields=['ativo'])
+        estado = 'ativado' if lim.ativo else 'desativado'
+        messages.success(request, f'Limite {estado}.')
+    return redirect('core:ia_limites')
+
+
+@login_required
+@require_http_methods(['GET'])
+def api_cotacao_usd_brl(request):
+    """GET /core/ia/cotacao/ — retorna cotação USD→BRL atual."""
+    from core.services.ia_monitor import get_cotacao_usd_brl
+    try:
+        cotacao = get_cotacao_usd_brl()
+        return JsonResponse({'cotacao': cotacao, 'status': 'ok'})
+    except Exception as exc:
+        return JsonResponse({'cotacao': 5.80, 'status': 'fallback', 'erro': str(exc)})

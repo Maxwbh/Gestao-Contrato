@@ -180,6 +180,12 @@ class ImportacaoIA:
         if not api_key:
             return None
         try:
+            from core.services.ia_monitor import checar_limite, LimiteUsoIAExcedido
+            checar_limite(modelo='gemini-2.0-flash', operacao='IMPORTACAO_PDF')
+        except LimiteUsoIAExcedido as e:
+            logger.info('Gemini bloqueado por limite mensal (%s) — escalando para cadeia Claude', e)
+            return None
+        try:
             import google.generativeai as genai
         except ImportError:
             logger.debug('google-generativeai não instalado — pulando Tier 0 Gemini')
@@ -219,10 +225,16 @@ class ImportacaoIA:
             return None
 
     def _call(self, content: list) -> dict:
+        from core.services.ia_monitor import LimiteUsoIAExcedido
+
         # Tier 1 — Haiku (barato): basta para contratos legíveis e padronizados
-        dados = self._invocar('claude-haiku-4-5-20251001', content)
-        if dados.get('confianca', {}).get('nivel') == 'ALTO':
-            return dados
+        try:
+            dados = self._invocar('claude-haiku-4-5-20251001', content)
+            if dados.get('confianca', {}).get('nivel') == 'ALTO':
+                return dados
+        except LimiteUsoIAExcedido:
+            logger.info('Haiku bloqueado por limite mensal — escalando para Sonnet')
+            dados = {}
 
         # Tier 2 — Sonnet (intermediário): cobre a maioria dos casos difíceis
         logger.info(
@@ -230,9 +242,13 @@ class ImportacaoIA:
             dados.get('confianca', {}).get('nivel'),
             dados.get('confianca', {}).get('campos_incertos', []),
         )
-        dados = self._invocar('claude-sonnet-4-6', content)
-        if dados.get('confianca', {}).get('nivel') == 'ALTO':
-            return dados
+        try:
+            dados = self._invocar('claude-sonnet-4-6', content)
+            if dados.get('confianca', {}).get('nivel') == 'ALTO':
+                return dados
+        except LimiteUsoIAExcedido:
+            logger.info('Sonnet bloqueado por limite mensal — escalando para Opus')
+            dados = {}
 
         # Tier 3 — Opus (caro): reservado para documentos muito difíceis
         logger.info(
@@ -240,9 +256,11 @@ class ImportacaoIA:
             dados.get('confianca', {}).get('nivel'),
             dados.get('confianca', {}).get('campos_incertos', []),
         )
-        return self._invocar('claude-opus-4-7', content)
+        return self._invocar('claude-opus-4-7', content)  # LimiteUsoIAExcedido propaga
 
     def _invocar(self, model: str, content: list) -> dict:
+        from core.services.ia_monitor import checar_limite, LimiteUsoIAExcedido
+        checar_limite(modelo=model, operacao='IMPORTACAO_PDF')
         resposta = self.client.messages.create(
             model=model,
             max_tokens=4096,
