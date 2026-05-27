@@ -2,7 +2,7 @@
 
 **Desenvolvedor:** Maxwell da Silva Oliveira (maxwbh@gmail.com)
 **Empresa:** M&S do Brasil LTDA
-**Última atualização:** 2026-05-04 (rev 16)
+**Última atualização:** 2026-05-27 (rev 17)
 
 > Pendentes organizados por prioridade.
 > Para documentação do sistema atual, consulte **[SISTEMA.md](SISTEMA.md)**.
@@ -3044,4 +3044,151 @@ Fase D — P2:  34.7 Importação via IA           ✅ CONCLUÍDO
 - Integrações externas (webhook PIX, push notifications) com modo sandbox e
   fallback gracioso quando o provedor estiver indisponível
 - Multi-tenancy preservado: todas as entidades novas isoladas por imobiliária
+
+---
+
+## 35. MELHORIAS DE PRODUTO 2026 — OPERACIONAL E FINANCEIRO 🆕
+
+> **Origem:** revisão do roadmap (2026-05-27).
+> Foco: rastreabilidade operacional, controle de crédito, relatórios financeiros
+> avançados, conformidade fiscal e expansão de canais de comunicação.
+> Itens fora do escopo deste sistema: simulador de renegociação com IA,
+> score de inadimplência preditivo, conformidade LGPD, webhook ERP e
+> aprimoramento de mapa de lotes.
+
+---
+
+### 35.1 P1 — Auditoria Reduzida — Log de Eventos Críticos
+
+**Por quê:** o sistema não registra quem fez o quê em operações financeiras
+críticas. Necessário para suporte, auditoria contábil e rastreabilidade legal.
+
+| # | Item | Status |
+|---|------|--------|
+| 35.1.1 | Model `LogAuditoria(usuario, acao, timestamp, ip_address, entidade, entidade_pk, descricao)` — índices em `[usuario, timestamp]` e `[entidade, entidade_pk]` | — |
+| 35.1.2 | Registro manual nas views críticas: pagamento de parcela, geração de boleto, aplicação de reajuste, processamento de CNAB retorno, importação via IA | — |
+| 35.1.3 | Dashboard de auditoria `/core/auditoria/` — últimos 100 eventos por imobiliária; filtros por ação, usuário e data; export CSV | — |
+| 35.1.4 | Admin Django `LogAuditoriaAdmin` — somente leitura; `list_display`, `list_filter`, `search_fields`, `date_hierarchy` | — |
+| 35.1.5 | Testes: gravação correta em cada ponto de integração; autenticação obrigatória; isolamento por imobiliária | — |
+
+**Escopo de ações auditadas:** `PAGAMENTO`, `BOLETO_GERADO`, `REAJUSTE_APLICADO`, `REAJUSTE_DESFEITO`, `CNAB_RETORNO`, `IMPORTACAO_IA`, `LOGIN_ADMIN`, `EXPORTACAO`.
+
+---
+
+### 35.2 P1 — Bloqueio de Crédito por Inadimplência
+
+**Por quê:** compradores com 90+ dias de atraso não devem conseguir assinar
+novos contratos sem aprovação. Alinhado à Lei 13.786 art. 28 (retenção em
+rescisão por inadimplência do comprador).
+
+| # | Item | Status |
+|---|------|--------|
+| 35.2.1 | Campo `Comprador.bloqueio_credito` (BooleanField, default=False) + `bloqueio_credito_motivo` (TextField blank) + `bloqueio_credito_em` (DateTimeField null) | — |
+| 35.2.2 | Task `atualizar_bloqueio_credito_sync()` em `core/tasks.py`: busca compradores com parcelas vencidas há ≥ 90 dias → ativa flag; descativa quando todas quitadas; inclusa em `task_run_all` | — |
+| 35.2.3 | Validação em `ContratoCreateView` e wizard step 1: se comprador bloqueado → alerta visual (banner amarelo) com motivo + data; superuser pode prosseguir com confirmação | — |
+| 35.2.4 | Badge "🔴 Inadimplente" na listagem de compradores e na tela de detalhe do comprador | — |
+| 35.2.5 | Endpoint admin `/core/compradores/<pk>/desbloquear/` (POST, requer superuser) com registro em `LogAuditoria` | — |
+| 35.2.6 | Testes: ativação automática aos 90 dias, desativação após quitação, bloqueio no wizard, desbloqueio manual | — |
+
+---
+
+### 35.3 P2 — Fluxo de Caixa Previsional (12 meses)
+
+**Por quê:** hoje o dashboard exibe fluxo de caixa histórico por imobiliária.
+Falta a visão prospectiva: quanto espera receber nos próximos 12 meses e qual
+o risco de inadimplência projetado.
+
+| # | Item | Status |
+|---|------|--------|
+| 35.3.1 | API `GET /financeiro/api/imobiliaria/<id>/fluxo-previsional/` — agrega parcelas futuras por mês (NORMAL + INTERMEDIARIA), separando: previsto total / em risco (comprador com bloqueio_credito) / histórico de inadimplência por mês | — |
+| 35.3.2 | Gráfico Chart.js "Fluxo Previsional 12 meses" no `dashboard_imobiliaria.html` — série: Previsto / Em Risco / Alerta (% inadimplência acima de limiar) | — |
+| 35.3.3 | Alertas automáticos na sidebar quando previsão do mês seguinte < 80% do mês atual ou inadimplência projetada > 5% — badge de atenção + notificação por e-mail (opcional, via `RegraNotificacao`) | — |
+| 35.3.4 | Endpoint `GET /api/dashboard/fluxo-previsional/?formato=json` para consumo por Power BI / Looker (bearer token, staff only) | — |
+| 35.3.5 | Testes: corretude do agrupamento mensal, cálculo de risco, alerta > limiar | — |
+
+---
+
+### 35.4 P3 — Exportação SPED/EFD — Receita Financeira
+
+**Por quê:** imobiliárias e contabilidades precisam declarar receitas de juros
+de mora e multas por atraso no SPED Contribuições (EFD-Contribuições, Bloco F).
+Hoje essas informações existem no sistema mas precisam ser extraídas manualmente.
+
+| # | Item | Status |
+|---|------|--------|
+| 35.4.1 | View `exportar_sped_efd` (`GET /financeiro/relatorios/sped-efd/`) — parâmetros: `imobiliaria_id`, `mes` (YYYY-MM); gera arquivo `.txt` no padrão EFD-Contribuições | — |
+| 35.4.2 | Registros gerados: F100 (receita bruta — valor de parcela pago), F200 (juros de mora recebidos), F600 (multas por atraso recebidas) | — |
+| 35.4.3 | Botão "Exportar SPED" na tela de relatórios consolidados com seletor de mês | — |
+| 35.4.4 | Testes: formato correto dos registros, totalização correta, apenas registros do período | — |
+
+**Dependências:** `HistoricoPagamento` já armazena `valor_juros`, `valor_multa`, `data_pagamento` e `imobiliaria` (via contrato).
+
+---
+
+### 35.5 P3 — Linha do Tempo no Portal do Comprador
+
+**Por quê:** o portal exibe contratos, parcelas e boletos em abas separadas.
+O comprador precisa de uma visão unificada da sua história financeira com a
+imobiliária — especialmente útil em disputas ou renegociações.
+
+| # | Item | Status |
+|---|------|--------|
+| 35.5.1 | View `portal_timeline` (`GET /portal/timeline/<contrato_id>/`) — agrega em ordem cronológica: pagamentos (`HistoricoPagamento`), reajustes (`Reajuste`), notificações recebidas (`Notificacao`), geração de boletos | — |
+| 35.5.2 | Template `portal_comprador/timeline.html` — vertical timeline com ícones por tipo (✅ pago, 📈 reajuste, 🔔 notificação, 🧾 boleto, ⚠️ atraso); valores em R$ com datas | — |
+| 35.5.3 | Botão "Download Extrato PDF" — ReportLab gera PDF da timeline com cabeçalho da imobiliária e dados do comprador (substitui planilha manual para comprovação) | — |
+| 35.5.4 | Link "Histórico Completo" no dashboard do portal (`portal_dashboard.html`) | — |
+| 35.5.5 | Testes: ordenação cronológica correta, isolamento por comprador, geração do PDF | — |
+
+---
+
+### 35.6 P3 — Widget de IA no Dashboard Principal
+
+**Por quê:** a infraestrutura de monitoramento de custos e limites de IA foi
+construída (Seção 12 do SISTEMA.md) mas não está visível no dashboard operacional.
+Operadores não sabem se estão próximos dos limites sem acessar `/ia/custos/`.
+
+| # | Item | Status |
+|---|------|--------|
+| 35.6.1 | Card "Uso de IA — Mês Atual" no `dashboard.html` — consumo em R$ / limite mensal configurado / % barra de progresso colorida (verde/amarelo/vermelho); link para `/ia/custos/` | — |
+| 35.6.2 | Badge de alerta na sidebar quando qualquer limite estiver ≥ 80% — ícone 🤖 com número de limites em risco | — |
+| 35.6.3 | API `GET /core/ia/status-widget/` — retorna JSON com: custo_mes_atual, limite_mes, pct_utilizado, alertas_ativos (lista de limites ≥ 80%) | — |
+| 35.6.4 | Testes: widget renderizado no contexto do dashboard, API retorna dados corretos, badge aparece acima de 80% | — |
+
+---
+
+### 35.7 P4 — Notificações via Telegram (Canal Interno para Imobiliária)
+
+**Por quê:** WhatsApp é voltado ao comprador. A equipe interna da imobiliária
+precisa de alertas operacionais em tempo real sem acessar o sistema. Telegram
+é gratuito, não requer aprovação de número e tem API simples.
+
+| # | Item | Status |
+|---|------|--------|
+| 35.7.1 | Model `ConfiguracaoTelegram(imobiliaria, bot_token, chat_id, ativo)` em `notificacoes/models.py` | — |
+| 35.7.2 | `ServicoTelegram.enviar(mensagem)` em `notificacoes/` — `POST https://api.telegram.org/bot{token}/sendMessage`; timeout 5s; falha silenciosa | — |
+| 35.7.3 | Alertas configuráveis: reajuste pendente há > N dias, boleto vencido há > 7 dias, PIX recebido, CNAB retorno processado, erro de importação IA | — |
+| 35.7.4 | CRUD de configuração via `/notificacoes/config/telegram/` com botão "Testar conexão" | — |
+| 35.7.5 | Integração nas tasks existentes: `task_run_all` notifica via Telegram quando há anomalias | — |
+| 35.7.6 | Testes: envio mock (requests_mock), autenticação, alertas corretos | — |
+
+---
+
+### 35.8 Ordem de Execução
+
+```
+Fase A — P1:  35.1 Auditoria Reduzida              — Q2/2026
+              35.2 Bloqueio de Crédito              — Q2/2026
+Fase B — P2:  35.3 Fluxo de Caixa Previsional      — Q3/2026
+Fase C — P3:  35.4 Exportação SPED/EFD             — Q3/2026
+              35.5 Timeline Portal Comprador        — Q3/2026
+              35.6 Widget IA no Dashboard           — Q3/2026
+Fase D — P4:  35.7 Notificações Telegram           — Q4/2026
+```
+
+### 35.9 Critérios de Aceitação
+
+- Suite mantida com ≥ 1335 testes passando; novos testes adicionados por feature
+- Multi-tenancy preservado: todas as novas entidades isoladas por imobiliária
+- Nenhuma view nova sem `@login_required` e verificação de tenant
+- Exportações (SPED, PDF) testadas com dados reais de homologação
 
