@@ -129,6 +129,7 @@ const compradoresRowData = [
     notif_email: {{ comprador.notificar_email|yesno:"true,false" }},
     notif_sms: {{ comprador.notificar_sms|yesno:"true,false" }},
     notif_whatsapp: {{ comprador.notificar_whatsapp|yesno:"true,false" }},
+    bloqueio_credito: {{ comprador.bloqueio_credito|yesno:"true,false" }},
     cadastro: "{{ comprador.criado_em|date:'d/m/Y' }}",
     edit_url: "{% url 'core:editar_comprador' comprador.pk %}",
     del_url: "{% url 'core:excluir_comprador' comprador.pk %}",
@@ -174,9 +175,14 @@ const compradoresColumnDefs = [
         headerName: 'Nome',
         field: 'nome',
         filter: 'agTextColumnFilter',
-       
-        minWidth: 180,
-        cellRenderer: params => `<strong>${params.value}</strong>`,
+
+        minWidth: 220,
+        cellRenderer: params => {
+            const badge = params.data.bloqueio_credito
+                ? ' <span class="badge bg-danger ms-1" title="Bloqueado por inadimpl&ecirc;ncia">Inadimplente</span>'
+                : '';
+            return `<strong>${params.value}</strong>${badge}`;
+        },
         sort: 'asc',
     },
     {

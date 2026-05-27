@@ -925,6 +925,9 @@ def task_run_all(request):
     # 5. Enviar notificações de inadimplência (N-02)
     results.append(enviar_inadimplentes_sync().to_dict())
 
+    # 6. Atualizar bloqueio de crédito por inadimplência ≥ 90 dias (35.2)
+    results.append(atualizar_bloqueio_credito_sync().to_dict())
+
     all_success = all(r['success'] for r in results)
 
     return JsonResponse({
@@ -1856,3 +1859,76 @@ def task_testar_notificacoes(request):
     )
     status_code = 200
     return JsonResponse(resultado, status=status_code)
+
+
+# =============================================================================
+# 35.2 — BLOQUEIO DE CRÉDITO POR INADIMPLÊNCIA
+# =============================================================================
+
+def atualizar_bloqueio_credito_sync():
+    """
+    Ativa/desativa bloqueio_credito nos Compradores com base em inadimplência ≥ 90 dias.
+    Retorna TaskResult com contadores de ativados/desativados.
+    """
+    from datetime import date, timedelta
+    from django.utils import timezone
+    from core.models import Comprador, LogAuditoria
+    from financeiro.models import Parcela
+
+    result = TaskResult('atualizar_bloqueio_credito')
+    limite = date.today() - timedelta(days=90)
+    ativados = desativados = 0
+
+    try:
+        compradores_inadimplentes = set(
+            Parcela.objects.filter(pago=False, data_vencimento__date__lte=limite)
+            .values_list('contrato__comprador_id', flat=True)
+            .distinct()
+        )
+
+        for comprador in Comprador.objects.all():
+            inadimplente = comprador.pk in compradores_inadimplentes
+
+            if inadimplente and not comprador.bloqueio_credito:
+                comprador.bloqueio_credito = True
+                comprador.bloqueio_credito_motivo = f'Parcela(s) vencida(s) há mais de 90 dias (verificado em {date.today():%d/%m/%Y})'
+                comprador.bloqueio_credito_em = timezone.now()
+                comprador.save(update_fields=['bloqueio_credito', 'bloqueio_credito_motivo', 'bloqueio_credito_em'])
+                LogAuditoria.objects.create(
+                    acao='BLOQUEIO_CREDITO', entidade='Comprador', entidade_pk=comprador.pk,
+                    descricao=comprador.bloqueio_credito_motivo,
+                )
+                ativados += 1
+                logger.info('Bloqueio ativado: Comprador pk=%s (%s)', comprador.pk, comprador.nome)
+
+            elif not inadimplente and comprador.bloqueio_credito:
+                comprador.bloqueio_credito = False
+                comprador.bloqueio_credito_motivo = ''
+                comprador.bloqueio_credito_em = None
+                comprador.save(update_fields=['bloqueio_credito', 'bloqueio_credito_motivo', 'bloqueio_credito_em'])
+                LogAuditoria.objects.create(
+                    acao='DESBLOQUEIO_CREDITO', entidade='Comprador', entidade_pk=comprador.pk,
+                    descricao=f'Desbloqueio automático — sem parcelas vencidas há 90+ dias em {date.today():%d/%m/%Y}',
+                )
+                desativados += 1
+                logger.info('Bloqueio desativado: Comprador pk=%s (%s)', comprador.pk, comprador.nome)
+
+        result.success = True
+        result.message = f'Bloqueios: {ativados} ativados, {desativados} desativados'
+        result.data = {'ativados': ativados, 'desativados': desativados}
+    except Exception as e:
+        result.success = False
+        result.message = str(e)
+        logger.exception('Erro ao atualizar bloqueio de crédito')
+
+    return result
+
+
+@require_http_methods(["POST"])
+@task_api_rate_limit
+@task_auth_required
+def task_atualizar_bloqueio_credito(request):
+    """Atualiza bloqueio de crédito dos compradores com inadimplência ≥ 90 dias."""
+    result = atualizar_bloqueio_credito_sync()
+    return JsonResponse(result.to_dict(), status=200 if result.success else 500)
+

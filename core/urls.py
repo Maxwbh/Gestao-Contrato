@@ -32,6 +32,7 @@ urlpatterns = [
     path('api/tasks/limpar-sessoes/', tasks.task_limpar_sessoes, name='task_limpar_sessoes'),
     path('api/tasks/limpar-sessoes-whatsapp/', tasks.task_limpar_sessoes_whatsapp, name='task_limpar_sessoes_whatsapp'),
     path('api/tasks/testar-notificacoes/', tasks.task_testar_notificacoes, name='task_testar_notificacoes'),
+    path('api/tasks/atualizar-bloqueio-credito/', tasks.task_atualizar_bloqueio_credito, name='task_atualizar_bloqueio_credito'),
 
     # Páginas principais
     path('', views.index, name='index'),
@@ -53,6 +54,7 @@ urlpatterns = [
     path('compradores/novo/', views.CompradorCreateView.as_view(), name='criar_comprador'),
     path('compradores/<int:pk>/editar/', views.CompradorUpdateView.as_view(), name='editar_comprador'),
     path('compradores/<int:pk>/excluir/', views.CompradorDeleteView.as_view(), name='excluir_comprador'),
+    path('compradores/<int:pk>/desbloquear/', views.comprador_desbloquear, name='comprador_desbloquear'),
 
     # CRUD Imóvel
     path('imoveis/', views.ImovelListView.as_view(), name='listar_imoveis'),
@@ -115,4 +117,7 @@ urlpatterns = [
     path('ia/limites/<int:pk>/excluir/', views.ia_limite_excluir, name='ia_limite_excluir'),
     path('ia/limites/<int:pk>/toggle/', views.ia_limite_toggle, name='ia_limite_toggle'),
     path('ia/cotacao/', views.api_cotacao_usd_brl, name='api_cotacao_usd_brl'),
+
+    # 35.1 — Log de Auditoria
+    path('auditoria/', views.auditoria_log, name='auditoria_log'),
 ]
