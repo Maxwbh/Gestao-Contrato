@@ -3211,7 +3211,7 @@ precisa de alertas operacionais em tempo real sem acessar o sistema. Telegram
 
 ---
 
-## 36. FOCO EM COBRANÇA — TecnoSpeed (Boleto / PIX / Conciliação) 🔒 LONGO PRAZO — PÓS CRESCIMENTO
+## 36. FOCO EM COBRANÇA — Boleto / PIX / Conciliação 🔒 LONGO PRAZO — PÓS CRESCIMENTO
 
 > **Perfil atual do sistema (2026-05):**
 > 3 imobiliárias · 30–70 lotes por imobiliária · escritório pequeno · orçamento restrito.
@@ -3231,11 +3231,50 @@ precisa de alertas operacionais em tempo real sem acessar o sistema. Telegram
 > geração de PIX copia-e-cola. A conciliação bancária depende de upload manual de OFX e
 > processamento de arquivos CNAB retorno — fluxo funcional mas com latência de 24–48h e
 > intervenção manual do operador.
->
-> A TecnoSpeed oferece três produtos complementares — PlugBank (boleto com registro instantâneo
-> + webhook), API PIX (QR Code dinâmico multi-banco) e Extrato Open Finance (conciliação
-> automática sem OFX) — que eliminam a maior parte da operação manual de cobrança.
-> Faz sentido apenas na escala dos gatilhos abaixo.
+
+---
+
+### 36.0 Comparativo de Provedores (pesquisa 2026-05)
+
+Três caminhos viáveis para integração de cobrança bancária, com perfis de custo e complexidade distintos:
+
+| Critério | **C6 Bank API** | **Sicoob API** | **TecnoSpeed** |
+|---|---|---|---|
+| Boleto com registro | Sim | Sim (boleto híbrido barra + PIX) | Sim — 40+ bancos (PlugBank) |
+| PIX QR dinâmico | Sim | Sim | Sim — 8 bancos (TecnoPay) |
+| Conciliação / extrato | Limitada (sem OFX nativo) | OFX via Open Banking | Automática — 44/47 bancos |
+| Custo volume atual | **Gratuito** (4 meses) → volume-based | A negociar | R$ 2.500+/mês (~R$ 12–25/boleto) |
+| Acesso self-service | Sim — `developers.c6bank.com.br` | Parcial — exige certificado ICP-Brasil | Sim — portal do desenvolvedor |
+| Complexidade de integração | Baixa | Média-alta (certificado digital) | Média |
+| Melhor para | ✅ **Escala atual** (gratuito no free tier) | Imobiliárias que já usam cooperativa Sicoob | Operações ≥ 500 boletos/mês |
+
+**Recomendação por perfil:**
+
+- **C6 Bank** — opção preferencial para a escala atual. Free tier (até 2.000 boletos/mês) cobre
+  com folga os 100–200 boletos/mês do sistema. Registro instantâneo de boleto, PIX QR dinâmico
+  e onboarding self-service. Sem mensalidade fixa nos primeiros 4 meses. Indicado quando os
+  gatilhos da Seção 36.1 forem atingidos (volume, demanda ou multibancos).
+
+- **Sicoob** — alternativa natural para imobiliárias que já operam conta na cooperativa.
+  Boleto híbrido (código de barras + PIX no mesmo documento) é diferencial relevante para
+  compradores PF. Requer certificado ICP-Brasil — overhead burocrático razoável apenas se a
+  imobiliária já mantiver o certificado para outros fins.
+
+- **TecnoSpeed** — mantido como referência para alta escala (≥ 500 boletos/mês). Único que
+  resolve os três problemas simultâneos (boleto + PIX + conciliação automática) com cobertura
+  de 40+ bancos. Custo alto demais para o volume atual.
+
+> **Contexto técnico adicional (C6 Bank):**
+> A API C6 suporta registro de boleto e PIX Cobrança. A conciliação ainda dependeria de OFX manual
+> (mesma limitação do fluxo atual), mas o registro instantâneo de boleto elimina o ciclo CNAB remessa.
+> Arquitetura: `gerar_boleto_parcela()` → roteamento por banco → C6 API se banco = C6 Bank;
+> fallback para BRCobrança nos demais bancos.
+
+> **Contexto técnico adicional (Sicoob):**
+> O boleto híbrido Sicoob gera um único documento com código de barras e QR Code PIX embutido.
+> Endpoint: `POST /v1/boletos`. Autenticação via OAuth2 com certificado mTLS ICP-Brasil.
+> Conciliação via Open Banking (`/v1/extrato`). Cobertura: todas as cooperativas filiadas ao
+> sistema Sicoob.
 
 ---
 
@@ -3245,18 +3284,21 @@ precisa de alertas operacionais em tempo real sem acessar o sistema. Telegram
 > o custo da TecnoSpeed for validado em cotação formal.
 
 > **Contexto dos gatilhos:** sistema atual tem 3 imobiliárias e ~100–200 boletos/mês.
-> TecnoSpeed só se paga a partir de ~500 boletos/mês (R$ 5/boleto). Os gatilhos abaixo
-> representam o patamar mínimo de crescimento para a integração ser economicamente viável.
+> O provedor escolhido depende do gatilho atingido: C6 Bank (qualquer volume, free tier),
+> Sicoob (imobiliária já usa cooperativa) ou TecnoSpeed (≥ 500 boletos/mês, cobertura multi-banco).
 
-| # | Gatilho | Métrica | Status atual | Justificativa |
-|---|---------|---------|-------------|---------------|
-| G-01 | **Volume de boletos** | ≥ 500 boletos gerados/mês (média 3 meses) | ~100–200/mês ❌ | Custo TecnoSpeed diluído em < R$ 5/boleto |
-| G-02 | **Imobiliárias ativas** | ≥ 10 imobiliárias com contratos ativos | 3 ❌ | Overhead OFX/CNAB manual por imobiliária justifica automação |
-| G-03 | **Volume financeiro** | ≥ R$ 1.000.000 em parcelas geradas/mês | < R$ 200k ❌ | Risco de atraso na conciliação torna-se crítico |
-| G-04 | **Reclamação operacional** | ≥ 5 imobiliárias relatando dificuldade com OFX/CNAB | 0 (3 imob.) ❌ | Demanda explícita do usuário |
-| G-05 | **Custo de suporte** | > 30% do tempo de suporte gasto em CNAB/OFX | Baixo ❌ | Custo indireto supera custo da TecnoSpeed |
+| # | Gatilho | Métrica | Status atual | Provedor recomendado |
+|---|---------|---------|-------------|----------------------|
+| G-01 | **Imobiliária com conta C6** | 1+ imobiliária solicita boleto/PIX via C6 Bank | 0 ❌ | **C6 Bank** — free tier, baixo risco |
+| G-02 | **Imobiliária com conta Sicoob** | 1+ imobiliária usa cooperativa Sicoob | 0 ❌ | **Sicoob** — boleto híbrido nativo |
+| G-03 | **Volume alto de boletos** | ≥ 500 boletos gerados/mês (média 3 meses) | ~100–200/mês ❌ | **TecnoSpeed** — cobertura 40+ bancos |
+| G-04 | **Volume financeiro** | ≥ R$ 1.000.000 em parcelas/mês | < R$ 200k ❌ | **TecnoSpeed** — conciliação automática |
+| G-05 | **Reclamação operacional** | ≥ 3 imobiliárias com dificuldade OFX/CNAB | 0 ❌ | Qualquer provedor com extrato automático |
+| G-06 | **Escala de imobiliárias** | ≥ 10 imobiliárias ativas | 3 ❌ | **TecnoSpeed** — overhead OFX inviável |
 
-**Ação ao atingir gatilho:** solicitar cotação formal à TecnoSpeed (0800 006 9500 / comercial@tecnospeed.com.br), validar preço vs. economia operacional estimada e autorizar implementação da Fase A.
+**Ação ao atingir G-01 ou G-02:** integração direta com a API do banco (C6 ou Sicoob), custo baixo/zero no volume atual. Avaliar com 2–4 semanas de desenvolvimento.
+
+**Ação ao atingir G-03 a G-06:** solicitar cotação formal à TecnoSpeed (0800 006 9500 / comercial@tecnospeed.com.br), validar preço vs. economia operacional e autorizar Fase A.
 
 ---
 
