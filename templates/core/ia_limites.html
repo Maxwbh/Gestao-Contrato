@@ -8,10 +8,7 @@
     .progress { height: 18px; border-radius: 4px; }
     .progress-bar { font-size: 0.75rem; line-height: 18px; }
 
-    .limit-card {
-        border-left: 4px solid;
-        transition: transform .15s;
-    }
+    .limit-card { border-left: 4px solid; transition: transform .15s; }
     .limit-card:hover { transform: translateY(-2px); }
     .limit-card.ok      { border-color: #28a745; }
     .limit-card.aviso   { border-color: #ffc107; }
@@ -22,13 +19,10 @@
     .badge-escopo-OPERACAO { background-color: #17a2b8; color:#fff; }
     .badge-tipo-TOKENS { background-color: #343a40; color:#fff; }
     .badge-tipo-REAIS  { background-color: #28a745; color:#fff; }
+    .badge-periodo     { background-color: #6c757d; color:#fff; font-size:.7rem; }
 
-    .form-section {
-        background: #f8f9fa;
-        border: 1px solid #dee2e6;
-        border-radius: .5rem;
-        padding: 1.25rem;
-    }
+    .ref-table th, .ref-table td { font-size: .85rem; vertical-align: middle; }
+    .modelo-mono { font-family: monospace; font-size: .82rem; }
 </style>
 {% endblock %}
 
@@ -40,12 +34,12 @@
         <div>
             <h2><i class="fas fa-shield-alt"></i> Limites de Uso de IA</h2>
             <p class="text-muted mb-0">
-                Defina limites mensais por modelo ou operação — em tokens ou R$.
-                Ao atingir o limite, as chamadas à API são bloqueadas automaticamente.
+                Defina limites por modelo ou operação — em tokens ou R$ — com período de reset configurável.
+                Múltiplos limites para o mesmo escopo são avaliados <strong>simultaneamente</strong>.
             </p>
         </div>
-        <div class="d-flex gap-2">
-            <span class="text-muted small align-self-center">
+        <div class="d-flex gap-2 align-items-center">
+            <span class="text-muted small">
                 USD 1 = R$ <strong id="cotacao-val">{{ cotacao_usd_brl|floatformat:2 }}</strong>
                 <button class="btn btn-link btn-sm p-0 ms-1" id="btn-refresh-cotacao" title="Atualizar cotação">
                     <i class="fas fa-sync-alt fa-xs"></i>
@@ -59,40 +53,140 @@
 
     {% if messages %}
     {% for msg in messages %}
-    <div class="alert alert-{{ msg.tags|default:'info' }} alert-dismissible fade show" role="alert">
-        {{ msg }}
-        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    <div class="alert alert-{{ msg.tags|default:'info' }} alert-dismissible fade show">
+        {{ msg }}<button type="button" class="btn-close" data-bs-dismiss="alert"></button>
     </div>
     {% endfor %}
     {% endif %}
 
+    <!-- Tabela de referência de preços -->
+    <div class="card mb-4">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <span><i class="fas fa-tag"></i> Preços de Referência (por 1 Milhão de tokens)</span>
+            <button class="btn btn-link btn-sm p-0 text-muted" data-bs-toggle="collapse"
+                    data-bs-target="#collapseRef">
+                <i class="fas fa-chevron-down"></i>
+            </button>
+        </div>
+        <div class="collapse show" id="collapseRef">
+            <div class="card-body p-0">
+                <table class="table table-sm ref-table mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Modelo</th>
+                            <th class="text-end">Input USD/MTok</th>
+                            <th class="text-end">Output USD/MTok</th>
+                            <th class="text-end">Input R$/MTok</th>
+                            <th class="text-end">Output R$/MTok</th>
+                            <th>Obs.</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for p in precos_ref %}
+                        <tr>
+                            <td class="modelo-mono">{{ p.modelo }}</td>
+                            <td class="text-end">{% if p.input == 0 %}—{% else %}U$ {{ p.input }}{% endif %}</td>
+                            <td class="text-end">{% if p.output == 0 %}—{% else %}U$ {{ p.output }}{% endif %}</td>
+                            <td class="text-end">{% if p.input_brl == 0 %}—{% else %}R$ {{ p.input_brl }}{% endif %}</td>
+                            <td class="text-end">{% if p.output_brl == 0 %}—{% else %}R$ {{ p.output_brl }}{% endif %}</td>
+                            <td class="text-muted small">{{ p.obs }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
     <!-- Limites configurados -->
+    <h5 class="mb-3">Limites Configurados</h5>
     <div class="row mb-4">
         {% for item in limites_com_consumo %}
         {% with lim=item.limite pct=item.percentual consumido=item.consumido %}
-        {% if not lim.ativo %}
-        {% with classe="inativo" %}
-        {% include "core/partials/_limite_card.html" with lim=lim pct=pct consumido=consumido classe=classe %}
-        {% endwith %}
-        {% elif pct >= 90 %}
-        {% with classe="critico" %}
-        {% include "core/partials/_limite_card.html" with lim=lim pct=pct consumido=consumido classe=classe %}
-        {% endwith %}
-        {% elif pct >= 70 %}
-        {% with classe="aviso" %}
-        {% include "core/partials/_limite_card.html" with lim=lim pct=pct consumido=consumido classe=classe %}
-        {% endwith %}
-        {% else %}
-        {% with classe="ok" %}
-        {% include "core/partials/_limite_card.html" with lim=lim pct=pct consumido=consumido classe=classe %}
-        {% endwith %}
-        {% endif %}
+        <div class="col-md-6 col-xl-4 mb-3">
+            {% if not lim.ativo %}
+            <div class="card limit-card inativo h-100">
+            {% elif pct >= 90 %}
+            <div class="card limit-card critico h-100">
+            {% elif pct >= 70 %}
+            <div class="card limit-card aviso h-100">
+            {% else %}
+            <div class="card limit-card ok h-100">
+            {% endif %}
+                <div class="card-body pb-2">
+                    <div class="d-flex justify-content-between align-items-start mb-2">
+                        <div class="d-flex flex-wrap gap-1">
+                            <span class="badge badge-escopo-{{ lim.tipo_escopo }}">{{ lim.get_tipo_escopo_display }}</span>
+                            <span class="badge badge-tipo-{{ lim.tipo_limite }}">{{ lim.tipo_limite }}</span>
+                            <span class="badge badge-periodo">{{ lim.get_periodo_display }}</span>
+                            {% if not lim.ativo %}
+                            <span class="badge bg-secondary">INATIVO</span>
+                            {% endif %}
+                        </div>
+                        <div class="btn-group btn-group-sm ms-1">
+                            <button class="btn btn-outline-secondary btn-editar"
+                                    data-pk="{{ lim.pk }}"
+                                    data-escopo="{{ lim.tipo_escopo }}"
+                                    data-escopo-valor="{{ lim.escopo_valor }}"
+                                    data-tipo="{{ lim.tipo_limite }}"
+                                    data-periodo="{{ lim.periodo }}"
+                                    data-valor="{{ lim.valor_limite }}"
+                                    data-ativo="{{ lim.ativo }}"
+                                    title="Editar">
+                                <i class="fas fa-edit fa-xs"></i>
+                            </button>
+                            <form method="post" action="{% url 'core:ia_limite_toggle' lim.pk %}" class="d-inline">
+                                {% csrf_token %}
+                                <button type="submit" class="btn btn-outline-secondary"
+                                        title="{% if lim.ativo %}Desativar{% else %}Ativar{% endif %}">
+                                    <i class="fas fa-{% if lim.ativo %}pause{% else %}play{% endif %} fa-xs"></i>
+                                </button>
+                            </form>
+                            <form method="post" action="{% url 'core:ia_limite_excluir' lim.pk %}"
+                                  class="d-inline" onsubmit="return confirm('Remover este limite?')">
+                                {% csrf_token %}
+                                <button type="submit" class="btn btn-outline-danger" title="Remover">
+                                    <i class="fas fa-trash fa-xs"></i>
+                                </button>
+                            </form>
+                        </div>
+                    </div>
+
+                    <div class="fw-semibold font-monospace mb-1 small">{{ lim.escopo_valor }}</div>
+
+                    <div class="d-flex justify-content-between small text-muted mb-1">
+                        <span>
+                            {% if lim.tipo_limite == 'TOKENS' %}
+                            {{ consumido|floatformat:0 }} / {{ lim.valor_limite|floatformat:0 }} tokens
+                            {% else %}
+                            R$ {{ consumido|floatformat:2 }} / R$ {{ lim.valor_limite|floatformat:2 }}
+                            {% endif %}
+                        </span>
+                        <span class="fw-bold
+                             {% if pct >= 90 %}text-danger
+                             {% elif pct >= 70 %}text-warning
+                             {% else %}text-success{% endif %}">
+                            {{ pct }}%
+                        </span>
+                    </div>
+
+                    <div class="progress">
+                        <div class="progress-bar
+                             {% if pct >= 90 %}bg-danger{% elif pct >= 70 %}bg-warning{% else %}bg-success{% endif %}"
+                             role="progressbar" style="width:{{ pct }}%"
+                             aria-valuenow="{{ pct }}" aria-valuemin="0" aria-valuemax="100">
+                            {% if pct >= 15 %}{{ pct }}%{% endif %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
         {% endwith %}
         {% empty %}
         <div class="col-12">
             <div class="alert alert-info">
                 <i class="fas fa-info-circle"></i>
-                Nenhum limite configurado ainda. Use o formulário abaixo para adicionar o primeiro.
+                Nenhum limite configurado. Use o formulário abaixo para adicionar.
             </div>
         </div>
         {% endfor %}
@@ -100,15 +194,13 @@
 
     <!-- Formulário de novo limite -->
     <div class="card">
-        <div class="card-header d-flex justify-content-between align-items-center">
-            <span><i class="fas fa-plus-circle"></i> Novo Limite</span>
-        </div>
+        <div class="card-header"><i class="fas fa-plus-circle"></i> Novo Limite</div>
         <div class="card-body">
-            <form method="post" action="{% url 'core:ia_limite_salvar' %}" id="form-novo-limite">
+            <form method="post" action="{% url 'core:ia_limite_salvar' %}">
                 {% csrf_token %}
                 <input type="hidden" name="pk" value="">
                 <div class="row g-3 align-items-end">
-                    <div class="col-md-3">
+                    <div class="col-md-2">
                         <label class="form-label fw-semibold">Escopo</label>
                         <select name="tipo_escopo" class="form-select" id="sel-escopo" required>
                             <option value="">Selecione...</option>
@@ -116,23 +208,31 @@
                             <option value="OPERACAO">Operação</option>
                         </select>
                     </div>
-                    <div class="col-md-3">
+                    <div class="col-md-2">
                         <label class="form-label fw-semibold">Valor do escopo</label>
                         <select name="escopo_valor" class="form-select" id="sel-escopo-valor" required disabled>
-                            <option value="">Selecione o escopo primeiro</option>
+                            <option value="">Selecione o escopo</option>
                         </select>
                     </div>
                     <div class="col-md-2">
-                        <label class="form-label fw-semibold">Tipo de limite</label>
+                        <label class="form-label fw-semibold">Tipo</label>
                         <select name="tipo_limite" class="form-select" required>
                             <option value="TOKENS">Tokens</option>
                             <option value="REAIS">R$ (Reais)</option>
                         </select>
                     </div>
                     <div class="col-md-2">
-                        <label class="form-label fw-semibold">Valor mensal</label>
+                        <label class="form-label fw-semibold">Período</label>
+                        <select name="periodo" class="form-select" required>
+                            {% for cod, label in periodo_choices %}
+                            <option value="{{ cod }}" {% if cod == 'MENSAL' %}selected{% endif %}>{{ label }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label fw-semibold">Valor limite</label>
                         <input type="text" name="valor_limite" class="form-control"
-                               placeholder="Ex: 100000 ou 50.00" required>
+                               placeholder="Ex: 100000 ou 50,00" required>
                     </div>
                     <div class="col-md-2">
                         <button type="submit" class="btn btn-primary w-100">
@@ -144,13 +244,11 @@
         </div>
     </div>
 
-    <!-- Legenda -->
     <div class="mt-3 text-muted small">
-        <i class="fas fa-circle text-success"></i> &lt; 70% &nbsp;
+        <i class="fas fa-circle text-success"></i> &lt;70% &nbsp;
         <i class="fas fa-circle text-warning"></i> 70–90% &nbsp;
-        <i class="fas fa-circle text-danger"></i> ≥ 90% &nbsp;
-        <i class="fas fa-circle text-secondary"></i> Desativado &nbsp;|&nbsp;
-        O período de apuração é <strong>mensal</strong> — reseta no dia 1 de cada mês.
+        <i class="fas fa-circle text-danger"></i> ≥90% &nbsp;|&nbsp;
+        Múltiplos limites para o mesmo escopo são todos verificados — o mais restritivo bloqueia.
     </div>
 
 </div>
@@ -178,15 +276,25 @@
                         <label class="form-label">Valor do escopo</label>
                         <input type="text" name="escopo_valor" id="edit-escopo-valor" class="form-control">
                     </div>
-                    <div class="mb-3">
-                        <label class="form-label">Tipo de limite</label>
-                        <select name="tipo_limite" id="edit-tipo" class="form-select">
-                            <option value="TOKENS">Tokens</option>
-                            <option value="REAIS">R$ (Reais)</option>
-                        </select>
+                    <div class="row">
+                        <div class="col mb-3">
+                            <label class="form-label">Tipo de limite</label>
+                            <select name="tipo_limite" id="edit-tipo" class="form-select">
+                                <option value="TOKENS">Tokens</option>
+                                <option value="REAIS">R$ (Reais)</option>
+                            </select>
+                        </div>
+                        <div class="col mb-3">
+                            <label class="form-label">Período</label>
+                            <select name="periodo" id="edit-periodo" class="form-select">
+                                {% for cod, label in periodo_choices %}
+                                <option value="{{ cod }}">{{ label }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
                     </div>
                     <div class="mb-3">
-                        <label class="form-label">Valor mensal</label>
+                        <label class="form-label">Valor limite</label>
                         <input type="text" name="valor_limite" id="edit-valor" class="form-control">
                     </div>
                     <div class="form-check">
@@ -197,56 +305,59 @@
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
-                    <button type="submit" class="btn btn-primary">Salvar</button>
+                    <button type="submit" class="btn btn-primary"><i class="fas fa-save"></i> Salvar</button>
                 </div>
             </form>
         </div>
     </div>
 </div>
-{% endblock %}
 
 {{ modelos|json_script:"data-modelos" }}
 {{ operacoes|json_script:"data-operacoes" }}
+{% endblock %}
 
 {% block extra_js %}
 <script>
-// Dropdown dinâmico: modelos x operações
-const MODELOS = JSON.parse(document.getElementById('data-modelos').textContent);
-const OPERACOES = JSON.parse(document.getElementById('data-operacoes').textContent);
+(function () {
+    const MODELOS   = JSON.parse(document.getElementById('data-modelos').textContent);
+    const OPERACOES = JSON.parse(document.getElementById('data-operacoes').textContent);
 
-document.getElementById('sel-escopo').addEventListener('change', function () {
-    const sel = document.getElementById('sel-escopo-valor');
-    sel.innerHTML = '<option value="">Selecione...</option>';
-    const lista = this.value === 'MODELO' ? MODELOS : (this.value === 'OPERACAO' ? OPERACOES : []);
-    lista.forEach(v => {
-        const opt = document.createElement('option');
-        opt.value = v; opt.textContent = v;
-        sel.appendChild(opt);
+    // Dropdown dinâmico escopo → valor
+    document.getElementById('sel-escopo').addEventListener('change', function () {
+        const sel = document.getElementById('sel-escopo-valor');
+        sel.innerHTML = '<option value="">Selecione...</option>';
+        const lista = this.value === 'MODELO' ? MODELOS : (this.value === 'OPERACAO' ? OPERACOES : []);
+        lista.forEach(v => {
+            const opt = document.createElement('option');
+            opt.value = v; opt.textContent = v;
+            sel.appendChild(opt);
+        });
+        sel.disabled = lista.length === 0;
     });
-    sel.disabled = lista.length === 0;
-});
 
-// Abrir modal de edição
-document.querySelectorAll('.btn-editar').forEach(btn => {
-    btn.addEventListener('click', function () {
-        document.getElementById('edit-pk').value = this.dataset.pk;
-        document.getElementById('edit-escopo').value = this.dataset.escopo;
-        document.getElementById('edit-escopo-valor').value = this.dataset.escopoValor;
-        document.getElementById('edit-tipo').value = this.dataset.tipo;
-        document.getElementById('edit-valor').value = this.dataset.valor;
-        document.getElementById('edit-ativo').checked = this.dataset.ativo === 'True';
-        new bootstrap.Modal(document.getElementById('modalEditar')).show();
+    // Abrir modal de edição
+    document.querySelectorAll('.btn-editar').forEach(btn => {
+        btn.addEventListener('click', function () {
+            document.getElementById('edit-pk').value          = this.dataset.pk;
+            document.getElementById('edit-escopo').value      = this.dataset.escopo;
+            document.getElementById('edit-escopo-valor').value = this.dataset.escopoValor;
+            document.getElementById('edit-tipo').value        = this.dataset.tipo;
+            document.getElementById('edit-periodo').value     = this.dataset.periodo;
+            document.getElementById('edit-valor').value       = this.dataset.valor;
+            document.getElementById('edit-ativo').checked     = this.dataset.ativo === 'True';
+            new bootstrap.Modal(document.getElementById('modalEditar')).show();
+        });
     });
-});
 
-// Atualizar cotação USD/BRL
-document.getElementById('btn-refresh-cotacao').addEventListener('click', function () {
-    fetch('{% url "core:api_cotacao_usd_brl" %}')
-        .then(r => r.json())
-        .then(d => {
-            document.getElementById('cotacao-val').textContent = d.cotacao.toFixed(2);
-        })
-        .catch(() => {});
-});
+    // Atualizar cotação USD/BRL
+    document.getElementById('btn-refresh-cotacao').addEventListener('click', function () {
+        fetch('{% url "core:api_cotacao_usd_brl" %}')
+            .then(r => r.json())
+            .then(d => {
+                document.getElementById('cotacao-val').textContent = d.cotacao.toFixed(2);
+            })
+            .catch(() => {});
+    });
+})();
 </script>
 {% endblock %}

@@ -106,13 +106,39 @@ def _salvar_cotacao_cache(hoje: str, val: float) -> None:
         pass
 
 
-def consumo_mes(modelo: str = '', operacao: str = '', tipo_limite: str = 'TOKENS') -> float:
-    """Retorna o consumo do mês corrente para o escopo dado."""
+def inicio_periodo(periodo: str):
+    """Retorna a data de início do período atual para o código de período dado."""
+    from datetime import date, timedelta
+    hoje = date.today()
+    if periodo == 'DIARIO':
+        return hoje
+    if periodo == 'SEMANAL':
+        return hoje - timedelta(days=hoje.weekday())  # segunda-feira da semana atual
+    if periodo == 'QUINZENAL':
+        return hoje.replace(day=1) if hoje.day <= 15 else hoje.replace(day=16)
+    if periodo == 'MENSAL':
+        return hoje.replace(day=1)
+    if periodo == 'BIMESTRAL':
+        mes_inicio = ((hoje.month - 1) // 2) * 2 + 1
+        return date(hoje.year, mes_inicio, 1)
+    if periodo == 'SEMESTRAL':
+        return date(hoje.year, 1, 1) if hoje.month <= 6 else date(hoje.year, 7, 1)
+    if periodo == 'ANUAL':
+        return date(hoje.year, 1, 1)
+    return hoje.replace(day=1)  # fallback → mensal
+
+
+def consumo_periodo(
+    periodo: str = 'MENSAL',
+    modelo: str = '',
+    operacao: str = '',
+    tipo_limite: str = 'TOKENS',
+) -> float:
+    """Retorna o consumo acumulado no período atual para o escopo dado."""
     from core.models import RegistroUsoIA
     from django.db.models import Sum
-    from datetime import date
 
-    inicio = date.today().replace(day=1)
+    inicio = inicio_periodo(periodo)
     qs = RegistroUsoIA.objects.filter(criado_em__date__gte=inicio)
     if modelo:
         qs = qs.filter(modelo=modelo)
@@ -127,11 +153,18 @@ def consumo_mes(modelo: str = '', operacao: str = '', tipo_limite: str = 'TOKENS
         return float(totais['custo'] or 0) * get_cotacao_usd_brl()
 
 
+def consumo_mes(modelo: str = '', operacao: str = '', tipo_limite: str = 'TOKENS') -> float:
+    """Compat: consumo do mês corrente. Use consumo_periodo() para outros períodos."""
+    return consumo_periodo('MENSAL', modelo=modelo, operacao=operacao, tipo_limite=tipo_limite)
+
+
 def checar_limite(modelo: str = '', operacao: str = '') -> None:
     """
-    Verifica os limites mensais ativos para o modelo e/ou operação.
-    Levanta LimiteUsoIAExcedido se qualquer limite ativo for ultrapassado.
-    Não lança nenhuma outra exceção — erros de DB são ignorados.
+    Verifica os limites ativos para o modelo e/ou operação.
+    Cada limite usa seu próprio período de reset.
+    Múltiplos limites para o mesmo escopo são todos avaliados — o mais
+    restritivo bloqueia. Levanta LimiteUsoIAExcedido se algum for atingido.
+    Não propaga outras exceções — erros de DB são ignorados silenciosamente.
     """
     try:
         from core.models import LimiteUsoIA
@@ -152,17 +185,22 @@ def checar_limite(modelo: str = '', operacao: str = '') -> None:
         logger.debug('ia_monitor.checar_limite: erro ao consultar limites (%s) — ignorado', exc)
         return
 
-    for limite in limites:
-        if limite.tipo_escopo == LimiteUsoIA.ESCOPO_MODELO:
-            atual = consumo_mes(modelo=limite.escopo_valor, tipo_limite=limite.tipo_limite)
+    for lim in limites:
+        if lim.tipo_escopo == LimiteUsoIA.ESCOPO_MODELO:
+            atual = consumo_periodo(
+                lim.periodo, modelo=lim.escopo_valor, tipo_limite=lim.tipo_limite,
+            )
         else:
-            atual = consumo_mes(operacao=limite.escopo_valor, tipo_limite=limite.tipo_limite)
+            atual = consumo_periodo(
+                lim.periodo, operacao=lim.escopo_valor, tipo_limite=lim.tipo_limite,
+            )
 
-        if atual >= float(limite.valor_limite):
-            unidade = 'tokens' if limite.tipo_limite == 'TOKENS' else 'R$'
+        if atual >= float(lim.valor_limite):
+            unidade = 'tokens' if lim.tipo_limite == 'TOKENS' else 'R$'
             raise LimiteUsoIAExcedido(
-                f'Limite mensal atingido: {limite.get_tipo_escopo_display()} '
-                f'"{limite.escopo_valor}" — {atual:.2f}/{float(limite.valor_limite):.2f} {unidade}'
+                f'Limite atingido: {lim.get_tipo_escopo_display()} "{lim.escopo_valor}" '
+                f'({lim.get_periodo_display()}) — '
+                f'{atual:.2f}/{float(lim.valor_limite):.2f} {unidade}'
             )
 
 

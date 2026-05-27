@@ -1,8 +1,8 @@
 """
 Testes de configuração e aplicação de limites de uso de IA.
 
-Cobre: LimiteUsoIA model, checar_limite, consumo_mes, get_cotacao_usd_brl,
-       views ia_limites / ia_limite_salvar / ia_limite_excluir / ia_limite_toggle.
+Cobre: LimiteUsoIA model, inicio_periodo, checar_limite, consumo_periodo,
+       get_cotacao_usd_brl, views ia_limites / salvar / excluir / toggle.
 """
 import pytest
 from decimal import Decimal
@@ -65,16 +65,33 @@ class TestLimiteUsoIAModel:
         assert 'claude-haiku-4-5-20251001' in s
         assert '100000' in s
 
-    def test_unique_together(self, limite_tokens):
+    def test_periodo_padrao_mensal(self, limite_tokens):
+        assert limite_tokens.periodo == 'MENSAL'
+
+    def test_unique_together_inclui_periodo(self, limite_tokens):
         from core.models import LimiteUsoIA
         from django.db import IntegrityError
+        # mesmo escopo/tipo/período → viola constraint
         with pytest.raises(IntegrityError):
             LimiteUsoIA.objects.create(
                 tipo_escopo=LimiteUsoIA.ESCOPO_MODELO,
                 escopo_valor='claude-haiku-4-5-20251001',
                 tipo_limite=LimiteUsoIA.TIPO_TOKENS,
+                periodo=LimiteUsoIA.PERIODO_MENSAL,
                 valor_limite=Decimal('999'),
             )
+
+    def test_mesmo_escopo_periodo_diferente_permitido(self, limite_tokens, db):
+        from core.models import LimiteUsoIA
+        # mesmo modelo/tipo mas período diferente → permitido (acumuladores)
+        lim2 = LimiteUsoIA.objects.create(
+            tipo_escopo=LimiteUsoIA.ESCOPO_MODELO,
+            escopo_valor='claude-haiku-4-5-20251001',
+            tipo_limite=LimiteUsoIA.TIPO_TOKENS,
+            periodo=LimiteUsoIA.PERIODO_ANUAL,
+            valor_limite=Decimal('1000000'),
+        )
+        assert lim2.pk != limite_tokens.pk
 
     def test_mesmo_modelo_tipos_diferentes_permitido(self, limite_tokens, db):
         from core.models import LimiteUsoIA
@@ -82,39 +99,79 @@ class TestLimiteUsoIAModel:
             tipo_escopo=LimiteUsoIA.ESCOPO_MODELO,
             escopo_valor='claude-haiku-4-5-20251001',
             tipo_limite=LimiteUsoIA.TIPO_REAIS,
+            periodo=LimiteUsoIA.PERIODO_MENSAL,
             valor_limite=Decimal('10.00'),
         )
         assert lim2.pk != limite_tokens.pk
 
 
-# ─── consumo_mes ─────────────────────────────────────────────────────────────
+# ─── inicio_periodo ──────────────────────────────────────────────────────────
+
+class TestInicioPeriodo:
+    def test_diario_e_hoje(self):
+        from core.services.ia_monitor import inicio_periodo
+        from datetime import date
+        assert inicio_periodo('DIARIO') == date.today()
+
+    def test_mensal_e_dia_1(self):
+        from core.services.ia_monitor import inicio_periodo
+        from datetime import date
+        assert inicio_periodo('MENSAL').day == 1
+
+    def test_anual_e_jan_1(self):
+        from core.services.ia_monitor import inicio_periodo
+        from datetime import date
+        r = inicio_periodo('ANUAL')
+        assert r.month == 1 and r.day == 1
+
+    def test_semanal_e_segunda(self):
+        from core.services.ia_monitor import inicio_periodo
+        assert inicio_periodo('SEMANAL').weekday() == 0  # Monday
+
+    def test_bimestral_retorna_mes_impar(self):
+        from core.services.ia_monitor import inicio_periodo
+        r = inicio_periodo('BIMESTRAL')
+        assert r.month % 2 == 1  # jan(1), mar(3), mai(5), jul(7), set(9), nov(11)
+
+    def test_semestral_retorna_jan_ou_jul(self):
+        from core.services.ia_monitor import inicio_periodo
+        r = inicio_periodo('SEMESTRAL')
+        assert r.month in (1, 7)
+
+    def test_quinzenal_retorna_dia_1_ou_16(self):
+        from core.services.ia_monitor import inicio_periodo
+        r = inicio_periodo('QUINZENAL')
+        assert r.day in (1, 16)
+
+
+# ─── consumo_periodo ─────────────────────────────────────────────────────────
 
 @pytest.mark.django_db
-class TestConsumoMes:
+class TestConsumoPeriodo:
     def test_sem_registros_retorna_zero(self):
-        from core.services.ia_monitor import consumo_mes
-        assert consumo_mes(modelo='claude-haiku-4-5-20251001') == 0.0
+        from core.services.ia_monitor import consumo_periodo
+        assert consumo_periodo('MENSAL', modelo='claude-haiku-4-5-20251001') == 0.0
 
-    def test_conta_tokens_do_mes(self):
-        from core.services.ia_monitor import registrar, consumo_mes, PROVIDER_ANTHROPIC, OP_IMPORTACAO_PDF
+    def test_conta_tokens_do_periodo(self):
+        from core.services.ia_monitor import registrar, consumo_periodo, PROVIDER_ANTHROPIC, OP_IMPORTACAO_PDF
         registrar(provider=PROVIDER_ANTHROPIC, modelo='claude-haiku-4-5-20251001',
                   operacao=OP_IMPORTACAO_PDF, tokens_input=300, tokens_output=200)
-        total = consumo_mes(modelo='claude-haiku-4-5-20251001', tipo_limite='TOKENS')
+        total = consumo_periodo('MENSAL', modelo='claude-haiku-4-5-20251001', tipo_limite='TOKENS')
         assert total == 500.0
 
     def test_tokens_por_operacao(self):
-        from core.services.ia_monitor import registrar, consumo_mes, PROVIDER_ANTHROPIC, OP_IMPORTACAO_PDF
+        from core.services.ia_monitor import registrar, consumo_periodo, PROVIDER_ANTHROPIC, OP_IMPORTACAO_PDF
         registrar(provider=PROVIDER_ANTHROPIC, modelo='claude-haiku-4-5-20251001',
                   operacao=OP_IMPORTACAO_PDF, tokens_input=100, tokens_output=50)
-        total = consumo_mes(operacao=OP_IMPORTACAO_PDF, tipo_limite='TOKENS')
+        total = consumo_periodo('MENSAL', operacao=OP_IMPORTACAO_PDF, tipo_limite='TOKENS')
         assert total >= 150.0
 
     def test_custo_em_reais(self):
-        from core.services.ia_monitor import registrar, consumo_mes, PROVIDER_ANTHROPIC, OP_IMPORTACAO_PDF
+        from core.services.ia_monitor import registrar, consumo_periodo, PROVIDER_ANTHROPIC, OP_IMPORTACAO_PDF
         with patch('core.services.ia_monitor.get_cotacao_usd_brl', return_value=5.0):
             registrar(provider=PROVIDER_ANTHROPIC, modelo='gemini-2.0-flash',
                       operacao=OP_IMPORTACAO_PDF, tokens_input=0, tokens_output=0)
-            total = consumo_mes(operacao=OP_IMPORTACAO_PDF, tipo_limite='REAIS')
+            total = consumo_periodo('MENSAL', operacao=OP_IMPORTACAO_PDF, tipo_limite='REAIS')
         assert total == 0.0  # gemini free
 
 
@@ -151,15 +208,33 @@ class TestChecarLimite:
     def test_limite_operacao_bloqueia(self, limite_reais):
         from core.services.ia_monitor import checar_limite, LimiteUsoIAExcedido, registrar, PROVIDER_ANTHROPIC, OP_IMPORTACAO_PDF
         with patch('core.services.ia_monitor.get_cotacao_usd_brl', return_value=5.0):
-            # custo: 10000 input * $3/MTok + 10000 output * $15/MTok = 0.03 + 0.15 = $0.18 USD * 5 = R$0.90
-            # precisamos de mais para ultrapassar R$50
-            # Sonnet: input $3/MTok, output $15/MTok
-            # 1000000 input = $3.00, 1000000 output = $15.00 → total $18 * 5 = R$90 > R$50
+            # Sonnet: $3/MTok in + $15/MTok out → 1M tokens each → $18 USD * 5 = R$90 > R$50
             registrar(provider=PROVIDER_ANTHROPIC, modelo='claude-sonnet-4-6',
                       operacao=OP_IMPORTACAO_PDF,
                       tokens_input=1_000_000, tokens_output=1_000_000)
             with pytest.raises(LimiteUsoIAExcedido):
                 checar_limite(operacao='IMPORTACAO_PDF')
+
+    def test_multiplos_limites_acumuladores(self, db):
+        """Dois limites para o mesmo escopo — o mensal é atingido, o anual não."""
+        from core.models import LimiteUsoIA
+        from core.services.ia_monitor import checar_limite, LimiteUsoIAExcedido, registrar, PROVIDER_ANTHROPIC, OP_IMPORTACAO_PDF
+        # Limite mensal baixo → vai ser excedido
+        LimiteUsoIA.objects.create(
+            tipo_escopo='MODELO', escopo_valor='claude-haiku-4-5-20251001',
+            tipo_limite='TOKENS', periodo='MENSAL', valor_limite=Decimal('100'),
+        )
+        # Limite anual alto → não excedido
+        LimiteUsoIA.objects.create(
+            tipo_escopo='MODELO', escopo_valor='claude-haiku-4-5-20251001',
+            tipo_limite='TOKENS', periodo='ANUAL', valor_limite=Decimal('999999999'),
+        )
+        registrar(provider=PROVIDER_ANTHROPIC, modelo='claude-haiku-4-5-20251001',
+                  operacao=OP_IMPORTACAO_PDF, tokens_input=200, tokens_output=0)
+        # O mensal (100 tokens) está excedido → bloqueia mesmo com anual OK
+        with pytest.raises(LimiteUsoIAExcedido) as exc_info:
+            checar_limite(modelo='claude-haiku-4-5-20251001')
+        assert 'Mensal' in str(exc_info.value) or 'MENSAL' in str(exc_info.value) or 'mensal' in str(exc_info.value).lower()
 
     def test_modelo_diferente_nao_bloqueia(self, limite_tokens):
         from core.services.ia_monitor import checar_limite, registrar, PROVIDER_ANTHROPIC, OP_IMPORTACAO_PDF
@@ -237,10 +312,24 @@ class TestIaLimiteSalvarView:
             'tipo_escopo': 'MODELO',
             'escopo_valor': 'claude-sonnet-4-6',
             'tipo_limite': 'TOKENS',
+            'periodo': 'MENSAL',
             'valor_limite': '500000',
         })
         assert resp.status_code == 302
         assert LimiteUsoIA.objects.filter(escopo_valor='claude-sonnet-4-6').exists()
+
+    def test_multiplos_limites_mesmo_escopo_diferentes_periodos(self, client_logado):
+        """O mesmo modelo pode ter limites mensais E anuais (acumuladores)."""
+        from core.models import LimiteUsoIA
+        for periodo in ('MENSAL', 'SEMESTRAL', 'ANUAL'):
+            client_logado.post(reverse('core:ia_limite_salvar'), {
+                'tipo_escopo': 'OPERACAO',
+                'escopo_valor': 'IMPORTACAO_PDF',
+                'tipo_limite': 'REAIS',
+                'periodo': periodo,
+                'valor_limite': '100',
+            })
+        assert LimiteUsoIA.objects.filter(escopo_valor='IMPORTACAO_PDF').count() == 3
 
     def test_valor_virgula_aceito(self, client_logado):
         from core.models import LimiteUsoIA
@@ -248,6 +337,7 @@ class TestIaLimiteSalvarView:
             'tipo_escopo': 'OPERACAO',
             'escopo_valor': 'CHATBOT_INTENT',
             'tipo_limite': 'REAIS',
+            'periodo': 'MENSAL',
             'valor_limite': '25,50',
         })
         lim = LimiteUsoIA.objects.filter(escopo_valor='CHATBOT_INTENT').first()
@@ -260,6 +350,7 @@ class TestIaLimiteSalvarView:
             'tipo_escopo': 'MODELO',
             'escopo_valor': '',
             'tipo_limite': 'TOKENS',
+            'periodo': '',
             'valor_limite': '',
         })
         assert LimiteUsoIA.objects.count() == 0
@@ -270,6 +361,7 @@ class TestIaLimiteSalvarView:
             'tipo_escopo': 'MODELO',
             'escopo_valor': 'claude-haiku-4-5-20251001',
             'tipo_limite': 'TOKENS',
+            'periodo': 'MENSAL',
             'valor_limite': '999999',
         })
         limite_tokens.refresh_from_db()

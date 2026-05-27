@@ -1488,12 +1488,20 @@ class RegistroUsoIA(models.Model):
 
 
 class LimiteUsoIA(models.Model):
-    """Limite mensal de uso das APIs de IA — por modelo ou por operação."""
+    """Limite de uso das APIs de IA — por modelo ou por operação, com período configurável."""
 
     ESCOPO_MODELO   = 'MODELO'
     ESCOPO_OPERACAO = 'OPERACAO'
     TIPO_TOKENS = 'TOKENS'
     TIPO_REAIS  = 'REAIS'
+
+    PERIODO_DIARIO     = 'DIARIO'
+    PERIODO_SEMANAL    = 'SEMANAL'
+    PERIODO_QUINZENAL  = 'QUINZENAL'
+    PERIODO_MENSAL     = 'MENSAL'
+    PERIODO_BIMESTRAL  = 'BIMESTRAL'
+    PERIODO_SEMESTRAL  = 'SEMESTRAL'
+    PERIODO_ANUAL      = 'ANUAL'
 
     ESCOPO_CHOICES = [
         (ESCOPO_MODELO,   'Modelo de IA'),
@@ -1503,23 +1511,35 @@ class LimiteUsoIA(models.Model):
         (TIPO_TOKENS, 'Tokens'),
         (TIPO_REAIS,  'R$ (Reais)'),
     ]
+    PERIODO_CHOICES = [
+        (PERIODO_DIARIO,    'Diário'),
+        (PERIODO_SEMANAL,   'Semanal'),
+        (PERIODO_QUINZENAL, 'Quinzenal (15 dias)'),
+        (PERIODO_MENSAL,    'Mensal'),
+        (PERIODO_BIMESTRAL, 'Bimestral (2 meses)'),
+        (PERIODO_SEMESTRAL, 'Semestral (6 meses)'),
+        (PERIODO_ANUAL,     'Anual'),
+    ]
 
     tipo_escopo  = models.CharField(max_length=10, choices=ESCOPO_CHOICES, verbose_name='Escopo')
     escopo_valor = models.CharField(max_length=60, verbose_name='Modelo / Operação')
     tipo_limite  = models.CharField(max_length=10, choices=TIPO_CHOICES, verbose_name='Tipo de limite')
+    periodo      = models.CharField(
+        max_length=12, choices=PERIODO_CHOICES, default=PERIODO_MENSAL, verbose_name='Período de reset',
+    )
     valor_limite = models.DecimalField(max_digits=14, decimal_places=2, verbose_name='Limite')
     ativo        = models.BooleanField(default=True, verbose_name='Ativo')
     criado_em    = models.DateTimeField(auto_now_add=True)
     modificado_em = models.DateTimeField(auto_now=True)
 
     class Meta:
-        unique_together = [('tipo_escopo', 'escopo_valor', 'tipo_limite')]
-        ordering = ['tipo_escopo', 'escopo_valor']
+        unique_together = [('tipo_escopo', 'escopo_valor', 'tipo_limite', 'periodo')]
+        ordering = ['tipo_escopo', 'escopo_valor', 'periodo']
         verbose_name = 'Limite de Uso de IA'
         verbose_name_plural = 'Limites de Uso de IA'
 
     def __str__(self):
         return (
             f'{self.get_tipo_escopo_display()} {self.escopo_valor} — '
-            f'{self.valor_limite} {self.tipo_limite}'
+            f'{self.valor_limite} {self.tipo_limite}/{self.get_periodo_display()}'
         )

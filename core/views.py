@@ -2254,12 +2254,20 @@ _MODELOS_IA = [
 ]
 _OPERACOES_IA = ['IMPORTACAO_PDF', 'CHATBOT_INTENT', 'CHATBOT_HUMANIZE']
 
+# Preços de referência USD/MTok para exibição na tela — (input, output)
+_PRECOS_REFERENCIA = [
+    {'modelo': 'gemini-2.0-flash',          'input': 0.00,  'output': 0.00,  'obs': 'Gratuito (cota diária)'},
+    {'modelo': 'claude-haiku-4-5-20251001', 'input': 0.80,  'output': 4.00,  'obs': ''},
+    {'modelo': 'claude-sonnet-4-6',         'input': 3.00,  'output': 15.00, 'obs': ''},
+    {'modelo': 'claude-opus-4-7',           'input': 15.00, 'output': 75.00, 'obs': 'Máximo custo'},
+]
+
 
 @login_required
 def ia_limites(request):
-    """Tela de configuração de limites mensais de uso de IA."""
+    """Tela de configuração de limites de uso de IA com período configurável."""
     from .models import LimiteUsoIA
-    from core.services.ia_monitor import consumo_mes, get_cotacao_usd_brl
+    from core.services.ia_monitor import consumo_periodo, get_cotacao_usd_brl
 
     try:
         cotacao = get_cotacao_usd_brl()
@@ -2270,9 +2278,9 @@ def ia_limites(request):
     limites_com_consumo = []
     for lim in limites_raw:
         if lim.tipo_escopo == LimiteUsoIA.ESCOPO_MODELO:
-            atual = consumo_mes(modelo=lim.escopo_valor, tipo_limite=lim.tipo_limite)
+            atual = consumo_periodo(lim.periodo, modelo=lim.escopo_valor, tipo_limite=lim.tipo_limite)
         else:
-            atual = consumo_mes(operacao=lim.escopo_valor, tipo_limite=lim.tipo_limite)
+            atual = consumo_periodo(lim.periodo, operacao=lim.escopo_valor, tipo_limite=lim.tipo_limite)
         pct = min(100, int(atual / float(lim.valor_limite) * 100)) if lim.valor_limite else 0
         limites_com_consumo.append({
             'limite': lim,
@@ -2280,11 +2288,22 @@ def ia_limites(request):
             'percentual': pct,
         })
 
+    # Enriquecer preços de referência com valor em R$
+    precos_ref = []
+    for p in _PRECOS_REFERENCIA:
+        precos_ref.append({
+            **p,
+            'input_brl':  round(p['input']  * cotacao, 4),
+            'output_brl': round(p['output'] * cotacao, 4),
+        })
+
     return render(request, 'core/ia_limites.html', {
         'limites_com_consumo': limites_com_consumo,
         'modelos': _MODELOS_IA,
         'operacoes': _OPERACOES_IA,
+        'periodo_choices': LimiteUsoIA.PERIODO_CHOICES,
         'cotacao_usd_brl': cotacao,
+        'precos_ref': precos_ref,
     })
 
 
@@ -2299,10 +2318,11 @@ def ia_limite_salvar(request):
     tipo_escopo = request.POST.get('tipo_escopo', '').strip()
     escopo_valor = request.POST.get('escopo_valor', '').strip()
     tipo_limite = request.POST.get('tipo_limite', '').strip()
+    periodo = request.POST.get('periodo', LimiteUsoIA.PERIODO_MENSAL).strip()
     valor_str = request.POST.get('valor_limite', '').replace(',', '.').strip()
     ativo = request.POST.get('ativo', 'true') != 'false'
 
-    if not all([tipo_escopo, escopo_valor, tipo_limite, valor_str]):
+    if not all([tipo_escopo, escopo_valor, tipo_limite, periodo, valor_str]):
         messages.error(request, 'Preencha todos os campos.')
         return redirect('core:ia_limites')
 
@@ -2318,7 +2338,8 @@ def ia_limite_salvar(request):
         if pk:
             updated = LimiteUsoIA.objects.filter(pk=pk).update(
                 tipo_escopo=tipo_escopo, escopo_valor=escopo_valor,
-                tipo_limite=tipo_limite, valor_limite=valor, ativo=ativo,
+                tipo_limite=tipo_limite, periodo=periodo,
+                valor_limite=valor, ativo=ativo,
             )
             if updated:
                 messages.success(request, 'Limite atualizado com sucesso.')
@@ -2329,6 +2350,7 @@ def ia_limite_salvar(request):
                 tipo_escopo=tipo_escopo,
                 escopo_valor=escopo_valor,
                 tipo_limite=tipo_limite,
+                periodo=periodo,
                 defaults={'valor_limite': valor, 'ativo': ativo},
             )
             messages.success(request, 'Limite criado.' if created else 'Limite atualizado.')
