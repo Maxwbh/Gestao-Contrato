@@ -24,7 +24,7 @@ import logging
 
 from django.core.cache import cache
 from .models import Parcela, Reajuste, StatusBoleto, HistoricoPagamento, TipoParcela
-from core.models import Imobiliaria, ContaBancaria, get_imobiliarias_usuario, usuario_tem_permissao_total
+from core.models import Imobiliaria, ContaBancaria, get_imobiliarias_usuario, usuario_tem_permissao_total, registrar_auditoria
 from core.mixins import verificar_acesso_tenant
 from core.hashids_utils import encode_id as _encode_id
 from contratos.models import Contrato, StatusContrato, TipoCorrecao
@@ -881,6 +881,10 @@ def registrar_pagamento(request, hid):
                 historico.comprovante = comprovante
                 historico.save(update_fields=['comprovante'])
 
+            registrar_auditoria(
+                request, 'PAGAMENTO', 'Parcela', parcela.pk,
+                f'Valor: R${valor_pago}'
+            )
             messages.success(request, 'Pagamento registrado com sucesso!')
             return redirect('financeiro:detalhe_parcela', hid=_encode_id(pk))
         except Exception as e:
@@ -1305,6 +1309,10 @@ def gerar_boleto_parcela(request, hid):
             # S-04 — renovar token e expiração a cada nova geração
             parcela.renovar_token()
 
+            registrar_auditoria(
+                request, 'BOLETO_GERADO', 'Parcela', parcela.pk,
+                f'Nosso número: {parcela.nosso_numero}'
+            )
             return JsonResponse({
                 'sucesso': True,
                 'parcela_id': parcela.id,
@@ -3387,6 +3395,10 @@ def aplicar_reajuste_pagina(request, contrato_id):
             )
 
             resultado = reajuste.aplicar_reajuste()
+            registrar_auditoria(
+                request, 'REAJUSTE_APLICADO', 'Contrato', contrato.pk,
+                f'Ciclo {ciclo}'
+            )
             msg = (
                 f'Reajuste do ciclo {ciclo} ({preview["percentual_final"]:,.4f}%) '
                 f'aplicado em {resultado["parcelas_reajustadas"]} parcela(s).'
@@ -3849,6 +3861,10 @@ def aplicar_reajuste_lote(request):
                 observacoes=observacoes,
             )
             resultado = reajuste.aplicar_reajuste()
+            registrar_auditoria(
+                request, 'REAJUSTE_APLICADO', 'Contrato', contrato.pk,
+                f'Lote ciclo {ciclo}'
+            )
             resultados.append({
                 'contrato_id': contrato_id,
                 'numero_contrato': contrato.numero_contrato,
