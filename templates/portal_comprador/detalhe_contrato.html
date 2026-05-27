@@ -127,4 +127,12 @@
 </div>
 {% endif %}
 {% endwith %}
+
+<!-- 35.5: Link Linha do Tempo -->
+<div style="padding:12px 0 4px;text-align:center;">
+    <a href="{% url 'portal_comprador:portal_timeline' contrato.pk %}"
+       style="color:var(--portal-primary);font-size:.85rem;text-decoration:none;">
+        <i class="fas fa-stream"></i> Ver Linha do Tempo deste Contrato
+    </a>
+</div>
 {% endblock %}

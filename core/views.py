@@ -2510,3 +2510,57 @@ def comprador_desbloquear(request, pk):
     )
     messages.success(request, f'{comprador.nome} desbloqueado com sucesso.')
     return redirect('core:editar_comprador', pk=pk)
+
+
+# =============================================================================
+# 35.6 — Widget de IA no Dashboard
+# =============================================================================
+
+@login_required
+def api_ia_status_widget(request):
+    """GET /core/ia/status-widget/ — custo mês atual, limites, alertas ≥ 80%."""
+    from datetime import date
+    from .models import RegistroUsoIA, LimiteUsoIA
+    from django.db.models import Sum as DbSum
+
+    hoje = date.today()
+    inicio_mes = hoje.replace(day=1)
+
+    custo_mes = RegistroUsoIA.objects.filter(
+        criado_em__date__gte=inicio_mes
+    ).aggregate(total=DbSum('custo_usd'))['total'] or 0
+
+    alertas = []
+    for lim in LimiteUsoIA.objects.filter(ativo=True):
+        try:
+            from datetime import timedelta
+            if lim.periodo == 'MENSAL':
+                data_inicio = inicio_mes
+            elif lim.periodo == 'SEMANAL':
+                data_inicio = hoje - timedelta(days=hoje.weekday())
+            else:
+                data_inicio = hoje
+
+            qs = RegistroUsoIA.objects.filter(criado_em__date__gte=data_inicio)
+            if lim.tipo_escopo == 'MODELO' and lim.escopo_valor:
+                qs = qs.filter(modelo=lim.escopo_valor)
+            elif lim.tipo_escopo == 'OPERACAO' and lim.escopo_valor:
+                qs = qs.filter(operacao=lim.escopo_valor)
+
+            if lim.tipo_limite == 'TOKENS':
+                consumo = (qs.aggregate(t=DbSum('tokens_total'))['t'] or 0)
+            else:
+                consumo = float(qs.aggregate(t=DbSum('custo_usd'))['t'] or 0)
+
+            limite_val = float(lim.valor_limite)
+            pct = round(consumo / limite_val * 100, 1) if limite_val > 0 else 0
+            if pct >= 80:
+                alertas.append({'descricao': lim.descricao or str(lim), 'pct': pct})
+        except Exception:
+            pass
+
+    return JsonResponse({
+        'custo_mes_usd': round(float(custo_mes), 4),
+        'alertas_ativos': alertas,
+        'alertas_count': len(alertas),
+    })

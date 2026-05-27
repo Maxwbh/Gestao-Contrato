@@ -120,4 +120,7 @@ urlpatterns = [
 
     # 35.1 — Log de Auditoria
     path('auditoria/', views.auditoria_log, name='auditoria_log'),
+
+    # 35.6 — Widget IA
+    path('ia/status-widget/', views.api_ia_status_widget, name='api_ia_status_widget'),
 ]

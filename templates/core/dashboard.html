@@ -250,6 +250,19 @@
             </div>
         </div>
 
+        <!-- Widget IA (35.6) -->
+        {% if user.is_staff or user.is_superuser %}
+        <div class="card mb-4" id="ia-widget-card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <span><i class="fas fa-robot"></i> Uso de IA — Mês Atual</span>
+                <a href="{% url 'core:ia_custos' %}" class="btn btn-sm btn-light">Detalhes</a>
+            </div>
+            <div class="card-body" id="ia-widget-body">
+                <div class="text-center text-muted py-2"><small>Carregando…</small></div>
+            </div>
+        </div>
+        {% endif %}
+
         <!-- Status dos Boletos -->
         <div class="card mb-4">
             <div class="card-header">
@@ -281,4 +294,39 @@
         </div>
     </div>
 </div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function() {
+    var card = document.getElementById('ia-widget-body');
+    if (!card) return;
+    fetch('{% url "core:api_ia_status_widget" %}')
+        .then(function(r){ return r.json(); })
+        .then(function(d) {
+            var alertas = d.alertas_ativos || [];
+            var html = '<div class="d-flex justify-content-between align-items-center mb-2">'
+                + '<span class="text-muted" style="font-size:.85rem;">Custo USD este mês</span>'
+                + '<strong>U$ ' + d.custo_mes_usd.toFixed(4) + '</strong></div>';
+            if (alertas.length > 0) {
+                html += '<div class="alert alert-warning py-1 px-2 mb-2" style="font-size:.8rem;">'
+                    + '<i class="fas fa-exclamation-triangle"></i> '
+                    + alertas.length + ' limite(s) acima de 80%</div>';
+                alertas.forEach(function(a) {
+                    var pctCor = a.pct >= 100 ? '#dc3545' : '#ffc107';
+                    html += '<div class="mb-1" style="font-size:.8rem;">'
+                        + '<span>' + (a.descricao || 'Limite') + '</span>'
+                        + '<div class="progress mt-1" style="height:6px;">'
+                        + '<div class="progress-bar" style="width:' + Math.min(a.pct,100) + '%;background:' + pctCor + ';"></div>'
+                        + '</div></div>';
+                });
+            } else {
+                html += '<div class="text-success" style="font-size:.82rem;"><i class="fas fa-check-circle"></i> Dentro dos limites</div>';
+            }
+            html += '<div class="mt-2 text-end"><a href="{% url "core:ia_custos" %}" style="font-size:.8rem;">Ver histórico completo</a></div>';
+            card.innerHTML = html;
+        })
+        .catch(function(){ card.innerHTML = '<small class="text-muted">Indisponível</small>'; });
+})();
+</script>
 {% endblock %}
