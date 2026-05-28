@@ -42,6 +42,47 @@
           {% endfor %}
         {% endif %}
 
+        <!-- 35.2.3: Aviso de bloqueio de crédito (server-side após submit) -->
+        {% if comprador_bloqueado %}
+        <div class="alert alert-danger alert-permanent mb-3" id="bloqueio-banner-server">
+          <div class="d-flex align-items-start gap-2">
+            <i class="fas fa-ban fa-lg mt-1 flex-shrink-0"></i>
+            <div>
+              <strong>Comprador com bloqueio de crédito</strong><br>
+              <span>{{ comprador_bloqueado.nome }}</span>
+              {% if comprador_bloqueado.bloqueio_credito_em %}
+              &mdash; bloqueado em {{ comprador_bloqueado.bloqueio_credito_em|date:"d/m/Y" }}
+              {% endif %}
+              {% if comprador_bloqueado.bloqueio_credito_motivo %}
+              <br><small>{{ comprador_bloqueado.bloqueio_credito_motivo }}</small>
+              {% endif %}
+              {% if user.is_superuser %}
+              <div class="form-check mt-2">
+                <input class="form-check-input border-danger" type="checkbox"
+                       name="confirmar_bloqueio" id="confirmar_bloqueio" value="1">
+                <label class="form-check-label fw-semibold" for="confirmar_bloqueio">
+                  Estou ciente do bloqueio e desejo prosseguir mesmo assim.
+                </label>
+              </div>
+              {% else %}
+              <div class="mt-2 fw-semibold">Contate o administrador para desbloquear este comprador.</div>
+              {% endif %}
+            </div>
+          </div>
+        </div>
+        {% endif %}
+
+        <!-- 35.2.3: Aviso imediato via JS ao selecionar comprador bloqueado -->
+        <div id="bloqueio-banner-js" class="alert alert-warning alert-permanent d-none mb-3">
+          <div class="d-flex align-items-start gap-2">
+            <i class="fas fa-exclamation-triangle fa-lg mt-1 flex-shrink-0"></i>
+            <div>
+              <strong>Atenção: comprador com bloqueio de crédito</strong><br>
+              <span id="bloqueio-detalhe"></span>
+            </div>
+          </div>
+        </div>
+
         <!-- F2-03: Banner de rascunho salvo automaticamente -->
         <div id="draft-banner" class="alert alert-info alert-permanent d-none mb-3" role="alert">
           <i class="fas fa-save me-2"></i>
@@ -461,6 +502,41 @@
       carregarImoveis(selImob.value, true);
     } else {
       if (imovelHint) imovelHint.classList.remove('d-none');
+    }
+  }
+
+  // ── 35.2.3: Verificação de bloqueio de crédito ao selecionar comprador ──────
+  var selComprador = document.getElementById('{{ form.comprador.id_for_label }}');
+  var bloqueioBannerJs = document.getElementById('bloqueio-banner-js');
+  var bloqueioDetalhe  = document.getElementById('bloqueio-detalhe');
+
+  function verificarBloqueioComprador(compradorId) {
+    if (!bloqueioBannerJs || !compradorId) {
+      if (bloqueioBannerJs) bloqueioBannerJs.classList.add('d-none');
+      return;
+    }
+    fetch('/core/api/compradores/' + compradorId + '/status/')
+      .then(function(r) { return r.json(); })
+      .then(function(d) {
+        if (d.bloqueio_credito) {
+          var txt = d.nome;
+          if (d.bloqueio_em) txt += ' — bloqueado em ' + d.bloqueio_em;
+          if (d.motivo)     txt += '. ' + d.motivo;
+          bloqueioDetalhe.textContent = txt;
+          bloqueioBannerJs.classList.remove('d-none');
+        } else {
+          bloqueioBannerJs.classList.add('d-none');
+        }
+      })
+      .catch(function() { bloqueioBannerJs.classList.add('d-none'); });
+  }
+
+  if (selComprador) {
+    selComprador.addEventListener('change', function() {
+      verificarBloqueioComprador(this.value);
+    });
+    if (selComprador.value) {
+      verificarBloqueioComprador(selComprador.value);
     }
   }
 })();

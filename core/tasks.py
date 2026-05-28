@@ -1881,7 +1881,7 @@ def atualizar_bloqueio_credito_sync():
 
     try:
         compradores_inadimplentes = set(
-            Parcela.objects.filter(pago=False, data_vencimento__date__lte=limite)
+            Parcela.objects.filter(pago=False, data_vencimento__lte=limite)
             .values_list('contrato__comprador_id', flat=True)
             .distinct()
         )

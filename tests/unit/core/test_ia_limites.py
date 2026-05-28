@@ -412,3 +412,98 @@ class TestApiCotacaoView:
         data = json.loads(resp.content)
         assert 'cotacao' in data
         assert data['cotacao'] == 5.80
+
+
+# ─── 35.6.4 — Widget IA no Dashboard ─────────────────────────────────────────
+
+@pytest.mark.django_db
+class TestApiIaStatusWidget:
+    def test_requer_login(self, client):
+        resp = client.get(reverse('core:api_ia_status_widget'))
+        assert resp.status_code == 302
+
+    def test_retorna_chaves_esperadas(self, client_logado):
+        import json
+        resp = client_logado.get(reverse('core:api_ia_status_widget'))
+        assert resp.status_code == 200
+        data = json.loads(resp.content)
+        assert 'custo_mes_usd' in data
+        assert 'alertas_ativos' in data
+        assert 'alertas_count' in data
+
+    def test_sem_registros_retorna_custo_zero(self, client_logado):
+        import json
+        resp = client_logado.get(reverse('core:api_ia_status_widget'))
+        data = json.loads(resp.content)
+        assert data['custo_mes_usd'] == 0.0
+        assert data['alertas_count'] == 0
+
+    def test_soma_custo_mes_atual(self, client_logado):
+        from decimal import Decimal
+        from core.models import RegistroUsoIA
+        import json
+        RegistroUsoIA.objects.create(
+            provider='ANTHROPIC',
+            modelo='claude-haiku-4-5-20251001',
+            operacao='IMPORTACAO_PDF',
+            custo_usd=Decimal('0.0050'),
+        )
+        RegistroUsoIA.objects.create(
+            provider='ANTHROPIC',
+            modelo='claude-haiku-4-5-20251001',
+            operacao='IMPORTACAO_PDF',
+            custo_usd=Decimal('0.0030'),
+        )
+        resp = client_logado.get(reverse('core:api_ia_status_widget'))
+        data = json.loads(resp.content)
+        assert abs(data['custo_mes_usd'] - 0.008) < 0.0001
+
+    def test_alerta_aparece_quando_limite_atingido(self, client_logado):
+        from decimal import Decimal
+        from core.models import RegistroUsoIA, LimiteUsoIA
+        import json
+        lim = LimiteUsoIA.objects.create(
+            tipo_escopo=LimiteUsoIA.ESCOPO_MODELO,
+            escopo_valor='claude-haiku-4-5-20251001',
+            tipo_limite=LimiteUsoIA.TIPO_TOKENS,
+            valor_limite=Decimal('100'),
+            ativo=True,
+        )
+        # Cria registro com tokens suficientes para ultrapassar 80%
+        RegistroUsoIA.objects.create(
+            provider='ANTHROPIC',
+            modelo='claude-haiku-4-5-20251001',
+            operacao='IMPORTACAO_PDF',
+            tokens_input=50,
+            tokens_output=40,
+            custo_usd=Decimal('0.001'),
+        )
+        resp = client_logado.get(reverse('core:api_ia_status_widget'))
+        data = json.loads(resp.content)
+        assert data['alertas_count'] >= 1
+        lim.refresh_from_db()
+        lim_str = str(lim)
+        assert any(lim_str in a['descricao'] for a in data['alertas_ativos'])
+
+    def test_limite_inativo_nao_gera_alerta(self, client_logado):
+        from decimal import Decimal
+        from core.models import RegistroUsoIA, LimiteUsoIA
+        import json
+        LimiteUsoIA.objects.create(
+            tipo_escopo=LimiteUsoIA.ESCOPO_MODELO,
+            escopo_valor='claude-haiku-4-5-20251001',
+            tipo_limite=LimiteUsoIA.TIPO_TOKENS,
+            valor_limite=Decimal('10'),
+            ativo=False,
+        )
+        RegistroUsoIA.objects.create(
+            provider='ANTHROPIC',
+            modelo='claude-haiku-4-5-20251001',
+            operacao='IMPORTACAO_PDF',
+            tokens_input=50,
+            tokens_output=50,
+            custo_usd=Decimal('0.001'),
+        )
+        resp = client_logado.get(reverse('core:api_ia_status_widget'))
+        data = json.loads(resp.content)
+        assert data['alertas_count'] == 0
