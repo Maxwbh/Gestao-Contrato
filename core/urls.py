@@ -123,4 +123,7 @@ urlpatterns = [
 
     # 35.6 — Widget IA
     path('ia/status-widget/', views.api_ia_status_widget, name='api_ia_status_widget'),
+
+    # 35.2 — Status de bloqueio do comprador (usado pelo wizard)
+    path('api/compradores/<int:pk>/status/', views.api_comprador_status, name='api_comprador_status'),
 ]
