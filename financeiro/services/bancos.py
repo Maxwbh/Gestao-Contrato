@@ -38,6 +38,7 @@ BANCOS_SUPORTADOS: dict[str, dict] = {
     '237': {'brcobranca_id': 'bradesco',       'nome': 'Bradesco',               'layouts_cnab': ('CNAB_400',)},
     '260': {'brcobranca_id': 'nubank',         'nome': 'Nubank',                 'layouts_cnab': ()},
     '341': {'brcobranca_id': 'itau',           'nome': 'Itaú',                   'layouts_cnab': ('CNAB_400',)},
+    '336': {'brcobranca_id': 'banco_c6',    'nome': 'C6 Bank',                'layouts_cnab': ()},
     '389': {'brcobranca_id': 'banco_mercantil','nome': 'Mercantil do Brasil',     'layouts_cnab': ()},
     '399': {'brcobranca_id': 'hsbc',           'nome': 'HSBC',                   'layouts_cnab': ()},
     '422': {'brcobranca_id': 'safra',          'nome': 'Safra',                  'layouts_cnab': ()},
@@ -168,13 +169,10 @@ def _probe_remessa(brcobranca_url: str, brc_id: str, formato: str, timeout: int 
 
 def descobrir_bancos(brcobranca_url: str, usar_cache: bool = True) -> list[dict]:
     """
-    Descobre bancos e layouts suportados consultando a API BRCobrança.
+    Descobre bancos e layouts suportados via GET /api/bancos (endpoint dedicado).
+    Fallback: probe individual por banco via /api/boleto/data e /api/remessa.
 
-    Para cada banco em BANCOS_SUPORTADOS:
-      - Proba GET /api/boleto/data para verificar suporte a boleto
-      - Proba POST /api/remessa com cnab240 e cnab400 para verificar remessa
-
-    Resultado é cacheado por _CACHE_TTL segundos para evitar probes repetidos.
+    Resultado é cacheado por _CACHE_TTL segundos.
 
     Returns:
         Lista de dicts: [{codigo, nome, brcobranca_id, suporta_boleto,
@@ -186,13 +184,47 @@ def descobrir_bancos(brcobranca_url: str, usar_cache: bool = True) -> list[dict]
     if usar_cache and _cache and (agora - _cache.get('ts', 0)) < _CACHE_TTL:
         return _cache['bancos']
 
+    # Tenta endpoint dedicado /api/bancos (documentado no OpenAPI)
+    try:
+        resp = requests.get(
+            f"{brcobranca_url}/api/bancos",
+            headers={"Accept": "application/vnd.BoletoApi-v1+json"},
+            timeout=10,
+        )
+        if resp.status_code == 200:
+            resultado = []
+            for item in resp.json():
+                brc_id = item.get('banco', '')
+                codigo = item.get('codigo', '')
+                # Normaliza layouts CNAB a partir dos campos remessa/retorno da API
+                remessa = item.get('remessa') or {}
+                formatos = remessa.get('formatos') or []
+                layouts: list[str] = []
+                if 'cnab240' in formatos:
+                    layouts.append('CNAB_240')
+                if 'cnab400' in formatos:
+                    layouts.append('CNAB_400')
+                resultado.append({
+                    'codigo': codigo,
+                    'nome': item.get('nome', brc_id),
+                    'brcobranca_id': brc_id,
+                    'suporta_boleto': bool((item.get('boleto') or {}).get('suportado', True)),
+                    'layouts_cnab': layouts,
+                })
+            _cache = {'bancos': resultado, 'ts': agora}
+            logger.info("BRCobrança discovery via /api/bancos: %d bancos", len(resultado))
+            return resultado
+    except Exception as e:
+        logger.debug("BRCobrança /api/bancos indisponível, usando probe: %s", e)
+
+    # Fallback: probe individual por banco (API sem /api/bancos)
     resultado = []
     for codigo, spec in BANCOS_SUPORTADOS.items():
         brc_id = spec['brcobranca_id']
 
         suporta_boleto = _probe_boleto(brcobranca_url, brc_id)
 
-        layouts: list[str] = []
+        layouts = []
         for fmt, key in [('cnab240', 'CNAB_240'), ('cnab400', 'CNAB_400')]:
             if _probe_remessa(brcobranca_url, brc_id, fmt):
                 layouts.append(key)
@@ -204,12 +236,10 @@ def descobrir_bancos(brcobranca_url: str, usar_cache: bool = True) -> list[dict]
             'suporta_boleto': suporta_boleto,
             'layouts_cnab': layouts,
         })
-        logger.debug(
-            "probe banco=%s boleto=%s layouts=%s", codigo, suporta_boleto, layouts
-        )
+        logger.debug("probe banco=%s boleto=%s layouts=%s", codigo, suporta_boleto, layouts)
 
     _cache = {'bancos': resultado, 'ts': agora}
-    logger.info("BRCobrança discovery concluído: %d bancos", len(resultado))
+    logger.info("BRCobrança discovery por probe: %d bancos", len(resultado))
     return resultado
 
 

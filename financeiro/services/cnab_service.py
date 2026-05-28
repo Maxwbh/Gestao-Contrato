@@ -252,13 +252,8 @@ class CNABService:
         """
         Monta dados de pagamento para a API /api/remessa (Brcobranca::Remessa::Pagamento).
 
-        Os campos do Pagamento de remessa são DIFERENTES dos campos do Boleto individual:
-        - nome_sacado (não sacado)
-        - documento_sacado (não sacado_documento)
-        - data_emissao (não data_documento)
-        - numero (não documento_numero)
-        - endereco separado em rua + bairro + cep + cidade + uf
-        - identificacao_ocorrencia obrigatório
+        Os campos do Pagamento de remessa seguem o schema Pagamento da spec OpenAPI:
+        sacado, sacado_documento, sacado_endereco, sacado_cidade, sacado_uf, sacado_cep
         """
         contrato = parcela.contrato
         comprador = contrato.comprador
@@ -288,14 +283,12 @@ class CNABService:
             'valor': self._formatar_valor(parcela.valor_boleto or parcela.valor_atual),
             'data_vencimento': self._formatar_data(parcela.data_vencimento),
             'data_emissao': self._formatar_data(data_emissao),
-            'nome_sacado': comprador.nome[:40],
-            'documento_sacado': cpf_cnpj,
-            'endereco_sacado': rua[:40],
-            'bairro_sacado': bairro[:15],
-            'cep_sacado': cep,
-            'cidade_sacado': cidade[:15],
-            'uf_sacado': uf[:2],
-            'identificacao_ocorrencia': '01',
+            'sacado': comprador.nome[:40],
+            'sacado_documento': cpf_cnpj,
+            'sacado_endereco': rua[:40],
+            'sacado_cep': cep,
+            'sacado_cidade': cidade[:15],
+            'sacado_uf': uf[:2],
         }
 
     def gerar_remessa(
@@ -455,13 +448,18 @@ class CNABService:
             # Retry automático em 429 (rate limit): backoff exponencial configurável
             _response = None
             _t0 = time.monotonic()
+            # pix=true ativa segmento PIX no CNAB quando conta tem chave PIX
+            _params_remessa: dict = {'bank': banco, 'type': tipo_cnab}
+            if getattr(conta_bancaria, 'chave_pix', ''):
+                _params_remessa['pix'] = 'true'
+
             for _tentativa in range(self.max_tentativas):
                 _response = requests.post(
                     f'{self.brcobranca_url}/api/remessa',
+                    params=_params_remessa,
                     files={'data': ('remessa.json',
                                     json.dumps(data_remessa).encode('utf-8'),
                                     'application/json')},
-                    data={'bank': banco, 'type': tipo_cnab},
                     headers={'Accept': 'application/vnd.BoletoApi-v1+json'},
                     timeout=self.timeout,
                 )
@@ -672,8 +670,8 @@ class CNABService:
             try:
                 response = requests.post(
                     f'{self.brcobranca_url}/api/retorno',
-                    files={'file': ('retorno.ret', io.BytesIO(conteudo), 'application/octet-stream')},
-                    data={'banco': banco, 'formato': formato_api},
+                    params={'bank': banco, 'type': formato_api},
+                    files={'data': ('retorno.ret', io.BytesIO(conteudo), 'application/octet-stream')},
                     timeout=self.timeout,
                 )
             except requests.exceptions.ConnectionError as e:

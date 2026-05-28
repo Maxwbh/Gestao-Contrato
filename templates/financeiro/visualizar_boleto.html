@@ -198,13 +198,23 @@
                         <label class="form-label fw-bold">
                             <i class="fas fa-qrcode me-1"></i>PIX Copia e Cola
                         </label>
-                        <div class="input-group">
-                            <textarea class="form-control font-monospace" id="pixCopiaECola"
-                                      rows="2" readonly>{{ parcela.pix_copia_cola }}</textarea>
-                            <button class="btn btn-outline-success" type="button"
-                                    onclick="copiarTexto('pixCopiaECola')">
-                                <i class="far fa-clipboard"></i> Copiar
-                            </button>
+                        <div class="row align-items-start">
+                            <div class="col">
+                                <div class="input-group">
+                                    <textarea class="form-control font-monospace" id="pixCopiaECola"
+                                              rows="2" readonly>{{ parcela.pix_copia_cola }}</textarea>
+                                    <button class="btn btn-outline-success" type="button"
+                                            onclick="copiarTexto('pixCopiaECola')">
+                                        <i class="far fa-clipboard"></i> Copiar
+                                    </button>
+                                </div>
+                            </div>
+                            {% if parcela.pix_qrcode %}
+                            <div class="col-auto">
+                                <img src="data:image/png;base64,{{ parcela.pix_qrcode }}"
+                                     alt="QR Code PIX" style="width:100px;height:100px;border:1px solid #dee2e6;border-radius:4px;">
+                            </div>
+                            {% endif %}
                         </div>
                     </div>
                     {% endif %}

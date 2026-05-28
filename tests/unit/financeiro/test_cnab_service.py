@@ -384,18 +384,18 @@ class TestCNABServiceIntegracao(TestCase):
         # Deve usar multipart/form-data, não JSON body
         self.assertNotIn('json', kwargs, 'gerar_remessa não deve usar json={...}')
         self.assertIn('files', kwargs, 'gerar_remessa deve usar files={...}')
-        self.assertIn('data', kwargs, 'gerar_remessa deve usar data={...}')
 
         # files deve conter 'data' como arquivo JSON
         self.assertIn('data', kwargs['files'])
         filename, content, content_type = kwargs['files']['data']
         self.assertEqual(content_type, 'application/json')
 
-        # data deve conter bank e type
-        self.assertIn('bank', kwargs['data'])
-        self.assertIn('type', kwargs['data'])
-        self.assertEqual(kwargs['data']['bank'], 'banco_brasil')
-        self.assertEqual(kwargs['data']['type'], 'cnab240')
+        # bank e type devem ser query params (spec OpenAPI)
+        self.assertIn('params', kwargs, 'gerar_remessa deve usar params={bank, type}')
+        self.assertIn('bank', kwargs['params'])
+        self.assertIn('type', kwargs['params'])
+        self.assertEqual(kwargs['params']['bank'], 'banco_brasil')
+        self.assertEqual(kwargs['params']['type'], 'cnab240')
 
     @patch('requests.post')
     def test_regenerar_remessa_preserva_itens_em_falha(self, mock_post):

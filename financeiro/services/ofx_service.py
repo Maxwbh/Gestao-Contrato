@@ -91,7 +91,7 @@ def _parse_via_brcobranca(content: bytes, brcobranca_url: str) -> list[OFXTransa
         logger.warning('OFX BRCobrança: erro inesperado — %s', e)
         return None
 
-    if resp.status_code != 200:
+    if resp.status_code not in (200, 201):
         logger.warning('OFX BRCobrança: status %s — resposta: %s', resp.status_code, resp.text[:200])
         return None
 

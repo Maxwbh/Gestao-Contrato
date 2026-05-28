@@ -26,6 +26,7 @@ import json
 import logging
 import time
 import re
+import base64
 from decimal import Decimal
 from datetime import date, timedelta
 from django.conf import settings
@@ -68,6 +69,7 @@ class BoletoService:
         '104': '1',        # Caixa (1=com registro)
         '237': '06',       # Bradesco
         '341': '175',      # Itau
+        '336': '1',        # C6 Bank
         '748': '3',        # Sicredi (3=sem registro)
         '756': '1',        # Sicoob
     }
@@ -76,6 +78,7 @@ class BoletoService:
     CAMPOS_BANCO = {
         '001': {'convenio_obrigatorio': True, 'convenio_len': 7},
         '033': {'convenio_obrigatorio': True, 'convenio_len': 7},
+        '336': {'convenio_obrigatorio': True},  # C6 Bank
         '104': {'emissao': '4', 'convenio_len': 6},
         '237': {'nosso_numero_len': 11},
         '341': {'seu_numero': True, 'nosso_numero_len': 8},
@@ -581,10 +584,9 @@ class BoletoService:
         # ── Slot 4: reservado para 2ª Via com valor atualizado (preenchido em gerar_segunda_via) ──
         instr4 = ''
 
-        # ── Slots 5-7: instruções configuráveis ────────────────────────────────
+        # ── Slots 5-6: instruções configuráveis (API suporta instrucao1–instrucao6) ──
         instr5 = config_boleto.get('instrucao_1', '') or ''
         instr6 = config_boleto.get('instrucao_2', '') or ''
-        instr7 = config_boleto.get('instrucao_3', '') or ''
 
         # Dados do boleto no formato BRCobranca
         dados = {
@@ -624,7 +626,6 @@ class BoletoService:
              'instrucao4': instr4,   # Reservado: valor atualizado na 2ª via vencida
              'instrucao5': instr5,   # Configurável: instrucao_1 do config
              'instrucao6': instr6,   # Configurável: instrucao_2 do config
-             'instrucao7': instr7,   # Configurável: instrucao_3 do config
 
              # Local de Pagamento
              'local_pagamento': 'Pagavel em qualquer banco ate o vencimento',
@@ -767,6 +768,17 @@ class BoletoService:
                     dados['desconto'] = float(valor_desconto)
 
         # =====================================================
+        # PIX (Boleto Híbrido) — se conta bancária tem chave PIX configurada
+        # =====================================================
+        if getattr(conta_bancaria, 'chave_pix', ''):
+            dados['chave_pix'] = conta_bancaria.chave_pix
+            dados['tipo_chave_pix'] = (getattr(conta_bancaria, 'tipo_pix', '') or '').lower()
+            dados['txid'] = (
+                getattr(parcela, 'pix_txid', '') or
+                f'GC{parcela.contrato_id:07d}P{parcela.numero_parcela:04d}'
+            )
+
+        # =====================================================
         # FILTRAGEM E VALIDACAO FINAL POR BANCO
         # Remove campos nao suportados e aplica tamanhos maximos
         # =====================================================
@@ -871,6 +883,8 @@ class BoletoService:
                     'codigo_barras': resultado.get('codigo_barras', ''),
                     'valor': Decimal(str(dados_boleto['valor'])),
                     'pdf_content': resultado.get('pdf_content'),
+                    'pix_copia_cola': resultado.get('pix_copia_cola', ''),
+                    'pix_qrcode': resultado.get('pix_qrcode', ''),
                 }
             else:
                 return resultado
@@ -966,8 +980,9 @@ class BoletoService:
         boletos_data = []
         for parcela in parcelas:
             try:
-                dados = self._montar_dados_boleto(parcela, conta_bancaria)
+                dados, _ = self._montar_dados_boleto(parcela, conta_bancaria)
                 dados.pop('codigo_banco', None)
+                dados['bank'] = banco_nome   # bank por boleto conforme spec OpenAPI
                 boletos_data.append(dados)
             except Exception as e:
                 logger.warning('gerar_carne: erro ao montar dados parcela pk=%s: %s', parcela.pk, e)
@@ -975,17 +990,13 @@ class BoletoService:
         if not boletos_data:
             return {'sucesso': False, 'erro': 'Nenhum boleto pôde ser preparado'}
 
-        payload = {
-            'bank': banco_nome,
-            'type': 'pdf',
-            'data': boletos_data,
-        }
-
         url = f"{self.brcobranca_url}/api/boleto/multi"
         try:
+            # Spec OpenAPI: form-data — type + data (JSON file); bank embutido em cada boleto
             response = requests.post(
                 url,
-                json=payload,
+                files={'data': ('boletos.json', json.dumps(boletos_data).encode(), 'application/json')},
+                data={'type': 'pdf'},
                 headers={'Accept': 'application/vnd.BoletoApi-v1+json'},
                 timeout=max(self.timeout, 60),
             )
@@ -1069,17 +1080,20 @@ class BoletoService:
                 if not lote_dados:
                     continue
 
-                payload = {
-                    'bank': banco_nome,
-                    'type': 'pdf',
-                    'data': [d for _, d, _ in lote_dados],
-                }
+                # Spec OpenAPI: form-data — type + data (JSON file) + include_data
+                # bank embutido em cada boleto; include_data=true → JSON com DV por boleto
+                lote_boletos = []
+                for _, d, _ in lote_dados:
+                    b = dict(d)
+                    b['bank'] = banco_nome
+                    lote_boletos.append(b)
 
                 timeout_lote = max(self.timeout, len(lote_dados) * 5)
                 try:
                     response = requests.post(
                         f"{self.brcobranca_url}/api/boleto/multi",
-                        json=payload,
+                        files={'data': ('boletos.json', json.dumps(lote_boletos).encode(), 'application/json')},
+                        data={'type': 'pdf', 'include_data': 'true'},
                         headers={'Accept': 'application/vnd.BoletoApi-v1+json'},
                         timeout=timeout_lote,
                     )
@@ -1098,7 +1112,43 @@ class BoletoService:
                     erros.append(msg)
                     continue
 
-                pdf_combinado = response.content
+                # Parsear resposta — dois formatos possíveis:
+                # 1. JSON com include_data=True: {"content_base64": "...", "boletos": [...]}
+                # 2. PDF binário com header X-Boletos-Info (fallback para API sem include_data)
+                boletos_info_por_nn: dict[str, dict] = {}
+                boletos_info_por_idx: list[dict] = []
+
+                try:
+                    resp_json = response.json()
+                    pdf_b64 = resp_json.get('content_base64', '')
+                    pdf_combinado = base64.b64decode(pdf_b64) if pdf_b64 else b''
+                    boletos_info_por_idx = resp_json.get('boletos', [])
+                    for b in boletos_info_por_idx:
+                        nn = b.get('nosso_numero', '')
+                        if nn:
+                            boletos_info_por_nn[nn] = b
+                    logger.info(
+                        'gerar_boletos_lote: resposta JSON (include_data) — %d boletos, %d bytes PDF',
+                        len(boletos_info_por_idx), len(pdf_combinado),
+                    )
+                except (ValueError, KeyError):
+                    # API antiga ou include_data não suportado → resposta binária
+                    pdf_combinado = response.content
+                    x_info = response.headers.get('X-Boletos-Info', '')
+                    if x_info:
+                        try:
+                            boletos_info_por_idx = json.loads(x_info)
+                            for b in boletos_info_por_idx:
+                                nn = b.get('nosso_numero', '')
+                                if nn:
+                                    boletos_info_por_nn[nn] = b
+                            logger.info(
+                                'gerar_boletos_lote: metadados via X-Boletos-Info — %d boletos',
+                                len(boletos_info_por_idx),
+                            )
+                        except (ValueError, KeyError):
+                            logger.debug('gerar_boletos_lote: X-Boletos-Info malformado, sem DV por boleto')
+
                 if not pdf_combinado:
                     erros.append(f'gerar_boletos_lote [{banco_nome}]: PDF vazio')
                     continue
@@ -1110,7 +1160,7 @@ class BoletoService:
 
                 agora = timezone.now()
                 a_atualizar = []
-                for parcela, dados, nosso_numero in lote_dados:
+                for idx, (parcela, dados, nosso_numero) in enumerate(lote_dados):
                     # Nosso número formatado conforme o banco:
                     #   BB (001): convenio(8) + sequencial(9) = 17 dígitos
                     #   Demais:   valor já formatado por _montar_dados_boleto
@@ -1121,11 +1171,18 @@ class BoletoService:
                     else:
                         nn_fmt = nn_banco
 
+                    # DV do nosso número via include_data — match por nosso_numero, fallback posição
+                    info = boletos_info_por_nn.get(nn_banco) or (
+                        boletos_info_por_idx[idx] if idx < len(boletos_info_por_idx) else {}
+                    )
+                    nn_dv = info.get('nosso_numero_dv', '')
+                    nn_fmt_api = info.get('nosso_numero_formatado', '') or nn_fmt
+
                     parcela.conta_bancaria = conta
                     parcela.status_boleto = StatusBoleto.GERADO
-                    parcela.nosso_numero = nn_fmt
-                    parcela.nosso_numero_formatado = nn_fmt
-                    parcela.nosso_numero_dv = ''
+                    parcela.nosso_numero = nn_fmt_api
+                    parcela.nosso_numero_formatado = nn_fmt_api
+                    parcela.nosso_numero_dv = nn_dv
                     parcela.numero_documento = parcela.gerar_numero_documento()
                     parcela.data_geracao_boleto = agora
                     # PDF do lote — carnê compartilhado por todas as parcelas do lote
@@ -1243,10 +1300,12 @@ class BoletoService:
                     'codigo_mora', 'percentual_mora', 'valor_mora', 'data_mora',
                     # Desconto
                     'desconto', 'data_desconto',
-                    # Instrucoes adicionais
-                    'instrucao5', 'instrucao6', 'instrucao7',
+                    # Instrucoes adicionais (spec suporta instrucao1–instrucao6)
+                    'instrucao5', 'instrucao6',
+                    # PIX (Boleto Híbrido)
+                    'chave_pix', 'tipo_chave_pix', 'txid', 'emv', 'pix_label',
                     # Outros campos opcionais da classe Base
-                    'demonstrativo', 'emv', 'descontos_e_abatimentos'
+                    'demonstrativo', 'descontos_e_abatimentos'
                 ]
 
                 for campo in campos_opcionais:
@@ -1473,6 +1532,7 @@ class BoletoService:
             if response.status_code == 200:
                 data = response.json()
                 logger.info("Dados do boleto obtidos via /api/boleto/data")
+                pix_data = data.get('pix') or {}
                 return {
                     'linha_digitavel': data.get('linha_digitavel', ''),
                     'codigo_barras': data.get('codigo_barras', ''),
@@ -1484,7 +1544,10 @@ class BoletoService:
                     'nosso_numero': data.get('nosso_numero', ''),
                     'nosso_numero_formatado': data.get('nosso_numero_formatado', '') or data.get('nosso_numero', ''),
                     'nosso_numero_dv': data.get('nosso_numero_dv', '') or data.get('dv', ''),
-                    'agencia_conta_boleto': data.get('agencia_conta_boleto', '')
+                    'agencia_conta_boleto': data.get('agencia_conta_boleto', ''),
+                    # PIX (Boleto Híbrido) — presente quando chave_pix foi enviada
+                    'pix_copia_cola': pix_data.get('emv', ''),
+                    'pix_qrcode': pix_data.get('qrcode_base64', ''),
                 }
             else:
                 logger.debug(f"Endpoint /api/boleto/data retornou {response.status_code}, dados opcionais nao disponiveis")
@@ -1517,9 +1580,18 @@ class BoletoService:
             # Campos separados para conciliação (CNAB / OFX):
             nosso_numero_raw = response.headers.get('X-Nosso-Numero', '')
             nosso_numero_dv = response.headers.get('X-Nosso-Numero-DV', '')
+            pix_copia_cola = ''
+            pix_qrcode = ''
 
             if linha_digitavel and nosso_numero_api:
                 logger.info("Dados obtidos via headers X-* (PR#33)")
+                # X-* headers não incluem PIX — busca /api/boleto/data se boleto é híbrido
+                if banco_nome and dados_boleto and dados_boleto.get('chave_pix'):
+                    dados_extras = self._obter_dados_boleto(banco_nome, dados_boleto)
+                    pix_copia_cola = dados_extras.get('pix_copia_cola', '')
+                    pix_qrcode = dados_extras.get('pix_qrcode', '')
+                    if pix_copia_cola:
+                        logger.info("PIX EMV obtido via /api/boleto/data")
             elif banco_nome and dados_boleto:
                 # Fallback: API antiga (< PR#33) — segunda chamada a /api/boleto/data
                 logger.info("Obtendo linha digitavel e codigo de barras via /api/boleto/data")
@@ -1529,6 +1601,8 @@ class BoletoService:
                 nosso_numero_api = nosso_numero_api or dados_extras.get('nosso_numero_formatado', '')
                 nosso_numero_raw = nosso_numero_raw or dados_extras.get('nosso_numero', '')
                 nosso_numero_dv = nosso_numero_dv or dados_extras.get('nosso_numero_dv', '')
+                pix_copia_cola = dados_extras.get('pix_copia_cola', '')
+                pix_qrcode = dados_extras.get('pix_qrcode', '')
 
             if linha_digitavel and codigo_barras:
                 logger.info(f"Dados obtidos — linha_digitavel: {linha_digitavel[:20]}..., codigo_barras: {codigo_barras[:20]}...")
@@ -1546,6 +1620,8 @@ class BoletoService:
                 'nosso_numero_api': nosso_numero_api,
                 'nosso_numero_raw': nosso_numero_raw,
                 'nosso_numero_dv': nosso_numero_dv,
+                'pix_copia_cola': pix_copia_cola,
+                'pix_qrcode': pix_qrcode,
             }
 
         except Exception as e:

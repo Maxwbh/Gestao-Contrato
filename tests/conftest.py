@@ -229,15 +229,63 @@ def parcela_paga(db, parcela_factory, historico_pagamento_factory):
 
 @pytest.fixture
 def mock_brcobranca_success(requests_mock):
-    """Mock da API BRCobranca retornando sucesso"""
+    """Mock da API BRCobranca retornando sucesso com headers X-* (PR#33)."""
     from django.conf import settings
     brcobranca_url = getattr(settings, 'BRCOBRANCA_URL', 'http://localhost:9292')
+    _x_headers = {
+        'X-Nosso-Numero-Formatado': '00012340000000018',
+        'X-Nosso-Numero':           '000000018',
+        'X-Nosso-Numero-DV':        '3',
+        'X-Codigo-Barras':          '00190000090012340000000001810000000000100000',
+        'X-Linha-Digitavel':        '00190.00009 00123.400000 00001.810000 1 00000100000',
+    }
+    _data_json = {
+        'linha_digitavel':       '00190.00009 00123.400000 00001.810000 1 00000100000',
+        'codigo_barras':         '00190000090012340000000001810000000000100000',
+        'nosso_numero':          '000000018',
+        'nosso_numero_formatado':'00012340000000018',
+        'nosso_numero_dv':       '3',
+        'agencia_conta_boleto':  '1234-5 / 00001-8',
+    }
     for url in {brcobranca_url, 'http://localhost:9292', 'https://brcobranca-api.onrender.com',
                 'https://brcobranca-api-m4q9.onrender.com'}:
         requests_mock.get(
             f'{url}/api/boleto',
             content=b'%PDF-1.4 Mock PDF Content',
-            status_code=200
+            status_code=200,
+            headers=_x_headers,
+        )
+        requests_mock.get(
+            f'{url}/api/boleto/data',
+            json=_data_json,
+            status_code=200,
+        )
+        # POST /api/boleto/multi: form-data, resposta JSON (include_data=true)
+        import base64 as _b64
+        _pdf_b64 = _b64.b64encode(b'%PDF-1.4 Mock Carne PDF').decode()
+        requests_mock.post(
+            f'{url}/api/boleto/multi',
+            json={
+                'total': 1,
+                'boletos': [{
+                    'bank': 'banco_brasil',
+                    'nosso_numero': '000000018',
+                    'nosso_numero_formatado': '00012340000000018',
+                    'nosso_numero_dv': '3',
+                    'linha_digitavel': '00190.00009 00123.400000 00001.810000 1 00000100000',
+                    'codigo_barras': '00190000090012340000000001810000000000100000',
+                }],
+                'content_base64': _pdf_b64,
+            },
+            status_code=200,
+        )
+        # POST /api/remessa: query params bank/type, form-data data
+        requests_mock.post(f'{url}/api/remessa', content=b'CB280500.REM', status_code=200)
+        # POST /api/retorno: query params bank/type, form-data data (campo 'data')
+        requests_mock.post(
+            f'{url}/api/retorno',
+            json=[{'nosso_numero': '000000018', 'codigo_ocorrencia': '06', 'valor_pago': '1000.00'}],
+            status_code=200,
         )
     return requests_mock
 
