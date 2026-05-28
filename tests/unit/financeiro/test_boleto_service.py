@@ -127,6 +127,10 @@ class TestBoletoServiceIntegracao:
         assert result['pdf_content'] is not None
         assert result['valor'] == Decimal('1000.00')
         assert result['numero_documento'] == parcela.gerar_numero_documento()
+        # Campos essenciais para conciliação CNAB/OFX
+        assert result.get('linha_digitavel'), 'linha_digitavel deve ser não-vazia'
+        assert result.get('codigo_barras'), 'codigo_barras deve ser não-vazio'
+        assert result.get('nosso_numero'), 'nosso_numero deve ser não-vazio'
 
     @pytest.mark.django_db
     def test_gerar_boleto_erro_500_com_retry(
