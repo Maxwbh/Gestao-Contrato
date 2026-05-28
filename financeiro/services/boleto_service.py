@@ -69,6 +69,7 @@ class BoletoService:
         '104': '1',        # Caixa (1=com registro)
         '237': '06',       # Bradesco
         '341': '175',      # Itau
+        '336': '1',        # C6 Bank
         '748': '3',        # Sicredi (3=sem registro)
         '756': '1',        # Sicoob
     }
@@ -77,6 +78,7 @@ class BoletoService:
     CAMPOS_BANCO = {
         '001': {'convenio_obrigatorio': True, 'convenio_len': 7},
         '033': {'convenio_obrigatorio': True, 'convenio_len': 7},
+        '336': {'convenio_obrigatorio': True},  # C6 Bank
         '104': {'emissao': '4', 'convenio_len': 6},
         '237': {'nosso_numero_len': 11},
         '341': {'seu_numero': True, 'nosso_numero_len': 8},
@@ -582,10 +584,9 @@ class BoletoService:
         # ── Slot 4: reservado para 2ª Via com valor atualizado (preenchido em gerar_segunda_via) ──
         instr4 = ''
 
-        # ── Slots 5-7: instruções configuráveis ────────────────────────────────
+        # ── Slots 5-6: instruções configuráveis (API suporta instrucao1–instrucao6) ──
         instr5 = config_boleto.get('instrucao_1', '') or ''
         instr6 = config_boleto.get('instrucao_2', '') or ''
-        instr7 = config_boleto.get('instrucao_3', '') or ''
 
         # Dados do boleto no formato BRCobranca
         dados = {
@@ -625,7 +626,6 @@ class BoletoService:
              'instrucao4': instr4,   # Reservado: valor atualizado na 2ª via vencida
              'instrucao5': instr5,   # Configurável: instrucao_1 do config
              'instrucao6': instr6,   # Configurável: instrucao_2 do config
-             'instrucao7': instr7,   # Configurável: instrucao_3 do config
 
              # Local de Pagamento
              'local_pagamento': 'Pagavel em qualquer banco ate o vencimento',
@@ -967,8 +967,9 @@ class BoletoService:
         boletos_data = []
         for parcela in parcelas:
             try:
-                dados = self._montar_dados_boleto(parcela, conta_bancaria)
+                dados, _ = self._montar_dados_boleto(parcela, conta_bancaria)
                 dados.pop('codigo_banco', None)
+                dados['bank'] = banco_nome   # bank por boleto conforme spec OpenAPI
                 boletos_data.append(dados)
             except Exception as e:
                 logger.warning('gerar_carne: erro ao montar dados parcela pk=%s: %s', parcela.pk, e)
@@ -976,17 +977,13 @@ class BoletoService:
         if not boletos_data:
             return {'sucesso': False, 'erro': 'Nenhum boleto pôde ser preparado'}
 
-        payload = {
-            'bank': banco_nome,
-            'type': 'pdf',
-            'data': boletos_data,
-        }
-
         url = f"{self.brcobranca_url}/api/boleto/multi"
         try:
+            # Spec OpenAPI: form-data — type + data (JSON file); bank embutido em cada boleto
             response = requests.post(
                 url,
-                json=payload,
+                files={'data': ('boletos.json', json.dumps(boletos_data).encode(), 'application/json')},
+                data={'type': 'pdf'},
                 headers={'Accept': 'application/vnd.BoletoApi-v1+json'},
                 timeout=max(self.timeout, 60),
             )
@@ -1070,19 +1067,20 @@ class BoletoService:
                 if not lote_dados:
                     continue
 
-                # include_data=True: API retorna JSON com content_base64 + boletos[].nosso_numero_dv
-                payload = {
-                    'bank': banco_nome,
-                    'type': 'pdf',
-                    'data': [d for _, d, _ in lote_dados],
-                    'include_data': True,
-                }
+                # Spec OpenAPI: form-data — type + data (JSON file) + include_data
+                # bank embutido em cada boleto; include_data=true → JSON com DV por boleto
+                lote_boletos = []
+                for _, d, _ in lote_dados:
+                    b = dict(d)
+                    b['bank'] = banco_nome
+                    lote_boletos.append(b)
 
                 timeout_lote = max(self.timeout, len(lote_dados) * 5)
                 try:
                     response = requests.post(
                         f"{self.brcobranca_url}/api/boleto/multi",
-                        json=payload,
+                        files={'data': ('boletos.json', json.dumps(lote_boletos).encode(), 'application/json')},
+                        data={'type': 'pdf', 'include_data': 'true'},
                         headers={'Accept': 'application/vnd.BoletoApi-v1+json'},
                         timeout=timeout_lote,
                     )

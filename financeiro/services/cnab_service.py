@@ -458,10 +458,10 @@ class CNABService:
             for _tentativa in range(self.max_tentativas):
                 _response = requests.post(
                     f'{self.brcobranca_url}/api/remessa',
+                    params={'bank': banco, 'type': tipo_cnab},
                     files={'data': ('remessa.json',
                                     json.dumps(data_remessa).encode('utf-8'),
                                     'application/json')},
-                    data={'bank': banco, 'type': tipo_cnab},
                     headers={'Accept': 'application/vnd.BoletoApi-v1+json'},
                     timeout=self.timeout,
                 )
@@ -672,8 +672,8 @@ class CNABService:
             try:
                 response = requests.post(
                     f'{self.brcobranca_url}/api/retorno',
-                    files={'file': ('retorno.ret', io.BytesIO(conteudo), 'application/octet-stream')},
-                    data={'banco': banco, 'formato': formato_api},
+                    params={'bank': banco, 'type': formato_api},
+                    files={'data': ('retorno.ret', io.BytesIO(conteudo), 'application/octet-stream')},
                     timeout=self.timeout,
                 )
             except requests.exceptions.ConnectionError as e:

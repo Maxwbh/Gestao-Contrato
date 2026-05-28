@@ -610,14 +610,14 @@ class TestBoletoServiceGeraCarne:
 
         with patch('financeiro.services.boleto_service.requests.post', return_value=mock_resp) as mock_post:
             service = BoletoService()
-            # Mock _montar_dados_boleto para não precisar de dados bancários completos
-            with patch.object(service, '_montar_dados_boleto', return_value={
+            # _montar_dados_boleto retorna (dados_dict, nosso_numero)
+            with patch.object(service, '_montar_dados_boleto', return_value=({
                 'cedente': 'Imob Teste', 'sacado': 'Comprador', 'valor': 8333.33,
                 'data_vencimento': '2026/04/07', 'nosso_numero': '0000000001',
                 'agencia': '1234', 'conta_corrente': '567890', 'carteira': '18',
                 'documento_cedente': '12345678000199', 'sacado_documento': '123.456.789-01',
                 'moeda': '9', 'especie': 'R$', 'especie_documento': 'DM', 'aceite': 'N',
-            }):
+            }, '0000000001')):
                 with patch.object(service, '_get_banco_brcobranca', return_value='sicoob'):
                     resultado = service.gerar_carne(parcelas, conta)
 
@@ -649,12 +649,12 @@ class TestBoletoServiceGeraCarne:
         parcelas = list(contrato_com_parcelas.parcelas.order_by('numero_parcela')[:3])
 
         service = BoletoService()
-        with patch.object(service, '_montar_dados_boleto', return_value={
+        with patch.object(service, '_montar_dados_boleto', return_value=({
             'cedente': 'T', 'sacado': 'T', 'valor': 100, 'data_vencimento': '2026/04/07',
             'nosso_numero': '1', 'agencia': '1', 'conta_corrente': '1', 'carteira': '1',
             'documento_cedente': '1', 'sacado_documento': '1',
             'moeda': '9', 'especie': 'R$', 'especie_documento': 'DM', 'aceite': 'N',
-        }):
+        }, '1')):
             with patch.object(service, '_get_banco_brcobranca', return_value='sicoob'):
                 with patch('financeiro.services.boleto_service.requests.post',
                            side_effect=req_lib.exceptions.ConnectionError('refused')):

@@ -260,25 +260,31 @@ def mock_brcobranca_success(requests_mock):
             json=_data_json,
             status_code=200,
         )
-        # Resposta JSON do /api/boleto/multi com include_data=True (nova API)
+        # POST /api/boleto/multi: form-data, resposta JSON (include_data=true)
         import base64 as _b64
         _pdf_b64 = _b64.b64encode(b'%PDF-1.4 Mock Carne PDF').decode()
         requests_mock.post(
             f'{url}/api/boleto/multi',
             json={
                 'total': 1,
-                'boletos': [
-                    {
-                        'bank': 'banco_brasil',
-                        'nosso_numero': '000000018',
-                        'nosso_numero_formatado': '00012340000000018',
-                        'nosso_numero_dv': '3',
-                        'linha_digitavel': '00190.00009 00123.400000 00001.810000 1 00000100000',
-                        'codigo_barras': '00190000090012340000000001810000000000100000',
-                    }
-                ],
+                'boletos': [{
+                    'bank': 'banco_brasil',
+                    'nosso_numero': '000000018',
+                    'nosso_numero_formatado': '00012340000000018',
+                    'nosso_numero_dv': '3',
+                    'linha_digitavel': '00190.00009 00123.400000 00001.810000 1 00000100000',
+                    'codigo_barras': '00190000090012340000000001810000000000100000',
+                }],
                 'content_base64': _pdf_b64,
             },
+            status_code=200,
+        )
+        # POST /api/remessa: query params bank/type, form-data data
+        requests_mock.post(f'{url}/api/remessa', content=b'CB280500.REM', status_code=200)
+        # POST /api/retorno: query params bank/type, form-data data (campo 'data')
+        requests_mock.post(
+            f'{url}/api/retorno',
+            json=[{'nosso_numero': '000000018', 'codigo_ocorrencia': '06', 'valor_pago': '1000.00'}],
             status_code=200,
         )
     return requests_mock
