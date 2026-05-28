@@ -3053,10 +3053,10 @@ Fase D — P2:  34.7 Importação via IA           ✅ CONCLUÍDO
 > **Perfil do sistema:** 3 imobiliárias · 30–70 lotes cada · escritório pequeno · orçamento restrito.
 >
 > **Status de implementação (2026-05-27):**
-> ✅ **35.1** Auditoria Reduzida — implementado (exceto CSV export e testes)
-> ✅ **35.2** Bloqueio de Crédito — implementado (exceto wizard step 1 e testes)
-> ✅ **35.5** Linha do Tempo Portal — implementado (exceto testes)
-> ✅ **35.6** Widget IA Dashboard — implementado (exceto testes)
+> ✅ **35.1** Auditoria Reduzida — implementado e testado
+> ✅ **35.2** Bloqueio de Crédito — implementado e testado (wizard step 1, ativação/desativação, desbloqueio manual)
+> ✅ **35.5** Linha do Tempo Portal — implementado e testado
+> ✅ **35.6** Widget IA Dashboard — implementado e testado
 > ⏳ **35.3** Fluxo de Caixa Previsional — aguardando crescimento (≥ 5 imobiliárias)
 > ⏳ **35.4** Exportação SPED/EFD — aguardando demanda da contabilidade
 > ⏳ **35.7** Notificações Telegram — aguardando equipe crescer (≥ 5 pessoas)
@@ -3075,7 +3075,7 @@ um reajuste. Custo de implementação baixo, valor alto para rastreabilidade.
 | 35.1.2 | Registro manual nas views críticas: pagamento de parcela, geração de boleto, aplicação de reajuste (×2), CNAB retorno | ✅ |
 | 35.1.3 | Dashboard de auditoria `/core/auditoria/` — últimos 200 eventos; filtros por ação; link no menu Admin | ✅ (sem CSV export) |
 | 35.1.4 | Admin Django `LogAuditoriaAdmin` — somente leitura; `list_display`, `list_filter`, `search_fields`, `date_hierarchy` | ✅ |
-| 35.1.5 | Testes: gravação correta em cada ponto de integração; autenticação obrigatória | ⏳ pendente |
+| 35.1.5 | Testes: gravação correta em cada ponto de integração; autenticação obrigatória | ✅ `test_35_auditoria_bloqueio.py` (25 testes) |
 
 **Escopo de ações auditadas:** `PAGAMENTO`, `BOLETO_GERADO`, `REAJUSTE_APLICADO`, `REAJUSTE_DESFEITO`, `CNAB_RETORNO`, `IMPORTACAO_IA`, `EXPORTACAO`, `BLOQUEIO_CREDITO`, `DESBLOQUEIO_CREDITO`.
 
@@ -3091,10 +3091,10 @@ significativamente o fluxo de caixa do loteamento. Proteção simples e de baixo
 |---|------|--------|
 | 35.2.1 | Campo `Comprador.bloqueio_credito` (BooleanField) + `bloqueio_credito_motivo` + `bloqueio_credito_em` — migração 0016 aplicada | ✅ |
 | 35.2.2 | Task `atualizar_bloqueio_credito_sync()`: parcelas vencidas ≥ 90 dias → ativa flag; desvincular quando quitadas; inclusa em `task_run_all` | ✅ |
-| 35.2.3 | Validação em `ContratoCreateView` e wizard step 1: banner de alerta quando comprador bloqueado | ⏳ pendente |
+| 35.2.3 | Validação em `ContratoCreateView` e wizard step 1: banner de alerta quando comprador bloqueado | ✅ `TestWizardBloqueioStep1` (4 testes) |
 | 35.2.4 | Badge "Inadimplente" na listagem de compradores (AG Grid renderer) | ✅ |
 | 35.2.5 | Endpoint `/core/compradores/<pk>/desbloquear/` (POST, superuser) com registro em `LogAuditoria` | ✅ |
-| 35.2.6 | Testes: ativação automática, desativação após quitação, desbloqueio manual | ⏳ pendente |
+| 35.2.6 | Testes: ativação automática, desativação após quitação, desbloqueio manual | ✅ `TestBloqueioCredito` + `TestDesbloqueioManualView` (11 testes) |
 
 ---
 
@@ -3151,7 +3151,7 @@ por 10–15 anos precisa de uma visão clara do histórico. Reduz ligações de 
 | 35.5.2 | Template `portal_comprador/timeline.html` — vertical timeline com ícones e cores por tipo de evento | ✅ |
 | 35.5.3 | View `portal_timeline_pdf` — ReportLab gera PDF com cabeçalho da imobiliária e tabela cronológica | ✅ |
 | 35.5.4 | Link "Ver Linha do Tempo" na página de detalhe do contrato | ✅ |
-| 35.5.5 | Testes: ordenação cronológica correta, isolamento por comprador, geração do PDF | ⏳ pendente |
+| 35.5.5 | Testes: ordenação cronológica correta, isolamento por comprador, geração do PDF | ✅ `test_35_timeline.py` (9 testes) |
 
 ---
 
@@ -3167,7 +3167,7 @@ sendo importados por mês.
 | 35.6.1 | Card "Uso de IA — Mês Atual" no `dashboard.html` — custo USD mês atual + barras de progresso por limite em alerta; JS fetch assíncrono | ✅ |
 | 35.6.2 | Badge vermelho no item "Admin" do navbar quando qualquer limite ≥ 80% | ✅ |
 | 35.6.3 | API `GET /core/ia/status-widget/` — retorna `custo_mes_usd`, `alertas_ativos` (lista de limites ≥ 80%), `alertas_count` | ✅ |
-| 35.6.4 | Testes: API retorna dados corretos, badge aparece acima de 80% | ⏳ pendente |
+| 35.6.4 | Testes: API retorna dados corretos, badge aparece acima de 80% | ✅ `test_ia_limites.py` (`TestApiIaStatusWidget`) |
 
 ---
 

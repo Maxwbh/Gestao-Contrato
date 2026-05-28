@@ -448,10 +448,15 @@ class CNABService:
             # Retry automático em 429 (rate limit): backoff exponencial configurável
             _response = None
             _t0 = time.monotonic()
+            # pix=true ativa segmento PIX no CNAB quando conta tem chave PIX
+            _params_remessa: dict = {'bank': banco, 'type': tipo_cnab}
+            if getattr(conta_bancaria, 'chave_pix', ''):
+                _params_remessa['pix'] = 'true'
+
             for _tentativa in range(self.max_tentativas):
                 _response = requests.post(
                     f'{self.brcobranca_url}/api/remessa',
-                    params={'bank': banco, 'type': tipo_cnab},
+                    params=_params_remessa,
                     files={'data': ('remessa.json',
                                     json.dumps(data_remessa).encode('utf-8'),
                                     'application/json')},
