@@ -260,9 +260,25 @@ def mock_brcobranca_success(requests_mock):
             json=_data_json,
             status_code=200,
         )
+        # Resposta JSON do /api/boleto/multi com include_data=True (nova API)
+        import base64 as _b64
+        _pdf_b64 = _b64.b64encode(b'%PDF-1.4 Mock Carne PDF').decode()
         requests_mock.post(
             f'{url}/api/boleto/multi',
-            content=b'%PDF-1.4 Mock Carne PDF',
+            json={
+                'total': 1,
+                'boletos': [
+                    {
+                        'bank': 'banco_brasil',
+                        'nosso_numero': '000000018',
+                        'nosso_numero_formatado': '00012340000000018',
+                        'nosso_numero_dv': '3',
+                        'linha_digitavel': '00190.00009 00123.400000 00001.810000 1 00000100000',
+                        'codigo_barras': '00190000090012340000000001810000000000100000',
+                    }
+                ],
+                'content_base64': _pdf_b64,
+            },
             status_code=200,
         )
     return requests_mock

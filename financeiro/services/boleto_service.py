@@ -26,6 +26,7 @@ import json
 import logging
 import time
 import re
+import base64
 from decimal import Decimal
 from datetime import date, timedelta
 from django.conf import settings
@@ -1069,10 +1070,12 @@ class BoletoService:
                 if not lote_dados:
                     continue
 
+                # include_data=True: API retorna JSON com content_base64 + boletos[].nosso_numero_dv
                 payload = {
                     'bank': banco_nome,
                     'type': 'pdf',
                     'data': [d for _, d, _ in lote_dados],
+                    'include_data': True,
                 }
 
                 timeout_lote = max(self.timeout, len(lote_dados) * 5)
@@ -1098,7 +1101,43 @@ class BoletoService:
                     erros.append(msg)
                     continue
 
-                pdf_combinado = response.content
+                # Parsear resposta — dois formatos possíveis:
+                # 1. JSON com include_data=True: {"content_base64": "...", "boletos": [...]}
+                # 2. PDF binário com header X-Boletos-Info (fallback para API sem include_data)
+                boletos_info_por_nn: dict[str, dict] = {}
+                boletos_info_por_idx: list[dict] = []
+
+                try:
+                    resp_json = response.json()
+                    pdf_b64 = resp_json.get('content_base64', '')
+                    pdf_combinado = base64.b64decode(pdf_b64) if pdf_b64 else b''
+                    boletos_info_por_idx = resp_json.get('boletos', [])
+                    for b in boletos_info_por_idx:
+                        nn = b.get('nosso_numero', '')
+                        if nn:
+                            boletos_info_por_nn[nn] = b
+                    logger.info(
+                        'gerar_boletos_lote: resposta JSON (include_data) — %d boletos, %d bytes PDF',
+                        len(boletos_info_por_idx), len(pdf_combinado),
+                    )
+                except (ValueError, KeyError):
+                    # API antiga ou include_data não suportado → resposta binária
+                    pdf_combinado = response.content
+                    x_info = response.headers.get('X-Boletos-Info', '')
+                    if x_info:
+                        try:
+                            boletos_info_por_idx = json.loads(x_info)
+                            for b in boletos_info_por_idx:
+                                nn = b.get('nosso_numero', '')
+                                if nn:
+                                    boletos_info_por_nn[nn] = b
+                            logger.info(
+                                'gerar_boletos_lote: metadados via X-Boletos-Info — %d boletos',
+                                len(boletos_info_por_idx),
+                            )
+                        except (ValueError, KeyError):
+                            logger.debug('gerar_boletos_lote: X-Boletos-Info malformado, sem DV por boleto')
+
                 if not pdf_combinado:
                     erros.append(f'gerar_boletos_lote [{banco_nome}]: PDF vazio')
                     continue
@@ -1110,7 +1149,7 @@ class BoletoService:
 
                 agora = timezone.now()
                 a_atualizar = []
-                for parcela, dados, nosso_numero in lote_dados:
+                for idx, (parcela, dados, nosso_numero) in enumerate(lote_dados):
                     # Nosso número formatado conforme o banco:
                     #   BB (001): convenio(8) + sequencial(9) = 17 dígitos
                     #   Demais:   valor já formatado por _montar_dados_boleto
@@ -1121,11 +1160,18 @@ class BoletoService:
                     else:
                         nn_fmt = nn_banco
 
+                    # DV do nosso número via include_data — match por nosso_numero, fallback posição
+                    info = boletos_info_por_nn.get(nn_banco) or (
+                        boletos_info_por_idx[idx] if idx < len(boletos_info_por_idx) else {}
+                    )
+                    nn_dv = info.get('nosso_numero_dv', '')
+                    nn_fmt_api = info.get('nosso_numero_formatado', '') or nn_fmt
+
                     parcela.conta_bancaria = conta
                     parcela.status_boleto = StatusBoleto.GERADO
-                    parcela.nosso_numero = nn_fmt
-                    parcela.nosso_numero_formatado = nn_fmt
-                    parcela.nosso_numero_dv = ''
+                    parcela.nosso_numero = nn_fmt_api
+                    parcela.nosso_numero_formatado = nn_fmt_api
+                    parcela.nosso_numero_dv = nn_dv
                     parcela.numero_documento = parcela.gerar_numero_documento()
                     parcela.data_geracao_boleto = agora
                     # PDF do lote — carnê compartilhado por todas as parcelas do lote
