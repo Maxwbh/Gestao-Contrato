@@ -252,13 +252,8 @@ class CNABService:
         """
         Monta dados de pagamento para a API /api/remessa (Brcobranca::Remessa::Pagamento).
 
-        Os campos do Pagamento de remessa são DIFERENTES dos campos do Boleto individual:
-        - nome_sacado (não sacado)
-        - documento_sacado (não sacado_documento)
-        - data_emissao (não data_documento)
-        - numero (não documento_numero)
-        - endereco separado em rua + bairro + cep + cidade + uf
-        - identificacao_ocorrencia obrigatório
+        Os campos do Pagamento de remessa seguem o schema Pagamento da spec OpenAPI:
+        sacado, sacado_documento, sacado_endereco, sacado_cidade, sacado_uf, sacado_cep
         """
         contrato = parcela.contrato
         comprador = contrato.comprador
@@ -288,14 +283,12 @@ class CNABService:
             'valor': self._formatar_valor(parcela.valor_boleto or parcela.valor_atual),
             'data_vencimento': self._formatar_data(parcela.data_vencimento),
             'data_emissao': self._formatar_data(data_emissao),
-            'nome_sacado': comprador.nome[:40],
-            'documento_sacado': cpf_cnpj,
-            'endereco_sacado': rua[:40],
-            'bairro_sacado': bairro[:15],
-            'cep_sacado': cep,
-            'cidade_sacado': cidade[:15],
-            'uf_sacado': uf[:2],
-            'identificacao_ocorrencia': '01',
+            'sacado': comprador.nome[:40],
+            'sacado_documento': cpf_cnpj,
+            'sacado_endereco': rua[:40],
+            'sacado_cep': cep,
+            'sacado_cidade': cidade[:15],
+            'sacado_uf': uf[:2],
         }
 
     def gerar_remessa(

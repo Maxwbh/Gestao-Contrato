@@ -198,10 +198,11 @@ def descobrir_bancos(brcobranca_url: str, usar_cache: bool = True) -> list[dict]
                 codigo = item.get('codigo', '')
                 # Normaliza layouts CNAB a partir dos campos remessa/retorno da API
                 remessa = item.get('remessa') or {}
+                formatos = remessa.get('formatos') or []
                 layouts: list[str] = []
-                if remessa.get('cnab240'):
+                if 'cnab240' in formatos:
                     layouts.append('CNAB_240')
-                if remessa.get('cnab400'):
+                if 'cnab400' in formatos:
                     layouts.append('CNAB_400')
                 resultado.append({
                     'codigo': codigo,

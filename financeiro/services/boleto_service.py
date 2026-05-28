@@ -768,6 +768,17 @@ class BoletoService:
                     dados['desconto'] = float(valor_desconto)
 
         # =====================================================
+        # PIX (Boleto Híbrido) — se conta bancária tem chave PIX configurada
+        # =====================================================
+        if getattr(conta_bancaria, 'chave_pix', ''):
+            dados['chave_pix'] = conta_bancaria.chave_pix
+            dados['tipo_chave_pix'] = (getattr(conta_bancaria, 'tipo_pix', '') or '').lower()
+            dados['txid'] = (
+                getattr(parcela, 'pix_txid', '') or
+                f'GC{parcela.contrato_id:07d}P{parcela.numero_parcela:04d}'
+            )
+
+        # =====================================================
         # FILTRAGEM E VALIDACAO FINAL POR BANCO
         # Remove campos nao suportados e aplica tamanhos maximos
         # =====================================================
@@ -872,6 +883,8 @@ class BoletoService:
                     'codigo_barras': resultado.get('codigo_barras', ''),
                     'valor': Decimal(str(dados_boleto['valor'])),
                     'pdf_content': resultado.get('pdf_content'),
+                    'pix_copia_cola': resultado.get('pix_copia_cola', ''),
+                    'pix_qrcode': resultado.get('pix_qrcode', ''),
                 }
             else:
                 return resultado
@@ -1287,10 +1300,12 @@ class BoletoService:
                     'codigo_mora', 'percentual_mora', 'valor_mora', 'data_mora',
                     # Desconto
                     'desconto', 'data_desconto',
-                    # Instrucoes adicionais
-                    'instrucao5', 'instrucao6', 'instrucao7',
+                    # Instrucoes adicionais (spec suporta instrucao1–instrucao6)
+                    'instrucao5', 'instrucao6',
+                    # PIX (Boleto Híbrido)
+                    'chave_pix', 'tipo_chave_pix', 'txid', 'emv', 'pix_label',
                     # Outros campos opcionais da classe Base
-                    'demonstrativo', 'emv', 'descontos_e_abatimentos'
+                    'demonstrativo', 'descontos_e_abatimentos'
                 ]
 
                 for campo in campos_opcionais:
@@ -1517,6 +1532,7 @@ class BoletoService:
             if response.status_code == 200:
                 data = response.json()
                 logger.info("Dados do boleto obtidos via /api/boleto/data")
+                pix_data = data.get('pix') or {}
                 return {
                     'linha_digitavel': data.get('linha_digitavel', ''),
                     'codigo_barras': data.get('codigo_barras', ''),
@@ -1528,7 +1544,10 @@ class BoletoService:
                     'nosso_numero': data.get('nosso_numero', ''),
                     'nosso_numero_formatado': data.get('nosso_numero_formatado', '') or data.get('nosso_numero', ''),
                     'nosso_numero_dv': data.get('nosso_numero_dv', '') or data.get('dv', ''),
-                    'agencia_conta_boleto': data.get('agencia_conta_boleto', '')
+                    'agencia_conta_boleto': data.get('agencia_conta_boleto', ''),
+                    # PIX (Boleto Híbrido) — presente quando chave_pix foi enviada
+                    'pix_copia_cola': pix_data.get('emv', ''),
+                    'pix_qrcode': pix_data.get('qrcode_base64', ''),
                 }
             else:
                 logger.debug(f"Endpoint /api/boleto/data retornou {response.status_code}, dados opcionais nao disponiveis")
@@ -1561,9 +1580,18 @@ class BoletoService:
             # Campos separados para conciliação (CNAB / OFX):
             nosso_numero_raw = response.headers.get('X-Nosso-Numero', '')
             nosso_numero_dv = response.headers.get('X-Nosso-Numero-DV', '')
+            pix_copia_cola = ''
+            pix_qrcode = ''
 
             if linha_digitavel and nosso_numero_api:
                 logger.info("Dados obtidos via headers X-* (PR#33)")
+                # X-* headers não incluem PIX — busca /api/boleto/data se boleto é híbrido
+                if banco_nome and dados_boleto and dados_boleto.get('chave_pix'):
+                    dados_extras = self._obter_dados_boleto(banco_nome, dados_boleto)
+                    pix_copia_cola = dados_extras.get('pix_copia_cola', '')
+                    pix_qrcode = dados_extras.get('pix_qrcode', '')
+                    if pix_copia_cola:
+                        logger.info("PIX EMV obtido via /api/boleto/data")
             elif banco_nome and dados_boleto:
                 # Fallback: API antiga (< PR#33) — segunda chamada a /api/boleto/data
                 logger.info("Obtendo linha digitavel e codigo de barras via /api/boleto/data")
@@ -1573,6 +1601,8 @@ class BoletoService:
                 nosso_numero_api = nosso_numero_api or dados_extras.get('nosso_numero_formatado', '')
                 nosso_numero_raw = nosso_numero_raw or dados_extras.get('nosso_numero', '')
                 nosso_numero_dv = nosso_numero_dv or dados_extras.get('nosso_numero_dv', '')
+                pix_copia_cola = dados_extras.get('pix_copia_cola', '')
+                pix_qrcode = dados_extras.get('pix_qrcode', '')
 
             if linha_digitavel and codigo_barras:
                 logger.info(f"Dados obtidos — linha_digitavel: {linha_digitavel[:20]}..., codigo_barras: {codigo_barras[:20]}...")
@@ -1590,6 +1620,8 @@ class BoletoService:
                 'nosso_numero_api': nosso_numero_api,
                 'nosso_numero_raw': nosso_numero_raw,
                 'nosso_numero_dv': nosso_numero_dv,
+                'pix_copia_cola': pix_copia_cola,
+                'pix_qrcode': pix_qrcode,
             }
 
         except Exception as e:
