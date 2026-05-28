@@ -2560,14 +2560,15 @@ def api_ia_status_widget(request):
                 qs = qs.filter(operacao=lim.escopo_valor)
 
             if lim.tipo_limite == 'TOKENS':
-                consumo = (qs.aggregate(t=DbSum('tokens_total'))['t'] or 0)
+                agg = qs.aggregate(ti=DbSum('tokens_input'), to=DbSum('tokens_output'))
+                consumo = (agg['ti'] or 0) + (agg['to'] or 0)
             else:
                 consumo = float(qs.aggregate(t=DbSum('custo_usd'))['t'] or 0)
 
             limite_val = float(lim.valor_limite)
             pct = round(consumo / limite_val * 100, 1) if limite_val > 0 else 0
             if pct >= 80:
-                alertas.append({'descricao': lim.descricao or str(lim), 'pct': pct})
+                alertas.append({'descricao': str(lim), 'pct': pct})
         except Exception:
             pass
 
