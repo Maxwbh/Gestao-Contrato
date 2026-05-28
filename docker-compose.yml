@@ -64,7 +64,7 @@ services:
       args:
         # Incremente para forçar re-clone do boleto_cnab_api quando houver atualização.
         # Ex: docker-compose build --build-arg CACHE_BUST=$(date +%s) brcobranca
-        CACHE_BUST: 1
+        CACHE_BUST: 4
     container_name: brcobranca-api
     restart: unless-stopped
     environment:
