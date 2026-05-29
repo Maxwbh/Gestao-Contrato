@@ -69,7 +69,7 @@ class BoletoService:
         '104': '1',        # Caixa (1=com registro)
         '237': '06',       # Bradesco
         '341': '175',      # Itau
-        '336': '1',        # C6 Bank
+        '336': '10',       # C6 Bank (10=emissao banco, 20=emissao cliente)
         '748': '3',        # Sicredi (3=sem registro)
         '756': '1',        # Sicoob
     }
@@ -78,7 +78,7 @@ class BoletoService:
     CAMPOS_BANCO = {
         '001': {'convenio_obrigatorio': True, 'convenio_len': 7},
         '033': {'convenio_obrigatorio': True, 'convenio_len': 7},
-        '336': {'convenio_obrigatorio': True},  # C6 Bank
+        '336': {'convenio_obrigatorio': True, 'nosso_numero_len': 10},  # C6 Bank (nosso numero 10 digitos, DV modulo 11)
         '104': {'emissao': '4', 'convenio_len': 6},
         '237': {'nosso_numero_len': 11},
         '341': {'seu_numero': True, 'nosso_numero_len': 8},
@@ -178,6 +178,11 @@ class BoletoService:
         # Aceita TODOS os campos da Base
         # IMPORTANTE: BRCobranca aceita APENAS documento_numero (não aceita numero_documento)
         '237': ['numero_documento'],
+
+        # C6 Bank (336)
+        # Aceita TODOS os campos da Base + convenio (12 dig) + carteira (10/20)
+        # IMPORTANTE: BRCobranca aceita APENAS documento_numero (não aceita numero_documento)
+        '336': ['numero_documento'],
 
         # Itau (341)
         # Aceita TODOS os campos da Base + seu_numero (para carteiras especificas)
@@ -337,6 +342,13 @@ class BoletoService:
             'agencia': 4,
             'conta_corrente': 7,
             'nosso_numero': 11,
+            'carteira': 2,
+        },
+        '336': {  # C6 Bank
+            'agencia': 4,
+            'conta_corrente': 8,
+            'convenio': 12,
+            'nosso_numero': 10,
             'carteira': 2,
         },
         '341': {  # Itau
@@ -669,6 +681,17 @@ class BoletoService:
             if dados.get('nosso_numero'):
                 dados['nosso_numero'] = str(dados['nosso_numero']).zfill(11)[:11]
 
+        # C6 Bank (336) — CNAB 400, carteiras 10/20, nosso numero 10 digitos (DV modulo 11)
+        elif codigo_banco == '336':
+            # Convenio (codigo do beneficiario) com 12 digitos
+            if not dados.get('convenio'):
+                dados['convenio'] = conta_bancaria.convenio or ''
+            if dados.get('convenio'):
+                dados['convenio'] = str(dados['convenio']).zfill(12)[:12]
+            # Nosso numero exatamente 10 digitos
+            if dados.get('nosso_numero'):
+                dados['nosso_numero'] = str(dados['nosso_numero']).zfill(10)[:10]
+
         # Itau (341)
         elif codigo_banco == '341':
             # Campo seu_numero para carteiras especiais (max 7 digitos)
@@ -816,6 +839,15 @@ class BoletoService:
                     'sucesso': False,
                     'erro': (
                         'Caixa Econômica requer o campo "Convênio" preenchido na conta bancária (6 dígitos). '
+                        'Acesse Configurações → Conta Bancária e informe o número do convênio.'
+                    )
+                }
+            if banco == '336' and not convenio:
+                return {
+                    'sucesso': False,
+                    'erro': (
+                        'C6 Bank requer o campo "Convênio" (código do beneficiário, 12 dígitos) '
+                        'preenchido na conta bancária. '
                         'Acesse Configurações → Conta Bancária e informe o número do convênio.'
                     )
                 }
