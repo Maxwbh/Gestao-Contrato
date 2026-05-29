@@ -179,26 +179,32 @@ const TIERS_URL  = '{% url "core:ia_workflow_tiers_salvar" pk=wf.pk %}';
 const ATIVAR_URL = '{% url "core:ia_workflow_ativar" pk=wf.pk %}';
 const REORDER_URL = '{% url "core:ia_workflow_tiers_reordenar" pk=wf.pk %}';
 
-// ── SortableJS ──────────────────────────────────────────────────────────────
+// ── SortableJS (drag-and-drop opcional — degrada se a lib não carregar) ──────
 const tierList = document.getElementById('tier-list');
-Sortable.create(tierList, {
-  handle: '.drag-handle',
-  animation: 150,
-  onEnd() {
-    renumerarTiers();
-    // Só envia IDs de tiers já persistidos (exclui "new")
-    const ids = [...tierList.querySelectorAll('.tier-row')]
-                 .map(r => r.dataset.tierId).filter(id => id !== 'new');
-    if (ids.length) {
-      fetch(REORDER_URL, {
-        method: 'POST',
-        headers: {'X-CSRFToken': CSRF, 'Content-Type': 'application/json'},
-        body: JSON.stringify({ids}),
-      });
-    }
-    atualizarDiagrama();
-  },
-});
+if (typeof Sortable !== 'undefined') {
+  Sortable.create(tierList, {
+    handle: '.drag-handle',
+    animation: 150,
+    onEnd() {
+      renumerarTiers();
+      // Só envia IDs de tiers já persistidos (exclui "new")
+      const ids = [...tierList.querySelectorAll('.tier-row')]
+                   .map(r => r.dataset.tierId).filter(id => id !== 'new');
+      if (ids.length) {
+        fetch(REORDER_URL, {
+          method: 'POST',
+          headers: {'X-CSRFToken': CSRF, 'Content-Type': 'application/json'},
+          body: JSON.stringify({ids}),
+        });
+      }
+      atualizarDiagrama();
+    },
+  });
+} else {
+  // CDN indisponível: esconde os handles de arrastar (reordenar fica via Salvar)
+  tierList.querySelectorAll('.drag-handle').forEach(h => h.style.display = 'none');
+  console.warn('SortableJS não carregou — drag-and-drop desabilitado.');
+}
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 function renumerarTiers() {
