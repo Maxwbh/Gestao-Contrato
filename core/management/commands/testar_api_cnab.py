@@ -67,6 +67,29 @@ CENARIOS = [
         'extras': {'codigo_empresa': '1234567', 'agencia': '1234'},
     },
     {
+        'label': 'C6 Bank CNAB400',
+        'bank': 'banco_c6',
+        'type': 'cnab400',
+        # C6 não usa 'convenio'/'variacao': a remessa exige 'codigo_beneficiario'.
+        'extras_remover': ['convenio', 'variacao'],
+        'extras': {
+            'codigo_beneficiario': '123456789012',  # até 12 dígitos
+            'carteira': '10',                        # 10=emissão banco, 20=emissão cliente
+            'agencia': '1234',
+        },
+    },
+    {
+        'label': 'C6 Bank CNAB400 (carteira 20 - emissão cliente)',
+        'bank': 'banco_c6',
+        'type': 'cnab400',
+        'extras_remover': ['convenio', 'variacao'],
+        'extras': {
+            'codigo_beneficiario': '123456789012',
+            'carteira': '20',
+            'agencia': '1234',
+        },
+    },
+    {
         'label': 'Sicoob CNAB400',
         'bank': 'sicoob',
         'type': 'cnab400',
@@ -76,6 +99,19 @@ CENARIOS = [
             'conta_corrente': '12345678',  # Sicoob: 8 dígitos
             'convenio': '123456789',       # Sicoob: 9 dígitos
             'sequencial_remessa': '0000001',  # Sicoob: 7 dígitos (string)
+        },
+    },
+    {
+        'label': 'Sicoob CNAB240',
+        'bank': 'sicoob',
+        'type': 'cnab240',
+        'extras_remover': ['variacao'],
+        'extras': {
+            'agencia': '3073',
+            'conta_corrente': '12345678',  # Sicoob: 8 dígitos
+            'convenio': '123456789',       # Sicoob: 9 dígitos
+            'carteira': '1',
+            'sequencial_remessa': '0000001',
         },
     },
 ]
@@ -88,7 +124,7 @@ class Command(BaseCommand):
         parser.add_argument(
             '--banco',
             default=None,
-            help='Código do banco (001=BB, 237=Bradesco, 756=Sicoob). Default: todos os cenários sintéticos.',
+            help='Código do banco (001=BB, 237=Bradesco, 336=C6, 756=Sicoob). Default: todos os cenários sintéticos.',
         )
         parser.add_argument(
             '--layout',

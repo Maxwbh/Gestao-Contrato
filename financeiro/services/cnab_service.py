@@ -336,6 +336,15 @@ class CNABService:
                     'Acesse Configurações → Conta Bancária e informe o número do convênio.'
                 )
             }
+        if conta_bancaria.banco == '336' and not conta_bancaria.convenio:
+            return {
+                'sucesso': False,
+                'erro': (
+                    'C6 Bank requer o campo "Convênio" (código do beneficiário, 12 dígitos) '
+                    'preenchido na conta bancária. '
+                    'Acesse Configurações → Conta Bancária e informe o número do convênio.'
+                )
+            }
         if conta_bancaria.banco == '748':
             posto = getattr(conta_bancaria, 'posto', '') or ''
             byte_idt = getattr(conta_bancaria, 'byte_idt', '') or ''
@@ -409,6 +418,13 @@ class CNABService:
         elif codigo_banco == '237':
             # Bradesco: codigo_empresa obrigatório
             dados_empresa['codigo_empresa'] = conta_bancaria.convenio or ''
+        elif codigo_banco == '336':
+            # C6 Bank (CNAB400): a remessa exige 'codigo_beneficiario' (até 12 dígitos),
+            # NÃO o campo 'convenio'. Carteira deve ser '10' (emissão banco) ou
+            # '20' (emissão cliente) — brcobranca valida via inclusion.
+            dados_empresa['codigo_beneficiario'] = re.sub(r'\D', '', conta_bancaria.convenio or '')[:12]
+            if not carteira_str:
+                dados_empresa['carteira'] = '10'
         elif codigo_banco == '756':
             # Sicoob: sequencial_remessa precisa ser string de 7 dígitos
             dados_empresa['sequencial_remessa'] = str(numero_remessa).zfill(7)[-7:]
