@@ -91,6 +91,48 @@ class TestBoletoServiceFiltroCampos:
         assert 'documento_numero' in dados_filtrados
 
 
+class TestBoletoServiceC6:
+    """C6 Bank (336) — suporte adicionado no boleto_cnab_api v1.3.0 / brcobranca 12.8.0.
+
+    Regras do gem (lib/brcobranca/boleto/banco_c6.rb):
+      - carteiras válidas: 10 (emissão banco) e 20 (emissão cliente); padrão 10
+      - nosso_numero: exatamente 10 dígitos (DV módulo 11)
+      - convênio (código do beneficiário): 12 dígitos
+      - CNAB 400 (remessa/retorno)
+    """
+
+    def test_carteira_padrao_c6_valida(self):
+        """Carteira padrão do C6 deve ser '10' (o gem rejeita '1')."""
+        assert BoletoService.CARTEIRAS_PADRAO['336'] == '10'
+
+    def test_c6_suporta_cnab_400(self):
+        """C6 deve oferecer remessa CNAB 400 após a atualização."""
+        from financeiro.services import bancos
+        assert bancos.suporta_cnab('336', 'CNAB_400')
+        assert not bancos.suporta_cnab('336', 'CNAB_240')
+
+    def test_c6_brcobranca_id(self):
+        """O identificador do C6 no BRCobrança deve ser 'banco_c6' (classe BancoC6)."""
+        from financeiro.services import bancos
+        assert bancos.brcobranca_id('336') == 'banco_c6'
+
+    def test_filtra_numero_documento_c6(self):
+        """C6 aceita apenas documento_numero (remove numero_documento)."""
+        service = BoletoService()
+        dados = {'numero_documento': 'CTR-001', 'documento_numero': 'CTR-001'}
+        dados_filtrados = service._filtrar_campos_banco(dados, '336')
+        assert 'numero_documento' not in dados_filtrados
+        assert 'documento_numero' in dados_filtrados
+
+    def test_nosso_numero_c6_padding_10_digitos(self):
+        """Nosso número do C6 deve ser normalizado para 10 dígitos."""
+        service = BoletoService()
+        dados = {'nosso_numero': '42', 'convenio': '12345'}
+        dados_filtrados = service._filtrar_campos_banco(dados, '336')
+        assert dados_filtrados['nosso_numero'] == '0000000042'
+        assert len(dados_filtrados['nosso_numero']) == 10
+
+
 @pytest.mark.integration
 class TestBoletoServiceIntegracao:
     """Testes de integração com a API BRCobranca"""

@@ -7,7 +7,11 @@ Cadeia de modelos (custo crescente, acionados apenas se necessário):
   Tier 0 — Gemini 2.0 Flash  (gratuito, 1.500 req/dia) — requer GEMINI_API_KEY
   Tier 1 — Claude Haiku 4.5  (~$0,01–0,02/contrato)
   Tier 2 — Claude Sonnet 4.6 (~$0,05–0,08/contrato)
-  Tier 3 — Claude Opus 4.7   (~$0,30–0,45/contrato)  — último recurso
+  Tier 3 — Claude Opus 4.8   (~$0,15–0,25/contrato)  — último recurso
+
+A cascade escala para o próximo tier quando a confiança extraída não é ALTO
+OU quando um tier falha (limite mensal, erro de API, JSON inválido). Só falha
+de fato se nenhum tier produzir um resultado utilizável.
 """
 import base64
 import json
@@ -20,6 +24,38 @@ from django.conf import settings
 from django.db import transaction
 
 logger = logging.getLogger(__name__)
+
+# Modelo gratuito do Tier 0. Centralizado para facilitar migração entre
+# versões do Gemini (ex.: gemini-2.0-flash → gemini-2.5-flash).
+_GEMINI_MODEL = 'gemini-2.0-flash'
+
+# Cascade padrão hardcoded — usada como fallback quando não há WorkflowIA ativo.
+_TIERS_CLAUDE = (
+    'claude-haiku-4-5-20251001',  # Tier 1 — barato: contratos legíveis e padronizados
+    'claude-sonnet-4-6',          # Tier 2 — intermediário: maioria dos casos difíceis
+    'claude-opus-4-8',            # Tier 3 — caro: último recurso para documentos muito difíceis
+)
+
+
+def _carregar_tiers_workflow() -> tuple:
+    """
+    Retorna tuple de modelos para a cascade Claude.
+    Se houver WorkflowIA ativo com tiers habilitados, usa o DB.
+    Caso contrário, usa _TIERS_CLAUDE como fallback.
+    Falha silenciosamente para nunca quebrar importações em produção.
+    """
+    try:
+        from core.models import WorkflowIA
+        wf = WorkflowIA.objects.filter(ativo=True).prefetch_related('tiers').first()
+        if wf is None:
+            return _TIERS_CLAUDE
+        tiers = tuple(
+            wf.tiers.filter(habilitado=True).order_by('ordem').values_list('modelo', flat=True)
+        )
+        return tiers if tiers else _TIERS_CLAUDE
+    except Exception:
+        return _TIERS_CLAUDE
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Prompt de extração
@@ -181,7 +217,7 @@ class ImportacaoIA:
             return None
         try:
             from core.services.ia_monitor import checar_limite, LimiteUsoIAExcedido
-            checar_limite(modelo='gemini-2.0-flash', operacao='IMPORTACAO_PDF')
+            checar_limite(modelo=_GEMINI_MODEL, operacao='IMPORTACAO_PDF')
         except LimiteUsoIAExcedido as e:
             logger.info('Gemini bloqueado por limite mensal (%s) — escalando para cadeia Claude', e)
             return None
@@ -192,7 +228,7 @@ class ImportacaoIA:
             return None
         try:
             genai.configure(api_key=api_key)
-            model = genai.GenerativeModel('gemini-2.0-flash')
+            model = genai.GenerativeModel(_GEMINI_MODEL)
             content = [{'mime_type': p['mime_type'], 'data': p['data']} for p in partes]
             content.append(_PROMPT)
             resposta = model.generate_content(content)
@@ -204,7 +240,7 @@ class ImportacaoIA:
             from core.services.ia_monitor import registrar, PROVIDER_GOOGLE, OP_IMPORTACAO_PDF
             registrar(
                 provider=PROVIDER_GOOGLE,
-                modelo='gemini-2.0-flash',
+                modelo=_GEMINI_MODEL,
                 operacao=OP_IMPORTACAO_PDF,
                 tokens_input=tok_in,
                 tokens_output=tok_out,
@@ -225,38 +261,47 @@ class ImportacaoIA:
             return None
 
     def _call(self, content: list) -> dict:
+        """
+        Percorre a cascade Claude. Um tier que retorna confiança ALTO encerra
+        a cadeia. Falhas (limite mensal, erro de API, JSON inválido) NÃO abortam
+        a importação: escalam para o próximo tier. Só propaga erro se nenhum
+        tier produzir resultado algum.
+        """
         from core.services.ia_monitor import LimiteUsoIAExcedido
 
-        # Tier 1 — Haiku (barato): basta para contratos legíveis e padronizados
-        try:
-            dados = self._invocar('claude-haiku-4-5-20251001', content)
-            if dados.get('confianca', {}).get('nivel') == 'ALTO':
-                return dados
-        except LimiteUsoIAExcedido:
-            logger.info('Haiku bloqueado por limite mensal — escalando para Sonnet')
-            dados = {}
+        melhor: dict = {}
+        ultimo_erro: Exception | None = None
 
-        # Tier 2 — Sonnet (intermediário): cobre a maioria dos casos difíceis
-        logger.info(
-            'Haiku confiança=%s campos_incertos=%s — escalando para Sonnet',
-            dados.get('confianca', {}).get('nivel'),
-            dados.get('confianca', {}).get('campos_incertos', []),
-        )
-        try:
-            dados = self._invocar('claude-sonnet-4-6', content)
-            if dados.get('confianca', {}).get('nivel') == 'ALTO':
-                return dados
-        except LimiteUsoIAExcedido:
-            logger.info('Sonnet bloqueado por limite mensal — escalando para Opus')
-            dados = {}
+        tiers = _carregar_tiers_workflow()
+        for idx, modelo in enumerate(tiers):
+            final = idx == len(tiers) - 1
+            try:
+                dados = self._invocar(modelo, content)
+            except LimiteUsoIAExcedido as exc:
+                ultimo_erro = exc
+                logger.info('%s bloqueado por limite mensal — escalando para o próximo tier', modelo)
+                continue
+            except Exception as exc:
+                ultimo_erro = exc
+                logger.warning('%s falhou (%s) — escalando para o próximo tier', modelo, type(exc).__name__)
+                continue
 
-        # Tier 3 — Opus (caro): reservado para documentos muito difíceis
-        logger.info(
-            'Sonnet confiança=%s campos_incertos=%s — escalando para Opus',
-            dados.get('confianca', {}).get('nivel'),
-            dados.get('confianca', {}).get('campos_incertos', []),
-        )
-        return self._invocar('claude-opus-4-7', content)  # LimiteUsoIAExcedido propaga
+            melhor = dados  # guarda o último resultado utilizável obtido
+            nivel = (dados.get('confianca') or {}).get('nivel')
+            if nivel == 'ALTO' or final:
+                return dados
+            logger.info(
+                '%s confiança=%s campos_incertos=%s — escalando para o próximo tier',
+                modelo, nivel, (dados.get('confianca') or {}).get('campos_incertos', []),
+            )
+
+        # Nenhum tier retornou ALTO ou o tier final falhou. Usa o melhor
+        # resultado parcial disponível; se nenhum tier respondeu, propaga o erro.
+        if melhor:
+            return melhor
+        if ultimo_erro:
+            raise ultimo_erro
+        raise RuntimeError('Cadeia de IA não retornou nenhum resultado.')
 
     def _invocar(self, model: str, content: list) -> dict:
         from core.services.ia_monitor import checar_limite, LimiteUsoIAExcedido

@@ -2410,7 +2410,7 @@ class WhatsAppBotService:
 
 | Modelo | Latência | Custo/1k tokens | Custo/mês (500 conv.) |
 |--------|----------|-----------------|----------------------|
-| `claude-haiku-4-5` | ~400ms | Input: $0.80 / Output: $4.00 | ~R$ 8–15 |
+| `claude-haiku-4-5` | ~400ms | Input: $1.00 / Output: $5.00 | ~R$ 10–18 |
 | `claude-sonnet-4-6` | ~1.2s | Input: $3.00 / Output: $15.00 | ~R$ 40–80 |
 
 > **Recomendação:** Usar `claude-haiku-4-5` para classificação de intent (barato, rápido)
@@ -3001,7 +3001,7 @@ Fluxo completo de cadastro de contrato a partir de um PDF ou fotos: o usuário f
 | # | Item | Status |
 |---|------|--------|
 | 34.7.1 | Upload de PDF ou múltiplas imagens (drag-and-drop, multi-arquivo, validação de tipo/tamanho) | ✅ |
-| 34.7.2 | Extração via Claude API (`claude-opus-4-7`) — prompt estruturado retorna JSON com todos os campos do contrato, dados de Imobiliária, Comprador, Imóvel e Prestações Intermediárias | ✅ |
+| 34.7.2 | Extração via Claude API (`claude-opus-4-8`) — prompt estruturado retorna JSON com todos os campos do contrato, dados de Imobiliária, Comprador, Imóvel e Prestações Intermediárias | ✅ |
 | 34.7.3 | Nível de confiança por campo (`ALTO/MEDIO/BAIXO`) — campos incertos destacados com borda amarela na revisão | ✅ |
 | 34.7.4 | `ProcessadorImportacao`: match de entidades existentes por CNPJ/CPF/matrícula antes de propor criação | ✅ |
 | 34.7.5 | Formulário de revisão pré-preenchido — operador corrige e confirma antes do cadastro | ✅ |
