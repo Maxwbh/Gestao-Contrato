@@ -2662,6 +2662,15 @@ def ia_workflow_excluir(request, pk):
 
 @login_required
 @require_http_methods(['POST'])
+def ia_workflow_desativar(request, pk):
+    from .models import WorkflowIA
+    wf = get_object_or_404(WorkflowIA, pk=pk)
+    wf.desativar()
+    return JsonResponse({'status': 'ok'})
+
+
+@login_required
+@require_http_methods(['POST'])
 def ia_workflow_tiers_salvar(request, pk):
     import json as _json
     from django.db import transaction
@@ -2672,11 +2681,12 @@ def ia_workflow_tiers_salvar(request, pk):
         tiers_data = payload.get('tiers', [])
     except (ValueError, AttributeError):
         return JsonResponse({'status': 'erro', 'msg': 'Payload inválido.'}, status=400)
+    valid_models = {m[0] for m in WorkflowIATier.MODELO_CHOICES}
     with transaction.atomic():
         wf.tiers.all().delete()
         for idx, t in enumerate(tiers_data, start=1):
             modelo = str(t.get('modelo', '')).strip()
-            if modelo:
+            if modelo and modelo in valid_models:
                 WorkflowIATier.objects.create(
                     workflow=wf,
                     modelo=modelo,
@@ -2690,12 +2700,20 @@ def ia_workflow_tiers_salvar(request, pk):
 @require_http_methods(['POST'])
 def ia_workflow_tiers_reordenar(request, pk):
     import json as _json
+    from django.db import transaction
     from .models import WorkflowIA, WorkflowIATier
     wf = get_object_or_404(WorkflowIA, pk=pk)
     try:
         ids = _json.loads(request.body).get('ids', [])
-    except (ValueError, AttributeError):
-        return JsonResponse({'status': 'erro', 'msg': 'Payload inválido.'}, status=400)
-    for idx, tier_id in enumerate(ids, start=1):
-        WorkflowIATier.objects.filter(pk=int(tier_id), workflow=wf).update(ordem=idx)
+        ids = [int(i) for i in ids]
+    except (ValueError, AttributeError, TypeError):
+        return JsonResponse({'status': 'erro', 'msg': 'IDs inválidos.'}, status=400)
+    with transaction.atomic():
+        # Offset temporário para evitar violação unique_together ao reordenar
+        offset = 10000
+        from django.db.models import F
+        for tier_id in ids:
+            WorkflowIATier.objects.filter(pk=tier_id, workflow=wf).update(ordem=F('ordem') + offset)
+        for idx, tier_id in enumerate(ids, start=1):
+            WorkflowIATier.objects.filter(pk=tier_id, workflow=wf).update(ordem=idx)
     return JsonResponse({'status': 'ok'})

@@ -163,3 +163,51 @@ class TestIaWorkflowViews:
         assert r.status_code == 200
         assert r.json()['count'] == 2
         assert wf.tiers.count() == 2
+
+    def test_tiers_salvar_lista_vazia_apaga_tiers(self, staff_client, wf_com_tiers):
+        url = reverse('core:ia_workflow_tiers_salvar', kwargs={'pk': wf_com_tiers.pk})
+        r = staff_client.post(url, content_type='application/json', data=json.dumps({'tiers': []}))
+        assert r.status_code == 200
+        assert wf_com_tiers.tiers.count() == 0
+
+    def test_tiers_salvar_modelo_invalido_ignorado(self, staff_client, wf):
+        url = reverse('core:ia_workflow_tiers_salvar', kwargs={'pk': wf.pk})
+        payload = {'tiers': [{'modelo': 'gpt-injetado', 'habilitado': True}]}
+        r = staff_client.post(url, content_type='application/json', data=json.dumps(payload))
+        assert r.status_code == 200
+        assert wf.tiers.count() == 0  # modelo inválido ignorado
+
+    def test_desativar_post_json_ok(self, staff_client, wf):
+        wf.ativar()
+        r = staff_client.post(
+            reverse('core:ia_workflow_desativar', kwargs={'pk': wf.pk}),
+            content_type='application/json',
+            data='{}',
+        )
+        assert r.status_code == 200
+        wf.refresh_from_db()
+        assert not wf.ativo
+
+    def test_reordenar_atualiza_ordem(self, staff_client, wf_com_tiers):
+        tiers = list(wf_com_tiers.tiers.order_by('ordem'))
+        assert tiers[0].modelo == 'claude-haiku-4-5-20251001'
+        assert tiers[1].modelo == 'claude-sonnet-4-6'
+        # Inverte a ordem
+        ids_invertidos = [str(tiers[1].pk), str(tiers[0].pk)]
+        r = staff_client.post(
+            reverse('core:ia_workflow_tiers_reordenar', kwargs={'pk': wf_com_tiers.pk}),
+            content_type='application/json',
+            data=json.dumps({'ids': ids_invertidos}),
+        )
+        assert r.status_code == 200
+        tiers_atualizados = list(wf_com_tiers.tiers.order_by('ordem'))
+        assert tiers_atualizados[0].modelo == 'claude-sonnet-4-6'
+        assert tiers_atualizados[1].modelo == 'claude-haiku-4-5-20251001'
+
+    def test_reordenar_id_invalido_retorna_400(self, staff_client, wf):
+        r = staff_client.post(
+            reverse('core:ia_workflow_tiers_reordenar', kwargs={'pk': wf.pk}),
+            content_type='application/json',
+            data=json.dumps({'ids': ['nao-e-numero']}),
+        )
+        assert r.status_code == 400

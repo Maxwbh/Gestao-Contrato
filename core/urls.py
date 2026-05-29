@@ -121,6 +121,7 @@ urlpatterns = [
     path('ia/workflow/novo/', views.ia_workflow_novo, name='ia_workflow_novo'),
     path('ia/workflow/<int:pk>/editar/', views.ia_workflow_editar, name='ia_workflow_editar'),
     path('ia/workflow/<int:pk>/ativar/', views.ia_workflow_ativar, name='ia_workflow_ativar'),
+    path('ia/workflow/<int:pk>/desativar/', views.ia_workflow_desativar, name='ia_workflow_desativar'),
     path('ia/workflow/<int:pk>/excluir/', views.ia_workflow_excluir, name='ia_workflow_excluir'),
     path('ia/workflow/<int:pk>/tiers/', views.ia_workflow_tiers_salvar, name='ia_workflow_tiers_salvar'),
     path('ia/workflow/<int:pk>/reordenar/', views.ia_workflow_tiers_reordenar, name='ia_workflow_tiers_reordenar'),

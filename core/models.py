@@ -1653,8 +1653,14 @@ class WorkflowIA(TimeStampedModel):
         return f'{self.nome} [ATIVO]' if self.ativo else self.nome
 
     def ativar(self):
-        WorkflowIA.objects.exclude(pk=self.pk).update(ativo=False)
-        self.ativo = True
+        from django.db import transaction
+        with transaction.atomic():
+            WorkflowIA.objects.select_for_update().filter(ativo=True).exclude(pk=self.pk).update(ativo=False)
+            self.ativo = True
+            self.save(update_fields=['ativo'])
+
+    def desativar(self):
+        self.ativo = False
         self.save(update_fields=['ativo'])
 
 

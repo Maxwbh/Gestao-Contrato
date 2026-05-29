@@ -4,6 +4,9 @@
 {% block title %}Workflows de IA{% endblock %}
 
 {% block content %}
+{# CSRF token hidden input — lido pelo JS via DOM (seguro mesmo com CSRF_COOKIE_HTTPONLY=True) #}
+<form id="csrf-form" style="display:none">{% csrf_token %}</form>
+
 <div class="container-fluid py-4">
 
   <div class="d-flex justify-content-between align-items-center mb-4">
@@ -67,14 +70,22 @@
                 <i class="fas fa-edit me-1"></i>Editar
               </a>
               {% if not wf.ativo %}
-                <button class="btn btn-outline-success btn-sm btn-ativar" data-pk="{{ wf.pk }}" data-nome="{{ wf.nome }}">
+                <button class="btn btn-outline-success btn-sm btn-ativar"
+                        data-pk="{{ wf.pk }}"
+                        data-nome="{{ wf.nome|escapejs }}"
+                        data-url="{% url 'core:ia_workflow_ativar' pk=wf.pk %}">
                   <i class="fas fa-play me-1"></i>Ativar
                 </button>
-                <button class="btn btn-outline-danger btn-sm btn-excluir" data-pk="{{ wf.pk }}" data-nome="{{ wf.nome }}">
+                <button class="btn btn-outline-danger btn-sm btn-excluir"
+                        data-pk="{{ wf.pk }}"
+                        data-nome="{{ wf.nome|escapejs }}"
+                        data-url="{% url 'core:ia_workflow_excluir' pk=wf.pk %}">
                   <i class="fas fa-trash me-1"></i>Excluir
                 </button>
               {% else %}
-                <button class="btn btn-outline-secondary btn-sm btn-desativar" data-pk="{{ wf.pk }}">
+                <button class="btn btn-outline-secondary btn-sm btn-desativar"
+                        data-pk="{{ wf.pk }}"
+                        data-url="{% url 'core:ia_workflow_desativar' pk=wf.pk %}">
                   <i class="fas fa-stop me-1"></i>Desativar
                 </button>
               {% endif %}
@@ -121,20 +132,19 @@
 </div>
 
 <script>
-const csrfToken = document.cookie.match(/csrftoken=([^;]+)/)?.[1] || '';
+const CSRF = document.querySelector('#csrf-form [name=csrfmiddlewaretoken]').value;
 
 function postJson(url) {
   return fetch(url, {
     method: 'POST',
-    headers: {'X-CSRFToken': csrfToken, 'Content-Type': 'application/json'},
+    headers: {'X-CSRFToken': CSRF, 'Content-Type': 'application/json'},
     body: '{}',
   }).then(r => r.json());
 }
 
 document.querySelectorAll('.btn-ativar').forEach(btn => {
   btn.addEventListener('click', () => {
-    const pk = btn.dataset.pk;
-    postJson(`/ia/workflow/${pk}/ativar/`).then(data => {
+    postJson(btn.dataset.url).then(data => {
       if (data.status === 'ok') location.reload();
       else alert(data.msg || 'Erro ao ativar.');
     });
@@ -144,9 +154,8 @@ document.querySelectorAll('.btn-ativar').forEach(btn => {
 document.querySelectorAll('.btn-excluir').forEach(btn => {
   btn.addEventListener('click', () => {
     if (!confirm(`Excluir o workflow "${btn.dataset.nome}"?`)) return;
-    const pk = btn.dataset.pk;
-    postJson(`/ia/workflow/${pk}/excluir/`).then(data => {
-      if (data.status === 'ok') document.getElementById(`wf-card-${pk}`)?.remove();
+    postJson(btn.dataset.url).then(data => {
+      if (data.status === 'ok') document.getElementById(`wf-card-${btn.dataset.pk}`)?.remove();
       else alert(data.msg || 'Erro ao excluir.');
     });
   });
@@ -154,12 +163,10 @@ document.querySelectorAll('.btn-excluir').forEach(btn => {
 
 document.querySelectorAll('.btn-desativar').forEach(btn => {
   btn.addEventListener('click', () => {
-    const pk = btn.dataset.pk;
-    fetch(`/ia/workflow/${pk}/ativar/`, {
-      method: 'POST',
-      headers: {'X-CSRFToken': csrfToken, 'Content-Type': 'application/json'},
-      body: JSON.stringify({desativar: true}),
-    }).then(() => location.reload());
+    postJson(btn.dataset.url).then(data => {
+      if (data.status === 'ok') location.reload();
+      else alert(data.msg || 'Erro ao desativar.');
+    });
   });
 });
 </script>

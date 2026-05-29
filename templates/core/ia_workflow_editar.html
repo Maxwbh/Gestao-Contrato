@@ -3,6 +3,9 @@
 {% block title %}Editar Workflow — {{ wf.nome }}{% endblock %}
 
 {% block content %}
+{# CSRF token hidden input — lido pelo JS via DOM (seguro mesmo com CSRF_COOKIE_HTTPONLY=True) #}
+<form id="csrf-form" style="display:none">{% csrf_token %}</form>
+
 <div class="container-fluid py-4">
 
   <!-- Breadcrumb -->
@@ -170,11 +173,11 @@
 
 <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
 <script>
-const CSRF = document.cookie.match(/csrftoken=([^;]+)/)?.[1] || '';
-const WF_PK = {{ wf.pk }};
-const TIERS_URL  = `/ia/workflow/${WF_PK}/tiers/`;
-const ATIVAR_URL = `/ia/workflow/${WF_PK}/ativar/`;
-const REORDER_URL = `/ia/workflow/${WF_PK}/reordenar/`;
+// URLs geradas pelo Django — independentes de subpath de deployment
+const CSRF       = document.querySelector('#csrf-form [name=csrfmiddlewaretoken]').value;
+const TIERS_URL  = '{% url "core:ia_workflow_tiers_salvar" pk=wf.pk %}';
+const ATIVAR_URL = '{% url "core:ia_workflow_ativar" pk=wf.pk %}';
+const REORDER_URL = '{% url "core:ia_workflow_tiers_reordenar" pk=wf.pk %}';
 
 // ── SortableJS ──────────────────────────────────────────────────────────────
 const tierList = document.getElementById('tier-list');
@@ -183,7 +186,7 @@ Sortable.create(tierList, {
   animation: 150,
   onEnd() {
     renumerarTiers();
-    // AJAX reorder
+    // Só envia IDs de tiers já persistidos (exclui "new")
     const ids = [...tierList.querySelectorAll('.tier-row')]
                  .map(r => r.dataset.tierId).filter(id => id !== 'new');
     if (ids.length) {
@@ -225,37 +228,63 @@ function atualizarCostBadge(row) {
 
 function atualizarDiagrama() {
   const rows = [...tierList.querySelectorAll('.tier-row')];
-  let html = `
-    <div class="d-flex flex-column align-items-center gap-0">
-      <div class="rounded px-3 py-2 text-center border border-success bg-success bg-opacity-10" style="width:100%">
-        <div class="small fw-semibold text-success">Tier 0</div>
-        <div class="small">Gemini 2.0 Flash</div>
-        <div class="badge bg-success mt-1">Grátis</div>
-      </div>`;
+  // Diagrama construído com createElement — nunca innerHTML com dados do usuário
+  const wrap = document.createElement('div');
+  wrap.className = 'd-flex flex-column align-items-center gap-0';
+
+  const tier0 = document.createElement('div');
+  tier0.className = 'rounded px-3 py-2 text-center border border-success bg-success bg-opacity-10';
+  tier0.style.width = '100%';
+  tier0.innerHTML = '<div class="small fw-semibold text-success">Tier 0</div>' +
+                    '<div class="small">Gemini 2.0 Flash</div>' +
+                    '<div class="badge bg-success mt-1">Grátis</div>';
+  wrap.appendChild(tier0);
+
   rows.forEach((row, i) => {
     const sel = row.querySelector('.modelo-select');
     const opt = sel.options[sel.selectedIndex];
     const hab = row.querySelector('.hab-toggle').checked;
     const p = getPreco(sel);
-    html += `<div class="text-muted" style="line-height:1.2">▼</div>
-      <div class="rounded px-3 py-2 text-center border ${hab ? '' : 'opacity-50'}" style="width:100%">
-        <div class="small fw-semibold text-primary">Tier ${i+1}</div>
-        <div class="small">${opt.text}</div>
-        <div class="text-muted" style="font-size:0.7rem">$${p.input}/$${p.output}/MTok</div>
-      </div>`;
-  });
-  html += `</div>`;
-  document.getElementById('diagrama').innerHTML = html;
 
-  // Custo resumo
+    const arrow = document.createElement('div');
+    arrow.className = 'text-muted';
+    arrow.style.lineHeight = '1.2';
+    arrow.textContent = '▼';
+    wrap.appendChild(arrow);
+
+    const box = document.createElement('div');
+    box.className = `rounded px-3 py-2 text-center border${hab ? '' : ' opacity-50'}`;
+    box.style.width = '100%';
+
+    const t = document.createElement('div');
+    t.className = 'small fw-semibold text-primary';
+    t.textContent = `Tier ${i + 1}`;
+
+    const m = document.createElement('div');
+    m.className = 'small';
+    m.textContent = opt.text;
+
+    const c = document.createElement('div');
+    c.className = 'text-muted';
+    c.style.fontSize = '0.7rem';
+    c.textContent = `$${p.input}/$${p.output}/MTok`;
+
+    box.appendChild(t); box.appendChild(m); box.appendChild(c);
+    wrap.appendChild(box);
+  });
+
+  const diagrama = document.getElementById('diagrama');
+  diagrama.replaceChildren(wrap);
+
+  // Custo resumo (apenas cálculo numérico — sem dados do usuário no DOM)
   let max = 0;
   rows.filter(r => r.querySelector('.hab-toggle').checked).forEach(row => {
     const p = getPreco(row.querySelector('.modelo-select'));
     max += (p.input * 3000 + p.output * 1000) / 1_000_000;
   });
   const maxR = (max * 5.80).toFixed(3);
-  document.getElementById('custo-resumo').innerHTML =
-    `<span class="text-muted">Pior caso (all tiers): ~$${max.toFixed(4)} USD / ~R$ ${maxR}</span>`;
+  const resumo = document.getElementById('custo-resumo');
+  resumo.textContent = `Pior caso (all tiers): ~$${max.toFixed(4)} USD / ~R$ ${maxR}`;
 }
 
 // ── Event listeners ──────────────────────────────────────────────────────────
@@ -298,9 +327,13 @@ async function salvarTiers(ativar = false) {
   });
   const data = await r.json();
   const fb = document.getElementById('save-feedback');
+  fb.style.display = '';
   if (data.status === 'ok') {
-    fb.innerHTML = '<span class="text-success small"><i class="fas fa-check me-1"></i>Tiers salvos.</span>';
-    fb.style.display = '';
+    // Mensagem de sucesso — hardcoded, sem dados do usuário
+    const span = document.createElement('span');
+    span.className = 'text-success small';
+    span.innerHTML = '<i class="fas fa-check me-1"></i>Tiers salvos.';
+    fb.replaceChildren(span);
     if (ativar) {
       await fetch(ATIVAR_URL, {
         method: 'POST',
@@ -310,8 +343,11 @@ async function salvarTiers(ativar = false) {
       location.reload();
     }
   } else {
-    fb.innerHTML = `<span class="text-danger small">${data.msg || 'Erro ao salvar.'}</span>`;
-    fb.style.display = '';
+    const span = document.createElement('span');
+    span.className = 'text-danger small';
+    // textContent evita XSS — data.msg vem do servidor mas pode mudar futuramente
+    span.textContent = data.msg || 'Erro ao salvar.';
+    fb.replaceChildren(span);
   }
 }
 
