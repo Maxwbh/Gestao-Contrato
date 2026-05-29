@@ -103,7 +103,7 @@ Sistema desenvolvido para contabilidades que gerenciam múltiplos loteamentos, p
 
 ### 9. Importação de Contratos via IA
 - ✅ **Upload de PDF ou fotos** (múltiplas imagens) via drag-and-drop — máx 20 MB por arquivo
-- ✅ **Extração automática** por Claude API (`claude-opus-4-7`): todos os campos do contrato, Imobiliária, Comprador, Imóvel e Prestações Intermediárias extraídos como JSON estruturado
+- ✅ **Extração automática** por Claude API (`claude-opus-4-8`): todos os campos do contrato, Imobiliária, Comprador, Imóvel e Prestações Intermediárias extraídos como JSON estruturado
 - ✅ **Nível de confiança** por campo (`ALTO/MEDIO/BAIXO`) — campos incertos destacados no formulário de revisão
 - ✅ **Match inteligente** de entidades existentes por CNPJ/CPF/matrícula antes de propor criação de novas
 - ✅ **Revisão humana** obrigatória antes do cadastro — formulário pré-preenchido editável

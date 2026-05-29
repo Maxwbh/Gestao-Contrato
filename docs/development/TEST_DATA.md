@@ -13,6 +13,7 @@ O sistema gera automaticamente:
 
 - ✅ **1 Contabilidade** - Contabilidade Sete Lagoas
 - ✅ **2 Imobiliárias** - Lagoa Real e Sete Colinas
+- ✅ **8 Contas Bancárias** - BB, Sicoob, Bradesco e C6 Bank (4 contas × 2 imobiliárias)
 - ✅ **60 Lotes** - 2 loteamentos com 30 lotes cada em Sete Lagoas
 - ✅ **5 Terrenos** - Em bairros de Sete Lagoas
 - ✅ **60 Compradores** - Com dados realistas (CPF, endereço, etc.)
@@ -99,14 +100,19 @@ Para gerar via POST, use uma ferramenta como Postman ou Thunder Client.
 - Responsável: Maxwell da Silva Oliveira
 - Localização: Sete Lagoas/MG
 
-### Imobiliárias
-1. **Imobiliária Lagoa Real**
-   - CNPJ: 23.456.780/0001-10
-   - Banco: Banco do Brasil
+### Imobiliárias e Contas Bancárias
 
-2. **Imobiliária Sete Colinas**
-   - CNPJ: 23.456.781/0001-11
-   - Banco: Banco do Brasil
+Cada imobiliária possui **4 contas bancárias** (uma por banco):
+
+| Banco | Código | Layout CNAB | Carteira | Convênio |
+|-------|--------|-------------|----------|----------|
+| Banco do Brasil | 001 | CNAB 240 | 18 | 12345678 |
+| Sicoob | 756 | CNAB 240 | 1 | 1234567 |
+| Bradesco | 237 | CNAB 400 | 06 | — |
+| C6 Bank | 336 | CNAB 400 | 10 | 123456789012 |
+
+1. **Imobiliária Lagoa Real** — CNPJ: 23.456.780/0001-10
+2. **Imobiliária Sete Colinas** — CNPJ: 23.456.781/0001-11
 
 ### Loteamentos
 
@@ -251,19 +257,26 @@ numero_parcelas = random.randint(120, 240)  # 120 a 240 meses
 Iniciando geração de dados de teste...
 Criando Contabilidade...
 Criando Imobiliárias...
+Criando Contas Bancárias...
 Criando Loteamentos...
 Criando Terrenos...
 Criando Compradores...
 Criando Contratos...
 Marcando parcelas como pagas...
+Simulando boletos gerados (para demo de remessa)...
+   → 001 - Banco do Brasil (001): N boletos simulados
+   → 756 - Sicoob (756): N boletos simulados
+   → 237 - Bradesco (237): N boletos simulados
+   → 336 - C6 Bank (336): N boletos simulados
 
 ✅ Dados gerados com sucesso!
    • 1 Contabilidade
    • 2 Imobiliárias
+   • 8 Contas Bancárias
    • 60 Lotes
    • 5 Terrenos
    • 60 Compradores
-   • 65 Contratos
+   • 65+ Contratos
 ```
 
 ---

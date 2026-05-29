@@ -470,6 +470,168 @@ class TestCNABServiceIntegracao(TestCase):
         self.assertIsInstance(boletos, list)
 
 
+class TestRemessaPayloadPorBanco(TestCase):
+    """Cenários de remessa por banco: C6 (336), Bradesco (237) e Sicoob (756).
+
+    Valida que o payload JSON enviado para POST /api/remessa contém os campos
+    específicos que cada banco exige no brcobranca (boleto_cnab_api v1.3.0 /
+    brcobranca 12.8.0), já que o FieldMapper da API NÃO renomeia chaves de
+    cabeçalho — cada campo precisa ser enviado com o nome exato.
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        from core.models import Contabilidade, Imobiliaria, Comprador, Imovel
+        from contratos.models import Contrato, TipoCorrecao, StatusContrato
+        from financeiro.models import Parcela, StatusBoleto
+
+        cls.contabilidade = Contabilidade.objects.create(
+            nome='Contabilidade Payload', razao_social='Contabilidade Payload LTDA',
+            cnpj='12121212000112', endereco='Rua Payload, 100',
+            telefone='(31) 3333-1212', email='payload@contabilidade.com',
+            responsavel='Responsável Payload',
+        )
+        cls.imobiliaria = Imobiliaria.objects.create(
+            contabilidade=cls.contabilidade, nome='Imobiliária Payload',
+            razao_social='Imobiliária Payload LTDA', cnpj='13131313000113',
+            telefone='(31) 3333-1313', email='payload@imobiliaria.com',
+            responsavel_financeiro='Responsável Financeiro Payload',
+        )
+        cls.comprador = Comprador.objects.create(
+            nome='Comprador Payload', tipo_pessoa='PF', cpf='141.414.141-40',
+            telefone='(31) 3333-1414', celular='(31) 99999-1414',
+            email='payload@comprador.com', logradouro='Rua Teste', numero='123',
+            bairro='Centro', cidade='São Paulo', estado='SP', cep='01234-567',
+        )
+        cls.imovel = Imovel.objects.create(
+            imobiliaria=cls.imobiliaria, identificacao='LOTE-PAY-001', area='360.00',
+        )
+        cls.contrato = Contrato.objects.create(
+            imobiliaria=cls.imobiliaria, comprador=cls.comprador, imovel=cls.imovel,
+            numero_contrato='CONT-PAY-001',
+            data_contrato=date.today() - timedelta(days=30),
+            data_primeiro_vencimento=date.today() + timedelta(days=30),
+            valor_total=Decimal('100000.00'), valor_entrada=Decimal('10000.00'),
+            numero_parcelas=24, dia_vencimento=10, tipo_correcao=TipoCorrecao.IPCA,
+            status=StatusContrato.ATIVO,
+        )
+        # Garante 2 parcelas com boleto gerado e nosso_numero preenchido
+        for i in range(1, 3):
+            cls.contrato.parcelas.filter(numero_parcela=i).update(
+                pago=False, status_boleto=StatusBoleto.GERADO,
+                valor_boleto=Decimal('3750.00'),
+                nosso_numero=f'00000000{i:02d}',
+                numero_documento=f'CONT-PAY-001-{i:03d}',
+            )
+        cls.parcelas = list(
+            Parcela.objects.filter(
+                contrato=cls.contrato, status_boleto=StatusBoleto.GERADO, pago=False
+            )[:2]
+        )
+
+    def _criar_conta(self, **kwargs):
+        from financeiro.models import ContaBancaria
+        defaults = dict(
+            imobiliaria=self.imobiliaria, descricao='Conta Payload',
+            agencia='1234', conta='12345-6', convenio='0123456', carteira='1',
+        )
+        defaults.update(kwargs)
+        return ContaBancaria.objects.create(**defaults)
+
+    @staticmethod
+    def _ok_response():
+        resp = MagicMock()
+        resp.status_code = 200
+        resp.content = b'ARQUIVO REMESSA\n'
+        return resp
+
+    def _payload_e_params(self, mock_post):
+        """Extrai (payload_json, params) da chamada feita a requests.post."""
+        import json
+        self.assertTrue(mock_post.called, 'requests.post deveria ter sido chamado')
+        _, kwargs = mock_post.call_args
+        _, content, _ = kwargs['files']['data']
+        payload = json.loads(content.decode('utf-8'))
+        return payload, kwargs['params']
+
+    @patch('requests.post')
+    def test_c6_envia_codigo_beneficiario_e_carteira(self, mock_post):
+        """C6 (336): remessa deve enviar 'codigo_beneficiario' (não 'convenio')."""
+        mock_post.return_value = self._ok_response()
+        conta = self._criar_conta(banco='336', convenio='123456789012', carteira='10')
+
+        resultado = CNABService().gerar_remessa(
+            self.parcelas, conta, layout='CNAB_400'
+        )
+        self.assertTrue(resultado['sucesso'], resultado.get('erro'))
+
+        payload, params = self._payload_e_params(mock_post)
+        self.assertEqual(params['bank'], 'banco_c6')
+        self.assertEqual(params['type'], 'cnab400')
+        self.assertEqual(payload.get('codigo_beneficiario'), '123456789012')
+        self.assertEqual(payload.get('carteira'), '10')
+
+    @patch('requests.post')
+    def test_c6_carteira_20_emissao_cliente(self, mock_post):
+        """C6 (336): carteira 20 (emissão cliente) deve fluir intacta."""
+        mock_post.return_value = self._ok_response()
+        conta = self._criar_conta(banco='336', convenio='123456789012', carteira='20')
+
+        CNABService().gerar_remessa(self.parcelas, conta, layout='CNAB_400')
+
+        payload, _ = self._payload_e_params(mock_post)
+        self.assertEqual(payload.get('carteira'), '20')
+
+    @patch('requests.post')
+    def test_c6_carteira_default_10_quando_vazia(self, mock_post):
+        """C6 (336): sem carteira definida, usa '10' (brcobranca exige 10/20)."""
+        mock_post.return_value = self._ok_response()
+        conta = self._criar_conta(banco='336', convenio='123456789012', carteira='')
+
+        CNABService().gerar_remessa(self.parcelas, conta, layout='CNAB_400')
+
+        payload, _ = self._payload_e_params(mock_post)
+        self.assertEqual(payload.get('carteira'), '10')
+
+    def test_c6_sem_convenio_retorna_erro(self):
+        """C6 (336): convênio (código do beneficiário) é obrigatório."""
+        conta = self._criar_conta(banco='336', convenio='', carteira='10')
+        resultado = CNABService().gerar_remessa(
+            self.parcelas, conta, layout='CNAB_400'
+        )
+        self.assertFalse(resultado['sucesso'])
+        self.assertIn('C6', resultado['erro'])
+
+    @patch('requests.post')
+    def test_bradesco_envia_codigo_empresa(self, mock_post):
+        """Bradesco (237): remessa deve enviar 'codigo_empresa'."""
+        mock_post.return_value = self._ok_response()
+        conta = self._criar_conta(banco='237', convenio='1234567', carteira='09')
+
+        CNABService().gerar_remessa(self.parcelas, conta, layout='CNAB_400')
+
+        payload, params = self._payload_e_params(mock_post)
+        self.assertEqual(params['bank'], 'bradesco')
+        self.assertEqual(payload.get('codigo_empresa'), '1234567')
+
+    @patch('requests.post')
+    def test_sicoob_sequencial_remessa_7_digitos(self, mock_post):
+        """Sicoob (756): sequencial_remessa deve ser string de 7 dígitos."""
+        mock_post.return_value = self._ok_response()
+        conta = self._criar_conta(
+            banco='756', convenio='123456789', carteira='1',
+            agencia='3073', conta='12345678',
+        )
+
+        CNABService().gerar_remessa(self.parcelas, conta, layout='CNAB_400')
+
+        payload, params = self._payload_e_params(mock_post)
+        self.assertEqual(params['bank'], 'sicoob')
+        seq = payload.get('sequencial_remessa')
+        self.assertIsInstance(seq, str)
+        self.assertEqual(len(seq), 7)
+
+
 class TestProcessamentoRetornoCNAB400(TestCase):
     """Testes para processamento de retorno CNAB 400"""
 

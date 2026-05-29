@@ -20,7 +20,8 @@ import requests
 logger = logging.getLogger(__name__)
 
 # ── Tabela estática (fallback quando BRCobrança indisponível) ─────────────────
-# Fonte: github.com/kivanio/brcobrança — pastas remessa/cnab240 e remessa/cnab400
+# Fonte: github.com/Maxwbh/brcobranca (v12.8.0+) — registry Brcobranca::Bancos
+# e boleto_cnab_api v1.3.0 (C6 336 com CNAB 400, PIX híbrido em 8 bancos)
 BANCOS_SUPORTADOS: dict[str, dict] = {
     '001': {'brcobranca_id': 'banco_brasil',   'nome': 'Banco do Brasil',        'layouts_cnab': ('CNAB_240', 'CNAB_400')},
     '004': {'brcobranca_id': 'banco_nordeste', 'nome': 'Banco do Nordeste - BNB','layouts_cnab': ('CNAB_400',)},
@@ -38,7 +39,7 @@ BANCOS_SUPORTADOS: dict[str, dict] = {
     '237': {'brcobranca_id': 'bradesco',       'nome': 'Bradesco',               'layouts_cnab': ('CNAB_400',)},
     '260': {'brcobranca_id': 'nubank',         'nome': 'Nubank',                 'layouts_cnab': ()},
     '341': {'brcobranca_id': 'itau',           'nome': 'Itaú',                   'layouts_cnab': ('CNAB_400',)},
-    '336': {'brcobranca_id': 'banco_c6',    'nome': 'C6 Bank',                'layouts_cnab': ()},
+    '336': {'brcobranca_id': 'banco_c6',    'nome': 'C6 Bank',                'layouts_cnab': ('CNAB_400',)},
     '389': {'brcobranca_id': 'banco_mercantil','nome': 'Mercantil do Brasil',     'layouts_cnab': ()},
     '399': {'brcobranca_id': 'hsbc',           'nome': 'HSBC',                   'layouts_cnab': ()},
     '422': {'brcobranca_id': 'safra',          'nome': 'Safra',                  'layouts_cnab': ()},

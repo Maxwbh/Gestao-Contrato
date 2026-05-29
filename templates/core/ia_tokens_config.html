@@ -232,7 +232,7 @@ input[type=range]    { width: 100%; accent-color: #0d6efd; cursor: pointer; }
                      data-val-lbl="val-lbl-tokens-{{ forloop.counter }}"
                      min="0"
                      max="{% if m.gratuito %}5000{% elif m.modelo == 'claude-haiku-4-5-20251001' %}2000000{% elif m.modelo == 'claude-sonnet-4-6' %}500000{% else %}100000{% endif %}"
-                     step="{% if m.gratuito %}100{% elif m.modelo == 'claude-opus-4-7' %}1000{% else %}5000{% endif %}"
+                     step="{% if m.gratuito %}100{% elif m.modelo == 'claude-opus-4-8' %}1000{% else %}5000{% endif %}"
                      value="{{ m.limite_tokens|default:0|floatformat:0 }}">
               <div class="d-flex justify-content-between mt-1">
                 <span class="range-bubble" id="val-lbl-tokens-{{ forloop.counter }}">

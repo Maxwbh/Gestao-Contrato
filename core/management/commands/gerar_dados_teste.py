@@ -333,7 +333,9 @@ class Command(BaseCommand):
         """
         contas = []
 
-        # Configuração apenas para BB, Sicoob e Bradesco
+        # Configuração para BB, Sicoob, Bradesco e C6 Bank
+        # layout_cnab respeita o suporte real de cada banco (financeiro.services.bancos):
+        #   BB → 240/400 | Sicoob → 240/400 | Bradesco → 400 | C6 → 400
         bancos_config = [
             {
                 'banco': '001',  # Banco do Brasil
@@ -344,6 +346,7 @@ class Command(BaseCommand):
                 'conta_dv': '9',
                 'convenio': '12345678',  # 8 dígitos — BB: convenio(8) + seq(9) = 17
                 'carteira': '18',
+                'layout_cnab': 'CNAB_240',
                 'nosso_numero_atual': 1,
             },
             {
@@ -355,10 +358,11 @@ class Command(BaseCommand):
                 'conta_dv': '5',
                 'convenio': '1234567',  # max 7 dígitos
                 'carteira': '1',
+                'layout_cnab': 'CNAB_240',
                 'nosso_numero_atual': 1,
             },
             {
-                'banco': '237',  # Bradesco
+                'banco': '237',  # Bradesco (apenas CNAB 400)
                 'descricao': 'Conta Bradesco',
                 'agencia': '1234',
                 'agencia_dv': '5',
@@ -366,12 +370,25 @@ class Command(BaseCommand):
                 'conta_dv': '0',
                 'convenio': '',
                 'carteira': '06',
+                'layout_cnab': 'CNAB_400',
+                'nosso_numero_atual': 1,
+            },
+            {
+                'banco': '336',  # C6 Bank (apenas CNAB 400)
+                'descricao': 'Conta C6 Bank',
+                'agencia': '1234',
+                'agencia_dv': '5',
+                'conta': '12345678',  # max 8 dígitos
+                'conta_dv': '9',
+                'convenio': '123456789012',  # código do beneficiário (até 12 dígitos)
+                'carteira': '10',            # 10=emissão banco, 20=emissão cliente
+                'layout_cnab': 'CNAB_400',
                 'nosso_numero_atual': 1,
             },
         ]
 
         for imobiliaria in imobiliarias:
-            # Criar todas as 3 contas (BB, Sicoob, Bradesco) para cada imobiliária
+            # Criar todas as contas (BB, Sicoob, Bradesco, C6) para cada imobiliária
             for i, config in enumerate(bancos_config):
                 # Mesclar agencia_dv com agencia se fornecido
                 agencia = config.get('agencia', '')
@@ -403,7 +420,7 @@ class Command(BaseCommand):
                         cobranca_registrada=True,
                         prazo_baixa=30,
                         prazo_protesto=0,
-                        layout_cnab='CNAB_240',
+                        layout_cnab=config.get('layout_cnab', 'CNAB_240'),
                         numero_remessa_cnab_atual=1,
                         ativo=True,
                     )
@@ -968,6 +985,7 @@ class Command(BaseCommand):
             '104': {'convenio': 'Convênio (6 dígitos)', 'emissao': 'Emissão (1 dígito)', 'codigo_beneficiario': 'Código Beneficiário'},
             '748': {'convenio': 'Convênio', 'posto': 'Posto (2 dígitos)', 'byte_idt': 'Byte IDT (1 dígito)'},
             '756': {'convenio': 'Convênio'},
+            '336': {'convenio': 'Convênio (código do beneficiário, até 12 dígitos)'},
         }
 
         alertas = []
