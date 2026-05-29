@@ -1,0 +1,166 @@
+{% extends "base.html" %}
+{% load humanize %}
+
+{% block title %}Workflows de IA{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+
+  <div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+      <h4 class="mb-1"><i class="fas fa-project-diagram me-2 text-primary"></i>Workflows de IA</h4>
+      <small class="text-muted">Configure a cascade de modelos usada na importação de contratos via IA.</small>
+    </div>
+    <button class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#modalNovo">
+      <i class="fas fa-plus me-1"></i>Novo Workflow
+    </button>
+  </div>
+
+  {% if messages %}
+    {% for msg in messages %}
+      <div class="alert alert-{{ msg.tags|default:'info' }} alert-dismissible fade show" role="alert">
+        {{ msg }}<button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+      </div>
+    {% endfor %}
+  {% endif %}
+
+  {% if not workflows %}
+    <div class="card border-0 shadow-sm">
+      <div class="card-body text-center py-5">
+        <i class="fas fa-project-diagram fa-3x text-muted mb-3"></i>
+        <h6 class="text-muted">Nenhum workflow configurado</h6>
+        <p class="text-muted small mb-3">A cascade padrão (Haiku → Sonnet → Opus) está em uso.</p>
+        <button class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#modalNovo">
+          <i class="fas fa-plus me-1"></i>Criar primeiro workflow
+        </button>
+      </div>
+    </div>
+  {% else %}
+    <div class="row g-3" id="workflow-cards">
+      {% for wf in workflows %}
+      <div class="col-md-6 col-xl-4" id="wf-card-{{ wf.pk }}">
+        <div class="card border-0 shadow-sm h-100 {% if wf.ativo %}border-start border-success border-3{% endif %}">
+          <div class="card-body">
+            <div class="d-flex justify-content-between align-items-start mb-2">
+              <h6 class="card-title mb-0 fw-semibold">{{ wf.nome }}</h6>
+              {% if wf.ativo %}
+                <span class="badge bg-success">ATIVO</span>
+              {% else %}
+                <span class="badge bg-secondary">inativo</span>
+              {% endif %}
+            </div>
+            {% if wf.descricao %}
+              <p class="text-muted small mb-2">{{ wf.descricao }}</p>
+            {% endif %}
+            <div class="mb-3">
+              {% for tier in wf.tiers.all %}
+                <div class="d-flex align-items-center gap-2 small {% if not tier.habilitado %}text-muted text-decoration-line-through{% endif %}">
+                  <span class="badge bg-light text-dark border">{{ tier.ordem }}</span>
+                  {{ tier.get_modelo_display }}
+                </div>
+              {% empty %}
+                <span class="text-muted small fst-italic">Sem tiers configurados</span>
+              {% endfor %}
+            </div>
+            <div class="d-flex gap-2 flex-wrap">
+              <a href="{% url 'core:ia_workflow_editar' pk=wf.pk %}" class="btn btn-outline-primary btn-sm">
+                <i class="fas fa-edit me-1"></i>Editar
+              </a>
+              {% if not wf.ativo %}
+                <button class="btn btn-outline-success btn-sm btn-ativar" data-pk="{{ wf.pk }}" data-nome="{{ wf.nome }}">
+                  <i class="fas fa-play me-1"></i>Ativar
+                </button>
+                <button class="btn btn-outline-danger btn-sm btn-excluir" data-pk="{{ wf.pk }}" data-nome="{{ wf.nome }}">
+                  <i class="fas fa-trash me-1"></i>Excluir
+                </button>
+              {% else %}
+                <button class="btn btn-outline-secondary btn-sm btn-desativar" data-pk="{{ wf.pk }}">
+                  <i class="fas fa-stop me-1"></i>Desativar
+                </button>
+              {% endif %}
+            </div>
+          </div>
+          <div class="card-footer text-muted small bg-transparent">
+            Criado {{ wf.criado_em|naturaltime }}
+          </div>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+
+    <div class="alert alert-info mt-4 small">
+      <i class="fas fa-info-circle me-1"></i>
+      <strong>Nota:</strong> O Gemini 2.0 Flash (gratuito) é sempre tentado primeiro como Tier 0,
+      independente da configuração de workflow. O workflow configura apenas os tiers Claude.
+    </div>
+  {% endif %}
+</div>
+
+<!-- Modal novo workflow -->
+<div class="modal fade" id="modalNovo" tabindex="-1">
+  <div class="modal-dialog modal-sm">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h6 class="modal-title">Novo Workflow</h6>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <form method="POST" action="{% url 'core:ia_workflow_novo' %}">
+        {% csrf_token %}
+        <div class="modal-body">
+          <label class="form-label small fw-semibold">Nome</label>
+          <input type="text" name="nome" class="form-control form-control-sm"
+                 placeholder="Ex: Gemini + Claude" required maxlength="100">
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancelar</button>
+          <button type="submit" class="btn btn-primary btn-sm">Criar</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<script>
+const csrfToken = document.cookie.match(/csrftoken=([^;]+)/)?.[1] || '';
+
+function postJson(url) {
+  return fetch(url, {
+    method: 'POST',
+    headers: {'X-CSRFToken': csrfToken, 'Content-Type': 'application/json'},
+    body: '{}',
+  }).then(r => r.json());
+}
+
+document.querySelectorAll('.btn-ativar').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const pk = btn.dataset.pk;
+    postJson(`/ia/workflow/${pk}/ativar/`).then(data => {
+      if (data.status === 'ok') location.reload();
+      else alert(data.msg || 'Erro ao ativar.');
+    });
+  });
+});
+
+document.querySelectorAll('.btn-excluir').forEach(btn => {
+  btn.addEventListener('click', () => {
+    if (!confirm(`Excluir o workflow "${btn.dataset.nome}"?`)) return;
+    const pk = btn.dataset.pk;
+    postJson(`/ia/workflow/${pk}/excluir/`).then(data => {
+      if (data.status === 'ok') document.getElementById(`wf-card-${pk}`)?.remove();
+      else alert(data.msg || 'Erro ao excluir.');
+    });
+  });
+});
+
+document.querySelectorAll('.btn-desativar').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const pk = btn.dataset.pk;
+    fetch(`/ia/workflow/${pk}/ativar/`, {
+      method: 'POST',
+      headers: {'X-CSRFToken': csrfToken, 'Content-Type': 'application/json'},
+      body: JSON.stringify({desativar: true}),
+    }).then(() => location.reload());
+  });
+});
+</script>
+{% endblock %}
