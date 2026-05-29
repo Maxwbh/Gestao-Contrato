@@ -20,9 +20,9 @@ User = get_user_model()
 class TestCalcularCusto:
     def test_modelo_conhecido_haiku(self):
         from core.services.ia_monitor import calcular_custo
-        # (1000*0.80 + 1000*4.00) / 1_000_000 = 4800/1_000_000 = 0.0048
+        # (1000*1.00 + 1000*5.00) / 1_000_000 = 6000/1_000_000 = 0.006
         custo = calcular_custo('claude-haiku-4-5-20251001', 1000, 1000)
-        assert custo == Decimal('0.0048')
+        assert custo == Decimal('0.006')
         assert isinstance(custo, Decimal)
 
     def test_modelo_gemini_flash_gratuito(self):

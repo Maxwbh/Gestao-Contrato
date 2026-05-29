@@ -353,7 +353,7 @@ class TestEstrategiaHibrida:
 
         assert ia._client.messages.create.call_count == 2
         modelos = [c.kwargs['model'] for c in ia._client.messages.create.call_args_list]
-        assert 'claude-opus-4-7' not in modelos
+        assert 'claude-opus-4-8' not in modelos
 
     def test_sonnet_medio_escala_para_opus(self):
         """Haiku BAIXO → Sonnet MEDIO → Opus chamado como último recurso."""
@@ -372,7 +372,7 @@ class TestEstrategiaHibrida:
         assert resultado == dados_opus
         assert ia._client.messages.create.call_count == 3
         modelos = [c.kwargs['model'] for c in ia._client.messages.create.call_args_list]
-        assert modelos == ['claude-haiku-4-5-20251001', 'claude-sonnet-4-6', 'claude-opus-4-7']
+        assert modelos == ['claude-haiku-4-5-20251001', 'claude-sonnet-4-6', 'claude-opus-4-8']
 
     # ── Tier 3: Opus ─────────────────────────────────────────────────────────
 

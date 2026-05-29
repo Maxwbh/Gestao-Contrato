@@ -256,7 +256,7 @@ class ImportacaoIA:
             dados.get('confianca', {}).get('nivel'),
             dados.get('confianca', {}).get('campos_incertos', []),
         )
-        return self._invocar('claude-opus-4-7', content)  # LimiteUsoIAExcedido propaga
+        return self._invocar('claude-opus-4-8', content)  # LimiteUsoIAExcedido propaga
 
     def _invocar(self, model: str, content: list) -> dict:
         from core.services.ia_monitor import checar_limite, LimiteUsoIAExcedido

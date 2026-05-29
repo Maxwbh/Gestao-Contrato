@@ -2262,9 +2262,9 @@ def ia_tokens_config(request):
     # Tabela de preços: (input USD/MTok, output USD/MTok)
     precos_map = {
         'gemini-2.0-flash':          (0.0,    0.0),
-        'claude-haiku-4-5-20251001': (0.80,   4.00),
+        'claude-haiku-4-5-20251001': (1.00,   5.00),
         'claude-sonnet-4-6':         (3.00,  15.00),
-        'claude-opus-4-7':           (15.00, 75.00),
+        'claude-opus-4-8':           (5.00,  25.00),
     }
 
     inicio = date.today().replace(day=1)
@@ -2322,7 +2322,7 @@ def ia_tokens_config(request):
 _MODELOS_IA = [
     'claude-haiku-4-5-20251001',
     'claude-sonnet-4-6',
-    'claude-opus-4-7',
+    'claude-opus-4-8',
     'gemini-2.0-flash',
 ]
 _OPERACOES_IA = ['IMPORTACAO_PDF', 'CHATBOT_INTENT', 'CHATBOT_HUMANIZE']
@@ -2330,9 +2330,9 @@ _OPERACOES_IA = ['IMPORTACAO_PDF', 'CHATBOT_INTENT', 'CHATBOT_HUMANIZE']
 # Preços de referência USD/MTok para exibição na tela — (input, output)
 _PRECOS_REFERENCIA = [
     {'modelo': 'gemini-2.0-flash',          'input': 0.00,  'output': 0.00,  'obs': 'Gratuito (cota diária)'},
-    {'modelo': 'claude-haiku-4-5-20251001', 'input': 0.80,  'output': 4.00,  'obs': ''},
+    {'modelo': 'claude-haiku-4-5-20251001', 'input': 1.00,  'output': 5.00,  'obs': ''},
     {'modelo': 'claude-sonnet-4-6',         'input': 3.00,  'output': 15.00, 'obs': ''},
-    {'modelo': 'claude-opus-4-7',           'input': 15.00, 'output': 75.00, 'obs': 'Máximo custo'},
+    {'modelo': 'claude-opus-4-8',           'input': 5.00,  'output': 25.00, 'obs': 'Máximo custo'},
 ]
 
 

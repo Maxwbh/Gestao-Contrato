@@ -14,12 +14,10 @@ logger = logging.getLogger(__name__)
 
 # Preço por milhão de tokens (USD) — (input/MTok, output/MTok)
 _PRECOS: dict[str, tuple[float, float]] = {
-    'claude-haiku-4-5-20251001': (0.80,   4.00),
+    'claude-haiku-4-5-20251001': (1.00,   5.00),
     'claude-sonnet-4-6':         (3.00,  15.00),
-    'claude-opus-4-7':           (15.00, 75.00),
+    'claude-opus-4-8':           (5.00,  25.00),
     'gemini-2.0-flash':          (0.0,    0.0),   # free tier
-    'gemini-1.5-flash':          (0.075,  0.30),
-    'gemini-1.5-pro':            (1.25,   5.00),
 }
 
 PROVIDER_ANTHROPIC = 'ANTHROPIC'
