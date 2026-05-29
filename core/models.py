@@ -1627,3 +1627,56 @@ class LimiteUsoIA(models.Model):
             f'{self.get_tipo_escopo_display()} {self.escopo_valor} — '
             f'{self.valor_limite} {self.tipo_limite}/{self.get_periodo_display()}'
         )
+
+
+# =============================================================================
+# WORKFLOW DE IA (CASCADE DE MODELOS)
+# =============================================================================
+
+class WorkflowIA(TimeStampedModel):
+    """Configuração nomeada de cascade de modelos de IA. Apenas um pode estar ativo."""
+
+    nome = models.CharField(max_length=100, verbose_name='Nome do Workflow')
+    descricao = models.TextField(blank=True, verbose_name='Descrição')
+    ativo = models.BooleanField(
+        default=False,
+        verbose_name='Ativo',
+        help_text='Apenas um workflow pode estar ativo. Se nenhum, usa a cascade padrão.',
+    )
+
+    class Meta:
+        verbose_name = 'Workflow de IA'
+        verbose_name_plural = 'Workflows de IA'
+        ordering = ['-ativo', 'nome']
+
+    def __str__(self):
+        return f'{self.nome} [ATIVO]' if self.ativo else self.nome
+
+    def ativar(self):
+        WorkflowIA.objects.exclude(pk=self.pk).update(ativo=False)
+        self.ativo = True
+        self.save(update_fields=['ativo'])
+
+
+class WorkflowIATier(models.Model):
+    """Um tier (nível) dentro de um WorkflowIA — modelo Claude e sua ordem na cascade."""
+
+    MODELO_CHOICES = [
+        ('claude-haiku-4-5-20251001', 'Claude Haiku 4.5'),
+        ('claude-sonnet-4-6',         'Claude Sonnet 4.6'),
+        ('claude-opus-4-8',           'Claude Opus 4.8'),
+    ]
+
+    workflow   = models.ForeignKey(WorkflowIA, on_delete=models.CASCADE, related_name='tiers')
+    modelo     = models.CharField(max_length=60, choices=MODELO_CHOICES, verbose_name='Modelo')
+    ordem      = models.PositiveSmallIntegerField(verbose_name='Ordem')
+    habilitado = models.BooleanField(default=True, verbose_name='Habilitado')
+
+    class Meta:
+        verbose_name = 'Tier do Workflow de IA'
+        verbose_name_plural = 'Tiers do Workflow de IA'
+        ordering = ['workflow', 'ordem']
+        unique_together = [['workflow', 'ordem']]
+
+    def __str__(self):
+        return f'{self.workflow.nome} — Tier {self.ordem}: {self.modelo}'

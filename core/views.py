@@ -2577,3 +2577,125 @@ def api_ia_status_widget(request):
         'alertas_ativos': alertas,
         'alertas_count': len(alertas),
     })
+
+
+# =============================================================================
+# WORKFLOW DE IA (CASCADE DE MODELOS CONFIGURÁVEL)
+# =============================================================================
+
+_DEFAULT_WORKFLOW_TIERS = [
+    ('claude-haiku-4-5-20251001', 1),
+    ('claude-sonnet-4-6',         2),
+    ('claude-opus-4-8',           3),
+]
+
+_MODELOS_WORKFLOW = [
+    ('claude-haiku-4-5-20251001', 'Claude Haiku 4.5',   1.00,  5.00),
+    ('claude-sonnet-4-6',         'Claude Sonnet 4.6',  3.00, 15.00),
+    ('claude-opus-4-8',           'Claude Opus 4.8',    5.00, 25.00),
+]
+
+
+@login_required
+def ia_workflow_list(request):
+    from .models import WorkflowIA
+    workflows = WorkflowIA.objects.prefetch_related('tiers').order_by('-ativo', 'nome')
+    return render(request, 'core/ia_workflow_list.html', {'workflows': workflows})
+
+
+@login_required
+@require_http_methods(['GET', 'POST'])
+def ia_workflow_novo(request):
+    from .models import WorkflowIA, WorkflowIATier
+    if request.method == 'POST':
+        nome = request.POST.get('nome', '').strip() or 'Novo Workflow'
+        wf = WorkflowIA.objects.create(nome=nome, descricao='')
+        for modelo, ordem in _DEFAULT_WORKFLOW_TIERS:
+            WorkflowIATier.objects.create(workflow=wf, modelo=modelo, ordem=ordem)
+        messages.success(request, f'Workflow "{wf.nome}" criado.')
+        return redirect('core:ia_workflow_editar', pk=wf.pk)
+    return render(request, 'core/ia_workflow_list.html', {
+        'workflows': WorkflowIA.objects.prefetch_related('tiers').order_by('-ativo', 'nome'),
+        'show_novo_form': True,
+    })
+
+
+@login_required
+def ia_workflow_editar(request, pk):
+    from .models import WorkflowIA
+    wf = get_object_or_404(WorkflowIA, pk=pk)
+    if request.method == 'POST':
+        wf.nome = request.POST.get('nome', wf.nome).strip() or wf.nome
+        wf.descricao = request.POST.get('descricao', wf.descricao).strip()
+        wf.save(update_fields=['nome', 'descricao'])
+        messages.success(request, 'Workflow atualizado.')
+        return redirect('core:ia_workflow_editar', pk=wf.pk)
+    tiers = list(wf.tiers.order_by('ordem'))
+    return render(request, 'core/ia_workflow_editar.html', {
+        'wf': wf,
+        'tiers': tiers,
+        'modelos_workflow': _MODELOS_WORKFLOW,
+    })
+
+
+@login_required
+@require_http_methods(['POST'])
+def ia_workflow_ativar(request, pk):
+    from .models import WorkflowIA
+    wf = get_object_or_404(WorkflowIA, pk=pk)
+    wf.ativar()
+    return JsonResponse({'status': 'ok', 'nome': wf.nome})
+
+
+@login_required
+@require_http_methods(['POST'])
+def ia_workflow_excluir(request, pk):
+    from .models import WorkflowIA
+    wf = get_object_or_404(WorkflowIA, pk=pk)
+    if wf.ativo:
+        return JsonResponse(
+            {'status': 'erro', 'msg': 'Desative o workflow antes de excluí-lo.'}, status=400
+        )
+    wf.delete()
+    return JsonResponse({'status': 'ok'})
+
+
+@login_required
+@require_http_methods(['POST'])
+def ia_workflow_tiers_salvar(request, pk):
+    import json as _json
+    from django.db import transaction
+    from .models import WorkflowIA, WorkflowIATier
+    wf = get_object_or_404(WorkflowIA, pk=pk)
+    try:
+        payload = _json.loads(request.body)
+        tiers_data = payload.get('tiers', [])
+    except (ValueError, AttributeError):
+        return JsonResponse({'status': 'erro', 'msg': 'Payload inválido.'}, status=400)
+    with transaction.atomic():
+        wf.tiers.all().delete()
+        for idx, t in enumerate(tiers_data, start=1):
+            modelo = str(t.get('modelo', '')).strip()
+            if modelo:
+                WorkflowIATier.objects.create(
+                    workflow=wf,
+                    modelo=modelo,
+                    ordem=idx,
+                    habilitado=bool(t.get('habilitado', True)),
+                )
+    return JsonResponse({'status': 'ok', 'count': wf.tiers.count()})
+
+
+@login_required
+@require_http_methods(['POST'])
+def ia_workflow_tiers_reordenar(request, pk):
+    import json as _json
+    from .models import WorkflowIA, WorkflowIATier
+    wf = get_object_or_404(WorkflowIA, pk=pk)
+    try:
+        ids = _json.loads(request.body).get('ids', [])
+    except (ValueError, AttributeError):
+        return JsonResponse({'status': 'erro', 'msg': 'Payload inválido.'}, status=400)
+    for idx, tier_id in enumerate(ids, start=1):
+        WorkflowIATier.objects.filter(pk=int(tier_id), workflow=wf).update(ordem=idx)
+    return JsonResponse({'status': 'ok'})

@@ -29,6 +29,34 @@ logger = logging.getLogger(__name__)
 # versões do Gemini (ex.: gemini-2.0-flash → gemini-2.5-flash).
 _GEMINI_MODEL = 'gemini-2.0-flash'
 
+# Cascade padrão hardcoded — usada como fallback quando não há WorkflowIA ativo.
+_TIERS_CLAUDE = (
+    'claude-haiku-4-5-20251001',  # Tier 1 — barato: contratos legíveis e padronizados
+    'claude-sonnet-4-6',          # Tier 2 — intermediário: maioria dos casos difíceis
+    'claude-opus-4-8',            # Tier 3 — caro: último recurso para documentos muito difíceis
+)
+
+
+def _carregar_tiers_workflow() -> tuple:
+    """
+    Retorna tuple de modelos para a cascade Claude.
+    Se houver WorkflowIA ativo com tiers habilitados, usa o DB.
+    Caso contrário, usa _TIERS_CLAUDE como fallback.
+    Falha silenciosamente para nunca quebrar importações em produção.
+    """
+    try:
+        from core.models import WorkflowIA
+        wf = WorkflowIA.objects.filter(ativo=True).prefetch_related('tiers').first()
+        if wf is None:
+            return _TIERS_CLAUDE
+        tiers = tuple(
+            wf.tiers.filter(habilitado=True).order_by('ordem').values_list('modelo', flat=True)
+        )
+        return tiers if tiers else _TIERS_CLAUDE
+    except Exception:
+        return _TIERS_CLAUDE
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Prompt de extração
 # ─────────────────────────────────────────────────────────────────────────────
@@ -232,14 +260,6 @@ class ImportacaoIA:
             logger.warning('Gemini falhou (%s) — usando cadeia Claude', type(exc).__name__)
             return None
 
-    # Cascade Claude (custo crescente). Cada tier é tentado em ordem; escala
-    # para o próximo quando a confiança não é ALTO OU quando o tier falha.
-    _TIERS_CLAUDE = (
-        'claude-haiku-4-5-20251001',  # Tier 1 — barato: contratos legíveis e padronizados
-        'claude-sonnet-4-6',          # Tier 2 — intermediário: maioria dos casos difíceis
-        'claude-opus-4-8',            # Tier 3 — caro: último recurso para documentos muito difíceis
-    )
-
     def _call(self, content: list) -> dict:
         """
         Percorre a cascade Claude. Um tier que retorna confiança ALTO encerra
@@ -252,8 +272,9 @@ class ImportacaoIA:
         melhor: dict = {}
         ultimo_erro: Exception | None = None
 
-        for idx, modelo in enumerate(self._TIERS_CLAUDE):
-            final = idx == len(self._TIERS_CLAUDE) - 1
+        tiers = _carregar_tiers_workflow()
+        for idx, modelo in enumerate(tiers):
+            final = idx == len(tiers) - 1
             try:
                 dados = self._invocar(modelo, content)
             except LimiteUsoIAExcedido as exc:

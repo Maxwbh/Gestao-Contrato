@@ -117,6 +117,13 @@ urlpatterns = [
     path('ia/limites/<int:pk>/excluir/', views.ia_limite_excluir, name='ia_limite_excluir'),
     path('ia/limites/<int:pk>/toggle/', views.ia_limite_toggle, name='ia_limite_toggle'),
     path('ia/cotacao/', views.api_cotacao_usd_brl, name='api_cotacao_usd_brl'),
+    path('ia/workflow/', views.ia_workflow_list, name='ia_workflow_list'),
+    path('ia/workflow/novo/', views.ia_workflow_novo, name='ia_workflow_novo'),
+    path('ia/workflow/<int:pk>/editar/', views.ia_workflow_editar, name='ia_workflow_editar'),
+    path('ia/workflow/<int:pk>/ativar/', views.ia_workflow_ativar, name='ia_workflow_ativar'),
+    path('ia/workflow/<int:pk>/excluir/', views.ia_workflow_excluir, name='ia_workflow_excluir'),
+    path('ia/workflow/<int:pk>/tiers/', views.ia_workflow_tiers_salvar, name='ia_workflow_tiers_salvar'),
+    path('ia/workflow/<int:pk>/reordenar/', views.ia_workflow_tiers_reordenar, name='ia_workflow_tiers_reordenar'),
 
     # 35.1 — Log de Auditoria
     path('auditoria/', views.auditoria_log, name='auditoria_log'),
