@@ -393,6 +393,52 @@ class TestEstrategiaHibrida:
         assert resultado == dados_opus
         assert ia._client.messages.create.call_count == 3
 
+    # ── Resiliência da cascade ───────────────────────────────────────────────
+
+    def test_erro_transitorio_no_haiku_escala_para_sonnet(self):
+        """Erro não-limite no Haiku não aborta — escala para o próximo tier."""
+        ia = self._ia_com_mock_client()
+        dados_sonnet = {'confianca': {'nivel': 'ALTO', 'campos_incertos': []}}
+        ia._client.messages.create.side_effect = [
+            Exception('overloaded_error'),       # Haiku falha (transitório)
+            self._api_resp(dados_sonnet),         # Sonnet resolve
+        ]
+
+        resultado = ia._call([])
+
+        assert resultado == dados_sonnet
+        assert ia._client.messages.create.call_count == 2
+        modelos = [c.kwargs['model'] for c in ia._client.messages.create.call_args_list]
+        assert modelos == ['claude-haiku-4-5-20251001', 'claude-sonnet-4-6']
+
+    def test_falha_no_tier_final_usa_melhor_parcial(self):
+        """Se Opus falha mas Sonnet trouxe dados parciais, retorna o parcial."""
+        ia = self._ia_com_mock_client()
+        dados_sonnet = {'confianca': {'nivel': 'MEDIO', 'campos_incertos': ['cpf']}}
+        ia._client.messages.create.side_effect = [
+            Exception('overloaded_error'),       # Haiku falha
+            self._api_resp(dados_sonnet),         # Sonnet MEDIO (parcial)
+            Exception('overloaded_error'),       # Opus falha
+        ]
+
+        resultado = ia._call([])
+
+        assert resultado == dados_sonnet
+        assert ia._client.messages.create.call_count == 3
+
+    def test_todos_os_tiers_falham_propaga_erro(self):
+        """Sem nenhum resultado utilizável, o último erro é propagado."""
+        ia = self._ia_com_mock_client()
+        ia._client.messages.create.side_effect = [
+            Exception('erro-haiku'),
+            Exception('erro-sonnet'),
+            ValueError('erro-opus'),
+        ]
+
+        with pytest.raises(ValueError, match='erro-opus'):
+            ia._call([])
+        assert ia._client.messages.create.call_count == 3
+
 
 # ─── Matching de entidades ────────────────────────────────────────────────────
 
