@@ -1417,6 +1417,17 @@ class BoletoService:
 
             except requests.exceptions.ConnectionError as e:
                 logger.warning(f"Erro de conexao (tentativa {tentativa}): {e}")
+                if tentativa == 1:
+                    # Primeira falha de conexao — pode ser cold start; aguarda acordar
+                    if not self._aguardar_api_acordar():
+                        return {
+                            'sucesso': False,
+                            'erro': (
+                                'O serviço de boletos está iniciando (cold start). '
+                                'Aguarde cerca de 1 minuto e tente novamente.'
+                            ),
+                        }
+                    continue
                 if tentativa < self.max_tentativas:
                     logger.info(f"Aguardando {delay}s antes de nova tentativa...")
                     time.sleep(delay)
@@ -1692,6 +1703,36 @@ class BoletoService:
                     time.sleep(1)
 
         logger.error(f"API BRCobranca indisponivel em {self.brcobranca_url}")
+        return False
+
+    def _aguardar_api_acordar(self):
+        """
+        Aguarda a API acordar apos cold start (Free Tier Render dorme apos 15 min).
+
+        Polling com intervalo de 5s ate BRCOBRANCA_COLD_START_WAIT segundos.
+        Retorna True se a API respondeu, False se esgotou o tempo.
+        """
+        limite = getattr(settings, 'BRCOBRANCA_COLD_START_WAIT', 60)
+        intervalo = 5
+        inicio = time.monotonic()
+        logger.info(
+            f"brcobranca-api em cold start — aguardando ate {limite}s para acordar..."
+        )
+        while time.monotonic() - inicio < limite:
+            try:
+                response = requests.get(
+                    f"{self.brcobranca_url}/api/health",
+                    timeout=intervalo,
+                )
+                if response.status_code in [200, 404, 405]:
+                    logger.info(
+                        f"brcobranca-api acordou em {time.monotonic() - inicio:.0f}s"
+                    )
+                    return True
+            except Exception:
+                pass
+            time.sleep(intervalo)
+        logger.error(f"brcobranca-api nao respondeu em {limite}s")
         return False
 
 
