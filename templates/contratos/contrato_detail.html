@@ -2049,42 +2049,36 @@ function copiarMensagemEmail() {
 
 // ============ FUNCOES DE BOLETO ============
 
-function gerarBoleto(parcelaId, btn) {
-    // Encontrar o botao se nao foi passado
+async function gerarBoleto(parcelaId, btn) {
     if (!btn) {
         btn = document.querySelector('button[onclick*="gerarBoleto(' + parcelaId + ')"]');
     }
 
-    // Mostrar loading no botao
     var originalHtml = btn.innerHTML;
     var restoreBtn = function() {
         btn.innerHTML = originalHtml;
         btn.classList.remove('btn-loading');
         btn.disabled = false;
     };
-    btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Gerando...';
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Verificando...';
     btn.classList.add('btn-loading');
     btn.disabled = true;
 
-    // Timeout de 120s — BRCobrança pode estar em cold start no Render
-    var controller = new AbortController();
-    var timeoutId = setTimeout(function() { controller.abort(); }, 120000);
+    try {
+        await GestaoContratos.BrcobrancaQueue.prepararApi(btn);
 
-    fetch('/financeiro/parcelas/' + parcelaId + '/boleto/gerar/', {
-        method: 'POST',
-        headers: {
-            'X-CSRFToken': '{{ csrf_token }}',
-            'Content-Type': 'application/json'
-        },
-        signal: controller.signal
-    })
-    .then(function(response) { clearTimeout(timeoutId); return response.json(); })
-    .then(function(data) {
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Gerando...';
+
+        var resp = await fetch('/financeiro/parcelas/' + parcelaId + '/boleto/gerar/', {
+            method: 'POST',
+            headers: { 'X-CSRFToken': '{{ csrf_token }}', 'Content-Type': 'application/json' },
+        });
+        var data = await resp.json();
         restoreBtn();
+
         if (data.sucesso) {
             showToast('Boleto gerado! Nosso Número: ' + data.nosso_numero, 'success');
 
-            // Atualizar a linha da parcela
             var row = btn.closest('tr');
             if (row) {
                 row.classList.add('boleto-gerado');
@@ -2106,21 +2100,14 @@ function gerarBoleto(parcelaId, btn) {
             var linkPublicoGerado = data.token_publico
                 ? (window.location.origin + '/b/' + data.token_publico + '/')
                 : ('/financeiro/parcelas/' + parcelaId + '/boleto/visualizar/?popup=true');
-            setTimeout(function() {
-                window.open(linkPublicoGerado, '_blank');
-            }, 500);
+            setTimeout(function() { window.open(linkPublicoGerado, '_blank'); }, 500);
         } else {
             showToast('Erro ao gerar boleto: ' + data.erro, 'error', 6000);
         }
-    })
-    .catch(function(error) {
-        clearTimeout(timeoutId);
+    } catch (error) {
         restoreBtn();
-        var msg = error.name === 'AbortError'
-            ? 'Tempo esgotado (120s). O serviço BRCobrança pode estar iniciando. Tente novamente.'
-            : 'Erro de conexão: ' + error;
-        showToast(msg, 'error', 8000);
-    });
+        showToast('Erro de conexão: ' + error.message, 'error', 8000);
+    }
 }
 
 function regenerarBoleto(parcelaId, btn) {

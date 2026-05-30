@@ -1685,6 +1685,40 @@ class BoletoService:
 
         return response.text or f"Erro HTTP {response.status_code}"
 
+    def verificar_api_rapido(self):
+        """Verifica se a API está respondendo agora (timeout curto para não bloquear)."""
+        try:
+            r = requests.get(f"{self.brcobranca_url}/api/health", timeout=2)
+            return r.status_code in [200, 404, 405]
+        except Exception:
+            return False
+
+    def acordar_async(self):
+        """
+        Dispara warm-up em background (thread daemon).
+
+        Envia pings periódicos até a API responder ou o tempo esgotar.
+        Não bloqueia o worker Django — o cliente aguarda via countdown JS.
+        """
+        import threading
+        url = f"{self.brcobranca_url}/api/health"
+        limite = getattr(settings, 'BRCOBRANCA_COLD_START_WAIT', 60) + 30
+
+        def _pinger():
+            deadline = time.monotonic() + limite
+            while time.monotonic() < deadline:
+                try:
+                    r = requests.get(url, timeout=10)
+                    if r.status_code in [200, 404, 405]:
+                        logger.info("brcobranca-api acordou (warm-up assíncrono)")
+                        return
+                except Exception:
+                    pass
+                time.sleep(5)
+            logger.warning("brcobranca-api não respondeu durante o warm-up assíncrono")
+
+        threading.Thread(target=_pinger, daemon=True).start()
+
     def verificar_api_disponivel(self):
         """Verifica se a API BRCobranca esta disponivel com retry"""
         for tentativa in range(3):

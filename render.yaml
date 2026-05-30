@@ -316,9 +316,10 @@ services:
 # REGRA: so manter o servico principal (Django) vivo com keep-alive.
 # Os demais devem dormir quando nao usados.
 #
-# gestao-contrato-web (Django)
+# gestao-contrato-web (Django) — keepalive apenas em horário comercial
 #   - Configure no cron-job.org: GET /health/ a cada 14 minutos
-#   - Mante o app responsivo para usuarios
+#   - Agendamento: Seg–Sex, 08:00–18:00 (fora desse horário pode dormir)
+#   - Consumo estimado: 10h/dia × 22 dias = ~220h/mês (dentro de 750h)
 #
 # brcobranca-api — NAO usar keep-alive
 #   - Deixar adormecer quando nao ha boletos sendo gerados
