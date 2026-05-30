@@ -6603,6 +6603,27 @@ def api_cnab_retorno_processar(request, retorno_id):
 
 
 @login_required
+@login_required
+@require_POST
+def api_brcobranca_solicitar(request):
+    """
+    Fase 1 do mecanismo de fila para geração de boletos.
+
+    Verifica rapidamente se o brcobranca-api está no ar (timeout=2s).
+    - Se sim  → {"status": "pronto",   "wait": 0}   (cliente gera imediatamente)
+    - Se não  → {"status": "acordando","wait": 60}  (cliente aguarda countdown)
+      e dispara warm-up assíncrono em background thread.
+    """
+    from financeiro.services.boleto_service import BoletoService
+    service = BoletoService()
+    if service.verificar_api_rapido():
+        return JsonResponse({'status': 'pronto', 'wait': 0})
+    service.acordar_async()
+    from django.conf import settings as _s
+    wait = getattr(_s, 'BRCOBRANCA_COLD_START_WAIT', 60)
+    return JsonResponse({'status': 'acordando', 'wait': wait})
+
+
 def api_contas_bancarias(request):
     """API para listar contas bancárias. GET /api/contas-bancarias/"""
     qs = ContaBancaria.objects.filter(ativo=True).select_related('imobiliaria')

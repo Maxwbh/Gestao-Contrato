@@ -352,6 +352,8 @@ BRCOBRANCA_URL = config('BRCOBRANCA_URL', default='http://localhost:9292')
 BRCOBRANCA_TIMEOUT = 30
 BRCOBRANCA_MAX_TENTATIVAS = 3
 BRCOBRANCA_DELAY_INICIAL = 2
+# Tempo máximo de espera (segundos) para o serviço acordar no cold start (Free Tier)
+BRCOBRANCA_COLD_START_WAIT = 60
 
 # PIX Webhook — token compartilhado enviado pelo PSP no header Authorization: Bearer <token>
 # Deixe vazio para desabilitar a validação (não recomendado em produção)

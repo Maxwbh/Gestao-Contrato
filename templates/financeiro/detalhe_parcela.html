@@ -270,32 +270,34 @@
 {% block extra_js %}
 <script>
 {% if not parcela.pago and not parcela.tem_boleto %}
-function gerarBoletoDetalhe() {
+async function gerarBoletoDetalhe() {
     const btn = document.getElementById('btnGerarBoleto');
     btn.disabled = true;
-    btn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Gerando...';
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Verificando...';
 
-    const fd = new FormData();
-    fd.append('csrfmiddlewaretoken', '{{ csrf_token }}');
+    try {
+        await GestaoContratos.BrcobrancaQueue.prepararApi(btn);
 
-    fetch('{% url "financeiro:gerar_boleto" parcela.pk|hashid %}', {method: 'POST', body: fd})
-        .then(r => r.json())
-        .then(data => {
-            if (data.sucesso) {
-                btn.className = 'btn btn-success';
-                btn.innerHTML = '<i class="fas fa-check me-2"></i>Boleto Gerado';
-                setTimeout(() => location.reload(), 1000);
-            } else {
-                btn.disabled = false;
-                btn.innerHTML = '<i class="fas fa-barcode me-2"></i>Gerar Boleto';
-                alert('Erro: ' + (data.erro || 'Erro ao gerar boleto.'));
-            }
-        })
-        .catch(err => {
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Gerando...';
+        const fd = new FormData();
+        fd.append('csrfmiddlewaretoken', '{{ csrf_token }}');
+        const r = await fetch('{% url "financeiro:gerar_boleto" parcela.pk|hashid %}', {method: 'POST', body: fd});
+        const data = await r.json();
+
+        if (data.sucesso) {
+            btn.className = 'btn btn-success';
+            btn.innerHTML = '<i class="fas fa-check me-2"></i>Boleto Gerado';
+            setTimeout(() => location.reload(), 1000);
+        } else {
             btn.disabled = false;
             btn.innerHTML = '<i class="fas fa-barcode me-2"></i>Gerar Boleto';
-            alert('Erro: ' + err.message);
-        });
+            alert('Erro: ' + (data.erro || 'Erro ao gerar boleto.'));
+        }
+    } catch (err) {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fas fa-barcode me-2"></i>Gerar Boleto';
+        alert('Erro: ' + err.message);
+    }
 }
 {% endif %}
 

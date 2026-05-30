@@ -308,25 +308,25 @@ services:
 #   - Enviar notificacoes de vencimento
 #
 # =============================================================================
-# KEEP-ALIVE (Evitar que o servico adormeca)
+# KEEP-ALIVE — APENAS gestao-contrato-web (Django)
 # =============================================================================
-# O Free tier "adormece" apos 15 min de inatividade. Para manter ativo:
+# O Free tier tem 750h/mes. Manter TODOS os servicos vivos 24/7 esgota
+# o limite em ~10 dias (3 servicos × 24h = 72h/dia).
 #
-# 1. Configure um cron job adicional em cron-job.org:
-#    - URL: https://seu-app.onrender.com/health/
-#    - Metodo: GET
-#    - Agenda: A cada 10 minutos
+# REGRA: so manter o servico principal (Django) vivo com keep-alive.
+# Os demais devem dormir quando nao usados.
 #
-# 2. Para o BRCobranca tambem:
-#    - URL: https://brcobranca-api-m4q9.onrender.com/
-#    - Metodo: GET
-#    - Agenda: A cada 10 minutos
+# gestao-contrato-web (Django) — keepalive apenas em horário comercial
+#   - Configure no cron-job.org: GET /health/ a cada 14 minutos
+#   - Agendamento: Seg–Sex, 08:00–18:00 (fora desse horário pode dormir)
+#   - Consumo estimado: 10h/dia × 22 dias = ~220h/mês (dentro de 750h)
 #
-# 3. Para o Evolution API (somente durante janelas de teste ativo):
-#    - URL: https://evolution-api-test.onrender.com/
-#    - Metodo: GET
-#    - Agenda: A cada 10 minutos
-#    Obs: pode deixar adormecer fora dos testes — reconecta automaticamente
-#    via sessao salva no Supabase sem precisar novo QR Code.
+# brcobranca-api — NAO usar keep-alive
+#   - Deixar adormecer quando nao ha boletos sendo gerados
+#   - O Django aguarda automaticamente o cold start (ate 60s) via
+#     BRCOBRANCA_COLD_START_WAIT — primeira geracao de boleto do dia
+#     pode levar ~30-50s; as seguintes sao imediatas (servico ja acordado)
 #
-# 4. Ou use https://uptimerobot.com (gratuito, 5 min interval)
+# evolution-api-test — NAO usar keep-alive
+#   - Reconecta automaticamente ao acordar via sessao salva no Supabase
+#   - Ligar somente durante janelas de teste ativo (autoDeploy: false)
