@@ -1375,6 +1375,22 @@ class BoletoService:
                 if response.status_code == 200:
                     return self._processar_resposta_sucesso(response, banco_nome, dados_boleto)
 
+                # 429 — rate limit: respeita Retry-After e tenta novamente
+                elif response.status_code == 429:
+                    retry_after = int(response.headers.get('Retry-After', max(delay, 10)))
+                    logger.warning(
+                        f"Rate limit 429 — aguardando {retry_after}s "
+                        f"(tentativa {tentativa}/{self.max_tentativas})"
+                    )
+                    if tentativa < self.max_tentativas:
+                        time.sleep(retry_after)
+                        continue
+                    else:
+                        return {
+                            'sucesso': False,
+                            'erro': 'Serviço de boletos temporariamente sobrecarregado. Tente novamente em instantes.',
+                        }
+
                 # Erros que justificam retry (5xx)
                 elif 500 <= response.status_code < 600:
                     error_msg = f"Erro do servidor {response.status_code}"
