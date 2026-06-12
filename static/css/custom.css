@@ -1965,6 +1965,26 @@ label.form-label,
 /* ========================================================================
    BOOTSTRAP BREADCRUMB BRIDGE
    ======================================================================== */
+/* Neutraliza o estilo de navbar do Materialize (fundo #ee6e73, altura 56px,
+   sombra, texto branco) nos <nav> de breadcrumb */
+nav[aria-label="breadcrumb"],
+nav.app-breadcrumb {
+    background: transparent;
+    box-shadow: none;
+    height: auto;
+    line-height: inherit;
+    color: inherit;
+    width: auto;
+}
+/* Materialize define nav a{color:#fff} — restaura a cor dos links no breadcrumb */
+nav[aria-label="breadcrumb"] a,
+nav.app-breadcrumb a {
+    color: var(--secondary-color);
+}
+/* Remove o chevron Material Icons que o Materialize injeta antes de .breadcrumb */
+.breadcrumb::before {
+    content: none;
+}
 .breadcrumb {
     display: flex;
     flex-wrap: wrap;
