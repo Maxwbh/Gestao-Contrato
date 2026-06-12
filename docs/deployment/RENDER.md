@@ -256,6 +256,26 @@ O PostgreSQL no Render Free Tier **não tem backup automático**. Para produçã
 
 ---
 
+## ⏰ Hibernação e Keep-Alive (estratégia das 750h/mês)
+
+O Free Tier hiberna serviços após **15 min** sem requisições e o limite de
+**750h/mês é compartilhado** entre todos os serviços gratuitos da conta —
+manter 3 serviços acordados 24/7 esgota o limite em ~10 dias (o Render
+**suspende tudo** até o próximo ciclo).
+
+Estratégia adotada (aplicável via `configurar_cronjob.py` na raiz do repo):
+
+| Serviço | Keep-alive | Como acorda |
+|---------|-----------|-------------|
+| `gestao-contrato-web` | Seg–Sex 08h–18h, a cada 14 min (`GET /health/`) | Cron externo (cron-job.org) |
+| `brcobranca-api` | **Nenhum** — dorme quando ocioso | **Warm-up automático**: ao gerar boleto, o Django detecta o cold start e aguarda o serviço subir (até `BRCOBRANCA_COLD_START_WAIT`, padrão 60s). A 1ª geração do dia leva ~30–50s; as seguintes são imediatas |
+| `evolution-api-test` | Nenhum | Reconecta via sessão salva no Supabase |
+
+Consumo estimado: ~225h/mês — folga de ~525h. Ver detalhes dos jobs em
+[CRONJOB.md](CRONJOB.md).
+
+---
+
 ## 💰 Upgrade para Plano Pago
 
 Para ter todas as funcionalidades automáticas, considere upgrade:
