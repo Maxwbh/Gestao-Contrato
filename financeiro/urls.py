@@ -58,6 +58,7 @@ urlpatterns = [
     path('parcelas/<str:hid>/boleto/status/', views.api_status_boleto, name='api_status_boleto'),
     path('parcelas/<str:hid>/boleto/whatsapp/', views.enviar_boleto_whatsapp, name='boleto_whatsapp'),
     path('parcelas/<str:hid>/boleto/sms/', views.enviar_boleto_sms, name='boleto_sms'),
+    path('parcelas/<str:hid>/boleto/email/', views.enviar_boleto_email, name='boleto_email'),
     path('contrato/<int:contrato_id>/boletos/gerar/', views.gerar_boletos_contrato, name='gerar_boletos_contrato'),
 
     # Reajustes

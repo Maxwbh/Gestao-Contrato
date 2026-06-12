@@ -1188,11 +1188,14 @@ class TestHU13_EnvioWhatsApp:
         p = self._parcela_com_boleto(contrato_com_parcelas)
         url = reverse('financeiro:boleto_whatsapp', kwargs={'hid': encode_id(p.pk)})
 
-        # Patch tem_boleto=True e comprador.telefone=None
+        # Patch tem_boleto=True e comprador sem celular nem telefone
         with patch('financeiro.views.Parcela.tem_boleto',
                    new_callable=lambda: property(lambda self: True)):
             with patch.object(
                 type(contrato_com_parcelas.comprador), 'telefone',
+                new_callable=PropertyMock, return_value=None
+            ), patch.object(
+                type(contrato_com_parcelas.comprador), 'celular',
                 new_callable=PropertyMock, return_value=None
             ):
                 resp = cli.post(url, data='{}', content_type='application/json')
@@ -1247,19 +1250,30 @@ class TestHU14_EnvioSMS:
         _, msg = mock_sms.call_args[0]
         assert len(msg) <= 160  # limite SMS
 
-    def test_sms_mensagem_contem_linha_digitavel(self, cli, contrato_com_parcelas):
-        """Mensagem SMS inclui a linha digitável do boleto."""
+    def test_sms_mensagem_contem_link_ou_linha(self, cli, contrato_com_parcelas, settings):
+        """Com SITE_URL o SMS leva o link público; sem, cai na linha digitável."""
         from django.urls import reverse
         p = self._parcela_com_boleto(contrato_com_parcelas)
         url = reverse('financeiro:boleto_sms', kwargs={'hid': encode_id(p.pk)})
 
+        # Com SITE_URL → link público (mensagem curta, cabe em 160 chars)
+        settings.SITE_URL = 'https://app.exemplo.com'
         with patch('financeiro.views.Parcela.tem_boleto', new_callable=lambda: property(lambda self: True)):
             with patch('notificacoes.services.ServicoSMS.enviar', return_value=True) as mock_sms:
                 cli.post(url, data='{"telefone": "+5511999999999"}',
                          content_type='application/json')
-
         _, msg = mock_sms.call_args[0]
-        assert p.linha_digitavel in msg
+        assert 'https://app.exemplo.com' in msg
+        assert len(msg) <= 160
+
+        # Sem SITE_URL → fallback para linha digitável
+        settings.SITE_URL = ''
+        with patch('financeiro.views.Parcela.tem_boleto', new_callable=lambda: property(lambda self: True)):
+            with patch('notificacoes.services.ServicoSMS.enviar', return_value=True) as mock_sms:
+                cli.post(url, data='{"telefone": "+5511999999999"}',
+                         content_type='application/json')
+        _, msg = mock_sms.call_args[0]
+        assert (p.linha_digitavel or 'indisponivel')[:20] in msg
 
     def test_sms_sem_boleto_retorna_400(self, cli, contrato_com_parcelas):
         """Parcela sem boleto retorna 400."""

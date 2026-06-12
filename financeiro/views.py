@@ -7110,60 +7110,139 @@ def upload_ofx(request):
 
 @login_required
 @require_POST
-def enviar_boleto_whatsapp(request, hid):
-    """
-    POST /financeiro/parcelas/<pk>/boleto/whatsapp/
-
-    Envia dados do boleto (linha digitável + vencimento) por WhatsApp via Twilio.
-    Campos opcionais no body (JSON ou form):
-      - telefone: destinatário (ex: +5511999999999). Se omitido, usa comprador.telefone.
-    """
-    pk = _hid_to_pk(hid)
-    parcela = get_object_or_404(Parcela, pk=pk)
-
+def _telefone_para_envio(request, parcela):
+    """Extrai o telefone do body (JSON/form) com fallback para o comprador."""
     import json as _json
-
-    if not parcela.tem_boleto:
-        return JsonResponse({'sucesso': False, 'erro': 'Parcela não possui boleto gerado'}, status=400)
-
-    # Determinar destinatário
     telefone = None
     try:
         body = _json.loads(request.body) if request.body else {}
         telefone = body.get('telefone')
     except (_json.JSONDecodeError, ValueError):
         telefone = request.POST.get('telefone')
-
     if not telefone:
-        try:
-            telefone = parcela.contrato.comprador.telefone
-        except AttributeError:
-            pass
+        telefone = (
+            getattr(parcela.contrato.comprador, 'celular', '')
+            or getattr(parcela.contrato.comprador, 'telefone', '')
+        )
+    return telefone
 
+
+def _link_publico_boleto(parcela):
+    """Link público completo do boleto (SITE_URL + token), '' se indisponível."""
+    from django.conf import settings
+    base = getattr(settings, 'SITE_URL', '')
+    if base and parcela.tem_boleto:
+        return f"{base}{parcela.get_link_publico()}"
+    return ''
+
+
+def _registrar_notificacao_direta(parcela, tipo, destinatario, assunto, mensagem, sucesso, external_id=''):
+    """Registra o envio direto em Notificacao para rastreamento unificado."""
+    try:
+        from notificacoes.models import Notificacao, StatusNotificacao
+        from django.utils import timezone as _tz
+        Notificacao.objects.create(
+            parcela=parcela,
+            tipo=tipo,
+            destinatario=destinatario,
+            assunto=assunto,
+            mensagem=mensagem,
+            status=StatusNotificacao.ENVIADA if sucesso else StatusNotificacao.ERRO,
+            data_envio=_tz.now() if sucesso else None,
+            external_id=external_id or '',
+        )
+    except Exception:
+        logger.exception('Falha ao registrar notificação direta (parcela pk=%s)', parcela.pk)
+
+
+@login_required
+@require_POST
+def enviar_boleto_email(request, hid):
+    """
+    POST /financeiro/parcelas/<pk>/boleto/email/
+
+    Envio simplificado por e-mail: usa o template padrão BOLETO_CRIADO
+    (HTML com PIX + botão), anexa o PDF e registra em Notificacao.
+    """
+    pk = _hid_to_pk(hid)
+    parcela = get_object_or_404(Parcela, pk=pk)
+
+    if not parcela.tem_boleto:
+        return JsonResponse({'sucesso': False, 'erro': 'Parcela não possui boleto gerado'}, status=400)
+
+    from notificacoes.boleto_notificacao import BoletoNotificacaoService
+    from notificacoes.models import TipoTemplate
+
+    resultado = BoletoNotificacaoService().enviar_email_boleto(
+        parcela, TipoTemplate.BOLETO_CRIADO
+    )
+    if resultado.get('sucesso'):
+        logger.info('E-mail boleto enviado: parcela pk=%s', pk)
+        return JsonResponse({'sucesso': True, 'destinatario': parcela.contrato.comprador.email})
+    return JsonResponse(
+        {'sucesso': False, 'erro': resultado.get('erro', 'Falha no envio')}, status=400
+    )
+
+
+@login_required
+@require_POST
+def enviar_boleto_whatsapp(request, hid):
+    """
+    POST /financeiro/parcelas/<pk>/boleto/whatsapp/
+
+    Envia o boleto por WhatsApp: PIX copia-e-cola (quando disponível),
+    linha digitável e link público. Registra em Notificacao.
+    Campos opcionais no body (JSON ou form):
+      - telefone: destinatário (ex: +5511999999999). Se omitido, usa o do comprador.
+    """
+    pk = _hid_to_pk(hid)
+    parcela = get_object_or_404(Parcela, pk=pk)
+
+    if not parcela.tem_boleto:
+        return JsonResponse({'sucesso': False, 'erro': 'Parcela não possui boleto gerado'}, status=400)
+
+    telefone = _telefone_para_envio(request, parcela)
     if not telefone:
         return JsonResponse({'sucesso': False, 'erro': 'Telefone não informado e comprador sem telefone cadastrado'}, status=400)
 
-    # Montar mensagem
     vencimento = parcela.data_vencimento.strftime('%d/%m/%Y') if parcela.data_vencimento else '—'
     valor = f"R$ {parcela.valor_atual:,.2f}".replace(',', 'X').replace('.', ',').replace('X', '.')
-    linha = parcela.linha_digitavel or '(linha digitável não disponível)'
     nome = getattr(parcela.contrato.comprador, 'nome', 'Cliente')
-    mensagem = (
-        f"Ola, {nome}!\n"
-        f"Seu boleto esta disponivel:\n\n"
-        f"Parcela: {parcela.numero_parcela}\n"
-        f"Valor: {valor}\n"
-        f"Vencimento: {vencimento}\n\n"
-        f"Linha Digitavel:\n{linha}\n\n"
-        f"Em caso de duvidas, entre em contato conosco."
-    )
+    imob = parcela.contrato.imovel.imobiliaria.nome
+    link = _link_publico_boleto(parcela)
+    pix = getattr(parcela, 'pix_copia_cola', '') or ''
 
+    partes = [
+        f"*{imob}* — Boleto disponível\n",
+        f"Olá {nome}!",
+        f"Parcela: {parcela.numero_parcela}/{parcela.contrato.numero_parcelas}",
+        f"Valor: {valor}",
+        f"Vencimento: {vencimento}\n",
+    ]
+    if pix:
+        partes.append(f"⚡ *Pague na hora com PIX* (copia e cola):\n{pix}\n")
+    if parcela.linha_digitavel:
+        partes.append(f"Linha digitável:\n{parcela.linha_digitavel}\n")
+    if link:
+        partes.append(f"Ver boleto: {link}")
+    mensagem = '\n'.join(partes)
+
+    from notificacoes.services import ServicoWhatsApp
+    from notificacoes.models import TipoNotificacao
     try:
-        from notificacoes.services import ServicoWhatsApp
-        ServicoWhatsApp.enviar(telefone, mensagem)
+        resultado = ServicoWhatsApp.enviar(telefone, mensagem)
+        ok, external_id = resultado if isinstance(resultado, tuple) else (bool(resultado), '')
+        _registrar_notificacao_direta(
+            parcela, TipoNotificacao.WHATSAPP, telefone,
+            f'Boleto parcela {parcela.numero_parcela}', mensagem, ok, external_id,
+        )
         logger.info('WhatsApp boleto enviado: parcela pk=%s → %s', pk, telefone)
         return JsonResponse({'sucesso': True, 'destinatario': telefone})
     except Exception as e:
+        _registrar_notificacao_direta(
+            parcela, TipoNotificacao.WHATSAPP, telefone,
+            f'Boleto parcela {parcela.numero_parcela}', mensagem, False,
+        )
         logger.exception('WhatsApp boleto erro: parcela pk=%s → %s', pk, e)
         return JsonResponse({'sucesso': False, 'erro': str(e)}, status=500)
 
@@ -7181,43 +7260,46 @@ def enviar_boleto_sms(request, hid):
     pk = _hid_to_pk(hid)
     parcela = get_object_or_404(Parcela, pk=pk)
 
-    import json as _json
-
     if not parcela.tem_boleto:
         return JsonResponse({'sucesso': False, 'erro': 'Parcela não possui boleto gerado'}, status=400)
 
-    # Determinar destinatário
-    telefone = None
-    try:
-        body = _json.loads(request.body) if request.body else {}
-        telefone = body.get('telefone')
-    except (_json.JSONDecodeError, ValueError):
-        telefone = request.POST.get('telefone')
-
-    if not telefone:
-        try:
-            telefone = parcela.contrato.comprador.telefone
-        except AttributeError:
-            pass
-
+    telefone = _telefone_para_envio(request, parcela)
     if not telefone:
         return JsonResponse({'sucesso': False, 'erro': 'Telefone não informado e comprador sem telefone cadastrado'}, status=400)
 
-    # Montar mensagem SMS (160 chars idealmente)
+    # SMS curto com link público (a linha digitável de 47 dígitos não cabe
+    # em 160 chars com contexto — o link abre a página com PIX, linha e PDF)
     vencimento = parcela.data_vencimento.strftime('%d/%m/%Y') if parcela.data_vencimento else '—'
     valor = f"R${parcela.valor_atual:.2f}"
-    linha = parcela.linha_digitavel or 'indisponível'
-    mensagem = (
-        f"Boleto parcela {parcela.numero_parcela} - {valor} - venc {vencimento}. "
-        f"Linha: {linha}"
-    )[:160]
+    imob = parcela.contrato.imovel.imobiliaria.nome
+    link = _link_publico_boleto(parcela)
+    if link:
+        mensagem = (
+            f"{imob}: Boleto parcela {parcela.numero_parcela} ({valor}) "
+            f"vence {vencimento}. Pague em: {link}"
+        )[:160]
+    else:
+        mensagem = (
+            f"{imob}: Boleto parcela {parcela.numero_parcela} ({valor}) "
+            f"vence {vencimento}. Linha: {parcela.linha_digitavel or 'indisponivel'}"
+        )[:160]
 
+    from notificacoes.services import ServicoSMS
+    from notificacoes.models import TipoNotificacao
     try:
-        from notificacoes.services import ServicoSMS
-        ServicoSMS.enviar(telefone, mensagem)
+        resultado = ServicoSMS.enviar(telefone, mensagem)
+        ok, external_id = resultado if isinstance(resultado, tuple) else (bool(resultado), '')
+        _registrar_notificacao_direta(
+            parcela, TipoNotificacao.SMS, telefone,
+            f'Boleto parcela {parcela.numero_parcela}', mensagem, ok, external_id,
+        )
         logger.info('SMS boleto enviado: parcela pk=%s → %s', pk, telefone)
         return JsonResponse({'sucesso': True, 'destinatario': telefone})
     except Exception as e:
+        _registrar_notificacao_direta(
+            parcela, TipoNotificacao.SMS, telefone,
+            f'Boleto parcela {parcela.numero_parcela}', mensagem, False,
+        )
         logger.exception('SMS boleto erro: parcela pk=%s → %s', pk, e)
         return JsonResponse({'sucesso': False, 'erro': str(e)}, status=500)
 
