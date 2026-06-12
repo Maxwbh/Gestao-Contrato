@@ -178,17 +178,22 @@ services:
       - key: RACK_ENV
         value: "production"
       # MALLOC e GC otimizados para Free Tier (512MB RAM)
+      # (jemalloc via LD_PRELOAD já vem do Dockerfile; MALLOC_ARENA_MAX é fallback)
       - key: MALLOC_ARENA_MAX
         value: "2"
       - key: RUBY_GC_HEAP_GROWTH_FACTOR
         value: "1.1"
-      # Puma: 1 worker para economizar memória no Free Tier
+      # Puma em SINGLE MODE (workers=0): 1 processo Ruby em vez de master+worker.
+      # ~Metade da RAM e cold start mais rápido — a concorrência vem das threads.
       - key: PUMA_WORKERS
-        value: "1"
+        value: "0"
       - key: PUMA_MIN_THREADS
         value: "0"
       - key: PUMA_MAX_THREADS
         value: "5"
+      # YJIT (Ruby 3.3): acelera geração de boleto/CNAB (~+30MB RAM)
+      - key: RUBY_YJIT_ENABLE
+        value: "1"
       # Para forçar re-clone do boleto_cnab_api: incremente ARG CACHE_BUST
       # no Dockerfile.brcobranca e faça push — o Render reconstruirá do zero.
 
