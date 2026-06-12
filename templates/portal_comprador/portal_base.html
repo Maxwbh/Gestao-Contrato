@@ -15,8 +15,8 @@
     <link rel="manifest" href="{% url 'portal_comprador:manifest' %}">
     <!-- Materialize CSS (local) -->
     <link rel="stylesheet" href="{% static 'vendor/materialize/css/materialize.min.css' %}">
-    <!-- Material Icons (Google Fonts CDN — required for icon font) -->
-    <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+    <!-- Material Icons (fonte vendorizada — sem dependência de CDN) -->
+    <link href="{% static 'vendor/material-icons/material-icons.css' %}" rel="stylesheet">
     <!-- Font Awesome (local) -->
     <link rel="stylesheet" href="{% static 'vendor/fontawesome/css/all.min.css' %}">
 

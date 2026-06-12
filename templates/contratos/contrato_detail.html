@@ -1,4 +1,5 @@
 {% extends 'base.html' %}
+{% load static %}
 {% load format_filters %}
 {% load hashid_tags %}
 
@@ -1696,7 +1697,7 @@
 {% endblock %}
 
 {% block extra_js %}
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+<script src="{% static 'vendor/chartjs/chart.umd.min.js' %}"></script>
 <script>
 // ── F3-03: Resumo Financeiro — Chart.js barras por mês ────────────────────────
 (function () {
