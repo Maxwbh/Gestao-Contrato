@@ -147,4 +147,9 @@ urlpatterns = [
     path('api/imobiliarias/<int:pk>/', views.api_imobiliaria_detalhe, name='api_imobiliaria_detalhe'),
     path('api/imobiliarias/<int:pk>/atualizar/', views.api_imobiliaria_atualizar, name='api_imobiliaria_atualizar'),
     path('api/imobiliarias/<int:pk>/excluir/', views.api_imobiliaria_excluir, name='api_imobiliaria_excluir'),
+
+    # Setup Passo 3 — remessa CNAB, retorno e logos
+    path('api/simular-remessa-teste/', views.api_simular_remessa_teste, name='api_simular_remessa_teste'),
+    path('api/simular-retorno-teste/', views.api_simular_retorno_teste, name='api_simular_retorno_teste'),
+    path('api/gerar-logos-teste/', views.api_gerar_logos_teste, name='api_gerar_logos_teste'),
 ]

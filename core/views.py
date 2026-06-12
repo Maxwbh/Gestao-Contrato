@@ -293,6 +293,9 @@ def _build_setup_context():
     total_imobiliarias = 0
     total_contratos = 0
     parcelas_nao_geradas = 0
+    total_remessas = 0
+    total_retornos = 0
+    imobiliarias_com_logo = 0
 
     if has_tables:
         try:
@@ -301,18 +304,23 @@ def _build_setup_context():
             has_superuser = get_user_model().objects.filter(is_superuser=True).exists()
             total_contas_bancarias = ContaBancaria.objects.count()
             total_imobiliarias = Imobiliaria.objects.count()
+            imobiliarias_com_logo = Imobiliaria.objects.exclude(logo='').exclude(logo=None).count()
         except Exception:
             pass
         try:
             from contratos.models import Contrato as _Contrato
             from financeiro.models import Parcela as _Parcela, StatusBoleto as _StatusBoleto
+            from financeiro.models import ArquivoRemessa as _AR, ArquivoRetorno as _ARet
             total_contratos = _Contrato.objects.count()
             parcelas_nao_geradas = _Parcela.objects.filter(
                 pago=False, status_boleto=_StatusBoleto.NAO_GERADO
             ).count()
+            total_remessas = _AR.objects.count()
+            total_retornos = _ARet.objects.count()
         except Exception:
             pass
-            pass
+
+    tem_dados_passo3 = total_contratos > 0
 
     return {
         'db_ok': db_ok,
@@ -325,6 +333,10 @@ def _build_setup_context():
         'total_contratos': total_contratos,
         'parcelas_nao_geradas': parcelas_nao_geradas,
         'tem_dados_para_boletos': total_contratos > 0,
+        'total_remessas': total_remessas,
+        'total_retornos': total_retornos,
+        'imobiliarias_com_logo': imobiliarias_com_logo,
+        'tem_dados_passo3': tem_dados_passo3,
     }
 
 
@@ -3330,4 +3342,61 @@ def api_imobiliaria_excluir(request, pk):
         return JsonResponse({'status': 'success', 'message': 'Imobiliária desativada.'})
     except Exception as e:
         logger.exception('api_imobiliaria_excluir pk=%s: %s', pk, e)
+        return JsonResponse({'status': 'error', 'message': str(e)}, status=500)
+
+
+# ---------------------------------------------------------------------------
+# Passo 3 — Setup: remessa CNAB, retorno e logos para imobiliárias
+# ---------------------------------------------------------------------------
+
+@login_required
+@require_http_methods(['POST'])
+def api_simular_remessa_teste(request):
+    """Gera arquivos de remessa CNAB simulados para todas as imobiliárias/meses."""
+    try:
+        from io import StringIO
+        from django.core.management import call_command
+        out = StringIO()
+        call_command('gerar_dados_teste', so_remessa=True, stdout=out)
+        saida = out.getvalue()
+        from financeiro.models import ArquivoRemessa
+        total = ArquivoRemessa.objects.count()
+        return JsonResponse({'status': 'success', 'output': saida, 'total_remessas': total})
+    except Exception as e:
+        logger.exception('api_simular_remessa_teste: %s', e)
+        return JsonResponse({'status': 'error', 'message': str(e)}, status=500)
+
+
+@login_required
+@require_http_methods(['POST'])
+def api_simular_retorno_teste(request):
+    """Gera arquivos de retorno CNAB simulados (70% pago)."""
+    try:
+        from io import StringIO
+        from django.core.management import call_command
+        out = StringIO()
+        call_command('gerar_dados_teste', so_retorno=True, stdout=out)
+        saida = out.getvalue()
+        from financeiro.models import ArquivoRetorno
+        total = ArquivoRetorno.objects.count()
+        return JsonResponse({'status': 'success', 'output': saida, 'total_retornos': total})
+    except Exception as e:
+        logger.exception('api_simular_retorno_teste: %s', e)
+        return JsonResponse({'status': 'error', 'message': str(e)}, status=500)
+
+
+@login_required
+@require_http_methods(['POST'])
+def api_gerar_logos_teste(request):
+    """Gera logotipos PNG para as imobiliárias de teste usando Pillow."""
+    try:
+        from io import StringIO
+        from django.core.management import call_command
+        out = StringIO()
+        call_command('gerar_dados_teste', so_logos=True, stdout=out)
+        saida = out.getvalue()
+        com_logo = Imobiliaria.objects.exclude(logo='').exclude(logo=None).count()
+        return JsonResponse({'status': 'success', 'output': saida, 'imobiliarias_com_logo': com_logo})
+    except Exception as e:
+        logger.exception('api_gerar_logos_teste: %s', e)
         return JsonResponse({'status': 'error', 'message': str(e)}, status=500)
