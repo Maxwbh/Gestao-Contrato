@@ -543,11 +543,18 @@ nav.app-navbar {
     box-shadow: 0 3px 14px rgba(0,0,0,0.25);
     /* height:auto (e não 62px fixo): se o menu quebrar linha em telas
        intermediárias, o fundo escuro acompanha — itens nunca ficam
-       brancos sobre fundo branco fora da barra */
+       brancos sobre fundo branco fora da barra.
+       NÃO usar overflow:hidden aqui: os dropdowns do Materialize são
+       posicionados dentro do nav e seriam cortados */
     height: auto;
     min-height: 62px;
     line-height: 62px;
-    overflow: hidden;
+}
+/* Clearfix: contém os floats do ul.right sem clipar os dropdowns */
+nav.app-navbar .nav-wrapper::after {
+    content: '';
+    display: block;
+    clear: both;
 }
 /* Telas de notebook (993-1599px): compacta itens para caber em uma linha */
 @media (min-width: 993px) and (max-width: 1599px) {
