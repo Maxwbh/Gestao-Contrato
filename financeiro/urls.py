@@ -169,6 +169,7 @@ urlpatterns = [
     # API - CONTAS BANCÁRIAS
     # ==========================================================================
     path('api/contas-bancarias/', views.api_contas_bancarias, name='api_contas_bancarias'),
+    path('api/brcobranca/solicitar/', views.api_brcobranca_solicitar, name='api_brcobranca_solicitar'),
 
     # ==========================================================================
     # API - NOTIFICAÇÕES

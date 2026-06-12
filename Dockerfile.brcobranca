@@ -40,19 +40,29 @@ RUN git clone --depth 1 --branch master \
 # bundle install resolve gems do Gemfile.lock (incluindo brcobranca via git).
 # NÃO usar "bundle clean --force" pois pode remover checkouts de gems git
 # causando erro "not yet checked out" no runtime.
+# Limpeza pós-install (reduz a imagem final):
+#   - cache/*.gem            → pacotes baixados, inúteis no runtime
+#   - cache/bundler/git      → mirrors bare usados só para clonar (checkouts ficam intactos)
+#   - *.c/*.o                → fontes de extensões já compiladas
+#   - spec/test das gems     → não executados em produção
 RUN bundle config set --local without 'development test' && \
     bundle install --jobs $(nproc) --retry 3 && \
-    rm -rf /usr/local/bundle/cache/*.gem && \
+    rm -rf /usr/local/bundle/cache/*.gem /usr/local/bundle/cache/bundler/git && \
     find /usr/local/bundle/gems/ -name "*.c" -delete 2>/dev/null || true && \
-    find /usr/local/bundle/gems/ -name "*.o" -delete 2>/dev/null || true
+    find /usr/local/bundle/gems/ -name "*.o" -delete 2>/dev/null || true && \
+    find /usr/local/bundle/gems/ -maxdepth 2 -type d \( -name spec -o -name test \) \
+        -exec rm -rf {} + 2>/dev/null || true
 
 # =============================================================================
 # Stage 2: Runtime
 # =============================================================================
 FROM ruby:3.3-slim
 
+# jemalloc: alocador com menos fragmentação — reduz RSS do Ruby em 20-40%,
+# essencial nos 512MB do Free Tier (ghostscript spika ~50-100MB por PDF).
 RUN apt-get update && apt-get upgrade -y && apt-get install -y --no-install-recommends \
     ghostscript \
+    libjemalloc2 \
     wget \
     && rm -rf /var/lib/apt/lists/*
 
@@ -75,8 +85,16 @@ RUN mkdir -p tmp log \
 
 USER app
 
+# LD_PRELOAD=jemalloc       → malloc com menos fragmentação (RSS menor)
+# PUMA_WORKERS=0            → single mode: 1 processo Ruby em vez de master+worker
+#                             (~metade da RAM, boot mais rápido no cold start)
+# RUBY_YJIT_ENABLE=1        → JIT do Ruby 3.3: acelera geração de boleto/CNAB
+#                             (custo de ~+30MB RAM, coberto pela economia acima)
 ENV RACK_ENV=production \
     PORT=9292 \
+    LD_PRELOAD=/usr/lib/x86_64-linux-gnu/libjemalloc.so.2 \
+    PUMA_WORKERS=0 \
+    RUBY_YJIT_ENABLE=1 \
     MALLOC_ARENA_MAX=2 \
     RUBY_GC_HEAP_GROWTH_FACTOR=1.1 \
     BUNDLE_PATH=/usr/local/bundle \

@@ -1,0 +1,5 @@
+# O Dockerfile.brcobranca NÃO copia arquivos do contexto de build —
+# ele clona o boleto_cnab_api dentro do estágio builder via git.
+# Ignorar tudo torna o upload do contexto instantâneo no Render
+# (sem isso, ~18MB do repo Django são enviados ao daemon a cada build).
+*

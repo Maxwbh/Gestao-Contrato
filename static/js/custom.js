@@ -789,6 +789,79 @@
     });
 
     // ========================================================================
+    // BRCOBRANCA QUEUE — warm-up do serviço no cold start (Free Tier Render)
+    // ========================================================================
+    //
+    // Uso:
+    //   await GestaoContratos.BrcobrancaQueue.prepararApi(btnEl);
+    //   // ... fetch de geração de boleto ...
+    //
+    // Se o serviço estiver rodando, resolve imediatamente (wait=0).
+    // Se estiver dormindo, dispara warm-up no servidor e exibe countdown no btn.
+    //
+    const BrcobrancaQueue = {
+        _warmedAt: 0,
+        _warmMs: 10 * 60 * 1000,   // considera quente por 10 minutos
+
+        isWarm() {
+            return Date.now() - this._warmedAt < this._warmMs;
+        },
+
+        markWarm() {
+            this._warmedAt = Date.now();
+        },
+
+        async prepararApi(btnEl) {
+            if (this.isWarm()) return;
+
+            const csrfToken = (document.cookie.match(/csrftoken=([^;]+)/) || [])[1] || '';
+
+            let wait = 0;
+            try {
+                const resp = await fetch('/financeiro/api/brcobranca/solicitar/', {
+                    method: 'POST',
+                    headers: { 'X-CSRFToken': csrfToken },
+                });
+                const data = await resp.json();
+                wait = data.wait || 0;
+            } catch (_) {
+                // Falha na verificação — tenta gerar mesmo assim
+            }
+
+            if (wait > 0) {
+                await this._countdown(wait, btnEl);
+            }
+
+            this.markWarm();
+        },
+
+        _countdown(seconds, btnEl) {
+            return new Promise(resolve => {
+                let remaining = seconds;
+                const update = () => {
+                    if (btnEl) {
+                        btnEl.innerHTML =
+                            `<i class="fas fa-power-off fa-spin me-2"></i>Iniciando serviço... ${remaining}s`;
+                    }
+                };
+                update();
+                const iv = setInterval(() => {
+                    remaining -= 1;
+                    update();
+                    if (remaining <= 0) {
+                        clearInterval(iv);
+                        if (btnEl) {
+                            btnEl.innerHTML =
+                                '<i class="fas fa-spinner fa-spin me-2"></i>Gerando...';
+                        }
+                        resolve();
+                    }
+                }, 1000);
+            });
+        },
+    };
+
+    // ========================================================================
     // EXPOSE UTILITY FUNCTIONS GLOBALLY
     // ========================================================================
     window.GestaoContratos = {
@@ -803,7 +876,8 @@
         buscarCEP,
         preencherEndereco,
         showToast,
-        debounce
+        debounce,
+        BrcobrancaQueue,
     };
 
 })();

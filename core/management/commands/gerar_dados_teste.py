@@ -35,6 +35,17 @@ class Command(BaseCommand):
             action='store_true',
             help='Limpa todos os dados antes de gerar novos',
         )
+        parser.add_argument(
+            '--banco',
+            type=str,
+            choices=['001', '756', '237', '336'],
+            default=None,
+            help=(
+                'Concentra 100%% dos boletos no banco informado e o torna a conta '
+                'principal (001=BB, 756=Sicoob, 237=Bradesco, 336=C6). '
+                'Sem este parâmetro, distribui em round-robin entre os 4 bancos.'
+            ),
+        )
 
     def normalizar_email(self, texto):
         """Remove acentos e caracteres especiais para criar um email válido"""
@@ -58,6 +69,13 @@ class Command(BaseCommand):
         self.fake = Faker('pt_BR')
         Faker.seed(12345)  # Para dados consistentes
         random.seed(12345)
+        self.banco_unico = options.get('banco')
+
+        if self.banco_unico:
+            nomes = {'001': 'Banco do Brasil', '756': 'Sicoob', '237': 'Bradesco', '336': 'C6 Bank'}
+            self.stdout.write(self.style.WARNING(
+                f'Modo banco único: 100% dos boletos no {nomes[self.banco_unico]} ({self.banco_unico})'
+            ))
 
         if options['limpar']:
             self.stdout.write(self.style.WARNING('Limpando dados existentes...'))
@@ -387,9 +405,14 @@ class Command(BaseCommand):
             },
         ]
 
+        # Banco principal: o escolhido via --banco, ou BB (primeiro da lista)
+        banco_principal = self.banco_unico or bancos_config[0]['banco']
+
         for imobiliaria in imobiliarias:
             # Criar todas as contas (BB, Sicoob, Bradesco, C6) para cada imobiliária
-            for i, config in enumerate(bancos_config):
+            for config in bancos_config:
+                eh_principal = (config['banco'] == banco_principal)
+
                 # Mesclar agencia_dv com agencia se fornecido
                 agencia = config.get('agencia', '')
                 agencia_dv = config.get('agencia_dv', '')
@@ -406,12 +429,12 @@ class Command(BaseCommand):
                 else:
                     conta_completa = conta_numero
 
-                conta, _ = ContaBancaria.objects.get_or_create(
+                conta, criada = ContaBancaria.objects.get_or_create(
                     imobiliaria=imobiliaria,
                     banco=config['banco'],
                     defaults=dict(
                         descricao=f"{config['descricao']} - {imobiliaria.nome}",
-                        principal=(i == 0),  # BB é a principal
+                        principal=eh_principal,
                         agencia=agencia_completa,
                         conta=conta_completa,
                         convenio=config['convenio'],
@@ -425,6 +448,10 @@ class Command(BaseCommand):
                         ativo=True,
                     )
                 )
+                # Conta já existia: garantir que o flag principal reflita o banco escolhido
+                if not criada and conta.principal != eh_principal:
+                    conta.principal = eh_principal
+                    conta.save(update_fields=['principal'])
                 contas.append(conta)
 
         return contas
@@ -853,9 +880,13 @@ class Command(BaseCommand):
 
         hoje_date = tz.now().date()
 
-        # ── Fase 1: Selecionar parcelas e atribuir contas (round-robin) ──────
+        # ── Fase 1: Selecionar parcelas e atribuir contas ────────────────────
+        # --banco informado → 100% dos boletos na conta desse banco
+        # sem --banco       → round-robin entre as contas da imobiliária
         contas_por_imob: dict = {}
         for cb in contas_bancarias:
+            if self.banco_unico and cb.banco != self.banco_unico:
+                continue
             contas_por_imob.setdefault(cb.imobiliaria_id, []).append(cb)
         for contas in contas_por_imob.values():
             contas.sort(key=lambda c: (not c.principal, c.banco))

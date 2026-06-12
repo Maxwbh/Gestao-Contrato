@@ -178,17 +178,22 @@ services:
       - key: RACK_ENV
         value: "production"
       # MALLOC e GC otimizados para Free Tier (512MB RAM)
+      # (jemalloc via LD_PRELOAD já vem do Dockerfile; MALLOC_ARENA_MAX é fallback)
       - key: MALLOC_ARENA_MAX
         value: "2"
       - key: RUBY_GC_HEAP_GROWTH_FACTOR
         value: "1.1"
-      # Puma: 1 worker para economizar memória no Free Tier
+      # Puma em SINGLE MODE (workers=0): 1 processo Ruby em vez de master+worker.
+      # ~Metade da RAM e cold start mais rápido — a concorrência vem das threads.
       - key: PUMA_WORKERS
-        value: "1"
+        value: "0"
       - key: PUMA_MIN_THREADS
         value: "0"
       - key: PUMA_MAX_THREADS
         value: "5"
+      # YJIT (Ruby 3.3): acelera geração de boleto/CNAB (~+30MB RAM)
+      - key: RUBY_YJIT_ENABLE
+        value: "1"
       # Para forçar re-clone do boleto_cnab_api: incremente ARG CACHE_BUST
       # no Dockerfile.brcobranca e faça push — o Render reconstruirá do zero.
 
@@ -308,25 +313,25 @@ services:
 #   - Enviar notificacoes de vencimento
 #
 # =============================================================================
-# KEEP-ALIVE (Evitar que o servico adormeca)
+# KEEP-ALIVE — APENAS gestao-contrato-web (Django)
 # =============================================================================
-# O Free tier "adormece" apos 15 min de inatividade. Para manter ativo:
+# O Free tier tem 750h/mes. Manter TODOS os servicos vivos 24/7 esgota
+# o limite em ~10 dias (3 servicos × 24h = 72h/dia).
 #
-# 1. Configure um cron job adicional em cron-job.org:
-#    - URL: https://seu-app.onrender.com/health/
-#    - Metodo: GET
-#    - Agenda: A cada 10 minutos
+# REGRA: so manter o servico principal (Django) vivo com keep-alive.
+# Os demais devem dormir quando nao usados.
 #
-# 2. Para o BRCobranca tambem:
-#    - URL: https://brcobranca-api-m4q9.onrender.com/
-#    - Metodo: GET
-#    - Agenda: A cada 10 minutos
+# gestao-contrato-web (Django) — keepalive apenas em horário comercial
+#   - Configure no cron-job.org: GET /health/ a cada 14 minutos
+#   - Agendamento: Seg–Sex, 08:00–18:00 (fora desse horário pode dormir)
+#   - Consumo estimado: 10h/dia × 22 dias = ~220h/mês (dentro de 750h)
 #
-# 3. Para o Evolution API (somente durante janelas de teste ativo):
-#    - URL: https://evolution-api-test.onrender.com/
-#    - Metodo: GET
-#    - Agenda: A cada 10 minutos
-#    Obs: pode deixar adormecer fora dos testes — reconecta automaticamente
-#    via sessao salva no Supabase sem precisar novo QR Code.
+# brcobranca-api — NAO usar keep-alive
+#   - Deixar adormecer quando nao ha boletos sendo gerados
+#   - O Django aguarda automaticamente o cold start (ate 60s) via
+#     BRCOBRANCA_COLD_START_WAIT — primeira geracao de boleto do dia
+#     pode levar ~30-50s; as seguintes sao imediatas (servico ja acordado)
 #
-# 4. Ou use https://uptimerobot.com (gratuito, 5 min interval)
+# evolution-api-test — NAO usar keep-alive
+#   - Reconecta automaticamente ao acordar via sessao salva no Supabase
+#   - Ligar somente durante janelas de teste ativo (autoDeploy: false)
