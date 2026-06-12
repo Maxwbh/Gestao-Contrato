@@ -60,8 +60,12 @@ FROM ruby:3.3-slim
 
 # jemalloc: alocador com menos fragmentação — reduz RSS do Ruby em 20-40%,
 # essencial nos 512MB do Free Tier (ghostscript spika ~50-100MB por PDF).
+# fonts-urw-base35: fontes PostScript (Helvetica etc.) usadas pelo RGhost
+# na renderização dos boletos — com --no-install-recommends não é garantido
+# que venham junto do ghostscript (o upstream Alpine instala ghostscript-fonts)
 RUN apt-get update && apt-get upgrade -y && apt-get install -y --no-install-recommends \
     ghostscript \
+    fonts-urw-base35 \
     libjemalloc2 \
     wget \
     && rm -rf /var/lib/apt/lists/*
@@ -98,6 +102,7 @@ ENV RACK_ENV=production \
     MALLOC_ARENA_MAX=2 \
     RUBY_GC_HEAP_GROWTH_FACTOR=1.1 \
     BUNDLE_PATH=/usr/local/bundle \
+    BUNDLE_WITHOUT=development:test \
     GEM_HOME=/usr/local/bundle \
     PATH="/usr/local/bundle/bin:$PATH"
 
