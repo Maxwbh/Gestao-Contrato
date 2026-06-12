@@ -236,6 +236,20 @@
                                         </label>
                                     </div>
 
+                                    <div class="mb-3 mx-auto" style="max-width: 360px;">
+                                        <label class="form-label small text-muted" for="bancoBoletos">
+                                            <i class="fas fa-university me-1"></i>Banco dos boletos
+                                        </label>
+                                        <select class="form-select" id="bancoBoletos">
+                                            <option value="" selected>Distribuir entre os 4 bancos (round-robin)</option>
+                                            <option value="001">100% Banco do Brasil (001)</option>
+                                            <option value="756">100% Sicoob (756)</option>
+                                            <option value="237">100% Bradesco (237)</option>
+                                            <option value="336">100% C6 Bank (336)</option>
+                                        </select>
+                                        <small class="text-muted">O banco escolhido vira a conta principal das imobiliárias.</small>
+                                    </div>
+
                                     <button class="btn btn-primary btn-lg px-5" onclick="iniciarGeracaoDados()">
                                         <i class="fas fa-play me-2"></i>
                                         Iniciar Geração
@@ -625,6 +639,7 @@
 
         async function iniciarGeracaoDados() {
             const limpar = document.getElementById('limparAntes').checked;
+            const banco = document.getElementById('bancoBoletos').value || null;
             if (limpar && !confirm('⚠️ Isso irá LIMPAR todos os dados existentes e gerar novos.\n\nDeseja continuar?')) return;
 
             resetModal();
@@ -675,7 +690,7 @@
                 const response = await fetch('/api/gerar-dados-teste/', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrftoken },
-                    body: JSON.stringify({ limpar }),
+                    body: JSON.stringify({ limpar, banco }),
                     signal: controller.signal
                 });
                 clearTimeout(fetchTimeout);

@@ -446,7 +446,8 @@ def gerar_dados_teste(request):
                 'endpoint': '/api/gerar-dados-teste/',
                 'metodos': ['GET', 'POST'],
                 'parametros': {
-                    'limpar': 'bool - Se true, limpa todos os dados antes de gerar novos'
+                    'limpar': 'bool - Se true, limpa todos os dados antes de gerar novos',
+                    'banco': 'str - Concentra 100% dos boletos no banco (001=BB, 756=Sicoob, 237=Bradesco, 336=C6)',
                 },
                 'dados_existentes': {
                     'contabilidades': Contabilidade.objects.count(),
@@ -470,20 +471,29 @@ def gerar_dados_teste(request):
     # POST - Gerar dados
     try:
         # Aceitar tanto form-data quanto JSON
+        banco = None
         if request.content_type == 'application/json':
             try:
                 data = json.loads(request.body)
                 limpar = data.get('limpar', False)
+                banco = data.get('banco') or None
             except Exception:
                 limpar = False
         else:
             limpar = request.POST.get('limpar', 'false').lower() == 'true'
+            banco = request.POST.get('banco') or None
+
+        if banco and banco not in ('001', '756', '237', '336'):
+            return JsonResponse({
+                'status': 'error',
+                'message': f'Banco inválido: {banco}. Use 001, 756, 237 ou 336.',
+            }, status=400)
 
         # Capturar output do comando
         out = io.StringIO()
 
         # Executar comando
-        call_command('gerar_dados_teste', limpar=limpar, stdout=out)
+        call_command('gerar_dados_teste', limpar=limpar, banco=banco, stdout=out)
 
         output = out.getvalue()
 
