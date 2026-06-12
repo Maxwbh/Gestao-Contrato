@@ -291,6 +291,8 @@ def _build_setup_context():
     has_superuser = False
     total_contas_bancarias = 0
     total_imobiliarias = 0
+    total_contratos = 0
+    parcelas_nao_geradas = 0
 
     if has_tables:
         try:
@@ -301,6 +303,16 @@ def _build_setup_context():
             total_imobiliarias = Imobiliaria.objects.count()
         except Exception:
             pass
+        try:
+            from contratos.models import Contrato as _Contrato
+            from financeiro.models import Parcela as _Parcela, StatusBoleto as _StatusBoleto
+            total_contratos = _Contrato.objects.count()
+            parcelas_nao_geradas = _Parcela.objects.filter(
+                pago=False, status_boleto=_StatusBoleto.NAO_GERADO
+            ).count()
+        except Exception:
+            pass
+            pass
 
     return {
         'db_ok': db_ok,
@@ -310,6 +322,9 @@ def _build_setup_context():
         'has_superuser': has_superuser,
         'total_contas_bancarias': total_contas_bancarias,
         'total_imobiliarias': total_imobiliarias,
+        'total_contratos': total_contratos,
+        'parcelas_nao_geradas': parcelas_nao_geradas,
+        'tem_dados_para_boletos': total_contratos > 0,
     }
 
 
