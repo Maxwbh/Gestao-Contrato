@@ -394,8 +394,8 @@ class Command(BaseCommand):
                 'agencia_dv': '0',
                 'conta': '12345678',  # max 8 dígitos
                 'conta_dv': '5',
-                'convenio': '1234567',  # max 7 dígitos
-                'carteira': '1',
+                'convenio': '123456789',  # 9 dígitos (remessa exige 9; boleto usa os 7 primeiros)
+                'carteira': '01',
                 'layout_cnab': 'CNAB_240',
                 'nosso_numero_atual': 1,
             },

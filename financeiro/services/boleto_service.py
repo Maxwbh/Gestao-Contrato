@@ -71,7 +71,7 @@ class BoletoService:
         '341': '175',      # Itau
         '336': '10',       # C6 Bank (10=emissao banco, 20=emissao cliente)
         '748': '3',        # Sicredi (3=sem registro)
-        '756': '1',        # Sicoob
+        '756': '01',       # Sicoob (2 dígitos obrigatórios)
     }
 
     # Campos especificos obrigatorios por banco
