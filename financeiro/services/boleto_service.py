@@ -1051,7 +1051,7 @@ class BoletoService:
         logger.error('gerar_carne: erro HTTP %s — %s', response.status_code, error_msg)
         return {'sucesso': False, 'erro': error_msg}
 
-    def gerar_boletos_lote(self, parcelas_contas, tamanho_lote=15):
+    def gerar_boletos_lote(self, parcelas_contas, tamanho_lote=15, template=None):
         """
         Gera boletos reais em lotes via POST /api/boleto/multi.
         1 chamada à API por lote → drástica redução de requisições vs. gerar_boleto() individual.
@@ -1121,11 +1121,18 @@ class BoletoService:
                     lote_boletos.append(b)
 
                 timeout_lote = max(self.timeout, len(lote_dados) * 5)
+                # template: 'prawn' = Ruby nativo (sem GhostScript, menos RAM); '' = padrão API
+                _tmpl = template if template is not None else getattr(
+                    settings, 'BRCOBRANCA_TEMPLATE', ''
+                )
+                _form = {'type': 'pdf', 'include_data': 'true'}
+                if _tmpl:
+                    _form['template'] = _tmpl
                 try:
                     response = requests.post(
                         f"{self.brcobranca_url}/api/boleto/multi",
                         files={'data': ('boletos.json', json.dumps(lote_boletos).encode(), 'application/json')},
-                        data={'type': 'pdf', 'include_data': 'true'},
+                        data=_form,
                         headers={'Accept': 'application/vnd.BoletoApi-v1+json'},
                         timeout=timeout_lote,
                     )
@@ -1345,11 +1352,14 @@ class BoletoService:
                         boleto_data[campo] = dados_boleto[campo]
 
                 # Preparar parametros da requisicao conforme API customizada
+                _tmpl_single = getattr(settings, 'BRCOBRANCA_TEMPLATE', '')
                 params = {
                     'bank': banco_nome,
                     'type': 'pdf',
                     'data': json.dumps(boleto_data)
                 }
+                if _tmpl_single:
+                    params['template'] = _tmpl_single
 
                 # Log detalhado da requisicao
                 url = f"{self.brcobranca_url}/api/boleto"

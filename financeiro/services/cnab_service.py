@@ -428,8 +428,8 @@ class CNABService:
         elif codigo_banco == '756':
             # Sicoob: sequencial_remessa = string de 7 dígitos
             dados_empresa['sequencial_remessa'] = str(numero_remessa).zfill(7)[-7:]
-            # Remessa exige carteira com exatamente 2 dígitos e convenio com 9 dígitos.
-            # O boleto usa os 7 primeiros dígitos do convenio (truncado pela boleto_service).
+            # brcobranca ≥12.9.0 normaliza automaticamente carteira (rjust 2) e convenio (rjust 9)
+            # na remessa. Formatamos aqui como defesa extra para versões anteriores.
             dados_empresa['carteira'] = re.sub(r'\D', '', carteira_str).zfill(2)[:2] or '01'
             conv_digits = re.sub(r'\D', '', conta_bancaria.convenio or '')
             dados_empresa['convenio'] = conv_digits.zfill(9)[:9]

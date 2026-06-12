@@ -883,9 +883,10 @@ class Command(BaseCommand):
         )
 
     def _executar_so_boletos(self):
-        """Passo 2 do setup: gera boletos para dados já existentes no banco."""
+        """Passo 2 do setup: gera (ou regenera) boletos para dados existentes no banco."""
         from core.models import ContaBancaria
         from contratos.models import Contrato
+        from financeiro.models import Parcela, StatusBoleto
 
         self.stdout.write('Buscando dados existentes...')
         contas_bancarias = list(ContaBancaria.objects.all())
@@ -896,6 +897,22 @@ class Command(BaseCommand):
                 'Nenhum contrato encontrado. Execute o Passo 1 (gerar dados) primeiro.'
             ))
             return
+
+        # Resetar boletos anteriores de parcelas não pagas — garante que Passo 2
+        # sempre regenera mesmo que já tenha sido executado antes (setup idempotente).
+        reset_qs = Parcela.objects.filter(pago=False, status_boleto=StatusBoleto.GERADO)
+        qtd_reset = reset_qs.count()
+        if qtd_reset > 0:
+            self.stdout.write(f'Resetando {qtd_reset} boleto(s) anteriores para regeneração...')
+            reset_qs.update(
+                status_boleto=StatusBoleto.NAO_GERADO,
+                conta_bancaria=None,
+                nosso_numero='',
+                nosso_numero_formatado='',
+                nosso_numero_dv='',
+                boleto_pdf_db=b'',
+                data_geracao_boleto=None,
+            )
 
         if self.banco_unico:
             nomes = {'001': 'Banco do Brasil', '756': 'Sicoob', '237': 'Bradesco', '336': 'C6 Bank'}
