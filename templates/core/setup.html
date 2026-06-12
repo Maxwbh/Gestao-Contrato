@@ -686,21 +686,17 @@
             const controller = new AbortController();
             const fetchTimeout = setTimeout(() => controller.abort(), 300000); // 5 min
 
-            try {
-                const response = await fetch('/api/gerar-dados-teste/', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrftoken },
-                    body: JSON.stringify({ limpar, banco }),
-                    signal: controller.signal
-                });
-                clearTimeout(fetchTimeout);
+            // Parse seguro: respostas de timeout/proxy vêm vazias ou em HTML
+            async function lerJson(response) {
+                const texto = await response.text();
+                try { return JSON.parse(texto); }
+                catch (_) {
+                    return { status: 'error', error: `HTTP ${response.status} — resposta não-JSON do servidor` };
+                }
+            }
 
-                const duration = Date.now() - startTime;
+            function finalizar(success, data, duration) {
                 stopTimers();
-
-                const data = await response.json();
-                const success = data.status === 'success';
-
                 allSteps.forEach(s => {
                     const el = document.querySelector(`[data-step="${s}"]`);
                     if (el && el.style.display !== 'none') updateStep(s, success ? 'completed' : 'error');
@@ -709,23 +705,66 @@
                 document.getElementById('progressPercent').textContent = '100%';
 
                 if (success) {
-                    const stats = data.dados_gerados || {};
+                    const stats = data.dados_gerados || data.dados_existentes || {};
                     const totalRecords = (stats.contratos||0) + (stats.parcelas||0) + (stats.imoveis||0) + (stats.compradores||0);
                     saveToHistory({ timestamp: Date.now(), duration, limpar, records: totalRecords });
                     renderHistory();
                     atualizarEstimativa();
                 }
-
                 setTimeout(() => showResult(success, data, duration), 400);
+            }
+
+            try {
+                // 1. Inicia a geração (responde imediatamente — roda em segundo plano
+                //    no servidor; requests longos morrem no timeout do Render)
+                const response = await fetch('/api/gerar-dados-teste/', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrftoken },
+                    body: JSON.stringify({ limpar, banco }),
+                    signal: controller.signal
+                });
+                clearTimeout(fetchTimeout);
+                const data = await lerJson(response);
+
+                if (data.status !== 'started' && data.status !== 'running') {
+                    // Erro imediato (validação, banco indisponível...)
+                    finalizar(false, data, Date.now() - startTime);
+                    return;
+                }
+
+                // 2. Polling do estado a cada 4s (até 20 min)
+                const POLL_MS = 4000, LIMITE_MS = 20 * 60 * 1000;
+                const pollInicio = Date.now();
+
+                const poll = async () => {
+                    if (Date.now() - pollInicio > LIMITE_MS) {
+                        finalizar(false, { error: 'Tempo limite de 20 min excedido. Verifique o status mais tarde.' }, Date.now() - startTime);
+                        return;
+                    }
+                    try {
+                        const r = await fetch('/api/gerar-dados-teste/');
+                        const st = await lerJson(r);
+                        const ger = st.geracao || {};
+                        if (ger.status === 'done') {
+                            finalizar(true, { status: 'success', output: ger.output, dados_gerados: ger.dados_gerados || st.dados_existentes }, Date.now() - startTime);
+                            return;
+                        }
+                        if (ger.status === 'error') {
+                            finalizar(false, { error: ger.erro || 'Erro na geração', output: ger.output }, Date.now() - startTime);
+                            return;
+                        }
+                    } catch (_) { /* falha transitória de rede — tenta de novo */ }
+                    setTimeout(poll, POLL_MS);
+                };
+                setTimeout(poll, POLL_MS);
 
             } catch (error) {
                 clearTimeout(fetchTimeout);
                 const duration = Date.now() - startTime;
-                stopTimers();
                 const msg = error.name === 'AbortError'
-                    ? 'Tempo limite excedido (5 min). O servidor pode estar processando — verifique em alguns instantes.'
+                    ? 'Tempo limite excedido. O servidor pode estar processando — verifique em alguns instantes.'
                     : error.toString();
-                showResult(false, { error: msg }, duration);
+                finalizar(false, { error: msg }, duration);
             }
         }
 

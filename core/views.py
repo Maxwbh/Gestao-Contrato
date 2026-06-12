@@ -449,6 +449,7 @@ def gerar_dados_teste(request):
                     'limpar': 'bool - Se true, limpa todos os dados antes de gerar novos',
                     'banco': 'str - Concentra 100% dos boletos no banco (001=BB, 756=Sicoob, 237=Bradesco, 336=C6)',
                 },
+                'geracao': _job_dados_teste_get(),
                 'dados_existentes': {
                     'contabilidades': Contabilidade.objects.count(),
                     'imobiliarias': Imobiliaria.objects.count(),
@@ -468,7 +469,8 @@ def gerar_dados_teste(request):
                 'error': str(e)
             }, status=500)
 
-    # POST - Gerar dados
+    # POST - Gerar dados (assíncrono: Render mata requests longos em ~100s;
+    # a geração leva vários minutos → roda em thread e o cliente faz polling)
     try:
         # Aceitar tanto form-data quanto JSON
         banco = None
@@ -489,32 +491,64 @@ def gerar_dados_teste(request):
                 'message': f'Banco inválido: {banco}. Use 001, 756, 237 ou 336.',
             }, status=400)
 
-        # Capturar output do comando
-        out = io.StringIO()
+        estado = _job_dados_teste_get()
+        if estado.get('status') == 'running':
+            return JsonResponse({
+                'status': 'running',
+                'message': 'Geração já em andamento. Acompanhe pelo status.',
+                'geracao': estado,
+            }, status=409)
 
-        # Executar comando
-        call_command('gerar_dados_teste', limpar=limpar, banco=banco, stdout=out)
-
-        output = out.getvalue()
-
-        from contratos.models import TabelaJurosContrato
-        # Retornar sucesso
-        return JsonResponse({
-            'status': 'success',
-            'message': 'Dados gerados com sucesso!',
-            'output': output,
-            'dados_gerados': {
-                'contabilidades': Contabilidade.objects.count(),
-                'imobiliarias': Imobiliaria.objects.count(),
-                'contas_bancarias': ContaBancaria.objects.count(),
-                'imoveis': Imovel.objects.count(),
-                'compradores': Comprador.objects.count(),
-                'contratos': Contrato.objects.count(),
-                'parcelas': Parcela.objects.count(),
-                'indices_reajuste': IndiceReajuste.objects.count(),
-                'tabela_juros': TabelaJurosContrato.objects.count(),
-            }
+        _job_dados_teste_set({
+            'status': 'running',
+            'iniciado': timezone.now().isoformat(),
+            'limpar': limpar,
+            'banco': banco,
         })
+
+        import threading
+
+        def _executar():
+            from django.db import connection
+            out = io.StringIO()
+            try:
+                call_command('gerar_dados_teste', limpar=limpar, banco=banco, stdout=out)
+                from contratos.models import Contrato as _Contrato
+                _job_dados_teste_set({
+                    'status': 'done',
+                    'iniciado': estado.get('iniciado') or timezone.now().isoformat(),
+                    'finalizado': timezone.now().isoformat(),
+                    'output': out.getvalue()[-8000:],
+                    # Contagens na mesma conexão que gravou (GET de outro worker
+                    # pode ler snapshot defasado logo após o commit)
+                    'dados_gerados': {
+                        'contabilidades': Contabilidade.objects.count(),
+                        'imobiliarias': Imobiliaria.objects.count(),
+                        'contas_bancarias': ContaBancaria.objects.count(),
+                        'imoveis': Imovel.objects.count(),
+                        'compradores': Comprador.objects.count(),
+                        'contratos': _Contrato.objects.count(),
+                        'parcelas': Parcela.objects.count(),
+                        'indices_reajuste': IndiceReajuste.objects.count(),
+                    },
+                })
+            except Exception as exc:
+                logger.exception("Erro na geração assíncrona de dados de teste: %s", exc)
+                _job_dados_teste_set({
+                    'status': 'error',
+                    'finalizado': timezone.now().isoformat(),
+                    'erro': str(exc),
+                    'output': out.getvalue()[-8000:],
+                })
+            finally:
+                connection.close()
+
+        threading.Thread(target=_executar, daemon=True).start()
+
+        return JsonResponse({
+            'status': 'started',
+            'message': 'Geração iniciada em segundo plano. Faça GET neste endpoint para acompanhar.',
+        }, status=202)
 
     except Exception as e:
         logger.exception("Erro ao gerar dados de teste: %s", e)
@@ -525,6 +559,49 @@ def gerar_dados_teste(request):
             'error': str(e),
             'traceback': traceback.format_exc()
         }, status=500)
+
+
+_JOB_DADOS_TESTE_CHAVE = '_job_gerar_dados_teste'
+_JOB_DADOS_TESTE_STALE_MIN = 30
+
+
+def _job_dados_teste_get():
+    """Lê o estado da geração de dados (persistido no banco — visível entre workers)."""
+    from core.models import ParametroSistema
+    from datetime import timedelta
+    try:
+        p = ParametroSistema.objects.filter(chave=_JOB_DADOS_TESTE_CHAVE).first()
+        if not p or not p.valor:
+            return {}
+        estado = json.loads(p.valor)
+        # Worker pode ter sido reciclado no meio da geração: estado 'running'
+        # antigo demais é tratado como falha para liberar nova execução
+        if estado.get('status') == 'running' and estado.get('iniciado'):
+            from django.utils.dateparse import parse_datetime
+            inicio = parse_datetime(estado['iniciado'])
+            if inicio and timezone.now() - inicio > timedelta(minutes=_JOB_DADOS_TESTE_STALE_MIN):
+                estado = {
+                    'status': 'error',
+                    'erro': f'Geração não respondeu em {_JOB_DADOS_TESTE_STALE_MIN} min '
+                            '(worker pode ter sido reiniciado). Tente novamente.',
+                }
+                _job_dados_teste_set(estado)
+        return estado
+    except Exception:
+        return {}
+
+
+def _job_dados_teste_set(estado):
+    from core.models import ParametroSistema
+    ParametroSistema.objects.update_or_create(
+        chave=_JOB_DADOS_TESTE_CHAVE,
+        defaults={
+            'valor': json.dumps(estado, ensure_ascii=False),
+            'grupo': ParametroSistema.GRUPO_TESTE,
+            'tipo': ParametroSistema.TIPO_STR,
+            'descricao': 'Estado interno da geração assíncrona de dados de teste',
+        },
+    )
 
 
 @require_http_methods(["GET", "POST", "DELETE"])

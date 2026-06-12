@@ -63,21 +63,27 @@ class TestGerarDadosTesteView:
 
     def test_post_requer_autenticacao(self, client):
         """POST está acessível sem autenticação (endpoint de dados de teste liberado)."""
-        response = client.post('/api/gerar-dados-teste/')
-        # Endpoint de dados de teste é liberado sem autenticação (conforme design da view)
-        assert response.status_code in [200, 500]
+        from unittest.mock import patch
+        with patch('core.views.call_command'):
+            response = client.post('/api/gerar-dados-teste/')
+        # 202 = geração iniciada em background; 409 = já em andamento
+        assert response.status_code in [202, 409, 500]
 
     def test_post_requer_superuser(self, client_logged_in):
         """POST está acessível por usuários comuns (endpoint de dados de teste liberado)."""
-        response = client_logged_in.post('/api/gerar-dados-teste/')
-        # Endpoint de dados de teste não restringe por tipo de usuário
-        assert response.status_code in [200, 403, 500]
+        from unittest.mock import patch
+        with patch('core.views.call_command'):
+            response = client_logged_in.post('/api/gerar-dados-teste/')
+        assert response.status_code in [202, 403, 409, 500]
 
     def test_post_admin_permitido(self, client_admin):
-        """POST deve funcionar para admin."""
-        response = client_admin.post('/api/gerar-dados-teste/')
-        # Pode ser 200 ou 500 dependendo do ambiente
-        assert response.status_code in [200, 500]
+        """POST deve iniciar a geração assíncrona para admin."""
+        from unittest.mock import patch
+        with patch('core.views.call_command'):
+            response = client_admin.post('/api/gerar-dados-teste/')
+        assert response.status_code in [202, 409, 500]
+        if response.status_code == 202:
+            assert response.json()['status'] == 'started'
 
 
 @pytest.mark.django_db
