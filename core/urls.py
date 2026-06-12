@@ -135,4 +135,16 @@ urlpatterns = [
 
     # 35.2 — Status de bloqueio do comprador (usado pelo wizard)
     path('api/compradores/<int:pk>/status/', views.api_comprador_status, name='api_comprador_status'),
+
+    # API Comprador — CRUD
+    path('api/compradores/', views.api_compradores, name='api_compradores'),
+    path('api/compradores/<int:pk>/', views.api_comprador_detalhe, name='api_comprador_detalhe'),
+    path('api/compradores/<int:pk>/atualizar/', views.api_comprador_atualizar, name='api_comprador_atualizar'),
+    path('api/compradores/<int:pk>/excluir/', views.api_comprador_excluir, name='api_comprador_excluir'),
+
+    # API Imobiliária — CRUD
+    path('api/imobiliarias/', views.api_imobiliarias, name='api_imobiliarias'),
+    path('api/imobiliarias/<int:pk>/', views.api_imobiliaria_detalhe, name='api_imobiliaria_detalhe'),
+    path('api/imobiliarias/<int:pk>/atualizar/', views.api_imobiliaria_atualizar, name='api_imobiliaria_atualizar'),
+    path('api/imobiliarias/<int:pk>/excluir/', views.api_imobiliaria_excluir, name='api_imobiliaria_excluir'),
 ]
