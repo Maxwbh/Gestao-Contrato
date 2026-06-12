@@ -1023,12 +1023,16 @@ class BoletoService:
             return {'sucesso': False, 'erro': 'Nenhum boleto pôde ser preparado'}
 
         url = f"{self.brcobranca_url}/api/boleto/multi"
+        _tmpl_carne = getattr(settings, 'BRCOBRANCA_TEMPLATE', '')
+        _form_carne = {'type': 'pdf'}
+        if _tmpl_carne:
+            _form_carne['template'] = _tmpl_carne
         try:
             # Spec OpenAPI: form-data — type + data (JSON file); bank embutido em cada boleto
             response = requests.post(
                 url,
                 files={'data': ('boletos.json', json.dumps(boletos_data).encode(), 'application/json')},
-                data={'type': 'pdf'},
+                data=_form_carne,
                 headers={'Accept': 'application/vnd.BoletoApi-v1+json'},
                 timeout=max(self.timeout, 60),
             )
