@@ -52,6 +52,11 @@ class ImobiliariaAdmin(admin.ModelAdmin):
         ('Dados Bancários', {
             'fields': ('banco', 'agencia', 'conta', 'pix')
         }),
+        ('Identidade Visual (Boleto)', {
+            'fields': ('logo', 'cor_marca', 'rodape_contato', 'marca_dagua'),
+            'classes': ('collapse',),
+            'description': 'Logo, cor de marca, rodapé e marca d\'água usados nos boletos Prawn (brcobranca ≥12.10.0).',
+        }),
         ('Status', {
             'fields': ('ativo', 'criado_em', 'atualizado_em')
         }),

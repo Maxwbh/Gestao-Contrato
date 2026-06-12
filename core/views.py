@@ -291,6 +291,11 @@ def _build_setup_context():
     has_superuser = False
     total_contas_bancarias = 0
     total_imobiliarias = 0
+    total_contratos = 0
+    parcelas_nao_geradas = 0
+    total_remessas = 0
+    total_retornos = 0
+    imobiliarias_com_logo = 0
 
     if has_tables:
         try:
@@ -299,8 +304,23 @@ def _build_setup_context():
             has_superuser = get_user_model().objects.filter(is_superuser=True).exists()
             total_contas_bancarias = ContaBancaria.objects.count()
             total_imobiliarias = Imobiliaria.objects.count()
+            imobiliarias_com_logo = Imobiliaria.objects.exclude(logo='').exclude(logo=None).count()
         except Exception:
             pass
+        try:
+            from contratos.models import Contrato as _Contrato
+            from financeiro.models import Parcela as _Parcela, StatusBoleto as _StatusBoleto
+            from financeiro.models import ArquivoRemessa as _AR, ArquivoRetorno as _ARet
+            total_contratos = _Contrato.objects.count()
+            parcelas_nao_geradas = _Parcela.objects.filter(
+                pago=False, status_boleto=_StatusBoleto.NAO_GERADO
+            ).count()
+            total_remessas = _AR.objects.count()
+            total_retornos = _ARet.objects.count()
+        except Exception:
+            pass
+
+    tem_dados_passo3 = total_contratos > 0
 
     return {
         'db_ok': db_ok,
@@ -310,6 +330,13 @@ def _build_setup_context():
         'has_superuser': has_superuser,
         'total_contas_bancarias': total_contas_bancarias,
         'total_imobiliarias': total_imobiliarias,
+        'total_contratos': total_contratos,
+        'parcelas_nao_geradas': parcelas_nao_geradas,
+        'tem_dados_para_boletos': total_contratos > 0,
+        'total_remessas': total_remessas,
+        'total_retornos': total_retornos,
+        'imobiliarias_com_logo': imobiliarias_com_logo,
+        'tem_dados_passo3': tem_dados_passo3,
     }
 
 
@@ -2969,3 +2996,407 @@ def ia_workflow_tiers_reordenar(request, pk):
         for idx, tier_id in enumerate(ids, start=1):
             WorkflowIATier.objects.filter(pk=tier_id, workflow=wf).update(ordem=idx)
     return JsonResponse({'status': 'ok'})
+
+
+# =============================================================================
+# API — Comprador (CRUD)
+# =============================================================================
+
+def _serializar_comprador(c):
+    return {
+        'id': c.id,
+        'tipo_pessoa': c.tipo_pessoa,
+        'nome': c.nome,
+        # PF
+        'cpf': c.cpf or '',
+        'rg': c.rg,
+        'data_nascimento': c.data_nascimento.isoformat() if c.data_nascimento else None,
+        'estado_civil': c.estado_civil,
+        'profissao': c.profissao,
+        # PJ
+        'cnpj': c.cnpj or '',
+        'nome_fantasia': c.nome_fantasia,
+        'inscricao_estadual': c.inscricao_estadual,
+        'inscricao_municipal': c.inscricao_municipal,
+        'responsavel_legal': c.responsavel_legal,
+        'responsavel_cpf': c.responsavel_cpf,
+        # Endereço
+        'cep': c.cep,
+        'logradouro': c.logradouro,
+        'numero': c.numero,
+        'complemento': c.complemento,
+        'bairro': c.bairro,
+        'cidade': c.cidade,
+        'estado': c.estado,
+        # Contato
+        'telefone': c.telefone,
+        'celular': c.celular,
+        'email': c.email,
+        'notificar_email': c.notificar_email,
+        'notificar_sms': c.notificar_sms,
+        'notificar_whatsapp': c.notificar_whatsapp,
+        # Cônjuge
+        'conjuge_nome': c.conjuge_nome,
+        'conjuge_cpf': c.conjuge_cpf,
+        'conjuge_rg': c.conjuge_rg,
+        # Outros
+        'observacoes': c.observacoes,
+        'bloqueio_credito': c.bloqueio_credito,
+        'ativo': c.ativo,
+        'criado_em': c.criado_em.isoformat() if c.criado_em else None,
+        'atualizado_em': c.atualizado_em.isoformat() if c.atualizado_em else None,
+    }
+
+
+@login_required
+@require_http_methods(['GET', 'POST'])
+def api_compradores(request):
+    """Lista ou cria compradores. GET aceita ?q= para busca por nome/CPF/CNPJ/email."""
+    if request.method == 'GET':
+        try:
+            qs = Comprador.objects.filter(ativo=True).order_by('nome')
+            q = request.GET.get('q', '').strip()
+            if q:
+                from django.db.models import Q as _Q
+                qs = qs.filter(
+                    _Q(nome__icontains=q) |
+                    _Q(cpf__icontains=q) |
+                    _Q(cnpj__icontains=q) |
+                    _Q(email__icontains=q) |
+                    _Q(celular__icontains=q)
+                )
+            total = qs.count()
+            page = max(1, int(request.GET.get('page', 1)))
+            page_size = min(100, max(1, int(request.GET.get('page_size', 25))))
+            start = (page - 1) * page_size
+            compradores = [_serializar_comprador(c) for c in qs[start:start + page_size]]
+            return JsonResponse({
+                'status': 'success',
+                'total': total,
+                'page': page,
+                'page_size': page_size,
+                'compradores': compradores,
+            })
+        except Exception as e:
+            logger.exception('api_compradores GET: %s', e)
+            return JsonResponse({'status': 'error', 'message': str(e)}, status=500)
+
+    # POST — criar
+    try:
+        data = json.loads(request.body)
+        comprador = Comprador.objects.create(
+            tipo_pessoa=data.get('tipo_pessoa', 'PF'),
+            nome=data.get('nome', ''),
+            cpf=data.get('cpf') or None,
+            rg=data.get('rg', ''),
+            data_nascimento=data.get('data_nascimento') or None,
+            estado_civil=data.get('estado_civil', ''),
+            profissao=data.get('profissao', ''),
+            cnpj=data.get('cnpj') or None,
+            nome_fantasia=data.get('nome_fantasia', ''),
+            inscricao_estadual=data.get('inscricao_estadual', ''),
+            inscricao_municipal=data.get('inscricao_municipal', ''),
+            responsavel_legal=data.get('responsavel_legal', ''),
+            responsavel_cpf=data.get('responsavel_cpf', ''),
+            cep=data.get('cep', ''),
+            logradouro=data.get('logradouro', ''),
+            numero=data.get('numero', ''),
+            complemento=data.get('complemento', ''),
+            bairro=data.get('bairro', ''),
+            cidade=data.get('cidade', ''),
+            estado=data.get('estado', ''),
+            telefone=data.get('telefone', ''),
+            celular=data.get('celular', ''),
+            email=data.get('email', ''),
+            notificar_email=data.get('notificar_email', True),
+            notificar_sms=data.get('notificar_sms', False),
+            notificar_whatsapp=data.get('notificar_whatsapp', False),
+            conjuge_nome=data.get('conjuge_nome', ''),
+            conjuge_cpf=data.get('conjuge_cpf', ''),
+            conjuge_rg=data.get('conjuge_rg', ''),
+            observacoes=data.get('observacoes', ''),
+        )
+        return JsonResponse({'status': 'success', 'comprador': _serializar_comprador(comprador)}, status=201)
+    except Exception as e:
+        logger.exception('api_compradores POST: %s', e)
+        return JsonResponse({'status': 'error', 'message': str(e)}, status=400)
+
+
+@login_required
+@require_http_methods(['GET'])
+def api_comprador_detalhe(request, pk):
+    """Retorna os dados completos de um comprador."""
+    try:
+        comprador = get_object_or_404(Comprador, pk=pk)
+        return JsonResponse({'status': 'success', 'comprador': _serializar_comprador(comprador)})
+    except Exception as e:
+        logger.exception('api_comprador_detalhe pk=%s: %s', pk, e)
+        return JsonResponse({'status': 'error', 'message': str(e)}, status=500)
+
+
+@login_required
+@require_http_methods(['PUT', 'PATCH'])
+def api_comprador_atualizar(request, pk):
+    """Atualiza os dados de um comprador (PUT ou PATCH)."""
+    try:
+        comprador = get_object_or_404(Comprador, pk=pk)
+        data = json.loads(request.body)
+        campos = [
+            'tipo_pessoa', 'nome', 'rg', 'data_nascimento', 'estado_civil', 'profissao',
+            'nome_fantasia', 'inscricao_estadual', 'inscricao_municipal',
+            'responsavel_legal', 'responsavel_cpf',
+            'cep', 'logradouro', 'numero', 'complemento', 'bairro', 'cidade', 'estado',
+            'telefone', 'celular', 'email',
+            'notificar_email', 'notificar_sms', 'notificar_whatsapp',
+            'conjuge_nome', 'conjuge_cpf', 'conjuge_rg',
+            'observacoes', 'ativo',
+        ]
+        for campo in campos:
+            if campo in data:
+                setattr(comprador, campo, data[campo])
+        # Nullable fields
+        if 'cpf' in data:
+            comprador.cpf = data['cpf'] or None
+        if 'cnpj' in data:
+            comprador.cnpj = data['cnpj'] or None
+        comprador.save()
+        return JsonResponse({'status': 'success', 'comprador': _serializar_comprador(comprador)})
+    except Exception as e:
+        logger.exception('api_comprador_atualizar pk=%s: %s', pk, e)
+        return JsonResponse({'status': 'error', 'message': str(e)}, status=400)
+
+
+@login_required
+@require_http_methods(['DELETE'])
+def api_comprador_excluir(request, pk):
+    """Desativa (soft delete) um comprador."""
+    try:
+        comprador = get_object_or_404(Comprador, pk=pk)
+        comprador.ativo = False
+        comprador.save(update_fields=['ativo'])
+        return JsonResponse({'status': 'success', 'message': 'Comprador desativado.'})
+    except Exception as e:
+        logger.exception('api_comprador_excluir pk=%s: %s', pk, e)
+        return JsonResponse({'status': 'error', 'message': str(e)}, status=500)
+
+
+# =============================================================================
+# API — Imobiliária (CRUD)
+# =============================================================================
+
+def _serializar_imobiliaria(imob, request=None):
+    logo_url = ''
+    if imob.logo:
+        try:
+            logo_url = request.build_absolute_uri(imob.logo.url) if request else imob.logo.url
+        except Exception:
+            pass
+    return {
+        'id': imob.id,
+        'tipo_pessoa': imob.tipo_pessoa,
+        'nome': imob.nome,
+        'razao_social': imob.razao_social,
+        'cnpj': imob.cnpj or '',
+        'cpf': imob.cpf or '',
+        'documento': imob.documento or '',
+        # Endereço
+        'cep': imob.cep,
+        'logradouro': imob.logradouro,
+        'numero': imob.numero,
+        'complemento': imob.complemento,
+        'bairro': imob.bairro,
+        'cidade': imob.cidade,
+        'estado': imob.estado,
+        # Contato
+        'telefone': imob.telefone,
+        'email': imob.email,
+        'responsavel_financeiro': imob.responsavel_financeiro,
+        # Identidade visual
+        'logo_url': logo_url,
+        'cor_marca': imob.cor_marca,
+        'rodape_contato': imob.rodape_contato,
+        'marca_dagua': imob.marca_dagua,
+        'ativo': imob.ativo,
+        'criado_em': imob.criado_em.isoformat() if imob.criado_em else None,
+        'atualizado_em': imob.atualizado_em.isoformat() if imob.atualizado_em else None,
+    }
+
+
+@login_required
+@require_http_methods(['GET', 'POST'])
+def api_imobiliarias(request):
+    """Lista ou cria imobiliárias. GET aceita ?q= para busca por nome/CNPJ."""
+    if request.method == 'GET':
+        try:
+            qs = Imobiliaria.objects.all().order_by('nome')
+            q = request.GET.get('q', '').strip()
+            if q:
+                from django.db.models import Q as _Q
+                qs = qs.filter(
+                    _Q(nome__icontains=q) |
+                    _Q(razao_social__icontains=q) |
+                    _Q(cnpj__icontains=q) |
+                    _Q(email__icontains=q)
+                )
+            ativo = request.GET.get('ativo')
+            if ativo is not None:
+                qs = qs.filter(ativo=(ativo.lower() in ('1', 'true', 'sim')))
+            total = qs.count()
+            page = max(1, int(request.GET.get('page', 1)))
+            page_size = min(100, max(1, int(request.GET.get('page_size', 25))))
+            start = (page - 1) * page_size
+            imobiliarias = [_serializar_imobiliaria(i, request) for i in qs[start:start + page_size]]
+            return JsonResponse({
+                'status': 'success',
+                'total': total,
+                'page': page,
+                'page_size': page_size,
+                'imobiliarias': imobiliarias,
+            })
+        except Exception as e:
+            logger.exception('api_imobiliarias GET: %s', e)
+            return JsonResponse({'status': 'error', 'message': str(e)}, status=500)
+
+    # POST — criar
+    try:
+        data = json.loads(request.body)
+        contabilidade_id = data.get('contabilidade_id')
+        if not contabilidade_id:
+            return JsonResponse({'status': 'error', 'message': 'contabilidade_id é obrigatório.'}, status=400)
+        contabilidade = get_object_or_404(Contabilidade, pk=contabilidade_id)
+        imob = Imobiliaria.objects.create(
+            contabilidade=contabilidade,
+            tipo_pessoa=data.get('tipo_pessoa', 'PJ'),
+            nome=data.get('nome', ''),
+            razao_social=data.get('razao_social', ''),
+            cnpj=data.get('cnpj') or None,
+            cpf=data.get('cpf') or None,
+            cep=data.get('cep', ''),
+            logradouro=data.get('logradouro', ''),
+            numero=data.get('numero', ''),
+            complemento=data.get('complemento', ''),
+            bairro=data.get('bairro', ''),
+            cidade=data.get('cidade', ''),
+            estado=data.get('estado', ''),
+            telefone=data.get('telefone', ''),
+            email=data.get('email', ''),
+            responsavel_financeiro=data.get('responsavel_financeiro', ''),
+            cor_marca=data.get('cor_marca', ''),
+            rodape_contato=data.get('rodape_contato', ''),
+            marca_dagua=data.get('marca_dagua', ''),
+        )
+        return JsonResponse({'status': 'success', 'imobiliaria': _serializar_imobiliaria(imob, request)}, status=201)
+    except Exception as e:
+        logger.exception('api_imobiliarias POST: %s', e)
+        return JsonResponse({'status': 'error', 'message': str(e)}, status=400)
+
+
+@login_required
+@require_http_methods(['GET'])
+def api_imobiliaria_detalhe(request, pk):
+    """Retorna os dados completos de uma imobiliária."""
+    try:
+        imob = get_object_or_404(Imobiliaria, pk=pk)
+        return JsonResponse({'status': 'success', 'imobiliaria': _serializar_imobiliaria(imob, request)})
+    except Exception as e:
+        logger.exception('api_imobiliaria_detalhe pk=%s: %s', pk, e)
+        return JsonResponse({'status': 'error', 'message': str(e)}, status=500)
+
+
+@login_required
+@require_http_methods(['PUT', 'PATCH'])
+def api_imobiliaria_atualizar(request, pk):
+    """Atualiza os dados de uma imobiliária (PUT ou PATCH)."""
+    try:
+        imob = get_object_or_404(Imobiliaria, pk=pk)
+        data = json.loads(request.body)
+        campos = [
+            'tipo_pessoa', 'nome', 'razao_social',
+            'cep', 'logradouro', 'numero', 'complemento', 'bairro', 'cidade', 'estado',
+            'telefone', 'email', 'responsavel_financeiro',
+            'cor_marca', 'rodape_contato', 'marca_dagua',
+            'ativo',
+        ]
+        for campo in campos:
+            if campo in data:
+                setattr(imob, campo, data[campo])
+        if 'cnpj' in data:
+            imob.cnpj = data['cnpj'] or None
+        if 'cpf' in data:
+            imob.cpf = data['cpf'] or None
+        imob.save()
+        return JsonResponse({'status': 'success', 'imobiliaria': _serializar_imobiliaria(imob, request)})
+    except Exception as e:
+        logger.exception('api_imobiliaria_atualizar pk=%s: %s', pk, e)
+        return JsonResponse({'status': 'error', 'message': str(e)}, status=400)
+
+
+@login_required
+@require_http_methods(['DELETE'])
+def api_imobiliaria_excluir(request, pk):
+    """Desativa (soft delete) uma imobiliária."""
+    try:
+        imob = get_object_or_404(Imobiliaria, pk=pk)
+        imob.ativo = False
+        imob.save(update_fields=['ativo'])
+        return JsonResponse({'status': 'success', 'message': 'Imobiliária desativada.'})
+    except Exception as e:
+        logger.exception('api_imobiliaria_excluir pk=%s: %s', pk, e)
+        return JsonResponse({'status': 'error', 'message': str(e)}, status=500)
+
+
+# ---------------------------------------------------------------------------
+# Passo 3 — Setup: remessa CNAB, retorno e logos para imobiliárias
+# ---------------------------------------------------------------------------
+
+@login_required
+@require_http_methods(['POST'])
+def api_simular_remessa_teste(request):
+    """Gera arquivos de remessa CNAB simulados para todas as imobiliárias/meses."""
+    try:
+        from io import StringIO
+        from django.core.management import call_command
+        out = StringIO()
+        call_command('gerar_dados_teste', so_remessa=True, stdout=out)
+        saida = out.getvalue()
+        from financeiro.models import ArquivoRemessa
+        total = ArquivoRemessa.objects.count()
+        return JsonResponse({'status': 'success', 'output': saida, 'total_remessas': total})
+    except Exception as e:
+        logger.exception('api_simular_remessa_teste: %s', e)
+        return JsonResponse({'status': 'error', 'message': str(e)}, status=500)
+
+
+@login_required
+@require_http_methods(['POST'])
+def api_simular_retorno_teste(request):
+    """Gera arquivos de retorno CNAB simulados (70% pago)."""
+    try:
+        from io import StringIO
+        from django.core.management import call_command
+        out = StringIO()
+        call_command('gerar_dados_teste', so_retorno=True, stdout=out)
+        saida = out.getvalue()
+        from financeiro.models import ArquivoRetorno
+        total = ArquivoRetorno.objects.count()
+        return JsonResponse({'status': 'success', 'output': saida, 'total_retornos': total})
+    except Exception as e:
+        logger.exception('api_simular_retorno_teste: %s', e)
+        return JsonResponse({'status': 'error', 'message': str(e)}, status=500)
+
+
+@login_required
+@require_http_methods(['POST'])
+def api_gerar_logos_teste(request):
+    """Gera logotipos PNG para as imobiliárias de teste usando Pillow."""
+    try:
+        from io import StringIO
+        from django.core.management import call_command
+        out = StringIO()
+        call_command('gerar_dados_teste', so_logos=True, stdout=out)
+        saida = out.getvalue()
+        com_logo = Imobiliaria.objects.exclude(logo='').exclude(logo=None).count()
+        return JsonResponse({'status': 'success', 'output': saida, 'imobiliarias_com_logo': com_logo})
+    except Exception as e:
+        logger.exception('api_gerar_logos_teste: %s', e)
+        return JsonResponse({'status': 'error', 'message': str(e)}, status=500)

@@ -276,9 +276,15 @@
                     </div>
                 </div>
 
-                <!-- PASSO 2: Geração de Boletos (revelado após Passo 1 bem-sucedido) -->
-                <div class="setup-card d-none" id="step2Card">
-                    <h3><i class="fas fa-barcode me-2 text-warning"></i>Passo 2: Gerar Boletos</h3>
+                <!-- PASSO 2: Geração de Boletos -->
+                <!-- Visível de imediato se já existem contratos no banco; caso contrário revelado via JS após Passo 1 -->
+                <div class="setup-card {% if not tem_dados_para_boletos %}d-none{% endif %}" id="step2Card">
+                    <h3>
+                        <i class="fas fa-barcode me-2 text-warning"></i>Passo 2: Gerar Boletos
+                        {% if parcelas_nao_geradas > 0 %}
+                        <span class="badge bg-warning text-dark ms-2 fs-6">{{ parcelas_nao_geradas }} pendente{{ parcelas_nao_geradas|pluralize:"s" }}</span>
+                        {% endif %}
+                    </h3>
                     <hr>
                     <div class="row justify-content-center">
                         <div class="col-md-8">
@@ -286,9 +292,25 @@
                                 <div class="card-body text-center p-4">
                                     <i class="fas fa-barcode fa-3x text-warning mb-3"></i>
                                     <h5>Gerar Boletos de Teste</h5>
+                                    {% if total_contratos > 0 %}
+                                    <p class="text-muted">
+                                        <strong>{{ total_contratos }} contrato(s)</strong> no banco
+                                        {% if parcelas_nao_geradas > 0 %}
+                                        — <span class="text-warning fw-bold">{{ parcelas_nao_geradas }} parcela(s) sem boleto</span>
+                                        {% else %}
+                                        — todos os boletos já foram gerados
+                                        {% endif %}
+                                    </p>
+                                    {% endif %}
                                     <p class="text-muted">
                                         Gera boletos reais via BRCobrança para as parcelas vencidas.
                                         A API pode estar hibernada — o processo aguarda o cold start automaticamente.
+                                    </p>
+                                    <p class="text-muted small">
+                                        <i class="fas fa-palette me-1 text-primary"></i>
+                                        Template <strong>Prawn</strong> com identidade visual da imobiliária:
+                                        cor de marca, rodapé e selo de parcela (ex: PARCELA 3/12).
+                                        <a href="/core/imobiliarias/" target="_blank" class="ms-1">Configurar →</a>
                                     </p>
 
                                     <div id="step2StatusBox" class="alert alert-light border mb-3 d-none">
@@ -312,9 +334,99 @@
                                         <i class="fas fa-barcode me-2"></i>
                                         Gerar Boletos
                                     </button>
+                                    {% if parcelas_nao_geradas == 0 and total_contratos > 0 %}
+                                    <div class="mt-2">
+                                        <small class="text-muted">
+                                            <i class="fas fa-redo me-1"></i>Clique para <strong>regenerar</strong> todos os boletos
+                                        </small>
+                                    </div>
+                                    {% endif %}
                                 </div>
                             </div>
                         </div>
+                    </div>
+                </div>
+
+                <!-- Passo 3 — visível quando há contratos/boletos no banco -->
+                <div class="setup-card {% if not tem_dados_passo3 %}d-none{% endif %}" id="step3Card">
+                    <h3>
+                        <i class="fas fa-file-invoice-dollar me-2 text-success"></i>Passo 3: Dados Avançados (CNAB e Logos)
+                    </h3>
+                    <hr>
+                    <div class="row justify-content-center g-3">
+
+                        <!-- Remessa CNAB -->
+                        <div class="col-md-4">
+                            <div class="card border-success shadow-sm h-100">
+                                <div class="card-body text-center p-4 d-flex flex-column">
+                                    <i class="fas fa-upload fa-3x text-success mb-3"></i>
+                                    <h5>Arquivo Remessa</h5>
+                                    <p class="text-muted small flex-grow-1">
+                                        Gera remessas CNAB por imobiliária/mês.
+                                        Boletos GERADO são agrupados e marcados como REGISTRADO.
+                                        Status variados (70% enviado, 30% outros).
+                                        {% if total_remessas > 0 %}
+                                        <br><span class="badge bg-success mt-1">{{ total_remessas }} remessa{{ total_remessas|pluralize:"s" }} já gerada{{ total_remessas|pluralize:"s" }}</span>
+                                        {% endif %}
+                                    </p>
+                                    <div id="remessaStatusBox" class="alert alert-light border mb-2 d-none">
+                                        <small id="remessaStatusTxt"></small>
+                                    </div>
+                                    <button class="btn btn-success mt-auto" id="btnRemessa" onclick="executarPasso3('remessa')">
+                                        <i class="fas fa-upload me-2"></i>Gerar Remessa
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Retorno CNAB -->
+                        <div class="col-md-4">
+                            <div class="card border-primary shadow-sm h-100">
+                                <div class="card-body text-center p-4 d-flex flex-column">
+                                    <i class="fas fa-download fa-3x text-primary mb-3"></i>
+                                    <h5>Arquivo Retorno</h5>
+                                    <p class="text-muted small flex-grow-1">
+                                        Simula retorno bancário: 70% LIQUIDADO (pagos),
+                                        30% com outros status. Registra o pagamento das parcelas
+                                        via <code>HistoricoPagamento</code> com origem CNAB.
+                                        {% if total_retornos > 0 %}
+                                        <br><span class="badge bg-primary mt-1">{{ total_retornos }} retorno{{ total_retornos|pluralize:"s" }} já gerado{{ total_retornos|pluralize:"s" }}</span>
+                                        {% endif %}
+                                    </p>
+                                    <div id="retornoStatusBox" class="alert alert-light border mb-2 d-none">
+                                        <small id="retornoStatusTxt"></small>
+                                    </div>
+                                    <button class="btn btn-primary mt-auto" id="btnRetorno" onclick="executarPasso3('retorno')">
+                                        <i class="fas fa-download me-2"></i>Gerar Retorno
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Logos das imobiliárias -->
+                        <div class="col-md-4">
+                            <div class="card border-info shadow-sm h-100">
+                                <div class="card-body text-center p-4 d-flex flex-column">
+                                    <i class="fas fa-image fa-3x text-info mb-3"></i>
+                                    <h5>Logos das Imobiliárias</h5>
+                                    <p class="text-muted small flex-grow-1">
+                                        Gera logotipos PNG (400×120 px) com Pillow usando
+                                        a cor de marca de cada imobiliária. Usados no template
+                                        Prawn dos boletos brcobrança ≥12.10.0.
+                                        {% if imobiliarias_com_logo > 0 %}
+                                        <br><span class="badge bg-info mt-1">{{ imobiliarias_com_logo }} imobiliária{{ imobiliarias_com_logo|pluralize:"s" }} com logo</span>
+                                        {% endif %}
+                                    </p>
+                                    <div id="logosStatusBox" class="alert alert-light border mb-2 d-none">
+                                        <small id="logosStatusTxt"></small>
+                                    </div>
+                                    <button class="btn btn-info mt-auto text-white" id="btnLogos" onclick="executarPasso3('logos')">
+                                        <i class="fas fa-image me-2"></i>Gerar Logos
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+
                     </div>
                 </div>
 
@@ -322,17 +434,25 @@
                     <h3><i class="fas fa-cogs me-2 text-info"></i>Outras Ações</h3>
                     <hr>
                     <div class="row">
-                        <div class="col-md-4 text-center mb-3">
+                        <div class="col-md-3 text-center mb-3">
                             <button class="btn btn-outline-info btn-setup w-100" onclick="executarAcao('migrations')">
                                 <i class="fas fa-database me-2"></i>Migrations
                             </button>
                         </div>
-                        <div class="col-md-4 text-center mb-3">
+                        <div class="col-md-3 text-center mb-3">
                             <button class="btn btn-outline-success btn-setup w-100" onclick="executarAcao('superuser')">
                                 <i class="fas fa-user-shield me-2"></i>Criar Admin
                             </button>
                         </div>
-                        <div class="col-md-4 text-center mb-3">
+                        <div class="col-md-3 text-center mb-3">
+                            <button class="btn btn-warning btn-setup w-100" onclick="irParaGerarBoletos()" id="btnGerarBoletosAtalho">
+                                <i class="fas fa-barcode me-2"></i>Gerar Boletos
+                                {% if parcelas_nao_geradas > 0 %}
+                                <span class="badge bg-dark ms-1">{{ parcelas_nao_geradas }}</span>
+                                {% endif %}
+                            </button>
+                        </div>
+                        <div class="col-md-3 text-center mb-3">
                             <button class="btn btn-outline-danger btn-setup w-100" onclick="limparDadosAPI()">
                                 <i class="fas fa-trash me-2"></i>Limpar Dados
                             </button>
@@ -952,6 +1072,89 @@
                 }
             } catch (_) {}
         })();
+
+        function irParaGerarBoletos() {
+            const card = document.getElementById('step2Card');
+            if (!card) return;
+            card.classList.remove('d-none');
+            card.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            // Destaca brevemente o card
+            card.style.transition = 'box-shadow 0.3s';
+            card.style.boxShadow = '0 0 0 3px #ffc107';
+            setTimeout(() => { card.style.boxShadow = ''; }, 1500);
+        }
+
+        const passo3Config = {
+            remessa: {
+                url: '/core/api/simular-remessa-teste/',
+                btnId: 'btnRemessa',
+                boxId: 'remessaStatusBox',
+                txtId: 'remessaStatusTxt',
+                label: 'Gerar Remessa',
+                icon: 'fa-upload',
+                confirmMsg: 'Gerar arquivos de remessa CNAB para todas as imobiliárias?',
+            },
+            retorno: {
+                url: '/core/api/simular-retorno-teste/',
+                btnId: 'btnRetorno',
+                boxId: 'retornoStatusBox',
+                txtId: 'retornoStatusTxt',
+                label: 'Gerar Retorno',
+                icon: 'fa-download',
+                confirmMsg: 'Simular retorno bancário (70% pago) para as remessas existentes?',
+            },
+            logos: {
+                url: '/core/api/gerar-logos-teste/',
+                btnId: 'btnLogos',
+                boxId: 'logosStatusBox',
+                txtId: 'logosStatusTxt',
+                label: 'Gerar Logos',
+                icon: 'fa-image',
+                confirmMsg: 'Gerar logotipos PNG para as imobiliárias de teste?',
+            },
+        };
+
+        async function executarPasso3(tipo) {
+            const cfg = passo3Config[tipo];
+            if (!cfg) return;
+            if (!confirm(cfg.confirmMsg)) return;
+
+            const btn = document.getElementById(cfg.btnId);
+            const box = document.getElementById(cfg.boxId);
+            const txt = document.getElementById(cfg.txtId);
+            const originalHTML = btn.innerHTML;
+
+            btn.disabled = true;
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Processando...';
+            box.className = 'alert alert-light border mb-2';
+            txt.textContent = 'Aguardando resposta…';
+
+            try {
+                const resp = await fetch(cfg.url, {
+                    method: 'POST',
+                    headers: { 'X-CSRFToken': csrftoken },
+                });
+                const data = await resp.json();
+
+                if (data.status === 'success') {
+                    box.className = 'alert alert-success border mb-2';
+                    const lines = (data.output || '').trim().split('\n').slice(-6);
+                    txt.innerHTML = lines.join('<br>') || 'Concluído com sucesso.';
+                    btn.innerHTML = '<i class="fas fa-check me-2"></i>Concluído';
+                    btn.disabled = false;
+                } else {
+                    box.className = 'alert alert-danger border mb-2';
+                    txt.textContent = data.message || 'Erro desconhecido.';
+                    btn.innerHTML = originalHTML;
+                    btn.disabled = false;
+                }
+            } catch (err) {
+                box.className = 'alert alert-danger border mb-2';
+                txt.textContent = 'Erro de conexão: ' + err;
+                btn.innerHTML = originalHTML;
+                btn.disabled = false;
+            }
+        }
 
         function executarAcao(action) {
             const actions = {

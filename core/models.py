@@ -201,6 +201,24 @@ class Imobiliaria(TimeStampedModel):
         verbose_name='Logo',
         help_text='PNG ou JPG, máx. 2 MB. Recomendado: fundo transparente.'
     )
+    cor_marca = models.CharField(
+        max_length=6,
+        blank=True,
+        verbose_name='Cor de Marca',
+        help_text='Hex RRGGBB sem # (ex: 1A4E8C). Cor de destaque nos boletos Prawn.'
+    )
+    rodape_contato = models.CharField(
+        max_length=120,
+        blank=True,
+        verbose_name='Rodapé de Contato',
+        help_text='Linha de contato no rodapé do boleto. Ex: Tel: (31) 3773-1234 | contato@empresa.com.br'
+    )
+    marca_dagua = models.CharField(
+        max_length=60,
+        blank=True,
+        verbose_name="Marca d'Água",
+        help_text='Texto antifraude diagonal no boleto (opcional, máx. 60 chars).'
+    )
 
     # Dados de Contato (mantido para compatibilidade)
     endereco = models.TextField(
