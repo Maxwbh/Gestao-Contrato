@@ -39,6 +39,7 @@ urlpatterns = [
     path('setup/', views.setup, name='setup'),
     path('dashboard/', views.dashboard, name='dashboard'),
     path('api/gerar-dados-teste/', views.gerar_dados_teste, name='gerar_dados_teste'),
+    path('api/gerar-boletos-teste/', views.gerar_boletos_teste, name='gerar_boletos_teste'),
     path('api/limpar-dados-teste/', views.limpar_dados_teste, name='limpar_dados_teste'),
     path('dados-teste/', views.pagina_dados_teste, name='pagina_dados_teste'),
 

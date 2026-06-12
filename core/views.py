@@ -512,47 +512,51 @@ def gerar_dados_teste(request):
 
         class _SaidaComProgresso(io.StringIO):
             """Atualiza a etapa no estado do job a cada linha de progresso —
-            heartbeat para o polling do front e para a detecção de job órfão."""
+            heartbeat para o polling do front e para a detecção de job órfão.
+            Também encaminha cada linha ao logger para visibilidade no Render."""
             def write(self, s):
                 r = super().write(s)
                 linha = s.strip()
-                if linha and not linha.startswith(('→', '•', '✓', '⚠', '[')):
-                    try:
-                        _job_dados_teste_set({
-                            'status': 'running',
-                            'iniciado': inicio_iso,
-                            'etapa': linha[:140],
-                        })
-                    except Exception:
-                        pass
+                if linha:
+                    logger.info('[SETUP P1] %s', linha)
+                    if not linha.startswith(('→', '•', '✓', '⚠', '[')):
+                        try:
+                            _job_dados_teste_set({
+                                'status': 'running',
+                                'iniciado': inicio_iso,
+                                'etapa': linha[:140],
+                            })
+                        except Exception:
+                            pass
                 return r
 
         def _executar():
             from django.db import connection
             out = _SaidaComProgresso()
+            logger.info('[SETUP P1] Iniciando geração de dados — limpar=%s banco=%s', limpar, banco)
             try:
-                call_command('gerar_dados_teste', limpar=limpar, banco=banco, stdout=out)
+                call_command('gerar_dados_teste', limpar=limpar, banco=banco, sem_boletos=True, stdout=out)
                 from contratos.models import Contrato as _Contrato
+                dados = {
+                    'contabilidades': Contabilidade.objects.count(),
+                    'imobiliarias': Imobiliaria.objects.count(),
+                    'contas_bancarias': ContaBancaria.objects.count(),
+                    'imoveis': Imovel.objects.count(),
+                    'compradores': Comprador.objects.count(),
+                    'contratos': _Contrato.objects.count(),
+                    'parcelas': Parcela.objects.count(),
+                    'indices_reajuste': IndiceReajuste.objects.count(),
+                }
+                logger.info('[SETUP P1] Concluído com sucesso: %s', dados)
                 _job_dados_teste_set({
                     'status': 'done',
                     'iniciado': inicio_iso,
                     'finalizado': timezone.now().isoformat(),
                     'output': out.getvalue()[-8000:],
-                    # Contagens na mesma conexão que gravou (GET de outro worker
-                    # pode ler snapshot defasado logo após o commit)
-                    'dados_gerados': {
-                        'contabilidades': Contabilidade.objects.count(),
-                        'imobiliarias': Imobiliaria.objects.count(),
-                        'contas_bancarias': ContaBancaria.objects.count(),
-                        'imoveis': Imovel.objects.count(),
-                        'compradores': Comprador.objects.count(),
-                        'contratos': _Contrato.objects.count(),
-                        'parcelas': Parcela.objects.count(),
-                        'indices_reajuste': IndiceReajuste.objects.count(),
-                    },
+                    'dados_gerados': dados,
                 })
             except Exception as exc:
-                logger.exception("Erro na geração assíncrona de dados de teste: %s", exc)
+                logger.exception('[SETUP P1] Erro na geração de dados: %s', exc)
                 _job_dados_teste_set({
                     'status': 'error',
                     'finalizado': timezone.now().isoformat(),
@@ -581,8 +585,10 @@ def gerar_dados_teste(request):
 
 
 _JOB_DADOS_TESTE_CHAVE = '_job_gerar_dados_teste'
-# Sem heartbeat (etapa gravada a cada passo) por este tempo → job considerado morto
-_JOB_DADOS_TESTE_STALE_MIN = 5
+# Sem heartbeat (etapa gravada a cada passo) por este tempo → job considerado
+# morto. Folga para passos legitimamente longos (cold start do brcobranca-api
+# + geração de PDFs reais por lote pode levar 1-3 min entre heartbeats)
+_JOB_DADOS_TESTE_STALE_MIN = 12
 
 
 def _job_dados_teste_get():
@@ -622,6 +628,145 @@ def _job_dados_teste_set(estado):
             'descricao': 'Estado interno da geração assíncrona de dados de teste',
         },
     )
+
+
+_JOB_BOLETOS_CHAVE = '_job_gerar_boletos_teste'
+_JOB_BOLETOS_STALE_MIN = 20
+
+
+def _job_boletos_get():
+    from core.models import ParametroSistema
+    from datetime import timedelta
+    try:
+        p = ParametroSistema.objects.filter(chave=_JOB_BOLETOS_CHAVE).first()
+        if not p or not p.valor:
+            return {}
+        estado = json.loads(p.valor)
+        if estado.get('status') == 'running' and p.atualizado_em:
+            if timezone.now() - p.atualizado_em > timedelta(minutes=_JOB_BOLETOS_STALE_MIN):
+                estado = {
+                    'status': 'error',
+                    'erro': f'Geração de boletos sem progresso há {_JOB_BOLETOS_STALE_MIN} min '
+                            '(worker pode ter sido reiniciado). Tente novamente.',
+                }
+                _job_boletos_set(estado)
+        return estado
+    except Exception:
+        return {}
+
+
+def _job_boletos_set(estado):
+    from core.models import ParametroSistema
+    ParametroSistema.objects.update_or_create(
+        chave=_JOB_BOLETOS_CHAVE,
+        defaults={
+            'valor': json.dumps(estado, ensure_ascii=False),
+            'grupo': ParametroSistema.GRUPO_TESTE,
+            'tipo': ParametroSistema.TIPO_STR,
+            'descricao': 'Estado interno da geração assíncrona de boletos de teste',
+        },
+    )
+
+
+@require_http_methods(["GET", "POST"])
+def gerar_boletos_teste(request):
+    """
+    Endpoint para geração de boletos (Passo 2 do setup).
+
+    GET: Retorna status do job de boletos.
+    POST: Inicia geração assíncrona de boletos para dados existentes.
+
+    Parâmetros POST (JSON):
+        banco (str): Banco para os boletos (001, 756, 237, 336 ou null para round-robin).
+    """
+    if request.method == 'GET':
+        return JsonResponse({'status': 'ok', 'geracao': _job_boletos_get()})
+
+    try:
+        banco = None
+        if request.content_type == 'application/json':
+            try:
+                data = json.loads(request.body)
+                banco = data.get('banco') or None
+            except Exception:
+                pass
+        else:
+            banco = request.POST.get('banco') or None
+
+        if banco and banco not in ('001', '756', '237', '336'):
+            return JsonResponse({
+                'status': 'error',
+                'message': f'Banco inválido: {banco}. Use 001, 756, 237 ou 336.',
+            }, status=400)
+
+        estado = _job_boletos_get()
+        if estado.get('status') == 'running':
+            return JsonResponse({
+                'status': 'running',
+                'message': 'Geração de boletos já em andamento.',
+                'geracao': estado,
+            }, status=409)
+
+        inicio_iso = timezone.now().isoformat()
+        _job_boletos_set({'status': 'running', 'iniciado': inicio_iso, 'banco': banco})
+
+        import threading
+
+        class _SaidaBoletos(io.StringIO):
+            """Encaminha cada linha ao logger (visibilidade no Render) e ao job state."""
+            def write(self, s):
+                r = super().write(s)
+                linha = s.strip()
+                if linha:
+                    logger.info('[SETUP P2] %s', linha)
+                    if not linha.startswith(('→', '•', '✓', '⚠', '[')):
+                        try:
+                            _job_boletos_set({
+                                'status': 'running',
+                                'iniciado': inicio_iso,
+                                'etapa': linha[:140],
+                            })
+                        except Exception:
+                            pass
+                return r
+
+        def _executar():
+            from django.db import connection as _conn
+            out = _SaidaBoletos()
+            logger.info('[SETUP P2] Iniciando geração de boletos — banco=%s', banco)
+            try:
+                call_command('gerar_dados_teste', so_boletos=True, banco=banco, stdout=out)
+                from financeiro.models import Parcela as _P, StatusBoleto as _SB
+                qtd = _P.objects.filter(status_boleto=_SB.GERADO, pago=False).count()
+                logger.info('[SETUP P2] Concluído: %d boleto(s) gerado(s)', qtd)
+                _job_boletos_set({
+                    'status': 'done',
+                    'iniciado': inicio_iso,
+                    'finalizado': timezone.now().isoformat(),
+                    'boletos_gerados': qtd,
+                    'output': out.getvalue()[-4000:],
+                })
+            except Exception as exc:
+                logger.exception('[SETUP P2] Erro na geração de boletos: %s', exc)
+                _job_boletos_set({
+                    'status': 'error',
+                    'finalizado': timezone.now().isoformat(),
+                    'erro': str(exc),
+                    'output': out.getvalue()[-4000:],
+                })
+            finally:
+                _conn.close()
+
+        threading.Thread(target=_executar, daemon=True).start()
+
+        return JsonResponse({
+            'status': 'started',
+            'message': 'Geração de boletos iniciada. Acompanhe pelo GET.',
+        }, status=202)
+
+    except Exception as e:
+        logger.exception("Erro ao iniciar geração de boletos: %s", e)
+        return JsonResponse({'status': 'error', 'message': str(e)}, status=500)
 
 
 @require_http_methods(["GET", "POST", "DELETE"])

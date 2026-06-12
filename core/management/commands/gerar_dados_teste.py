@@ -46,6 +46,16 @@ class Command(BaseCommand):
                 'Sem este parâmetro, distribui em round-robin entre os 4 bancos.'
             ),
         )
+        parser.add_argument(
+            '--sem-boletos',
+            action='store_true',
+            help='Pula a geração de boletos (use o Passo 2 para gerar separadamente).',
+        )
+        parser.add_argument(
+            '--so-boletos',
+            action='store_true',
+            help='Gera apenas boletos para os dados existentes (Passo 2 do setup).',
+        )
 
     def normalizar_email(self, texto):
         """Remove acentos e caracteres especiais para criar um email válido"""
@@ -70,6 +80,12 @@ class Command(BaseCommand):
         Faker.seed(12345)  # Para dados consistentes
         random.seed(12345)
         self.banco_unico = options.get('banco')
+        self.sem_boletos = options.get('sem_boletos', False)
+        self.so_boletos = options.get('so_boletos', False)
+
+        if self.so_boletos:
+            self._executar_so_boletos()
+            return
 
         if self.banco_unico:
             nomes = {'001': 'Banco do Brasil', '756': 'Sicoob', '237': 'Bradesco', '336': 'C6 Bank'}
@@ -127,9 +143,13 @@ class Command(BaseCommand):
                 self.marcar_parcelas_pagas(contratos, 0.90)
 
                 # 9. Simular boletos gerados para demonstração da remessa
-                self.stdout.write('Simulando boletos gerados (para demo de remessa)...')
-                boletos_simulados = self.simular_boletos_gerados(contratos, contas_bancarias)
-                self.stdout.write(f'   {boletos_simulados} boletos simulados')
+                if self.sem_boletos:
+                    self.stdout.write('Geração de boletos pulada — use o Passo 2 para gerar.')
+                    boletos_simulados = 0
+                else:
+                    self.stdout.write('Simulando boletos gerados (para demo de remessa)...')
+                    boletos_simulados = self.simular_boletos_gerados(contratos, contas_bancarias)
+                    self.stdout.write(f'   {boletos_simulados} boletos simulados')
 
                 # 10. Gerar índices de reajuste
                 self.stdout.write('Gerando índices de reajuste...')
@@ -862,6 +882,31 @@ class Command(BaseCommand):
             batch_size=500,
         )
 
+    def _executar_so_boletos(self):
+        """Passo 2 do setup: gera boletos para dados já existentes no banco."""
+        from core.models import ContaBancaria
+        from contratos.models import Contrato
+
+        self.stdout.write('Buscando dados existentes...')
+        contas_bancarias = list(ContaBancaria.objects.all())
+        contratos = list(Contrato.objects.all())
+
+        if not contratos:
+            self.stdout.write(self.style.ERROR(
+                'Nenhum contrato encontrado. Execute o Passo 1 (gerar dados) primeiro.'
+            ))
+            return
+
+        if self.banco_unico:
+            nomes = {'001': 'Banco do Brasil', '756': 'Sicoob', '237': 'Bradesco', '336': 'C6 Bank'}
+            self.stdout.write(self.style.WARNING(
+                f'Modo banco único: 100% dos boletos no {nomes[self.banco_unico]} ({self.banco_unico})'
+            ))
+
+        self.stdout.write(f'Gerando boletos para {len(contratos)} contratos...')
+        count = self.simular_boletos_gerados(contratos, contas_bancarias)
+        self.stdout.write(self.style.SUCCESS(f'Passo 2 concluído: {count} boleto(s) gerado(s).'))
+
     def simular_boletos_gerados(self, contratos, contas_bancarias):
         """
         Gera boletos para parcelas VENCIDAS e pendentes, distribuindo entre TODAS
@@ -926,14 +971,22 @@ class Command(BaseCommand):
         service = BoletoService()
 
         if service.verificar_api_disponivel():
+            total_lotes = (len(pares) + 14) // 15
             self.stdout.write(
                 f'   → API BRCobrança disponível — gerando {len(pares)} boletos reais '
-                f'em lotes de 15 ({(len(pares) + 14) // 15} chamadas)...'
+                f'em lotes de 15 ({total_lotes} chamadas)...'
             )
-            resultado = service.gerar_boletos_lote(pares, tamanho_lote=15)
-            count = resultado['gerados']
-            for e in resultado['erros']:
-                self.stdout.write(self.style.WARNING(f'   ⚠ {e}'))
+            # Um lote por chamada COM stdout entre eles: cada linha vira
+            # heartbeat do job assíncrono — sem isso, a geração via API
+            # (cold start + PDFs) fica minutos sem sinal de progresso
+            count = 0
+            for i in range(0, len(pares), 15):
+                num_lote = i // 15 + 1
+                self.stdout.write(f'Gerando boletos reais — lote {num_lote}/{total_lotes}...')
+                resultado = service.gerar_boletos_lote(pares[i:i + 15], tamanho_lote=15)
+                count += resultado['gerados']
+                for e in resultado['erros']:
+                    self.stdout.write(self.style.WARNING(f'   ⚠ {e}'))
         else:
             self.stdout.write(
                 f'   → API BRCobrança indisponível — simulando {len(pares)} boletos localmente...'

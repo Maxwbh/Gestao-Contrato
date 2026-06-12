@@ -204,7 +204,7 @@
                 </div>
 
                 <div class="setup-card">
-                    <h3><i class="fas fa-database me-2 text-success"></i>Geração de Dados de Teste</h3>
+                    <h3><i class="fas fa-database me-2 text-success"></i>Passo 1: Geração de Dados</h3>
                     <hr>
 
                     <div class="row justify-content-center">
@@ -214,9 +214,10 @@
                                     <i class="fas fa-magic fa-3x text-primary mb-3"></i>
                                     <h5>Gerar Massa de Dados</h5>
                                     <p class="text-muted">
-                                        Cria automaticamente: Contabilidade, Imobiliárias, Contas Bancárias
-                                        (BB, Sicoob, Bradesco e C6 Bank), Imóveis, Compradores, Contratos,
-                                        Parcelas e Índices de Reajuste.
+                                        <strong>Passo 1:</strong> Cria Contabilidade, Imobiliárias, Contas Bancárias,
+                                        Imóveis, Compradores, Contratos, Parcelas e Índices de Reajuste.
+                                        <br><small class="text-warning"><i class="fas fa-info-circle me-1"></i>
+                                        Boletos são gerados separadamente no Passo 2 (requer API BRCobrança).</small>
                                     </p>
 
                                     <!-- Previsão baseada em histórico -->
@@ -271,6 +272,48 @@
                             <button class="btn btn-sm btn-outline-secondary" onclick="limparHistorico()">
                                 <i class="fas fa-trash-alt me-1"></i>Limpar histórico
                             </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- PASSO 2: Geração de Boletos (revelado após Passo 1 bem-sucedido) -->
+                <div class="setup-card d-none" id="step2Card">
+                    <h3><i class="fas fa-barcode me-2 text-warning"></i>Passo 2: Gerar Boletos</h3>
+                    <hr>
+                    <div class="row justify-content-center">
+                        <div class="col-md-8">
+                            <div class="card border-warning shadow-sm">
+                                <div class="card-body text-center p-4">
+                                    <i class="fas fa-barcode fa-3x text-warning mb-3"></i>
+                                    <h5>Gerar Boletos de Teste</h5>
+                                    <p class="text-muted">
+                                        Gera boletos reais via BRCobrança para as parcelas vencidas.
+                                        A API pode estar hibernada — o processo aguarda o cold start automaticamente.
+                                    </p>
+
+                                    <div id="step2StatusBox" class="alert alert-light border mb-3 d-none">
+                                        <small id="step2StatusTxt"></small>
+                                    </div>
+
+                                    <div class="mb-3 mx-auto" style="max-width: 360px;">
+                                        <label class="form-label small text-muted" for="bancoBoletos2">
+                                            <i class="fas fa-university me-1"></i>Banco dos boletos
+                                        </label>
+                                        <select class="form-select" id="bancoBoletos2">
+                                            <option value="">Distribuir entre os 4 bancos (round-robin)</option>
+                                            <option value="001">100% Banco do Brasil (001)</option>
+                                            <option value="756">100% Sicoob (756)</option>
+                                            <option value="237">100% Bradesco (237)</option>
+                                            <option value="336">100% C6 Bank (336)</option>
+                                        </select>
+                                    </div>
+
+                                    <button class="btn btn-warning btn-lg px-5" id="btnGerarBoletos" onclick="iniciarGeracaoBoletos()">
+                                        <i class="fas fa-barcode me-2"></i>
+                                        Gerar Boletos
+                                    </button>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -332,7 +375,7 @@
                     <div id="progressIcon">
                         <i class="fas fa-cog fa-spin fa-3x mb-3"></i>
                     </div>
-                    <h4 id="progressTitle" class="mb-0">Gerando Dados de Teste</h4>
+                    <h4 id="progressTitle" class="mb-0">Passo 1: Gerando Dados</h4>
                     <p id="progressSubtitle" class="mb-0 opacity-75 small">Aguarde...</p>
                 </div>
 
@@ -566,7 +609,7 @@
             document.getElementById('progressTime').textContent = 'Calculando...';
             document.getElementById('elapsedTime').innerHTML = '<i class="fas fa-stopwatch me-1"></i>0s';
             document.getElementById('progressIcon').innerHTML = '<i class="fas fa-cog fa-spin fa-3x mb-3"></i>';
-            document.getElementById('progressTitle').textContent = 'Gerando Dados de Teste';
+            document.getElementById('progressTitle').textContent = 'Passo 1: Gerando Dados';
             document.getElementById('progressSubtitle').textContent = 'Aguarde...';
             document.getElementById('resultSection').classList.add('d-none');
             document.getElementById('stepsList').parentElement.classList.remove('d-none');
@@ -605,10 +648,10 @@
                 const totalRecords = (stats.contratos||0) + (stats.parcelas||0) + (stats.imoveis||0) + (stats.compradores||0);
 
                 resultIcon.className = 'fas fa-check-circle fa-4x text-success mb-3';
-                resultTitle.textContent = 'Dados Gerados com Sucesso!';
-                resultMessage.textContent = `Concluído em ${formatMs(duration)} — ${totalRecords.toLocaleString('pt-BR')} registros criados.`;
+                resultTitle.textContent = 'Passo 1 Concluído!';
+                resultMessage.textContent = `Dados criados em ${formatMs(duration)} — ${totalRecords.toLocaleString('pt-BR')} registros.`;
                 document.getElementById('progressIcon').innerHTML = '<i class="fas fa-check-circle fa-3x mb-3" style="color:#28a745"></i>';
-                document.getElementById('progressTitle').textContent = 'Concluído!';
+                document.getElementById('progressTitle').textContent = 'Passo 1 Concluído!';
                 document.getElementById('progressSubtitle').textContent = `em ${formatMs(duration)}`;
                 document.getElementById('progressTime').textContent = '';
                 document.getElementById('elapsedTime').innerHTML = `<i class="fas fa-stopwatch me-1"></i>${formatMs(duration)}`;
@@ -622,6 +665,13 @@
                     <div class="col-4"><div class="result-card success"><div class="number">${stats.contratos||60}</div><div class="label">Contratos</div></div></div>
                     <div class="col-6"><div class="result-card warning"><div class="number">${stats.parcelas||0}</div><div class="label">Parcelas</div></div></div>
                     <div class="col-6"><div class="result-card info"><div class="number">${stats.indices_reajuste||252}</div><div class="label">Índices</div></div></div>
+                    <div class="col-12 mt-2">
+                        <div class="alert alert-warning mb-0">
+                            <i class="fas fa-barcode me-2"></i>
+                            <strong>Boletos não gerados ainda.</strong>
+                            Feche este painel e clique em <strong>Gerar Boletos</strong> (Passo 2).
+                        </div>
+                    </div>
                 `;
             } else {
                 resultIcon.className = 'fas fa-times-circle fa-4x text-danger mb-3';
@@ -643,6 +693,7 @@
             if (limpar && !confirm('⚠️ Isso irá LIMPAR todos os dados existentes e gerar novos.\n\nDeseja continuar?')) return;
 
             resetModal();
+            window._etapaServidor = null;
             progressModal.show();
             startTime = Date.now();
 
@@ -670,7 +721,10 @@
                     document.getElementById('progressTime').textContent = `~${formatMs(remaining)} restantes`;
                 } else if (elapsed >= estimatedTotal) {
                     document.getElementById('progressTime').textContent = 'Aguardando servidor...';
-                    document.getElementById('progressSubtitle').textContent = 'Processamento demorou mais que o previsto';
+                    // Não sobrescrever a etapa real reportada pelo servidor
+                    if (!window._etapaServidor) {
+                        document.getElementById('progressSubtitle').textContent = 'Processamento demorou mais que o previsto';
+                    }
                 }
             }, 200);
 
@@ -710,6 +764,14 @@
                     saveToHistory({ timestamp: Date.now(), duration, limpar, records: totalRecords });
                     renderHistory();
                     atualizarEstimativa();
+                    // Revelar o Passo 2 e pré-selecionar o mesmo banco
+                    const step2Card = document.getElementById('step2Card');
+                    if (step2Card) {
+                        step2Card.classList.remove('d-none');
+                        const sel2 = document.getElementById('bancoBoletos2');
+                        if (sel2) sel2.value = banco || '';
+                        setTimeout(() => step2Card.scrollIntoView({ behavior: 'smooth', block: 'start' }), 700);
+                    }
                 }
                 setTimeout(() => showResult(success, data, duration), 400);
             }
@@ -754,6 +816,7 @@
                             return;
                         }
                         if (ger.etapa) {
+                            window._etapaServidor = ger.etapa;
                             document.getElementById('progressSubtitle').textContent = ger.etapa;
                         }
                     } catch (_) { /* falha transitória de rede — tenta de novo */ }
@@ -770,6 +833,125 @@
                 finalizar(false, { error: msg }, duration);
             }
         }
+
+        // ===== PASSO 2: GERAÇÃO DE BOLETOS =====
+        let boletoStartTime;
+        let boletoElapsedInterval;
+        let boletoPollTimeout;
+
+        async function iniciarGeracaoBoletos() {
+            const banco = document.getElementById('bancoBoletos2').value || null;
+            const btn = document.getElementById('btnGerarBoletos');
+            const statusBox = document.getElementById('step2StatusBox');
+            const statusTxt = document.getElementById('step2StatusTxt');
+
+            btn.disabled = true;
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Aguarde...';
+            statusBox.classList.remove('d-none', 'alert-success', 'alert-danger', 'alert-info', 'alert-warning');
+            statusBox.classList.add('alert-info');
+            statusTxt.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i> Iniciando geração de boletos...';
+
+            boletoStartTime = Date.now();
+
+            // Cronômetro
+            clearInterval(boletoElapsedInterval);
+            boletoElapsedInterval = setInterval(() => {
+                const elapsed = Date.now() - boletoStartTime;
+                const parts = [];
+                const m = Math.floor(elapsed / 60000);
+                const s = Math.floor((elapsed % 60000) / 1000);
+                if (m > 0) parts.push(`${m}m`);
+                parts.push(`${s}s`);
+                statusTxt.innerHTML = `<i class="fas fa-spinner fa-spin me-1"></i> ${window._boletoEtapa || 'Gerando...'} <span class="text-muted ms-2">(${parts.join(' ')})</span>`;
+            }, 500);
+
+            try {
+                const response = await fetch('/api/gerar-boletos-teste/', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrftoken },
+                    body: JSON.stringify({ banco }),
+                });
+                const data = await response.json();
+
+                if (data.status !== 'started' && data.status !== 'running') {
+                    _finalizarBoletos(false, data.message || data.error || 'Erro ao iniciar');
+                    return;
+                }
+
+                window._boletoEtapa = 'Aguardando servidor...';
+
+                // Polling
+                const POLL_MS = 4000, LIMITE_MS = 25 * 60 * 1000;
+                const pollInicio = Date.now();
+
+                const pollBoletos = async () => {
+                    if (Date.now() - pollInicio > LIMITE_MS) {
+                        _finalizarBoletos(false, 'Tempo limite de 25 min excedido.');
+                        return;
+                    }
+                    try {
+                        const r = await fetch('/api/gerar-boletos-teste/');
+                        const st = await r.json();
+                        const ger = st.geracao || {};
+                        if (ger.etapa) window._boletoEtapa = ger.etapa;
+                        if (ger.status === 'done') {
+                            _finalizarBoletos(true, `${ger.boletos_gerados || 0} boleto(s) gerado(s).`);
+                            return;
+                        }
+                        if (ger.status === 'error') {
+                            _finalizarBoletos(false, ger.erro || 'Erro na geração de boletos');
+                            return;
+                        }
+                    } catch (_) { /* falha transitória */ }
+                    boletoPollTimeout = setTimeout(pollBoletos, POLL_MS);
+                };
+                boletoPollTimeout = setTimeout(pollBoletos, POLL_MS);
+
+            } catch (err) {
+                _finalizarBoletos(false, err.toString());
+            }
+        }
+
+        function _finalizarBoletos(success, mensagem) {
+            clearInterval(boletoElapsedInterval);
+            clearTimeout(boletoPollTimeout);
+            const btn = document.getElementById('btnGerarBoletos');
+            const statusBox = document.getElementById('step2StatusBox');
+            const statusTxt = document.getElementById('step2StatusTxt');
+            const duration = Date.now() - (boletoStartTime || Date.now());
+            const tempo = formatMs(duration);
+
+            statusBox.classList.remove('alert-info', 'alert-warning');
+            if (success) {
+                statusBox.classList.add('alert-success');
+                statusTxt.innerHTML = `<i class="fas fa-check-circle me-1 text-success"></i> <strong>Concluído em ${tempo}:</strong> ${mensagem}`;
+                btn.disabled = false;
+                btn.innerHTML = '<i class="fas fa-redo me-2"></i>Gerar Novamente';
+            } else {
+                statusBox.classList.add('alert-danger');
+                statusTxt.innerHTML = `<i class="fas fa-times-circle me-1 text-danger"></i> <strong>Erro:</strong> ${mensagem}`;
+                btn.disabled = false;
+                btn.innerHTML = '<i class="fas fa-redo me-2"></i>Tentar Novamente';
+            }
+        }
+
+        // Verificar se há job de boletos em andamento ao carregar a página
+        (async function verificarJobBoletos() {
+            try {
+                const r = await fetch('/api/gerar-boletos-teste/');
+                const st = await r.json();
+                const ger = st.geracao || {};
+                if (ger.status === 'running' || ger.status === 'done' || ger.status === 'error') {
+                    const step2Card = document.getElementById('step2Card');
+                    if (step2Card) step2Card.classList.remove('d-none');
+                    if (ger.status === 'done') {
+                        _finalizarBoletos(true, `${ger.boletos_gerados || 0} boleto(s) gerado(s).`);
+                    } else if (ger.status === 'error') {
+                        _finalizarBoletos(false, ger.erro || 'Erro anterior');
+                    }
+                }
+            } catch (_) {}
+        })();
 
         function executarAcao(action) {
             const actions = {
