@@ -1,160 +1,106 @@
 {% extends 'portal_comprador/portal_base.html' %}
 {% load format_filters %}
 
-{% block title %}Histórico Unificado{% endblock %}
+{% block title %}Histórico{% endblock %}
 
 {% block content %}
-<div class="row">
-  <div class="col-12">
 
-    <div class="d-flex justify-content-between align-items-center mb-3">
-      <h4 class="mb-0">
-        <i class="fas fa-history me-2 text-primary"></i>
-        Histórico Unificado
-      </h4>
-      <a href="{% url 'portal_comprador:dashboard' %}" class="btn btn-outline-secondary btn-sm">
-        <i class="fas fa-arrow-left me-1"></i> Voltar
-      </a>
-    </div>
-
-    <ul class="nav nav-tabs mb-3" id="historicoTabs" role="tablist">
-      <li class="nav-item" role="presentation">
-        <button class="nav-link active" data-bs-toggle="tab" data-bs-target="#tab-pagamentos">
-          <i class="fas fa-check-circle me-1"></i> Pagamentos
-          <span class="badge bg-success ms-1">{{ pagamentos|length }}</span>
-        </button>
-      </li>
-      <li class="nav-item" role="presentation">
-        <button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-comprovantes">
-          <i class="fas fa-receipt me-1"></i> Comprovantes Enviados
-          <span class="badge bg-info ms-1">{{ comprovantes|length }}</span>
-        </button>
-      </li>
-      <li class="nav-item" role="presentation">
-        <button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-reajustes">
-          <i class="fas fa-chart-line me-1"></i> Reajustes
-          <span class="badge bg-warning text-dark ms-1">{{ reajustes|length }}</span>
-        </button>
-      </li>
-    </ul>
-
-    <div class="tab-content">
-      <!-- Pagamentos -->
-      <div class="tab-pane fade show active" id="tab-pagamentos">
-        {% if pagamentos %}
-        <div class="table-responsive">
-          <table class="table table-sm table-hover">
-            <thead>
-              <tr>
-                <th>Data</th>
-                <th>Contrato</th>
-                <th>Parcela</th>
-                <th>Forma</th>
-                <th class="text-end">Valor Pago</th>
-              </tr>
-            </thead>
-            <tbody>
-              {% for p in pagamentos %}
-              <tr>
-                <td>{{ p.data_pagamento|date:"d/m/Y" }}</td>
-                <td><small>{{ p.parcela.contrato.numero_contrato }}</small></td>
-                <td>{{ p.parcela.numero_parcela }}/{{ p.parcela.contrato.numero_parcelas }}</td>
-                <td><small class="text-muted">{{ p.get_forma_pagamento_display|default:p.forma_pagamento }}</small></td>
-                <td class="text-end fw-bold text-success">{{ p.valor_pago|moeda }}</td>
-              </tr>
-              {% endfor %}
-            </tbody>
-          </table>
-        </div>
-        {% else %}
-        <div class="text-center text-muted py-4">
-          <i class="fas fa-inbox fa-2x mb-2 opacity-25 d-block"></i>
-          Nenhum pagamento registrado ainda.
-        </div>
-        {% endif %}
-      </div>
-
-      <!-- Comprovantes -->
-      <div class="tab-pane fade" id="tab-comprovantes">
-        {% if comprovantes %}
-        <div class="table-responsive">
-          <table class="table table-sm table-hover">
-            <thead>
-              <tr>
-                <th>Enviado em</th>
-                <th>Contrato</th>
-                <th>Parcela</th>
-                <th>Forma</th>
-                <th class="text-end">Valor</th>
-                <th>Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              {% for c in comprovantes %}
-              <tr>
-                <td><small>{{ c.criado_em|date:"d/m/Y H:i" }}</small></td>
-                <td><small>{{ c.parcela.contrato.numero_contrato }}</small></td>
-                <td>{{ c.parcela.numero_parcela }}/{{ c.parcela.contrato.numero_parcelas }}</td>
-                <td><small class="text-muted">{{ c.get_forma_pagamento_display }}</small></td>
-                <td class="text-end">{{ c.valor_informado|moeda }}</td>
-                <td>
-                  {% if c.status == 'PENDENTE' %}
-                  <span class="badge bg-warning text-dark">Aguardando</span>
-                  {% elif c.status == 'APROVADO' %}
-                  <span class="badge bg-success">Aprovado</span>
-                  {% else %}
-                  <span class="badge bg-danger" title="{{ c.motivo_rejeicao }}">Rejeitado</span>
-                  {% endif %}
-                </td>
-              </tr>
-              {% endfor %}
-            </tbody>
-          </table>
-        </div>
-        {% else %}
-        <div class="text-center text-muted py-4">
-          <i class="fas fa-inbox fa-2x mb-2 opacity-25 d-block"></i>
-          Nenhum comprovante enviado ainda.
-        </div>
-        {% endif %}
-      </div>
-
-      <!-- Reajustes -->
-      <div class="tab-pane fade" id="tab-reajustes">
-        {% if reajustes %}
-        <div class="table-responsive">
-          <table class="table table-sm table-hover">
-            <thead>
-              <tr>
-                <th>Data</th>
-                <th>Contrato</th>
-                <th>Índice</th>
-                <th class="text-end">Percentual</th>
-                <th>Parcelas Afetadas</th>
-              </tr>
-            </thead>
-            <tbody>
-              {% for r in reajustes %}
-              <tr>
-                <td>{{ r.data_reajuste|date:"d/m/Y" }}</td>
-                <td><small>{{ r.contrato.numero_contrato }}</small></td>
-                <td><small>{{ r.indice_tipo }}</small></td>
-                <td class="text-end fw-bold">{{ r.percentual }}%</td>
-                <td><small class="text-muted">{{ r.parcela_inicial }} a {{ r.parcela_final }}</small></td>
-              </tr>
-              {% endfor %}
-            </tbody>
-          </table>
-        </div>
-        {% else %}
-        <div class="text-center text-muted py-4">
-          <i class="fas fa-inbox fa-2x mb-2 opacity-25 d-block"></i>
-          Nenhum reajuste aplicado ainda.
-        </div>
-        {% endif %}
-      </div>
-    </div>
-
-  </div>
+<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+    <h5 style="margin:0;font-weight:600;">
+        <i class="fas fa-history" style="color:var(--portal-primary);margin-right:6px;"></i>Histórico
+    </h5>
+    <a href="{% url 'portal_comprador:dashboard' %}"
+       style="color:var(--portal-primary);font-size:.85rem;text-decoration:none;">
+        <i class="fas fa-arrow-left"></i> Voltar
+    </a>
 </div>
+
+<!-- Pagamentos -->
+<div class="portal-card">
+    <div class="portal-card-header" style="background:#2e7d32;">
+        <i class="fas fa-check-circle" style="margin-right:6px;"></i>Pagamentos
+        <span style="float:right;background:rgba(255,255,255,.25);border-radius:10px;padding:0 10px;font-size:.8rem;">{{ pagamentos|length }}</span>
+    </div>
+    {% for p in pagamentos %}
+    <div class="parcela-item">
+        <div class="parcela-icon pago">
+            <i class="fas fa-check"></i>
+        </div>
+        <div class="parcela-info">
+            <div class="contrato">{{ p.parcela.contrato.numero_contrato }}</div>
+            <div class="desc">Parcela {{ p.parcela.numero_parcela }}/{{ p.parcela.contrato.numero_parcelas }} · {{ p.get_forma_pagamento_display|default:p.forma_pagamento }}</div>
+            <div class="data">Pago em {{ p.data_pagamento|date:"d/m/Y" }}</div>
+        </div>
+        <div class="parcela-valor" style="color:#2e7d32;">
+            {{ p.valor_pago|moeda }}
+        </div>
+    </div>
+    {% empty %}
+    <div class="portal-card-body" style="text-align:center;color:#9e9e9e;">
+        Nenhum pagamento registrado ainda.
+    </div>
+    {% endfor %}
+</div>
+
+<!-- Comprovantes Enviados -->
+<div class="portal-card">
+    <div class="portal-card-header">
+        <i class="fas fa-receipt" style="margin-right:6px;"></i>Comprovantes Enviados
+        <span style="float:right;background:rgba(255,255,255,.25);border-radius:10px;padding:0 10px;font-size:.8rem;">{{ comprovantes|length }}</span>
+    </div>
+    {% for c in comprovantes %}
+    <div class="parcela-item">
+        <div class="parcela-icon {% if c.status == 'APROVADO' %}pago{% elif c.status == 'PENDENTE' %}pendente{% else %}vencida{% endif %}">
+            {% if c.status == 'APROVADO' %}<i class="fas fa-check"></i>
+            {% elif c.status == 'PENDENTE' %}<i class="fas fa-clock"></i>
+            {% else %}<i class="fas fa-times"></i>{% endif %}
+        </div>
+        <div class="parcela-info">
+            <div class="contrato">{{ c.parcela.contrato.numero_contrato }}</div>
+            <div class="desc">Parcela {{ c.parcela.numero_parcela }}/{{ c.parcela.contrato.numero_parcelas }} · {{ c.get_forma_pagamento_display }}</div>
+            <div class="data">
+                Enviado em {{ c.criado_em|date:"d/m/Y H:i" }} —
+                {% if c.status == 'PENDENTE' %}Aguardando análise
+                {% elif c.status == 'APROVADO' %}Aprovado
+                {% else %}Rejeitado{% if c.motivo_rejeicao %}: {{ c.motivo_rejeicao|truncatechars:60 }}{% endif %}{% endif %}
+            </div>
+        </div>
+        <div class="parcela-valor">
+            {{ c.valor_informado|moeda }}
+        </div>
+    </div>
+    {% empty %}
+    <div class="portal-card-body" style="text-align:center;color:#9e9e9e;">
+        Nenhum comprovante enviado ainda.
+    </div>
+    {% endfor %}
+</div>
+
+<!-- Reajustes -->
+<div class="portal-card">
+    <div class="portal-card-header" style="background:#ef6c00;">
+        <i class="fas fa-chart-line" style="margin-right:6px;"></i>Reajustes
+        <span style="float:right;background:rgba(255,255,255,.25);border-radius:10px;padding:0 10px;font-size:.8rem;">{{ reajustes|length }}</span>
+    </div>
+    {% for r in reajustes %}
+    <div class="parcela-item">
+        <div class="parcela-icon pendente">
+            <i class="fas fa-percent"></i>
+        </div>
+        <div class="parcela-info">
+            <div class="contrato">{{ r.contrato.numero_contrato }}</div>
+            <div class="desc">{{ r.indice_tipo }} · Parcelas {{ r.parcela_inicial }} a {{ r.parcela_final }}</div>
+            <div class="data">Aplicado em {{ r.data_reajuste|date:"d/m/Y" }}</div>
+        </div>
+        <div class="parcela-valor">
+            {{ r.percentual }}%
+        </div>
+    </div>
+    {% empty %}
+    <div class="portal-card-body" style="text-align:center;color:#9e9e9e;">
+        Nenhum reajuste aplicado ainda.
+    </div>
+    {% endfor %}
+</div>
+
 {% endblock %}

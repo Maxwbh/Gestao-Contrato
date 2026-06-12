@@ -1138,6 +1138,7 @@ def upload_comprovante(request, parcela_id):
         })
 
     return render(request, 'portal_comprador/upload_comprovante.html', {
+        'comprador': comprador,
         'form': form,
         'parcela': parcela,
         'pendente_existente': pendente_existente,
@@ -1179,6 +1180,7 @@ def historico_unificado(request):
     )
 
     return render(request, 'portal_comprador/historico_unificado.html', {
+        'comprador': comprador,
         'pagamentos': pagamentos,
         'comprovantes': comprovantes,
         'reajustes': reajustes,
@@ -1250,6 +1252,7 @@ def simulador_antecipacao_portal(request, contrato_id):
         }
 
     return render(request, 'portal_comprador/simulador_antecipacao.html', {
+        'comprador': comprador,
         'contrato': contrato,
         'parcelas_disponiveis': parcelas_disponiveis,
         'preview': preview,
@@ -1472,6 +1475,7 @@ def portal_timeline(request, contrato_id):
     eventos.sort(key=lambda e: e['data'] or __import__('datetime').date.min)
 
     return render(request, 'portal_comprador/timeline.html', {
+        'comprador': comprador,
         'contrato': contrato,
         'eventos': eventos,
     })
