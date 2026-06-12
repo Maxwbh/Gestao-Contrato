@@ -354,6 +354,9 @@ BRCOBRANCA_MAX_TENTATIVAS = 3
 BRCOBRANCA_DELAY_INICIAL = 2
 # Tempo máximo de espera (segundos) para o serviço acordar no cold start (Free Tier)
 BRCOBRANCA_COLD_START_WAIT = 60
+# Template de renderização: 'prawn' (Ruby nativo, sem GhostScript — recomendado Render Free 512MB)
+# ou '' para usar o padrão da API (GhostScript, melhor qualidade mas +50-100MB RAM por PDF).
+BRCOBRANCA_TEMPLATE = config('BRCOBRANCA_TEMPLATE', default='prawn')
 
 # PIX Webhook — token compartilhado enviado pelo PSP no header Authorization: Bearer <token>
 # Deixe vazio para desabilitar a validação (não recomendado em produção)
