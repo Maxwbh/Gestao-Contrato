@@ -61,18 +61,33 @@ curl -s -X POST \
 
 ## 3. Jobs Obrigatórios
 
+> ⚙️ **Configuração automática:** o script `configurar_cronjob.py` (raiz do
+> repositório) aplica a estratégia de keep-alive abaixo via API do cron-job.org:
+> ```bash
+> CRONJOB_API_KEY=<chave> python configurar_cronjob.py          # aplica
+> CRONJOB_API_KEY=<chave> python configurar_cronjob.py --dry-run # só exibe
+> ```
+> Chave em: cron-job.org → Settings → API → Generate API Key.
+
 ### Job 1 — Keep-Alive (prevenir hibernação)
 
-O Render Free Tier hiberna serviços após **15 minutos** sem requisições.
+O Render Free Tier hiberna serviços após **15 minutos** sem requisições, mas o
+limite de **750h/mês é compartilhado** entre todos os serviços gratuitos da
+conta — keep-alive 24/7 em 3 serviços esgota o limite em ~10 dias e o Render
+**suspende tudo**. Por isso o keep-alive é restrito a horário comercial e
+**apenas** ao serviço principal.
 
 | Campo | Valor |
 |-------|-------|
 | **Nome** | `keep-alive-gestao` |
 | **URL** | `https://gestao-contrato-web-mt6j.onrender.com/health/` |
 | **Método** | `GET` |
-| **Intervalo** | A cada **10 minutos** |
+| **Intervalo** | A cada **14 minutos** |
+| **Dias/Horário** | **Seg–Sex, 08:00–18:00** (America/Sao_Paulo) |
 | **Autenticação** | Nenhuma |
 | **Timeout** | 30 segundos |
+
+Consumo estimado: ~220h/mês — folga de ~530h dentro do limite de 750h.
 
 **Resposta esperada (HTTP 200):**
 ```json
@@ -88,16 +103,14 @@ O Render Free Tier hiberna serviços após **15 minutos** sem requisições.
 
 ---
 
-### Job 2 — Keep-Alive BRCobrança
+### Job 2 — ~~Keep-Alive BRCobrança~~ (não usar)
 
-| Campo | Valor |
-|-------|-------|
-| **Nome** | `keep-alive-brcobranca` |
-| **URL** | `https://brcobranca-api-m4q9.onrender.com/api/health` |
-| **Método** | `GET` |
-| **Intervalo** | A cada **10 minutos** |
-| **Autenticação** | Nenhuma |
-| **Timeout** | 30 segundos |
+> ⚠️ **Removido da estratégia.** O `brcobranca-api` deve **dormir** quando não
+> há boletos sendo gerados. O Django detecta o cold start e aguarda o serviço
+> acordar automaticamente (até `BRCOBRANCA_COLD_START_WAIT`, padrão 60s) —
+> a primeira geração de boleto do dia leva ~30-50s, as seguintes são imediatas.
+> Se existir um job pingando `brcobranca-api-m4q9.onrender.com`, **desative-o**
+> (o `configurar_cronjob.py` faz isso automaticamente).
 
 ---
 
