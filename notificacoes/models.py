@@ -353,11 +353,16 @@ class TemplateNotificacao(TimeStampedModel):
     %%CODIGOBARRAS%% - Código de barras
     %%STATUSBOLETO%% - Status do boleto
     %%VALORBOLETO%% - Valor do boleto
+    %%PIXCOPIACOLA%% - Código PIX copia-e-cola (boleto híbrido)
 
     DADOS DO SISTEMA:
     %%DATAATUAL%% - Data atual
     %%HORAATUAL%% - Hora atual
-    %%LINKBOLETO%% - Link para download do boleto
+    %%LINKBOLETO%% - Link para visualizar/baixar o boleto (página pública)
+
+    BLOCOS CONDICIONAIS:
+    %%SE_TAG%%...%%FIM_TAG%% - O conteúdo só aparece se a TAG tiver valor.
+    Ex: %%SE_PIXCOPIACOLA%%Pague com PIX: %%PIXCOPIACOLA%%%%FIM_PIXCOPIACOLA%%
 
     RELATÓRIO SEMANAL (RELATORIO_SEMANAL):
     %%NOMEIMOBILIARIA%% - Nome da imobiliária
@@ -500,13 +505,29 @@ class TemplateNotificacao(TimeStampedModel):
         """
         Renderiza o template substituindo TAGs pelo contexto.
 
+        Suporta blocos condicionais %%SE_TAG%%...%%FIM_TAG%%: o conteúdo do
+        bloco só permanece se contexto['TAG'] tiver valor não-vazio (ex:
+        %%SE_PIXCOPIACOLA%%Pague com PIX: %%PIXCOPIACOLA%%%%FIM_PIXCOPIACOLA%%).
+
         Returns:
             tuple: (assunto, corpo_sms, corpo_html, corpo_whatsapp) — todos renderizados
         """
-        assunto_r = self.assunto or ''
-        corpo_r = self.corpo or ''
-        corpo_html_r = self.corpo_html or ''
-        corpo_whatsapp_r = self.corpo_whatsapp or ''
+        import re
+
+        def processar_condicionais(texto):
+            if not texto or '%%SE_' not in texto:
+                return texto
+
+            def repl(m):
+                tag, conteudo = m.group(1), m.group(2)
+                return conteudo if str(contexto.get(tag) or '').strip() else ''
+
+            return re.sub(r'%%SE_(\w+)%%(.*?)%%FIM_\1%%', repl, texto, flags=re.DOTALL)
+
+        assunto_r = processar_condicionais(self.assunto or '')
+        corpo_r = processar_condicionais(self.corpo or '')
+        corpo_html_r = processar_condicionais(self.corpo_html or '')
+        corpo_whatsapp_r = processar_condicionais(self.corpo_whatsapp or '')
 
         for tag, valor in contexto.items():
             placeholder = f"%%{tag}%%"

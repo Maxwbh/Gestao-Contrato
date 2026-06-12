@@ -753,6 +753,9 @@
                             finalizar(false, { error: ger.erro || 'Erro na geração', output: ger.output }, Date.now() - startTime);
                             return;
                         }
+                        if (ger.etapa) {
+                            document.getElementById('progressSubtitle').textContent = ger.etapa;
+                        }
                     } catch (_) { /* falha transitória de rede — tenta de novo */ }
                     setTimeout(poll, POLL_MS);
                 };

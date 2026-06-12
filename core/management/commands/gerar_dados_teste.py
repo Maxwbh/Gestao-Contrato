@@ -813,8 +813,17 @@ class Command(BaseCommand):
         return count
 
     def marcar_parcelas_pagas(self, contratos, percentual=0.90):
-        """Marca parcelas como pagas (somente parcelas vencidas até a data atual)"""
+        """
+        Marca parcelas como pagas (somente parcelas vencidas até a data atual).
+
+        Usa bulk_update: pagar parcela a parcela via registrar_pagamento() gera
+        milhares de UPDATEs individuais — em banco remoto (Supabase) o setup
+        estoura o tempo de vida do worker e a geração nunca conclui.
+        """
+        from financeiro.models import Parcela
+
         hoje = timezone.now().date()
+        a_atualizar = []
 
         for contrato in contratos:
             # Filtrar apenas parcelas com vencimento até hoje
@@ -822,45 +831,36 @@ class Command(BaseCommand):
                 data_vencimento__lte=hoje
             ).order_by('numero_parcela'))
 
-            total_parcelas = len(parcelas)
-            parcelas_a_pagar = int(total_parcelas * percentual)
+            parcelas_a_pagar = int(len(parcelas) * percentual)
 
             for i in range(parcelas_a_pagar):
                 parcela = parcelas[i]
+                # Cachear o FK: parcela.contrato lazy-load dispararia 1 query
+                # por parcela dentro de calcular_juros_multa
+                parcela.contrato = contrato
 
                 # Data de pagamento entre vencimento e no máximo hoje
-                dias_apos_vencimento = random.randint(0, 10)
-                data_pagamento = parcela.data_vencimento + timedelta(days=dias_apos_vencimento)
-
-                # Garantir que data de pagamento não ultrapasse hoje
-                if data_pagamento > hoje:
-                    data_pagamento = hoje
+                data_pagamento = min(
+                    parcela.data_vencimento + timedelta(days=random.randint(0, 10)),
+                    hoje,
+                )
 
                 if data_pagamento > parcela.data_vencimento:
                     juros, multa = parcela.calcular_juros_multa(data_pagamento)
                     parcela.valor_juros = juros
                     parcela.valor_multa = multa
 
-                valor_pago = parcela.valor_atual + parcela.valor_juros + parcela.valor_multa
+                parcela.pago = True
+                parcela.data_pagamento = data_pagamento
+                parcela.valor_pago = parcela.valor_atual + parcela.valor_juros + parcela.valor_multa
+                parcela.observacoes = 'Pagamento gerado automaticamente para teste'
+                a_atualizar.append(parcela)
 
-                # Variar origem de pagamento para testar conciliação
-                origens_variaveis = ['MANUAL', 'MANUAL', 'CNAB', 'OFX', 'MANUAL']
-                origem = origens_variaveis[i % len(origens_variaveis)]
-
-                parcela.registrar_pagamento(
-                    valor_pago=valor_pago,
-                    data_pagamento=data_pagamento,
-                    observacoes=f'Pagamento gerado automaticamente para teste ({origem})'
-                )
-
-                # Atualizar origem_pagamento no HistoricoPagamento recém criado
-                from financeiro.models import HistoricoPagamento
-                hist = HistoricoPagamento.objects.filter(parcela=parcela).order_by('-id').first()
-                if hist and origem != 'MANUAL':
-                    hist.origem_pagamento = origem
-                    if origem == 'OFX':
-                        hist.fitid_ofx = f'OFX{data_pagamento.strftime("%Y%m%d")}{parcela.pk:06d}'
-                    hist.save(update_fields=['origem_pagamento', 'fitid_ofx'])
+        Parcela.objects.bulk_update(
+            a_atualizar,
+            ['pago', 'data_pagamento', 'valor_pago', 'valor_juros', 'valor_multa', 'observacoes'],
+            batch_size=500,
+        )
 
     def simular_boletos_gerados(self, contratos, contas_bancarias):
         """
@@ -957,12 +957,12 @@ class Command(BaseCommand):
         Fallback quando a API BRCobrança está indisponível.
         Popula os campos de boleto sem gerar PDF — dados suficientes para remessa CNAB.
         """
-        from financeiro.models import StatusBoleto
+        from financeiro.models import Parcela, StatusBoleto
         from django.utils import timezone as tz
 
         hoje = tz.now()
-        count = 0
         contas_modificadas: dict = {}
+        a_atualizar = []
 
         for parcela, conta in pares:
             if parcela.pago:
@@ -983,18 +983,20 @@ class Command(BaseCommand):
             parcela.nosso_numero_dv = ''
             parcela.numero_documento = parcela.gerar_numero_documento()
             parcela.data_geracao_boleto = hoje
-            parcela.save(update_fields=[
-                'conta_bancaria', 'status_boleto', 'nosso_numero',
-                'nosso_numero_formatado', 'nosso_numero_dv',
-                'numero_documento', 'data_geracao_boleto',
-            ])
-            count += 1
+            a_atualizar.append(parcela)
             contas_modificadas[conta.pk] = conta
+
+        # bulk_update: saves individuais multiplicam round-trips em banco remoto
+        Parcela.objects.bulk_update(a_atualizar, [
+            'conta_bancaria', 'status_boleto', 'nosso_numero',
+            'nosso_numero_formatado', 'nosso_numero_dv',
+            'numero_documento', 'data_geracao_boleto',
+        ], batch_size=500)
 
         for conta_mod in contas_modificadas.values():
             conta_mod.save(update_fields=['nosso_numero_atual'])
 
-        return count
+        return len(a_atualizar)
 
     def verificar_dados_boleto_remessa(self, contratos, contas_bancarias):
         """
