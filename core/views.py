@@ -499,24 +499,43 @@ def gerar_dados_teste(request):
                 'geracao': estado,
             }, status=409)
 
+        inicio_iso = timezone.now().isoformat()
+
         _job_dados_teste_set({
             'status': 'running',
-            'iniciado': timezone.now().isoformat(),
+            'iniciado': inicio_iso,
             'limpar': limpar,
             'banco': banco,
         })
 
         import threading
 
+        class _SaidaComProgresso(io.StringIO):
+            """Atualiza a etapa no estado do job a cada linha de progresso —
+            heartbeat para o polling do front e para a detecção de job órfão."""
+            def write(self, s):
+                r = super().write(s)
+                linha = s.strip()
+                if linha and not linha.startswith(('→', '•', '✓', '⚠', '[')):
+                    try:
+                        _job_dados_teste_set({
+                            'status': 'running',
+                            'iniciado': inicio_iso,
+                            'etapa': linha[:140],
+                        })
+                    except Exception:
+                        pass
+                return r
+
         def _executar():
             from django.db import connection
-            out = io.StringIO()
+            out = _SaidaComProgresso()
             try:
                 call_command('gerar_dados_teste', limpar=limpar, banco=banco, stdout=out)
                 from contratos.models import Contrato as _Contrato
                 _job_dados_teste_set({
                     'status': 'done',
-                    'iniciado': estado.get('iniciado') or timezone.now().isoformat(),
+                    'iniciado': inicio_iso,
                     'finalizado': timezone.now().isoformat(),
                     'output': out.getvalue()[-8000:],
                     # Contagens na mesma conexão que gravou (GET de outro worker
@@ -562,7 +581,8 @@ def gerar_dados_teste(request):
 
 
 _JOB_DADOS_TESTE_CHAVE = '_job_gerar_dados_teste'
-_JOB_DADOS_TESTE_STALE_MIN = 30
+# Sem heartbeat (etapa gravada a cada passo) por este tempo → job considerado morto
+_JOB_DADOS_TESTE_STALE_MIN = 5
 
 
 def _job_dados_teste_get():
@@ -574,16 +594,16 @@ def _job_dados_teste_get():
         if not p or not p.valor:
             return {}
         estado = json.loads(p.valor)
-        # Worker pode ter sido reciclado no meio da geração: estado 'running'
-        # antigo demais é tratado como falha para liberar nova execução
-        if estado.get('status') == 'running' and estado.get('iniciado'):
-            from django.utils.dateparse import parse_datetime
-            inicio = parse_datetime(estado['iniciado'])
-            if inicio and timezone.now() - inicio > timedelta(minutes=_JOB_DADOS_TESTE_STALE_MIN):
+        # Worker pode ter sido reciclado no meio da geração: o job grava
+        # heartbeat (etapa) a cada passo — 'running' sem atualização recente
+        # é tratado como falha para liberar nova execução
+        if estado.get('status') == 'running' and p.atualizado_em:
+            if timezone.now() - p.atualizado_em > timedelta(minutes=_JOB_DADOS_TESTE_STALE_MIN):
                 estado = {
                     'status': 'error',
-                    'erro': f'Geração não respondeu em {_JOB_DADOS_TESTE_STALE_MIN} min '
-                            '(worker pode ter sido reiniciado). Tente novamente.',
+                    'erro': f'Geração sem progresso há {_JOB_DADOS_TESTE_STALE_MIN} min '
+                            '(o worker pode ter sido reiniciado durante um deploy). '
+                            'Tente novamente.',
                 }
                 _job_dados_teste_set(estado)
         return estado

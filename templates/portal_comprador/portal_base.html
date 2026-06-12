@@ -137,7 +137,10 @@
             border-radius: 10px;
             padding: 12px 8px;
             text-align: center;
-            background: #fff;
+            /* !important: Materialize define .blue/.green/.amber/.red com
+               background-color !important — sem isso o card fica todo colorido
+               e o rótulo cinza perde o contraste */
+            background: #fff !important;
             box-shadow: 0 1px 3px rgba(0,0,0,.1);
         }
         .stat-chip .val {
@@ -150,6 +153,10 @@
         .stat-chip.red   { border-top: 3px solid #f44336; }
         .stat-chip.amber { border-top: 3px solid #ff9800; }
         .stat-chip.blue  { border-top: 3px solid #2196f3; }
+        .stat-chip.green .val { color: #2e7d32; }
+        .stat-chip.red   .val { color: #c62828; }
+        .stat-chip.amber .val { color: #ef6c00; }
+        .stat-chip.blue  .val { color: #1565c0; }
 
         /* ── Parcela Item ── */
         .parcela-item {

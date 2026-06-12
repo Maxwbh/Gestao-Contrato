@@ -740,6 +740,8 @@ class Contrato(TimeStampedModel):
 
         prazo_ciclo = self.prazo_reajuste_meses or 12
 
+        from contratos.utils import ajustar_data_vencimento
+
         for numero in range(1, self.numero_parcelas + 1):
             # Se ate_mes_atual=True, parar quando vencimento ultrapassar o mês atual
             if data_limite and data_vencimento > data_limite:
@@ -749,19 +751,17 @@ class Contrato(TimeStampedModel):
             # 2 para as próximas, etc. Usado na trava de boleto e na grid de reajustes.
             ciclo_reajuste = (numero - 1) // prazo_ciclo + 1
 
-            parcela = Parcela.objects.create(
+            parcelas_criadas.append(Parcela(
                 contrato=self,
                 numero_parcela=numero,
                 data_vencimento=data_vencimento,
                 valor_original=valor_parcela,
                 valor_atual=valor_parcela,
                 ciclo_reajuste=ciclo_reajuste,
-            )
-            parcelas_criadas.append(parcela)
+            ))
 
             # Avançar para o próximo mês, mantendo o dia de vencimento
             # Item 2.3: Usar ajuste inteligente que considera meses curtos e feriados
-            from contratos.utils import ajustar_data_vencimento
             proximo_mes = data_vencimento + relativedelta(months=1)
             data_vencimento, motivo_ajuste = ajustar_data_vencimento(
                 dia_desejado=self.dia_vencimento,
@@ -770,6 +770,10 @@ class Contrato(TimeStampedModel):
                 ajustar_feriado=True,
                 ajustar_fim_semana=False  # Boletos podem vencer em fins de semana
             )
+
+        # bulk_create: contratos de 360 meses geravam 360 INSERTs individuais —
+        # em banco remoto (Supabase) isso domina o tempo de criação do contrato
+        Parcela.objects.bulk_create(parcelas_criadas, batch_size=500)
 
         return parcelas_criadas
 
