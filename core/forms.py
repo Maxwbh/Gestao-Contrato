@@ -616,6 +616,8 @@ class ImobiliariaForm(forms.ModelForm):
             'cep', 'logradouro', 'numero', 'complemento', 'bairro', 'cidade', 'estado',
             'telefone', 'email', 'responsavel_financeiro',
             'banco', 'agencia', 'conta', 'pix',
+            # Identidade Visual (boletos Prawn ≥12.10.0)
+            'cor_marca', 'rodape_contato', 'marca_dagua',
             # Configurações de Boleto
             'tipo_valor_multa', 'percentual_multa_padrao',
             'tipo_valor_juros', 'percentual_juros_padrao',
@@ -673,6 +675,20 @@ class ImobiliariaForm(forms.ModelForm):
                 'placeholder': '0,00'
             }),
             'instrucao_padrao': forms.TextInput(attrs={'placeholder': 'Uma linha no espaço instrução ao caixa'}),
+            'cor_marca': forms.TextInput(attrs={
+                'placeholder': '1A4E8C',
+                'maxlength': '6',
+                'pattern': '[0-9A-Fa-f]{6}',
+                'title': 'Hex RRGGBB sem # (ex: 1A4E8C)',
+            }),
+            'rodape_contato': forms.TextInput(attrs={
+                'placeholder': 'Tel: (31) 3773-1234 | contato@empresa.com.br',
+                'maxlength': '120',
+            }),
+            'marca_dagua': forms.TextInput(attrs={
+                'placeholder': 'ANTIFRAUDE (opcional)',
+                'maxlength': '60',
+            }),
         }
 
     def __init__(self, *args, **kwargs):
@@ -767,6 +783,25 @@ class ImobiliariaForm(forms.ModelForm):
                 Column(Field('conta', wrapper_class='mb-2'), css_class='col-md-3'),
                 Column(Field('pix', wrapper_class='mb-2'), css_class='col-md-3'),
             ),
+            HTML('</div></div>'),
+
+            # Card: Identidade Visual (Boleto Prawn ≥12.10.0)
+            HTML('''
+                <div class="card mb-3 card-opcional">
+                    <div class="card-header py-2">
+                        <i class="fas fa-palette me-2"></i><strong>Identidade Visual do Boleto</strong>
+                        <small class="text-muted ms-2">(Logo, cor e rodapé nos boletos Prawn)</small>
+                    </div>
+                    <div class="card-body py-3">
+            '''),
+            Row(
+                Column(Field('logo', wrapper_class='mb-2'), css_class='col-md-12'),
+            ),
+            Row(
+                Column(Field('cor_marca', wrapper_class='mb-2'), css_class='col-md-3'),
+                Column(Field('rodape_contato', wrapper_class='mb-2'), css_class='col-md-9'),
+            ),
+            Field('marca_dagua', wrapper_class='mb-2'),
             HTML('</div></div>'),
 
             # Card: Configuracoes Padrao de Boleto (Opcional)

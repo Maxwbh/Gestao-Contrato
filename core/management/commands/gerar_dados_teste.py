@@ -320,7 +320,9 @@ class Command(BaseCommand):
                 'numero': '100',
                 'bairro': 'Centro',
                 'cidade': 'Sete Lagoas',
-                'estado': 'MG'
+                'estado': 'MG',
+                'cor_marca': '1A4E8C',
+                'rodape_contato': 'Tel: (31) 3773-2000 | contato@imobiliarialagoareal.com.br',
             },
             {
                 'nome': 'Imobiliária Sete Colinas',
@@ -329,7 +331,9 @@ class Command(BaseCommand):
                 'numero': '250',
                 'bairro': 'Progresso',
                 'cidade': 'Sete Lagoas',
-                'estado': 'MG'
+                'estado': 'MG',
+                'cor_marca': '2D6E45',
+                'rodape_contato': 'Tel: (31) 3773-2100 | contato@imobiliariasetecolinas.com.br',
             }
         ]
 
@@ -355,6 +359,8 @@ class Command(BaseCommand):
                     'agencia': f'{3000+i}',
                     'conta': f'{50000+i*1000}-{i}',
                     'pix': f'pix@{d["nome"].lower().replace(" ", "")}.com.br',
+                    'cor_marca': d.get('cor_marca', ''),
+                    'rodape_contato': d.get('rodape_contato', ''),
                     'ativo': True,
                 }
             )

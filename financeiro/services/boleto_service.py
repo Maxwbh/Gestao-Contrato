@@ -802,6 +802,27 @@ class BoletoService:
             )
 
         # =====================================================
+        # CAMPOS VISUAIS brcobranca ≥12.10.0 (templates Prawn)
+        # =====================================================
+        if getattr(imobiliaria, 'logo', None) and imobiliaria.logo:
+            try:
+                dados['logo_empresa'] = imobiliaria.logo.path
+            except (ValueError, AttributeError):
+                pass
+        if getattr(imobiliaria, 'cor_marca', ''):
+            dados['cor_marca'] = imobiliaria.cor_marca
+        if getattr(imobiliaria, 'rodape_contato', ''):
+            dados['rodape_contato'] = imobiliaria.rodape_contato
+        if getattr(imobiliaria, 'marca_dagua', ''):
+            dados['marca_dagua'] = imobiliaria.marca_dagua
+        if parcela.numero_parcela:
+            dados['parcela_atual'] = str(parcela.numero_parcela)
+        try:
+            dados['total_parcelas'] = str(parcela.contrato.numero_parcelas)
+        except Exception:
+            pass
+
+        # =====================================================
         # FILTRAGEM E VALIDACAO FINAL POR BANCO
         # Remove campos nao suportados e aplica tamanhos maximos
         # =====================================================
@@ -1348,7 +1369,10 @@ class BoletoService:
                     # PIX (Boleto Híbrido)
                     'chave_pix', 'tipo_chave_pix', 'txid', 'emv', 'pix_label',
                     # Outros campos opcionais da classe Base
-                    'demonstrativo', 'descontos_e_abatimentos'
+                    'demonstrativo', 'descontos_e_abatimentos',
+                    # Identidade visual brcobranca ≥12.10.0 (Prawn)
+                    'logo_empresa', 'cor_marca', 'rodape_contato', 'marca_dagua',
+                    'parcela_atual', 'total_parcelas', 'fonte_ttf',
                 ]
 
                 for campo in campos_opcionais:
