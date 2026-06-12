@@ -469,12 +469,15 @@ class RelatorioService:
             parcelas_afetadas = sum(1 for n in nums if parcela_inicial <= n <= parcela_final)
 
             itens.append({
+                'contrato_id': contrato.pk,
                 'contrato_numero': contrato.numero_contrato,
                 'comprador_nome': contrato.comprador.nome,
+                'imobiliaria_nome': contrato.imobiliaria.nome if contrato.imobiliaria else '',
                 'tipo_correcao': contrato.tipo_correcao,
                 'data_proximo_reajuste': data_proximo,
                 'dias_para_reajuste': (data_proximo - hoje).days,
                 'ciclo_proximo': proximo_ciclo,
+                'proximo_ciclo': proximo_ciclo,
                 'status_reajuste': status_reajuste,
                 'parcelas_afetadas': parcelas_afetadas,
                 'bloqueio_ativo': contrato.bloqueio_boleto_reajuste,

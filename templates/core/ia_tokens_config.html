@@ -337,6 +337,7 @@ input[type=range]    { width: 100%; accent-color: #0d6efd; cursor: pointer; }
 {% endblock %}
 
 {% block extra_js %}
+<script src="{% static 'vendor/chartjs/chart.umd.min.js' %}"></script>
 <script>
 (function () {
   const COTACAO = {{ cotacao_usd_brl }};

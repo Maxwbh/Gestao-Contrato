@@ -5,7 +5,7 @@
 {% block title %}Dashboard Executivo — Contabilidade{% endblock %}
 
 {% block extra_head %}
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script src="{% static 'vendor/chartjs/chart.umd.min.js' %}"></script>
 <style>
   .kpi-card { border-radius:10px; padding:18px 20px; color:#fff; margin-bottom:16px; }
   .kpi-card .val { font-size:1.8rem; font-weight:700; line-height:1.2; }
