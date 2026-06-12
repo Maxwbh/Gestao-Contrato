@@ -643,6 +643,7 @@
             if (limpar && !confirm('⚠️ Isso irá LIMPAR todos os dados existentes e gerar novos.\n\nDeseja continuar?')) return;
 
             resetModal();
+            window._etapaServidor = null;
             progressModal.show();
             startTime = Date.now();
 
@@ -670,7 +671,10 @@
                     document.getElementById('progressTime').textContent = `~${formatMs(remaining)} restantes`;
                 } else if (elapsed >= estimatedTotal) {
                     document.getElementById('progressTime').textContent = 'Aguardando servidor...';
-                    document.getElementById('progressSubtitle').textContent = 'Processamento demorou mais que o previsto';
+                    // Não sobrescrever a etapa real reportada pelo servidor
+                    if (!window._etapaServidor) {
+                        document.getElementById('progressSubtitle').textContent = 'Processamento demorou mais que o previsto';
+                    }
                 }
             }, 200);
 
@@ -754,6 +758,7 @@
                             return;
                         }
                         if (ger.etapa) {
+                            window._etapaServidor = ger.etapa;
                             document.getElementById('progressSubtitle').textContent = ger.etapa;
                         }
                     } catch (_) { /* falha transitória de rede — tenta de novo */ }

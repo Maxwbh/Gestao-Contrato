@@ -581,8 +581,10 @@ def gerar_dados_teste(request):
 
 
 _JOB_DADOS_TESTE_CHAVE = '_job_gerar_dados_teste'
-# Sem heartbeat (etapa gravada a cada passo) por este tempo → job considerado morto
-_JOB_DADOS_TESTE_STALE_MIN = 5
+# Sem heartbeat (etapa gravada a cada passo) por este tempo → job considerado
+# morto. Folga para passos legitimamente longos (cold start do brcobranca-api
+# + geração de PDFs reais por lote pode levar 1-3 min entre heartbeats)
+_JOB_DADOS_TESTE_STALE_MIN = 12
 
 
 def _job_dados_teste_get():

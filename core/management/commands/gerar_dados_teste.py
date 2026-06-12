@@ -926,14 +926,22 @@ class Command(BaseCommand):
         service = BoletoService()
 
         if service.verificar_api_disponivel():
+            total_lotes = (len(pares) + 14) // 15
             self.stdout.write(
                 f'   → API BRCobrança disponível — gerando {len(pares)} boletos reais '
-                f'em lotes de 15 ({(len(pares) + 14) // 15} chamadas)...'
+                f'em lotes de 15 ({total_lotes} chamadas)...'
             )
-            resultado = service.gerar_boletos_lote(pares, tamanho_lote=15)
-            count = resultado['gerados']
-            for e in resultado['erros']:
-                self.stdout.write(self.style.WARNING(f'   ⚠ {e}'))
+            # Um lote por chamada COM stdout entre eles: cada linha vira
+            # heartbeat do job assíncrono — sem isso, a geração via API
+            # (cold start + PDFs) fica minutos sem sinal de progresso
+            count = 0
+            for i in range(0, len(pares), 15):
+                num_lote = i // 15 + 1
+                self.stdout.write(f'Gerando boletos reais — lote {num_lote}/{total_lotes}...')
+                resultado = service.gerar_boletos_lote(pares[i:i + 15], tamanho_lote=15)
+                count += resultado['gerados']
+                for e in resultado['erros']:
+                    self.stdout.write(self.style.WARNING(f'   ⚠ {e}'))
         else:
             self.stdout.write(
                 f'   → API BRCobrança indisponível — simulando {len(pares)} boletos localmente...'
