@@ -515,7 +515,7 @@
       if (bloqueioBannerJs) bloqueioBannerJs.classList.add('d-none');
       return;
     }
-    fetch('/core/api/compradores/' + compradorId + '/status/')
+    fetch('/api/compradores/' + compradorId + '/status/')
       .then(function(r) { return r.json(); })
       .then(function(d) {
         if (d.bloqueio_credito) {
