@@ -3126,8 +3126,8 @@ def api_compradores(request):
 @require_http_methods(['GET'])
 def api_comprador_detalhe(request, pk):
     """Retorna os dados completos de um comprador."""
+    comprador = get_object_or_404(Comprador, pk=pk)
     try:
-        comprador = get_object_or_404(Comprador, pk=pk)
         return JsonResponse({'status': 'success', 'comprador': _serializar_comprador(comprador)})
     except Exception as e:
         logger.exception('api_comprador_detalhe pk=%s: %s', pk, e)
@@ -3138,8 +3138,8 @@ def api_comprador_detalhe(request, pk):
 @require_http_methods(['PUT', 'PATCH'])
 def api_comprador_atualizar(request, pk):
     """Atualiza os dados de um comprador (PUT ou PATCH)."""
+    comprador = get_object_or_404(Comprador, pk=pk)
     try:
-        comprador = get_object_or_404(Comprador, pk=pk)
         data = json.loads(request.body)
         campos = [
             'tipo_pessoa', 'nome', 'rg', 'data_nascimento', 'estado_civil', 'profissao',
@@ -3170,8 +3170,8 @@ def api_comprador_atualizar(request, pk):
 @require_http_methods(['DELETE'])
 def api_comprador_excluir(request, pk):
     """Desativa (soft delete) um comprador."""
+    comprador = get_object_or_404(Comprador, pk=pk)
     try:
-        comprador = get_object_or_404(Comprador, pk=pk)
         comprador.ativo = False
         comprador.save(update_fields=['ativo'])
         return JsonResponse({'status': 'success', 'message': 'Comprador desativado.'})
@@ -3295,8 +3295,8 @@ def api_imobiliarias(request):
 @require_http_methods(['GET'])
 def api_imobiliaria_detalhe(request, pk):
     """Retorna os dados completos de uma imobiliária."""
+    imob = get_object_or_404(Imobiliaria, pk=pk)
     try:
-        imob = get_object_or_404(Imobiliaria, pk=pk)
         return JsonResponse({'status': 'success', 'imobiliaria': _serializar_imobiliaria(imob, request)})
     except Exception as e:
         logger.exception('api_imobiliaria_detalhe pk=%s: %s', pk, e)
@@ -3307,8 +3307,8 @@ def api_imobiliaria_detalhe(request, pk):
 @require_http_methods(['PUT', 'PATCH'])
 def api_imobiliaria_atualizar(request, pk):
     """Atualiza os dados de uma imobiliária (PUT ou PATCH)."""
+    imob = get_object_or_404(Imobiliaria, pk=pk)
     try:
-        imob = get_object_or_404(Imobiliaria, pk=pk)
         data = json.loads(request.body)
         campos = [
             'tipo_pessoa', 'nome', 'razao_social',
@@ -3335,8 +3335,8 @@ def api_imobiliaria_atualizar(request, pk):
 @require_http_methods(['DELETE'])
 def api_imobiliaria_excluir(request, pk):
     """Desativa (soft delete) uma imobiliária."""
+    imob = get_object_or_404(Imobiliaria, pk=pk)
     try:
-        imob = get_object_or_404(Imobiliaria, pk=pk)
         imob.ativo = False
         imob.save(update_fields=['ativo'])
         return JsonResponse({'status': 'success', 'message': 'Imobiliária desativada.'})

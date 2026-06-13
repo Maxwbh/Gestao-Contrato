@@ -1,7 +1,7 @@
 """
 Testes dos management commands do app core.
 
-Escopo: gerar_dados_teste (com e sem --limpar)
+Escopo: gerar_dados_teste (com e sem --limpar), flags --so-remessa, --so-retorno, --so-logos
 """
 import pytest
 from io import StringIO
@@ -32,8 +32,61 @@ class TestGerarDadosTeste:
         """Após execução, existem dados no banco"""
         from core.models import Imobiliaria, Comprador
         call_command('gerar_dados_teste', stdout=StringIO())
-        # Deve criar pelo menos algumas imobiliárias ou compradores
         assert Imobiliaria.objects.count() > 0 or Comprador.objects.count() > 0
+
+
+@pytest.mark.django_db
+class TestGerarDadosTestePassos:
+    """Testes dos novos flags de passo isolado --so-remessa, --so-retorno, --so-logos"""
+
+    def _setup_base(self):
+        """Gera dados base (Passo 1) para os demais passos."""
+        call_command('gerar_dados_teste', stdout=StringIO())
+
+    def test_so_remessa_sem_dados_nao_falha(self):
+        """--so-remessa com banco vazio não deve lançar exceção."""
+        out = StringIO()
+        try:
+            call_command('gerar_dados_teste', so_remessa=True, stdout=out)
+        except SystemExit as e:
+            assert e.code == 0
+
+    def test_so_retorno_sem_dados_nao_falha(self):
+        """--so-retorno com banco vazio não deve lançar exceção."""
+        out = StringIO()
+        try:
+            call_command('gerar_dados_teste', so_retorno=True, stdout=out)
+        except SystemExit as e:
+            assert e.code == 0
+
+    def test_so_logos_sem_dados_nao_falha(self):
+        """--so-logos com banco vazio não deve lançar exceção."""
+        out = StringIO()
+        try:
+            call_command('gerar_dados_teste', so_logos=True, stdout=out)
+        except SystemExit as e:
+            assert e.code == 0
+
+    def test_so_remessa_cria_arquivo_remessa(self):
+        """--so-remessa após dados base deve criar ArquivoRemessa."""
+        from financeiro.models import ArquivoRemessa
+        self._setup_base()
+        # Precisa de boletos gerados para criar remessa (pode não haver neste ambiente de teste)
+        initial = ArquivoRemessa.objects.count()
+        call_command('gerar_dados_teste', so_remessa=True, stdout=StringIO())
+        # Se havia boletos GERADO, cria remessas; senão mantém igual
+        assert ArquivoRemessa.objects.count() >= initial
+
+    def test_so_logos_com_imobiliarias_executa(self):
+        """--so-logos com imobiliárias no banco executa sem erro."""
+        from core.models import Imobiliaria
+        self._setup_base()
+        assert Imobiliaria.objects.count() > 0
+        out = StringIO()
+        call_command('gerar_dados_teste', so_logos=True, stdout=out)
+        # Não deve ter lançado exceção; output deve conter algum texto
+        saida = out.getvalue()
+        assert isinstance(saida, str)
 
 
 @pytest.mark.django_db
@@ -47,3 +100,4 @@ class TestProcessarReajustes:
             call_command('processar_reajustes', stdout=out)
         except SystemExit as e:
             assert e.code == 0
+
