@@ -1,4 +1,5 @@
 {% extends 'base.html' %}
+{% load static %}
 {% load format_filters %}
 {% load hashid_tags %}
 
@@ -1360,14 +1361,14 @@
                 <div class="mb-2">
                     <label class="form-label fw-bold">Enviar por E-mail</label>
                     <div class="d-flex gap-2 flex-wrap">
-                        <a id="btnEmailComprador" href="#"
-                           class="btn btn-primary flex-fill">
+                        <button type="button" id="btnEmailComprador"
+                                class="btn btn-primary flex-fill"
+                                onclick="enviarBoletoEmailServidor(this)">
                             <i class="fas fa-envelope me-2"></i>Enviar ao Comprador
-                        </a>
-                        <button type="button" class="btn btn-outline-primary flex-fill"
-                                onclick="copiarMensagemEmail()">
-                            <i class="fas fa-copy me-2"></i>Copiar mensagem
                         </button>
+                        <a id="btnEmailManual" href="#" class="btn btn-outline-primary flex-fill">
+                            <i class="fas fa-pen me-2"></i>Escrever manualmente
+                        </a>
                     </div>
                     <small class="text-muted mt-1 d-block" id="infoEmail"></small>
                 </div>
@@ -1696,7 +1697,7 @@
 {% endblock %}
 
 {% block extra_js %}
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+<script src="{% static 'vendor/chartjs/chart.umd.min.js' %}"></script>
 <script>
 // ── F3-03: Resumo Financeiro — Chart.js barras por mês ────────────────────────
 (function () {
@@ -1950,9 +1951,10 @@ function abrirModalCompartilhar(parcelaId, linhaDigitavel, numeroParcela, vencim
 
     var assunto = 'Boleto - Contrato ' + numeroContrato + ' - Parcela ' + numeroParcela;
 
-    // Guardar para uso do botão copiar mensagem
+    // Guardar para uso do botão copiar mensagem e envio direto por e-mail
     _compartilharDados.mensagem = mensagem;
     _compartilharDados.assunto = assunto;
+    _compartilharDados.parcelaId = parcelaId;
 
     // Preencher campos
     document.getElementById('compartilharLinhaDigitavel').value = linhaDigitavel || '(não disponível)';
@@ -1974,14 +1976,41 @@ function abrirModalCompartilhar(parcelaId, linhaDigitavel, numeroParcela, vencim
     }
     document.getElementById('btnWhatsAppLink').href = 'https://wa.me/?text=' + msgWa;
 
-    // E-mail
+    // E-mail — envio direto pelo sistema (template + PDF anexo) ou mailto manual
     var mailtoUrl = 'mailto:' + encodeURIComponent(compradorEmail)
         + '?subject=' + encodeURIComponent(assunto)
         + '&body=' + encodeURIComponent(mensagem);
-    document.getElementById('btnEmailComprador').href = mailtoUrl;
-    document.getElementById('infoEmail').textContent = 'E-mail do comprador: ' + compradorEmail;
+    document.getElementById('btnEmailManual').href = mailtoUrl;
+    document.getElementById('infoEmail').textContent = compradorEmail
+        ? 'Envia o boleto com PDF anexo para: ' + compradorEmail
+        : 'Comprador sem e-mail cadastrado.';
+    document.getElementById('btnEmailComprador').disabled = !compradorEmail;
 
     new bootstrap.Modal(document.getElementById('modalCompartilhar')).show();
+}
+
+async function enviarBoletoEmailServidor(btn) {
+    var original = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Enviando...';
+    try {
+        var resp = await fetch('/financeiro/parcelas/' + _compartilharDados.parcelaId + '/boleto/email/', {
+            method: 'POST',
+            headers: { 'X-CSRFToken': '{{ csrf_token }}' },
+        });
+        var data = await resp.json();
+        btn.disabled = false;
+        btn.innerHTML = original;
+        if (data.sucesso) {
+            showToast('E-mail enviado para ' + data.destinatario, 'success');
+        } else {
+            showToast('Erro: ' + (data.erro || 'Falha no envio'), 'error', 6000);
+        }
+    } catch (e) {
+        btn.disabled = false;
+        btn.innerHTML = original;
+        showToast('Erro de conexão: ' + e.message, 'error');
+    }
 }
 
 function compartilharNativo() {

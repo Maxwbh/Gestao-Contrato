@@ -28,16 +28,25 @@ O sistema gera automaticamente:
 ### Opção 1: Via Django Management Command
 
 ```bash
-# Gerar dados
+# Gerar dados (boletos distribuídos entre os 4 bancos, round-robin)
 python manage.py gerar_dados_teste
 
 # Limpar dados antigos e gerar novos
 python manage.py gerar_dados_teste --limpar
+
+# Concentrar 100% dos boletos em um banco (vira a conta principal)
+# 001=Banco do Brasil | 756=Sicoob | 237=Bradesco | 336=C6 Bank
+python manage.py gerar_dados_teste --limpar --banco 756
 ```
 
-### Opção 2: Via Endpoint HTTP
+### Opção 2: Via Endpoint HTTP (assíncrono)
 
-#### **GET** - Ver status atual
+> A geração roda em **segundo plano**: o POST responde imediatamente com
+> `202 {"status": "started"}` e o progresso é acompanhado via GET (campo
+> `geracao`). Isso evita o timeout de request do Render (~100s) — a geração
+> completa leva alguns minutos.
+
+#### **GET** - Ver status atual (e progresso da geração)
 ```bash
 curl https://gestao-contrato-web.onrender.com/api/gerar-dados-teste/
 ```
@@ -46,6 +55,11 @@ Resposta:
 ```json
 {
   "status": "ok",
+  "geracao": {
+    "status": "running",
+    "etapa": "Criando Contratos...",
+    "iniciado": "2026-06-12T10:00:00+00:00"
+  },
   "dados_existentes": {
     "contabilidades": 1,
     "imobiliarias": 2,
@@ -55,40 +69,31 @@ Resposta:
 }
 ```
 
-#### **POST** - Gerar dados
-```bash
-curl -X POST https://gestao-contrato-web.onrender.com/api/gerar-dados-teste/
-```
+`geracao.status`: `running` (em andamento, com `etapa` atual), `done`
+(concluído, com `output` e `dados_gerados`) ou `error` (com `erro`).
 
-#### **POST** - Limpar e gerar novos dados
+#### **POST** - Iniciar geração
 ```bash
 curl -X POST https://gestao-contrato-web.onrender.com/api/gerar-dados-teste/ \
-  -d "limpar=true"
+  -H "Content-Type: application/json" \
+  -d '{"limpar": true, "banco": "756"}'
 ```
 
-Resposta:
+Resposta imediata (`202 Accepted`):
 ```json
 {
-  "status": "success",
-  "message": "Dados gerados com sucesso!",
-  "output": "...",
-  "dados_gerados": {
-    "contabilidades": 1,
-    "imobiliarias": 2,
-    "imoveis": 65,
-    "compradores": 60
-  }
+  "status": "started",
+  "message": "Geração iniciada em segundo plano. Faça GET neste endpoint para acompanhar."
 }
 ```
 
-### Opção 3: Via Browser
+POST com geração em andamento retorna `409 {"status": "running"}`.
 
-Acesse diretamente no navegador:
-```
-GET: https://gestao-contrato-web.onrender.com/api/gerar-dados-teste/
-```
+### Opção 3: Via Browser (recomendado)
 
-Para gerar via POST, use uma ferramenta como Postman ou Thunder Client.
+Acesse **`/setup/`** no sistema: a tela "Geração de Dados de Teste" tem
+seletor de banco dos boletos, opção de limpeza, barra de progresso com a
+etapa em andamento e histórico de execuções.
 
 ---
 

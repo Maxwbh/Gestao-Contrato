@@ -131,6 +131,7 @@ class BoletoNotificacaoService:
             'CODIGOBARRAS': parcela.codigo_barras or '',
             'STATUSBOLETO': parcela.get_status_boleto_display() if hasattr(parcela, 'get_status_boleto_display') else '',
             'VALORBOLETO': self._formatar_valor(parcela.valor_boleto or parcela.valor_atual),
+            'PIXCOPIACOLA': getattr(parcela, 'pix_copia_cola', '') or '',
 
             # Dados do Sistema
             'DATAATUAL': self._formatar_data(hoje.date()),
@@ -644,9 +645,9 @@ def criar_templates_padrao():
             'nome': 'Boleto Gerado',
             'assunto': 'Boleto Gerado - Parcela %%PARCELA%% - %%NOMEIMOBILIARIA%%',
             'corpo': (
-                '%%NOMEIMOBILIARIA%%: Ola %%NOMECOMPRADOR%%, '
-                'boleto parcela %%PARCELA%% '
-                'R$%%VALORBOLETO%% vence %%DATAVENCIMENTO%%.'
+                '%%NOMEIMOBILIARIA%%: Ola %%NOMECOMPRADOR%%! Boleto da parcela '
+                '%%PARCELA%% (%%VALORBOLETO%%) vence %%DATAVENCIMENTO%%.'
+                '%%SE_LINKBOLETO%% Pague em: %%LINKBOLETO%%%%FIM_LINKBOLETO%%'
             ),
             'corpo_html': """<!DOCTYPE html>
 <html lang="pt-BR">
@@ -694,10 +695,18 @@ def criar_templates_padrao():
               <td style="padding:8px 16px;font-size:18px;color:#27ae60;font-weight:700;text-align:right;">%%VALORBOLETO%%</td>
             </tr>
           </table>
-          <div style="background:#f8f9fa;padding:12px 16px;border-radius:6px;margin:20px 0;">
+          %%SE_PIXCOPIACOLA%%<div style="background:#e8f7ef;border:1px solid #2ecc71;padding:12px 16px;border-radius:6px;margin:20px 0 16px;">
+            <p style="margin:0 0 6px;font-size:12px;font-weight:700;color:#1e8449;text-transform:uppercase;">⚡ Pague na hora com PIX</p>
+            <p style="margin:0 0 8px;font-size:12px;color:#555;">Copie o código abaixo e cole na opção <strong>PIX Copia e Cola</strong> do app do seu banco:</p>
+            <code style="font-size:12px;word-break:break-all;color:#333;">%%PIXCOPIACOLA%%</code>
+          </div>%%FIM_PIXCOPIACOLA%%
+          <div style="background:#f8f9fa;padding:12px 16px;border-radius:6px;margin:16px 0;">
             <p style="margin:0 0 6px;font-size:12px;font-weight:700;color:#888;text-transform:uppercase;">Linha Digitável</p>
             <code style="font-size:13px;word-break:break-all;color:#333;">%%LINHADIGITAVEL%%</code>
           </div>
+          %%SE_LINKBOLETO%%<div style="text-align:center;margin:24px 0 8px;">
+            <a href="%%LINKBOLETO%%" style="background:#27ae60;color:#fff;text-decoration:none;padding:12px 32px;border-radius:6px;font-size:15px;font-weight:700;display:inline-block;">Visualizar Boleto</a>
+          </div>%%FIM_LINKBOLETO%%
           <p style="color:#666;font-size:13px;">O boleto segue em anexo para sua comodidade.</p>
         </td>
       </tr>
@@ -719,8 +728,10 @@ def criar_templates_padrao():
                 'Parcela: %%PARCELA%%\n'
                 'Valor: %%VALORBOLETO%%\n'
                 'Vencimento: %%DATAVENCIMENTO%%\n\n'
+                '%%SE_PIXCOPIACOLA%%⚡ *Pague na hora com PIX* (copia e cola):\n'
+                '%%PIXCOPIACOLA%%\n\n%%FIM_PIXCOPIACOLA%%'
                 'Linha digitável:\n%%LINHADIGITAVEL%%\n\n'
-                'Download: %%LINKBOLETO%%'
+                'Ver boleto: %%LINKBOLETO%%'
             ),
         },
         {
@@ -728,9 +739,9 @@ def criar_templates_padrao():
             'nome': 'Lembrete - 5 dias para vencimento',
             'assunto': 'Lembrete: Seu boleto vence em 5 dias - Parcela %%PARCELA%%',
             'corpo': (
-                '%%NOMEIMOBILIARIA%%: Lembrete %%NOMECOMPRADOR%%, '
-                'boleto parcela %%PARCELA%% vence em 5 dias '
-                'valor %%VALORBOLETO%% data %%DATAVENCIMENTO%%.'
+                '%%NOMEIMOBILIARIA%%: %%NOMECOMPRADOR%%, sua parcela %%PARCELA%% '
+                '(%%VALORBOLETO%%) vence em 5 dias: %%DATAVENCIMENTO%%.'
+                '%%SE_LINKBOLETO%% Pague em: %%LINKBOLETO%%%%FIM_LINKBOLETO%%'
             ),
             'corpo_html': """<!DOCTYPE html>
 <html lang="pt-BR">
@@ -777,10 +788,18 @@ def criar_templates_padrao():
           <div style="background:#2980b9;color:#fff;padding:12px 16px;border-radius:6px;margin:20px 0;font-size:13px;">
             Efetue o pagamento até %%DATAVENCIMENTO%% para evitar juros e multa.
           </div>
+          %%SE_PIXCOPIACOLA%%<div style="background:#e8f7ef;border:1px solid #2ecc71;padding:12px 16px;border-radius:6px;margin:16px 0;">
+            <p style="margin:0 0 6px;font-size:12px;font-weight:700;color:#1e8449;text-transform:uppercase;">⚡ Pague na hora com PIX</p>
+            <p style="margin:0 0 8px;font-size:12px;color:#555;">Copie o código abaixo e cole na opção <strong>PIX Copia e Cola</strong> do app do seu banco:</p>
+            <code style="font-size:12px;word-break:break-all;color:#333;">%%PIXCOPIACOLA%%</code>
+          </div>%%FIM_PIXCOPIACOLA%%
           <div style="background:#f8f9fa;padding:12px 16px;border-radius:6px;margin:16px 0;">
             <p style="margin:0 0 6px;font-size:12px;font-weight:700;color:#888;text-transform:uppercase;">Linha Digitável</p>
             <code style="font-size:13px;word-break:break-all;color:#333;">%%LINHADIGITAVEL%%</code>
           </div>
+          %%SE_LINKBOLETO%%<div style="text-align:center;margin:24px 0 8px;">
+            <a href="%%LINKBOLETO%%" style="background:#27ae60;color:#fff;text-decoration:none;padding:12px 32px;border-radius:6px;font-size:15px;font-weight:700;display:inline-block;">Visualizar Boleto</a>
+          </div>%%FIM_LINKBOLETO%%
           <p style="color:#666;font-size:13px;">O boleto segue em anexo para sua comodidade.</p>
         </td>
       </tr>
@@ -804,7 +823,9 @@ def criar_templates_padrao():
                 'Valor: %%VALORBOLETO%%\n'
                 'Vencimento: %%DATAVENCIMENTO%%\n\n'
                 'Evite multas pagando até a data de vencimento.\n'
-                'Download: %%LINKBOLETO%%'
+                '%%SE_PIXCOPIACOLA%%\n⚡ *Pague na hora com PIX* (copia e cola):\n'
+                '%%PIXCOPIACOLA%%\n%%FIM_PIXCOPIACOLA%%\n'
+                'Ver boleto: %%LINKBOLETO%%'
             ),
         },
         {
@@ -812,9 +833,9 @@ def criar_templates_padrao():
             'nome': 'Urgente - Boleto vence amanhã',
             'assunto': 'URGENTE: Seu boleto vence AMANHÃ - Parcela %%PARCELA%%',
             'corpo': (
-                '%%NOMEIMOBILIARIA%%: ATENCAO %%NOMECOMPRADOR%%, '
-                'boleto parcela %%PARCELA%% vence AMANHA '
-                'valor %%VALORBOLETO%%.'
+                '%%NOMEIMOBILIARIA%%: ATENCAO %%NOMECOMPRADOR%%! Parcela %%PARCELA%% '
+                '(%%VALORBOLETO%%) vence AMANHA. Evite juros.'
+                '%%SE_LINKBOLETO%% Pague em: %%LINKBOLETO%%%%FIM_LINKBOLETO%%'
             ),
             'corpo_html': """<!DOCTYPE html>
 <html lang="pt-BR">
@@ -861,10 +882,18 @@ def criar_templates_padrao():
           <div style="background:#e67e22;color:#fff;padding:12px 16px;border-radius:6px;margin:20px 0;font-size:13px;">
             Pague hoje para evitar multas e juros a partir de amanhã!
           </div>
+          %%SE_PIXCOPIACOLA%%<div style="background:#e8f7ef;border:1px solid #2ecc71;padding:12px 16px;border-radius:6px;margin:16px 0;">
+            <p style="margin:0 0 6px;font-size:12px;font-weight:700;color:#1e8449;text-transform:uppercase;">⚡ Pague na hora com PIX</p>
+            <p style="margin:0 0 8px;font-size:12px;color:#555;">Copie o código abaixo e cole na opção <strong>PIX Copia e Cola</strong> do app do seu banco:</p>
+            <code style="font-size:12px;word-break:break-all;color:#333;">%%PIXCOPIACOLA%%</code>
+          </div>%%FIM_PIXCOPIACOLA%%
           <div style="background:#f8f9fa;padding:12px 16px;border-radius:6px;margin:16px 0;">
             <p style="margin:0 0 6px;font-size:12px;font-weight:700;color:#888;text-transform:uppercase;">Linha Digitável</p>
             <code style="font-size:13px;word-break:break-all;color:#333;">%%LINHADIGITAVEL%%</code>
           </div>
+          %%SE_LINKBOLETO%%<div style="text-align:center;margin:24px 0 8px;">
+            <a href="%%LINKBOLETO%%" style="background:#27ae60;color:#fff;text-decoration:none;padding:12px 32px;border-radius:6px;font-size:15px;font-weight:700;display:inline-block;">Visualizar Boleto</a>
+          </div>%%FIM_LINKBOLETO%%
           <p style="color:#666;font-size:13px;">O boleto segue em anexo para sua comodidade.</p>
         </td>
       </tr>
@@ -888,7 +917,9 @@ def criar_templates_padrao():
                 'Valor: %%VALORBOLETO%%\n'
                 'Vencimento: %%DATAVENCIMENTO%%\n\n'
                 'Pague hoje para evitar multas e juros!\n'
-                'Download: %%LINKBOLETO%%'
+                '%%SE_PIXCOPIACOLA%%\n⚡ *Pague na hora com PIX* (copia e cola):\n'
+                '%%PIXCOPIACOLA%%\n%%FIM_PIXCOPIACOLA%%\n'
+                'Ver boleto: %%LINKBOLETO%%'
             ),
         },
         {
@@ -896,9 +927,10 @@ def criar_templates_padrao():
             'nome': 'Aviso - Boleto vencido',
             'assunto': 'AVISO: Boleto vencido - Parcela %%PARCELA%%',
             'corpo': (
-                '%%NOMEIMOBILIARIA%%: Ola %%NOMECOMPRADOR%%, '
-                'boleto parcela %%PARCELA%% venceu em %%DATAVENCIMENTO%%. '
-                'Contato: %%TELEFONEIMOBILIARIA%%'
+                '%%NOMEIMOBILIARIA%%: %%NOMECOMPRADOR%%, a parcela %%PARCELA%% '
+                'venceu em %%DATAVENCIMENTO%%.'
+                '%%SE_LINKBOLETO%% Regularize em: %%LINKBOLETO%%%%FIM_LINKBOLETO%%'
+                ' Duvidas: %%TELEFONEIMOBILIARIA%%'
             ),
             'corpo_html': """<!DOCTYPE html>
 <html lang="pt-BR">
@@ -945,8 +977,20 @@ def criar_templates_padrao():
           <div style="background:#c0392b;color:#fff;padding:12px 16px;border-radius:6px;margin:20px 0;font-size:13px;">
             Regularize o pagamento para evitar acréscimo de juros, multa e protesto do título.
           </div>
+          %%SE_PIXCOPIACOLA%%<div style="background:#e8f7ef;border:1px solid #2ecc71;padding:12px 16px;border-radius:6px;margin:16px 0;">
+            <p style="margin:0 0 6px;font-size:12px;font-weight:700;color:#1e8449;text-transform:uppercase;">⚡ Regularize na hora com PIX</p>
+            <p style="margin:0 0 8px;font-size:12px;color:#555;">Copie o código abaixo e cole na opção <strong>PIX Copia e Cola</strong> do app do seu banco:</p>
+            <code style="font-size:12px;word-break:break-all;color:#333;">%%PIXCOPIACOLA%%</code>
+          </div>%%FIM_PIXCOPIACOLA%%
+          %%SE_LINHADIGITAVEL%%<div style="background:#f8f9fa;padding:12px 16px;border-radius:6px;margin:16px 0;">
+            <p style="margin:0 0 6px;font-size:12px;font-weight:700;color:#888;text-transform:uppercase;">Linha Digitável</p>
+            <code style="font-size:13px;word-break:break-all;color:#333;">%%LINHADIGITAVEL%%</code>
+          </div>%%FIM_LINHADIGITAVEL%%
+          %%SE_LINKBOLETO%%<div style="text-align:center;margin:24px 0 8px;">
+            <a href="%%LINKBOLETO%%" style="background:#c0392b;color:#fff;text-decoration:none;padding:12px 32px;border-radius:6px;font-size:15px;font-weight:700;display:inline-block;">Atualizar e Pagar Boleto</a>
+          </div>%%FIM_LINKBOLETO%%
           <p style="color:#666;font-size:13px;">
-            Entre em contato conosco: <strong>%%TELEFONEIMOBILIARIA%%</strong> | %%EMAILIMOBILIARIA%%
+            Dúvidas ou negociação? Fale conosco: <strong>%%TELEFONEIMOBILIARIA%%</strong> | %%EMAILIMOBILIARIA%%
           </p>
         </td>
       </tr>
@@ -967,7 +1011,10 @@ def criar_templates_padrao():
                 'Olá %%NOMECOMPRADOR%%,\n'
                 'O boleto da parcela %%PARCELA%% venceu em %%DATAVENCIMENTO%%.\n\n'
                 'Poderão incidir multa e juros conforme contrato.\n'
-                'Entre em contato para regularização:\n'
+                '%%SE_PIXCOPIACOLA%%\n⚡ *Regularize na hora com PIX* (copia e cola):\n'
+                '%%PIXCOPIACOLA%%\n%%FIM_PIXCOPIACOLA%%'
+                '%%SE_LINKBOLETO%%\nAtualizar e pagar: %%LINKBOLETO%%\n%%FIM_LINKBOLETO%%'
+                '\nDúvidas ou negociação:\n'
                 '%%TELEFONEIMOBILIARIA%% | %%EMAILIMOBILIARIA%%'
             ),
         },

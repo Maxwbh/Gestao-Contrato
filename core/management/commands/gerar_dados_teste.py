@@ -46,6 +46,31 @@ class Command(BaseCommand):
                 'Sem este parâmetro, distribui em round-robin entre os 4 bancos.'
             ),
         )
+        parser.add_argument(
+            '--sem-boletos',
+            action='store_true',
+            help='Pula a geração de boletos (use o Passo 2 para gerar separadamente).',
+        )
+        parser.add_argument(
+            '--so-boletos',
+            action='store_true',
+            help='Gera apenas boletos para os dados existentes (Passo 2 do setup).',
+        )
+        parser.add_argument(
+            '--so-remessa',
+            action='store_true',
+            help='Simula geração de remessa CNAB (Passo 3 do setup).',
+        )
+        parser.add_argument(
+            '--so-retorno',
+            action='store_true',
+            help='Simula processamento de retorno CNAB com 70%% pago (Passo 3 do setup).',
+        )
+        parser.add_argument(
+            '--so-logos',
+            action='store_true',
+            help='Gera logos para as imobiliárias de teste (Passo 3 do setup).',
+        )
 
     def normalizar_email(self, texto):
         """Remove acentos e caracteres especiais para criar um email válido"""
@@ -70,6 +95,30 @@ class Command(BaseCommand):
         Faker.seed(12345)  # Para dados consistentes
         random.seed(12345)
         self.banco_unico = options.get('banco')
+        self.sem_boletos = options.get('sem_boletos', False)
+        self.so_boletos = options.get('so_boletos', False)
+        self.so_remessa = options.get('so_remessa', False)
+        self.so_retorno = options.get('so_retorno', False)
+        self.so_logos = options.get('so_logos', False)
+
+        if self.so_boletos:
+            self._executar_so_boletos()
+            return
+
+        if self.so_remessa:
+            count = self.simular_remessa_teste()
+            self.stdout.write(self.style.SUCCESS(f'Remessa: {count} arquivo(s) gerado(s).'))
+            return
+
+        if self.so_retorno:
+            count = self.simular_retorno_teste()
+            self.stdout.write(self.style.SUCCESS(f'Retorno: {count} parcela(s) marcada(s) como pago.'))
+            return
+
+        if self.so_logos:
+            count = self.gerar_logos_imobiliarias()
+            self.stdout.write(self.style.SUCCESS(f'Logos: {count} imobiliária(s) com logo gerado.'))
+            return
 
         if self.banco_unico:
             nomes = {'001': 'Banco do Brasil', '756': 'Sicoob', '237': 'Bradesco', '336': 'C6 Bank'}
@@ -127,9 +176,13 @@ class Command(BaseCommand):
                 self.marcar_parcelas_pagas(contratos, 0.90)
 
                 # 9. Simular boletos gerados para demonstração da remessa
-                self.stdout.write('Simulando boletos gerados (para demo de remessa)...')
-                boletos_simulados = self.simular_boletos_gerados(contratos, contas_bancarias)
-                self.stdout.write(f'   {boletos_simulados} boletos simulados')
+                if self.sem_boletos:
+                    self.stdout.write('Geração de boletos pulada — use o Passo 2 para gerar.')
+                    boletos_simulados = 0
+                else:
+                    self.stdout.write('Simulando boletos gerados (para demo de remessa)...')
+                    boletos_simulados = self.simular_boletos_gerados(contratos, contas_bancarias)
+                    self.stdout.write(f'   {boletos_simulados} boletos simulados')
 
                 # 10. Gerar índices de reajuste
                 self.stdout.write('Gerando índices de reajuste...')
@@ -300,7 +353,9 @@ class Command(BaseCommand):
                 'numero': '100',
                 'bairro': 'Centro',
                 'cidade': 'Sete Lagoas',
-                'estado': 'MG'
+                'estado': 'MG',
+                'cor_marca': '1A4E8C',
+                'rodape_contato': 'Tel: (31) 3773-2000 | contato@imobiliarialagoareal.com.br',
             },
             {
                 'nome': 'Imobiliária Sete Colinas',
@@ -309,7 +364,9 @@ class Command(BaseCommand):
                 'numero': '250',
                 'bairro': 'Progresso',
                 'cidade': 'Sete Lagoas',
-                'estado': 'MG'
+                'estado': 'MG',
+                'cor_marca': '2D6E45',
+                'rodape_contato': 'Tel: (31) 3773-2100 | contato@imobiliariasetecolinas.com.br',
             }
         ]
 
@@ -335,6 +392,8 @@ class Command(BaseCommand):
                     'agencia': f'{3000+i}',
                     'conta': f'{50000+i*1000}-{i}',
                     'pix': f'pix@{d["nome"].lower().replace(" ", "")}.com.br',
+                    'cor_marca': d.get('cor_marca', ''),
+                    'rodape_contato': d.get('rodape_contato', ''),
                     'ativo': True,
                 }
             )
@@ -374,8 +433,8 @@ class Command(BaseCommand):
                 'agencia_dv': '0',
                 'conta': '12345678',  # max 8 dígitos
                 'conta_dv': '5',
-                'convenio': '1234567',  # max 7 dígitos
-                'carteira': '1',
+                'convenio': '123456789',  # 9 dígitos (remessa exige 9; boleto usa os 7 primeiros)
+                'carteira': '01',
                 'layout_cnab': 'CNAB_240',
                 'nosso_numero_atual': 1,
             },
@@ -813,8 +872,17 @@ class Command(BaseCommand):
         return count
 
     def marcar_parcelas_pagas(self, contratos, percentual=0.90):
-        """Marca parcelas como pagas (somente parcelas vencidas até a data atual)"""
+        """
+        Marca parcelas como pagas (somente parcelas vencidas até a data atual).
+
+        Usa bulk_update: pagar parcela a parcela via registrar_pagamento() gera
+        milhares de UPDATEs individuais — em banco remoto (Supabase) o setup
+        estoura o tempo de vida do worker e a geração nunca conclui.
+        """
+        from financeiro.models import Parcela
+
         hoje = timezone.now().date()
+        a_atualizar = []
 
         for contrato in contratos:
             # Filtrar apenas parcelas com vencimento até hoje
@@ -822,45 +890,78 @@ class Command(BaseCommand):
                 data_vencimento__lte=hoje
             ).order_by('numero_parcela'))
 
-            total_parcelas = len(parcelas)
-            parcelas_a_pagar = int(total_parcelas * percentual)
+            parcelas_a_pagar = int(len(parcelas) * percentual)
 
             for i in range(parcelas_a_pagar):
                 parcela = parcelas[i]
+                # Cachear o FK: parcela.contrato lazy-load dispararia 1 query
+                # por parcela dentro de calcular_juros_multa
+                parcela.contrato = contrato
 
                 # Data de pagamento entre vencimento e no máximo hoje
-                dias_apos_vencimento = random.randint(0, 10)
-                data_pagamento = parcela.data_vencimento + timedelta(days=dias_apos_vencimento)
-
-                # Garantir que data de pagamento não ultrapasse hoje
-                if data_pagamento > hoje:
-                    data_pagamento = hoje
+                data_pagamento = min(
+                    parcela.data_vencimento + timedelta(days=random.randint(0, 10)),
+                    hoje,
+                )
 
                 if data_pagamento > parcela.data_vencimento:
                     juros, multa = parcela.calcular_juros_multa(data_pagamento)
                     parcela.valor_juros = juros
                     parcela.valor_multa = multa
 
-                valor_pago = parcela.valor_atual + parcela.valor_juros + parcela.valor_multa
+                parcela.pago = True
+                parcela.data_pagamento = data_pagamento
+                parcela.valor_pago = parcela.valor_atual + parcela.valor_juros + parcela.valor_multa
+                parcela.observacoes = 'Pagamento gerado automaticamente para teste'
+                a_atualizar.append(parcela)
 
-                # Variar origem de pagamento para testar conciliação
-                origens_variaveis = ['MANUAL', 'MANUAL', 'CNAB', 'OFX', 'MANUAL']
-                origem = origens_variaveis[i % len(origens_variaveis)]
+        Parcela.objects.bulk_update(
+            a_atualizar,
+            ['pago', 'data_pagamento', 'valor_pago', 'valor_juros', 'valor_multa', 'observacoes'],
+            batch_size=500,
+        )
 
-                parcela.registrar_pagamento(
-                    valor_pago=valor_pago,
-                    data_pagamento=data_pagamento,
-                    observacoes=f'Pagamento gerado automaticamente para teste ({origem})'
-                )
+    def _executar_so_boletos(self):
+        """Passo 2 do setup: gera (ou regenera) boletos para dados existentes no banco."""
+        from core.models import ContaBancaria
+        from contratos.models import Contrato
+        from financeiro.models import Parcela, StatusBoleto
 
-                # Atualizar origem_pagamento no HistoricoPagamento recém criado
-                from financeiro.models import HistoricoPagamento
-                hist = HistoricoPagamento.objects.filter(parcela=parcela).order_by('-id').first()
-                if hist and origem != 'MANUAL':
-                    hist.origem_pagamento = origem
-                    if origem == 'OFX':
-                        hist.fitid_ofx = f'OFX{data_pagamento.strftime("%Y%m%d")}{parcela.pk:06d}'
-                    hist.save(update_fields=['origem_pagamento', 'fitid_ofx'])
+        self.stdout.write('Buscando dados existentes...')
+        contas_bancarias = list(ContaBancaria.objects.all())
+        contratos = list(Contrato.objects.all())
+
+        if not contratos:
+            self.stdout.write(self.style.ERROR(
+                'Nenhum contrato encontrado. Execute o Passo 1 (gerar dados) primeiro.'
+            ))
+            return
+
+        # Resetar boletos anteriores de parcelas não pagas — garante que Passo 2
+        # sempre regenera mesmo que já tenha sido executado antes (setup idempotente).
+        reset_qs = Parcela.objects.filter(pago=False, status_boleto=StatusBoleto.GERADO)
+        qtd_reset = reset_qs.count()
+        if qtd_reset > 0:
+            self.stdout.write(f'Resetando {qtd_reset} boleto(s) anteriores para regeneração...')
+            reset_qs.update(
+                status_boleto=StatusBoleto.NAO_GERADO,
+                conta_bancaria=None,
+                nosso_numero='',
+                nosso_numero_formatado='',
+                nosso_numero_dv='',
+                boleto_pdf_db=b'',
+                data_geracao_boleto=None,
+            )
+
+        if self.banco_unico:
+            nomes = {'001': 'Banco do Brasil', '756': 'Sicoob', '237': 'Bradesco', '336': 'C6 Bank'}
+            self.stdout.write(self.style.WARNING(
+                f'Modo banco único: 100% dos boletos no {nomes[self.banco_unico]} ({self.banco_unico})'
+            ))
+
+        self.stdout.write(f'Gerando boletos para {len(contratos)} contratos...')
+        count = self.simular_boletos_gerados(contratos, contas_bancarias)
+        self.stdout.write(self.style.SUCCESS(f'Passo 2 concluído: {count} boleto(s) gerado(s).'))
 
     def simular_boletos_gerados(self, contratos, contas_bancarias):
         """
@@ -926,14 +1027,22 @@ class Command(BaseCommand):
         service = BoletoService()
 
         if service.verificar_api_disponivel():
+            total_lotes = (len(pares) + 14) // 15
             self.stdout.write(
                 f'   → API BRCobrança disponível — gerando {len(pares)} boletos reais '
-                f'em lotes de 15 ({(len(pares) + 14) // 15} chamadas)...'
+                f'em lotes de 15 ({total_lotes} chamadas)...'
             )
-            resultado = service.gerar_boletos_lote(pares, tamanho_lote=15)
-            count = resultado['gerados']
-            for e in resultado['erros']:
-                self.stdout.write(self.style.WARNING(f'   ⚠ {e}'))
+            # Um lote por chamada COM stdout entre eles: cada linha vira
+            # heartbeat do job assíncrono — sem isso, a geração via API
+            # (cold start + PDFs) fica minutos sem sinal de progresso
+            count = 0
+            for i in range(0, len(pares), 15):
+                num_lote = i // 15 + 1
+                self.stdout.write(f'Gerando boletos reais — lote {num_lote}/{total_lotes}...')
+                resultado = service.gerar_boletos_lote(pares[i:i + 15], tamanho_lote=15)
+                count += resultado['gerados']
+                for e in resultado['erros']:
+                    self.stdout.write(self.style.WARNING(f'   ⚠ {e}'))
         else:
             self.stdout.write(
                 f'   → API BRCobrança indisponível — simulando {len(pares)} boletos localmente...'
@@ -957,12 +1066,12 @@ class Command(BaseCommand):
         Fallback quando a API BRCobrança está indisponível.
         Popula os campos de boleto sem gerar PDF — dados suficientes para remessa CNAB.
         """
-        from financeiro.models import StatusBoleto
+        from financeiro.models import Parcela, StatusBoleto
         from django.utils import timezone as tz
 
         hoje = tz.now()
-        count = 0
         contas_modificadas: dict = {}
+        a_atualizar = []
 
         for parcela, conta in pares:
             if parcela.pago:
@@ -983,18 +1092,20 @@ class Command(BaseCommand):
             parcela.nosso_numero_dv = ''
             parcela.numero_documento = parcela.gerar_numero_documento()
             parcela.data_geracao_boleto = hoje
-            parcela.save(update_fields=[
-                'conta_bancaria', 'status_boleto', 'nosso_numero',
-                'nosso_numero_formatado', 'nosso_numero_dv',
-                'numero_documento', 'data_geracao_boleto',
-            ])
-            count += 1
+            a_atualizar.append(parcela)
             contas_modificadas[conta.pk] = conta
+
+        # bulk_update: saves individuais multiplicam round-trips em banco remoto
+        Parcela.objects.bulk_update(a_atualizar, [
+            'conta_bancaria', 'status_boleto', 'nosso_numero',
+            'nosso_numero_formatado', 'nosso_numero_dv',
+            'numero_documento', 'data_geracao_boleto',
+        ], batch_size=500)
 
         for conta_mod in contas_modificadas.values():
             conta_mod.save(update_fields=['nosso_numero_atual'])
 
-        return count
+        return len(a_atualizar)
 
     def verificar_dados_boleto_remessa(self, contratos, contas_bancarias):
         """
@@ -1849,6 +1960,290 @@ class Command(BaseCommand):
                 f'   → {retornos_criados} arquivos de retorno CNAB · {itens_criados} itens criados'
             )
         return retornos_criados
+
+    # ── PASSO 3: REMESSA / RETORNO / LOGOS ──────────────────────────────────
+
+    def simular_remessa_teste(self):
+        """
+        Cria ArquivoRemessa + ItemRemessa simulados, agrupando por
+        conta_bancaria / mês de vencimento. Marca todos os boletos
+        incluídos como REGISTRADO.
+        Retorna o número de arquivos de remessa criados.
+        """
+        from collections import defaultdict
+        from django.core.files.base import ContentFile
+        from financeiro.models import (
+            Parcela, StatusBoleto, ArquivoRemessa, ItemRemessa, StatusArquivoRemessa,
+        )
+        from django.utils import timezone as tz
+
+        parcelas_qs = Parcela.objects.filter(
+            status_boleto=StatusBoleto.GERADO,
+            pago=False,
+            nosso_numero__gt='',
+        ).exclude(
+            itens_remessa__isnull=False
+        ).select_related('conta_bancaria').order_by('data_vencimento')
+
+        if not parcelas_qs.exists():
+            self.stdout.write('   Nenhum boleto GERADO disponível para remessa.')
+            return 0
+
+        # Agrupar por (conta_bancaria, ano, mês)
+        grupos = defaultdict(list)
+        for p in parcelas_qs:
+            chave = (p.conta_bancaria_id, p.data_vencimento.year, p.data_vencimento.month)
+            grupos[chave].append(p)
+
+        remessas_criadas = 0
+        hoje = tz.now()
+
+        for (conta_id, ano, mes), parcelas in grupos.items():
+            conta = parcelas[0].conta_bancaria
+            layout = getattr(conta, 'layout_cnab', 'CNAB_400') or 'CNAB_400'
+
+            # Número sequencial da remessa
+            num_remessa = (conta.numero_remessa_cnab_atual or 0) + 1
+            # Evitar duplicidade
+            while ArquivoRemessa.objects.filter(conta_bancaria=conta, numero_remessa=num_remessa).exists():
+                num_remessa += 1
+            conta.numero_remessa_cnab_atual = num_remessa
+            conta.save(update_fields=['numero_remessa_cnab_atual'])
+
+            nome_arquivo = f'REM{conta.banco}{ano:04d}{mes:02d}{num_remessa:04d}.REM'
+            valor_total = sum(p.valor_atual for p in parcelas)
+            # Conteúdo mínimo (simulação — sem chamada à API BRCobrança)
+            conteudo = (
+                f'REMESSA SIMULADA | {conta.banco} | {layout} | '
+                f'{ano:04d}-{mes:02d} | {len(parcelas)} boletos\n'
+            ).encode()
+
+            arquivo_remessa = ArquivoRemessa.objects.create(
+                conta_bancaria=conta,
+                numero_remessa=num_remessa,
+                layout=layout,
+                nome_arquivo=nome_arquivo,
+                status=StatusArquivoRemessa.ENVIADO,
+                quantidade_boletos=len(parcelas),
+                valor_total=valor_total,
+                data_envio=hoje,
+                observacoes='Simulado pelo setup de teste',
+            )
+            arquivo_remessa.arquivo.save(nome_arquivo, ContentFile(conteudo), save=True)
+
+            # ItemRemessa + status REGISTRADO
+            itens = [
+                ItemRemessa(
+                    arquivo_remessa=arquivo_remessa,
+                    parcela=p,
+                    nosso_numero=p.nosso_numero_formatado or p.nosso_numero,
+                    valor=p.valor_atual,
+                    data_vencimento=p.data_vencimento,
+                )
+                for p in parcelas
+            ]
+            ItemRemessa.objects.bulk_create(itens)
+
+            Parcela.objects.filter(pk__in=[p.pk for p in parcelas]).update(
+                status_boleto=StatusBoleto.REGISTRADO
+            )
+            remessas_criadas += 1
+            self.stdout.write(
+                f'   → Remessa #{num_remessa} {conta.banco} {ano}/{mes:02d} '
+                f'— {len(parcelas)} boletos (R$ {valor_total:,.2f})'
+            )
+
+        return remessas_criadas
+
+    def simular_retorno_teste(self, pct_pago=0.70):
+        """
+        Cria ArquivoRetorno + ItemRetorno simulados a partir de boletos REGISTRADO.
+        pct_pago (70%) recebem LIQUIDACAO e são marcados como PAGO.
+        Restante (30%) recebem ENTRADA_CONFIRMADA e permanecem REGISTRADO.
+        Retorna o total de parcelas pagas.
+        """
+        from django.core.files.base import ContentFile
+        from financeiro.models import (
+            Parcela, StatusBoleto, ArquivoRetorno, ItemRetorno,
+            StatusArquivoRetorno, HistoricoPagamento,
+        )
+        from django.utils import timezone as tz
+        from core.models import ContaBancaria
+
+        hoje = tz.now()
+        total_pago = 0
+
+        # Agrupar REGISTRADO por conta_bancaria
+        parcelas_por_conta = {}
+        for p in Parcela.objects.filter(
+            status_boleto=StatusBoleto.REGISTRADO,
+            pago=False,
+            nosso_numero__gt='',
+        ).select_related('conta_bancaria').order_by('conta_bancaria', 'data_vencimento'):
+            parcelas_por_conta.setdefault(p.conta_bancaria_id, []).append(p)
+
+        if not parcelas_por_conta:
+            self.stdout.write('   Nenhum boleto REGISTRADO disponível para retorno.')
+            return 0
+
+        for conta_id, parcelas in parcelas_por_conta.items():
+            conta = parcelas[0].conta_bancaria
+            layout = getattr(conta, 'layout_cnab', 'CNAB_400') or 'CNAB_400'
+            nome_arquivo = f'RET{conta.banco}{hoje.strftime("%Y%m%d")}.RET'
+            conteudo = f'RETORNO SIMULADO | {conta.banco} | {layout} | {len(parcelas)} registros\n'.encode()
+
+            arquivo_ret = ArquivoRetorno.objects.create(
+                conta_bancaria=conta,
+                nome_arquivo=nome_arquivo,
+                layout=layout,
+                status=StatusArquivoRetorno.PROCESSADO,
+                total_registros=len(parcelas),
+                registros_processados=len(parcelas),
+                registros_erro=0,
+                valor_total_pago=Decimal('0.00'),
+                data_processamento=hoje,
+            )
+            arquivo_ret.arquivo.save(nome_arquivo, ContentFile(conteudo), save=True)
+
+            n_pago = max(1, int(len(parcelas) * pct_pago))
+            valor_total_lote = Decimal('0.00')
+
+            for i, parcela in enumerate(parcelas):
+                pagar = (i < n_pago)
+                nn_cnab = parcela.nosso_numero_formatado or parcela.nosso_numero
+                data_ocorrencia = parcela.data_vencimento + timedelta(days=random.randint(0, 7))
+                if data_ocorrencia > hoje.date():
+                    data_ocorrencia = hoje.date()
+
+                if pagar:
+                    valor_pago = float(parcela.valor_atual)
+                    ItemRetorno.objects.create(
+                        arquivo_retorno=arquivo_ret,
+                        nosso_numero=nn_cnab,
+                        parcela=parcela,
+                        codigo_ocorrencia='06',
+                        descricao_ocorrencia='Liquidação normal',
+                        tipo_ocorrencia='LIQUIDACAO',
+                        valor_titulo=valor_pago,
+                        valor_pago=valor_pago,
+                        data_ocorrencia=hoje.replace(
+                            year=data_ocorrencia.year,
+                            month=data_ocorrencia.month,
+                            day=data_ocorrencia.day,
+                        ),
+                        data_credito=hoje.replace(
+                            year=data_ocorrencia.year,
+                            month=data_ocorrencia.month,
+                            day=data_ocorrencia.day,
+                        ),
+                        processado=True,
+                    )
+                    parcela.registrar_pagamento_boleto(
+                        valor_pago=Decimal(str(valor_pago)),
+                        data_pagamento=data_ocorrencia,
+                        banco_pagador=conta.banco,
+                        validar_minimo=False,
+                    )
+                    hist = HistoricoPagamento.objects.filter(parcela=parcela).order_by('-id').first()
+                    if hist:
+                        hist.origem_pagamento = 'CNAB'
+                        hist.save(update_fields=['origem_pagamento'])
+                    valor_total_lote += Decimal(str(valor_pago))
+                    total_pago += 1
+                else:
+                    ItemRetorno.objects.create(
+                        arquivo_retorno=arquivo_ret,
+                        nosso_numero=nn_cnab,
+                        parcela=parcela,
+                        codigo_ocorrencia='02',
+                        descricao_ocorrencia='Entrada confirmada',
+                        tipo_ocorrencia='OUTROS',
+                        valor_titulo=float(parcela.valor_atual),
+                        valor_pago=None,
+                        data_ocorrencia=hoje,
+                        processado=True,
+                    )
+
+            arquivo_ret.valor_total_pago = valor_total_lote
+            arquivo_ret.save(update_fields=['valor_total_pago'])
+            self.stdout.write(
+                f'   → Retorno {conta.banco}: {n_pago}/{len(parcelas)} pago(s) '
+                f'(R$ {valor_total_lote:,.2f})'
+            )
+
+        return total_pago
+
+    def gerar_logos_imobiliarias(self):
+        """
+        Gera logos PNG coloridas para imobiliárias sem logo usando Pillow.
+        Background = cor_marca da imobiliária (ou azul padrão).
+        Texto branco com as iniciais da empresa.
+        Retorna o número de logos criadas.
+        """
+        from PIL import Image, ImageDraw
+        import io
+        from django.core.files.base import ContentFile
+
+        imobiliarias = Imobiliaria.objects.filter(ativo=True)
+        criados = 0
+
+        for imob in imobiliarias:
+            if imob.logo:
+                self.stdout.write(f'   → {imob.nome}: já tem logo, pulando.')
+                continue
+
+            # Cor do fundo
+            cor_hex = (imob.cor_marca or '1A4E8C').strip().lstrip('#')
+            if len(cor_hex) < 6:
+                cor_hex = '1A4E8C'
+            try:
+                r, g, b = int(cor_hex[0:2], 16), int(cor_hex[2:4], 16), int(cor_hex[4:6], 16)
+            except ValueError:
+                r, g, b = 26, 78, 140
+
+            # Iniciais: até 3 palavras relevantes
+            palavras = [w for w in imob.nome.split() if len(w) > 2 and w.lower() not in
+                        ('imobiliaria', 'imóveis', 'negócios', 'ltda', 'me', 'sa', 'eireli')]
+            iniciais = ''.join(p[0].upper() for p in palavras[:3]) or imob.nome[:3].upper()
+
+            # Imagem 400×120
+            img = Image.new('RGB', (400, 120), color=(r, g, b))
+            draw = ImageDraw.Draw(img)
+
+            # Faixa inferior mais escura
+            escuro = (max(0, r - 40), max(0, g - 40), max(0, b - 40))
+            draw.rectangle([0, 90, 400, 120], fill=escuro)
+
+            # Iniciais grandes no lado esquerdo
+            tam_iniciais = 62
+            try:
+                from PIL import ImageFont
+                font_inicial = ImageFont.truetype('/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf', tam_iniciais)
+                font_nome = ImageFont.truetype('/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf', 22)
+                font_rodape = ImageFont.truetype('/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf', 14)
+            except Exception:
+                font_inicial = font_nome = font_rodape = None
+
+            draw.text((20, 5), iniciais, fill='white', font=font_inicial)
+
+            # Nome da empresa à direita
+            nome_curto = imob.nome[:28]
+            draw.text((140, 22), nome_curto, fill='white', font=font_nome)
+
+            # Rodapé: telefone ou site
+            rodape = (imob.rodape_contato or imob.telefone or '')[:50]
+            draw.text((10, 96), rodape, fill=(220, 220, 220), font=font_rodape)
+
+            # Salvar
+            buf = io.BytesIO()
+            img.save(buf, format='PNG', optimize=True)
+            buf.seek(0)
+            nome_arquivo = f'logo_{re.sub(r"[^a-z0-9]", "_", imob.nome.lower())[:40]}.png'
+            imob.logo.save(nome_arquivo, ContentFile(buf.read()), save=True)
+            criados += 1
+            self.stdout.write(f'   → Logo gerada: {imob.nome} ({iniciais})')
+
+        return criados
 
     # ── ÍNDICES REAIS ────────────────────────────────────────────────────────
 

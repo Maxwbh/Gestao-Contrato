@@ -31,7 +31,8 @@ ENV BUNDLE_PATH=/usr/local/bundle \
 
 # ARG antes do git clone para invalidar o cache Docker quando o repo for atualizado.
 # Render: incremente CACHE_BUST para forçar novo clone + bundle install do zero.
-ARG CACHE_BUST=4
+# CACHE_BUST=7 → boleto_cnab_api (brcobranca 12.10.1)
+ARG CACHE_BUST=7
 
 # Clonar repositório da API (shallow clone da branch master)
 RUN git clone --depth 1 --branch master \
@@ -60,9 +61,14 @@ FROM ruby:3.3-slim
 
 # jemalloc: alocador com menos fragmentação — reduz RSS do Ruby em 20-40%,
 # essencial nos 512MB do Free Tier (ghostscript spika ~50-100MB por PDF).
+# fonts-urw-base35: fontes PostScript (Helvetica etc.) usadas pelo RGhost
+# na renderização dos boletos — com --no-install-recommends não é garantido
+# que venham junto do ghostscript (o upstream Alpine instala ghostscript-fonts)
 RUN apt-get update && apt-get upgrade -y && apt-get install -y --no-install-recommends \
     ghostscript \
+    fonts-urw-base35 \
     libjemalloc2 \
+    tini \
     wget \
     && rm -rf /var/lib/apt/lists/*
 
@@ -86,18 +92,27 @@ RUN mkdir -p tmp log \
 USER app
 
 # LD_PRELOAD=jemalloc       → malloc com menos fragmentação (RSS menor)
+# MALLOC_CONF               → jemalloc devolve memória ociosa ao SO agressivamente
 # PUMA_WORKERS=0            → single mode: 1 processo Ruby em vez de master+worker
 #                             (~metade da RAM, boot mais rápido no cold start)
+# PUMA_WORKER_TIMEOUT=60    → não matar worker durante cold start (puma.rb 1.3.1)
 # RUBY_YJIT_ENABLE=1        → JIT do Ruby 3.3: acelera geração de boleto/CNAB
 #                             (custo de ~+30MB RAM, coberto pela economia acima)
+# RUBY_GC_*MALLOC_LIMIT     → GC dispara mais cedo sob pressão de malloc (16MB)
+# MALLOC_ARENA_MAX          → fallback glibc caso jemalloc não carregue
 ENV RACK_ENV=production \
     PORT=9292 \
     LD_PRELOAD=/usr/lib/x86_64-linux-gnu/libjemalloc.so.2 \
+    MALLOC_CONF="background_thread:true,narenas:2,dirty_decay_ms:1000,muzzy_decay_ms:0" \
     PUMA_WORKERS=0 \
+    PUMA_WORKER_TIMEOUT=60 \
     RUBY_YJIT_ENABLE=1 \
     MALLOC_ARENA_MAX=2 \
     RUBY_GC_HEAP_GROWTH_FACTOR=1.1 \
+    RUBY_GC_MALLOC_LIMIT=16777216 \
+    RUBY_GC_OLDMALLOC_LIMIT=16777216 \
     BUNDLE_PATH=/usr/local/bundle \
+    BUNDLE_WITHOUT=development:test \
     GEM_HOME=/usr/local/bundle \
     PATH="/usr/local/bundle/bin:$PATH"
 
@@ -107,4 +122,6 @@ EXPOSE 9292
 HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
     CMD wget --quiet --tries=1 --spider http://localhost:9292/api/health || exit 1
 
+# tini como PID 1 → propaga SIGTERM ao Puma (shutdown gracioso nos deploys)
+ENTRYPOINT ["/usr/bin/tini", "--"]
 CMD ["bundle", "exec", "puma", "-C", "config/puma.rb", "config.ru"]

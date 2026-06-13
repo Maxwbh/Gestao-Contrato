@@ -73,7 +73,9 @@ Sistema desenvolvido para contabilidades que gerenciam múltiplos loteamentos, p
 - ✅ Notificações por **E-mail**
 - ✅ Notificações por **SMS** (via Twilio)
 - ✅ Notificações por **WhatsApp** (via Twilio)
-- ✅ Templates personalizáveis com TAGs `%%TAG%%`
+- ✅ Templates personalizáveis com TAGs `%%TAG%%` e blocos condicionais `%%SE_TAG%%...%%FIM_TAG%%`
+- ✅ PIX copia-e-cola nas mensagens (TAG `%%PIXCOPIACOLA%%` — boleto híbrido)
+- ✅ Envio direto por parcela: e-mail (template + PDF anexo), SMS e WhatsApp
 - ✅ Envio automático antes do vencimento (D-5, D-3, D-1, D0)
 - ✅ Régua de inadimplência (D+3, D+7, D+15)
 - ✅ **Relatório Semanal** por imobiliária: KPIs de recebimentos, inadimplência e a vencer
@@ -218,7 +220,8 @@ python manage.py migrate
 ### 6. Crie os Templates de E-mail Padrão
 ```bash
 python manage.py criar_templates_relatorio
-python manage.py criar_templates_padrao   # templates de boleto/notificação
+# Templates de boleto/notificação (função, não comando CLI):
+python manage.py shell -c "from notificacoes.boleto_notificacao import criar_templates_padrao; criar_templates_padrao()"
 ```
 
 ### 7. Crie um Superusuário
@@ -277,7 +280,7 @@ O `build.sh` executa automaticamente:
 1. `pip install -r requirements.txt`
 2. `python manage.py migrate`
 3. `python manage.py criar_templates_relatorio` (templates de relatório)
-4. `python manage.py criar_templates_padrao` (templates de boleto/notificação)
+4. Templates de boleto/notificação via shell (`criar_templates_padrao()` — função, não comando)
 5. `python manage.py collectstatic`
 6. Criação dos superusuários `maxwbh` e `admin`
 

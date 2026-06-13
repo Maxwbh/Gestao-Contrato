@@ -426,8 +426,13 @@ class CNABService:
             if not carteira_str:
                 dados_empresa['carteira'] = '10'
         elif codigo_banco == '756':
-            # Sicoob: sequencial_remessa precisa ser string de 7 dígitos
+            # Sicoob: sequencial_remessa = string de 7 dígitos
             dados_empresa['sequencial_remessa'] = str(numero_remessa).zfill(7)[-7:]
+            # brcobranca ≥12.9.0 normaliza automaticamente carteira (rjust 2) e convenio (rjust 9)
+            # na remessa. Formatamos aqui como defesa extra para versões anteriores.
+            dados_empresa['carteira'] = re.sub(r'\D', '', carteira_str).zfill(2)[:2] or '01'
+            conv_digits = re.sub(r'\D', '', conta_bancaria.convenio or '')
+            dados_empresa['convenio'] = conv_digits.zfill(9)[:9]
 
         # Pagamentos com campos corretos do Brcobranca::Remessa::Pagamento
         pagamentos = []
