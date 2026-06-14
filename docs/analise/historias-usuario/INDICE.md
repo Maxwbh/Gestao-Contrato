@@ -193,7 +193,7 @@ HU-21 Portal do Comprador ──► auto-cadastro → dashboard → boletos → 
 | HU-20 | `RegraNotificacao`, `TemplateNotificacao`, `Notificacao`, `ConfiguracaoWhatsApp` | `enviar_notificacoes_sync()`, `enviar_inadimplentes_sync()` | `POST /api/tasks/enviar-notificacoes/`, `/api/tasks/enviar-inadimplentes/`, `POST /financeiro/parcelas/<pk>/notificar/` |
 | HU-21 | `AcessoComprador`, `LogAcessoComprador` | — | `/portal/cadastro/`, `/portal/login/`, `/portal/`, `/portal/contratos/`, `/portal/boletos/`, `/portal/meus-dados/`, `/portal/api/*` |
 | HU-22 | `Imovel` | — | `/imoveis/` (mapa com marcadores Leaflet + markercluster), `/imoveis/loteamento/<nome>/` |
-| HU-23 | `ArquivoRemessa`, `ItemRemessa`, `ContaBancaria` | `CNABService` | `/financeiro/remessa/` (wizard), `/remessa/gerar/`, `/remessa/gerar-todos/`, `/remessa/<pk>/download/`, `/remessa/download-lote/`, `/remessa/<pk>/marcar-enviada/`, `/remessa/historico/` |
+| HU-23 | `ArquivoRemessa`, `ItemRemessa`, `ContaBancaria` | `CNABService` | `/financeiro/remessa/` (wizard), `/remessa/gerar/` (escopo: todos/imobiliaria/conta/boleto), `/remessa/<pk>/download/`, `/remessa/download-lote/`, `/remessa/<pk>/marcar-enviada/`, `/remessa/historico/` |
 
 ---
 
