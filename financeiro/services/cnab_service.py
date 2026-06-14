@@ -866,17 +866,19 @@ class CNABService:
 
         Exclui parcelas em remessas ativas (GERADO, ENVIADO, PROCESSADO).
         """
-        from financeiro.models import Parcela, StatusBoleto, StatusArquivoRemessa
+        from financeiro.models import Parcela, StatusBoleto, StatusArquivoRemessa, ItemRemessa
 
         queryset = Parcela.objects.filter(
             status_boleto=StatusBoleto.GERADO,
             pago=False,
         ).exclude(
+            # HU-23 RN-18: itens REJEITADO não bloqueiam reinclusão
             itens_remessa__arquivo_remessa__status__in=[
                 StatusArquivoRemessa.GERADO,
                 StatusArquivoRemessa.ENVIADO,
                 StatusArquivoRemessa.PROCESSADO,
-            ]
+            ],
+            itens_remessa__status=ItemRemessa.Status.ATIVO,
         ).select_related(
             'contrato', 'contrato__comprador', 'contrato__imovel',
             'contrato__imobiliaria', 'conta_bancaria', 'conta_bancaria__imobiliaria'
@@ -957,18 +959,20 @@ class CNABService:
 
         # Buscar parcelas válidas — exclui apenas as já em remessas ativas
         # (inclui parcelas em remessas com ERRO, que podem ser re-incluídas)
-        from financeiro.models import StatusArquivoRemessa
+        from financeiro.models import StatusArquivoRemessa, ItemRemessa
         parcelas = list(
             Parcela.objects.filter(
                 pk__in=parcela_ids,
                 status_boleto=StatusBoleto.GERADO,
                 pago=False,
             ).exclude(
+                # HU-23 RN-18: itens REJEITADO não bloqueiam reinclusão
                 itens_remessa__arquivo_remessa__status__in=[
                     StatusArquivoRemessa.GERADO,
                     StatusArquivoRemessa.ENVIADO,
                     StatusArquivoRemessa.PROCESSADO,
-                ]
+                ],
+                itens_remessa__status=ItemRemessa.Status.ATIVO,
             ).select_related('conta_bancaria', 'contrato').distinct()
         )
 

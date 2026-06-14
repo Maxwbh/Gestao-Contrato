@@ -2124,6 +2124,24 @@ class ItemRemessa(TimeStampedModel):
         verbose_name='Descrição da Ocorrência'
     )
 
+    # HU-23 RN-18 — tratamento de rejeição pelo banco
+    class Status(models.TextChoices):
+        ATIVO = 'ATIVO', 'Ativo'
+        REJEITADO = 'REJEITADO', 'Rejeitado pelo Banco'
+
+    status = models.CharField(
+        max_length=10,
+        choices=Status.choices,
+        default=Status.ATIVO,
+        verbose_name='Status do Item',
+        help_text='REJEITADO quando o banco recusou o registro (boleto volta a ser elegível)'
+    )
+    motivo_rejeicao = models.CharField(
+        max_length=255,
+        blank=True,
+        verbose_name='Motivo da Rejeição'
+    )
+
     class Meta:
         verbose_name = 'Item de Remessa'
         verbose_name_plural = 'Itens de Remessa'
@@ -2132,6 +2150,12 @@ class ItemRemessa(TimeStampedModel):
 
     def __str__(self):
         return f"Item {self.nosso_numero} - Remessa {self.arquivo_remessa.numero_remessa}"
+
+    def marcar_rejeitado(self, motivo=''):
+        """HU-23 RN-18: marca o item como rejeitado pelo banco."""
+        self.status = ItemRemessa.Status.REJEITADO
+        self.motivo_rejeicao = (motivo or '')[:255]
+        self.save(update_fields=['status', 'motivo_rejeicao', 'atualizado_em'])
 
 
 class StatusArquivoRetorno(models.TextChoices):
@@ -2454,8 +2478,21 @@ class ItemRetorno(TimeStampedModel):
                 self.parcela.motivo_rejeicao = self.descricao_ocorrencia
                 self.parcela.save()
             elif self.tipo_ocorrencia == 'REJEICAO':
-                self.parcela.status_boleto = StatusBoleto.CANCELADO
-                self.parcela.motivo_rejeicao = self.descricao_ocorrencia
+                # HU-23 RN-18: o banco recusou o registro. Marca o ItemRemessa
+                # ativo correspondente como REJEITADO e devolve o boleto para
+                # GERADO, tornando-o elegível para uma nova remessa (após correção).
+                motivo = self.descricao_ocorrencia or self.codigo_ocorrencia
+                item_remessa = (
+                    self.parcela.itens_remessa
+                    .filter(status=ItemRemessa.Status.ATIVO)
+                    .order_by('-arquivo_remessa__data_geracao')
+                    .first()
+                )
+                if item_remessa:
+                    item_remessa.marcar_rejeitado(motivo)
+                self.parcela.status_boleto = StatusBoleto.GERADO
+                self.parcela.data_registro_boleto = None
+                self.parcela.motivo_rejeicao = motivo
                 self.parcela.save()
             elif self.tipo_ocorrencia == 'PROTESTO':
                 self.parcela.status_boleto = StatusBoleto.PROTESTADO

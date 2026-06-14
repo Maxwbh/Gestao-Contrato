@@ -367,6 +367,84 @@ class TestBannerConclusao:
 
 
 @pytest.mark.django_db
+class TestRejeicaoCNAB:
+    """RN-18: rejeição do banco devolve o boleto a GERADO e marca o item REJEITADO."""
+
+    def _gerar(self, c):
+        import json as _json
+        from financeiro.models import ArquivoRemessa
+        with patch('financeiro.services.cnab_service.requests.post', return_value=_mock_brcobranca_ok()):
+            c.post(reverse('financeiro:remessa_painel_gerar'),
+                   data=_json.dumps({'escopo': 'todos'}), content_type='application/json')
+        return ArquivoRemessa.objects.latest('data_geracao')
+
+    def test_rejeicao_devolve_boleto_para_gerado_e_reinclui(self, base, staff_cli):
+        from financeiro.models import (
+            StatusBoleto, ItemRemessa, ItemRetorno, ArquivoRetorno,
+            StatusArquivoRetorno,
+        )
+        from financeiro.services.cnab_service import CNABService
+        imob, conta, contrato = base
+        u, c = staff_cli
+        self._gerar(c)  # gera remessa → boletos REGISTRADO
+        p = contrato.parcelas.filter(status_boleto=StatusBoleto.REGISTRADO).first()
+        assert p is not None
+        item = p.itens_remessa.first()
+
+        # Simula retorno de REJEIÇÃO (código 03)
+        arq_ret = ArquivoRetorno.objects.create(
+            conta_bancaria=conta, nome_arquivo='RET.RET', status=StatusArquivoRetorno.PENDENTE,
+        )
+        ir = ItemRetorno.objects.create(
+            arquivo_retorno=arq_ret, parcela=p, nosso_numero=p.nosso_numero,
+            codigo_ocorrencia='03', descricao_ocorrencia='Entrada Rejeitada',
+            tipo_ocorrencia='REJEICAO',
+        )
+        assert ir.processar_baixa() is True
+
+        # Boleto volta a GERADO; item marcado REJEITADO
+        p.refresh_from_db(); item.refresh_from_db()
+        assert p.status_boleto == StatusBoleto.GERADO
+        assert item.status == ItemRemessa.Status.REJEITADO
+        assert 'Rejeitada' in item.motivo_rejeicao
+
+        # E volta a ser elegível para nova remessa (RN-18)
+        elegiveis = CNABService().obter_boletos_elegiveis_painel()
+        assert p.pk in {x.pk for x in elegiveis}
+
+
+@pytest.mark.django_db
+class TestAcoesHistorico:
+    """Item A: regenerar/excluir expostos no painel (endpoints da HU-16)."""
+
+    def _gerar(self, c):
+        import json as _json
+        from financeiro.models import ArquivoRemessa
+        with patch('financeiro.services.cnab_service.requests.post', return_value=_mock_brcobranca_ok()):
+            c.post(reverse('financeiro:remessa_painel_gerar'),
+                   data=_json.dumps({'escopo': 'todos'}), content_type='application/json')
+        return ArquivoRemessa.objects.latest('data_geracao')
+
+    def test_excluir_remessa_gerada_devolve_boletos(self, base, staff_cli):
+        from core.hashids_utils import encode_id
+        from financeiro.models import ArquivoRemessa, StatusBoleto
+        imob, conta, contrato = base
+        u, c = staff_cli
+        arq = self._gerar(c)
+        resp = c.post(reverse('financeiro:excluir_remessa', kwargs={'hid': encode_id(arq.pk)}))
+        assert resp.status_code == 200 and resp.json()['sucesso'] is True
+        assert not ArquivoRemessa.objects.filter(pk=arq.pk).exists()
+
+    def test_excluir_remessa_enviada_bloqueado(self, base, staff_cli):
+        from core.hashids_utils import encode_id
+        u, c = staff_cli
+        arq = self._gerar(c)
+        arq.marcar_enviado(usuario=u)
+        resp = c.post(reverse('financeiro:excluir_remessa', kwargs={'hid': encode_id(arq.pk)}))
+        assert resp.status_code == 400
+
+
+@pytest.mark.django_db
 class TestAcesso:
     def test_usuario_sem_acesso_nao_gera(self, base):
         """Usuário comum sem AcessoUsuario não enxerga nenhuma imobiliária."""

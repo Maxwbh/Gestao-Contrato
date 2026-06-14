@@ -227,6 +227,10 @@
                             {% if arq.estado_ui == 'BAIXADO' %}
                             <button class="btn btn-sm btn-outline-success btn-marcar-enviada" data-hid="{{ arq.id|hashid }}" title="Marcar como enviada"><i class="fas fa-paper-plane"></i></button>
                             {% endif %}
+                            {% if arq.pode_reenviar %}
+                            <button class="btn btn-sm btn-outline-secondary btn-regenerar" data-hid="{{ arq.id|hashid }}" title="Regenerar arquivo"><i class="fas fa-rotate"></i></button>
+                            <button class="btn btn-sm btn-outline-danger btn-excluir" data-hid="{{ arq.id|hashid }}" title="Excluir remessa"><i class="fas fa-trash"></i></button>
+                            {% endif %}
                         </td>
                     </tr>
                     {% empty %}
@@ -332,6 +336,28 @@
             post(URL_MARCAR_BASE + btn.dataset.hid + '/marcar-enviada/', {}).then(({ ok, data }) => {
                 if (ok && data.sucesso) { window.location.reload(); }
                 else { alert(data.erro || 'Falha.'); unlockBtn(btn); }
+            }).catch(() => { alert('Erro de conexão.'); unlockBtn(btn); });
+        });
+    });
+
+    document.querySelectorAll('.btn-regenerar').forEach(btn => {
+        btn.addEventListener('click', () => {
+            if (!confirm('Regenerar este arquivo de remessa? O conteúdo será refeito.')) return;
+            lockBtn(btn, '');
+            post(URL_MARCAR_BASE + btn.dataset.hid + '/regenerar/', {}).then(({ ok, data }) => {
+                if (ok && data.sucesso) { window.location.reload(); }
+                else { alert(data.erro || 'Falha ao regenerar.'); unlockBtn(btn); }
+            }).catch(() => { alert('Erro de conexão.'); unlockBtn(btn); });
+        });
+    });
+
+    document.querySelectorAll('.btn-excluir').forEach(btn => {
+        btn.addEventListener('click', () => {
+            if (!confirm('Excluir esta remessa? Os boletos voltam a ficar disponíveis.')) return;
+            lockBtn(btn, '');
+            post(URL_MARCAR_BASE + btn.dataset.hid + '/excluir/', {}).then(({ ok, data }) => {
+                if (ok && data.sucesso) { window.location.reload(); }
+                else { alert(data.erro || 'Falha ao excluir.'); unlockBtn(btn); }
             }).catch(() => { alert('Erro de conexão.'); unlockBtn(btn); });
         });
     });

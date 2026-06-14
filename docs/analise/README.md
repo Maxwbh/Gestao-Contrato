@@ -53,7 +53,7 @@ docs/analise/
 | [HU-20](historias-usuario/HU-20.md) | Notificações e Cobrança Automática | `notificacoes` | ✅ |
 | [HU-21](historias-usuario/HU-21.md) | Portal do Comprador — Autoatendimento | `portal_comprador` | ✅ |
 | [HU-22](historias-usuario/HU-22.md) | Mapa Interativo de Lotes | `core` | ✅ (parcial) |
-| [HU-23](historias-usuario/HU-23.md) | Envio Mensal de Remessa CNAB (Contadora) | `financeiro` | 🚧 (em desenvolvimento) |
+| [HU-23](historias-usuario/HU-23.md) | Envio Mensal de Remessa CNAB (Contadora) | `financeiro` | ✅ |
 
 ---
 
