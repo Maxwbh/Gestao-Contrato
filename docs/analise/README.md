@@ -20,7 +20,8 @@ docs/analise/
 │   ├── HU-01.md … HU-24.md
 └── mockups/               ← protótipos visuais / wireframes (HTML, imagens)
     ├── HU-23-remessa-layout.html
-    └── HU-23-retorno-layout.html
+    ├── HU-23-retorno-layout.html
+    └── HU-24-geracao-layout.html
 ```
 
 ---
@@ -67,6 +68,7 @@ Wireframes e protótipos de alta fidelidade que acompanham as HUs.
 |--------|----|-----------|
 | [HU-23-remessa-layout.html](mockups/HU-23-remessa-layout.html) | HU-23 | Tela de Gestão de Arquivos Remessa — Passos 1–4 (Tailwind + Material Symbols) |
 | [HU-23-retorno-layout.html](mockups/HU-23-retorno-layout.html) | HU-23 | Tela de Processamento de Retorno Bancário — Passo 5 (Tailwind + Material Symbols) |
+| [HU-24-geracao-layout.html](mockups/HU-24-geracao-layout.html) | HU-24 | Tela de Geração de Boletos do Mês + modal de configuração do lote (Tailwind + Material Symbols) |
 
 > Para abrir um mockup HTML, faça o download e abra no navegador (usam CDN do Tailwind).
 
