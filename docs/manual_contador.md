@@ -59,9 +59,14 @@ Após entrar, a barra superior exibe todos os menus disponíveis:
 | Parcelas do Mês | Parcelas com vencimento no mês atual |
 | Reajustes Pendentes | Contratos aguardando aplicação de índice |
 | Histórico de Reajustes | Reajustes já aplicados |
-| Arquivos de Remessa | Envio de boletos ao banco (CNAB) |
-| Arquivos de Retorno | Confirmação de pagamentos do banco (CNAB) |
+| **Gerar Boletos do Mês** | Geração em massa de boletos por escopo (parcelas + intermediárias) |
+| **Gerar Arquivo Remessa** | Envio de boletos ao banco (CNAB) — wizard por escopo |
+| **Receber Arquivo Retorno** | Importa o retorno do banco e dá baixa nos boletos pagos |
 | Conciliação Bancária | Conciliar extrato OFX com parcelas do sistema |
+
+> 💡 **Ciclo mensal da contabilidade** (3 telas dedicadas, na ordem):
+> **Gerar Boletos do Mês → Gerar Arquivo Remessa → Receber Arquivo Retorno**.
+> Cada tela tem um atalho direto para a etapa seguinte.
 
 ### Menu Contratos ▾
 | Item | O que faz |
@@ -398,6 +403,60 @@ Modelos de texto jurídico vinculados ao contrato. Acesse em **[Minutas]** dentr
 **Enviar por WhatsApp:**
 - Na parcela → **📱 WhatsApp** → abre link pré-formatado
 
+### 6.4.1 Gerar Boletos do Mês (geração em massa por escopo)
+
+Tela dedicada para a contabilidade preparar a cobrança do mês de uma vez, sem
+entrar contrato por contrato. Acesse em **[Financeiro] → [Gerar Boletos do Mês]**.
+
+```
+[Financeiro] → [Gerar Boletos do Mês]
+
+┌──────────────────────────────────────────────────────────────────┐
+│ Geração de Boletos do Mês          [Gerar Remessa →] [⚡ Gerar Boletos]│
+├──────────────────────────────────────────────────────────────────┤
+│ Imobiliária[Todas ▾]  Mês[06] Ano[2026] Qtde/contrato[1] [Filtrar]│
+├──────────────────────────────────────────────────────────────────┤
+│  A Gerar    Valor Total   Contratos  Bloqueados   Intermediárias  │
+│   59        R$673.165,50    59          0             18           │
+├──────────────────────────────────────────────────────────────────┤
+│ 🏢 Imobiliária Lagoa Real        33 contratos ativos  [Gerar desta]│
+│ Contrato     Comprador     Elig. Bloq. Interm. Status      Valor   │
+│ CTR-2024-003 Enzo Costa      1    0     0    Não Gerado  R$6.822  👁 [Gerar]│
+│ CTR-2024-112 Mariana F.      0    1     0    Bloqueado   R$1.890  👁 [⛔] │
+└──────────────────────────────────────────────────────────────────┘
+```
+
+Ao clicar em **⚡ Gerar Boletos**, abre o popup de configuração do lote:
+
+```
+┌──────────────────────────────────────────────┐
+│ Configurar Geração de Lote                    │
+├──────────────────────────────────────────────┤
+│ Quantidade de boletos por contrato: [ 1 ]    │  ← 1 (só o do mês) ou X (adiantar)
+│ Tipo de Boleto:  [ Folha (A4)        ▾ ]     │  ← Folha ou Carnê (consolidado)
+│ Incluir Intermediárias?   [ ●—— SIM ]        │  ← inclui prestações de reforço/anuais
+│                                              │
+│               [ Cancelar ]  [ Confirmar ]    │
+└──────────────────────────────────────────────┘
+```
+
+**Escopos de geração** (escolhidos pela própria tela):
+- **Todas as imobiliárias** — botão "Gerar Boletos" sem filtro de imobiliária
+- **Uma imobiliária** — filtre a imobiliária, ou use "Gerar desta imobiliária"
+- **Um ou vários contratos** — botão "Gerar" na linha do contrato
+- **Uma parcela / intermediária específica** — pelo detalhe do contrato
+
+> ⚠ **Bloqueio por reajuste:** contratos com reajuste pendente aparecem em
+> **âmbar** com status "Bloqueado Reajuste" e **não são gerados**. Resolva em
+> **Financeiro → Reajustes Pendentes** (link "Ver pendentes") antes de gerar.
+
+> 📨 **Envio automático ao comprador:** ao gerar **mais de 1 boleto** por contrato,
+> o sistema envia **e-mail e WhatsApp** com **todos os boletos em 1 PDF** e o
+> **SMS um a um** (1 por boleto). Com 1 boleto, é o envio individual padrão.
+
+Concluída a geração, a tela mostra o resumo (gerados / bloqueados / erros) e
+o atalho **"Gerar Remessa →"** para enviar os boletos ao banco (passo seguinte).
+
 ### 6.5 Reajustes
 
 ```
@@ -429,21 +488,44 @@ Modelos de texto jurídico vinculados ao contrato. Acesse em **[Minutas]** dentr
 
 ### 6.6 CNAB (Remessa e Retorno Bancário)
 
-**Gerar arquivo de remessa:**
-```
-[Financeiro] → [Arquivos de Remessa] → [Gerar Remessa]
+O fluxo bancário é feito em **2 telas dedicadas**, na ordem do ciclo mensal.
 
-Selecione os boletos → [Gerar arquivo CNAB 240]
-→ Baixar arquivo .rem para enviar ao banco
+**Tela 1 — Gerar Arquivo Remessa** (envio dos boletos ao banco):
 ```
+[Financeiro] → [Gerar Arquivo Remessa]
 
-**Processar retorno do banco:**
+┌──────────────────────────────────────────────────────────────────┐
+│ Envio de Remessa Bancária   [Receber Retorno] [⚡ Gerar Todos]   │
+├──────────────────────────────────────────────────────────────────┤
+│  KPIs: Total Pendente · Valor · Bancos Ativos · Vencendo Hoje    │
+├──────────────────────────────────────────────────────────────────┤
+│ 🏦 001 Banco do Brasil — CNAB 240 — 15 boletos   [Gerar e Baixar]│
+│ 🏦 237 Bradesco        — CNAB 400 — 8 boletos    [Gerar e Baixar]│
+└──────────────────────────────────────────────────────────────────┘
 ```
-[Financeiro] → [Arquivos de Retorno] → [Upload Retorno]
+- **1 arquivo = 1 conta bancária** (agrupamento automático por banco/layout)
+- Só entram boletos **não enviados** com **vencimento ≥ hoje**
+- **"Gerar e Baixar"** gera o `.rem` e baixa em um clique; **"Gerar Todos"**
+  processa todas as contas (tolerante a falhas parciais)
+- Após baixar, clique em **"Marcar como Enviada"** quando subir no internet banking
 
-Selecione o arquivo .ret do banco → [Processar]
-→ Sistema marca automaticamente as parcelas como pagas
+**Tela 2 — Receber Arquivo Retorno** (baixa dos pagamentos):
 ```
+[Financeiro] → [Receber Arquivo Retorno]
+
+┌──────────────────────────────────────────────────────────────────┐
+│ Processamento de Retorno Bancário                                 │
+├──────────────────────────────────────────────────────────────────┤
+│ KPIs: Processados · Liquidados · Valor Pago · Rejeitados         │
+├──────────────────────────────────────────────────────────────────┤
+│ 🏦 Banco do Brasil   [⬆ Upload Retorno (.ret)]                   │
+│ 🏦 Bradesco          [⬆ Upload Retorno (.ret)]                   │
+└──────────────────────────────────────────────────────────────────┘
+```
+- Aparece 1 card por conta com remessa **enviada** aguardando retorno
+- O **upload do `.ret` já processa a baixa** (upload + processamento em 1 passo)
+- Pagamentos → parcelas marcadas como **pagas**; **rejeições** devolvem o boleto
+  para "Gerado" (volta a ficar elegível para uma nova remessa)
 
 ### 6.7 Relatórios
 
@@ -582,15 +664,32 @@ Cria login para funcionários de Imobiliárias:
 
 ### Fluxo 5 — Processar retorno bancário (CNAB)
 1. Baixar o arquivo `.ret` do internet banking
-2. **Financeiro → Arquivos de Retorno → Upload Retorno**
-3. Selecionar o arquivo → **Processar**
-4. O sistema marca automaticamente as parcelas como pagas
+2. **Financeiro → Receber Arquivo Retorno**
+3. No card do banco, clique em **Upload Retorno** → selecione o `.ret`
+4. O sistema processa e marca automaticamente as parcelas como pagas
+   (rejeições devolvem o boleto para "Gerado")
 
 ### Fluxo 6 — Criar login para funcionário de Imobiliária
 1. O funcionário deve ter uma conta criada em **Accounts → Registro** (ou pelo Admin Django)
 2. **Admin → Acessos de Usuários → + Novo Acesso**
 3. Selecionar usuário, contabilidade e imobiliária → **Salvar**
 
+### Fluxo 7 — Ciclo mensal de cobrança completo ⭐
+O fluxo recomendado para a contabilidade no início de cada mês, em 3 telas:
+
+1. **Financeiro → Gerar Boletos do Mês**
+   - Confira os KPIs e a conferência por imobiliária/contrato
+   - Resolva eventuais **bloqueios por reajuste** (Reajustes Pendentes)
+   - Clique em **Gerar Boletos** → configure o lote (quantidade, Folha/Carnê,
+     intermediárias) → **Confirmar** (compradores são notificados automaticamente)
+2. **→ Gerar Arquivo Remessa** (atalho na própria tela)
+   - **Gerar e Baixar** o `.rem` por banco → suba no internet banking
+   - **Marcar como Enviada**
+3. **→ Receber Arquivo Retorno** (dias depois)
+   - **Upload Retorno** do `.ret` → baixa automática dos pagamentos
+
 ---
 
-*Manual gerado em 2026-05-25 — Gestão de Contratos v3.1*
+*Manual atualizado em 2026-06-14 — Gestão de Contratos v3.1*
+*Inclui as telas dedicadas da contabilidade: Gerar Boletos do Mês (HU-24),
+Gerar Arquivo Remessa e Receber Arquivo Retorno (HU-23).*
