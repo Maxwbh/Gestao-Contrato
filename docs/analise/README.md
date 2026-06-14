@@ -15,9 +15,9 @@
 ```
 docs/analise/
 ├── README.md              ← você está aqui (hub central)
-├── historias-usuario/     ← Histórias de Usuário (HU-01 … HU-23) + INDICE
+├── historias-usuario/     ← Histórias de Usuário (HU-01 … HU-24) + INDICE
 │   ├── INDICE.md          ← índice mestre: matriz de rastreabilidade + fluxo macro
-│   ├── HU-01.md … HU-23.md
+│   ├── HU-01.md … HU-24.md
 └── mockups/               ← protótipos visuais / wireframes (HTML, imagens)
     ├── HU-23-remessa-layout.html
     └── HU-23-retorno-layout.html
@@ -55,6 +55,7 @@ docs/analise/
 | [HU-21](historias-usuario/HU-21.md) | Portal do Comprador — Autoatendimento | `portal_comprador` | ✅ |
 | [HU-22](historias-usuario/HU-22.md) | Mapa Interativo de Lotes | `core` | ✅ (parcial) |
 | [HU-23](historias-usuario/HU-23.md) | Ciclo Mensal de Cobrança CNAB — Remessa + Retorno (Contadora) | `financeiro` | ✅ |
+| [HU-24](historias-usuario/HU-24.md) | Geração Mensal de Boletos — tela dedicada por escopo (Contadora) | `financeiro` | 📋 |
 
 ---
 
@@ -73,7 +74,7 @@ Wireframes e protótipos de alta fidelidade que acompanham as HUs.
 
 ## Convenções
 
-- **Numeração de HU**: sequencial a partir de `HU-01`. A próxima HU livre é **HU-24**.
+- **Numeração de HU**: sequencial a partir de `HU-01`. A próxima HU livre é **HU-25**.
 - **⚠️ Numeração distinta no ROADMAP**: o [`ROADMAP.md`](../../ROADMAP.md) usa uma numeração
   *interna* `HU-360` (e sub-tarefas `HU-01..HU-13` da seção 13) que é **independente**
   deste índice. Ao referenciar, use o prefixo `HU-360/HU-xx` para evitar ambiguidade.
