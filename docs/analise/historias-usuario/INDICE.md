@@ -43,7 +43,7 @@
 | [HU-21](HU-21.md) | `HU-21.md` | Portal do Comprador — Acesso e Autoatendimento Digital | `portal_comprador` | ✅ |
 | [HU-22](HU-22.md) | `HU-22.md` | Mapa Interativo de Lotes | `core` | ✅ (parcial — M-13/M-14 pendentes) |
 | [HU-23](HU-23.md) | `HU-23.md` | Ciclo Mensal de Cobrança CNAB — Remessa + Retorno (Fluxo da Contadora) | `financeiro` | ✅ |
-| [HU-24](HU-24.md) | `HU-24.md` | Geração Mensal de Boletos — tela dedicada por escopo (Fluxo da Contadora) | `financeiro` | 📋 |
+| [HU-24](HU-24.md) | `HU-24.md` | Geração Mensal de Boletos — tela dedicada por escopo (Fluxo da Contadora) | `financeiro` | ✅ |
 
 ---
 

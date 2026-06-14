@@ -2528,6 +2528,197 @@ def remessa_painel_retorno_upload(request):
 
 
 # =============================================================================
+# HU-24 — GERAÇÃO MENSAL DE BOLETOS (FLUXO DA CONTADORA)
+# =============================================================================
+
+@login_required
+def boletos_painel(request):
+    """
+    HU-24: tela dedicada de Geração de Boletos do Mês.
+    Resumo executivo (KPIs) + conferência agrupada por imobiliária → contrato.
+    """
+    from .services.geracao_boletos_service import GeracaoBoletosService
+
+    imobs = _imobs_para_usuario(request.user)
+    service = GeracaoBoletosService()
+
+    imobiliaria_id = request.GET.get('imobiliaria') or None
+    mes = request.GET.get('mes') or None
+    ano = request.GET.get('ano') or None
+    try:
+        quantidade = max(1, int(request.GET.get('quantidade') or 1))
+    except (ValueError, TypeError):
+        quantidade = 1
+
+    conf = service.obter_conferencia(
+        imobiliarias=imobs,
+        imobiliaria_id=imobiliaria_id,
+        quantidade=quantidade,
+        incluir_intermediarias=True,
+    )
+
+    context = {
+        'grupos': conf['grupos'],
+        'kpis': conf['kpis'],
+        'imobiliarias': imobs.order_by('nome'),
+        'filtro_imobiliaria': imobiliaria_id,
+        'filtro_mes': mes,
+        'filtro_ano': ano,
+        'filtro_quantidade': quantidade,
+        'hoje': timezone.localdate(),
+    }
+    return render(request, 'financeiro/boletos/geracao_painel.html', context)
+
+
+@login_required
+@require_POST
+def boletos_painel_gerar(request):
+    """
+    HU-24: endpoint único de geração dirigido por `escopo`.
+    Escopos: todos / imobiliaria / contratos / parcela / intermediaria.
+    Respeita o bloqueio por reajuste (HU-06) e consolida a notificação (RN-14).
+    """
+    import json
+    from django.urls import reverse
+    from collections import defaultdict
+    from .models import Parcela, StatusBoleto
+    from .services.geracao_boletos_service import GeracaoBoletosService, ESCOPOS_VALIDOS
+
+    try:
+        data = json.loads(request.body or '{}')
+    except json.JSONDecodeError:
+        return JsonResponse({'sucesso': False, 'erro': 'JSON inválido.'}, status=400)
+
+    escopo = (data.get('escopo') or '').strip()
+    if escopo not in ESCOPOS_VALIDOS:
+        return JsonResponse({'sucesso': False, 'erro': f'Escopo inválido: {escopo!r}'}, status=400)
+
+    try:
+        quantidade = max(1, int(data.get('quantidade') or 1))
+    except (ValueError, TypeError):
+        quantidade = 1
+    tipo = (data.get('tipo') or 'folha').strip().lower()
+    if tipo not in ('folha', 'carne'):
+        tipo = 'folha'
+    incluir_intermediarias = bool(data.get('incluir_intermediarias', True))
+
+    imobs = _imobs_para_usuario(request.user)
+    service = GeracaoBoletosService()
+
+    # ----- Resolver alvos por escopo (com validação de acesso — RN-10) -----
+    contratos_alvo = []          # lista de (contrato, [parcelas], [intermediarias])
+    bloqueados = []              # [{parcela_id, contrato, motivo}]
+
+    try:
+        if escopo in ('todos', 'imobiliaria', 'contratos'):
+            qs = service.resolver_contratos(
+                escopo, imobs,
+                imobiliaria_id=data.get('imobiliaria_id'),
+                contrato_ids=data.get('contrato_ids'),
+            )
+            for contrato in qs:
+                elegiveis, bloq = service.proximas_elegiveis(contrato, quantidade)
+                inter = service.intermediarias_elegiveis(contrato) if incluir_intermediarias else []
+                for p, motivo in bloq:
+                    bloqueados.append({'parcela_id': p.pk, 'contrato': contrato.numero_contrato, 'motivo': motivo})
+                if elegiveis or inter:
+                    contratos_alvo.append((contrato, elegiveis, inter))
+
+        elif escopo == 'parcela':
+            parcela = get_object_or_404(
+                Parcela.objects.select_related('contrato__imobiliaria', 'contrato__comprador'),
+                pk=data.get('parcela_id'),
+            )
+            verificar_acesso_tenant(request, parcela.contrato.imobiliaria)
+            contrato = parcela.contrato
+            pode, motivo = contrato.pode_gerar_boleto(parcela.numero_parcela)
+            if not pode:
+                bloqueados.append({'parcela_id': parcela.pk, 'contrato': contrato.numero_contrato, 'motivo': motivo})
+            elif parcela.pago or parcela.status_boleto != StatusBoleto.NAO_GERADO:
+                return JsonResponse({'sucesso': False, 'erro': 'Parcela não elegível (paga ou já gerada).'}, status=400)
+            else:
+                contratos_alvo.append((contrato, [parcela], []))
+
+        elif escopo == 'intermediaria':
+            from contratos.models import PrestacaoIntermediaria
+            inter = get_object_or_404(
+                PrestacaoIntermediaria.objects.select_related('contrato__imobiliaria', 'contrato__comprador'),
+                pk=data.get('intermediaria_id'),
+            )
+            verificar_acesso_tenant(request, inter.contrato.imobiliaria)
+            if inter.paga:
+                return JsonResponse({'sucesso': False, 'erro': 'Intermediária já paga.'}, status=400)
+            contratos_alvo.append((inter.contrato, [], [inter]))
+    except ValueError as e:
+        return JsonResponse({'sucesso': False, 'erro': str(e)}, status=400)
+
+    # ----- Gerar (tolerante a falhas parciais — RN-06) -----
+    total_gerados = 0
+    total_erros = 0
+    erros = []
+    carnes = []
+    por_imob = defaultdict(lambda: {'gerados': 0, 'bloqueados': 0, 'erros': 0})
+
+    for contrato, parcelas, intermediarias in contratos_alvo:
+        imob_nome = contrato.imobiliaria.nome
+        geradas_contrato = []
+
+        # Materializa parcelas das intermediárias
+        alvos = list(parcelas)
+        for it in intermediarias:
+            try:
+                alvos.append(it.gerar_parcela())
+            except Exception as e:
+                total_erros += 1
+                por_imob[imob_nome]['erros'] += 1
+                erros.append({'parcela_id': None, 'contrato': contrato.numero_contrato,
+                              'erro': f'Intermediária {it.pk}: {e}'})
+
+        for parcela in alvos:
+            try:
+                resultado = parcela.gerar_boleto(enviar_email=False)
+                if resultado and resultado.get('sucesso'):
+                    total_gerados += 1
+                    por_imob[imob_nome]['gerados'] += 1
+                    geradas_contrato.append(parcela)
+                else:
+                    total_erros += 1
+                    por_imob[imob_nome]['erros'] += 1
+                    erros.append({'parcela_id': parcela.pk, 'contrato': contrato.numero_contrato,
+                                  'erro': (resultado or {}).get('erro', 'Erro desconhecido')})
+            except Exception as e:
+                logger.exception('HU-24: erro ao gerar boleto parcela pk=%s: %s', parcela.pk, e)
+                total_erros += 1
+                por_imob[imob_nome]['erros'] += 1
+                erros.append({'parcela_id': parcela.pk, 'contrato': contrato.numero_contrato, 'erro': str(e)})
+
+        # Notificação consolidada por canal (RN-14)
+        if geradas_contrato:
+            try:
+                service.notificar_lote(contrato, geradas_contrato)
+            except Exception:
+                logger.exception('HU-24: falha ao notificar lote do contrato %s', contrato.pk)
+            # Tipo carnê: expõe PDF consolidado por contrato (RN-13)
+            if tipo == 'carne':
+                carnes.append({
+                    'contrato': contrato.numero_contrato,
+                    'carne_url': reverse('financeiro:download_carne_pdf', kwargs={'contrato_id': contrato.id}),
+                })
+
+    return JsonResponse({
+        'sucesso': True,
+        'total_gerados': total_gerados,
+        'total_bloqueados': len(bloqueados),
+        'total_erros': total_erros,
+        'por_imobiliaria': [{'imobiliaria': k, **v} for k, v in por_imob.items()],
+        'bloqueados': bloqueados,
+        'erros': erros,
+        'tipo': tipo,
+        'carnes': carnes,
+    })
+
+
+# =============================================================================
 # DASHBOARD DE CONCILIAÇÃO BANCÁRIA
 # =============================================================================
 

@@ -56,7 +56,7 @@ docs/analise/
 | [HU-21](historias-usuario/HU-21.md) | Portal do Comprador — Autoatendimento | `portal_comprador` | ✅ |
 | [HU-22](historias-usuario/HU-22.md) | Mapa Interativo de Lotes | `core` | ✅ (parcial) |
 | [HU-23](historias-usuario/HU-23.md) | Ciclo Mensal de Cobrança CNAB — Remessa + Retorno (Contadora) | `financeiro` | ✅ |
-| [HU-24](historias-usuario/HU-24.md) | Geração Mensal de Boletos — tela dedicada por escopo (Contadora) | `financeiro` | 📋 |
+| [HU-24](historias-usuario/HU-24.md) | Geração Mensal de Boletos — tela dedicada por escopo (Contadora) | `financeiro` | ✅ |
 
 ---
 

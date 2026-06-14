@@ -38,6 +38,7 @@
         <li><a href="{% url 'financeiro:dashboard' %}"><i class="fas fa-chart-line left"></i> Dashboard Financeiro</a></li>
         <li><a href="{% url 'financeiro:listar_parcelas' %}"><i class="fas fa-list left"></i> Todas as Parcelas</a></li>
         <li><a href="{% url 'financeiro:parcelas_mes' %}"><i class="fas fa-calendar-alt left"></i> Parcelas do Mês</a></li>
+        <li><a href="{% url 'financeiro:boletos_painel' %}"><i class="fas fa-file-invoice-dollar left"></i> Gerar Boletos do Mês</a></li>
         <li><a href="{% url 'financeiro:remessa_painel' %}"><i class="fas fa-file-export left"></i> Gerar Arquivo Remessa</a></li>
         <li><a href="{% url 'financeiro:retorno_painel' %}"><i class="fas fa-file-import left"></i> Receber Arquivo Retorno</a></li>
         <li><a href="{% url 'financeiro:dashboard_conciliacao' %}"><i class="fas fa-balance-scale left"></i> Conciliação Bancária</a></li>
@@ -193,6 +194,7 @@
         <li><a href="{% url 'financeiro:reajustes_pendentes' %}"><i class="fas fa-exclamation-triangle orange-text"></i> Pendentes</a></li>
         <li><a href="{% url 'financeiro:listar_reajustes' %}"><i class="fas fa-history"></i> Histórico</a></li>
         <li><a class="dropdown-header-item"><i class="fas fa-file-alt"></i> CNAB</a></li>
+        <li><a href="{% url 'financeiro:boletos_painel' %}"><i class="fas fa-file-invoice-dollar"></i> Gerar Boletos do Mês</a></li>
         <li><a href="{% url 'financeiro:remessa_painel' %}"><i class="fas fa-file-export"></i> Gerar Arquivo Remessa</a></li>
         <li><a href="{% url 'financeiro:retorno_painel' %}"><i class="fas fa-file-import"></i> Receber Arquivo Retorno</a></li>
         <li><a href="{% url 'financeiro:dashboard_conciliacao' %}"><i class="fas fa-balance-scale"></i> Conciliação Bancária</a></li>
