@@ -19,7 +19,8 @@ docs/analise/
 │   ├── INDICE.md          ← índice mestre: matriz de rastreabilidade + fluxo macro
 │   ├── HU-01.md … HU-23.md
 └── mockups/               ← protótipos visuais / wireframes (HTML, imagens)
-    └── HU-23-remessa-layout.html
+    ├── HU-23-remessa-layout.html
+    └── HU-23-retorno-layout.html
 ```
 
 ---
@@ -53,7 +54,7 @@ docs/analise/
 | [HU-20](historias-usuario/HU-20.md) | Notificações e Cobrança Automática | `notificacoes` | ✅ |
 | [HU-21](historias-usuario/HU-21.md) | Portal do Comprador — Autoatendimento | `portal_comprador` | ✅ |
 | [HU-22](historias-usuario/HU-22.md) | Mapa Interativo de Lotes | `core` | ✅ (parcial) |
-| [HU-23](historias-usuario/HU-23.md) | Envio Mensal de Remessa CNAB (Contadora) | `financeiro` | ✅ |
+| [HU-23](historias-usuario/HU-23.md) | Ciclo Mensal de Cobrança CNAB — Remessa + Retorno (Contadora) | `financeiro` | ✅ |
 
 ---
 

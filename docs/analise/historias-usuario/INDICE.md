@@ -42,7 +42,7 @@
 | [HU-20](HU-20.md) | `HU-20.md` | Notificações e Cobrança Automática | `notificacoes` | ✅ |
 | [HU-21](HU-21.md) | `HU-21.md` | Portal do Comprador — Acesso e Autoatendimento Digital | `portal_comprador` | ✅ |
 | [HU-22](HU-22.md) | `HU-22.md` | Mapa Interativo de Lotes | `core` | ✅ (parcial — M-13/M-14 pendentes) |
-| [HU-23](HU-23.md) | `HU-23.md` | Envio Mensal de Remessa CNAB (Fluxo da Contadora) | `financeiro` | ✅ |
+| [HU-23](HU-23.md) | `HU-23.md` | Ciclo Mensal de Cobrança CNAB — Remessa + Retorno (Fluxo da Contadora) | `financeiro` | ✅ |
 
 ---
 
@@ -193,7 +193,7 @@ HU-21 Portal do Comprador ──► auto-cadastro → dashboard → boletos → 
 | HU-20 | `RegraNotificacao`, `TemplateNotificacao`, `Notificacao`, `ConfiguracaoWhatsApp` | `enviar_notificacoes_sync()`, `enviar_inadimplentes_sync()` | `POST /api/tasks/enviar-notificacoes/`, `/api/tasks/enviar-inadimplentes/`, `POST /financeiro/parcelas/<pk>/notificar/` |
 | HU-21 | `AcessoComprador`, `LogAcessoComprador` | — | `/portal/cadastro/`, `/portal/login/`, `/portal/`, `/portal/contratos/`, `/portal/boletos/`, `/portal/meus-dados/`, `/portal/api/*` |
 | HU-22 | `Imovel` | — | `/imoveis/` (mapa com marcadores Leaflet + markercluster), `/imoveis/loteamento/<nome>/` |
-| HU-23 | `ArquivoRemessa`, `ItemRemessa`, `ContaBancaria` | `CNABService` | `/financeiro/remessa/` (wizard), `/remessa/gerar/` (escopo: todos/imobiliaria/conta/boleto), `/remessa/<pk>/download/`, `/remessa/download-lote/`, `/remessa/<pk>/marcar-enviada/`, `/remessa/historico/` |
+| HU-23 | `ArquivoRemessa`, `ItemRemessa`, `ArquivoRetorno`, `ItemRetorno`, `ContaBancaria` | `CNABService` | **Tela 1 (Remessa):** `/financeiro/remessa/` (wizard), `/remessa/gerar/` (escopo: todos/imobiliaria/conta/boleto), `download-lote/`, `cancelar-envio/`. **Tela 2 (Retorno):** `/financeiro/retorno/` (KPIs + upload por banco), `/retorno/upload/` (upload + baixa em 1 passo) |
 
 ---
 
