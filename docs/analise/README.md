@@ -63,7 +63,8 @@ Wireframes e protótipos de alta fidelidade que acompanham as HUs.
 
 | Mockup | HU | Descrição |
 |--------|----|-----------|
-| [HU-23-remessa-layout.html](mockups/HU-23-remessa-layout.html) | HU-23 | Tela de Gestão de Arquivos Remessa (Tailwind + Material Symbols) |
+| [HU-23-remessa-layout.html](mockups/HU-23-remessa-layout.html) | HU-23 | Tela de Gestão de Arquivos Remessa — Passos 1–4 (Tailwind + Material Symbols) |
+| [HU-23-retorno-layout.html](mockups/HU-23-retorno-layout.html) | HU-23 | Tela de Processamento de Retorno Bancário — Passo 5 (Tailwind + Material Symbols) |
 
 > Para abrir um mockup HTML, faça o download e abra no navegador (usam CDN do Tailwind).
 

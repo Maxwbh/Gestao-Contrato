@@ -2201,27 +2201,6 @@ def remessa_painel(request):
         status=StatusContrato.ATIVO, imobiliaria__in=imobs
     ).count()
 
-    # HU-23 Passo 5: retornos do mês e contas aguardando retorno
-    from .models import ArquivoRetorno, StatusArquivoRemessa as _SAR
-    retornos_recentes = ArquivoRetorno.objects.select_related(
-        'conta_bancaria', 'conta_bancaria__imobiliaria'
-    ).filter(
-        conta_bancaria__imobiliaria__in=imobs,
-        data_upload__year=hoje.year,
-        data_upload__month=hoje.month,
-    ).order_by('-data_upload')[:10]
-
-    # Contas com remessas ENVIADO no mês (elegíveis para upload de retorno)
-    contas_com_enviado_ids = ArquivoRemessa.objects.filter(
-        conta_bancaria__imobiliaria__in=imobs,
-        status=_SAR.ENVIADO,
-        data_envio__year=hoje.year,
-        data_envio__month=hoje.month,
-    ).values_list('conta_bancaria_id', flat=True).distinct()
-    contas_com_enviado = ContaBancaria.objects.filter(
-        pk__in=contas_com_enviado_ids
-    ).select_related('imobiliaria').order_by('imobiliaria__nome', 'banco')
-
     context = {
         'grupos': grupos,
         'arquivos_recentes': arquivos_recentes,
@@ -2243,9 +2222,6 @@ def remessa_painel(request):
         # Banner de conclusão (CT-07)
         'mes_concluido': mes_concluido,
         'bancos_enviados': bancos_enviados,
-        # HU-23 Passo 5: retorno bancário
-        'retornos_recentes': retornos_recentes,
-        'contas_com_enviado': contas_com_enviado,
     }
     return render(request, 'financeiro/cnab/remessa_painel.html', context)
 
@@ -2409,6 +2385,92 @@ def remessa_cancelar_envio(request, hid):
         {'sucesso': False, 'erro': 'Só é possível cancelar o envio de uma remessa ENVIADA.'},
         status=400,
     )
+
+
+@login_required
+def retorno_painel(request):
+    """
+    HU-23 Passo 5: tela dedicada de Processamento de Retorno Bancário.
+    GET /financeiro/retorno/
+    KPIs mensais, cards de upload por conta com ENVIADO e histórico de retornos.
+    """
+    from datetime import date
+    from .models import ArquivoRetorno, StatusArquivoRemessa, ItemRetorno
+
+    imobs = _imobs_para_usuario(request.user)
+    hoje = date.today()
+
+    mes_str = request.GET.get('mes') or None
+    ano_str = request.GET.get('ano') or None
+    try:
+        mes = int(mes_str) if mes_str else hoje.month
+        ano = int(ano_str) if ano_str else hoje.year
+    except (ValueError, TypeError):
+        mes, ano = hoje.month, hoje.year
+
+    imobiliaria_id = request.GET.get('imobiliaria') or None
+
+    retornos_qs = ArquivoRetorno.objects.filter(
+        conta_bancaria__imobiliaria__in=imobs,
+        data_upload__year=ano,
+        data_upload__month=mes,
+    )
+    if imobiliaria_id:
+        retornos_qs = retornos_qs.filter(conta_bancaria__imobiliaria_id=imobiliaria_id)
+
+    # KPIs
+    from django.db.models import Sum as _Sum
+    agg = retornos_qs.aggregate(
+        liq=_Sum('registros_processados'),
+        tot=_Sum('total_registros'),
+        vlr=_Sum('valor_total_pago'),
+    )
+    kpi_total_processados = retornos_qs.count()
+    kpi_boletos_liquidados = agg['liq'] or 0
+    kpi_total_registros = agg['tot'] or 0
+    kpi_taxa_sucesso = (
+        round(kpi_boletos_liquidados / kpi_total_registros * 100)
+        if kpi_total_registros > 0 else 0
+    )
+    kpi_valor_total_pago = agg['vlr'] or Decimal('0.00')
+    kpi_rejeicoes = ItemRetorno.objects.filter(
+        arquivo_retorno__in=retornos_qs,
+        tipo_ocorrencia='REJEICAO',
+    ).count()
+
+    # Contas com remessas ENVIADO (elegíveis para receber retorno)
+    contas_enviadas_ids = ArquivoRemessa.objects.filter(
+        conta_bancaria__imobiliaria__in=imobs,
+        status=StatusArquivoRemessa.ENVIADO,
+    ).values_list('conta_bancaria_id', flat=True).distinct()
+    if imobiliaria_id:
+        contas_enviadas_ids = contas_enviadas_ids.filter(
+            conta_bancaria__imobiliaria_id=imobiliaria_id
+        )
+    contas_com_enviado = ContaBancaria.objects.filter(
+        pk__in=contas_enviadas_ids
+    ).select_related('imobiliaria').order_by('imobiliaria__nome', 'banco')
+
+    # Histórico de retornos
+    historico = retornos_qs.select_related(
+        'conta_bancaria', 'conta_bancaria__imobiliaria', 'processado_por'
+    ).order_by('-data_upload')[:30]
+
+    context = {
+        'kpi_total_processados': kpi_total_processados,
+        'kpi_boletos_liquidados': kpi_boletos_liquidados,
+        'kpi_taxa_sucesso': kpi_taxa_sucesso,
+        'kpi_valor_total_pago': kpi_valor_total_pago,
+        'kpi_rejeicoes': kpi_rejeicoes,
+        'contas_com_enviado': contas_com_enviado,
+        'historico': historico,
+        'imobiliarias': imobs.order_by('nome'),
+        'filtro_imobiliaria': imobiliaria_id,
+        'filtro_mes': mes,
+        'filtro_ano': ano,
+        'hoje': hoje,
+    }
+    return render(request, 'financeiro/cnab/retorno_painel.html', context)
 
 
 @login_required
