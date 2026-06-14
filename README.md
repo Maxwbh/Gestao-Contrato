@@ -50,6 +50,12 @@ Sistema desenvolvido para contabilidades que gerenciam múltiplos loteamentos, p
 - ✅ **CNAB Remessa** (G-08): geração de arquivo para banco com rastreamento de nosso número
 - ✅ **CNAB Retorno** (G-09): processamento automático de entradas e liquidações bancárias
 
+#### Ciclo Mensal da Contabilidade (3 telas dedicadas, dirigidas por escopo)
+- ✅ **Gerar Boletos do Mês** (HU-24) — `/financeiro/boletos/`: geração em massa por escopo (todos / imobiliária / contratos / parcela / intermediária), com quantidade por contrato (1 ou próximos X), tipo Folha/Carnê, inclusão de intermediárias, respeito ao **bloqueio por reajuste** (HU-06) e **notificação consolidada por canal** (e-mail/WhatsApp em 1 PDF, SMS um a um)
+- ✅ **Gerar Arquivo Remessa** (HU-23) — `/financeiro/remessa/`: wizard que agrupa por banco/layout (1 arquivo = 1 conta), "Gerar e Baixar", download em lote (ZIP), estado BAIXADO e marcação de envio
+- ✅ **Receber Arquivo Retorno** (HU-23) — `/financeiro/retorno/`: upload do `.ret` por banco que **já processa a baixa**; rejeições devolvem o boleto para "Gerado" (RN-18)
+- ✅ **Encadeamento**: Gerar Boletos → Gerar Remessa → Receber Retorno, com atalhos entre as telas
+
 ### 4. Sistema de Reajuste Automático
 - ✅ Integração com API do Banco Central do Brasil
 - ✅ Busca automática de índices IPCA, IGP-M e SELIC
@@ -367,6 +373,10 @@ Gestao-Contrato/
 │   └── urls.py
 ├── accounts/                  # Autenticação e permissões
 ├── docs/                      # Documentação organizada
+│   ├── analise/               # Hub de análise: HUs + mockups + índice
+│   ├── manual_contador.md     # Manual do Contador/Administrador
+│   ├── manual_imobiliaria.md  # Manual da Imobiliária
+│   └── manual_comprador.md    # Manual do Comprador
 ├── tests/                     # 1335 testes
 │   ├── unit/                  # Testes unitários por app
 │   ├── integration/           # Testes de integração
@@ -443,6 +453,14 @@ http://localhost:8000/admin/
 - Acesse "Templates de Notificação" → filtre por `gestao-relatorio-semanal` / `gestao-relatorio-mensal`
 - Edite o HTML do corpo do e-mail conforme necessário
 - Configure os cronjobs no cron-job.org com o `TASK_TOKEN` correto
+
+### 7. Rode o Ciclo Mensal de Cobrança (3 telas)
+1. **Financeiro → Gerar Boletos do Mês**: confira os KPIs, resolva bloqueios de reajuste e gere os boletos por escopo (popup: quantidade, Folha/Carnê, intermediárias). Os compradores são notificados automaticamente.
+2. **→ Gerar Arquivo Remessa** (atalho): "Gerar e Baixar" o `.rem` por banco, suba no internet banking e marque como enviada.
+3. **→ Receber Arquivo Retorno**: faça o upload do `.ret` — o sistema dá baixa nos pagamentos automaticamente.
+
+> Detalhes completos no [Manual do Contador](docs/manual_contador.md) e nas
+> [HU-23/HU-24](docs/analise/historias-usuario/).
 
 ## 📊 API do Banco Central
 
