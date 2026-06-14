@@ -2562,6 +2562,15 @@ def ia_tokens_config(request):
         'claude-opus-4-8':           (5.00,  25.00),
     }
 
+    # Estilo visual por modelo (card, badge, rótulo e ícone do tier)
+    estilo_map = {
+        'gemini-2.0-flash':          ('card-gemini', 'badge-free',  'GRATUITO',      'fas fa-leaf'),
+        'claude-haiku-4-5-20251001': ('card-haiku',  'badge-cheap', 'ECONÔMICO',     'fas fa-bolt'),
+        'claude-sonnet-4-6':         ('card-sonnet', 'badge-mid',   'INTERMEDIÁRIO', 'fas fa-star'),
+        'claude-opus-4-8':           ('card-opus',   'badge-prem',  'PREMIUM',       'fas fa-crown'),
+    }
+    _estilo_default = ('card-opus', 'badge-prem', 'PREMIUM', 'fas fa-crown')
+
     inicio = date.today().replace(day=1)
     modelos_data = []
     for modelo in _MODELOS_IA:
@@ -2588,8 +2597,14 @@ def ia_tokens_config(request):
         limite_reais_val = float(lim_reais.valor_limite) if lim_reais else None
         pct_tokens = min(100, int(consumo_tokens / limite_tokens * 100)) if limite_tokens else 0
 
+        card_class, badge_class, badge_lbl, tier_icon = estilo_map.get(modelo, _estilo_default)
+
         modelos_data.append({
             'modelo': modelo,
+            'card_class': card_class,
+            'badge_class': badge_class,
+            'badge_lbl': badge_lbl,
+            'tier_icon': tier_icon,
             'preco_in': preco_in,
             'preco_out': preco_out,
             'preco_in_brl': round(preco_in * cotacao, 4),

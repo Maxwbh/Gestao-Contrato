@@ -228,3 +228,32 @@ class TestApiIaCustosDados:
         # o registro antigo não deve aparecer na tendência
         total_chamadas = sum(d['chamadas'] for d in data['tendencia'])
         assert total_chamadas == 0
+
+
+@pytest.mark.django_db
+class TestIaTokensConfigView:
+    """Configuração gráfica de tokens — renderiza o template (regressão do 500)."""
+
+    def test_requer_login(self, client):
+        resp = client.get(reverse('core:ia_tokens_config'))
+        assert resp.status_code == 302
+
+    def test_200_autenticado(self, client_logado):
+        # Renderiza o template inteiro: pega TemplateSyntaxError como o
+        # {% with %} dentro de {% if/elif %} que causava 500 em produção.
+        resp = client_logado.get(reverse('core:ia_tokens_config'))
+        assert resp.status_code == 200
+
+    def test_contexto_contem_modelos_data(self, client_logado):
+        resp = client_logado.get(reverse('core:ia_tokens_config'))
+        assert 'modelos_data' in resp.context
+        assert len(resp.context['modelos_data']) >= 1
+
+    def test_modelos_data_tem_estilos(self, client_logado):
+        """Cada modelo deve trazer os campos visuais usados no template."""
+        resp = client_logado.get(reverse('core:ia_tokens_config'))
+        for m in resp.context['modelos_data']:
+            assert 'card_class' in m
+            assert 'badge_class' in m
+            assert 'badge_lbl' in m
+            assert 'tier_icon' in m
