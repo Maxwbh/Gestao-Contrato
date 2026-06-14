@@ -9,6 +9,8 @@ Cobre:
   - remessa_painel_gerar (POST) — geração por escopo, REGISTRADO, 1 arquivo/conta
   - download grava data_download → estado BAIXADO
   - cancelar_envio (RN-07) e marcar_enviada (auditoria)
+  - retorno_painel (GET) + upload de retorno (RN-22 / CT-28)
+  - rejeição CNAB devolve boleto a GERADO (RN-18 / CT-29)
   - IDOR: usuário sem acesso não gera (RN-11)
 
 Desenvolvedor: Maxwell da Silva Oliveira
@@ -441,6 +443,67 @@ class TestAcoesHistorico:
         arq = self._gerar(c)
         arq.marcar_enviado(usuario=u)
         resp = c.post(reverse('financeiro:excluir_remessa', kwargs={'hid': encode_id(arq.pk)}))
+        assert resp.status_code == 400
+
+
+@pytest.mark.django_db
+class TestRetornoPainel:
+    """Passo 5 — tela dedicada de retorno (RN-22 / CT-28)."""
+
+    def _gerar_e_enviar(self, c, u):
+        import json as _json
+        from financeiro.models import ArquivoRemessa
+        with patch('financeiro.services.cnab_service.requests.post', return_value=_mock_brcobranca_ok()):
+            c.post(reverse('financeiro:remessa_painel_gerar'),
+                   data=_json.dumps({'escopo': 'todos'}), content_type='application/json')
+        for arq in ArquivoRemessa.objects.all():
+            arq.marcar_enviado(usuario=u)
+
+    def test_requer_login(self, base):
+        resp = Client().get(reverse('financeiro:retorno_painel'))
+        assert resp.status_code == 302
+
+    def test_card_upload_aparece_para_conta_enviada(self, base, staff_cli):
+        """RN-22: conta com remessa ENVIADO vira card de upload de retorno."""
+        u, c = staff_cli
+        imob, conta, contrato = base
+        self._gerar_e_enviar(c, u)
+        resp = c.get(reverse('financeiro:retorno_painel'))
+        assert resp.status_code == 200
+        assert conta.pk in {x.pk for x in resp.context['contas_com_enviado']}
+
+    def test_sem_envio_nao_mostra_card(self, base, staff_cli):
+        u, c = staff_cli
+        resp = c.get(reverse('financeiro:retorno_painel'))
+        assert resp.status_code == 200
+        assert list(resp.context['contas_com_enviado']) == []
+
+    def test_upload_processa_e_retorna_resumo(self, base, staff_cli):
+        """CT-28: upload + auto-processo retorna o resumo JSON documentado."""
+        from django.core.files.uploadedfile import SimpleUploadedFile
+        u, c = staff_cli
+        imob, conta, contrato = base
+        fake = {
+            'sucesso': True, 'total_registros': 3, 'registros_processados': 3,
+            'registros_erro': 0, 'valor_total_pago': Decimal('100.00'),
+        }
+        ret_file = SimpleUploadedFile('RET.RET', b'0' * 240, content_type='application/octet-stream')
+        with patch('financeiro.services.cnab_service.CNABService.processar_retorno', return_value=fake):
+            resp = c.post(reverse('financeiro:remessa_retorno_upload'),
+                          data={'conta_bancaria_id': conta.pk, 'arquivo': ret_file})
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data['sucesso'] is True
+        for k in ('total_registros', 'registros_processados', 'registros_erro',
+                  'rejeicoes', 'valor_total_pago', 'detalhe_url'):
+            assert k in data
+        assert data['total_registros'] == 3
+
+    def test_upload_sem_arquivo_retorna_400(self, base, staff_cli):
+        u, c = staff_cli
+        imob, conta, contrato = base
+        resp = c.post(reverse('financeiro:remessa_retorno_upload'),
+                      data={'conta_bancaria_id': conta.pk})
         assert resp.status_code == 400
 
 
