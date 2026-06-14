@@ -2046,10 +2046,11 @@ def marcar_remessa_enviada(request, hid):
             'erro': 'Apenas arquivos com status GERADO podem ser marcados como enviados'
         }, status=400)
 
-    arquivo.marcar_enviado()
+    arquivo.marcar_enviado(usuario=request.user)
     return JsonResponse({
         'sucesso': True,
-        'mensagem': 'Remessa marcada como enviada'
+        'mensagem': 'Remessa marcada como enviada',
+        'status': 'ENVIADO',
     })
 
 
@@ -2094,6 +2095,8 @@ def download_arquivo_remessa(request, hid):
         return redirect('financeiro:detalhe_remessa', hid=_encode_id(pk))
 
     try:
+        # HU-23: registra o 1º download (habilita o estado BAIXADO)
+        arquivo.registrar_download()
         response = FileResponse(
             arquivo.arquivo.open('rb'),
             as_attachment=True,
@@ -2105,6 +2108,232 @@ def download_arquivo_remessa(request, hid):
         logger.exception(f"Erro ao fazer download da remessa: {e}")
         messages.error(request, 'Erro ao baixar o arquivo.')
         return redirect('financeiro:detalhe_remessa', hid=_encode_id(pk))
+
+
+# =============================================================================
+# HU-23 — PAINEL DE REMESSA MENSAL (FLUXO DA CONTADORA)
+# =============================================================================
+
+@login_required
+def remessa_painel(request):
+    """
+    HU-23: wizard simplificado de envio de remessa.
+
+    Exibe Resumo Executivo (KPIs), boletos elegíveis agrupados por conta
+    bancária (1 arquivo = 1 conta) e o histórico recente de arquivos gerados.
+    """
+    from collections import defaultdict
+    from datetime import date
+    from .models import ArquivoRemessa, StatusArquivoRemessa
+    from .services.cnab_service import CNABService
+
+    imobs = _imobs_para_usuario(request.user)
+    service = CNABService()
+    hoje = date.today()
+
+    # Filtros opcionais (competência + imobiliária)
+    imobiliaria_id = request.GET.get('imobiliaria') or None
+    mes = request.GET.get('mes') or None
+    ano = request.GET.get('ano') or None
+
+    elegiveis = service.obter_boletos_elegiveis_painel(
+        imobiliarias=imobs,
+        imobiliaria_id=imobiliaria_id,
+        mes=mes,
+        ano=ano,
+        hoje=hoje,
+    )
+
+    # Agrupar por conta bancária (invariante: 1 arquivo = 1 conta)
+    grupos_map = defaultdict(list)
+    for p in elegiveis:
+        grupos_map[p.conta_bancaria].append(p)
+
+    grupos = []
+    valor_total_geral = Decimal('0.00')
+    vencendo_hoje = 0
+    for conta, ps in grupos_map.items():
+        valor = sum(((x.valor_boleto or x.valor_atual) for x in ps), Decimal('0.00'))
+        venc_hoje_grp = sum(1 for x in ps if x.data_vencimento == hoje)
+        valor_total_geral += valor
+        vencendo_hoje += venc_hoje_grp
+        grupos.append({
+            'conta': conta,
+            'imobiliaria': conta.imobiliaria,
+            'banco': conta.banco,
+            'banco_nome': conta.banco_nome,
+            'layout': conta.layout_cnab,
+            'quantidade': len(ps),
+            'valor_total': valor,
+            'vencendo_hoje': venc_hoje_grp,
+        })
+    grupos.sort(key=lambda g: (g['imobiliaria'].nome, g['banco_nome']))
+
+    # KPIs do Resumo Executivo
+    remessas_enviadas_mes = ArquivoRemessa.objects.filter(
+        conta_bancaria__imobiliaria__in=imobs,
+        status__in=[StatusArquivoRemessa.ENVIADO, StatusArquivoRemessa.PROCESSADO],
+        data_envio__year=hoje.year,
+        data_envio__month=hoje.month,
+    ).count()
+
+    # Histórico recente
+    arquivos_recentes = ArquivoRemessa.objects.select_related(
+        'conta_bancaria', 'conta_bancaria__imobiliaria'
+    ).filter(conta_bancaria__imobiliaria__in=imobs).order_by('-data_geracao')[:10]
+
+    contratos_ativos = Contrato.objects.filter(
+        status=StatusContrato.ATIVO, imobiliaria__in=imobs
+    ).count()
+
+    context = {
+        'grupos': grupos,
+        'arquivos_recentes': arquivos_recentes,
+        'imobiliarias': imobs.order_by('nome'),
+        'filtro_imobiliaria': imobiliaria_id,
+        'filtro_mes': mes,
+        'filtro_ano': ano,
+        # KPIs
+        'kpi_total_pendente': len(elegiveis),
+        'kpi_valor_total': valor_total_geral,
+        'kpi_bancos_ativos': len(grupos),
+        'kpi_vencendo_hoje': vencendo_hoje,
+        'kpi_remessas_enviadas': remessas_enviadas_mes,
+        'contratos_ativos': contratos_ativos,
+        'hoje': hoje,
+    }
+    return render(request, 'financeiro/cnab/remessa_painel.html', context)
+
+
+@login_required
+@require_POST
+def remessa_painel_gerar(request):
+    """
+    HU-23: geração dirigida por escopo (todos / imobiliaria / conta / boleto).
+    Sempre gera 1 arquivo por conta bancária e responde em lista.
+    """
+    import json as _json
+    from .services.cnab_service import CNABService
+
+    try:
+        payload = _json.loads(request.body or '{}')
+    except (ValueError, TypeError):
+        payload = request.POST
+
+    escopo = payload.get('escopo', 'todos')
+    imobs = _imobs_para_usuario(request.user)
+    service = CNABService()
+
+    resol = service.resolver_parcela_ids_por_escopo(
+        escopo=escopo,
+        imobiliarias=imobs,
+        conta_bancaria_id=payload.get('conta_bancaria_id'),
+        imobiliaria_id=payload.get('imobiliaria_id'),
+        parcela_id=payload.get('parcela_id'),
+        mes=payload.get('mes'),
+        ano=payload.get('ano'),
+    )
+    if resol['erro']:
+        return JsonResponse({'sucesso': False, 'erro': resol['erro']}, status=400)
+
+    parcela_ids = resol['parcela_ids']
+    if not parcela_ids:
+        return JsonResponse(
+            {'sucesso': False, 'erro': 'Nenhum boleto elegível para o escopo selecionado.'},
+            status=400,
+        )
+
+    resultado = service.gerar_remessas_por_escopo(
+        parcela_ids, layout=None, usuario=request.user, transicionar_registrado=True,
+    )
+
+    arquivos = []
+    for r in resultado['remessas_geradas']:
+        arq = r['arquivo_remessa']
+        conta = r['conta_bancaria']
+        arquivos.append({
+            'arquivo_id': arq.pk,
+            'conta_bancaria_id': conta.pk,
+            'banco': conta.banco,
+            'imobiliaria': conta.imobiliaria.nome,
+            'total_boletos': r['quantidade_boletos'],
+            'valor_total': str(r['valor_total']),
+            'numero_remessa': r['numero_remessa'],
+            'download_url': f"/financeiro/cnab/remessa/{_encode_id(arq.pk)}/download/",
+        })
+
+    resp = {
+        'sucesso': len(arquivos) > 0,
+        'arquivos': arquivos,
+        'erros': resultado['erros'],
+        'total_gerados': len(arquivos),
+        'total_falhas': len(resultado['erros']),
+    }
+    if len(arquivos) > 1:
+        hids = ','.join(_encode_id(a['arquivo_id']) for a in arquivos)
+        resp['download_lote_url'] = f"/financeiro/cnab/remessa/download-lote/?ids={hids}"
+    status_code = 200 if arquivos else 400
+    return JsonResponse(resp, status=status_code)
+
+
+@login_required
+def remessa_download_lote(request):
+    """HU-23: download em lote (ZIP) de vários arquivos de remessa (?ids=hid1,hid2)."""
+    import io
+    import zipfile
+    from core.hashids_utils import decode_id
+    from .models import ArquivoRemessa
+
+    pks = []
+    for tok in (request.GET.get('ids', '') or '').split(','):
+        tok = tok.strip()
+        if not tok:
+            continue
+        pk = decode_id(tok)
+        if pk:
+            pks.append(pk)
+
+    imobs = _imobs_para_usuario(request.user)
+    arquivos = ArquivoRemessa.objects.select_related(
+        'conta_bancaria__imobiliaria'
+    ).filter(pk__in=pks, conta_bancaria__imobiliaria__in=imobs)
+
+    if not arquivos:
+        messages.error(request, 'Nenhum arquivo disponível para download.')
+        return redirect('financeiro:remessa_painel')
+
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, 'w', zipfile.ZIP_DEFLATED) as zf:
+        for arq in arquivos:
+            if arq.arquivo:
+                zf.writestr(arq.nome_arquivo, arq.arquivo.read())
+                arq.registrar_download()
+    buf.seek(0)
+    response = HttpResponse(buf.getvalue(), content_type='application/zip')
+    response['Content-Disposition'] = (
+        f'attachment; filename="remessas_{timezone.now():%Y%m%d_%H%M}.zip"'
+    )
+    return response
+
+
+@login_required
+@require_POST
+def remessa_cancelar_envio(request, hid):
+    """HU-23 (RN-07): reverte uma remessa ENVIADO → GERADO para correção."""
+    pk = _hid_to_pk(hid)
+    from .models import ArquivoRemessa
+
+    arquivo = get_object_or_404(
+        ArquivoRemessa.objects.select_related('conta_bancaria__imobiliaria'), pk=pk
+    )
+    verificar_acesso_tenant(request, arquivo.conta_bancaria.imobiliaria)
+
+    if arquivo.cancelar_envio():
+        return JsonResponse({'sucesso': True, 'status': 'GERADO'})
+    return JsonResponse(
+        {'sucesso': False, 'erro': 'Só é possível cancelar o envio de uma remessa ENVIADA.'},
+        status=400,
+    )
 
 
 # =============================================================================

@@ -1978,6 +1978,30 @@ class ArquivoRemessa(TimeStampedModel):
         verbose_name='Mensagem de Erro'
     )
 
+    # HU-23 — rastreabilidade e estado "BAIXADO"
+    data_download = models.DateTimeField(
+        null=True,
+        blank=True,
+        verbose_name='Data do 1º Download',
+        help_text='Quando o arquivo .rem foi baixado pela primeira vez (habilita o estado BAIXADO)'
+    )
+    gerado_por = models.ForeignKey(
+        'auth.User',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='remessas_geradas',
+        verbose_name='Gerado por'
+    )
+    enviado_por = models.ForeignKey(
+        'auth.User',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='remessas_enviadas',
+        verbose_name='Enviado por'
+    )
+
     class Meta:
         verbose_name = 'Arquivo de Remessa'
         verbose_name_plural = 'Arquivos de Remessa'
@@ -1997,11 +2021,43 @@ class ArquivoRemessa(TimeStampedModel):
         """Verifica se a remessa pode ser reenviada"""
         return self.status in [StatusArquivoRemessa.GERADO, StatusArquivoRemessa.ERRO]
 
-    def marcar_enviado(self):
-        """Marca a remessa como enviada"""
+    @property
+    def estado_ui(self):
+        """
+        HU-23: estado derivado para a interface. "BAIXADO" não é um valor do enum —
+        é GERADO + data_download preenchido (mantém a semântica de conciliação).
+        Retorna: ERRO | PROCESSADO | ENVIADO | BAIXADO | GERADO.
+        """
+        if self.status == StatusArquivoRemessa.GERADO and self.data_download:
+            return 'BAIXADO'
+        return self.status
+
+    def registrar_download(self):
+        """HU-23: marca o 1º download (habilita o estado BAIXADO). Idempotente."""
+        if not self.data_download:
+            self.data_download = timezone.now()
+            self.save(update_fields=['data_download', 'atualizado_em'])
+
+    def marcar_enviado(self, usuario=None):
+        """Marca a remessa como enviada (HU-23: registra quem enviou)."""
         self.status = StatusArquivoRemessa.ENVIADO
         self.data_envio = timezone.now()
+        if usuario is not None:
+            self.enviado_por = usuario
         self.save()
+
+    def cancelar_envio(self):
+        """
+        HU-23 (RN-07): reverte ENVIADO → GERADO para permitir correção/regeneração.
+        Não afeta remessas já PROCESSADAS pelo retorno do banco.
+        """
+        if self.status != StatusArquivoRemessa.ENVIADO:
+            return False
+        self.status = StatusArquivoRemessa.GERADO
+        self.data_envio = None
+        self.enviado_por = None
+        self.save(update_fields=['status', 'data_envio', 'enviado_por', 'atualizado_em'])
+        return True
 
     def marcar_processado(self):
         """Marca a remessa como processada"""
