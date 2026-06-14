@@ -2155,6 +2155,10 @@ def remessa_painel(request):
     for conta, ps in grupos_map.items():
         valor = sum(((x.valor_boleto or x.valor_atual) for x in ps), Decimal('0.00'))
         venc_hoje_grp = sum(1 for x in ps if x.data_vencimento == hoje)
+        # RN-15: boletos cujo vencimento está a menos de 1 dia útil
+        venc_proximo_grp = sum(
+            1 for x in ps if service._dias_uteis_ate(hoje, x.data_vencimento) < 1
+        )
         valor_total_geral += valor
         vencendo_hoje += venc_hoje_grp
         grupos.append({
@@ -2166,16 +2170,27 @@ def remessa_painel(request):
             'quantidade': len(ps),
             'valor_total': valor,
             'vencendo_hoje': venc_hoje_grp,
+            'vencimento_proximo': venc_proximo_grp,
         })
     grupos.sort(key=lambda g: (g['imobiliaria'].nome, g['banco_nome']))
 
+    # CT-21 / RN-15: validação determinística pré-geração (resumo p/ banner)
+    validacao = service.validar_boletos_para_remessa(elegiveis, hoje=hoje)
+
     # KPIs do Resumo Executivo
-    remessas_enviadas_mes = ArquivoRemessa.objects.filter(
+    enviadas_qs = ArquivoRemessa.objects.filter(
         conta_bancaria__imobiliaria__in=imobs,
         status__in=[StatusArquivoRemessa.ENVIADO, StatusArquivoRemessa.PROCESSADO],
         data_envio__year=hoje.year,
         data_envio__month=hoje.month,
-    ).count()
+    )
+    remessas_enviadas_mes = enviadas_qs.count()
+
+    # CT-07: banner de conclusão — nada pendente + houve envios no mês
+    bancos_enviados = enviadas_qs.values_list(
+        'conta_bancaria__banco', flat=True
+    ).distinct().count()
+    mes_concluido = (len(elegiveis) == 0 and remessas_enviadas_mes > 0)
 
     # Histórico recente
     arquivos_recentes = ArquivoRemessa.objects.select_related(
@@ -2201,6 +2216,12 @@ def remessa_painel(request):
         'kpi_remessas_enviadas': remessas_enviadas_mes,
         'contratos_ativos': contratos_ativos,
         'hoje': hoje,
+        # Validação pré-geração (CT-21 / RN-15)
+        'validacao_total': validacao['total_alertas'],
+        'validacao_por_tipo': validacao['por_tipo'],
+        # Banner de conclusão (CT-07)
+        'mes_concluido': mes_concluido,
+        'bancos_enviados': bancos_enviados,
     }
     return render(request, 'financeiro/cnab/remessa_painel.html', context)
 
@@ -2277,6 +2298,33 @@ def remessa_painel_gerar(request):
         resp['download_lote_url'] = f"/financeiro/cnab/remessa/download-lote/?ids={hids}"
     status_code = 200 if arquivos else 400
     return JsonResponse(resp, status=status_code)
+
+
+@login_required
+@require_GET
+def api_remessa_validar(request):
+    """
+    HU-23 (CT-21 / RN-15): validação determinística pré-geração dos boletos
+    elegíveis no escopo atual (mesmos filtros do painel). Base da "Sugestão de
+    Conciliação". Não gera nada — apenas reporta inconsistências.
+    """
+    from .services.cnab_service import CNABService
+
+    imobs = _imobs_para_usuario(request.user)
+    service = CNABService()
+    elegiveis = service.obter_boletos_elegiveis_painel(
+        imobiliarias=imobs,
+        imobiliaria_id=request.GET.get('imobiliaria') or None,
+        mes=request.GET.get('mes') or None,
+        ano=request.GET.get('ano') or None,
+    )
+    resultado = service.validar_boletos_para_remessa(elegiveis)
+    return JsonResponse({
+        'total_elegiveis': len(elegiveis),
+        'total_alertas': resultado['total_alertas'],
+        'por_tipo': resultado['por_tipo'],
+        'alertas': resultado['alertas'],
+    })
 
 
 @login_required

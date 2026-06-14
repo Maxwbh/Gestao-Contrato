@@ -106,6 +106,38 @@
         </div>
     </div>
 
+    <!-- CT-07: Banner de conclusão do mês -->
+    {% if mes_concluido %}
+    <div class="alert alert-success d-flex align-items-center" role="alert">
+        <i class="fas fa-circle-check fa-lg me-2"></i>
+        <div>Remessa de {{ hoje|date:'F/Y'|capfirst }} concluída — {{ kpi_remessas_enviadas }} arquivo{{ kpi_remessas_enviadas|pluralize }} enviado{{ kpi_remessas_enviadas|pluralize }} para {{ bancos_enviados }} banco{{ bancos_enviados|pluralize }}.</div>
+    </div>
+    {% endif %}
+
+    <!-- CT-21: Validação pré-geração (Sugestão de Conciliação) -->
+    {% if validacao_total %}
+    <div class="alert alert-warning d-flex align-items-start" role="alert">
+        <i class="fas fa-wand-magic-sparkles fa-lg me-2 mt-1"></i>
+        <div class="flex-grow-1">
+            <strong>Sugestão de Conciliação</strong> — detectamos {{ validacao_total }} possível(is) inconsistência(s) antes de gerar a remessa.
+            <div class="small mt-1">
+                {% for tipo, n in validacao_por_tipo.items %}
+                <span class="badge bg-warning text-dark me-1">{{ n }} {{ tipo|cut:'_'|default:tipo }}</span>
+                {% endfor %}
+            </div>
+        </div>
+        <button class="btn btn-sm btn-outline-secondary ms-2" id="btnVerAlertas">Revisar</button>
+    </div>
+    <div class="card border-warning mb-3 d-none" id="boxAlertas">
+        <div class="card-body p-0">
+            <table class="table table-sm mb-0">
+                <thead class="table-light"><tr><th>Contrato</th><th>Parcela</th><th>Sacado</th><th>Inconsistência</th></tr></thead>
+                <tbody id="tbodyAlertas"><tr><td colspan="4" class="text-center text-muted py-2">Carregando…</td></tr></tbody>
+            </table>
+        </div>
+    </div>
+    {% endif %}
+
     <!-- Conferência: Arquivos por Instituição -->
     <div class="d-flex justify-content-between align-items-center mb-2">
         <h5 class="mb-0">Arquivos por Instituição</h5>
@@ -128,7 +160,7 @@
                     <div>
                         <div class="kpi-label">Valor Total</div>
                         <div class="h5 mb-0">R$ {{ g.valor_total|floatformat:2 }}</div>
-                        {% if g.vencendo_hoje %}<div class="small text-danger"><i class="fas fa-triangle-exclamation me-1"></i>{{ g.vencendo_hoje }} vence(m) hoje</div>{% endif %}
+                        {% if g.vencimento_proximo %}<div class="small text-danger"><i class="fas fa-triangle-exclamation me-1"></i>{{ g.vencimento_proximo }} com vencimento muito próximo</div>{% endif %}
                     </div>
                     <button class="btn btn-primary btn-gerar-conta" data-conta="{{ g.conta.id }}">
                         <i class="fas fa-download me-1"></i> Gerar e Baixar
@@ -258,6 +290,32 @@
             const extra = { mes: params.get('mes') || null, ano: params.get('ano') || null };
             if (imob) { gerar('imobiliaria', Object.assign({ imobiliaria_id: imob }, extra), btnTodos); }
             else { gerar('todos', extra, btnTodos); }
+        });
+    }
+
+    // CT-21: carregar detalhes da validação sob demanda
+    const btnVer = document.getElementById('btnVerAlertas');
+    if (btnVer) {
+        btnVer.addEventListener('click', () => {
+            const box = document.getElementById('boxAlertas');
+            box.classList.toggle('d-none');
+            if (box.classList.contains('d-none') || box.dataset._loaded) return;
+            const qs = window.location.search;
+            fetch("{% url 'financeiro:api_remessa_validar' %}" + qs)
+                .then(r => r.json()).then(data => {
+                    const tb = document.getElementById('tbodyAlertas');
+                    if (!data.alertas || !data.alertas.length) {
+                        tb.innerHTML = '<tr><td colspan="4" class="text-center text-muted py-2">Sem inconsistências.</td></tr>';
+                        return;
+                    }
+                    tb.innerHTML = data.alertas.map(a =>
+                        `<tr><td>${a.contrato || '-'}</td><td>${a.numero_parcela}</td><td>${a.comprador || '-'}</td>` +
+                        `<td><span class="badge bg-${a.severidade === 'erro' ? 'danger' : 'warning text-dark'} me-1">${a.tipo}</span>${a.mensagem}</td></tr>`
+                    ).join('');
+                    box.dataset._loaded = '1';
+                }).catch(() => {
+                    document.getElementById('tbodyAlertas').innerHTML = '<tr><td colspan="4" class="text-danger py-2">Erro ao carregar.</td></tr>';
+                });
         });
     }
 

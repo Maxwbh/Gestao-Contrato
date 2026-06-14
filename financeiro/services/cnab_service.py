@@ -1194,3 +1194,82 @@ class CNABService:
 
         elegiveis = self.obter_boletos_elegiveis_painel(**kwargs)
         return {'parcela_ids': [p.pk for p in elegiveis], 'erro': None}
+
+    @staticmethod
+    def _dias_uteis_ate(inicio, fim) -> int:
+        """Conta dias úteis (seg–sex) entre `inicio` (excl.) e `fim` (incl.)."""
+        from datetime import timedelta
+        if fim <= inicio:
+            return 0
+        dias = 0
+        d = inicio
+        while d < fim:
+            d += timedelta(days=1)
+            if d.weekday() < 5:  # 0=seg ... 4=sex
+                dias += 1
+        return dias
+
+    def validar_boletos_para_remessa(self, parcelas, lead_time_dias_uteis: int = 1, hoje=None) -> Dict:
+        """
+        HU-23 (CT-21 / RN-15): validação determinística pré-geração.
+
+        Detecta inconsistências antes de gerar a remessa, sem depender de IA:
+          - nosso_numero ausente
+          - valor zerado/negativo
+          - sacado com documento (CPF/CNPJ) inválido
+          - endereço do sacado incompleto (sem CEP ou logradouro)
+          - vencimento muito próximo (< lead_time dias úteis) — RN-15
+
+        Returns: {'alertas': [...], 'total_alertas': int, 'por_tipo': {tipo: n}}
+        """
+        from datetime import date as _date
+        from django.core.exceptions import ValidationError
+        from core.validators import validar_cpf_cnpj
+        from collections import Counter
+
+        hoje = hoje or _date.today()
+        alertas = []
+
+        for p in parcelas:
+            contrato = getattr(p, 'contrato', None)
+            comprador = getattr(contrato, 'comprador', None) if contrato else None
+            ref = {
+                'parcela_id': p.pk,
+                'numero_parcela': p.numero_parcela,
+                'comprador': getattr(comprador, 'nome', '') if comprador else '',
+                'contrato': getattr(contrato, 'numero_contrato', '') if contrato else '',
+            }
+
+            def _alerta(tipo, msg, sev='warning'):
+                alertas.append({**ref, 'tipo': tipo, 'severidade': sev, 'mensagem': msg})
+
+            if not (p.nosso_numero or '').strip():
+                _alerta('sem_nosso_numero', 'Boleto sem nosso número — será ignorado na remessa.', 'erro')
+
+            valor = p.valor_boleto or p.valor_atual or Decimal('0')
+            if valor <= 0:
+                _alerta('valor_invalido', 'Valor do boleto zerado ou negativo.', 'erro')
+
+            if comprador is not None:
+                doc = (comprador.cnpj or comprador.cpf or '').strip()
+                if not doc:
+                    _alerta('documento_ausente', 'Sacado sem CPF/CNPJ cadastrado.')
+                else:
+                    try:
+                        validar_cpf_cnpj(doc)
+                    except ValidationError:
+                        _alerta('documento_invalido', f'CPF/CNPJ do sacado inválido ({doc}).')
+                cep = (getattr(comprador, 'cep', '') or '').strip()
+                logr = (getattr(comprador, 'logradouro', '') or getattr(comprador, 'endereco', '') or '').strip()
+                if not cep or not logr:
+                    _alerta('endereco_incompleto', 'Endereço do sacado incompleto (sem CEP ou logradouro).')
+
+            dias = self._dias_uteis_ate(hoje, p.data_vencimento)
+            if dias < lead_time_dias_uteis:
+                _alerta(
+                    'vencimento_proximo',
+                    f'Vencimento muito próximo ({p.data_vencimento:%d/%m}) — pode não registrar a tempo.',
+                )
+
+        por_tipo = dict(Counter(a['tipo'] for a in alertas))
+        return {'alertas': alertas, 'total_alertas': len(alertas), 'por_tipo': por_tipo}

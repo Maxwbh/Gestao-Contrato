@@ -84,6 +84,7 @@ urlpatterns = [
     # HU-23 — Painel de Remessa Mensal (fluxo da contadora)
     path('remessa/', views.remessa_painel, name='remessa_painel'),
     path('remessa/gerar/', views.remessa_painel_gerar, name='remessa_painel_gerar'),
+    path('api/remessa/validar/', views.api_remessa_validar, name='api_remessa_validar'),
     path('cnab/remessa/download-lote/', views.remessa_download_lote, name='remessa_download_lote'),
     path('cnab/remessa/<str:hid>/cancelar-envio/', views.remessa_cancelar_envio, name='remessa_cancelar_envio'),
     # U-05: compat redirect

@@ -296,6 +296,77 @@ class TestEstadosArquivo:
 # ---------------------------------------------------------------------------
 
 @pytest.mark.django_db
+class TestValidacaoPreGeracao:
+    def test_detecta_vencimento_proximo(self, base):
+        from financeiro.services.cnab_service import CNABService
+        # parcela 4 vence hoje → 0 dias úteis < 1 → vencimento_proximo
+        elegiveis = CNABService().obter_boletos_elegiveis_painel()
+        res = CNABService().validar_boletos_para_remessa(elegiveis)
+        assert 'vencimento_proximo' in res['por_tipo']
+
+    def test_detecta_endereco_incompleto(self, base):
+        from financeiro.services.cnab_service import CNABService
+        imob, conta, contrato = base
+        contrato.comprador.cep = ''
+        contrato.comprador.logradouro = ''
+        contrato.comprador.endereco = ''
+        contrato.comprador.save()
+        elegiveis = CNABService().obter_boletos_elegiveis_painel()
+        res = CNABService().validar_boletos_para_remessa(elegiveis)
+        assert res['por_tipo'].get('endereco_incompleto', 0) >= 1
+
+    def test_detecta_sem_nosso_numero(self, base):
+        from financeiro.services.cnab_service import CNABService
+        imob, conta, contrato = base
+        elegiveis = CNABService().obter_boletos_elegiveis_painel()
+        # força um boleto sem nosso_numero na lista validada
+        elegiveis[0].nosso_numero = ''
+        res = CNABService().validar_boletos_para_remessa(elegiveis)
+        assert res['por_tipo'].get('sem_nosso_numero', 0) >= 1
+
+    def test_dias_uteis_helper(self):
+        from financeiro.services.cnab_service import CNABService
+        from datetime import date
+        # sexta (2026-06-12) → segunda (2026-06-15) = 1 dia útil (seg)
+        assert CNABService._dias_uteis_ate(date(2026, 6, 12), date(2026, 6, 15)) == 1
+        assert CNABService._dias_uteis_ate(date(2026, 6, 12), date(2026, 6, 12)) == 0
+
+
+@pytest.mark.django_db
+class TestApiValidar:
+    def test_endpoint_retorna_alertas(self, base, staff_cli):
+        _, c = staff_cli
+        resp = c.get(reverse('financeiro:api_remessa_validar'))
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data['total_elegiveis'] == 3
+        assert 'por_tipo' in data and 'alertas' in data
+
+    def test_requer_login(self, base):
+        resp = Client().get(reverse('financeiro:api_remessa_validar'))
+        assert resp.status_code == 302
+
+
+@pytest.mark.django_db
+class TestBannerConclusao:
+    def test_mes_concluido_quando_sem_pendentes_e_com_envio(self, base, staff_cli):
+        import json as _json
+        from core.hashids_utils import encode_id
+        from financeiro.models import ArquivoRemessa
+        u, c = staff_cli
+        # gera todos e marca todos como enviados
+        with patch('financeiro.services.cnab_service.requests.post', return_value=_mock_brcobranca_ok()):
+            c.post(reverse('financeiro:remessa_painel_gerar'),
+                   data=_json.dumps({'escopo': 'todos'}), content_type='application/json')
+        for arq in ArquivoRemessa.objects.all():
+            c.post(reverse('financeiro:marcar_remessa_enviada', kwargs={'hid': encode_id(arq.pk)}))
+        resp = c.get(reverse('financeiro:remessa_painel'))
+        assert resp.context['kpi_total_pendente'] == 0
+        assert resp.context['mes_concluido'] is True
+        assert resp.context['bancos_enviados'] >= 1
+
+
+@pytest.mark.django_db
 class TestAcesso:
     def test_usuario_sem_acesso_nao_gera(self, base):
         """Usuário comum sem AcessoUsuario não enxerga nenhuma imobiliária."""
