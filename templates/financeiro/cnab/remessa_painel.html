@@ -116,7 +116,7 @@
     <!-- CT-07: Banner de conclusão do mês -->
     {% if mes_concluido %}
     <div class="alert alert-success d-flex align-items-center" role="alert">
-        <i class="fas fa-circle-check fa-lg me-2"></i>
+        <i class="fas fa-check-circle fa-lg me-2" style="line-height:1.5"></i>
         <div>Remessa de {{ hoje|date:'F/Y'|capfirst }} concluída — {{ kpi_remessas_enviadas }} arquivo{{ kpi_remessas_enviadas|pluralize }} enviado{{ kpi_remessas_enviadas|pluralize }} para {{ bancos_enviados }} banco{{ bancos_enviados|pluralize }}.</div>
     </div>
     {% endif %}

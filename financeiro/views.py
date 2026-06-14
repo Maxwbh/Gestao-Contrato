@@ -2395,7 +2395,9 @@ def retorno_painel(request):
     KPIs mensais, cards de upload por conta com ENVIADO e histórico de retornos.
     """
     from datetime import date
-    from .models import ArquivoRetorno, StatusArquivoRemessa, ItemRetorno
+    from .models import (
+        ArquivoRemessa, ArquivoRetorno, StatusArquivoRemessa, ItemRetorno,
+    )
 
     imobs = _imobs_para_usuario(request.user)
     hoje = date.today()
