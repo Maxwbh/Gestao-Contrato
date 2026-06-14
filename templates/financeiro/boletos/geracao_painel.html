@@ -15,6 +15,8 @@
     .imob-card .card-head { background:#eff4ff; border-bottom:1px solid #e2e8f0; }
     .mono { font-family: 'Courier New', monospace; font-size:.82rem; }
     .row-bloqueado { background: rgba(245,158,11,.07); border-left: 3px solid #f59e0b; }
+    .imob-avatar { width:32px; height:32px; border-radius:.375rem; background:#091426; color:#fff;
+                   display:inline-flex; align-items:center; justify-content:center; font-weight:700; font-size:.78rem; }
 </style>
 {% endblock %}
 
@@ -101,7 +103,11 @@
     {% for grupo in grupos %}
     <div class="imob-card mb-3">
         <div class="card-head px-3 py-2 d-flex justify-content-between align-items-center">
-            <strong><i class="fas fa-building me-2"></i>{{ grupo.imobiliaria.nome }}</strong>
+            <div class="d-flex align-items-center gap-2">
+                <span class="imob-avatar">{{ grupo.imobiliaria.nome|slice:":2"|upper }}</span>
+                <strong>{{ grupo.imobiliaria.nome }}</strong>
+                <span class="badge bg-primary text-white ms-1">{{ grupo.total_ativos }} contratos ativos</span>
+            </div>
             <button class="btn btn-sm btn-outline-primary btn-gerar-imob" data-imob="{{ grupo.imobiliaria.pk }}">
                 <i class="fas fa-bolt me-1"></i> Gerar desta imobiliária
             </button>
@@ -112,21 +118,32 @@
                     <tr>
                         <th>Contrato</th><th>Comprador</th>
                         <th class="text-end">Elegíveis</th><th class="text-end">Bloqueados</th>
-                        <th class="text-end">Interm.</th><th class="text-end">Valor</th><th class="text-end">Ações</th>
+                        <th class="text-end">Interm.</th><th>Status</th>
+                        <th class="text-end">Valor</th><th class="text-end">Ações</th>
                     </tr>
                 </thead>
                 <tbody>
                     {% for row in grupo.contratos %}
-                    <tr class="{% if row.bloqueados and not row.elegiveis %}row-bloqueado{% endif %}">
+                    <tr class="{% if row.status == 'BLOQUEADO' %}row-bloqueado{% endif %}">
                         <td class="mono">{{ row.contrato.numero_contrato }}</td>
                         <td class="fw-semibold">{{ row.comprador }}</td>
                         <td class="text-end">{{ row.elegiveis }}</td>
                         <td class="text-end {% if row.bloqueados %}text-warning fw-bold{% endif %}">{{ row.bloqueados }}</td>
                         <td class="text-end">{{ row.intermediarias }}</td>
+                        <td>
+                            {% if row.status == 'BLOQUEADO' %}<span class="badge bg-warning text-dark">Bloqueado Reajuste</span>
+                            {% elif row.status == 'PARCIAL' %}<span class="badge bg-success text-white">Gerado ({{ row.ja_gerados }})</span>
+                            {% elif row.status == 'GERADO' %}<span class="badge bg-success text-white">Gerado ({{ row.ja_gerados }})</span>
+                            {% else %}<span class="badge bg-secondary text-white">Não Gerado</span>
+                            {% endif %}
+                        </td>
                         <td class="text-end fw-semibold">R$ {{ row.valor|floatformat:2 }}</td>
-                        <td class="text-end">
+                        <td class="text-end text-nowrap">
+                            <a href="{% url 'contratos:detalhe' hid=row.contrato.pk|hashid %}" class="btn btn-sm btn-outline-secondary" title="Ver detalhes"><i class="fas fa-eye"></i></a>
                             {% if row.elegiveis or row.intermediarias %}
-                            <button class="btn btn-sm btn-primary btn-gerar-contrato" data-contrato="{{ row.contrato.pk }}">Gerar</button>
+                            <button class="btn btn-sm btn-primary btn-gerar-contrato" data-contrato="{{ row.contrato.pk }}">
+                                {% if row.status == 'PARCIAL' %}Gerar Pendente{% else %}Gerar{% endif %}
+                            </button>
                             {% else %}
                             <button class="btn btn-sm btn-secondary" disabled>Bloqueado</button>
                             {% endif %}

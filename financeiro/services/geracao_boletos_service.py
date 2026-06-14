@@ -86,9 +86,14 @@ class GeracaoBoletosService:
         kpi_valor = Decimal('0.00')
         contratos_com_pendencia = set()
 
+        from financeiro.models import StatusBoleto
+
         for contrato in contratos:
             elegiveis, bloqueados = self.proximas_elegiveis(contrato, quantidade)
             inter = self.intermediarias_elegiveis(contrato) if incluir_intermediarias else []
+            ja_gerados = contrato.parcelas.filter(
+                status_boleto__in=[StatusBoleto.GERADO, StatusBoleto.REGISTRADO]
+            ).count()
             if not elegiveis and not bloqueados and not inter:
                 continue
 
@@ -102,6 +107,16 @@ class GeracaoBoletosService:
             if elegiveis or inter:
                 contratos_com_pendencia.add(contrato.pk)
 
+            # Status derivado para o badge da linha (espelha o template)
+            if bloqueados and not elegiveis:
+                status = 'BLOQUEADO'
+            elif ja_gerados and elegiveis:
+                status = 'PARCIAL'      # parte já gerada, parte pendente
+            elif ja_gerados:
+                status = 'GERADO'
+            else:
+                status = 'NAO_GERADO'
+
             imob = contrato.imobiliaria
             g = grupos.setdefault(imob.pk, {'imobiliaria': imob, 'contratos': []})
             g['contratos'].append({
@@ -110,8 +125,17 @@ class GeracaoBoletosService:
                 'elegiveis': len(elegiveis),
                 'bloqueados': len(bloqueados),
                 'intermediarias': len(inter),
+                'ja_gerados': ja_gerados,
+                'status': status,
                 'valor': valor,
             })
+
+        # total de contratos ativos por imobiliária (pill do cabeçalho do grupo)
+        from contratos.models import Contrato as _C, StatusContrato as _S
+        for imob_pk, g in grupos.items():
+            g['total_ativos'] = _C.objects.filter(
+                status=_S.ATIVO, imobiliaria_id=imob_pk
+            ).count()
 
         return {
             'grupos': sorted(grupos.values(), key=lambda x: x['imobiliaria'].nome),
