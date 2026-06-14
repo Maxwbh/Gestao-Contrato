@@ -139,6 +139,22 @@ def health_check(request):
             'message': str(e)
         }
 
+    # Verificar boleto_cnab_api (não crítico para o health do Django)
+    try:
+        from financeiro.services.boleto_service import BoletoService
+        svc = BoletoService()
+        if svc.verificar_api_rapido():
+            info = svc.obter_versao_api()
+            status['checks']['brcobranca'] = {
+                'status': 'healthy',
+                'versao_api': info.get('version') or info.get('api_version', ''),
+                'versao_gem': info.get('brcobranca_version') or info.get('gem_version', ''),
+            }
+        else:
+            status['checks']['brcobranca'] = {'status': 'unavailable'}
+    except Exception:
+        status['checks']['brcobranca'] = {'status': 'unavailable'}
+
     # Tempo total de verificação
     status['total_latency_ms'] = round((time.time() - start_time) * 1000, 2)
 
