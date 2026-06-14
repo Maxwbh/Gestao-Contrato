@@ -34,6 +34,9 @@
             <p class="text-muted mb-0">Gere e controle os arquivos CNAB de cobrança — 1 arquivo por conta bancária.</p>
         </div>
         <div class="d-flex gap-2">
+            <a href="{% url 'financeiro:retorno_painel' %}" class="btn btn-outline-success">
+                <i class="fas fa-file-import me-1"></i> Receber Retorno
+            </a>
             <a href="{% url 'financeiro:listar_remessas' %}" class="btn btn-outline-secondary">
                 <i class="fas fa-clock-rotate-left me-1"></i> Histórico completo
             </a>
