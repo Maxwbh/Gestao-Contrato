@@ -240,7 +240,129 @@
             </table>
         </div>
     </div>
+
+    <!-- HU-23 Passo 5: Processar Retorno Bancário -->
+    <div class="card mt-3">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <strong><i class="fas fa-file-import me-2 text-success"></i>Processar Retorno Bancário</strong>
+            <a href="{% url 'financeiro:listar_retornos' %}" class="small text-decoration-none">Ver todos &rsaquo;</a>
+        </div>
+        <div class="card-body">
+            <p class="text-muted small mb-3">
+                Após enviar a remessa ao banco, faça upload do arquivo <code>.ret</code> recebido
+                para processar pagamentos, baixas e rejeições automaticamente.
+                Boletos rejeitados voltam a <strong>GERADO</strong> e ficam elegíveis para nova remessa (RN-18).
+            </p>
+
+            {% if contas_com_enviado %}
+            <div class="row g-2 mb-3">
+                {% for conta in contas_com_enviado %}
+                <div class="col-12 col-md-6">
+                    <div class="border rounded p-3 d-flex justify-content-between align-items-center">
+                        <div>
+                            <strong>{{ conta.banco_nome }}</strong>
+                            <span class="badge bg-secondary text-white ms-1 small">{{ conta.layout_cnab }}</span>
+                            <div class="small text-muted">{{ conta.imobiliaria.nome }}</div>
+                        </div>
+                        <button class="btn btn-sm btn-outline-success btn-upload-retorno"
+                                data-conta="{{ conta.pk }}"
+                                data-banco="{{ conta.banco_nome }}">
+                            <i class="fas fa-file-import me-1"></i> Upload Retorno
+                        </button>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+            {% else %}
+            <div class="alert alert-light border small mb-3">
+                <i class="fas fa-info-circle text-muted me-1"></i>
+                Nenhuma conta com remessa enviada aguardando retorno no mês atual.
+            </div>
+            {% endif %}
+
+            {% if retornos_recentes %}
+            <h6 class="fw-semibold mb-2">Retornos Processados no Mês</h6>
+            <div class="table-responsive">
+                <table class="table table-sm table-hover align-middle mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Arquivo</th><th>Banco</th>
+                            <th class="text-end">Processados</th><th class="text-end">R$ Pago</th>
+                            <th>Status</th><th class="text-end">Ações</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for ret in retornos_recentes %}
+                        <tr>
+                            <td><span class="mono small">{{ ret.nome_arquivo }}</span></td>
+                            <td>
+                                <div>{{ ret.conta_bancaria.banco_nome }}</div>
+                                <div class="small text-muted">{{ ret.data_upload|date:'d/m/Y H:i' }}</div>
+                            </td>
+                            <td class="text-end">{{ ret.registros_processados }}/{{ ret.total_registros }}</td>
+                            <td class="text-end fw-semibold">R$ {{ ret.valor_total_pago|floatformat:2 }}</td>
+                            <td>
+                                {% if ret.status == 'PROCESSADO' %}<span class="badge bg-success text-white">Processado</span>
+                                {% elif ret.status == 'PROCESSADO_PARCIAL' %}<span class="badge bg-warning text-dark">Parcial</span>
+                                {% elif ret.status == 'ERRO' %}<span class="badge bg-danger text-white">Erro</span>
+                                {% else %}<span class="badge bg-secondary text-white">Pendente</span>
+                                {% endif %}
+                            </td>
+                            <td class="text-end">
+                                <a href="{% url 'financeiro:detalhe_retorno' hid=ret.id|hashid %}"
+                                   class="btn btn-sm btn-outline-secondary" title="Ver detalhes">
+                                    <i class="fas fa-eye"></i>
+                                </a>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% endif %}
+        </div>
+    </div>
 </div>
+
+<!-- Modal upload retorno (HU-23 Passo 5) -->
+<div class="modal fade" id="modalUploadRetorno" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title fs-6">
+                    <i class="fas fa-file-import me-2 text-success"></i>
+                    Upload Retorno — <span id="modalBancoNome"></span>
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div id="alertUpload" class="alert d-none mb-3"></div>
+                <div id="resultadoUpload" class="d-none">
+                    <div class="alert alert-success">
+                        <strong>Retorno processado com sucesso!</strong>
+                        <ul class="mb-0 mt-2 small" id="listaResultado"></ul>
+                    </div>
+                </div>
+                <div id="formUpload">
+                    <input type="hidden" id="uploadContaId">
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Arquivo <code>.ret</code> do banco</label>
+                        <input type="file" class="form-control" id="uploadArquivoRet"
+                               accept=".ret,.RET,.txt,.TXT,.dat,.DAT">
+                        <div class="form-text">Arquivo de retorno CNAB 240 ou CNAB 400 gerado pelo banco.</div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Fechar</button>
+                <button type="button" class="btn btn-success btn-sm" id="btnConfirmarUpload">
+                    <i class="fas fa-upload me-1"></i> Processar Retorno
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
 {% endblock %}
 
 {% block extra_js %}
@@ -361,6 +483,76 @@
             }).catch(() => { alert('Erro de conexão.'); unlockBtn(btn); });
         });
     });
+
+    // HU-23 Passo 5: upload de retorno bancário
+    const modalUpload = document.getElementById('modalUploadRetorno');
+    const bsModalUpload = modalUpload ? new bootstrap.Modal(modalUpload) : null;
+
+    document.querySelectorAll('.btn-upload-retorno').forEach(btn => {
+        btn.addEventListener('click', () => {
+            document.getElementById('uploadContaId').value = btn.dataset.conta;
+            document.getElementById('modalBancoNome').textContent = btn.dataset.banco;
+            document.getElementById('uploadArquivoRet').value = '';
+            document.getElementById('alertUpload').className = 'alert d-none';
+            document.getElementById('resultadoUpload').classList.add('d-none');
+            document.getElementById('formUpload').classList.remove('d-none');
+            document.getElementById('btnConfirmarUpload').classList.remove('d-none');
+            if (bsModalUpload) bsModalUpload.show();
+        });
+    });
+
+    const btnConfirmar = document.getElementById('btnConfirmarUpload');
+    if (btnConfirmar) {
+        btnConfirmar.addEventListener('click', () => {
+            const contaId = document.getElementById('uploadContaId').value;
+            const fileInput = document.getElementById('uploadArquivoRet');
+            const alertEl = document.getElementById('alertUpload');
+
+            if (!fileInput.files.length) {
+                alertEl.className = 'alert alert-danger';
+                alertEl.textContent = 'Selecione o arquivo .ret antes de continuar.';
+                return;
+            }
+
+            lockBtn(btnConfirmar, 'Processando...');
+            alertEl.className = 'alert d-none';
+
+            const formData = new FormData();
+            formData.append('conta_bancaria_id', contaId);
+            formData.append('arquivo', fileInput.files[0]);
+            formData.append('csrfmiddlewaretoken', CSRF);
+
+            fetch("{% url 'financeiro:remessa_retorno_upload' %}", {
+                method: 'POST',
+                headers: { 'X-CSRFToken': CSRF },
+                body: formData,
+            }).then(r => r.json()).then(data => {
+                unlockBtn(btnConfirmar);
+                if (data.sucesso) {
+                    document.getElementById('formUpload').classList.add('d-none');
+                    btnConfirmar.classList.add('d-none');
+                    const lista = document.getElementById('listaResultado');
+                    const pago = parseFloat(data.valor_total_pago || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+                    lista.innerHTML = [
+                        `<li>${data.registros_processados} de ${data.total_registros} registros processados</li>`,
+                        data.rejeicoes ? `<li><strong>${data.rejeicoes} rejeitado(s)</strong> — boletos devolvidos para GERADO (RN-18)</li>` : '',
+                        data.registros_erro ? `<li>${data.registros_erro} com erro — <a href="${data.detalhe_url}">ver detalhes</a></li>` : '',
+                        `<li>Valor total pago confirmado: <strong>${pago}</strong></li>`,
+                        `<li><a href="${data.detalhe_url}">Ver relatório completo do retorno</a></li>`,
+                    ].join('');
+                    document.getElementById('resultadoUpload').classList.remove('d-none');
+                    setTimeout(() => window.location.reload(), 3000);
+                } else {
+                    alertEl.className = 'alert alert-danger';
+                    alertEl.textContent = data.erro || 'Erro ao processar o retorno.';
+                }
+            }).catch(() => {
+                unlockBtn(btnConfirmar);
+                alertEl.className = 'alert alert-danger';
+                alertEl.textContent = 'Erro de conexão ao enviar o arquivo.';
+            });
+        });
+    }
 })();
 </script>
 {% endblock %}

@@ -2201,6 +2201,27 @@ def remessa_painel(request):
         status=StatusContrato.ATIVO, imobiliaria__in=imobs
     ).count()
 
+    # HU-23 Passo 5: retornos do mês e contas aguardando retorno
+    from .models import ArquivoRetorno, StatusArquivoRemessa as _SAR
+    retornos_recentes = ArquivoRetorno.objects.select_related(
+        'conta_bancaria', 'conta_bancaria__imobiliaria'
+    ).filter(
+        conta_bancaria__imobiliaria__in=imobs,
+        data_upload__year=hoje.year,
+        data_upload__month=hoje.month,
+    ).order_by('-data_upload')[:10]
+
+    # Contas com remessas ENVIADO no mês (elegíveis para upload de retorno)
+    contas_com_enviado_ids = ArquivoRemessa.objects.filter(
+        conta_bancaria__imobiliaria__in=imobs,
+        status=_SAR.ENVIADO,
+        data_envio__year=hoje.year,
+        data_envio__month=hoje.month,
+    ).values_list('conta_bancaria_id', flat=True).distinct()
+    contas_com_enviado = ContaBancaria.objects.filter(
+        pk__in=contas_com_enviado_ids
+    ).select_related('imobiliaria').order_by('imobiliaria__nome', 'banco')
+
     context = {
         'grupos': grupos,
         'arquivos_recentes': arquivos_recentes,
@@ -2222,6 +2243,9 @@ def remessa_painel(request):
         # Banner de conclusão (CT-07)
         'mes_concluido': mes_concluido,
         'bancos_enviados': bancos_enviados,
+        # HU-23 Passo 5: retorno bancário
+        'retornos_recentes': retornos_recentes,
+        'contas_com_enviado': contas_com_enviado,
     }
     return render(request, 'financeiro/cnab/remessa_painel.html', context)
 
@@ -2385,6 +2409,58 @@ def remessa_cancelar_envio(request, hid):
         {'sucesso': False, 'erro': 'Só é possível cancelar o envio de uma remessa ENVIADA.'},
         status=400,
     )
+
+
+@login_required
+@require_POST
+def remessa_painel_retorno_upload(request):
+    """
+    HU-23 Passo 5: upload + processamento automático de retorno bancário via painel simplificado.
+    POST /financeiro/remessa/retorno/upload/
+    Cria ArquivoRetorno e processa imediatamente via CNABService.processar_retorno().
+    """
+    from django.urls import reverse
+    from .models import ArquivoRetorno
+    from .services.cnab_service import CNABService
+
+    imobs = _imobs_para_usuario(request.user)
+    conta_id = request.POST.get('conta_bancaria_id')
+    arquivo_upload = request.FILES.get('arquivo')
+
+    if not conta_id or not arquivo_upload:
+        return JsonResponse({'erro': 'Conta bancária e arquivo são obrigatórios.'}, status=400)
+
+    conta = get_object_or_404(ContaBancaria, pk=conta_id, imobiliaria__in=imobs)
+
+    try:
+        arquivo_retorno = ArquivoRetorno.objects.create(
+            conta_bancaria=conta,
+            nome_arquivo=arquivo_upload.name,
+        )
+        arquivo_retorno.arquivo.save(arquivo_upload.name, arquivo_upload)
+
+        service = CNABService()
+        resultado = service.processar_retorno(arquivo_retorno, request.user)
+
+        if not resultado.get('sucesso'):
+            return JsonResponse({'erro': resultado.get('erro', 'Erro ao processar retorno.')}, status=400)
+
+        rejeicoes = arquivo_retorno.itens.filter(tipo_ocorrencia='REJEICAO').count()
+
+        return JsonResponse({
+            'sucesso': True,
+            'arquivo_id': arquivo_retorno.pk,
+            'total_registros': resultado['total_registros'],
+            'registros_processados': resultado['registros_processados'],
+            'registros_erro': resultado['registros_erro'],
+            'rejeicoes': rejeicoes,
+            'valor_total_pago': str(resultado['valor_total_pago']),
+            'detalhe_url': reverse('financeiro:detalhe_retorno', kwargs={'hid': _encode_id(arquivo_retorno.pk)}),
+        })
+
+    except Exception as e:
+        logger.exception("Erro ao processar retorno pelo painel: %s", e)
+        return JsonResponse({'erro': str(e)}, status=500)
 
 
 # =============================================================================
