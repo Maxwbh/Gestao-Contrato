@@ -2269,6 +2269,9 @@ def remessa_painel_gerar(request):
         'total_gerados': len(arquivos),
         'total_falhas': len(resultado['erros']),
     }
+    # Quando nada foi gerado, expõe o motivo (singular) para a UI/clients
+    if not arquivos and resultado['erros']:
+        resp['erro'] = ' | '.join(resultado['erros'])
     if len(arquivos) > 1:
         hids = ','.join(_encode_id(a['arquivo_id']) for a in arquivos)
         resp['download_lote_url'] = f"/financeiro/cnab/remessa/download-lote/?ids={hids}"
