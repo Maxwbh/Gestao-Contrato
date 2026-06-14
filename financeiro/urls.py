@@ -81,6 +81,18 @@ urlpatterns = [
     # ==========================================================================
     path('cnab/remessa/', views.listar_arquivos_remessa, name='listar_remessas'),
     path('cnab/remessa/gerar/', views.gerar_arquivo_remessa, name='gerar_remessa'),
+    # HU-23 — Painel de Remessa Mensal (fluxo da contadora)
+    path('remessa/', views.remessa_painel, name='remessa_painel'),
+    path('remessa/gerar/', views.remessa_painel_gerar, name='remessa_painel_gerar'),
+    # HU-23 Passo 5 — Tela dedicada de Retorno Bancário
+    path('retorno/', views.retorno_painel, name='retorno_painel'),
+    path('retorno/upload/', views.remessa_painel_retorno_upload, name='remessa_retorno_upload'),
+    # HU-24 — Geração Mensal de Boletos (tela dedicada)
+    path('boletos/', views.boletos_painel, name='boletos_painel'),
+    path('boletos/gerar/', views.boletos_painel_gerar, name='boletos_painel_gerar'),
+    path('api/remessa/validar/', views.api_remessa_validar, name='api_remessa_validar'),
+    path('cnab/remessa/download-lote/', views.remessa_download_lote, name='remessa_download_lote'),
+    path('cnab/remessa/<str:hid>/cancelar-envio/', views.remessa_cancelar_envio, name='remessa_cancelar_envio'),
     # U-05: compat redirect
     path('cnab/remessa/<int:pk>/compat/', views.remessa_pk_compat, name='remessa_pk_compat'),
     # U-03: hashid routes

@@ -1,0 +1,345 @@
+{% extends 'base.html' %}
+{% load static hashid_tags %}
+
+{% block title %}Processamento de Retorno Bancário{% endblock %}
+
+{% block extra_css %}
+<style>
+    .kpi-card { border: 1px solid #e2e8f0; border-radius: .5rem; box-shadow: 0 4px 12px rgba(30,41,59,.05); }
+    .kpi-ic { width: 40px; height: 40px; display:flex; align-items:center; justify-content:center; border-radius:.5rem; font-size:1.05rem; }
+    .kpi-ic-success { background: rgba(25,135,84,.13);  color:#198754; }
+    .kpi-ic-primary { background: rgba(13,110,253,.12); color:#0d6efd; }
+    .kpi-ic-info    { background: rgba(13,202,240,.16); color:#0aa2c0; }
+    .kpi-ic-danger  { background: rgba(220,53,69,.13);  color:#dc3545; }
+    .kpi-value { font-size: 1.6rem; font-weight: 700; line-height: 1.1; }
+    .kpi-label { font-size: .72rem; letter-spacing: .05em; text-transform: uppercase; color:#64748b; font-weight:600; }
+    .kpi-grid { display:flex; flex-wrap:wrap; gap:.75rem; }
+    .kpi-grid > .kpi-col { flex:1 1 180px; }
+    .banco-card { border:1px solid #e2e8f0; border-radius:.5rem; box-shadow:0 4px 12px rgba(30,41,59,.05); }
+    .banco-initial { width:44px; height:44px; display:flex; align-items:center; justify-content:center;
+                     border-radius:.375rem; font-weight:700; font-size:1.1rem; color:#fff; }
+    .mono { font-family: 'Courier New', monospace; font-size:.82rem; }
+    .kpi-card-danger { background: rgba(220,53,69,.07); border-color: rgba(220,53,69,.25); }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4" id="retornoApp">
+
+    <!-- Cabeçalho -->
+    <div class="d-flex flex-wrap justify-content-between align-items-end mb-4 gap-2">
+        <div>
+            <div class="small text-muted mb-1">Financeiro / <a href="{% url 'financeiro:remessa_painel' %}">Remessa</a> / Retorno Bancário</div>
+            <h2 class="h4 fw-bold mb-0">Processamento de Retorno Bancário</h2>
+            <p class="text-muted small mb-0 mt-1">Gerencie a liquidação de boletos e conciliação financeira automatizada.</p>
+        </div>
+        <div class="d-flex gap-2 align-items-center">
+            <!-- Filtro mês -->
+            <form method="get" class="d-flex gap-2 align-items-center">
+                {% if filtro_imobiliaria %}<input type="hidden" name="imobiliaria" value="{{ filtro_imobiliaria }}">{% endif %}
+                <select name="mes" class="form-select form-select-sm" style="width:auto" onchange="this.form.submit()">
+                    <option value="1" {% if filtro_mes == 1 %}selected{% endif %}>Janeiro</option>
+                    <option value="2" {% if filtro_mes == 2 %}selected{% endif %}>Fevereiro</option>
+                    <option value="3" {% if filtro_mes == 3 %}selected{% endif %}>Março</option>
+                    <option value="4" {% if filtro_mes == 4 %}selected{% endif %}>Abril</option>
+                    <option value="5" {% if filtro_mes == 5 %}selected{% endif %}>Maio</option>
+                    <option value="6" {% if filtro_mes == 6 %}selected{% endif %}>Junho</option>
+                    <option value="7" {% if filtro_mes == 7 %}selected{% endif %}>Julho</option>
+                    <option value="8" {% if filtro_mes == 8 %}selected{% endif %}>Agosto</option>
+                    <option value="9" {% if filtro_mes == 9 %}selected{% endif %}>Setembro</option>
+                    <option value="10" {% if filtro_mes == 10 %}selected{% endif %}>Outubro</option>
+                    <option value="11" {% if filtro_mes == 11 %}selected{% endif %}>Novembro</option>
+                    <option value="12" {% if filtro_mes == 12 %}selected{% endif %}>Dezembro</option>
+                </select>
+                <input type="number" name="ano" value="{{ filtro_ano }}" class="form-control form-control-sm" style="width:80px">
+                <button type="submit" class="btn btn-sm btn-outline-secondary"><i class="fas fa-filter me-1"></i>Filtrar</button>
+            </form>
+            <a href="{% url 'financeiro:listar_retornos' %}" class="btn btn-outline-secondary btn-sm">
+                <i class="fas fa-list me-1"></i> Histórico completo
+            </a>
+        </div>
+    </div>
+
+    <!-- KPIs -->
+    <div class="kpi-grid mb-4">
+        <div class="kpi-col">
+            <div class="kpi-card p-3 h-100">
+                <div class="d-flex justify-content-between align-items-start mb-2">
+                    <span class="kpi-label">Total Processado</span>
+                    <div class="kpi-ic kpi-ic-primary"><i class="fas fa-folder-open"></i></div>
+                </div>
+                <div class="kpi-value">{{ kpi_total_processados }}</div>
+                <div class="small text-muted mt-1">arquivos no mês</div>
+            </div>
+        </div>
+        <div class="kpi-col">
+            <div class="kpi-card p-3 h-100">
+                <div class="d-flex justify-content-between align-items-start mb-2">
+                    <span class="kpi-label">Boletos Liquidados</span>
+                    <div class="kpi-ic kpi-ic-success"><i class="fas fa-check-circle"></i></div>
+                </div>
+                <div class="kpi-value text-success">{{ kpi_boletos_liquidados }}</div>
+                <div class="small text-muted mt-1">{{ kpi_taxa_sucesso }}% taxa de sucesso</div>
+            </div>
+        </div>
+        <div class="kpi-col">
+            <div class="kpi-card p-3 h-100">
+                <div class="d-flex justify-content-between align-items-start mb-2">
+                    <span class="kpi-label">Valor Total Pago</span>
+                    <div class="kpi-ic kpi-ic-info"><i class="fas fa-wallet"></i></div>
+                </div>
+                <div class="kpi-value">R$ {{ kpi_valor_total_pago|floatformat:2 }}</div>
+                <div class="small text-muted mt-1">confirmado pelo banco</div>
+            </div>
+        </div>
+        <div class="kpi-col">
+            <div class="kpi-card kpi-card-danger p-3 h-100">
+                <div class="d-flex justify-content-between align-items-start mb-2">
+                    <span class="kpi-label text-danger fw-bold">Boletos Rejeitados</span>
+                    <div class="kpi-ic kpi-ic-danger"><i class="fas fa-triangle-exclamation"></i></div>
+                </div>
+                <div class="kpi-value text-danger">{{ kpi_rejeicoes }}</div>
+                {% if kpi_rejeicoes > 0 %}
+                <div class="small text-danger fw-semibold mt-1">
+                    <a href="{% url 'financeiro:remessa_painel' %}" class="text-danger">Requer revisão — voltar elegíveis</a>
+                </div>
+                {% else %}
+                <div class="small text-muted mt-1">sem rejeições no mês</div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Cards de upload por banco -->
+    <div class="card mb-4">
+        <div class="card-header">
+            <strong><i class="fas fa-cloud-arrow-up me-2 text-success"></i>Upload de Arquivos de Retorno</strong>
+            <span class="text-muted small ms-2">(selecione o banco de origem)</span>
+        </div>
+        <div class="card-body">
+            {% if contas_com_enviado %}
+            <div class="row g-3">
+                {% for conta in contas_com_enviado %}
+                <div class="col-12 col-md-4">
+                    <div class="banco-card p-4 h-100">
+                        <div class="d-flex align-items-center gap-3 mb-4">
+                            <div class="banco-initial" style="background:#455a64;">
+                                {{ conta.banco_nome|slice:":1"|upper }}
+                            </div>
+                            <div>
+                                <div class="fw-bold">{{ conta.banco_nome }}</div>
+                                <div class="small text-muted">{{ conta.layout_cnab }}</div>
+                                <div class="small text-muted">{{ conta.imobiliaria.nome }}</div>
+                            </div>
+                        </div>
+                        <button class="btn btn-outline-primary w-100 btn-upload-retorno"
+                                data-conta="{{ conta.pk }}"
+                                data-banco="{{ conta.banco_nome }}">
+                            <i class="fas fa-cloud-arrow-up me-2"></i>Upload Retorno (.ret)
+                        </button>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+            {% else %}
+            <div class="alert alert-info mb-0">
+                <i class="fas fa-info-circle me-1"></i>
+                Nenhuma conta bancária com remessa <strong>ENVIADA</strong> aguardando retorno.
+                <a href="{% url 'financeiro:remessa_painel' %}" class="alert-link ms-1">Ir para Remessa →</a>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Histórico de Retornos -->
+    <div class="card">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <strong>Histórico de Retornos Processados</strong>
+            <a href="{% url 'financeiro:listar_retornos' %}" class="small text-decoration-none">Ver todos &rsaquo;</a>
+        </div>
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0">
+                <thead class="table-dark">
+                    <tr>
+                        <th>Data Processamento</th>
+                        <th>Banco</th>
+                        <th>Nome do Arquivo</th>
+                        <th class="text-end">Registros (S/E)</th>
+                        <th class="text-end">Valor Liquidado</th>
+                        <th>Status</th>
+                        <th class="text-end">Ação</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for ret in historico %}
+                    <tr>
+                        <td><span class="mono">{{ ret.data_upload|date:'d/m/Y H:i' }}</span></td>
+                        <td>{{ ret.conta_bancaria.banco_nome }}</td>
+                        <td><span class="mono">{{ ret.nome_arquivo }}</span></td>
+                        <td class="text-end">
+                            <span class="text-success fw-bold">{{ ret.registros_processados }}</span>
+                            /
+                            <span class="text-danger fw-bold">{{ ret.registros_erro }}</span>
+                        </td>
+                        <td class="text-end fw-semibold">R$ {{ ret.valor_total_pago|floatformat:2 }}</td>
+                        <td>
+                            {% if ret.status == 'PROCESSADO' %}
+                                <span class="badge bg-success text-white">Concluído</span>
+                            {% elif ret.status == 'PROCESSADO_PARCIAL' %}
+                                <span class="badge bg-warning text-dark">Parcial</span>
+                            {% elif ret.status == 'ERRO' %}
+                                <span class="badge bg-danger text-white">Erro Layout</span>
+                            {% else %}
+                                <span class="badge bg-secondary text-white">Pendente</span>
+                            {% endif %}
+                        </td>
+                        <td class="text-end">
+                            <a href="{% url 'financeiro:detalhe_retorno' hid=ret.id|hashid %}"
+                               class="btn btn-sm btn-outline-secondary">DETALHES</a>
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr><td colspan="7" class="text-center text-muted py-4">Nenhum retorno processado no período.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% if historico %}
+        <div class="card-footer d-flex justify-content-between align-items-center small text-muted">
+            <span>Exibindo {{ historico|length }} retorno(s) do período</span>
+            <a href="{% url 'financeiro:listar_retornos' %}" class="text-decoration-none">Ver todos &rsaquo;</a>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Modal de upload -->
+<div class="modal fade" id="modalUploadRetorno" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title fs-6">
+                    <i class="fas fa-cloud-arrow-up me-2 text-success"></i>
+                    Upload Retorno — <span id="modalBancoNome"></span>
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div id="alertUpload" class="alert d-none mb-3"></div>
+                <div id="resultadoUpload" class="d-none">
+                    <div class="alert alert-success">
+                        <strong>Retorno processado com sucesso!</strong>
+                        <ul class="mb-0 mt-2 small" id="listaResultado"></ul>
+                    </div>
+                </div>
+                <div id="formUpload">
+                    <input type="hidden" id="uploadContaId">
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Arquivo <code>.ret</code> do banco</label>
+                        <input type="file" class="form-control" id="uploadArquivoRet"
+                               accept=".ret,.RET,.txt,.TXT,.dat,.DAT">
+                        <div class="form-text">Arquivo de retorno CNAB 240 ou CNAB 400 gerado pelo banco.</div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Fechar</button>
+                <button type="button" class="btn btn-success btn-sm" id="btnConfirmarUpload">
+                    <i class="fas fa-upload me-1"></i> Processar Retorno
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function () {
+    const CSRF = '{{ csrf_token }}';
+    const URL_UPLOAD = "{% url 'financeiro:remessa_retorno_upload' %}";
+
+    function lockBtn(btn, txt) {
+        btn.dataset._html = btn.innerHTML;
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>' + (txt || 'Processando...');
+    }
+    function unlockBtn(btn) {
+        btn.disabled = false;
+        if (btn.dataset._html) btn.innerHTML = btn.dataset._html;
+    }
+
+    const modalEl = document.getElementById('modalUploadRetorno');
+    const bsModal = modalEl ? new bootstrap.Modal(modalEl) : null;
+
+    document.querySelectorAll('.btn-upload-retorno').forEach(btn => {
+        btn.addEventListener('click', () => {
+            document.getElementById('uploadContaId').value = btn.dataset.conta;
+            document.getElementById('modalBancoNome').textContent = btn.dataset.banco;
+            document.getElementById('uploadArquivoRet').value = '';
+            document.getElementById('alertUpload').className = 'alert d-none';
+            document.getElementById('resultadoUpload').classList.add('d-none');
+            document.getElementById('formUpload').classList.remove('d-none');
+            document.getElementById('btnConfirmarUpload').classList.remove('d-none');
+            if (bsModal) bsModal.show();
+        });
+    });
+
+    const btnConfirmar = document.getElementById('btnConfirmarUpload');
+    if (btnConfirmar) {
+        btnConfirmar.addEventListener('click', () => {
+            const contaId = document.getElementById('uploadContaId').value;
+            const fileInput = document.getElementById('uploadArquivoRet');
+            const alertEl = document.getElementById('alertUpload');
+
+            if (!fileInput.files.length) {
+                alertEl.className = 'alert alert-danger';
+                alertEl.textContent = 'Selecione o arquivo .ret antes de continuar.';
+                return;
+            }
+
+            lockBtn(btnConfirmar, 'Processando...');
+            alertEl.className = 'alert d-none';
+
+            const fd = new FormData();
+            fd.append('conta_bancaria_id', contaId);
+            fd.append('arquivo', fileInput.files[0]);
+
+            fetch(URL_UPLOAD, {
+                method: 'POST',
+                headers: { 'X-CSRFToken': CSRF },
+                body: fd,
+            }).then(r => r.json()).then(data => {
+                unlockBtn(btnConfirmar);
+                if (data.sucesso) {
+                    document.getElementById('formUpload').classList.add('d-none');
+                    btnConfirmar.classList.add('d-none');
+                    const pago = parseFloat(data.valor_total_pago || 0)
+                        .toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+                    document.getElementById('listaResultado').innerHTML = [
+                        `<li>${data.registros_processados} de ${data.total_registros} registros processados</li>`,
+                        data.rejeicoes
+                            ? `<li><strong>${data.rejeicoes} rejeitado(s)</strong> — boletos devolvidos para GERADO (RN-18)</li>`
+                            : '',
+                        data.registros_erro
+                            ? `<li>${data.registros_erro} com erro — <a href="${data.detalhe_url}">ver detalhes</a></li>`
+                            : '',
+                        `<li>Valor total pago confirmado: <strong>${pago}</strong></li>`,
+                        `<li><a href="${data.detalhe_url}">Ver relatório completo</a></li>`,
+                    ].join('');
+                    document.getElementById('resultadoUpload').classList.remove('d-none');
+                    setTimeout(() => window.location.reload(), 3000);
+                } else {
+                    alertEl.className = 'alert alert-danger';
+                    alertEl.textContent = data.erro || 'Erro ao processar o retorno.';
+                }
+            }).catch(() => {
+                unlockBtn(btnConfirmar);
+                alertEl.className = 'alert alert-danger';
+                alertEl.textContent = 'Erro de conexão ao enviar o arquivo.';
+            });
+        });
+    }
+})();
+</script>
+{% endblock %}

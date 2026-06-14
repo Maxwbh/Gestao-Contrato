@@ -1747,6 +1747,23 @@ class BoletoService:
         except Exception:
             return False
 
+    def obter_versao_api(self) -> dict:
+        """
+        Retorna versão e metadados da boleto_cnab_api via GET /api/info.
+        Retorna dict vazio se o endpoint não estiver disponível.
+        """
+        try:
+            r = requests.get(
+                f"{self.brcobranca_url}/api/info",
+                headers={'Accept': 'application/vnd.BoletoApi-v1+json'},
+                timeout=5,
+            )
+            if r.status_code == 200:
+                return r.json()
+        except Exception as e:
+            logger.debug("api/info indisponível: %s", e)
+        return {}
+
     def acordar_async(self):
         """
         Dispara warm-up em background (thread daemon).

@@ -712,10 +712,9 @@ const parcelasColumnDefs = [
         headerName: 'Vencimento',
         field: 'vencimento',
         filter: 'agDateColumnFilter',
-       
+
         minWidth: 120,
         cellRenderer: params => params.data.vencimento_fmt,
-        sort: 'desc',
     },
     {
         headerName: 'Valor Original',
@@ -794,11 +793,24 @@ document.addEventListener('DOMContentLoaded', function() {
             suppressCellFocus: true,
             enableCellTextSelection: true,
             onSortChanged: function(event) {
-                const model = event.api.getSortModel ? event.api.getSortModel() : (event.api.getColumnState ? event.api.getColumnState().filter(c => c.sort) : []);
-                const params = new URLSearchParams(window.location.search);
+                const model = event.api.getColumnState ? event.api.getColumnState().filter(c => c.sort) : [];
+                let newSort = '', newOrder = '';
                 if (model && model.length > 0) {
-                    params.set('sort', model[0].colId || model[0].colId);
-                    params.set('order', model[0].sort);
+                    // Em caso de múltiplas colunas ordenadas, usa a de menor sortIndex
+                    const principal = model.slice().sort((a, b) => (a.sortIndex ?? 0) - (b.sortIndex ?? 0))[0];
+                    newSort = principal.colId;
+                    newOrder = principal.sort;
+                }
+                // Evita loop infinito: o AG Grid dispara onSortChanged ao aplicar o
+                // sort inicial (initialState). Só navega se o sort REALMENTE mudou
+                // em relação ao estado já refletido na URL/servidor.
+                if (newSort === _currentSort && newOrder === _currentOrder) {
+                    return;
+                }
+                const params = new URLSearchParams(window.location.search);
+                if (newSort) {
+                    params.set('sort', newSort);
+                    params.set('order', newOrder);
                 } else {
                     params.delete('sort');
                     params.delete('order');

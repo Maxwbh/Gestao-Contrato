@@ -139,6 +139,22 @@ def health_check(request):
             'message': str(e)
         }
 
+    # Verificar boleto_cnab_api (não crítico para o health do Django)
+    try:
+        from financeiro.services.boleto_service import BoletoService
+        svc = BoletoService()
+        if svc.verificar_api_rapido():
+            info = svc.obter_versao_api()
+            status['checks']['brcobranca'] = {
+                'status': 'healthy',
+                'versao_api': info.get('version') or info.get('api_version', ''),
+                'versao_gem': info.get('brcobranca_version') or info.get('gem_version', ''),
+            }
+        else:
+            status['checks']['brcobranca'] = {'status': 'unavailable'}
+    except Exception:
+        status['checks']['brcobranca'] = {'status': 'unavailable'}
+
     # Tempo total de verificação
     status['total_latency_ms'] = round((time.time() - start_time) * 1000, 2)
 
@@ -2546,6 +2562,15 @@ def ia_tokens_config(request):
         'claude-opus-4-8':           (5.00,  25.00),
     }
 
+    # Estilo visual por modelo (card, badge, rótulo e ícone do tier)
+    estilo_map = {
+        'gemini-2.0-flash':          ('card-gemini', 'badge-free',  'GRATUITO',      'fas fa-leaf'),
+        'claude-haiku-4-5-20251001': ('card-haiku',  'badge-cheap', 'ECONÔMICO',     'fas fa-bolt'),
+        'claude-sonnet-4-6':         ('card-sonnet', 'badge-mid',   'INTERMEDIÁRIO', 'fas fa-star'),
+        'claude-opus-4-8':           ('card-opus',   'badge-prem',  'PREMIUM',       'fas fa-crown'),
+    }
+    _estilo_default = ('card-opus', 'badge-prem', 'PREMIUM', 'fas fa-crown')
+
     inicio = date.today().replace(day=1)
     modelos_data = []
     for modelo in _MODELOS_IA:
@@ -2572,8 +2597,14 @@ def ia_tokens_config(request):
         limite_reais_val = float(lim_reais.valor_limite) if lim_reais else None
         pct_tokens = min(100, int(consumo_tokens / limite_tokens * 100)) if limite_tokens else 0
 
+        card_class, badge_class, badge_lbl, tier_icon = estilo_map.get(modelo, _estilo_default)
+
         modelos_data.append({
             'modelo': modelo,
+            'card_class': card_class,
+            'badge_class': badge_class,
+            'badge_lbl': badge_lbl,
+            'tier_icon': tier_icon,
             'preco_in': preco_in,
             'preco_out': preco_out,
             'preco_in_brl': round(preco_in * cotacao, 4),
@@ -3126,8 +3157,8 @@ def api_compradores(request):
 @require_http_methods(['GET'])
 def api_comprador_detalhe(request, pk):
     """Retorna os dados completos de um comprador."""
+    comprador = get_object_or_404(Comprador, pk=pk)
     try:
-        comprador = get_object_or_404(Comprador, pk=pk)
         return JsonResponse({'status': 'success', 'comprador': _serializar_comprador(comprador)})
     except Exception as e:
         logger.exception('api_comprador_detalhe pk=%s: %s', pk, e)
@@ -3138,8 +3169,8 @@ def api_comprador_detalhe(request, pk):
 @require_http_methods(['PUT', 'PATCH'])
 def api_comprador_atualizar(request, pk):
     """Atualiza os dados de um comprador (PUT ou PATCH)."""
+    comprador = get_object_or_404(Comprador, pk=pk)
     try:
-        comprador = get_object_or_404(Comprador, pk=pk)
         data = json.loads(request.body)
         campos = [
             'tipo_pessoa', 'nome', 'rg', 'data_nascimento', 'estado_civil', 'profissao',
@@ -3170,8 +3201,8 @@ def api_comprador_atualizar(request, pk):
 @require_http_methods(['DELETE'])
 def api_comprador_excluir(request, pk):
     """Desativa (soft delete) um comprador."""
+    comprador = get_object_or_404(Comprador, pk=pk)
     try:
-        comprador = get_object_or_404(Comprador, pk=pk)
         comprador.ativo = False
         comprador.save(update_fields=['ativo'])
         return JsonResponse({'status': 'success', 'message': 'Comprador desativado.'})
@@ -3295,8 +3326,8 @@ def api_imobiliarias(request):
 @require_http_methods(['GET'])
 def api_imobiliaria_detalhe(request, pk):
     """Retorna os dados completos de uma imobiliária."""
+    imob = get_object_or_404(Imobiliaria, pk=pk)
     try:
-        imob = get_object_or_404(Imobiliaria, pk=pk)
         return JsonResponse({'status': 'success', 'imobiliaria': _serializar_imobiliaria(imob, request)})
     except Exception as e:
         logger.exception('api_imobiliaria_detalhe pk=%s: %s', pk, e)
@@ -3307,8 +3338,8 @@ def api_imobiliaria_detalhe(request, pk):
 @require_http_methods(['PUT', 'PATCH'])
 def api_imobiliaria_atualizar(request, pk):
     """Atualiza os dados de uma imobiliária (PUT ou PATCH)."""
+    imob = get_object_or_404(Imobiliaria, pk=pk)
     try:
-        imob = get_object_or_404(Imobiliaria, pk=pk)
         data = json.loads(request.body)
         campos = [
             'tipo_pessoa', 'nome', 'razao_social',
@@ -3335,8 +3366,8 @@ def api_imobiliaria_atualizar(request, pk):
 @require_http_methods(['DELETE'])
 def api_imobiliaria_excluir(request, pk):
     """Desativa (soft delete) uma imobiliária."""
+    imob = get_object_or_404(Imobiliaria, pk=pk)
     try:
-        imob = get_object_or_404(Imobiliaria, pk=pk)
         imob.ativo = False
         imob.save(update_fields=['ativo'])
         return JsonResponse({'status': 'success', 'message': 'Imobiliária desativada.'})

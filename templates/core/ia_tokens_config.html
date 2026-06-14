@@ -165,11 +165,7 @@ input[type=range]    { width: 100%; accent-color: #0d6efd; cursor: pointer; }
   <div class="row g-3">
 
     {% for m in modelos_data %}
-    {% if m.modelo == 'gemini-2.0-flash' %}{% with card_class="card-gemini" badge_class="badge-free" badge_lbl="GRATUITO" tier_icon="fas fa-leaf" %}
-    {% elif m.modelo == 'claude-haiku-4-5-20251001' %}{% with card_class="card-haiku" badge_class="badge-cheap" badge_lbl="ECONÔMICO" tier_icon="fas fa-bolt" %}
-    {% elif m.modelo == 'claude-sonnet-4-6' %}{% with card_class="card-sonnet" badge_class="badge-mid" badge_lbl="INTERMEDIÁRIO" tier_icon="fas fa-star" %}
-    {% else %}{% with card_class="card-opus" badge_class="badge-prem" badge_lbl="PREMIUM" tier_icon="fas fa-crown" %}
-    {% endif %}
+    {% with card_class=m.card_class badge_class=m.badge_class badge_lbl=m.badge_lbl tier_icon=m.tier_icon %}
 
     <div class="col-md-6 col-xl-3">
       <div class="card model-card h-100 {{ card_class }}">

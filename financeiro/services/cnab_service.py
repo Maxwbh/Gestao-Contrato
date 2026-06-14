@@ -866,17 +866,19 @@ class CNABService:
 
         Exclui parcelas em remessas ativas (GERADO, ENVIADO, PROCESSADO).
         """
-        from financeiro.models import Parcela, StatusBoleto, StatusArquivoRemessa
+        from financeiro.models import Parcela, StatusBoleto, StatusArquivoRemessa, ItemRemessa
 
         queryset = Parcela.objects.filter(
             status_boleto=StatusBoleto.GERADO,
             pago=False,
         ).exclude(
+            # HU-23 RN-18: itens REJEITADO não bloqueiam reinclusão
             itens_remessa__arquivo_remessa__status__in=[
                 StatusArquivoRemessa.GERADO,
                 StatusArquivoRemessa.ENVIADO,
                 StatusArquivoRemessa.PROCESSADO,
-            ]
+            ],
+            itens_remessa__status=ItemRemessa.Status.ATIVO,
         ).select_related(
             'contrato', 'contrato__comprador', 'contrato__imovel',
             'contrato__imobiliaria', 'conta_bancaria', 'conta_bancaria__imobiliaria'
@@ -928,15 +930,22 @@ class CNABService:
     def gerar_remessas_por_escopo(
         self,
         parcela_ids: List[int],
-        layout: str = 'CNAB_240'
+        layout: str = None,
+        usuario=None,
+        transicionar_registrado: bool = False,
     ) -> Dict:
         """
         Gera remessas agrupando automaticamente as parcelas por conta_bancaria.
-        Cada conta gera exatamente 1 arquivo de remessa.
+        Cada conta gera exatamente 1 arquivo de remessa (invariante CNAB — HU-23 RN-19).
 
         Args:
             parcela_ids: IDs das parcelas selecionadas
-            layout: Layout CNAB (CNAB_240 ou CNAB_400)
+            layout: Layout CNAB forçado (CNAB_240/CNAB_400). Se None, usa o
+                    layout_cnab configurado em cada conta (HU-23 RN-05).
+            usuario: Quando informado, grava ArquivoRemessa.gerado_por (HU-23 RN-17).
+            transicionar_registrado: Quando True, os boletos incluídos passam de
+                    GERADO → REGISTRADO (HU-23 RN-14). Default False preserva o
+                    comportamento da HU-16.
 
         Returns:
             dict com:
@@ -950,18 +959,20 @@ class CNABService:
 
         # Buscar parcelas válidas — exclui apenas as já em remessas ativas
         # (inclui parcelas em remessas com ERRO, que podem ser re-incluídas)
-        from financeiro.models import StatusArquivoRemessa
+        from financeiro.models import StatusArquivoRemessa, ItemRemessa
         parcelas = list(
             Parcela.objects.filter(
                 pk__in=parcela_ids,
                 status_boleto=StatusBoleto.GERADO,
                 pago=False,
             ).exclude(
+                # HU-23 RN-18: itens REJEITADO não bloqueiam reinclusão
                 itens_remessa__arquivo_remessa__status__in=[
                     StatusArquivoRemessa.GERADO,
                     StatusArquivoRemessa.ENVIADO,
                     StatusArquivoRemessa.PROCESSADO,
-                ]
+                ],
+                itens_remessa__status=ItemRemessa.Status.ATIVO,
             ).select_related('conta_bancaria', 'contrato').distinct()
         )
 
@@ -1013,11 +1024,26 @@ class CNABService:
                 )
                 time.sleep(_espera)
 
-            resultado = self.gerar_remessa(lista_parcelas, conta, layout)
+            # HU-23 RN-05: layout por conta quando não forçado
+            layout_conta = layout or getattr(conta, 'layout_cnab', None) or 'CNAB_240'
+            resultado = self.gerar_remessa(lista_parcelas, conta, layout_conta)
             _ultimo_request_banco[banco_key] = time.monotonic()
 
             if resultado.get('sucesso'):
                 arq = resultado['arquivo_remessa']
+                # HU-23 RN-17: auditoria de quem gerou
+                if usuario is not None and getattr(arq, 'gerado_por_id', None) is None:
+                    arq.gerado_por = usuario
+                    arq.save(update_fields=['gerado_por'])
+                # HU-23 RN-14: boletos incluídos passam a REGISTRADO
+                if transicionar_registrado:
+                    Parcela.objects.filter(
+                        pk__in=[p.pk for p in lista_parcelas],
+                        status_boleto=StatusBoleto.GERADO,
+                    ).update(
+                        status_boleto=StatusBoleto.REGISTRADO,
+                        data_registro_boleto=timezone.now(),
+                    )
                 remessas_geradas.append({
                     'arquivo_remessa': arq,
                     'conta_bancaria': conta,
@@ -1040,3 +1066,214 @@ class CNABService:
             'total_boletos': total_boletos,
             'total_valor': total_valor,
         }
+
+    # =========================================================================
+    # HU-23 — Painel de Remessa Mensal (escopos + elegibilidade)
+    # =========================================================================
+
+    def obter_boletos_elegiveis_painel(
+        self,
+        imobiliarias=None,
+        conta_bancaria=None,
+        imobiliaria_id=None,
+        mes=None,
+        ano=None,
+        hoje=None,
+    ) -> List:
+        """
+        HU-23: boletos elegíveis para remessa no painel da contadora.
+
+        Reaproveita obter_boletos_sem_remessa() e aplica as regras da HU-23:
+          - data_vencimento >= hoje              (RN-01)
+          - conta com cobranca_registrada=True   (RN-16)
+          - escopo às imobiliárias acessíveis     (RN-11/RN-21)
+          - (opcional) competência mês/ano do vencimento
+        """
+        from datetime import date as _date
+        hoje = hoje or _date.today()
+
+        parcelas = self.obter_boletos_sem_remessa(
+            conta_bancaria=conta_bancaria,
+            imobiliaria_id=imobiliaria_id,
+        )
+
+        ids_imobs = None
+        if imobiliarias is not None:
+            if hasattr(imobiliarias, 'values_list'):
+                ids_imobs = set(imobiliarias.values_list('id', flat=True))
+            else:
+                ids_imobs = {getattr(i, 'id', i) for i in imobiliarias}
+
+        elegiveis = []
+        for p in parcelas:
+            conta = p.conta_bancaria
+            if not conta:
+                continue
+            if not getattr(conta, 'cobranca_registrada', True):
+                continue  # RN-16: registro online / sem registro → sem remessa
+            if ids_imobs is not None and conta.imobiliaria_id not in ids_imobs:
+                continue  # RN-11: fora do escopo do usuário
+            if p.data_vencimento < hoje:
+                continue  # RN-01: só presente/futuro
+            if mes and ano and not (
+                p.data_vencimento.month == int(mes) and p.data_vencimento.year == int(ano)
+            ):
+                continue  # competência selecionada
+            elegiveis.append(p)
+        return elegiveis
+
+    def resolver_parcela_ids_por_escopo(
+        self,
+        escopo: str,
+        imobiliarias=None,
+        conta_bancaria_id=None,
+        imobiliaria_id=None,
+        parcela_id=None,
+        mes=None,
+        ano=None,
+    ) -> Dict:
+        """
+        HU-23: resolve um escopo de geração para a lista de parcela_ids elegíveis,
+        sempre respeitando o acesso do usuário (imobiliarias).
+
+        Escopos: 'todos' | 'imobiliaria' | 'conta' | 'boleto'.
+
+        Returns: {'parcela_ids': [...], 'erro': str|None}
+        """
+        from financeiro.models import Parcela, StatusBoleto, StatusArquivoRemessa
+        from datetime import date as _date
+
+        ids_imobs = None
+        if imobiliarias is not None:
+            if hasattr(imobiliarias, 'values_list'):
+                ids_imobs = set(imobiliarias.values_list('id', flat=True))
+            else:
+                ids_imobs = {getattr(i, 'id', i) for i in imobiliarias}
+
+        if escopo == 'boleto':
+            if not parcela_id:
+                return {'parcela_ids': [], 'erro': 'parcela_id é obrigatório no escopo "boleto".'}
+            p = Parcela.objects.select_related('conta_bancaria', 'contrato').filter(pk=parcela_id).first()
+            if not p:
+                return {'parcela_ids': [], 'erro': 'Boleto não encontrado.'}
+            if not p.conta_bancaria:
+                return {'parcela_ids': [], 'erro': 'Boleto sem conta bancária associada.'}
+            if ids_imobs is not None and p.conta_bancaria.imobiliaria_id not in ids_imobs:
+                return {'parcela_ids': [], 'erro': 'Sem acesso a este boleto.'}
+            if p.status_boleto != StatusBoleto.GERADO or p.pago:
+                return {'parcela_ids': [], 'erro': 'Boleto não elegível (status ou já pago).'}
+            if p.data_vencimento < _date.today():
+                return {'parcela_ids': [], 'erro': 'Boleto não elegível: vencimento no passado.'}
+            ja_em_remessa = p.itens_remessa.filter(
+                arquivo_remessa__status__in=[
+                    StatusArquivoRemessa.GERADO,
+                    StatusArquivoRemessa.ENVIADO,
+                    StatusArquivoRemessa.PROCESSADO,
+                ]
+            ).exists()
+            if ja_em_remessa:
+                return {'parcela_ids': [], 'erro': 'Boleto já está em uma remessa ativa.'}
+            return {'parcela_ids': [p.pk], 'erro': None}
+
+        # Escopos agregados: todos / imobiliaria / conta
+        kwargs = {'imobiliarias': imobiliarias, 'mes': mes, 'ano': ano}
+        if escopo == 'conta':
+            if not conta_bancaria_id:
+                return {'parcela_ids': [], 'erro': 'conta_bancaria_id é obrigatório no escopo "conta".'}
+            from core.models import ContaBancaria
+            conta = ContaBancaria.objects.filter(pk=conta_bancaria_id).first()
+            if not conta:
+                return {'parcela_ids': [], 'erro': 'Conta bancária não encontrada.'}
+            if ids_imobs is not None and conta.imobiliaria_id not in ids_imobs:
+                return {'parcela_ids': [], 'erro': 'Sem acesso a esta conta bancária.'}
+            kwargs['conta_bancaria'] = conta
+        elif escopo == 'imobiliaria':
+            if not imobiliaria_id:
+                return {'parcela_ids': [], 'erro': 'imobiliaria_id é obrigatório no escopo "imobiliaria".'}
+            if ids_imobs is not None and int(imobiliaria_id) not in ids_imobs:
+                return {'parcela_ids': [], 'erro': 'Sem acesso a esta imobiliária.'}
+            kwargs['imobiliaria_id'] = imobiliaria_id
+        elif escopo != 'todos':
+            return {'parcela_ids': [], 'erro': f'Escopo inválido: {escopo}'}
+
+        elegiveis = self.obter_boletos_elegiveis_painel(**kwargs)
+        return {'parcela_ids': [p.pk for p in elegiveis], 'erro': None}
+
+    @staticmethod
+    def _dias_uteis_ate(inicio, fim) -> int:
+        """Conta dias úteis (seg–sex) entre `inicio` (excl.) e `fim` (incl.)."""
+        from datetime import timedelta
+        if fim <= inicio:
+            return 0
+        dias = 0
+        d = inicio
+        while d < fim:
+            d += timedelta(days=1)
+            if d.weekday() < 5:  # 0=seg ... 4=sex
+                dias += 1
+        return dias
+
+    def validar_boletos_para_remessa(self, parcelas, lead_time_dias_uteis: int = 1, hoje=None) -> Dict:
+        """
+        HU-23 (CT-21 / RN-15): validação determinística pré-geração.
+
+        Detecta inconsistências antes de gerar a remessa, sem depender de IA:
+          - nosso_numero ausente
+          - valor zerado/negativo
+          - sacado com documento (CPF/CNPJ) inválido
+          - endereço do sacado incompleto (sem CEP ou logradouro)
+          - vencimento muito próximo (< lead_time dias úteis) — RN-15
+
+        Returns: {'alertas': [...], 'total_alertas': int, 'por_tipo': {tipo: n}}
+        """
+        from datetime import date as _date
+        from django.core.exceptions import ValidationError
+        from core.validators import validar_cpf_cnpj
+        from collections import Counter
+
+        hoje = hoje or _date.today()
+        alertas = []
+
+        for p in parcelas:
+            contrato = getattr(p, 'contrato', None)
+            comprador = getattr(contrato, 'comprador', None) if contrato else None
+            ref = {
+                'parcela_id': p.pk,
+                'numero_parcela': p.numero_parcela,
+                'comprador': getattr(comprador, 'nome', '') if comprador else '',
+                'contrato': getattr(contrato, 'numero_contrato', '') if contrato else '',
+            }
+
+            def _alerta(tipo, msg, sev='warning'):
+                alertas.append({**ref, 'tipo': tipo, 'severidade': sev, 'mensagem': msg})
+
+            if not (p.nosso_numero or '').strip():
+                _alerta('sem_nosso_numero', 'Boleto sem nosso número — será ignorado na remessa.', 'erro')
+
+            valor = p.valor_boleto or p.valor_atual or Decimal('0')
+            if valor <= 0:
+                _alerta('valor_invalido', 'Valor do boleto zerado ou negativo.', 'erro')
+
+            if comprador is not None:
+                doc = (comprador.cnpj or comprador.cpf or '').strip()
+                if not doc:
+                    _alerta('documento_ausente', 'Sacado sem CPF/CNPJ cadastrado.')
+                else:
+                    try:
+                        validar_cpf_cnpj(doc)
+                    except ValidationError:
+                        _alerta('documento_invalido', f'CPF/CNPJ do sacado inválido ({doc}).')
+                cep = (getattr(comprador, 'cep', '') or '').strip()
+                logr = (getattr(comprador, 'logradouro', '') or getattr(comprador, 'endereco', '') or '').strip()
+                if not cep or not logr:
+                    _alerta('endereco_incompleto', 'Endereço do sacado incompleto (sem CEP ou logradouro).')
+
+            dias = self._dias_uteis_ate(hoje, p.data_vencimento)
+            if dias < lead_time_dias_uteis:
+                _alerta(
+                    'vencimento_proximo',
+                    f'Vencimento muito próximo ({p.data_vencimento:%d/%m}) — pode não registrar a tempo.',
+                )
+
+        por_tipo = dict(Counter(a['tipo'] for a in alertas))
+        return {'alertas': alertas, 'total_alertas': len(alertas), 'por_tipo': por_tipo}

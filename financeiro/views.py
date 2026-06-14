@@ -2046,10 +2046,11 @@ def marcar_remessa_enviada(request, hid):
             'erro': 'Apenas arquivos com status GERADO podem ser marcados como enviados'
         }, status=400)
 
-    arquivo.marcar_enviado()
+    arquivo.marcar_enviado(usuario=request.user)
     return JsonResponse({
         'sucesso': True,
-        'mensagem': 'Remessa marcada como enviada'
+        'mensagem': 'Remessa marcada como enviada',
+        'status': 'ENVIADO',
     })
 
 
@@ -2094,6 +2095,8 @@ def download_arquivo_remessa(request, hid):
         return redirect('financeiro:detalhe_remessa', hid=_encode_id(pk))
 
     try:
+        # HU-23: registra o 1º download (habilita o estado BAIXADO)
+        arquivo.registrar_download()
         response = FileResponse(
             arquivo.arquivo.open('rb'),
             as_attachment=True,
@@ -2105,6 +2108,614 @@ def download_arquivo_remessa(request, hid):
         logger.exception(f"Erro ao fazer download da remessa: {e}")
         messages.error(request, 'Erro ao baixar o arquivo.')
         return redirect('financeiro:detalhe_remessa', hid=_encode_id(pk))
+
+
+# =============================================================================
+# HU-23 — PAINEL DE REMESSA MENSAL (FLUXO DA CONTADORA)
+# =============================================================================
+
+@login_required
+def remessa_painel(request):
+    """
+    HU-23: wizard simplificado de envio de remessa.
+
+    Exibe Resumo Executivo (KPIs), boletos elegíveis agrupados por conta
+    bancária (1 arquivo = 1 conta) e o histórico recente de arquivos gerados.
+    """
+    from collections import defaultdict
+    from datetime import date
+    from .models import ArquivoRemessa, StatusArquivoRemessa
+    from .services.cnab_service import CNABService
+
+    imobs = _imobs_para_usuario(request.user)
+    service = CNABService()
+    hoje = date.today()
+
+    # Filtros opcionais (competência + imobiliária)
+    imobiliaria_id = request.GET.get('imobiliaria') or None
+    mes = request.GET.get('mes') or None
+    ano = request.GET.get('ano') or None
+
+    elegiveis = service.obter_boletos_elegiveis_painel(
+        imobiliarias=imobs,
+        imobiliaria_id=imobiliaria_id,
+        mes=mes,
+        ano=ano,
+        hoje=hoje,
+    )
+
+    # Agrupar por conta bancária (invariante: 1 arquivo = 1 conta)
+    grupos_map = defaultdict(list)
+    for p in elegiveis:
+        grupos_map[p.conta_bancaria].append(p)
+
+    grupos = []
+    valor_total_geral = Decimal('0.00')
+    vencendo_hoje = 0
+    for conta, ps in grupos_map.items():
+        valor = sum(((x.valor_boleto or x.valor_atual) for x in ps), Decimal('0.00'))
+        venc_hoje_grp = sum(1 for x in ps if x.data_vencimento == hoje)
+        # RN-15: boletos cujo vencimento está a menos de 1 dia útil
+        venc_proximo_grp = sum(
+            1 for x in ps if service._dias_uteis_ate(hoje, x.data_vencimento) < 1
+        )
+        valor_total_geral += valor
+        vencendo_hoje += venc_hoje_grp
+        grupos.append({
+            'conta': conta,
+            'imobiliaria': conta.imobiliaria,
+            'banco': conta.banco,
+            'banco_nome': conta.banco_nome,
+            'layout': conta.layout_cnab,
+            'quantidade': len(ps),
+            'valor_total': valor,
+            'vencendo_hoje': venc_hoje_grp,
+            'vencimento_proximo': venc_proximo_grp,
+        })
+    grupos.sort(key=lambda g: (g['imobiliaria'].nome, g['banco_nome']))
+
+    # CT-21 / RN-15: validação determinística pré-geração (resumo p/ banner)
+    validacao = service.validar_boletos_para_remessa(elegiveis, hoje=hoje)
+
+    # KPIs do Resumo Executivo
+    enviadas_qs = ArquivoRemessa.objects.filter(
+        conta_bancaria__imobiliaria__in=imobs,
+        status__in=[StatusArquivoRemessa.ENVIADO, StatusArquivoRemessa.PROCESSADO],
+        data_envio__year=hoje.year,
+        data_envio__month=hoje.month,
+    )
+    remessas_enviadas_mes = enviadas_qs.count()
+
+    # CT-07: banner de conclusão — nada pendente + houve envios no mês
+    bancos_enviados = enviadas_qs.values_list(
+        'conta_bancaria__banco', flat=True
+    ).distinct().count()
+    mes_concluido = (len(elegiveis) == 0 and remessas_enviadas_mes > 0)
+
+    # Histórico recente
+    arquivos_recentes = ArquivoRemessa.objects.select_related(
+        'conta_bancaria', 'conta_bancaria__imobiliaria'
+    ).filter(conta_bancaria__imobiliaria__in=imobs).order_by('-data_geracao')[:10]
+
+    contratos_ativos = Contrato.objects.filter(
+        status=StatusContrato.ATIVO, imobiliaria__in=imobs
+    ).count()
+
+    context = {
+        'grupos': grupos,
+        'arquivos_recentes': arquivos_recentes,
+        'imobiliarias': imobs.order_by('nome'),
+        'filtro_imobiliaria': imobiliaria_id,
+        'filtro_mes': mes,
+        'filtro_ano': ano,
+        # KPIs
+        'kpi_total_pendente': len(elegiveis),
+        'kpi_valor_total': valor_total_geral,
+        'kpi_bancos_ativos': len(grupos),
+        'kpi_vencendo_hoje': vencendo_hoje,
+        'kpi_remessas_enviadas': remessas_enviadas_mes,
+        'contratos_ativos': contratos_ativos,
+        'hoje': hoje,
+        # Validação pré-geração (CT-21 / RN-15)
+        'validacao_total': validacao['total_alertas'],
+        'validacao_por_tipo': validacao['por_tipo'],
+        # Banner de conclusão (CT-07)
+        'mes_concluido': mes_concluido,
+        'bancos_enviados': bancos_enviados,
+    }
+    return render(request, 'financeiro/cnab/remessa_painel.html', context)
+
+
+@login_required
+@require_POST
+def remessa_painel_gerar(request):
+    """
+    HU-23: geração dirigida por escopo (todos / imobiliaria / conta / boleto).
+    Sempre gera 1 arquivo por conta bancária e responde em lista.
+    """
+    import json as _json
+    from .services.cnab_service import CNABService
+
+    try:
+        payload = _json.loads(request.body or '{}')
+    except (ValueError, TypeError):
+        payload = request.POST
+
+    escopo = payload.get('escopo', 'todos')
+    imobs = _imobs_para_usuario(request.user)
+    service = CNABService()
+
+    resol = service.resolver_parcela_ids_por_escopo(
+        escopo=escopo,
+        imobiliarias=imobs,
+        conta_bancaria_id=payload.get('conta_bancaria_id'),
+        imobiliaria_id=payload.get('imobiliaria_id'),
+        parcela_id=payload.get('parcela_id'),
+        mes=payload.get('mes'),
+        ano=payload.get('ano'),
+    )
+    if resol['erro']:
+        return JsonResponse({'sucesso': False, 'erro': resol['erro']}, status=400)
+
+    parcela_ids = resol['parcela_ids']
+    if not parcela_ids:
+        return JsonResponse(
+            {'sucesso': False, 'erro': 'Nenhum boleto elegível para o escopo selecionado.'},
+            status=400,
+        )
+
+    resultado = service.gerar_remessas_por_escopo(
+        parcela_ids, layout=None, usuario=request.user, transicionar_registrado=True,
+    )
+
+    arquivos = []
+    for r in resultado['remessas_geradas']:
+        arq = r['arquivo_remessa']
+        conta = r['conta_bancaria']
+        arquivos.append({
+            'arquivo_id': arq.pk,
+            'conta_bancaria_id': conta.pk,
+            'banco': conta.banco,
+            'imobiliaria': conta.imobiliaria.nome,
+            'total_boletos': r['quantidade_boletos'],
+            'valor_total': str(r['valor_total']),
+            'numero_remessa': r['numero_remessa'],
+            'download_url': f"/financeiro/cnab/remessa/{_encode_id(arq.pk)}/download/",
+        })
+
+    resp = {
+        'sucesso': len(arquivos) > 0,
+        'arquivos': arquivos,
+        'erros': resultado['erros'],
+        'total_gerados': len(arquivos),
+        'total_falhas': len(resultado['erros']),
+    }
+    # Quando nada foi gerado, expõe o motivo (singular) para a UI/clients
+    if not arquivos and resultado['erros']:
+        resp['erro'] = ' | '.join(resultado['erros'])
+    if len(arquivos) > 1:
+        hids = ','.join(_encode_id(a['arquivo_id']) for a in arquivos)
+        resp['download_lote_url'] = f"/financeiro/cnab/remessa/download-lote/?ids={hids}"
+    status_code = 200 if arquivos else 400
+    return JsonResponse(resp, status=status_code)
+
+
+@login_required
+@require_GET
+def api_remessa_validar(request):
+    """
+    HU-23 (CT-21 / RN-15): validação determinística pré-geração dos boletos
+    elegíveis no escopo atual (mesmos filtros do painel). Base da "Sugestão de
+    Conciliação". Não gera nada — apenas reporta inconsistências.
+    """
+    from .services.cnab_service import CNABService
+
+    imobs = _imobs_para_usuario(request.user)
+    service = CNABService()
+    elegiveis = service.obter_boletos_elegiveis_painel(
+        imobiliarias=imobs,
+        imobiliaria_id=request.GET.get('imobiliaria') or None,
+        mes=request.GET.get('mes') or None,
+        ano=request.GET.get('ano') or None,
+    )
+    resultado = service.validar_boletos_para_remessa(elegiveis)
+    return JsonResponse({
+        'total_elegiveis': len(elegiveis),
+        'total_alertas': resultado['total_alertas'],
+        'por_tipo': resultado['por_tipo'],
+        'alertas': resultado['alertas'],
+    })
+
+
+@login_required
+def remessa_download_lote(request):
+    """HU-23: download em lote (ZIP) de vários arquivos de remessa (?ids=hid1,hid2)."""
+    import io
+    import zipfile
+    from core.hashids_utils import decode_id
+    from .models import ArquivoRemessa
+
+    pks = []
+    for tok in (request.GET.get('ids', '') or '').split(','):
+        tok = tok.strip()
+        if not tok:
+            continue
+        pk = decode_id(tok)
+        if pk:
+            pks.append(pk)
+
+    imobs = _imobs_para_usuario(request.user)
+    arquivos = ArquivoRemessa.objects.select_related(
+        'conta_bancaria__imobiliaria'
+    ).filter(pk__in=pks, conta_bancaria__imobiliaria__in=imobs)
+
+    if not arquivos:
+        messages.error(request, 'Nenhum arquivo disponível para download.')
+        return redirect('financeiro:remessa_painel')
+
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, 'w', zipfile.ZIP_DEFLATED) as zf:
+        for arq in arquivos:
+            if arq.arquivo:
+                zf.writestr(arq.nome_arquivo, arq.arquivo.read())
+                arq.registrar_download()
+    buf.seek(0)
+    response = HttpResponse(buf.getvalue(), content_type='application/zip')
+    response['Content-Disposition'] = (
+        f'attachment; filename="remessas_{timezone.now():%Y%m%d_%H%M}.zip"'
+    )
+    return response
+
+
+@login_required
+@require_POST
+def remessa_cancelar_envio(request, hid):
+    """HU-23 (RN-07): reverte uma remessa ENVIADO → GERADO para correção."""
+    pk = _hid_to_pk(hid)
+    from .models import ArquivoRemessa
+
+    arquivo = get_object_or_404(
+        ArquivoRemessa.objects.select_related('conta_bancaria__imobiliaria'), pk=pk
+    )
+    verificar_acesso_tenant(request, arquivo.conta_bancaria.imobiliaria)
+
+    if arquivo.cancelar_envio():
+        return JsonResponse({'sucesso': True, 'status': 'GERADO'})
+    return JsonResponse(
+        {'sucesso': False, 'erro': 'Só é possível cancelar o envio de uma remessa ENVIADA.'},
+        status=400,
+    )
+
+
+@login_required
+def retorno_painel(request):
+    """
+    HU-23 Passo 5: tela dedicada de Processamento de Retorno Bancário.
+    GET /financeiro/retorno/
+    KPIs mensais, cards de upload por conta com ENVIADO e histórico de retornos.
+    """
+    from datetime import date
+    from .models import (
+        ArquivoRemessa, ArquivoRetorno, StatusArquivoRemessa, ItemRetorno,
+    )
+
+    imobs = _imobs_para_usuario(request.user)
+    hoje = date.today()
+
+    mes_str = request.GET.get('mes') or None
+    ano_str = request.GET.get('ano') or None
+    try:
+        mes = int(mes_str) if mes_str else hoje.month
+        ano = int(ano_str) if ano_str else hoje.year
+    except (ValueError, TypeError):
+        mes, ano = hoje.month, hoje.year
+
+    imobiliaria_id = request.GET.get('imobiliaria') or None
+
+    retornos_qs = ArquivoRetorno.objects.filter(
+        conta_bancaria__imobiliaria__in=imobs,
+        data_upload__year=ano,
+        data_upload__month=mes,
+    )
+    if imobiliaria_id:
+        retornos_qs = retornos_qs.filter(conta_bancaria__imobiliaria_id=imobiliaria_id)
+
+    # KPIs
+    from django.db.models import Sum as _Sum
+    agg = retornos_qs.aggregate(
+        liq=_Sum('registros_processados'),
+        tot=_Sum('total_registros'),
+        vlr=_Sum('valor_total_pago'),
+    )
+    kpi_total_processados = retornos_qs.count()
+    kpi_boletos_liquidados = agg['liq'] or 0
+    kpi_total_registros = agg['tot'] or 0
+    kpi_taxa_sucesso = (
+        round(kpi_boletos_liquidados / kpi_total_registros * 100)
+        if kpi_total_registros > 0 else 0
+    )
+    kpi_valor_total_pago = agg['vlr'] or Decimal('0.00')
+    kpi_rejeicoes = ItemRetorno.objects.filter(
+        arquivo_retorno__in=retornos_qs,
+        tipo_ocorrencia='REJEICAO',
+    ).count()
+
+    # Contas com remessas ENVIADO (elegíveis para receber retorno)
+    contas_enviadas_ids = ArquivoRemessa.objects.filter(
+        conta_bancaria__imobiliaria__in=imobs,
+        status=StatusArquivoRemessa.ENVIADO,
+    ).values_list('conta_bancaria_id', flat=True).distinct()
+    if imobiliaria_id:
+        contas_enviadas_ids = contas_enviadas_ids.filter(
+            conta_bancaria__imobiliaria_id=imobiliaria_id
+        )
+    contas_com_enviado = ContaBancaria.objects.filter(
+        pk__in=contas_enviadas_ids
+    ).select_related('imobiliaria').order_by('imobiliaria__nome', 'banco')
+
+    # Histórico de retornos
+    historico = retornos_qs.select_related(
+        'conta_bancaria', 'conta_bancaria__imobiliaria', 'processado_por'
+    ).order_by('-data_upload')[:30]
+
+    context = {
+        'kpi_total_processados': kpi_total_processados,
+        'kpi_boletos_liquidados': kpi_boletos_liquidados,
+        'kpi_taxa_sucesso': kpi_taxa_sucesso,
+        'kpi_valor_total_pago': kpi_valor_total_pago,
+        'kpi_rejeicoes': kpi_rejeicoes,
+        'contas_com_enviado': contas_com_enviado,
+        'historico': historico,
+        'imobiliarias': imobs.order_by('nome'),
+        'filtro_imobiliaria': imobiliaria_id,
+        'filtro_mes': mes,
+        'filtro_ano': ano,
+        'hoje': hoje,
+    }
+    return render(request, 'financeiro/cnab/retorno_painel.html', context)
+
+
+@login_required
+@require_POST
+def remessa_painel_retorno_upload(request):
+    """
+    HU-23 Passo 5: upload + processamento automático de retorno bancário via painel simplificado.
+    POST /financeiro/remessa/retorno/upload/
+    Cria ArquivoRetorno e processa imediatamente via CNABService.processar_retorno().
+    """
+    from django.urls import reverse
+    from .models import ArquivoRetorno
+    from .services.cnab_service import CNABService
+
+    imobs = _imobs_para_usuario(request.user)
+    conta_id = request.POST.get('conta_bancaria_id')
+    arquivo_upload = request.FILES.get('arquivo')
+
+    if not conta_id or not arquivo_upload:
+        return JsonResponse({'erro': 'Conta bancária e arquivo são obrigatórios.'}, status=400)
+
+    conta = get_object_or_404(ContaBancaria, pk=conta_id, imobiliaria__in=imobs)
+
+    try:
+        arquivo_retorno = ArquivoRetorno.objects.create(
+            conta_bancaria=conta,
+            nome_arquivo=arquivo_upload.name,
+        )
+        arquivo_retorno.arquivo.save(arquivo_upload.name, arquivo_upload)
+
+        service = CNABService()
+        resultado = service.processar_retorno(arquivo_retorno, request.user)
+
+        if not resultado.get('sucesso'):
+            return JsonResponse({'erro': resultado.get('erro', 'Erro ao processar retorno.')}, status=400)
+
+        rejeicoes = arquivo_retorno.itens.filter(tipo_ocorrencia='REJEICAO').count()
+
+        return JsonResponse({
+            'sucesso': True,
+            'arquivo_id': arquivo_retorno.pk,
+            'total_registros': resultado['total_registros'],
+            'registros_processados': resultado['registros_processados'],
+            'registros_erro': resultado['registros_erro'],
+            'rejeicoes': rejeicoes,
+            'valor_total_pago': str(resultado['valor_total_pago']),
+            'detalhe_url': reverse('financeiro:detalhe_retorno', kwargs={'hid': _encode_id(arquivo_retorno.pk)}),
+        })
+
+    except Exception as e:
+        logger.exception("Erro ao processar retorno pelo painel: %s", e)
+        return JsonResponse({'erro': str(e)}, status=500)
+
+
+# =============================================================================
+# HU-24 — GERAÇÃO MENSAL DE BOLETOS (FLUXO DA CONTADORA)
+# =============================================================================
+
+@login_required
+def boletos_painel(request):
+    """
+    HU-24: tela dedicada de Geração de Boletos do Mês.
+    Resumo executivo (KPIs) + conferência agrupada por imobiliária → contrato.
+    """
+    from .services.geracao_boletos_service import GeracaoBoletosService
+
+    imobs = _imobs_para_usuario(request.user)
+    service = GeracaoBoletosService()
+
+    imobiliaria_id = request.GET.get('imobiliaria') or None
+    mes = request.GET.get('mes') or None
+    ano = request.GET.get('ano') or None
+    try:
+        quantidade = max(1, int(request.GET.get('quantidade') or 1))
+    except (ValueError, TypeError):
+        quantidade = 1
+
+    conf = service.obter_conferencia(
+        imobiliarias=imobs,
+        imobiliaria_id=imobiliaria_id,
+        quantidade=quantidade,
+        incluir_intermediarias=True,
+    )
+
+    context = {
+        'grupos': conf['grupos'],
+        'kpis': conf['kpis'],
+        'imobiliarias': imobs.order_by('nome'),
+        'filtro_imobiliaria': imobiliaria_id,
+        'filtro_mes': mes,
+        'filtro_ano': ano,
+        'filtro_quantidade': quantidade,
+        'hoje': timezone.localdate(),
+    }
+    return render(request, 'financeiro/boletos/geracao_painel.html', context)
+
+
+@login_required
+@require_POST
+def boletos_painel_gerar(request):
+    """
+    HU-24: endpoint único de geração dirigido por `escopo`.
+    Escopos: todos / imobiliaria / contratos / parcela / intermediaria.
+    Respeita o bloqueio por reajuste (HU-06) e consolida a notificação (RN-14).
+    """
+    import json
+    from django.urls import reverse
+    from collections import defaultdict
+    from .models import Parcela, StatusBoleto
+    from .services.geracao_boletos_service import GeracaoBoletosService, ESCOPOS_VALIDOS
+
+    try:
+        data = json.loads(request.body or '{}')
+    except json.JSONDecodeError:
+        return JsonResponse({'sucesso': False, 'erro': 'JSON inválido.'}, status=400)
+
+    escopo = (data.get('escopo') or '').strip()
+    if escopo not in ESCOPOS_VALIDOS:
+        return JsonResponse({'sucesso': False, 'erro': f'Escopo inválido: {escopo!r}'}, status=400)
+
+    try:
+        quantidade = max(1, int(data.get('quantidade') or 1))
+    except (ValueError, TypeError):
+        quantidade = 1
+    tipo = (data.get('tipo') or 'folha').strip().lower()
+    if tipo not in ('folha', 'carne'):
+        tipo = 'folha'
+    incluir_intermediarias = bool(data.get('incluir_intermediarias', True))
+
+    imobs = _imobs_para_usuario(request.user)
+    service = GeracaoBoletosService()
+
+    # ----- Resolver alvos por escopo (com validação de acesso — RN-10) -----
+    contratos_alvo = []          # lista de (contrato, [parcelas], [intermediarias])
+    bloqueados = []              # [{parcela_id, contrato, motivo}]
+
+    try:
+        if escopo in ('todos', 'imobiliaria', 'contratos'):
+            qs = service.resolver_contratos(
+                escopo, imobs,
+                imobiliaria_id=data.get('imobiliaria_id'),
+                contrato_ids=data.get('contrato_ids'),
+            )
+            for contrato in qs:
+                elegiveis, bloq = service.proximas_elegiveis(contrato, quantidade)
+                inter = service.intermediarias_elegiveis(contrato) if incluir_intermediarias else []
+                for p, motivo in bloq:
+                    bloqueados.append({'parcela_id': p.pk, 'contrato': contrato.numero_contrato, 'motivo': motivo})
+                if elegiveis or inter:
+                    contratos_alvo.append((contrato, elegiveis, inter))
+
+        elif escopo == 'parcela':
+            parcela = get_object_or_404(
+                Parcela.objects.select_related('contrato__imobiliaria', 'contrato__comprador'),
+                pk=data.get('parcela_id'),
+            )
+            verificar_acesso_tenant(request, parcela.contrato.imobiliaria)
+            contrato = parcela.contrato
+            pode, motivo = contrato.pode_gerar_boleto(parcela.numero_parcela)
+            if not pode:
+                bloqueados.append({'parcela_id': parcela.pk, 'contrato': contrato.numero_contrato, 'motivo': motivo})
+            elif parcela.pago or parcela.status_boleto != StatusBoleto.NAO_GERADO:
+                return JsonResponse({'sucesso': False, 'erro': 'Parcela não elegível (paga ou já gerada).'}, status=400)
+            else:
+                contratos_alvo.append((contrato, [parcela], []))
+
+        elif escopo == 'intermediaria':
+            from contratos.models import PrestacaoIntermediaria
+            inter = get_object_or_404(
+                PrestacaoIntermediaria.objects.select_related('contrato__imobiliaria', 'contrato__comprador'),
+                pk=data.get('intermediaria_id'),
+            )
+            verificar_acesso_tenant(request, inter.contrato.imobiliaria)
+            if inter.paga:
+                return JsonResponse({'sucesso': False, 'erro': 'Intermediária já paga.'}, status=400)
+            contratos_alvo.append((inter.contrato, [], [inter]))
+    except ValueError as e:
+        return JsonResponse({'sucesso': False, 'erro': str(e)}, status=400)
+
+    # ----- Gerar (tolerante a falhas parciais — RN-06) -----
+    total_gerados = 0
+    total_erros = 0
+    erros = []
+    carnes = []
+    por_imob = defaultdict(lambda: {'gerados': 0, 'bloqueados': 0, 'erros': 0})
+
+    for contrato, parcelas, intermediarias in contratos_alvo:
+        imob_nome = contrato.imobiliaria.nome
+        geradas_contrato = []
+
+        # Materializa parcelas das intermediárias
+        alvos = list(parcelas)
+        for it in intermediarias:
+            try:
+                alvos.append(it.gerar_parcela())
+            except Exception as e:
+                total_erros += 1
+                por_imob[imob_nome]['erros'] += 1
+                erros.append({'parcela_id': None, 'contrato': contrato.numero_contrato,
+                              'erro': f'Intermediária {it.pk}: {e}'})
+
+        for parcela in alvos:
+            try:
+                resultado = parcela.gerar_boleto(enviar_email=False)
+                if resultado and resultado.get('sucesso'):
+                    total_gerados += 1
+                    por_imob[imob_nome]['gerados'] += 1
+                    geradas_contrato.append(parcela)
+                else:
+                    total_erros += 1
+                    por_imob[imob_nome]['erros'] += 1
+                    erros.append({'parcela_id': parcela.pk, 'contrato': contrato.numero_contrato,
+                                  'erro': (resultado or {}).get('erro', 'Erro desconhecido')})
+            except Exception as e:
+                logger.exception('HU-24: erro ao gerar boleto parcela pk=%s: %s', parcela.pk, e)
+                total_erros += 1
+                por_imob[imob_nome]['erros'] += 1
+                erros.append({'parcela_id': parcela.pk, 'contrato': contrato.numero_contrato, 'erro': str(e)})
+
+        # Notificação consolidada por canal (RN-14)
+        if geradas_contrato:
+            try:
+                service.notificar_lote(contrato, geradas_contrato)
+            except Exception:
+                logger.exception('HU-24: falha ao notificar lote do contrato %s', contrato.pk)
+            # Tipo carnê: expõe PDF consolidado por contrato (RN-13)
+            if tipo == 'carne':
+                carnes.append({
+                    'contrato': contrato.numero_contrato,
+                    'carne_url': reverse('financeiro:download_carne_pdf', kwargs={'contrato_id': contrato.id}),
+                })
+
+    return JsonResponse({
+        'sucesso': True,
+        'total_gerados': total_gerados,
+        'total_bloqueados': len(bloqueados),
+        'total_erros': total_erros,
+        'por_imobiliaria': [{'imobiliaria': k, **v} for k, v in por_imob.items()],
+        'bloqueados': bloqueados,
+        'erros': erros,
+        'tipo': tipo,
+        'carnes': carnes,
+    })
 
 
 # =============================================================================

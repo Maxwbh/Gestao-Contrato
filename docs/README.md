@@ -6,6 +6,10 @@ Desenvolvido por **Maxwell da Silva Oliveira** (maxwbh@gmail.com) — M&S do Bra
 
 ## Índice
 
+### Análise de Produto (HUs + Mockups) ⭐ centralizado
+- **[Hub de Análise](analise/README.md)** — Histórias de Usuário, mockups/protótipos e análise de negócio em um só lugar
+- **[Índice Mestre das HUs](analise/historias-usuario/INDICE.md)** — matriz de rastreabilidade, personas e fluxo macro
+
 ### Principal
 - **[README.md](../README.md)** — Visão geral, instalação, funcionalidades
 - **[SISTEMA.md](../SISTEMA.md)** — Documentação técnica do sistema (o que está implementado)
@@ -26,7 +30,7 @@ Desenvolvido por **Maxwell da Silva Oliveira** (maxwbh@gmail.com) — M&S do Bra
 ### Desenvolvimento
 - **[Setup Local](development/SETUP.md)** — Configuração do ambiente de desenvolvimento
 - **[Dados de Teste](development/TEST_DATA.md)** — Como gerar dados de teste
-- **[Histórias de Usuário](development/HISTORIAS_USUARIO.md)** — HUs implementadas
+- **[Histórias de Usuário](analise/README.md)** — centralizadas em `docs/analise/` ⭐
 - **[Testes](../tests/README.md)** — Estrutura de testes e como executar
 
 ### APIs e Integrações

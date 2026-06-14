@@ -1978,6 +1978,30 @@ class ArquivoRemessa(TimeStampedModel):
         verbose_name='Mensagem de Erro'
     )
 
+    # HU-23 — rastreabilidade e estado "BAIXADO"
+    data_download = models.DateTimeField(
+        null=True,
+        blank=True,
+        verbose_name='Data do 1º Download',
+        help_text='Quando o arquivo .rem foi baixado pela primeira vez (habilita o estado BAIXADO)'
+    )
+    gerado_por = models.ForeignKey(
+        'auth.User',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='remessas_geradas',
+        verbose_name='Gerado por'
+    )
+    enviado_por = models.ForeignKey(
+        'auth.User',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='remessas_enviadas',
+        verbose_name='Enviado por'
+    )
+
     class Meta:
         verbose_name = 'Arquivo de Remessa'
         verbose_name_plural = 'Arquivos de Remessa'
@@ -1997,11 +2021,43 @@ class ArquivoRemessa(TimeStampedModel):
         """Verifica se a remessa pode ser reenviada"""
         return self.status in [StatusArquivoRemessa.GERADO, StatusArquivoRemessa.ERRO]
 
-    def marcar_enviado(self):
-        """Marca a remessa como enviada"""
+    @property
+    def estado_ui(self):
+        """
+        HU-23: estado derivado para a interface. "BAIXADO" não é um valor do enum —
+        é GERADO + data_download preenchido (mantém a semântica de conciliação).
+        Retorna: ERRO | PROCESSADO | ENVIADO | BAIXADO | GERADO.
+        """
+        if self.status == StatusArquivoRemessa.GERADO and self.data_download:
+            return 'BAIXADO'
+        return self.status
+
+    def registrar_download(self):
+        """HU-23: marca o 1º download (habilita o estado BAIXADO). Idempotente."""
+        if not self.data_download:
+            self.data_download = timezone.now()
+            self.save(update_fields=['data_download', 'atualizado_em'])
+
+    def marcar_enviado(self, usuario=None):
+        """Marca a remessa como enviada (HU-23: registra quem enviou)."""
         self.status = StatusArquivoRemessa.ENVIADO
         self.data_envio = timezone.now()
+        if usuario is not None:
+            self.enviado_por = usuario
         self.save()
+
+    def cancelar_envio(self):
+        """
+        HU-23 (RN-07): reverte ENVIADO → GERADO para permitir correção/regeneração.
+        Não afeta remessas já PROCESSADAS pelo retorno do banco.
+        """
+        if self.status != StatusArquivoRemessa.ENVIADO:
+            return False
+        self.status = StatusArquivoRemessa.GERADO
+        self.data_envio = None
+        self.enviado_por = None
+        self.save(update_fields=['status', 'data_envio', 'enviado_por', 'atualizado_em'])
+        return True
 
     def marcar_processado(self):
         """Marca a remessa como processada"""
@@ -2068,6 +2124,24 @@ class ItemRemessa(TimeStampedModel):
         verbose_name='Descrição da Ocorrência'
     )
 
+    # HU-23 RN-18 — tratamento de rejeição pelo banco
+    class Status(models.TextChoices):
+        ATIVO = 'ATIVO', 'Ativo'
+        REJEITADO = 'REJEITADO', 'Rejeitado pelo Banco'
+
+    status = models.CharField(
+        max_length=10,
+        choices=Status.choices,
+        default=Status.ATIVO,
+        verbose_name='Status do Item',
+        help_text='REJEITADO quando o banco recusou o registro (boleto volta a ser elegível)'
+    )
+    motivo_rejeicao = models.CharField(
+        max_length=255,
+        blank=True,
+        verbose_name='Motivo da Rejeição'
+    )
+
     class Meta:
         verbose_name = 'Item de Remessa'
         verbose_name_plural = 'Itens de Remessa'
@@ -2076,6 +2150,12 @@ class ItemRemessa(TimeStampedModel):
 
     def __str__(self):
         return f"Item {self.nosso_numero} - Remessa {self.arquivo_remessa.numero_remessa}"
+
+    def marcar_rejeitado(self, motivo=''):
+        """HU-23 RN-18: marca o item como rejeitado pelo banco."""
+        self.status = ItemRemessa.Status.REJEITADO
+        self.motivo_rejeicao = (motivo or '')[:255]
+        self.save(update_fields=['status', 'motivo_rejeicao', 'atualizado_em'])
 
 
 class StatusArquivoRetorno(models.TextChoices):
@@ -2398,8 +2478,21 @@ class ItemRetorno(TimeStampedModel):
                 self.parcela.motivo_rejeicao = self.descricao_ocorrencia
                 self.parcela.save()
             elif self.tipo_ocorrencia == 'REJEICAO':
-                self.parcela.status_boleto = StatusBoleto.CANCELADO
-                self.parcela.motivo_rejeicao = self.descricao_ocorrencia
+                # HU-23 RN-18: o banco recusou o registro. Marca o ItemRemessa
+                # ativo correspondente como REJEITADO e devolve o boleto para
+                # GERADO, tornando-o elegível para uma nova remessa (após correção).
+                motivo = self.descricao_ocorrencia or self.codigo_ocorrencia
+                item_remessa = (
+                    self.parcela.itens_remessa
+                    .filter(status=ItemRemessa.Status.ATIVO)
+                    .order_by('-arquivo_remessa__data_geracao')
+                    .first()
+                )
+                if item_remessa:
+                    item_remessa.marcar_rejeitado(motivo)
+                self.parcela.status_boleto = StatusBoleto.GERADO
+                self.parcela.data_registro_boleto = None
+                self.parcela.motivo_rejeicao = motivo
                 self.parcela.save()
             elif self.tipo_ocorrencia == 'PROTESTO':
                 self.parcela.status_boleto = StatusBoleto.PROTESTADO
