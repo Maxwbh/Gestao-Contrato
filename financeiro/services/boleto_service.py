@@ -1413,13 +1413,18 @@ class BoletoService:
                 if response.status_code == 200:
                     return self._processar_resposta_sucesso(response, banco_nome, dados_boleto)
 
-                # 429 — rate limit: respeita Retry-After e tenta novamente
+                # 429 — rate limit ou cold start do Render.com: aguarda e tenta novamente
                 elif response.status_code == 429:
                     retry_after = int(response.headers.get('Retry-After', max(delay, 10)))
                     logger.warning(
                         f"Rate limit 429 — aguardando {retry_after}s "
                         f"(tentativa {tentativa}/{self.max_tentativas})"
                     )
+                    if tentativa == 1:
+                        # Na primeira tentativa o 429 pode ser cold start do Render.com:
+                        # espera a API acordar antes de retentar (evita esperar retry_after fixo)
+                        if self._aguardar_api_acordar():
+                            continue
                     if tentativa < self.max_tentativas:
                         time.sleep(retry_after)
                         continue
@@ -1478,7 +1483,7 @@ class BoletoService:
                             'sucesso': False,
                             'erro': (
                                 'O serviço de boletos está iniciando (cold start). '
-                                'Aguarde cerca de 1 minuto e tente novamente.'
+                                'Aguarde cerca de 2 minutos e tente novamente.'
                             ),
                         }
                     continue
@@ -1495,6 +1500,19 @@ class BoletoService:
 
             except requests.exceptions.Timeout as e:
                 logger.warning(f"Timeout (tentativa {tentativa}): {e}")
+                if tentativa == 1:
+                    # Timeout na primeira tentativa pode ser cold start do Render.com:
+                    # o proxy aceita a conexão mas a app demora >60s para responder.
+                    # Aguarda a API acordar antes de retentar.
+                    if self._aguardar_api_acordar():
+                        continue
+                    return {
+                        'sucesso': False,
+                        'erro': (
+                            'O serviço de boletos está iniciando (cold start). '
+                            'Aguarde cerca de 2 minutos e tente novamente.'
+                        ),
+                    }
                 if tentativa < self.max_tentativas:
                     logger.info(f"Aguardando {delay}s antes de nova tentativa...")
                     time.sleep(delay)

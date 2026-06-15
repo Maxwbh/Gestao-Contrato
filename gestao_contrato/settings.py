@@ -349,11 +349,11 @@ TASK_TOKEN = None
 
 # BRCobrança
 BRCOBRANCA_URL = config('BRCOBRANCA_URL', default='http://localhost:9292')
-BRCOBRANCA_TIMEOUT = 30
+BRCOBRANCA_TIMEOUT = 60
 BRCOBRANCA_MAX_TENTATIVAS = 3
 BRCOBRANCA_DELAY_INICIAL = 2
-# Tempo máximo de espera (segundos) para o serviço acordar no cold start (Free Tier)
-BRCOBRANCA_COLD_START_WAIT = 60
+# Tempo máximo de espera (segundos) para o serviço acordar no cold start (Free Tier Render ~90s)
+BRCOBRANCA_COLD_START_WAIT = 120
 # Template de renderização: 'prawn' (Ruby nativo, sem GhostScript — recomendado Render Free 512MB)
 # ou '' para usar o padrão da API (GhostScript, melhor qualidade mas +50-100MB RAM por PDF).
 BRCOBRANCA_TEMPLATE = config('BRCOBRANCA_TEMPLATE', default='prawn')
