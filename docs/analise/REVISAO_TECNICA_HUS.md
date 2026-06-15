@@ -50,9 +50,13 @@ deliberada à regra de não citar tecnologias), por serem dependências operacio
 | **Twilio** | Envio de SMS e mensagens de WhatsApp | Provedor de mensagens; telefones normalizados ao padrão internacional antes do envio | HU-19, HU-20 |
 | **cron-job.org** | Agendador de tarefas via chamadas HTTP | Substitui processos de segundo plano (Celery) no plano gratuito de hospedagem, que não mantém *workers*. Aciona os pontos de entrada de notificação/cobrança | HU-20 |
 | **SMTP** | Envio de e-mail | Canal de e-mail das notificações, cobranças e avisos internos | HU-03, HU-19, HU-20, HU-24 |
+| **BrasilAPI — CEP** | Consulta de endereço por CEP | Autopreenchimento de endereço no cadastro (servidor); **ViaCEP** também é usado no preenchimento pelo formulário. Resultado em cache | HU-01, HU-21 (cadastros) |
+| **BrasilAPI — CNPJ** | Consulta de dados cadastrais de empresa por CNPJ | Preenche razão social/endereço ao cadastrar comprador ou imobiliária pessoa jurídica. Resultado em cache | HU-01, HU-21 (cadastros) |
+| **CPF — (sem API externa)** | Validação e identificação por CPF | **Não há serviço externo de consulta de CPF.** A validação é **local** (algoritmo de dígitos verificadores); o CPF serve apenas para localizar o comprador no próprio sistema (identificação no atendimento e auto-cadastro) | HU-19, HU-21 |
 
-> Demais fontes auxiliares (consulta de CEP, consulta de cadastro de pessoa jurídica) existem no
-> sistema, mas não são centrais ao fluxo financeiro coberto por estas HUs.
+> **Observação sobre o CPF:** diferentemente de CEP e CNPJ, o CPF **não** é consultado em API
+> externa — apenas validado localmente e usado como chave de identificação interna do comprador.
+> Reportado assim para evitar a impressão de que existe integração de consulta de CPF.
 
 ---
 
@@ -690,8 +694,9 @@ anterior à remessa (HU-23).
 do índice mestre `INDICE.md` e da verificação contra o código atual. Mantém o escopo
 funcional/técnico sem referências a tecnologias de implementação ou de apresentação visual —
 **com exceção das APIs e serviços externos** listados na seção "APIs e Serviços Externos"
-(Banco Central do Brasil, BRCobrança, Twilio, cron-job.org e SMTP), identificados explicitamente
-por serem dependências operacionais do sistema (decisão de revisão).*
+(Banco Central do Brasil, BRCobrança, Twilio, cron-job.org, SMTP e BrasilAPI/ViaCEP para
+CEP e CNPJ), identificados explicitamente por serem dependências operacionais do sistema
+(decisão de revisão). O CPF não possui API externa — é validado localmente.*
 
 > **Nota desta revisão (atualização):** achados de 07×24 e HU-11/12/18 reavaliados contra o
 > código real — HU-11/HU-12 já reusam o cálculo canônico de saldo; só a HU-18 duplica a fórmula;
