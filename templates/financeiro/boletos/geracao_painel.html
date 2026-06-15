@@ -171,7 +171,6 @@
                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
             <div class="modal-body">
-                <div id="alertGerar" class="alert d-none mb-3"></div>
                 <div id="resultadoGerar" class="d-none">
                     <div class="alert alert-success"><strong>Geração concluída!</strong>
                         <ul class="mb-0 mt-2 small" id="listaResultado"></ul>
@@ -222,7 +221,6 @@
     function abrirModal(escopo, extra) {
         escopoAtual = escopo;
         extraAtual = extra || {};
-        document.getElementById('alertGerar').className = 'alert d-none';
         document.getElementById('resultadoGerar').classList.add('d-none');
         document.getElementById('formGerar').classList.remove('d-none');
         document.getElementById('btnConfirmarGerar').classList.remove('d-none');
@@ -247,6 +245,13 @@
         btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>' + (txt || '...'); }
     function unlock(btn) { btn.disabled = false; if (btn.dataset._h) btn.innerHTML = btn.dataset._h; }
 
+    // Notificações visuais — usa o showToast/showErrorModal globais (base.html)
+    function notify(msg, type, duration) {
+        if (window.showToast) { window.showToast(msg, type, duration); return; }
+        // Fallback mínimo caso o helper global não esteja disponível
+        if (type === 'error') alert(msg);
+    }
+
     const btnConf = document.getElementById('btnConfirmarGerar');
     btnConf.addEventListener('click', async () => {
         const body = Object.assign({
@@ -256,9 +261,6 @@
             incluir_intermediarias: document.getElementById('gIntermediarias').checked,
         }, extraAtual);
 
-        const alertEl = document.getElementById('alertGerar');
-        alertEl.className = 'alert d-none';
-
         // Verificar e aguardar API de boletos antes de gerar (cold start)
         try {
             lock(btnConf, 'Verificando API...');
@@ -267,8 +269,7 @@
             }
         } catch (apiErr) {
             unlock(btnConf);
-            alertEl.className = 'alert alert-danger';
-            alertEl.textContent = apiErr.message || 'Serviço de boletos indisponível. Tente novamente em instantes.';
+            notify(apiErr.message || 'Serviço de boletos indisponível. Tente novamente em instantes.', 'error');
             return;
         }
 
@@ -283,10 +284,11 @@
             const data = await r.json();
             unlock(btnConf);
             if (!data.sucesso) {
-                alertEl.className = 'alert alert-danger';
-                alertEl.textContent = data.erro || 'Falha na geração.';
+                notify(data.erro || 'Falha na geração.', 'error');
                 return;
             }
+
+            // Resumo visual dentro do modal
             document.getElementById('formGerar').classList.add('d-none');
             btnConf.classList.add('d-none');
             const itens = [
@@ -300,11 +302,22 @@
             (data.carnes || []).forEach(c => itens.push(`<li>Carnê ${c.contrato}: <a href="${c.carne_url}">baixar PDF</a></li>`));
             document.getElementById('listaResultado').innerHTML = itens.filter(Boolean).join('');
             document.getElementById('resultadoGerar').classList.remove('d-none');
+
+            // Toast de resumo (sucesso / parcial / sem geração)
+            if (data.total_gerados > 0 && !data.total_erros) {
+                notify(`${data.total_gerados} boleto(s) gerado(s) com sucesso!`, 'success', 4000);
+            } else if (data.total_gerados > 0 && data.total_erros) {
+                notify(`${data.total_gerados} gerado(s), ${data.total_erros} com erro. Veja o detalhe.`, 'warning', 6000);
+            } else if (data.total_erros) {
+                notify(`Nenhum boleto gerado — ${data.total_erros} erro(s). Veja o detalhe.`, 'error');
+            } else {
+                notify('Nenhum boleto elegível para geração.', 'info', 4000);
+            }
+
             setTimeout(() => window.location.reload(), 3500);
         } catch (err) {
             unlock(btnConf);
-            alertEl.className = 'alert alert-danger';
-            alertEl.textContent = 'Erro de conexão. Verifique sua internet e tente novamente.';
+            notify('Erro de conexão. Verifique sua internet e tente novamente.', 'error');
         }
     });
 })();
