@@ -2657,11 +2657,27 @@ def boletos_painel_gerar(request):
     total_erros = 0
     erros = []
     carnes = []
+    boletos_gerados = []
     por_imob = defaultdict(lambda: {'gerados': 0, 'bloqueados': 0, 'erros': 0})
 
     for contrato, parcelas, intermediarias in contratos_alvo:
         imob_nome = contrato.imobiliaria.nome
         geradas_contrato = []
+        ultimo_mes_atualizado = False
+
+        # Resolver conta bancária principal da imobiliária (via FK direto no contrato)
+        conta_bancaria = contrato.imobiliaria.contas_bancarias.filter(
+            principal=True, ativo=True
+        ).first()
+        if not conta_bancaria:
+            total_erros += 1
+            por_imob[imob_nome]['erros'] += 1
+            erros.append({
+                'parcela_id': None,
+                'contrato': contrato.numero_contrato,
+                'erro': 'Nenhuma conta bancária principal configurada para esta imobiliária.',
+            })
+            continue
 
         # Materializa parcelas das intermediárias
         alvos = list(parcelas)
@@ -2676,11 +2692,32 @@ def boletos_painel_gerar(request):
 
         for parcela in alvos:
             try:
-                resultado = parcela.gerar_boleto(enviar_email=False)
+                resultado = parcela.gerar_boleto(conta_bancaria=conta_bancaria, enviar_email=False)
                 if resultado and resultado.get('sucesso'):
                     total_gerados += 1
                     por_imob[imob_nome]['gerados'] += 1
                     geradas_contrato.append(parcela)
+
+                    # S-04 — renovar token e expiração a cada nova geração
+                    parcela.renovar_token()
+
+                    registrar_auditoria(
+                        request, 'BOLETO_GERADO', 'Parcela', parcela.pk,
+                        f'Nosso número: {parcela.nosso_numero}'
+                    )
+
+                    # Atualizar último mês com boleto gerado
+                    if hasattr(contrato, 'ultimo_mes_boleto_gerado'):
+                        if parcela.numero_parcela > contrato.ultimo_mes_boleto_gerado:
+                            contrato.ultimo_mes_boleto_gerado = parcela.numero_parcela
+                            ultimo_mes_atualizado = True
+
+                    boletos_gerados.append({
+                        'parcela_id': parcela.pk,
+                        'contrato': contrato.numero_contrato,
+                        'nosso_numero': resultado.get('nosso_numero', ''),
+                        'token_publico': str(parcela.token_publico),
+                    })
                 else:
                     total_erros += 1
                     por_imob[imob_nome]['erros'] += 1
@@ -2691,6 +2728,9 @@ def boletos_painel_gerar(request):
                 total_erros += 1
                 por_imob[imob_nome]['erros'] += 1
                 erros.append({'parcela_id': parcela.pk, 'contrato': contrato.numero_contrato, 'erro': str(e)})
+
+        if ultimo_mes_atualizado:
+            contrato.save(update_fields=['ultimo_mes_boleto_gerado'])
 
         # Notificação consolidada por canal (RN-14)
         if geradas_contrato:
@@ -2715,6 +2755,7 @@ def boletos_painel_gerar(request):
         'erros': erros,
         'tipo': tipo,
         'carnes': carnes,
+        'boletos': boletos_gerados,
     })
 
 
