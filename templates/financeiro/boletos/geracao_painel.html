@@ -248,7 +248,7 @@
     function unlock(btn) { btn.disabled = false; if (btn.dataset._h) btn.innerHTML = btn.dataset._h; }
 
     const btnConf = document.getElementById('btnConfirmarGerar');
-    btnConf.addEventListener('click', () => {
+    btnConf.addEventListener('click', async () => {
         const body = Object.assign({
             escopo: escopoAtual,
             quantidade: parseInt(document.getElementById('gQuantidade').value, 10) || 1,
@@ -256,15 +256,31 @@
             incluir_intermediarias: document.getElementById('gIntermediarias').checked,
         }, extraAtual);
 
-        lock(btnConf, 'Gerando...');
         const alertEl = document.getElementById('alertGerar');
         alertEl.className = 'alert d-none';
 
-        fetch(URL_GERAR, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'X-CSRFToken': CSRF },
-            body: JSON.stringify(body),
-        }).then(r => r.json()).then(data => {
+        // Verificar e aguardar API de boletos antes de gerar (cold start)
+        try {
+            lock(btnConf, 'Verificando API...');
+            if (window.GestaoContratos && GestaoContratos.BrcobrancaQueue) {
+                await GestaoContratos.BrcobrancaQueue.prepararApi(btnConf);
+            }
+        } catch (apiErr) {
+            unlock(btnConf);
+            alertEl.className = 'alert alert-danger';
+            alertEl.textContent = apiErr.message || 'Serviço de boletos indisponível. Tente novamente em instantes.';
+            return;
+        }
+
+        lock(btnConf, 'Gerando...');
+
+        try {
+            const r = await fetch(URL_GERAR, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'X-CSRFToken': CSRF },
+                body: JSON.stringify(body),
+            });
+            const data = await r.json();
             unlock(btnConf);
             if (!data.sucesso) {
                 alertEl.className = 'alert alert-danger';
@@ -276,17 +292,20 @@
             const itens = [
                 `<li><strong>${data.total_gerados}</strong> boleto(s) gerado(s)</li>`,
                 data.total_bloqueados ? `<li>${data.total_bloqueados} bloqueado(s) por reajuste — <a href="{% url 'financeiro:reajustes_pendentes' %}">ver pendentes</a></li>` : '',
-                data.total_erros ? `<li>${data.total_erros} erro(s)</li>` : '',
+                data.total_erros ? `<li class="text-danger">${data.total_erros} erro(s)</li>` : '',
             ];
+            (data.erros || []).forEach(e => itens.push(
+                `<li class="text-danger small">Contrato ${e.contrato}: ${e.erro}</li>`
+            ));
             (data.carnes || []).forEach(c => itens.push(`<li>Carnê ${c.contrato}: <a href="${c.carne_url}">baixar PDF</a></li>`));
-            document.getElementById('listaResultado').innerHTML = itens.join('');
+            document.getElementById('listaResultado').innerHTML = itens.filter(Boolean).join('');
             document.getElementById('resultadoGerar').classList.remove('d-none');
-            setTimeout(() => window.location.reload(), 2500);
-        }).catch(() => {
+            setTimeout(() => window.location.reload(), 3500);
+        } catch (err) {
             unlock(btnConf);
             alertEl.className = 'alert alert-danger';
-            alertEl.textContent = 'Erro de conexão.';
-        });
+            alertEl.textContent = 'Erro de conexão. Verifique sua internet e tente novamente.';
+        }
     });
 })();
 </script>
