@@ -364,6 +364,15 @@ class CNABService:
                         'Acesse Configurações → Conta Bancária e informe o Byte IDT.'
                     )
                 }
+        if conta_bancaria.banco == '756' and not conta_bancaria.convenio:
+            return {
+                'sucesso': False,
+                'erro': (
+                    'Sicoob requer o campo "Convênio" preenchido na conta bancária '
+                    '(código de cedente, 7-9 dígitos fornecido pelo banco). '
+                    'Acesse Configurações → Conta Bancária e informe o número do convênio.'
+                )
+            }
 
         # Validar parcelas
         parcelas_validas = [p for p in parcelas if p.tem_boleto and not p.pago]
@@ -386,10 +395,12 @@ class CNABService:
         banco = self._get_banco_brcobranca(conta_bancaria.banco)
         imobiliaria = conta_bancaria.imobiliaria
 
-        # Agencia: CNAB240 usa até 5 dígitos (num+DV para BB), CNAB400 usa 4
+        # Agencia: CNAB240 usa até 5 dígitos (num+DV para BB); Sicoob/Sicredi usam 4
         agencia_num, agencia_dv = self._parsear_numero_dv(conta_bancaria.agencia)
         conta_num, conta_dv = self._parsear_numero_dv(conta_bancaria.conta)
-        if layout == 'CNAB_240' and agencia_dv:
+        # Bancos que usam agência de 4 dígitos sem DV em qualquer layout CNAB
+        _bancos_agencia_sem_dv = {'756', '748'}
+        if layout == 'CNAB_240' and agencia_dv and conta_bancaria.banco not in _bancos_agencia_sem_dv:
             agencia_remessa = f"{agencia_num}{agencia_dv}"[:5]
         else:
             agencia_remessa = agencia_num

@@ -891,6 +891,15 @@ class BoletoService:
                             'Acesse Configurações → Conta Bancária e informe o Byte IDT.'
                         )
                     }
+            if banco == '756' and not convenio:
+                return {
+                    'sucesso': False,
+                    'erro': (
+                        'Sicoob requer o campo "Convênio" preenchido na conta bancária '
+                        '(código de cedente, 7-9 dígitos fornecido pelo banco). '
+                        'Acesse Configurações → Conta Bancária e informe o número do convênio.'
+                    )
+                }
 
             # Montar dados do boleto (ja inclui numero_documento e validacoes)
             dados_boleto, nosso_numero = self._montar_dados_boleto(parcela, conta_bancaria)
