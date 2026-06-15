@@ -9,7 +9,13 @@
 > Convenções: "registro" = entidade persistida; "serviço" = componente de regra de
 > negócio reutilizável; "rota" = ponto de entrada da aplicação; "provedor de mensagens" =
 > canal externo de e-mail/SMS/conversa; "gerador de documento" = produção de arquivo
-> imprimível; "serviço de boletos" = componente externo que produz o título e seus dados.
+> imprimível.
+>
+> **Serviço de boletos = BRCobrança.** O componente externo que produz o título (código de
+> barras, linha digitável, pagamento instantâneo, documento imprimível) e também lê o extrato
+> bancário é o **BRCobrança**. Onde o texto diz "serviço de boletos"/"serviço de registro",
+> leia **BRCobrança**. Importante: o BRCobrança **gera** o boleto, mas **não o registra** no
+> banco — o registro continua sendo feito pelo arquivo de remessa bancária (HU-23).
 
 ---
 
@@ -97,8 +103,11 @@ persistindo tudo em uma única operação atômica.
 - Mapeamento de campos por instituição (convênio/carteira/posto/variação conforme o banco).
 
 **Observações da Revisão:**
+- O título e seus dados são produzidos pelo **BRCobrança** (serviço de boletos externo).
 - O duplo armazenamento (arquivo + binário) é uma decisão acertada para ambientes efêmeros.
-- A regra "já existe → retorna existente" evita consumo desnecessário do serviço de boletos.
+- A regra "já existe → retorna existente" evita consumo desnecessário do BRCobrança.
+- A inicialização lenta do BRCobrança (quando ocioso) é tratada com espera/retentativa na
+  geração, de modo que a primeira chamada do período não falhe por indisponibilidade temporária.
 - Verificar que o cancelamento não invalide conciliações já realizadas.
 
 ---
@@ -183,16 +192,29 @@ persistindo tudo em uma única operação atômica.
 **Mecânica técnica:**
 - Seleção: próximas N parcelas não pagas (padrão 20; alternativa 6), ordenadas por vencimento.
 - Cada parcela passa pelo bloqueio por reajuste; se uma estiver bloqueada, aborta com motivo claro.
-- Emissão em lotes de 15 por chamada ao serviço de boletos (limite para evitar estouro de tempo).
+- Emissão em lotes de 15 por chamada ao **BRCobrança** (limite para evitar estouro de tempo).
 - **Tolerância a falha parcial:** falha individual não derruba o lote; erros são reportados.
 - Saídas: documento consolidado para impressão e pacote com documentos individuais; também há
   consolidação de múltiplos contratos.
 - Quando restam menos que N, gera só as disponíveis (sem erro). Aviso informativo (não bloqueante)
   quando o reajuste está próximo.
 
-**Observações da Revisão:**
-- Diferença de comportamento frente à HU-24: aqui um bloqueio **aborta**; lá ele apenas **exclui**
-  a parcela bloqueada e segue. Decisão deliberada — documentar para evitar confusão do operador.
+**Observações da Revisão (achado 07×24 — revisado contra o código):**
+- A especificação sugeria que o carnê **aborta** ao encontrar bloqueio; na prática o código já é
+  **tolerante** (conta os bloqueados e segue com os demais). A divergência real frente à HU-24 não
+  é "abortar vs. seguir", e sim o **mecanismo de bloqueio**:
+  - **HU-24** consulta `contrato.pode_gerar_boleto(numero_parcela)` por parcela (fonte canônica).
+  - **HU-07 (carnê)** usa um **corte por ciclo** próprio (`max_parcela_lote`), mais restritivo:
+    bloqueia parcelas de **ciclos futuros** no lote (só permite individualmente), mesmo quando o
+    `pode_gerar_boleto()` as liberaria por ainda não terem vencido.
+- **Melhoria recomendada (decisão: unificar):** o carnê deve passar a usar
+  `contrato.pode_gerar_boleto()` por parcela como **fonte única de verdade** do bloqueio por
+  reajuste (mesma regra da HU-24), padronizando inclusive a mensagem ("Reajuste do ciclo N
+  pendente"). Efeito: parcelas de ciclos futuros ainda não vencidos passam a ser permitidas no
+  lote do carnê; bloqueia-se apenas o reajuste efetivamente pendente. Remove a heurística
+  duplicada `max_parcela_lote` e elimina o risco de duas definições de "elegível" divergirem.
+- *Esta é uma recomendação de revisão; a implementação no código foi mantida fora do escopo desta
+  rodada (somente documentação).*
 
 ---
 
@@ -201,8 +223,8 @@ persistindo tudo em uma única operação atômica.
 **Objetivo:** emitir via atualizada com encargos calculados para o dia.
 
 **Mecânica técnica:**
-- Pré-visualização exibe valor, juros e multa de hoje; emissão produz documento **fresco** com
-  os encargos recalculados — não reutiliza o documento armazenado.
+- Pré-visualização exibe valor, juros e multa de hoje; emissão produz documento **fresco** via
+  **BRCobrança** com os encargos recalculados — não reutiliza o documento armazenado.
 - Fórmulas idênticas à HU-04 (juros proporcionais aos dias; multa única; zero se no prazo).
 - Não altera o estado do boleto nem sobrescreve o documento original; reutiliza o número de
   controle existente (preserva a conciliação).
@@ -236,8 +258,8 @@ persistindo tudo em uma única operação atômica.
 **Objetivo:** conciliar pagamentos em massa a partir do extrato, com deduplicação.
 
 **Mecânica técnica:**
-- Processa o extrato com **alternativa interna** quando o serviço externo de leitura está
-  indisponível — o processamento nunca para por falha externa.
+- A leitura do extrato é feita pelo **BRCobrança**, com **alternativa interna** quando o
+  BRCobrança está indisponível — o processamento nunca para por falha externa.
 - Conciliação por prioridade: (1) número de controle no descritivo; (2) número de contrato no
   descritivo; (3) valor exato ± R$ 0,10 dentro de janela de ±5 dias do vencimento; (4) sem match
   → fila de conciliação manual.
@@ -247,7 +269,7 @@ persistindo tudo em uma única operação atômica.
   mesma semana) → não concilia automaticamente, vai para revisão. Arquivo inválido → erro sem efeito.
 
 **Observações da Revisão:**
-- A alternativa interna de leitura é uma boa proteção de continuidade.
+- A alternativa interna de leitura (quando o BRCobrança falha) é uma boa proteção de continuidade.
 - A regra de empate evita baixas erradas — correta para operação financeira.
 
 ---
@@ -269,7 +291,11 @@ persistindo tudo em uma única operação atômica.
 - Cálculo é **apenas informativo** — não altera o contrato; o resultado permanece visível
   (sem desaparecer) e a ação de calcular não pede confirmação.
 
-**Observações da Revisão:**
+**Observações da Revisão (verificado contra o código):**
+- **Saldo devedor já reutiliza a função canônica** `Contrato.calcular_saldo_devedor()` — sem
+  duplicação de fórmula. ✅
+- Há tratamento legal adicional embutido: limite de retenção (pena convencional ≤ 25% do total
+  pago) com alerta e cálculo de devolução alternativo conforme esse teto — bom ponto de conformidade.
 - Bom: persistência visual do resultado e ausência de efeito colateral.
 - Confirmar arredondamento e exibição quando retenções superam o pago (devolução zero + aviso).
 
@@ -285,8 +311,9 @@ persistindo tudo em uma única operação atômica.
 - Data de referência opcional (padrão hoje); considera parcelas com vencimento posterior à data.
 - **Apenas informativo** — não gera cobrança nem altera estado.
 
-**Observações da Revisão:**
-- Reaproveita corretamente o cálculo de saldo devedor da HU-11 — consistência boa.
+**Observações da Revisão (verificado contra o código):**
+- **Reaproveita corretamente** a mesma função canônica `Contrato.calcular_saldo_devedor()` da
+  HU-11 — consistência boa, fórmula única. ✅
 
 ---
 
@@ -393,9 +420,19 @@ persistindo tudo em uma única operação atômica.
 - Painel por imobiliária com série de 12 meses (5 passados a 6 futuros) e três séries de fluxo:
   previsto (não pagas no período), realizado (pagamentos efetuados) e pendente (vencidas não pagas).
 
-**Observações da Revisão:**
-- O saldo por método de amortização deve ser o mesmo usado em HU-11/HU-12 — verificar reuso para
-  evitar divergência de cálculo entre relatórios e cálculos de encerramento.
+**Observações da Revisão (achado de saldo — revisado contra o código):**
+- **Aqui está a única divergência real:** o relatório de posição **não** chama
+  `Contrato.calcular_saldo_devedor()`. Para evitar consulta por contrato (problema de desempenho
+  N+1 num relatório em massa), ele **recalcula a fórmula inline** numa **agregação única**:
+  amortização constante → soma das amortizações (com recurso à soma dos valores atuais quando
+  ausente); demais → soma dos valores atuais. A lógica é **idêntica** à da função canônica, mas
+  **duplicada** em outro ponto.
+- **Melhoria recomendada:** extrair a **fórmula** do saldo para um auxiliar puro e compartilhado
+  (ex.: `Contrato.saldo_devedor_de_componentes(tipo_amortizacao, soma_amortizacao, soma_valor)`),
+  consumido tanto por `calcular_saldo_devedor()` (caminho por contrato) quanto pelo relatório
+  (caminho em massa). Mantém o desempenho da agregação única e elimina a duplicação — assim
+  HU-11/HU-12/HU-18 passam a depender de **uma só regra**, sem risco de divergir no futuro.
+- *Recomendação de revisão; implementação mantida fora do escopo desta rodada (somente documentação).*
 
 ---
 
@@ -526,9 +563,12 @@ registro e **(2)** o recebimento dos arquivos de confirmação com baixa automá
   registro, auditoria, proteção de acesso, tratamento de rejeição). A revisão atual confirma que
   as correções estão refletidas em regras, critérios e cenários.
 - Ponto forte: a anti-duplicidade e a sequência por conta endereçam os riscos financeiros mais caros.
+- **Importante (papel do BRCobrança):** o BRCobrança **gera** o boleto, mas **não o registra** no
+  banco — o registro é feito pelo arquivo de remessa desta HU. Logo, o ciclo de cobrança depende de
+  ambos: BRCobrança (geração — HU-03/HU-24) + remessa CNAB (registro — esta HU).
 - Pendência prática conhecida (corrigida no código recente): o formato de agência/dígito e a
-  validação de convênio por instituição precisam acompanhar o que o serviço de registro espera —
-  manter cobertura de teste por banco.
+  validação de convênio por instituição precisam acompanhar o que o **BRCobrança** espera (tanto na
+  geração do boleto quanto no layout de remessa) — manter cobertura de teste por banco.
 
 ---
 
@@ -575,19 +615,23 @@ anterior à remessa (HU-23).
 
 ## Achados Transversais (Cross-Cutting)
 
-1. **Função única de bloqueio por reajuste** (HU-06) é consumida por HU-03, HU-07, HU-14 e HU-24.
-   Consistência boa; atenção à diferença de política de lote (abortar vs. excluir) entre HU-07 e HU-24.
-2. **Saldo devedor por tipo de amortização** aparece em HU-11, HU-12 e HU-18. Recomenda-se reuso de
-   um único cálculo para evitar divergências entre relatórios e encerramentos.
+1. **Bloqueio por reajuste** (HU-06): consumido por `pode_gerar_boleto()` em HU-03, HU-14 e HU-24,
+   mas o **carnê (HU-07) usa um corte por ciclo próprio** (`max_parcela_lote`), mais restritivo.
+   **Recomendação:** unificar o carnê em `pode_gerar_boleto()` (fonte única) — ver achado da HU-07.
+2. **Saldo devedor por tipo de amortização** (HU-11, HU-12, HU-18): HU-11 e HU-12 **já reusam** a
+   função canônica `Contrato.calcular_saldo_devedor()`; **apenas a HU-18 duplica a fórmula inline**
+   (por desempenho, em agregação única). **Recomendação:** extrair um auxiliar puro de fórmula
+   compartilhado entre os dois caminhos (ver achado da HU-18) — sem perder o desempenho do relatório.
 3. **Idempotência** é princípio recorrente e bem aplicado: conciliação por extrato (HU-10),
    importação de índices (HU-15), retorno bancário (HU-16/HU-23) e geração em lote (HU-24).
 4. **Preservação do valor original** (`valor_original` imutável) é regra global respeitada em
    reajuste (HU-05) e renegociação (HU-17).
 5. **Privacidade do documento do comprador** em superfícies públicas (HU-13, HU-21) é regra global,
    verificada por teste de conteúdo.
-6. **Resiliência a indisponibilidade externa:** leitura de extrato com alternativa interna (HU-10),
-   importação de índices tolerante a falha por fonte (HU-15) e tratamento de inicialização lenta do
-   serviço de boletos (geração em lote) — padrão maduro de degradação graciosa.
+6. **Resiliência a indisponibilidade externa:** leitura de extrato pelo **BRCobrança** com
+   alternativa interna (HU-10), importação de índices tolerante a falha por fonte (HU-15) e
+   tratamento da **inicialização lenta do BRCobrança** quando ocioso (espera/retentativa na
+   geração) — padrão maduro de degradação graciosa.
 7. **Tolerância a falha parcial em lotes** (HU-07, HU-23, HU-24) com relato individual de sucesso/erro.
 8. **Controle de acesso multi-inquilino** revalidado por operação sensível (HU-21, HU-23, HU-24),
    com proteção explícita contra manipulação de identificador no envio.
@@ -603,12 +647,26 @@ anterior à remessa (HU-23).
 - **Escala do mapa** (HU-22): carga total de marcadores pode exigir carregamento por região no futuro.
 - **Cobertura de testes ponta a ponta** do atendimento por conversa (HU-19) e dos itens parciais do
   mapa (HU-22), ambos marcados como parciais.
-- **Paridade por banco** na geração/registro de boletos (HU-03/HU-23): manter testes por instituição
-  para formato de agência/dígito, convênio e layout, acompanhando o que o serviço de registro espera.
-- **Reuso do cálculo de saldo devedor** entre relatórios (HU-18) e encerramentos (HU-11/HU-12).
+- **Paridade por banco no BRCobrança** (HU-03/HU-23): manter testes por instituição para formato de
+  agência/dígito, convênio e layout, acompanhando o que o **BRCobrança** espera — lembrando que o
+  BRCobrança **gera** o boleto e produz o layout de remessa, mas o **registro** efetivo no banco
+  depende do envio do arquivo (HU-23).
+- **Unificar o bloqueio por reajuste do carnê (HU-07) em `pode_gerar_boleto()`** — hoje o carnê usa
+  um corte por ciclo próprio, mais restritivo que a HU-24; unificar elimina duas definições de
+  "elegível".
+- **Reuso do cálculo de saldo devedor (HU-18):** extrair um auxiliar puro de fórmula compartilhado
+  com `calcular_saldo_devedor()` (HU-11/HU-12 já o reusam; só o relatório em massa duplica a fórmula).
 
 ---
 
-*Revisão consolidada a partir das especificações em `docs/analise/historias-usuario/HU-01..HU-24`
-e do índice mestre `INDICE.md`. Mantém o escopo funcional/técnico sem referências a tecnologias
-de implementação ou de apresentação visual.*
+*Revisão consolidada a partir das especificações em `docs/analise/historias-usuario/HU-01..HU-24`,
+do índice mestre `INDICE.md` e da verificação contra o código atual. Mantém o escopo
+funcional/técnico sem referências a tecnologias de implementação ou de apresentação visual —
+**com exceção do BRCobrança**, identificado explicitamente por ser a integração externa de
+geração de boletos e leitura de extrato (decisão de revisão).*
+
+> **Nota desta revisão (atualização):** achados de 07×24 e HU-11/12/18 reavaliados contra o
+> código real — HU-11/HU-12 já reusam o cálculo canônico de saldo; só a HU-18 duplica a fórmula;
+> o carnê (HU-07) usa corte por ciclo próprio em vez de `pode_gerar_boleto()`. Recomendações
+> registradas (unificar o carnê em `pode_gerar_boleto()`; extrair auxiliar de fórmula de saldo).
+> As recomendações são **somente de documentação** nesta rodada — sem alteração de código.
