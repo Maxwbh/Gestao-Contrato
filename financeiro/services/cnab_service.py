@@ -444,6 +444,10 @@ class CNABService:
             dados_empresa['carteira'] = re.sub(r'\D', '', carteira_str).zfill(2)[:2] or '01'
             conv_digits = re.sub(r'\D', '', conta_bancaria.convenio or '')
             dados_empresa['convenio'] = conv_digits.zfill(9)[:9]
+            # CNAB240 Sicoob: BRCobrança espera agência com 4 dígitos (sem DV) e DV separado.
+            # Sem agencia_dv o Ruby lança "undefined method `format_size' for nil".
+            if agencia_dv:
+                dados_empresa['agencia_dv'] = agencia_dv[:1]
 
         # Pagamentos com campos corretos do Brcobranca::Remessa::Pagamento
         pagamentos = []
