@@ -38,6 +38,24 @@ extrato, retorno bancário) → reajustar anualmente → encerrar (quitação, r
 
 ---
 
+## APIs e Serviços Externos
+
+As integrações externas a seguir são **identificadas explicitamente** nesta revisão (exceção
+deliberada à regra de não citar tecnologias), por serem dependências operacionais do sistema:
+
+| Serviço | Uso | Observações | HUs |
+|---------|-----|-------------|-----|
+| **Banco Central do Brasil — API** | Índices econômicos (IPCA, IGP-M, SELIC, e demais) | Fonte oficial dos números-índice e variações usados no reajuste | HU-05, HU-15 |
+| **BRCobrança — API** | Geração de boletos e arquivos CNAB; leitura de extrato | Auto-hospedado em contêiner (Docker self-hosted). **Gera** o boleto e produz o layout de remessa, mas **não registra** no banco — o registro é feito pelo envio do arquivo de remessa (HU-23). Pode ter inicialização lenta quando ocioso (tratada com espera/retentativa) | HU-03, HU-07, HU-08, HU-10, HU-14, HU-16, HU-23, HU-24 |
+| **Twilio** | Envio de SMS e mensagens de WhatsApp | Provedor de mensagens; telefones normalizados ao padrão internacional antes do envio | HU-19, HU-20 |
+| **cron-job.org** | Agendador de tarefas via chamadas HTTP | Substitui processos de segundo plano (Celery) no plano gratuito de hospedagem, que não mantém *workers*. Aciona os pontos de entrada de notificação/cobrança | HU-20 |
+| **SMTP** | Envio de e-mail | Canal de e-mail das notificações, cobranças e avisos internos | HU-03, HU-19, HU-20, HU-24 |
+
+> Demais fontes auxiliares (consulta de CEP, consulta de cadastro de pessoa jurídica) existem no
+> sistema, mas não são centrais ao fluxo financeiro coberto por estas HUs.
+
+---
+
 ## HU-01 — Criação de Contrato (Assistente Guiado)
 
 **Objetivo:** cadastrar um contrato em etapas (`básico → juros → intermediárias → preview`),
@@ -140,6 +158,8 @@ persistindo tudo em uma única operação atômica.
 **Objetivo:** aplicar a correção econômica anual conforme o índice contratado.
 
 **Mecânica técnica:**
+- Os índices (IPCA, IGP-M, SELIC e demais) provêm da **API do Banco Central do Brasil**,
+  importados pela HU-15; o reajuste consome esses números-índice/variações já cadastrados.
 - Pré-visualização não persiste; aplicação ocorre em operação atômica.
 - Período de referência: `início = data_contrato + (ciclo−2)×prazo + 1 mês`;
   `fim = data_contrato + (ciclo−1)×prazo`.
@@ -361,7 +381,8 @@ persistindo tudo em uma única operação atômica.
 **Objetivo:** obter índices oficiais (vários tipos) automaticamente para os cálculos de reajuste.
 
 **Mecânica técnica:**
-- Cadastro manual e importação automática a partir de fontes oficiais por tipo de índice.
+- Cadastro manual e importação automática por tipo de índice, tendo a **API do Banco Central do
+  Brasil** como fonte oficial (IPCA, IGP-M, SELIC e demais), com fontes complementares quando aplicável.
 - Cada registro: tipo, ano, mês, variação %, número-índice (quando disponível), fonte, data de importação.
 - **Idempotência:** chave única (tipo, ano, mês) — reimportar atualiza só se o valor divergir.
 - Falha de uma fonte não aborta as demais; resultado reporta importados/atualizados/erros por fonte.
@@ -441,6 +462,8 @@ persistindo tudo em uma única operação atômica.
 **Objetivo:** autoatendimento do comprador (segunda via, atrasos, comprovante, resumo) por conversa.
 
 **Mecânica técnica:**
+- Conversa por **WhatsApp (Twilio)**; o aviso ao administrador sobre comprovante recebido vai por
+  **e-mail (SMTP)**. A segunda via é produzida pelo **BRCobrança** e enviada como anexo na conversa.
 - Mensagens recebidas (não enviadas pelo próprio sistema) são roteadas a um serviço de atendimento.
 - Identificação por telefone normalizado ao padrão internacional; fallback por documento (até 3 tentativas).
 - Máquina de estados de sessão: ocioso → aguardando documento → menu → aguardando seleção (segunda
@@ -463,6 +486,7 @@ persistindo tudo em uma única operação atômica.
 **Objetivo:** enviar lembretes e cobranças por múltiplos canais conforme régua configurável.
 
 **Mecânica técnica:**
+- Canais: **e-mail (SMTP)**, **SMS e WhatsApp (Twilio)** — além de outros provedores de conversa.
 - Gatilhos padrão: lembrete 5 dias antes do vencimento; inadimplência 3 dias após (configurável).
 - Régua configurável por imobiliária (gatilho "antes"/"depois" + nº de dias); sem régua, usa os padrões.
 - Templates unificados com três conteúdos (corpo de e-mail rico, texto curto ≤255 caracteres,
@@ -471,14 +495,17 @@ persistindo tudo em uma única operação atômica.
 - **Salvaguarda de ambiente:** fora de produção, todos os envios são redirecionados para destinos
   de teste — nunca atinge compradores reais em desenvolvimento.
 - **Deduplicação:** mesma parcela + mesmo gatilho não envia duas vezes no mesmo dia.
-- Normalização de telefone ao padrão internacional antes do envio.
-- Disparo manual individual disponível; execuções periódicas acionadas por agendador externo
-  via pontos de entrada dedicados (o ambiente de hospedagem não mantém processos de segundo plano).
+- Normalização de telefone ao padrão internacional antes do envio via **Twilio**.
+- Disparo manual individual disponível; execuções periódicas acionadas pelo **cron-job.org**
+  (agendador HTTP que substitui processos de segundo plano/Celery no plano gratuito de hospedagem,
+  que não mantém *workers*), chamando pontos de entrada dedicados.
 
 **Observações da Revisão:**
 - A salvaguarda de ambiente é uma proteção crítica e deve ser testada (já há cenário dedicado).
-- Suporte a múltiplos provedores de conversa aumenta a resiliência, mas amplia a superfície de
-  configuração — garantir validação de credenciais por provedor.
+- Suporte a múltiplos provedores de mensagem (Twilio e alternativos) aumenta a resiliência, mas
+  amplia a superfície de configuração — garantir validação de credenciais por provedor.
+- Dependência do **cron-job.org** como agendador externo: monitorar a execução dos jobs (uma falha
+  silenciosa do agendador interrompe lembretes/cobranças sem erro visível no sistema).
 
 ---
 
@@ -662,8 +689,9 @@ anterior à remessa (HU-23).
 *Revisão consolidada a partir das especificações em `docs/analise/historias-usuario/HU-01..HU-24`,
 do índice mestre `INDICE.md` e da verificação contra o código atual. Mantém o escopo
 funcional/técnico sem referências a tecnologias de implementação ou de apresentação visual —
-**com exceção do BRCobrança**, identificado explicitamente por ser a integração externa de
-geração de boletos e leitura de extrato (decisão de revisão).*
+**com exceção das APIs e serviços externos** listados na seção "APIs e Serviços Externos"
+(Banco Central do Brasil, BRCobrança, Twilio, cron-job.org e SMTP), identificados explicitamente
+por serem dependências operacionais do sistema (decisão de revisão).*
 
 > **Nota desta revisão (atualização):** achados de 07×24 e HU-11/12/18 reavaliados contra o
 > código real — HU-11/HU-12 já reusam o cálculo canônico de saldo; só a HU-18 duplica a fórmula;
