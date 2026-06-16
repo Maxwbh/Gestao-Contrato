@@ -62,7 +62,7 @@ docs/analise/
 | [HU-24](historias-usuario/HU-24.md) | Geração Mensal de Boletos — tela dedicada por escopo (Contadora) | `financeiro` | ✅ |
 | [HU-25](historias-usuario/HU-25.md) | Hub "Cobrança do Mês" — assistente de ciclo mensal (Contadora) | `financeiro` | ✅ |
 | [HU-26](historias-usuario/HU-26.md) | Painel de Conciliação & Saúde da Cobrança | `financeiro` | ✅ |
-| [HU-27](historias-usuario/HU-27.md) | Reorganização do Menu (navegação orientada à Contadora) | `core` | 📋 |
+| [HU-27](historias-usuario/HU-27.md) | Reorganização do Menu (navegação orientada à Contadora) | `core` | ✅ |
 
 ---
 

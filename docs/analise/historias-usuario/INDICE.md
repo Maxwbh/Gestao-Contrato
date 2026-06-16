@@ -46,7 +46,7 @@
 | [HU-24](HU-24.md) | `HU-24.md` | Geração Mensal de Boletos — tela dedicada por escopo (Fluxo da Contadora) | `financeiro` | ✅ |
 | [HU-25](HU-25.md) | `HU-25.md` | Hub "Cobrança do Mês" — assistente de ciclo mensal (passo a passo) | `financeiro` | ✅ |
 | [HU-26](HU-26.md) | `HU-26.md` | Painel de Conciliação & Saúde da Cobrança | `financeiro` | ✅ |
-| [HU-27](HU-27.md) | `HU-27.md` | Reorganização do Menu (navegação orientada à rotina da Contadora) | `core` (base.html) | 📋 |
+| [HU-27](HU-27.md) | `HU-27.md` | Reorganização do Menu (navegação orientada à rotina da Contadora) | `core` (base.html) | ✅ |
 
 ---
 
@@ -201,7 +201,7 @@ HU-21 Portal do Comprador ──► auto-cadastro → dashboard → boletos → 
 | HU-24 | `Parcela`, `PrestacaoIntermediaria`, `ContaBancaria` | `BoletoService` (`gerar_boletos_lote`) | **Tela dedicada:** `/financeiro/boletos/` (wizard), `/boletos/gerar/` (escopo: todos/imobiliaria/contratos/parcela/intermediaria, quantidade 1/X), `api/boletos/elegiveis/`. Etapa anterior à HU-23 |
 | HU-25 | *(orquestra HU-24/HU-23 — sem modelos novos)* | reutiliza `boletos_painel_gerar`, `remessa_painel_gerar`, `remessa_retorno_upload` | **Hub:** `/financeiro/cobranca/` (stepper 1·2·3), `api/cobranca/estado/`. Costura geração→remessa→retorno num fluxo guiado (📋 especificada) |
 | HU-26 | `HistoricoPagamento`, `EventoPIX`, `ItemRemessa` | reutiliza serviços de baixa/relatório (HU-04/16/18) | **Painel:** `/financeiro/cobranca/conciliacao/`, `api/conciliacao/saude/`. KPIs de saúde, recebido por origem, aging, rejeitados (📋 especificada) |
-| HU-27 | *(navegação — sem modelos)* | — | **Menu** (`templates/base.html`): novo dropdown "Cobrança" (hub + passo a passo + acompanhamento) e "Financeiro" enxuto; reagrupa links existentes (📋 especificada) |
+| HU-27 | *(navegação — sem modelos)* | — | **Menu** (`templates/base.html`): reorganiza os 4 submenus (Financeiro lidera por "Cobrança do Mês"; Contratos; Cadastros; Notificações), remove "Dashboard" do topo, move Admin/Modo Escuro p/ o usuário e tira a lupa do menu (✅ implementada) |
 
 ---
 
