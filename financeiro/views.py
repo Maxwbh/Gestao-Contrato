@@ -2829,10 +2829,18 @@ def _cobranca_estado(request):
         qs_conc = qs_conc.filter(contrato__imobiliaria_id=imobiliaria_id)
     a_conciliar_boletos = qs_conc.count()
 
-    # Estados derivados
+    # Estados derivados (cascata). Um passo só é "concluído" quando os anteriores
+    # também estão; se não há o que fazer porque o passo anterior ainda não terminou,
+    # fica "aguardando" (em vez de falsamente "concluído").
     p1 = 'concluido' if a_gerar == 0 else 'pendente'
-    p2 = 'concluido' if a_enviar_boletos == 0 else 'pendente'
-    p3 = 'concluido' if a_conciliar_arquivos == 0 else 'pendente'
+    if a_enviar_boletos > 0:
+        p2 = 'pendente'
+    else:
+        p2 = 'concluido' if p1 == 'concluido' else 'aguardando'
+    if a_conciliar_arquivos > 0:
+        p3 = 'pendente'
+    else:
+        p3 = 'concluido' if (p1 == 'concluido' and p2 == 'concluido') else 'aguardando'
     estados = [p1, p2, p3]
     recomendado = next((i + 1 for i, e in enumerate(estados) if e == 'pendente'), None)
     concluidos = sum(1 for e in estados if e == 'concluido')

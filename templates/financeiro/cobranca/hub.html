@@ -79,6 +79,7 @@
         <div class="mt-2 fw-bold small">1. Gerar Boletos</div>
         {% if estado.passo1 == 'concluido' %}<span class="badge bg-success badge-estado">CONCLUÍDO</span>
         {% elif estado.recomendado == 1 %}<span class="badge bg-warning text-dark badge-estado">EM ANDAMENTO</span>
+        {% elif estado.passo1 == 'aguardando' %}<span class="badge bg-light text-dark border badge-estado">AGUARDANDO</span>
         {% else %}<span class="badge bg-secondary badge-estado">PENDENTE</span>{% endif %}
         <div class="small text-muted mt-1">{{ estado.a_gerar }} a gerar</div>
       </div>
@@ -89,6 +90,7 @@
         <div class="mt-2 fw-bold small">2. Gerar Remessa</div>
         {% if estado.passo2 == 'concluido' %}<span class="badge bg-success badge-estado">CONCLUÍDO</span>
         {% elif estado.recomendado == 2 %}<span class="badge bg-warning text-dark badge-estado">EM ANDAMENTO</span>
+        {% elif estado.passo2 == 'aguardando' %}<span class="badge bg-light text-dark border badge-estado">AGUARDANDO</span>
         {% else %}<span class="badge bg-secondary badge-estado">PENDENTE</span>{% endif %}
         <div class="small text-muted mt-1">{{ estado.a_enviar_contas }} contas</div>
       </div>
@@ -99,6 +101,7 @@
         <div class="mt-2 fw-bold small">3. Receber Retorno</div>
         {% if estado.passo3 == 'concluido' %}<span class="badge bg-success badge-estado">CONCLUÍDO</span>
         {% elif estado.recomendado == 3 %}<span class="badge bg-warning text-dark badge-estado">EM ANDAMENTO</span>
+        {% elif estado.passo3 == 'aguardando' %}<span class="badge bg-light text-dark border badge-estado">AGUARDANDO</span>
         {% else %}<span class="badge bg-secondary badge-estado">PENDENTE</span>{% endif %}
         <div class="small text-muted mt-1">{{ estado.a_conciliar_boletos }} a conciliar</div>
       </div>
