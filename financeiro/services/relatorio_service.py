@@ -307,7 +307,7 @@ class RelatorioService:
 
         # Materializar queryset e pre-computar resumos em 1 GROUP BY — evita N aggregate queries
         from django.db.models import Sum, Count, Q
-        from contratos.models import TipoAmortizacao
+        from contratos.models import TipoAmortizacao, saldo_devedor_de_agregado
         from financeiro.models import TipoParcela
 
         contratos_list = list(queryset)
@@ -333,10 +333,11 @@ class RelatorioService:
             _total = _agg.get('total') or 0
             _pagas = _agg.get('pagas') or 0
             _progresso = (_pagas / _total * 100) if _total else 0
-            if contrato.tipo_amortizacao == TipoAmortizacao.SAC:
-                _saldo = _agg.get('saldo_normal_amort') or _agg.get('saldo_normal_valor') or Decimal('0.00')
-            else:
-                _saldo = _agg.get('saldo_normal_valor') or Decimal('0.00')
+            _saldo = saldo_devedor_de_agregado(
+                contrato.tipo_amortizacao,
+                _agg.get('saldo_normal_amort'),
+                _agg.get('saldo_normal_valor'),
+            )
             resumo = {
                 'total_parcelas': _total,
                 'parcelas_pagas': _pagas,

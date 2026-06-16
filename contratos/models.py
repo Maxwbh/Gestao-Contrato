@@ -203,6 +203,25 @@ class TipoAmortizacao(models.TextChoices):
     SAC = 'SAC', 'SAC — Amortização Constante (PMT decrescente)'
 
 
+def saldo_devedor_de_agregado(tipo_amortizacao, amort, valor):
+    """Calcula saldo devedor a partir de valores já agregados pelo banco.
+
+    Centraliza a lógica SAC vs. Price para evitar divergência entre
+    calcular_saldo_devedor() (instância) e relatório em massa (query única).
+
+    Args:
+        tipo_amortizacao: TipoAmortizacao.SAC ou PRICE
+        amort: Sum('amortizacao') do banco (pode ser None)
+        valor: Sum('valor_atual') do banco (pode ser None)
+    """
+    if tipo_amortizacao == TipoAmortizacao.SAC:
+        # amort=0.00 é válido (contrato quitando) — checar None, não falsiness
+        saldo = amort if amort is not None else (valor or Decimal('0.00'))
+    else:
+        saldo = valor or Decimal('0.00')
+    return saldo or Decimal('0.00')
+
+
 class TipoPrestacao(models.TextChoices):
     """Tipos de prestação"""
     NORMAL = 'NORMAL', 'Normal'
@@ -943,22 +962,12 @@ class Contrato(TimeStampedModel):
         return valor_pago + self.valor_entrada
 
     def calcular_saldo_devedor(self):
-        """
-        Calcula o saldo devedor das parcelas normais em aberto.
-
-        - Tabela Price: soma de valor_atual (PMTs futuros = total futuro comprometido)
-        - SAC: soma de amortizacao das parcelas pendentes (principal restante real)
-          Se amortizacao não preenchida ainda, cai para valor_atual como fallback.
-        """
+        """Saldo devedor das parcelas normais em aberto (SAC usa amortizacao; Price usa valor_atual)."""
         from django.db.models import Sum
         from financeiro.models import TipoParcela
         qs = self.parcelas.filter(pago=False, tipo_parcela=TipoParcela.NORMAL)
-        if self.tipo_amortizacao == TipoAmortizacao.SAC:
-            agg = qs.aggregate(amort=Sum('amortizacao'), valor=Sum('valor_atual'))
-            saldo = agg['amort'] if agg['amort'] is not None else (agg['valor'] or Decimal('0.00'))
-        else:
-            saldo = qs.aggregate(total=Sum('valor_atual'))['total'] or Decimal('0.00')
-        return saldo or Decimal('0.00')
+        agg = qs.aggregate(amort=Sum('amortizacao'), valor=Sum('valor_atual'))
+        return saldo_devedor_de_agregado(self.tipo_amortizacao, agg['amort'], agg['valor'])
 
     def validar_soma_intermediarias(self):
         """
@@ -1221,10 +1230,9 @@ class Contrato(TimeStampedModel):
         pagas_qt = agg['pagas'] or 0
         progresso = (pagas_qt / total * 100) if total else 0
 
-        if self.tipo_amortizacao == TipoAmortizacao.SAC:
-            saldo = agg['saldo_normal_amort'] or agg['saldo_normal_valor'] or Decimal('0.00')
-        else:
-            saldo = agg['saldo_normal_valor'] or Decimal('0.00')
+        saldo = saldo_devedor_de_agregado(
+            self.tipo_amortizacao, agg['saldo_normal_amort'], agg['saldo_normal_valor']
+        )
 
         return {
             'valor_contrato': self.valor_total,
