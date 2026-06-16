@@ -638,12 +638,12 @@ ul.dropdown-content.app-dropdown li > a:hover {
 
 /* Cabeçalhos de grupo dentro do dropdown (não clicáveis) */
 .app-dropdown .dropdown-header-item {
-    color: #fff !important;
-    background: #34495e !important;
-    font-size: 0.72rem !important;
+    color: #334155 !important;
+    background: #eef2f7 !important;
+    font-size: 0.7rem !important;
     font-weight: 700 !important;
     text-transform: uppercase;
-    letter-spacing: 0.8px;
+    letter-spacing: 0.6px;
     padding: 6px 16px !important;
     cursor: default;
     pointer-events: none;
@@ -652,6 +652,7 @@ ul.dropdown-content.app-dropdown li > a:hover {
     gap: 7px;
     border-left: 3px solid var(--secondary-color) !important;
 }
+.app-dropdown .dropdown-header-item i { color: var(--secondary-color) !important; }
 /* Itens sob um header ficam levemente indentados */
 .app-dropdown li + li:has(.dropdown-header-item) {
     margin-top: 0;
@@ -2406,6 +2407,11 @@ body.dark-mode .app-dropdown li > a {
 body.dark-mode .dropdown-content li:hover,
 body.dark-mode .app-dropdown li:hover {
     background-color: #2a2a2a !important;
+}
+
+body.dark-mode .app-dropdown .dropdown-header-item {
+    color: #cbd5e1 !important;
+    background: #2a2f3a !important;
 }
 
 body.dark-mode .sidenav {

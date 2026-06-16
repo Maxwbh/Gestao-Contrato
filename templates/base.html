@@ -35,8 +35,8 @@
         <li><a class="subheader">Cobrança do Mês</a></li>
         <li><a href="{% url 'financeiro:cobranca_hub' %}"><i class="fas fa-route left"></i> Cobrança do Mês</a></li>
         <li><a href="{% url 'financeiro:boletos_painel' %}"><i class="fas fa-file-invoice-dollar left"></i> Gerar Boletos do Mês</a></li>
-        <li><a href="{% url 'financeiro:remessa_painel' %}"><i class="fas fa-file-export left"></i> Gerar Arquivo Remessa</a></li>
-        <li><a href="{% url 'financeiro:retorno_painel' %}"><i class="fas fa-file-import left"></i> Receber Arquivo Retorno</a></li>
+        <li><a href="{% url 'financeiro:remessa_painel' %}"><i class="fas fa-file-export left"></i> Enviar Remessa ao Banco</a></li>
+        <li><a href="{% url 'financeiro:retorno_painel' %}"><i class="fas fa-file-import left"></i> Receber Retorno do Banco</a></li>
         <li><a href="{% url 'financeiro:painel_conciliacao_saude' %}"><i class="fas fa-heart-pulse left"></i> Conciliação &amp; Saúde</a></li>
         <li><a href="{% url 'notificacoes:listar_regras' %}"><i class="fas fa-sliders-h left"></i> Régua de Cobrança</a></li>
         <li><div class="divider"></div></li>
@@ -176,8 +176,8 @@
         <li><a href="{% url 'financeiro:cobranca_hub' %}"><i class="fas fa-route"></i> <strong>Cobrança do Mês</strong></a></li>
         <li><a class="dropdown-header-item"><i class="fas fa-list-ol"></i> Passo a passo</a></li>
         <li><a href="{% url 'financeiro:boletos_painel' %}"><i class="fas fa-file-invoice-dollar"></i> Gerar Boletos do Mês</a></li>
-        <li><a href="{% url 'financeiro:remessa_painel' %}"><i class="fas fa-file-export"></i> Gerar Arquivo Remessa</a></li>
-        <li><a href="{% url 'financeiro:retorno_painel' %}"><i class="fas fa-file-import"></i> Receber Arquivo Retorno</a></li>
+        <li><a href="{% url 'financeiro:remessa_painel' %}"><i class="fas fa-file-export"></i> Enviar Remessa ao Banco</a></li>
+        <li><a href="{% url 'financeiro:retorno_painel' %}"><i class="fas fa-file-import"></i> Receber Retorno do Banco</a></li>
         <li><a class="dropdown-header-item"><i class="fas fa-heart-pulse"></i> Acompanhamento</a></li>
         <li><a href="{% url 'financeiro:painel_conciliacao_saude' %}"><i class="fas fa-heart-pulse"></i> Conciliação &amp; Saúde</a></li>
         <li><a href="{% url 'notificacoes:listar_regras' %}"><i class="fas fa-sliders-h"></i> Régua de Cobrança</a></li>
@@ -720,12 +720,31 @@
             })
             .catch(function() {});
 
+        // Badge: boletos a gerar no menu de topo "Cobrança" (mesmo número do hub)
+        fetch('{% url "financeiro:api_cobranca_estado" %}')
+            .then(function(r) { return r.ok ? r.json() : null; })
+            .then(function(data) {
+                var n = data && data.estado ? data.estado.a_gerar : 0;
+                if (n > 0) {
+                    var cob = document.querySelector('a[data-target="dd-cobranca"]');
+                    if (cob && !cob.querySelector('.badge-cobranca')) {
+                        var badge = document.createElement('span');
+                        badge.className = 'new badge orange badge-notify badge-cobranca ms-1';
+                        badge.setAttribute('data-badge-caption', '');
+                        badge.textContent = n;
+                        badge.title = n + ' boleto(s) a gerar';
+                        cob.appendChild(badge);
+                    }
+                }
+            })
+            .catch(function() {});
+
         // Badge: boletos aguardando remessa CNAB
         fetch('{% url "financeiro:api_cnab_boletos_pendentes_count" %}')
             .then(function(r) { return r.ok ? r.json() : null; })
             .then(function(data) {
                 if (data && data.count > 0) {
-                    // Badge no link "Gerar Arquivo Remessa" no menu (href do painel)
+                    // Badge no link "Enviar Remessa ao Banco" no menu (href do painel)
                     var links = document.querySelectorAll('a[href="{% url "financeiro:remessa_painel" %}"]');
                     links.forEach(function(link) {
                         if (!link.querySelector('.badge-remessa')) {
