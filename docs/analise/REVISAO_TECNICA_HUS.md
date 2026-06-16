@@ -644,6 +644,115 @@ anterior à remessa (HU-23).
 
 ---
 
+## Ordem de Desenvolvimento (Visão do Desenvolvedor)
+
+> **Premissa:** a numeração `HU-01..HU-24` segue o **fluxo de domínio** (a ordem em que o negócio
+> "conta a história"), **não** a ordem ideal de **construção**. Esta seção propõe uma sequência de
+> build **dirigida por dependências**, para que o desenvolvimento flua sem retrabalho: cada onda só
+> começa quando suas dependências já existem, e as peças unitárias são entregues antes das
+> orquestrações que as consomem.
+
+### Ondas de construção
+
+**Onda 0 — Fundação e Cadastros (pré-requisito de tudo)**
+Não há HU numerada aqui, mas nada compila sem isto: entidades base (Contabilidade, Imobiliária,
+Imóvel, Comprador, Conta Bancária), autenticação e **controle de acesso multi-inquilino**, e as
+integrações de apoio ao cadastro — **CEP** (BrasilAPI/ViaCEP), **CNPJ** (BrasilAPI) e **validação
+local de CPF**. Sem a Conta Bancária e o acesso, HU-01 e a emissão de boletos não rodam.
+
+**Onda 1 — Núcleo Contratual** → **HU-01** (criação) → **HU-02** (geração de parcelas).
+Base de todo o sistema. O identificador público da parcela já nasce aqui (semente da HU-13).
+
+**Onda 2 — Índices, Reajuste e Bloqueio** → **HU-15** (índices/Banco Central) → **HU-05**
+(reajuste) → **HU-06** (bloqueio / `pode_gerar_boleto()`).
+*Ponto crítico de ordenação:* embora numerada como 15, a **importação de índices é dado de
+entrada do reajuste** e precisa vir **antes** da HU-05. E a HU-06 deve existir **antes** da
+emissão de boletos, para que `pode_gerar_boleto()` já esteja integrado em HU-03 sem retrabalho.
+
+**Onda 3 — Emissão de Boletos** → **HU-03** (boleto individual, BRCobrança, já consultando HU-06)
+→ **HU-13** (link público) → **HU-08** (segunda via) → **HU-07** (carnê) → emissão de boleto de
+**HU-14** (intermediárias — o CRUD da intermediária pode ser feito junto da Onda 1; só a emissão
+depende da HU-03). Todas estendem a HU-03.
+
+**Onda 4 — Pagamentos e Conciliação** → **HU-04** (pagamento manual) → **HU-09** (antecipação) →
+**HU-16** (remessa/retorno CNAB — base técnica) → **HU-10** (conciliação por extrato/BRCobrança).
+Registra e concilia pagamentos; depende de parcelas (Onda 1) e boletos (Onda 3).
+
+**Onda 5 — Operações Contratuais e Encerramento** → **HU-17** (renegociação) → **HU-11** (rescisão)
+→ **HU-12** (cessão). Dependem de saldo devedor (Onda 1) e do histórico de pagamentos (Onda 4).
+
+**Onda 6 — Comunicação** → **HU-20** (notificações: régua, canais via Twilio/SMTP, agendamento via
+cron-job.org) → **HU-19** (atendimento por conversa). A HU-19 **reaproveita** segunda via (HU-08),
+recebimento de comprovante (HU-04) e os canais (HU-20) — por isso vem depois.
+
+**Onda 7 — Autoatendimento** → **HU-21** (Portal do Comprador). Depende de parcelas/boletos
+(Ondas 1/3) e do link/identificador público (HU-13).
+
+**Onda 8 — Orquestração Mensal (Contadora)** → **HU-24** (geração mensal de boletos) → **HU-23**
+(remessa/retorno mensal). *Construir HU-24 antes da HU-23* (a HU-24 é a etapa anterior e produz os
+boletos que a HU-23 consome). Ambas **orquestram** peças já prontas (HU-03/06/07/14/16/20) — só
+fazem sentido depois que as unitárias existem.
+
+**Onda 9 — Análise e Visualização (paralelizável)** → **HU-18** (relatórios/painel) e **HU-22**
+(mapa de lotes). São majoritariamente leitura; podem ser desenvolvidas em paralelo a partir do
+momento em que há dados. A **HU-22** é quase independente (depende só de Imóvel/core) e pode flutuar
+para qualquer ponto após a Onda 0.
+
+### Sequência linear sugerida (resumo)
+
+```
+0. Fundação/Cadastros (core, acesso, CEP/CNPJ/CPF)
+1. HU-01 → HU-02
+2. HU-15 → HU-05 → HU-06
+3. HU-03 → HU-13 → HU-08 → HU-07 → HU-14(emissão)
+4. HU-04 → HU-09 → HU-16 → HU-10
+5. HU-17 → HU-11 → HU-12
+6. HU-20 → HU-19
+7. HU-21
+8. HU-24 → HU-23
+9. HU-18, HU-22  (paralelo)
+```
+
+### Divergências entre numeração e ordem de construção
+
+| HU | Numeração (fluxo de domínio) | Construção (dependências) | Observação |
+|----|------------------------------|---------------------------|------------|
+| **HU-15** | 15 (perto do fim) | **Onda 2 (cedo)** | Índices são **dado de entrada** do reajuste (HU-05) — inversão de dependência na numeração |
+| **HU-06** | 06 | Onda 2, **após** HU-05/HU-15 | Bloqueio depende de reajuste+índices; deve preceder a emissão (HU-03) |
+| **HU-13** | 13 | Onda 3 (semente na Onda 1) | Identificador público nasce na criação da parcela (HU-02); página/download dependem do boleto (HU-03) |
+| **HU-14** | 14 | CRUD na Onda 1; emissão na Onda 3 | Intermediárias são criadas com o contrato; só a emissão de boleto depende da HU-03 |
+| **HU-24** | 24 | **antes da HU-23** | HU-24 é a "etapa anterior" e produz os boletos que a HU-23 consome |
+| **HU-22** | 22 | flutuante (após Onda 0) | Depende só de Imóvel/core — pode ser feita a qualquer momento |
+
+---
+
+## Revisão dos Documentos de Apoio
+
+Verificação cruzada entre `INDICE.md`, `SISTEMA.md` e `ROADMAP.md`:
+
+- **`INDICE.md`** — índice mestre coerente (matriz HU → modelos/serviços/rotas, fluxo macro, regras
+  globais). Já alerta para a ambiguidade de numeração com o ROADMAP (`HU-360`). **Recomendação:**
+  referenciar esta seção de "Ordem de Desenvolvimento" para deixar claro que a numeração é de
+  **domínio**, não de **build**, evitando que alguém implemente índices (HU-15) por último.
+- **`SISTEMA.md`** — documenta o estado implementado, mas a tabela de integrações **não lista o
+  cron-job.org** e a seção de tarefas ainda usa o rótulo "Celery", embora o agendamento real seja
+  por chamadas HTTP do cron-job.org (o próprio ROADMAP registra "Render Free Tier não suporta
+  Celery"). Além disso, foi atualizado antes das HUs da contadora — **não inclui as rotas
+  `/financeiro/boletos/` (HU-24) e `/financeiro/remessa/` · `/financeiro/retorno/` (HU-23)**.
+  **Recomendação:** alinhar terminologia (cron-job.org em vez de Celery) e acrescentar as rotas da
+  contadora à listagem de views.
+- **`ROADMAP.md`** — organizado por prioridade, majoritariamente concluído, com numeração interna
+  própria (`R-`, `C-`, `B-`, `HU-360`) distinta do índice de HUs. Consistente, porém extenso; a
+  seção "5. TAREFAS CELERY" mantém o rótulo histórico embora a nota interna esclareça o uso de
+  tarefas HTTP. **Recomendação:** cosmética — renomear o título para refletir o agendador HTTP atual.
+
+> **Conclusão da revisão de documentos:** não há contradição funcional entre os documentos; as
+> divergências são de **terminologia** (Celery × cron-job.org) e de **atualização** (SISTEMA.md
+> anterior às HUs da contadora). A maior recomendação técnica é tornar explícita a distinção entre
+> **ordem de domínio** (numeração) e **ordem de construção** (dependências), consolidada na seção acima.
+
+---
+
 ## Achados Transversais (Cross-Cutting)
 
 1. **Bloqueio por reajuste** (HU-06): consumido por `pode_gerar_boleto()` em HU-03, HU-14 e HU-24,
