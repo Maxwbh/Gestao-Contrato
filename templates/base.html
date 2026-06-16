@@ -38,6 +38,7 @@
         <li><a href="{% url 'financeiro:remessa_painel' %}"><i class="fas fa-file-export left"></i> Gerar Arquivo Remessa</a></li>
         <li><a href="{% url 'financeiro:retorno_painel' %}"><i class="fas fa-file-import left"></i> Receber Arquivo Retorno</a></li>
         <li><a href="{% url 'financeiro:painel_conciliacao_saude' %}"><i class="fas fa-heart-pulse left"></i> Conciliação &amp; Saúde</a></li>
+        <li><a href="{% url 'notificacoes:listar_regras' %}"><i class="fas fa-sliders-h left"></i> Régua de Cobrança</a></li>
         <li><div class="divider"></div></li>
         <!-- Financeiro · Análise -->
         <li><a class="subheader">Financeiro</a></li>
@@ -105,13 +106,23 @@
             <!-- Desktop nav links -->
             <ul class="right hide-on-med-and-down">
                 {% with app=request.resolver_match.app_name url_name=request.resolver_match.url_name %}
-                <!-- Financeiro dropdown -->
-                <li{% if app == 'financeiro' %} class="nav-active"{% endif %}>
+                {% with cob_urls='cobranca_hub boletos_painel remessa_painel retorno_painel painel_conciliacao_saude' %}
+                <!-- Cobrança dropdown (rotina mensal da contadora) -->
+                <li{% if app == 'financeiro' and url_name in cob_urls %} class="nav-active"{% endif %}>
+                    <a class="dropdown-trigger" href="#!" data-target="dd-cobranca">
+                        <i class="fas fa-coins"></i> Cobrança
+                        <i class="material-icons right">arrow_drop_down</i>
+                    </a>
+                </li>
+
+                <!-- Financeiro dropdown (análise & gestão) -->
+                <li{% if app == 'financeiro' and url_name not in cob_urls %} class="nav-active"{% endif %}>
                     <a class="dropdown-trigger" href="#!" data-target="dd-financeiro">
                         <i class="fas fa-dollar-sign"></i> Financeiro
                         <i class="material-icons right">arrow_drop_down</i>
                     </a>
                 </li>
+                {% endwith %}
 
                 <!-- Contratos dropdown -->
                 <li{% if app == 'contratos' %} class="nav-active"{% endif %}>
@@ -161,15 +172,20 @@
     </nav>
 
     <!-- Dropdown Structures -->
-    <ul id="dd-financeiro" class="dropdown-content app-dropdown">
-        <li><a class="dropdown-header-item"><i class="fas fa-bolt"></i> Cobrança do Mês</a></li>
-        <li><a href="{% url 'financeiro:cobranca_hub' %}"><i class="fas fa-route"></i> Cobrança do Mês</a></li>
+    <ul id="dd-cobranca" class="dropdown-content app-dropdown">
+        <li><a href="{% url 'financeiro:cobranca_hub' %}"><i class="fas fa-route"></i> <strong>Cobrança do Mês</strong></a></li>
+        <li><a class="dropdown-header-item"><i class="fas fa-list-ol"></i> Passo a passo</a></li>
         <li><a href="{% url 'financeiro:boletos_painel' %}"><i class="fas fa-file-invoice-dollar"></i> Gerar Boletos do Mês</a></li>
         <li><a href="{% url 'financeiro:remessa_painel' %}"><i class="fas fa-file-export"></i> Gerar Arquivo Remessa</a></li>
         <li><a href="{% url 'financeiro:retorno_painel' %}"><i class="fas fa-file-import"></i> Receber Arquivo Retorno</a></li>
+        <li><a class="dropdown-header-item"><i class="fas fa-heart-pulse"></i> Acompanhamento</a></li>
         <li><a href="{% url 'financeiro:painel_conciliacao_saude' %}"><i class="fas fa-heart-pulse"></i> Conciliação &amp; Saúde</a></li>
-        <li><a class="dropdown-header-item"><i class="fas fa-chart-line"></i> Análise</a></li>
+        <li><a href="{% url 'notificacoes:listar_regras' %}"><i class="fas fa-sliders-h"></i> Régua de Cobrança</a></li>
+    </ul>
+
+    <ul id="dd-financeiro" class="dropdown-content app-dropdown">
         <li><a href="{% url 'financeiro:dashboard' %}"><i class="fas fa-chart-line"></i> Dashboard Financeiro</a></li>
+        <li><a class="dropdown-header-item"><i class="fas fa-barcode"></i> Parcelas &amp; Boletos</a></li>
         <li><a href="{% url 'financeiro:listar_parcelas' %}"><i class="fas fa-list"></i> Todas as Parcelas</a></li>
         <li><a href="{% url 'financeiro:parcelas_mes' %}"><i class="fas fa-calendar-alt"></i> Parcelas do Mês</a></li>
         <li><a href="{% url 'financeiro:listar_parcelas' %}?status_boleto=NAO_GERADO"><i class="fas fa-exclamation-circle orange-text"></i> Boletos Pendentes</a></li>
