@@ -31,8 +31,6 @@
                 </span>
             </div>
         </li>
-        <li><a href="{% url 'core:dashboard' %}"><i class="fas fa-tachometer-alt left"></i> Dashboard</a></li>
-        <li><div class="divider"></div></li>
         <!-- Financeiro -->
         <li><a class="subheader">Financeiro</a></li>
         <li><a href="{% url 'financeiro:dashboard' %}"><i class="fas fa-chart-line left"></i> Dashboard Financeiro</a></li>
@@ -100,12 +98,6 @@
             <!-- Desktop nav links -->
             <ul class="right hide-on-med-and-down">
                 {% with app=request.resolver_match.app_name url_name=request.resolver_match.url_name %}
-                <li{% if url_name == 'dashboard' and app == 'core' %} class="nav-active"{% endif %}>
-                    <a href="{% url 'core:dashboard' %}">
-                        <i class="fas fa-tachometer-alt"></i> Dashboard
-                    </a>
-                </li>
-
                 <!-- Financeiro dropdown -->
                 <li{% if app == 'financeiro' %} class="nav-active"{% endif %}>
                     <a class="dropdown-trigger" href="#!" data-target="dd-financeiro">
