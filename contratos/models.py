@@ -1076,7 +1076,7 @@ class Contrato(TimeStampedModel):
 
         return None
 
-    def pode_gerar_boleto(self, numero_parcela):
+    def pode_gerar_boleto(self, numero_parcela, ciclos_aplicados=None):
         """
         Verifica se é possível gerar boleto para uma parcela específica.
 
@@ -1088,6 +1088,11 @@ class Contrato(TimeStampedModel):
 
         Args:
             numero_parcela: Número da parcela a verificar
+            ciclos_aplicados: (opcional) conjunto de ciclos já reajustados
+                (aplicado=True) deste contrato. Quando fornecido, evita uma
+                consulta a Reajuste por ciclo — usado em telas/lotes que
+                pré-carregam os ciclos de vários contratos de uma vez. Quando
+                None (padrão), consulta o banco (comportamento original).
 
         Returns:
             tuple: (pode_gerar: bool, motivo: str)
@@ -1111,10 +1116,13 @@ class Contrato(TimeStampedModel):
             if hoje < data_reajuste:
                 break  # ciclo ainda não venceu
 
-            from financeiro.models import Reajuste
-            reajuste_aplicado = Reajuste.objects.filter(
-                contrato=self, ciclo=ciclo_check, aplicado=True
-            ).exists()
+            if ciclos_aplicados is not None:
+                reajuste_aplicado = ciclo_check in ciclos_aplicados
+            else:
+                from financeiro.models import Reajuste
+                reajuste_aplicado = Reajuste.objects.filter(
+                    contrato=self, ciclo=ciclo_check, aplicado=True
+                ).exists()
             if not reajuste_aplicado:
                 return False, (
                     f"Reajuste do ciclo {ciclo_check} pendente desde "

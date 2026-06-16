@@ -24,7 +24,14 @@ class GeracaoBoletosService:
     # Elegibilidade por contrato
     # ------------------------------------------------------------------ #
     def _qs_parcelas_base(self, contrato):
-        """Parcelas normais não pagas e sem boleto, em ordem cronológica."""
+        """Parcelas normais não pagas e sem boleto, em ordem cronológica.
+
+        Usa o cache de prefetch (`to_attr='_parcelas_pendentes'`) quando
+        disponível — evita uma consulta por contrato no painel/conferência.
+        """
+        pend = getattr(contrato, '_parcelas_pendentes', None)
+        if pend is not None:
+            return pend
         from financeiro.models import StatusBoleto, TipoParcela
         return (
             contrato.parcelas
@@ -33,17 +40,23 @@ class GeracaoBoletosService:
             .order_by('numero_parcela')
         )
 
-    def proximas_elegiveis(self, contrato, quantidade):
+    def proximas_elegiveis(self, contrato, quantidade, ciclos_aplicados=None):
         """
         Próximas `quantidade` parcelas elegíveis do contrato.
         Respeita a cascata da HU-06: para no primeiro bloqueio (as seguintes
         também estariam bloqueadas). Retorna (elegiveis, bloqueados).
+
+        `ciclos_aplicados` (opcional) é repassado a `pode_gerar_boleto` para
+        evitar consulta a Reajuste por parcela quando o chamador já pré-carregou
+        os ciclos reajustados do contrato.
         """
         elegiveis, bloqueados = [], []
         for p in self._qs_parcelas_base(contrato):
             if len(elegiveis) >= quantidade:
                 break
-            pode, motivo = contrato.pode_gerar_boleto(p.numero_parcela)
+            pode, motivo = contrato.pode_gerar_boleto(
+                p.numero_parcela, ciclos_aplicados=ciclos_aplicados
+            )
             if not pode:
                 bloqueados.append((p, motivo))
                 break  # cascata HU-06
@@ -51,11 +64,22 @@ class GeracaoBoletosService:
         return elegiveis, bloqueados
 
     def intermediarias_elegiveis(self, contrato):
-        """Intermediárias não pagas sem boleto gerado."""
+        """Intermediárias não pagas sem boleto gerado.
+
+        Usa o cache de prefetch (`to_attr='_intermediarias_pend'`) quando
+        disponível — evita consulta + N+1 em `parcela_vinculada` por contrato.
+        """
         from financeiro.models import StatusBoleto
         from contratos.models import PrestacaoIntermediaria
+        pref = getattr(contrato, '_intermediarias_pend', None)
+        if pref is not None:
+            itens = pref
+        else:
+            itens = PrestacaoIntermediaria.objects.filter(
+                contrato=contrato, paga=False
+            ).select_related('parcela_vinculada')
         res = []
-        for it in PrestacaoIntermediaria.objects.filter(contrato=contrato, paga=False):
+        for it in itens:
             pv = it.parcela_vinculada
             if pv and pv.status_boleto != StatusBoleto.NAO_GERADO:
                 continue
@@ -71,29 +95,61 @@ class GeracaoBoletosService:
         Monta a conferência agrupada por imobiliária → contrato e os KPIs.
         Retorna dict: {grupos, kpis}.
         """
-        from contratos.models import Contrato, StatusContrato
+        from django.db.models import Count, Q, Prefetch
+        from contratos.models import Contrato, StatusContrato, PrestacaoIntermediaria
+        from financeiro.models import StatusBoleto, TipoParcela, Parcela, Reajuste
 
+        # Pré-carrega tudo o que o laço precisa em poucas consultas (em vez de
+        # ~3 consultas por contrato + N+1): parcelas pendentes, intermediárias
+        # não pagas e a contagem de já gerados, todos por contrato.
+        parcelas_pend_qs = (
+            Parcela.objects
+            .filter(pago=False, status_boleto=StatusBoleto.NAO_GERADO)
+            .exclude(tipo_parcela=TipoParcela.INTERMEDIARIA)
+            .order_by('numero_parcela')
+        )
+        inter_pend_qs = (
+            PrestacaoIntermediaria.objects.filter(paga=False)
+            .select_related('parcela_vinculada')
+        )
         contratos = (
             Contrato.objects.filter(status=StatusContrato.ATIVO, imobiliaria__in=imobiliarias)
             .select_related('imobiliaria', 'comprador')
+            .annotate(_ja_gerados=Count(
+                'parcelas',
+                filter=Q(parcelas__status_boleto__in=[StatusBoleto.GERADO, StatusBoleto.REGISTRADO]),
+            ))
+            .prefetch_related(
+                Prefetch('parcelas', queryset=parcelas_pend_qs, to_attr='_parcelas_pendentes'),
+                Prefetch('intermediarias', queryset=inter_pend_qs, to_attr='_intermediarias_pend'),
+            )
             .order_by('imobiliaria__nome', 'numero_contrato')
         )
         if imobiliaria_id:
             contratos = contratos.filter(imobiliaria_id=imobiliaria_id)
+
+        contratos = list(contratos)
+
+        # Ciclos já reajustados (aplicado=True) de todos os contratos em 1 consulta
+        # — evita uma consulta a Reajuste por parcela em pode_gerar_boleto().
+        ciclos_por_contrato: dict = {}
+        for cid, ciclo in Reajuste.objects.filter(
+            contrato_id__in=[c.pk for c in contratos], aplicado=True
+        ).values_list('contrato_id', 'ciclo'):
+            ciclos_por_contrato.setdefault(cid, set()).add(ciclo)
 
         grupos = {}
         kpi_a_gerar = kpi_bloqueados = kpi_intermediarias = 0
         kpi_valor = Decimal('0.00')
         contratos_com_pendencia = set()
 
-        from financeiro.models import StatusBoleto
-
         for contrato in contratos:
-            elegiveis, bloqueados = self.proximas_elegiveis(contrato, quantidade)
+            ciclos_aplic = ciclos_por_contrato.get(contrato.pk, set())
+            elegiveis, bloqueados = self.proximas_elegiveis(
+                contrato, quantidade, ciclos_aplicados=ciclos_aplic
+            )
             inter = self.intermediarias_elegiveis(contrato) if incluir_intermediarias else []
-            ja_gerados = contrato.parcelas.filter(
-                status_boleto__in=[StatusBoleto.GERADO, StatusBoleto.REGISTRADO]
-            ).count()
+            ja_gerados = contrato._ja_gerados
             if not elegiveis and not bloqueados and not inter:
                 continue
 
@@ -131,11 +187,18 @@ class GeracaoBoletosService:
             })
 
         # total de contratos ativos por imobiliária (pill do cabeçalho do grupo)
-        from contratos.models import Contrato as _C, StatusContrato as _S
-        for imob_pk, g in grupos.items():
-            g['total_ativos'] = _C.objects.filter(
-                status=_S.ATIVO, imobiliaria_id=imob_pk
-            ).count()
+        # — uma única consulta agregada em vez de uma por grupo.
+        if grupos:
+            ativos_por_imob = dict(
+                Contrato.objects.filter(
+                    status=StatusContrato.ATIVO, imobiliaria_id__in=list(grupos.keys())
+                )
+                .values('imobiliaria_id')
+                .annotate(n=Count('id'))
+                .values_list('imobiliaria_id', 'n')
+            )
+            for imob_pk, g in grupos.items():
+                g['total_ativos'] = ativos_por_imob.get(imob_pk, 0)
 
         return {
             'grupos': sorted(grupos.values(), key=lambda x: x['imobiliaria'].nome),

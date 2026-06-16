@@ -280,3 +280,63 @@ class TestNotificacaoConsolidada:
             assert menv.call_count == 2
             assert resumo['email_consolidado'] is True
             assert resumo['whatsapp_consolidado'] is True
+
+
+# ---------------------------------------------------------------------------
+# Performance — conferência não escala consultas por contrato
+# ---------------------------------------------------------------------------
+
+@pytest.mark.django_db
+class TestConferenciaPerformance:
+    """Trava de regressão: obter_conferencia usa um nº de consultas LIMITADO,
+    independente da quantidade de contratos (prefetch/annotate/batch).
+
+    Antes da otimização eram ~3 consultas por contrato (parcelas + intermediárias
+    + contagem) mais N+1 — o que tornava o hub/painel de cobrança lento.
+    """
+
+    def _criar_contratos(self, n):
+        from decimal import Decimal
+        from datetime import date
+        from tests.fixtures.factories import (
+            ImobiliariaFactory, ContaBancariaFactory, ImovelFactory, CompradorFactory,
+        )
+        from contratos.models import Contrato, StatusContrato, TipoAmortizacao, TipoCorrecao
+        from financeiro.models import StatusBoleto, TipoParcela
+
+        imob = ImobiliariaFactory(nome='Imob Perf')
+        conta = ContaBancariaFactory(
+            imobiliaria=imob, banco='001', principal=True, ativo=True,
+            convenio='1234567', cobranca_registrada=True, layout_cnab='CNAB_240',
+        )
+        for i in range(n):
+            contrato = Contrato.objects.create(
+                imobiliaria=imob, imovel=ImovelFactory(imobiliaria=imob, disponivel=False),
+                comprador=CompradorFactory(nome=f'Comprador Perf {i}'),
+                numero_contrato=f'CTR-PERF-{i}', data_contrato=date(2025, 1, 1),
+                data_primeiro_vencimento=date(2025, 2, 1),
+                valor_total=Decimal('120000.00'), valor_entrada=Decimal('20000.00'),
+                numero_parcelas=12, dia_vencimento=1,
+                tipo_amortizacao=TipoAmortizacao.PRICE, tipo_correcao=TipoCorrecao.FIXO,
+                status=StatusContrato.ATIVO,
+            )
+            contrato.parcelas.filter(tipo_parcela=TipoParcela.NORMAL).update(
+                status_boleto=StatusBoleto.NAO_GERADO, pago=False, conta_bancaria=conta,
+            )
+        return imob
+
+    def test_conferencia_consultas_limitadas(self, django_assert_max_num_queries):
+        from financeiro.services.geracao_boletos_service import GeracaoBoletosService
+        from core.models import Imobiliaria
+
+        imob = self._criar_contratos(6)
+        qs = Imobiliaria.objects.filter(pk=imob.pk)
+
+        # 6 contratos: com a otimização o nº de consultas é ~constante (prefetch +
+        # annotate + batch). O ceiling separa com folga do comportamento antigo
+        # (~3 consultas/contrato → 18+).
+        with django_assert_max_num_queries(12):
+            conf = GeracaoBoletosService().obter_conferencia(qs, quantidade=2)
+
+        assert conf['kpis']['contratos'] == 6
+        assert conf['kpis']['a_gerar'] == 12  # 2 por contrato × 6
