@@ -444,10 +444,11 @@ class CNABService:
             dados_empresa['carteira'] = re.sub(r'\D', '', carteira_str).zfill(2)[:2] or '01'
             conv_digits = re.sub(r'\D', '', conta_bancaria.convenio or '')
             dados_empresa['convenio'] = conv_digits.zfill(9)[:9]
-            # CNAB240 Sicoob: BRCobrança espera agência com 4 dígitos (sem DV) e DV separado.
-            # Sem agencia_dv o Ruby lança "undefined method `format_size' for nil".
-            if agencia_dv:
-                dados_empresa['agencia_dv'] = agencia_dv[:1]
+            # CNAB240 Sicoob: a agência é de 4 dígitos SEM dígito verificador e a
+            # classe Brcobranca::Remessa::Cnab240::Sicoob NÃO possui o setter
+            # `agencia_dv=` — enviá-lo causa HTTP 400 ("undefined method
+            # `agencia_dv='"). O DV da agência não entra na remessa do Sicoob.
+            dados_empresa.pop('agencia_dv', None)
 
         # Pagamentos com campos corretos do Brcobranca::Remessa::Pagamento
         pagamentos = []

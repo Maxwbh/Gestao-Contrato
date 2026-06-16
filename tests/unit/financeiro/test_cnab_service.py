@@ -631,6 +631,29 @@ class TestRemessaPayloadPorBanco(TestCase):
         self.assertIsInstance(seq, str)
         self.assertEqual(len(seq), 7)
 
+    @patch('requests.post')
+    def test_sicoob_cnab240_nao_envia_agencia_dv(self, mock_post):
+        """Sicoob (756) CNAB 240: NÃO deve enviar 'agencia_dv'.
+
+        Regressão: a classe Brcobranca::Remessa::Cnab240::Sicoob não tem o setter
+        `agencia_dv=`; enviá-lo causava HTTP 400 ("undefined method `agencia_dv='").
+        A agência vai com 4 dígitos sem DV.
+        """
+        mock_post.return_value = self._ok_response()
+        conta = self._criar_conta(
+            banco='756', convenio='123456789', carteira='1',
+            agencia='3073-0', conta='12345678-5',
+        )
+
+        CNABService().gerar_remessa(self.parcelas, conta, layout='CNAB_240')
+
+        payload, params = self._payload_e_params(mock_post)
+        self.assertEqual(params['type'], 'cnab240')
+        self.assertNotIn('agencia_dv', payload,
+                         'Sicoob CNAB 240 não aceita agencia_dv')
+        self.assertEqual(payload.get('agencia'), '3073')   # 4 dígitos, sem DV
+        self.assertEqual(payload.get('digito_conta'), '5')  # DV da conta segue separado
+
 
 class TestProcessamentoRetornoCNAB400(TestCase):
     """Testes para processamento de retorno CNAB 400"""
