@@ -93,6 +93,7 @@ urlpatterns = [
     # HU-25 — Hub "Cobrança do Mês" (assistente de ciclo mensal)
     path('cobranca/', views.cobranca_hub, name='cobranca_hub'),
     path('api/cobranca/estado/', views.api_cobranca_estado, name='api_cobranca_estado'),
+    path('api/cobranca/contagem/', views.api_cobranca_contagem, name='api_cobranca_contagem'),
     # HU-26 — Painel de Conciliação & Saúde da Cobrança
     path('cobranca/conciliacao/', views.painel_conciliacao_saude, name='painel_conciliacao_saude'),
     path('api/conciliacao/saude/', views.api_conciliacao_saude, name='api_conciliacao_saude'),

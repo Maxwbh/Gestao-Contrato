@@ -2745,6 +2745,10 @@ def boletos_painel_gerar(request):
                     'carne_url': reverse('financeiro:download_carne_pdf', kwargs={'contrato_id': contrato.id}),
                 })
 
+    # HU-27: invalida o badge "boletos a gerar" do menu Cobrança (recomputa na próxima carga)
+    if total_gerados:
+        cache.delete(_cobranca_badge_cache_key(request.user))
+
     return JsonResponse({
         'sucesso': True,
         'total_gerados': total_gerados,
@@ -2883,6 +2887,31 @@ def api_cobranca_estado(request):
     estado = dict(_cobranca_estado(request))
     estado['valor_gerar'] = float(estado.get('valor_gerar') or 0)
     return JsonResponse({'sucesso': True, 'estado': estado})
+
+
+def _cobranca_badge_cache_key(user):
+    return f'cobranca_a_gerar_u{user.pk}'
+
+
+@login_required
+def api_cobranca_contagem(request):
+    """
+    HU-27: contagem leve de "boletos a gerar" para o badge do menu Cobrança.
+
+    Retorna apenas {a_gerar}. O resultado é **cacheado por usuário** (TTL curto)
+    para não recomputar a conferência completa a cada carregamento de página —
+    diferente de `api_cobranca_estado`, que devolve o ciclo inteiro.
+    """
+    key = _cobranca_badge_cache_key(request.user)
+    n = cache.get(key)
+    if n is None:
+        try:
+            n = int(_cobranca_estado(request).get('a_gerar') or 0)
+        except Exception:
+            logger.exception('HU-27: falha na contagem do badge de Cobrança')
+            n = 0
+        cache.set(key, n, 60)  # 60s — badge é um lembrete, não precisa ser tempo real
+    return JsonResponse({'a_gerar': n})
 
 
 # =============================================================================

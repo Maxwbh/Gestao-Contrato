@@ -56,6 +56,17 @@ class TestCobrancaHub:
         # valor_gerar deve ser serializável (float)
         assert isinstance(estado['valor_gerar'], (int, float))
 
+    def test_api_contagem_badge(self, client_logado):
+        """HU-27: endpoint leve do badge retorna {a_gerar:int}."""
+        resp = client_logado.get(reverse('financeiro:api_cobranca_contagem'))
+        assert resp.status_code == 200
+        data = json.loads(resp.content)
+        assert 'a_gerar' in data
+        assert isinstance(data['a_gerar'], int)
+        # segunda chamada (cacheada) mantém o mesmo valor
+        resp2 = client_logado.get(reverse('financeiro:api_cobranca_contagem'))
+        assert json.loads(resp2.content)['a_gerar'] == data['a_gerar']
+
 
 @pytest.mark.django_db
 class TestConciliacaoSaude:
