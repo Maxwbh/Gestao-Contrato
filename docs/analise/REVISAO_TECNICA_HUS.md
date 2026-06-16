@@ -1,4 +1,4 @@
-# Revisão Técnica Completa das Histórias de Usuário (HU-01 … HU-24)
+# Revisão Técnica Completa das Histórias de Usuário (HU-01 … HU-27)
 
 > Revisão consolidada das 24 HUs do Sistema de Gestão de Contratos.
 > Foco em **detalhes técnicos** (regras, fórmulas, estados, validações, fluxos),
@@ -644,13 +644,88 @@ anterior à remessa (HU-23).
 
 ---
 
+## HU-25 — Hub "Cobrança do Mês" (Assistente de Ciclo Mensal — Persona Contadora)
+
+**Objetivo:** costurar a rotina mensal (gerar boletos → enviar remessa → receber retorno) num
+**fluxo guiado de 3 passos**, sem o operador precisar caçar telas.
+
+**Mecânica técnica:**
+- **Passo a passo (stepper 1·2·3)** com **estado derivado por passo** (não persistido), calculado
+  em tempo real: Passo 1 = há boletos elegíveis a gerar; Passo 2 = há boletos prontos para remessa;
+  Passo 3 = há remessa enviada aguardando retorno. Cada passo é `pendente`, `concluído` ou
+  **`aguardando`** (quando não há trabalho ainda porque o passo anterior não terminou).
+- **Filtros compartilhados** (imobiliária + competência) propagados aos 3 passos; **KPIs do ciclo**
+  (a gerar / a enviar / a conciliar / % concluído) e **passo recomendado** (primeiro pendente).
+- **Ação encadeada de um clique:** gera os boletos do período e **avança automaticamente** à etapa
+  de remessa, com os grupos já montados.
+- **Orquestração pura:** reutiliza os pontos de entrada já existentes (geração, remessa, retorno);
+  **sem regra de negócio nova**. Escopo multi-inquilino herdado.
+
+**Observações da Revisão:**
+- A regra de estado em **cascata** (`aguardando`) evita "falso concluído" nos passos 2/3 quando o
+  passo 1 ainda tem trabalho — ajuste identificado e corrigido na validação visual em desktop.
+- Um **badge de contagem** no menu chegou a ser avaliado e foi **descartado** (recalculava a cada
+  página, custo sem ganho); a contagem permanece visível no próprio hub.
+
+---
+
+## HU-26 — Painel de Conciliação & Saúde da Cobrança
+
+**Objetivo:** fechar o ciclo respondendo "**o que entrou e o que falta?**" num só painel.
+
+**Mecânica técnica:**
+- **KPIs de saúde:** **% conciliado em valor** (recebido / (recebido + pendente)), recebido,
+  pendente, vencido e rejeitados — no período/imobiliária filtrados.
+- **Recebido por origem** consolidado (retorno bancário / Pix por webhook / extrato / manual) a
+  partir de **uma única fonte** (o histórico de pagamentos), sem dupla contagem — a soma por origem
+  fecha com o total recebido.
+- **Aging** em faixas (a vencer · 1–30 · 31–60 · 60+) **clicáveis**, que filtram a tabela de
+  pendências; cada pendência traz vencimento, dias de atraso, valor e ações (baixa manual, segunda
+  via, detalhes/notificar — reusando as HUs respectivas).
+- **Rejeitados** com atalho para a remessa (o título rejeitado já retorna a "elegível" no
+  processamento do retorno — RN-18 da HU-23); **recém-conciliados** com selo de origem.
+- **Exportação do recorte** (planilha, no lado do cliente, respeitando o filtro de aging) e
+  **impressão**. É um painel **somente leitura** — as escritas vêm apenas das ações explícitas.
+
+**Observações da Revisão:**
+- Reaproveita HU-04 (baixa/encargos), HU-08 (segunda via), HU-16/HU-23 (origem/rejeição),
+  HU-18 (relatórios) e HU-20 (notificação) — sem reimplementar conciliação.
+- A escolha de **% conciliado em valor** (não em contagem) reflete melhor a saúde financeira.
+
+---
+
+## HU-27 — Reorganização do Menu (Navegação orientada à rotina da Contadora)
+
+**Objetivo:** colocar a rotina da contadora em primeiro plano, com **linguagem de negócio**, e
+reduzir a carga cognitiva do menu.
+
+**Mecânica técnica:**
+- **Menu de topo:** **Cobrança · Financeiro · Contratos · Cadastros · Notificações · Usuário**
+  (o "Dashboard" genérico foi removido — cada seção tem seu painel).
+- **"Cobrança" (topo)** concentra a rotina: hub (HU-25) à frente, depois *Passo a passo* (gerar
+  boletos · enviar remessa · receber retorno) e *Acompanhamento* (Conciliação & Saúde · Régua) —
+  **sem jargão técnico** nos rótulos.
+- **"Financeiro" enxuto** (análise & gestão): visão geral, parcelas & boletos, reajustes,
+  relatórios & conciliação técnica.
+- **Utilitários sob o nome do usuário:** Administração (só perfis administrativos) e Modo Escuro;
+  **busca fora do menu** (atalho de teclado mantido).
+- **Estado ativo** separa Cobrança × Financeiro; **paridade** entre menu lateral (mobile) e
+  dropdown (desktop).
+
+**Observações da Revisão:**
+- HU de **navegação** — não cria telas/regras; só reorganiza o menu.
+- Cabeçalhos de seção tiveram a **legibilidade corrigida** (antes barras escuras pesadas).
+- Decisão registrada: "Cobrança" é **menu de topo** (não um grupo dentro de Financeiro).
+
+---
+
 ## Ordem de Desenvolvimento (Visão do Desenvolvedor)
 
-> **Premissa:** a numeração `HU-01..HU-24` segue o **fluxo de domínio** (a ordem em que o negócio
+> **Premissa:** a numeração `HU-01..HU-27` segue o **fluxo de domínio** (a ordem em que o negócio
 > "conta a história"), **não** a ordem ideal de **construção**. Esta seção propõe uma sequência de
 > build **dirigida por dependências**, para que o desenvolvimento flua sem retrabalho: cada onda só
 > começa quando suas dependências já existem, e as peças unitárias são entregues antes das
-> orquestrações que as consomem.
+> orquestrações (HU-24/25) e da camada de navegação (HU-27) que as consomem.
 
 ### Ondas de construção
 
@@ -698,6 +773,12 @@ fazem sentido depois que as unitárias existem.
 momento em que há dados. A **HU-22** é quase independente (depende só de Imóvel/core) e pode flutuar
 para qualquer ponto após a Onda 0.
 
+**Onda 10 — Experiência da Contadora (orquestração + fechamento + navegação)** → **HU-25** (hub do
+ciclo mensal) → **HU-26** (conciliação & saúde) → **HU-27** (reorganização do menu). É a **última
+camada**: o hub costura HU-24/HU-23; a conciliação fecha o ciclo lendo as baixas (HU-04/10/16/23 +
+Pix); e o menu reorganiza a navegação em torno dessa rotina. Só faz sentido quando todas as peças
+anteriores existem.
+
 ### Sequência linear sugerida (resumo)
 
 ```
@@ -711,6 +792,7 @@ para qualquer ponto após a Onda 0.
 7. HU-21
 8. HU-24 → HU-23
 9. HU-18, HU-22  (paralelo)
+10. HU-25 → HU-26 → HU-27  (experiência da contadora: hub, conciliação, menu)
 ```
 
 ### Divergências entre numeração e ordem de construção
@@ -734,13 +816,11 @@ Verificação cruzada entre `INDICE.md`, `SISTEMA.md` e `ROADMAP.md`:
   globais). Já alerta para a ambiguidade de numeração com o ROADMAP (`HU-360`). **Recomendação:**
   referenciar esta seção de "Ordem de Desenvolvimento" para deixar claro que a numeração é de
   **domínio**, não de **build**, evitando que alguém implemente índices (HU-15) por último.
-- **`SISTEMA.md`** — documenta o estado implementado, mas a tabela de integrações **não lista o
-  cron-job.org** e a seção de tarefas ainda usa o rótulo "Celery", embora o agendamento real seja
-  por chamadas HTTP do cron-job.org (o próprio ROADMAP registra "Render Free Tier não suporta
-  Celery"). Além disso, foi atualizado antes das HUs da contadora — **não inclui as rotas
-  `/financeiro/boletos/` (HU-24) e `/financeiro/remessa/` · `/financeiro/retorno/` (HU-23)**.
-  **Recomendação:** alinhar terminologia (cron-job.org em vez de Celery) e acrescentar as rotas da
-  contadora à listagem de views.
+- **`SISTEMA.md`** — ✅ **recomendações já aplicadas:** a seção de tarefas agora esclarece o uso de
+  **cron-job.org** (endpoints HTTP `/api/tasks/*`) ao lado das definições Celery, o cron-job.org foi
+  incluído na tabela de integrações, e as rotas da contadora (HU-23 `/financeiro/remessa/` ·
+  `/retorno/`; HU-24 `/financeiro/boletos/`) foram acrescentadas. **Pendente menor:** incluir também
+  as rotas de HU-25 (`/financeiro/cobranca/`) e HU-26 (`/financeiro/cobranca/conciliacao/`).
 - **`ROADMAP.md`** — organizado por prioridade, majoritariamente concluído, com numeração interna
   própria (`R-`, `C-`, `B-`, `HU-360`) distinta do índice de HUs. Consistente, porém extenso; a
   seção "5. TAREFAS CELERY" mantém o rótulo histórico embora a nota interna esclareça o uso de
@@ -799,7 +879,7 @@ Verificação cruzada entre `INDICE.md`, `SISTEMA.md` e `ROADMAP.md`:
 
 ---
 
-*Revisão consolidada a partir das especificações em `docs/analise/historias-usuario/HU-01..HU-24`,
+*Revisão consolidada a partir das especificações em `docs/analise/historias-usuario/HU-01..HU-27`,
 do índice mestre `INDICE.md` e da verificação contra o código atual. Mantém o escopo
 funcional/técnico sem referências a tecnologias de implementação ou de apresentação visual —
 **com exceção das APIs e serviços externos** listados na seção "APIs e Serviços Externos"
@@ -807,8 +887,12 @@ funcional/técnico sem referências a tecnologias de implementação ou de apres
 CEP e CNPJ), identificados explicitamente por serem dependências operacionais do sistema
 (decisão de revisão). O CPF não possui API externa — é validado localmente.*
 
-> **Nota desta revisão (atualização):** achados de 07×24 e HU-11/12/18 reavaliados contra o
-> código real — HU-11/HU-12 já reusam o cálculo canônico de saldo; só a HU-18 duplica a fórmula;
-> o carnê (HU-07) usa corte por ciclo próprio em vez de `pode_gerar_boleto()`. Recomendações
-> registradas (unificar o carnê em `pode_gerar_boleto()`; extrair auxiliar de fórmula de saldo).
-> As recomendações são **somente de documentação** nesta rodada — sem alteração de código.
+> **Nota desta revisão (atualização):**
+> - **Cobertura ampliada para HU-25, HU-26 e HU-27** (Onda 10 — experiência da contadora: hub do
+>   ciclo, conciliação & saúde, reorganização do menu), todas **implementadas e validadas**.
+> - Achados de 07×24 e HU-11/12/18 reavaliados contra o código: HU-11/HU-12 já reusam o cálculo
+>   canônico de saldo; só a HU-18 duplica a fórmula; o carnê (HU-07) usa corte por ciclo próprio.
+>   **Pendentes (somente documentação, sem código):** unificar o carnê em `pode_gerar_boleto()` e
+>   extrair um auxiliar de fórmula de saldo compartilhado.
+> - **`SISTEMA.md` corrigido** (cron-job.org + rotas da contadora); falta apenas listar as rotas de
+>   HU-25/HU-26.
