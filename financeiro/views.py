@@ -2999,6 +2999,15 @@ def painel_conciliacao_saude(request):
     )
     for p in pendencias:
         p.dias_atraso = max(0, (s['hoje'] - p.data_vencimento).days)
+        # Faixa de aging (para o filtro clicável da HU-26)
+        if p.dias_atraso <= 0:
+            p.bucket = 'a_vencer'
+        elif p.dias_atraso <= 30:
+            p.bucket = 'd1_30'
+        elif p.dias_atraso <= 60:
+            p.bucket = 'd31_60'
+        else:
+            p.bucket = 'd60_mais'
 
     recem = list(
         s['_hist_qs'].select_related(
