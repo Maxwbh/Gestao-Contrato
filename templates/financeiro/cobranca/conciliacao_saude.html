@@ -5,6 +5,8 @@
 
 {% block extra_css %}
 <style>
+  .kpi-grid { display:flex; flex-wrap:wrap; gap:.75rem; }
+  .kpi-grid > .kpi-col { flex:1 1 170px; }
   .kpi-card { border:1px solid #e2e8f0; border-radius:.5rem; box-shadow:0 4px 12px rgba(30,41,59,.05); }
   .kpi-value { font-size:1.5rem; font-weight:700; line-height:1.1; }
   .kpi-label { font-size:.7rem; letter-spacing:.05em; text-transform:uppercase; color:#64748b; font-weight:600; }
@@ -37,14 +39,14 @@
   </div>
 
   <!-- KPIs de saúde -->
-  <div class="row g-3 mb-4">
-    <div class="col-6 col-lg"><div class="kpi-card p-3 h-100" style="background:rgba(0,88,190,.06);border-color:rgba(0,88,190,.3)">
+  <div class="kpi-grid mb-4">
+    <div class="kpi-col"><div class="kpi-card p-3 h-100" style="background:rgba(0,88,190,.06);border-color:rgba(0,88,190,.3)">
       <span class="kpi-label" style="color:#0058be">% Conciliado</span><div class="kpi-value" style="color:#0058be">{{ pct_conciliado }}%</div>
       <div class="progress mt-2" style="height:6px"><div class="progress-bar" style="width:{{ pct_conciliado }}%"></div></div></div></div>
-    <div class="col-6 col-lg"><div class="kpi-card p-3 h-100"><span class="kpi-label">Recebido</span><div class="kpi-value text-success">R$ {{ recebido_valor|floatformat:2 }}</div><div class="small text-muted">{{ recebido_qtd }} baixas</div></div></div>
-    <div class="col-6 col-lg"><div class="kpi-card p-3 h-100"><span class="kpi-label">Pendente</span><div class="kpi-value">R$ {{ pendente_valor|floatformat:2 }}</div><div class="small text-muted">{{ pendente_qtd }} boletos</div></div></div>
-    <div class="col-6 col-lg"><div class="kpi-card p-3 h-100" style="background:rgba(239,68,68,.05);border-color:rgba(239,68,68,.3)"><span class="kpi-label text-danger">Vencido</span><div class="kpi-value text-danger">R$ {{ vencido_valor|floatformat:2 }}</div><div class="small text-muted">{{ vencido_qtd }} parcelas</div></div></div>
-    <div class="col-6 col-lg"><div class="kpi-card p-3 h-100" style="background:rgba(245,158,11,.07);border-color:rgba(245,158,11,.3)"><span class="kpi-label text-warning">Rejeitados</span><div class="kpi-value text-warning">{{ rejeitados_qtd }}</div><div class="small text-muted">itens de remessa</div></div></div>
+    <div class="kpi-col"><div class="kpi-card p-3 h-100"><span class="kpi-label">Recebido</span><div class="kpi-value text-success">R$ {{ recebido_valor|floatformat:2 }}</div><div class="small text-muted">{{ recebido_qtd }} baixas</div></div></div>
+    <div class="kpi-col"><div class="kpi-card p-3 h-100"><span class="kpi-label">Pendente</span><div class="kpi-value">R$ {{ pendente_valor|floatformat:2 }}</div><div class="small text-muted">{{ pendente_qtd }} boletos</div></div></div>
+    <div class="kpi-col"><div class="kpi-card p-3 h-100" style="background:rgba(239,68,68,.05);border-color:rgba(239,68,68,.3)"><span class="kpi-label text-danger">Vencido</span><div class="kpi-value text-danger">R$ {{ vencido_valor|floatformat:2 }}</div><div class="small text-muted">{{ vencido_qtd }} parcelas</div></div></div>
+    <div class="kpi-col"><div class="kpi-card p-3 h-100" style="background:rgba(245,158,11,.07);border-color:rgba(245,158,11,.3)"><span class="kpi-label text-warning">Rejeitados</span><div class="kpi-value text-warning">{{ rejeitados_qtd }}</div><div class="small text-muted">itens de remessa</div></div></div>
   </div>
 
   <div class="row g-3 mb-4">
