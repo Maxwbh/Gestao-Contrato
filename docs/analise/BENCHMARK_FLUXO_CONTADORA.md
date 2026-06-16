@@ -15,7 +15,7 @@
 | **SGL — Sistema de Gestão de Loteamentos** | Loteamento (match direto) | Módulo financeiro único: Contas a Receber, **Conciliação Bancária**, **régua de cobrança estruturada**, notificações por e-mail/WhatsApp, exportação/importação remessa/retorno, **reajuste automático de receitas**, **portal do cliente** (2ª via, extrato, quitação/antecipação) |
 | **ERPFlex / Sankhya / Lotewin / Nuvem ERP** | ERP genérico/loteamento | Geração de boletos em lote: **marcar títulos do mesmo banco/carteira** → "Exportar Remessa" → importar Retorno → **baixa automática**. Validação de agrupamento por banco/carteira |
 | **Asaas** | Cobrança/recebíveis | **Régua de cobrança visual** por etapas (antes: criação, alteração, lembretes 5/10/15/30 dias e no dia; depois: 1/3/7/15/30 dias; após pagamento: confirmação), multicanal (WhatsApp/SMS/e-mail/ligação/correios), configurável no cadastro do cliente |
-| **TecnoSpeed / Nexxera / Boleto Cloud / bancos (BB, Bradesco, Sicredi)** | Infra de boleto | **Boleto Híbrido (Bolepix/QR Pix)** com **registro online via API** — elimina remessa/retorno; **conciliação 2-way** informa se o pagamento veio por boleto (COMPE) ou Pix. Regulamentação do Banco Central vigente desde fev/2025 |
+| **TecnoSpeed / Nexxera / Boleto Cloud / bancos (BB, Bradesco, Sicredi)** | Infra de boleto | **Boleto Híbrido (Bolepix/QR Pix)** — *já temos via BRCobrança* — com **registro online via API** (elimina remessa/retorno) e **conciliação 2-way** (informa se o pagamento veio por COMPE ou Pix). O diferencial que ainda não temos é o **registro online**. Regulamentação do Banco Central vigente desde fev/2025 |
 
 ---
 
@@ -51,14 +51,23 @@
 - Defaults inteligentes, exclusão silenciosa de inelegíveis, anti-duplicidade — ✅ (HU-23).
 - Régua de cobrança configurável e multicanal — ✅ (HU-20).
 - Portal do comprador (2ª via, extrato, quitação) — ✅ (HU-21).
+- **Boleto Híbrido (boleto com Pix / Bolepix) — ✅ já implementado via BRCobrança.** Quando a
+  conta bancária tem `chave_pix` configurada, o serviço envia `chave_pix`/`tipo_chave_pix`/`txid`
+  ao BRCobrança e recebe o bloco Pix (`emv` → copia-e-cola e `qrcode_base64` → QR Code),
+  persistidos na `Parcela` (`pix_copia_cola`, `pix_qrcode`, `pix_txid`). Há ainda **webhook PIX**
+  (`EventoPIX`, origem `PIX_WEBHOOK`, dedup por `end_to_end_id`/`pix_txid`) para **conciliação
+  automática do lado Pix**.
 
 **Lacunas frente ao mercado (oportunidades):**
 - As etapas vivem em **rotas separadas** (`/financeiro/boletos/`, `/financeiro/remessa/`,
   `/financeiro/retorno/`) — falta um **fio condutor** que conduza a contadora de ponta a ponta.
 - Não há **encadeamento de um clique** entre **gerar boletos (HU-24) → gerar remessa (HU-23)**.
 - A régua de cobrança (HU-20) é configurável, mas **sem editor visual em linha do tempo**.
-- Conciliação ainda depende de **upload manual** do retorno (sem agendamento/automação).
-- Registro continua por **arquivo CNAB**; não há **registro online/Bolepix** (norte estratégico).
+- Conciliação do **lado boleto/COMPE** ainda depende de **upload manual** do retorno CNAB (o lado
+  **Pix** já é automático via webhook).
+- O **registro** do título continua por **arquivo CNAB** (remessa); **falta o registro online via
+  API** que dispensaria a remessa/retorno. *(O "Pix no boleto" — Bolepix — já existe; o que falta
+  do norte estratégico é o registro online, não o Pix.)*
 
 ---
 
@@ -105,17 +114,23 @@ Oferecer **agendamento de importação** do `.ret` (tarefa periódica via cron-j
 por integração, espelhando a automação "fim da rotina diária de CNAB" do mercado. Mantém o upload
 manual como alternativa.
 
-### Estratégico (norte) — Registro online + Bolepix (Pix no boleto)
+### Estratégico (norte) — Registro online via API (o Bolepix já temos)
 
-A maior simplificação possível para a contadora é **não manusear arquivos**:
-- **Boleto Híbrido (Bolepix/QR Pix)**: um único título pago por linha digitável **ou** Pix —
-  aumenta conversão e antecipa a baixa.
-- **Registro online via API**: o boleto é registrado **na geração** (HU-24), tornando a remessa
-  (HU-23 tela 1) **desnecessária** para os bancos que suportam; a baixa vira **automática**
-  (conciliação 2-way COMPE/Pix), reduzindo a HU-23 tela 2 a exceções.
-- Caminho técnico: evoluir o serviço de geração (**BRCobrança**) ou integrar um provedor de
-  registro online; manter o CNAB como *fallback* para bancos sem API. Fora do escopo imediato,
-  mas é a direção que o mercado (e o Banco Central, desde fev/2025) já tomou.
+> **Correção importante:** o **boleto com Pix (Bolepix/QR Pix) já está implementado** no nosso
+> sistema via BRCobrança (campo `chave_pix` na conta → `pix_copia_cola`/`pix_qrcode`/`pix_txid`),
+> com webhook PIX para conciliação automática do lado Pix. Portanto, **este item do norte já está
+> atendido** — não é uma lacuna.
+
+A simplificação que **ainda falta** para a contadora **não manusear arquivos** é o **registro
+online**:
+- **Registro online via API**: registrar o boleto **na geração** (HU-24), tornando a remessa
+  (HU-23 tela 1) **desnecessária** para os bancos que suportam; a baixa do lado boleto/COMPE viraria
+  **automática** (conciliação 2-way), reduzindo a HU-23 tela 2 a exceções. Hoje, o BRCobrança
+  **gera** o título (com Pix) mas **não o registra** — o registro continua via CNAB.
+- Caminho técnico: evoluir o BRCobrança (ou integrar um provedor) para **registro online**;
+  aproveitar que o webhook PIX (`EventoPIX`) já faz a baixa automática do lado Pix e estender a
+  baixa automática do lado COMPE; manter o CNAB como *fallback* para bancos sem API. É a direção
+  que o mercado (e o Banco Central, desde fev/2025) já tomou.
 
 ---
 
@@ -149,9 +164,11 @@ Apoio (reduzem demanda à contadora):
 - O maior ganho de **fluidez** não é uma nova funcionalidade e sim **costurar as 3 telas num único
   hub com passo a passo** e **encadear geração de boletos → remessa** — reduzindo a carga cognitiva
   ("o que faço agora?") e o número de cliques.
-- O maior ganho **estratégico** é migrar para **registro online + Bolepix**, que elimina o
-  vai-e-vem de arquivos CNAB — a direção que Superlógica (PJBank), Asaas e a infraestrutura de
-  boleto (TecnoSpeed/Nexxera/bancos) já seguem desde a regulamentação do Bolepix (fev/2025).
+- O **Bolepix (boleto com Pix) já está pronto** via BRCobrança (com webhook PIX para baixa
+  automática do lado Pix) — não é lacuna. O maior ganho **estratégico** restante é o **registro
+  online via API**, que eliminaria o vai-e-vem de arquivos CNAB e tornaria a baixa do lado
+  boleto/COMPE automática — a direção que Superlógica (PJBank), Asaas e a infraestrutura de boleto
+  (TecnoSpeed/Nexxera/bancos) já seguem desde a regulamentação do Bolepix (fev/2025).
 
 ---
 
