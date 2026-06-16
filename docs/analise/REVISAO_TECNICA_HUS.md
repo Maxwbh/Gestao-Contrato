@@ -1,6 +1,6 @@
 # Revisão Técnica Completa das Histórias de Usuário (HU-01 … HU-27)
 
-> Revisão consolidada das 24 HUs do Sistema de Gestão de Contratos.
+> Revisão consolidada das 27 HUs do Sistema de Gestão de Contratos.
 > Foco em **detalhes técnicos** (regras, fórmulas, estados, validações, fluxos),
 > **sem referência a tecnologias** (linguagens, frameworks, bancos de dados) nem a
 > **estilos/bibliotecas visuais**. Onde aplicável, cada HU traz *Observações da Revisão*
@@ -123,6 +123,11 @@ persistindo tudo em uma única operação atômica.
 - Rotas auxiliares: consultar estado, cancelar (com motivo, estado → `cancelado`), baixar
   documento, visualizar página.
 - Mapeamento de campos por instituição (convênio/carteira/posto/variação conforme o banco).
+- **Validação no cadastro da conta bancária** (fonte única por banco): tamanho de
+  agência/conta (descartando o dígito verificador) e da carteira — por valor, onde a instituição
+  o exige (ex.: dois valores fixos de carteira em certos bancos) — além de **conferir que o layout
+  de remessa escolhido é suportado pelo banco** (240/400). É a mesma tabela por instituição usada
+  na geração de boleto e de remessa (paridade HU-03 × HU-23).
 
 **Observações da Revisão:**
 - O título e seus dados são produzidos pelo **BRCobrança** (serviço de boletos externo).
@@ -131,6 +136,9 @@ persistindo tudo em uma única operação atômica.
 - A inicialização lenta do BRCobrança (quando ocioso) é tratada com espera/retentativa na
   geração, de modo que a primeira chamada do período não falhe por indisponibilidade temporária.
 - Verificar que o cancelamento não invalide conciliações já realizadas.
+- **Paridade por instituição travada por teste:** a validação de campos da conta, o suporte de
+  geração de boleto e o suporte de layout de remessa partem de **uma única tabela por banco**,
+  evitando divergência entre o que o usuário cadastra e o que o serviço de boletos aceita.
 
 ---
 
@@ -599,9 +607,9 @@ registro e **(2)** o recebimento dos arquivos de confirmação com baixa automá
   de remessa) vem da tabela única `financeiro/services/bancos.BANCOS_SUPORTADOS`, consumida tanto pela
   HU-03 (boleto) quanto por esta HU (remessa, via `suporta_cnab`/`layouts_cnab`). A coerência entre o
   seletor `BancoBrasil`, a geração e a remessa é verificada em
-  `tests/unit/financeiro/test_paridade_bancos.py` — qualquer drift quebra o build. O formato de
-  agência/dígito e a validação de convênio por instituição continuam acompanhando o que o **BRCobrança**
-  espera (ver HU-23 RN-16/16b/16c).
+  `tests/unit/financeiro/test_paridade_bancos.py` — qualquer drift quebra o build. Além disso, o
+  cadastro da conta **valida por banco** o tamanho de agência/conta/carteira e o layout de remessa
+  escolhido (HU-03 RN-10/RN-11), acompanhando o que o **BRCobrança** espera (ver HU-23 RN-16/16b/16c).
 
 ---
 
@@ -841,10 +849,10 @@ Verificação cruzada entre `INDICE.md`, `SISTEMA.md` e `ROADMAP.md`:
    **HU-07**, HU-14 e HU-24. ✅ O carnê (HU-07) foi **unificado** nesta função (removido o
    `max_parcela_lote`): gera a sequência liberada e pára na primeira bloqueada; ciclos futuros
    passam a ser permitidos em lote.
-2. **Saldo devedor por tipo de amortização** (HU-11, HU-12, HU-18): HU-11 e HU-12 **já reusam** a
-   função canônica `Contrato.calcular_saldo_devedor()`; **apenas a HU-18 duplica a fórmula inline**
-   (por desempenho, em agregação única). **Recomendação:** extrair um auxiliar puro de fórmula
-   compartilhado entre os dois caminhos (ver achado da HU-18) — sem perder o desempenho do relatório.
+2. **Saldo devedor por tipo de amortização** (HU-11, HU-12, HU-18): ✅ **unificado** — auxiliar puro
+   `saldo_devedor_de_agregado()` centraliza a regra (amortização constante × prestação constante),
+   reusado por `Contrato.calcular_saldo_devedor()`, `get_financeiro_resumo()` e pelo relatório em
+   massa da HU-18 (que mantém a agregação única, sem perder desempenho). Eliminada a duplicação inline.
 3. **Idempotência** é princípio recorrente e bem aplicado: conciliação por extrato (HU-10),
    importação de índices (HU-15), retorno bancário (HU-16/HU-23) e geração em lote (HU-24).
 4. **Preservação do valor original** (`valor_original` imutável) é regra global respeitada em
@@ -874,9 +882,13 @@ Verificação cruzada entre `INDICE.md`, `SISTEMA.md` e `ROADMAP.md`:
   (`tests/unit/financeiro/test_paridade_bancos.py`) — coerência entre o seletor `BancoBrasil`, os
   bancos com geração de boleto (`BANCOS_SUPORTADOS`, fonte única) e os com remessa (`layouts_cnab`);
   `BANCOS_BRCOBRANCA` do `BoletoService` é derivado da tabela única. Documentado em HU-03 (RN-08/RN-09
-  + seção de paridade) e HU-23 (RN-16/16b/16c). **Gap conhecido remanescente:** o seletor `BancoBrasil`
-  é mais amplo que `BANCOS_SUPORTADOS` (ex.: BTG, Sofisa, Mercado Pago, "Outros") — divergência travada
-  pelo teste; guard em `ContaBancaria.clean()` fica como evolução recomendada.
+  + seção de paridade) e HU-23 (RN-16/16b/16c).
+- ✅ **Validação de campos da conta por banco** (HU-03 RN-10/RN-11): no cadastro, agência/conta/carteira
+  e o layout CNAB são validados por instituição via `bancos.validar_campos_conta()` /
+  `validar_layout_cnab()` (fonte única, cobertos por teste de form + paridade). **Gap conhecido
+  remanescente:** o seletor `BancoBrasil` é mais amplo que `BANCOS_SUPORTADOS` (ex.: BTG, Sofisa,
+  Mercado Pago, "Outros") — divergência travada pelo teste; recusar no cadastro um banco fora de
+  `BANCOS_SUPORTADOS` fica como evolução recomendada.
 - ✅ **Bloqueio do carnê (HU-07) unificado em `pode_gerar_boleto()`** — implementado (removido o
   `max_parcela_lote`); o carnê gera a sequência liberada e pára na primeira bloqueada. Preview de
   elegibilidade também unificado na mesma função.
@@ -900,7 +912,9 @@ CEP e CNPJ), identificados explicitamente por serem dependências operacionais d
 > - **07×24 — ✅ implementado:** o carnê (HU-07) foi unificado em `pode_gerar_boleto()` (removido o
 >   `max_parcela_lote`); gera a sequência liberada e pára na primeira bloqueada; ciclos futuros
 >   liberados em lote. Testes do comportamento antigo reescritos.
-> - HU-11/12/18 (saldo): HU-11/HU-12 já reusam o cálculo canônico; **resta** extrair um auxiliar de
->   fórmula compartilhado para a HU-18 (relatório em massa) — único item ainda somente-documentação.
+> - **HU-11/12/18 (saldo): ✅ unificado** — auxiliar `saldo_devedor_de_agregado()` compartilhado por
+>   `calcular_saldo_devedor()`, `get_financeiro_resumo()` e o relatório em massa (HU-18).
+> - **Paridade por banco (HU-03/HU-23): ✅ travada por teste** + **validação de agência/conta/carteira
+>   e layout CNAB por instituição** no cadastro da conta (fonte única, HU-03 RN-10/RN-11).
 > - **`SISTEMA.md` atualizado** — cron-job.org + rotas da contadora (HU-23/24) e as rotas de
 >   **HU-25/HU-26** já listadas; sem pendências.
