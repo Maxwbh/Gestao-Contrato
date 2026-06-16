@@ -31,19 +31,23 @@
                 </span>
             </div>
         </li>
-        <!-- Financeiro -->
-        <li><a class="subheader">Financeiro</a></li>
-        <li><a href="{% url 'financeiro:dashboard' %}"><i class="fas fa-chart-line left"></i> Dashboard Financeiro</a></li>
-        <li><a href="{% url 'financeiro:listar_parcelas' %}"><i class="fas fa-list left"></i> Todas as Parcelas</a></li>
-        <li><a href="{% url 'financeiro:parcelas_mes' %}"><i class="fas fa-calendar-alt left"></i> Parcelas do Mês</a></li>
+        <!-- Financeiro · Cobrança do Mês (rotina) -->
+        <li><a class="subheader">Cobrança do Mês</a></li>
         <li><a href="{% url 'financeiro:cobranca_hub' %}"><i class="fas fa-route left"></i> Cobrança do Mês</a></li>
         <li><a href="{% url 'financeiro:boletos_painel' %}"><i class="fas fa-file-invoice-dollar left"></i> Gerar Boletos do Mês</a></li>
         <li><a href="{% url 'financeiro:remessa_painel' %}"><i class="fas fa-file-export left"></i> Gerar Arquivo Remessa</a></li>
         <li><a href="{% url 'financeiro:retorno_painel' %}"><i class="fas fa-file-import left"></i> Receber Arquivo Retorno</a></li>
         <li><a href="{% url 'financeiro:painel_conciliacao_saude' %}"><i class="fas fa-heart-pulse left"></i> Conciliação &amp; Saúde</a></li>
-        <li><a href="{% url 'financeiro:dashboard_conciliacao' %}"><i class="fas fa-balance-scale left"></i> Conciliação Bancária</a></li>
+        <li><div class="divider"></div></li>
+        <!-- Financeiro · Análise -->
+        <li><a class="subheader">Financeiro</a></li>
+        <li><a href="{% url 'financeiro:dashboard' %}"><i class="fas fa-chart-line left"></i> Dashboard Financeiro</a></li>
+        <li><a href="{% url 'financeiro:listar_parcelas' %}"><i class="fas fa-list left"></i> Todas as Parcelas</a></li>
+        <li><a href="{% url 'financeiro:parcelas_mes' %}"><i class="fas fa-calendar-alt left"></i> Parcelas do Mês</a></li>
         <li><a href="{% url 'financeiro:reajustes_pendentes' %}"><i class="fas fa-exclamation-triangle left"></i> Reajustes Pendentes</a></li>
         <li><a href="{% url 'financeiro:listar_reajustes' %}"><i class="fas fa-history left"></i> Histórico de Reajustes</a></li>
+        <li><a href="{% url 'financeiro:relatorio_prestacoes_a_pagar' %}"><i class="fas fa-file-invoice left"></i> Relatórios Financeiros</a></li>
+        <li><a href="{% url 'financeiro:dashboard_conciliacao' %}"><i class="fas fa-balance-scale left"></i> Conciliação Bancária</a></li>
         <li><div class="divider"></div></li>
         <!-- Contratos -->
         <li><a class="subheader">Contratos</a></li>
@@ -60,9 +64,12 @@
         <li><div class="divider"></div></li>
         <!-- Notificações -->
         <li><a class="subheader">Notificações</a></li>
+        <li><a href="{% url 'notificacoes:painel_mensagens' %}"><i class="fas fa-comments left"></i> Painel de Mensagens</a></li>
         <li><a href="{% url 'notificacoes:listar' %}"><i class="fas fa-history left"></i> Histórico de Envios</a></li>
-        <li><a href="{% url 'notificacoes:listar_config_email' %}"><i class="fas fa-envelope left"></i> Servidores de E-mail</a></li>
+        <li><a href="{% url 'notificacoes:listar_regras' %}"><i class="fas fa-sliders-h left"></i> Régua de Cobrança</a></li>
         <li><a href="{% url 'notificacoes:listar_templates' %}"><i class="fas fa-file-alt left"></i> Templates de Mensagens</a></li>
+        <li><a href="{% url 'notificacoes:listar_config_email' %}"><i class="fas fa-envelope left"></i> Servidores de E-mail</a></li>
+        <li><a href="{% url 'notificacoes:listar_config_whatsapp' %}"><i class="fab fa-whatsapp left"></i> WhatsApp</a></li>
         {% if user.is_staff or user.is_superuser %}
         <li><div class="divider"></div></li>
         <li><a class="subheader">Admin</a></li>
@@ -155,28 +162,31 @@
 
     <!-- Dropdown Structures -->
     <ul id="dd-financeiro" class="dropdown-content app-dropdown">
-        <li><a href="{% url 'financeiro:dashboard' %}"><i class="fas fa-chart-line"></i> Dashboard Financeiro</a></li>
-        <li><a href="{% url 'financeiro:listar_parcelas' %}"><i class="fas fa-list"></i> Todas as Parcelas</a></li>
-        <li><a href="{% url 'financeiro:parcelas_mes' %}"><i class="fas fa-calendar-alt"></i> Parcelas do Mês</a></li>
-        <li><a class="dropdown-header-item"><i class="fas fa-barcode"></i> Boletos</a></li>
-        <li><a href="{% url 'financeiro:listar_parcelas' %}?status_boleto=NAO_GERADO"><i class="fas fa-exclamation-circle orange-text"></i> Pendentes de Geração</a></li>
-        <li><a href="{% url 'financeiro:listar_parcelas' %}?status_boleto=GERADO"><i class="fas fa-check-circle green-text"></i> Boletos Gerados</a></li>
-        <li><a class="dropdown-header-item"><i class="fas fa-chart-bar"></i> Reajustes</a></li>
-        <li><a href="{% url 'financeiro:reajustes_pendentes' %}"><i class="fas fa-exclamation-triangle orange-text"></i> Pendentes</a></li>
-        <li><a href="{% url 'financeiro:listar_reajustes' %}"><i class="fas fa-history"></i> Histórico</a></li>
-        <li><a class="dropdown-header-item"><i class="fas fa-file-alt"></i> CNAB</a></li>
+        <li><a class="dropdown-header-item"><i class="fas fa-bolt"></i> Cobrança do Mês</a></li>
         <li><a href="{% url 'financeiro:cobranca_hub' %}"><i class="fas fa-route"></i> Cobrança do Mês</a></li>
         <li><a href="{% url 'financeiro:boletos_painel' %}"><i class="fas fa-file-invoice-dollar"></i> Gerar Boletos do Mês</a></li>
         <li><a href="{% url 'financeiro:remessa_painel' %}"><i class="fas fa-file-export"></i> Gerar Arquivo Remessa</a></li>
         <li><a href="{% url 'financeiro:retorno_painel' %}"><i class="fas fa-file-import"></i> Receber Arquivo Retorno</a></li>
         <li><a href="{% url 'financeiro:painel_conciliacao_saude' %}"><i class="fas fa-heart-pulse"></i> Conciliação &amp; Saúde</a></li>
+        <li><a class="dropdown-header-item"><i class="fas fa-chart-line"></i> Análise</a></li>
+        <li><a href="{% url 'financeiro:dashboard' %}"><i class="fas fa-chart-line"></i> Dashboard Financeiro</a></li>
+        <li><a href="{% url 'financeiro:listar_parcelas' %}"><i class="fas fa-list"></i> Todas as Parcelas</a></li>
+        <li><a href="{% url 'financeiro:parcelas_mes' %}"><i class="fas fa-calendar-alt"></i> Parcelas do Mês</a></li>
+        <li><a href="{% url 'financeiro:listar_parcelas' %}?status_boleto=NAO_GERADO"><i class="fas fa-exclamation-circle orange-text"></i> Boletos Pendentes</a></li>
+        <li><a href="{% url 'financeiro:listar_parcelas' %}?status_boleto=GERADO"><i class="fas fa-check-circle green-text"></i> Boletos Gerados</a></li>
+        <li><a class="dropdown-header-item"><i class="fas fa-chart-bar"></i> Reajustes</a></li>
+        <li><a href="{% url 'financeiro:reajustes_pendentes' %}"><i class="fas fa-exclamation-triangle orange-text"></i> Pendentes</a></li>
+        <li><a href="{% url 'financeiro:listar_reajustes' %}"><i class="fas fa-history"></i> Histórico</a></li>
+        <li><a class="dropdown-header-item"><i class="fas fa-file-invoice"></i> Relatórios &amp; Conciliação</a></li>
+        <li><a href="{% url 'financeiro:relatorio_prestacoes_a_pagar' %}"><i class="fas fa-file-invoice"></i> Relatórios Financeiros</a></li>
         <li><a href="{% url 'financeiro:dashboard_conciliacao' %}"><i class="fas fa-balance-scale"></i> Conciliação Bancária</a></li>
     </ul>
 
     <ul id="dd-contratos" class="dropdown-content app-dropdown">
+        <li><a class="dropdown-header-item"><i class="fas fa-file-contract"></i> Contratos</a></li>
         <li><a href="{% url 'contratos:listar' %}"><i class="fas fa-list"></i> Todos os Contratos</a></li>
         <li><a href="{% url 'contratos:criar' %}"><i class="fas fa-plus-circle"></i> Novo Contrato</a></li>
-        <li class="divider" tabindex="-1"></li>
+        <li><a class="dropdown-header-item"><i class="fas fa-chart-bar"></i> Reajuste</a></li>
         <li><a href="{% url 'contratos:indices_listar' %}"><i class="fas fa-chart-bar"></i> Índices de Reajuste</a></li>
     </ul>
 
@@ -190,8 +200,9 @@
     </ul>
 
     <ul id="dd-notificacoes" class="dropdown-content app-dropdown">
-        <li><a href="{% url 'notificacoes:listar' %}"><i class="fas fa-history"></i> Histórico de Envios</a></li>
+        <li><a class="dropdown-header-item"><i class="fas fa-paper-plane"></i> Operação</a></li>
         <li><a href="{% url 'notificacoes:painel_mensagens' %}"><i class="fas fa-comments"></i> Painel de Mensagens</a></li>
+        <li><a href="{% url 'notificacoes:listar' %}"><i class="fas fa-history"></i> Histórico de Envios</a></li>
         <li><a class="dropdown-header-item"><i class="fas fa-cogs"></i> Configurações</a></li>
         <li><a href="{% url 'notificacoes:listar_regras' %}"><i class="fas fa-sliders-h"></i> Régua de Cobrança</a></li>
         <li><a href="{% url 'notificacoes:listar_templates' %}"><i class="fas fa-file-alt"></i> Templates de Mensagens</a></li>
