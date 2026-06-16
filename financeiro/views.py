@@ -3512,33 +3512,6 @@ def gerar_carne(request, contrato_id):
                 'erro': 'Nenhuma parcela valida encontrada'
             }, status=400)
 
-        # =====================================================================
-        # LIMITE DE LOTE: apenas até o último boleto do ciclo atual
-        # Regra: em lote só é permitido gerar boletos dentro do ciclo atual
-        # (último ciclo onde todos os reajustes foram aplicados).
-        # Ciclos futuros (data ainda não chegou) só são permitidos individualmente.
-        # =====================================================================
-        max_parcela_lote = None  # None = sem limite (FIXO ou todos ciclos quitados)
-        if not force and contrato.tipo_correcao != TipoCorrecao.FIXO:
-            from dateutil.relativedelta import relativedelta as _rd
-            prazo_lote = contrato.prazo_reajuste_meses or 12
-            hoje_lote = timezone.now().date()
-            total_ciclos_lote = (contrato.numero_parcelas - 1) // prazo_lote + 1
-            # Pre-fetch todos os ciclos aplicados — 1 query em vez de N .exists()
-            _ciclos_aplicados = set(
-                Reajuste.objects.filter(contrato=contrato, aplicado=True).values_list('ciclo', flat=True)
-            )
-            for _ciclo in range(2, total_ciclos_lote + 2):
-                data_rd = contrato.data_contrato + _rd(months=(_ciclo - 1) * prazo_lote)
-                if hoje_lote < data_rd:
-                    # Ciclo ainda futuro → lote só até o ciclo anterior
-                    max_parcela_lote = (_ciclo - 1) * prazo_lote
-                    break
-                if _ciclo not in _ciclos_aplicados:
-                    # Ciclo vencido mas não reajustado → lote só até o ciclo anterior
-                    max_parcela_lote = (_ciclo - 1) * prazo_lote
-                    break
-
         resultados = []
         gerados = 0
         bloqueados = 0
@@ -3546,21 +3519,25 @@ def gerar_carne(request, contrato_id):
 
         for parcela in parcelas:
             # =====================================================================
-            # BLOQUEIO DE LOTE: parcelas além do ciclo atual não são permitidas em lote
+            # BLOQUEIO POR REAJUSTE — fonte única: contrato.pode_gerar_boleto()
+            # (mesma regra de HU-03/HU-24). Política do carnê: cada contrato gera
+            # a sequência de parcelas liberadas e PÁRA na primeira bloqueada — as
+            # seguintes (mesmo ciclo ou superiores) também estariam bloqueadas por
+            # cascata. Ex.: pediu 10, só as 5 primeiras liberadas → gera 5; outro
+            # contrato libera 9 → gera 9. `force=True` ignora o bloqueio.
             # =====================================================================
-            if not force and max_parcela_lote is not None and parcela.numero_parcela > max_parcela_lote:
-                resultados.append({
-                    'parcela_id': parcela.id,
-                    'numero_parcela': parcela.numero_parcela,
-                    'sucesso': False,
-                    'bloqueado_reajuste': True,
-                    'erro': (
-                        f"Parcela {parcela.numero_parcela} pertence a um ciclo futuro ou com reajuste "
-                        f"pendente. Boletos de ciclos futuros só podem ser gerados individualmente."
-                    )
-                })
-                bloqueados += 1
-                continue
+            if not force and hasattr(contrato, 'pode_gerar_boleto'):
+                pode_gerar, motivo = contrato.pode_gerar_boleto(parcela.numero_parcela)
+                if not pode_gerar:
+                    resultados.append({
+                        'parcela_id': parcela.id,
+                        'numero_parcela': parcela.numero_parcela,
+                        'sucesso': False,
+                        'bloqueado_reajuste': True,
+                        'erro': f'Boleto bloqueado: {motivo}',
+                    })
+                    bloqueados += 1
+                    break  # interrompe este contrato — próximas parcelas também bloqueadas
 
             # Verificar se ja tem boleto
             if parcela.tem_boleto and not force:

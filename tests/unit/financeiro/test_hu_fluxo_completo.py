@@ -360,10 +360,11 @@ class TestHUFluxoCompleto:
         )
 
         # ================================================================
-        # PASSO 6 — Validar bloqueio do ciclo 3 (parcelas 25-36)
+        # PASSO 6 — Ciclo 3 futuro liberado no carnê (unificado em pode_gerar_boleto)
         # ================================================================
 
-        # Ciclo 3 ainda não recebeu reajuste → deve bloquear geração em lote
+        # Ciclo 3 ainda não venceu (~10 meses à frente) e ciclo 2 já foi reajustado (P4)
+        # → carnê LIBERA as parcelas do ciclo 3 (regra unificada com HU-03/HU-24)
         parcelas_ciclo3 = list(
             Parcela.objects.filter(
                 contrato=contrato,
@@ -386,23 +387,23 @@ class TestHUFluxoCompleto:
         assert resp.status_code == 200, f"P6: gerar_carne retornou {resp.status_code}"
         dados_p6 = resp.json()
 
-        assert dados_p6.get('bloqueados') == len(parcelas_ciclo3), (
-            f"P6: todas as {len(parcelas_ciclo3)} parcelas do ciclo 3 deveriam estar "
-            f"bloqueadas, obtidos bloqueados={dados_p6.get('bloqueados')}, "
-            f"gerados={dados_p6.get('gerados')}"
+        # Unificação HU-07 em pode_gerar_boleto(): o ciclo 3 está no FUTURO (~10 meses)
+        # e o ciclo 2 já foi reajustado (P4) → as parcelas do ciclo 3 são LIBERADAS no
+        # carnê (mesma regra de HU-03/HU-24). O antigo max_parcela_lote, que bloqueava
+        # ciclos futuros em lote, foi removido.
+        assert dados_p6.get('gerados') == len(parcelas_ciclo3), (
+            f"P6: ciclo 3 futuro deve ser gerado no carnê (unificado em pode_gerar_boleto), "
+            f"obtidos gerados={dados_p6.get('gerados')}, bloqueados={dados_p6.get('bloqueados')}"
         )
-        assert dados_p6.get('gerados') == 0, (
-            "P6: nenhum boleto do ciclo 3 deve ser gerado sem reajuste aplicado"
+        assert dados_p6.get('bloqueados') == 0, (
+            "P6: sem reajuste pendente intermediário, nada deve ser bloqueado"
         )
 
-        # Valida via método direto do modelo: ciclo 3 ainda não venceu (~10 meses
-        # à frente), portanto pode_gerar_boleto() retorna True. O bloqueio em lote
-        # é feito pelo max_parcela_lote na view gerar_carne, não por este método.
+        # O modelo confirma: ciclo 3 ainda futuro → pode_gerar_boleto() = True
         for p in parcelas_ciclo3[:3]:
             pode, motivo = contrato.pode_gerar_boleto(p.numero_parcela)
             assert pode is True, (
-                f"P6: ciclo 3 ainda futuro — parcela {p.numero_parcela} deve ser "
-                f"liberada pelo modelo (bloqueio de lote ocorre na view)"
+                f"P6: ciclo 3 futuro — parcela {p.numero_parcela} deve ser liberada"
             )
 
         # ================================================================
@@ -842,8 +843,13 @@ class TestBloqueioReajusteCiclo3:
             'parcela_final': 36,
         }), content_type='application/json')
 
-    def test_parcelas_ciclo3_bloqueadas_em_lote(self, contrato_36m, usuario_cli):
-        """Parcelas 25+ devem ser bloqueadas pois ciclo 3 não foi reajustado."""
+    def test_ciclo3_futuro_liberado_em_lote(self, contrato_36m, usuario_cli):
+        """Após reajustar o ciclo 2, o ciclo 3 (futuro) é LIBERADO no carnê.
+
+        Unificação HU-07: o carnê passou a usar contrato.pode_gerar_boleto(), que
+        libera ciclos ainda não vencidos. (Antes, o max_parcela_lote bloqueava
+        ciclos futuros em lote — regra removida.)
+        """
         from financeiro.models import Parcela, TipoParcela
         _, cli = usuario_cli
         self._aplicar_reajuste_ciclo2(contrato_36m, cli)
@@ -862,8 +868,37 @@ class TestBloqueioReajusteCiclo3:
                             content_type='application/json')
 
         d = resp.json()
-        assert d['bloqueados'] == len(ids_c3)
-        assert d['gerados'] == 0
+        assert d['gerados'] == len(ids_c3)
+        assert d['bloqueados'] == 0
+
+    def test_carne_para_na_primeira_bloqueada(self, contrato_36m, usuario_cli):
+        """Cenário-chave (HU-07): pediu o carnê de 1..24 sem o reajuste do ciclo 2.
+
+        O carnê gera o ciclo 1 (parcelas 1..12) e PÁRA na parcela 13 (ciclo 2 já
+        vencido e com reajuste pendente) → gera apenas as liberadas, como pedido.
+        """
+        from financeiro.models import Parcela, TipoParcela
+        _, cli = usuario_cli
+        # NÃO aplica reajuste do ciclo 2 → parcela 13+ bloqueada por cascata
+        ids = list(
+            Parcela.objects.filter(
+                contrato=contrato_36m, tipo_parcela=TipoParcela.NORMAL,
+                pago=False, numero_parcela__lte=24,
+            ).order_by('numero_parcela').values_list('pk', flat=True)
+        )
+        url = reverse('financeiro:gerar_carne', kwargs={'contrato_id': contrato_36m.pk})
+        with patch.object(Parcela, 'gerar_boleto', _mock_gerar_boleto):
+            resp = cli.post(url, data=json.dumps({'parcelas': ids}),
+                            content_type='application/json')
+
+        d = resp.json()
+        # Ciclo 1 (12 parcelas) liberado; para na 13 (ciclo 2 pendente).
+        assert d['gerados'] == 12, f"esperado 12 gerados (ciclo 1), obtido {d['gerados']}"
+        assert d['bloqueados'] >= 1
+        gerados_ok = [r['numero_parcela'] for r in d['resultados'] if r.get('sucesso')]
+        assert gerados_ok and max(gerados_ok) <= 12, (
+            "nenhuma parcela do ciclo 2+ deve ser gerada sem reajuste"
+        )
 
     def test_pode_gerar_boleto_retorna_true_para_ciclo_futuro(self, contrato_36m, usuario_cli):
         """pode_gerar_boleto() deve retornar True para ciclo 3 ainda futuro.

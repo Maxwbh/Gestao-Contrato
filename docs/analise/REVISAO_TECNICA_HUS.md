@@ -215,30 +215,24 @@ persistindo tudo em uma única operação atômica.
 
 **Mecânica técnica:**
 - Seleção: próximas N parcelas não pagas (padrão 20; alternativa 6), ordenadas por vencimento.
-- Cada parcela passa pelo bloqueio por reajuste; se uma estiver bloqueada, aborta com motivo claro.
+- **Bloqueio por reajuste unificado em `contrato.pode_gerar_boleto()`** (fonte única, mesma regra de
+  HU-03/HU-24): por contrato, o carnê gera a **sequência de parcelas liberadas** e **pára na primeira
+  bloqueada** (as seguintes, do mesmo ciclo ou superiores, também estão bloqueadas por cascata).
 - Emissão em lotes de 15 por chamada ao **BRCobrança** (limite para evitar estouro de tempo).
 - **Tolerância a falha parcial:** falha individual não derruba o lote; erros são reportados.
 - Saídas: documento consolidado para impressão e pacote com documentos individuais; também há
   consolidação de múltiplos contratos.
-- Quando restam menos que N, gera só as disponíveis (sem erro). Aviso informativo (não bloqueante)
-  quando o reajuste está próximo.
+- Quando restam menos que N, gera só as disponíveis (sem erro).
 
-**Observações da Revisão (achado 07×24 — revisado contra o código):**
-- A especificação sugeria que o carnê **aborta** ao encontrar bloqueio; na prática o código já é
-  **tolerante** (conta os bloqueados e segue com os demais). A divergência real frente à HU-24 não
-  é "abortar vs. seguir", e sim o **mecanismo de bloqueio**:
-  - **HU-24** consulta `contrato.pode_gerar_boleto(numero_parcela)` por parcela (fonte canônica).
-  - **HU-07 (carnê)** usa um **corte por ciclo** próprio (`max_parcela_lote`), mais restritivo:
-    bloqueia parcelas de **ciclos futuros** no lote (só permite individualmente), mesmo quando o
-    `pode_gerar_boleto()` as liberaria por ainda não terem vencido.
-- **Melhoria recomendada (decisão: unificar):** o carnê deve passar a usar
-  `contrato.pode_gerar_boleto()` por parcela como **fonte única de verdade** do bloqueio por
-  reajuste (mesma regra da HU-24), padronizando inclusive a mensagem ("Reajuste do ciclo N
-  pendente"). Efeito: parcelas de ciclos futuros ainda não vencidos passam a ser permitidas no
-  lote do carnê; bloqueia-se apenas o reajuste efetivamente pendente. Remove a heurística
-  duplicada `max_parcela_lote` e elimina o risco de duas definições de "elegível" divergirem.
-- *Esta é uma recomendação de revisão; a implementação no código foi mantida fora do escopo desta
-  rodada (somente documentação).*
+**Observações da Revisão (achado 07×24 — ✅ implementado):**
+- O carnê **foi unificado** em `pode_gerar_boleto()`: removido o antigo corte por ciclo
+  (`max_parcela_lote`). Resultado prático do cenário pedido — pediu 10, mas só as 5 primeiras de um
+  contrato estão liberadas → gera 5; outro contrato libera 9 → gera 9. Cada contrato gera o que pode.
+- **Efeito colateral intencional:** parcelas de **ciclos futuros** (ainda não vencidos) passam a ser
+  **permitidas** no carnê (antes o `max_parcela_lote` as bloqueava em lote). Bloqueia-se apenas o
+  reajuste **efetivamente pendente** (cascata). Elimina a divergência entre duas definições de "elegível".
+- Cobertura: cenário "gera até a primeira bloqueada" e "ciclo futuro liberado" em
+  `test_hu_fluxo_completo.py` (testes antigos do `max_parcela_lote` reescritos para a nova regra).
 
 ---
 
@@ -835,9 +829,10 @@ Verificação cruzada entre `INDICE.md`, `SISTEMA.md` e `ROADMAP.md`:
 
 ## Achados Transversais (Cross-Cutting)
 
-1. **Bloqueio por reajuste** (HU-06): consumido por `pode_gerar_boleto()` em HU-03, HU-14 e HU-24,
-   mas o **carnê (HU-07) usa um corte por ciclo próprio** (`max_parcela_lote`), mais restritivo.
-   **Recomendação:** unificar o carnê em `pode_gerar_boleto()` (fonte única) — ver achado da HU-07.
+1. **Bloqueio por reajuste** (HU-06): **fonte única** `pode_gerar_boleto()`, consumida por HU-03,
+   **HU-07**, HU-14 e HU-24. ✅ O carnê (HU-07) foi **unificado** nesta função (removido o
+   `max_parcela_lote`): gera a sequência liberada e pára na primeira bloqueada; ciclos futuros
+   passam a ser permitidos em lote.
 2. **Saldo devedor por tipo de amortização** (HU-11, HU-12, HU-18): HU-11 e HU-12 **já reusam** a
    função canônica `Contrato.calcular_saldo_devedor()`; **apenas a HU-18 duplica a fórmula inline**
    (por desempenho, em agregação única). **Recomendação:** extrair um auxiliar puro de fórmula
@@ -871,11 +866,11 @@ Verificação cruzada entre `INDICE.md`, `SISTEMA.md` e `ROADMAP.md`:
   agência/dígito, convênio e layout, acompanhando o que o **BRCobrança** espera — lembrando que o
   BRCobrança **gera** o boleto e produz o layout de remessa, mas o **registro** efetivo no banco
   depende do envio do arquivo (HU-23).
-- **Unificar o bloqueio por reajuste do carnê (HU-07) em `pode_gerar_boleto()`** — hoje o carnê usa
-  um corte por ciclo próprio, mais restritivo que a HU-24; unificar elimina duas definições de
-  "elegível".
+- ✅ **Bloqueio do carnê (HU-07) unificado em `pode_gerar_boleto()`** — implementado (removido o
+  `max_parcela_lote`); o carnê gera a sequência liberada e pára na primeira bloqueada.
 - **Reuso do cálculo de saldo devedor (HU-18):** extrair um auxiliar puro de fórmula compartilhado
   com `calcular_saldo_devedor()` (HU-11/HU-12 já o reusam; só o relatório em massa duplica a fórmula).
+  *(Único item ainda somente-documentação.)*
 
 ---
 
@@ -890,9 +885,10 @@ CEP e CNPJ), identificados explicitamente por serem dependências operacionais d
 > **Nota desta revisão (atualização):**
 > - **Cobertura ampliada para HU-25, HU-26 e HU-27** (Onda 10 — experiência da contadora: hub do
 >   ciclo, conciliação & saúde, reorganização do menu), todas **implementadas e validadas**.
-> - Achados de 07×24 e HU-11/12/18 reavaliados contra o código: HU-11/HU-12 já reusam o cálculo
->   canônico de saldo; só a HU-18 duplica a fórmula; o carnê (HU-07) usa corte por ciclo próprio.
->   **Pendentes (somente documentação, sem código):** unificar o carnê em `pode_gerar_boleto()` e
->   extrair um auxiliar de fórmula de saldo compartilhado.
+> - **07×24 — ✅ implementado:** o carnê (HU-07) foi unificado em `pode_gerar_boleto()` (removido o
+>   `max_parcela_lote`); gera a sequência liberada e pára na primeira bloqueada; ciclos futuros
+>   liberados em lote. Testes do comportamento antigo reescritos.
+> - HU-11/12/18 (saldo): HU-11/HU-12 já reusam o cálculo canônico; **resta** extrair um auxiliar de
+>   fórmula compartilhado para a HU-18 (relatório em massa) — único item ainda somente-documentação.
 > - **`SISTEMA.md` atualizado** — cron-job.org + rotas da contadora (HU-23/24) e as rotas de
 >   **HU-25/HU-26** já listadas; sem pendências.
