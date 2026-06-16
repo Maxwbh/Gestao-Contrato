@@ -118,3 +118,94 @@ def test_banco_nao_suportado_para_remessa_nao_suporta_nenhum_layout():
     assert not bancos.suporta_cnab('999', LayoutCNAB.CNAB_240)
     assert bancos.layouts_cnab('999') == ()
     assert not bancos.suportado('999')
+
+
+# ── Validação de campos da conta por banco ────────────────────────────────────
+
+def test_campos_validacao_so_para_bancos_suportados():
+    """Toda entrada de CAMPOS_BANCO_VALIDACAO é um banco suportado."""
+    assert set(bancos.CAMPOS_BANCO_VALIDACAO).issubset(set(bancos.BANCOS_SUPORTADOS))
+
+
+def test_validar_campos_conta_agencia_excedida():
+    """BB: agência além de 4 dígitos é rejeitada."""
+    erros = bancos.validar_campos_conta('001', agencia='12345', conta='123')
+    assert 'agencia' in erros and '4' in erros['agencia']
+
+
+def test_validar_campos_conta_descarta_dv():
+    """O dígito verificador (após '-') não conta no tamanho."""
+    # BB conta máx 8 → '12345678-9' tem número de 8 dígitos (válido)
+    erros = bancos.validar_campos_conta('001', agencia='1234-5', conta='12345678-9')
+    assert erros == {}
+
+
+def test_validar_campos_conta_conta_excedida():
+    """Itaú: conta máx 5 dígitos."""
+    erros = bancos.validar_campos_conta('341', conta='123456')
+    assert 'conta' in erros
+
+
+def test_validar_campos_conta_carteira_valores_c6():
+    """C6: carteira só pode ser 10 ou 20."""
+    assert bancos.validar_campos_conta('336', carteira='10') == {}
+    assert bancos.validar_campos_conta('336', carteira='20') == {}
+    erros = bancos.validar_campos_conta('336', carteira='99')
+    assert 'carteira' in erros and '10' in erros['carteira']
+
+
+def test_validar_campos_conta_carteira_valores_sicoob():
+    """Sicoob: carteira ∈ {1, 3, 9}."""
+    assert bancos.validar_campos_conta('756', carteira='1') == {}
+    assert 'carteira' in bancos.validar_campos_conta('756', carteira='2')
+
+
+def test_validar_campos_conta_carteira_tamanho():
+    """BB: carteira máx 2 dígitos."""
+    assert bancos.validar_campos_conta('001', carteira='18') == {}
+    assert 'carteira' in bancos.validar_campos_conta('001', carteira='123')
+
+
+def test_validar_campos_conta_banco_sem_regra_nao_restringe():
+    """Banco fora da tabela de validação não impõe restrição."""
+    assert bancos.validar_campos_conta('077', agencia='999999', conta='9'*30) == {}
+
+
+def test_validar_campos_conta_vazio_nao_erra():
+    """Campos vazios não disparam erro de tamanho (obrigatoriedade é à parte)."""
+    assert bancos.validar_campos_conta('001', agencia='', conta='', carteira='') == {}
+
+
+# ── Validação de layout CNAB por banco ────────────────────────────────────────
+
+def test_validar_layout_cnab_incompativel():
+    """Caixa (104) só suporta CNAB 240 → CNAB 400 é rejeitado."""
+    erro = bancos.validar_layout_cnab('104', LayoutCNAB.CNAB_400)
+    assert erro and 'CNAB 400' in erro
+    assert bancos.validar_layout_cnab('104', LayoutCNAB.CNAB_240) is None
+
+
+def test_validar_layout_cnab_bradesco_so_400():
+    """Bradesco (237) só suporta CNAB 400 → CNAB 240 é rejeitado."""
+    assert bancos.validar_layout_cnab('237', LayoutCNAB.CNAB_240) is not None
+    assert bancos.validar_layout_cnab('237', LayoutCNAB.CNAB_400) is None
+
+
+def test_validar_layout_cnab_banco_sem_remessa_nao_restringe():
+    """Banco sem remessa CNAB (Inter 077) não restringe layout (registro online)."""
+    assert bancos.validar_layout_cnab('077', LayoutCNAB.CNAB_240) is None
+    assert bancos.validar_layout_cnab('077', LayoutCNAB.CNAB_400) is None
+
+
+def test_validar_layout_cnab_concorda_com_layouts_cnab():
+    """validar_layout_cnab concorda com a tabela layouts_cnab para todo banco."""
+    for codigo, spec in bancos.BANCOS_SUPORTADOS.items():
+        layouts = spec['layouts_cnab']
+        for layout in (LayoutCNAB.CNAB_240, LayoutCNAB.CNAB_400):
+            erro = bancos.validar_layout_cnab(codigo, layout)
+            if not layouts:
+                assert erro is None  # sem remessa → nunca bloqueia
+            elif layout in layouts:
+                assert erro is None
+            else:
+                assert erro is not None
