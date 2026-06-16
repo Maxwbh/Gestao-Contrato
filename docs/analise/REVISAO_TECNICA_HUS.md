@@ -231,8 +231,12 @@ persistindo tudo em uma única operação atômica.
 - **Efeito colateral intencional:** parcelas de **ciclos futuros** (ainda não vencidos) passam a ser
   **permitidas** no carnê (antes o `max_parcela_lote` as bloqueava em lote). Bloqueia-se apenas o
   reajuste **efetivamente pendente** (cascata). Elimina a divergência entre duas definições de "elegível".
-- Cobertura: cenário "gera até a primeira bloqueada" e "ciclo futuro liberado" em
-  `test_hu_fluxo_completo.py` (testes antigos do `max_parcela_lote` reescritos para a nova regra).
+- **Preview unificado também:** `api_parcelas_elegibilidade` (que alimenta o modal) passou a delegar
+  a `pode_gerar_boleto()` em vez de recalcular ciclo/reajuste por conta própria — antes o preview
+  bloqueava todo ciclo >1 sem reajuste (ignorando a data), exibindo menos parcelas do que a geração
+  realmente produzia. Agora preview e geração concordam parcela a parcela.
+- Cobertura: cenário "gera até a primeira bloqueada", "ciclo futuro liberado" e "preview concorda com
+  geração" em `test_hu_fluxo_completo.py` (testes antigos do `max_parcela_lote` reescritos para a nova regra).
 
 ---
 

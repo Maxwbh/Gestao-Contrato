@@ -915,6 +915,37 @@ class TestBloqueioReajusteCiclo3:
         assert pode is True
         assert motivo  # motivo explicativo não deve ser vazio
 
+    def test_preview_elegibilidade_concorda_com_geracao(self, contrato_36m, usuario_cli):
+        """Regressão (HU-07): o preview (api_parcelas_elegibilidade) usa a MESMA
+        fonte única (pode_gerar_boleto) que a geração — não pode divergir.
+
+        Após reajustar o ciclo 2, o ciclo 3 (futuro, ainda não vencido) deve
+        aparecer como LIBERADO no preview, igual à geração em lote. Antes da
+        unificação o preview bloqueava todo ciclo >1 sem reajuste (ignorando a
+        data), gerando menos boletos do que o backend permitia.
+        """
+        _, cli = usuario_cli
+        self._aplicar_reajuste_ciclo2(contrato_36m, cli)
+        contrato_36m.refresh_from_db()
+
+        url = reverse('financeiro:api_parcelas_elegibilidade',
+                      kwargs={'contrato_id': contrato_36m.pk})
+        resp = cli.get(url)
+        d = resp.json()
+        assert d['sucesso'] is True
+        # Nenhuma parcela bloqueada: ciclo 1 liberado, ciclo 2 reajustado,
+        # ciclo 3 ainda futuro (liberado por pode_gerar_boleto).
+        assert d['total_bloqueadas'] == 0, (
+            f"ciclo futuro deve estar liberado no preview, obtido "
+            f"{d['total_bloqueadas']} bloqueada(s)"
+        )
+        # E a decisão por parcela bate com pode_gerar_boleto (fonte única).
+        for p in d['parcelas']:
+            pode, _ = contrato_36m.pode_gerar_boleto(p['numero_parcela'])
+            assert p['pode_gerar'] == pode, (
+                f"divergência preview×geração na parcela {p['numero_parcela']}"
+            )
+
 
 # ── Passo 7: carnê PDF 6 meses ────────────────────────────────────────────────
 

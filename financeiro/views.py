@@ -3797,25 +3797,13 @@ def _api_parcelas_elegibilidade_logic(request, contrato_id):
     for parcela in parcelas:
         ciclo_parcela = contrato.calcular_ciclo_parcela(parcela.numero_parcela)
 
-        # Determinar elegibilidade
-        if tipo_correcao_fixo:
-            # FIXO: todas liberadas
-            pode_gerar = True
-            motivo = "Indice FIXO - sem reajuste necessario"
-        elif ciclo_parcela == 1:
-            # Primeiro ciclo: sempre liberado
-            pode_gerar = True
-            motivo = "Primeiro ciclo - liberado"
-        elif ciclo_parcela in reajustes_aplicados:
-            # Reajuste ja aplicado para este ciclo
-            pode_gerar = True
-            motivo = f"Reajuste do ciclo {ciclo_parcela} aplicado"
-        else:
-            # Reajuste pendente
-            pode_gerar = False
-            motivo = f"Aguardando reajuste do ciclo {ciclo_parcela}"
-            if primeiro_ciclo_bloqueado is None:
-                primeiro_ciclo_bloqueado = ciclo_parcela
+        # Elegibilidade — FONTE ÚNICA: contrato.pode_gerar_boleto() (mesma regra
+        # de HU-03/HU-24 e do gerar_carne). NÃO recalcular aqui: ciclos futuros
+        # ainda não vencidos são liberados; só bloqueia reajuste efetivamente
+        # pendente (cascata). Garante que o preview concorde com a geração.
+        pode_gerar, motivo = contrato.pode_gerar_boleto(parcela.numero_parcela)
+        if not pode_gerar and primeiro_ciclo_bloqueado is None:
+            primeiro_ciclo_bloqueado = ciclo_parcela
 
         if pode_gerar:
             total_disponiveis += 1
