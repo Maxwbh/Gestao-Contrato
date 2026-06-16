@@ -2,7 +2,7 @@
 
 **Desenvolvedor:** Maxwell da Silva Oliveira (maxwbh@gmail.com)
 **Empresa:** M&S do Brasil LTDA
-**Última atualização:** 2026-05-27
+**Última atualização:** 2026-06-16
 
 > Documentação completa do que está implementado no sistema.
 > Para novas funcionalidades, consulte **[ROADMAP.md](ROADMAP.md)**.
@@ -212,8 +212,14 @@ gestao_contrato/          # Configuração do projeto
 | `contrato/<id>/gerar-carne/` | `gerar_carne` | Gerar carnê |
 | `reajustes/` | `listar_reajustes` | Lista de reajustes |
 | `contrato/<id>/reajuste/aplicar/` | `aplicar_reajuste_contrato` | Aplicar reajuste |
-| `cnab/remessa/` | `listar_arquivos_remessa` | Remessas CNAB |
-| `cnab/retorno/` | `listar_arquivos_retorno` | Retornos CNAB |
+| `cnab/remessa/` | `listar_arquivos_remessa` | Remessas CNAB (lista técnica) |
+| `cnab/retorno/` | `listar_arquivos_retorno` | Retornos CNAB (lista técnica) |
+| `boletos/` | `boletos_painel` | **HU-24** Geração Mensal de Boletos (wizard da contadora) |
+| `boletos/gerar/` | `boletos_painel_gerar` | **HU-24** Geração dirigida por escopo (todos/imobiliaria/contratos/parcela/intermediaria) |
+| `remessa/` | `remessa_painel` | **HU-23** Tela 1 — Gerar Arquivo Remessa (wizard da contadora) |
+| `remessa/gerar/` | `remessa_painel_gerar` | **HU-23** Geração dirigida por escopo (todos/imobiliaria/conta/boleto) |
+| `retorno/` | `retorno_painel` | **HU-23** Tela 2 — Receber Arquivo de Retorno (baixa) |
+| `retorno/upload/` | `remessa_painel_retorno_upload` | **HU-23** Upload + auto-processo do `.ret` |
 | `relatorios/prestacoes-a-pagar/` | `RelatorioPrestacoesAPagarView` | Relatório |
 | `relatorios/prestacoes-pagas/` | `RelatorioPrestacoesPageasView` | Relatório |
 | `relatorios/posicao-contratos/` | `RelatorioPosicaoContratosView` | Relatório |
@@ -252,7 +258,14 @@ gestao_contrato/          # Configuração do projeto
 
 ---
 
-## 6. TAREFAS CELERY IMPLEMENTADAS
+## 6. TAREFAS AGENDADAS (CELERY + CRON-JOB.ORG)
+
+> **Como roda em produção:** as tarefas são **definidas** como tarefas Celery
+> (`gestao_contrato/celery.py` + `financeiro/tasks.py`, com agenda `celery-beat`). Porém, no
+> ambiente de produção (Render Free Tier) **não há workers Celery**; por isso as mesmas rotinas
+> também são expostas como **endpoints HTTP** em `core/tasks.py` (`POST /api/tasks/...`) e
+> **agendadas externamente pelo cron-job.org**. Em ambientes com worker, o Celery+beat executa
+> diretamente; no free tier, o cron-job.org chama os endpoints HTTP (protegidos por `TASK_TOKEN`).
 
 | Task | Módulo | Frequência | Descrição |
 |------|--------|------------|-----------|
@@ -268,6 +281,12 @@ gestao_contrato/          # Configuração do projeto
 | `enviar_relatorio_posicao_contratos` | `financeiro` | Configurável | E-mail com anexo Excel/PDF de posição (34.5) |
 | `enviar_push_comprador` | `portal_comprador` | On-demand | Envia notificação push via VAPID (34.6) |
 | `notificar_push_vencimento_amanha` | `portal_comprador` | Diário | Push para parcelas com vencimento amanhã (34.6) |
+
+**Endpoints HTTP de tarefas** (`core/tasks.py`, acionados pelo cron-job.org, protegidos por `TASK_TOKEN`):
+`POST /api/tasks/run-all/`, `enviar-notificacoes/`, `enviar-inadimplentes/`, `processar-reajustes/`,
+`atualizar-parcelas/`, `atualizar-indices/`, `processar-fila/`, `processar-notificacoes/`,
+`relatorio-semanal/`, `relatorio-mensal/`, `processar-bounces/`, `limpar-sessoes/`,
+`limpar-sessoes-whatsapp/`, `atualizar-bloqueio-credito/`, `status/`.
 
 ---
 
@@ -327,6 +346,7 @@ valor_reajustado = valor_atual * (1 + indice_percentual / 100)
 | **ViaCEP** | Busca de endereço por CEP | ✅ Funcionando |
 | **BrasilAPI** | Busca de CNPJ | ✅ Funcionando |
 | **Twilio** | SMS e WhatsApp | ⚠️ Configurado, pendente testes E2E |
+| **cron-job.org** | Agendador HTTP das tarefas (`/api/tasks/*`) — substitui workers Celery no Render Free Tier | ✅ Funcionando |
 
 ---
 
