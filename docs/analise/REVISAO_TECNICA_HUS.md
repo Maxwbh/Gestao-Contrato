@@ -595,9 +595,13 @@ registro e **(2)** o recebimento dos arquivos de confirmação com baixa automá
 - **Importante (papel do BRCobrança):** o BRCobrança **gera** o boleto, mas **não o registra** no
   banco — o registro é feito pelo arquivo de remessa desta HU. Logo, o ciclo de cobrança depende de
   ambos: BRCobrança (geração — HU-03/HU-24) + remessa CNAB (registro — esta HU).
-- Pendência prática conhecida (corrigida no código recente): o formato de agência/dígito e a
-  validação de convênio por instituição precisam acompanhar o que o **BRCobrança** espera (tanto na
-  geração do boleto quanto no layout de remessa) — manter cobertura de teste por banco.
+- **Paridade por banco (✅ travada por teste):** o suporte por instituição (geração de boleto e layout
+  de remessa) vem da tabela única `financeiro/services/bancos.BANCOS_SUPORTADOS`, consumida tanto pela
+  HU-03 (boleto) quanto por esta HU (remessa, via `suporta_cnab`/`layouts_cnab`). A coerência entre o
+  seletor `BancoBrasil`, a geração e a remessa é verificada em
+  `tests/unit/financeiro/test_paridade_bancos.py` — qualquer drift quebra o build. O formato de
+  agência/dígito e a validação de convênio por instituição continuam acompanhando o que o **BRCobrança**
+  espera (ver HU-23 RN-16/16b/16c).
 
 ---
 
@@ -866,15 +870,19 @@ Verificação cruzada entre `INDICE.md`, `SISTEMA.md` e `ROADMAP.md`:
 - **Escala do mapa** (HU-22): carga total de marcadores pode exigir carregamento por região no futuro.
 - **Cobertura de testes ponta a ponta** do atendimento por conversa (HU-19) e dos itens parciais do
   mapa (HU-22), ambos marcados como parciais.
-- **Paridade por banco no BRCobrança** (HU-03/HU-23): manter testes por instituição para formato de
-  agência/dígito, convênio e layout, acompanhando o que o **BRCobrança** espera — lembrando que o
-  BRCobrança **gera** o boleto e produz o layout de remessa, mas o **registro** efetivo no banco
-  depende do envio do arquivo (HU-23).
+- ✅ **Paridade por banco no BRCobrança** (HU-03/HU-23): **travada por teste**
+  (`tests/unit/financeiro/test_paridade_bancos.py`) — coerência entre o seletor `BancoBrasil`, os
+  bancos com geração de boleto (`BANCOS_SUPORTADOS`, fonte única) e os com remessa (`layouts_cnab`);
+  `BANCOS_BRCOBRANCA` do `BoletoService` é derivado da tabela única. Documentado em HU-03 (RN-08/RN-09
+  + seção de paridade) e HU-23 (RN-16/16b/16c). **Gap conhecido remanescente:** o seletor `BancoBrasil`
+  é mais amplo que `BANCOS_SUPORTADOS` (ex.: BTG, Sofisa, Mercado Pago, "Outros") — divergência travada
+  pelo teste; guard em `ContaBancaria.clean()` fica como evolução recomendada.
 - ✅ **Bloqueio do carnê (HU-07) unificado em `pode_gerar_boleto()`** — implementado (removido o
-  `max_parcela_lote`); o carnê gera a sequência liberada e pára na primeira bloqueada.
-- **Reuso do cálculo de saldo devedor (HU-18):** extrair um auxiliar puro de fórmula compartilhado
-  com `calcular_saldo_devedor()` (HU-11/HU-12 já o reusam; só o relatório em massa duplica a fórmula).
-  *(Único item ainda somente-documentação.)*
+  `max_parcela_lote`); o carnê gera a sequência liberada e pára na primeira bloqueada. Preview de
+  elegibilidade também unificado na mesma função.
+- ✅ **Reuso do cálculo de saldo devedor (HU-18):** implementado — auxiliar puro
+  `saldo_devedor_de_agregado()` em `contratos/models.py`, compartilhado por `calcular_saldo_devedor()`,
+  `get_financeiro_resumo()` e o relatório em massa (`relatorio_service`).
 
 ---
 
