@@ -44,6 +44,8 @@
 | [HU-22](HU-22.md) | `HU-22.md` | Mapa Interativo de Lotes | `core` | ✅ (parcial — M-13/M-14 pendentes) |
 | [HU-23](HU-23.md) | `HU-23.md` | Ciclo Mensal de Cobrança CNAB — Remessa + Retorno (Fluxo da Contadora) | `financeiro` | ✅ |
 | [HU-24](HU-24.md) | `HU-24.md` | Geração Mensal de Boletos — tela dedicada por escopo (Fluxo da Contadora) | `financeiro` | ✅ |
+| [HU-25](HU-25.md) | `HU-25.md` | Hub "Cobrança do Mês" — assistente de ciclo mensal (passo a passo) | `financeiro` | 📋 |
+| [HU-26](HU-26.md) | `HU-26.md` | Painel de Conciliação & Saúde da Cobrança | `financeiro` | 📋 |
 
 ---
 
@@ -196,6 +198,8 @@ HU-21 Portal do Comprador ──► auto-cadastro → dashboard → boletos → 
 | HU-22 | `Imovel` | — | `/imoveis/` (mapa com marcadores Leaflet + markercluster), `/imoveis/loteamento/<nome>/` |
 | HU-23 | `ArquivoRemessa`, `ItemRemessa`, `ArquivoRetorno`, `ItemRetorno`, `ContaBancaria` | `CNABService` | **Tela 1 (Remessa):** `/financeiro/remessa/` (wizard), `/remessa/gerar/` (escopo: todos/imobiliaria/conta/boleto), `download-lote/`, `cancelar-envio/`. **Tela 2 (Retorno):** `/financeiro/retorno/` (KPIs + upload por banco), `/retorno/upload/` (upload + baixa em 1 passo) |
 | HU-24 | `Parcela`, `PrestacaoIntermediaria`, `ContaBancaria` | `BoletoService` (`gerar_boletos_lote`) | **Tela dedicada:** `/financeiro/boletos/` (wizard), `/boletos/gerar/` (escopo: todos/imobiliaria/contratos/parcela/intermediaria, quantidade 1/X), `api/boletos/elegiveis/`. Etapa anterior à HU-23 |
+| HU-25 | *(orquestra HU-24/HU-23 — sem modelos novos)* | reutiliza `boletos_painel_gerar`, `remessa_painel_gerar`, `remessa_retorno_upload` | **Hub:** `/financeiro/cobranca/` (stepper 1·2·3), `api/cobranca/estado/`. Costura geração→remessa→retorno num fluxo guiado (📋 especificada) |
+| HU-26 | `HistoricoPagamento`, `EventoPIX`, `ItemRemessa` | reutiliza serviços de baixa/relatório (HU-04/16/18) | **Painel:** `/financeiro/cobranca/conciliacao/`, `api/conciliacao/saude/`. KPIs de saúde, recebido por origem, aging, rejeitados (📋 especificada) |
 
 ---
 
