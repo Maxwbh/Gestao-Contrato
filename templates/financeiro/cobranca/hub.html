@@ -1,0 +1,187 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Cobrança do Mês{% endblock %}
+
+{% block extra_css %}
+<style>
+  .step-circle { width:48px; height:48px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-weight:700; }
+  .step-line { flex:1; height:3px; background:#e2e8f0; margin:0 .5rem; }
+  .step-line.done { background:#0058be; }
+  .kpi-card { border:1px solid #e2e8f0; border-radius:.5rem; box-shadow:0 4px 12px rgba(30,41,59,.05); }
+  .kpi-value { font-size:1.6rem; font-weight:700; line-height:1.1; }
+  .kpi-label { font-size:.72rem; letter-spacing:.05em; text-transform:uppercase; color:#64748b; font-weight:600; }
+  .badge-estado { font-size:.68rem; font-weight:700; letter-spacing:.03em; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4" id="cobrancaHub">
+
+  <!-- Cabeçalho -->
+  <div class="d-flex flex-wrap justify-content-between align-items-end mb-4 gap-2">
+    <div>
+      <div class="small text-muted mb-1">Financeiro / <span class="fw-bold text-dark">Cobrança do Mês</span></div>
+      <h2 class="h4 fw-bold mb-0"><i class="fas fa-route me-2"></i>Cobrança do Mês</h2>
+      <p class="text-muted small mb-0 mt-1">Gere os boletos, envie a remessa e concilie o retorno — tudo em um fluxo guiado.</p>
+    </div>
+    <button class="btn btn-primary" id="btnEncadear">
+      <i class="fas fa-bolt me-1"></i> Gerar boletos do mês e preparar remessa
+      <i class="fas fa-arrow-right ms-1"></i>
+    </button>
+  </div>
+
+  <!-- Filtros compartilhados -->
+  <form method="get" class="card card-body mb-4">
+    <div class="d-flex flex-wrap gap-3 align-items-end">
+      <div style="min-width:220px" class="flex-grow-1">
+        <label class="form-label small fw-bold text-muted">IMOBILIÁRIA</label>
+        <select name="imobiliaria" class="form-select form-select-sm" onchange="this.form.submit()">
+          <option value="">Todas as Imobiliárias</option>
+          {% for im in imobiliarias %}
+          <option value="{{ im.pk }}" {% if filtro_imobiliaria == im.pk|stringformat:'s' %}selected{% endif %}>{{ im.nome }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div style="width:120px">
+        <label class="form-label small fw-bold text-muted">MÊS</label>
+        <input type="number" name="mes" min="1" max="12" value="{{ filtro_mes }}" class="form-control form-control-sm">
+      </div>
+      <div style="width:110px">
+        <label class="form-label small fw-bold text-muted">ANO</label>
+        <input type="number" name="ano" value="{{ filtro_ano }}" class="form-control form-control-sm">
+      </div>
+      <button type="submit" class="btn btn-sm btn-outline-secondary"><i class="fas fa-filter me-1"></i>Filtrar</button>
+      <span class="small text-muted ms-auto align-self-center">Filtros aplicados aos 3 passos</span>
+    </div>
+  </form>
+
+  {% if estado.ciclo_concluido %}
+  <div class="alert alert-success d-flex align-items-center"><i class="fas fa-check-circle fa-lg me-2"></i>
+    <div><strong>Ciclo de {{ filtro_mes }}/{{ filtro_ano }} concluído</strong> — boletos gerados, remessas enviadas e retornos conciliados.</div>
+  </div>
+  {% endif %}
+
+  <!-- Resumo do ciclo -->
+  <div class="row g-3 mb-4">
+    <div class="col-6 col-lg-3"><div class="kpi-card p-3 h-100"><span class="kpi-label">A Gerar</span><div class="kpi-value">{{ estado.a_gerar }}</div><div class="small text-muted">boletos elegíveis</div></div></div>
+    <div class="col-6 col-lg-3"><div class="kpi-card p-3 h-100"><span class="kpi-label">A Enviar</span><div class="kpi-value">{{ estado.a_enviar_contas }}</div><div class="small text-muted">contas / arquivos</div></div></div>
+    <div class="col-6 col-lg-3"><div class="kpi-card p-3 h-100"><span class="kpi-label">A Conciliar</span><div class="kpi-value">{{ estado.a_conciliar_boletos }}</div><div class="small text-muted">boletos enviados</div></div></div>
+    <div class="col-6 col-lg-3"><div class="kpi-card p-3 h-100" style="background:rgba(0,88,190,.06);border-color:rgba(0,88,190,.3)"><span class="kpi-label" style="color:#0058be">Ciclo Concluído</span><div class="kpi-value" style="color:#0058be">{{ estado.percentual }}%</div><div class="progress mt-2" style="height:6px"><div class="progress-bar" style="width:{{ estado.percentual }}%"></div></div></div></div>
+  </div>
+
+  <!-- Stepper -->
+  <div class="card mb-4"><div class="card-body">
+    <div class="d-flex align-items-center">
+      {% comment %}Passo 1{% endcomment %}
+      <div class="text-center" style="width:180px">
+        <div class="step-circle mx-auto {% if estado.passo1 == 'concluido' %}bg-success text-white{% elif estado.recomendado == 1 %}bg-primary text-white{% else %}bg-light text-muted border{% endif %}"><i class="fas fa-bolt"></i></div>
+        <div class="mt-2 fw-bold small">1. Gerar Boletos</div>
+        {% if estado.passo1 == 'concluido' %}<span class="badge bg-success badge-estado">CONCLUÍDO</span>
+        {% elif estado.recomendado == 1 %}<span class="badge bg-warning text-dark badge-estado">EM ANDAMENTO</span>
+        {% else %}<span class="badge bg-secondary badge-estado">PENDENTE</span>{% endif %}
+        <div class="small text-muted mt-1">{{ estado.a_gerar }} a gerar</div>
+      </div>
+      <div class="step-line {% if estado.passo1 == 'concluido' %}done{% endif %}"></div>
+      {% comment %}Passo 2{% endcomment %}
+      <div class="text-center" style="width:180px">
+        <div class="step-circle mx-auto {% if estado.passo2 == 'concluido' %}bg-success text-white{% elif estado.recomendado == 2 %}bg-primary text-white{% else %}bg-light text-muted border{% endif %}"><i class="fas fa-paper-plane"></i></div>
+        <div class="mt-2 fw-bold small">2. Gerar Remessa</div>
+        {% if estado.passo2 == 'concluido' %}<span class="badge bg-success badge-estado">CONCLUÍDO</span>
+        {% elif estado.recomendado == 2 %}<span class="badge bg-warning text-dark badge-estado">EM ANDAMENTO</span>
+        {% else %}<span class="badge bg-secondary badge-estado">PENDENTE</span>{% endif %}
+        <div class="small text-muted mt-1">{{ estado.a_enviar_contas }} contas</div>
+      </div>
+      <div class="step-line {% if estado.passo2 == 'concluido' %}done{% endif %}"></div>
+      {% comment %}Passo 3{% endcomment %}
+      <div class="text-center" style="width:180px">
+        <div class="step-circle mx-auto {% if estado.passo3 == 'concluido' %}bg-success text-white{% elif estado.recomendado == 3 %}bg-primary text-white{% else %}bg-light text-muted border{% endif %}"><i class="fas fa-university"></i></div>
+        <div class="mt-2 fw-bold small">3. Receber Retorno</div>
+        {% if estado.passo3 == 'concluido' %}<span class="badge bg-success badge-estado">CONCLUÍDO</span>
+        {% elif estado.recomendado == 3 %}<span class="badge bg-warning text-dark badge-estado">EM ANDAMENTO</span>
+        {% else %}<span class="badge bg-secondary badge-estado">PENDENTE</span>{% endif %}
+        <div class="small text-muted mt-1">{{ estado.a_conciliar_boletos }} a conciliar</div>
+      </div>
+    </div>
+  </div></div>
+
+  <!-- Passos: cards de ação -->
+  {% with q="?imobiliaria="|add:filtro_imobiliaria %}
+  <div class="row g-3">
+    <div class="col-lg-4">
+      <div class="card h-100 {% if estado.recomendado == 1 %}border-primary{% endif %}">
+        <div class="card-body d-flex flex-column">
+          <h6 class="fw-bold"><i class="fas fa-bolt text-primary me-1"></i> Passo 1 — Gerar Boletos</h6>
+          <p class="small text-muted flex-grow-1">Gere as parcelas e intermediárias do mês por escopo, respeitando o bloqueio por reajuste.
+            {% if estado.bloqueados %}<br><span class="text-warning"><i class="fas fa-exclamation-triangle"></i> {{ estado.bloqueados }} bloqueado(s) por reajuste.</span>{% endif %}
+          </p>
+          <a href="{% url 'financeiro:boletos_painel' %}{{ q }}&mes={{ filtro_mes }}&ano={{ filtro_ano }}" class="btn btn-sm {% if estado.recomendado == 1 %}btn-primary{% else %}btn-outline-primary{% endif %}">Abrir Geração de Boletos</a>
+        </div>
+      </div>
+    </div>
+    <div class="col-lg-4">
+      <div class="card h-100 {% if estado.recomendado == 2 %}border-primary{% endif %}">
+        <div class="card-body d-flex flex-column">
+          <h6 class="fw-bold"><i class="fas fa-paper-plane text-primary me-1"></i> Passo 2 — Gerar Remessa</h6>
+          <p class="small text-muted flex-grow-1">Agrupe por banco/layout, gere e baixe os arquivos de remessa e marque como enviados ao banco.</p>
+          <a href="{% url 'financeiro:remessa_painel' %}{{ q }}&mes={{ filtro_mes }}&ano={{ filtro_ano }}" class="btn btn-sm {% if estado.recomendado == 2 %}btn-primary{% else %}btn-outline-primary{% endif %}">Abrir Geração de Remessa</a>
+        </div>
+      </div>
+    </div>
+    <div class="col-lg-4">
+      <div class="card h-100 {% if estado.recomendado == 3 %}border-primary{% endif %}">
+        <div class="card-body d-flex flex-column">
+          <h6 class="fw-bold"><i class="fas fa-university text-primary me-1"></i> Passo 3 — Receber Retorno</h6>
+          <p class="small text-muted flex-grow-1">Faça o upload do arquivo de retorno (.ret) — a baixa é processada automaticamente.</p>
+          <a href="{% url 'financeiro:retorno_painel' %}{{ q }}&mes={{ filtro_mes }}&ano={{ filtro_ano }}" class="btn btn-sm {% if estado.recomendado == 3 %}btn-primary{% else %}btn-outline-primary{% endif %}">Abrir Recebimento de Retorno</a>
+        </div>
+      </div>
+    </div>
+  </div>
+  {% endwith %}
+
+  <div class="text-end mt-3">
+    <a href="{% url 'financeiro:painel_conciliacao_saude' %}?imobiliaria={{ filtro_imobiliaria }}&mes={{ filtro_mes }}&ano={{ filtro_ano }}" class="btn btn-sm btn-outline-secondary">
+      <i class="fas fa-heart-pulse me-1"></i> Ver Conciliação &amp; Saúde da Cobrança
+    </a>
+  </div>
+</div>
+
+<script>
+(function () {
+  const CSRF = '{{ csrf_token }}';
+  const URL_GERAR = "{% url 'financeiro:boletos_painel_gerar' %}";
+  const URL_REMESSA = "{% url 'financeiro:remessa_painel' %}";
+  const imob = "{{ filtro_imobiliaria }}";
+  const btn = document.getElementById('btnEncadear');
+
+  function notify(msg, type) { if (window.showToast) window.showToast(msg, type || 'info'); else if (type==='error') alert(msg); }
+
+  btn.addEventListener('click', async () => {
+    const body = { escopo: imob ? 'imobiliaria' : 'todos', quantidade: 1, tipo: 'folha', incluir_intermediarias: true };
+    if (imob) body.imobiliaria_id = imob;
+    btn.disabled = true;
+    const original = btn.innerHTML;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Verificando API...';
+    try {
+      if (window.GestaoContratos && GestaoContratos.BrcobrancaQueue) {
+        await GestaoContratos.BrcobrancaQueue.prepararApi(btn);
+      }
+      btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Gerando boletos...';
+      const r = await fetch(URL_GERAR, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-CSRFToken': CSRF }, body: JSON.stringify(body) });
+      const data = await r.json();
+      if (!data.sucesso) { btn.disabled = false; btn.innerHTML = original; notify(data.erro || 'Falha na geração.', 'error'); return; }
+      let msg = `${data.total_gerados} boleto(s) gerado(s)`;
+      if (data.total_bloqueados) msg += ` · ${data.total_bloqueados} bloqueado(s)`;
+      if (data.total_erros) msg += ` · ${data.total_erros} erro(s)`;
+      notify(msg, data.total_erros ? 'warning' : 'success');
+      // Avança ao Passo 2 (remessa) preservando filtros
+      setTimeout(() => { window.location.href = `${URL_REMESSA}?imobiliaria=${imob}&mes={{ filtro_mes }}&ano={{ filtro_ano }}`; }, 1200);
+    } catch (e) {
+      btn.disabled = false; btn.innerHTML = original;
+      notify((e && e.message) || 'Serviço de boletos indisponível. Tente novamente.', 'error');
+    }
+  });
+})();
+</script>
+{% endblock %}

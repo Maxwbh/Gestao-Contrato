@@ -59,8 +59,8 @@ docs/analise/
 | [HU-22](historias-usuario/HU-22.md) | Mapa Interativo de Lotes | `core` | ✅ (parcial) |
 | [HU-23](historias-usuario/HU-23.md) | Ciclo Mensal de Cobrança CNAB — Remessa + Retorno (Contadora) | `financeiro` | ✅ |
 | [HU-24](historias-usuario/HU-24.md) | Geração Mensal de Boletos — tela dedicada por escopo (Contadora) | `financeiro` | ✅ |
-| [HU-25](historias-usuario/HU-25.md) | Hub "Cobrança do Mês" — assistente de ciclo mensal (Contadora) | `financeiro` | 📋 |
-| [HU-26](historias-usuario/HU-26.md) | Painel de Conciliação & Saúde da Cobrança | `financeiro` | 📋 |
+| [HU-25](historias-usuario/HU-25.md) | Hub "Cobrança do Mês" — assistente de ciclo mensal (Contadora) | `financeiro` | ✅ |
+| [HU-26](historias-usuario/HU-26.md) | Painel de Conciliação & Saúde da Cobrança | `financeiro` | ✅ |
 
 ---
 

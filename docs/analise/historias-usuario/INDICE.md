@@ -44,8 +44,8 @@
 | [HU-22](HU-22.md) | `HU-22.md` | Mapa Interativo de Lotes | `core` | ✅ (parcial — M-13/M-14 pendentes) |
 | [HU-23](HU-23.md) | `HU-23.md` | Ciclo Mensal de Cobrança CNAB — Remessa + Retorno (Fluxo da Contadora) | `financeiro` | ✅ |
 | [HU-24](HU-24.md) | `HU-24.md` | Geração Mensal de Boletos — tela dedicada por escopo (Fluxo da Contadora) | `financeiro` | ✅ |
-| [HU-25](HU-25.md) | `HU-25.md` | Hub "Cobrança do Mês" — assistente de ciclo mensal (passo a passo) | `financeiro` | 📋 |
-| [HU-26](HU-26.md) | `HU-26.md` | Painel de Conciliação & Saúde da Cobrança | `financeiro` | 📋 |
+| [HU-25](HU-25.md) | `HU-25.md` | Hub "Cobrança do Mês" — assistente de ciclo mensal (passo a passo) | `financeiro` | ✅ |
+| [HU-26](HU-26.md) | `HU-26.md` | Painel de Conciliação & Saúde da Cobrança | `financeiro` | ✅ |
 
 ---
 

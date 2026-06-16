@@ -2760,6 +2760,286 @@ def boletos_painel_gerar(request):
 
 
 # =============================================================================
+# HU-25 — HUB "COBRANÇA DO MÊS" (assistente de ciclo mensal — orquestração)
+# =============================================================================
+
+def _cobranca_filtros(request):
+    """Resolve imobiliária + competência (mês/ano) compartilhados do hub."""
+    hoje = timezone.localdate()
+    imobiliaria_id = request.GET.get('imobiliaria') or None
+    try:
+        mes = int(request.GET.get('mes') or hoje.month)
+        ano = int(request.GET.get('ano') or hoje.year)
+    except (ValueError, TypeError):
+        mes, ano = hoje.month, hoje.year
+    return imobiliaria_id, mes, ano, hoje
+
+
+def _cobranca_estado(request):
+    """
+    HU-25: estado derivado dos 3 passos + KPIs do ciclo (não persistido).
+    Passo 1 = Gerar Boletos (HU-24) · Passo 2 = Gerar Remessa (HU-23/1) ·
+    Passo 3 = Receber Retorno (HU-23/2).
+    """
+    from .services.geracao_boletos_service import GeracaoBoletosService
+    from .services.cnab_service import CNABService
+    from .models import ArquivoRemessa, StatusArquivoRemessa, Parcela, StatusBoleto
+
+    imobs = _imobs_para_usuario(request.user)
+    imobiliaria_id, mes, ano, hoje = _cobranca_filtros(request)
+
+    # Passo 1 — Gerar Boletos
+    try:
+        conf = GeracaoBoletosService().obter_conferencia(
+            imobiliarias=imobs, imobiliaria_id=imobiliaria_id,
+            quantidade=1, incluir_intermediarias=True,
+        )
+        kpi = conf.get('kpis', {})
+        a_gerar = (kpi.get('a_gerar') or 0) + (kpi.get('intermediarias') or 0)
+        valor_gerar = kpi.get('valor_total') or Decimal('0.00')
+        bloqueados = kpi.get('bloqueados') or 0
+        contratos_pend = kpi.get('contratos') or 0
+    except Exception:
+        logger.exception('HU-25: falha ao obter conferência (passo 1)')
+        a_gerar, valor_gerar, bloqueados, contratos_pend = 0, Decimal('0.00'), 0, 0
+
+    # Passo 2 — Gerar Remessa
+    try:
+        elegiveis = CNABService().obter_boletos_elegiveis_painel(
+            imobiliarias=imobs, imobiliaria_id=imobiliaria_id, mes=mes, ano=ano, hoje=hoje,
+        )
+        a_enviar_boletos = len(elegiveis)
+        a_enviar_contas = len({p.conta_bancaria_id for p in elegiveis})
+    except Exception:
+        logger.exception('HU-25: falha ao obter elegíveis de remessa (passo 2)')
+        a_enviar_boletos, a_enviar_contas = 0, 0
+
+    # Passo 3 — Receber Retorno
+    remessas_enviadas = ArquivoRemessa.objects.filter(
+        conta_bancaria__imobiliaria__in=imobs, status=StatusArquivoRemessa.ENVIADO,
+    )
+    if imobiliaria_id:
+        remessas_enviadas = remessas_enviadas.filter(conta_bancaria__imobiliaria_id=imobiliaria_id)
+    a_conciliar_arquivos = remessas_enviadas.count()
+
+    qs_conc = Parcela.objects.filter(
+        status_boleto=StatusBoleto.REGISTRADO, pago=False, contrato__imobiliaria__in=imobs,
+    )
+    if imobiliaria_id:
+        qs_conc = qs_conc.filter(contrato__imobiliaria_id=imobiliaria_id)
+    a_conciliar_boletos = qs_conc.count()
+
+    # Estados derivados
+    p1 = 'concluido' if a_gerar == 0 else 'pendente'
+    p2 = 'concluido' if a_enviar_boletos == 0 else 'pendente'
+    p3 = 'concluido' if a_conciliar_arquivos == 0 else 'pendente'
+    estados = [p1, p2, p3]
+    recomendado = next((i + 1 for i, e in enumerate(estados) if e == 'pendente'), None)
+    concluidos = sum(1 for e in estados if e == 'concluido')
+
+    return {
+        'mes': mes, 'ano': ano,
+        'passo1': p1, 'passo2': p2, 'passo3': p3,
+        'recomendado': recomendado,
+        'percentual': round(concluidos / 3 * 100),
+        'ciclo_concluido': concluidos == 3,
+        'a_gerar': a_gerar, 'valor_gerar': valor_gerar,
+        'bloqueados': bloqueados, 'contratos_pend': contratos_pend,
+        'a_enviar_boletos': a_enviar_boletos, 'a_enviar_contas': a_enviar_contas,
+        'a_conciliar_arquivos': a_conciliar_arquivos, 'a_conciliar_boletos': a_conciliar_boletos,
+    }
+
+
+@login_required
+def cobranca_hub(request):
+    """
+    HU-25: Hub "Cobrança do Mês" — assistente de ciclo mensal (passo a passo).
+    Orquestra HU-24 → HU-23/1 → HU-23/2 sem regra de negócio própria.
+    """
+    estado = _cobranca_estado(request)
+    imobs = _imobs_para_usuario(request.user)
+    context = {
+        'estado': estado,
+        'imobiliarias': imobs.order_by('nome'),
+        'filtro_imobiliaria': request.GET.get('imobiliaria') or '',
+        'filtro_mes': estado['mes'],
+        'filtro_ano': estado['ano'],
+        'hoje': timezone.localdate(),
+    }
+    return render(request, 'financeiro/cobranca/hub.html', context)
+
+
+@login_required
+def api_cobranca_estado(request):
+    """HU-25: estado derivado dos 3 passos + KPIs do ciclo (JSON)."""
+    estado = dict(_cobranca_estado(request))
+    estado['valor_gerar'] = float(estado.get('valor_gerar') or 0)
+    return JsonResponse({'sucesso': True, 'estado': estado})
+
+
+# =============================================================================
+# HU-26 — PAINEL DE CONCILIAÇÃO & SAÚDE DA COBRANÇA
+# =============================================================================
+
+def _conciliacao_saude(request):
+    """
+    HU-26: consolida a saúde da cobrança no período (KPIs, recebido por origem,
+    aging) a partir de HistoricoPagamento, Parcela e ItemRemessa. Somente leitura.
+    """
+    from django.db.models import Count, Sum
+    from .models import Parcela, HistoricoPagamento, StatusBoleto, ItemRemessa
+
+    imobs = _imobs_para_usuario(request.user)
+    imobiliaria_id, mes, ano, hoje = _cobranca_filtros(request)
+
+    # ── Recebido no mês (HistoricoPagamento) ──────────────────────────────────
+    hist = HistoricoPagamento.objects.filter(
+        data_pagamento__year=ano, data_pagamento__month=mes,
+        parcela__contrato__imobiliaria__in=imobs,
+    )
+    if imobiliaria_id:
+        hist = hist.filter(parcela__contrato__imobiliaria_id=imobiliaria_id)
+    rec_agg = hist.aggregate(total=Count('id'), valor=Sum('valor_pago'))
+    recebido_valor = rec_agg['valor'] or Decimal('0.00')
+    recebido_qtd = rec_agg['total'] or 0
+
+    # Recebido por origem (PIX = PIX_WEBHOOK; MANUAL agrega manual/antecipação/portal/sistema)
+    origem = {'CNAB': Decimal('0.00'), 'PIX': Decimal('0.00'),
+              'OFX': Decimal('0.00'), 'MANUAL': Decimal('0.00')}
+    for row in hist.values('origem_pagamento').annotate(v=Sum('valor_pago')):
+        v = row['v'] or Decimal('0.00')
+        o = row['origem_pagamento']
+        if o == 'CNAB':
+            origem['CNAB'] += v
+        elif o == 'PIX_WEBHOOK':
+            origem['PIX'] += v
+        elif o == 'OFX':
+            origem['OFX'] += v
+        else:
+            origem['MANUAL'] += v
+
+    # ── Pendentes (snapshot de boletos em aberto) ─────────────────────────────
+    pend = Parcela.objects.filter(
+        status_boleto__in=[StatusBoleto.GERADO, StatusBoleto.REGISTRADO, StatusBoleto.VENCIDO],
+        pago=False, contrato__imobiliaria__in=imobs,
+    )
+    if imobiliaria_id:
+        pend = pend.filter(contrato__imobiliaria_id=imobiliaria_id)
+    pend_agg = pend.aggregate(total=Count('id'), valor=Sum('valor_atual'))
+    pendente_valor = pend_agg['valor'] or Decimal('0.00')
+    pendente_qtd = pend_agg['total'] or 0
+
+    venc = pend.filter(data_vencimento__lt=hoje)
+    venc_agg = venc.aggregate(total=Count('id'), valor=Sum('valor_atual'))
+    vencido_valor = venc_agg['valor'] or Decimal('0.00')
+    vencido_qtd = venc_agg['total'] or 0
+
+    base = recebido_valor + pendente_valor
+    pct_conciliado = round(float(recebido_valor) / float(base) * 100) if base > 0 else 0
+
+    # ── Aging (faixas de atraso) ──────────────────────────────────────────────
+    from datetime import timedelta
+    d30, d60 = hoje - timedelta(days=30), hoje - timedelta(days=60)
+
+    def _bucket(qs):
+        a = qs.aggregate(total=Count('id'), valor=Sum('valor_atual'))
+        return {'qtd': a['total'] or 0, 'valor': a['valor'] or Decimal('0.00')}
+
+    aging = {
+        'a_vencer': _bucket(pend.filter(data_vencimento__gte=hoje)),
+        'd1_30':    _bucket(pend.filter(data_vencimento__lt=hoje, data_vencimento__gte=d30)),
+        'd31_60':   _bucket(pend.filter(data_vencimento__lt=d30, data_vencimento__gte=d60)),
+        'd60_mais': _bucket(pend.filter(data_vencimento__lt=d60)),
+    }
+
+    # ── Rejeitados (ItemRemessa REJEITADO) ────────────────────────────────────
+    rejeitados_qs = ItemRemessa.objects.filter(
+        status=ItemRemessa.Status.REJEITADO,
+        parcela__contrato__imobiliaria__in=imobs,
+    ).select_related('parcela', 'parcela__contrato', 'parcela__contrato__comprador')
+    if imobiliaria_id:
+        rejeitados_qs = rejeitados_qs.filter(parcela__contrato__imobiliaria_id=imobiliaria_id)
+    rejeitados_qtd = rejeitados_qs.count()
+
+    return {
+        'mes': mes, 'ano': ano, 'hoje': hoje,
+        'pct_conciliado': pct_conciliado,
+        'recebido_valor': recebido_valor, 'recebido_qtd': recebido_qtd,
+        'pendente_valor': pendente_valor, 'pendente_qtd': pendente_qtd,
+        'vencido_valor': vencido_valor, 'vencido_qtd': vencido_qtd,
+        'rejeitados_qtd': rejeitados_qtd,
+        'origem': origem,
+        'aging': aging,
+        '_pend_qs': pend, '_hist_qs': hist, '_rejeitados_qs': rejeitados_qs,
+    }
+
+
+@login_required
+def painel_conciliacao_saude(request):
+    """
+    HU-26: Painel de Conciliação & Saúde da Cobrança.
+    KPIs de saúde, recebido por origem, aging, pendências, rejeitados e
+    recém-conciliados — somente leitura, reusando as HUs de baixa.
+    """
+    s = _conciliacao_saude(request)
+    imobs = _imobs_para_usuario(request.user)
+
+    pendencias = list(
+        s['_pend_qs'].select_related(
+            'contrato', 'contrato__comprador'
+        ).order_by('data_vencimento')[:100]
+    )
+    for p in pendencias:
+        p.dias_atraso = max(0, (s['hoje'] - p.data_vencimento).days)
+
+    recem = list(
+        s['_hist_qs'].select_related(
+            'parcela', 'parcela__contrato', 'parcela__contrato__comprador'
+        ).order_by('-data_pagamento', '-id')[:12]
+    )
+    rejeitados = list(s['_rejeitados_qs'].order_by('-id')[:20])
+
+    origem_rows = [
+        ('CNAB (retorno)', s['origem']['CNAB'], '#0058be'),
+        ('PIX (webhook)', s['origem']['PIX'], '#22c55e'),
+        ('OFX (extrato)', s['origem']['OFX'], '#f59e0b'),
+        ('Manual', s['origem']['MANUAL'], '#091426'),
+    ]
+
+    context = {
+        'imobiliarias': imobs.order_by('nome'),
+        'filtro_imobiliaria': request.GET.get('imobiliaria') or '',
+        'filtro_mes': s['mes'], 'filtro_ano': s['ano'],
+        'hoje': s['hoje'],
+        'pct_conciliado': s['pct_conciliado'],
+        'recebido_valor': s['recebido_valor'], 'recebido_qtd': s['recebido_qtd'],
+        'pendente_valor': s['pendente_valor'], 'pendente_qtd': s['pendente_qtd'],
+        'vencido_valor': s['vencido_valor'], 'vencido_qtd': s['vencido_qtd'],
+        'rejeitados_qtd': s['rejeitados_qtd'],
+        'origem': s['origem'], 'origem_rows': origem_rows, 'aging': s['aging'],
+        'pendencias': pendencias, 'recem': recem, 'rejeitados': rejeitados,
+    }
+    return render(request, 'financeiro/cobranca/conciliacao_saude.html', context)
+
+
+@login_required
+def api_conciliacao_saude(request):
+    """HU-26: KPIs + recebido por origem + buckets de aging (JSON)."""
+    s = _conciliacao_saude(request)
+    return JsonResponse({
+        'sucesso': True,
+        'pct_conciliado': s['pct_conciliado'],
+        'recebido': float(s['recebido_valor']), 'recebido_qtd': s['recebido_qtd'],
+        'pendente': float(s['pendente_valor']), 'pendente_qtd': s['pendente_qtd'],
+        'vencido': float(s['vencido_valor']), 'vencido_qtd': s['vencido_qtd'],
+        'rejeitados': s['rejeitados_qtd'],
+        'origem': {k: float(v) for k, v in s['origem'].items()},
+        'aging': {k: {'qtd': b['qtd'], 'valor': float(b['valor'])}
+                  for k, b in s['aging'].items()},
+    })
+
+
+# =============================================================================
 # DASHBOARD DE CONCILIAÇÃO BANCÁRIA
 # =============================================================================
 

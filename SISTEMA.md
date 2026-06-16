@@ -216,6 +216,8 @@ gestao_contrato/          # Configuração do projeto
 | `cnab/retorno/` | `listar_arquivos_retorno` | Retornos CNAB (lista técnica) |
 | `boletos/` | `boletos_painel` | **HU-24** Geração Mensal de Boletos (wizard da contadora) |
 | `boletos/gerar/` | `boletos_painel_gerar` | **HU-24** Geração dirigida por escopo (todos/imobiliaria/contratos/parcela/intermediaria) |
+| `cobranca/` | `cobranca_hub` | **HU-25** Hub "Cobrança do Mês" — assistente passo a passo (gerar boletos → remessa → retorno) |
+| `cobranca/conciliacao/` | `painel_conciliacao_saude` | **HU-26** Painel de Conciliação & Saúde (% conciliado, recebido por origem, aging, rejeitados) |
 | `remessa/` | `remessa_painel` | **HU-23** Tela 1 — Gerar Arquivo Remessa (wizard da contadora) |
 | `remessa/gerar/` | `remessa_painel_gerar` | **HU-23** Geração dirigida por escopo (todos/imobiliaria/conta/boleto) |
 | `retorno/` | `retorno_painel` | **HU-23** Tela 2 — Receber Arquivo de Retorno (baixa) |
