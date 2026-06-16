@@ -816,11 +816,11 @@ Verificação cruzada entre `INDICE.md`, `SISTEMA.md` e `ROADMAP.md`:
   globais). Já alerta para a ambiguidade de numeração com o ROADMAP (`HU-360`). **Recomendação:**
   referenciar esta seção de "Ordem de Desenvolvimento" para deixar claro que a numeração é de
   **domínio**, não de **build**, evitando que alguém implemente índices (HU-15) por último.
-- **`SISTEMA.md`** — ✅ **recomendações já aplicadas:** a seção de tarefas agora esclarece o uso de
+- **`SISTEMA.md`** — ✅ **recomendações aplicadas:** a seção de tarefas agora esclarece o uso de
   **cron-job.org** (endpoints HTTP `/api/tasks/*`) ao lado das definições Celery, o cron-job.org foi
-  incluído na tabela de integrações, e as rotas da contadora (HU-23 `/financeiro/remessa/` ·
-  `/retorno/`; HU-24 `/financeiro/boletos/`) foram acrescentadas. **Pendente menor:** incluir também
-  as rotas de HU-25 (`/financeiro/cobranca/`) e HU-26 (`/financeiro/cobranca/conciliacao/`).
+  incluído na tabela de integrações, e as rotas da contadora estão listadas — HU-23
+  (`/financeiro/remessa/` · `/retorno/`), HU-24 (`/financeiro/boletos/`), **HU-25**
+  (`/financeiro/cobranca/`) e **HU-26** (`/financeiro/cobranca/conciliacao/`). Sem pendências.
 - **`ROADMAP.md`** — organizado por prioridade, majoritariamente concluído, com numeração interna
   própria (`R-`, `C-`, `B-`, `HU-360`) distinta do índice de HUs. Consistente, porém extenso; a
   seção "5. TAREFAS CELERY" mantém o rótulo histórico embora a nota interna esclareça o uso de
@@ -894,5 +894,5 @@ CEP e CNPJ), identificados explicitamente por serem dependências operacionais d
 >   canônico de saldo; só a HU-18 duplica a fórmula; o carnê (HU-07) usa corte por ciclo próprio.
 >   **Pendentes (somente documentação, sem código):** unificar o carnê em `pode_gerar_boleto()` e
 >   extrair um auxiliar de fórmula de saldo compartilhado.
-> - **`SISTEMA.md` corrigido** (cron-job.org + rotas da contadora); falta apenas listar as rotas de
->   HU-25/HU-26.
+> - **`SISTEMA.md` atualizado** — cron-job.org + rotas da contadora (HU-23/24) e as rotas de
+>   **HU-25/HU-26** já listadas; sem pendências.
