@@ -1017,6 +1017,9 @@ class ContaBancariaForm(forms.ModelForm):
         agencia = agencia.strip()
         conta = cleaned_data.get('conta', '') or ''
         conta = conta.strip()
+        carteira = cleaned_data.get('carteira', '') or ''
+        carteira = carteira.strip()
+        layout_cnab = cleaned_data.get('layout_cnab', '') or ''
         posto = cleaned_data.get('posto', '') or ''
         posto = posto.strip()
         byte_idt = cleaned_data.get('byte_idt', '') or ''
@@ -1050,22 +1053,6 @@ class ContaBancariaForm(forms.ModelForm):
                         'convenio',
                         f'Para {banco_nome}, o convênio deve ter no máximo {config["convenio_max"]} dígitos')
 
-            # Validar tamanho da agência
-            if agencia and config.get('agencia_max'):
-                agencia_numeros = ''.join(filter(str.isdigit, agencia))
-                if len(agencia_numeros) > config['agencia_max']:
-                    self.add_error(
-                        'agencia',
-                        f'Para {banco_nome}, a agência deve ter no máximo {config["agencia_max"]} dígitos')
-
-            # Validar tamanho da conta
-            if conta and config.get('conta_max'):
-                conta_numeros = ''.join(filter(str.isdigit, conta))
-                if len(conta_numeros) > config['conta_max']:
-                    self.add_error(
-                        'conta',
-                        f'Para {banco_nome}, a conta deve ter no máximo {config["conta_max"]} dígitos')
-
             # Sicredi: posto e byte_idt obrigatórios
             if config.get('posto_obrigatorio') and not posto:
                 self.add_error('posto', f'Posto é obrigatório para {banco_nome}')
@@ -1095,6 +1082,21 @@ class ContaBancariaForm(forms.ModelForm):
 
             if config.get('codigo_beneficiario_obrigatorio') and not codigo_beneficiario:
                 self.add_error('codigo_beneficiario', f'Código do Beneficiário é obrigatório para {banco_nome}')
+
+        # Validação de tamanho de agência/conta/carteira por banco — fonte única
+        # em financeiro.services.bancos (mesma tabela do BRCobrança usada na geração).
+        if banco:
+            from financeiro.services import bancos as _bancos
+            erros_campos = _bancos.validar_campos_conta(
+                banco, agencia=agencia, conta=conta, carteira=carteira,
+            )
+            for campo, mensagem in erros_campos.items():
+                self.add_error(campo, mensagem)
+
+            # Validação do layout CNAB suportado pelo banco (CNAB 240/400)
+            erro_layout = _bancos.validar_layout_cnab(banco, layout_cnab)
+            if erro_layout:
+                self.add_error('layout_cnab', erro_layout)
 
         return cleaned_data
 

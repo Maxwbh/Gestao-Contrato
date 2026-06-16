@@ -6,7 +6,10 @@ Escopo: ContabilidadeForm, CompradorForm, ImovelForm, ImobiliariaForm,
 """
 import pytest
 
-from core.forms import ContabilidadeForm, CompradorForm, ImovelForm, ImobiliariaForm
+from core.forms import (
+    ContabilidadeForm, CompradorForm, ImovelForm, ImobiliariaForm,
+    ContaBancariaForm,
+)
 
 from tests.fixtures.factories import UserFactory, ContratoFactory
 
@@ -138,3 +141,52 @@ class TestImobiliariaForm:
         form = ImobiliariaForm(data=data)
         # O form pode precisar de outros campos obrigatórios
         assert isinstance(form.is_valid(), bool)
+
+
+class TestContaBancariaForm:
+    """Validação de campos por banco (agência/conta/carteira) e layout CNAB."""
+
+    def _dados(self, **over):
+        base = {
+            'banco': '336', 'descricao': 'Conta C6',
+            'agencia': '1234', 'conta': '12345678', 'carteira': '10',
+            'layout_cnab': 'CNAB_400', 'nosso_numero_atual': 0,
+            'numero_remessa_cnab_atual': 0,
+        }
+        base.update(over)
+        return base
+
+    def test_agencia_excedida_bb(self):
+        # BB (001) agência máx 4 dígitos
+        form = ContaBancariaForm(data=self._dados(
+            banco='001', convenio='1234567', agencia='12345', conta='1234'))
+        form.is_valid()
+        assert 'agencia' in form.errors
+
+    def test_carteira_invalida_c6(self):
+        form = ContaBancariaForm(data=self._dados(carteira='99'))
+        form.is_valid()
+        assert 'carteira' in form.errors
+
+    def test_carteira_valida_c6_nao_erra(self):
+        form = ContaBancariaForm(data=self._dados(carteira='20'))
+        form.is_valid()
+        assert 'carteira' not in form.errors
+
+    def test_layout_incompativel_c6(self):
+        # C6 (336) só suporta CNAB 400 → CNAB 240 deve ser recusado
+        form = ContaBancariaForm(data=self._dados(layout_cnab='CNAB_240'))
+        form.is_valid()
+        assert 'layout_cnab' in form.errors
+
+    def test_layout_compativel_c6_nao_erra(self):
+        form = ContaBancariaForm(data=self._dados(layout_cnab='CNAB_400'))
+        form.is_valid()
+        assert 'layout_cnab' not in form.errors
+
+    def test_conta_excedida_itau(self):
+        # Itaú (341) conta máx 5 dígitos
+        form = ContaBancariaForm(data=self._dados(
+            banco='341', conta='123456', layout_cnab='CNAB_400'))
+        form.is_valid()
+        assert 'conta' in form.errors

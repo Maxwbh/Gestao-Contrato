@@ -83,6 +83,117 @@ def suportado(codigo: str) -> bool:
     return codigo in BANCOS_SUPORTADOS
 
 
+# ── Validação de campos da conta por banco (BRCobrança) ───────────────────────
+# Fonte: docs/api/BRCOBRANCA_CAMPOS_REFERENCIA.md (brcobrança v12.8.1).
+# Comprimentos referem-se ao NÚMERO (sem o dígito verificador), em semântica
+# 'max' (compatível com a validação anterior do formulário). 'valores' restringe
+# a carteira a um conjunto que o próprio BRCobrança valida na inclusão.
+CAMPOS_BANCO_VALIDACAO: dict[str, dict] = {
+    '001': {'agencia': {'max': 4}, 'conta': {'max': 8}, 'carteira': {'max': 2}},
+    '033': {'agencia': {'max': 4}, 'conta': {'max': 9}},
+    '041': {'agencia': {'max': 4}, 'conta': {'max': 9}, 'carteira': {'max': 1}},
+    '104': {'agencia': {'max': 4}, 'carteira': {'max': 1}},
+    '136': {'carteira': {'max': 2}},
+    '237': {'agencia': {'max': 4}, 'conta': {'max': 7}, 'carteira': {'max': 2}},
+    '336': {'agencia': {'max': 4}, 'conta': {'max': 8}, 'carteira': {'valores': ('10', '20')}},
+    '341': {'agencia': {'max': 4}, 'conta': {'max': 5}},
+    '748': {'agencia': {'max': 4}, 'conta': {'max': 5}, 'carteira': {'max': 1}},
+    '756': {'agencia': {'max': 4}, 'conta': {'max': 8}, 'carteira': {'valores': ('1', '3', '9')}},
+}
+
+_ROTULO_CAMPO = {'agencia': 'a agência', 'conta': 'a conta', 'carteira': 'a carteira'}
+
+
+def _digitos_numero(valor: str) -> str:
+    """Parte numérica (sem DV) de um campo '1234-5' / '1234 5' / '1234/5' → '1234'."""
+    if not valor:
+        return ''
+    s = valor.strip()
+    for sep in ('-', ' ', '/'):
+        if sep in s:
+            s = s.split(sep, 1)[0]
+            break
+    return ''.join(ch for ch in s if ch.isdigit())
+
+
+def _erro_tamanho(qtd_digitos: int, regra: dict, rotulo: str, banco_nome: str) -> str | None:
+    if 'exato' in regra and qtd_digitos != regra['exato']:
+        return f"Para {banco_nome}, {rotulo} deve ter exatamente {regra['exato']} dígitos (tem {qtd_digitos})."
+    if 'max' in regra and qtd_digitos > regra['max']:
+        return f"Para {banco_nome}, {rotulo} deve ter no máximo {regra['max']} dígitos (tem {qtd_digitos})."
+    if 'min' in regra and qtd_digitos < regra['min']:
+        return f"Para {banco_nome}, {rotulo} deve ter no mínimo {regra['min']} dígitos (tem {qtd_digitos})."
+    return None
+
+
+def validar_campos_conta(codigo: str, *, agencia: str = '', conta: str = '',
+                         carteira: str = '') -> dict[str, str]:
+    """
+    Valida agência, conta e carteira conforme as regras do banco na BRCobrança.
+
+    Comprimentos consideram só o número (DV é descartado). Banco fora da tabela
+    não impõe restrições.
+
+    Returns:
+        dict {campo: mensagem} — vazio quando tudo válido. Chaves possíveis:
+        'agencia', 'conta', 'carteira'.
+    """
+    regras = CAMPOS_BANCO_VALIDACAO.get(codigo)
+    if not regras:
+        return {}
+
+    banco_nome = nome(codigo)
+    erros: dict[str, str] = {}
+
+    for campo, valor in (('agencia', agencia), ('conta', conta)):
+        regra = regras.get(campo)
+        if not regra:
+            continue
+        digitos = _digitos_numero(valor)
+        if not digitos:
+            continue  # presença/obrigatoriedade é tratada à parte
+        msg = _erro_tamanho(len(digitos), regra, _ROTULO_CAMPO[campo], banco_nome)
+        if msg:
+            erros[campo] = msg
+
+    regra_cart = regras.get('carteira')
+    cart = (carteira or '').strip()
+    if regra_cart and cart:
+        if 'valores' in regra_cart:
+            if cart not in regra_cart['valores']:
+                permitidos = ', '.join(regra_cart['valores'])
+                erros['carteira'] = (
+                    f"Para {banco_nome}, a carteira deve ser uma de: {permitidos}."
+                )
+        else:
+            digitos = ''.join(ch for ch in cart if ch.isdigit())
+            msg = _erro_tamanho(len(digitos), regra_cart, _ROTULO_CAMPO['carteira'], banco_nome)
+            if msg:
+                erros['carteira'] = msg
+
+    return erros
+
+
+def validar_layout_cnab(codigo: str, layout: str) -> str | None:
+    """
+    Valida que o banco suporta o layout de remessa escolhido (CNAB 240/400).
+
+    Banco sem remessa CNAB (registro online — HU-23 RN-16) não restringe o
+    layout (a conta simplesmente não entra em remessa). Retorna mensagem de
+    erro ou None.
+    """
+    layouts = layouts_cnab(codigo)
+    if not layouts:
+        return None  # registro online; layout é irrelevante para este banco
+    if layout and layout not in layouts:
+        disponiveis = ', '.join(l.replace('_', ' ') for l in layouts)
+        return (
+            f"{nome(codigo)} não suporta {layout.replace('_', ' ')} na BRCobrança. "
+            f"Layouts disponíveis: {disponiveis}."
+        )
+    return None
+
+
 # ── Discovery via API ─────────────────────────────────────────────────────────
 
 _STUB_BOLETO = {

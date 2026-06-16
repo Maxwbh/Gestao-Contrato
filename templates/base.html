@@ -31,19 +31,24 @@
                 </span>
             </div>
         </li>
-        <li><a href="{% url 'core:dashboard' %}"><i class="fas fa-tachometer-alt left"></i> Dashboard</a></li>
+        <!-- Financeiro · Cobrança do Mês (rotina) -->
+        <li><a class="subheader">Cobrança do Mês</a></li>
+        <li><a href="{% url 'financeiro:cobranca_hub' %}"><i class="fas fa-route left"></i> Cobrança do Mês</a></li>
+        <li><a href="{% url 'financeiro:boletos_painel' %}"><i class="fas fa-file-invoice-dollar left"></i> Gerar Boletos do Mês</a></li>
+        <li><a href="{% url 'financeiro:remessa_painel' %}"><i class="fas fa-file-export left"></i> Enviar Remessa ao Banco</a></li>
+        <li><a href="{% url 'financeiro:retorno_painel' %}"><i class="fas fa-file-import left"></i> Receber Retorno do Banco</a></li>
+        <li><a href="{% url 'financeiro:painel_conciliacao_saude' %}"><i class="fas fa-heart-pulse left"></i> Conciliação &amp; Saúde</a></li>
+        <li><a href="{% url 'notificacoes:listar_regras' %}"><i class="fas fa-sliders-h left"></i> Régua de Cobrança</a></li>
         <li><div class="divider"></div></li>
-        <!-- Financeiro -->
+        <!-- Financeiro · Análise -->
         <li><a class="subheader">Financeiro</a></li>
         <li><a href="{% url 'financeiro:dashboard' %}"><i class="fas fa-chart-line left"></i> Dashboard Financeiro</a></li>
         <li><a href="{% url 'financeiro:listar_parcelas' %}"><i class="fas fa-list left"></i> Todas as Parcelas</a></li>
         <li><a href="{% url 'financeiro:parcelas_mes' %}"><i class="fas fa-calendar-alt left"></i> Parcelas do Mês</a></li>
-        <li><a href="{% url 'financeiro:boletos_painel' %}"><i class="fas fa-file-invoice-dollar left"></i> Gerar Boletos do Mês</a></li>
-        <li><a href="{% url 'financeiro:remessa_painel' %}"><i class="fas fa-file-export left"></i> Gerar Arquivo Remessa</a></li>
-        <li><a href="{% url 'financeiro:retorno_painel' %}"><i class="fas fa-file-import left"></i> Receber Arquivo Retorno</a></li>
-        <li><a href="{% url 'financeiro:dashboard_conciliacao' %}"><i class="fas fa-balance-scale left"></i> Conciliação Bancária</a></li>
         <li><a href="{% url 'financeiro:reajustes_pendentes' %}"><i class="fas fa-exclamation-triangle left"></i> Reajustes Pendentes</a></li>
         <li><a href="{% url 'financeiro:listar_reajustes' %}"><i class="fas fa-history left"></i> Histórico de Reajustes</a></li>
+        <li><a href="{% url 'financeiro:relatorio_prestacoes_a_pagar' %}"><i class="fas fa-file-invoice left"></i> Relatórios Financeiros</a></li>
+        <li><a href="{% url 'financeiro:dashboard_conciliacao' %}"><i class="fas fa-balance-scale left"></i> Conciliação Bancária</a></li>
         <li><div class="divider"></div></li>
         <!-- Contratos -->
         <li><a class="subheader">Contratos</a></li>
@@ -60,9 +65,12 @@
         <li><div class="divider"></div></li>
         <!-- Notificações -->
         <li><a class="subheader">Notificações</a></li>
+        <li><a href="{% url 'notificacoes:painel_mensagens' %}"><i class="fas fa-comments left"></i> Painel de Mensagens</a></li>
         <li><a href="{% url 'notificacoes:listar' %}"><i class="fas fa-history left"></i> Histórico de Envios</a></li>
-        <li><a href="{% url 'notificacoes:listar_config_email' %}"><i class="fas fa-envelope left"></i> Servidores de E-mail</a></li>
+        <li><a href="{% url 'notificacoes:listar_regras' %}"><i class="fas fa-sliders-h left"></i> Régua de Cobrança</a></li>
         <li><a href="{% url 'notificacoes:listar_templates' %}"><i class="fas fa-file-alt left"></i> Templates de Mensagens</a></li>
+        <li><a href="{% url 'notificacoes:listar_config_email' %}"><i class="fas fa-envelope left"></i> Servidores de E-mail</a></li>
+        <li><a href="{% url 'notificacoes:listar_config_whatsapp' %}"><i class="fab fa-whatsapp left"></i> WhatsApp</a></li>
         {% if user.is_staff or user.is_superuser %}
         <li><div class="divider"></div></li>
         <li><a class="subheader">Admin</a></li>
@@ -98,19 +106,23 @@
             <!-- Desktop nav links -->
             <ul class="right hide-on-med-and-down">
                 {% with app=request.resolver_match.app_name url_name=request.resolver_match.url_name %}
-                <li{% if url_name == 'dashboard' and app == 'core' %} class="nav-active"{% endif %}>
-                    <a href="{% url 'core:dashboard' %}">
-                        <i class="fas fa-tachometer-alt"></i> Dashboard
+                {% with cob_urls='cobranca_hub boletos_painel remessa_painel retorno_painel painel_conciliacao_saude' %}
+                <!-- Cobrança dropdown (rotina mensal da contadora) -->
+                <li{% if app == 'financeiro' and url_name in cob_urls %} class="nav-active"{% endif %}>
+                    <a class="dropdown-trigger" href="#!" data-target="dd-cobranca">
+                        <i class="fas fa-coins"></i> Cobrança
+                        <i class="material-icons right">arrow_drop_down</i>
                     </a>
                 </li>
 
-                <!-- Financeiro dropdown -->
-                <li{% if app == 'financeiro' %} class="nav-active"{% endif %}>
+                <!-- Financeiro dropdown (análise & gestão) -->
+                <li{% if app == 'financeiro' and url_name not in cob_urls %} class="nav-active"{% endif %}>
                     <a class="dropdown-trigger" href="#!" data-target="dd-financeiro">
                         <i class="fas fa-dollar-sign"></i> Financeiro
                         <i class="material-icons right">arrow_drop_down</i>
                     </a>
                 </li>
+                {% endwith %}
 
                 <!-- Contratos dropdown -->
                 <li{% if app == 'contratos' %} class="nav-active"{% endif %}>
@@ -137,37 +149,14 @@
                     </a>
                 </li>
 
-                {% if user.is_staff or user.is_superuser %}
-                <!-- Admin dropdown -->
-                <li{% if 'configuracoes_sistema' in url_name or 'acesso' in url_name or 'dados_teste' in url_name %} class="nav-active"{% endif %}>
-                    <a class="dropdown-trigger" href="#!" data-target="dd-admin">
-                        <i class="fas fa-cog"></i> Admin
-                        <span id="ia-alerta-badge" class="badge-ia-alerta" style="display:none;background:#e53935;color:#fff;border-radius:10px;font-size:.65rem;padding:1px 5px;margin-left:3px;vertical-align:middle;"></span>
-                        <i class="material-icons right">arrow_drop_down</i>
-                    </a>
-                </li>
-                {% endif %}
                 {% endwith %}
 
                 {% if user.is_authenticated %}
-                <!-- U-01: Dark mode toggle -->
-                <li>
-                    <a href="#!" id="dark-mode-toggle" title="Alternar modo escuro">
-                        <i class="dm-icon fas fa-moon" id="dm-icon"></i>
-                    </a>
-                </li>
-                <!-- U-06: Busca Global -->
-                <li>
-                    <a href="#!" id="global-search-btn" title="Busca global (Ctrl+K)"
-                       style="display:flex;align-items:center;gap:4px;opacity:.85;">
-                        <i class="fas fa-search"></i>
-                        <span class="hide-on-med-and-down" style="font-size:.78rem;border:1px solid rgba(255,255,255,.4);border-radius:4px;padding:2px 6px;letter-spacing:.5px;">Ctrl+K</span>
-                    </a>
-                </li>
-                <!-- User dropdown -->
+                <!-- User dropdown (Perfil · Modo Escuro · Admin · Sair) -->
                 <li>
                     <a class="dropdown-trigger" href="#!" data-target="dd-user">
                         <i class="fas fa-user-circle"></i> {{ user.first_name|default:user.username }}
+                        {% if user.is_staff or user.is_superuser %}<span id="ia-alerta-badge" class="badge-ia-alerta" style="display:none;background:#e53935;color:#fff;border-radius:10px;font-size:.65rem;padding:1px 5px;margin-left:3px;vertical-align:middle;"></span>{% endif %}
                         <i class="material-icons right">arrow_drop_down</i>
                     </a>
                 </li>
@@ -183,27 +172,37 @@
     </nav>
 
     <!-- Dropdown Structures -->
+    <ul id="dd-cobranca" class="dropdown-content app-dropdown">
+        <li><a href="{% url 'financeiro:cobranca_hub' %}"><i class="fas fa-route"></i> <strong>Cobrança do Mês</strong></a></li>
+        <li><a class="dropdown-header-item"><i class="fas fa-list-ol"></i> Passo a passo</a></li>
+        <li><a href="{% url 'financeiro:boletos_painel' %}"><i class="fas fa-file-invoice-dollar"></i> Gerar Boletos do Mês</a></li>
+        <li><a href="{% url 'financeiro:remessa_painel' %}"><i class="fas fa-file-export"></i> Enviar Remessa ao Banco</a></li>
+        <li><a href="{% url 'financeiro:retorno_painel' %}"><i class="fas fa-file-import"></i> Receber Retorno do Banco</a></li>
+        <li><a class="dropdown-header-item"><i class="fas fa-heart-pulse"></i> Acompanhamento</a></li>
+        <li><a href="{% url 'financeiro:painel_conciliacao_saude' %}"><i class="fas fa-heart-pulse"></i> Conciliação &amp; Saúde</a></li>
+        <li><a href="{% url 'notificacoes:listar_regras' %}"><i class="fas fa-sliders-h"></i> Régua de Cobrança</a></li>
+    </ul>
+
     <ul id="dd-financeiro" class="dropdown-content app-dropdown">
         <li><a href="{% url 'financeiro:dashboard' %}"><i class="fas fa-chart-line"></i> Dashboard Financeiro</a></li>
+        <li><a class="dropdown-header-item"><i class="fas fa-barcode"></i> Parcelas &amp; Boletos</a></li>
         <li><a href="{% url 'financeiro:listar_parcelas' %}"><i class="fas fa-list"></i> Todas as Parcelas</a></li>
         <li><a href="{% url 'financeiro:parcelas_mes' %}"><i class="fas fa-calendar-alt"></i> Parcelas do Mês</a></li>
-        <li><a class="dropdown-header-item"><i class="fas fa-barcode"></i> Boletos</a></li>
-        <li><a href="{% url 'financeiro:listar_parcelas' %}?status_boleto=NAO_GERADO"><i class="fas fa-exclamation-circle orange-text"></i> Pendentes de Geração</a></li>
+        <li><a href="{% url 'financeiro:listar_parcelas' %}?status_boleto=NAO_GERADO"><i class="fas fa-exclamation-circle orange-text"></i> Boletos Pendentes</a></li>
         <li><a href="{% url 'financeiro:listar_parcelas' %}?status_boleto=GERADO"><i class="fas fa-check-circle green-text"></i> Boletos Gerados</a></li>
         <li><a class="dropdown-header-item"><i class="fas fa-chart-bar"></i> Reajustes</a></li>
         <li><a href="{% url 'financeiro:reajustes_pendentes' %}"><i class="fas fa-exclamation-triangle orange-text"></i> Pendentes</a></li>
         <li><a href="{% url 'financeiro:listar_reajustes' %}"><i class="fas fa-history"></i> Histórico</a></li>
-        <li><a class="dropdown-header-item"><i class="fas fa-file-alt"></i> CNAB</a></li>
-        <li><a href="{% url 'financeiro:boletos_painel' %}"><i class="fas fa-file-invoice-dollar"></i> Gerar Boletos do Mês</a></li>
-        <li><a href="{% url 'financeiro:remessa_painel' %}"><i class="fas fa-file-export"></i> Gerar Arquivo Remessa</a></li>
-        <li><a href="{% url 'financeiro:retorno_painel' %}"><i class="fas fa-file-import"></i> Receber Arquivo Retorno</a></li>
+        <li><a class="dropdown-header-item"><i class="fas fa-file-invoice"></i> Relatórios &amp; Conciliação</a></li>
+        <li><a href="{% url 'financeiro:relatorio_prestacoes_a_pagar' %}"><i class="fas fa-file-invoice"></i> Relatórios Financeiros</a></li>
         <li><a href="{% url 'financeiro:dashboard_conciliacao' %}"><i class="fas fa-balance-scale"></i> Conciliação Bancária</a></li>
     </ul>
 
     <ul id="dd-contratos" class="dropdown-content app-dropdown">
+        <li><a class="dropdown-header-item"><i class="fas fa-file-contract"></i> Contratos</a></li>
         <li><a href="{% url 'contratos:listar' %}"><i class="fas fa-list"></i> Todos os Contratos</a></li>
         <li><a href="{% url 'contratos:criar' %}"><i class="fas fa-plus-circle"></i> Novo Contrato</a></li>
-        <li class="divider" tabindex="-1"></li>
+        <li><a class="dropdown-header-item"><i class="fas fa-chart-bar"></i> Reajuste</a></li>
         <li><a href="{% url 'contratos:indices_listar' %}"><i class="fas fa-chart-bar"></i> Índices de Reajuste</a></li>
     </ul>
 
@@ -217,8 +216,9 @@
     </ul>
 
     <ul id="dd-notificacoes" class="dropdown-content app-dropdown">
-        <li><a href="{% url 'notificacoes:listar' %}"><i class="fas fa-history"></i> Histórico de Envios</a></li>
+        <li><a class="dropdown-header-item"><i class="fas fa-paper-plane"></i> Operação</a></li>
         <li><a href="{% url 'notificacoes:painel_mensagens' %}"><i class="fas fa-comments"></i> Painel de Mensagens</a></li>
+        <li><a href="{% url 'notificacoes:listar' %}"><i class="fas fa-history"></i> Histórico de Envios</a></li>
         <li><a class="dropdown-header-item"><i class="fas fa-cogs"></i> Configurações</a></li>
         <li><a href="{% url 'notificacoes:listar_regras' %}"><i class="fas fa-sliders-h"></i> Régua de Cobrança</a></li>
         <li><a href="{% url 'notificacoes:listar_templates' %}"><i class="fas fa-file-alt"></i> Templates de Mensagens</a></li>
@@ -226,8 +226,14 @@
         <li><a href="{% url 'notificacoes:listar_config_whatsapp' %}"><i class="fab fa-whatsapp"></i> WhatsApp</a></li>
     </ul>
 
-    {% if user.is_staff or user.is_superuser %}
-    <ul id="dd-admin" class="dropdown-content app-dropdown">
+    {% if user.is_authenticated %}
+    <ul id="dd-user" class="dropdown-content app-dropdown">
+        <li><a href="{% url 'accounts:perfil' %}"><i class="fas fa-user"></i> Meu Perfil</a></li>
+        <li><a href="{% url 'accounts:alterar_senha' %}"><i class="fas fa-key"></i> Alterar Senha</a></li>
+        <li><a href="#!" id="dark-mode-toggle" title="Alternar modo escuro"><i class="dm-icon fas fa-moon" id="dm-icon"></i> Modo Escuro</a></li>
+        {% if user.is_staff or user.is_superuser %}
+        <li class="divider" tabindex="-1"></li>
+        <li><a class="dropdown-header-item"><i class="fas fa-cog"></i> Administração</a></li>
         <li><a href="{% url 'core:configuracoes_sistema' %}"><i class="fas fa-sliders-h"></i> Configurações do Sistema</a></li>
         <li><a href="{% url 'core:listar_acessos' %}"><i class="fas fa-key"></i> Acessos de Usuários</a></li>
         <li><a href="{% url 'core:ia_custos' %}"><i class="fas fa-robot"></i> Custos de IA</a></li>
@@ -235,16 +241,9 @@
         <li><a href="{% url 'core:ia_tokens_config' %}"><i class="fas fa-sliders-h"></i> Configuração de Tokens</a></li>
         <li><a href="{% url 'core:ia_workflow_list' %}"><i class="fas fa-project-diagram"></i> Workflow IA</a></li>
         <li><a href="{% url 'core:auditoria_log' %}"><i class="fas fa-clipboard-list"></i> Log de Auditoria</a></li>
-        <li class="divider" tabindex="-1"></li>
         <li><a href="{% url 'core:pagina_dados_teste' %}"><i class="fas fa-database"></i> Dados de Teste</a></li>
         <li><a href="/admin/"><i class="fas fa-tools"></i> Django Admin</a></li>
-    </ul>
-    {% endif %}
-
-    {% if user.is_authenticated %}
-    <ul id="dd-user" class="dropdown-content app-dropdown">
-        <li><a href="{% url 'accounts:perfil' %}"><i class="fas fa-user"></i> Meu Perfil</a></li>
-        <li><a href="{% url 'accounts:alterar_senha' %}"><i class="fas fa-key"></i> Alterar Senha</a></li>
+        {% endif %}
         <li class="divider" tabindex="-1"></li>
         <li><a href="{% url 'accounts:logout' %}"><i class="fas fa-sign-out-alt"></i> Sair</a></li>
     </ul>
@@ -726,7 +725,7 @@
             .then(function(r) { return r.ok ? r.json() : null; })
             .then(function(data) {
                 if (data && data.count > 0) {
-                    // Badge no link "Gerar Arquivo Remessa" no menu (href do painel)
+                    // Badge no link "Enviar Remessa ao Banco" no menu (href do painel)
                     var links = document.querySelectorAll('a[href="{% url "financeiro:remessa_painel" %}"]');
                     links.forEach(function(link) {
                         if (!link.querySelector('.badge-remessa')) {
@@ -817,7 +816,9 @@
             input.value = '';
         }
 
-        document.getElementById('global-search-btn').addEventListener('click', function(e){
+        // Botão de busca removido do menu (busca é por tela). Guarda defensiva:
+        var _gsb = document.getElementById('global-search-btn');
+        if (_gsb) _gsb.addEventListener('click', function(e){
             e.preventDefault(); open();
         });
 

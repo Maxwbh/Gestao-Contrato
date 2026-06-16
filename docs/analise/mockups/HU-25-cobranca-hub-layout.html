@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html class="light" lang="pt-BR"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Cobrança do Mês | ContractHub</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&amp;family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<style>
+  .material-symbols-outlined { font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24; }
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
+</style>
+<script id="tailwind-config">
+  tailwind.config = {
+    theme: { extend: { colors: {
+      "primary": "#091426", "secondary": "#0058be", "success": "#22c55e",
+      "warning": "#f59e0b", "danger": "#ef4444", "error": "#ba1a1a",
+      "surface-border": "#e2e8f0", "background": "#f8f9ff",
+      "surface-container-low": "#eff4ff", "surface-container-high": "#dce9ff",
+      "on-surface-variant": "#45474c", "outline-variant": "#c5c6cd",
+      "primary-fixed": "#d8e3fb"
+    }, borderRadius: { "xl": "0.5rem", "full": "0.75rem" }, fontFamily: { sans: ["Inter"] } } }
+  };
+</script>
+</head>
+<body class="bg-background font-sans text-primary">
+
+<!-- Sidebar -->
+<aside class="fixed top-0 left-0 w-64 h-screen bg-white border-r border-surface-border flex flex-col py-6 z-50">
+  <div class="px-6 mb-8 flex items-center gap-2">
+    <span class="material-symbols-outlined text-secondary">apartment</span>
+    <span class="font-bold text-lg">ContractHub</span>
+  </div>
+  <nav class="flex-1 flex flex-col">
+    <a class="flex items-center px-6 py-3 text-on-surface-variant hover:bg-surface-container-high" href="#"><span class="material-symbols-outlined mr-3">dashboard</span>Dashboard</a>
+    <a class="flex items-center px-6 py-3 text-on-surface-variant hover:bg-surface-container-high" href="#"><span class="material-symbols-outlined mr-3">description</span>Contratos</a>
+    <a class="flex items-center px-6 py-3 bg-surface-container-low text-secondary font-bold border-r-4 border-secondary" href="#"><span class="material-symbols-outlined mr-3">payments</span>Cobrança do Mês</a>
+    <a class="flex items-center px-6 py-3 text-on-surface-variant hover:bg-surface-container-high" href="#"><span class="material-symbols-outlined mr-3">account_balance</span>Conciliação</a>
+    <a class="flex items-center px-6 py-3 text-on-surface-variant hover:bg-surface-container-high" href="#"><span class="material-symbols-outlined mr-3">assessment</span>Relatórios</a>
+  </nav>
+  <div class="px-6 pt-6 border-t border-outline-variant flex items-center gap-3">
+    <div class="w-10 h-10 rounded-full bg-primary-fixed flex items-center justify-center text-primary font-bold">MC</div>
+    <div><p class="text-sm font-bold">Maria Contadora</p><p class="text-xs text-on-surface-variant">Cobrança</p></div>
+  </div>
+</aside>
+
+<!-- Top bar -->
+<header class="fixed top-0 right-0 w-[calc(100%-16rem)] h-16 bg-white border-b border-surface-border z-40 flex justify-between items-center px-6">
+  <div class="relative">
+    <span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant">search</span>
+    <input class="pl-10 pr-4 py-2 bg-surface-container-low border border-outline-variant rounded-lg text-sm w-80 outline-none" placeholder="Buscar contratos ou clientes..." type="text"/>
+  </div>
+  <div class="flex items-center gap-5 text-on-surface-variant">
+    <span class="material-symbols-outlined relative">notifications<span class="absolute top-0 right-0 w-2 h-2 bg-danger rounded-full"></span></span>
+    <span class="material-symbols-outlined">settings</span>
+    <span class="material-symbols-outlined">help</span>
+  </div>
+</header>
+
+<!-- Main -->
+<main class="ml-64 pt-16 min-h-screen">
+<div class="p-6 max-w-[1280px] mx-auto">
+
+  <!-- Breadcrumb + title -->
+  <div class="mb-6">
+    <nav class="flex text-xs text-on-surface-variant mb-2"><span>Financeiro</span><span class="mx-2">/</span><span class="text-primary font-bold">Cobrança do Mês</span></nav>
+    <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
+      <div>
+        <h2 class="text-2xl font-bold">Cobrança do Mês</h2>
+        <p class="text-sm text-on-surface-variant mt-1">Gere os boletos, envie a remessa e concilie o retorno — tudo em um fluxo guiado.</p>
+      </div>
+      <button class="flex items-center gap-2 px-5 py-2.5 bg-primary text-white font-semibold rounded shadow-lg hover:bg-primary/90 text-sm">
+        <span class="material-symbols-outlined text-base">bolt</span> Gerar boletos do mês e preparar remessa
+        <span class="material-symbols-outlined text-base">arrow_forward</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- Filtros compartilhados -->
+  <div class="bg-white p-4 border border-surface-border rounded-xl shadow-sm mb-6 flex flex-wrap items-end gap-6">
+    <div class="flex-1 min-w-[220px]">
+      <label class="block text-xs font-bold text-on-surface-variant mb-2 uppercase tracking-wider">Imobiliária</label>
+      <select class="w-full bg-surface-container-low border border-outline-variant rounded px-3 py-2 text-sm outline-none"><option>Todas as Imobiliárias</option><option>Imobiliária Lagoa Real</option></select>
+    </div>
+    <div class="w-48">
+      <label class="block text-xs font-bold text-on-surface-variant mb-2 uppercase tracking-wider">Competência</label>
+      <select class="w-full bg-surface-container-low border border-outline-variant rounded px-3 py-2 text-sm outline-none"><option selected>Junho 2026</option><option>Maio 2026</option></select>
+    </div>
+    <span class="text-xs text-on-surface-variant ml-auto">Filtros aplicados aos 3 passos</span>
+  </div>
+
+  <!-- Resumo do ciclo (KPIs) -->
+  <div class="grid grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+    <div class="bg-white p-5 border border-surface-border rounded-xl shadow-sm"><p class="text-xs font-bold text-on-surface-variant uppercase mb-2">A Gerar</p><h3 class="text-2xl font-bold">142</h3><p class="text-xs text-on-surface-variant">boletos elegíveis</p></div>
+    <div class="bg-white p-5 border border-surface-border rounded-xl shadow-sm"><p class="text-xs font-bold text-on-surface-variant uppercase mb-2">A Enviar</p><h3 class="text-2xl font-bold">3</h3><p class="text-xs text-on-surface-variant">arquivos / contas</p></div>
+    <div class="bg-white p-5 border border-surface-border rounded-xl shadow-sm"><p class="text-xs font-bold text-on-surface-variant uppercase mb-2">A Conciliar</p><h3 class="text-2xl font-bold">58</h3><p class="text-xs text-on-surface-variant">boletos enviados</p></div>
+    <div class="bg-secondary/5 border border-secondary/30 p-5 rounded-xl shadow-sm"><p class="text-xs font-bold text-secondary uppercase mb-2">Ciclo Concluído</p><h3 class="text-2xl font-bold text-secondary">38%</h3><div class="w-full h-2 bg-secondary/15 rounded-full mt-2"><div class="h-2 bg-secondary rounded-full" style="width:38%"></div></div></div>
+  </div>
+
+  <!-- Stepper -->
+  <div class="bg-white border border-surface-border rounded-xl shadow-sm p-6 mb-8">
+    <div class="flex items-center justify-between">
+      <!-- Passo 1 -->
+      <div class="flex-1 flex items-center">
+        <div class="flex flex-col items-center text-center w-40">
+          <div class="w-11 h-11 rounded-full bg-secondary text-white flex items-center justify-center font-bold ring-4 ring-secondary/15"><span class="material-symbols-outlined">bolt</span></div>
+          <p class="mt-2 text-sm font-bold text-secondary">1. Gerar Boletos</p>
+          <span class="mt-1 text-[11px] font-bold px-2 py-0.5 rounded-full bg-warning/15 text-warning">EM ANDAMENTO</span>
+          <p class="text-[11px] text-on-surface-variant mt-1">142 a gerar</p>
+        </div>
+        <div class="flex-1 h-0.5 bg-secondary/40 mx-2"></div>
+      </div>
+      <!-- Passo 2 -->
+      <div class="flex-1 flex items-center">
+        <div class="flex flex-col items-center text-center w-40">
+          <div class="w-11 h-11 rounded-full bg-surface-container-high text-on-surface-variant flex items-center justify-center font-bold"><span class="material-symbols-outlined">send</span></div>
+          <p class="mt-2 text-sm font-bold">2. Gerar Remessa</p>
+          <span class="mt-1 text-[11px] font-bold px-2 py-0.5 rounded-full bg-surface-container-high text-on-surface-variant">PENDENTE</span>
+          <p class="text-[11px] text-on-surface-variant mt-1">3 contas</p>
+        </div>
+        <div class="flex-1 h-0.5 bg-surface-border mx-2"></div>
+      </div>
+      <!-- Passo 3 -->
+      <div class="flex flex-col items-center text-center w-40">
+        <div class="w-11 h-11 rounded-full bg-surface-container-high text-on-surface-variant flex items-center justify-center font-bold"><span class="material-symbols-outlined">account_balance</span></div>
+        <p class="mt-2 text-sm font-bold">3. Receber Retorno</p>
+        <span class="mt-1 text-[11px] font-bold px-2 py-0.5 rounded-full bg-surface-container-high text-on-surface-variant">PENDENTE</span>
+        <p class="text-[11px] text-on-surface-variant mt-1">58 a conciliar</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Painel do passo ativo (Passo 1) -->
+  <div class="bg-white border border-surface-border rounded-xl shadow-sm">
+    <div class="flex items-center justify-between px-6 py-4 border-b border-surface-border bg-surface-container-low rounded-t-xl">
+      <h3 class="font-bold flex items-center gap-2"><span class="material-symbols-outlined text-secondary">bolt</span> Passo 1 — Gerar Boletos</h3>
+      <div class="flex gap-2">
+        <button class="px-4 py-2 border border-secondary text-secondary font-semibold rounded text-sm hover:bg-secondary/5">Gerar Boletos</button>
+        <button class="px-4 py-2 bg-primary text-white font-semibold rounded text-sm flex items-center gap-1">Concluir e ir para Remessa <span class="material-symbols-outlined text-sm">arrow_forward</span></button>
+      </div>
+    </div>
+    <table class="w-full text-sm">
+      <thead class="text-xs uppercase text-on-surface-variant bg-surface-container-low/50"><tr>
+        <th class="text-left px-6 py-3">Imobiliária / Contrato</th><th class="text-center px-4 py-3">Elegíveis</th>
+        <th class="text-center px-4 py-3">Bloqueados</th><th class="text-center px-4 py-3">Já gerados</th>
+        <th class="text-right px-4 py-3">Valor</th><th class="text-right px-6 py-3">Ação</th></tr></thead>
+      <tbody class="divide-y divide-surface-border">
+        <tr><td class="px-6 py-3"><span class="font-bold">Lagoa Real</span> · CTR-2026-018</td><td class="text-center">3</td><td class="text-center text-on-surface-variant">0</td><td class="text-center text-on-surface-variant">1</td><td class="text-right font-semibold">R$ 5.400,00</td><td class="text-right px-6"><button class="text-secondary font-semibold text-xs">Gerar deste</button></td></tr>
+        <tr class="bg-warning/5"><td class="px-6 py-3"><span class="font-bold">Lagoa Real</span> · CTR-2026-022</td><td class="text-center">2</td><td class="text-center text-warning font-bold">1</td><td class="text-center text-on-surface-variant">0</td><td class="text-right font-semibold">R$ 3.600,00</td><td class="text-right px-6"><a class="text-warning font-semibold text-xs" href="#">ver reajuste →</a></td></tr>
+        <tr><td class="px-6 py-3"><span class="font-bold">Lagoa Real</span> · CTR-2026-031</td><td class="text-center">6</td><td class="text-center text-on-surface-variant">0</td><td class="text-center text-on-surface-variant">0</td><td class="text-right font-semibold">R$ 10.800,00</td><td class="text-right px-6"><button class="text-secondary font-semibold text-xs">Gerar deste</button></td></tr>
+      </tbody>
+    </table>
+  </div>
+
+</div>
+</main>
+</body></html>

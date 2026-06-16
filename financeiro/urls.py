@@ -90,6 +90,12 @@ urlpatterns = [
     # HU-24 — Geração Mensal de Boletos (tela dedicada)
     path('boletos/', views.boletos_painel, name='boletos_painel'),
     path('boletos/gerar/', views.boletos_painel_gerar, name='boletos_painel_gerar'),
+    # HU-25 — Hub "Cobrança do Mês" (assistente de ciclo mensal)
+    path('cobranca/', views.cobranca_hub, name='cobranca_hub'),
+    path('api/cobranca/estado/', views.api_cobranca_estado, name='api_cobranca_estado'),
+    # HU-26 — Painel de Conciliação & Saúde da Cobrança
+    path('cobranca/conciliacao/', views.painel_conciliacao_saude, name='painel_conciliacao_saude'),
+    path('api/conciliacao/saude/', views.api_conciliacao_saude, name='api_conciliacao_saude'),
     path('api/remessa/validar/', views.api_remessa_validar, name='api_remessa_validar'),
     path('cnab/remessa/download-lote/', views.remessa_download_lote, name='remessa_download_lote'),
     path('cnab/remessa/<str:hid>/cancelar-envio/', views.remessa_cancelar_envio, name='remessa_cancelar_envio'),
