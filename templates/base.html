@@ -720,25 +720,6 @@
             })
             .catch(function() {});
 
-        // Badge: boletos a gerar no menu de topo "Cobrança" (endpoint leve cacheado)
-        fetch('{% url "financeiro:api_cobranca_contagem" %}')
-            .then(function(r) { return r.ok ? r.json() : null; })
-            .then(function(data) {
-                var n = data ? data.a_gerar : 0;
-                if (n > 0) {
-                    var cob = document.querySelector('a[data-target="dd-cobranca"]');
-                    if (cob && !cob.querySelector('.badge-cobranca')) {
-                        var badge = document.createElement('span');
-                        badge.className = 'new badge orange badge-notify badge-cobranca ms-1';
-                        badge.setAttribute('data-badge-caption', '');
-                        badge.textContent = n;
-                        badge.title = n + ' boleto(s) a gerar';
-                        cob.appendChild(badge);
-                    }
-                }
-            })
-            .catch(function() {});
-
         // Badge: boletos aguardando remessa CNAB
         fetch('{% url "financeiro:api_cnab_boletos_pendentes_count" %}')
             .then(function(r) { return r.ok ? r.json() : null; })
