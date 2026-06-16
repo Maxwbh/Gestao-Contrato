@@ -15,15 +15,16 @@
 ```
 docs/analise/
 ├── README.md              ← você está aqui (hub central)
-├── historias-usuario/     ← Histórias de Usuário (HU-01 … HU-26) + INDICE
+├── historias-usuario/     ← Histórias de Usuário (HU-01 … HU-27) + INDICE
 │   ├── INDICE.md          ← índice mestre: matriz de rastreabilidade + fluxo macro
-│   ├── HU-01.md … HU-26.md
+│   ├── HU-01.md … HU-27.md
 └── mockups/               ← protótipos visuais / wireframes (HTML, imagens)
     ├── HU-23-remessa-layout.html
     ├── HU-23-retorno-layout.html
     ├── HU-24-geracao-layout.html
     ├── HU-25-cobranca-hub-layout.html
-    └── HU-26-conciliacao-saude-layout.html
+    ├── HU-26-conciliacao-saude-layout.html
+    └── HU-27-menu-layout.html
 ```
 
 ---
@@ -61,6 +62,7 @@ docs/analise/
 | [HU-24](historias-usuario/HU-24.md) | Geração Mensal de Boletos — tela dedicada por escopo (Contadora) | `financeiro` | ✅ |
 | [HU-25](historias-usuario/HU-25.md) | Hub "Cobrança do Mês" — assistente de ciclo mensal (Contadora) | `financeiro` | ✅ |
 | [HU-26](historias-usuario/HU-26.md) | Painel de Conciliação & Saúde da Cobrança | `financeiro` | ✅ |
+| [HU-27](historias-usuario/HU-27.md) | Reorganização do Menu (navegação orientada à Contadora) | `core` | 📋 |
 
 ---
 
@@ -75,6 +77,7 @@ Wireframes e protótipos de alta fidelidade que acompanham as HUs.
 | [HU-24-geracao-layout.html](mockups/HU-24-geracao-layout.html) | HU-24 | Tela de Geração de Boletos do Mês + modal de configuração do lote (Tailwind + Material Symbols) |
 | [HU-25-cobranca-hub-layout.html](mockups/HU-25-cobranca-hub-layout.html) | HU-25 | Hub "Cobrança do Mês" — stepper 1·2·3, KPIs do ciclo, painel do passo ativo, ação encadeada (Tailwind + Material Symbols) |
 | [HU-26-conciliacao-saude-layout.html](mockups/HU-26-conciliacao-saude-layout.html) | HU-26 | Painel de Conciliação & Saúde — KPIs, recebido por origem, aging, pendências e rejeitados (Tailwind + Material Symbols) |
+| [HU-27-menu-layout.html](mockups/HU-27-menu-layout.html) | HU-27 | Navbar com dropdown "Cobrança" aberto (hub + passo a passo + acompanhamento) e "Financeiro" enxuto (Tailwind + Material Symbols) |
 
 > Para abrir um mockup HTML, faça o download e abra no navegador (usam CDN do Tailwind).
 
@@ -82,7 +85,7 @@ Wireframes e protótipos de alta fidelidade que acompanham as HUs.
 
 ## Convenções
 
-- **Numeração de HU**: sequencial a partir de `HU-01`. A próxima HU livre é **HU-27**.
+- **Numeração de HU**: sequencial a partir de `HU-01`. A próxima HU livre é **HU-28**.
 - **⚠️ Numeração distinta no ROADMAP**: o [`ROADMAP.md`](../../ROADMAP.md) usa uma numeração
   *interna* `HU-360` (e sub-tarefas `HU-01..HU-13` da seção 13) que é **independente**
   deste índice. Ao referenciar, use o prefixo `HU-360/HU-xx` para evitar ambiguidade.
