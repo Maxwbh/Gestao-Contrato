@@ -139,35 +139,14 @@
                     </a>
                 </li>
 
-                {% if user.is_staff or user.is_superuser %}
-                <!-- Admin dropdown -->
-                <li{% if 'configuracoes_sistema' in url_name or 'acesso' in url_name or 'dados_teste' in url_name %} class="nav-active"{% endif %}>
-                    <a class="dropdown-trigger" href="#!" data-target="dd-admin">
-                        <i class="fas fa-cog"></i> Admin
-                        <span id="ia-alerta-badge" class="badge-ia-alerta" style="display:none;background:#e53935;color:#fff;border-radius:10px;font-size:.65rem;padding:1px 5px;margin-left:3px;vertical-align:middle;"></span>
-                        <i class="material-icons right">arrow_drop_down</i>
-                    </a>
-                </li>
-                {% endif %}
                 {% endwith %}
 
                 {% if user.is_authenticated %}
-                <!-- U-01: Dark mode toggle -->
-                <li>
-                    <a href="#!" id="dark-mode-toggle" title="Alternar modo escuro">
-                        <i class="dm-icon fas fa-moon" id="dm-icon"></i>
-                    </a>
-                </li>
-                <!-- U-06: Busca Global (Ctrl+K — atalho no tooltip) -->
-                <li>
-                    <a href="#!" id="global-search-btn" title="Busca global (Ctrl+K)" style="display:flex;align-items:center;">
-                        <i class="fas fa-search"></i>
-                    </a>
-                </li>
-                <!-- User dropdown -->
+                <!-- User dropdown (Perfil · Modo Escuro · Admin · Sair) -->
                 <li>
                     <a class="dropdown-trigger" href="#!" data-target="dd-user">
                         <i class="fas fa-user-circle"></i> {{ user.first_name|default:user.username }}
+                        {% if user.is_staff or user.is_superuser %}<span id="ia-alerta-badge" class="badge-ia-alerta" style="display:none;background:#e53935;color:#fff;border-radius:10px;font-size:.65rem;padding:1px 5px;margin-left:3px;vertical-align:middle;"></span>{% endif %}
                         <i class="material-icons right">arrow_drop_down</i>
                     </a>
                 </li>
@@ -228,8 +207,14 @@
         <li><a href="{% url 'notificacoes:listar_config_whatsapp' %}"><i class="fab fa-whatsapp"></i> WhatsApp</a></li>
     </ul>
 
-    {% if user.is_staff or user.is_superuser %}
-    <ul id="dd-admin" class="dropdown-content app-dropdown">
+    {% if user.is_authenticated %}
+    <ul id="dd-user" class="dropdown-content app-dropdown">
+        <li><a href="{% url 'accounts:perfil' %}"><i class="fas fa-user"></i> Meu Perfil</a></li>
+        <li><a href="{% url 'accounts:alterar_senha' %}"><i class="fas fa-key"></i> Alterar Senha</a></li>
+        <li><a href="#!" id="dark-mode-toggle" title="Alternar modo escuro"><i class="dm-icon fas fa-moon" id="dm-icon"></i> Modo Escuro</a></li>
+        {% if user.is_staff or user.is_superuser %}
+        <li class="divider" tabindex="-1"></li>
+        <li><a class="dropdown-header-item"><i class="fas fa-cog"></i> Administração</a></li>
         <li><a href="{% url 'core:configuracoes_sistema' %}"><i class="fas fa-sliders-h"></i> Configurações do Sistema</a></li>
         <li><a href="{% url 'core:listar_acessos' %}"><i class="fas fa-key"></i> Acessos de Usuários</a></li>
         <li><a href="{% url 'core:ia_custos' %}"><i class="fas fa-robot"></i> Custos de IA</a></li>
@@ -237,16 +222,9 @@
         <li><a href="{% url 'core:ia_tokens_config' %}"><i class="fas fa-sliders-h"></i> Configuração de Tokens</a></li>
         <li><a href="{% url 'core:ia_workflow_list' %}"><i class="fas fa-project-diagram"></i> Workflow IA</a></li>
         <li><a href="{% url 'core:auditoria_log' %}"><i class="fas fa-clipboard-list"></i> Log de Auditoria</a></li>
-        <li class="divider" tabindex="-1"></li>
         <li><a href="{% url 'core:pagina_dados_teste' %}"><i class="fas fa-database"></i> Dados de Teste</a></li>
         <li><a href="/admin/"><i class="fas fa-tools"></i> Django Admin</a></li>
-    </ul>
-    {% endif %}
-
-    {% if user.is_authenticated %}
-    <ul id="dd-user" class="dropdown-content app-dropdown">
-        <li><a href="{% url 'accounts:perfil' %}"><i class="fas fa-user"></i> Meu Perfil</a></li>
-        <li><a href="{% url 'accounts:alterar_senha' %}"><i class="fas fa-key"></i> Alterar Senha</a></li>
+        {% endif %}
         <li class="divider" tabindex="-1"></li>
         <li><a href="{% url 'accounts:logout' %}"><i class="fas fa-sign-out-alt"></i> Sair</a></li>
     </ul>
@@ -819,7 +797,9 @@
             input.value = '';
         }
 
-        document.getElementById('global-search-btn').addEventListener('click', function(e){
+        // Botão de busca removido do menu (busca é por tela). Guarda defensiva:
+        var _gsb = document.getElementById('global-search-btn');
+        if (_gsb) _gsb.addEventListener('click', function(e){
             e.preventDefault(); open();
         });
 
