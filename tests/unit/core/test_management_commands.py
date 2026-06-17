@@ -119,6 +119,75 @@ class TestGerarDadosTestePassos:
 
 
 @pytest.mark.django_db
+class TestGerarDadosBoletoApi:
+    """Testa que o comando gera contas Boleto-API corretamente."""
+
+    def test_contas_sicoob_e_c6_tem_provider_correto(self):
+        """Sicoob deve ter provider=sicoob e C6 deve ter provider=c6."""
+        from core.models import ContaBancaria
+        call_command('gerar_dados_teste', stdout=StringIO())
+        assert ContaBancaria.objects.filter(banco='756', provider='sicoob').exists()
+        assert ContaBancaria.objects.filter(banco='336', provider='c6').exists()
+
+    def test_contas_bb_e_bradesco_usam_brcobranca(self):
+        """BB e Bradesco devem manter provider=brcobranca (fluxo CNAB)."""
+        from core.models import ContaBancaria
+        call_command('gerar_dados_teste', stdout=StringIO())
+        assert not ContaBancaria.objects.filter(banco='001').exclude(provider='brcobranca').exists()
+        assert not ContaBancaria.objects.filter(banco='237').exclude(provider='brcobranca').exists()
+
+    def test_contas_api_tem_account_config_e_tenant_id(self):
+        """Contas Boleto-API devem ter account_config e tenant_id preenchidos."""
+        from core.models import ContaBancaria
+        call_command('gerar_dados_teste', stdout=StringIO())
+        for conta in ContaBancaria.objects.filter(banco__in=['756', '336']):
+            assert conta.account_config is not None, f'{conta}: account_config vazio'
+            assert conta.tenant_id, f'{conta}: tenant_id vazio'
+
+    def test_boletos_api_simulados_tem_cobranca_id(self):
+        """Após --so-boletos, parcelas com conta Boleto-API devem ter cobranca_id."""
+        from financeiro.models import Parcela
+        call_command('gerar_dados_teste', stdout=StringIO())
+        call_command('gerar_dados_teste', so_boletos=True, stdout=StringIO())
+        parcelas_api = Parcela.objects.filter(
+            conta_bancaria__provider__in=['sicoob', 'c6'],
+            status_boleto='GERADO',
+            pago=False,
+        )
+        if parcelas_api.exists():
+            assert parcelas_api.filter(cobranca_id='').count() == 0, \
+                'Parcelas Boleto-API sem cobranca_id após geração'
+
+    def test_so_boletos_reseta_cobranca_id(self):
+        """Segunda execução de --so-boletos deve limpar cobranca_id antes de regenerar."""
+        from financeiro.models import Parcela
+        call_command('gerar_dados_teste', stdout=StringIO())
+        call_command('gerar_dados_teste', so_boletos=True, stdout=StringIO())
+        # Forçar reset: executar novamente — deve limpar cobranca_id e regenerar
+        call_command('gerar_dados_teste', so_boletos=True, stdout=StringIO())
+        # Não deve haver GERADO sem cobranca_id em contas API
+        sem_id = Parcela.objects.filter(
+            conta_bancaria__provider__in=['sicoob', 'c6'],
+            status_boleto='GERADO',
+            pago=False,
+            cobranca_id='',
+        ).count()
+        assert sem_id == 0
+
+    def test_remessa_cnab_ignora_contas_boleto_api(self):
+        """--so-remessa não deve incluir parcelas de contas Boleto-API."""
+        from financeiro.models import ArquivoRemessa, ItemRemessa
+        call_command('gerar_dados_teste', stdout=StringIO())
+        call_command('gerar_dados_teste', so_boletos=True, stdout=StringIO())
+        call_command('gerar_dados_teste', so_remessa=True, stdout=StringIO())
+        # Nenhum ItemRemessa deve ter parcela vinculada a conta Boleto-API
+        itens_api = ItemRemessa.objects.filter(
+            parcela__conta_bancaria__provider__in=['sicoob', 'c6']
+        ).count()
+        assert itens_api == 0, f'{itens_api} ItemRemessa indevidos em contas Boleto-API'
+
+
+@pytest.mark.django_db
 class TestProcessarReajustes:
     """Testes do management command processar_reajustes"""
 
