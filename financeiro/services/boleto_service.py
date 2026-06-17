@@ -1441,6 +1441,7 @@ class BoletoService:
                         return {
                             'sucesso': False,
                             'erro': 'Serviço de boletos temporariamente sobrecarregado. Tente novamente em instantes.',
+                            'rate_limited': True,
                         }
 
                 # Erros que justificam retry (5xx)

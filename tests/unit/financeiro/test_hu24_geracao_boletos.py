@@ -283,6 +283,101 @@ class TestNotificacaoConsolidada:
 
 
 # ---------------------------------------------------------------------------
+# Pacing + abort em rate limit (HU-24 / BRCobrança Render free tier)
+# ---------------------------------------------------------------------------
+
+@pytest.mark.django_db
+class TestPacingAbort:
+    def _post(self, c, body):
+        return c.post(reverse('financeiro:boletos_painel_gerar'),
+                      data=json.dumps(body), content_type='application/json')
+
+    def test_abort_em_rate_limit(self, base, staff_cli):
+        """Quando gerar_boleto sinaliza rate_limited, a geração para imediatamente."""
+        from financeiro.models import StatusBoleto
+        _, _, contrato = base
+        _, c = staff_cli
+        chamadas = {'n': 0}
+
+        def _se(self, enviar_email=True, **kw):
+            chamadas['n'] += 1
+            if chamadas['n'] >= 3:
+                return {
+                    'sucesso': False,
+                    'rate_limited': True,
+                    'erro': 'Serviço de boletos temporariamente sobrecarregado. Tente novamente em instantes.',
+                }
+            self.status_boleto = StatusBoleto.GERADO
+            self.save(update_fields=['status_boleto'])
+            return {'sucesso': True}
+
+        with patch('financeiro.models.Parcela.gerar_boleto', autospec=True) as m, \
+             patch('financeiro.services.geracao_boletos_service.GeracaoBoletosService.notificar_lote'), \
+             patch('financeiro.views.time'):
+            m.side_effect = _se
+            resp = self._post(c, {'escopo': 'contratos', 'contrato_ids': [contrato.pk],
+                                  'quantidade': 5, 'incluir_intermediarias': False})
+
+        data = resp.json()
+        assert data['sucesso'] is True
+        assert data['total_gerados'] == 2
+        assert data['rate_limit_abort'] is True
+        assert chamadas['n'] == 3  # parou na 3ª chamada (rate_limited)
+
+    def test_falha_comum_nao_aborta(self, base, staff_cli):
+        """Erros normais (não rate_limited) não ativam o abort — comportamento tolerante a falhas."""
+        from financeiro.models import StatusBoleto
+        _, _, contrato = base
+        _, c = staff_cli
+        chamadas = {'n': 0}
+
+        def _se(self, enviar_email=True, **kw):
+            chamadas['n'] += 1
+            if chamadas['n'] == 2:
+                return {'sucesso': False, 'erro': 'Dados inválidos'}
+            self.status_boleto = StatusBoleto.GERADO
+            self.save(update_fields=['status_boleto'])
+            return {'sucesso': True}
+
+        with patch('financeiro.models.Parcela.gerar_boleto', autospec=True) as m, \
+             patch('financeiro.services.geracao_boletos_service.GeracaoBoletosService.notificar_lote'), \
+             patch('financeiro.views.time'):
+            m.side_effect = _se
+            resp = self._post(c, {'escopo': 'contratos', 'contrato_ids': [contrato.pk],
+                                  'quantidade': 3, 'incluir_intermediarias': False})
+
+        data = resp.json()
+        assert data['total_gerados'] == 2
+        assert data['total_erros'] == 1
+        assert data['rate_limit_abort'] is False
+
+    def test_pacing_delay_entre_chamadas(self, base, staff_cli, settings):
+        """Verifica que time.sleep é chamado N-1 vezes com o delay configurado."""
+        from financeiro.models import StatusBoleto
+        _, _, contrato = base
+        _, c = staff_cli
+        settings.BRCOBRANCA_INTER_BOLETO_DELAY_MS = 200
+
+        def _se(self, enviar_email=True, **kw):
+            self.status_boleto = StatusBoleto.GERADO
+            self.save(update_fields=['status_boleto'])
+            return {'sucesso': True}
+
+        with patch('financeiro.models.Parcela.gerar_boleto', autospec=True) as m, \
+             patch('financeiro.services.geracao_boletos_service.GeracaoBoletosService.notificar_lote'), \
+             patch('financeiro.views.time') as mock_time:
+            m.side_effect = _se
+            resp = self._post(c, {'escopo': 'contratos', 'contrato_ids': [contrato.pk],
+                                  'quantidade': 3, 'incluir_intermediarias': False})
+
+        data = resp.json()
+        assert data['total_gerados'] == 3
+        # delay antes da 2ª e 3ª chamada (não antes da 1ª)
+        assert mock_time.sleep.call_count == 2
+        mock_time.sleep.assert_called_with(0.2)  # 200 ms → 0.2 s
+
+
+# ---------------------------------------------------------------------------
 # Performance — conferência não escala consultas por contrato
 # ---------------------------------------------------------------------------
 

@@ -21,6 +21,7 @@ from datetime import timedelta
 from dateutil.relativedelta import relativedelta
 from decimal import Decimal
 import logging
+import time
 
 from django.core.cache import cache
 from .models import Parcela, Reajuste, StatusBoleto, HistoricoPagamento, TipoParcela
@@ -2660,6 +2661,13 @@ def boletos_painel_gerar(request):
     boletos_gerados = []
     por_imob = defaultdict(lambda: {'gerados': 0, 'bloqueados': 0, 'erros': 0})
 
+    # Pacing: intervalo mínimo entre chamadas individuais à API para evitar 429 no Render free tier.
+    # Configurável via BRCOBRANCA_INTER_BOLETO_DELAY_MS (padrão 100 ms).
+    from django.conf import settings as _dj_settings
+    _inter_delay = getattr(_dj_settings, 'BRCOBRANCA_INTER_BOLETO_DELAY_MS', 100) / 1000
+    _rate_limit_abort = False
+    _total_boleto_calls = 0
+
     for contrato, parcelas, intermediarias in contratos_alvo:
         imob_nome = contrato.imobiliaria.nome
         geradas_contrato = []
@@ -2691,6 +2699,9 @@ def boletos_painel_gerar(request):
                               'erro': f'Intermediária {it.pk}: {e}'})
 
         for parcela in alvos:
+            if _total_boleto_calls > 0 and _inter_delay > 0:
+                time.sleep(_inter_delay)
+            _total_boleto_calls += 1
             try:
                 resultado = parcela.gerar_boleto(conta_bancaria=conta_bancaria, enviar_email=False)
                 if resultado and resultado.get('sucesso'):
@@ -2719,6 +2730,12 @@ def boletos_painel_gerar(request):
                         'token_publico': str(parcela.token_publico),
                     })
                 else:
+                    # Rate limit esgotado: abortar as demais gerações desta rodada.
+                    # Os boletos já gerados são preservados; o usuário pode tentar
+                    # novamente em instantes para as parcelas restantes.
+                    if resultado and resultado.get('rate_limited'):
+                        _rate_limit_abort = True
+                        break
                     total_erros += 1
                     por_imob[imob_nome]['erros'] += 1
                     erros.append({'parcela_id': parcela.pk, 'contrato': contrato.numero_contrato,
@@ -2728,6 +2745,9 @@ def boletos_painel_gerar(request):
                 total_erros += 1
                 por_imob[imob_nome]['erros'] += 1
                 erros.append({'parcela_id': parcela.pk, 'contrato': contrato.numero_contrato, 'erro': str(e)})
+
+        if _rate_limit_abort:
+            break
 
         if ultimo_mes_atualizado:
             contrato.save(update_fields=['ultimo_mes_boleto_gerado'])
@@ -2756,6 +2776,7 @@ def boletos_painel_gerar(request):
         'tipo': tipo,
         'carnes': carnes,
         'boletos': boletos_gerados,
+        'rate_limit_abort': _rate_limit_abort,
     })
 
 
