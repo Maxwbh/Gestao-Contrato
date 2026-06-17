@@ -37,11 +37,40 @@ class TestGerarDadosTeste:
 
 @pytest.mark.django_db
 class TestGerarDadosTestePassos:
-    """Testes dos novos flags de passo isolado --so-remessa, --so-retorno, --so-logos"""
+    """Testes dos novos flags de passo isolado --so-boletos, --so-remessa, --so-retorno, --so-logos"""
 
     def _setup_base(self):
         """Gera dados base (Passo 1) para os demais passos."""
         call_command('gerar_dados_teste', stdout=StringIO())
+
+    def test_so_boletos_sem_dados_nao_falha(self):
+        """--so-boletos com banco vazio deve reportar erro sem lançar exceção."""
+        out = StringIO()
+        try:
+            call_command('gerar_dados_teste', so_boletos=True, stdout=out)
+        except SystemExit as e:
+            assert e.code == 0
+
+    def test_so_boletos_com_dados_executa(self):
+        """--so-boletos após dados base executa sem erro."""
+        self._setup_base()
+        out = StringIO()
+        call_command('gerar_dados_teste', so_boletos=True, stdout=out)
+        saida = out.getvalue()
+        assert isinstance(saida, str)
+
+    def test_limpar_remove_evento_cobranca_api(self):
+        """--limpar deve remover EventoCobrancaApi mesmo com FK SET_NULL."""
+        from financeiro.models import EventoCobrancaApi
+        self._setup_base()
+        # Criar um EventoCobrancaApi orphan (parcela=None) para simular resíduo
+        EventoCobrancaApi.objects.create(
+            cobranca_id='cob-limpar-test',
+            parcela=None,
+        )
+        assert EventoCobrancaApi.objects.filter(cobranca_id='cob-limpar-test').exists()
+        call_command('gerar_dados_teste', limpar=True, stdout=StringIO())
+        assert not EventoCobrancaApi.objects.filter(cobranca_id='cob-limpar-test').exists()
 
     def test_so_remessa_sem_dados_nao_falha(self):
         """--so-remessa com banco vazio não deve lançar exceção."""

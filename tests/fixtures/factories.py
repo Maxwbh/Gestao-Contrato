@@ -142,8 +142,10 @@ class ContaBancariaFactory(DjangoModelFactory):
     descricao = 'Conta Principal'
     agencia = factory.Sequence(lambda n: f'{n:04d}')
     conta = factory.Sequence(lambda n: f'{n:08d}')
-    convenio = factory.Sequence(lambda n: f'{n:07d}')
+    convenio = factory.Sequence(lambda n: f'{n:08d}')  # BB: 8 dígitos
     carteira = '18'
+    layout_cnab = 'CNAB_240'
+    nosso_numero_atual = 1
     principal = True
     ativo = True
 

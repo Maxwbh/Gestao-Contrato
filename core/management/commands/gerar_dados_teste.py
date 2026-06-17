@@ -295,6 +295,13 @@ class Command(BaseCommand):
         _safe_delete(ArquivoRemessa, 'financeiro_arquivoremessa')
         _safe_delete(ArquivoRetorno, 'financeiro_arquivoretorno')
 
+        # Boleto-API: FK parcela usa SET_NULL → não cascateia ao deletar Parcela
+        try:
+            from financeiro.models import EventoCobrancaApi
+            _safe_delete(EventoCobrancaApi, 'financeiro_eventocobrancaapi')
+        except ImportError:
+            pass
+
         # Notificações (registros de envio + templates padrão)
         try:
             from notificacoes.models import Notificacao, TemplateNotificacao
@@ -1811,10 +1818,9 @@ class Command(BaseCommand):
             from financeiro.models import Parcela as _Parcela
             from collections import defaultdict
             grupos_layout = defaultdict(list)
-            for pid in parcela_ids:
-                p = _Parcela.objects.select_related('conta_bancaria').get(pk=pid)
+            for p in _Parcela.objects.select_related('conta_bancaria').filter(pk__in=parcela_ids):
                 layout = getattr(p.conta_bancaria, 'layout_cnab', 'CNAB_400') or 'CNAB_400'
-                grupos_layout[layout].append(pid)
+                grupos_layout[layout].append(p.pk)
 
             for layout, ids in grupos_layout.items():
                 resultado = service.gerar_remessas_por_escopo(
