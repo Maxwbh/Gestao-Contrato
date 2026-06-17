@@ -485,6 +485,12 @@ class CNABService:
                     p0.get('data_vencimento'), p0.get('data_emissao')
                 )
 
+            # Cooldown pós-geração de boletos: se a remessa foi acionada logo
+            # após um burst de geração (HU-24 → HU-23, requests encadeados),
+            # aguarda a cota do rate limit se recuperar antes do primeiro POST.
+            from .brcobranca_throttle import aguardar_cooldown_remessa
+            aguardar_cooldown_remessa()
+
             # Retry automático em 429 (rate limit): backoff exponencial configurável
             _response = None
             _t0 = time.monotonic()

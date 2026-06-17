@@ -2558,6 +2558,11 @@ def boletos_painel(request):
         incluir_intermediarias=True,
     )
 
+    # Estimativa de tempo para a barra de progresso (front): pacing entre chamadas
+    # + tempo médio de resposta da API por boleto. Apenas indicativo.
+    _delay_s = getattr(_settings, 'BRCOBRANCA_INTER_BOLETO_DELAY_MS', 100) / 1000
+    _tempo_por_boleto = round(_delay_s + getattr(_settings, 'BRCOBRANCA_TEMPO_API_BOLETO_S', 1.8), 2)
+
     context = {
         'grupos': conf['grupos'],
         'kpis': conf['kpis'],
@@ -2567,6 +2572,7 @@ def boletos_painel(request):
         'filtro_ano': ano,
         'filtro_quantidade': quantidade,
         'hoje': timezone.localdate(),
+        'tempo_por_boleto_s': _tempo_por_boleto,
     }
     return render(request, 'financeiro/boletos/geracao_painel.html', context)
 

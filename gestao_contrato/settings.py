@@ -352,6 +352,14 @@ BRCOBRANCA_URL = config('BRCOBRANCA_URL', default='http://localhost:9292')
 BRCOBRANCA_TIMEOUT = 60
 BRCOBRANCA_MAX_TENTATIVAS = 3
 BRCOBRANCA_DELAY_INICIAL = 2
+# Espera máxima por tentativa ao tratar 429 na remessa (respeita Retry-After, com teto)
+BRCOBRANCA_DELAY_MAX_429 = config('BRCOBRANCA_DELAY_MAX_429', default=8, cast=int)
+# Pacing entre chamadas individuais de geração de boleto (ms) — reduz burst no Render free tier
+BRCOBRANCA_INTER_BOLETO_DELAY_MS = config('BRCOBRANCA_INTER_BOLETO_DELAY_MS', default=100, cast=int)
+# Cooldown (s) entre o último burst de geração de boletos e o POST de remessa (0 desativa)
+BRCOBRANCA_REMESSA_COOLDOWN_S = config('BRCOBRANCA_REMESSA_COOLDOWN_S', default=5, cast=int)
+# Tempo médio (s) de resposta da API por boleto — usado só na estimativa visual de progresso
+BRCOBRANCA_TEMPO_API_BOLETO_S = config('BRCOBRANCA_TEMPO_API_BOLETO_S', default=1.8, cast=float)
 # Tempo máximo de espera (segundos) para o serviço acordar no cold start (Free Tier Render ~90s)
 BRCOBRANCA_COLD_START_WAIT = 120
 # Template de renderização: 'prawn' (Ruby nativo, sem GhostScript — recomendado Render Free 512MB)

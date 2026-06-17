@@ -124,7 +124,11 @@
                 </thead>
                 <tbody>
                     {% for row in grupo.contratos %}
-                    <tr class="{% if row.status == 'BLOQUEADO' %}row-bloqueado{% endif %}">
+                    <tr class="ctr-row {% if row.status == 'BLOQUEADO' %}row-bloqueado{% endif %}"
+                        data-imob="{{ grupo.imobiliaria.pk }}"
+                        data-contrato="{{ row.contrato.pk }}"
+                        data-elegiveis="{{ row.elegiveis }}"
+                        data-intermediarias="{{ row.intermediarias }}">
                         <td class="mono">{{ row.contrato.numero_contrato }}</td>
                         <td class="fw-semibold">{{ row.comprador }}</td>
                         <td class="text-end">{{ row.elegiveis }}</td>
@@ -172,10 +176,31 @@
             </div>
             <div class="modal-body">
                 <div id="resultadoGerar" class="d-none">
-                    <div class="alert alert-success"><strong>Geração concluída!</strong>
+                    <div class="alert" id="alertResultado"><strong id="resultadoTitulo">Geração concluída!</strong>
                         <ul class="mb-0 mt-2 small" id="listaResultado"></ul>
                     </div>
                 </div>
+
+                <!-- Painel de progresso (geração em andamento) -->
+                <div id="progressoGerar" class="d-none text-center py-2">
+                    <div class="mb-2">
+                        <i class="fas fa-file-invoice-dollar fa-2x text-primary"></i>
+                    </div>
+                    <h6 class="fw-bold mb-1" id="progTitulo">Gerando boletos…</h6>
+                    <p class="text-muted small mb-3" id="progSub">
+                        Não feche esta janela. Os boletos são gerados um a um na operadora.
+                    </p>
+                    <div class="progress" style="height:1.1rem;">
+                        <div id="progBar" class="progress-bar progress-bar-striped progress-bar-animated"
+                             role="progressbar" style="width:0%;">0%</div>
+                    </div>
+                    <div class="d-flex justify-content-between small text-muted mt-2">
+                        <span>Decorrido: <strong id="progElapsed">0s</strong></span>
+                        <span>Restante (estim.): <strong id="progRemaining">—</strong></span>
+                    </div>
+                    <div class="small text-muted mt-1" id="progContagem"></div>
+                </div>
+
                 <div id="formGerar">
                     <div class="mb-3">
                         <label class="form-label fw-semibold">Quantidade de boletos por contrato</label>
@@ -211,6 +236,9 @@
 (function () {
     const CSRF = '{{ csrf_token }}';
     const URL_GERAR = "{% url 'financeiro:boletos_painel_gerar' %}";
+    const TEMPO_POR_BOLETO = {{ tempo_por_boleto_s|default:2 }};   // s/boleto (pacing + API)
+    const TOTAL_A_GERAR = {{ kpis.a_gerar|default:0 }};
+    const TOTAL_INTERM = {{ kpis.intermediarias|default:0 }};
     const modalEl = document.getElementById('modalGerar');
     const bsModal = modalEl ? new bootstrap.Modal(modalEl) : null;
 
@@ -218,10 +246,40 @@
     let escopoAtual = 'todos';
     let extraAtual = {};
 
+    // Estima quantos boletos a operação vai gerar (para o tempo previsto).
+    function estimarQtdBoletos(escopo, extra, incluirInter) {
+        let eleg = 0, inter = 0;
+        if (escopo === 'todos') {
+            eleg = TOTAL_A_GERAR; inter = TOTAL_INTERM;
+        } else if (escopo === 'imobiliaria') {
+            document.querySelectorAll(`.ctr-row[data-imob="${extra.imobiliaria_id}"]`).forEach(tr => {
+                eleg += parseInt(tr.dataset.elegiveis, 10) || 0;
+                inter += parseInt(tr.dataset.intermediarias, 10) || 0;
+            });
+        } else if (escopo === 'contratos') {
+            (extra.contrato_ids || []).forEach(id => {
+                const tr = document.querySelector(`.ctr-row[data-contrato="${id}"]`);
+                if (tr) {
+                    eleg += parseInt(tr.dataset.elegiveis, 10) || 0;
+                    inter += parseInt(tr.dataset.intermediarias, 10) || 0;
+                }
+            });
+        }
+        return eleg + (incluirInter ? inter : 0);
+    }
+
+    function fmtDur(seg) {
+        seg = Math.max(0, Math.round(seg));
+        if (seg < 60) return seg + 's';
+        const m = Math.floor(seg / 60), s = seg % 60;
+        return m + 'min' + (s ? ' ' + s + 's' : '');
+    }
+
     function abrirModal(escopo, extra) {
         escopoAtual = escopo;
         extraAtual = extra || {};
         document.getElementById('resultadoGerar').classList.add('d-none');
+        document.getElementById('progressoGerar').classList.add('d-none');
         document.getElementById('formGerar').classList.remove('d-none');
         document.getElementById('btnConfirmarGerar').classList.remove('d-none');
         if (bsModal) bsModal.show();
@@ -252,13 +310,55 @@
         if (type === 'error') alert(msg);
     }
 
+    // ---- Barra de progresso (estimativa baseada em tempo decorrido) ----
+    // A geração é um único POST síncrono que só retorna no fim; por isso a barra
+    // avança pela estimativa de tempo (real = cronômetro) e é finalizada na resposta.
+    let progTimer = null;
+    function iniciarProgresso(qtd) {
+        const elPanel = document.getElementById('progressoGerar');
+        const elBar = document.getElementById('progBar');
+        const elEl = document.getElementById('progElapsed');
+        const elRem = document.getElementById('progRemaining');
+        const elCont = document.getElementById('progContagem');
+        const elSub = document.getElementById('progSub');
+        const estTotal = Math.max(2, qtd * TEMPO_POR_BOLETO);   // s
+        const t0 = Date.now();
+
+        document.getElementById('formGerar').classList.add('d-none');
+        elPanel.classList.remove('d-none');
+        elBar.classList.remove('bg-success', 'bg-danger');
+        elBar.style.width = '0%'; elBar.textContent = '0%';
+        elCont.textContent = qtd ? `${qtd} boleto(s) na fila` : '';
+        elSub.textContent = qtd
+            ? `Tempo estimado: ~${fmtDur(estTotal)}. Não feche esta janela.`
+            : 'Não feche esta janela.';
+
+        progTimer = setInterval(() => {
+            const elapsed = (Date.now() - t0) / 1000;
+            // Avança assintótico até 95% — nunca "completa" antes da resposta real.
+            const frac = Math.min(0.95, elapsed / estTotal);
+            const pct = Math.round(frac * 100);
+            elBar.style.width = pct + '%'; elBar.textContent = pct + '%';
+            elEl.textContent = fmtDur(elapsed);
+            elRem.textContent = fmtDur(Math.max(0, estTotal - elapsed));
+        }, 250);
+    }
+    function finalizarProgresso(ok) {
+        if (progTimer) { clearInterval(progTimer); progTimer = null; }
+        const elBar = document.getElementById('progBar');
+        elBar.classList.remove('progress-bar-animated');
+        elBar.classList.add(ok ? 'bg-success' : 'bg-danger');
+        elBar.style.width = '100%'; elBar.textContent = ok ? 'Concluído' : 'Interrompido';
+    }
+
     const btnConf = document.getElementById('btnConfirmarGerar');
     btnConf.addEventListener('click', async () => {
+        const incluirInter = document.getElementById('gIntermediarias').checked;
         const body = Object.assign({
             escopo: escopoAtual,
             quantidade: parseInt(document.getElementById('gQuantidade').value, 10) || 1,
             tipo: document.getElementById('gTipo').value,
-            incluir_intermediarias: document.getElementById('gIntermediarias').checked,
+            incluir_intermediarias: incluirInter,
         }, extraAtual);
 
         // Verificar e aguardar API de boletos antes de gerar (cold start)
@@ -273,7 +373,10 @@
             return;
         }
 
-        lock(btnConf, 'Gerando...');
+        // Inicia a barra de progresso e esconde o botão de confirmar
+        btnConf.classList.add('d-none');
+        const qtdEst = estimarQtdBoletos(escopoAtual, extraAtual, incluirInter);
+        iniciarProgresso(qtdEst);
 
         try {
             const r = await fetch(URL_GERAR, {
@@ -282,17 +385,29 @@
                 body: JSON.stringify(body),
             });
             const data = await r.json();
-            unlock(btnConf);
+
             if (!data.sucesso) {
+                finalizarProgresso(false);
+                unlock(btnConf); btnConf.classList.remove('d-none');
+                document.getElementById('progressoGerar').classList.add('d-none');
+                document.getElementById('formGerar').classList.remove('d-none');
                 notify(data.erro || 'Falha na geração.', 'error');
                 return;
             }
 
+            finalizarProgresso(!data.rate_limit_abort);
+            document.getElementById('progressoGerar').classList.add('d-none');
+
             // Resumo visual dentro do modal
-            document.getElementById('formGerar').classList.add('d-none');
-            btnConf.classList.add('d-none');
+            const alertBox = document.getElementById('alertResultado');
+            const titulo = document.getElementById('resultadoTitulo');
+            alertBox.className = 'alert ' + (data.rate_limit_abort ? 'alert-warning' : 'alert-success');
+            titulo.textContent = data.rate_limit_abort
+                ? 'Geração interrompida (limite da operadora)' : 'Geração concluída!';
+
             const itens = [
                 `<li><strong>${data.total_gerados}</strong> boleto(s) gerado(s)</li>`,
+                data.rate_limit_abort ? `<li class="text-warning fw-semibold">A operadora atingiu o limite de requisições — a geração parou para não falhar. Aguarde alguns instantes e gere o restante novamente.</li>` : '',
                 data.total_bloqueados ? `<li>${data.total_bloqueados} bloqueado(s) por reajuste — <a href="{% url 'financeiro:reajustes_pendentes' %}">ver pendentes</a></li>` : '',
                 data.total_erros ? `<li class="text-danger">${data.total_erros} erro(s)</li>` : '',
             ];
@@ -303,8 +418,10 @@
             document.getElementById('listaResultado').innerHTML = itens.filter(Boolean).join('');
             document.getElementById('resultadoGerar').classList.remove('d-none');
 
-            // Toast de resumo (sucesso / parcial / sem geração)
-            if (data.total_gerados > 0 && !data.total_erros) {
+            // Toast de resumo (sucesso / parcial / rate limit / sem geração)
+            if (data.rate_limit_abort) {
+                notify(`${data.total_gerados} gerado(s). Limite da operadora atingido — gere o restante em instantes.`, 'warning', 7000);
+            } else if (data.total_gerados > 0 && !data.total_erros) {
                 notify(`${data.total_gerados} boleto(s) gerado(s) com sucesso!`, 'success', 4000);
             } else if (data.total_gerados > 0 && data.total_erros) {
                 notify(`${data.total_gerados} gerado(s), ${data.total_erros} com erro. Veja o detalhe.`, 'warning', 6000);
@@ -316,7 +433,10 @@
 
             setTimeout(() => window.location.reload(), 3500);
         } catch (err) {
-            unlock(btnConf);
+            finalizarProgresso(false);
+            unlock(btnConf); btnConf.classList.remove('d-none');
+            document.getElementById('progressoGerar').classList.add('d-none');
+            document.getElementById('formGerar').classList.remove('d-none');
             notify('Erro de conexão. Verifique sua internet e tente novamente.', 'error');
         }
     });
