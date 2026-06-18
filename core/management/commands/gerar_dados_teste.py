@@ -295,6 +295,13 @@ class Command(BaseCommand):
         _safe_delete(ArquivoRemessa, 'financeiro_arquivoremessa')
         _safe_delete(ArquivoRetorno, 'financeiro_arquivoretorno')
 
+        # Boleto-API: FK parcela usa SET_NULL → não cascateia ao deletar Parcela
+        try:
+            from financeiro.models import EventoCobrancaApi
+            _safe_delete(EventoCobrancaApi, 'financeiro_eventocobrancaapi')
+        except ImportError:
+            pass
+
         # Notificações (registros de envio + templates padrão)
         try:
             from notificacoes.models import Notificacao, TemplateNotificacao
@@ -406,16 +413,17 @@ class Command(BaseCommand):
     def criar_contas_bancarias(self, imobiliarias):
         """
         Cria Contas Bancárias para cada imobiliária.
-        Configura os campos obrigatórios conforme documentação BRCobranca.
+
+        BB e Bradesco: fluxo CNAB/BRCobrança (provider=brcobranca).
+        Sicoob e C6:   cobrança registrada via Boleto-API (provider=sicoob/c6),
+                       com account_config e tenant_id de demonstração.
         """
         contas = []
 
-        # Configuração para BB, Sicoob, Bradesco e C6 Bank
-        # layout_cnab respeita o suporte real de cada banco (financeiro.services.bancos):
-        #   BB → 240/400 | Sicoob → 240/400 | Bradesco → 400 | C6 → 400
+        # layout_cnab: BB → 240/400 | Sicoob → 240 | Bradesco → 400 | C6 → 400
         bancos_config = [
             {
-                'banco': '001',  # Banco do Brasil
+                'banco': '001',  # Banco do Brasil — CNAB/BRCobrança
                 'descricao': 'Conta Principal BB',
                 'agencia': '3073',
                 'agencia_dv': '0',
@@ -425,68 +433,80 @@ class Command(BaseCommand):
                 'carteira': '18',
                 'layout_cnab': 'CNAB_240',
                 'nosso_numero_atual': 1,
+                'provider': 'brcobranca',
+                'account_config': None,
             },
             {
-                'banco': '756',  # Sicoob
+                'banco': '756',  # Sicoob — cobrança registrada via Boleto-API
                 'descricao': 'Conta Sicoob',
                 'agencia': '3073',
                 'agencia_dv': '0',
-                'conta': '12345678',  # max 8 dígitos
+                'conta': '12345678',
                 'conta_dv': '5',
                 'convenio': '123456789',  # 9 dígitos (remessa exige 9; boleto usa os 7 primeiros)
                 'carteira': '01',
                 'layout_cnab': 'CNAB_240',
                 'nosso_numero_atual': 1,
+                'provider': 'sicoob',
+                'account_config': {
+                    'cooperativa': '3073',
+                    'conta': '12345678',
+                    'numeroCliente': '123456789',
+                    'codigoModalidade': '1',
+                },
             },
             {
-                'banco': '237',  # Bradesco (apenas CNAB 400)
+                'banco': '237',  # Bradesco — CNAB/BRCobrança (CNAB 400)
                 'descricao': 'Conta Bradesco',
                 'agencia': '1234',
                 'agencia_dv': '5',
-                'conta': '1234567',  # max 7 dígitos
+                'conta': '1234567',
                 'conta_dv': '0',
                 'convenio': '',
                 'carteira': '06',
                 'layout_cnab': 'CNAB_400',
                 'nosso_numero_atual': 1,
+                'provider': 'brcobranca',
+                'account_config': None,
             },
             {
-                'banco': '336',  # C6 Bank (apenas CNAB 400)
+                'banco': '336',  # C6 Bank — cobrança registrada via Boleto-API
                 'descricao': 'Conta C6 Bank',
                 'agencia': '1234',
                 'agencia_dv': '5',
-                'conta': '12345678',  # max 8 dígitos
+                'conta': '12345678',
                 'conta_dv': '9',
                 'convenio': '123456789012',  # código do beneficiário (até 12 dígitos)
-                'carteira': '10',            # 10=emissão banco, 20=emissão cliente
+                'carteira': '10',
                 'layout_cnab': 'CNAB_400',
                 'nosso_numero_atual': 1,
+                'provider': 'c6',
+                'account_config': {
+                    'agencia': '1234',
+                    'conta': '12345678',
+                    'convenio': '123456789012',
+                },
             },
         ]
 
         # Banco principal: o escolhido via --banco, ou BB (primeiro da lista)
         banco_principal = self.banco_unico or bancos_config[0]['banco']
 
-        for imobiliaria in imobiliarias:
-            # Criar todas as contas (BB, Sicoob, Bradesco, C6) para cada imobiliária
+        for imob_idx, imobiliaria in enumerate(imobiliarias):
             for config in bancos_config:
                 eh_principal = (config['banco'] == banco_principal)
+                provider = config.get('provider', 'brcobranca')
 
-                # Mesclar agencia_dv com agencia se fornecido
+                # tenant_id único por imobiliária + banco (Boleto-API precisa; CNAB fica vazio)
+                tenant_id = f'imob{imob_idx + 1}-{config["banco"]}' if provider != 'brcobranca' else ''
+
                 agencia = config.get('agencia', '')
                 agencia_dv = config.get('agencia_dv', '')
-                if agencia and agencia_dv:
-                    agencia_completa = f"{agencia}-{agencia_dv}"
-                else:
-                    agencia_completa = agencia
+                agencia_completa = f"{agencia}-{agencia_dv}" if agencia and agencia_dv else agencia
 
-                # Mesclar conta_dv com conta se fornecido
                 conta_numero = config.get('conta', '')
                 conta_dv = config.get('conta_dv', '')
-                if conta_numero and conta_dv:
-                    conta_completa = f"{conta_numero}-{conta_dv}"
-                else:
-                    conta_completa = conta_numero
+                conta_completa = f"{conta_numero}-{conta_dv}" if conta_numero and conta_dv else conta_numero
 
                 conta, criada = ContaBancaria.objects.get_or_create(
                     imobiliaria=imobiliaria,
@@ -504,13 +524,25 @@ class Command(BaseCommand):
                         prazo_protesto=0,
                         layout_cnab=config.get('layout_cnab', 'CNAB_240'),
                         numero_remessa_cnab_atual=1,
+                        provider=provider,
+                        tenant_id=tenant_id,
+                        account_config=config.get('account_config'),
                         ativo=True,
                     )
                 )
-                # Conta já existia: garantir que o flag principal reflita o banco escolhido
-                if not criada and conta.principal != eh_principal:
-                    conta.principal = eh_principal
-                    conta.save(update_fields=['principal'])
+
+                if not criada:
+                    # Sincroniza campos que podem ter mudado entre execuções
+                    update_fields = []
+                    if conta.principal != eh_principal:
+                        conta.principal = eh_principal
+                        update_fields.append('principal')
+                    if conta.provider != provider:
+                        conta.provider = provider
+                        update_fields.append('provider')
+                    if update_fields:
+                        conta.save(update_fields=update_fields)
+
                 contas.append(conta)
 
         return contas
@@ -949,6 +981,7 @@ class Command(BaseCommand):
                 nosso_numero='',
                 nosso_numero_formatado='',
                 nosso_numero_dv='',
+                cobranca_id='',  # Boleto-API: limpar junto com campos CNAB
                 boleto_pdf_db=b'',
                 data_geracao_boleto=None,
             )
@@ -1022,32 +1055,45 @@ class Command(BaseCommand):
             self.stdout.write('   Nenhuma parcela elegível para boleto.')
             return 0
 
-        # ── Fase 2: Geração real ou simulada ─────────────────────────────────
+        # ── Fase 2: Separar por provedor ─────────────────────────────────────
+        # Boleto-API (Sicoob/C6): sempre simulado em modo setup — gateway real
+        # não está disponível durante a geração de dados de demonstração.
+        # BRCobrança (BB/Bradesco): usa API real se disponível, fallback simulado.
+        pares_cnab = [(p, c) for p, c in pares if getattr(c, 'provider', 'brcobranca') == 'brcobranca']
+        pares_api  = [(p, c) for p, c in pares if getattr(c, 'provider', 'brcobranca') != 'brcobranca']
+
         from financeiro.services.boleto_service import BoletoService
         service = BoletoService()
+        api_disponivel = service.verificar_api_disponivel()
+        count = 0
 
-        if service.verificar_api_disponivel():
-            total_lotes = (len(pares) + 14) // 15
+        if pares_cnab:
+            if api_disponivel:
+                total_lotes = (len(pares_cnab) + 14) // 15
+                self.stdout.write(
+                    f'   → BRCobrança disponível — {len(pares_cnab)} boletos CNAB '
+                    f'em lotes de 15 ({total_lotes} chamadas)...'
+                )
+                for i in range(0, len(pares_cnab), 15):
+                    num_lote = i // 15 + 1
+                    self.stdout.write(f'Gerando boletos reais — lote {num_lote}/{total_lotes}...')
+                    resultado = service.gerar_boletos_lote(pares_cnab[i:i + 15], tamanho_lote=15)
+                    count += resultado['gerados']
+                    for e in resultado['erros']:
+                        self.stdout.write(self.style.WARNING(f'   ⚠ {e}'))
+            else:
+                self.stdout.write(
+                    f'   → BRCobrança indisponível — simulando {len(pares_cnab)} boletos CNAB...'
+                )
+                count += self._gerar_boletos_simulados(pares_cnab)
+
+        if pares_api:
+            providers = sorted({getattr(c, 'provider', '?') for _, c in pares_api})
             self.stdout.write(
-                f'   → API BRCobrança disponível — gerando {len(pares)} boletos reais '
-                f'em lotes de 15 ({total_lotes} chamadas)...'
+                f'   → Boleto-API ({", ".join(providers)}) — simulando '
+                f'{len(pares_api)} boletos registrados...'
             )
-            # Um lote por chamada COM stdout entre eles: cada linha vira
-            # heartbeat do job assíncrono — sem isso, a geração via API
-            # (cold start + PDFs) fica minutos sem sinal de progresso
-            count = 0
-            for i in range(0, len(pares), 15):
-                num_lote = i // 15 + 1
-                self.stdout.write(f'Gerando boletos reais — lote {num_lote}/{total_lotes}...')
-                resultado = service.gerar_boletos_lote(pares[i:i + 15], tamanho_lote=15)
-                count += resultado['gerados']
-                for e in resultado['erros']:
-                    self.stdout.write(self.style.WARNING(f'   ⚠ {e}'))
-        else:
-            self.stdout.write(
-                f'   → API BRCobrança indisponível — simulando {len(pares)} boletos localmente...'
-            )
-            count = self._gerar_boletos_simulados(pares)
+            count += self._gerar_boletos_simulados(pares_api)
 
         # ── Fase 3: Estatísticas por banco ────────────────────────────────────
         from financeiro.models import Parcela, StatusBoleto as SB
@@ -1056,15 +1102,24 @@ class Command(BaseCommand):
                 conta_bancaria=cb, status_boleto=SB.GERADO, pago=False
             ).count()
             if qtd > 0:
-                label = 'boletos reais' if service.verificar_api_disponivel() else 'boletos simulados'
+                provider = getattr(cb, 'provider', 'brcobranca')
+                if provider != 'brcobranca':
+                    label = f'boletos simulados ({provider})'
+                elif api_disponivel:
+                    label = 'boletos reais'
+                else:
+                    label = 'boletos simulados CNAB'
                 self.stdout.write(f'   → {cb.get_banco_display()} ({cb.banco}): {qtd} {label}')
 
         return count
 
     def _gerar_boletos_simulados(self, pares):
         """
-        Fallback quando a API BRCobrança está indisponível.
-        Popula os campos de boleto sem gerar PDF — dados suficientes para remessa CNAB.
+        Simula campos de boleto sem chamar APIs externas.
+
+        - BRCobrança (provider=brcobranca): popula nosso_numero no formato CNAB.
+        - Boleto-API (provider=sicoob/c6): popula cobranca_id simulado + nosso_numero
+          (o banco também devolve nosso_numero no CobrancaOut real).
         """
         from financeiro.models import Parcela, StatusBoleto
         from django.utils import timezone as tz
@@ -1077,29 +1132,38 @@ class Command(BaseCommand):
             if parcela.pago:
                 continue
 
+            provider = getattr(conta, 'provider', 'brcobranca')
             conta.nosso_numero_atual += 1
             seq_str = str(conta.nosso_numero_atual).zfill(9)
 
-            if conta.banco == '001' and conta.convenio:
-                nosso_numero_fmt = str(conta.convenio).zfill(8) + seq_str
+            if provider != 'brcobranca':
+                # Boleto-API: cobranca_id é o identificador principal de conciliação push.
+                # nosso_numero é retornado pelo banco no CobrancaOut (simulado aqui).
+                parcela.cobranca_id = f'sim-{conta.banco}-{seq_str}'
+                parcela.nosso_numero = seq_str
+                parcela.nosso_numero_formatado = seq_str
+                parcela.nosso_numero_dv = ''
             else:
-                nosso_numero_fmt = seq_str.zfill(10)
+                # BRCobrança/CNAB: formato nosso_numero varia por banco
+                if conta.banco == '001' and conta.convenio:
+                    nosso_numero_fmt = str(conta.convenio).zfill(8) + seq_str
+                else:
+                    nosso_numero_fmt = seq_str.zfill(10)
+                parcela.nosso_numero = nosso_numero_fmt
+                parcela.nosso_numero_formatado = nosso_numero_fmt
+                parcela.nosso_numero_dv = ''
 
             parcela.conta_bancaria = conta
             parcela.status_boleto = StatusBoleto.GERADO
-            parcela.nosso_numero = nosso_numero_fmt
-            parcela.nosso_numero_formatado = nosso_numero_fmt
-            parcela.nosso_numero_dv = ''
             parcela.numero_documento = parcela.gerar_numero_documento()
             parcela.data_geracao_boleto = hoje
             a_atualizar.append(parcela)
             contas_modificadas[conta.pk] = conta
 
-        # bulk_update: saves individuais multiplicam round-trips em banco remoto
         Parcela.objects.bulk_update(a_atualizar, [
             'conta_bancaria', 'status_boleto', 'nosso_numero',
             'nosso_numero_formatado', 'nosso_numero_dv',
-            'numero_documento', 'data_geracao_boleto',
+            'cobranca_id', 'numero_documento', 'data_geracao_boleto',
         ], batch_size=500)
 
         for conta_mod in contas_modificadas.values():
@@ -1791,12 +1855,14 @@ class Command(BaseCommand):
         service = CNABService()
         count = 0
 
-        # Coletar IDs de boletos GERADO não pagos ainda sem remessa
+        # Coletar IDs de boletos GERADO não pagos ainda sem remessa.
+        # Contas Boleto-API (Sicoob/C6) não usam CNAB — conciliação é por webhook.
         parcela_ids = list(
             Parcela.objects.filter(
                 status_boleto=StatusBoleto.GERADO,
                 pago=False,
                 nosso_numero__gt='',
+                conta_bancaria__provider='brcobranca',
             ).exclude(
                 itens_remessa__isnull=False
             ).values_list('pk', flat=True)
@@ -1811,10 +1877,9 @@ class Command(BaseCommand):
             from financeiro.models import Parcela as _Parcela
             from collections import defaultdict
             grupos_layout = defaultdict(list)
-            for pid in parcela_ids:
-                p = _Parcela.objects.select_related('conta_bancaria').get(pk=pid)
+            for p in _Parcela.objects.select_related('conta_bancaria').filter(pk__in=parcela_ids):
                 layout = getattr(p.conta_bancaria, 'layout_cnab', 'CNAB_400') or 'CNAB_400'
-                grupos_layout[layout].append(pid)
+                grupos_layout[layout].append(p.pk)
 
             for layout, ids in grupos_layout.items():
                 resultado = service.gerar_remessas_por_escopo(
@@ -1853,7 +1918,11 @@ class Command(BaseCommand):
         itens_criados = 0
 
         for conta in contas_bancarias:
-            # Boletos GERADO com nosso_numero para simular retorno bancário
+            # Boleto-API (Sicoob/C6): conciliação via webhook push, não CNAB retorno
+            if getattr(conta, 'provider', 'brcobranca') != 'brcobranca':
+                continue
+
+            # Boletos GERADO com nosso_numero para simular retorno bancário CNAB
             boletos = list(
                 Parcela.objects.filter(
                     conta_bancaria=conta,
@@ -1977,10 +2046,12 @@ class Command(BaseCommand):
         )
         from django.utils import timezone as tz
 
+        # Contas Boleto-API não usam CNAB remessa — conciliação é por webhook push
         parcelas_qs = Parcela.objects.filter(
             status_boleto=StatusBoleto.GERADO,
             pago=False,
             nosso_numero__gt='',
+            conta_bancaria__provider='brcobranca',
         ).exclude(
             itens_remessa__isnull=False
         ).select_related('conta_bancaria').order_by('data_vencimento')

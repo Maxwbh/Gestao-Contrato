@@ -370,6 +370,15 @@ BRCOBRANCA_TEMPLATE = config('BRCOBRANCA_TEMPLATE', default='prawn')
 # Deixe vazio para desabilitar a validação (não recomendado em produção)
 PIX_WEBHOOK_TOKEN = config('PIX_WEBHOOK_TOKEN', default='')
 
+# Boleto-API gateway (cobrança registrada C6/Sicoob)
+BOLETO_API_URL = config('BOLETO_API_URL', default='http://localhost:8001')
+BOLETO_API_TIMEOUT = config('BOLETO_API_TIMEOUT', default=30, cast=int)
+BOLETO_API_MAX_TENTATIVAS = config('BOLETO_API_MAX_TENTATIVAS', default=3, cast=int)
+BOLETO_API_DELAY_INICIAL = config('BOLETO_API_DELAY_INICIAL', default=2, cast=int)
+# Segredo HMAC compartilhado entre Django e Boleto-API para assinar eventos push.
+# Deve ser o mesmo valor em EVENT_WEBHOOK_SECRET no Boleto-API.
+EVENT_WEBHOOK_SECRET = config('EVENT_WEBHOOK_SECRET', default='')
+
 # 34.5 — Relatórios agendados e BI
 # Token para o endpoint público de exportação para Power BI / Looker
 BI_API_TOKEN = config('BI_API_TOKEN', default='')

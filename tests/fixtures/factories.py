@@ -142,10 +142,28 @@ class ContaBancariaFactory(DjangoModelFactory):
     descricao = 'Conta Principal'
     agencia = factory.Sequence(lambda n: f'{n:04d}')
     conta = factory.Sequence(lambda n: f'{n:08d}')
-    convenio = factory.Sequence(lambda n: f'{n:07d}')
+    convenio = factory.Sequence(lambda n: f'{n:08d}')  # BB: 8 dígitos
     carteira = '18'
+    layout_cnab = 'CNAB_240'
+    nosso_numero_atual = 1
     principal = True
     ativo = True
+
+
+class ContaBancariaApiFactory(ContaBancariaFactory):
+    """Conta com provedor Boleto-API para testes do fluxo de cobrança registrada."""
+    banco = '756'  # Sicoob por padrão; use banco='336' para C6
+    provider = 'sicoob'
+    tenant_id = factory.Sequence(lambda n: f'imob{n}-sicoob')
+    account_config = factory.LazyFunction(lambda: {
+        'cooperativa': '3073',
+        'conta': '12345678',
+        'numeroCliente': '123456789',
+        'codigoModalidade': '1',
+    })
+    convenio = factory.Sequence(lambda n: f'{n:09d}')
+    carteira = '01'
+    layout_cnab = 'CNAB_240'
 
 
 class ImovelFactory(DjangoModelFactory):

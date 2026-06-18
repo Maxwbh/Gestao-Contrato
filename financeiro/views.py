@@ -9023,6 +9023,139 @@ def webhook_pix(request):
 
 
 # =============================================================================
+# Boleto-API — webhook push de pagamento (payment.confirmed / baixado)
+# =============================================================================
+
+def _processar_evento_cobranca(
+    cobranca_id: str,
+    status_cobranca: str,
+    event: str,
+    paid_at_str: str,
+    valor_str: str,
+    payload_raw: str,
+) -> dict:
+    """
+    Processa um evento push do Boleto-API e dá baixa na parcela se liquidado.
+    Idempotente: evento duplicado retorna 'duplicado' sem re-baixar.
+    """
+    import json as _json_mod
+    from decimal import Decimal as _Dec, InvalidOperation
+    from django.utils import timezone as _tz
+    from .models import Parcela, EventoCobrancaApi
+
+    # Parsear paid_at
+    paid_at = None
+    if paid_at_str:
+        try:
+            from dateutil.parser import parse as _dp
+            paid_at = _tz.make_aware(_dp(paid_at_str)) if _dp(paid_at_str).tzinfo is None else _dp(paid_at_str)
+        except Exception:
+            pass
+
+    valor = None
+    try:
+        valor = _Dec(str(valor_str))
+    except (InvalidOperation, ValueError):
+        pass
+
+    # Idempotência: se já há um evento 'baixado' para este cobranca_id, ignorar.
+    if EventoCobrancaApi.objects.filter(cobranca_id=cobranca_id, status='baixado').exists():
+        evt = EventoCobrancaApi.objects.create(
+            cobranca_id=cobranca_id, event=event, status_cobranca=status_cobranca,
+            paid_at=paid_at, valor=valor, status='duplicado', payload_raw=payload_raw,
+        )
+        return {'status': 'duplicado', 'evento_id': evt.pk}
+
+    # Casar com parcela via cobranca_id
+    parcela = Parcela.objects.filter(cobranca_id=cobranca_id).first()
+    if not parcela:
+        evt = EventoCobrancaApi.objects.create(
+            cobranca_id=cobranca_id, event=event, status_cobranca=status_cobranca,
+            paid_at=paid_at, valor=valor, status='sem_parcela', payload_raw=payload_raw,
+        )
+        logger.warning('[BoletoAPI webhook] cobranca_id=%s sem parcela vinculada', cobranca_id)
+        return {'status': 'sem_parcela', 'evento_id': evt.pk}
+
+    evt = EventoCobrancaApi.objects.create(
+        cobranca_id=cobranca_id, event=event, status_cobranca=status_cobranca,
+        parcela=parcela, paid_at=paid_at, valor=valor,
+        status='recebido', payload_raw=payload_raw,
+    )
+
+    if status_cobranca == 'liquidado':
+        if parcela.pago:
+            evt.status = 'duplicado'
+            evt.save(update_fields=['status'])
+            return {'status': 'duplicado', 'parcela_id': parcela.pk, 'evento_id': evt.pk}
+        try:
+            parcela.registrar_pagamento_boleto(
+                valor_pago=float(valor or 0),
+                data_pagamento=paid_at,
+                banco_pagador='boleto-api',
+                agencia_pagadora='',
+                validar_minimo=False,
+            )
+            evt.status = 'baixado'
+            evt.save(update_fields=['status'])
+            logger.info('[BoletoAPI webhook] parcela pk=%s baixada cobranca_id=%s', parcela.pk, cobranca_id)
+            return {'status': 'baixado', 'parcela_id': parcela.pk, 'evento_id': evt.pk}
+        except Exception as exc:
+            evt.status = 'erro'
+            evt.erro = str(exc)
+            evt.save(update_fields=['status', 'erro'])
+            logger.exception('[BoletoAPI webhook] erro ao baixar parcela pk=%s: %s', parcela.pk, exc)
+            return {'status': 'erro', 'parcela_id': parcela.pk, 'evento_id': evt.pk, 'erro': str(exc)}
+
+    return {'status': 'recebido', 'parcela_id': parcela.pk, 'evento_id': evt.pk}
+
+
+@csrf_exempt
+@require_POST
+def webhook_boleto_api(request):
+    """
+    Recebe eventos push do Boleto-API (payment.confirmed, baixado, etc.).
+
+    Autenticação: X-Signature: sha256=<hmac_sha256(EVENT_WEBHOOK_SECRET, raw_body)>
+    Reutiliza hmac.compare_digest (proteção timing-attack, igual ao webhook PIX).
+    """
+    import hashlib as _hashlib
+    import hmac as _hmac
+    import json as _json_mod
+
+    raw_body = request.body
+    secret = getattr(_settings, 'EVENT_WEBHOOK_SECRET', '')
+    if secret:
+        sig_header = request.headers.get('X-Signature', '')
+        expected = 'sha256=' + _hmac.new(
+            secret.encode(),
+            raw_body,
+            _hashlib.sha256,
+        ).hexdigest()
+        if not _hmac.compare_digest(expected, sig_header):
+            logger.warning('[BoletoAPI webhook] assinatura inválida — rejeitado')
+            return JsonResponse({'erro': 'Assinatura inválida'}, status=401)
+
+    try:
+        payload = _json_mod.loads(raw_body)
+    except (ValueError, _json_mod.JSONDecodeError):
+        return JsonResponse({'erro': 'JSON inválido'}, status=400)
+
+    cobranca_id = str(payload.get('id', '')).strip()
+    if not cobranca_id:
+        return JsonResponse({'erro': 'Campo id ausente'}, status=400)
+
+    resultado = _processar_evento_cobranca(
+        cobranca_id=cobranca_id,
+        status_cobranca=str(payload.get('status', '')).strip(),
+        event=str(payload.get('event', '')).strip(),
+        paid_at_str=str(payload.get('paid_at', '')).strip(),
+        valor_str=str(payload.get('valor', '0')).strip(),
+        payload_raw=_json_mod.dumps(payload, ensure_ascii=False),
+    )
+    return JsonResponse(resultado, status=200)
+
+
+# =============================================================================
 # 34.5 P3 — Relatórios Agendados e Exportação para BI
 # =============================================================================
 

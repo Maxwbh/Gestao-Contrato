@@ -99,6 +99,13 @@ class LayoutCNAB(models.TextChoices):
     CNAB_444 = 'CNAB_444', 'Layout 444 (CNAB 400 + Chave NFE)'
 
 
+class ProviderBoleto(models.TextChoices):
+    """Provedor de emissão de boletos / cobrança registrada."""
+    BRCOBRANCA = 'brcobranca', 'BRCobrança (CNAB local/Docker)'
+    C6 = 'c6', 'C6 Bank (cobrança registrada)'
+    SICOOB = 'sicoob', 'Sicoob (cobrança registrada)'
+
+
 class Imobiliaria(TimeStampedModel):
     """Modelo para representar a Imobiliária/Beneficiário do contrato (PF ou PJ)"""
 
@@ -529,6 +536,35 @@ class ContaBancaria(TimeStampedModel):
         default=True,
         verbose_name='Cobrança Registrada'
     )
+
+    # Boleto-API: provedor de cobrança registrada (flag de feature por conta)
+    # 'brcobranca' (padrão) mantém o fluxo CNAB atual; 'c6'/'sicoob' ativam
+    # o fluxo de cobrança registrada via gateway Boleto-API.
+    provider = models.CharField(
+        max_length=20,
+        choices=ProviderBoleto.choices,
+        default=ProviderBoleto.BRCOBRANCA,
+        verbose_name='Provedor de Cobrança',
+        help_text='BRCobrança = fluxo CNAB atual; C6/Sicoob = cobrança registrada via Boleto-API.',
+    )
+    account_config = models.JSONField(
+        null=True,
+        blank=True,
+        verbose_name='Config. da Conta (Boleto-API)',
+        help_text=(
+            'Parâmetros bancários sem segredos para o Boleto-API. '
+            'C6: {"agencia","conta","convenio"}. '
+            'Sicoob: {"cooperativa","conta","numeroCliente","codigoModalidade"}. '
+            'Credenciais (client_id/secret/.pfx) ficam no cofre do Boleto-API.'
+        ),
+    )
+    tenant_id = models.CharField(
+        max_length=100,
+        blank=True,
+        verbose_name='Tenant ID (Boleto-API)',
+        help_text='Identificador do tenant no Boleto-API. Obrigatório para provedores registrados.',
+    )
+
     prazo_baixa = models.IntegerField(
         default=0,
         verbose_name='Prazo para Baixa (dias)',

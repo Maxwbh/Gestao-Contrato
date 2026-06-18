@@ -222,6 +222,11 @@ urlpatterns = [
     path('webhook/pix/', views.webhook_pix, name='webhook_pix'),
 
     # ==========================================================================
+    # Boleto-API — webhook push de pagamento (X-Signature: sha256=<hmac>)
+    # ==========================================================================
+    path('webhooks/boleto-api/', views.webhook_boleto_api, name='webhook_boleto_api'),
+
+    # ==========================================================================
     # 34.5 P3 — Relatórios Agendados e Exportação para BI
     # ==========================================================================
     # 34.5.3: endpoint público (token) para Power BI / Looker
