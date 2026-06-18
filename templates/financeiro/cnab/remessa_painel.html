@@ -272,7 +272,8 @@
     }
 
     function gerar(escopo, extra, btn) {
-        lockBtn(btn, 'Gerando...');
+        // Pode aguardar o cooldown da operadora (logo após gerar boletos) + retries.
+        lockBtn(btn, 'Gerando remessa…');
         post(URL_GERAR, Object.assign({ escopo: escopo }, extra || {})).then(({ ok, data }) => {
             if (!ok || !data.sucesso) {
                 alert(data.erro || 'Falha ao gerar remessa.');

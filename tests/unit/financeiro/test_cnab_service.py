@@ -334,6 +334,58 @@ class TestCNABServiceIntegracao(TestCase):
         self.assertFalse(resultado['sucesso'])
         self.assertIn('erro', resultado)
 
+    @patch('financeiro.services.cnab_service.time.sleep')
+    @patch('requests.post')
+    def test_remessa_429_persistente_mensagem_amigavel(self, mock_post, mock_sleep):
+        """429 persistente: mensagem amigável de rate limit (não 'API fora do ar')
+        e sem dormir após a última tentativa."""
+        from financeiro.models import Parcela, StatusBoleto
+
+        resp = MagicMock()
+        resp.status_code = 429
+        resp.text = 'Too Many Requests'
+        resp.headers = {}
+        mock_post.return_value = resp
+
+        service = CNABService()
+        parcelas = list(Parcela.objects.filter(
+            contrato=self.contrato, status_boleto=StatusBoleto.GERADO, pago=False
+        )[:2])
+
+        resultado = service.gerar_remessa(parcelas, self.conta_bancaria, layout='CNAB_240')
+
+        self.assertFalse(resultado['sucesso'])
+        self.assertIn('sobrecarregada', resultado['erro'].lower())
+        # 3 tentativas → tenta 3 vezes, mas dorme só entre elas (2 vezes)
+        self.assertEqual(mock_post.call_count, service.max_tentativas)
+        self.assertEqual(mock_sleep.call_count, service.max_tentativas - 1)
+
+    @patch('financeiro.services.cnab_service.time.sleep')
+    @patch('requests.post')
+    def test_remessa_429_respeita_retry_after_limitado(self, mock_post, mock_sleep):
+        """429 com Retry-After: respeita o header, limitado a delay_max_429, e
+        tem sucesso na tentativa seguinte."""
+        from financeiro.models import Parcela, StatusBoleto
+
+        r429 = MagicMock()
+        r429.status_code = 429
+        r429.text = 'Too Many Requests'
+        r429.headers = {'Retry-After': '999'}  # exagerado → deve ser limitado
+        r200 = MagicMock()
+        r200.status_code = 200
+        r200.content = b'ARQUIVO REMESSA\n'
+        mock_post.side_effect = [r429, r200]
+
+        service = CNABService()
+        parcelas = list(Parcela.objects.filter(
+            contrato=self.contrato, status_boleto=StatusBoleto.GERADO, pago=False
+        )[:2])
+
+        resultado = service.gerar_remessa(parcelas, self.conta_bancaria, layout='CNAB_240')
+
+        self.assertTrue(resultado['sucesso'], resultado.get('erro'))
+        mock_sleep.assert_called_once_with(service.delay_max_429)  # 999 limitado ao teto
+
     @patch('requests.post')
     def test_gerar_remessa_api_indisponivel_retorna_falha(self, mock_post):
         """Testa que ConnectionError com API retorna sucesso=False com mensagem de erro"""

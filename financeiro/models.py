@@ -319,6 +319,16 @@ class Parcela(TimeStampedModel):
         help_text='ID de transação PIX (até 35 chars — padrão BCB) usado para reconciliação via webhook'
     )
 
+    # Boleto-API: ID da cobrança registrada no gateway. Usado para conciliação
+    # push (webhook payment.confirmed) em vez de conciliação CNAB/OFX.
+    cobranca_id = models.CharField(
+        max_length=100,
+        blank=True,
+        db_index=True,
+        verbose_name='ID Cobrança (Boleto-API)',
+        help_text='ID retornado pelo Boleto-API ao registrar a cobrança. Usado para casamento no webhook push.',
+    )
+
     class Meta:
         verbose_name = 'Parcela'
         verbose_name_plural = 'Parcelas'
@@ -720,6 +730,98 @@ class Parcela(TimeStampedModel):
         conta_bancaria.save(update_fields=['nosso_numero_atual'])
         return conta_bancaria.nosso_numero_atual
 
+    def _gerar_via_boleto_api(self, conta_bancaria, provider: str, force: bool, enviar_email: bool) -> dict:
+        """
+        Emite cobrança registrada via Boleto-API gateway (C6/Sicoob).
+
+        Chamado por gerar_boleto() quando conta_bancaria.provider != 'brcobranca'.
+        Persiste cobranca_id para conciliação push (webhook).
+        """
+        from financeiro.services.boleto_api_client import BoletoApiClient
+
+        tenant_id = getattr(conta_bancaria, 'tenant_id', '') or ''
+        account_config = getattr(conta_bancaria, 'account_config', None) or {}
+
+        contrato = self.contrato
+        comprador = contrato.comprador
+        cpf_cnpj = ''
+        if hasattr(comprador, 'cnpj') and comprador.cnpj:
+            cpf_cnpj = comprador.cnpj.replace('.', '').replace('/', '').replace('-', '')
+        elif hasattr(comprador, 'cpf') and comprador.cpf:
+            cpf_cnpj = comprador.cpf.replace('.', '').replace('-', '')
+
+        endereco_parts = [
+            getattr(comprador, 'logradouro', None) or getattr(comprador, 'endereco', ''),
+            getattr(comprador, 'numero', ''),
+            getattr(comprador, 'complemento', ''),
+        ]
+        endereco = ', '.join(p for p in endereco_parts if p)
+
+        cobranca_payload: dict = {
+            'valor': float(self.valor_boleto or self.valor_atual or 0),
+            'vencimento': self.data_vencimento.strftime('%Y-%m-%d') if self.data_vencimento else '',
+            'seu_numero': str(self.numero_documento or f'{contrato.numero_contrato}/{self.numero_parcela}'),
+            'pagador': {
+                'nome': comprador.nome[:60],
+                'documento': cpf_cnpj,
+                'endereco': endereco[:80],
+            },
+        }
+
+        # Multa / juros da imobiliária (se configurados)
+        imob = contrato.imobiliaria
+        if getattr(imob, 'percentual_multa_padrao', None):
+            cobranca_payload['multa'] = float(imob.percentual_multa_padrao)
+        if getattr(imob, 'percentual_juros_padrao', None):
+            cobranca_payload['juros'] = float(imob.percentual_juros_padrao)
+
+        client = BoletoApiClient()
+        resultado = client.registrar_cobranca(tenant_id, provider, account_config, cobranca_payload)
+
+        if not resultado.get('sucesso'):
+            return resultado
+
+        # Persistir campos do boleto
+        self.conta_bancaria = conta_bancaria
+        self.cobranca_id = resultado.get('cobranca_id', '')
+        self.nosso_numero = resultado.get('nosso_numero', '')
+        self.nosso_numero_formatado = resultado.get('nosso_numero_formatado', '')
+        self.nosso_numero_dv = resultado.get('nosso_numero_dv', '')
+        self.numero_documento = self.gerar_numero_documento()
+        self.codigo_barras = resultado.get('codigo_barras', '')
+        self.linha_digitavel = resultado.get('linha_digitavel', '')
+        self.valor_boleto = resultado.get('valor', self.valor_atual)
+        # Status REGISTRADO indica cobrança confirmada no banco (acima de apenas GERADO)
+        self.status_boleto = StatusBoleto.REGISTRADO
+        self.data_geracao_boleto = timezone.now()
+
+        if resultado.get('pdf_content'):
+            from django.core.files.base import ContentFile
+            pdf_content = resultado['pdf_content']
+            nome_arquivo = f"boleto_{contrato.numero_contrato}_{self.numero_parcela}.pdf"
+            self.boleto_pdf.save(nome_arquivo, ContentFile(pdf_content), save=False)
+            self.boleto_pdf_db = pdf_content
+
+        if resultado.get('pix_copia_cola'):
+            self.pix_copia_cola = resultado['pix_copia_cola']
+        if not self.pix_txid:
+            self.pix_txid = f'GC{self.contrato_id:07d}P{self.numero_parcela:04d}'
+
+        self.save()
+
+        if enviar_email:
+            try:
+                from notificacoes.boleto_notificacao import BoletoNotificacaoService
+                agendado = BoletoNotificacaoService().agendar_notificacao_boleto_criado(self)
+                resultado['email_enviado'] = 'agendado'
+                resultado['notificacoes_agendadas'] = agendado.get('agendadas', [])
+            except Exception as exc:
+                import logging as _log
+                _log.getLogger(__name__).exception('Erro ao agendar notificação boleto (Boleto-API): %s', exc)
+                resultado['email_enviado'] = 'erro_agendamento'
+
+        return resultado
+
     def gerar_boleto(self, conta_bancaria=None, force=False, enviar_email=True):
         """
         Gera o boleto para esta parcela.
@@ -760,7 +862,13 @@ class Parcela(TimeStampedModel):
         if not conta_bancaria:
             raise ValueError("Nenhuma conta bancária disponível para gerar boleto")
 
-        # Usar o serviço de boleto
+        # Feature flag por conta: provider != 'brcobranca' → cobrança registrada via Boleto-API.
+        # Mantém fluxo CNAB intacto quando desligado (nenhuma mudança de comportamento).
+        provider = getattr(conta_bancaria, 'provider', 'brcobranca') or 'brcobranca'
+        if provider != 'brcobranca':
+            return self._gerar_via_boleto_api(conta_bancaria, provider, force, enviar_email)
+
+        # Usar o serviço de boleto (fluxo CNAB/BRCobrança existente)
         service = BoletoService()
         resultado = service.gerar_boleto(self, conta_bancaria)
 
@@ -2603,3 +2711,73 @@ class EventoPIX(models.Model):
 
     def __str__(self):
         return f'PIX {self.end_to_end_id[:16]}… {self.valor} — {self.get_status_display()}'
+
+
+# =============================================================================
+# Boleto-API — log de eventos push (webhook payment.confirmed / baixado)
+# =============================================================================
+
+class EventoCobrancaApi(models.Model):
+    """
+    Log imutável de cada evento push recebido do Boleto-API.
+
+    Deduplication key: cobranca_id + status (um mesmo boleto pode ter múltiplos
+    eventos, mas 'liquidado' só deve baixar a parcela uma vez).
+    """
+
+    STATUS_CHOICES = [
+        ('recebido', 'Recebido'),
+        ('baixado', 'Parcela baixada'),
+        ('duplicado', 'Duplicado (ignorado)'),
+        ('sem_parcela', 'Sem parcela vinculada'),
+        ('erro', 'Erro no processamento'),
+    ]
+
+    cobranca_id = models.CharField(
+        max_length=100,
+        db_index=True,
+        verbose_name='ID Cobrança',
+    )
+    event = models.CharField(max_length=50, blank=True, verbose_name='Tipo de Evento')
+    status_cobranca = models.CharField(
+        max_length=20, blank=True, verbose_name='Status no Boleto-API',
+    )
+    parcela = models.ForeignKey(
+        'Parcela',
+        null=True, blank=True,
+        on_delete=models.SET_NULL,
+        related_name='eventos_cobranca_api',
+        verbose_name='Parcela',
+    )
+    paid_at = models.DateTimeField(null=True, blank=True, verbose_name='Pago em')
+    valor = models.DecimalField(
+        max_digits=12, decimal_places=2,
+        null=True, blank=True,
+        verbose_name='Valor Pago',
+    )
+    status = models.CharField(
+        max_length=20,
+        choices=STATUS_CHOICES,
+        default='recebido',
+        verbose_name='Status de Processamento',
+    )
+    erro = models.TextField(blank=True, verbose_name='Erro')
+    payload_raw = models.TextField(
+        blank=True,
+        verbose_name='Payload Raw',
+        help_text='JSON completo para auditoria',
+    )
+    recebido_em = models.DateTimeField(auto_now_add=True, verbose_name='Recebido em')
+
+    class Meta:
+        verbose_name = 'Evento Cobrança API'
+        verbose_name_plural = 'Eventos Cobrança API'
+        ordering = ['-recebido_em']
+        indexes = [
+            models.Index(fields=['cobranca_id']),
+            models.Index(fields=['status']),
+            models.Index(fields=['recebido_em']),
+        ]
+
+    def __str__(self):
+        return f'CobrancaAPI {self.cobranca_id} [{self.status_cobranca}] → {self.get_status_display()}'

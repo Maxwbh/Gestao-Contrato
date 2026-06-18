@@ -77,6 +77,9 @@ class CNABService:
         self.timeout = getattr(settings, 'BRCOBRANCA_TIMEOUT', 30)
         self.max_tentativas = getattr(settings, 'BRCOBRANCA_MAX_TENTATIVAS', 3)
         self.delay_inicial = getattr(settings, 'BRCOBRANCA_DELAY_INICIAL', 2)
+        # Espera máxima por tentativa ao tratar 429 (respeitando Retry-After do
+        # servidor sem travar a requisição síncrona da contadora).
+        self.delay_max_429 = getattr(settings, 'BRCOBRANCA_DELAY_MAX_429', 8)
 
     def _get_banco_brcobranca(self, codigo_banco: str) -> str:
         """Retorna o nome do banco para o BRCobranca"""
@@ -482,6 +485,12 @@ class CNABService:
                     p0.get('data_vencimento'), p0.get('data_emissao')
                 )
 
+            # Cooldown pós-geração de boletos: se a remessa foi acionada logo
+            # após um burst de geração (HU-24 → HU-23, requests encadeados),
+            # aguarda a cota do rate limit se recuperar antes do primeiro POST.
+            from .brcobranca_throttle import aguardar_cooldown_remessa
+            aguardar_cooldown_remessa()
+
             # Retry automático em 429 (rate limit): backoff exponencial configurável
             _response = None
             _t0 = time.monotonic()
@@ -502,7 +511,17 @@ class CNABService:
                 )
                 if _response.status_code != 429:
                     break
-                _wait = self.delay_inicial ** _tentativa
+                # Última tentativa: não dorme — sai do laço e trata como erro.
+                if _tentativa >= self.max_tentativas - 1:
+                    break
+                # Respeita o header Retry-After do servidor quando presente
+                # (limitado a delay_max_429 para não travar a requisição);
+                # caso contrário, backoff exponencial.
+                _retry_after = (_response.headers.get('Retry-After') or '').strip()
+                if _retry_after.isdigit():
+                    _wait = min(int(_retry_after), self.delay_max_429)
+                else:
+                    _wait = min(self.delay_inicial ** _tentativa, self.delay_max_429)
                 logger.warning(
                     "[Remessa] BRCobranca 429 (rate limit) conta=%s banco=%s — "
                     "aguardando %ds antes de nova tentativa (%d/%d)",
@@ -600,10 +619,17 @@ class CNABService:
                     response.status_code, descricao_conta, banco, layout,
                     f'{self.brcobranca_url}/api/remessa', erro_body,
                 )
-                erro_msg = (
-                    f'BRCobranca retornou HTTP {response.status_code}. '
-                    'Verifique os logs do servidor e se a API está operacional.'
-                )
+                if response.status_code == 429:
+                    erro_msg = (
+                        'A API de cobrança (BRCobrança) está temporariamente '
+                        'sobrecarregada (limite de requisições atingido). '
+                        'Aguarde alguns instantes e gere a remessa novamente.'
+                    )
+                else:
+                    erro_msg = (
+                        f'BRCobranca retornou HTTP {response.status_code}. '
+                        'Verifique os logs do servidor e se a API está operacional.'
+                    )
                 if arquivo_para_atualizar:
                     arquivo_para_atualizar.marcar_erro(erro_msg)
                 return {

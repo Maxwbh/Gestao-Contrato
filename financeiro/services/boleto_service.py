@@ -1418,6 +1418,11 @@ class BoletoService:
                 if response.status_code != 200:
                     logger.debug(f"Response body: {response.text[:500]}")
 
+                # Marca o uso da API (qualquer status conta para o rate limit do
+                # Render) — base do cooldown boletos → remessa.
+                from .brcobranca_throttle import marcar_uso_boleto
+                marcar_uso_boleto()
+
                 # Sucesso
                 if response.status_code == 200:
                     return self._processar_resposta_sucesso(response, banco_nome, dados_boleto)
@@ -1441,6 +1446,7 @@ class BoletoService:
                         return {
                             'sucesso': False,
                             'erro': 'Serviço de boletos temporariamente sobrecarregado. Tente novamente em instantes.',
+                            'rate_limited': True,
                         }
 
                 # Erros que justificam retry (5xx)

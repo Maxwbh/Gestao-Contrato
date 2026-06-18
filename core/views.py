@@ -312,6 +312,7 @@ def _build_setup_context():
     total_remessas = 0
     total_retornos = 0
     imobiliarias_com_logo = 0
+    boleto_api_count = 0
 
     if has_tables:
         try:
@@ -333,6 +334,9 @@ def _build_setup_context():
             ).count()
             total_remessas = _AR.objects.count()
             total_retornos = _ARet.objects.count()
+            boleto_api_count = _Parcela.objects.filter(
+                pago=False, cobranca_id__gt=''
+            ).count()
         except Exception:
             pass
 
@@ -353,6 +357,7 @@ def _build_setup_context():
         'total_retornos': total_retornos,
         'imobiliarias_com_logo': imobiliarias_com_logo,
         'tem_dados_passo3': tem_dados_passo3,
+        'boleto_api_count': boleto_api_count,
     }
 
 
