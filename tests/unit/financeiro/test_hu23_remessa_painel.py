@@ -129,6 +129,39 @@ class TestElegibilidade:
         )
         assert len(elegiveis) == 3
 
+    def test_exclui_conta_boleto_api(self, base):
+        """Contas Boleto-API (C6/Sicoob) não entram na elegibilidade de remessa CNAB."""
+        from financeiro.services.cnab_service import CNABService
+        imob, conta, contrato = base
+        conta.provider = 'sicoob'
+        conta.save(update_fields=['provider'])
+        elegiveis = CNABService().obter_boletos_elegiveis_painel()
+        assert elegiveis == []
+
+    def test_escopo_boleto_rejeita_conta_boleto_api(self, base):
+        """resolver_parcela_ids_por_escopo('boleto') recusa boleto de conta Boleto-API."""
+        from financeiro.services.cnab_service import CNABService
+        imob, conta, contrato = base
+        conta.provider = 'c6'
+        conta.save(update_fields=['provider'])
+        parcela = contrato.parcelas.filter(numero_parcela=4).first()
+        resol = CNABService().resolver_parcela_ids_por_escopo(
+            escopo='boleto', parcela_id=parcela.pk,
+        )
+        assert resol['parcela_ids'] == []
+        assert 'cobrança registrada' in resol['erro'].lower()
+
+    def test_gerar_remessa_rejeita_conta_boleto_api(self, base):
+        """gerar_remessa() recusa diretamente uma conta Boleto-API (defesa)."""
+        from financeiro.services.cnab_service import CNABService
+        imob, conta, contrato = base
+        conta.provider = 'sicoob'
+        conta.save(update_fields=['provider'])
+        parcelas = list(contrato.parcelas.filter(numero_parcela__in=[4, 5]))
+        resultado = CNABService().gerar_remessa(parcelas, conta, layout='CNAB_240')
+        assert resultado['sucesso'] is False
+        assert 'Boleto-API' in resultado['erro']
+
 
 # ---------------------------------------------------------------------------
 # Service: resolução de escopo
