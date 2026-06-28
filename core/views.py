@@ -1689,6 +1689,9 @@ def api_obter_conta_bancaria(request, conta_id):
             'banco': conta.banco,
             'banco_nome': conta.get_banco_display(),
             'descricao': conta.descricao,
+            'provider': conta.provider,
+            'tenant_id': conta.tenant_id,
+            'account_config': conta.account_config,
             'agencia': conta.agencia,
             'conta': conta.conta,
             'convenio': conta.convenio,
@@ -1725,10 +1728,16 @@ def api_criar_conta_bancaria(request):
 
         imobiliaria = get_object_or_404(Imobiliaria, pk=data.get('imobiliaria_id'), ativo=True)
 
+        # Provider vazio = BRCobrança (fluxo CNAB padrão)
+        provider = (data.get('provider') or 'brcobranca').strip() or 'brcobranca'
+
         conta = ContaBancaria.objects.create(
             imobiliaria=imobiliaria,
             banco=data.get('banco', ''),
             descricao=data.get('descricao', ''),
+            provider=provider,
+            tenant_id=(data.get('tenant_id') or '').strip(),
+            account_config=data.get('account_config'),
             agencia=data.get('agencia', ''),
             conta=data.get('conta', ''),
             convenio=data.get('convenio', ''),
@@ -1770,6 +1779,12 @@ def api_atualizar_conta_bancaria(request, conta_id):
 
         conta.banco = data.get('banco', conta.banco)
         conta.descricao = data.get('descricao', conta.descricao)
+        # Provider vazio = BRCobrança (fluxo CNAB padrão)
+        _provider = (data.get('provider') or '').strip()
+        conta.provider = _provider or 'brcobranca'
+        conta.tenant_id = (data.get('tenant_id', conta.tenant_id) or '').strip()
+        if 'account_config' in data:
+            conta.account_config = data.get('account_config')
         conta.agencia = data.get('agencia', conta.agencia)
         conta.conta = data.get('conta', conta.conta)
         conta.convenio = data.get('convenio', conta.convenio)

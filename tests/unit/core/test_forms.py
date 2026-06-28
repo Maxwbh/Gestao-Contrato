@@ -152,6 +152,7 @@ class TestContaBancariaForm:
             'agencia': '1234', 'conta': '12345678', 'carteira': '10',
             'layout_cnab': 'CNAB_400', 'nosso_numero_atual': 0,
             'numero_remessa_cnab_atual': 0,
+            'prazo_baixa': 0, 'prazo_protesto': 0,
         }
         base.update(over)
         return base
@@ -190,3 +191,39 @@ class TestContaBancariaForm:
             banco='341', conta='123456', layout_cnab='CNAB_400'))
         form.is_valid()
         assert 'conta' in form.errors
+
+    def test_provider_vazio_vira_brcobranca(self):
+        """Provider não informado → BRCobrança (fluxo CNAB padrão)."""
+        form = ContaBancariaForm(data=self._dados(provider=''))
+        assert form.is_valid(), form.errors
+        assert form.cleaned_data['provider'] == 'brcobranca'
+
+    def test_provider_ausente_vira_brcobranca(self):
+        """Sem a chave provider no POST → BRCobrança."""
+        dados = self._dados()
+        dados.pop('provider', None)
+        form = ContaBancariaForm(data=dados)
+        assert form.is_valid(), form.errors
+        assert form.cleaned_data['provider'] == 'brcobranca'
+
+    def test_c6_brcobranca_continua_valido(self):
+        """C6 (banco=336) com provider=brcobranca permanece válido (fluxo CNAB)."""
+        form = ContaBancariaForm(data=self._dados(provider='brcobranca'))
+        assert form.is_valid(), form.errors
+        assert form.cleaned_data['provider'] == 'brcobranca'
+
+    def test_provider_c6_exige_tenant_id(self):
+        """Provider c6 sem tenant_id deve dar erro."""
+        form = ContaBancariaForm(data=self._dados(provider='c6', tenant_id=''))
+        form.is_valid()
+        assert 'tenant_id' in form.errors
+
+    def test_provider_sicoob_com_tenant_id_valido(self):
+        """Provider sicoob com tenant_id preenchido é aceito."""
+        form = ContaBancariaForm(data=self._dados(
+            banco='756', convenio='1234567', layout_cnab='CNAB_240',
+            carteira='1', provider='sicoob', tenant_id='imob1-756',
+        ))
+        assert form.is_valid(), form.errors
+        assert form.cleaned_data['provider'] == 'sicoob'
+        assert 'tenant_id' not in form.errors

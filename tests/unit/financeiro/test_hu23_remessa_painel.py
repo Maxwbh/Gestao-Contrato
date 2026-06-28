@@ -162,6 +162,37 @@ class TestElegibilidade:
         assert resultado['sucesso'] is False
         assert 'Boleto-API' in resultado['erro']
 
+    def test_c6_com_provider_brcobranca_continua_elegivel(self, base):
+        """C6 (banco=336) com provider=brcobranca usa CNAB normalmente — o filtro
+        é por provider, não por banco."""
+        from financeiro.services.cnab_service import CNABService
+        imob, conta, contrato = base
+        conta.banco = '336'
+        conta.provider = 'brcobranca'
+        conta.convenio = '123456789012'
+        conta.layout_cnab = 'CNAB_400'
+        conta.save(update_fields=['banco', 'provider', 'convenio', 'layout_cnab'])
+        elegiveis = CNABService().obter_boletos_elegiveis_painel()
+        assert {p.numero_parcela for p in elegiveis} == {4, 5, 6}
+
+    def test_sicoob_com_provider_brcobranca_continua_elegivel(self, base):
+        """Sicoob (banco=756) com provider=brcobranca permanece elegível para remessa CNAB."""
+        from financeiro.services.cnab_service import CNABService
+        imob, conta, contrato = base
+        conta.banco = '756'
+        conta.provider = 'brcobranca'
+        conta.convenio = '123456789'
+        conta.save(update_fields=['banco', 'provider', 'convenio'])
+        elegiveis = CNABService().obter_boletos_elegiveis_painel()
+        assert {p.numero_parcela for p in elegiveis} == {4, 5, 6}
+        # E o escopo de boleto avulso também aceita
+        parcela = contrato.parcelas.filter(numero_parcela=4).first()
+        resol = CNABService().resolver_parcela_ids_por_escopo(
+            escopo='boleto', parcela_id=parcela.pk,
+        )
+        assert resol['parcela_ids'] == [parcela.pk]
+        assert resol['erro'] is None
+
 
 # ---------------------------------------------------------------------------
 # Service: resolução de escopo

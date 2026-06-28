@@ -976,6 +976,7 @@ class ContaBancariaForm(forms.ModelForm):
         model = ContaBancaria
         fields = [
             'banco', 'descricao', 'principal',
+            'provider', 'tenant_id', 'account_config',
             'agencia', 'conta',
             'convenio', 'carteira', 'nosso_numero_atual', 'modalidade',
             'posto', 'byte_idt', 'emissao', 'codigo_beneficiario',
@@ -986,6 +987,7 @@ class ContaBancariaForm(forms.ModelForm):
         widgets = {
             'banco': forms.Select(attrs={'class': 'form-select'}),
             'descricao': forms.TextInput(attrs={'placeholder': 'Ex: Conta Principal'}),
+            'provider': forms.Select(attrs={'class': 'form-select'}),
             'tipo_pix': forms.Select(attrs={'class': 'form-select'}),
             'layout_cnab': forms.Select(attrs={'class': 'form-select'}),
         }
@@ -994,10 +996,22 @@ class ContaBancariaForm(forms.ModelForm):
             'carteira': 'Número da carteira de cobrança. Se vazio, usa a carteira padrão do banco.',
             'agencia': 'Número da agência (apenas números)',
             'conta': 'Número da conta (apenas números)',
+            'provider': (
+                'Provedor de cobrança. Vazio = BRCobrança (fluxo CNAB padrão). '
+                'C6/Sicoob ativam cobrança registrada via Boleto-API (integração ainda em validação).'
+            ),
+            'tenant_id': 'Identificador do tenant no Boleto-API. Obrigatório apenas para C6/Sicoob.',
         }
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        # provider/tenant_id/account_config são opcionais no cadastro — vazio = BRCobrança
+        if 'provider' in self.fields:
+            self.fields['provider'].required = False
+        if 'tenant_id' in self.fields:
+            self.fields['tenant_id'].required = False
+        if 'account_config' in self.fields:
+            self.fields['account_config'].required = False
         for field_name, field in self.fields.items():
             if 'class' not in field.widget.attrs:
                 if isinstance(field.widget, forms.Select):
@@ -1097,6 +1111,24 @@ class ContaBancariaForm(forms.ModelForm):
             erro_layout = _bancos.validar_layout_cnab(banco, layout_cnab)
             if erro_layout:
                 self.add_error('layout_cnab', erro_layout)
+
+        # Provider: vazio = BRCobrança (fluxo CNAB padrão, sem dependência do gateway).
+        # A integração C6/Sicoob via Boleto-API ainda está em validação — não é o default.
+        from core.models import ProviderBoleto
+        provider = (cleaned_data.get('provider') or '').strip()
+        if not provider:
+            provider = ProviderBoleto.BRCOBRANCA
+            cleaned_data['provider'] = provider
+
+        # C6/Sicoob exigem tenant_id para resolver as credenciais no Boleto-API
+        if provider in ('c6', 'sicoob'):
+            tenant_id = (cleaned_data.get('tenant_id') or '').strip()
+            if not tenant_id:
+                self.add_error(
+                    'tenant_id',
+                    'Tenant ID é obrigatório quando o provedor é C6 ou Sicoob '
+                    '(identifica as credenciais no Boleto-API).',
+                )
 
         return cleaned_data
 
