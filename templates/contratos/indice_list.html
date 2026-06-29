@@ -1,5 +1,5 @@
 {% extends 'base.html' %}
-{% load crispy_forms_tags hashid_tags %}
+{% load crispy_forms_tags hashid_tags l10n %}
 
 {% block title %}Indices de Reajuste - Gestao de Contratos{% endblock %}
 
@@ -300,6 +300,11 @@
     }
 
     // ===== AG GRID - INDICES =====
+    // Numeros do grid sempre com PONTO decimal: o projeto usa locale pt-br, e
+    // floatformat localizado emitiria virgula, que o parseFloat do JS trunca
+    // (ex.: o valor 0.84 viraria zero no grid). Por isso usamos o sufixo "u"
+    // (unlocalized) no floatformat e localizacao desligada nos inteiros (ano/mes).
+    {% localize off %}
     const indicesRowData = [
     {% for indice in indices %}
     {
@@ -308,9 +313,9 @@
         periodo: "{{ indice.mes_nome|escapejs }}/{{ indice.ano }}",
         periodo_sort: {{ indice.ano }} * 100 + {{ indice.mes }},
         ano: {{ indice.ano }},
-        valor: parseFloat("{{ indice.valor|floatformat:4 }}") || 0,
-        valor_acum_ano: {% if indice.valor_acumulado_ano %}parseFloat("{{ indice.valor_acumulado_ano|floatformat:4 }}") || 0{% else %}null{% endif %},
-        valor_acum_12m: {% if indice.valor_acumulado_12m %}parseFloat("{{ indice.valor_acumulado_12m|floatformat:4 }}") || 0{% else %}null{% endif %},
+        valor: parseFloat("{{ indice.valor|floatformat:'4u' }}") || 0,
+        valor_acum_ano: {% if indice.valor_acumulado_ano %}parseFloat("{{ indice.valor_acumulado_ano|floatformat:'4u' }}") || 0{% else %}null{% endif %},
+        valor_acum_12m: {% if indice.valor_acumulado_12m %}parseFloat("{{ indice.valor_acumulado_12m|floatformat:'4u' }}") || 0{% else %}null{% endif %},
         fonte: "{{ indice.fonte|default:'-'|escapejs }}",
         edit_url: "{% url 'contratos:indices_editar' indice.pk|hashid %}",
         del_url: "{% url 'contratos:indices_excluir' indice.pk|hashid %}",
@@ -318,6 +323,7 @@
     },
     {% endfor %}
     ];
+    {% endlocalize %}
 
     function tipoBadge(tipo) {
         const map = { IPCA: 'bg-primary', IGPM: 'bg-success', INCC: 'bg-info text-dark', INPC: 'bg-danger', TR: 'bg-dark' };
