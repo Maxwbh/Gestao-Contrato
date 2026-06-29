@@ -760,6 +760,23 @@ def _http_get_indice(url):
     raise ultimo_erro
 
 
+def _series_por_variavel_sidra(data):
+    """
+    Indexa a resposta da SIDRA por id de variável → série {periodo: valor}.
+
+    Mais robusto que acessar por posição (data[0], data[1]…): se o IBGE mudar a
+    ordem das variáveis, continua correto.
+    """
+    out = {}
+    for var in data or []:
+        try:
+            serie = var['resultados'][0]['series'][0]['serie']
+        except (KeyError, IndexError, TypeError):
+            serie = {}
+        out[str(var.get('id'))] = serie
+    return out
+
+
 def _parse_valor_indice(valor):
     """
     Converte o valor bruto da API (IBGE/BCB) para float de forma robusta.
@@ -781,6 +798,47 @@ def _parse_valor_indice(valor):
         return float(s)
     except (TypeError, ValueError):
         return None
+
+
+def _preencher_numero_indice(tipo_indice, indices):
+    """
+    Garante `numero_indice` em todos os meses, para o cálculo exato (Método 1 em
+    IndiceReajuste.get_acumulado_periodo).
+
+    - IBGE (IPCA/INPC) já traz o número-índice oficial → mantido.
+    - Séries do BCB/FGV (IGP-M, IGP-DI, INCC, TR, SELIC) não publicam número-índice
+      junto da variação → encadeamos a partir das variações mensais:
+      C(t) = C(t-1) × (1 + valor/100). Como o cálculo de acumulado usa a RAZÃO
+      C(fim)/C(início), a base é arbitrária e se cancela; semeamos com o
+      número-índice do mês imediatamente anterior (continuidade com o histórico)
+      ou 100 quando não houver.
+    """
+    from contratos.models import IndiceReajuste
+
+    pendentes = [d for d in indices
+                 if d.get('valor') is not None and d.get('numero_indice') is None]
+    if not pendentes:
+        return
+
+    indices.sort(key=lambda d: (d['ano'], d['mes']))
+    primeiro = next(d for d in indices if d.get('valor') is not None)
+    pa, pm = (primeiro['ano'] - 1, 12) if primeiro['mes'] == 1 else (primeiro['ano'], primeiro['mes'] - 1)
+    prev = IndiceReajuste.objects.filter(tipo_indice=tipo_indice, ano=pa, mes=pm).first()
+    corrente = (
+        float(prev.numero_indice)
+        if prev and prev.numero_indice and prev.numero_indice > 0
+        else 100.0
+    )
+
+    for d in indices:
+        if d.get('valor') is None:
+            continue
+        if d.get('numero_indice') is not None:
+            # Mês com número-índice oficial: ressincroniza o encadeamento.
+            corrente = float(d['numero_indice'])
+            continue
+        corrente = corrente * (1 + d['valor'] / 100.0)
+        d['numero_indice'] = round(corrente, 4)
 
 
 def _periodo_base_importacao(tipo_indice, sobrescrever, ano_req, mes_req):
@@ -906,6 +964,10 @@ def importar_indices_ibge(request):
                 ),
             }, status=502)
 
+        # Garante numero_indice em todos os meses (oficial do IBGE ou encadeado
+        # nas séries do BCB/FGV) para o cálculo exato de acumulado (Método 1).
+        _preencher_numero_indice(tipo_indice, indices)
+
         # Salvar índices no banco usando bulk operations para melhor performance
         count_created = 0
         count_updated = 0
@@ -938,10 +1000,9 @@ def importar_indices_ibge(request):
                 obj.valor_acumulado_ano = indice_data.get('acumulado_ano')
                 obj.valor_acumulado_12m = indice_data.get('acumulado_12m')
                 obj.fonte = indice_data.get('fonte', 'API')
-                # Zera numero_indice fictício: o índice real só traz a variação
-                # mensal, e um numero_indice de teste corromperia o cálculo exato
-                # de acumulado (Método 1 em get_acumulado_periodo).
-                obj.numero_indice = None
+                # Grava o número-índice de referência (oficial do IBGE ou
+                # encadeado nas séries do BCB) para o cálculo exato (Método 1).
+                obj.numero_indice = indice_data.get('numero_indice')
                 obj.data_importacao = now
                 to_update.append(obj)
                 count_updated += 1
@@ -954,6 +1015,7 @@ def importar_indices_ibge(request):
                     valor=valor,
                     valor_acumulado_ano=indice_data.get('acumulado_ano'),
                     valor_acumulado_12m=indice_data.get('acumulado_12m'),
+                    numero_indice=indice_data.get('numero_indice'),
                     fonte=indice_data.get('fonte', 'API'),
                     data_importacao=now,
                 ))
@@ -1018,8 +1080,9 @@ def _buscar_ipca_ibge(ano_inicio, mes_inicio):
 
     try:
         # API SIDRA - Tabela 1737 (IPCA)
-        # Código da variável: 63 (variação mensal)
-        url = "https://servicodados.ibge.gov.br/api/v3/agregados/1737/periodos/all/variaveis/63|69|2265?localidades=N1[all]"
+        # Variáveis: 63 (var mensal), 69 (acum ano), 2265 (acum 12m),
+        # 2266 (número-índice base dez/1993=100 — para cálculo exato, Método 1).
+        url = "https://servicodados.ibge.gov.br/api/v3/agregados/1737/periodos/all/variaveis/63|69|2265|2266?localidades=N1[all]"
 
         response = _http_get_indice(url)
         data = response.json()
@@ -1027,11 +1090,11 @@ def _buscar_ipca_ibge(ano_inicio, mes_inicio):
         if not data or len(data) == 0:
             return indices
 
-        # Processar dados
-        # Estrutura: data[0] = var mensal, data[1] = acum ano, data[2] = acum 12m
-        var_mensal = data[0]['resultados'][0]['series'][0]['serie'] if len(data) > 0 else {}
-        var_acum_ano = data[1]['resultados'][0]['series'][0]['serie'] if len(data) > 1 else {}
-        var_acum_12m = data[2]['resultados'][0]['series'][0]['serie'] if len(data) > 2 else {}
+        series_por_var = _series_por_variavel_sidra(data)
+        var_mensal = series_por_var.get('63', {})
+        var_acum_ano = series_por_var.get('69', {})
+        var_acum_12m = series_por_var.get('2265', {})
+        numero_indice = series_por_var.get('2266', {})
 
         for periodo, valor in var_mensal.items():
             valor_f = _parse_valor_indice(valor)
@@ -1052,6 +1115,7 @@ def _buscar_ipca_ibge(ano_inicio, mes_inicio):
                 'valor': valor_f,
                 'acumulado_ano': _parse_valor_indice(var_acum_ano.get(periodo)),
                 'acumulado_12m': _parse_valor_indice(var_acum_12m.get(periodo)),
+                'numero_indice': _parse_valor_indice(numero_indice.get(periodo)),
                 'fonte': 'IBGE/SIDRA'
             })
 
@@ -1125,14 +1189,15 @@ def _buscar_igpdi_bcb(ano_inicio, mes_inicio):
 
 def _buscar_inpc_ibge(ano_inicio, mes_inicio):
     """
-    Busca INPC da API SIDRA do IBGE
-    Tabela 1100 - INPC - Variação mensal
+    Busca INPC da API SIDRA do IBGE.
+    Tabela 1736 - INPC - Série histórica com número-índice e variação mensal.
+    Variáveis: 44 (var mensal), 2289 (número-índice base dez/1993=100).
     """
     indices = []
 
     try:
-        # API SIDRA - Tabela 1100 (INPC)
-        url = "https://servicodados.ibge.gov.br/api/v3/agregados/1100/periodos/all/variaveis/44?localidades=N1[all]"
+        url = ("https://servicodados.ibge.gov.br/api/v3/agregados/1736/"
+               "periodos/all/variaveis/44|2289?localidades=N1[all]")
 
         response = _http_get_indice(url)
         data = response.json()
@@ -1140,7 +1205,9 @@ def _buscar_inpc_ibge(ano_inicio, mes_inicio):
         if not data or len(data) == 0:
             return indices
 
-        var_mensal = data[0]['resultados'][0]['series'][0]['serie'] if len(data) > 0 else {}
+        series_por_var = _series_por_variavel_sidra(data)
+        var_mensal = series_por_var.get('44', {})
+        numero_indice = series_por_var.get('2289', {})
 
         for periodo, valor in var_mensal.items():
             valor_f = _parse_valor_indice(valor)
@@ -1157,6 +1224,7 @@ def _buscar_inpc_ibge(ano_inicio, mes_inicio):
                 'ano': ano,
                 'mes': mes,
                 'valor': valor_f,
+                'numero_indice': _parse_valor_indice(numero_indice.get(periodo)),
                 'acumulado_ano': None,
                 'acumulado_12m': None,
                 'fonte': 'IBGE/SIDRA'
