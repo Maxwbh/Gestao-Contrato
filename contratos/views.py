@@ -841,6 +841,63 @@ def _preencher_numero_indice(tipo_indice, indices):
         d['numero_indice'] = round(corrente, 4)
 
 
+def _preencher_acumulados(tipo_indice, indices):
+    """
+    Preenche `acumulado_ano` e `acumulado_12m` quando ausentes, derivando-os do
+    número-índice (razão entre meses) — o IBGE já traz os oficiais, as séries do
+    BCB não. Usa o número-índice dos próprios meses importados e dos já gravados:
+
+        acum_ano(t)  = NI(t) / NI(dez ano anterior) − 1
+        acum_12m(t)  = NI(t) / NI(mesmo mês ano anterior) − 1
+
+    Meses sem o mês de referência disponível ficam sem acumulado (não há como
+    calcular) — sem reprocessamento perpétuo.
+    """
+    from contratos.models import IndiceReajuste
+
+    alvo = [d for d in indices
+            if d.get('valor') is not None and d.get('numero_indice') is not None
+            and (d.get('acumulado_ano') is None or d.get('acumulado_12m') is None)]
+    if not alvo:
+        return
+
+    ni = {(d['ano'], d['mes']): float(d['numero_indice'])
+          for d in indices if d.get('numero_indice') is not None}
+    for ano, mes, num in (IndiceReajuste.objects
+                          .filter(tipo_indice=tipo_indice, numero_indice__isnull=False)
+                          .values_list('ano', 'mes', 'numero_indice')):
+        ni.setdefault((ano, mes), float(num))
+
+    for d in alvo:
+        a, m, cur = d['ano'], d['mes'], float(d['numero_indice'])
+        if d.get('acumulado_ano') is None:
+            ref = ni.get((a - 1, 12))
+            if ref and ref > 0:
+                d['acumulado_ano'] = round((cur / ref - 1) * 100, 4)
+        if d.get('acumulado_12m') is None:
+            ref = ni.get((a - 1, m))
+            if ref and ref > 0:
+                d['acumulado_12m'] = round((cur / ref - 1) * 100, 4)
+
+
+def _primeiro_mes_impreciso(tipo_indice):
+    """
+    (ano, mes) do registro REAL mais antigo SEM número-índice — dado impreciso
+    que impede o cálculo exato. Usado para, na importação, voltar à fonte e
+    enriquecer os meses já gravados sem número-índice. Retorna None se não houver.
+
+    Critério deliberadamente restrito a `numero_indice` ausente (sempre
+    recalculável); acumulados podem faltar legitimamente nos meses iniciais do
+    histórico e não devem disparar reimportação a cada vez.
+    """
+    return (IndiceReajuste.objects
+            .filter(tipo_indice=tipo_indice, numero_indice__isnull=True)
+            .exclude(fonte__icontains='teste')
+            .order_by('ano', 'mes')
+            .values_list('ano', 'mes')
+            .first())
+
+
 def _periodo_base_importacao(tipo_indice, sobrescrever, ano_req, mes_req):
     """
     Determina (ano_inicio, mes_inicio) para a importação de índices.
@@ -848,6 +905,8 @@ def _periodo_base_importacao(tipo_indice, sobrescrever, ano_req, mes_req):
     - Pedido explícito de período tem prioridade.
     - sobrescrever=True: busca desde o contrato mais antigo (cobre todo o
       histórico necessário) para regravar TODOS os meses com dados reais.
+    - Dados imprecisos (meses reais sem número-índice): volta à fonte a partir do
+      mês impreciso mais antigo para enriquecê-los (backfill).
     - Caso contrário (incremental): começa no mês seguinte ao último índice já
       cadastrado; se não houver nenhum, parte do contrato mais antigo.
     """
@@ -863,6 +922,11 @@ def _periodo_base_importacao(tipo_indice, sobrescrever, ano_req, mes_req):
 
     if sobrescrever:
         return base_ano, base_mes
+
+    # Backfill de dados imprecisos: reimporta desde o 1º mês sem número-índice.
+    impreciso = _primeiro_mes_impreciso(tipo_indice)
+    if impreciso:
+        return impreciso[0], impreciso[1]
 
     ultimo_indice = IndiceReajuste.objects.filter(
         tipo_indice=tipo_indice
@@ -965,8 +1029,10 @@ def importar_indices_ibge(request):
             }, status=502)
 
         # Garante numero_indice em todos os meses (oficial do IBGE ou encadeado
-        # nas séries do BCB/FGV) para o cálculo exato de acumulado (Método 1).
+        # nas séries do BCB/FGV) para o cálculo exato de acumulado (Método 1) e,
+        # a partir dele, preenche os acumulados (ano/12m) onde faltarem.
         _preencher_numero_indice(tipo_indice, indices)
+        _preencher_acumulados(tipo_indice, indices)
 
         # Salvar índices no banco usando bulk operations para melhor performance
         count_created = 0
