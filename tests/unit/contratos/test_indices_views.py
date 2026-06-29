@@ -47,6 +47,21 @@ class TestIndiceReajusteListView:
         )
         assert response.status_code == 200
 
+    def test_grid_usa_ponto_decimal_e_sem_separador_milhar(self, client_logado):
+        """Regressão: o array JS do grid deve usar ponto decimal e inteiros sem
+        separador de milhar. Com locale pt-br e sem {% localize off %}, o valor
+        viraria '0,8400' (parseFloat → 0) e o ano '2.026', zerando o grid."""
+        from decimal import Decimal
+        from contratos.models import IndiceReajuste
+        IndiceReajuste.objects.create(
+            tipo_indice='IGPM', ano=2026, mes=5, valor=Decimal('0.84'), fonte='BCB',
+        )
+        html = client_logado.get(reverse('contratos:indices_listar')).content.decode()
+        assert 'parseFloat("0.8400")' in html      # ponto decimal, JS entende
+        assert 'parseFloat("0,8400")' not in html  # vírgula quebraria (→ 0)
+        assert 'ano: 2026' in html                 # sem separador de milhar
+        assert 'ano: 2.026' not in html
+
 
 @pytest.mark.django_db
 class TestIndiceReajusteCreateView:
