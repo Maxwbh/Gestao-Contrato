@@ -334,13 +334,16 @@ class TestCNABServiceIntegracao(TestCase):
         self.assertFalse(resultado['sucesso'])
         self.assertIn('erro', resultado)
 
+    @patch('financeiro.services.cnab_service.requests.get')
     @patch('financeiro.services.cnab_service.time.sleep')
     @patch('requests.post')
-    def test_remessa_429_persistente_mensagem_amigavel(self, mock_post, mock_sleep):
-        """429 persistente: mensagem amigável de rate limit (não 'API fora do ar')
-        e sem dormir após a última tentativa."""
+    def test_remessa_transiente_persistente_mensagem_amigavel(self, mock_post, mock_sleep, mock_get):
+        """Cold start persistente (429 sempre): mensagem amigável de 'reiniciando'
+        após esgotar o backoff longo, sem dormir após a última tentativa."""
         from financeiro.models import Parcela, StatusBoleto
 
+        # warm-up acorda (health 200) mas a API segue respondendo 429 nos POSTs
+        mock_get.return_value = MagicMock(status_code=200)
         resp = MagicMock()
         resp.status_code = 429
         resp.text = 'Too Many Requests'
@@ -355,22 +358,72 @@ class TestCNABServiceIntegracao(TestCase):
         resultado = service.gerar_remessa(parcelas, self.conta_bancaria, layout='CNAB_240')
 
         self.assertFalse(resultado['sucesso'])
-        self.assertIn('sobrecarregada', resultado['erro'].lower())
-        # 3 tentativas → tenta 3 vezes, mas dorme só entre elas (2 vezes)
-        self.assertEqual(mock_post.call_count, service.max_tentativas)
-        self.assertEqual(mock_sleep.call_count, service.max_tentativas - 1)
+        # Mensagem amigável de cold start (não fala em "limite de requisições")
+        self.assertIn('reiniciando', resultado['erro'].lower())
+        self.assertNotIn('limite', resultado['erro'].lower())
+        # N+1 tentativas (N = passos de backoff), dormindo só entre elas (N vezes)
+        n_passos = len(service.backoff_transiente)
+        self.assertEqual(mock_post.call_count, n_passos + 1)
+        self.assertEqual(mock_sleep.call_count, n_passos)
 
+    @patch('financeiro.services.cnab_service.requests.get')
     @patch('financeiro.services.cnab_service.time.sleep')
     @patch('requests.post')
-    def test_remessa_429_respeita_retry_after_limitado(self, mock_post, mock_sleep):
-        """429 com Retry-After: respeita o header, limitado a delay_max_429, e
-        tem sucesso na tentativa seguinte."""
+    def test_remessa_429_depois_200_tem_sucesso(self, mock_post, mock_sleep, mock_get):
+        """Acceptance (a): 429 nas 2 primeiras e 200 na 3ª → sucesso."""
         from financeiro.models import Parcela, StatusBoleto
 
+        mock_get.return_value = MagicMock(status_code=200)
+        r429 = MagicMock(status_code=429, text='Too Many Requests', headers={})
+        r200 = MagicMock(status_code=200, content=b'ARQUIVO REMESSA\n')
+        mock_post.side_effect = [r429, r429, r200]
+
+        service = CNABService()
+        parcelas = list(Parcela.objects.filter(
+            contrato=self.contrato, status_boleto=StatusBoleto.GERADO, pago=False
+        )[:2])
+
+        resultado = service.gerar_remessa(parcelas, self.conta_bancaria, layout='CNAB_240')
+
+        self.assertTrue(resultado['sucesso'], resultado.get('erro'))
+        self.assertEqual(mock_post.call_count, 3)
+
+    @patch('financeiro.services.cnab_service.requests.get')
+    @patch('financeiro.services.cnab_service.time.sleep')
+    @patch('requests.post')
+    def test_remessa_503_transiente_e_retentado(self, mock_post, mock_sleep, mock_get):
+        """502/503/504 (reinício/cold start) são transientes: re-tentados como o 429."""
+        from financeiro.models import Parcela, StatusBoleto
+
+        mock_get.return_value = MagicMock(status_code=200)
+        r503 = MagicMock(status_code=503, text='Service Unavailable', headers={})
+        r200 = MagicMock(status_code=200, content=b'ARQUIVO REMESSA\n')
+        mock_post.side_effect = [r503, r200]
+
+        service = CNABService()
+        parcelas = list(Parcela.objects.filter(
+            contrato=self.contrato, status_boleto=StatusBoleto.GERADO, pago=False
+        )[:1])
+
+        resultado = service.gerar_remessa(parcelas, self.conta_bancaria, layout='CNAB_240')
+
+        self.assertTrue(resultado['sucesso'], resultado.get('erro'))
+        self.assertEqual(mock_post.call_count, 2)
+        mock_sleep.assert_called_once_with(service.backoff_transiente[0])
+
+    @patch('financeiro.services.cnab_service.requests.get')
+    @patch('financeiro.services.cnab_service.time.sleep')
+    @patch('requests.post')
+    def test_remessa_429_respeita_retry_after_com_teto(self, mock_post, mock_sleep, mock_get):
+        """429 com Retry-After exagerado: respeita o header mas limita ao maior
+        passo de backoff (não trava a requisição síncrona)."""
+        from financeiro.models import Parcela, StatusBoleto
+
+        mock_get.return_value = MagicMock(status_code=200)
         r429 = MagicMock()
         r429.status_code = 429
         r429.text = 'Too Many Requests'
-        r429.headers = {'Retry-After': '999'}  # exagerado → deve ser limitado
+        r429.headers = {'Retry-After': '999'}  # exagerado → deve ser limitado ao teto
         r200 = MagicMock()
         r200.status_code = 200
         r200.content = b'ARQUIVO REMESSA\n'
@@ -384,7 +437,56 @@ class TestCNABServiceIntegracao(TestCase):
         resultado = service.gerar_remessa(parcelas, self.conta_bancaria, layout='CNAB_240')
 
         self.assertTrue(resultado['sucesso'], resultado.get('erro'))
-        mock_sleep.assert_called_once_with(service.delay_max_429)  # 999 limitado ao teto
+        # 999 limitado ao maior passo do backoff (último elemento da lista)
+        mock_sleep.assert_called_once_with(service.backoff_transiente[-1])
+
+    @patch('financeiro.services.cnab_service.requests.get')
+    @patch('requests.post')
+    def test_remessa_warmup_chamado_uma_vez_por_lote(self, mock_post, mock_get):
+        """Acceptance (c): warm-up GET /api/health é chamado 1x por lote, mesmo
+        gerando remessas para várias contas na mesma instância de serviço."""
+        from financeiro.models import Parcela, StatusBoleto
+
+        mock_get.return_value = MagicMock(status_code=200)
+        mock_post.return_value = MagicMock(status_code=200, content=b'ARQUIVO REMESSA\n')
+
+        service = CNABService()
+        parcelas = list(Parcela.objects.filter(
+            contrato=self.contrato, status_boleto=StatusBoleto.GERADO, pago=False
+        )[:3])
+
+        # Duas gerações na MESMA instância (simula lote multi-conta)
+        service.gerar_remessa(parcelas[:1], self.conta_bancaria, layout='CNAB_240')
+        service.gerar_remessa(parcelas[1:2], self.conta_bancaria, layout='CNAB_240')
+
+        # warm-up só na 1ª geração (flag _servico_acordado)
+        self.assertEqual(mock_get.call_count, 1)
+        self.assertTrue(service._servico_acordado)
+        # E o health foi consultado no endpoint correto
+        url_chamada = mock_get.call_args[0][0]
+        self.assertTrue(url_chamada.endswith('/api/health'))
+
+    @patch('financeiro.services.cnab_service.requests.get')
+    @patch('requests.post')
+    def test_remessa_warmup_falho_nao_aborta_lote(self, mock_post, mock_get):
+        """Warm-up best-effort: se o health falhar, a geração ainda prossegue
+        (o backoff longo das chamadas cobre a janela de wake)."""
+        import requests as _requests
+        from financeiro.models import Parcela, StatusBoleto
+
+        mock_get.side_effect = _requests.exceptions.ConnectionError('health indisponível')
+        mock_post.return_value = MagicMock(status_code=200, content=b'ARQUIVO REMESSA\n')
+
+        service = CNABService()
+        parcelas = list(Parcela.objects.filter(
+            contrato=self.contrato, status_boleto=StatusBoleto.GERADO, pago=False
+        )[:1])
+
+        resultado = service.gerar_remessa(parcelas, self.conta_bancaria, layout='CNAB_240')
+
+        self.assertTrue(resultado['sucesso'], resultado.get('erro'))
+        self.assertFalse(service._servico_acordado)
+        self.assertTrue(mock_post.called)
 
     @patch('requests.post')
     def test_gerar_remessa_api_indisponivel_retorna_falha(self, mock_post):

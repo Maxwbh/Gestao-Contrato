@@ -279,6 +279,8 @@ def mock_brcobranca_success(requests_mock):
             },
             status_code=200,
         )
+        # GET /api/health: warm-up do lote de remessa (acorda o Render free)
+        requests_mock.get(f'{url}/api/health', json={'status': 'ok'}, status_code=200)
         # POST /api/remessa: query params bank/type, form-data data
         requests_mock.post(f'{url}/api/remessa', content=b'CB280500.REM', status_code=200)
         # POST /api/retorno: query params bank/type, form-data data (campo 'data')

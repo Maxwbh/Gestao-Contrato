@@ -244,6 +244,46 @@ class TestGerarPorEscopo:
         assert resp.status_code == 400
         assert resp.json()['sucesso'] is False
 
+    def test_lote_parcial_reprocessa_apenas_pendentes(self, base):
+        """Idempotência do lote (cold start): conta com remessa concluída não é
+        reprocessada; conta que falhou (sem arquivo) segue elegível e gera na
+        2ª passada — sem duplicar a concluída."""
+        from financeiro.services.cnab_service import CNABService
+        from financeiro.models import ArquivoRemessa
+        from tests.fixtures.factories import ContaBancariaFactory
+        imob, conta_a, contrato = base
+
+        # 2ª conta na mesma imobiliária; move a parcela 6 para ela.
+        conta_b = ContaBancariaFactory(
+            imobiliaria=imob, banco='001', principal=False, ativo=True,
+            convenio='7654321', cobranca_registrada=True, layout_cnab='CNAB_240',
+        )
+        contrato.parcelas.filter(numero_parcela=6).update(conta_bancaria=conta_b)
+
+        service = CNABService()
+        p4, p5, p6 = (contrato.parcelas.get(numero_parcela=n) for n in (4, 5, 6))
+
+        # 1ª passada: apenas a conta_a (parcelas 4,5) é gerada com sucesso; a
+        # conta_b "falha" (não foi incluída → fica como pendente/cold start).
+        with patch('financeiro.services.cnab_service.requests.post',
+                   return_value=_mock_brcobranca_ok()):
+            r1 = service.gerar_remessas_por_escopo([p4.pk, p5.pk])
+        assert len(r1['remessas_geradas']) == 1
+        assert ArquivoRemessa.objects.count() == 1
+
+        # 2ª passada sobre TODAS as parcelas: a conta_a já está em remessa ativa
+        # (excluída); só a conta_b pendente é reprocessada.
+        with patch('financeiro.services.cnab_service.requests.post',
+                   return_value=_mock_brcobranca_ok()) as mock_post:
+            r2 = service.gerar_remessas_por_escopo([p4.pk, p5.pk, p6.pk])
+        assert len(r2['remessas_geradas']) == 1
+        assert r2['remessas_geradas'][0]['conta_bancaria'] == conta_b
+        assert r2['total_boletos'] == 1  # só a parcela 6
+        # Nenhuma duplicação: 1 arquivo por conta no total (2 contas, 2 arquivos)
+        assert ArquivoRemessa.objects.count() == 2
+        # O POST da 2ª passada ocorreu apenas para a conta pendente
+        assert mock_post.call_count == 1
+
 
 # ---------------------------------------------------------------------------
 # Download → BAIXADO, marcar enviada, cancelar envio

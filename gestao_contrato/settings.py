@@ -354,6 +354,13 @@ BRCOBRANCA_MAX_TENTATIVAS = 3
 BRCOBRANCA_DELAY_INICIAL = 2
 # Espera máxima por tentativa ao tratar 429 na remessa (respeita Retry-After, com teto)
 BRCOBRANCA_DELAY_MAX_429 = config('BRCOBRANCA_DELAY_MAX_429', default=8, cast=int)
+# Timeout (s) do warm-up GET /api/health antes do lote de remessa. O 1º acesso após
+# o sleep do Render free leva ~20-30s para acordar — daí o teto folgado de 90s.
+BRCOBRANCA_HEALTH_TIMEOUT = config('BRCOBRANCA_HEALTH_TIMEOUT', default=90, cast=int)
+# Backoff (s) entre tentativas da remessa ao receber status TRANSIENTE
+# (429/502/503/504). Cobre a janela de cold start do Render free (~30s): a soma
+# (5+10+20+30 ≈ 65s) dá tempo para o serviço acordar antes de desistir.
+BRCOBRANCA_BACKOFF_COLD_START = [5, 10, 20, 30]
 # Pacing entre chamadas individuais de geração de boleto (ms) — reduz burst no Render free tier
 BRCOBRANCA_INTER_BOLETO_DELAY_MS = config('BRCOBRANCA_INTER_BOLETO_DELAY_MS', default=100, cast=int)
 # Cooldown (s) entre o último burst de geração de boletos e o POST de remessa (0 desativa)

@@ -32,6 +32,12 @@ from django.core.files.base import ContentFile
 
 logger = logging.getLogger(__name__)
 
+# Status HTTP tratados como TRANSIENTES na geração de remessa: não são erro
+# definitivo, e sim sintoma de que o serviço BRCobrança ainda está acordando
+# (cold start do Render free responde 429; reinícios respondem 502/503/504).
+# São re-tentados com backoff longo antes de virar erro ao usuário.
+STATUS_TRANSIENTES = frozenset({429, 502, 503, 504})
+
 
 # Mapeamento de bancos para o BRCobranca
 # Fonte única: financeiro.services.bancos.BANCOS_SUPORTADOS
@@ -74,16 +80,71 @@ class CNABService:
             'BRCOBRANCA_URL',
             'http://localhost:9292'
         )
-        self.timeout = getattr(settings, 'BRCOBRANCA_TIMEOUT', 30)
+        # Timeout de leitura das chamadas de remessa: piso de 60s porque a 1ª
+        # chamada logo após o wake do Render free pode demorar dezenas de segundos.
+        self.timeout = max(getattr(settings, 'BRCOBRANCA_TIMEOUT', 60), 60)
         self.max_tentativas = getattr(settings, 'BRCOBRANCA_MAX_TENTATIVAS', 3)
         self.delay_inicial = getattr(settings, 'BRCOBRANCA_DELAY_INICIAL', 2)
         # Espera máxima por tentativa ao tratar 429 (respeitando Retry-After do
         # servidor sem travar a requisição síncrona da contadora).
         self.delay_max_429 = getattr(settings, 'BRCOBRANCA_DELAY_MAX_429', 8)
+        # Warm-up do serviço antes do lote: GET /api/health com timeout folgado.
+        self.health_timeout = getattr(settings, 'BRCOBRANCA_HEALTH_TIMEOUT', 90)
+        # Backoff longo (s) para status transientes/cold start. A soma cobre a
+        # janela de wake do Render free (~30s) antes de desistir.
+        self.backoff_transiente = list(
+            getattr(settings, 'BRCOBRANCA_BACKOFF_COLD_START', [5, 10, 20, 30])
+        )
+        # Marcador de warm-up: garante uma única chamada ao /api/health por
+        # instância (= 1x por lote, pois gerar_remessas_por_escopo reusa a mesma
+        # instância para todas as contas).
+        self._servico_acordado = False
 
     def _get_banco_brcobranca(self, codigo_banco: str) -> str:
         """Retorna o nome do banco para o BRCobranca"""
         return BANCOS_BRCOBRANCA.get(codigo_banco, 'banco_brasil')
+
+    def _warm_up(self) -> bool:
+        """
+        Acorda o serviço BRCobrança antes do lote (GET /api/health).
+
+        No Render free, após ~15 min ocioso a API dorme; o 1º acesso leva
+        ~20-30s para acordar e, nessa janela, responde 429. Uma única chamada
+        ao health acorda o serviço para o lote inteiro — evitando 429 conta a
+        conta. Idempotente por instância (1x por lote).
+
+        Best-effort: se o health não responder a tempo, NÃO aborta — o backoff
+        longo das chamadas de remessa (STATUS_TRANSIENTES) ainda cobre a janela
+        de wake e só então exibe a mensagem amigável ao usuário.
+
+        Returns:
+            True se o serviço respondeu (já acordado); False caso contrário.
+        """
+        if self._servico_acordado:
+            return True
+        url = f'{self.brcobranca_url}/api/health'
+        _t0 = time.monotonic()
+        try:
+            resp = requests.get(url, timeout=self.health_timeout)
+            # 200 = health OK; 404/405 indicam serviço no ar (rota/método difere)
+            if resp.status_code in (200, 404, 405):
+                self._servico_acordado = True
+                logger.info(
+                    '[Remessa] warm-up BRCobrança OK em %.1fs (HTTP %d) — serviço acordado',
+                    time.monotonic() - _t0, resp.status_code,
+                )
+                return True
+            logger.warning(
+                '[Remessa] warm-up BRCobrança respondeu HTTP %d (ainda acordando?) — '
+                'prosseguindo com backoff longo nas chamadas de remessa',
+                resp.status_code,
+            )
+        except requests.exceptions.RequestException as e:
+            logger.warning(
+                '[Remessa] warm-up BRCobrança falhou (%s) — prosseguindo com backoff '
+                'longo nas chamadas de remessa', e,
+            )
+        return False
 
     def _formatar_cpf_cnpj(self, documento: str) -> str:
         """Remove formatacao do CPF/CNPJ"""
@@ -485,13 +546,21 @@ class CNABService:
                     p0.get('data_vencimento'), p0.get('data_emissao')
                 )
 
+            # Warm-up (1x por lote): acorda o Render free antes do 1º POST para
+            # evitar 429 de cold start conta a conta. Best-effort — se falhar, o
+            # backoff longo abaixo ainda cobre a janela de wake.
+            self._warm_up()
+
             # Cooldown pós-geração de boletos: se a remessa foi acionada logo
             # após um burst de geração (HU-24 → HU-23, requests encadeados),
             # aguarda a cota do rate limit se recuperar antes do primeiro POST.
             from .brcobranca_throttle import aguardar_cooldown_remessa
             aguardar_cooldown_remessa()
 
-            # Retry automático em 429 (rate limit): backoff exponencial configurável
+            # Retry com backoff longo para status TRANSIENTES (429/502/503/504):
+            # cobre o cold start do Render free (~30s para acordar). A soma do
+            # backoff (5+10+20+30 ≈ 65s) dá tempo do serviço acordar; só após
+            # esgotar é que vira erro ao usuário.
             _response = None
             _t0 = time.monotonic()
             # pix=true ativa segmento PIX no CNAB quando conta tem chave PIX
@@ -499,7 +568,9 @@ class CNABService:
             if getattr(conta_bancaria, 'chave_pix', ''):
                 _params_remessa['pix'] = 'true'
 
-            for _tentativa in range(self.max_tentativas):
+            _backoff = self.backoff_transiente
+            _max_tentativas = len(_backoff) + 1
+            for _tentativa in range(_max_tentativas):
                 _response = requests.post(
                     f'{self.brcobranca_url}/api/remessa',
                     params=_params_remessa,
@@ -509,23 +580,25 @@ class CNABService:
                     headers={'Accept': 'application/vnd.BoletoApi-v1+json'},
                     timeout=self.timeout,
                 )
-                if _response.status_code != 429:
+                if _response.status_code not in STATUS_TRANSIENTES:
                     break
                 # Última tentativa: não dorme — sai do laço e trata como erro.
-                if _tentativa >= self.max_tentativas - 1:
+                if _tentativa >= _max_tentativas - 1:
                     break
-                # Respeita o header Retry-After do servidor quando presente
-                # (limitado a delay_max_429 para não travar a requisição);
-                # caso contrário, backoff exponencial.
+                # Backoff longo da tentativa atual; respeita Retry-After do
+                # servidor quando presente (nunca menor que o passo, com teto no
+                # maior passo para não travar a requisição síncrona).
+                _passo = _backoff[_tentativa]
                 _retry_after = (_response.headers.get('Retry-After') or '').strip()
                 if _retry_after.isdigit():
-                    _wait = min(int(_retry_after), self.delay_max_429)
+                    _wait = min(max(int(_retry_after), _passo), _backoff[-1])
                 else:
-                    _wait = min(self.delay_inicial ** _tentativa, self.delay_max_429)
+                    _wait = _passo
                 logger.warning(
-                    "[Remessa] BRCobranca 429 (rate limit) conta=%s banco=%s — "
-                    "aguardando %ds antes de nova tentativa (%d/%d)",
-                    descricao_conta, banco, _wait, _tentativa + 1, self.max_tentativas
+                    "[Remessa] BRCobranca HTTP %d (transiente/cold start) conta=%s "
+                    "banco=%s — aguardando %ds antes de nova tentativa (%d/%d)",
+                    _response.status_code, descricao_conta, banco, _wait,
+                    _tentativa + 1, _max_tentativas
                 )
                 time.sleep(_wait)
 
@@ -609,7 +682,7 @@ class CNABService:
                         'erro': erro_msg,
                     }
             else:
-                # HTTP error (429 persistente, 5xx, etc.)
+                # HTTP error (transiente persistente após backoff, 4xx, 5xx…)
                 erro_body = response.text[:500]
                 logger.error(
                     "[Remessa] ERRO BRCobranca HTTP %d — conta=%s banco=%s layout=%s\n"
@@ -619,11 +692,13 @@ class CNABService:
                     response.status_code, descricao_conta, banco, layout,
                     f'{self.brcobranca_url}/api/remessa', erro_body,
                 )
-                if response.status_code == 429:
+                if response.status_code in STATUS_TRANSIENTES:
+                    # Cold start do Render free: o serviço ainda estava reiniciando
+                    # e não acordou dentro do backoff longo. Mensagem amigável —
+                    # evita falar em "limite de requisições", que confunde.
                     erro_msg = (
-                        'A API de cobrança (BRCobrança) está temporariamente '
-                        'sobrecarregada (limite de requisições atingido). '
-                        'Aguarde alguns instantes e gere a remessa novamente.'
+                        'A API de cobrança estava reiniciando e não respondeu a tempo. '
+                        'Tente novamente em ~1 minuto.'
                     )
                 else:
                     erro_msg = (
