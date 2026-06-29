@@ -725,6 +725,41 @@ class IndiceReajusteDeleteView(LoginRequiredMixin, HashidMixin, DeleteView):
 # APIs para buscar índices do IBGE/BCB
 # ==============================================================
 
+# As APIs oficiais (BCB/SGS e IBGE/SIDRA) às vezes respondem devagar a partir do
+# Render — observado ReadTimeout em 30s. Usamos um timeout de leitura maior e uma
+# retentativa, mantendo a soma abaixo do timeout do gunicorn (120s):
+#   2 tentativas × 45s + 1s de espera ≈ 91s.
+_INDICE_READ_TIMEOUT = 45
+_INDICE_CONNECT_TIMEOUT = 10
+_INDICE_TENTATIVAS = 2
+
+
+def _http_get_indice(url):
+    """
+    GET resiliente para as APIs de índices: timeout de leitura folgado e uma
+    retentativa em timeout/erro de conexão (a 1ª chamada à BCB costuma ser lenta).
+    Levanta a última exceção se todas as tentativas falharem.
+    """
+    import time as _time
+    ultimo_erro = None
+    for tentativa in range(_INDICE_TENTATIVAS):
+        try:
+            resp = requests.get(
+                url, timeout=(_INDICE_CONNECT_TIMEOUT, _INDICE_READ_TIMEOUT)
+            )
+            resp.raise_for_status()
+            return resp
+        except (requests.exceptions.Timeout, requests.exceptions.ConnectionError) as e:
+            ultimo_erro = e
+            logger.warning(
+                "Índices: tentativa %d/%d falhou (%s) para %s",
+                tentativa + 1, _INDICE_TENTATIVAS, e.__class__.__name__, url,
+            )
+            if tentativa < _INDICE_TENTATIVAS - 1:
+                _time.sleep(1)
+    raise ultimo_erro
+
+
 def _parse_valor_indice(valor):
     """
     Converte o valor bruto da API (IBGE/BCB) para float de forma robusta.
@@ -937,9 +972,27 @@ def importar_indices_ibge(request):
                 batch_size=100
             )
 
+        # Limpeza de itens inválidos após sobrescrita: numa importação completa,
+        # qualquer registro NÃO atualizado por esta rodada (data_importacao != now)
+        # que ainda seja fictício (teste) ou tenha valor zero é resíduo inválido
+        # — remove para a base ficar só com dados reais e não-zerados.
+        removidos_invalidos = 0
+        if sobrescrever:
+            invalidos_qs = (
+                IndiceReajuste.objects
+                .filter(tipo_indice=tipo_indice)
+                .filter(Q(fonte__icontains='teste') | Q(valor=0))
+                .exclude(data_importacao=now)
+            )
+            removidos_invalidos = invalidos_qs.count()
+            if removidos_invalidos:
+                invalidos_qs.delete()
+
         msg = f'Importação concluída! {count_created} novos, {count_updated} atualizados.'
         if count_ignorados:
             msg += f' {count_ignorados} mês(es) sem valor publicado foram ignorados.'
+        if removidos_invalidos:
+            msg += f' {removidos_invalidos} registro(s) inválido(s) (teste/zero) removidos.'
 
         return JsonResponse({
             'success': True,
@@ -947,6 +1000,7 @@ def importar_indices_ibge(request):
             'created': count_created,
             'updated': count_updated,
             'ignored': count_ignorados,
+            'removed_invalid': removidos_invalidos,
             'total': count_created + count_updated,
         })
 
@@ -967,8 +1021,7 @@ def _buscar_ipca_ibge(ano_inicio, mes_inicio):
         # Código da variável: 63 (variação mensal)
         url = "https://servicodados.ibge.gov.br/api/v3/agregados/1737/periodos/all/variaveis/63|69|2265?localidades=N1[all]"
 
-        response = requests.get(url, timeout=30)
-        response.raise_for_status()
+        response = _http_get_indice(url)
         data = response.json()
 
         if not data or len(data) == 0:
@@ -1022,8 +1075,7 @@ def _buscar_serie_bcb(serie, ano_inicio, mes_inicio, fonte, nome_log):
             f"https://api.bcb.gov.br/dados/serie/bcdata.sgs.{serie}/dados"
             f"?formato=json&dataInicial={data_inicio}"
         )
-        response = requests.get(url, timeout=30)
-        response.raise_for_status()
+        response = _http_get_indice(url)
         data = response.json()
 
         for item in data:
@@ -1082,8 +1134,7 @@ def _buscar_inpc_ibge(ano_inicio, mes_inicio):
         # API SIDRA - Tabela 1100 (INPC)
         url = "https://servicodados.ibge.gov.br/api/v3/agregados/1100/periodos/all/variaveis/44?localidades=N1[all]"
 
-        response = requests.get(url, timeout=30)
-        response.raise_for_status()
+        response = _http_get_indice(url)
         data = response.json()
 
         if not data or len(data) == 0:
