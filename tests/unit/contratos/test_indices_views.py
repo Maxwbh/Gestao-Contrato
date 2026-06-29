@@ -261,6 +261,47 @@ class TestImportarIndices:
         assert maio.numero_indice is None           # numero_indice fictício zerado
 
     @patch('contratos.views.requests.get')
+    def test_sobrescrever_remove_invalidos_residuais(self, mock_get, client_logado):
+        """Após sobrescrever, registros residuais inválidos (teste/zero) que a API
+        não cobriu são removidos; os recém-gravados (inclusive zero real) ficam."""
+        from contratos.models import IndiceReajuste
+        # Resíduos inválidos que a API NÃO vai retornar (meses antigos)
+        IndiceReajuste.objects.create(tipo_indice='IGPM', ano=2030, mes=1,
+                                      valor=Decimal('0.00'), fonte='BCB')          # zero órfão
+        IndiceReajuste.objects.create(tipo_indice='IGPM', ano=2030, mes=2,
+                                      valor=Decimal('1.00'), fonte='BCB/FGV (teste)')  # teste órfão
+        mock_get.return_value = MagicMock(
+            status_code=200,
+            json=lambda: [
+                {'data': '01/04/2026', 'valor': '2.73'},
+                {'data': '01/05/2026', 'valor': '0.00'},   # zero REAL recém-importado
+            ],
+        )
+        resp = self._post(client_logado, {'tipo_indice': 'IGPM', 'sobrescrever': True})
+        data = resp.json()
+        assert data['success'] is True
+        assert data['removed_invalid'] == 2
+        # resíduos removidos
+        assert not IndiceReajuste.objects.filter(tipo_indice='IGPM', ano=2030).exists()
+        # zero REAL recém-importado é preservado
+        maio = IndiceReajuste.objects.get(tipo_indice='IGPM', ano=2026, mes=5)
+        assert maio.valor == Decimal('0.0000') and maio.fonte == 'BCB'
+
+    @patch('contratos.views.requests.get')
+    def test_http_get_indice_retenta_apos_timeout(self, mock_get, client_logado):
+        """1º timeout do BCB é re-tentado; a 2ª resposta OK conclui a importação."""
+        import requests as _requests
+        ok = MagicMock(status_code=200, json=lambda: [{'data': '01/05/2026', 'valor': '0.84'}])
+        ok.raise_for_status = lambda: None
+        mock_get.side_effect = [_requests.exceptions.ReadTimeout('read timed out'), ok]
+        with patch('time.sleep'):   # não dormir de verdade no teste
+            resp = self._post(client_logado, {'tipo_indice': 'IGPM'})
+        data = resp.json()
+        assert data['success'] is True
+        assert data['created'] == 1
+        assert mock_get.call_count == 2   # 1 timeout + 1 sucesso
+
+    @patch('contratos.views.requests.get')
     def test_mes_sem_valor_nao_grava_zero(self, mock_get, client_logado):
         """Mês sem valor publicado é ignorado (não cria registro 0,0000%)."""
         mock_get.return_value = MagicMock(
