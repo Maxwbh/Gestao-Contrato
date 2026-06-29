@@ -237,6 +237,51 @@ class TestImportarIndices:
         abr = IndiceReajuste.objects.get(tipo_indice='IGPM', ano=2026, mes=4)
         assert abr.numero_indice == Decimal('1020.0000')   # 1000 × 1.02
 
+    @patch('contratos.views.requests.get')
+    def test_acumulado_ano_calculado_do_numero_indice(self, mock_get, client_logado):
+        """acum_ano(t) = NI(t)/NI(dez ano anterior) − 1. Dez/2025=+1%, Jan/2026=+2%
+        → acum_ano de Jan/2026 = 2% (variação do próprio mês)."""
+        mock_get.return_value = MagicMock(status_code=200, json=lambda: [
+            {'data': '01/12/2025', 'valor': '1.00'},
+            {'data': '01/01/2026', 'valor': '2.00'},
+        ])
+        self._post(client_logado, {'tipo_indice': 'IGPM'})
+        from contratos.models import IndiceReajuste
+        jan = IndiceReajuste.objects.get(tipo_indice='IGPM', ano=2026, mes=1)
+        assert jan.numero_indice is not None
+        assert jan.valor_acumulado_ano == Decimal('2.0000')
+
+    @patch('contratos.views.requests.get')
+    def test_acumulado_12m_calculado_do_numero_indice(self, mock_get, client_logado):
+        """acum_12m(t) = NI(t)/NI(mesmo mês ano anterior) − 1."""
+        mock_get.return_value = MagicMock(status_code=200, json=lambda: [
+            {'data': '01/05/2025', 'valor': '1.00'},
+            {'data': '01/05/2026', 'valor': '2.00'},
+        ])
+        self._post(client_logado, {'tipo_indice': 'IGPM'})
+        from contratos.models import IndiceReajuste
+        mai = IndiceReajuste.objects.get(tipo_indice='IGPM', ano=2026, mes=5)
+        assert mai.valor_acumulado_12m == Decimal('2.0000')
+
+    @patch('contratos.views.requests.get')
+    def test_backfill_enriquece_dados_imprecisos(self, mock_get, client_logado):
+        """Importar (sem sobrescrever) detecta mês real SEM número-índice e volta à
+        fonte para enriquecê-lo (não fica só no incremental pós-último)."""
+        from contratos.models import IndiceReajuste
+        # Abril já existe, real, porém impreciso (numero_indice nulo)
+        IndiceReajuste.objects.create(
+            tipo_indice='IGPM', ano=2026, mes=4, valor=Decimal('2.00'), fonte='BCB',
+        )
+        mock_get.return_value = MagicMock(status_code=200, json=lambda: [
+            {'data': '01/04/2026', 'valor': '2.73'},
+            {'data': '01/05/2026', 'valor': '0.84'},
+        ])
+        resp = self._post(client_logado, {'tipo_indice': 'IGPM'})
+        assert resp.json()['success'] is True
+        abril = IndiceReajuste.objects.get(tipo_indice='IGPM', ano=2026, mes=4)
+        assert abril.numero_indice is not None          # backfill preencheu
+        assert abril.valor == Decimal('2.7300')         # atualizado da fonte
+
     def test_dados_ficticios_requer_confirmacao(self, client_logado):
         """Com dados FICTÍCIOS e sem confirmar: pede confirmação (não grava)."""
         from contratos.models import IndiceReajuste

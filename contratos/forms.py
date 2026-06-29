@@ -397,7 +397,7 @@ class IndiceReajusteForm(forms.ModelForm):
     class Meta:
         model = IndiceReajuste
         fields = ['tipo_indice', 'ano', 'mes', 'valor', 'valor_acumulado_ano',
-                  'valor_acumulado_12m', 'fonte']
+                  'valor_acumulado_12m', 'numero_indice', 'fonte']
         widgets = {
             'ano': forms.TextInput(attrs={
                 'data-mask': 'inteiro', 'placeholder': 'Ex: 2024'
@@ -425,6 +425,9 @@ class IndiceReajusteForm(forms.ModelForm):
             }),
             'valor_acumulado_12m': forms.TextInput(attrs={
                 'data-mask': 'pct4', 'placeholder': '4,6200 %'
+            }),
+            'numero_indice': forms.TextInput(attrs={
+                'placeholder': 'Ex: 7640,1500'
             }),
             'fonte': forms.TextInput(attrs={
                 'placeholder': 'Ex: IBGE, BCB, FGV'
@@ -463,6 +466,9 @@ class IndiceReajusteForm(forms.ModelForm):
                 Column(Field('valor', wrapper_class='mb-2 campo-obrigatorio'), css_class='col-md-4'),
                 Column(Field('valor_acumulado_ano', wrapper_class='mb-2'), css_class='col-md-4'),
                 Column(Field('valor_acumulado_12m', wrapper_class='mb-2'), css_class='col-md-4'),
+            ),
+            Row(
+                Column(Field('numero_indice', wrapper_class='mb-2'), css_class='col-md-4'),
             ),
             HTML('</div></div>'),
 

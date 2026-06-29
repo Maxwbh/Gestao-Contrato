@@ -316,6 +316,7 @@
         valor: parseFloat("{{ indice.valor|floatformat:'4u' }}") || 0,
         valor_acum_ano: {% if indice.valor_acumulado_ano %}parseFloat("{{ indice.valor_acumulado_ano|floatformat:'4u' }}") || 0{% else %}null{% endif %},
         valor_acum_12m: {% if indice.valor_acumulado_12m %}parseFloat("{{ indice.valor_acumulado_12m|floatformat:'4u' }}") || 0{% else %}null{% endif %},
+        numero_indice: {% if indice.numero_indice %}parseFloat("{{ indice.numero_indice|floatformat:'4u' }}") || null{% else %}null{% endif %},
         fonte: "{{ indice.fonte|default:'-'|escapejs }}",
         edit_url: "{% url 'contratos:indices_editar' indice.pk|hashid %}",
         del_url: "{% url 'contratos:indices_excluir' indice.pk|hashid %}",
@@ -377,10 +378,20 @@
             headerName: 'Acum. 12m (%)',
             field: 'valor_acum_12m',
             filter: 'agNumberColumnFilter',
-           
+
             minWidth: 120,
             type: 'numericColumn',
             cellRenderer: valorRenderer,
+        },
+        {
+            headerName: 'Nº Índice',
+            field: 'numero_indice',
+            filter: 'agNumberColumnFilter',
+            minWidth: 110,
+            type: 'numericColumn',
+            cellRenderer: params => params.value == null
+                ? '<span class="text-muted">—</span>'
+                : `<span class="text-muted">${parseFloat(params.value).toFixed(4)}</span>`,
         },
         {
             headerName: 'Fonte',
