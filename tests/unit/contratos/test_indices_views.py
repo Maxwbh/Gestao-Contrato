@@ -5,6 +5,10 @@ Escopo: IndiceReajusteListView, IndiceReajusteCreateView,
         IndiceReajusteUpdateView, IndiceReajusteDeleteView,
         importar_indices_ibge
 """
+import json
+from decimal import Decimal
+from unittest.mock import patch, MagicMock
+
 import pytest
 from django.urls import reverse
 from core.hashids_utils import encode_id
@@ -116,3 +120,116 @@ class TestIndiceReajusteDeleteView:
         response = client_logado.post(url, {})
         assert response.status_code == 302
         assert not IndiceReajuste.objects.filter(pk=indice.pk).exists()
+
+
+def test_parse_valor_indice_robustez():
+    """_parse_valor_indice trata vírgula/ponto/ausência sem gravar 0 falso."""
+    from contratos.views import _parse_valor_indice
+    assert _parse_valor_indice('2.73') == 2.73
+    assert _parse_valor_indice('2,73') == 2.73   # IBGE usa vírgula decimal
+    assert _parse_valor_indice('-0.49') == -0.49
+    assert _parse_valor_indice(0.84) == 0.84
+    # Ausência de valor → None (não 0)
+    for ausente in (None, '', '-', '...', 'NaN'):
+        assert _parse_valor_indice(ausente) is None
+
+
+@pytest.mark.django_db
+class TestImportarIndices:
+    """Importação de índices: confirmação, sobrescrita e gravação correta."""
+
+    def _post(self, client, body):
+        return client.post(
+            reverse('contratos:indices_importar'),
+            data=json.dumps(body),
+            content_type='application/json',
+        )
+
+    def test_tipo_invalido_retorna_400(self, client_logado):
+        resp = self._post(client_logado, {'tipo_indice': 'XPTO'})
+        assert resp.status_code == 400
+        assert resp.json()['success'] is False
+
+    @patch('contratos.views.requests.get')
+    def test_importa_grava_valor_real(self, mock_get, client_logado):
+        """Sem dados prévios: importa e grava o valor real (não 0)."""
+        mock_get.return_value = MagicMock(
+            status_code=200,
+            json=lambda: [
+                {'data': '01/04/2026', 'valor': '2.73'},
+                {'data': '01/05/2026', 'valor': '0.84'},
+            ],
+        )
+        resp = self._post(client_logado, {'tipo_indice': 'IGPM'})
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data['success'] is True
+        assert data['created'] == 2
+
+        from contratos.models import IndiceReajuste
+        maio = IndiceReajuste.objects.get(tipo_indice='IGPM', ano=2026, mes=5)
+        assert maio.valor == Decimal('0.8400')   # gravou o valor real
+        assert maio.fonte == 'BCB'
+
+    def test_dados_existentes_requer_confirmacao(self, client_logado):
+        """Com dados já existentes e sem confirmar: pede confirmação (não grava)."""
+        from contratos.models import IndiceReajuste
+        IndiceReajuste.objects.create(
+            tipo_indice='IGPM', ano=2026, mes=4, valor=Decimal('1.00'),
+            fonte='BCB/FGV (teste)',
+        )
+        resp = self._post(client_logado, {'tipo_indice': 'IGPM'})
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data['success'] is False
+        assert data['requer_confirmacao'] is True
+        assert data['total_existente'] == 1
+        assert data['total_ficticios'] == 1
+
+    @patch('contratos.views.requests.get')
+    def test_sobrescrever_substitui_ficticio_por_real(self, mock_get, client_logado):
+        """Confirmação (sobrescrever): valor fictício é substituído pelo real e
+        o numero_indice fictício é zerado."""
+        from contratos.models import IndiceReajuste
+        from datetime import date
+        from contratos.models import Contrato  # noqa
+
+        # Dado fictício gravado com numero_indice de teste
+        IndiceReajuste.objects.create(
+            tipo_indice='IGPM', ano=2026, mes=5, valor=Decimal('1.00'),
+            numero_indice=Decimal('3000.0000'), fonte='BCB/FGV (teste)',
+        )
+        mock_get.return_value = MagicMock(
+            status_code=200,
+            json=lambda: [{'data': '01/05/2026', 'valor': '0.84'}],
+        )
+        resp = self._post(client_logado, {'tipo_indice': 'IGPM', 'sobrescrever': True})
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data['success'] is True
+        assert data['updated'] == 1
+
+        maio = IndiceReajuste.objects.get(tipo_indice='IGPM', ano=2026, mes=5)
+        assert maio.valor == Decimal('0.8400')      # substituiu o fictício
+        assert maio.fonte == 'BCB'
+        assert maio.numero_indice is None           # numero_indice fictício zerado
+
+    @patch('contratos.views.requests.get')
+    def test_mes_sem_valor_nao_grava_zero(self, mock_get, client_logado):
+        """Mês sem valor publicado é ignorado (não cria registro 0,0000%)."""
+        mock_get.return_value = MagicMock(
+            status_code=200,
+            json=lambda: [
+                {'data': '01/04/2026', 'valor': '2.73'},
+                {'data': '01/05/2026', 'valor': '-'},   # ainda não publicado
+            ],
+        )
+        resp = self._post(client_logado, {'tipo_indice': 'IGPM'})
+        data = resp.json()
+        assert data['success'] is True
+        # Mês sem valor é descartado já na busca — só Abril é gravado, nunca um 0,0000%
+        assert data['created'] == 1
+        from contratos.models import IndiceReajuste
+        assert not IndiceReajuste.objects.filter(tipo_indice='IGPM', ano=2026, mes=5).exists()
+        abril = IndiceReajuste.objects.get(tipo_indice='IGPM', ano=2026, mes=4)
+        assert abril.valor == Decimal('2.7300')

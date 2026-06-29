@@ -447,7 +447,8 @@
         new bootstrap.Modal(document.getElementById('modalExclusao')).show();
     }
 
-    function importarIndices() {
+    function importarIndices(sobrescrever) {
+        sobrescrever = !!sobrescrever;
         const btn = document.getElementById('btnImportar');
         const btnCancelar = document.getElementById('btnCancelar');
         const btnFecharModal = document.getElementById('btnFecharModal');
@@ -512,7 +513,7 @@
                 'Content-Type': 'application/json',
                 'X-CSRFToken': '{{ csrf_token }}'
             },
-            body: JSON.stringify({ tipo_indice: tipo })
+            body: JSON.stringify({ tipo_indice: tipo, sobrescrever: sobrescrever })
         })
         .then(response => response.json())
         .then(data => {
@@ -526,6 +527,32 @@
             setTimeout(() => {
                 progressoImportacao.classList.add('d-none');
                 resultado.classList.remove('d-none');
+
+                // Já existem dados: pedir confirmação antes de sobrescrever
+                if (data.requer_confirmacao) {
+                    resultado.className = 'alert alert-warning';
+                    resultado.innerHTML = `
+                        <div class="text-center">
+                            <i class="fas fa-exclamation-triangle fa-2x text-warning mb-2"></i>
+                            <h6 class="text-warning">Dados já existentes</h6>
+                            <p class="mb-3">${data.message}</p>
+                            <button type="button" class="btn btn-success me-2" id="btnConfirmarSobrescrever">
+                                <i class="fas fa-sync-alt me-1"></i> Sim, atualizar com dados reais
+                            </button>
+                            <button type="button" class="btn btn-outline-secondary" onclick="resetarModal()">
+                                Cancelar
+                            </button>
+                        </div>
+                    `;
+                    btn.disabled = false;
+                    btnCancelar.disabled = false;
+                    btnFecharModal.disabled = false;
+                    document.getElementById('btnConfirmarSobrescrever').onclick = function() {
+                        resetarModal();
+                        importarIndices(true);
+                    };
+                    return;
+                }
 
                 if (data.success) {
                     barraProgresso.classList.remove('progress-bar-animated');
