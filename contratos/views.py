@@ -641,19 +641,30 @@ class IndiceReajusteListView(LoginRequiredMixin, PaginacaoMixin, ListView):
         # Total de índices
         context['total_indices'] = IndiceReajuste.objects.count()
 
-        # Estatísticas por tipo — 1 query em vez de 2 por tipo
+        # Estatísticas por tipo — contagem agregada (1 query) + último de cada
+        # tipo via índice (tipo_indice, ano, mes). Evita carregar TODOS os índices
+        # como instâncias completas a cada render (lento conforme o histórico cresce).
         tipos = ['IPCA', 'IGPM', 'INCC', 'IGPDI', 'INPC', 'TR', 'SELIC']
-        counts_por_tipo = {}
-        ultimos_por_tipo = {}
-        for idx in IndiceReajuste.objects.filter(tipo_indice__in=tipos).order_by('tipo_indice', '-ano', '-mes'):
-            counts_por_tipo[idx.tipo_indice] = counts_por_tipo.get(idx.tipo_indice, 0) + 1
-            if idx.tipo_indice not in ultimos_por_tipo:
-                ultimos_por_tipo[idx.tipo_indice] = idx
-        context['estatisticas_indices'] = [
-            {'tipo': tipo, 'total': counts_por_tipo[tipo], 'ultimo': ultimos_por_tipo[tipo]}
-            for tipo in tipos
-            if tipo in counts_por_tipo
-        ]
+        counts_por_tipo = dict(
+            IndiceReajuste.objects.filter(tipo_indice__in=tipos)
+            .values_list('tipo_indice')
+            .annotate(total=Count('id'))
+            .values_list('tipo_indice', 'total')
+        )
+        estatisticas_indices = []
+        for tipo in tipos:
+            total = counts_por_tipo.get(tipo, 0)
+            if not total:
+                continue
+            ultimo = (
+                IndiceReajuste.objects
+                .filter(tipo_indice=tipo)
+                .order_by('-ano', '-mes')
+                .only('tipo_indice', 'ano', 'mes', 'valor')
+                .first()
+            )
+            estatisticas_indices.append({'tipo': tipo, 'total': total, 'ultimo': ultimo})
+        context['estatisticas_indices'] = estatisticas_indices
 
         # Data do contrato mais antigo (para limite de importação)
         contrato_mais_antigo = Contrato.objects.order_by('data_contrato').first()
@@ -705,43 +716,113 @@ class IndiceReajusteDeleteView(LoginRequiredMixin, HashidMixin, DeleteView):
 # APIs para buscar índices do IBGE/BCB
 # ==============================================================
 
+def _parse_valor_indice(valor):
+    """
+    Converte o valor bruto da API (IBGE/BCB) para float de forma robusta.
+
+    Trata: None, marcadores de ausência ('-', '...', ''), número já numérico e
+    string com vírgula ou ponto decimal. Retorna None quando não há valor válido
+    (evita gravar 0,0000% por engano quando a API não publicou o mês).
+    """
+    if valor is None:
+        return None
+    if isinstance(valor, (int, float)):
+        return float(valor)
+    s = str(valor).strip()
+    if s in ('', '-', '...', 'NaN', 'null'):
+        return None
+    # API IBGE usa vírgula decimal; BCB usa ponto. Normaliza para ponto.
+    s = s.replace(',', '.')
+    try:
+        return float(s)
+    except (TypeError, ValueError):
+        return None
+
+
+def _periodo_base_importacao(tipo_indice, sobrescrever, ano_req, mes_req):
+    """
+    Determina (ano_inicio, mes_inicio) para a importação de índices.
+
+    - Pedido explícito de período tem prioridade.
+    - sobrescrever=True: busca desde o contrato mais antigo (cobre todo o
+      histórico necessário) para regravar TODOS os meses com dados reais.
+    - Caso contrário (incremental): começa no mês seguinte ao último índice já
+      cadastrado; se não houver nenhum, parte do contrato mais antigo.
+    """
+    if ano_req:
+        return int(ano_req), int(mes_req or 1)
+
+    contrato_mais_antigo = Contrato.objects.order_by('data_contrato').first()
+    if contrato_mais_antigo:
+        base_ano = contrato_mais_antigo.data_contrato.year
+        base_mes = contrato_mais_antigo.data_contrato.month
+    else:
+        base_ano, base_mes = datetime.now().year - 5, 1
+
+    if sobrescrever:
+        return base_ano, base_mes
+
+    ultimo_indice = IndiceReajuste.objects.filter(
+        tipo_indice=tipo_indice
+    ).order_by('-ano', '-mes').first()
+    if ultimo_indice:
+        ano_inicio = ultimo_indice.ano
+        mes_inicio = ultimo_indice.mes + 1
+        if mes_inicio > 12:
+            mes_inicio = 1
+            ano_inicio += 1
+        return ano_inicio, mes_inicio
+    return base_ano, base_mes
+
+
 @login_required
 @require_http_methods(["POST"])
 def importar_indices_ibge(request):
     """
-    Importa índices do IBGE (IPCA) e BCB (IGP-M, SELIC)
+    Importa índices do IBGE (IPCA/INPC) e BCB (IGP-M, IGP-DI, INCC, TR, SELIC).
     API IBGE (SIDRA): https://servicodados.ibge.gov.br/api/docs/agregados
     API BCB: https://api.bcb.gov.br/dados/serie/bcdata.sgs.{codigo}/dados
+
+    Quando já existem índices do tipo e o cliente não confirmou (`sobrescrever`),
+    retorna `requer_confirmacao=True` para que a UI pergunte antes de substituir
+    os dados existentes (inclusive fictícios/teste) por dados reais.
     """
     try:
         data = json.loads(request.body)
         tipo_indice = data.get('tipo_indice', 'IPCA')
         ano_inicio = data.get('ano_inicio')
         mes_inicio = data.get('mes_inicio', 1)
+        sobrescrever = bool(data.get('sobrescrever', False))
 
-        # Determinar data de início
-        if not ano_inicio:
-            # Buscar último índice cadastrado ou data do contrato mais antigo
-            ultimo_indice = IndiceReajuste.objects.filter(
-                tipo_indice=tipo_indice
-            ).order_by('-ano', '-mes').first()
+        if tipo_indice not in ('IPCA', 'IGPM', 'INCC', 'IGPDI', 'INPC', 'TR', 'SELIC'):
+            return JsonResponse({'success': False, 'error': 'Tipo de índice inválido'}, status=400)
 
-            if ultimo_indice:
-                # Começar do mês seguinte ao último cadastrado
-                ano_inicio = ultimo_indice.ano
-                mes_inicio = ultimo_indice.mes + 1
-                if mes_inicio > 12:
-                    mes_inicio = 1
-                    ano_inicio += 1
-            else:
-                # Buscar contrato mais antigo
-                contrato_mais_antigo = Contrato.objects.order_by('data_contrato').first()
-                if contrato_mais_antigo:
-                    ano_inicio = contrato_mais_antigo.data_contrato.year
-                    mes_inicio = contrato_mais_antigo.data_contrato.month
-                else:
-                    ano_inicio = datetime.now().year - 1
-                    mes_inicio = 1
+        # Confirmação antes de sobrescrever dados já existentes (RN: dados reais
+        # substituem fictícios, mas só após o usuário confirmar).
+        existentes_qs = IndiceReajuste.objects.filter(tipo_indice=tipo_indice)
+        total_existente = existentes_qs.count()
+        if total_existente > 0 and not sobrescrever and not ano_inicio:
+            total_ficticios = existentes_qs.filter(fonte__icontains='teste').count()
+            partes = [f'Já existem {total_existente} registro(s) de {tipo_indice}']
+            if total_ficticios:
+                partes.append(f'{total_ficticios} fictício(s) (teste)')
+            msg = ', sendo '.join(partes) if total_ficticios else partes[0]
+            return JsonResponse({
+                'success': False,
+                'requer_confirmacao': True,
+                'tipo_indice': tipo_indice,
+                'total_existente': total_existente,
+                'total_ficticios': total_ficticios,
+                'message': (
+                    f'{msg}. Deseja atualizar com dados reais das APIs oficiais '
+                    '(IBGE/Banco Central)? Os valores existentes serão substituídos.'
+                ),
+            })
+
+        # Determinar data de início (sobrescrever ⇒ histórico completo)
+        ano_inicio, mes_inicio = _periodo_base_importacao(
+            tipo_indice, sobrescrever, ano_inicio, mes_inicio
+        )
 
         # Buscar dados da API
         if tipo_indice == 'IPCA':
@@ -771,20 +852,32 @@ def importar_indices_ibge(request):
             for idx in IndiceReajuste.objects.filter(tipo_indice=tipo_indice)
         }
 
+        from django.utils import timezone
         to_create = []
         to_update = []
-        now = datetime.now()
+        count_ignorados = 0
+        now = timezone.now()
 
         for indice_data in indices:
+            valor = indice_data.get('valor')
+            if valor is None:
+                # Mês sem valor real publicado: não grava (evita 0,0000% falso).
+                count_ignorados += 1
+                continue
+
             key = (indice_data['ano'], indice_data['mes'])
 
             if key in existing_indices:
-                # Atualizar existente
+                # Atualizar existente com dado real
                 obj = existing_indices[key]
-                obj.valor = indice_data['valor']
+                obj.valor = valor
                 obj.valor_acumulado_ano = indice_data.get('acumulado_ano')
                 obj.valor_acumulado_12m = indice_data.get('acumulado_12m')
                 obj.fonte = indice_data.get('fonte', 'API')
+                # Zera numero_indice fictício: o índice real só traz a variação
+                # mensal, e um numero_indice de teste corromperia o cálculo exato
+                # de acumulado (Método 1 em get_acumulado_periodo).
+                obj.numero_indice = None
                 obj.data_importacao = now
                 to_update.append(obj)
                 count_updated += 1
@@ -794,7 +887,7 @@ def importar_indices_ibge(request):
                     tipo_indice=tipo_indice,
                     ano=indice_data['ano'],
                     mes=indice_data['mes'],
-                    valor=indice_data['valor'],
+                    valor=valor,
                     valor_acumulado_ano=indice_data.get('acumulado_ano'),
                     valor_acumulado_12m=indice_data.get('acumulado_12m'),
                     fonte=indice_data.get('fonte', 'API'),
@@ -810,16 +903,22 @@ def importar_indices_ibge(request):
         if to_update:
             IndiceReajuste.objects.bulk_update(
                 to_update,
-                ['valor', 'valor_acumulado_ano', 'valor_acumulado_12m', 'fonte', 'data_importacao'],
+                ['valor', 'valor_acumulado_ano', 'valor_acumulado_12m',
+                 'numero_indice', 'fonte', 'data_importacao'],
                 batch_size=100
             )
 
+        msg = f'Importação concluída! {count_created} novos, {count_updated} atualizados.'
+        if count_ignorados:
+            msg += f' {count_ignorados} mês(es) sem valor publicado foram ignorados.'
+
         return JsonResponse({
             'success': True,
-            'message': f'Importação concluída! {count_created} novos, {count_updated} atualizados.',
+            'message': msg,
             'created': count_created,
             'updated': count_updated,
-            'total': len(indices)
+            'ignored': count_ignorados,
+            'total': count_created + count_updated,
         })
 
     except Exception as e:
@@ -853,7 +952,8 @@ def _buscar_ipca_ibge(ano_inicio, mes_inicio):
         var_acum_12m = data[2]['resultados'][0]['series'][0]['serie'] if len(data) > 2 else {}
 
         for periodo, valor in var_mensal.items():
-            if valor == '-' or valor == '...' or valor is None:
+            valor_f = _parse_valor_indice(valor)
+            if valor_f is None:
                 continue
 
             # Período formato: 202401 (AAAAMM)
@@ -867,9 +967,9 @@ def _buscar_ipca_ibge(ano_inicio, mes_inicio):
             indices.append({
                 'ano': ano,
                 'mes': mes,
-                'valor': float(valor.replace(',', '.')),
-                'acumulado_ano': float(var_acum_ano.get(periodo, '0').replace(',', '.')) if var_acum_ano.get(periodo) not in ['-', '...', None] else None,
-                'acumulado_12m': float(var_acum_12m.get(periodo, '0').replace(',', '.')) if var_acum_12m.get(periodo) not in ['-', '...', None] else None,
+                'valor': valor_f,
+                'acumulado_ano': _parse_valor_indice(var_acum_ano.get(periodo)),
+                'acumulado_12m': _parse_valor_indice(var_acum_12m.get(periodo)),
                 'fonte': 'IBGE/SIDRA'
             })
 
@@ -879,150 +979,67 @@ def _buscar_ipca_ibge(ano_inicio, mes_inicio):
     return indices
 
 
-def _buscar_igpm_bcb(ano_inicio, mes_inicio):
+def _buscar_serie_bcb(serie, ano_inicio, mes_inicio, fonte, nome_log):
     """
-    Busca IGP-M da API do Banco Central
-    Série 189 - IGP-M - Variação mensal
+    Busca uma série mensal da API SGS do Banco Central e normaliza os registros.
+
+    Parsing robusto de valor (vírgula/ponto/ausente) e de data (dd/mm/yyyy).
+    Meses sem valor publicado são ignorados (não geram 0,0000% falso).
     """
     indices = []
-
     try:
-        # Formatar data de início
         data_inicio = f"01/{mes_inicio:02d}/{ano_inicio}"
-
-        # API BCB - Série 189 (IGP-M mensal)
-        url = f"https://api.bcb.gov.br/dados/serie/bcdata.sgs.189/dados?formato=json&dataInicial={data_inicio}"
-
+        url = (
+            f"https://api.bcb.gov.br/dados/serie/bcdata.sgs.{serie}/dados"
+            f"?formato=json&dataInicial={data_inicio}"
+        )
         response = requests.get(url, timeout=30)
         response.raise_for_status()
         data = response.json()
 
         for item in data:
-            # Data formato: dd/mm/yyyy
-            partes = item['data'].split('/')
-            _, mes, ano = int(partes[0]), int(partes[1]), int(partes[2])
+            valor_f = _parse_valor_indice(item.get('valor'))
+            if valor_f is None:
+                continue
+            try:
+                partes = str(item['data']).split('/')
+                mes = int(partes[1])
+                ano = int(partes[2])
+            except (KeyError, IndexError, ValueError):
+                continue
 
             indices.append({
                 'ano': ano,
                 'mes': mes,
-                'valor': float(item['valor']),
+                'valor': valor_f,
                 'acumulado_ano': None,
                 'acumulado_12m': None,
-                'fonte': 'BCB'
+                'fonte': fonte,
             })
-
     except Exception as e:
-        logger.exception("Erro ao buscar IGP-M: %s", e)
+        logger.exception("Erro ao buscar %s: %s", nome_log, e)
 
     return indices
+
+
+def _buscar_igpm_bcb(ano_inicio, mes_inicio):
+    """Busca IGP-M da API do BCB — Série 189 (variação mensal)."""
+    return _buscar_serie_bcb(189, ano_inicio, mes_inicio, 'BCB', 'IGP-M')
 
 
 def _buscar_selic_bcb(ano_inicio, mes_inicio):
-    """
-    Busca SELIC da API do Banco Central
-    Série 4390 - Taxa Selic acumulada no mês
-    """
-    indices = []
-
-    try:
-        # Formatar data de início
-        data_inicio = f"01/{mes_inicio:02d}/{ano_inicio}"
-
-        # API BCB - Série 4390 (SELIC mensal)
-        url = f"https://api.bcb.gov.br/dados/serie/bcdata.sgs.4390/dados?formato=json&dataInicial={data_inicio}"
-
-        response = requests.get(url, timeout=30)
-        response.raise_for_status()
-        data = response.json()
-
-        for item in data:
-            # Data formato: dd/mm/yyyy
-            partes = item['data'].split('/')
-            _, mes, ano = int(partes[0]), int(partes[1]), int(partes[2])
-
-            indices.append({
-                'ano': ano,
-                'mes': mes,
-                'valor': float(item['valor']),
-                'acumulado_ano': None,
-                'acumulado_12m': None,
-                'fonte': 'BCB'
-            })
-
-    except Exception as e:
-        logger.exception("Erro ao buscar SELIC: %s", e)
-
-    return indices
+    """Busca SELIC da API do BCB — Série 4390 (acumulada no mês)."""
+    return _buscar_serie_bcb(4390, ano_inicio, mes_inicio, 'BCB', 'SELIC')
 
 
 def _buscar_incc_bcb(ano_inicio, mes_inicio):
-    """
-    Busca INCC da API do Banco Central
-    Série 192 - INCC-DI - Variação mensal
-    """
-    indices = []
-
-    try:
-        data_inicio = f"01/{mes_inicio:02d}/{ano_inicio}"
-        url = f"https://api.bcb.gov.br/dados/serie/bcdata.sgs.192/dados?formato=json&dataInicial={data_inicio}"
-
-        response = requests.get(url, timeout=30)
-        response.raise_for_status()
-        data = response.json()
-
-        for item in data:
-            partes = item['data'].split('/')
-            mes = int(partes[1])
-            ano = int(partes[2])
-
-            indices.append({
-                'ano': ano,
-                'mes': mes,
-                'valor': float(item['valor']),
-                'acumulado_ano': None,
-                'acumulado_12m': None,
-                'fonte': 'BCB/FGV'
-            })
-
-    except Exception as e:
-        logger.exception("Erro ao buscar INCC: %s", e)
-
-    return indices
+    """Busca INCC da API do BCB — Série 192 (INCC-DI, variação mensal)."""
+    return _buscar_serie_bcb(192, ano_inicio, mes_inicio, 'BCB/FGV', 'INCC')
 
 
 def _buscar_igpdi_bcb(ano_inicio, mes_inicio):
-    """
-    Busca IGP-DI da API do Banco Central
-    Série 190 - IGP-DI - Variação mensal
-    """
-    indices = []
-
-    try:
-        data_inicio = f"01/{mes_inicio:02d}/{ano_inicio}"
-        url = f"https://api.bcb.gov.br/dados/serie/bcdata.sgs.190/dados?formato=json&dataInicial={data_inicio}"
-
-        response = requests.get(url, timeout=30)
-        response.raise_for_status()
-        data = response.json()
-
-        for item in data:
-            partes = item['data'].split('/')
-            mes = int(partes[1])
-            ano = int(partes[2])
-
-            indices.append({
-                'ano': ano,
-                'mes': mes,
-                'valor': float(item['valor']),
-                'acumulado_ano': None,
-                'acumulado_12m': None,
-                'fonte': 'BCB/FGV'
-            })
-
-    except Exception as e:
-        logger.exception("Erro ao buscar IGP-DI: %s", e)
-
-    return indices
+    """Busca IGP-DI da API do BCB — Série 190 (variação mensal)."""
+    return _buscar_serie_bcb(190, ano_inicio, mes_inicio, 'BCB/FGV', 'IGP-DI')
 
 
 def _buscar_inpc_ibge(ano_inicio, mes_inicio):
@@ -1046,7 +1063,8 @@ def _buscar_inpc_ibge(ano_inicio, mes_inicio):
         var_mensal = data[0]['resultados'][0]['series'][0]['serie'] if len(data) > 0 else {}
 
         for periodo, valor in var_mensal.items():
-            if valor == '-' or valor == '...' or valor is None:
+            valor_f = _parse_valor_indice(valor)
+            if valor_f is None:
                 continue
 
             ano = int(periodo[:4])
@@ -1058,7 +1076,7 @@ def _buscar_inpc_ibge(ano_inicio, mes_inicio):
             indices.append({
                 'ano': ano,
                 'mes': mes,
-                'valor': float(valor.replace(',', '.')),
+                'valor': valor_f,
                 'acumulado_ano': None,
                 'acumulado_12m': None,
                 'fonte': 'IBGE/SIDRA'
@@ -1071,38 +1089,8 @@ def _buscar_inpc_ibge(ano_inicio, mes_inicio):
 
 
 def _buscar_tr_bcb(ano_inicio, mes_inicio):
-    """
-    Busca TR (Taxa Referencial) da API do Banco Central
-    Série 226 - Taxa referencial - acumulada no mês
-    """
-    indices = []
-
-    try:
-        data_inicio = f"01/{mes_inicio:02d}/{ano_inicio}"
-        url = f"https://api.bcb.gov.br/dados/serie/bcdata.sgs.226/dados?formato=json&dataInicial={data_inicio}"
-
-        response = requests.get(url, timeout=30)
-        response.raise_for_status()
-        data = response.json()
-
-        for item in data:
-            partes = item['data'].split('/')
-            mes = int(partes[1])
-            ano = int(partes[2])
-
-            indices.append({
-                'ano': ano,
-                'mes': mes,
-                'valor': float(item['valor']),
-                'acumulado_ano': None,
-                'acumulado_12m': None,
-                'fonte': 'BCB'
-            })
-
-    except Exception as e:
-        logger.exception("Erro ao buscar TR: %s", e)
-
-    return indices
+    """Busca TR (Taxa Referencial) da API do BCB — Série 226 (acumulada no mês)."""
+    return _buscar_serie_bcb(226, ano_inicio, mes_inicio, 'BCB', 'TR')
 
 
 # ==============================================================
