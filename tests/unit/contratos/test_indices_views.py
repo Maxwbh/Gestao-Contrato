@@ -186,6 +186,57 @@ class TestImportarIndices:
         assert maio.valor == Decimal('0.8400')   # gravou o valor real
         assert maio.fonte == 'BCB'
 
+    @patch('contratos.views.requests.get')
+    def test_ipca_grava_numero_indice_oficial(self, mock_get, client_logado):
+        """IPCA (IBGE): grava o número-índice OFICIAL (variável 2266) para o
+        cálculo exato — não um valor encadeado."""
+        sidra = [
+            {'id': '63',   'resultados': [{'series': [{'serie': {'202605': '0.58'}}]}]},
+            {'id': '69',   'resultados': [{'series': [{'serie': {'202605': '2.00'}}]}]},
+            {'id': '2265', 'resultados': [{'series': [{'serie': {'202605': '5.00'}}]}]},
+            {'id': '2266', 'resultados': [{'series': [{'serie': {'202605': '7640.15'}}]}]},
+        ]
+        mock_get.return_value = MagicMock(status_code=200, json=lambda: sidra)
+        resp = self._post(client_logado, {'tipo_indice': 'IPCA'})
+        assert resp.json()['success'] is True
+        from contratos.models import IndiceReajuste
+        o = IndiceReajuste.objects.get(tipo_indice='IPCA', ano=2026, mes=5)
+        assert o.valor == Decimal('0.5800')
+        assert o.numero_indice == Decimal('7640.1500')   # oficial IBGE
+
+    @patch('contratos.views.requests.get')
+    def test_igpm_numero_indice_encadeado(self, mock_get, client_logado):
+        """IGP-M (BCB, sem número-índice oficial): encadeia a partir das variações
+        com base 100 — C(t)=C(t-1)×(1+valor/100)."""
+        mock_get.return_value = MagicMock(status_code=200, json=lambda: [
+            {'data': '01/04/2026', 'valor': '2.00'},
+            {'data': '01/05/2026', 'valor': '1.00'},
+        ])
+        resp = self._post(client_logado, {'tipo_indice': 'IGPM'})
+        assert resp.json()['success'] is True
+        from contratos.models import IndiceReajuste
+        abr = IndiceReajuste.objects.get(tipo_indice='IGPM', ano=2026, mes=4)
+        mai = IndiceReajuste.objects.get(tipo_indice='IGPM', ano=2026, mes=5)
+        assert abr.numero_indice == Decimal('102.0000')   # 100 × 1.02
+        assert mai.numero_indice == Decimal('103.0200')   # 102 × 1.01
+
+    @patch('contratos.views.requests.get')
+    def test_numero_indice_encadeia_do_mes_anterior(self, mock_get, client_logado):
+        """O encadeamento parte do número-índice do mês anterior já existente,
+        preservando a continuidade da série."""
+        from contratos.models import IndiceReajuste
+        IndiceReajuste.objects.create(
+            tipo_indice='IGPM', ano=2026, mes=3, valor=Decimal('0.50'),
+            numero_indice=Decimal('1000.00'), fonte='BCB',
+        )
+        mock_get.return_value = MagicMock(status_code=200, json=lambda: [
+            {'data': '01/04/2026', 'valor': '2.00'},
+        ])
+        resp = self._post(client_logado, {'tipo_indice': 'IGPM'})
+        assert resp.json()['success'] is True
+        abr = IndiceReajuste.objects.get(tipo_indice='IGPM', ano=2026, mes=4)
+        assert abr.numero_indice == Decimal('1020.0000')   # 1000 × 1.02
+
     def test_dados_ficticios_requer_confirmacao(self, client_logado):
         """Com dados FICTÍCIOS e sem confirmar: pede confirmação (não grava)."""
         from contratos.models import IndiceReajuste
@@ -249,11 +300,9 @@ class TestImportarIndices:
 
     @patch('contratos.views.requests.get')
     def test_sobrescrever_substitui_ficticio_por_real(self, mock_get, client_logado):
-        """Confirmação (sobrescrever): valor fictício é substituído pelo real e
-        o numero_indice fictício é zerado."""
+        """Confirmação (sobrescrever): valor fictício é substituído pelo real e o
+        numero_indice fictício é recalculado a partir das variações reais."""
         from contratos.models import IndiceReajuste
-        from datetime import date
-        from contratos.models import Contrato  # noqa
 
         # Dado fictício gravado com numero_indice de teste
         IndiceReajuste.objects.create(
@@ -273,7 +322,8 @@ class TestImportarIndices:
         maio = IndiceReajuste.objects.get(tipo_indice='IGPM', ano=2026, mes=5)
         assert maio.valor == Decimal('0.8400')      # substituiu o fictício
         assert maio.fonte == 'BCB'
-        assert maio.numero_indice is None           # numero_indice fictício zerado
+        # numero_indice fictício (3000) recalculado: base 100 × 1.0084 = 100.84
+        assert maio.numero_indice == Decimal('100.8400')
 
     @patch('contratos.views.requests.get')
     def test_sobrescrever_remove_invalidos_residuais(self, mock_get, client_logado):
