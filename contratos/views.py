@@ -9,7 +9,7 @@ from django.contrib.auth.decorators import login_required
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.views import View
 from django.views.generic import ListView, CreateView, UpdateView, DeleteView, DetailView
-from django.urls import reverse_lazy
+from django.urls import reverse_lazy, reverse
 from django.contrib import messages
 from django.db import models
 from django.db.models import Q, Sum, Count
@@ -685,16 +685,26 @@ class IndiceReajusteListView(LoginRequiredMixin, PaginacaoMixin, ListView):
         return context
 
 
+def _url_lista_indices_do_tipo(tipo_indice):
+    """URL da listagem filtrada pelo tipo — preserva a aba selecionada após
+    criar/editar/excluir um índice (a seleção não é mais perdida)."""
+    base = reverse('contratos:indices_listar')
+    return f'{base}?tipo={tipo_indice}' if tipo_indice else base
+
+
 class IndiceReajusteCreateView(LoginRequiredMixin, CreateView):
     """Cria um novo índice de reajuste"""
     model = IndiceReajuste
     form_class = IndiceReajusteForm
     template_name = 'contratos/indice_form.html'
-    success_url = reverse_lazy('contratos:indices_listar')
 
     def form_valid(self, form):
         messages.success(self.request, f'Índice {form.instance} cadastrado com sucesso!')
         return super().form_valid(form)
+
+    def get_success_url(self):
+        # Volta para a aba do tipo recém-criado (mantém a seleção).
+        return _url_lista_indices_do_tipo(self.object.tipo_indice)
 
 
 class IndiceReajusteUpdateView(LoginRequiredMixin, HashidMixin, UpdateView):
@@ -702,11 +712,14 @@ class IndiceReajusteUpdateView(LoginRequiredMixin, HashidMixin, UpdateView):
     model = IndiceReajuste
     form_class = IndiceReajusteForm
     template_name = 'contratos/indice_form.html'
-    success_url = reverse_lazy('contratos:indices_listar')
 
     def form_valid(self, form):
         messages.success(self.request, f'Índice {form.instance} atualizado com sucesso!')
         return super().form_valid(form)
+
+    def get_success_url(self):
+        # Mantém a aba do índice editado selecionada após salvar.
+        return _url_lista_indices_do_tipo(self.object.tipo_indice)
 
 
 class IndiceReajusteDeleteView(LoginRequiredMixin, HashidMixin, DeleteView):
@@ -716,9 +729,14 @@ class IndiceReajusteDeleteView(LoginRequiredMixin, HashidMixin, DeleteView):
 
     def form_valid(self, form):
         label = str(self.object)
+        # Captura o tipo antes da exclusão para voltar à mesma aba.
+        self._tipo_excluido = self.object.tipo_indice
         response = super().form_valid(form)
         messages.success(self.request, f'Índice {label} excluído com sucesso!')
         return response
+
+    def get_success_url(self):
+        return _url_lista_indices_do_tipo(getattr(self, '_tipo_excluido', ''))
 
 
 # ==============================================================

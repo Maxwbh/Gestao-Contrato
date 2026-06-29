@@ -110,6 +110,21 @@ class TestIndiceReajusteUpdateView:
         response = client_logado.get(url)
         assert response.status_code == 404
 
+    def test_editar_preserva_aba_do_tipo(self, client_logado):
+        """Após salvar a edição, volta para a lista filtrada pelo tipo (mantém a
+        aba selecionada — antes a seleção era perdida)."""
+        from contratos.models import IndiceReajuste
+        idx = IndiceReajuste.objects.create(
+            tipo_indice='IGPM', ano=2026, mes=5, valor=Decimal('0.84'), fonte='BCB',
+        )
+        url = reverse('contratos:indices_editar', kwargs={'hid': encode_id(idx.pk)})
+        resp = client_logado.post(url, {
+            'tipo_indice': 'IGPM', 'ano': '2026', 'mes': '5',
+            'valor': '0.9000', 'fonte': 'BCB',
+        })
+        assert resp.status_code == 302
+        assert 'tipo=IGPM' in resp.url
+
 
 @pytest.mark.django_db
 class TestIndiceReajusteDeleteView:
@@ -135,6 +150,8 @@ class TestIndiceReajusteDeleteView:
         response = client_logado.post(url, {})
         assert response.status_code == 302
         assert not IndiceReajuste.objects.filter(pk=indice.pk).exists()
+        # Volta para a aba do tipo excluído (mantém a seleção)
+        assert 'tipo=IPCA' in response.url
 
 
 def test_parse_valor_indice_robustez():
