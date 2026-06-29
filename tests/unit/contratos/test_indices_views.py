@@ -171,8 +171,8 @@ class TestImportarIndices:
         assert maio.valor == Decimal('0.8400')   # gravou o valor real
         assert maio.fonte == 'BCB'
 
-    def test_dados_existentes_requer_confirmacao(self, client_logado):
-        """Com dados já existentes e sem confirmar: pede confirmação (não grava)."""
+    def test_dados_ficticios_requer_confirmacao(self, client_logado):
+        """Com dados FICTÍCIOS e sem confirmar: pede confirmação (não grava)."""
         from contratos.models import IndiceReajuste
         IndiceReajuste.objects.create(
             tipo_indice='IGPM', ano=2026, mes=4, valor=Decimal('1.00'),
@@ -183,8 +183,54 @@ class TestImportarIndices:
         data = resp.json()
         assert data['success'] is False
         assert data['requer_confirmacao'] is True
-        assert data['total_existente'] == 1
         assert data['total_ficticios'] == 1
+
+    @patch('contratos.views.requests.get')
+    def test_dados_reais_existentes_nao_pergunta_e_completa(self, mock_get, client_logado):
+        """Dados já REAIS (sem fictícios): não pergunta nem rebaixa — só completa
+        os meses faltantes (sem download/confirmação redundante)."""
+        from contratos.models import IndiceReajuste
+        IndiceReajuste.objects.create(
+            tipo_indice='IGPM', ano=2026, mes=3, valor=Decimal('0.52'), fonte='BCB',
+        )
+        mock_get.return_value = MagicMock(
+            status_code=200,
+            json=lambda: [
+                {'data': '01/04/2026', 'valor': '2.73'},
+                {'data': '01/05/2026', 'valor': '0.84'},
+            ],
+        )
+        resp = self._post(client_logado, {'tipo_indice': 'IGPM'})
+        data = resp.json()
+        assert 'requer_confirmacao' not in data       # não pergunta
+        assert data['success'] is True
+        assert data['created'] == 2                    # completou os meses novos
+        assert IndiceReajuste.objects.get(tipo_indice='IGPM', ano=2026, mes=5).valor == Decimal('0.8400')
+
+    @patch('contratos.views.requests.get')
+    def test_fetch_vazio_importacao_completa_retorna_erro(self, mock_get, client_logado):
+        """API sem dados numa importação do zero: erro claro (não 'concluída 0')."""
+        mock_get.return_value = MagicMock(status_code=200, json=lambda: [])
+        resp = self._post(client_logado, {'tipo_indice': 'IGPM'})
+        assert resp.status_code == 502
+        data = resp.json()
+        assert data['success'] is False
+        assert 'API oficial' in data['error']
+
+    @patch('contratos.views.requests.get')
+    def test_fetch_vazio_incremental_ja_atualizado(self, mock_get, client_logado):
+        """API sem meses novos com dados reais existentes: 'já atualizado' (sucesso)."""
+        from contratos.models import IndiceReajuste
+        IndiceReajuste.objects.create(
+            tipo_indice='IGPM', ano=2026, mes=5, valor=Decimal('0.84'), fonte='BCB',
+        )
+        mock_get.return_value = MagicMock(status_code=200, json=lambda: [])
+        resp = self._post(client_logado, {'tipo_indice': 'IGPM'})
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data['success'] is True
+        assert data['created'] == 0 and data['updated'] == 0
+        assert 'atualizados' in data['message'].lower()
 
     @patch('contratos.views.requests.get')
     def test_sobrescrever_substitui_ficticio_por_real(self, mock_get, client_logado):

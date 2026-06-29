@@ -666,6 +666,15 @@ class IndiceReajusteListView(LoginRequiredMixin, PaginacaoMixin, ListView):
             estatisticas_indices.append({'tipo': tipo, 'total': total, 'ultimo': ultimo})
         context['estatisticas_indices'] = estatisticas_indices
 
+        # Contagem de registros fictícios (teste) por tipo — usado pela UI para
+        # perguntar antes de substituir por dados reais (sem download redundante).
+        context['ficticios_por_tipo'] = dict(
+            IndiceReajuste.objects.filter(tipo_indice__in=tipos, fonte__icontains='teste')
+            .values_list('tipo_indice')
+            .annotate(total=Count('id'))
+            .values_list('tipo_indice', 'total')
+        )
+
         # Data do contrato mais antigo (para limite de importação)
         contrato_mais_antigo = Contrato.objects.order_by('data_contrato').first()
         if contrato_mais_antigo:
@@ -797,16 +806,14 @@ def importar_indices_ibge(request):
         if tipo_indice not in ('IPCA', 'IGPM', 'INCC', 'IGPDI', 'INPC', 'TR', 'SELIC'):
             return JsonResponse({'success': False, 'error': 'Tipo de índice inválido'}, status=400)
 
-        # Confirmação antes de sobrescrever dados já existentes (RN: dados reais
-        # substituem fictícios, mas só após o usuário confirmar).
+        # Confirmação só quando há dados FICTÍCIOS (teste) a substituir. Se os
+        # dados existentes já são reais, não há nada a confirmar nem por que
+        # rebaixar tudo — a importação apenas completa os meses faltantes
+        # (incremental), sem re-download desnecessário do histórico.
         existentes_qs = IndiceReajuste.objects.filter(tipo_indice=tipo_indice)
         total_existente = existentes_qs.count()
-        if total_existente > 0 and not sobrescrever and not ano_inicio:
-            total_ficticios = existentes_qs.filter(fonte__icontains='teste').count()
-            partes = [f'Já existem {total_existente} registro(s) de {tipo_indice}']
-            if total_ficticios:
-                partes.append(f'{total_ficticios} fictício(s) (teste)')
-            msg = ', sendo '.join(partes) if total_ficticios else partes[0]
+        total_ficticios = existentes_qs.filter(fonte__icontains='teste').count()
+        if total_ficticios > 0 and not sobrescrever and not ano_inicio:
             return JsonResponse({
                 'success': False,
                 'requer_confirmacao': True,
@@ -814,8 +821,9 @@ def importar_indices_ibge(request):
                 'total_existente': total_existente,
                 'total_ficticios': total_ficticios,
                 'message': (
-                    f'{msg}. Deseja atualizar com dados reais das APIs oficiais '
-                    '(IBGE/Banco Central)? Os valores existentes serão substituídos.'
+                    f'Existem {total_ficticios} registro(s) fictício(s) (teste) de '
+                    f'{tipo_indice}. Deseja substituí-los pelos dados reais das APIs '
+                    'oficiais (IBGE/Banco Central)?'
                 ),
             })
 
@@ -841,6 +849,27 @@ def importar_indices_ibge(request):
             indices = _buscar_selic_bcb(ano_inicio, mes_inicio)
         else:
             return JsonResponse({'success': False, 'error': 'Tipo de índice inválido'}, status=400)
+
+        # Nenhum dado retornado da API: distinguir "já atualizado" (incremental,
+        # sem meses novos) de "falha ao obter dados" (API indisponível/sem rede).
+        # Surfacing explícito evita o falso "Importação concluída! 0 novos" que
+        # mascarava a falha de conexão com IBGE/BCB.
+        if not indices:
+            incremental = (not sobrescrever) and total_existente > 0
+            if incremental:
+                return JsonResponse({
+                    'success': True,
+                    'message': 'Índices já estão atualizados — nenhum mês novo publicado.',
+                    'created': 0, 'updated': 0, 'ignored': 0, 'total': 0,
+                })
+            return JsonResponse({
+                'success': False,
+                'error': (
+                    'Não foi possível obter dados da API oficial (IBGE/Banco Central) '
+                    'agora. Nenhum dado foi gravado — verifique a conexão do servidor '
+                    'com a internet e tente novamente em instantes.'
+                ),
+            }, status=502)
 
         # Salvar índices no banco usando bulk operations para melhor performance
         count_created = 0

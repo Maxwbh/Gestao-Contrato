@@ -287,6 +287,7 @@
 {% endblock %}
 
 {% block extra_js %}
+{{ ficticios_por_tipo|json_script:"indices-ficticios-data" }}
 <script>
     function cleanCsvCell(params) {
         const v = params.value;
@@ -447,7 +448,58 @@
         new bootstrap.Modal(document.getElementById('modalExclusao')).show();
     }
 
+    // Contagem de registros fictícios (teste) por tipo, vinda do servidor.
+    let _ficticiosPorTipo = {};
+    try {
+        _ficticiosPorTipo = JSON.parse(document.getElementById('indices-ficticios-data').textContent) || {};
+    } catch (e) { _ficticiosPorTipo = {}; }
+
+    // Dispatcher: pergunta ANTES de baixar quando há dados fictícios a substituir
+    // (evita o download redundante). Caso contrário, importa direto.
     function importarIndices(sobrescrever) {
+        if (sobrescrever === true || sobrescrever === false) {
+            return executarImportacao(sobrescrever);
+        }
+        const tipo = document.getElementById('tipoIndiceImportar').value;
+        const nFicticios = _ficticiosPorTipo[tipo] || 0;
+        if (nFicticios > 0) {
+            return pedirConfirmacaoSobrescrever(
+                `Existem ${nFicticios} registro(s) fictício(s) (teste) de ${tipo}. ` +
+                `Deseja substituí-los pelos dados reais das APIs oficiais (IBGE/Banco Central)?`
+            );
+        }
+        return executarImportacao(false);
+    }
+
+    // Exibe a confirmação no modal, sem barra de progresso (nada foi baixado ainda).
+    function pedirConfirmacaoSobrescrever(mensagem) {
+        const formImportacao = document.getElementById('formImportacao');
+        const progressoImportacao = document.getElementById('progressoImportacao');
+        const resultado = document.getElementById('resultadoImportacao');
+        formImportacao.classList.add('d-none');
+        progressoImportacao.classList.add('d-none');
+        resultado.classList.remove('d-none');
+        resultado.className = 'alert alert-warning';
+        resultado.innerHTML = `
+            <div class="text-center">
+                <i class="fas fa-exclamation-triangle fa-2x text-warning mb-2"></i>
+                <h6 class="text-warning">Dados de teste encontrados</h6>
+                <p class="mb-3">${mensagem}</p>
+                <button type="button" class="btn btn-success me-2" id="btnConfirmarSobrescrever">
+                    <i class="fas fa-sync-alt me-1"></i> Sim, substituir por dados reais
+                </button>
+                <button type="button" class="btn btn-outline-secondary" onclick="resetarModal()">
+                    Cancelar
+                </button>
+            </div>
+        `;
+        document.getElementById('btnConfirmarSobrescrever').onclick = function() {
+            resetarModal();
+            executarImportacao(true);
+        };
+    }
+
+    function executarImportacao(sobrescrever) {
         sobrescrever = !!sobrescrever;
         const btn = document.getElementById('btnImportar');
         const btnCancelar = document.getElementById('btnCancelar');
