@@ -29,7 +29,7 @@
     <!-- Cabeçalho + Ações -->
     <div class="d-flex flex-wrap justify-content-between align-items-end mb-4 gap-2">
         <div>
-            <div class="small text-muted mb-1">Financeiro / <span class="fw-bold text-dark">Arquivos Remessa</span></div>
+            <div class="small text-muted mb-1">Financeiro / <a href="{% url 'financeiro:cobranca_hub' %}">Cobrança do Mês</a> / <span class="fw-bold text-dark">Arquivos Remessa</span></div>
             <h2 class="mb-1"><i class="fas fa-file-export me-2"></i>Envio de Remessa Bancária</h2>
             <p class="text-muted mb-0">Gere e controle os arquivos CNAB de cobrança — 1 arquivo por conta bancária.</p>
         </div>
@@ -144,6 +144,18 @@
                 <thead class="table-light"><tr><th>Contrato</th><th>Parcela</th><th>Sacado</th><th>Inconsistência</th></tr></thead>
                 <tbody id="tbodyAlertas"><tr><td colspan="4" class="text-center text-muted py-2">Carregando…</td></tr></tbody>
             </table>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Boleto-API: cobrança registrada não entra no CNAB (informativo, não é erro) -->
+    {% if boleto_api_count %}
+    <div class="alert alert-info d-flex align-items-start py-2" role="alert">
+        <i class="fas fa-cloud-arrow-up me-2 mt-1"></i>
+        <div class="small">
+            <strong>{{ boleto_api_count }} boleto{{ boleto_api_count|pluralize }} de cobrança registrada (C6/Sicoob via Boleto-API)</strong>
+            não {{ boleto_api_count|pluralize:'entra,entram' }} na remessa CNAB — o registro é feito online no banco e a baixa
+            é conciliada automaticamente por evento (webhook). Nenhuma ação é necessária para ele{{ boleto_api_count|pluralize }}.
         </div>
     </div>
     {% endif %}
@@ -271,26 +283,65 @@
         if (btn.dataset._html) btn.innerHTML = btn.dataset._html;
     }
 
+    function notify(msg, type) {
+        if (window.showToast) window.showToast(msg, type || 'info');
+        else if (type === 'error') alert(msg);
+    }
+    function esc(s) {
+        return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+    }
+
+    // Mensagem que sobrevive ao reload — o resumo não é cortado pela atualização
+    const FLASH_KEY = 'remessaFlash';
+    function flashAposReload(html, tipo) {
+        try { sessionStorage.setItem(FLASH_KEY, JSON.stringify({ html: html, tipo: tipo || 'success' })); } catch (e) {}
+    }
+    document.addEventListener('DOMContentLoaded', () => {
+        let f = null;
+        try {
+            f = JSON.parse(sessionStorage.getItem(FLASH_KEY) || 'null');
+            sessionStorage.removeItem(FLASH_KEY);
+        } catch (e) {}
+        if (!f) return;
+        const div = document.createElement('div');
+        div.className = 'alert alert-' + f.tipo + ' alert-dismissible d-flex align-items-start';
+        div.innerHTML = '<i class="fas fa-circle-info me-2 mt-1"></i><div>' + f.html + '</div>' +
+            '<button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Fechar"></button>';
+        const app = document.getElementById('remessaApp');
+        app.insertBefore(div, app.children[1]);
+    });
+
     function gerar(escopo, extra, btn) {
         // Pode aguardar o cooldown da operadora (logo após gerar boletos) + retries.
         lockBtn(btn, 'Gerando remessa…');
         post(URL_GERAR, Object.assign({ escopo: escopo }, extra || {})).then(({ ok, data }) => {
             if (!ok || !data.sucesso) {
-                alert(data.erro || 'Falha ao gerar remessa.');
+                notify(data.erro || 'Falha ao gerar remessa.', 'error');
                 unlockBtn(btn);
                 return;
             }
             // Dispara download(s)
+            let baixou = false;
             if (data.download_lote_url) {
                 window.location = data.download_lote_url;
+                baixou = true;
             } else if (data.arquivos && data.arquivos.length === 1) {
                 window.location = data.arquivos[0].download_url;
+                baixou = true;
             }
+            // Resumo persistente: exibido após o reload, sem cortar a leitura
+            let resumo = '<strong>' + data.total_gerados + ' arquivo(s) de remessa gerado(s).</strong>' +
+                ' Baixe, envie ao banco e use <em>Marcar como enviada</em> para liberar o retorno.';
+            let tipo = 'success';
             if (data.erros && data.erros.length) {
-                alert('Gerados: ' + data.total_gerados + '. Avisos:\n' + data.erros.join('\n'));
+                tipo = 'warning';
+                resumo += '<div class="small mt-1"><strong>Avisos:</strong><ul class="mb-0">' +
+                    data.erros.map(e => '<li>' + esc(e) + '</li>').join('') + '</ul></div>';
             }
-            setTimeout(() => window.location.reload(), 1200);
-        }).catch(() => { alert('Erro de conexão.'); unlockBtn(btn); });
+            flashAposReload(resumo, tipo);
+            // Espera o download iniciar antes de recarregar (evita corrida)
+            setTimeout(() => window.location.reload(), baixou ? 2500 : 800);
+        }).catch(() => { notify('Erro de conexão com o servidor. Tente novamente.', 'error'); unlockBtn(btn); });
     }
 
     document.querySelectorAll('.btn-gerar-conta').forEach(btn => {
@@ -334,13 +385,24 @@
         });
     }
 
+    const URL_RETORNO = "{% url 'financeiro:retorno_painel' %}";
+
     document.querySelectorAll('.btn-marcar-enviada').forEach(btn => {
         btn.addEventListener('click', () => {
             lockBtn(btn, '');
             post(URL_MARCAR_BASE + btn.dataset.hid + '/marcar-enviada/', {}).then(({ ok, data }) => {
-                if (ok && data.sucesso) { window.location.reload(); }
-                else { alert(data.erro || 'Falha.'); unlockBtn(btn); }
-            }).catch(() => { alert('Erro de conexão.'); unlockBtn(btn); });
+                if (ok && data.sucesso) {
+                    // Próximo passo do ciclo: receber o retorno deste banco
+                    flashAposReload(
+                        '<strong>Remessa marcada como enviada ao banco.</strong> ' +
+                        'Quando o banco disponibilizar o arquivo de retorno, processe a baixa: ' +
+                        '<a href="' + URL_RETORNO + window.location.search + '" class="alert-link">Receber Retorno →</a>',
+                        'success'
+                    );
+                    window.location.reload();
+                }
+                else { notify(data.erro || 'Falha ao marcar como enviada.', 'error'); unlockBtn(btn); }
+            }).catch(() => { notify('Erro de conexão com o servidor. Tente novamente.', 'error'); unlockBtn(btn); });
         });
     });
 
@@ -349,9 +411,12 @@
             if (!confirm('Regenerar este arquivo de remessa? O conteúdo será refeito.')) return;
             lockBtn(btn, '');
             post(URL_MARCAR_BASE + btn.dataset.hid + '/regenerar/', {}).then(({ ok, data }) => {
-                if (ok && data.sucesso) { window.location.reload(); }
-                else { alert(data.erro || 'Falha ao regenerar.'); unlockBtn(btn); }
-            }).catch(() => { alert('Erro de conexão.'); unlockBtn(btn); });
+                if (ok && data.sucesso) {
+                    flashAposReload('<strong>Arquivo de remessa regenerado.</strong> Baixe novamente antes de enviar ao banco.', 'success');
+                    window.location.reload();
+                }
+                else { notify(data.erro || 'Falha ao regenerar.', 'error'); unlockBtn(btn); }
+            }).catch(() => { notify('Erro de conexão com o servidor. Tente novamente.', 'error'); unlockBtn(btn); });
         });
     });
 
@@ -360,9 +425,12 @@
             if (!confirm('Excluir esta remessa? Os boletos voltam a ficar disponíveis.')) return;
             lockBtn(btn, '');
             post(URL_MARCAR_BASE + btn.dataset.hid + '/excluir/', {}).then(({ ok, data }) => {
-                if (ok && data.sucesso) { window.location.reload(); }
-                else { alert(data.erro || 'Falha ao excluir.'); unlockBtn(btn); }
-            }).catch(() => { alert('Erro de conexão.'); unlockBtn(btn); });
+                if (ok && data.sucesso) {
+                    flashAposReload('<strong>Remessa excluída.</strong> Os boletos voltaram a ficar elegíveis para nova remessa.', 'success');
+                    window.location.reload();
+                }
+                else { notify(data.erro || 'Falha ao excluir.', 'error'); unlockBtn(btn); }
+            }).catch(() => { notify('Erro de conexão com o servidor. Tente novamente.', 'error'); unlockBtn(btn); });
         });
     });
 })();

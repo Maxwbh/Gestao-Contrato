@@ -92,7 +92,7 @@
                     </h5>
                 </div>
                 <div class="card-body">
-                    <form method="post" enctype="multipart/form-data">
+                    <form method="post" enctype="multipart/form-data" id="formPagamento">
                         {% csrf_token %}
 
                         <div class="row">
@@ -115,10 +115,15 @@
                             <label for="valor_pago" class="form-label">Valor Pago *</label>
                             <div class="input-group">
                                 <span class="input-group-text">R$</span>
-                                <input type="number" step="0.01" class="form-control" id="valor_pago" name="valor_pago"
+                                <input type="number" step="0.01" min="0.01" class="form-control" id="valor_pago" name="valor_pago"
                                        value="{{ parcela.valor_total|floatformat:2 }}" required>
                             </div>
-                            <div class="form-text">Valor efetivamente pago pelo cliente.</div>
+                            <div class="form-text">
+                                Valor efetivamente pago pelo cliente.
+                                <span id="avisoEstimativa" class="d-none text-warning">
+                                    Juros/multa sugeridos são uma estimativa — o valor definitivo é recalculado ao confirmar.
+                                </span>
+                            </div>
                         </div>
 
                         <div class="mb-3">
@@ -140,7 +145,7 @@
                             <a href="{% url 'financeiro:detalhe_parcela' parcela.pk|hashid %}" class="btn btn-secondary">
                                 <i class="fas fa-times me-1"></i> Cancelar
                             </a>
-                            <button type="submit" class="btn btn-success btn-lg">
+                            <button type="submit" class="btn btn-success btn-lg" id="btnConfirmarPagamento">
                                 <i class="fas fa-check me-2"></i>
                                 Confirmar Pagamento
                             </button>
@@ -164,6 +169,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
     dataInput.addEventListener('change', function() {
         const dataPagamento = new Date(this.value);
+        const aviso = document.getElementById('avisoEstimativa');
         if (dataPagamento > vencimento) {
             const diffTime = Math.abs(dataPagamento - vencimento);
             const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
@@ -173,10 +179,30 @@ document.addEventListener('DOMContentLoaded', function() {
             const total = valorOriginal + juros + multa;
 
             valorInput.value = total.toFixed(2);
+            // Cálculo do front é aproximado — o backend recalcula na confirmação
+            if (aviso) aviso.classList.remove('d-none');
         } else {
             valorInput.value = valorOriginal.toFixed(2);
+            if (aviso) aviso.classList.add('d-none');
         }
     });
+
+    // Trava anti duplo-submit: 2 cliques = 2 pagamentos registrados
+    const form = document.getElementById('formPagamento');
+    const btnConfirmar = document.getElementById('btnConfirmarPagamento');
+    form.addEventListener('submit', function(e) {
+        const valor = parseFloat(valorInput.value);
+        if (!valor || valor <= 0) {
+            e.preventDefault();
+            valorInput.classList.add('is-invalid');
+            valorInput.focus();
+            return;
+        }
+        if (btnConfirmar.disabled) { e.preventDefault(); return; }
+        btnConfirmar.disabled = true;
+        btnConfirmar.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Registrando pagamento...';
+    });
+    valorInput.addEventListener('input', () => valorInput.classList.remove('is-invalid'));
 });
 </script>
 {% endblock %}

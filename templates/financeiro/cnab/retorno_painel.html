@@ -29,7 +29,7 @@
     <!-- Cabeçalho -->
     <div class="d-flex flex-wrap justify-content-between align-items-end mb-4 gap-2">
         <div>
-            <div class="small text-muted mb-1">Financeiro / <a href="{% url 'financeiro:remessa_painel' %}">Remessa</a> / Retorno Bancário</div>
+            <div class="small text-muted mb-1">Financeiro / <a href="{% url 'financeiro:cobranca_hub' %}">Cobrança do Mês</a> / <a href="{% url 'financeiro:remessa_painel' %}">Remessa</a> / Retorno Bancário</div>
             <h2 class="h4 fw-bold mb-0">Processamento de Retorno Bancário</h2>
             <p class="text-muted small mb-0 mt-1">Gerencie a liquidação de boletos e conciliação financeira automatizada.</p>
         </div>
@@ -271,6 +271,7 @@
 
     const modalEl = document.getElementById('modalUploadRetorno');
     const bsModal = modalEl ? new bootstrap.Modal(modalEl) : null;
+    let dadosProcessados = false;  // true após um retorno processado — reload ao fechar o modal
 
     document.querySelectorAll('.btn-upload-retorno').forEach(btn => {
         btn.addEventListener('click', () => {
@@ -316,6 +317,7 @@
                     btnConfirmar.classList.add('d-none');
                     const pago = parseFloat(data.valor_total_pago || 0)
                         .toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+                    const URL_CONCILIACAO = "{% url 'financeiro:painel_conciliacao_saude' %}";
                     document.getElementById('listaResultado').innerHTML = [
                         `<li>${data.registros_processados} de ${data.total_registros} registros processados</li>`,
                         data.rejeicoes
@@ -326,9 +328,12 @@
                             : '',
                         `<li>Valor total pago confirmado: <strong>${pago}</strong></li>`,
                         `<li><a href="${data.detalhe_url}">Ver relatório completo</a></li>`,
+                        `<li>Próximo passo: <a href="${URL_CONCILIACAO}${window.location.search}">Conferir Conciliação &amp; Saúde da Cobrança →</a></li>`,
                     ].join('');
                     document.getElementById('resultadoUpload').classList.remove('d-none');
-                    setTimeout(() => window.location.reload(), 3000);
+                    // Recarrega os KPIs somente quando o usuário terminar de ler
+                    // o resumo (fechar o modal) — sem cortar a leitura no meio.
+                    dadosProcessados = true;
                 } else {
                     alertEl.className = 'alert alert-danger';
                     alertEl.textContent = data.erro || 'Erro ao processar o retorno.';
@@ -338,6 +343,13 @@
                 alertEl.className = 'alert alert-danger';
                 alertEl.textContent = 'Erro de conexão ao enviar o arquivo.';
             });
+        });
+    }
+
+    // Após um processamento bem-sucedido, atualiza KPIs/histórico ao fechar o modal
+    if (modalEl) {
+        modalEl.addEventListener('hidden.bs.modal', () => {
+            if (dadosProcessados) window.location.reload();
         });
     }
 })();

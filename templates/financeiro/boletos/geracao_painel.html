@@ -26,7 +26,7 @@
     <!-- Cabeçalho -->
     <div class="d-flex flex-wrap justify-content-between align-items-end mb-4 gap-2">
         <div>
-            <div class="small text-muted mb-1">Financeiro / <span class="fw-bold text-dark">Geração de Boletos</span></div>
+            <div class="small text-muted mb-1">Financeiro / <a href="{% url 'financeiro:cobranca_hub' %}">Cobrança do Mês</a> / <span class="fw-bold text-dark">Geração de Boletos</span></div>
             <h2 class="h4 fw-bold mb-0"><i class="fas fa-file-invoice-dollar me-2"></i>Geração de Boletos do Mês</h2>
             <p class="text-muted small mb-0 mt-1">Gere os boletos do período por escopo — parcelas e intermediárias.</p>
         </div>
@@ -98,6 +98,19 @@
             <div class="small text-muted">prestações elegíveis</div>
         </div></div>
     </div>
+
+    <!-- Boleto-API: contas com cobrança registrada (registro online, sem remessa CNAB) -->
+    {% if contas_boleto_api %}
+    <div class="alert alert-info d-flex align-items-start py-2" role="alert">
+        <i class="fas fa-cloud-arrow-up me-2 mt-1"></i>
+        <div class="small">
+            <strong>Cobrança registrada via Boleto-API:</strong>
+            {% for cb in contas_boleto_api %}{{ cb.get_banco_display }} ({{ cb.imobiliaria.nome }}){% if not forloop.last %}, {% endif %}{% endfor %}.
+            Boletos dessas contas são registrados online no banco no momento da geração e
+            <strong>não passam pelo Passo 2 (remessa CNAB)</strong> — a baixa chega automaticamente por evento do banco.
+        </div>
+    </div>
+    {% endif %}
 
     <!-- Conferência por imobiliária → contrato -->
     {% for grupo in grupos %}
@@ -241,6 +254,12 @@
     const TOTAL_INTERM = {{ kpis.intermediarias|default:0 }};
     const modalEl = document.getElementById('modalGerar');
     const bsModal = modalEl ? new bootstrap.Modal(modalEl) : null;
+    let aguardandoReload = false;  // geração concluída — recarregar KPIs ao fechar o modal
+    if (modalEl) {
+        modalEl.addEventListener('hidden.bs.modal', () => {
+            if (aguardandoReload) window.location.reload();
+        });
+    }
 
     // escopo escolhido antes de abrir o modal
     let escopoAtual = 'todos';
@@ -431,7 +450,9 @@
                 notify('Nenhum boleto elegível para geração.', 'info', 4000);
             }
 
-            setTimeout(() => window.location.reload(), 3500);
+            // Recarrega os KPIs quando o usuário fechar o modal — o resumo
+            // (erros, links de carnê, bloqueados) fica na tela até ele terminar de ler.
+            aguardandoReload = true;
         } catch (err) {
             finalizarProgresso(false);
             unlock(btnConf); btnConf.classList.remove('d-none');

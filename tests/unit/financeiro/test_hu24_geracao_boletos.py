@@ -111,6 +111,19 @@ class TestPainelView:
         resp = c.get(reverse('financeiro:boletos_painel') + '?quantidade=2')
         assert resp.status_code == 200
         assert resp.context['kpis']['a_gerar'] == 2
+        assert resp.context['contas_boleto_api'] == []  # sem contas Boleto-API
+
+    def test_contas_boleto_api_no_contexto(self, base, staff_cli):
+        """Contas C6/Sicoob aparecem no aviso de cobrança registrada do painel."""
+        _, c = staff_cli
+        imob, conta, contrato = base
+        conta.provider = 'c6'
+        conta.save(update_fields=['provider'])
+        resp = c.get(reverse('financeiro:boletos_painel'))
+        assert resp.status_code == 200
+        contas = resp.context['contas_boleto_api']
+        assert len(contas) == 1 and contas[0].pk == conta.pk
+        assert 'Cobrança registrada via Boleto-API' in resp.content.decode()
 
 
 # ---------------------------------------------------------------------------

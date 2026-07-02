@@ -203,7 +203,7 @@
             <div class="vr d-none d-sm-block"></div>
             <!-- Carnê -->
             <button type="button" class="btn btn-outline-info btn-sm" onclick="gerarCarneSelecionados()"
-                    title="Gera carnê para parcelas selecionadas (mesmo contrato)">
+                    title="Gera carnê para parcelas selecionadas — mesmo contrato, máximo de 60 parcelas por carnê">
                 <i class="fas fa-book me-1"></i> Gerar Carnê
             </button>
             <!-- Remessa CNAB -->
@@ -1065,15 +1065,30 @@ function confirmarPagar() {
 function gerarCarneSelecionados() {
     const selecionados = window.parcelasGridApi ? window.parcelasGridApi.getSelectedRows() : [];
     const naoPagas = selecionados.filter(r => !r.pago);
+    const resultadoAviso = document.getElementById('bulkResultado');
+
+    function avisoCarne(msg) {
+        resultadoAviso.className = 'alert alert-warning';
+        resultadoAviso.innerHTML = '<i class="fas fa-circle-info me-1"></i> ' + msg;
+        resultadoAviso.classList.remove('d-none');
+    }
+
     if (!naoPagas.length) {
-        alert('Nenhuma parcela não-paga selecionada.');
+        avisoCarne('Nenhuma parcela não-paga selecionada. Selecione na tabela as parcelas em aberto que devem compor o carnê.');
         return;
     }
 
-    // Validar que todas são do mesmo contrato
+    // Regras do carnê comunicadas ANTES de chamar o servidor:
+    // 1 contrato por carnê · máximo de 60 parcelas
     const contratoIds = [...new Set(naoPagas.map(r => r.contrato_pk))];
     if (contratoIds.length > 1) {
-        alert('Para gerar Carnê, selecione parcelas de apenas um contrato.\nForam selecionados ' + contratoIds.length + ' contratos diferentes.');
+        avisoCarne('O carnê é por contrato: selecione parcelas de <strong>apenas um contrato</strong>. ' +
+            'Foram selecionados ' + contratoIds.length + ' contratos diferentes — refine a seleção (dica: filtre a coluna Contrato).');
+        return;
+    }
+    if (naoPagas.length > 60) {
+        avisoCarne('O carnê comporta no máximo <strong>60 parcelas</strong> — foram selecionadas ' + naoPagas.length + '. ' +
+            'Divida em mais de um carnê (ex.: 60 primeiras parcelas e o restante em outro).');
         return;
     }
 
@@ -1138,7 +1153,12 @@ function baixarCarnePdf(contratoId, parcela_ids) {
         document.body.removeChild(a);
         URL.revokeObjectURL(url);
     })
-    .catch(function(err) { alert('Erro ao baixar carnê PDF: ' + err.message); });
+    .catch(function(err) {
+        var resultado = document.getElementById('bulkResultado');
+        resultado.className = 'alert alert-danger';
+        resultado.innerHTML = '<i class="fas fa-exclamation-triangle me-1"></i> Erro ao baixar carnê PDF: ' + err.message;
+        resultado.classList.remove('d-none');
+    });
 }
 
 // ===== GERAR REMESSA CNAB =====

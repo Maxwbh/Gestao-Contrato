@@ -253,6 +253,21 @@ class TestPainelView:
         assert resp.context['kpi_bancos_ativos'] == 1   # 1 conta
         assert resp.context['kpi_vencendo_hoje'] == 1    # parcela 4 vence hoje
         assert len(resp.context['grupos']) == 1
+        assert resp.context['boleto_api_count'] == 0    # sem contas Boleto-API
+
+    def test_boleto_api_count_no_contexto(self, base, staff_cli):
+        """Boletos de contas C6/Sicoob são contados e informados (não somem em silêncio)."""
+        _, c = staff_cli
+        imob, conta, contrato = base
+        conta.provider = 'sicoob'
+        conta.save(update_fields=['provider'])
+        resp = c.get(reverse('financeiro:remessa_painel'))
+        assert resp.status_code == 200
+        # As 4 parcelas GERADO não pagas da conta agora são Boleto-API
+        assert resp.context['boleto_api_count'] == 4
+        # E saem da elegibilidade CNAB
+        assert resp.context['kpi_total_pendente'] == 0
+        assert 'cobrança registrada' in resp.content.decode()
 
 
 # ---------------------------------------------------------------------------
