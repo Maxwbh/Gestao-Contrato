@@ -1,0 +1,27 @@
+#!/bin/bash
+#
+# Git Hook: pre-commit (V-06)
+# Exibe a versão que será registrada neste commit.
+# PATCH é calculado automaticamente via git rev-list --count HEAD.
+# Para bumpar MAJOR ou MINOR, edite manualmente o arquivo VERSION.
+#
+# Desenvolvedor: Maxwell da Silva Oliveira (@maxwbh)
+# Email: maxwbh@gmail.com
+# Empresa: M&S do Brasil LTDA - www.msbrasil.inf.br
+#
+
+GIT_DIR=$(git rev-parse --git-dir 2>/dev/null)
+PROJECT_ROOT=$(dirname "$GIT_DIR")
+VERSION_FILE="$PROJECT_ROOT/VERSION"
+
+BASE_VERSION="1.0"
+if [ -f "$VERSION_FILE" ]; then
+    BASE_VERSION=$(cat "$VERSION_FILE" | tr -d '[:space:]')
+fi
+
+# PATCH = número de commits existentes + 1 (este será o próximo)
+PATCH=$(git rev-list --count HEAD 2>/dev/null)
+PATCH=$((PATCH + 1))
+
+echo "→ Versão após commit: ${BASE_VERSION}.${PATCH}"
+exit 0

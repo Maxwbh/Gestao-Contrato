@@ -9,7 +9,6 @@ LinkedIn: https://www.linkedin.com/in/maxwbh/
 GitHub: https://github.com/Maxwbh/
 """
 
-import os
 from pathlib import Path
 import dj_database_url
 from decouple import config, Csv
@@ -19,6 +18,10 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 
 # SECURITY WARNING: keep the secret key used in production secret!
 SECRET_KEY = config('SECRET_KEY', default='django-insecure-dev-key-change-in-production')
+
+# ── Hashids URL obfuscation (U-01) ───────────────────────────────────────────
+HASHIDS_SALT = SECRET_KEY[:20]
+HASHIDS_MIN_LENGTH = 6
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = config('DEBUG', default=False, cast=bool)
@@ -42,17 +45,22 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+    'django.contrib.humanize',
 
     # Third party apps
     'crispy_forms',
     'crispy_bootstrap5',
     'django_celery_beat',
+    'rest_framework',
+    'drf_spectacular',
 
     # Local apps
+    'accounts',
     'core',
     'contratos',
     'financeiro',
     'notificacoes',
+    'portal_comprador',
 ]
 
 MIDDLEWARE = [
@@ -64,7 +72,12 @@ MIDDLEWARE = [
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
+    'core.middleware.AntiEnumeracaoMiddleware',  # D-01: anti-enumeration
 ]
+
+# D-03: Security headers — sempre ativos (não apenas em produção)
+SECURE_CONTENT_TYPE_NOSNIFF = True
+X_FRAME_OPTIONS = 'DENY'
 
 ROOT_URLCONF = 'gestao_contrato.urls'
 
@@ -79,6 +92,7 @@ TEMPLATES = [
                 'django.template.context_processors.request',
                 'django.contrib.auth.context_processors.auth',
                 'django.contrib.messages.context_processors.messages',
+                'core.context_processors.system_info',
             ],
         },
     },
@@ -93,10 +107,65 @@ if config('DATABASE_URL', default=None):
     DATABASES = {
         'default': dj_database_url.config(
             default=config('DATABASE_URL'),
-            conn_max_age=600,
-            conn_health_checks=True,
+            # pgBouncer transaction mode: manter conn_max_age=0 para que Django
+            # nao tente reutilizar conexoes entre requests (cada transacao pode
+            # ir para um backend diferente no pool).
+            conn_max_age=0,
+            conn_health_checks=False,
         )
     }
+    import sys as _sys
+    _is_testing = 'pytest' in _sys.modules or (
+        len(_sys.argv) > 1 and _sys.argv[1] == 'test'
+    )
+    _db_engine = DATABASES['default'].get('ENGINE', '')
+    _is_pg = 'postgresql' in _db_engine
+    _is_mysql = 'mysql' in _db_engine
+    _is_oracle = 'oracle' in _db_engine
+
+    if not _is_testing:
+        if _is_pg:
+            # DB-01/DB-03: search_path e opções apenas para PostgreSQL
+            DATABASES['default']['OPTIONS'] = {
+                'options': '-c search_path=gestao_contrato'
+            }
+        elif _is_mysql:
+            # DB-03: opções específicas para MySQL
+            DATABASES['default']['OPTIONS'] = {
+                'charset': 'utf8mb4',
+                'init_command': "SET sql_mode='STRICT_TRANS_TABLES'",
+            }
+        elif _is_oracle:
+            # DB-03: opções específicas para Oracle
+            DATABASES['default']['OPTIONS'] = {'threaded': True}
+        else:
+            DATABASES['default']['OPTIONS'] = {}
+    else:
+        # Testes: usar schema public (sem multi-tenant; evita erros de schema ausente)
+        DATABASES['default']['OPTIONS'] = {}
+
+    # Banco de teste: nome fixo, schema public
+    DATABASES['default']['TEST'] = {
+        'NAME': 'test_gestao_contrato',
+    }
+
+    if _is_pg:
+        # pgBouncer transaction mode: desabilitar cursores nomeados server-side.
+        # Django usa cursores nomeados para iterar querysets grandes (fetchmany),
+        # mas pgBouncer pode rotear fetchmany() para um backend diferente do cursor,
+        # causando "cursor X does not exist". DISABLE_SERVER_SIDE_CURSORS=True faz
+        # Django buscar todas as linhas de uma vez (sem cursor nomeado).
+        DATABASES['default']['DISABLE_SERVER_SIDE_CURSORS'] = True
+
+    # DB-01: Signal para garantir search_path em cada conexao (somente PostgreSQL)
+    if _is_pg and not _is_testing:
+        from django.db.backends.signals import connection_created
+
+        def set_search_path(sender, connection, **kwargs):
+            if connection.vendor == 'postgresql':
+                cursor = connection.cursor()
+                cursor.execute("SET search_path TO gestao_contrato")
+        connection_created.connect(set_search_path)
 else:
     DATABASES = {
         'default': {
@@ -123,6 +192,11 @@ AUTH_PASSWORD_VALIDATORS = [
     },
 ]
 
+# Login/Logout URLs
+LOGIN_URL = 'accounts:login'
+LOGIN_REDIRECT_URL = 'core:dashboard'
+LOGOUT_REDIRECT_URL = 'accounts:login'
+
 # Internationalization
 # https://docs.djangoproject.com/en/4.2/topics/i18n/
 
@@ -146,7 +220,14 @@ static_dir = BASE_DIR / 'static'
 if static_dir.exists():
     STATICFILES_DIRS = [static_dir]
 
-STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
+STORAGES = {
+    "default": {
+        "BACKEND": "django.core.files.storage.FileSystemStorage",
+    },
+    "staticfiles": {
+        "BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage",
+    },
+}
 
 MEDIA_URL = '/media/'
 MEDIA_ROOT = BASE_DIR / 'media'
@@ -169,29 +250,172 @@ CELERY_RESULT_SERIALIZER = 'json'
 CELERY_TIMEZONE = TIME_ZONE
 CELERY_BEAT_SCHEDULER = 'django_celery_beat.schedulers:DatabaseScheduler'
 
+# =============================================================================
+# Parâmetros operacionais — valores padrão (bootstrap)
+# Estes valores são usados apenas na primeira inicialização ou em testes.
+# Em produção, CoreConfig.ready() sobrescreve estas configurações com os
+# valores armazenados em ParametroSistema (banco de dados).
+# Para alterar em produção: Admin → Gestão Principal → Parâmetros do Sistema.
+# =============================================================================
+
 # Email Configuration
-EMAIL_BACKEND = config('EMAIL_BACKEND', default='django.core.mail.backends.console.EmailBackend')
-EMAIL_HOST = config('EMAIL_HOST', default='localhost')
-EMAIL_PORT = config('EMAIL_PORT', default=587, cast=int)
-EMAIL_USE_TLS = config('EMAIL_USE_TLS', default=True, cast=bool)
-EMAIL_HOST_USER = config('EMAIL_HOST_USER', default='')
-EMAIL_HOST_PASSWORD = config('EMAIL_HOST_PASSWORD', default='')
-DEFAULT_FROM_EMAIL = config('DEFAULT_FROM_EMAIL', default='noreply@gestaocontrato.com.br')
+EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
+EMAIL_HOST = 'localhost'
+EMAIL_PORT = 587
+EMAIL_USE_TLS = True
+EMAIL_USE_SSL = False
+EMAIL_HOST_USER = ''
+EMAIL_HOST_PASSWORD = ''
+DEFAULT_FROM_EMAIL = 'noreply@gestaocontrato.com.br'
+EMAIL_TIMEOUT = 10
 
 # Twilio Configuration (SMS e WhatsApp)
-TWILIO_ACCOUNT_SID = config('TWILIO_ACCOUNT_SID', default='')
-TWILIO_AUTH_TOKEN = config('TWILIO_AUTH_TOKEN', default='')
-TWILIO_PHONE_NUMBER = config('TWILIO_PHONE_NUMBER', default='')
-TWILIO_WHATSAPP_NUMBER = config('TWILIO_WHATSAPP_NUMBER', default='')
+TWILIO_ACCOUNT_SID = ''
+TWILIO_AUTH_TOKEN = ''
+TWILIO_PHONE_NUMBER = ''
+TWILIO_WHATSAPP_NUMBER = ''
+TWILIO_STATUS_CALLBACK_URL = ''
 
-# Configurações de Notificação
-NOTIFICACAO_DIAS_ANTECEDENCIA = config('NOTIFICACAO_DIAS_ANTECEDENCIA', default=5, cast=int)
+# Bounce Monitoring (IMAP)
+BOUNCE_EMAIL_ADDRESS = ''
+BOUNCE_IMAP_HOST = 'imap.zoho.com'
+BOUNCE_IMAP_PORT = 993
+BOUNCE_IMAP_USER = ''
+BOUNCE_IMAP_PASSWORD = ''
+BOUNCE_IMAP_FOLDER = 'INBOX'
 
-# Configurações de Índices Econômicos (APIs)
+# Supabase (acesso direto via cliente Python, se necessário)
+SUPABASE_URL = config('SUPABASE_URL', default='')
+SUPABASE_KEY = config('SUPABASE_KEY', default='')
+
+# Modo de Teste
+TEST_MODE = False
+TEST_RECIPIENT_EMAIL = 'receber@msbrasil.inf.br'
+TEST_RECIPIENT_PHONE = '+5531993257479'
+
+# =============================================================================
+# REST FRAMEWORK (DRF) + drf-spectacular (Swagger/OpenAPI)
+# =============================================================================
+
+REST_FRAMEWORK = {
+    'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
+    'DEFAULT_AUTHENTICATION_CLASSES': [
+        'rest_framework.authentication.SessionAuthentication',
+    ],
+    'DEFAULT_PERMISSION_CLASSES': [
+        'rest_framework.permissions.IsAuthenticated',
+    ],
+    'DEFAULT_RENDERER_CLASSES': [
+        'rest_framework.renderers.JSONRenderer',
+    ],
+    'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
+    'PAGE_SIZE': 25,
+}
+
+SPECTACULAR_SETTINGS = {
+    'TITLE': 'Gestão de Contratos API',
+    'DESCRIPTION': (
+        'API REST para o sistema de Gestão de Contratos Imobiliários.\n\n'
+        '## Autenticação\n'
+        'Todas as rotas requerem autenticação via sessão Django (`/accounts/login/`).\n\n'
+        '## Módulos\n'
+        '- **Financeiro**: parcelas, boletos, CNAB, reajustes, dashboards\n'
+        '- **Core**: contabilidades, imobiliárias, compradores, CEP/CNPJ\n'
+        '- **Portal Comprador**: contratos, boletos e segunda via\n'
+        '- **Tasks**: cron jobs para reajustes, notificações e relatórios\n'
+    ),
+    'VERSION': '3.1.0',
+    'SERVE_INCLUDE_SCHEMA': False,
+    'CONTACT': {
+        'name': 'Maxwell da Silva Oliveira',
+        'email': 'maxwbh@gmail.com',
+    },
+    'LICENSE': {'name': 'Proprietário — M&S do Brasil LTDA'},
+    'SWAGGER_UI_SETTINGS': {
+        'deepLinking': True,
+        'persistAuthorization': True,
+        'displayOperationId': False,
+    },
+    'COMPONENT_SPLIT_REQUEST': True,
+    'SORT_OPERATIONS': False,
+}
+
+# Notificações
+NOTIFICACAO_DIAS_ANTECEDENCIA = 5
+NOTIFICACAO_DIAS_INADIMPLENCIA = 3
+
+# Tarefas Agendadas
+TASK_TOKEN = None
+
+# BRCobrança
+BRCOBRANCA_URL = config('BRCOBRANCA_URL', default='http://localhost:9292')
+BRCOBRANCA_TIMEOUT = 60
+BRCOBRANCA_MAX_TENTATIVAS = 3
+BRCOBRANCA_DELAY_INICIAL = 2
+# Espera máxima por tentativa ao tratar 429 na remessa (respeita Retry-After, com teto)
+BRCOBRANCA_DELAY_MAX_429 = config('BRCOBRANCA_DELAY_MAX_429', default=8, cast=int)
+# Timeout (s) do warm-up GET /api/health antes do lote de remessa. O 1º acesso após
+# o sleep do Render free leva ~20-30s para acordar — daí o teto folgado de 90s.
+BRCOBRANCA_HEALTH_TIMEOUT = config('BRCOBRANCA_HEALTH_TIMEOUT', default=90, cast=int)
+# Backoff (s) entre tentativas da remessa ao receber status TRANSIENTE
+# (429/502/503/504). Cobre a janela de cold start do Render free (~30s): a soma
+# (5+10+20+30 ≈ 65s) dá tempo para o serviço acordar antes de desistir.
+BRCOBRANCA_BACKOFF_COLD_START = [5, 10, 20, 30]
+# Pacing entre chamadas individuais de geração de boleto (ms) — reduz burst no Render free tier
+BRCOBRANCA_INTER_BOLETO_DELAY_MS = config('BRCOBRANCA_INTER_BOLETO_DELAY_MS', default=100, cast=int)
+# Cooldown (s) entre o último burst de geração de boletos e o POST de remessa (0 desativa)
+BRCOBRANCA_REMESSA_COOLDOWN_S = config('BRCOBRANCA_REMESSA_COOLDOWN_S', default=5, cast=int)
+# Tempo médio (s) de resposta da API por boleto — usado só na estimativa visual de progresso
+BRCOBRANCA_TEMPO_API_BOLETO_S = config('BRCOBRANCA_TEMPO_API_BOLETO_S', default=1.8, cast=float)
+# Tempo máximo de espera (segundos) para o serviço acordar no cold start (Free Tier Render ~90s)
+BRCOBRANCA_COLD_START_WAIT = 120
+# Template de renderização: 'prawn' (Ruby nativo, sem GhostScript — recomendado Render Free 512MB)
+# ou '' para usar o padrão da API (GhostScript, melhor qualidade mas +50-100MB RAM por PDF).
+BRCOBRANCA_TEMPLATE = config('BRCOBRANCA_TEMPLATE', default='prawn')
+
+# PIX Webhook — token compartilhado enviado pelo PSP no header Authorization: Bearer <token>
+# Deixe vazio para desabilitar a validação (não recomendado em produção)
+PIX_WEBHOOK_TOKEN = config('PIX_WEBHOOK_TOKEN', default='')
+
+# Boleto-API gateway (cobrança registrada C6/Sicoob)
+BOLETO_API_URL = config('BOLETO_API_URL', default='http://localhost:8001')
+BOLETO_API_TIMEOUT = config('BOLETO_API_TIMEOUT', default=30, cast=int)
+BOLETO_API_MAX_TENTATIVAS = config('BOLETO_API_MAX_TENTATIVAS', default=3, cast=int)
+BOLETO_API_DELAY_INICIAL = config('BOLETO_API_DELAY_INICIAL', default=2, cast=int)
+# Segredo HMAC compartilhado entre Django e Boleto-API para assinar eventos push.
+# Deve ser o mesmo valor em EVENT_WEBHOOK_SECRET no Boleto-API.
+EVENT_WEBHOOK_SECRET = config('EVENT_WEBHOOK_SECRET', default='')
+
+# 34.5 — Relatórios agendados e BI
+# Token para o endpoint público de exportação para Power BI / Looker
+BI_API_TOKEN = config('BI_API_TOKEN', default='')
+# Destinatários dos relatórios automáticos por e-mail (separados por vírgula)
+RELATORIO_INADIMPLENCIA_EMAILS = config('RELATORIO_INADIMPLENCIA_EMAILS', default='', cast=Csv())
+RELATORIO_POSICAO_EMAILS = config('RELATORIO_POSICAO_EMAILS', default='', cast=Csv())
+
+# 34.6 — PWA: Web Push (VAPID)
+# Gere com: python -c "from py_vapid import Vapid; v=Vapid(); v.generate_keys(); print(v.public_key, v.private_key)"
+VAPID_PUBLIC_KEY = config('VAPID_PUBLIC_KEY', default='')
+VAPID_PRIVATE_KEY = config('VAPID_PRIVATE_KEY', default='')
+VAPID_CLAIMS_EMAIL = config('VAPID_CLAIMS_EMAIL', default='admin@example.com')
+
+# Portal do Comprador
+PORTAL_EMAIL_VERIFICACAO = False
+
+# Aplicação
+SITE_URL = 'http://localhost:8000'
+
+# APIs BCB — Índices Econômicos
 BCBAPI_URL = 'https://api.bcb.gov.br/dados/serie/bcdata.sgs.{}/dados'
-IPCA_SERIE_ID = '433'  # Código do IPCA no BCB
-IGPM_SERIE_ID = '189'  # Código do IGP-M no BCB
-SELIC_SERIE_ID = '432'  # Código da SELIC no BCB
+IPCA_SERIE_ID = '433'
+IGPM_SERIE_ID = '189'
+SELIC_SERIE_ID = '432'
+
+# IA — Anthropic / Claude API (H-01)
+ANTHROPIC_API_KEY = config('ANTHROPIC_API_KEY', default='')
+
+# IA — Google Gemini (Tier 0 gratuito; opcional — sem esta chave usa apenas Claude)
+GEMINI_API_KEY = config('GEMINI_API_KEY', default='')
 
 # Logging Configuration
 LOGGING = {
@@ -199,8 +423,20 @@ LOGGING = {
     'disable_existing_loggers': False,
     'formatters': {
         'verbose': {
-            'format': '{levelname} {asctime} {module} {message}',
+            'format': '{levelname} {asctime} {module} {process:d} {thread:d} {message}',
             'style': '{',
+        },
+        'simple': {
+            'format': '{levelname} {asctime} {message}',
+            'style': '{',
+        },
+    },
+    'filters': {
+        'require_debug_false': {
+            '()': 'django.utils.log.RequireDebugFalse',
+        },
+        'require_debug_true': {
+            '()': 'django.utils.log.RequireDebugTrue',
         },
     },
     'handlers': {
@@ -208,13 +444,54 @@ LOGGING = {
             'class': 'logging.StreamHandler',
             'formatter': 'verbose',
         },
+        'console_simple': {
+            'class': 'logging.StreamHandler',
+            'formatter': 'simple',
+            'filters': ['require_debug_true'],
+        },
+        'mail_admins': {
+            'level': 'ERROR',
+            'class': 'django.utils.log.AdminEmailHandler',
+            'filters': ['require_debug_false'],
+        },
     },
     'root': {
         'handlers': ['console'],
-        'level': 'INFO',
+        'level': 'WARNING',
     },
     'loggers': {
         'django': {
+            'handlers': ['console'],
+            'level': 'INFO',
+            'propagate': False,
+        },
+        'django.request': {
+            'handlers': ['console', 'mail_admins'],
+            'level': 'ERROR',
+            'propagate': False,
+        },
+        'django.security': {
+            'handlers': ['console', 'mail_admins'],
+            'level': 'ERROR',
+            'propagate': False,
+        },
+        # App-level loggers
+        'financeiro': {
+            'handlers': ['console'],
+            'level': 'INFO',
+            'propagate': False,
+        },
+        'contratos': {
+            'handlers': ['console'],
+            'level': 'INFO',
+            'propagate': False,
+        },
+        'core': {
+            'handlers': ['console'],
+            'level': 'INFO',
+            'propagate': False,
+        },
+        'notificacoes': {
             'handlers': ['console'],
             'level': 'INFO',
             'propagate': False,
@@ -240,8 +517,14 @@ if not DEBUG:
     SESSION_COOKIE_SECURE = True
     CSRF_COOKIE_SECURE = True
     SECURE_BROWSER_XSS_FILTER = True
-    SECURE_CONTENT_TYPE_NOSNIFF = True
-    X_FRAME_OPTIONS = 'DENY'
+    # SECURE_CONTENT_TYPE_NOSNIFF e X_FRAME_OPTIONS já definidos globalmente (D-03)
     SECURE_HSTS_SECONDS = 31536000
     SECURE_HSTS_INCLUDE_SUBDOMAINS = True
     SECURE_HSTS_PRELOAD = True
+
+    # CSRF Trusted Origins - Required for Django 4.x+ behind HTTPS proxy
+    CSRF_TRUSTED_ORIGINS = config(
+        'CSRF_TRUSTED_ORIGINS',
+        default='https://*.onrender.com',
+        cast=Csv()
+    )

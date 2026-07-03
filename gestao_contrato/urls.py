@@ -8,13 +8,26 @@ from django.contrib import admin
 from django.urls import path, include
 from django.conf import settings
 from django.conf.urls.static import static
+from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView, SpectacularRedocView
 
 urlpatterns = [
     path('admin/', admin.site.urls),
+    path('accounts/', include('accounts.urls')),
     path('', include('core.urls')),
     path('contratos/', include('contratos.urls')),
     path('financeiro/', include('financeiro.urls')),
     path('notificacoes/', include('notificacoes.urls')),
+
+    # Link público de boleto — sem autenticação, URL opaca via UUID
+    path('b/', include('financeiro.public_urls')),
+
+    # Portal do Comprador - Acesso para compradores via CPF/CNPJ
+    path('portal/', include('portal_comprador.urls')),
+
+    # API Documentation (Swagger/OpenAPI)
+    path('api/schema/', SpectacularAPIView.as_view(), name='schema'),
+    path('api/docs/', SpectacularSwaggerView.as_view(url_name='schema'), name='swagger-ui'),
+    path('api/docs/redoc/', SpectacularRedocView.as_view(url_name='schema'), name='redoc'),
 ]
 
 # Configuração para servir arquivos estáticos e de mídia em desenvolvimento
