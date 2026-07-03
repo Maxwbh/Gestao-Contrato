@@ -557,6 +557,24 @@ class TestRetornoPainel:
         assert resp.status_code == 200
         assert list(resp.context['contas_com_enviado']) == []
 
+    def test_filtro_imobiliaria_visivel(self, base, staff_cli):
+        """O seletor de imobiliária deve estar presente na tela (consistência com Remessa)."""
+        u, c = staff_cli
+        imob, conta, contrato = base
+        resp = c.get(reverse('financeiro:retorno_painel'))
+        assert resp.status_code == 200
+        html = resp.content.decode()
+        assert 'name="imobiliaria"' in html
+        assert imob.nome in html
+
+    def test_filtro_imobiliaria_restringe_historico(self, base, staff_cli):
+        """Filtrar por outra imobiliária esconde os retornos da imobiliária base."""
+        u, c = staff_cli
+        imob, conta, contrato = base
+        resp = c.get(reverse('financeiro:retorno_painel') + f'?imobiliaria={imob.pk}')
+        assert resp.status_code == 200
+        assert resp.context['filtro_imobiliaria'] == str(imob.pk)
+
     def test_upload_processa_e_retorna_resumo(self, base, staff_cli):
         """CT-28: upload + auto-processo retorna o resumo JSON documentado."""
         from django.core.files.uploadedfile import SimpleUploadedFile

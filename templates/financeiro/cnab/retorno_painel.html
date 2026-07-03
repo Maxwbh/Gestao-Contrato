@@ -34,9 +34,14 @@
             <p class="text-muted small mb-0 mt-1">Gerencie a liquidação de boletos e conciliação financeira automatizada.</p>
         </div>
         <div class="d-flex gap-2 align-items-center">
-            <!-- Filtro mês -->
+            <!-- Filtro imobiliária + mês (consistente com Remessa/Boletos) -->
             <form method="get" class="d-flex gap-2 align-items-center">
-                {% if filtro_imobiliaria %}<input type="hidden" name="imobiliaria" value="{{ filtro_imobiliaria }}">{% endif %}
+                <select name="imobiliaria" class="form-select form-select-sm" style="width:auto" onchange="this.form.submit()">
+                    <option value="">Todas as Imobiliárias</option>
+                    {% for imob in imobiliarias %}
+                    <option value="{{ imob.id }}" {% if filtro_imobiliaria == imob.id|stringformat:'s' %}selected{% endif %}>{{ imob.nome }}</option>
+                    {% endfor %}
+                </select>
                 <select name="mes" class="form-select form-select-sm" style="width:auto" onchange="this.form.submit()">
                     <option value="1" {% if filtro_mes == 1 %}selected{% endif %}>Janeiro</option>
                     <option value="2" {% if filtro_mes == 2 %}selected{% endif %}>Fevereiro</option>
@@ -296,6 +301,27 @@
             if (!fileInput.files.length) {
                 alertEl.className = 'alert alert-danger';
                 alertEl.textContent = 'Selecione o arquivo .ret antes de continuar.';
+                return;
+            }
+
+            // Validação client-side antes de subir: extensão e tamanho
+            const arquivo = fileInput.files[0];
+            const nome = (arquivo.name || '').toLowerCase();
+            const extOk = /\.(ret|txt|dat)$/.test(nome);
+            if (!extOk) {
+                alertEl.className = 'alert alert-danger';
+                alertEl.innerHTML = 'Extensão não reconhecida — envie o arquivo de retorno do banco (<code>.ret</code>, <code>.txt</code> ou <code>.dat</code>).';
+                return;
+            }
+            const MAX_MB = 10;
+            if (arquivo.size > MAX_MB * 1024 * 1024) {
+                alertEl.className = 'alert alert-danger';
+                alertEl.textContent = 'Arquivo muito grande (' + (arquivo.size / 1048576).toFixed(1) + ' MB). O limite é ' + MAX_MB + ' MB.';
+                return;
+            }
+            if (arquivo.size === 0) {
+                alertEl.className = 'alert alert-danger';
+                alertEl.textContent = 'O arquivo selecionado está vazio.';
                 return;
             }
 
