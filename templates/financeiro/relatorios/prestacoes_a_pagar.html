@@ -107,7 +107,7 @@
             </tr>
           </thead>
           <tbody>
-            {% for item in relatorio.itens %}
+            {% for item in page_obj %}
             <tr {% if item.dias_atraso > 0 %}class="table-danger"{% endif %}>
               <td><small>{{ item.contrato_numero }}</small></td>
               <td><small>{{ item.comprador_nome }}</small></td>
@@ -131,6 +131,9 @@
             {% endfor %}
           </tbody>
         </table>
+      </div>
+      <div class="card-body pt-0">
+        {% include "includes/pagination_perpage.html" %}
       </div>
     </div>
   </div>

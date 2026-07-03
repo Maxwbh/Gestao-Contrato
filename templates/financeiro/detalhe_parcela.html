@@ -282,15 +282,31 @@ async function gerarBoletoDetalhe() {
             btn.className = 'btn btn-success';
             btn.innerHTML = '<i class="fas fa-check me-2"></i>Boleto Gerado';
             setTimeout(() => location.reload(), 1000);
+        } else if (data.bloqueado_reajuste) {
+            // HU-06: bloqueio por reajuste → deep-link para a tela de resolução
+            btn.disabled = false;
+            btn.innerHTML = '<i class="fas fa-barcode me-2"></i>Gerar Boleto';
+            let box = document.getElementById('alertBloqueioReajuste');
+            if (!box) {
+                box = document.createElement('div');
+                box.id = 'alertBloqueioReajuste';
+                box.className = 'alert alert-warning alert-dismissible mt-3';
+                btn.closest('.card-body, .container-fluid, body').prepend(box);
+            }
+            box.innerHTML = '<i class="fas fa-lock me-1"></i> ' + (data.erro || 'Boleto bloqueado por reajuste pendente.') +
+                ' <a href="{% url "financeiro:reajustes_pendentes" %}" class="alert-link">Resolver reajuste pendente →</a>' +
+                '<button type="button" class="btn-close" data-bs-dismiss="alert"></button>';
         } else {
             btn.disabled = false;
             btn.innerHTML = '<i class="fas fa-barcode me-2"></i>Gerar Boleto';
-            alert('Erro: ' + (data.erro || 'Erro ao gerar boleto.'));
+            if (window.showToast) window.showToast('Erro: ' + (data.erro || 'Erro ao gerar boleto.'), 'error', 8000);
+            else alert('Erro: ' + (data.erro || 'Erro ao gerar boleto.'));
         }
     } catch (err) {
         btn.disabled = false;
         btn.innerHTML = '<i class="fas fa-barcode me-2"></i>Gerar Boleto';
-        alert('Erro: ' + err.message);
+        if (window.showToast) window.showToast('Erro: ' + err.message, 'error', 8000);
+        else alert('Erro: ' + err.message);
     }
 }
 {% endif %}

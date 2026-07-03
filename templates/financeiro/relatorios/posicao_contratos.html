@@ -95,7 +95,7 @@
             </tr>
           </thead>
           <tbody>
-            {% for item in relatorio.itens %}
+            {% for item in page_obj %}
             <tr {% if item.parcelas_vencidas > 0 %}class="table-warning"{% endif %}>
               <td><small><a href="{% url 'contratos:detalhe' item.contrato_id|hashid %}">{{ item.contrato_numero }}</a></small></td>
               <td><small>{{ item.comprador_nome }}</small></td>
@@ -122,6 +122,9 @@
             {% endfor %}
           </tbody>
         </table>
+      </div>
+      <div class="card-body pt-0">
+        {% include "includes/pagination_perpage.html" %}
       </div>
     </div>
   </div>

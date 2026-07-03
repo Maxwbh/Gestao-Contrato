@@ -48,6 +48,7 @@
 | 2.9 | Validar sequência de ciclos de reajuste (não pular) | ✅ V-09: validação em `aplicar_reajuste_pagina` e `aplicar_reajuste_contrato`: verifica `calcular_ciclo_pendente` antes de aceitar POST, retorna erro claro se ciclo fora de ordem; modelo `Reajuste.clean()` já tinha validação de cadeia (ciclo N exige ciclo N-1 aplicado) |
 | 2.10 | Segunda via de boleto com juros/multa calculados | ✅ `BoletoService.gerar_segunda_via()` reutiliza nosso_número existente, sobrepõe valor com juros/multa do dia; view `segunda_via_boleto` GET=preview com totais atualizados, GET?download=1=PDF fresco via BRCobrança; botão "Segunda Via" em `detalhe_parcela.html` |
 | 2.11 | WhatsApp/SMS — testes end-to-end com Twilio | 🏦 Débito Técnico (pós-2050) |
+| 2.12 | HU-17 Renegociação — auditoria/histórico (model `Renegociacao` com valores antes/depois, usuário e data; exigido pelos CA-4/CA-5 da HU) | 🏦 Débito Técnico (2030) — a renegociação funciona, mas não grava trilha de auditoria |
 
 ---
 

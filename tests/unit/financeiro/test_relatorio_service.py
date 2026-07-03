@@ -435,3 +435,55 @@ class TestGeradorReciboPDF:
         assert len(pdf) > 0
         assert pdf[:4] == b'%PDF'
 
+
+
+# =============================================================================
+# HU-18 — Paginação das telas de relatório
+# =============================================================================
+
+@pytest.mark.django_db
+class TestPaginacaoRelatorios:
+    """As 4 telas de relatório devem paginar a tabela (page/per_page)."""
+
+    def _staff_client(self):
+        from django.test import Client
+        from django.contrib.auth import get_user_model
+        u = get_user_model().objects.create_user('rel_pag', password='x', is_staff=True)
+        c = Client()
+        c.force_login(u)
+        return c
+
+    def test_prestacoes_a_pagar_pagina(self, contrato_com_parcelas):
+        c = self._staff_client()
+        resp = c.get('/financeiro/relatorios/prestacoes-a-pagar/?per_page=5')
+        assert resp.status_code == 200
+        assert 'page_obj' in resp.context
+        assert resp.context['paginator'].per_page == 5
+        # A página nunca traz mais itens que o per_page
+        assert len(resp.context['page_obj'].object_list) <= 5
+
+    def test_per_page_invalido_usa_default(self, contrato_com_parcelas):
+        c = self._staff_client()
+        resp = c.get('/financeiro/relatorios/prestacoes-a-pagar/?per_page=abc')
+        assert resp.status_code == 200
+        assert resp.context['paginator'].per_page == 25
+
+    def test_per_page_limitado_a_100(self, contrato_com_parcelas):
+        c = self._staff_client()
+        resp = c.get('/financeiro/relatorios/prestacoes-a-pagar/?per_page=9999')
+        assert resp.status_code == 200
+        assert resp.context['paginator'].per_page == 100
+
+    def test_pagina_fora_do_range_retorna_ultima(self, contrato_com_parcelas):
+        c = self._staff_client()
+        resp = c.get('/financeiro/relatorios/prestacoes-a-pagar/?per_page=5&page=999')
+        assert resp.status_code == 200  # get_page clampa em vez de 404
+
+    def test_demais_relatorios_tem_page_obj(self, contrato_com_parcelas):
+        c = self._staff_client()
+        for url in ('/financeiro/relatorios/prestacoes-pagas/',
+                    '/financeiro/relatorios/posicao-contratos/',
+                    '/financeiro/relatorios/previsao-reajustes/'):
+            resp = c.get(url)
+            assert resp.status_code == 200, url
+            assert 'page_obj' in resp.context, url

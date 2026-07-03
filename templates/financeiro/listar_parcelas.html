@@ -881,7 +881,9 @@ async function gerarBoletosSelecionados(force) {
         restoreBtn();
         let cls = data.erros > 0 ? 'alert-warning' : 'alert-success';
         let msg = `<strong><i class="fas fa-check-circle me-1"></i>${data.gerados} gerado(s)</strong>`;
-        if (data.bloqueados) msg += ` &nbsp; <span class="text-warning">${data.bloqueados} bloqueado(s) por reajuste</span>`;
+        // HU-06: bloqueio por reajuste com deep-link para a tela de resolução
+        if (data.bloqueados) msg += ` &nbsp; <span class="text-warning">${data.bloqueados} bloqueado(s) por reajuste</span>` +
+            ' — <a href="{% url "financeiro:reajustes_pendentes" %}" class="alert-link">Resolver reajustes pendentes →</a>';
         if (data.erros) msg += ` &nbsp; <span class="text-danger">${data.erros} erro(s)</span>`;
         resultado.className = 'alert ' + cls;
         resultado.innerHTML = msg + '<br><small class="text-muted">Recarregue a página para ver os status atualizados.</small>' +
@@ -939,6 +941,11 @@ async function confirmarGerarBoleto() {
                 (data.nosso_numero ? '<br><small>Nosso número: <strong>' + data.nosso_numero + '</strong></small>' : '');
             document.getElementById('modalBoletoForm').classList.add('d-none');
             btn.classList.add('d-none');
+        } else if (data.bloqueado_reajuste) {
+            // HU-06: bloqueio por reajuste → deep-link para a tela de resolução
+            res.className = 'alert alert-warning';
+            res.innerHTML = '<i class="fas fa-lock me-1"></i> ' + (data.erro || 'Boleto bloqueado por reajuste pendente.') +
+                '<br><a href="{% url "financeiro:reajustes_pendentes" %}" class="alert-link">Resolver reajuste pendente →</a>';
         } else {
             res.className = 'alert alert-danger';
             res.innerHTML = '<i class="fas fa-exclamation-triangle me-1"></i> ' + (data.erro || 'Erro ao gerar boleto.');
@@ -1113,7 +1120,9 @@ function gerarCarneSelecionados() {
             const erros = data.erros || 0;
             let cls = erros > 0 ? 'alert-warning' : 'alert-success';
             let msg = '<strong><i class="fas fa-book me-1"></i>' + gerados + ' boleto(s) do carnê gerado(s)</strong>';
-            if (bloqueados) msg += ' &nbsp; <span class="text-warning">' + bloqueados + ' bloqueado(s)</span>';
+            // HU-06: bloqueio por reajuste com deep-link para a resolução
+            if (bloqueados) msg += ' &nbsp; <span class="text-warning">' + bloqueados + ' bloqueado(s)</span>' +
+                ' — <a href="{% url "financeiro:reajustes_pendentes" %}" class="alert-link">Resolver reajustes pendentes →</a>';
             if (erros) msg += ' &nbsp; <span class="text-danger">' + erros + ' erro(s)</span>';
             resultado.className = 'alert ' + cls;
             let btnPdf = gerados > 0

@@ -5826,6 +5826,31 @@ def api_dashboard_contabilidade(request):
 # VIEWS DE RELATÓRIOS AVANÇADOS
 # =============================================================================
 
+def _paginar_itens_relatorio(request, itens, per_page_default=25):
+    """
+    HU-18: pagina a lista de itens de um relatório (tabela paginada).
+
+    Usa os params `page`/`per_page` (mesmos do include
+    includes/pagination_perpage.html, que preserva os filtros da querystring).
+    Retorna dict pronto para o contexto: page_obj, paginator, is_paginated.
+    """
+    from django.core.paginator import Paginator
+
+    try:
+        per_page = int(request.GET.get('per_page') or per_page_default)
+    except (TypeError, ValueError):
+        per_page = per_page_default
+    per_page = max(5, min(per_page, 100))
+
+    paginator = Paginator(itens, per_page)
+    page_obj = paginator.get_page(request.GET.get('page'))
+    return {
+        'paginator': paginator,
+        'page_obj': page_obj,
+        'is_paginated': page_obj.has_other_pages(),
+    }
+
+
 class RelatorioPrestacoesAPagarView(LoginRequiredMixin, TemplateView):
     """
     Relatório de prestações a pagar.
@@ -5868,6 +5893,8 @@ class RelatorioPrestacoesAPagarView(LoginRequiredMixin, TemplateView):
         relatorio = service.gerar_relatorio_prestacoes_a_pagar(filtro)
 
         context['relatorio'] = relatorio
+        # HU-18: tabela paginada (totais permanecem sobre o conjunto completo)
+        context.update(_paginar_itens_relatorio(self.request, relatorio.get('itens') or []))
         context['filtros'] = {
             'contrato_id': contrato_id,
             'imobiliaria_id': imobiliaria_id,
@@ -5924,6 +5951,8 @@ class RelatorioPrestacoesPageasView(LoginRequiredMixin, TemplateView):
         relatorio = service.gerar_relatorio_prestacoes_pagas(filtro)
 
         context['relatorio'] = relatorio
+        # HU-18: tabela paginada
+        context.update(_paginar_itens_relatorio(self.request, relatorio.get('itens') or []))
         context['filtros'] = {
             'contrato_id': contrato_id,
             'imobiliaria_id': imobiliaria_id,
@@ -5970,6 +5999,8 @@ class RelatorioPosicaoContratosView(LoginRequiredMixin, TemplateView):
             ]
 
         context['relatorio'] = relatorio
+        # HU-18: tabela paginada
+        context.update(_paginar_itens_relatorio(self.request, relatorio.get('itens') or []))
         context['filtros'] = {
             'imobiliaria_id': imobiliaria_id,
             'status': status,
@@ -6009,6 +6040,8 @@ class RelatorioPrevisaoReajustesView(LoginRequiredMixin, TemplateView):
             ]
 
         context['relatorio'] = relatorio
+        # HU-18: tabela paginada
+        context.update(_paginar_itens_relatorio(self.request, relatorio.get('itens') or []))
         context['filtros'] = {
             'dias': dias_antecedencia,
             'imobiliaria_id': imobiliaria_id,
