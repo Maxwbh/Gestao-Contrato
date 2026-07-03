@@ -5,34 +5,68 @@ Desenvolvedor: Maxwell da Silva Oliveira
 """
 from django.urls import path
 from . import views
+from . import tasks
 
 app_name = 'core'
 
 urlpatterns = [
+    # Health Check (monitoramento)
+    path('health/', views.health_check, name='health_check'),
+
+    # ==========================================================================
+    # API de Tarefas (alternativa ao Celery para Render Free tier)
+    # Configure TASK_TOKEN nas variáveis de ambiente e use cron-job.org
+    # ==========================================================================
+    path('api/tasks/status/', tasks.task_status, name='task_status'),
+    path('api/tasks/processar-reajustes/', tasks.task_processar_reajustes, name='task_reajustes'),
+    path('api/tasks/enviar-notificacoes/', tasks.task_enviar_notificacoes, name='task_notificacoes'),
+    path('api/tasks/enviar-inadimplentes/', tasks.task_enviar_inadimplentes, name='task_inadimplentes'),
+    path('api/tasks/atualizar-parcelas/', tasks.task_atualizar_parcelas, name='task_parcelas'),
+    path('api/tasks/processar-fila/', tasks.task_processar_fila, name='task_processar_fila'),
+    path('api/tasks/run-all/', tasks.task_run_all, name='task_run_all'),
+    path('api/tasks/relatorio-semanal/', tasks.task_relatorio_semanal, name='task_relatorio_semanal'),
+    path('api/tasks/relatorio-mensal/', tasks.task_relatorio_mensal, name='task_relatorio_mensal'),
+    path('api/tasks/processar-notificacoes/', tasks.task_processar_notificacoes, name='task_processar_notificacoes'),
+    path('api/tasks/atualizar-indices/', tasks.task_atualizar_indices, name='task_atualizar_indices'),
+    path('api/tasks/processar-bounces/', tasks.task_processar_bounces, name='task_processar_bounces'),
+    path('api/tasks/limpar-sessoes/', tasks.task_limpar_sessoes, name='task_limpar_sessoes'),
+    path('api/tasks/limpar-sessoes-whatsapp/', tasks.task_limpar_sessoes_whatsapp, name='task_limpar_sessoes_whatsapp'),
+    path('api/tasks/testar-notificacoes/', tasks.task_testar_notificacoes, name='task_testar_notificacoes'),
+    path('api/tasks/atualizar-bloqueio-credito/', tasks.task_atualizar_bloqueio_credito, name='task_atualizar_bloqueio_credito'),
+
     # Páginas principais
     path('', views.index, name='index'),
     path('setup/', views.setup, name='setup'),
     path('dashboard/', views.dashboard, name='dashboard'),
     path('api/gerar-dados-teste/', views.gerar_dados_teste, name='gerar_dados_teste'),
+    path('api/gerar-boletos-teste/', views.gerar_boletos_teste, name='gerar_boletos_teste'),
     path('api/limpar-dados-teste/', views.limpar_dados_teste, name='limpar_dados_teste'),
+    path('dados-teste/', views.pagina_dados_teste, name='pagina_dados_teste'),
 
     # CRUD Contabilidade
     path('contabilidades/', views.ContabilidadeListView.as_view(), name='listar_contabilidades'),
     path('contabilidades/novo/', views.ContabilidadeCreateView.as_view(), name='criar_contabilidade'),
     path('contabilidades/<int:pk>/editar/', views.ContabilidadeUpdateView.as_view(), name='editar_contabilidade'),
     path('contabilidades/<int:pk>/excluir/', views.ContabilidadeDeleteView.as_view(), name='excluir_contabilidade'),
+    path('contabilidades/<int:pk>/configuracoes/', views.contabilidade_configuracoes, name='contabilidade_configuracoes'),
 
     # CRUD Comprador
     path('compradores/', views.CompradorListView.as_view(), name='listar_compradores'),
     path('compradores/novo/', views.CompradorCreateView.as_view(), name='criar_comprador'),
     path('compradores/<int:pk>/editar/', views.CompradorUpdateView.as_view(), name='editar_comprador'),
     path('compradores/<int:pk>/excluir/', views.CompradorDeleteView.as_view(), name='excluir_comprador'),
+    path('compradores/<int:pk>/desbloquear/', views.comprador_desbloquear, name='comprador_desbloquear'),
 
     # CRUD Imóvel
     path('imoveis/', views.ImovelListView.as_view(), name='listar_imoveis'),
     path('imoveis/novo/', views.ImovelCreateView.as_view(), name='criar_imovel'),
     path('imoveis/<int:pk>/editar/', views.ImovelUpdateView.as_view(), name='editar_imovel'),
     path('imoveis/<int:pk>/excluir/', views.ImovelDeleteView.as_view(), name='excluir_imovel'),
+    path('imoveis/loteamento/<str:nome>/', views.loteamento_detalhe, name='loteamento_detalhe'),
+    # M-13: Polígonos de lote
+    path('imoveis/<int:pk>/poligono/', views.api_poligono_imovel, name='api_poligono_imovel'),
+    # M-14: Overlay de planta baixa por loteamento
+    path('imoveis/loteamento/<str:nome>/overlay/', views.api_overlay_loteamento, name='api_overlay_loteamento'),
 
     # CRUD Imobiliária
     path('imobiliarias/', views.ImobiliariaListView.as_view(), name='listar_imobiliarias'),
@@ -57,4 +91,65 @@ urlpatterns = [
     # API Acesso de Usuários
     path('api/contabilidades/<int:contabilidade_id>/imobiliarias/', views.api_listar_imobiliarias_por_contabilidade, name='api_imobiliarias_contabilidade'),
     path('api/usuarios/<int:usuario_id>/acessos/', views.api_listar_acessos_usuario, name='api_acessos_usuario'),
+
+    # U-06: Busca Global
+    path('api/search/', views.api_busca_global, name='api_busca_global'),
+
+    # API BrasilAPI (CEP e CNPJ)
+    path('api/cep/<str:cep>/', views.api_buscar_cep, name='api_buscar_cep'),
+    path('api/cnpj/<str:cnpj>/', views.api_buscar_cnpj, name='api_buscar_cnpj'),
+
+    # Hub de Configurações do Sistema
+    path('configuracoes/', views.configuracoes_sistema, name='configuracoes_sistema'),
+    path('api/parametros/', views.api_parametros_salvar_grupo, name='api_parametros_salvar'),
+    path('api/parametros/exportar/', views.api_parametros_exportar, name='api_parametros_exportar'),
+    path('api/parametros/<int:parametro_id>/', views.api_parametro_atualizar, name='api_parametro_atualizar'),
+
+    # Painel de Custos de IA
+    path('ia/custos/', views.ia_custos, name='ia_custos'),
+    path('ia/custos/dados/', views.api_ia_custos_dados, name='api_ia_custos_dados'),
+
+    # Configuração Gráfica de Tokens
+    path('ia/tokens/', views.ia_tokens_config, name='ia_tokens_config'),
+
+    # Configuração de Limites de IA
+    path('ia/limites/', views.ia_limites, name='ia_limites'),
+    path('ia/limites/salvar/', views.ia_limite_salvar, name='ia_limite_salvar'),
+    path('ia/limites/<int:pk>/excluir/', views.ia_limite_excluir, name='ia_limite_excluir'),
+    path('ia/limites/<int:pk>/toggle/', views.ia_limite_toggle, name='ia_limite_toggle'),
+    path('ia/cotacao/', views.api_cotacao_usd_brl, name='api_cotacao_usd_brl'),
+    path('ia/workflow/', views.ia_workflow_list, name='ia_workflow_list'),
+    path('ia/workflow/novo/', views.ia_workflow_novo, name='ia_workflow_novo'),
+    path('ia/workflow/<int:pk>/editar/', views.ia_workflow_editar, name='ia_workflow_editar'),
+    path('ia/workflow/<int:pk>/ativar/', views.ia_workflow_ativar, name='ia_workflow_ativar'),
+    path('ia/workflow/<int:pk>/desativar/', views.ia_workflow_desativar, name='ia_workflow_desativar'),
+    path('ia/workflow/<int:pk>/excluir/', views.ia_workflow_excluir, name='ia_workflow_excluir'),
+    path('ia/workflow/<int:pk>/tiers/', views.ia_workflow_tiers_salvar, name='ia_workflow_tiers_salvar'),
+    path('ia/workflow/<int:pk>/reordenar/', views.ia_workflow_tiers_reordenar, name='ia_workflow_tiers_reordenar'),
+
+    # 35.1 — Log de Auditoria
+    path('auditoria/', views.auditoria_log, name='auditoria_log'),
+
+    # 35.6 — Widget IA
+    path('ia/status-widget/', views.api_ia_status_widget, name='api_ia_status_widget'),
+
+    # 35.2 — Status de bloqueio do comprador (usado pelo wizard)
+    path('api/compradores/<int:pk>/status/', views.api_comprador_status, name='api_comprador_status'),
+
+    # API Comprador — CRUD
+    path('api/compradores/', views.api_compradores, name='api_compradores'),
+    path('api/compradores/<int:pk>/', views.api_comprador_detalhe, name='api_comprador_detalhe'),
+    path('api/compradores/<int:pk>/atualizar/', views.api_comprador_atualizar, name='api_comprador_atualizar'),
+    path('api/compradores/<int:pk>/excluir/', views.api_comprador_excluir, name='api_comprador_excluir'),
+
+    # API Imobiliária — CRUD
+    path('api/imobiliarias/', views.api_imobiliarias, name='api_imobiliarias'),
+    path('api/imobiliarias/<int:pk>/', views.api_imobiliaria_detalhe, name='api_imobiliaria_detalhe'),
+    path('api/imobiliarias/<int:pk>/atualizar/', views.api_imobiliaria_atualizar, name='api_imobiliaria_atualizar'),
+    path('api/imobiliarias/<int:pk>/excluir/', views.api_imobiliaria_excluir, name='api_imobiliaria_excluir'),
+
+    # Setup Passo 3 — remessa CNAB, retorno e logos
+    path('api/simular-remessa-teste/', views.api_simular_remessa_teste, name='api_simular_remessa_teste'),
+    path('api/simular-retorno-teste/', views.api_simular_retorno_teste, name='api_simular_retorno_teste'),
+    path('api/gerar-logos-teste/', views.api_gerar_logos_teste, name='api_gerar_logos_teste'),
 ]

@@ -7,15 +7,14 @@ Email: maxwbh@gmail.com
 from django import forms
 from django.core.exceptions import ValidationError
 from crispy_forms.helper import FormHelper
-from crispy_forms.layout import Layout, Submit, Row, Column, Div, HTML, Field
+from crispy_forms.layout import Layout, Row, Column, Div, HTML, Field
 from crispy_forms.bootstrap import PrependedText, AppendedText
 from .models import (
-    Contabilidade, Imobiliaria, Imovel, Comprador, TipoImovel,
-    ContaBancaria, BancoBrasil, TipoValor, TipoTitulo, LayoutCNAB,
+    Contabilidade, Imobiliaria, Imovel, Comprador,
+    ContaBancaria,
     AcessoUsuario
 )
 from django.contrib.auth import get_user_model
-import re
 
 
 class ContabilidadeForm(forms.ModelForm):
@@ -130,20 +129,23 @@ class CompradorForm(forms.ModelForm):
         ]
         widgets = {
             'tipo_pessoa': forms.RadioSelect(attrs={'class': 'form-check-input'}),
-            'data_nascimento': forms.DateInput(attrs={'type': 'date', 'class': 'form-control'}),
+            'data_nascimento': forms.DateInput(
+                attrs={'type': 'text', 'class': 'form-control mask-date', 'placeholder': 'DD/MM/AAAA', 'maxlength': '10'},
+                format='%d/%m/%Y'
+            ),
             'observacoes': forms.Textarea(attrs={'rows': 2, 'class': 'form-control'}),
             'cep': forms.TextInput(attrs={
                 'placeholder': '00000-000',
                 'data-viacep': 'true',
-                'class': 'form-control cep-input',
+                'class': 'form-control cep-input mask-cep',
                 'maxlength': '9'
             }),
-            'cpf': forms.TextInput(attrs={'placeholder': '000.000.000-00', 'maxlength': '14'}),
-            'cnpj': forms.TextInput(attrs={'placeholder': '00.000.000/0000-00', 'maxlength': '20'}),
-            'responsavel_cpf': forms.TextInput(attrs={'placeholder': '000.000.000-00', 'maxlength': '14'}),
-            'conjuge_cpf': forms.TextInput(attrs={'placeholder': '000.000.000-00', 'maxlength': '14'}),
-            'telefone': forms.TextInput(attrs={'placeholder': '(00) 0000-0000'}),
-            'celular': forms.TextInput(attrs={'placeholder': '(00) 00000-0000'}),
+            'cpf': forms.TextInput(attrs={'placeholder': '000.000.000-00', 'maxlength': '14', 'class': 'form-control mask-cpf'}),
+            'cnpj': forms.TextInput(attrs={'placeholder': 'AA.BBB.000/0001-00', 'maxlength': '18', 'class': 'form-control mask-cnpj'}),
+            'responsavel_cpf': forms.TextInput(attrs={'placeholder': '000.000.000-00', 'maxlength': '14', 'class': 'form-control mask-cpf'}),
+            'conjuge_cpf': forms.TextInput(attrs={'placeholder': '000.000.000-00', 'maxlength': '14', 'class': 'form-control mask-cpf'}),
+            'telefone': forms.TextInput(attrs={'placeholder': '(00) 0000-0000', 'class': 'form-control mask-phone'}),
+            'celular': forms.TextInput(attrs={'placeholder': '(00) 00000-0000', 'class': 'form-control mask-phone'}),
             'email': forms.EmailInput(attrs={'placeholder': 'email@exemplo.com'}),
             'numero': forms.TextInput(attrs={'placeholder': 'Nº'}),
             'estado': forms.Select(attrs={'class': 'form-select'}),
@@ -412,7 +414,7 @@ class ImovelForm(forms.ModelForm):
                 'placeholder': '-46.6333094',
                 'id': 'id_longitude'
             }),
-            'valor': forms.NumberInput(attrs={'step': '0.01', 'min': '0'}),
+            'valor': forms.TextInput(attrs={'data-mask': 'moeda', 'placeholder': 'R$ 0,00'}),
         }
 
     def __init__(self, *args, **kwargs):
@@ -610,10 +612,12 @@ class ImobiliariaForm(forms.ModelForm):
     class Meta:
         model = Imobiliaria
         fields = [
-            'contabilidade', 'nome', 'razao_social', 'cnpj',
+            'contabilidade', 'nome', 'razao_social', 'cnpj', 'logo',
             'cep', 'logradouro', 'numero', 'complemento', 'bairro', 'cidade', 'estado',
             'telefone', 'email', 'responsavel_financeiro',
             'banco', 'agencia', 'conta', 'pix',
+            # Identidade Visual (boletos Prawn ≥12.10.0)
+            'cor_marca', 'rodape_contato', 'marca_dagua',
             # Configurações de Boleto
             'tipo_valor_multa', 'percentual_multa_padrao',
             'tipo_valor_juros', 'percentual_juros_padrao',
@@ -630,16 +634,61 @@ class ImobiliariaForm(forms.ModelForm):
             'cep': forms.TextInput(attrs={
                 'placeholder': '00000-000',
                 'data-viacep': 'true',
-                'class': 'form-control cep-input',
+                'class': 'form-control cep-input mask-cep',
                 'maxlength': '9'
             }),
-            'cnpj': forms.TextInput(attrs={'placeholder': '00.000.000/0000-00', 'maxlength': '20'}),
-            'percentual_multa_padrao': forms.NumberInput(attrs={'step': '0.01', 'min': '0'}),
-            'percentual_juros_padrao': forms.NumberInput(attrs={'step': '0.0001', 'min': '0'}),
-            'percentual_desconto_padrao': forms.NumberInput(attrs={'step': '0.01', 'min': '0'}),
-            'desconto2_padrao': forms.NumberInput(attrs={'step': '0.01', 'min': '0'}),
-            'desconto3_padrao': forms.NumberInput(attrs={'step': '0.01', 'min': '0'}),
+            'cnpj': forms.TextInput(attrs={'placeholder': 'AA.BBB.000/0001-00', 'maxlength': '18', 'class': 'form-control mask-cnpj'}),
+            'telefone': forms.TextInput(attrs={'placeholder': '(00) 0000-0000', 'class': 'form-control mask-phone'}),
+            'percentual_multa_padrao': forms.TextInput(attrs={
+                'data-mask': 'pct2',
+                'data-mask-switch': 'id_tipo_valor_multa',
+                'data-mask-moeda': 'moeda',
+                'data-mask-pct': 'pct2',
+                'placeholder': '2,00'
+            }),
+            'percentual_juros_padrao': forms.TextInput(attrs={
+                'data-mask': 'pct4',
+                'data-mask-switch': 'id_tipo_valor_juros',
+                'data-mask-moeda': 'decimal4',
+                'data-mask-pct': 'pct4',
+                'placeholder': '0,0333'
+            }),
+            'percentual_desconto_padrao': forms.TextInput(attrs={
+                'data-mask': 'pct2',
+                'data-mask-switch': 'id_tipo_valor_desconto',
+                'data-mask-moeda': 'moeda',
+                'data-mask-pct': 'pct2',
+                'placeholder': '0,00'
+            }),
+            'desconto2_padrao': forms.TextInput(attrs={
+                'data-mask': 'pct2',
+                'data-mask-switch': 'id_tipo_valor_desconto2',
+                'data-mask-moeda': 'moeda',
+                'data-mask-pct': 'pct2',
+                'placeholder': '0,00'
+            }),
+            'desconto3_padrao': forms.TextInput(attrs={
+                'data-mask': 'pct2',
+                'data-mask-switch': 'id_tipo_valor_desconto3',
+                'data-mask-moeda': 'moeda',
+                'data-mask-pct': 'pct2',
+                'placeholder': '0,00'
+            }),
             'instrucao_padrao': forms.TextInput(attrs={'placeholder': 'Uma linha no espaço instrução ao caixa'}),
+            'cor_marca': forms.TextInput(attrs={
+                'placeholder': '1A4E8C',
+                'maxlength': '6',
+                'pattern': '[0-9A-Fa-f]{6}',
+                'title': 'Hex RRGGBB sem # (ex: 1A4E8C)',
+            }),
+            'rodape_contato': forms.TextInput(attrs={
+                'placeholder': 'Tel: (31) 3773-1234 | contato@empresa.com.br',
+                'maxlength': '120',
+            }),
+            'marca_dagua': forms.TextInput(attrs={
+                'placeholder': 'ANTIFRAUDE (opcional)',
+                'maxlength': '60',
+            }),
         }
 
     def __init__(self, *args, **kwargs):
@@ -736,6 +785,25 @@ class ImobiliariaForm(forms.ModelForm):
             ),
             HTML('</div></div>'),
 
+            # Card: Identidade Visual (Boleto Prawn ≥12.10.0)
+            HTML('''
+                <div class="card mb-3 card-opcional">
+                    <div class="card-header py-2">
+                        <i class="fas fa-palette me-2"></i><strong>Identidade Visual do Boleto</strong>
+                        <small class="text-muted ms-2">(Logo, cor e rodapé nos boletos Prawn)</small>
+                    </div>
+                    <div class="card-body py-3">
+            '''),
+            Row(
+                Column(Field('logo', wrapper_class='mb-2'), css_class='col-md-12'),
+            ),
+            Row(
+                Column(Field('cor_marca', wrapper_class='mb-2'), css_class='col-md-3'),
+                Column(Field('rodape_contato', wrapper_class='mb-2'), css_class='col-md-9'),
+            ),
+            Field('marca_dagua', wrapper_class='mb-2'),
+            HTML('</div></div>'),
+
             # Card: Configuracoes Padrao de Boleto (Opcional)
             HTML('''
                 <div class="card mb-3 card-opcional border-info">
@@ -816,14 +884,102 @@ class ImobiliariaForm(forms.ModelForm):
 
 
 class ContaBancariaForm(forms.ModelForm):
-    """Formulário para cadastro de Conta Bancária"""
+    """
+    Formulário para cadastro de Conta Bancária.
+    Valida campos obrigatórios conforme requisitos de cada banco para BRCobranca.
+    """
+
+    # Configuração de campos por banco (conforme BRCobranca)
+    CAMPOS_BANCO = {
+        '001': {  # Banco do Brasil
+            'nome': 'Banco do Brasil',
+            'convenio_obrigatorio': True,
+            'convenio_min': 4,
+            'convenio_max': 8,
+            'agencia_max': 4,
+            'conta_max': 8,
+            'carteira_max': 2,
+            'carteira_padrao': '18',
+            'campos_extras': [],
+        },
+        '033': {  # Santander
+            'nome': 'Santander',
+            'convenio_obrigatorio': True,
+            'convenio_digitos': 7,
+            'agencia_max': 4,
+            'conta_max': 9,
+            'nosso_numero_max': 7,
+            'carteira_padrao': '102',
+            'campos_extras': [],
+        },
+        '104': {  # Caixa Econômica Federal
+            'nome': 'Caixa Econômica',
+            'convenio_obrigatorio': True,
+            'convenio_digitos': 6,
+            'agencia_max': 4,
+            'carteira_max': 1,
+            'nosso_numero_max': 15,
+            'carteira_padrao': '1',
+            'campos_extras': ['emissao', 'codigo_beneficiario'],
+            'emissao_obrigatorio': True,
+            'emissao_digitos': 1,
+            'codigo_beneficiario_obrigatorio': True,
+        },
+        '237': {  # Bradesco
+            'nome': 'Bradesco',
+            'convenio_obrigatorio': False,
+            'agencia_max': 4,
+            'conta_max': 7,
+            'carteira_max': 2,
+            'nosso_numero_max': 11,
+            'carteira_padrao': '06',
+            'campos_extras': [],
+        },
+        '341': {  # Itaú
+            'nome': 'Itaú',
+            'convenio_obrigatorio': False,
+            'convenio_max': 5,
+            'agencia_max': 4,
+            'conta_max': 5,
+            'nosso_numero_max': 8,
+            'carteira_padrao': '175',
+            'campos_extras': [],
+        },
+        '748': {  # Sicredi
+            'nome': 'Sicredi',
+            'convenio_obrigatorio': True,
+            'convenio_max': 5,
+            'agencia_max': 4,
+            'conta_max': 5,
+            'carteira_max': 1,
+            'nosso_numero_max': 5,
+            'carteira_padrao': '3',
+            'campos_extras': ['posto', 'byte_idt'],
+            'posto_obrigatorio': True,
+            'posto_digitos': 2,
+            'byte_idt_obrigatorio': True,
+            'byte_idt_digitos': 1,
+        },
+        '756': {  # Sicoob
+            'nome': 'Sicoob',
+            'convenio_obrigatorio': True,
+            'convenio_max': 7,
+            'agencia_max': 4,
+            'conta_max': 8,
+            'nosso_numero_max': 7,
+            'carteira_padrao': '1',
+            'campos_extras': [],
+        },
+    }
 
     class Meta:
         model = ContaBancaria
         fields = [
             'banco', 'descricao', 'principal',
+            'provider', 'tenant_id', 'account_config',
             'agencia', 'conta',
             'convenio', 'carteira', 'nosso_numero_atual', 'modalidade',
+            'posto', 'byte_idt', 'emissao', 'codigo_beneficiario',
             'tipo_pix', 'chave_pix',
             'cobranca_registrada', 'prazo_baixa', 'prazo_protesto',
             'layout_cnab', 'numero_remessa_cnab_atual'
@@ -831,12 +987,31 @@ class ContaBancariaForm(forms.ModelForm):
         widgets = {
             'banco': forms.Select(attrs={'class': 'form-select'}),
             'descricao': forms.TextInput(attrs={'placeholder': 'Ex: Conta Principal'}),
+            'provider': forms.Select(attrs={'class': 'form-select'}),
             'tipo_pix': forms.Select(attrs={'class': 'form-select'}),
             'layout_cnab': forms.Select(attrs={'class': 'form-select'}),
+        }
+        help_texts = {
+            'convenio': 'Código do convênio/beneficiário. Obrigatório para: BB, Santander, Caixa, Sicredi, Sicoob',
+            'carteira': 'Número da carteira de cobrança. Se vazio, usa a carteira padrão do banco.',
+            'agencia': 'Número da agência (apenas números)',
+            'conta': 'Número da conta (apenas números)',
+            'provider': (
+                'Provedor de cobrança. Vazio = BRCobrança (fluxo CNAB padrão). '
+                'C6/Sicoob ativam cobrança registrada via Boleto-API (integração ainda em validação).'
+            ),
+            'tenant_id': 'Identificador do tenant no Boleto-API. Obrigatório apenas para C6/Sicoob.',
         }
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        # provider/tenant_id/account_config são opcionais no cadastro — vazio = BRCobrança
+        if 'provider' in self.fields:
+            self.fields['provider'].required = False
+        if 'tenant_id' in self.fields:
+            self.fields['tenant_id'].required = False
+        if 'account_config' in self.fields:
+            self.fields['account_config'].required = False
         for field_name, field in self.fields.items():
             if 'class' not in field.widget.attrs:
                 if isinstance(field.widget, forms.Select):
@@ -845,6 +1020,117 @@ class ContaBancariaForm(forms.ModelForm):
                     field.widget.attrs['class'] = 'form-check-input'
                 else:
                     field.widget.attrs['class'] = 'form-control'
+
+    def clean(self):
+        """Validação customizada baseada no banco selecionado"""
+        cleaned_data = super().clean()
+        banco = cleaned_data.get('banco')
+        convenio = cleaned_data.get('convenio', '') or ''
+        convenio = convenio.strip()
+        agencia = cleaned_data.get('agencia', '') or ''
+        agencia = agencia.strip()
+        conta = cleaned_data.get('conta', '') or ''
+        conta = conta.strip()
+        carteira = cleaned_data.get('carteira', '') or ''
+        carteira = carteira.strip()
+        layout_cnab = cleaned_data.get('layout_cnab', '') or ''
+        posto = cleaned_data.get('posto', '') or ''
+        posto = posto.strip()
+        byte_idt = cleaned_data.get('byte_idt', '') or ''
+        byte_idt = byte_idt.strip()
+        emissao = cleaned_data.get('emissao', '') or ''
+        emissao = emissao.strip()
+        codigo_beneficiario = cleaned_data.get('codigo_beneficiario', '') or ''
+        codigo_beneficiario = codigo_beneficiario.strip()
+
+        if banco and banco in self.CAMPOS_BANCO:
+            config = self.CAMPOS_BANCO[banco]
+            banco_nome = config.get('nome', banco)
+
+            # Validar convênio obrigatório
+            if config.get('convenio_obrigatorio') and not convenio:
+                self.add_error('convenio', f'Convênio é obrigatório para {banco_nome}')
+
+            # Validar tamanho do convênio
+            if convenio:
+                convenio_numeros = ''.join(filter(str.isdigit, convenio))
+                if config.get('convenio_digitos') and len(convenio_numeros) != config['convenio_digitos']:
+                    self.add_error(
+                        'convenio',
+                        f'Para {banco_nome}, o convênio deve ter exatamente {config["convenio_digitos"]} dígitos')
+                elif config.get('convenio_min') and len(convenio_numeros) < config['convenio_min']:
+                    self.add_error(
+                        'convenio',
+                        f'Para {banco_nome}, o convênio deve ter entre {config["convenio_min"]} e {config["convenio_max"]} dígitos')
+                elif config.get('convenio_max') and len(convenio_numeros) > config['convenio_max']:
+                    self.add_error(
+                        'convenio',
+                        f'Para {banco_nome}, o convênio deve ter no máximo {config["convenio_max"]} dígitos')
+
+            # Sicredi: posto e byte_idt obrigatórios
+            if config.get('posto_obrigatorio') and not posto:
+                self.add_error('posto', f'Posto é obrigatório para {banco_nome}')
+            if posto and config.get('posto_digitos'):
+                posto_nums = ''.join(filter(str.isdigit, posto))
+                if len(posto_nums) != config['posto_digitos']:
+                    self.add_error(
+                        'posto',
+                        f'Para {banco_nome}, o posto deve ter exatamente {config["posto_digitos"]} dígitos')
+
+            if config.get('byte_idt_obrigatorio') and not byte_idt:
+                self.add_error('byte_idt', f'Byte IDT é obrigatório para {banco_nome}')
+            if byte_idt and config.get('byte_idt_digitos'):
+                if len(byte_idt) != config['byte_idt_digitos']:
+                    self.add_error(
+                        'byte_idt',
+                        f'Para {banco_nome}, o Byte IDT deve ter exatamente {config["byte_idt_digitos"]} caractere')
+
+            # Caixa: emissao e codigo_beneficiario obrigatórios
+            if config.get('emissao_obrigatorio') and not emissao:
+                self.add_error('emissao', f'Tipo de Emissão é obrigatório para {banco_nome}')
+            if emissao and config.get('emissao_digitos'):
+                if len(emissao) != config['emissao_digitos']:
+                    self.add_error(
+                        'emissao',
+                        f'Para {banco_nome}, o tipo de emissão deve ter exatamente {config["emissao_digitos"]} dígito')
+
+            if config.get('codigo_beneficiario_obrigatorio') and not codigo_beneficiario:
+                self.add_error('codigo_beneficiario', f'Código do Beneficiário é obrigatório para {banco_nome}')
+
+        # Validação de tamanho de agência/conta/carteira por banco — fonte única
+        # em financeiro.services.bancos (mesma tabela do BRCobrança usada na geração).
+        if banco:
+            from financeiro.services import bancos as _bancos
+            erros_campos = _bancos.validar_campos_conta(
+                banco, agencia=agencia, conta=conta, carteira=carteira,
+            )
+            for campo, mensagem in erros_campos.items():
+                self.add_error(campo, mensagem)
+
+            # Validação do layout CNAB suportado pelo banco (CNAB 240/400)
+            erro_layout = _bancos.validar_layout_cnab(banco, layout_cnab)
+            if erro_layout:
+                self.add_error('layout_cnab', erro_layout)
+
+        # Provider: vazio = BRCobrança (fluxo CNAB padrão, sem dependência do gateway).
+        # A integração C6/Sicoob via Boleto-API ainda está em validação — não é o default.
+        from core.models import ProviderBoleto
+        provider = (cleaned_data.get('provider') or '').strip()
+        if not provider:
+            provider = ProviderBoleto.BRCOBRANCA
+            cleaned_data['provider'] = provider
+
+        # C6/Sicoob exigem tenant_id para resolver as credenciais no Boleto-API
+        if provider in ('c6', 'sicoob'):
+            tenant_id = (cleaned_data.get('tenant_id') or '').strip()
+            if not tenant_id:
+                self.add_error(
+                    'tenant_id',
+                    'Tenant ID é obrigatório quando o provedor é C6 ou Sicoob '
+                    '(identifica as credenciais no Boleto-API).',
+                )
+
+        return cleaned_data
 
 
 class AcessoUsuarioForm(forms.ModelForm):

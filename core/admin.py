@@ -5,7 +5,9 @@ Desenvolvedor: Maxwell da Silva Oliveira
 Email: maxwbh@gmail.com
 """
 from django.contrib import admin
-from .models import Contabilidade, Imobiliaria, Imovel, Comprador
+from django.utils.html import format_html
+from .models import Contabilidade, Imobiliaria, Imovel, Comprador, ParametroSistema, LoteamentoOverlay, AcessoNegado, LogAuditoria
+from .parametros import invalidar_cache
 
 
 @admin.register(Contabilidade)
@@ -29,14 +31,20 @@ class ContabilidadeAdmin(admin.ModelAdmin):
 
 @admin.register(Imobiliaria)
 class ImobiliariaAdmin(admin.ModelAdmin):
-    list_display = ['nome', 'razao_social', 'cnpj', 'contabilidade', 'responsavel_financeiro', 'ativo']
-    list_filter = ['ativo', 'contabilidade', 'criado_em']
-    search_fields = ['nome', 'razao_social', 'cnpj', 'responsavel_financeiro']
+    list_display = ['nome', 'tipo_pessoa', 'documento_display', 'contabilidade', 'responsavel_financeiro', 'ativo']
+    list_select_related = ['contabilidade']
+    list_filter = ['ativo', 'tipo_pessoa', 'contabilidade', 'criado_em']
+    search_fields = ['nome', 'razao_social', 'cnpj', 'cpf', 'responsavel_financeiro']
     readonly_fields = ['criado_em', 'atualizado_em']
     autocomplete_fields = ['contabilidade']
     fieldsets = (
-        ('Informações Básicas', {
-            'fields': ('contabilidade', 'nome', 'razao_social', 'cnpj')
+        ('Tipo de Pessoa', {
+            'fields': ('contabilidade', 'tipo_pessoa'),
+            'description': 'Selecione PJ para empresa/imobiliária ou PF para vendedor pessoa física.',
+        }),
+        ('Identificação', {
+            'fields': ('nome', 'razao_social', 'cnpj', 'cpf'),
+            'description': 'Para PJ: preencha CNPJ. Para PF: preencha apenas CPF.',
         }),
         ('Contato', {
             'fields': ('endereco', 'telefone', 'email', 'responsavel_financeiro')
@@ -44,15 +52,25 @@ class ImobiliariaAdmin(admin.ModelAdmin):
         ('Dados Bancários', {
             'fields': ('banco', 'agencia', 'conta', 'pix')
         }),
+        ('Identidade Visual (Boleto)', {
+            'fields': ('logo', 'cor_marca', 'rodape_contato', 'marca_dagua'),
+            'classes': ('collapse',),
+            'description': 'Logo, cor de marca, rodapé e marca d\'água usados nos boletos Prawn (brcobranca ≥12.10.0).',
+        }),
         ('Status', {
             'fields': ('ativo', 'criado_em', 'atualizado_em')
         }),
     )
 
+    def documento_display(self, obj):
+        return obj.documento or '—'
+    documento_display.short_description = 'CNPJ / CPF'
+
 
 @admin.register(Imovel)
 class ImovelAdmin(admin.ModelAdmin):
     list_display = ['identificacao', 'loteamento', 'tipo', 'imobiliaria', 'area', 'disponivel', 'ativo']
+    list_select_related = ['imobiliaria']
     list_filter = ['tipo', 'disponivel', 'ativo', 'imobiliaria', 'criado_em']
     search_fields = ['identificacao', 'loteamento', 'endereco', 'matricula']
     readonly_fields = ['criado_em', 'atualizado_em']
@@ -103,3 +121,111 @@ class CompradorAdmin(admin.ModelAdmin):
             'fields': ('ativo', 'criado_em', 'atualizado_em')
         }),
     )
+
+
+@admin.register(ParametroSistema)
+class ParametroSistemaAdmin(admin.ModelAdmin):
+    list_display = ['chave', 'valor_admin', 'tipo', 'grupo', 'modificado_manualmente', 'atualizado_em']
+    list_filter = ['grupo', 'tipo', 'modificado_manualmente']
+    search_fields = ['chave', 'descricao']
+    ordering = ['grupo', 'chave']
+    readonly_fields = ['atualizado_em', 'modificado_manualmente']
+    list_per_page = 50
+
+    def get_readonly_fields(self, request, obj=None):
+        if obj:
+            return ['chave', 'atualizado_em', 'modificado_manualmente']
+        return ['atualizado_em', 'modificado_manualmente']
+
+    fieldsets = (
+        (None, {
+            'fields': ('chave', 'grupo', 'tipo', 'descricao')
+        }),
+        ('Valor', {
+            'fields': ('valor',),
+            'description': 'Campos do tipo Senha/Token são exibidos mascarados na listagem.',
+        }),
+        ('Auditoria', {
+            'fields': ('atualizado_em', 'modificado_manualmente'),
+            'classes': ('collapse',),
+        }),
+    )
+
+    def valor_admin(self, obj):
+        if obj.tipo == ParametroSistema.TIPO_SECRET and obj.valor:
+            return format_html('<span style="color:#999">••••••••</span>')
+        return obj.valor or format_html('<em style="color:#ccc">—</em>')
+    valor_admin.short_description = 'Valor'
+
+    def save_model(self, request, obj, form, change):
+        obj.modificado_manualmente = True
+        super().save_model(request, obj, form, change)
+        invalidar_cache()
+
+    def delete_model(self, request, obj):
+        super().delete_model(request, obj)
+        invalidar_cache()
+
+
+@admin.register(LoteamentoOverlay)
+class LoteamentoOverlayAdmin(admin.ModelAdmin):
+    list_display = ['nome_loteamento', 'imagem', 'opacidade', 'ativo', 'atualizado_em']
+    list_filter = ['ativo', 'nome_loteamento']
+    search_fields = ['nome_loteamento']
+    list_editable = ['opacidade', 'ativo']
+    readonly_fields = ['criado_em', 'atualizado_em', 'preview_imagem']
+    fieldsets = (
+        ('Identificação', {
+            'fields': ('nome_loteamento', 'imagem', 'preview_imagem', 'opacidade', 'ativo'),
+        }),
+        ('Limites Geográficos (SW = Sudoeste, NE = Nordeste)', {
+            'description': 'Define o retângulo sobre o qual a imagem será projetada no mapa.',
+            'fields': (('lat_sw', 'lng_sw'), ('lat_ne', 'lng_ne')),
+        }),
+        ('Auditoria', {
+            'fields': ('criado_em', 'atualizado_em'),
+            'classes': ('collapse',),
+        }),
+    )
+
+    def preview_imagem(self, obj):
+        if obj.imagem:
+            return format_html('<img src="{}" style="max-height:120px;max-width:300px;border:1px solid #ddd;border-radius:4px;">', obj.imagem.url)
+        return '—'
+    preview_imagem.short_description = 'Preview'
+
+
+@admin.register(AcessoNegado)
+class AcessoNegadoAdmin(admin.ModelAdmin):
+    list_display = ['ip', 'usuario', 'url_resumida', 'status_code', 'timestamp']
+    list_select_related = ['usuario']
+    list_filter = ['status_code', 'timestamp']
+    search_fields = ['ip', 'url', 'usuario__username']
+    readonly_fields = ['ip', 'usuario', 'url', 'status_code', 'timestamp']
+    date_hierarchy = 'timestamp'
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def url_resumida(self, obj):
+        return obj.url[:80] + '…' if len(obj.url) > 80 else obj.url
+    url_resumida.short_description = 'URL'
+
+
+@admin.register(LogAuditoria)
+class LogAuditoriaAdmin(admin.ModelAdmin):
+    list_display = ['timestamp', 'acao', 'usuario', 'entidade', 'entidade_pk', 'ip_address']
+    list_select_related = ['usuario']
+    list_filter = ['acao']
+    search_fields = ['usuario__username', 'descricao', 'entidade_pk']
+    date_hierarchy = 'timestamp'
+    readonly_fields = ['timestamp', 'acao', 'usuario', 'entidade', 'entidade_pk', 'descricao', 'ip_address']
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
