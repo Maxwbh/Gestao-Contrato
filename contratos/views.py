@@ -7,32 +7,67 @@ Email: maxwbh@gmail.com
 from django.shortcuts import render, get_object_or_404, redirect
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.mixins import LoginRequiredMixin
+from django.views import View
 from django.views.generic import ListView, CreateView, UpdateView, DeleteView, DetailView
-from django.urls import reverse_lazy
+from django.urls import reverse_lazy, reverse
 from django.contrib import messages
+from django.db import models
 from django.db.models import Q, Sum, Count
-from .models import Contrato, StatusContrato, IndiceReajuste
+from .models import Contrato, StatusContrato, IndiceReajuste, PrestacaoIntermediaria, TabelaJurosContrato, TipoAmortizacao, TipoCorrecao
 from .forms import ContratoForm, IndiceReajusteForm
+from core.mixins import PaginacaoMixin, TenantMixin, HashidMixin
+from core.mixins import verificar_acesso_tenant
+from core.hashids_utils import encode_id, decode_id as _decode_id
 import requests
 from django.http import JsonResponse
 from django.views.decorators.http import require_http_methods
 import json
+import logging
 from datetime import datetime
+from decimal import Decimal
+
+logger = logging.getLogger(__name__)
 
 
-class ContratoListView(LoginRequiredMixin, ListView):
+def _voltar_url(request, default):
+    """Retorna o HTTP_REFERER se for da mesma origem, senão o default."""
+    from urllib.parse import urlparse
+    ref = request.META.get('HTTP_REFERER', '')
+    if ref:
+        p = urlparse(ref)
+        if not p.netloc or p.netloc == request.get_host():
+            return ref
+    return default
+
+
+class ContratoListView(LoginRequiredMixin, TenantMixin, PaginacaoMixin, ListView):
     """Lista todos os contratos"""
     model = Contrato
     template_name = 'contratos/contrato_list.html'
     context_object_name = 'contratos'
     paginate_by = 20
 
+    _SORT_FIELDS = {
+        'data_contrato': 'data_contrato',
+        'numero':        'numero_contrato',
+        'comprador':     'comprador__nome',
+        'imovel':        'imovel__identificacao',
+        'valor_total':   'valor_total',
+        'status':        'status',
+    }
+
     def get_queryset(self):
-        queryset = Contrato.objects.select_related(
+        queryset = super().get_queryset().select_related(
             'imovel', 'imovel__imobiliaria',
             'comprador',
             'imobiliaria'
-        ).order_by('-data_contrato')
+        )
+
+        sort_field = self.request.GET.get('sort', 'data_contrato')
+        sort_order = self.request.GET.get('order', 'desc')
+        db_field = self._SORT_FIELDS.get(sort_field, 'data_contrato')
+        ordering = db_field if sort_order == 'asc' else f'-{db_field}'
+        queryset = queryset.order_by(ordering)
 
         # Filtro de busca
         search = self.request.GET.get('search')
@@ -61,18 +96,30 @@ class ContratoListView(LoginRequiredMixin, ListView):
         context['search'] = self.request.GET.get('search', '')
         context['status_filter'] = self.request.GET.get('status', '')
         context['imobiliaria_filter'] = self.request.GET.get('imobiliaria', '')
+        context['sort_field'] = self.request.GET.get('sort', 'data_contrato')
+        context['sort_order'] = self.request.GET.get('order', 'desc')
         context['status_choices'] = StatusContrato.choices
-        context['total_contratos'] = Contrato.objects.count()
-        context['contratos_ativos'] = Contrato.objects.filter(status=StatusContrato.ATIVO).count()
-        context['contratos_quitados'] = Contrato.objects.filter(status=StatusContrato.QUITADO).count()
+        qs_tenant = self.get_queryset()
+        counts = qs_tenant.aggregate(
+            total=Count('id'),
+            ativos=Count('id', filter=Q(status=StatusContrato.ATIVO)),
+            quitados=Count('id', filter=Q(status=StatusContrato.QUITADO)),
+        )
+        context['total_contratos'] = counts['total']
+        context['contratos_ativos'] = counts['ativos']
+        context['contratos_quitados'] = counts['quitados']
 
-        # Lista de imobiliárias para filtro
-        from core.models import Imobiliaria
-        context['imobiliarias'] = Imobiliaria.objects.filter(ativo=True)
+        # Lista de imobiliárias para filtro (apenas as acessíveis ao usuário)
+        context['imobiliarias'] = self.get_imobiliarias_permitidas()
 
         # Contratos que precisam de reajuste no mês corrente
         context['contratos_reajuste'] = self._get_contratos_reajuste_pendente()
 
+        from core.breadcrumbs import bc, bc_dashboard
+        context['breadcrumb'] = [
+            bc_dashboard(),
+            bc('Contratos'),
+        ]
         return context
 
     def _get_contratos_reajuste_pendente(self):
@@ -84,14 +131,15 @@ class ContratoListView(LoginRequiredMixin, ListView):
         3. Passou o prazo de reajuste desde a última atualização
         """
         from django.utils import timezone
-        from .models import TipoCorrecao
         from dateutil.relativedelta import relativedelta
 
         hoje = timezone.now().date()
         contratos_pendentes = []
 
+        imobs = self.get_imobiliarias_permitidas()
         contratos_ativos = Contrato.objects.filter(
-            status=StatusContrato.ATIVO
+            status=StatusContrato.ATIVO,
+            imobiliaria__in=imobs
         ).exclude(
             tipo_correcao=TipoCorrecao.FIXO
         ).select_related('comprador', 'imovel', 'imobiliaria')
@@ -104,8 +152,9 @@ class ContratoListView(LoginRequiredMixin, ListView):
             proxima_data_reajuste = data_base + relativedelta(months=contrato.prazo_reajuste_meses)
 
             # Se a próxima data de reajuste é no mês corrente ou já passou
-            if (proxima_data_reajuste.year < hoje.year or
-                (proxima_data_reajuste.year == hoje.year and proxima_data_reajuste.month <= hoje.month)):
+            if (proxima_data_reajuste.year < hoje.year
+                    or (proxima_data_reajuste.year == hoje.year
+                        and proxima_data_reajuste.month <= hoje.month)):
 
                 # Calcular meses em atraso
                 meses_atraso = (hoje.year - proxima_data_reajuste.year) * 12 + (hoje.month - proxima_data_reajuste.month)
@@ -131,6 +180,16 @@ class ContratoCreateView(LoginRequiredMixin, CreateView):
     template_name = 'contratos/contrato_form.html'
     success_url = reverse_lazy('contratos:listar')
 
+    def get_context_data(self, **kwargs):
+        from core.breadcrumbs import bc, bc_dashboard
+        context = super().get_context_data(**kwargs)
+        context['breadcrumb'] = [
+            bc_dashboard(),
+            bc('Contratos', 'contratos:listar'),
+            bc('Novo'),
+        ]
+        return context
+
     def form_valid(self, form):
         messages.success(self.request, f'Contrato {form.instance.numero_contrato} criado com sucesso! Parcelas geradas automaticamente.')
         return super().form_valid(form)
@@ -150,12 +209,24 @@ class ContratoCreateView(LoginRequiredMixin, CreateView):
         return super().form_invalid(form)
 
 
-class ContratoUpdateView(LoginRequiredMixin, UpdateView):
+class ContratoUpdateView(LoginRequiredMixin, HashidMixin, TenantMixin, UpdateView):
     """Atualiza um contrato existente"""
     model = Contrato
     form_class = ContratoForm
     template_name = 'contratos/contrato_form.html'
     success_url = reverse_lazy('contratos:listar')
+
+    def get_context_data(self, **kwargs):
+        from core.breadcrumbs import bc, bc_dashboard
+        from core.templatetags.hashid_tags import hashid_filter
+        context = super().get_context_data(**kwargs)
+        context['breadcrumb'] = [
+            bc_dashboard(),
+            bc('Contratos', 'contratos:listar'),
+            bc(self.object.numero_contrato, 'contratos:detalhe', hashid_filter(self.object.pk)),
+            bc('Editar'),
+        ]
+        return context
 
     def form_valid(self, form):
         messages.success(self.request, f'Contrato {form.instance.numero_contrato} atualizado com sucesso!')
@@ -176,61 +247,267 @@ class ContratoUpdateView(LoginRequiredMixin, UpdateView):
         return super().form_invalid(form)
 
 
-class ContratoDetailView(LoginRequiredMixin, DetailView):
+class ContratoDetailView(LoginRequiredMixin, HashidMixin, TenantMixin, DetailView):
     """Exibe detalhes de um contrato"""
     model = Contrato
     template_name = 'contratos/contrato_detail.html'
     context_object_name = 'contrato'
 
     def get_queryset(self):
-        return Contrato.objects.select_related(
+        from django.db.models import Prefetch
+        from financeiro.models import Reajuste as _Reajuste
+        return super().get_queryset().select_related(
             'imovel', 'imovel__imobiliaria',
             'comprador',
             'imobiliaria'
+        ).prefetch_related(
+            'parcelas',
+            'intermediarias',
+            Prefetch('reajustes', queryset=_Reajuste.objects.order_by('-data_reajuste'), to_attr='_reajustes_pre'),
         )
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         contrato = self.object
-
-        context['progresso'] = contrato.calcular_progresso()
-        context['valor_pago'] = contrato.calcular_valor_pago()
-        context['saldo_devedor'] = contrato.calcular_saldo_devedor()
-
-        # Parcelas
-        context['parcelas'] = contrato.parcelas.all().order_by('numero_parcela')
-        context['parcelas_pagas'] = contrato.parcelas.filter(pago=True).count()
-        context['parcelas_pendentes'] = contrato.parcelas.filter(pago=False).count()
-
-        # Próxima parcela a vencer
         from django.utils import timezone
-        context['proxima_parcela'] = contrato.parcelas.filter(
-            pago=False,
-            data_vencimento__gte=timezone.now().date()
-        ).order_by('data_vencimento').first()
 
-        # Parcelas em atraso
-        context['parcelas_atrasadas'] = contrato.parcelas.filter(
-            pago=False,
-            data_vencimento__lt=timezone.now().date()
-        ).count()
+        # Parcelas — compute from prefetch cache to avoid extra queries
+        hoje = timezone.now().date()
+        todas_parcelas = sorted(contrato.parcelas.all(), key=lambda p: p.numero_parcela)
+        context['parcelas'] = todas_parcelas
+        pagas = [p for p in todas_parcelas if p.pago]
+        pendentes = [p for p in todas_parcelas if not p.pago]
+        context['parcelas_pagas'] = len(pagas)
+        context['parcelas_pendentes'] = len(pendentes)
+
+        proximas = sorted((p for p in pendentes if p.data_vencimento >= hoje), key=lambda p: p.data_vencimento)
+        context['proxima_parcela'] = proximas[0] if proximas else None
+        context['parcelas_atrasadas'] = sum(1 for p in pendentes if p.data_vencimento < hoje)
+
+        # Computed from prefetch cache — avoids 5 extra DB queries
+        total_p = len(todas_parcelas)
+        context['progresso'] = (len(pagas) / total_p * 100) if total_p else 0
+        context['valor_pago'] = (
+            sum(p.valor_pago or Decimal('0') for p in pagas) + contrato.valor_entrada
+        )
+        from financeiro.models import TipoParcela as _TP
+        from contratos.models import TipoAmortizacao as _TA
+        pendentes_normais = [p for p in pendentes if p.tipo_parcela == _TP.NORMAL]
+        if contrato.tipo_amortizacao == _TA.SAC:
+            saldo = sum((p.amortizacao or p.valor_atual) for p in pendentes_normais)
+        else:
+            saldo = sum(p.valor_atual for p in pendentes_normais)
+        context['saldo_devedor'] = saldo or Decimal('0.00')
+
+        # Reajuste pendente no mês exato do aniversário (antecipacao_meses=0)
+        from financeiro.models import Reajuste
+        ciclo_pendente = Reajuste.calcular_ciclo_pendente(contrato, antecipacao_meses=0)
+        if ciclo_pendente:
+            prazo = contrato.prazo_reajuste_meses or 12
+            context['reajuste_pendente_desde_parcela'] = (ciclo_pendente - 1) * prazo + 1
+        else:
+            context['reajuste_pendente_desde_parcela'] = None
+
+        # Reajustes do contrato
+        context['reajustes'] = getattr(contrato, '_reajustes_pre', None) or []
+
+        # Índices disponíveis para reajuste manual
+        context['indices_reajuste'] = IndiceReajuste.objects.filter(
+            ano=timezone.now().year
+        ).order_by('-mes').values('tipo_indice').distinct()
+
+        # Tipos de índice únicos para o dropdown
+        context['tipos_indice'] = [
+            ('IPCA', 'IPCA - IBGE'),
+            ('IGPM', 'IGP-M - FGV'),
+            ('INCC', 'INCC - FGV'),
+            ('INPC', 'INPC - IBGE'),
+            ('SELIC', 'SELIC'),
+            ('MANUAL', 'Percentual Manual'),
+        ]
+
+        # Conta bancária da imobiliária (usa a do contrato ou a principal da imobiliária)
+        conta_bancaria = None
+        if hasattr(contrato, 'get_conta_bancaria'):
+            conta_bancaria = contrato.get_conta_bancaria()
+        if not conta_bancaria:
+            conta_bancaria = contrato.imobiliaria.contas_bancarias.filter(
+                principal=True, ativo=True
+            ).first()
+        if not conta_bancaria:
+            conta_bancaria = contrato.imobiliaria.contas_bancarias.filter(
+                ativo=True
+            ).first()
+        context['conta_bancaria'] = conta_bancaria
+
+        # =====================================================================
+        # PRESTAÇÕES INTERMEDIÁRIAS
+        # =====================================================================
+        if hasattr(contrato, 'intermediarias'):
+            from django.utils import timezone as tz
+            from dateutil.relativedelta import relativedelta
+            # Use prefetch cache — sort in Python to avoid extra queries
+            todas_intermediarias = sorted(
+                contrato.intermediarias.all(), key=lambda i: i.numero_sequencial
+            )
+            context['intermediarias'] = todas_intermediarias
+            context['total_intermediarias'] = len(todas_intermediarias)
+            context['intermediarias_pagas'] = sum(1 for i in todas_intermediarias if i.paga)
+            context['intermediarias_pendentes'] = sum(1 for i in todas_intermediarias if not i.paga)
+            # Intermediárias vencidas sem boleto gerado — filter in Python
+            hoje_inter = tz.now().date()
+            vencidas_sem_boleto = [
+                inter for inter in todas_intermediarias
+                if not inter.paga and inter.parcela_vinculada_id is None
+                and (contrato.data_primeiro_vencimento + relativedelta(months=inter.mes_vencimento - 1)).replace(
+                    day=min(contrato.dia_vencimento, 28)
+                ) <= hoje_inter
+            ]
+            context['intermediarias_vencidas_sem_boleto'] = vencidas_sem_boleto
+        else:
+            context['intermediarias'] = []
+            context['total_intermediarias'] = 0
+            context['intermediarias_pagas'] = 0
+            context['intermediarias_pendentes'] = 0
+            context['intermediarias_vencidas_sem_boleto'] = []
+
+        # =====================================================================
+        # CONTROLE DE BLOQUEIO DE BOLETO POR REAJUSTE
+        # =====================================================================
+        # verificar_bloqueio_reajuste() retorna bool (True = bloqueado)
+        _bloqueado = (
+            contrato.verificar_bloqueio_reajuste()
+            if hasattr(contrato, 'verificar_bloqueio_reajuste')
+            else False
+        )
+        context['bloqueio_reajuste'] = {
+            'bloqueado': bool(_bloqueado),
+            'motivo': '',
+            'ciclo_atual': 1,
+            'ciclo_pendente': None,
+        }
+
+        # Verificar status de cada parcela para geração de boleto
+        # Batch: prefetch applied reajuste cycles once to avoid N+1 queries
+        parcelas_status_boleto = []
+        if hasattr(contrato, 'pode_gerar_boleto'):
+            from financeiro.models import Reajuste as ReajusteModel
+            from django.utils import timezone as _tz
+            from dateutil.relativedelta import relativedelta as _rdelta
+
+            _hoje = _tz.now().date()
+            _prazo = contrato.prazo_reajuste_meses or 12
+            _fixo = contrato.tipo_correcao == TipoCorrecao.FIXO
+
+            # Single query: all applied cycles for this contract
+            _applied_cycles = set(
+                ReajusteModel.objects.filter(contrato=contrato, aplicado=True)
+                .values_list('ciclo', flat=True)
+            )
+
+            # Find first blocked cycle (done once, not per parcela)
+            _blocked_cycle = None
+            _blocked_msg = ''
+            if not _fixo:
+                for _c in range(2, 9999):
+                    _data = contrato.data_contrato + _rdelta(months=(_c - 1) * _prazo)
+                    if _hoje < _data:
+                        break  # future cycle — stop
+                    if _c not in _applied_cycles:
+                        _blocked_cycle = _c
+                        _blocked_msg = (
+                            f"Reajuste do ciclo {_c} pendente desde "
+                            f"{_data.strftime('%d/%m/%Y')}. "
+                            f"Execute o reajuste antes de gerar boletos."
+                        )
+                        break
+
+            for parcela in context['parcelas']:
+                if _fixo:
+                    pode_gerar, motivo = True, "Índice FIXO — sem necessidade de reajuste."
+                else:
+                    _ciclo_parcela = (parcela.numero_parcela - 1) // _prazo + 1
+                    if _ciclo_parcela <= 1:
+                        pode_gerar, motivo = True, "Primeiro ciclo — liberado."
+                    elif _blocked_cycle is not None and _blocked_cycle <= _ciclo_parcela:
+                        pode_gerar, motivo = False, _blocked_msg
+                    else:
+                        pode_gerar = True
+                        motivo = f"Reajuste do ciclo {_ciclo_parcela} aplicado."
+                parcelas_status_boleto.append({
+                    'parcela': parcela,
+                    'pode_gerar_boleto': pode_gerar,
+                    'motivo_bloqueio': motivo if not pode_gerar else '',
+                })
+        else:
+            for parcela in context['parcelas']:
+                parcelas_status_boleto.append({
+                    'parcela': parcela,
+                    'pode_gerar_boleto': True,
+                    'motivo_bloqueio': '',
+                })
+        context['parcelas_status_boleto'] = parcelas_status_boleto
+
+        # =====================================================================
+        # RESUMO FINANCEIRO DO CONTRATO
+        # =====================================================================
+        if hasattr(contrato, 'get_resumo_financeiro'):
+            context['resumo_financeiro'] = contrato.get_resumo_financeiro()
+        else:
+            context['resumo_financeiro'] = {}
+
+        # =====================================================================
+        # INFORMAÇÕES DE CICLO DE REAJUSTE
+        # =====================================================================
+        context['ciclo_atual'] = getattr(contrato, 'ciclo_reajuste_atual', 1)
+        context['prazo_reajuste'] = getattr(contrato, 'prazo_reajuste_meses', 12)
+        context['ultimo_mes_boleto'] = getattr(contrato, 'ultimo_mes_boleto_gerado', 0)
+
+        # =====================================================================
+        # Q-04: TABELA DE JUROS ESCALANTES
+        # =====================================================================
+        context['tabela_juros'] = contrato.tabela_juros.all().order_by('ciclo_inicio')
+
+        # =====================================================================
+        # HISTÓRICO DE PAGAMENTOS (3.19)
+        # =====================================================================
+        from financeiro.models import HistoricoPagamento
+        context['historico_pagamentos'] = (
+            HistoricoPagamento.objects
+            .filter(parcela__contrato=contrato)
+            .select_related('parcela')
+            .order_by('-data_pagamento')
+        )
+
+        # Botão Voltar dinâmico
+        from django.urls import reverse
+        context['voltar_url'] = _voltar_url(
+            self.request, reverse('contratos:listar')
+        )
+
+        from core.breadcrumbs import bc, bc_dashboard
+        context['breadcrumb'] = [
+            bc_dashboard(),
+            bc('Contratos', 'contratos:listar'),
+            bc(contrato.numero_contrato),
+        ]
 
         return context
 
 
-class ContratoDeleteView(LoginRequiredMixin, DeleteView):
+class ContratoDeleteView(LoginRequiredMixin, HashidMixin, TenantMixin, DeleteView):
     """Cancela um contrato (soft delete via status)"""
     model = Contrato
     success_url = reverse_lazy('contratos:listar')
 
-    def delete(self, request, *args, **kwargs):
+    def form_valid(self, form):
         self.object = self.get_object()
 
         # Verifica se tem parcelas pagas
         parcelas_pagas = self.object.parcelas.filter(pago=True).count()
         if parcelas_pagas > 0:
-            messages.error(request, f'Não é possível cancelar o contrato. Existem {parcelas_pagas} parcela(s) já paga(s).')
-            return redirect('contratos:detalhe', pk=self.object.pk)
+            messages.error(self.request, f'Não é possível cancelar o contrato. Existem {parcelas_pagas} parcela(s) já paga(s).')
+            return redirect('contratos:detalhe', hid=encode_id(self.object.pk))
 
         # Soft delete - apenas muda o status para CANCELADO
         self.object.status = StatusContrato.CANCELADO
@@ -241,7 +518,7 @@ class ContratoDeleteView(LoginRequiredMixin, DeleteView):
             self.object.imovel.disponivel = True
             self.object.imovel.save()
 
-        messages.success(request, f'Contrato {self.object.numero_contrato} cancelado com sucesso!')
+        messages.success(self.request, f'Contrato {self.object.numero_contrato} cancelado com sucesso!')
         return redirect(self.success_url)
 
 
@@ -259,9 +536,14 @@ def detalhe_contrato(request, pk):
 
 
 @login_required
-def parcelas_contrato(request, pk):
+def parcelas_contrato(request, hid):
     """Lista todas as parcelas de um contrato"""
-    contrato = get_object_or_404(Contrato, pk=pk)
+    pk = _decode_id(hid)
+    if pk is None:
+        from django.http import Http404
+        raise Http404
+    contrato = get_object_or_404(Contrato.objects.select_related('imobiliaria'), pk=pk)
+    verificar_acesso_tenant(request, contrato.imobiliaria)
     parcelas = contrato.parcelas.all().order_by('numero_parcela')
 
     context = {
@@ -271,11 +553,49 @@ def parcelas_contrato(request, pk):
     return render(request, 'contratos/parcelas.html', context)
 
 
+@login_required
+@require_http_methods(["POST"])
+def api_completar_parcelas(request, hid):
+    """
+    Cria as parcelas faltantes de um contrato sem recriar as existentes.
+    Útil após gerar_dados_teste (que cria só até o mês atual).
+    """
+    pk = _decode_id(hid)
+    if pk is None:
+        from django.http import Http404
+        raise Http404
+    contrato = get_object_or_404(Contrato, pk=pk)
+
+    existentes = contrato.parcelas.count()
+    if existentes >= contrato.numero_parcelas:
+        return JsonResponse({
+            'status': 'ok',
+            'message': 'Nenhuma parcela faltando.',
+            'criadas': 0,
+        })
+
+    try:
+        criados = contrato.completar_parcelas_faltantes()
+        messages.success(
+            request,
+            f'{len(criados)} parcela(s) criada(s) para {contrato.numero_contrato}.'
+        )
+        return JsonResponse({
+            'status': 'ok',
+            'message': f'{len(criados)} parcela(s) criada(s).',
+            'criadas': len(criados),
+            'numeros': criados,
+        })
+    except Exception as e:
+        logger.exception("Erro ao completar parcelas do contrato %s: %s", pk, e)
+        return JsonResponse({'status': 'error', 'message': str(e)}, status=500)
+
+
 # ==============================================================
 # CRUD de Índices de Reajuste
 # ==============================================================
 
-class IndiceReajusteListView(LoginRequiredMixin, ListView):
+class IndiceReajusteListView(LoginRequiredMixin, PaginacaoMixin, ListView):
     """Lista todos os índices de reajuste"""
     model = IndiceReajuste
     template_name = 'contratos/indice_list.html'
@@ -318,17 +638,42 @@ class IndiceReajusteListView(LoginRequiredMixin, ListView):
             ('SELIC', 'SELIC'),
         ]
 
-        # Estatísticas por tipo
+        # Total de índices
+        context['total_indices'] = IndiceReajuste.objects.count()
+
+        # Estatísticas por tipo — contagem agregada (1 query) + último de cada
+        # tipo via índice (tipo_indice, ano, mes). Evita carregar TODOS os índices
+        # como instâncias completas a cada render (lento conforme o histórico cresce).
         tipos = ['IPCA', 'IGPM', 'INCC', 'IGPDI', 'INPC', 'TR', 'SELIC']
-        context['estatisticas_indices'] = []
+        counts_por_tipo = dict(
+            IndiceReajuste.objects.filter(tipo_indice__in=tipos)
+            .values_list('tipo_indice')
+            .annotate(total=Count('id'))
+            .values_list('tipo_indice', 'total')
+        )
+        estatisticas_indices = []
         for tipo in tipos:
-            total = IndiceReajuste.objects.filter(tipo_indice=tipo).count()
-            ultimo = IndiceReajuste.objects.filter(tipo_indice=tipo).order_by('-ano', '-mes').first()
-            context['estatisticas_indices'].append({
-                'tipo': tipo,
-                'total': total,
-                'ultimo': ultimo,
-            })
+            total = counts_por_tipo.get(tipo, 0)
+            if not total:
+                continue
+            ultimo = (
+                IndiceReajuste.objects
+                .filter(tipo_indice=tipo)
+                .order_by('-ano', '-mes')
+                .only('tipo_indice', 'ano', 'mes', 'valor')
+                .first()
+            )
+            estatisticas_indices.append({'tipo': tipo, 'total': total, 'ultimo': ultimo})
+        context['estatisticas_indices'] = estatisticas_indices
+
+        # Contagem de registros fictícios (teste) por tipo — usado pela UI para
+        # perguntar antes de substituir por dados reais (sem download redundante).
+        context['ficticios_por_tipo'] = dict(
+            IndiceReajuste.objects.filter(tipo_indice__in=tipos, fonte__icontains='teste')
+            .values_list('tipo_indice')
+            .annotate(total=Count('id'))
+            .values_list('tipo_indice', 'total')
+        )
 
         # Data do contrato mais antigo (para limite de importação)
         contrato_mais_antigo = Contrato.objects.order_by('data_contrato').first()
@@ -340,82 +685,327 @@ class IndiceReajusteListView(LoginRequiredMixin, ListView):
         return context
 
 
+def _url_lista_indices_do_tipo(tipo_indice):
+    """URL da listagem filtrada pelo tipo — preserva a aba selecionada após
+    criar/editar/excluir um índice (a seleção não é mais perdida)."""
+    base = reverse('contratos:indices_listar')
+    return f'{base}?tipo={tipo_indice}' if tipo_indice else base
+
+
 class IndiceReajusteCreateView(LoginRequiredMixin, CreateView):
     """Cria um novo índice de reajuste"""
     model = IndiceReajuste
     form_class = IndiceReajusteForm
     template_name = 'contratos/indice_form.html'
-    success_url = reverse_lazy('contratos:indices_listar')
 
     def form_valid(self, form):
         messages.success(self.request, f'Índice {form.instance} cadastrado com sucesso!')
         return super().form_valid(form)
 
+    def get_success_url(self):
+        # Volta para a aba do tipo recém-criado (mantém a seleção).
+        return _url_lista_indices_do_tipo(self.object.tipo_indice)
 
-class IndiceReajusteUpdateView(LoginRequiredMixin, UpdateView):
+
+class IndiceReajusteUpdateView(LoginRequiredMixin, HashidMixin, UpdateView):
     """Atualiza um índice de reajuste"""
     model = IndiceReajuste
     form_class = IndiceReajusteForm
     template_name = 'contratos/indice_form.html'
-    success_url = reverse_lazy('contratos:indices_listar')
 
     def form_valid(self, form):
         messages.success(self.request, f'Índice {form.instance} atualizado com sucesso!')
         return super().form_valid(form)
 
+    def get_success_url(self):
+        # Mantém a aba do índice editado selecionada após salvar.
+        return _url_lista_indices_do_tipo(self.object.tipo_indice)
 
-class IndiceReajusteDeleteView(LoginRequiredMixin, DeleteView):
+
+class IndiceReajusteDeleteView(LoginRequiredMixin, HashidMixin, DeleteView):
     """Exclui um índice de reajuste"""
     model = IndiceReajuste
     success_url = reverse_lazy('contratos:indices_listar')
 
-    def delete(self, request, *args, **kwargs):
-        self.object = self.get_object()
-        messages.success(request, f'Índice {self.object} excluído com sucesso!')
-        return super().delete(request, *args, **kwargs)
+    def form_valid(self, form):
+        label = str(self.object)
+        # Captura o tipo antes da exclusão para voltar à mesma aba.
+        self._tipo_excluido = self.object.tipo_indice
+        response = super().form_valid(form)
+        messages.success(self.request, f'Índice {label} excluído com sucesso!')
+        return response
+
+    def get_success_url(self):
+        return _url_lista_indices_do_tipo(getattr(self, '_tipo_excluido', ''))
 
 
 # ==============================================================
 # APIs para buscar índices do IBGE/BCB
 # ==============================================================
 
+# As APIs oficiais (BCB/SGS e IBGE/SIDRA) às vezes respondem devagar a partir do
+# Render — observado ReadTimeout em 30s. Usamos um timeout de leitura maior e uma
+# retentativa, mantendo a soma abaixo do timeout do gunicorn (120s):
+#   2 tentativas × 45s + 1s de espera ≈ 91s.
+_INDICE_READ_TIMEOUT = 45
+_INDICE_CONNECT_TIMEOUT = 10
+_INDICE_TENTATIVAS = 2
+
+
+def _http_get_indice(url):
+    """
+    GET resiliente para as APIs de índices: timeout de leitura folgado e uma
+    retentativa em timeout/erro de conexão (a 1ª chamada à BCB costuma ser lenta).
+    Levanta a última exceção se todas as tentativas falharem.
+    """
+    import time as _time
+    ultimo_erro = None
+    for tentativa in range(_INDICE_TENTATIVAS):
+        try:
+            resp = requests.get(
+                url, timeout=(_INDICE_CONNECT_TIMEOUT, _INDICE_READ_TIMEOUT)
+            )
+            resp.raise_for_status()
+            return resp
+        except (requests.exceptions.Timeout, requests.exceptions.ConnectionError) as e:
+            ultimo_erro = e
+            logger.warning(
+                "Índices: tentativa %d/%d falhou (%s) para %s",
+                tentativa + 1, _INDICE_TENTATIVAS, e.__class__.__name__, url,
+            )
+            if tentativa < _INDICE_TENTATIVAS - 1:
+                _time.sleep(1)
+    raise ultimo_erro
+
+
+def _series_por_variavel_sidra(data):
+    """
+    Indexa a resposta da SIDRA por id de variável → série {periodo: valor}.
+
+    Mais robusto que acessar por posição (data[0], data[1]…): se o IBGE mudar a
+    ordem das variáveis, continua correto.
+    """
+    out = {}
+    for var in data or []:
+        try:
+            serie = var['resultados'][0]['series'][0]['serie']
+        except (KeyError, IndexError, TypeError):
+            serie = {}
+        out[str(var.get('id'))] = serie
+    return out
+
+
+def _parse_valor_indice(valor):
+    """
+    Converte o valor bruto da API (IBGE/BCB) para float de forma robusta.
+
+    Trata: None, marcadores de ausência ('-', '...', ''), número já numérico e
+    string com vírgula ou ponto decimal. Retorna None quando não há valor válido
+    (evita gravar 0,0000% por engano quando a API não publicou o mês).
+    """
+    if valor is None:
+        return None
+    if isinstance(valor, (int, float)):
+        return float(valor)
+    s = str(valor).strip()
+    if s in ('', '-', '...', 'NaN', 'null'):
+        return None
+    # API IBGE usa vírgula decimal; BCB usa ponto. Normaliza para ponto.
+    s = s.replace(',', '.')
+    try:
+        return float(s)
+    except (TypeError, ValueError):
+        return None
+
+
+def _preencher_numero_indice(tipo_indice, indices):
+    """
+    Garante `numero_indice` em todos os meses, para o cálculo exato (Método 1 em
+    IndiceReajuste.get_acumulado_periodo).
+
+    - IBGE (IPCA/INPC) já traz o número-índice oficial → mantido.
+    - Séries do BCB/FGV (IGP-M, IGP-DI, INCC, TR, SELIC) não publicam número-índice
+      junto da variação → encadeamos a partir das variações mensais:
+      C(t) = C(t-1) × (1 + valor/100). Como o cálculo de acumulado usa a RAZÃO
+      C(fim)/C(início), a base é arbitrária e se cancela; semeamos com o
+      número-índice do mês imediatamente anterior (continuidade com o histórico)
+      ou 100 quando não houver.
+    """
+    from contratos.models import IndiceReajuste
+
+    pendentes = [d for d in indices
+                 if d.get('valor') is not None and d.get('numero_indice') is None]
+    if not pendentes:
+        return
+
+    indices.sort(key=lambda d: (d['ano'], d['mes']))
+    primeiro = next(d for d in indices if d.get('valor') is not None)
+    pa, pm = (primeiro['ano'] - 1, 12) if primeiro['mes'] == 1 else (primeiro['ano'], primeiro['mes'] - 1)
+    prev = IndiceReajuste.objects.filter(tipo_indice=tipo_indice, ano=pa, mes=pm).first()
+    corrente = (
+        float(prev.numero_indice)
+        if prev and prev.numero_indice and prev.numero_indice > 0
+        else 100.0
+    )
+
+    for d in indices:
+        if d.get('valor') is None:
+            continue
+        if d.get('numero_indice') is not None:
+            # Mês com número-índice oficial: ressincroniza o encadeamento.
+            corrente = float(d['numero_indice'])
+            continue
+        corrente = corrente * (1 + d['valor'] / 100.0)
+        d['numero_indice'] = round(corrente, 4)
+
+
+def _preencher_acumulados(tipo_indice, indices):
+    """
+    Preenche `acumulado_ano` e `acumulado_12m` quando ausentes, derivando-os do
+    número-índice (razão entre meses) — o IBGE já traz os oficiais, as séries do
+    BCB não. Usa o número-índice dos próprios meses importados e dos já gravados:
+
+        acum_ano(t)  = NI(t) / NI(dez ano anterior) − 1
+        acum_12m(t)  = NI(t) / NI(mesmo mês ano anterior) − 1
+
+    Meses sem o mês de referência disponível ficam sem acumulado (não há como
+    calcular) — sem reprocessamento perpétuo.
+    """
+    from contratos.models import IndiceReajuste
+
+    alvo = [d for d in indices
+            if d.get('valor') is not None and d.get('numero_indice') is not None
+            and (d.get('acumulado_ano') is None or d.get('acumulado_12m') is None)]
+    if not alvo:
+        return
+
+    ni = {(d['ano'], d['mes']): float(d['numero_indice'])
+          for d in indices if d.get('numero_indice') is not None}
+    for ano, mes, num in (IndiceReajuste.objects
+                          .filter(tipo_indice=tipo_indice, numero_indice__isnull=False)
+                          .values_list('ano', 'mes', 'numero_indice')):
+        ni.setdefault((ano, mes), float(num))
+
+    for d in alvo:
+        a, m, cur = d['ano'], d['mes'], float(d['numero_indice'])
+        if d.get('acumulado_ano') is None:
+            ref = ni.get((a - 1, 12))
+            if ref and ref > 0:
+                d['acumulado_ano'] = round((cur / ref - 1) * 100, 4)
+        if d.get('acumulado_12m') is None:
+            ref = ni.get((a - 1, m))
+            if ref and ref > 0:
+                d['acumulado_12m'] = round((cur / ref - 1) * 100, 4)
+
+
+def _primeiro_mes_impreciso(tipo_indice):
+    """
+    (ano, mes) do registro REAL mais antigo SEM número-índice — dado impreciso
+    que impede o cálculo exato. Usado para, na importação, voltar à fonte e
+    enriquecer os meses já gravados sem número-índice. Retorna None se não houver.
+
+    Critério deliberadamente restrito a `numero_indice` ausente (sempre
+    recalculável); acumulados podem faltar legitimamente nos meses iniciais do
+    histórico e não devem disparar reimportação a cada vez.
+    """
+    return (IndiceReajuste.objects
+            .filter(tipo_indice=tipo_indice, numero_indice__isnull=True)
+            .exclude(fonte__icontains='teste')
+            .order_by('ano', 'mes')
+            .values_list('ano', 'mes')
+            .first())
+
+
+def _periodo_base_importacao(tipo_indice, sobrescrever, ano_req, mes_req):
+    """
+    Determina (ano_inicio, mes_inicio) para a importação de índices.
+
+    - Pedido explícito de período tem prioridade.
+    - sobrescrever=True: busca desde o contrato mais antigo (cobre todo o
+      histórico necessário) para regravar TODOS os meses com dados reais.
+    - Dados imprecisos (meses reais sem número-índice): volta à fonte a partir do
+      mês impreciso mais antigo para enriquecê-los (backfill).
+    - Caso contrário (incremental): começa no mês seguinte ao último índice já
+      cadastrado; se não houver nenhum, parte do contrato mais antigo.
+    """
+    if ano_req:
+        return int(ano_req), int(mes_req or 1)
+
+    contrato_mais_antigo = Contrato.objects.order_by('data_contrato').first()
+    if contrato_mais_antigo:
+        base_ano = contrato_mais_antigo.data_contrato.year
+        base_mes = contrato_mais_antigo.data_contrato.month
+    else:
+        base_ano, base_mes = datetime.now().year - 5, 1
+
+    if sobrescrever:
+        return base_ano, base_mes
+
+    # Backfill de dados imprecisos: reimporta desde o 1º mês sem número-índice.
+    impreciso = _primeiro_mes_impreciso(tipo_indice)
+    if impreciso:
+        return impreciso[0], impreciso[1]
+
+    ultimo_indice = IndiceReajuste.objects.filter(
+        tipo_indice=tipo_indice
+    ).order_by('-ano', '-mes').first()
+    if ultimo_indice:
+        ano_inicio = ultimo_indice.ano
+        mes_inicio = ultimo_indice.mes + 1
+        if mes_inicio > 12:
+            mes_inicio = 1
+            ano_inicio += 1
+        return ano_inicio, mes_inicio
+    return base_ano, base_mes
+
+
 @login_required
 @require_http_methods(["POST"])
 def importar_indices_ibge(request):
     """
-    Importa índices do IBGE (IPCA) e BCB (IGP-M, SELIC)
+    Importa índices do IBGE (IPCA/INPC) e BCB (IGP-M, IGP-DI, INCC, TR, SELIC).
     API IBGE (SIDRA): https://servicodados.ibge.gov.br/api/docs/agregados
     API BCB: https://api.bcb.gov.br/dados/serie/bcdata.sgs.{codigo}/dados
+
+    Quando já existem índices do tipo e o cliente não confirmou (`sobrescrever`),
+    retorna `requer_confirmacao=True` para que a UI pergunte antes de substituir
+    os dados existentes (inclusive fictícios/teste) por dados reais.
     """
     try:
         data = json.loads(request.body)
         tipo_indice = data.get('tipo_indice', 'IPCA')
         ano_inicio = data.get('ano_inicio')
         mes_inicio = data.get('mes_inicio', 1)
+        sobrescrever = bool(data.get('sobrescrever', False))
 
-        # Determinar data de início
-        if not ano_inicio:
-            # Buscar último índice cadastrado ou data do contrato mais antigo
-            ultimo_indice = IndiceReajuste.objects.filter(
-                tipo_indice=tipo_indice
-            ).order_by('-ano', '-mes').first()
+        if tipo_indice not in ('IPCA', 'IGPM', 'INCC', 'IGPDI', 'INPC', 'TR', 'SELIC'):
+            return JsonResponse({'success': False, 'error': 'Tipo de índice inválido'}, status=400)
 
-            if ultimo_indice:
-                # Começar do mês seguinte ao último cadastrado
-                ano_inicio = ultimo_indice.ano
-                mes_inicio = ultimo_indice.mes + 1
-                if mes_inicio > 12:
-                    mes_inicio = 1
-                    ano_inicio += 1
-            else:
-                # Buscar contrato mais antigo
-                contrato_mais_antigo = Contrato.objects.order_by('data_contrato').first()
-                if contrato_mais_antigo:
-                    ano_inicio = contrato_mais_antigo.data_contrato.year
-                    mes_inicio = contrato_mais_antigo.data_contrato.month
-                else:
-                    ano_inicio = datetime.now().year - 1
-                    mes_inicio = 1
+        # Confirmação só quando há dados FICTÍCIOS (teste) a substituir. Se os
+        # dados existentes já são reais, não há nada a confirmar nem por que
+        # rebaixar tudo — a importação apenas completa os meses faltantes
+        # (incremental), sem re-download desnecessário do histórico.
+        existentes_qs = IndiceReajuste.objects.filter(tipo_indice=tipo_indice)
+        total_existente = existentes_qs.count()
+        total_ficticios = existentes_qs.filter(fonte__icontains='teste').count()
+        if total_ficticios > 0 and not sobrescrever and not ano_inicio:
+            return JsonResponse({
+                'success': False,
+                'requer_confirmacao': True,
+                'tipo_indice': tipo_indice,
+                'total_existente': total_existente,
+                'total_ficticios': total_ficticios,
+                'message': (
+                    f'Existem {total_ficticios} registro(s) fictício(s) (teste) de '
+                    f'{tipo_indice}. Deseja substituí-los pelos dados reais das APIs '
+                    'oficiais (IBGE/Banco Central)?'
+                ),
+            })
+
+        # Determinar data de início (sobrescrever ⇒ histórico completo)
+        ano_inicio, mes_inicio = _periodo_base_importacao(
+            tipo_indice, sobrescrever, ano_inicio, mes_inicio
+        )
 
         # Buscar dados da API
         if tipo_indice == 'IPCA':
@@ -433,38 +1023,136 @@ def importar_indices_ibge(request):
         elif tipo_indice == 'SELIC':
             indices = _buscar_selic_bcb(ano_inicio, mes_inicio)
         else:
-            return JsonResponse({'success': False, 'error': 'Tipo de índice inválido'})
+            return JsonResponse({'success': False, 'error': 'Tipo de índice inválido'}, status=400)
 
-        # Salvar índices no banco
+        # Nenhum dado retornado da API: distinguir "já atualizado" (incremental,
+        # sem meses novos) de "falha ao obter dados" (API indisponível/sem rede).
+        # Surfacing explícito evita o falso "Importação concluída! 0 novos" que
+        # mascarava a falha de conexão com IBGE/BCB.
+        if not indices:
+            incremental = (not sobrescrever) and total_existente > 0
+            if incremental:
+                return JsonResponse({
+                    'success': True,
+                    'message': 'Índices já estão atualizados — nenhum mês novo publicado.',
+                    'created': 0, 'updated': 0, 'ignored': 0, 'total': 0,
+                })
+            return JsonResponse({
+                'success': False,
+                'error': (
+                    'Não foi possível obter dados da API oficial (IBGE/Banco Central) '
+                    'agora. Nenhum dado foi gravado — verifique a conexão do servidor '
+                    'com a internet e tente novamente em instantes.'
+                ),
+            }, status=502)
+
+        # Garante numero_indice em todos os meses (oficial do IBGE ou encadeado
+        # nas séries do BCB/FGV) para o cálculo exato de acumulado (Método 1) e,
+        # a partir dele, preenche os acumulados (ano/12m) onde faltarem.
+        _preencher_numero_indice(tipo_indice, indices)
+        _preencher_acumulados(tipo_indice, indices)
+
+        # Salvar índices no banco usando bulk operations para melhor performance
         count_created = 0
         count_updated = 0
+
+        # Buscar índices existentes para este tipo
+        existing_indices = {
+            (idx.ano, idx.mes): idx
+            for idx in IndiceReajuste.objects.filter(tipo_indice=tipo_indice)
+        }
+
+        from django.utils import timezone
+        to_create = []
+        to_update = []
+        count_ignorados = 0
+        now = timezone.now()
+
         for indice_data in indices:
-            obj, created = IndiceReajuste.objects.update_or_create(
-                tipo_indice=tipo_indice,
-                ano=indice_data['ano'],
-                mes=indice_data['mes'],
-                defaults={
-                    'valor': indice_data['valor'],
-                    'valor_acumulado_ano': indice_data.get('acumulado_ano'),
-                    'valor_acumulado_12m': indice_data.get('acumulado_12m'),
-                    'fonte': indice_data.get('fonte', 'API'),
-                    'data_importacao': datetime.now(),
-                }
-            )
-            if created:
-                count_created += 1
-            else:
+            valor = indice_data.get('valor')
+            if valor is None:
+                # Mês sem valor real publicado: não grava (evita 0,0000% falso).
+                count_ignorados += 1
+                continue
+
+            key = (indice_data['ano'], indice_data['mes'])
+
+            if key in existing_indices:
+                # Atualizar existente com dado real
+                obj = existing_indices[key]
+                obj.valor = valor
+                obj.valor_acumulado_ano = indice_data.get('acumulado_ano')
+                obj.valor_acumulado_12m = indice_data.get('acumulado_12m')
+                obj.fonte = indice_data.get('fonte', 'API')
+                # Grava o número-índice de referência (oficial do IBGE ou
+                # encadeado nas séries do BCB) para o cálculo exato (Método 1).
+                obj.numero_indice = indice_data.get('numero_indice')
+                obj.data_importacao = now
+                to_update.append(obj)
                 count_updated += 1
+            else:
+                # Criar novo
+                to_create.append(IndiceReajuste(
+                    tipo_indice=tipo_indice,
+                    ano=indice_data['ano'],
+                    mes=indice_data['mes'],
+                    valor=valor,
+                    valor_acumulado_ano=indice_data.get('acumulado_ano'),
+                    valor_acumulado_12m=indice_data.get('acumulado_12m'),
+                    numero_indice=indice_data.get('numero_indice'),
+                    fonte=indice_data.get('fonte', 'API'),
+                    data_importacao=now,
+                ))
+                count_created += 1
+
+        # Bulk create novos registros
+        if to_create:
+            IndiceReajuste.objects.bulk_create(to_create, batch_size=100)
+
+        # Bulk update registros existentes
+        if to_update:
+            IndiceReajuste.objects.bulk_update(
+                to_update,
+                ['valor', 'valor_acumulado_ano', 'valor_acumulado_12m',
+                 'numero_indice', 'fonte', 'data_importacao'],
+                batch_size=100
+            )
+
+        # Limpeza de itens inválidos após sobrescrita: numa importação completa,
+        # qualquer registro NÃO atualizado por esta rodada (data_importacao != now)
+        # que ainda seja fictício (teste) ou tenha valor zero é resíduo inválido
+        # — remove para a base ficar só com dados reais e não-zerados.
+        removidos_invalidos = 0
+        if sobrescrever:
+            invalidos_qs = (
+                IndiceReajuste.objects
+                .filter(tipo_indice=tipo_indice)
+                .filter(Q(fonte__icontains='teste') | Q(valor=0))
+                .exclude(data_importacao=now)
+            )
+            removidos_invalidos = invalidos_qs.count()
+            if removidos_invalidos:
+                invalidos_qs.delete()
+
+        msg = f'Importação concluída! {count_created} novos, {count_updated} atualizados.'
+        if count_ignorados:
+            msg += f' {count_ignorados} mês(es) sem valor publicado foram ignorados.'
+        if removidos_invalidos:
+            msg += f' {removidos_invalidos} registro(s) inválido(s) (teste/zero) removidos.'
 
         return JsonResponse({
             'success': True,
-            'message': f'Importação concluída! {count_created} novos, {count_updated} atualizados.',
+            'message': msg,
             'created': count_created,
-            'updated': count_updated
+            'updated': count_updated,
+            'ignored': count_ignorados,
+            'removed_invalid': removidos_invalidos,
+            'total': count_created + count_updated,
         })
 
     except Exception as e:
-        return JsonResponse({'success': False, 'error': str(e)})
+        logger.exception("Erro ao importar indices: %s", e)
+        return JsonResponse({'success': False, 'error': str(e)}, status=500)
 
 
 def _buscar_ipca_ibge(ano_inicio, mes_inicio):
@@ -476,24 +1164,25 @@ def _buscar_ipca_ibge(ano_inicio, mes_inicio):
 
     try:
         # API SIDRA - Tabela 1737 (IPCA)
-        # Código da variável: 63 (variação mensal)
-        url = "https://servicodados.ibge.gov.br/api/v3/agregados/1737/periodos/all/variaveis/63|69|2265?localidades=N1[all]"
+        # Variáveis: 63 (var mensal), 69 (acum ano), 2265 (acum 12m),
+        # 2266 (número-índice base dez/1993=100 — para cálculo exato, Método 1).
+        url = "https://servicodados.ibge.gov.br/api/v3/agregados/1737/periodos/all/variaveis/63|69|2265|2266?localidades=N1[all]"
 
-        response = requests.get(url, timeout=30)
-        response.raise_for_status()
+        response = _http_get_indice(url)
         data = response.json()
 
         if not data or len(data) == 0:
             return indices
 
-        # Processar dados
-        # Estrutura: data[0] = var mensal, data[1] = acum ano, data[2] = acum 12m
-        var_mensal = data[0]['resultados'][0]['series'][0]['serie'] if len(data) > 0 else {}
-        var_acum_ano = data[1]['resultados'][0]['series'][0]['serie'] if len(data) > 1 else {}
-        var_acum_12m = data[2]['resultados'][0]['series'][0]['serie'] if len(data) > 2 else {}
+        series_por_var = _series_por_variavel_sidra(data)
+        var_mensal = series_por_var.get('63', {})
+        var_acum_ano = series_por_var.get('69', {})
+        var_acum_12m = series_por_var.get('2265', {})
+        numero_indice = series_por_var.get('2266', {})
 
         for periodo, valor in var_mensal.items():
-            if valor == '-' or valor == '...' or valor is None:
+            valor_f = _parse_valor_indice(valor)
+            if valor_f is None:
                 continue
 
             # Período formato: 202401 (AAAAMM)
@@ -507,190 +1196,106 @@ def _buscar_ipca_ibge(ano_inicio, mes_inicio):
             indices.append({
                 'ano': ano,
                 'mes': mes,
-                'valor': float(valor.replace(',', '.')),
-                'acumulado_ano': float(var_acum_ano.get(periodo, '0').replace(',', '.')) if var_acum_ano.get(periodo) not in ['-', '...', None] else None,
-                'acumulado_12m': float(var_acum_12m.get(periodo, '0').replace(',', '.')) if var_acum_12m.get(periodo) not in ['-', '...', None] else None,
+                'valor': valor_f,
+                'acumulado_ano': _parse_valor_indice(var_acum_ano.get(periodo)),
+                'acumulado_12m': _parse_valor_indice(var_acum_12m.get(periodo)),
+                'numero_indice': _parse_valor_indice(numero_indice.get(periodo)),
                 'fonte': 'IBGE/SIDRA'
             })
 
     except Exception as e:
-        print(f"Erro ao buscar IPCA: {e}")
+        logger.exception("Erro ao buscar IPCA: %s", e)
+
+    return indices
+
+
+def _buscar_serie_bcb(serie, ano_inicio, mes_inicio, fonte, nome_log):
+    """
+    Busca uma série mensal da API SGS do Banco Central e normaliza os registros.
+
+    Parsing robusto de valor (vírgula/ponto/ausente) e de data (dd/mm/yyyy).
+    Meses sem valor publicado são ignorados (não geram 0,0000% falso).
+    """
+    indices = []
+    try:
+        data_inicio = f"01/{mes_inicio:02d}/{ano_inicio}"
+        url = (
+            f"https://api.bcb.gov.br/dados/serie/bcdata.sgs.{serie}/dados"
+            f"?formato=json&dataInicial={data_inicio}"
+        )
+        response = _http_get_indice(url)
+        data = response.json()
+
+        for item in data:
+            valor_f = _parse_valor_indice(item.get('valor'))
+            if valor_f is None:
+                continue
+            try:
+                partes = str(item['data']).split('/')
+                mes = int(partes[1])
+                ano = int(partes[2])
+            except (KeyError, IndexError, ValueError):
+                continue
+
+            indices.append({
+                'ano': ano,
+                'mes': mes,
+                'valor': valor_f,
+                'acumulado_ano': None,
+                'acumulado_12m': None,
+                'fonte': fonte,
+            })
+    except Exception as e:
+        logger.exception("Erro ao buscar %s: %s", nome_log, e)
 
     return indices
 
 
 def _buscar_igpm_bcb(ano_inicio, mes_inicio):
-    """
-    Busca IGP-M da API do Banco Central
-    Série 189 - IGP-M - Variação mensal
-    """
-    indices = []
-
-    try:
-        # Formatar data de início
-        data_inicio = f"01/{mes_inicio:02d}/{ano_inicio}"
-
-        # API BCB - Série 189 (IGP-M mensal)
-        url = f"https://api.bcb.gov.br/dados/serie/bcdata.sgs.189/dados?formato=json&dataInicial={data_inicio}"
-
-        response = requests.get(url, timeout=30)
-        response.raise_for_status()
-        data = response.json()
-
-        for item in data:
-            # Data formato: dd/mm/yyyy
-            partes = item['data'].split('/')
-            dia = int(partes[0])
-            mes = int(partes[1])
-            ano = int(partes[2])
-
-            indices.append({
-                'ano': ano,
-                'mes': mes,
-                'valor': float(item['valor']),
-                'acumulado_ano': None,
-                'acumulado_12m': None,
-                'fonte': 'BCB'
-            })
-
-    except Exception as e:
-        print(f"Erro ao buscar IGP-M: {e}")
-
-    return indices
+    """Busca IGP-M da API do BCB — Série 189 (variação mensal)."""
+    return _buscar_serie_bcb(189, ano_inicio, mes_inicio, 'BCB', 'IGP-M')
 
 
 def _buscar_selic_bcb(ano_inicio, mes_inicio):
-    """
-    Busca SELIC da API do Banco Central
-    Série 4390 - Taxa Selic acumulada no mês
-    """
-    indices = []
-
-    try:
-        # Formatar data de início
-        data_inicio = f"01/{mes_inicio:02d}/{ano_inicio}"
-
-        # API BCB - Série 4390 (SELIC mensal)
-        url = f"https://api.bcb.gov.br/dados/serie/bcdata.sgs.4390/dados?formato=json&dataInicial={data_inicio}"
-
-        response = requests.get(url, timeout=30)
-        response.raise_for_status()
-        data = response.json()
-
-        for item in data:
-            # Data formato: dd/mm/yyyy
-            partes = item['data'].split('/')
-            dia = int(partes[0])
-            mes = int(partes[1])
-            ano = int(partes[2])
-
-            indices.append({
-                'ano': ano,
-                'mes': mes,
-                'valor': float(item['valor']),
-                'acumulado_ano': None,
-                'acumulado_12m': None,
-                'fonte': 'BCB'
-            })
-
-    except Exception as e:
-        print(f"Erro ao buscar SELIC: {e}")
-
-    return indices
+    """Busca SELIC da API do BCB — Série 4390 (acumulada no mês)."""
+    return _buscar_serie_bcb(4390, ano_inicio, mes_inicio, 'BCB', 'SELIC')
 
 
 def _buscar_incc_bcb(ano_inicio, mes_inicio):
-    """
-    Busca INCC da API do Banco Central
-    Série 192 - INCC-DI - Variação mensal
-    """
-    indices = []
-
-    try:
-        data_inicio = f"01/{mes_inicio:02d}/{ano_inicio}"
-        url = f"https://api.bcb.gov.br/dados/serie/bcdata.sgs.192/dados?formato=json&dataInicial={data_inicio}"
-
-        response = requests.get(url, timeout=30)
-        response.raise_for_status()
-        data = response.json()
-
-        for item in data:
-            partes = item['data'].split('/')
-            mes = int(partes[1])
-            ano = int(partes[2])
-
-            indices.append({
-                'ano': ano,
-                'mes': mes,
-                'valor': float(item['valor']),
-                'acumulado_ano': None,
-                'acumulado_12m': None,
-                'fonte': 'BCB/FGV'
-            })
-
-    except Exception as e:
-        print(f"Erro ao buscar INCC: {e}")
-
-    return indices
+    """Busca INCC da API do BCB — Série 192 (INCC-DI, variação mensal)."""
+    return _buscar_serie_bcb(192, ano_inicio, mes_inicio, 'BCB/FGV', 'INCC')
 
 
 def _buscar_igpdi_bcb(ano_inicio, mes_inicio):
-    """
-    Busca IGP-DI da API do Banco Central
-    Série 190 - IGP-DI - Variação mensal
-    """
-    indices = []
-
-    try:
-        data_inicio = f"01/{mes_inicio:02d}/{ano_inicio}"
-        url = f"https://api.bcb.gov.br/dados/serie/bcdata.sgs.190/dados?formato=json&dataInicial={data_inicio}"
-
-        response = requests.get(url, timeout=30)
-        response.raise_for_status()
-        data = response.json()
-
-        for item in data:
-            partes = item['data'].split('/')
-            mes = int(partes[1])
-            ano = int(partes[2])
-
-            indices.append({
-                'ano': ano,
-                'mes': mes,
-                'valor': float(item['valor']),
-                'acumulado_ano': None,
-                'acumulado_12m': None,
-                'fonte': 'BCB/FGV'
-            })
-
-    except Exception as e:
-        print(f"Erro ao buscar IGP-DI: {e}")
-
-    return indices
+    """Busca IGP-DI da API do BCB — Série 190 (variação mensal)."""
+    return _buscar_serie_bcb(190, ano_inicio, mes_inicio, 'BCB/FGV', 'IGP-DI')
 
 
 def _buscar_inpc_ibge(ano_inicio, mes_inicio):
     """
-    Busca INPC da API SIDRA do IBGE
-    Tabela 1100 - INPC - Variação mensal
+    Busca INPC da API SIDRA do IBGE.
+    Tabela 1736 - INPC - Série histórica com número-índice e variação mensal.
+    Variáveis: 44 (var mensal), 2289 (número-índice base dez/1993=100).
     """
     indices = []
 
     try:
-        # API SIDRA - Tabela 1100 (INPC)
-        url = "https://servicodados.ibge.gov.br/api/v3/agregados/1100/periodos/all/variaveis/44?localidades=N1[all]"
+        url = ("https://servicodados.ibge.gov.br/api/v3/agregados/1736/"
+               "periodos/all/variaveis/44|2289?localidades=N1[all]")
 
-        response = requests.get(url, timeout=30)
-        response.raise_for_status()
+        response = _http_get_indice(url)
         data = response.json()
 
         if not data or len(data) == 0:
             return indices
 
-        var_mensal = data[0]['resultados'][0]['series'][0]['serie'] if len(data) > 0 else {}
+        series_por_var = _series_por_variavel_sidra(data)
+        var_mensal = series_por_var.get('44', {})
+        numero_indice = series_por_var.get('2289', {})
 
         for periodo, valor in var_mensal.items():
-            if valor == '-' or valor == '...' or valor is None:
+            valor_f = _parse_valor_indice(valor)
+            if valor_f is None:
                 continue
 
             ano = int(periodo[:4])
@@ -702,48 +1307,1596 @@ def _buscar_inpc_ibge(ano_inicio, mes_inicio):
             indices.append({
                 'ano': ano,
                 'mes': mes,
-                'valor': float(valor.replace(',', '.')),
+                'valor': valor_f,
+                'numero_indice': _parse_valor_indice(numero_indice.get(periodo)),
                 'acumulado_ano': None,
                 'acumulado_12m': None,
                 'fonte': 'IBGE/SIDRA'
             })
 
     except Exception as e:
-        print(f"Erro ao buscar INPC: {e}")
+        logger.exception("Erro ao buscar INPC: %s", e)
 
     return indices
 
 
 def _buscar_tr_bcb(ano_inicio, mes_inicio):
+    """Busca TR (Taxa Referencial) da API do BCB — Série 226 (acumulada no mês)."""
+    return _buscar_serie_bcb(226, ano_inicio, mes_inicio, 'BCB', 'TR')
+
+
+# ==============================================================
+# CRUD de Prestações Intermediárias
+# ==============================================================
+
+
+class IntermediariasListView(LoginRequiredMixin, PaginacaoMixin, ListView):
+    """Lista todas as prestações intermediárias de um contrato"""
+    model = PrestacaoIntermediaria
+    template_name = 'contratos/intermediaria_list.html'
+    context_object_name = 'intermediarias'
+    paginate_by = 20
+
+    def get_queryset(self):
+        self.contrato = get_object_or_404(
+            Contrato.objects.select_related('imobiliaria'), pk=_decode_id(self.kwargs['contrato_hid'])
+        )
+        verificar_acesso_tenant(self.request, self.contrato.imobiliaria)
+        return PrestacaoIntermediaria.objects.filter(
+            contrato=self.contrato
+        ).select_related('contrato', 'parcela_vinculada').order_by('numero_sequencial')
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['contrato'] = self.contrato
+
+        # Estatísticas
+        intermediarias = self.get_queryset()
+        from django.db.models import Sum, Count, Q
+        agg = intermediarias.aggregate(
+            total=Count('id'),
+            pagas=Count('id', filter=Q(paga=True)),
+            pendentes=Count('id', filter=Q(paga=False)),
+            valor_total=Sum('valor'),
+            valor_pago=Sum('valor_pago', filter=Q(paga=True)),
+            valor_pendente=Sum('valor', filter=Q(paga=False)),
+        )
+        context['total_intermediarias'] = agg['total'] or 0
+        context['intermediarias_pagas'] = agg['pagas'] or 0
+        context['intermediarias_pendentes'] = agg['pendentes'] or 0
+        context['valor_total'] = agg['valor_total'] or Decimal('0.00')
+        context['valor_pago'] = agg['valor_pago'] or Decimal('0.00')
+        context['valor_pendente'] = agg['valor_pendente'] or Decimal('0.00')
+
+        return context
+
+
+class IntermediariasDetailView(LoginRequiredMixin, HashidMixin, TenantMixin, DetailView):
+    """Exibe detalhes de uma prestação intermediária"""
+    model = PrestacaoIntermediaria
+    template_name = 'contratos/intermediaria_detail.html'
+    context_object_name = 'intermediaria'
+    tenant_field = 'contrato.imobiliaria'
+    tenant_filter = 'contrato__imobiliaria__in'
+
+    def get_queryset(self):
+        return super().get_queryset().select_related(
+            'contrato', 'contrato__comprador', 'contrato__imovel',
+            'parcela_vinculada'
+        )
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['contrato'] = self.object.contrato
+
+        # Verificar se pode gerar boleto
+        if hasattr(self.object.contrato, 'pode_gerar_boleto'):
+            pode_gerar, motivo = self.object.contrato.pode_gerar_boleto(
+                self.object.mes_vencimento
+            )
+            context['pode_gerar_boleto'] = pode_gerar
+            context['motivo_bloqueio'] = motivo if not pode_gerar else ''
+        else:
+            context['pode_gerar_boleto'] = True
+            context['motivo_bloqueio'] = ''
+
+        return context
+
+
+def _recalcular_se_necessario(contrato):
     """
-    Busca TR (Taxa Referencial) da API do Banco Central
-    Série 226 - Taxa referencial - acumulada no mês
+    Recalcula amortização das parcelas NORMAL quando intermediarias_reduzem_pmt=True.
+
+    Replica a lógica do wizard: base_pv = valor_financiado − Σ(valor de todas as
+    intermediárias, pagas ou não), garantindo que mudanças posteriores nas
+    intermediárias se reflitam nas parcelas mensais.
     """
-    indices = []
+    if not contrato.intermediarias_reduzem_pmt:
+        return
+    soma = contrato.intermediarias.aggregate(
+        total=Sum('valor')
+    )['total'] or Decimal('0')
+    base_pv = max(contrato.valor_financiado - soma, Decimal('0.01'))
+    contrato.recalcular_amortizacao(base_pv=base_pv)
+
+
+@login_required
+@require_http_methods(["POST"])
+def criar_intermediaria(request, contrato_hid):
+    """Cria uma nova prestação intermediária para um contrato"""
+    contrato_id = _decode_id(contrato_hid)
+    if contrato_id is None:
+        from django.http import Http404
+        raise Http404
+    contrato = get_object_or_404(Contrato, pk=contrato_id)
 
     try:
-        data_inicio = f"01/{mes_inicio:02d}/{ano_inicio}"
-        url = f"https://api.bcb.gov.br/dados/serie/bcdata.sgs.226/dados?formato=json&dataInicial={data_inicio}"
+        data = json.loads(request.body) if request.content_type == 'application/json' else request.POST
 
-        response = requests.get(url, timeout=30)
-        response.raise_for_status()
-        data = response.json()
+        # Validar quantidade máxima de intermediárias
+        qtd_atual = contrato.intermediarias.count() if hasattr(contrato, 'intermediarias') else 0
+        if qtd_atual >= 30:  # Limite absoluto
+            return JsonResponse({
+                'sucesso': False,
+                'erro': 'Limite máximo de 30 prestações intermediárias atingido'
+            }, status=400)
 
-        for item in data:
-            partes = item['data'].split('/')
-            mes = int(partes[1])
-            ano = int(partes[2])
+        # Determinar próximo número sequencial
+        ultimo_numero = contrato.intermediarias.aggregate(
+            max_seq=models.Max('numero_sequencial')
+        )['max_seq'] or 0
+        proximo_numero = ultimo_numero + 1
 
-            indices.append({
-                'ano': ano,
-                'mes': mes,
-                'valor': float(item['valor']),
-                'acumulado_ano': None,
-                'acumulado_12m': None,
-                'fonte': 'BCB'
+        # Criar a intermediária
+        intermediaria = PrestacaoIntermediaria.objects.create(
+            contrato=contrato,
+            numero_sequencial=proximo_numero,
+            mes_vencimento=int(data.get('mes_vencimento', 12)),
+            valor=Decimal(str(data.get('valor', 0))),
+            observacoes=data.get('observacoes', '')
+        )
+
+        # Recalcular PMT das parcelas se a flag intermediarias_reduzem_pmt estiver ativa
+        _recalcular_se_necessario(contrato)
+
+        return JsonResponse({
+            'sucesso': True,
+            'mensagem': f'Prestação intermediária #{proximo_numero} criada com sucesso',
+            'intermediaria_id': intermediaria.id,
+            'numero_sequencial': intermediaria.numero_sequencial
+        })
+
+    except ValueError as e:
+        return JsonResponse({
+            'sucesso': False,
+            'erro': f'Valor inválido: {str(e)}'
+        }, status=400)
+    except Exception as e:
+        logger.exception("Erro ao criar intermediaria: %s", e)
+        return JsonResponse({
+            'sucesso': False,
+            'erro': str(e)
+        }, status=500)
+
+
+@login_required
+@require_http_methods(["POST"])
+def atualizar_intermediaria(request, hid):
+    """Atualiza uma prestação intermediária"""
+    pk = _decode_id(hid)
+    if pk is None:
+        from django.http import Http404
+        raise Http404
+    intermediaria = get_object_or_404(PrestacaoIntermediaria, pk=pk)
+
+    if intermediaria.paga:
+        return JsonResponse({
+            'sucesso': False,
+            'erro': 'Não é possível alterar uma prestação já paga'
+        }, status=400)
+
+    try:
+        data = json.loads(request.body) if request.content_type == 'application/json' else request.POST
+
+        if 'mes_vencimento' in data:
+            intermediaria.mes_vencimento = int(data['mes_vencimento'])
+        valor_alterado = False
+        if 'valor' in data:
+            novo_valor = Decimal(str(data['valor']))
+            if novo_valor != intermediaria.valor:
+                intermediaria.valor = novo_valor
+                valor_alterado = True
+        if 'observacoes' in data:
+            intermediaria.observacoes = data['observacoes']
+
+        intermediaria.save()
+
+        # Sincronizar parcela vinculada se o valor foi alterado e existe parcela
+        if valor_alterado and intermediaria.parcela_vinculada:
+            intermediaria.parcela_vinculada.valor_atual = intermediaria.valor_atual
+            intermediaria.parcela_vinculada.save(update_fields=['valor_atual'])
+
+        # Recalcular PMT das parcelas se a flag intermediarias_reduzem_pmt estiver ativa
+        _recalcular_se_necessario(intermediaria.contrato)
+
+        return JsonResponse({
+            'sucesso': True,
+            'mensagem': 'Prestação intermediária atualizada com sucesso'
+        })
+
+    except Exception as e:
+        logger.exception("Erro ao atualizar intermediaria pk=%s: %s", pk, e)
+        return JsonResponse({
+            'sucesso': False,
+            'erro': str(e)
+        }, status=500)
+
+
+@login_required
+@require_http_methods(["POST"])
+def excluir_intermediaria(request, hid):
+    """Exclui uma prestação intermediária"""
+    pk = _decode_id(hid)
+    if pk is None:
+        from django.http import Http404
+        raise Http404
+    intermediaria = get_object_or_404(PrestacaoIntermediaria, pk=pk)
+
+    if intermediaria.paga:
+        return JsonResponse({
+            'sucesso': False,
+            'erro': 'Não é possível excluir uma prestação já paga'
+        }, status=400)
+
+    if intermediaria.parcela_vinculada:
+        return JsonResponse({
+            'sucesso': False,
+            'erro': 'Não é possível excluir uma prestação com parcela vinculada. Cancele o boleto primeiro.'
+        }, status=400)
+
+    try:
+        contrato = intermediaria.contrato
+        numero = intermediaria.numero_sequencial
+        intermediaria.delete()
+
+        # Recalcular PMT das parcelas se a flag intermediarias_reduzem_pmt estiver ativa
+        _recalcular_se_necessario(contrato)
+
+        return JsonResponse({
+            'sucesso': True,
+            'mensagem': f'Prestação intermediária #{numero} excluída com sucesso',
+            'redirect': f'/contratos/{contrato.pk}/intermediarias/'
+        })
+
+    except Exception as e:
+        logger.exception("Erro ao excluir intermediaria pk=%s: %s", pk, e)
+        return JsonResponse({
+            'sucesso': False,
+            'erro': str(e)
+        }, status=500)
+
+
+@login_required
+@require_http_methods(["POST"])
+def pagar_intermediaria(request, hid):
+    """Registra o pagamento de uma prestação intermediária"""
+    pk = _decode_id(hid)
+    if pk is None:
+        from django.http import Http404
+        raise Http404
+    intermediaria = get_object_or_404(PrestacaoIntermediaria, pk=pk)
+
+    if intermediaria.paga:
+        return JsonResponse({
+            'sucesso': False,
+            'erro': 'Esta prestação já está paga'
+        }, status=400)
+
+    try:
+        data = json.loads(request.body) if request.content_type == 'application/json' else request.POST
+
+        valor_pago = Decimal(str(data.get('valor_pago', intermediaria.valor)))
+        data_pagamento_str = data.get('data_pagamento', '')
+
+        if data_pagamento_str:
+            data_pagamento = datetime.strptime(data_pagamento_str, '%Y-%m-%d').date()
+        else:
+            from django.utils import timezone
+            data_pagamento = timezone.now().date()
+
+        intermediaria.paga = True
+        intermediaria.valor_pago = valor_pago
+        intermediaria.data_pagamento = data_pagamento
+
+        if 'observacoes' in data:
+            intermediaria.observacoes = data['observacoes']
+
+        intermediaria.save()
+
+        # Sincronizar parcela vinculada (se existir) como paga
+        if intermediaria.parcela_vinculada:
+            parcela_vinc = intermediaria.parcela_vinculada
+            parcela_vinc.pago = True
+            parcela_vinc.valor_pago = valor_pago
+            parcela_vinc.data_pagamento = data_pagamento
+            parcela_vinc.save(update_fields=['pago', 'valor_pago', 'data_pagamento'])
+
+        return JsonResponse({
+            'sucesso': True,
+            'mensagem': f'Pagamento de R$ {valor_pago:,.2f} registrado com sucesso',
+            'intermediaria_id': intermediaria.id
+        })
+
+    except Exception as e:
+        logger.exception("Erro ao processar intermediaria pk=%s: %s", pk, e)
+        return JsonResponse({
+            'sucesso': False,
+            'erro': str(e)
+        }, status=500)
+
+
+@login_required
+@require_http_methods(["POST"])
+def gerar_boleto_intermediaria(request, hid):
+    """Gera boleto para uma prestação intermediária"""
+    pk = _decode_id(hid)
+    if pk is None:
+        from django.http import Http404
+        raise Http404
+    from financeiro.models import Parcela, TipoParcela
+    from core.models import ContaBancaria
+
+    intermediaria = get_object_or_404(
+        PrestacaoIntermediaria.objects.select_related('contrato'),
+        pk=pk
+    )
+
+    if intermediaria.paga:
+        return JsonResponse({
+            'sucesso': False,
+            'erro': 'Prestação já está paga'
+        }, status=400)
+
+    if intermediaria.parcela_vinculada:
+        return JsonResponse({
+            'sucesso': False,
+            'erro': 'Esta prestação já possui um boleto vinculado'
+        }, status=400)
+
+    contrato = intermediaria.contrato
+
+    # Verificar bloqueio por reajuste (apenas quando intermediárias são reajustadas)
+    force = request.POST.get('force', 'false').lower() == 'true'
+    if not force and contrato.intermediarias_reajustadas and hasattr(contrato, 'pode_gerar_boleto'):
+        pode_gerar, motivo = contrato.pode_gerar_boleto(intermediaria.mes_vencimento)
+        if not pode_gerar:
+            return JsonResponse({
+                'sucesso': False,
+                'erro': f'Boleto bloqueado: {motivo}',
+                'bloqueado_reajuste': True
+            }, status=400)
+
+    try:
+        # Calcular data de vencimento baseada no mês da intermediária
+        from dateutil.relativedelta import relativedelta
+        data_base = contrato.data_primeiro_vencimento
+        data_vencimento = data_base + relativedelta(months=intermediaria.mes_vencimento - 1)
+
+        # Ajustar dia de vencimento
+        dia_vencimento = contrato.dia_vencimento
+        try:
+            data_vencimento = data_vencimento.replace(day=dia_vencimento)
+        except ValueError:
+            # Dia não existe no mês (ex: 31 em fevereiro)
+            import calendar
+            ultimo_dia = calendar.monthrange(data_vencimento.year, data_vencimento.month)[1]
+            data_vencimento = data_vencimento.replace(day=min(dia_vencimento, ultimo_dia))
+
+        # Criar parcela vinculada.
+        # numero_parcela usa offset além das NORMAL para não conflitar com
+        # unique_together = [['contrato', 'numero_parcela']] na model Parcela.
+        numero_inter = contrato.numero_parcelas + intermediaria.numero_sequencial
+        parcela = Parcela.objects.create(
+            contrato=contrato,
+            numero_parcela=numero_inter,
+            data_vencimento=data_vencimento,
+            valor_original=intermediaria.valor,
+            valor_atual=intermediaria.valor_reajustado or intermediaria.valor,
+            tipo_parcela=TipoParcela.INTERMEDIARIA if hasattr(Parcela, 'tipo_parcela') else 'INTERMEDIARIA',
+            ciclo_reajuste=contrato.calcular_ciclo_parcela(intermediaria.mes_vencimento) if hasattr(contrato, 'calcular_ciclo_parcela') else 1,
+        )
+
+        # Vincular parcela à intermediária
+        intermediaria.parcela_vinculada = parcela
+        intermediaria.save()
+
+        # Gerar boleto
+        conta_id = request.POST.get('conta_bancaria_id')
+        if conta_id:
+            conta_bancaria = get_object_or_404(ContaBancaria, pk=conta_id, ativo=True)
+        else:
+            conta_bancaria = contrato.imobiliaria.contas_bancarias.filter(
+                principal=True, ativo=True
+            ).first()
+
+        if conta_bancaria:
+            resultado = parcela.gerar_boleto(conta_bancaria)
+            if resultado and resultado.get('sucesso'):
+                return JsonResponse({
+                    'sucesso': True,
+                    'mensagem': 'Boleto gerado com sucesso',
+                    'parcela_id': parcela.id,
+                    'nosso_numero': resultado.get('nosso_numero', '')
+                })
+            else:
+                return JsonResponse({
+                    'sucesso': False,
+                    'erro': resultado.get('erro') if resultado else 'Erro ao gerar boleto'
+                }, status=400)
+        else:
+            return JsonResponse({
+                'sucesso': True,
+                'mensagem': 'Parcela criada. Configure uma conta bancária para gerar o boleto.',
+                'parcela_id': parcela.id
             })
 
     except Exception as e:
-        print(f"Erro ao buscar TR: {e}")
+        logger.exception("Erro ao gerar boleto intermediaria pk=%s: %s", pk, e)
+        return JsonResponse({
+            'sucesso': False,
+            'erro': str(e)
+        }, status=500)
 
-    return indices
+
+@login_required
+def api_intermediarias_contrato(request, contrato_hid):
+    """API para retornar lista de intermediárias de um contrato em JSON"""
+    contrato_id = _decode_id(contrato_hid)
+    if contrato_id is None:
+        from django.http import Http404
+        raise Http404
+    contrato = get_object_or_404(Contrato, pk=contrato_id)
+
+    intermediarias = PrestacaoIntermediaria.objects.filter(
+        contrato=contrato
+    ).select_related('parcela_vinculada').order_by('numero_sequencial')
+
+    # Pre-fetch Reajuste aplicados para este contrato — 1 query em vez de N×M
+    from financeiro.models import Reajuste as _ReajusteM
+    from django.utils import timezone as _tz
+    from dateutil.relativedelta import relativedelta
+    _hoje = _tz.now().date()
+    _prazo = contrato.prazo_reajuste_meses or 12
+    _reajustes_aplicados = set(
+        _ReajusteM.objects.filter(contrato=contrato, aplicado=True).values_list('ciclo', flat=True)
+    )
+
+    def _pode_gerar(mes_vencimento):
+        if contrato.tipo_correcao == TipoCorrecao.FIXO:
+            return True, ""
+        ciclo_parcela = (mes_vencimento - 1) // _prazo + 1
+        if ciclo_parcela <= 1:
+            return True, ""
+        for ciclo_check in range(2, ciclo_parcela + 1):
+            data_reajuste = contrato.data_contrato + relativedelta(months=(ciclo_check - 1) * _prazo)
+            if _hoje < data_reajuste:
+                break
+            if ciclo_check not in _reajustes_aplicados:
+                return False, (
+                    f"Reajuste do ciclo {ciclo_check} pendente desde "
+                    f"{data_reajuste.strftime('%d/%m/%Y')}."
+                )
+        return True, ""
+
+    data = []
+    for inter in intermediarias:
+        pode_gerar, motivo = _pode_gerar(inter.mes_vencimento)
+
+        data.append({
+            'id': inter.id,
+            'numero_sequencial': inter.numero_sequencial,
+            'mes_vencimento': inter.mes_vencimento,
+            'valor': float(inter.valor),
+            'valor_reajustado': float(inter.valor_reajustado) if inter.valor_reajustado else None,
+            'paga': inter.paga,
+            'data_pagamento': inter.data_pagamento.isoformat() if inter.data_pagamento else None,
+            'valor_pago': float(inter.valor_pago) if inter.valor_pago else None,
+            'tem_boleto': inter.parcela_vinculada is not None,
+            'parcela_id': inter.parcela_vinculada_id,
+            'pode_gerar_boleto': pode_gerar,
+            'motivo_bloqueio': motivo if not pode_gerar else '',
+            'observacoes': inter.observacoes,
+        })
+
+    return JsonResponse({
+        'sucesso': True,
+        'total': len(data),
+        'intermediarias': data
+    })
+
+
+# =============================================================================
+# Wizard — API: imóveis disponíveis por imobiliária
+# =============================================================================
+
+@login_required
+def api_wizard_imoveis(request):
+    """Retorna imóveis disponíveis pertencentes à imobiliária informada."""
+    from core.models import Imovel as _Imovel
+    imobiliaria_id = request.GET.get('imobiliaria_id')
+    if not imobiliaria_id:
+        return JsonResponse({'imoveis': []})
+    qs = _Imovel.objects.filter(
+        imobiliaria_id=imobiliaria_id,
+        disponivel=True,
+        ativo=True,
+    ).values('id', 'identificacao', 'loteamento')
+    imoveis = [
+        {
+            'id': i['id'],
+            'texto': f"{i['identificacao']}{' — ' + i['loteamento'] if i['loteamento'] else ''}",
+        }
+        for i in qs
+    ]
+    return JsonResponse({'imoveis': imoveis})
+
+
+# =============================================================================
+# HU-08 — API Preview de Parcelas (projeção sem salvar)
+# =============================================================================
+
+@login_required
+def api_preview_parcelas(request):
+    """
+    GET/POST: recebe dados do wizard (step1 + step2) e retorna projeção
+    das primeiras N parcelas com marcação dos ciclos de reajuste.
+    """
+    from decimal import Decimal as D
+    from dateutil.relativedelta import relativedelta
+    import json
+
+    try:
+        if request.method == 'POST':
+            payload = json.loads(request.body)
+        else:
+            payload = request.GET
+
+        valor_total = D(str(payload.get('valor_total', 0)))
+        valor_entrada = D(str(payload.get('valor_entrada', 0)))
+        numero_parcelas = int(payload.get('numero_parcelas', 1))
+        prazo_reajuste = int(payload.get('prazo_reajuste_meses', 12))
+        reduzem_pmt = str(payload.get('intermediarias_reduzem_pmt', 'false')).lower() in ('true', '1')
+        soma_inter = D(str(payload.get('soma_intermediarias', 0)))
+
+        data_primeiro_vencimento = payload.get('data_primeiro_vencimento', '')
+        dia_vencimento = int(payload.get('dia_vencimento', 1))
+
+        from datetime import date
+        try:
+            from datetime import datetime
+            data_base = datetime.strptime(data_primeiro_vencimento, '%Y-%m-%d').date()
+        except (ValueError, TypeError):
+            data_base = date.today()
+
+        tipo_amortizacao = str(payload.get('tipo_amortizacao', 'PRICE')).upper()
+
+        valor_financiado = valor_total - valor_entrada
+        if reduzem_pmt:
+            base_pmt = max(valor_financiado - soma_inter, D('0.01'))
+        else:
+            base_pmt = valor_financiado
+
+        # Juros por ciclo
+        juros_rows = payload.get('juros', [])
+        if isinstance(juros_rows, str):
+            juros_rows = json.loads(juros_rows)
+
+        def get_juros_ciclo(ciclo):
+            for row in juros_rows:
+                ci = int(row.get('ciclo_inicio', 1))
+                cf = row.get('ciclo_fim')
+                if cf:
+                    if ci <= ciclo <= int(cf):
+                        return D(str(row['juros_mensal']))
+                else:
+                    if ciclo >= ci:
+                        return D(str(row['juros_mensal']))
+            return D('0')
+
+        # Intermediárias por mês
+        inter_list = payload.get('intermediarias_lista', [])
+        if isinstance(inter_list, str):
+            inter_list = json.loads(inter_list)
+        inter_mes = {int(r['mes_vencimento']): D(str(r['valor'])) for r in inter_list}
+
+        # Gerar tabela de amortização para primeiros 24 períodos
+        from financeiro.models import Reajuste as _P
+        juros_ciclo1 = get_juros_ciclo(1)
+        preview_count = min(numero_parcelas, 24)
+
+        if tipo_amortizacao == TipoAmortizacao.SAC:
+            # Pré-calcular tabela SAC completa para os primeiros 24
+            tabela_full = _P._calcular_sac_tabela(base_pmt, juros_ciclo1, numero_parcelas)
+            tabela_preview = tabela_full[:preview_count]
+            pmt_ref = tabela_full[0][0] if tabela_full else D('0')
+        else:
+            # Price: PMT constante para ciclo 1
+            pmt_ref = _P._calcular_pmt(base_pmt, juros_ciclo1, numero_parcelas)
+            tabela_preview = None  # calculado inline
+
+        parcelas = []
+        for i in range(1, preview_count + 1):
+            ciclo = (i - 1) // prazo_reajuste + 1
+            juros_ciclo = get_juros_ciclo(ciclo)
+            venc = data_base + relativedelta(months=i - 1)
+            try:
+                venc = venc.replace(day=dia_vencimento)
+            except ValueError:
+                import calendar
+                ultimo = calendar.monthrange(venc.year, venc.month)[1]
+                venc = venc.replace(day=min(dia_vencimento, ultimo))
+
+            if tipo_amortizacao == TipoAmortizacao.SAC:
+                pmt_k, amort_k, juros_k = tabela_preview[i - 1]
+            else:
+                # Para Price: recalcula PMT se ciclo mudar (projeção aproximada)
+                pmt_k = _P._calcular_pmt(base_pmt, juros_ciclo, numero_parcelas - (i - 1))
+                amort_k = None
+                juros_k = None
+
+            parcelas.append({
+                'numero': i,
+                'ciclo': ciclo,
+                'vencimento': venc.strftime('%d/%m/%Y'),
+                'valor': float(pmt_k),
+                'juros_mensal': float(juros_ciclo),
+                'inicio_ciclo': (i - 1) % prazo_reajuste == 0 and i > 1,
+                'intermediaria': float(inter_mes[i]) if i in inter_mes else None,
+                'amortizacao': float(amort_k) if amort_k is not None else None,
+                'juros_embutido': float(juros_k) if juros_k is not None else None,
+            })
+
+        return JsonResponse({
+            'sucesso': True,
+            'tipo_amortizacao': tipo_amortizacao,
+            'pmt': float(pmt_ref),
+            'valor_financiado': float(valor_financiado),
+            'base_pmt': float(base_pmt),
+            'total_parcelas': numero_parcelas,
+            'preview_count': preview_count,
+            'parcelas': parcelas,
+        })
+
+    except Exception as e:
+        logger.exception("Erro ao calcular preview de parcelas: %s", e)
+        return JsonResponse({'sucesso': False, 'erro': str(e)}, status=500)
+
+
+# =============================================================================
+# WIZARD — Contrato com Tabela Price + Intermediárias
+# =============================================================================
+
+def _gerar_numero_contrato():
+    """Gera o próximo número de contrato no formato CTR-AAAA-NNNN."""
+    from django.utils import timezone
+    from contratos.models import Contrato
+    ano = timezone.now().year
+    prefix = f'CTR-{ano}-'
+    ultimos = Contrato.objects.filter(
+        numero_contrato__startswith=prefix
+    ).values_list('numero_contrato', flat=True)
+    seq = 1
+    for n in ultimos:
+        try:
+            num = int(n[len(prefix):])
+            if num >= seq:
+                seq = num + 1
+        except (ValueError, IndexError):
+            pass
+    return f'{prefix}{seq:04d}'
+
+
+class ContratoWizardView(LoginRequiredMixin, View):
+    """
+    Wizard de 4 etapas para criar contratos com TabelaJuros escalante
+    e intermediárias parametrizadas.
+
+    Etapas:
+      1. basico        — dados do contrato
+      2. juros         — faixas de TabelaJurosContrato
+      3. intermediarias — padrão (intervalo) ou manual
+      4. preview       — confirmação + salvar
+    """
+    STEPS = ['basico', 'juros', 'intermediarias', 'preview']
+    SESSION_KEY = 'wizard_contrato'
+
+    def _session(self, request):
+        return request.session.setdefault(self.SESSION_KEY, {})
+
+    def _clear(self, request):
+        request.session.pop(self.SESSION_KEY, None)
+        request.session.modified = True
+
+    def get(self, request, step='basico'):
+        from .forms import (
+            ContratoWizardBasicoForm,
+            IntermediariaPadraoForm,
+        )
+        sess = self._session(request)
+
+        if step == 'basico':
+            initial = sess.get('basico', {})
+            if not initial.get('numero_contrato'):
+                initial = dict(initial)
+                initial['numero_contrato'] = _gerar_numero_contrato()
+            form = ContratoWizardBasicoForm(initial=initial)
+            return render(request, 'contratos/wizard/step1_basico.html', {
+                'form': form, 'step': step, 'step_num': 1,
+            })
+
+        elif step == 'juros':
+            if 'basico' not in sess:
+                return redirect('contratos:wizard', step='basico')
+            juros_data = sess.get('juros', [{'ciclo_inicio': 1, 'ciclo_fim': 1, 'juros_mensal': '0.0000', 'observacoes': 'Ciclo 1 — isenção'}])
+            prazo = sess['basico'].get('prazo_reajuste_meses', 12)
+            return render(request, 'contratos/wizard/step2_juros.html', {
+                'juros_rows': juros_data, 'step': step, 'step_num': 2,
+                'basico': sess['basico'],
+                'prazo_reajuste_meses': prazo,
+            })
+
+        elif step == 'intermediarias':
+            if 'basico' not in sess:
+                return redirect('contratos:wizard', step='basico')
+            padrao_form = IntermediariaPadraoForm(initial=sess.get('intermediarias_padrao_initial', {'intervalo_meses': 6, 'mes_inicio': 6}))
+            manual_rows = sess.get('intermediarias_manual', [])
+            modo = sess.get('intermediarias_modo', 'padrao')
+            return render(request, 'contratos/wizard/step3_intermediarias.html', {
+                'padrao_form': padrao_form,
+                'manual_rows': manual_rows,
+                'modo': modo,
+                'step': step, 'step_num': 3,
+                'basico': sess['basico'],
+            })
+
+        elif step == 'preview':
+            if 'basico' not in sess:
+                return redirect('contratos:wizard', step='basico')
+            resumo = self._calcular_resumo(sess)
+            return render(request, 'contratos/wizard/step4_preview.html', {
+                'resumo': resumo, 'step': step, 'step_num': 4,
+                'sess': sess,
+            })
+
+        return redirect('contratos:wizard', step='basico')
+
+    def post(self, request, step='basico'):
+        from .forms import (
+            ContratoWizardBasicoForm, TabelaJurosForm,
+            IntermediariaPadraoForm, IntermediariaManualForm,
+        )
+        from django.db import transaction
+        sess = self._session(request)
+
+        if step == 'basico':
+            form = ContratoWizardBasicoForm(request.POST)
+            if form.is_valid():
+                comprador = form.cleaned_data.get('comprador')
+                if comprador and comprador.bloqueio_credito:
+                    if not request.user.is_superuser:
+                        messages.error(
+                            request,
+                            f'{comprador.nome} possui bloqueio de crédito ativo. '
+                            'Contate o administrador para desbloqueio antes de criar o contrato.',
+                        )
+                        return render(request, 'contratos/wizard/step1_basico.html', {
+                            'form': form, 'step': step, 'step_num': 1,
+                            'comprador_bloqueado': comprador,
+                        })
+                    elif not request.POST.get('confirmar_bloqueio'):
+                        return render(request, 'contratos/wizard/step1_basico.html', {
+                            'form': form, 'step': step, 'step_num': 1,
+                            'comprador_bloqueado': comprador,
+                        })
+                sess['basico'] = form.cleaned_data_serializable()
+                request.session.modified = True
+                return redirect('contratos:wizard', step='juros')
+            return render(request, 'contratos/wizard/step1_basico.html', {
+                'form': form, 'step': step, 'step_num': 1,
+            })
+
+        elif step == 'juros':
+            # Parse juros rows from POST
+            juros_rows = []
+            errors = []
+            try:
+                count = max(0, int(request.POST.get('juros_count', 0)))
+            except (ValueError, TypeError):
+                count = 0
+            for i in range(count):
+                f = TabelaJurosForm({
+                    'ciclo_inicio': request.POST.get(f'juros_{i}_ciclo_inicio'),
+                    'ciclo_fim': request.POST.get(f'juros_{i}_ciclo_fim'),
+                    'juros_mensal': request.POST.get(f'juros_{i}_juros_mensal'),
+                    'observacoes': request.POST.get(f'juros_{i}_observacoes', ''),
+                })
+                if f.is_valid():
+                    juros_rows.append({
+                        'ciclo_inicio': f.cleaned_data['ciclo_inicio'],
+                        'ciclo_fim': f.cleaned_data['ciclo_fim'],
+                        'juros_mensal': str(f.cleaned_data['juros_mensal']),
+                        'observacoes': f.cleaned_data['observacoes'],
+                    })
+                else:
+                    errors.extend(f.errors.as_text().splitlines())
+
+            if errors:
+                messages.error(request, f'Erros nas faixas de juros: {"; ".join(errors[:3])}')
+                return redirect('contratos:wizard', step='juros')
+
+            sess['juros'] = juros_rows
+            request.session.modified = True
+            return redirect('contratos:wizard', step='intermediarias')
+
+        elif step == 'intermediarias':
+            modo = request.POST.get('modo', 'padrao')
+            sess['intermediarias_modo'] = modo
+
+            # Salva configuração de intermediárias na seção basico da sessão
+            if 'basico' in sess:
+                sess['basico']['intermediarias_reduzem_pmt'] = request.POST.get('intermediarias_reduzem_pmt') == 'on'
+                sess['basico']['intermediarias_reajustadas'] = request.POST.get('intermediarias_reajustadas') == 'on'
+
+            if modo == 'padrao':
+                form = IntermediariaPadraoForm(request.POST)
+                if form.is_valid():
+                    sess['intermediarias_padrao_initial'] = {
+                        'valor': str(form.cleaned_data['valor']),
+                        'intervalo_meses': form.cleaned_data['intervalo_meses'],
+                        'numero_ocorrencias': form.cleaned_data['numero_ocorrencias'],
+                        'mes_inicio': form.cleaned_data['mes_inicio'],
+                    }
+                    sess['intermediarias_lista'] = form.gerar_intermediarias_serializable()
+                    request.session.modified = True
+                    return redirect('contratos:wizard', step='preview')
+                padrao_form = form
+                return render(request, 'contratos/wizard/step3_intermediarias.html', {
+                    'padrao_form': padrao_form, 'manual_rows': [],
+                    'modo': modo, 'step': step, 'step_num': 3, 'basico': sess.get('basico', {}),
+                })
+
+            elif modo == 'manual':
+                try:
+                    count = max(0, int(request.POST.get('inter_count', 0)))
+                except (ValueError, TypeError):
+                    count = 0
+                lista = []
+                errors = []
+                for i in range(count):
+                    f = IntermediariaManualForm({
+                        'numero_sequencial': request.POST.get(f'inter_{i}_seq'),
+                        'mes_vencimento': request.POST.get(f'inter_{i}_mes'),
+                        'valor': request.POST.get(f'inter_{i}_valor'),
+                    })
+                    if f.is_valid():
+                        lista.append({
+                            'numero_sequencial': f.cleaned_data['numero_sequencial'],
+                            'mes_vencimento': f.cleaned_data['mes_vencimento'],
+                            'valor': str(f.cleaned_data['valor']),
+                        })
+                    else:
+                        errors.extend(f.errors.as_text().splitlines())
+
+                if errors:
+                    messages.error(request, f'Erros nas intermediárias: {"; ".join(errors[:3])}')
+                    return redirect('contratos:wizard', step='intermediarias')
+
+                sess['intermediarias_lista'] = lista
+                request.session.modified = True
+                return redirect('contratos:wizard', step='preview')
+
+            elif modo == 'nenhuma':
+                sess['intermediarias_lista'] = []
+                request.session.modified = True
+                return redirect('contratos:wizard', step='preview')
+
+        elif step == 'salvar':
+            if 'basico' not in sess:
+                return redirect('contratos:wizard', step='basico')
+
+            try:
+                with transaction.atomic():
+                    contrato = self._salvar_contrato(request, sess)
+                self._clear(request)
+                messages.success(
+                    request,
+                    f'Contrato {contrato.numero_contrato} criado com sucesso! '
+                    f'{contrato.numero_parcelas} parcelas geradas.'
+                )
+                return redirect('contratos:detalhe', hid=encode_id(contrato.pk))
+            except Exception as e:
+                logger.exception('Erro ao salvar wizard: %s', e)
+                messages.error(request, f'Erro ao criar contrato: {e}')
+                return redirect('contratos:wizard', step='preview')
+
+        return redirect('contratos:wizard', step='basico')
+
+    def _calcular_resumo(self, sess):
+        """Calcula o resumo financeiro do wizard para o step de preview"""
+        from decimal import Decimal as D
+        import json as _json
+
+        def to_dec(val, default=0):
+            if val is None:
+                return D(str(default))
+            try:
+                return D(str(val))
+            except Exception:
+                return D(str(default))
+
+        basico = sess.get('basico', {})
+        juros_rows = sess.get('juros', [])
+        intermediarias = sess.get('intermediarias_lista', [])
+
+        valor_total = to_dec(basico.get('valor_total'), 0)
+        valor_entrada = to_dec(basico.get('valor_entrada'), 0)
+        numero_parcelas = int(basico.get('numero_parcelas') or 1)
+        valor_financiado = valor_total - valor_entrada
+
+        soma_intermediarias = sum(D(str(r['valor'])) for r in intermediarias)
+        reduzem_pmt = basico.get('intermediarias_reduzem_pmt', False)
+        tipo_amortizacao = basico.get('tipo_amortizacao', 'PRICE')
+
+        if reduzem_pmt:
+            base_pmt = max(valor_financiado - soma_intermediarias, D('0.01'))
+        else:
+            base_pmt = valor_financiado
+
+        # Usar taxa do ciclo 1 se definida
+        taxa_ciclo1 = D('0')
+        for row in juros_rows:
+            if int(row.get('ciclo_inicio') or 999) == 1:
+                taxa_ciclo1 = to_dec(row.get('juros_mensal'), 0)
+                break
+
+        if numero_parcelas > 0:
+            from financeiro.models import Reajuste as _P
+            if tipo_amortizacao == TipoAmortizacao.SAC:
+                # PMT do primeiro período SAC (o maior)
+                tabela = _P._calcular_sac_tabela(base_pmt, taxa_ciclo1, numero_parcelas)
+                pmt_ciclo1 = tabela[0][0] if tabela else D('0')
+                pmt_ultimo = tabela[-1][0] if tabela else D('0')
+            else:
+                pmt_ciclo1 = _P._calcular_pmt(base_pmt, taxa_ciclo1, numero_parcelas)
+                pmt_ultimo = pmt_ciclo1  # Price: PMT constante por ciclo
+        else:
+            pmt_ciclo1 = pmt_ultimo = D('0')
+
+        intermediarias_preview = intermediarias[:12]
+        return {
+            'valor_total': valor_total,
+            'valor_entrada': valor_entrada,
+            'valor_financiado': valor_financiado,
+            'numero_parcelas': numero_parcelas,
+            'pmt_ciclo1': pmt_ciclo1,
+            'pmt_ultimo': pmt_ultimo,
+            'taxa_ciclo1': taxa_ciclo1,
+            'tipo_amortizacao': tipo_amortizacao,
+            'soma_intermediarias': soma_intermediarias,
+            'n_intermediarias': len(intermediarias),
+            'juros_rows': juros_rows,
+            'juros_json': _json.dumps(juros_rows),
+            'intermediarias': intermediarias_preview,
+            'intermediarias_json': _json.dumps(intermediarias_preview),
+            'intermediarias_total': len(intermediarias),
+            'basico': basico,
+            'reduzem_pmt': reduzem_pmt,
+            'reajustadas': basico.get('intermediarias_reajustadas', True),
+        }
+
+    def _salvar_contrato(self, request, sess):
+        """Cria o contrato com TabelaJuros e intermediárias em uma única transação"""
+        from decimal import Decimal as D
+        from contratos.models import TabelaJurosContrato, PrestacaoIntermediaria
+
+        basico = sess['basico']
+        # Reconstruct form from session data
+        contrato = self._criar_contrato_from_session(basico)
+
+        # TabelaJuros rows
+        TabelaJurosContrato.objects.bulk_create([
+            TabelaJurosContrato(
+                contrato=contrato,
+                ciclo_inicio=row['ciclo_inicio'],
+                ciclo_fim=row.get('ciclo_fim'),
+                juros_mensal=D(str(row['juros_mensal'])),
+                observacoes=row.get('observacoes', ''),
+            )
+            for row in sess.get('juros', [])
+        ])
+
+        # Intermediárias
+        PrestacaoIntermediaria.objects.bulk_create([
+            PrestacaoIntermediaria(
+                contrato=contrato,
+                numero_sequencial=row['numero_sequencial'],
+                mes_vencimento=row['mes_vencimento'],
+                valor=D(str(row['valor'])),
+            )
+            for row in sess.get('intermediarias_lista', [])
+        ])
+
+        # Recalcula amortização (Price ou SAC) com base na TabelaJuros recém-criada.
+        # Também trata intermediarias_reduzem_pmt.
+        from django.db.models import Sum
+        base_pv = contrato.valor_financiado
+        if contrato.intermediarias_reduzem_pmt:
+            soma = contrato.intermediarias.aggregate(total=Sum('valor'))['total'] or D('0')
+            base_pv = max(base_pv - soma, D('0.01'))
+
+        contrato.recalcular_amortizacao(base_pv=base_pv)
+
+        return contrato
+
+    def _criar_contrato_from_session(self, basico):
+        """Creates a Contrato object from session data dict"""
+        from contratos.models import Contrato
+        from decimal import Decimal as D
+        from datetime import date
+
+        def to_date(v):
+            if isinstance(v, date):
+                return v
+            if isinstance(v, str):
+                from datetime import datetime
+                for fmt in ('%Y-%m-%d', '%d/%m/%Y'):
+                    try:
+                        return datetime.strptime(v, fmt).date()
+                    except ValueError:
+                        pass
+            return v
+
+        def to_dec(v):
+            return D(str(v)) if v not in (None, '', 'None') else None
+
+        contrato = Contrato.objects.create(
+            imobiliaria_id=basico['imobiliaria'],
+            imovel_id=basico['imovel'],
+            comprador_id=basico['comprador'],
+            numero_contrato=basico['numero_contrato'],
+            data_contrato=to_date(basico['data_contrato']),
+            data_primeiro_vencimento=to_date(basico['data_primeiro_vencimento']),
+            valor_total=to_dec(basico['valor_total']),
+            valor_entrada=to_dec(basico['valor_entrada']) or D('0'),
+            numero_parcelas=int(basico['numero_parcelas']),
+            dia_vencimento=int(basico['dia_vencimento']),
+            percentual_juros_mora=to_dec(basico.get('percentual_juros_mora', '1.00')),
+            percentual_multa=to_dec(basico.get('percentual_multa', '2.00')),
+            tipo_correcao=basico.get('tipo_correcao', TipoCorrecao.IPCA),
+            prazo_reajuste_meses=int(basico.get('prazo_reajuste_meses', 12)),
+            tipo_correcao_fallback=basico.get('tipo_correcao_fallback', ''),
+            spread_reajuste=to_dec(basico.get('spread_reajuste')),
+            reajuste_piso=to_dec(basico.get('reajuste_piso')),
+            reajuste_teto=to_dec(basico.get('reajuste_teto')),
+            tipo_amortizacao=basico.get('tipo_amortizacao', TipoAmortizacao.PRICE),
+            intermediarias_reduzem_pmt=bool(basico.get('intermediarias_reduzem_pmt', False)),
+            intermediarias_reajustadas=bool(basico.get('intermediarias_reajustadas', True)),
+            percentual_fruicao=to_dec(basico.get('percentual_fruicao', '0.5000')),
+            percentual_multa_rescisao_penal=to_dec(basico.get('percentual_multa_rescisao_penal', '10.0000')),
+            percentual_multa_rescisao_adm=to_dec(basico.get('percentual_multa_rescisao_adm', '12.0000')),
+            percentual_cessao=to_dec(basico.get('percentual_cessao', '3.0000')),
+            status=basico.get('status', StatusContrato.ATIVO),
+            observacoes=basico.get('observacoes', ''),
+        )
+        return contrato
+
+
+# =============================================================================
+# G-11: Cálculo de Rescisão
+# =============================================================================
+
+@login_required
+def calcular_rescisao_view(request, hid):
+    """
+    Calcula o valor de devolução em caso de rescisão pelo comprador.
+    GET: exibe formulário com data de rescisão.
+    POST: processa cálculo e exibe resultado.
+    """
+    pk = _decode_id(hid)
+    if pk is None:
+        from django.http import Http404
+        raise Http404
+    contrato = get_object_or_404(Contrato, pk=pk)
+
+    from datetime import date as date_type
+    resultado = None
+    data_rescisao = None
+
+    if request.method == 'POST':
+        data_str = request.POST.get('data_rescisao', '')
+        try:
+            data_rescisao = date_type.fromisoformat(data_str) if data_str else date_type.today()
+        except ValueError:
+            data_rescisao = date_type.today()
+        resultado = contrato.calcular_rescisao(data_rescisao)
+
+    return render(request, 'contratos/calcular_rescisao.html', {
+        'contrato': contrato,
+        'resultado': resultado,
+        'data_rescisao': data_rescisao,
+    })
+
+
+# =============================================================================
+# G-12: Cálculo de Cessão de Direitos
+# =============================================================================
+
+@login_required
+def calcular_cessao_view(request, hid):
+    """
+    Calcula a taxa de cessão de direitos.
+    GET: exibe formulário com data de cessão.
+    POST: processa cálculo e exibe resultado.
+    """
+    pk = _decode_id(hid)
+    if pk is None:
+        from django.http import Http404
+        raise Http404
+    contrato = get_object_or_404(Contrato, pk=pk)
+
+    from datetime import date as date_type
+    resultado = None
+    data_cessao = None
+
+    if request.method == 'POST':
+        data_str = request.POST.get('data_cessao', '')
+        try:
+            data_cessao = date_type.fromisoformat(data_str) if data_str else date_type.today()
+        except ValueError:
+            data_cessao = date_type.today()
+        resultado = contrato.calcular_cessao(data_cessao)
+
+    return render(request, 'contratos/calcular_cessao.html', {
+        'contrato': contrato,
+        'resultado': resultado,
+        'data_cessao': data_cessao,
+    })
+
+
+# =============================================================================
+# 34.2 P1: Quadro-Resumo (Lei 6.766 art. 26) e Minutas de Contrato
+# =============================================================================
+
+
+@login_required
+def quadro_resumo_view(request, hid):
+    """Exibe o quadro-resumo do contrato conforme Lei 6.766/79 art. 26."""
+    from django.utils import timezone as tz
+    pk = _decode_id(hid)
+    if pk is None:
+        from django.http import Http404
+        raise Http404
+    contrato = get_object_or_404(
+        Contrato.objects.select_related('imobiliaria', 'comprador', 'imovel'),
+        pk=pk,
+    )
+    saldo_financiado = (contrato.valor_total or Decimal('0')) - (contrato.valor_entrada or Decimal('0'))
+    return render(request, 'contratos/quadro_resumo.html', {
+        'contrato': contrato,
+        'saldo_financiado': saldo_financiado,
+        'hoje': tz.now().date(),
+    })
+
+
+@login_required
+def minutas_listar(request, hid):
+    """Lista todas as minutas registradas para um contrato."""
+    pk = _decode_id(hid)
+    if pk is None:
+        from django.http import Http404
+        raise Http404
+    contrato = get_object_or_404(Contrato, pk=pk)
+    from .models import MinutaContrato
+    minutas = MinutaContrato.objects.filter(contrato=contrato).order_by('-criado_em')
+    return render(request, 'contratos/minutas_list.html', {
+        'contrato': contrato,
+        'minutas': minutas,
+    })
+
+
+@login_required
+def minutas_criar(request, hid):
+    """Cria uma nova minuta para um contrato."""
+    pk = _decode_id(hid)
+    if pk is None:
+        from django.http import Http404
+        raise Http404
+    contrato = get_object_or_404(Contrato, pk=pk)
+    from .models import MinutaContrato
+    from django.contrib import messages
+
+    errors = {}
+    form_data = {'ativa': True}
+
+    if request.method == 'POST':
+        versao = request.POST.get('versao', '').strip()
+        titulo = request.POST.get('titulo', '').strip()
+        conteudo = request.POST.get('conteudo', '').strip()
+        ativa = 'ativa' in request.POST
+        form_data = {'versao': versao, 'titulo': titulo, 'conteudo': conteudo, 'ativa': ativa}
+
+        if not versao:
+            errors['versao'] = 'Versão é obrigatória.'
+        elif MinutaContrato.objects.filter(contrato=contrato, versao=versao).exists():
+            errors['versao'] = f'Já existe uma minuta com versão "{versao}" para este contrato.'
+        if not titulo:
+            errors['titulo'] = 'Título é obrigatório.'
+        if not conteudo:
+            errors['conteudo'] = 'Conteúdo é obrigatório.'
+
+        if not errors:
+            MinutaContrato.objects.create(
+                contrato=contrato,
+                versao=versao,
+                titulo=titulo,
+                conteudo=conteudo,
+                ativa=ativa,
+            )
+            messages.success(request, f'Minuta {versao} registrada com sucesso.')
+            from django.shortcuts import redirect
+            from core.hashids_utils import encode_id
+            return redirect('contratos:minutas_listar', hid=encode_id(contrato.pk))
+
+    return render(request, 'contratos/minuta_form.html', {
+        'contrato': contrato,
+        'minuta': None,
+        'form_data': form_data,
+        'errors': errors,
+    })
+
+
+@login_required
+def minutas_editar(request, hid):
+    """Edita uma minuta existente."""
+    from .models import MinutaContrato
+    from django.contrib import messages
+    pk = _decode_id(hid)
+    if pk is None:
+        from django.http import Http404
+        raise Http404
+    minuta = get_object_or_404(MinutaContrato.objects.select_related('contrato'), pk=pk)
+    contrato = minuta.contrato
+
+    errors = {}
+    form_data = {
+        'versao': minuta.versao,
+        'titulo': minuta.titulo,
+        'conteudo': minuta.conteudo,
+        'ativa': minuta.ativa,
+    }
+
+    if request.method == 'POST':
+        versao = request.POST.get('versao', '').strip()
+        titulo = request.POST.get('titulo', '').strip()
+        conteudo = request.POST.get('conteudo', '').strip()
+        ativa = 'ativa' in request.POST
+        form_data = {'versao': versao, 'titulo': titulo, 'conteudo': conteudo, 'ativa': ativa}
+
+        if not versao:
+            errors['versao'] = 'Versão é obrigatória.'
+        elif (MinutaContrato.objects.filter(contrato=contrato, versao=versao)
+                                    .exclude(pk=minuta.pk).exists()):
+            errors['versao'] = f'Já existe uma minuta com versão "{versao}" para este contrato.'
+        if not titulo:
+            errors['titulo'] = 'Título é obrigatório.'
+        if not conteudo:
+            errors['conteudo'] = 'Conteúdo é obrigatório.'
+
+        if not errors:
+            minuta.versao = versao
+            minuta.titulo = titulo
+            minuta.conteudo = conteudo
+            minuta.ativa = ativa
+            minuta.save()
+            messages.success(request, f'Minuta {versao} atualizada com sucesso.')
+            from django.shortcuts import redirect
+            from core.hashids_utils import encode_id
+            return redirect('contratos:minutas_listar', hid=encode_id(contrato.pk))
+
+    return render(request, 'contratos/minuta_form.html', {
+        'contrato': contrato,
+        'minuta': minuta,
+        'form_data': form_data,
+        'errors': errors,
+    })
+
+
+@login_required
+@require_http_methods(["POST"])
+def minutas_excluir(request, hid):
+    """Exclui uma minuta."""
+    from .models import MinutaContrato
+    from django.contrib import messages
+    pk = _decode_id(hid)
+    if pk is None:
+        from django.http import Http404
+        raise Http404
+    minuta = get_object_or_404(MinutaContrato.objects.select_related('contrato'), pk=pk)
+    contrato = minuta.contrato
+    versao = minuta.versao
+    minuta.delete()
+    messages.success(request, f'Minuta {versao} excluída.')
+    from django.shortcuts import redirect
+    from core.hashids_utils import encode_id
+    return redirect('contratos:minutas_listar', hid=encode_id(contrato.pk))
+
+
+# =============================================================================
+# TabelaJurosContrato — CRUD inline (Q-04 / HU-360)
+# Permite gerenciar juros escalantes diretamente na tela do contrato.
+# =============================================================================
+
+
+@login_required
+@require_http_methods(["GET", "POST"])
+def api_tabela_juros_contrato(request, hid):
+    """
+    GET  → retorna lista JSON das faixas de juros do contrato.
+    POST → cria uma nova faixa (ciclo_inicio, ciclo_fim opcional, juros_mensal, observacoes).
+    """
+    pk = _decode_id(hid)
+    if pk is None:
+        from django.http import Http404
+        raise Http404
+    contrato = get_object_or_404(Contrato, pk=pk)
+
+    if request.method == 'GET':
+        rows = list(
+            contrato.tabela_juros.order_by('ciclo_inicio').values(
+                'id', 'ciclo_inicio', 'ciclo_fim', 'juros_mensal', 'observacoes'
+            )
+        )
+        for r in rows:
+            r['juros_mensal'] = str(r['juros_mensal'])
+        return JsonResponse({'sucesso': True, 'tabela': rows})
+
+    # POST
+    import json
+    try:
+        data = json.loads(request.body)
+    except Exception:
+        data = request.POST
+
+    try:
+        ciclo_inicio = int(data.get('ciclo_inicio', 0))
+        ciclo_fim_raw = data.get('ciclo_fim') or None
+        ciclo_fim = int(ciclo_fim_raw) if ciclo_fim_raw else None
+        from decimal import Decimal as D
+        juros_mensal = D(str(data.get('juros_mensal', '0')))
+        observacoes = str(data.get('observacoes', ''))[:200]
+    except Exception as e:
+        return JsonResponse({'sucesso': False, 'erro': str(e)}, status=400)
+
+    if ciclo_inicio < 1:
+        return JsonResponse({'sucesso': False, 'erro': 'ciclo_inicio deve ser >= 1'}, status=400)
+    if ciclo_fim and ciclo_fim < ciclo_inicio:
+        return JsonResponse({'sucesso': False, 'erro': 'ciclo_fim deve ser >= ciclo_inicio'}, status=400)
+
+    entry = TabelaJurosContrato.objects.create(
+        contrato=contrato,
+        ciclo_inicio=ciclo_inicio,
+        ciclo_fim=ciclo_fim,
+        juros_mensal=juros_mensal,
+        observacoes=observacoes,
+    )
+    return JsonResponse({
+        'sucesso': True,
+        'entry': {
+            'id': entry.pk,
+            'ciclo_inicio': entry.ciclo_inicio,
+            'ciclo_fim': entry.ciclo_fim,
+            'juros_mensal': str(entry.juros_mensal),
+            'observacoes': entry.observacoes,
+        }
+    }, status=201)
+
+
+@login_required
+@require_http_methods(["DELETE"])
+def api_tabela_juros_delete(request, hid):
+    """DELETE → remove uma faixa de juros pelo ID.
+
+    Recalcula amortização das parcelas após a remoção para manter
+    consistência entre TabelaJurosContrato e valores das parcelas.
+    Bloqueia se o contrato já possui reajustes aplicados (parcelas
+    reajustadas não devem ser recalculadas retroativamente).
+    """
+    pk = _decode_id(hid)
+    if pk is None:
+        from django.http import Http404
+        raise Http404
+    from financeiro.models import Reajuste
+    entry = get_object_or_404(TabelaJurosContrato, pk=pk)
+    contrato = entry.contrato
+
+    # Guard: impede exclusão se reajuste já foi aplicado no contrato.
+    # Recalcular amortização após reajustes aplicados corromperia os valores.
+    if Reajuste.objects.filter(contrato=contrato, aplicado=True).exists():
+        return JsonResponse({
+            'sucesso': False,
+            'erro': (
+                'Não é possível excluir faixas de juros após reajustes terem sido aplicados. '
+                'Os valores das parcelas já foram corrigidos e não podem ser recalculados retroativamente.'
+            )
+        }, status=400)
+
+    entry.delete()
+
+    # Recalcula amortização: se ainda há faixas, aplica PMT pela nova tabela;
+    # se removeu todas as faixas, `get_juros_para_ciclo` retorna None e
+    # recalcular_amortizacao() usa taxa=0 (amortização linear).
+    if contrato.parcelas.exists():
+        base_pv = contrato.valor_financiado
+        if contrato.intermediarias_reduzem_pmt:
+            soma = contrato.intermediarias.aggregate(
+                total=Sum('valor')
+            )['total'] or Decimal('0')
+            base_pv = max(base_pv - soma, Decimal('0.01'))
+        contrato.recalcular_amortizacao(base_pv=base_pv)
+
+    return JsonResponse({'sucesso': True})
+
+
+# =============================================================================
+# U-05: Compat redirects — PKs inteiros → hashids (manter por 30 dias)
+# =============================================================================
+
+@login_required
+def contrato_pk_compat(request, pk):
+    """Redireciona /contratos/<int:pk>/ → /contratos/<hid>/"""
+    hid = encode_id(pk)
+    return redirect('contratos:detalhe', hid=hid, permanent=True)
+
+
+@login_required
+def contrato_pk_compat_editar(request, pk):
+    hid = encode_id(pk)
+    return redirect('contratos:editar', hid=hid, permanent=True)
+
+
+@login_required
+def contrato_pk_compat_excluir(request, pk):
+    hid = encode_id(pk)
+    return redirect('contratos:excluir', hid=hid, permanent=True)
+
+
+@login_required
+def contrato_pk_compat_parcelas(request, pk):
+    hid = encode_id(pk)
+    return redirect('contratos:parcelas', hid=hid, permanent=True)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Importação de Contratos via IA
+# ─────────────────────────────────────────────────────────────────────────────
+
+_TIPOS_PERMITIDOS = {
+    'application/pdf': 'pdf',
+    'image/jpeg': 'imagem',
+    'image/jpg': 'imagem',
+    'image/png': 'imagem',
+    'image/webp': 'imagem',
+}
+_MAX_ARQUIVO_MB = 20
+
+
+@login_required
+def upload_importacao(request):
+    from contratos.models import ContratoImportacao
+    from contratos.services.importacao_ia import ImportacaoIA
+    from core.models import get_imobiliarias_usuario
+
+    imobiliarias = get_imobiliarias_usuario(request.user)
+
+    if request.method == 'GET':
+        return render(request, 'contratos/importar_pdf.html', {'imobiliarias': imobiliarias})
+
+    arquivos = request.FILES.getlist('arquivo')
+    if not arquivos:
+        messages.error(request, 'Nenhum arquivo enviado.')
+        return render(request, 'contratos/importar_pdf.html', {'imobiliarias': imobiliarias})
+
+    # Valida tipos e tamanhos
+    for f in arquivos:
+        ct = f.content_type or ''
+        if ct not in _TIPOS_PERMITIDOS and not f.name.lower().endswith(('.pdf', '.jpg', '.jpeg', '.png', '.webp')):
+            messages.error(request, f'Tipo de arquivo não suportado: {f.name}')
+            return render(request, 'contratos/importar_pdf.html', {'imobiliarias': imobiliarias})
+        if f.size > _MAX_ARQUIVO_MB * 1024 * 1024:
+            messages.error(request, f'Arquivo muito grande (máx {_MAX_ARQUIVO_MB} MB): {f.name}')
+            return render(request, 'contratos/importar_pdf.html', {'imobiliarias': imobiliarias})
+
+    # Lê bytes antes de criar o registro (FileField substituído por BinaryField — sem disco)
+    primeiro = arquivos[0]
+    ct_primeiro = primeiro.content_type or ''
+    primeiro_bytes = primeiro.read()
+
+    importacao = ContratoImportacao.objects.create(
+        arquivo_bytes=primeiro_bytes,
+        arquivo_nome=primeiro.name,
+        status='EXTRAINDO',
+        criado_por=request.user,
+    )
+
+    try:
+        ia = ImportacaoIA(usuario=request.user, contrato_importacao=importacao)
+
+        if ct_primeiro == 'application/pdf' or primeiro.name.lower().endswith('.pdf'):
+            dados = ia.extrair_de_pdf(primeiro_bytes)
+        else:
+            # Múltiplas imagens: lê restantes (primeiro já foi lido)
+            pares = [(primeiro_bytes, ct_primeiro if ct_primeiro.startswith('image/') else 'image/jpeg')]
+            for f in arquivos[1:]:
+                ct = f.content_type or 'image/jpeg'
+                if not ct.startswith('image/'):
+                    ct = 'image/jpeg'
+                pares.append((f.read(), ct))
+            dados = ia.extrair_de_imagens(pares)
+
+        importacao.dados_extraidos = dados
+        importacao.status = 'REVISAO'
+        importacao.save(update_fields=['dados_extraidos', 'status'])
+        return redirect('contratos:revisao_importacao', pk=importacao.pk)
+
+    except Exception as exc:
+        logger.exception('Erro na extração IA para importacao #%s', importacao.pk)
+        importacao.status = 'ERRO'
+        importacao.erros_extracao = str(exc)
+        importacao.save(update_fields=['status', 'erros_extracao'])
+        messages.error(request, f'Erro ao extrair dados do documento: {exc}')
+        return redirect('contratos:upload_importacao')
+
+
+@login_required
+def revisao_importacao(request, pk):
+    from contratos.models import ContratoImportacao, TipoCorrecao
+    from contratos.services.importacao_ia import ProcessadorImportacao
+    from core.models import TipoImovel
+
+    importacao = get_object_or_404(ContratoImportacao, pk=pk, criado_por=request.user)
+    if importacao.status == 'CONCLUIDO':
+        messages.info(request, 'Esta importação já foi concluída.')
+        return redirect('contratos:detalhe', hid=encode_id(importacao.contrato_criado_id))
+
+    dados = importacao.dados_extraidos or {}
+    matches = ProcessadorImportacao().processar(dados, request.user)
+
+    return render(request, 'contratos/revisao_importacao.html', {
+        'importacao': importacao,
+        'dados': dados,
+        'matches': matches,
+        'tipo_correcao_choices': TipoCorrecao.choices,
+        'tipo_imovel_choices': TipoImovel.choices,
+        'campos_incertos': set((dados.get('confianca') or {}).get('campos_incertos') or []),
+    })
+
+
+@login_required
+@require_http_methods(['POST'])
+def confirmar_importacao(request, pk):
+    from contratos.models import ContratoImportacao
+    from contratos.services.importacao_ia import confirmar_importacao as _confirmar
+
+    importacao = get_object_or_404(ContratoImportacao, pk=pk, criado_por=request.user)
+    if importacao.status == 'CONCLUIDO':
+        messages.warning(request, 'Esta importação já foi concluída.')
+        return redirect('contratos:detalhe', hid=encode_id(importacao.contrato_criado_id))
+
+    try:
+        contrato = _confirmar(importacao, request.POST, request.user)
+        messages.success(request, f'Contrato {contrato.numero_contrato} importado com sucesso!')
+        return redirect('contratos:detalhe', hid=encode_id(contrato.pk))
+    except Exception as exc:
+        logger.exception('Erro ao confirmar importacao #%s', pk)
+        messages.error(request, f'Erro ao criar contrato: {exc}')
+        return redirect('contratos:revisao_importacao', pk=pk)
