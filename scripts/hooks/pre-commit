@@ -1,15 +1,100 @@
 #!/bin/bash
 #
-# Git Hook: pre-commit (V-06)
-# Exibe a versão que será registrada neste commit.
-# PATCH é calculado automaticamente via git rev-list --count HEAD.
-# Para bumpar MAJOR ou MINOR, edite manualmente o arquivo VERSION.
+# Git Hook: pre-commit
+#   1. Varredura de segredos — bloqueia o commit se detectar credenciais
+#      (senhas SMTP/IMAP, tokens, chaves de API, chaves privadas) ou
+#      arquivos .env sendo versionados. Ver SECURITY.md.
+#   2. Exibe a versão que será registrada neste commit (V-06).
 #
 # Desenvolvedor: Maxwell da Silva Oliveira (@maxwbh)
 # Email: maxwbh@gmail.com
 # Empresa: M&S do Brasil LTDA - www.msbrasil.inf.br
 #
 
+set -u
+
+RED=$'\033[0;31m'
+YELLOW=$'\033[1;33m'
+NC=$'\033[0m'
+
+fail=0
+
+# Arquivos staged (Adicionados/Copiados/Modificados)
+staged_files=$(git diff --cached --name-only --diff-filter=ACM)
+
+# -----------------------------------------------------------------------------
+# 1. Bloquear arquivos .env versionados (contêm segredos reais).
+#    Templates (.env.example / .env.sample / .env.template) são permitidos.
+# -----------------------------------------------------------------------------
+for f in $staged_files; do
+    base=$(basename "$f")
+    case "$base" in
+        .env.example|.env.sample|.env.template) ;;   # permitido
+        .env|.env.*)
+            echo "${RED}✗ Segredo bloqueado:${NC} o arquivo de ambiente '$f' não deve ser versionado."
+            echo "  Use variáveis de ambiente / painel do Render. Consulte SECURITY.md."
+            fail=1
+            ;;
+    esac
+done
+
+# -----------------------------------------------------------------------------
+# 2. Varredura de conteúdo — apenas linhas ADICIONADAS no diff staged.
+# -----------------------------------------------------------------------------
+# Valores de exemplo aceitos (não são segredos reais).
+placeholder='(sua-senha|sua_senha|your-|your_|change|placeholder|example|exemplo|xxxx|<[^>]+>|\{\{|senha-de-app|senha-de-apl|senha-imap|token-secreto|min-[0-9]|seu-email|test|teste|fake|dummy|redacted|senha_teste|dev-secret|dev-key|localhost|local-)'
+
+# Chaves sensíveis conhecidas: se receberem um valor literal real (>= 8 chars)
+# que não seja um placeholder nem uma leitura de env/config, é bloqueado.
+secret_keys='(EMAIL_HOST_PASSWORD|EMAIL_PASSWORD|SMTP_PASSWORD|BOUNCE_IMAP_PASSWORD|TWILIO_AUTH_TOKEN|SECRET_KEY|TASK_TOKEN|GEMINI_API_KEY|AWS_SECRET_ACCESS_KEY)'
+
+for f in $staged_files; do
+    # Não varre a própria infraestrutura de segurança nem testes/docs
+    # (que contêm exemplos e placeholders propositais).
+    case "$f" in
+        scripts/hooks/*|SECURITY.md|tests/*|docs/*|*.md) continue ;;
+    esac
+
+    added=$(git diff --cached -U0 --diff-filter=ACM -- "$f" | grep '^+' | grep -v '^+++')
+    [ -z "$added" ] && continue
+
+    # Chave privada (RSA/EC/OPENSSH/DSA/PGP)
+    if printf '%s\n' "$added" | grep -qE 'BEGIN (RSA |EC |OPENSSH |DSA |PGP |)PRIVATE KEY'; then
+        echo "${RED}✗ Segredo bloqueado:${NC} bloco de chave privada em '$f'."
+        fail=1
+    fi
+
+    # AWS Access Key ID
+    if printf '%s\n' "$added" | grep -qE 'AKIA[0-9A-Z]{16}'; then
+        echo "${RED}✗ Segredo bloqueado:${NC} AWS Access Key em '$f'."
+        fail=1
+    fi
+
+    # Atribuição de credencial conhecida com valor literal real
+    hits=$(printf '%s\n' "$added" \
+        | grep -iE "${secret_keys}[[:space:]]*[:=][[:space:]]*['\"]?[A-Za-z0-9/+=_.:@-]{8,}['\"]?" \
+        | grep -viE "$placeholder" \
+        | grep -viE '(config\(|os\.|getenv|env\(|getattr|environ|=[[:space:]]*(config|env|os|self|request|settings)\b|=[[:space:]]*'"''"'|=[[:space:]]*"")')
+    if [ -n "$hits" ]; then
+        echo "${RED}✗ Possível credencial em '$f':${NC}"
+        printf '%s\n' "$hits" | sed 's/^+/    /'
+        fail=1
+    fi
+done
+
+if [ "$fail" -ne 0 ]; then
+    echo ""
+    echo "${YELLOW}Commit bloqueado pela varredura de segredos (pre-commit).${NC}"
+    echo "Remova a credencial do código, use variáveis de ambiente e consulte SECURITY.md."
+    echo "Em caso de falso positivo comprovado: git commit --no-verify"
+    exit 1
+fi
+
+# -----------------------------------------------------------------------------
+# 3. Exibir a versão que será registrada (comportamento original — V-06).
+#    PATCH é calculado automaticamente via git rev-list --count HEAD.
+#    Para bumpar MAJOR ou MINOR, edite manualmente o arquivo VERSION.
+# -----------------------------------------------------------------------------
 GIT_DIR=$(git rev-parse --git-dir 2>/dev/null)
 PROJECT_ROOT=$(dirname "$GIT_DIR")
 VERSION_FILE="$PROJECT_ROOT/VERSION"
