@@ -193,6 +193,103 @@
     }
 
     /**
+     * Buscar dados da empresa via BrasilAPI (CNPJ)
+     */
+    async function buscarCNPJ(cnpj) {
+        const cnpjLimpo = cnpj.replace(/\D/g, '');
+
+        if (cnpjLimpo.length !== 14) {
+            return { erro: true, mensagem: 'CNPJ deve ter 14 digitos' };
+        }
+
+        try {
+            // Usar o endpoint local que faz proxy para BrasilAPI
+            const response = await fetch(`/api/cnpj/${cnpjLimpo}/`);
+            const data = await response.json();
+
+            if (!data.sucesso) {
+                return { erro: true, mensagem: data.erro || 'CNPJ nao encontrado' };
+            }
+
+            return {
+                erro: false,
+                cnpj: data.cnpj,
+                razao_social: data.razao_social,
+                nome_fantasia: data.nome_fantasia,
+                situacao_cadastral: data.situacao_cadastral,
+                email: data.email,
+                telefone: data.telefone,
+                cep: data.cep,
+                logradouro: data.logradouro,
+                numero: data.numero,
+                complemento: data.complemento,
+                bairro: data.bairro,
+                cidade: data.cidade,
+                estado: data.estado
+            };
+        } catch (error) {
+            console.error('Erro ao buscar CNPJ:', error);
+            return { erro: true, mensagem: 'Erro ao buscar CNPJ. Tente novamente.' };
+        }
+    }
+
+    /**
+     * Preencher campos com dados da empresa (CNPJ)
+     */
+    function preencherDadosEmpresa(dados) {
+        const mapeamento = {
+            // Dados da empresa
+            'nome': dados.razao_social,
+            'id_nome': dados.razao_social,
+            'razao_social': dados.razao_social,
+            'nome_fantasia': dados.nome_fantasia,
+            'id_nome_fantasia': dados.nome_fantasia,
+
+            // Contato
+            'email': dados.email,
+            'id_email': dados.email,
+            'telefone': dados.telefone,
+            'id_telefone': dados.telefone,
+
+            // Endereco
+            'cep': dados.cep,
+            'id_cep': dados.cep,
+            'logradouro': dados.logradouro,
+            'id_logradouro': dados.logradouro,
+            'numero': dados.numero,
+            'id_numero': dados.numero,
+            'complemento': dados.complemento,
+            'id_complemento': dados.complemento,
+            'bairro': dados.bairro,
+            'id_bairro': dados.bairro,
+            'cidade': dados.cidade,
+            'id_cidade': dados.cidade,
+            'estado': dados.estado,
+            'id_estado': dados.estado
+        };
+
+        Object.keys(mapeamento).forEach(campo => {
+            const valor = mapeamento[campo];
+            if (valor) {
+                const elemento = document.querySelector(`[name="${campo}"]`) ||
+                                document.getElementById(campo);
+                if (elemento && !elemento.value) {
+                    elemento.value = valor;
+                    elemento.dispatchEvent(new Event('change'));
+                }
+            }
+        });
+
+        // Mostrar situacao cadastral
+        if (dados.situacao_cadastral) {
+            const situacaoDiv = document.getElementById('situacao-cnpj');
+            if (situacaoDiv) {
+                situacaoDiv.innerHTML = `<span class="badge ${dados.situacao_cadastral === 'ATIVA' ? 'bg-success' : 'bg-danger'}">${dados.situacao_cadastral}</span>`;
+            }
+        }
+    }
+
+    /**
      * Apply currency mask
      */
     function mascaraMoeda(value) {
@@ -420,6 +517,11 @@
         // ====================================================================
         const cpfInputs = document.querySelectorAll('input[name="cpf"], input[name="conjuge_cpf"], input[name="responsavel_cpf"]');
         cpfInputs.forEach(input => {
+            // Aplicar máscara em valores já existentes (edição)
+            if (input.value) {
+                input.value = mascaraCPF(input.value);
+            }
+
             input.addEventListener('input', function(e) {
                 e.target.value = mascaraCPF(e.target.value);
             });
@@ -450,6 +552,11 @@
         // ====================================================================
         const cnpjInputs = document.querySelectorAll('input[name="cnpj"]');
         cnpjInputs.forEach(input => {
+            // Aplicar máscara em valores já existentes (edição)
+            if (input.value) {
+                input.value = mascaraCNPJ(input.value);
+            }
+
             input.addEventListener('input', function(e) {
                 e.target.value = mascaraCNPJ(e.target.value);
             });
@@ -515,7 +622,54 @@
                         e.target.classList.remove('is-invalid');
                         e.target.classList.add('is-valid');
                         preencherEndereco(resultado);
-                        showToast('Endereço encontrado!', 'success');
+                        showToast('Endereco encontrado!', 'success');
+                    }
+                }
+            });
+        });
+
+        // ====================================================================
+        // CNPJ inputs with BrasilAPI integration
+        // ====================================================================
+        const cnpjInputsBrasilApi = document.querySelectorAll('input[name="cnpj"], .cnpj-input');
+        cnpjInputsBrasilApi.forEach(input => {
+            input.addEventListener('input', function(e) {
+                e.target.value = mascaraCNPJ(e.target.value);
+            });
+
+            input.addEventListener('blur', async function(e) {
+                const cnpj = e.target.value.replace(/\D/g, '');
+
+                if (cnpj.length === 14) {
+                    // Validar CNPJ primeiro
+                    if (!validarCNPJ(e.target.value)) {
+                        showToast('CNPJ invalido', 'warning');
+                        e.target.classList.add('is-invalid');
+                        e.target.classList.remove('is-valid');
+                        return;
+                    }
+
+                    const originalValue = e.target.value;
+                    e.target.value = 'Buscando...';
+                    e.target.disabled = true;
+
+                    const resultado = await buscarCNPJ(cnpj);
+
+                    e.target.value = originalValue;
+                    e.target.disabled = false;
+
+                    if (resultado.erro) {
+                        showToast(resultado.mensagem, 'warning');
+                        e.target.classList.add('is-invalid');
+                        e.target.classList.remove('is-valid');
+                    } else {
+                        e.target.classList.remove('is-invalid');
+                        e.target.classList.add('is-valid');
+                        preencherDadosEmpresa(resultado);
+
+                        // Mensagem com nome da empresa
+                        const nomeEmpresa = resultado.nome_fantasia || resultado.razao_social;
+                        showToast(`Empresa encontrada: ${nomeEmpresa}`, 'success');
                     }
                 }
             });
@@ -569,42 +723,31 @@
         });
 
         // ====================================================================
-        // ANIMATE ELEMENTS ON SCROLL
+        // ANIMATE ELEMENTS ON SCROLL — desabilitado
+        // A animação de fade-in via IntersectionObserver causava flash de
+        // conteúdo invisível (opacity:0) ao fazer scroll. Removido.
         // ====================================================================
-        const observerOptions = {
-            threshold: 0.1,
-            rootMargin: '0px 0px -50px 0px'
-        };
-
-        const observer = new IntersectionObserver(function(entries) {
-            entries.forEach(entry => {
-                if (entry.isIntersecting) {
-                    entry.target.classList.add('fade-in');
-                    observer.unobserve(entry.target);
-                }
-            });
-        }, observerOptions);
-
-        const animatedElements = document.querySelectorAll('.card, .table, .alert');
-        animatedElements.forEach(el => observer.observe(el));
 
         // ====================================================================
         // AUTO-DISMISS ALERTS
+        // Only dismisses flash-message alerts (alert-dismissible), never
+        // static result cards like the rescisão / cessão calculation output.
         // ====================================================================
-        const alerts = document.querySelectorAll('.alert:not(.alert-permanent)');
-        alerts.forEach(alert => {
-            setTimeout(() => {
-                if (typeof bootstrap !== 'undefined') {
-                    const bsAlert = new bootstrap.Alert(alert);
-                    bsAlert.close();
-                }
+        const alerts = document.querySelectorAll('.alert.alert-dismissible:not(.alert-permanent)');
+        alerts.forEach(function(alert) {
+            setTimeout(function() {
+                alert.style.transition = 'opacity 0.4s ease';
+                alert.style.opacity = '0';
+                setTimeout(function() { if (alert.parentNode) alert.parentNode.removeChild(alert); }, 400);
             }, 5000);
         });
 
         // ====================================================================
         // CONFIRM DELETIONS
+        // Targets only btn-danger submit buttons WITHOUT the no-confirm class.
+        // Add class="... no-confirm" to calculation buttons to skip this.
         // ====================================================================
-        const deleteButtons = document.querySelectorAll('.btn-danger[type="submit"]');
+        const deleteButtons = document.querySelectorAll('.btn-danger[type="submit"]:not(.no-confirm)');
         deleteButtons.forEach(button => {
             button.addEventListener('click', function(e) {
                 if (!confirm('Tem certeza que deseja executar esta ação?')) {
@@ -646,6 +789,79 @@
     });
 
     // ========================================================================
+    // BRCOBRANCA QUEUE — warm-up do serviço no cold start (Free Tier Render)
+    // ========================================================================
+    //
+    // Uso:
+    //   await GestaoContratos.BrcobrancaQueue.prepararApi(btnEl);
+    //   // ... fetch de geração de boleto ...
+    //
+    // Se o serviço estiver rodando, resolve imediatamente (wait=0).
+    // Se estiver dormindo, dispara warm-up no servidor e exibe countdown no btn.
+    //
+    const BrcobrancaQueue = {
+        _warmedAt: 0,
+        _warmMs: 10 * 60 * 1000,   // considera quente por 10 minutos
+
+        isWarm() {
+            return Date.now() - this._warmedAt < this._warmMs;
+        },
+
+        markWarm() {
+            this._warmedAt = Date.now();
+        },
+
+        async prepararApi(btnEl) {
+            if (this.isWarm()) return;
+
+            const csrfToken = (document.cookie.match(/csrftoken=([^;]+)/) || [])[1] || '';
+
+            let wait = 0;
+            try {
+                const resp = await fetch('/financeiro/api/brcobranca/solicitar/', {
+                    method: 'POST',
+                    headers: { 'X-CSRFToken': csrfToken },
+                });
+                const data = await resp.json();
+                wait = data.wait || 0;
+            } catch (_) {
+                // Falha na verificação — tenta gerar mesmo assim
+            }
+
+            if (wait > 0) {
+                await this._countdown(wait, btnEl);
+            }
+
+            this.markWarm();
+        },
+
+        _countdown(seconds, btnEl) {
+            return new Promise(resolve => {
+                let remaining = seconds;
+                const update = () => {
+                    if (btnEl) {
+                        btnEl.innerHTML =
+                            `<i class="fas fa-power-off fa-spin me-2"></i>Iniciando serviço... ${remaining}s`;
+                    }
+                };
+                update();
+                const iv = setInterval(() => {
+                    remaining -= 1;
+                    update();
+                    if (remaining <= 0) {
+                        clearInterval(iv);
+                        if (btnEl) {
+                            btnEl.innerHTML =
+                                '<i class="fas fa-spinner fa-spin me-2"></i>Gerando...';
+                        }
+                        resolve();
+                    }
+                }, 1000);
+            });
+        },
+    };
+
+    // ========================================================================
     // EXPOSE UTILITY FUNCTIONS GLOBALLY
     // ========================================================================
     window.GestaoContratos = {
@@ -660,7 +876,8 @@
         buscarCEP,
         preencherEndereco,
         showToast,
-        debounce
+        debounce,
+        BrcobrancaQueue,
     };
 
 })();
