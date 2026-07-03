@@ -2202,6 +2202,24 @@ def remessa_painel(request):
         status=StatusContrato.ATIVO, imobiliaria__in=imobs
     ).count()
 
+    # Boleto-API (C6/Sicoob): cobrança registrada concilia por webhook e NÃO
+    # entra na remessa CNAB. Contar para informar o usuário (exclusão não é
+    # silenciosa — o total visto na geração pode diferir do pendente aqui).
+    from .services.cnab_service import PROVIDERS_BOLETO_API
+    boleto_api_qs = Parcela.objects.filter(
+        status_boleto=StatusBoleto.GERADO,
+        pago=False,
+        conta_bancaria__provider__in=PROVIDERS_BOLETO_API,
+        conta_bancaria__imobiliaria__in=imobs,
+    )
+    if imobiliaria_id:
+        boleto_api_qs = boleto_api_qs.filter(contrato__imobiliaria_id=imobiliaria_id)
+    if mes and ano:
+        boleto_api_qs = boleto_api_qs.filter(
+            data_vencimento__month=int(mes), data_vencimento__year=int(ano)
+        )
+    boleto_api_count = boleto_api_qs.count()
+
     context = {
         'grupos': grupos,
         'arquivos_recentes': arquivos_recentes,
@@ -2223,6 +2241,8 @@ def remessa_painel(request):
         # Banner de conclusão (CT-07)
         'mes_concluido': mes_concluido,
         'bancos_enviados': bancos_enviados,
+        # Boleto-API: registrados via gateway, conciliação por webhook (fora do CNAB)
+        'boleto_api_count': boleto_api_count,
     }
     return render(request, 'financeiro/cnab/remessa_painel.html', context)
 
@@ -2563,6 +2583,18 @@ def boletos_painel(request):
     _delay_s = getattr(_settings, 'BRCOBRANCA_INTER_BOLETO_DELAY_MS', 100) / 1000
     _tempo_por_boleto = round(_delay_s + getattr(_settings, 'BRCOBRANCA_TEMPO_API_BOLETO_S', 1.8), 2)
 
+    # Contas com cobrança registrada via Boleto-API (C6/Sicoob): os boletos
+    # dessas contas são registrados online e NÃO passam pela remessa CNAB —
+    # informar aqui evita surpresa no Passo 2.
+    from .services.cnab_service import PROVIDERS_BOLETO_API
+    contas_boleto_api = list(
+        ContaBancaria.objects.filter(
+            imobiliaria__in=imobs,
+            provider__in=PROVIDERS_BOLETO_API,
+            ativo=True,
+        ).select_related('imobiliaria')
+    )
+
     context = {
         'grupos': conf['grupos'],
         'kpis': conf['kpis'],
@@ -2573,6 +2605,7 @@ def boletos_painel(request):
         'filtro_quantidade': quantidade,
         'hoje': timezone.localdate(),
         'tempo_por_boleto_s': _tempo_por_boleto,
+        'contas_boleto_api': contas_boleto_api,
     }
     return render(request, 'financeiro/boletos/geracao_painel.html', context)
 

@@ -129,6 +129,70 @@ class TestElegibilidade:
         )
         assert len(elegiveis) == 3
 
+    def test_exclui_conta_boleto_api(self, base):
+        """Contas Boleto-API (C6/Sicoob) não entram na elegibilidade de remessa CNAB."""
+        from financeiro.services.cnab_service import CNABService
+        imob, conta, contrato = base
+        conta.provider = 'sicoob'
+        conta.save(update_fields=['provider'])
+        elegiveis = CNABService().obter_boletos_elegiveis_painel()
+        assert elegiveis == []
+
+    def test_escopo_boleto_rejeita_conta_boleto_api(self, base):
+        """resolver_parcela_ids_por_escopo('boleto') recusa boleto de conta Boleto-API."""
+        from financeiro.services.cnab_service import CNABService
+        imob, conta, contrato = base
+        conta.provider = 'c6'
+        conta.save(update_fields=['provider'])
+        parcela = contrato.parcelas.filter(numero_parcela=4).first()
+        resol = CNABService().resolver_parcela_ids_por_escopo(
+            escopo='boleto', parcela_id=parcela.pk,
+        )
+        assert resol['parcela_ids'] == []
+        assert 'cobrança registrada' in resol['erro'].lower()
+
+    def test_gerar_remessa_rejeita_conta_boleto_api(self, base):
+        """gerar_remessa() recusa diretamente uma conta Boleto-API (defesa)."""
+        from financeiro.services.cnab_service import CNABService
+        imob, conta, contrato = base
+        conta.provider = 'sicoob'
+        conta.save(update_fields=['provider'])
+        parcelas = list(contrato.parcelas.filter(numero_parcela__in=[4, 5]))
+        resultado = CNABService().gerar_remessa(parcelas, conta, layout='CNAB_240')
+        assert resultado['sucesso'] is False
+        assert 'Boleto-API' in resultado['erro']
+
+    def test_c6_com_provider_brcobranca_continua_elegivel(self, base):
+        """C6 (banco=336) com provider=brcobranca usa CNAB normalmente — o filtro
+        é por provider, não por banco."""
+        from financeiro.services.cnab_service import CNABService
+        imob, conta, contrato = base
+        conta.banco = '336'
+        conta.provider = 'brcobranca'
+        conta.convenio = '123456789012'
+        conta.layout_cnab = 'CNAB_400'
+        conta.save(update_fields=['banco', 'provider', 'convenio', 'layout_cnab'])
+        elegiveis = CNABService().obter_boletos_elegiveis_painel()
+        assert {p.numero_parcela for p in elegiveis} == {4, 5, 6}
+
+    def test_sicoob_com_provider_brcobranca_continua_elegivel(self, base):
+        """Sicoob (banco=756) com provider=brcobranca permanece elegível para remessa CNAB."""
+        from financeiro.services.cnab_service import CNABService
+        imob, conta, contrato = base
+        conta.banco = '756'
+        conta.provider = 'brcobranca'
+        conta.convenio = '123456789'
+        conta.save(update_fields=['banco', 'provider', 'convenio'])
+        elegiveis = CNABService().obter_boletos_elegiveis_painel()
+        assert {p.numero_parcela for p in elegiveis} == {4, 5, 6}
+        # E o escopo de boleto avulso também aceita
+        parcela = contrato.parcelas.filter(numero_parcela=4).first()
+        resol = CNABService().resolver_parcela_ids_por_escopo(
+            escopo='boleto', parcela_id=parcela.pk,
+        )
+        assert resol['parcela_ids'] == [parcela.pk]
+        assert resol['erro'] is None
+
 
 # ---------------------------------------------------------------------------
 # Service: resolução de escopo
@@ -189,6 +253,21 @@ class TestPainelView:
         assert resp.context['kpi_bancos_ativos'] == 1   # 1 conta
         assert resp.context['kpi_vencendo_hoje'] == 1    # parcela 4 vence hoje
         assert len(resp.context['grupos']) == 1
+        assert resp.context['boleto_api_count'] == 0    # sem contas Boleto-API
+
+    def test_boleto_api_count_no_contexto(self, base, staff_cli):
+        """Boletos de contas C6/Sicoob são contados e informados (não somem em silêncio)."""
+        _, c = staff_cli
+        imob, conta, contrato = base
+        conta.provider = 'sicoob'
+        conta.save(update_fields=['provider'])
+        resp = c.get(reverse('financeiro:remessa_painel'))
+        assert resp.status_code == 200
+        # As 4 parcelas GERADO não pagas da conta agora são Boleto-API
+        assert resp.context['boleto_api_count'] == 4
+        # E saem da elegibilidade CNAB
+        assert resp.context['kpi_total_pendente'] == 0
+        assert 'cobrança registrada' in resp.content.decode()
 
 
 # ---------------------------------------------------------------------------
@@ -477,6 +556,24 @@ class TestRetornoPainel:
         resp = c.get(reverse('financeiro:retorno_painel'))
         assert resp.status_code == 200
         assert list(resp.context['contas_com_enviado']) == []
+
+    def test_filtro_imobiliaria_visivel(self, base, staff_cli):
+        """O seletor de imobiliária deve estar presente na tela (consistência com Remessa)."""
+        u, c = staff_cli
+        imob, conta, contrato = base
+        resp = c.get(reverse('financeiro:retorno_painel'))
+        assert resp.status_code == 200
+        html = resp.content.decode()
+        assert 'name="imobiliaria"' in html
+        assert imob.nome in html
+
+    def test_filtro_imobiliaria_restringe_historico(self, base, staff_cli):
+        """Filtrar por outra imobiliária esconde os retornos da imobiliária base."""
+        u, c = staff_cli
+        imob, conta, contrato = base
+        resp = c.get(reverse('financeiro:retorno_painel') + f'?imobiliaria={imob.pk}')
+        assert resp.status_code == 200
+        assert resp.context['filtro_imobiliaria'] == str(imob.pk)
 
     def test_upload_processa_e_retorna_resumo(self, base, staff_cli):
         """CT-28: upload + auto-processo retorna o resumo JSON documentado."""

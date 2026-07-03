@@ -38,6 +38,11 @@ logger = logging.getLogger(__name__)
 from .bancos import BANCOS_SUPORTADOS as _BANCOS
 BANCOS_BRCOBRANCA = {cod: spec['brcobranca_id'] for cod, spec in _BANCOS.items()}
 
+# Provedores que NÃO usam arquivo CNAB de remessa (cobrança registrada via
+# Boleto-API gateway; conciliação por evento push/webhook). Contas com esses
+# providers são excluídas de toda elegibilidade de remessa CNAB.
+PROVIDERS_BOLETO_API = ('c6', 'sicoob')
+
 # Codigos de ocorrencia padrao CNAB
 OCORRENCIAS_CNAB = {
     '01': ('ENTRADA', 'Entrada Confirmada'),
@@ -313,6 +318,18 @@ class CNABService:
             dict: Resultado com arquivo gerado e estatisticas
         """
         from financeiro.models import ArquivoRemessa, ItemRemessa
+
+        # Boleto-API (C6/Sicoob): cobrança registrada não gera remessa CNAB.
+        # A conciliação ocorre por evento push (webhook), não por arquivo.
+        if getattr(conta_bancaria, 'provider', 'brcobranca') in PROVIDERS_BOLETO_API:
+            return {
+                'sucesso': False,
+                'erro': (
+                    f'Conta {conta_bancaria} usa cobrança registrada via Boleto-API '
+                    f'({conta_bancaria.get_provider_display()}). Esses boletos não entram '
+                    'em remessa CNAB — a baixa é conciliada automaticamente pelo banco.'
+                ),
+            }
 
         # Validar conta bancária para bancos com campos obrigatórios
         if conta_bancaria.banco == '001' and not conta_bancaria.convenio:
@@ -907,12 +924,17 @@ class CNABService:
         - Estão apenas em remessas com status ERRO (podem ser re-incluídas)
 
         Exclui parcelas em remessas ativas (GERADO, ENVIADO, PROCESSADO).
+        Exclui contas com provedor Boleto-API (C6/Sicoob): essas conciliam por
+        evento push (webhook), não por arquivo CNAB de remessa.
         """
         from financeiro.models import Parcela, StatusBoleto, StatusArquivoRemessa, ItemRemessa
 
         queryset = Parcela.objects.filter(
             status_boleto=StatusBoleto.GERADO,
             pago=False,
+        ).exclude(
+            # Boleto-API (C6/Sicoob): sem remessa CNAB — conciliação via webhook
+            conta_bancaria__provider__in=PROVIDERS_BOLETO_API,
         ).exclude(
             # HU-23 RN-18: itens REJEITADO não bloqueiam reinclusão
             itens_remessa__arquivo_remessa__status__in=[
@@ -1200,6 +1222,14 @@ class CNABService:
                 return {'parcela_ids': [], 'erro': 'Boleto não encontrado.'}
             if not p.conta_bancaria:
                 return {'parcela_ids': [], 'erro': 'Boleto sem conta bancária associada.'}
+            if getattr(p.conta_bancaria, 'provider', 'brcobranca') in PROVIDERS_BOLETO_API:
+                return {
+                    'parcela_ids': [],
+                    'erro': (
+                        'Boleto de cobrança registrada (C6/Sicoob) não entra em remessa CNAB — '
+                        'a baixa é conciliada automaticamente por evento do banco.'
+                    ),
+                }
             if ids_imobs is not None and p.conta_bancaria.imobiliaria_id not in ids_imobs:
                 return {'parcela_ids': [], 'erro': 'Sem acesso a este boleto.'}
             if p.status_boleto != StatusBoleto.GERADO or p.pago:

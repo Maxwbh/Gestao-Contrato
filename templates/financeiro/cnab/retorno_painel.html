@@ -29,14 +29,19 @@
     <!-- Cabeçalho -->
     <div class="d-flex flex-wrap justify-content-between align-items-end mb-4 gap-2">
         <div>
-            <div class="small text-muted mb-1">Financeiro / <a href="{% url 'financeiro:remessa_painel' %}">Remessa</a> / Retorno Bancário</div>
+            <div class="small text-muted mb-1">Financeiro / <a href="{% url 'financeiro:cobranca_hub' %}">Cobrança do Mês</a> / <a href="{% url 'financeiro:remessa_painel' %}">Remessa</a> / Retorno Bancário</div>
             <h2 class="h4 fw-bold mb-0">Processamento de Retorno Bancário</h2>
             <p class="text-muted small mb-0 mt-1">Gerencie a liquidação de boletos e conciliação financeira automatizada.</p>
         </div>
         <div class="d-flex gap-2 align-items-center">
-            <!-- Filtro mês -->
+            <!-- Filtro imobiliária + mês (consistente com Remessa/Boletos) -->
             <form method="get" class="d-flex gap-2 align-items-center">
-                {% if filtro_imobiliaria %}<input type="hidden" name="imobiliaria" value="{{ filtro_imobiliaria }}">{% endif %}
+                <select name="imobiliaria" class="form-select form-select-sm" style="width:auto" onchange="this.form.submit()">
+                    <option value="">Todas as Imobiliárias</option>
+                    {% for imob in imobiliarias %}
+                    <option value="{{ imob.id }}" {% if filtro_imobiliaria == imob.id|stringformat:'s' %}selected{% endif %}>{{ imob.nome }}</option>
+                    {% endfor %}
+                </select>
                 <select name="mes" class="form-select form-select-sm" style="width:auto" onchange="this.form.submit()">
                     <option value="1" {% if filtro_mes == 1 %}selected{% endif %}>Janeiro</option>
                     <option value="2" {% if filtro_mes == 2 %}selected{% endif %}>Fevereiro</option>
@@ -271,6 +276,7 @@
 
     const modalEl = document.getElementById('modalUploadRetorno');
     const bsModal = modalEl ? new bootstrap.Modal(modalEl) : null;
+    let dadosProcessados = false;  // true após um retorno processado — reload ao fechar o modal
 
     document.querySelectorAll('.btn-upload-retorno').forEach(btn => {
         btn.addEventListener('click', () => {
@@ -298,6 +304,27 @@
                 return;
             }
 
+            // Validação client-side antes de subir: extensão e tamanho
+            const arquivo = fileInput.files[0];
+            const nome = (arquivo.name || '').toLowerCase();
+            const extOk = /\.(ret|txt|dat)$/.test(nome);
+            if (!extOk) {
+                alertEl.className = 'alert alert-danger';
+                alertEl.innerHTML = 'Extensão não reconhecida — envie o arquivo de retorno do banco (<code>.ret</code>, <code>.txt</code> ou <code>.dat</code>).';
+                return;
+            }
+            const MAX_MB = 10;
+            if (arquivo.size > MAX_MB * 1024 * 1024) {
+                alertEl.className = 'alert alert-danger';
+                alertEl.textContent = 'Arquivo muito grande (' + (arquivo.size / 1048576).toFixed(1) + ' MB). O limite é ' + MAX_MB + ' MB.';
+                return;
+            }
+            if (arquivo.size === 0) {
+                alertEl.className = 'alert alert-danger';
+                alertEl.textContent = 'O arquivo selecionado está vazio.';
+                return;
+            }
+
             lockBtn(btnConfirmar, 'Processando...');
             alertEl.className = 'alert d-none';
 
@@ -316,6 +343,7 @@
                     btnConfirmar.classList.add('d-none');
                     const pago = parseFloat(data.valor_total_pago || 0)
                         .toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+                    const URL_CONCILIACAO = "{% url 'financeiro:painel_conciliacao_saude' %}";
                     document.getElementById('listaResultado').innerHTML = [
                         `<li>${data.registros_processados} de ${data.total_registros} registros processados</li>`,
                         data.rejeicoes
@@ -326,9 +354,12 @@
                             : '',
                         `<li>Valor total pago confirmado: <strong>${pago}</strong></li>`,
                         `<li><a href="${data.detalhe_url}">Ver relatório completo</a></li>`,
+                        `<li>Próximo passo: <a href="${URL_CONCILIACAO}${window.location.search}">Conferir Conciliação &amp; Saúde da Cobrança →</a></li>`,
                     ].join('');
                     document.getElementById('resultadoUpload').classList.remove('d-none');
-                    setTimeout(() => window.location.reload(), 3000);
+                    // Recarrega os KPIs somente quando o usuário terminar de ler
+                    // o resumo (fechar o modal) — sem cortar a leitura no meio.
+                    dadosProcessados = true;
                 } else {
                     alertEl.className = 'alert alert-danger';
                     alertEl.textContent = data.erro || 'Erro ao processar o retorno.';
@@ -338,6 +369,13 @@
                 alertEl.className = 'alert alert-danger';
                 alertEl.textContent = 'Erro de conexão ao enviar o arquivo.';
             });
+        });
+    }
+
+    // Após um processamento bem-sucedido, atualiza KPIs/histórico ao fechar o modal
+    if (modalEl) {
+        modalEl.addEventListener('hidden.bs.modal', () => {
+            if (dadosProcessados) window.location.reload();
         });
     }
 })();

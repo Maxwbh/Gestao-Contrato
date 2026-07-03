@@ -528,6 +528,27 @@
                     <h6 class="text-muted mb-3"><i class="fas fa-barcode me-2"></i>Configurações de Boleto (opcional)</h6>
 
                     <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Provedor de Cobrança</label>
+                            <select id="provider" name="provider" class="form-select">
+                                <option value="brcobranca" selected>BRCobrança (CNAB padrão)</option>
+                                <option value="c6">C6 Bank (cobrança registrada)</option>
+                                <option value="sicoob">Sicoob (cobrança registrada)</option>
+                            </select>
+                            <small class="text-muted">
+                                Vazio = BRCobrança (fluxo CNAB). C6/Sicoob usam o Boleto-API
+                                (integração ainda em validação).
+                            </small>
+                        </div>
+                        <div class="col-md-6 mb-3" id="tenant_id_wrap" style="display:none;">
+                            <label class="form-label">Tenant ID (Boleto-API)</label>
+                            <input type="text" class="form-control" id="tenant_id" name="tenant_id"
+                                   placeholder="Ex: imob1-756" maxlength="100">
+                            <small class="text-muted">Obrigatório para C6/Sicoob.</small>
+                        </div>
+                    </div>
+
+                    <div class="row">
                         <div class="col-md-3 mb-3">
                             <label class="form-label">Carteira</label>
                             <input type="text" class="form-control" id="carteira" name="carteira"
@@ -873,10 +894,25 @@ function abrirModalConta() {
     document.getElementById('imobiliaria_id').value = IMOBILIARIA_ID || '';
     document.getElementById('modalContaTitle').innerHTML = '<i class="fas fa-university me-2"></i>Nova Conta Bancária';
     document.getElementById('cobranca_registrada').checked = true;
+    document.getElementById('provider').value = 'brcobranca';
+    document.getElementById('tenant_id').value = '';
+    atualizarVisibilidadeProvider();
     editandoIndex = -1;
     atualizarCamposBanco('');
     _getModalContaBancaria()?.open();
 }
+
+// Mostra o campo Tenant ID apenas quando o provedor é Boleto-API (C6/Sicoob)
+function atualizarVisibilidadeProvider() {
+    const prov = document.getElementById('provider').value || 'brcobranca';
+    const wrap = document.getElementById('tenant_id_wrap');
+    if (wrap) wrap.style.display = (prov === 'c6' || prov === 'sicoob') ? '' : 'none';
+}
+
+document.addEventListener('DOMContentLoaded', function () {
+    const provSel = document.getElementById('provider');
+    if (provSel) provSel.addEventListener('change', atualizarVisibilidadeProvider);
+});
 
 function editarContaLocal(index) {
     const conta = contasLocais[index];
@@ -885,6 +921,9 @@ function editarContaLocal(index) {
     document.getElementById('conta_id').value = '';
     document.getElementById('banco').value = conta.banco;
     document.getElementById('descricao').value = conta.descricao;
+    document.getElementById('provider').value = conta.provider || 'brcobranca';
+    document.getElementById('tenant_id').value = conta.tenant_id || '';
+    atualizarVisibilidadeProvider();
     document.getElementById('agencia').value = conta.agencia;
     document.getElementById('conta').value = conta.conta;
     document.getElementById('convenio').value = conta.convenio || '';
@@ -912,6 +951,8 @@ function salvarContaLocal() {
     const contaData = {
         banco: banco,
         descricao: document.getElementById('descricao').value,
+        provider: document.getElementById('provider').value || 'brcobranca',
+        tenant_id: document.getElementById('tenant_id').value,
         agencia: document.getElementById('agencia').value,
         conta: document.getElementById('conta').value,
         convenio: document.getElementById('convenio').value,
@@ -983,6 +1024,9 @@ async function editarConta(contaId) {
             document.getElementById('conta_id').value = conta.id;
             document.getElementById('banco').value = conta.banco;
             document.getElementById('descricao').value = conta.descricao;
+            document.getElementById('provider').value = conta.provider || 'brcobranca';
+            document.getElementById('tenant_id').value = conta.tenant_id || '';
+            atualizarVisibilidadeProvider();
             document.getElementById('agencia').value = conta.agencia;
             document.getElementById('conta').value = conta.conta;
             document.getElementById('convenio').value = conta.convenio || '';
@@ -1023,6 +1067,8 @@ async function salvarConta() {
         imobiliaria_id: IMOBILIARIA_ID,
         banco: document.getElementById('banco').value,
         descricao: document.getElementById('descricao').value,
+        provider: document.getElementById('provider').value || 'brcobranca',
+        tenant_id: document.getElementById('tenant_id').value,
         agencia: document.getElementById('agencia').value,
         conta: document.getElementById('conta').value,
         convenio: document.getElementById('convenio').value,

@@ -70,11 +70,12 @@
     <div class="col-6 col-lg-3"><div class="kpi-card p-3 h-100" style="background:rgba(0,88,190,.06);border-color:rgba(0,88,190,.3)"><span class="kpi-label" style="color:#0058be">Ciclo Concluído</span><div class="kpi-value" style="color:#0058be">{{ estado.percentual }}%</div><div class="progress mt-2" style="height:6px"><div class="progress-bar" style="width:{{ estado.percentual }}%"></div></div></div></div>
   </div>
 
-  <!-- Stepper -->
+  {% with q="?imobiliaria="|add:filtro_imobiliaria %}
+  <!-- Stepper (passos clicáveis) -->
   <div class="card mb-4"><div class="card-body">
     <div class="d-flex align-items-center">
       {% comment %}Passo 1{% endcomment %}
-      <div class="text-center" style="width:180px">
+      <a href="{% url 'financeiro:boletos_painel' %}{{ q }}&mes={{ filtro_mes }}&ano={{ filtro_ano }}" class="text-center text-decoration-none text-reset" style="width:180px" title="Abrir Geração de Boletos">
         <div class="step-circle mx-auto {% if estado.passo1 == 'concluido' %}bg-success text-white{% elif estado.recomendado == 1 %}bg-primary text-white{% else %}bg-light text-muted border{% endif %}"><i class="fas fa-bolt"></i></div>
         <div class="mt-2 fw-bold small">1. Gerar Boletos</div>
         {% if estado.passo1 == 'concluido' %}<span class="badge bg-success badge-estado">CONCLUÍDO</span>
@@ -82,10 +83,10 @@
         {% elif estado.passo1 == 'aguardando' %}<span class="badge bg-light text-dark border badge-estado">AGUARDANDO</span>
         {% else %}<span class="badge bg-secondary badge-estado">PENDENTE</span>{% endif %}
         <div class="small text-muted mt-1">{{ estado.a_gerar }} a gerar</div>
-      </div>
+      </a>
       <div class="step-line {% if estado.passo1 == 'concluido' %}done{% endif %}"></div>
       {% comment %}Passo 2{% endcomment %}
-      <div class="text-center" style="width:180px">
+      <a href="{% url 'financeiro:remessa_painel' %}{{ q }}&mes={{ filtro_mes }}&ano={{ filtro_ano }}" class="text-center text-decoration-none text-reset" style="width:180px" title="Abrir Geração de Remessa">
         <div class="step-circle mx-auto {% if estado.passo2 == 'concluido' %}bg-success text-white{% elif estado.recomendado == 2 %}bg-primary text-white{% else %}bg-light text-muted border{% endif %}"><i class="fas fa-paper-plane"></i></div>
         <div class="mt-2 fw-bold small">2. Gerar Remessa</div>
         {% if estado.passo2 == 'concluido' %}<span class="badge bg-success badge-estado">CONCLUÍDO</span>
@@ -93,10 +94,10 @@
         {% elif estado.passo2 == 'aguardando' %}<span class="badge bg-light text-dark border badge-estado">AGUARDANDO</span>
         {% else %}<span class="badge bg-secondary badge-estado">PENDENTE</span>{% endif %}
         <div class="small text-muted mt-1">{{ estado.a_enviar_contas }} contas</div>
-      </div>
+      </a>
       <div class="step-line {% if estado.passo2 == 'concluido' %}done{% endif %}"></div>
       {% comment %}Passo 3{% endcomment %}
-      <div class="text-center" style="width:180px">
+      <a href="{% url 'financeiro:retorno_painel' %}{{ q }}&mes={{ filtro_mes }}&ano={{ filtro_ano }}" class="text-center text-decoration-none text-reset" style="width:180px" title="Abrir Recebimento de Retorno">
         <div class="step-circle mx-auto {% if estado.passo3 == 'concluido' %}bg-success text-white{% elif estado.recomendado == 3 %}bg-primary text-white{% else %}bg-light text-muted border{% endif %}"><i class="fas fa-university"></i></div>
         <div class="mt-2 fw-bold small">3. Receber Retorno</div>
         {% if estado.passo3 == 'concluido' %}<span class="badge bg-success badge-estado">CONCLUÍDO</span>
@@ -104,12 +105,11 @@
         {% elif estado.passo3 == 'aguardando' %}<span class="badge bg-light text-dark border badge-estado">AGUARDANDO</span>
         {% else %}<span class="badge bg-secondary badge-estado">PENDENTE</span>{% endif %}
         <div class="small text-muted mt-1">{{ estado.a_conciliar_boletos }} a conciliar</div>
-      </div>
+      </a>
     </div>
   </div></div>
 
   <!-- Passos: cards de ação -->
-  {% with q="?imobiliaria="|add:filtro_imobiliaria %}
   <div class="row g-3">
     <div class="col-lg-4">
       <div class="card h-100 {% if estado.recomendado == 1 %}border-primary{% endif %}">
@@ -174,6 +174,12 @@
       const r = await fetch(URL_GERAR, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-CSRFToken': CSRF }, body: JSON.stringify(body) });
       const data = await r.json();
       if (!data.sucesso) { btn.disabled = false; btn.innerHTML = original; notify(data.erro || 'Falha na geração.', 'error'); return; }
+      // Limite da operadora atingido: NÃO avança à remessa — ainda há boletos por gerar
+      if (data.rate_limit_abort) {
+        btn.disabled = false; btn.innerHTML = original;
+        notify(`${data.total_gerados} boleto(s) gerado(s). Limite da operadora atingido — aguarde alguns instantes e clique novamente para gerar o restante.`, 'warning');
+        return;
+      }
       let msg = `${data.total_gerados} boleto(s) gerado(s)`;
       if (data.total_bloqueados) msg += ` · ${data.total_bloqueados} bloqueado(s)`;
       if (data.total_erros) msg += ` · ${data.total_erros} erro(s)`;

@@ -107,6 +107,69 @@ class TestApiContasBancarias:
         response = client_logado.delete(url)
         assert response.status_code in (400, 404, 500)
 
+    def test_criar_conta_sem_provider_default_brcobranca(self, client_logado, contrato):
+        """Criar conta sem provider → persiste brcobranca (default seguro)."""
+        from core.models import ContaBancaria
+        url = reverse('core:api_criar_conta')
+        payload = {
+            'imobiliaria_id': contrato.imobiliaria.pk,
+            'banco': '001', 'descricao': 'Conta sem provider',
+            'agencia': '1234', 'conta': '123456', 'convenio': '1234567',
+        }
+        response = client_logado.post(url, payload, content_type='application/json')
+        assert response.status_code == 200, response.content
+        conta_id = response.json()['conta_id']
+        conta = ContaBancaria.objects.get(pk=conta_id)
+        assert conta.provider == 'brcobranca'
+
+    def test_criar_conta_com_provider_sicoob(self, client_logado, contrato):
+        """Criar conta com provider=sicoob persiste provider e tenant_id."""
+        from core.models import ContaBancaria
+        url = reverse('core:api_criar_conta')
+        payload = {
+            'imobiliaria_id': contrato.imobiliaria.pk,
+            'banco': '756', 'descricao': 'Conta Sicoob API',
+            'agencia': '3073', 'conta': '12345678', 'convenio': '123456789',
+            'provider': 'sicoob', 'tenant_id': 'imob1-756',
+            'account_config': {'cooperativa': '3073', 'conta': '12345678'},
+        }
+        response = client_logado.post(url, payload, content_type='application/json')
+        assert response.status_code == 200, response.content
+        conta = ContaBancaria.objects.get(pk=response.json()['conta_id'])
+        assert conta.provider == 'sicoob'
+        assert conta.tenant_id == 'imob1-756'
+        assert conta.account_config == {'cooperativa': '3073', 'conta': '12345678'}
+
+    def test_obter_conta_inclui_provider(self, client_logado, contrato):
+        """GET da conta deve serializar provider/tenant_id."""
+        from core.models import ContaBancaria
+        conta = ContaBancaria.objects.create(
+            imobiliaria=contrato.imobiliaria, banco='336', descricao='C6 API',
+            agencia='1234', conta='12345678', convenio='123456789012',
+            provider='c6', tenant_id='imob1-336', layout_cnab='CNAB_400',
+        )
+        url = reverse('core:api_obter_conta', kwargs={'conta_id': conta.pk})
+        response = client_logado.get(url)
+        assert response.status_code == 200
+        data = response.json()['conta']
+        assert data['provider'] == 'c6'
+        assert data['tenant_id'] == 'imob1-336'
+
+    def test_atualizar_conta_provider_vazio_vira_brcobranca(self, client_logado, contrato):
+        """Atualizar conta enviando provider vazio → brcobranca."""
+        from core.models import ContaBancaria
+        conta = ContaBancaria.objects.create(
+            imobiliaria=contrato.imobiliaria, banco='756', descricao='Sicoob',
+            agencia='3073', conta='12345678', convenio='123456789',
+            provider='sicoob', tenant_id='imob1-756',
+        )
+        url = reverse('core:api_atualizar_conta', kwargs={'conta_id': conta.pk})
+        payload = {'banco': '756', 'descricao': 'Sicoob', 'provider': ''}
+        response = client_logado.post(url, payload, content_type='application/json')
+        assert response.status_code == 200, response.content
+        conta.refresh_from_db()
+        assert conta.provider == 'brcobranca'
+
 
 @pytest.mark.django_db
 class TestApiBuscaGlobal:
