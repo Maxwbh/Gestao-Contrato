@@ -223,6 +223,19 @@
     </div>
     {% endif %}
 
+    <!-- HU-06: bloqueio por reajuste visível ANTES de qualquer clique -->
+    {% if bloqueado_reajuste %}
+    <div class="alert alert-warning d-flex align-items-start mb-3" id="alertBloqueioReajuste">
+        <i class="fas fa-lock me-2 mt-1"></i>
+        <div>
+            <strong>Geração de boleto bloqueada:</strong> {{ motivo_bloqueio }}
+            <br>
+            <a href="{% url 'financeiro:reajustes_pendentes' %}" class="alert-link">Resolver reajuste pendente →</a>
+            <span class="text-muted small ms-2">Quitação manual e OFX não são afetadas pelo bloqueio.</span>
+        </div>
+    </div>
+    {% endif %}
+
     <!-- Ações -->
     <div class="row">
         <div class="col-12 d-flex flex-wrap gap-2">
@@ -231,8 +244,9 @@
             </a>
             {% if not parcela.pago %}
                 {% if not parcela.tem_boleto %}
-                <button type="button" class="btn btn-outline-primary" id="btnGerarBoleto" onclick="gerarBoletoDetalhe()">
-                    <i class="fas fa-barcode me-2"></i>Gerar Boleto
+                <button type="button" class="btn btn-outline-primary" id="btnGerarBoleto" onclick="gerarBoletoDetalhe()"
+                        {% if bloqueado_reajuste %}title="Bloqueado: {{ motivo_bloqueio }}"{% endif %}>
+                    {% if bloqueado_reajuste %}<i class="fas fa-lock me-2"></i>{% else %}<i class="fas fa-barcode me-2"></i>{% endif %}Gerar Boleto
                 </button>
                 {% else %}
                 <a href="{% url 'financeiro:download_boleto' parcela.pk|hashid %}" class="btn btn-outline-primary" target="_blank">
@@ -269,8 +283,14 @@ async function gerarBoletoDetalhe() {
     btn.disabled = true;
     btn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Verificando...';
 
+    // HU-06: parcela bloqueada por reajuste — o servidor recusa localmente,
+    // então NÃO espera o cold-start da API de boletos (economiza até ~2 min)
+    const bloqueadaPorReajuste = {{ bloqueado_reajuste|yesno:'true,false' }};
+
     try {
-        await GestaoContratos.BrcobrancaQueue.prepararApi(btn);
+        if (!bloqueadaPorReajuste) {
+            await GestaoContratos.BrcobrancaQueue.prepararApi(btn);
+        }
 
         btn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Gerando...';
         const fd = new FormData();

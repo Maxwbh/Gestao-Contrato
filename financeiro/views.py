@@ -686,10 +686,22 @@ def detalhe_parcela(request, hid):
     if parcela.esta_vencida and not parcela.pago:
         parcela.atualizar_juros_multa()
 
+    # HU-06: expor o bloqueio por reajuste ANTES de qualquer clique — o
+    # operador vê o aviso (com link p/ resolução) sem esperar a API de boletos
+    bloqueado_reajuste = False
+    motivo_bloqueio = ''
+    if not parcela.pago and hasattr(parcela.contrato, 'pode_gerar_boleto'):
+        _pode, _motivo = parcela.contrato.pode_gerar_boleto(parcela.numero_parcela)
+        if not _pode:
+            bloqueado_reajuste = True
+            motivo_bloqueio = _motivo
+
     from django.urls import reverse
     from core.breadcrumbs import bc, bc_dashboard
     context = {
         'parcela': parcela,
+        'bloqueado_reajuste': bloqueado_reajuste,
+        'motivo_bloqueio': motivo_bloqueio,
         'voltar_url': _voltar_url(request, reverse('financeiro:listar_parcelas')),
         'breadcrumb': [
             bc_dashboard(),
@@ -1722,6 +1734,15 @@ def api_status_boleto(request, hid):
     parcela = get_object_or_404(Parcela.objects.select_related('contrato__imobiliaria'), pk=pk)
     verificar_acesso_tenant(request, parcela.contrato.imobiliaria)
 
+    # HU-06 CA-7: o status também informa se a geração está bloqueada e o motivo
+    bloqueado = False
+    motivo_bloqueio = ''
+    if not parcela.pago and hasattr(parcela.contrato, 'pode_gerar_boleto'):
+        _pode, _motivo = parcela.contrato.pode_gerar_boleto(parcela.numero_parcela)
+        if not _pode:
+            bloqueado = True
+            motivo_bloqueio = _motivo
+
     return JsonResponse({
         'parcela_id': parcela.id,
         'status': parcela.status_boleto,
@@ -1731,6 +1752,8 @@ def api_status_boleto(request, hid):
         'linha_digitavel': parcela.linha_digitavel,
         'tem_pdf': bool(parcela.boleto_pdf),
         'data_geracao': parcela.data_geracao_boleto.isoformat() if parcela.data_geracao_boleto else None,
+        'bloqueado_reajuste': bloqueado,
+        'motivo_bloqueio': motivo_bloqueio,
     })
 
 

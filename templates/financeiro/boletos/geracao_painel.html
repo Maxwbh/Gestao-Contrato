@@ -1,5 +1,5 @@
 {% extends 'base.html' %}
-{% load static hashid_tags %}
+{% load static hashid_tags l10n %}
 
 {% block title %}Geração de Boletos do Mês{% endblock %}
 
@@ -249,7 +249,7 @@
 (function () {
     const CSRF = '{{ csrf_token }}';
     const URL_GERAR = "{% url 'financeiro:boletos_painel_gerar' %}";
-    const TEMPO_POR_BOLETO = {{ tempo_por_boleto_s|default:2 }};   // s/boleto (pacing + API)
+    const TEMPO_POR_BOLETO = {{ tempo_por_boleto_s|default:2|unlocalize }};   // s/boleto (pacing + API)
     const TOTAL_A_GERAR = {{ kpis.a_gerar|default:0 }};
     const TOTAL_INTERM = {{ kpis.intermediarias|default:0 }};
     const modalEl = document.getElementById('modalGerar');
