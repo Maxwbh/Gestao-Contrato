@@ -1,304 +1,191 @@
-# Sistema de Gestão de Contratos de Venda de Imóveis
+<div align="center">
 
-Sistema completo desenvolvido em Python/Django para gerenciamento de contratos de venda de imóveis (lotes, terrenos, casas) com funcionalidades avançadas de gestão financeira, reajustes automáticos, notificações e relatórios automáticos.
+# 🏢 Gestão de Contratos
 
-## 👨‍💻 Desenvolvedor
+**Sistema Django para gestão de contratos de venda de imóveis** — parcelas, reajustes automáticos, cobrança bancária (CNAB + cobrança registrada), notificações multicanal, portal do comprador e relatórios/BI.
 
-**Maxwell da Silva Oliveira**
-- **E-mail:** maxwbh@gmail.com
-- **LinkedIn:** [linkedin.com/in/maxwbh](https://www.linkedin.com/in/maxwbh/)
-- **GitHub:** [github.com/Maxwbh](https://github.com/Maxwbh/)
-- **Empresa:** M&S do Brasil LTDA
-- **Site:** [msbrasil.inf.br](https://msbrasil.inf.br)
+![Python](https://img.shields.io/badge/Python-3.11+-3776AB?logo=python&logoColor=white)
+![Django](https://img.shields.io/badge/Django-4.2-092E20?logo=django&logoColor=white)
+![PostgreSQL](https://img.shields.io/badge/PostgreSQL-12+-4169E1?logo=postgresql&logoColor=white)
+![Testes](https://img.shields.io/badge/testes-1683%20passando-2ea44f)
+![Versão](https://img.shields.io/badge/vers%C3%A3o-3.1-0058be)
+![Licença](https://img.shields.io/badge/licen%C3%A7a-Proprietary-lightgrey)
+
+</div>
+
+---
+
+## 📑 Índice
+
+- [Sobre o Sistema](#-sobre-o-sistema)
+- [Novidades da Versão 3.1](#-novidades-da-versão-31)
+- [Funcionalidades](#-funcionalidades)
+- [Ciclo Mensal de Cobrança](#-ciclo-mensal-de-cobrança)
+- [Tecnologias](#️-tecnologias)
+- [Instalação](#-instalação)
+- [Configuração (.env)](#-configuração-env)
+- [Deploy no Render](#-deploy-no-render)
+- [Estrutura do Projeto](#-estrutura-do-projeto)
+- [Testes](#-testes)
+- [Docker / BRCobrança](#-docker--brcobrança)
+- [Contato](#-contato)
+
+---
 
 ## 📋 Sobre o Sistema
 
-Sistema desenvolvido para contabilidades que gerenciam múltiplos loteamentos, permitindo o controle completo de:
+Plataforma multi-tenant para **contabilidades** que administram múltiplos loteamentos e imobiliárias, com controle completo do ciclo de venda parcelada:
 
-- **Contabilidades** → Gerenciam múltiplas imobiliárias
-- **Imobiliárias** → Responsáveis financeiros/beneficiários dos contratos
-- **Imóveis** → Lotes, terrenos, casas, apartamentos e imóveis comerciais
-- **Compradores** → Clientes que adquirem os imóveis
-- **Contratos** → Gestão completa com parcelas, reajustes e notificações
+| Entidade | Papel |
+|----------|-------|
+| **Contabilidade** | Administra múltiplas imobiliárias (topo da hierarquia) |
+| **Imobiliária** | Beneficiária/cedente dos contratos e contas bancárias |
+| **Imóvel** | Lote, terreno, casa, apartamento ou comercial |
+| **Comprador** | Cliente (PF ou PJ) que adquire o imóvel |
+| **Contrato** | Parcelas, reajustes, intermediárias, boletos e notificações |
 
-## 🚀 Funcionalidades Principais
+O isolamento por tenant (`get_imobiliarias_usuario()`) garante que cada usuário só enxergue os dados das imobiliárias a que tem acesso.
+
+---
+
+## ✨ Novidades da Versão 3.1
+
+> As grandes atualizações recentes, além da base já consolidada:
+
+- **💳 Cobrança Registrada via Boleto-API** — integração com gateway **C6 Bank / Sicoob** (OAuth + mTLS) para cobrança registrada online, com **conciliação por evento push (webhook)** em vez de CNAB. Feature flag por conta (`ContaBancaria.provider`) mantém o **fluxo CNAB/BRCobrança como padrão seguro**.
+- **🧭 Hub "Cobrança do Mês" (HU-25)** — assistente guiado com stepper clicável: *Gerar Boletos → Gerar Remessa → Receber Retorno*, filtros compartilhados e ação encadeada de 1 clique.
+- **❤️ Conciliação & Saúde da Cobrança (HU-26)** — painel de fechamento com % conciliado (por valor), recebido por origem (CNAB/PIX/OFX/Manual), aging clicável e reinclusão de rejeitados.
+- **📈 Índices econômicos aprimorados** — **número-índice** e **acumulados** visíveis, cálculo exato de variação, backfill de valores imprecisos e importação BCB resiliente a timeout.
+- **🎨 Usabilidade dos fluxos de cobrança** — feedback consistente (toasts), avisos de boletos que conciliam por webhook, navegação encadeada, travas anti duplo-submit e validações client-side.
+
+---
+
+## 🚀 Funcionalidades
 
 ### 1. Gestão de Entidades
-- ✅ Cadastro de Contabilidades
-- ✅ Cadastro de Imobiliárias/Beneficiários
-- ✅ Cadastro de Imóveis (com tipos: Lote, Terreno, Casa, Apartamento, Comercial)
-- ✅ Cadastro de Compradores (com preferências de notificação)
+- Cadastro de Contabilidades, Imobiliárias/Beneficiários, Imóveis e Compradores (PF/PJ)
+- Contas bancárias por imobiliária com **provedor de cobrança selecionável** (BRCobrança/CNAB, C6, Sicoob)
+- CNPJ alfanumérico 2026 (IN RFB 2229/2024)
 
-### 2. Sistema de Contratos
-- ✅ Criação de contratos de venda
-- ✅ Configuração de número de parcelas
-- ✅ Definição de dia de vencimento
-- ✅ Cálculo de juros e multa
-- ✅ Tipos de correção monetária: IPCA, IGP-M, SELIC ou Fixo
-- ✅ Prazo de reajuste configurável (padrão: 12 meses)
-- ✅ **Juros Escalantes** (HU-360): tabela por ciclo com PMT recalculado e bloqueio cascata
-- ✅ **Rescisão Contratual** (G-11): fruição + multa penal/adm + mora pro rata
-- ✅ **Cessão de Direitos** (G-12): taxa 3% sobre saldo devedor com novo contrato
+### 2. Contratos
+- Parcelas geradas automaticamente; dia de vencimento e nº de parcelas configuráveis
+- Correção monetária: **IPCA, IGP-M, INCC, IGP-DI, INPC, TR, SELIC ou Fixo**
+- Amortização **PRICE ou SAC**; prestações intermediárias (balões)
+- **Juros Escalantes** (HU-360): tabela por ciclo com PMT recalculado e bloqueio cascata
+- **Rescisão Contratual** (G-11): fruição + multa penal/adm + mora pro rata
+- **Cessão de Direitos** (G-12): taxa 3% sobre saldo devedor com novo contrato
 
 ### 3. Gestão Financeira
-- ✅ Geração automática de parcelas mês a mês
-- ✅ Cálculo automático de juros e multa por atraso
-- ✅ Registro de pagamentos
-- ✅ Controle de saldo devedor
-- ✅ Histórico completo de pagamentos
-- ✅ **Boletos bancários** via BRCobrança API (integração CNAB)
-- ✅ **CNAB Remessa** (G-08): geração de arquivo para banco com rastreamento de nosso número
-- ✅ **CNAB Retorno** (G-09): processamento automático de entradas e liquidações bancárias
+- Geração de parcelas, cálculo de juros/multa por atraso, saldo devedor e histórico de pagamentos
+- **Boletos bancários** via BRCobrança (CNAB) **ou** cobrança registrada via **Boleto-API** (C6/Sicoob)
+- **CNAB Remessa** (G-08) e **CNAB Retorno** (G-09) com rastreamento de nosso número
+- **Carnê** consolidado por contrato (PDF)
+- **Registro manual de pagamento**, **quitação/antecipação** com desconto e **conciliação OFX**
+- **Webhook Boleto-API** (`/financeiro/webhooks/boleto-api/`) — baixa idempotente por evento, assinatura **HMAC-SHA256**
 
-#### Ciclo Mensal da Contabilidade (3 telas dedicadas, dirigidas por escopo)
-- ✅ **Gerar Boletos do Mês** (HU-24) — `/financeiro/boletos/`: geração em massa por escopo (todos / imobiliária / contratos / parcela / intermediária), com quantidade por contrato (1 ou próximos X), tipo Folha/Carnê, inclusão de intermediárias, respeito ao **bloqueio por reajuste** (HU-06) e **notificação consolidada por canal** (e-mail/WhatsApp em 1 PDF, SMS um a um)
-- ✅ **Gerar Arquivo Remessa** (HU-23) — `/financeiro/remessa/`: wizard que agrupa por banco/layout (1 arquivo = 1 conta), "Gerar e Baixar", download em lote (ZIP), estado BAIXADO e marcação de envio
-- ✅ **Receber Arquivo Retorno** (HU-23) — `/financeiro/retorno/`: upload do `.ret` por banco que **já processa a baixa**; rejeições devolvem o boleto para "Gerado" (RN-18)
-- ✅ **Encadeamento**: Gerar Boletos → Gerar Remessa → Receber Retorno, com atalhos entre as telas
-
-### 4. Sistema de Reajuste Automático
-- ✅ Integração com API do Banco Central do Brasil
-- ✅ Busca automática de índices IPCA, IGP-M e SELIC
-- ✅ Reajuste automático a cada período configurado
-- ✅ Possibilidade de reajuste manual
-- ✅ Histórico de reajustes aplicados
+### 4. Reajuste Automático
+- Integração com a **API do Banco Central** (IPCA/IGP-M/SELIC), com número-índice e acumulados
+- Reajuste automático por ciclo (padrão 12 meses) ou manual; histórico completo
+- Spread, piso e teto configuráveis por contrato; fallback de índice
 
 ### 5. Portal do Comprador
-- ✅ Acesso web individual por CPF/senha para compradores
-- ✅ Dashboard com resumo de contratos e parcelas
-- ✅ Listagem e detalhe de contratos (isolamento por comprador)
-- ✅ Segunda via de boletos diretamente no portal
-- ✅ APIs JSON para linha digitável, PDF e status de parcelas
-- ✅ Isolamento de segurança: comprador só acessa seus próprios dados
-- ✅ **Upload de comprovantes de pagamento** com validação magic bytes (PDF/JPG/PNG/WebP)
-- ✅ **PWA Instalável** (34.6): manifest.json + service worker com cache offline
-- ✅ **Web Push Notifications** (34.6): alertas de vencimento via VAPID/browser push
-- ✅ **Mobile-first**: meta tags Apple/Android, theme-color, `display: standalone`
+- Acesso individual por CPF/senha, dashboard, contratos e **2ª via de boleto**
+- **Upload de comprovantes** com validação de magic bytes
+- **PWA instalável** (manifest + service worker offline) e **Web Push** (VAPID)
+- Isolamento estrito: cada comprador só acessa seus próprios dados
 
-### 6. Sistema de Notificações e Relatórios
-- ✅ Notificações por **E-mail**
-- ✅ Notificações por **SMS** (via Twilio)
-- ✅ Notificações por **WhatsApp** (via Twilio)
-- ✅ Templates personalizáveis com TAGs `%%TAG%%` e blocos condicionais `%%SE_TAG%%...%%FIM_TAG%%`
-- ✅ PIX copia-e-cola nas mensagens (TAG `%%PIXCOPIACOLA%%` — boleto híbrido)
-- ✅ Envio direto por parcela: e-mail (template + PDF anexo), SMS e WhatsApp
-- ✅ Envio automático antes do vencimento (D-5, D-3, D-1, D0)
-- ✅ Régua de inadimplência (D+3, D+7, D+15)
-- ✅ **Relatório Semanal** por imobiliária: KPIs de recebimentos, inadimplência e a vencer
-- ✅ **Relatório Mensal Consolidado** por contabilidade: tabela por imobiliária com totais
-- ✅ Templates HTML responsivos configuráveis pelo Admin
-- ✅ **Relatório Agendado de Inadimplência** (34.5): e-mail diário/semanal automático com tabela de parcelas vencidas
-- ✅ **Relatório de Posição de Contratos** (34.5): e-mail com anexo Excel ou PDF gerado por `RelatorioService`
-- ✅ **API BI** `GET /financeiro/api/relatorios/posicao/` (34.5): JSON/CSV para Power BI, Looker, Metabase — autenticada por Bearer token
-- ✅ **Dashboard Executivo** (34.5): gráfico de barras+linha receita prevista/realizada/inadimplência 12 meses, KPIs consolidados, tenant isolation
+### 6. Notificações e Relatórios
+- **E-mail, SMS e WhatsApp** (Twilio) com templates `%%TAG%%` e blocos condicionais
+- Régua de vencimento (D-5, D-3, D-1, D0) e de inadimplência (D+3, D+7, D+15)
+- Notificação **consolidada por canal** (e-mail/WhatsApp em 1 PDF; SMS um a um)
+- Relatórios **Semanal** e **Mensal Consolidado**; **Dashboard Executivo**
+- **API BI** (`/financeiro/api/relatorios/posicao/`) para Power BI/Looker/Metabase — Bearer token
 
-### 7. Tarefas Automáticas via API (cron-job.org)
-- ✅ Endpoints `POST /api/tasks/` autenticados com `X-Task-Token`
-- ✅ **Relatório Semanal** → `POST /api/tasks/relatorio-semanal/`
-- ✅ **Relatório Mensal** → `POST /api/tasks/relatorio-mensal/` (dia 1 às 09:00 UTC)
-- ✅ **Notificações de vencimento** → `POST /api/tasks/notificacoes/`
-- ✅ **Inadimplentes** → `POST /api/tasks/inadimplentes/`
-- ✅ **Reajustes** → `POST /api/tasks/reajustes/`
-- ✅ **Boletos** → `POST /api/tasks/boletos/`
+### 7. Tarefas Agendadas (cron-job.org)
+Endpoints `POST /api/tasks/...` autenticados com `X-Task-Token`: relatório semanal/mensal, notificações, inadimplentes, reajustes e boletos.
 
-### 8. Segurança Reforçada
-- ✅ Comparação de tokens em tempo constante (`hmac.compare_digest`) — previne timing attacks no webhook PIX e API BI
-- ✅ `select_for_update()` + `transaction.atomic()` em pagamentos, aprovações de comprovantes e minutas de contrato
-- ✅ Deduplicação atômica de eventos PIX via `IntegrityError` (constraint única no BD)
-- ✅ Validação de magic bytes em uploads de comprovantes (detecta arquivos disfarçados por extensão)
-- ✅ Isolamento de tenant em todas as views financeiras (`get_imobiliarias_usuario()`)
-- ✅ API BI fail-closed: retorna 503 quando `BI_API_TOKEN` não configurado em produção
+### 8. Segurança
+- Comparação de tokens em tempo constante (`hmac.compare_digest`) em webhooks PIX/Boleto-API e API BI
+- `select_for_update()` + `transaction.atomic()` em pagamentos e aprovações
+- Deduplicação atômica de eventos; validação de magic bytes; tenant isolation; API BI *fail-closed*
 
 ### 9. Importação de Contratos via IA
-- ✅ **Upload de PDF ou fotos** (múltiplas imagens) via drag-and-drop — máx 20 MB por arquivo
-- ✅ **Extração automática** por Claude API (`claude-opus-4-8`): todos os campos do contrato, Imobiliária, Comprador, Imóvel e Prestações Intermediárias extraídos como JSON estruturado
-- ✅ **Nível de confiança** por campo (`ALTO/MEDIO/BAIXO`) — campos incertos destacados no formulário de revisão
-- ✅ **Match inteligente** de entidades existentes por CNPJ/CPF/matrícula antes de propor criação de novas
-- ✅ **Revisão humana** obrigatória antes do cadastro — formulário pré-preenchido editável
-- ✅ **Criação atômica** de todas as entidades em `transaction.atomic()` (Imobiliária → Comprador → Imóvel → Contrato → Intermediárias)
-- ✅ **Idempotente** — duplo-submit redireciona sem duplicar entidades
+Upload de PDF/imagens → extração estruturada com nível de confiança por campo → match de entidades existentes → **revisão humana** → criação atômica e idempotente.
 
-### 10. Recursos Adicionais
-- ✅ Dashboard com estatísticas
-- ✅ Interface administrativa completa (Django Admin)
-- ✅ Sistema de busca e filtros avançados
-- ✅ Design responsivo baseado em Bootstrap 5
-- ✅ Pronto para deploy no Render (Free Tier)
+---
 
-## 🛠️ Tecnologias Utilizadas
+## 🔄 Ciclo Mensal de Cobrança
 
-### Backend
-- **Python 3.11+**
-- **Django 4.2.7** - Framework web
-- **PostgreSQL** - Banco de dados
-- **Gunicorn** - Servidor WSGI para produção
+Três telas dedicadas, orquestradas pelo **Hub "Cobrança do Mês"** (`/financeiro/cobranca/`):
 
-### Frontend
-- **Bootstrap 5** - Framework CSS
-- **Font Awesome** - Ícones
-- **JavaScript** - Interatividade
+| Passo | Tela | O que faz |
+|-------|------|-----------|
+| **1. Gerar Boletos** (HU-24) | `/financeiro/boletos/` | Geração em massa por escopo (todos / imobiliária / contrato), quantidade por contrato, Folha/Carnê, intermediárias, com bloqueio por reajuste (HU-06) |
+| **2. Gerar Remessa** (HU-23) | `/financeiro/remessa/` | Agrupa por banco/layout (1 arquivo = 1 conta), "Gerar e Baixar", ZIP em lote, marcação de envio. Contas C6/Sicoob (Boleto-API) **não entram no CNAB** — conciliam por webhook |
+| **3. Receber Retorno** (HU-23) | `/financeiro/retorno/` | Upload do `.ret` que **já processa a baixa**; rejeições devolvem o boleto para "Gerado" (RN-18) |
+| **Fechamento** (HU-26) | `/financeiro/cobranca/conciliacao/` | % conciliado, recebido por origem, aging clicável e reinclusão de rejeitados |
 
-### APIs e Serviços
-- **Banco Central do Brasil API** - Índices econômicos (IPCA, IGP-M, SELIC)
-- **BRCobrança API** - Geração de boletos e arquivos CNAB (Docker self-hosted)
-- **Twilio** - SMS e WhatsApp
-- **cron-job.org** - Agendador de tarefas HTTP (substitui Celery no free tier)
-- **SMTP** - E-mail
+> Detalhes no [Manual do Contador](docs/manual_contador.md) e nas [Histórias de Usuário](docs/analise/historias-usuario/).
 
-## 📦 Instalação e Configuração
+---
 
-### Pré-requisitos
-- Python 3.11 ou superior
-- PostgreSQL 12+ (para produção)
-- Docker (para BRCobrança API)
-- Git
+## 🛠️ Tecnologias
 
-### 1. Clone o Repositório
+**Backend:** Python 3.11+ · Django 4.2.7 · PostgreSQL · Gunicorn
+**Frontend:** Bootstrap 5 · AG Grid · Font Awesome · PWA (service worker + Web Push)
+**Integrações:**
+- **Banco Central** — índices econômicos (IPCA/IGP-M/SELIC)
+- **BRCobrança** — boletos e arquivos CNAB (Docker self-hosted)
+- **Boleto-API** — cobrança registrada C6/Sicoob (OAuth + mTLS)
+- **Twilio** — SMS e WhatsApp · **SMTP** — e-mail · **cron-job.org** — agendamento HTTP
+
+---
+
+## 📦 Instalação
+
 ```bash
+# 1. Clone
 git clone https://github.com/Maxwbh/Gestao-Contrato.git
 cd Gestao-Contrato
-```
 
-### 2. Crie um Ambiente Virtual
-```bash
+# 2. Ambiente virtual
 python -m venv venv
+source venv/bin/activate          # Windows: venv\Scripts\activate
 
-# Linux/Mac
-source venv/bin/activate
-
-# Windows
-venv\Scripts\activate
-```
-
-### 3. Instale as Dependências
-```bash
+# 3. Dependências
 pip install -r requirements.txt
-```
 
-### 4. Configure as Variáveis de Ambiente
-```bash
-cp .env.example .env
-```
+# 4. Variáveis de ambiente
+cp .env.example .env              # edite conforme a seção abaixo
 
-Edite o arquivo `.env` com suas configurações:
-```env
-SECRET_KEY=sua-chave-secreta-aqui
-DEBUG=True
-ALLOWED_HOSTS=localhost,127.0.0.1
-
-DATABASE_URL=postgresql://user:password@localhost:5432/gestao_contrato
-
-# Token para autenticação das APIs de tarefas (cron-job.org)
-TASK_TOKEN=seu-token-secreto
-
-# Configurações de E-mail
-EMAIL_HOST=smtp.gmail.com
-EMAIL_PORT=587
-EMAIL_HOST_USER=seu-email@gmail.com
-EMAIL_HOST_PASSWORD=sua-senha-de-app
-
-# Twilio (SMS e WhatsApp)
-TWILIO_ACCOUNT_SID=seu-account-sid
-TWILIO_AUTH_TOKEN=seu-auth-token
-TWILIO_PHONE_NUMBER=+5511999999999
-TWILIO_WHATSAPP_NUMBER=whatsapp:+5511999999999
-
-# Webhook PIX (token de autenticação para POST /financeiro/api/webhook/pix/)
-PIX_WEBHOOK_TOKEN=seu-token-pix
-
-# API BI — Power BI / Looker / Metabase (34.5)
-BI_API_TOKEN=seu-token-bi-secreto
-RELATORIO_INADIMPLENCIA_EMAILS=financeiro@empresa.com,diretoria@empresa.com
-RELATORIO_POSICAO_EMAILS=financeiro@empresa.com
-
-# PWA Web Push — VAPID (34.6)
-# Gerar: python -c "from py_vapid import Vapid; v=Vapid(); v.generate_keys(); print(v.public_key, v.private_key)"
-VAPID_PUBLIC_KEY=sua-chave-publica-vapid
-VAPID_PRIVATE_KEY=sua-chave-privada-vapid
-VAPID_CLAIMS_EMAIL=admin@suaempresa.com
-```
-
-### 5. Execute as Migrações
-```bash
+# 5. Migrações + templates + superusuário
 python manage.py migrate
-```
-
-### 6. Crie os Templates de E-mail Padrão
-```bash
 python manage.py criar_templates_relatorio
-# Templates de boleto/notificação (função, não comando CLI):
 python manage.py shell -c "from notificacoes.boleto_notificacao import criar_templates_padrao; criar_templates_padrao()"
-```
-
-### 7. Crie um Superusuário
-```bash
 python manage.py createsuperuser
-```
 
-### 8. Colete os Arquivos Estáticos
-```bash
-python manage.py collectstatic
-```
+# 6. Estáticos e servidor
+python manage.py collectstatic --noinput
+python manage.py runserver        # http://localhost:8000
 
-### 9. Execute o Servidor de Desenvolvimento
-```bash
-python manage.py runserver
-```
-
-Acesse: `http://localhost:8000`
-
-### 10. Inicie a BRCobrança API (Docker)
-
-```bash
+# 7. (opcional) BRCobrança via Docker
 docker-compose up -d brcobranca
 ```
 
-## 🚀 Deploy no Render
+> Dica: `python manage.py gerar_dados_teste --limpar` popula o banco com massa de demonstração (contabilidade, imobiliárias, contratos, boletos e índices reais).
 
-### ⚠️ IMPORTANTE: Plano Gratuito — sem Celery
+---
 
-Este projeto está configurado para funcionar no **Plano Gratuito** do Render usando **cron-job.org** no lugar do Celery para tarefas agendadas.
+## 🔧 Configuração (.env)
 
-#### Plano Gratuito (Free Tier)
-- ✅ Web Service (Django)
-- ✅ PostgreSQL Database
-- ✅ Tarefas agendadas via **cron-job.org** (HTTP POST autenticado)
-- ❌ Background Workers (Celery) — não suportado
+```env
+SECRET_KEY=sua-chave-secreta
+DEBUG=True
+ALLOWED_HOSTS=localhost,127.0.0.1
+DATABASE_URL=postgresql://user:password@localhost:5432/gestao_contrato
 
-#### Como funciona o agendamento no Free Tier
-
-1. Crie uma conta gratuita em **cron-job.org**
-2. Configure cada tarefa como `POST` com header `X-Task-Token: <seu-token>`
-3. Configure o mesmo token em `TASK_TOKEN` nas variáveis do Render
-
-| Job | URL | Cron |
-|-----|-----|------|
-| `gestao-relatorio-semanal` | `.../api/tasks/relatorio-semanal/` | `0 9 * * 1` (toda segunda às 09h UTC) |
-| `gestao-relatorio-mensal` | `.../api/tasks/relatorio-mensal/` | `0 9 1 * *` (dia 1 às 09h UTC) |
-| `gestao-notificacoes` | `.../api/tasks/notificacoes/` | `0 8 * * *` (diário) |
-| `gestao-inadimplentes` | `.../api/tasks/inadimplentes/` | `0 8 * * *` (diário) |
-| `gestao-reajustes` | `.../api/tasks/reajustes/` | `0 1 * * *` (01h UTC) |
-| `gestao-boletos` | `.../api/tasks/boletos/` | `0 7 * * *` (07h UTC) |
-
-### Configuração Automática
-
-O `build.sh` executa automaticamente:
-1. `pip install -r requirements.txt`
-2. `python manage.py migrate`
-3. `python manage.py criar_templates_relatorio` (templates de relatório)
-4. Templates de boleto/notificação via shell (`criar_templates_padrao()` — função, não comando)
-5. `python manage.py collectstatic`
-6. Criação dos superusuários `maxwbh` e `admin`
-
-### Variáveis de Ambiente no Render
-
-```
-SECRET_KEY=(gerar aleatório)
-DEBUG=False
-ALLOWED_HOSTS=.onrender.com
-
-# Autenticação das APIs de tarefas
-TASK_TOKEN=mesmo-token-configurado-no-cronjob
+# Tarefas agendadas (cron-job.org)
+TASK_TOKEN=seu-token-secreto
 
 # E-mail
 EMAIL_HOST=smtp.gmail.com
@@ -306,304 +193,131 @@ EMAIL_PORT=587
 EMAIL_HOST_USER=seu-email@gmail.com
 EMAIL_HOST_PASSWORD=sua-senha-de-app
 
-# Twilio
+# Twilio (SMS/WhatsApp)
 TWILIO_ACCOUNT_SID=seu-account-sid
 TWILIO_AUTH_TOKEN=seu-auth-token
 TWILIO_PHONE_NUMBER=+5511999999999
 TWILIO_WHATSAPP_NUMBER=whatsapp:+5511999999999
 
-# PIX Webhook
-PIX_WEBHOOK_TOKEN=token-secreto-gerado-aleatoriamente
+# BRCobrança (boletos/CNAB)
+BRCOBRANCA_URL=http://localhost:9292
+BRCOBRANCA_INTER_BOLETO_DELAY_MS=100   # pacing entre boletos (anti rate-limit)
+BRCOBRANCA_REMESSA_COOLDOWN_S=5        # cooldown boletos → remessa
+
+# Boleto-API (cobrança registrada C6/Sicoob)
+BOLETO_API_URL=http://localhost:8001
+BOLETO_API_TIMEOUT=30
+BOLETO_API_MAX_TENTATIVAS=3
+EVENT_WEBHOOK_SECRET=segredo-hmac-do-webhook   # assina X-Signature (HMAC-SHA256)
+
+# Webhook PIX
+PIX_WEBHOOK_TOKEN=seu-token-pix
 
 # API BI (Power BI / Looker / Metabase)
-BI_API_TOKEN=token-secreto-bi
+BI_API_TOKEN=seu-token-bi
 RELATORIO_INADIMPLENCIA_EMAILS=financeiro@empresa.com
 RELATORIO_POSICAO_EMAILS=financeiro@empresa.com
 
 # PWA Web Push (VAPID)
+# Gerar: python -c "from py_vapid import Vapid; v=Vapid(); v.generate_keys(); print(v.public_key, v.private_key)"
 VAPID_PUBLIC_KEY=...
 VAPID_PRIVATE_KEY=...
 VAPID_CLAIMS_EMAIL=admin@empresa.com
 ```
 
+---
+
+## 🚀 Deploy no Render
+
+> **Plano Gratuito** — sem Celery. Tarefas agendadas via **cron-job.org** (HTTP POST autenticado).
+
+O `build.sh` executa automaticamente: `pip install` → `migrate` → templates de relatório e boleto → `collectstatic` → criação dos superusuários.
+
+| Job | URL | Cron |
+|-----|-----|------|
+| Relatório semanal | `.../api/tasks/relatorio-semanal/` | `0 9 * * 1` |
+| Relatório mensal | `.../api/tasks/relatorio-mensal/` | `0 9 1 * *` |
+| Notificações | `.../api/tasks/notificacoes/` | `0 8 * * *` |
+| Inadimplentes | `.../api/tasks/inadimplentes/` | `0 8 * * *` |
+| Reajustes | `.../api/tasks/reajustes/` | `0 1 * * *` |
+| Boletos | `.../api/tasks/boletos/` | `0 7 * * *` |
+
+Configure cada job como `POST` com header `X-Task-Token: <TASK_TOKEN>` (mesmo valor do Render). Em produção use `DEBUG=False` e `ALLOWED_HOSTS=.onrender.com`.
+
+---
+
 ## 📖 Estrutura do Projeto
 
 ```
 Gestao-Contrato/
-├── gestao_contrato/          # Configurações do projeto
-│   ├── settings.py
-│   ├── urls.py
-│   └── wsgi.py
-├── core/                      # App principal
-│   ├── models.py             # Contabilidade, Imobiliária, Imóvel, Comprador
-│   ├── tasks.py              # Endpoints das tarefas agendadas
-│   ├── views.py
-│   └── urls.py
-├── contratos/                 # App de contratos
-│   ├── models.py             # Contrato, TabelaJurosContrato, PrestacaoIntermediaria, MinutaContrato, TipoAmortizacao
-│   └── services/
-│       ├── rescisao_service.py
-│       └── cessao_service.py
-├── financeiro/                # App financeiro
-│   ├── models.py             # Parcela, Reajuste, HistoricoPagamento, EventoPIX, ArquivoRemessa, ArquivoRetorno, AcessoBoletoPublico
-│   ├── tasks.py              # Celery: relatório inadimplência e posição contratos (34.5)
-│   ├── services/
-│   │   ├── boleto_service.py
-│   │   ├── carne_service.py          # Geração de carnê PDF
-│   │   ├── cnab_service.py           # Remessa e Retorno CNAB
-│   │   ├── indices_economicos_service.py  # Busca BCB (IPCA/IGP-M/SELIC)
-│   │   ├── ofx_service.py            # Importação de extrato OFX
-│   │   ├── reajuste_service.py       # Simulação e aplicação de reajuste
-│   │   ├── recibo_service.py         # Geração de recibo PDF
-│   │   └── relatorio_service.py      # RelatorioService + FiltroRelatorio + exports Excel/PDF
-│   ├── management/commands/
-│   │   ├── enviar_relatorio_inadimplencia.py  # --frequencia diario|semanal
-│   │   └── enviar_relatorio_posicao.py        # --formato excel|pdf
-│   └── urls.py
-├── notificacoes/              # App de notificações
-│   ├── models.py             # Notificacao, TemplateNotificacao, RegraNotificacao
-│   ├── relatorio_templates.py # HTML dos relatórios semanal/mensal
-│   ├── management/commands/
-│   │   └── criar_templates_relatorio.py
-│   └── urls.py
-├── portal_comprador/          # Portal web para compradores
-│   ├── models.py             # AcessoComprador, PushSubscriptionPortal (34.6)
-│   ├── tasks.py              # Celery: push de vencimentos via VAPID (34.6)
-│   ├── views.py              # Dashboard, contratos, boletos, manifest, SW, push API
-│   └── urls.py
-├── accounts/                  # Autenticação e permissões
-├── docs/                      # Documentação organizada
-│   ├── analise/               # Hub de análise: HUs + mockups + índice
-│   ├── manual_contador.md     # Manual do Contador/Administrador
-│   ├── manual_imobiliaria.md  # Manual da Imobiliária
-│   └── manual_comprador.md    # Manual do Comprador
-├── tests/                     # 1335 testes
-│   ├── unit/                  # Testes unitários por app
-│   ├── integration/           # Testes de integração
-│   ├── functional/            # Testes end-to-end
-│   └── fixtures/              # Factories e dados de teste
-├── templates/                 # Templates HTML
-├── static/
-│   └── js/
-│       └── portal-sw.js      # Service worker PWA (cache offline + Web Push)
-├── build.sh                   # Script de build (Render)
-├── render.yaml               # Configuração Render
-├── docker-compose.yml         # Desenvolvimento local
-└── Dockerfile.brcobranca      # BRCobrança API customizada
+├── gestao_contrato/          # settings, urls, wsgi
+├── core/                     # Contabilidade, Imobiliária, Imóvel, Comprador, ContaBancaria (provider)
+│   └── management/commands/  # gerar_dados_teste, setup
+├── contratos/                # Contrato, TabelaJurosContrato, PrestacaoIntermediaria, IndiceReajuste
+│   └── services/             # rescisao_service, cessao_service
+├── financeiro/               # Parcela, Reajuste, EventoPIX, EventoCobrancaApi, ArquivoRemessa/Retorno
+│   └── services/             # boleto_service, boleto_api_client, cnab_service, carne_service,
+│                             # indices_economicos_service, ofx_service, reajuste_service, relatorio_service
+├── notificacoes/             # Notificacao, TemplateNotificacao, RegraNotificacao
+├── portal_comprador/         # AcessoComprador, PushSubscriptionPortal (PWA/Web Push)
+├── accounts/                 # Autenticação e permissões
+├── templates/                # Telas (cobrança, contratos, portal, componentes)
+├── static/                   # Assets, vendors e service worker PWA
+├── docs/                     # HUs, mockups, análise técnica e manuais
+├── tests/                    # unit / integration / functional / fixtures
+├── build.sh · render.yaml · docker-compose.yml · Dockerfile.brcobranca
 ```
 
-## 🔧 Configuração de Serviços
-
-### Templates de E-mail (Admin)
-
-Acesse `/notificacoes/templates/` no Admin para configurar os templates HTML dos relatórios:
-
-| Código | Uso | Tags disponíveis |
-|--------|-----|-----------------|
-| `gestao-relatorio-semanal` | Relatório semanal por imobiliária | `%%NOMEIMOBILIARIA%%`, `%%PERIODORELATORIO%%`, `%%VALORRECEBIMENTOS%%`, `%%VALORINADIMPLENTES%%`, `%%VALORAVENCER%%` |
-| `gestao-relatorio-mensal` | Relatório mensal consolidado | `%%NOMECONTABILIDADE%%`, `%%MESREFERENCIA%%`, `%%QTDCONTRATOSATIVOS%%`, `%%TABELAIMOBILIARIAS%%` |
-
-Deixe o campo **Imobiliária** em branco para template global. Templates por imobiliária têm prioridade sobre o global.
-
-### E-mail (Gmail)
-
-1. Ative a verificação em duas etapas na sua conta Google
-2. Gere uma "Senha de app" em: https://myaccount.google.com/apppasswords
-3. Configure no `.env`:
-```env
-EMAIL_HOST=smtp.gmail.com
-EMAIL_PORT=587
-EMAIL_HOST_USER=seu-email@gmail.com
-EMAIL_HOST_PASSWORD=sua-senha-de-app-gerada
-```
-
-### SMS e WhatsApp (Twilio)
-
-1. Crie uma conta em: https://www.twilio.com
-2. Obtenha o Account SID e Auth Token
-3. Configure um número de telefone Twilio
-4. Para WhatsApp, ative o WhatsApp Sandbox ou configure WhatsApp Business API
-
-## 📱 Como Usar
-
-### 1. Acesse o Admin
-```
-http://localhost:8000/admin/
-```
-
-### 2. Cadastre uma Contabilidade
-- Navegue até "Contabilidades" → Adicionar → Preencha e salve
-
-### 3. Cadastre uma Imobiliária
-- Selecione a contabilidade responsável
-- Preencha dados bancários (para boletos CNAB)
-
-### 4. Crie um Contrato
-- Selecione: Imóvel, Comprador e Imobiliária
-- Configure: valor total, número de parcelas, dia de vencimento
-- Defina: tipo de correção (IPCA/IGP-M/SELIC/Fixo), juros e multa
-- As parcelas são geradas automaticamente
-
-### 5. Configure Notificações
-- Acesse "Templates de Notificação"
-- Personalize mensagens para e-mail, SMS e WhatsApp usando TAGs `%%TAG%%`
-- Configure a Régua de Notificação (dias antes/após o vencimento)
-
-### 6. Configure os Relatórios Automáticos
-- Acesse "Templates de Notificação" → filtre por `gestao-relatorio-semanal` / `gestao-relatorio-mensal`
-- Edite o HTML do corpo do e-mail conforme necessário
-- Configure os cronjobs no cron-job.org com o `TASK_TOKEN` correto
-
-### 7. Rode o Ciclo Mensal de Cobrança (3 telas)
-1. **Financeiro → Gerar Boletos do Mês**: confira os KPIs, resolva bloqueios de reajuste e gere os boletos por escopo (popup: quantidade, Folha/Carnê, intermediárias). Os compradores são notificados automaticamente.
-2. **→ Gerar Arquivo Remessa** (atalho): "Gerar e Baixar" o `.rem` por banco, suba no internet banking e marque como enviada.
-3. **→ Receber Arquivo Retorno**: faça o upload do `.ret` — o sistema dá baixa nos pagamentos automaticamente.
-
-> Detalhes completos no [Manual do Contador](docs/manual_contador.md) e nas
-> [HU-23/HU-24](docs/analise/historias-usuario/).
-
-## 📊 API do Banco Central
-
-O sistema busca automaticamente os índices econômicos na API do Banco Central:
-
-- **IPCA**: Série 433
-- **IGP-M**: Série 189
-- **SELIC**: Série 432
-
-Não é necessária autenticação. A API é pública e gratuita.
-
-## 🐛 Troubleshooting
-
-### Relatório não é enviado pelo cron-job
-- Verifique se o `TASK_TOKEN` no Render bate com o header `X-Task-Token` no cron-job.org
-- Confirme que o método é `POST` (não `GET`)
-- Verifique os logs em `Parâmetros do Sistema` → `TASK_TOKEN`
-
-### Templates de relatório não encontrados
-```bash
-python manage.py criar_templates_relatorio --forcar
-```
-
-### Erro ao enviar e-mail
-- Verifique se a senha de app do Gmail está correta
-- Confirme se a verificação em duas etapas está ativada
-
-### Erro ao buscar índices econômicos
-- Verifique sua conexão com a internet
-- Confirme se a API do BCB está disponível: https://api.bcb.gov.br
+---
 
 ## 🧪 Testes
 
-O projeto utiliza **pytest** com estrutura moderna organizada por tipo:
+Suíte **pytest** organizada por tipo (unit / integration / functional):
 
 ```bash
-# Executar todos os testes
-pytest
-
-# Apenas testes unitários (rápido)
-pytest tests/unit/
-
-# Apenas testes de integração
-pytest tests/integration/
-
-# Com cobertura
-pytest --cov=. --cov-report=html
-
-# Verbose
-pytest -v
+pytest                        # tudo
+pytest tests/unit/            # unitários (rápido)
+pytest tests/integration/     # integração
+pytest --cov=. --cov-report=html   # cobertura
 ```
 
-**Meta de cobertura:** > 80% | **Status atual:** ✅ 1335 testes passando
+**Status:** ✅ **1683 testes** · **Meta de cobertura:** > 80%
 
-### Cobertura por área
+Cobertura ampla das HUs (cobrança CNAB, Boleto-API, portal, PWA, relatórios BI, webhooks) e serviços. Detalhes em [/tests/README.md](tests/README.md).
 
-| Área | Arquivo(s) | Testes |
-|------|-----------|--------|
-| Smoke Tests (todos os endpoints GET) | `test_smoke.py` | 117 |
-| Financeiro — CNAB Remessa/Retorno | `test_hu_boleto_remessa.py` | 57 |
-| Contratos — Rescisão e Cessão | `test_hu_rescisao_cessao.py` | 34 |
-| Contratos — Juros Escalantes HU-360 | `test_hu_360_juros_escalantes.py` | 33 |
-| Financeiro — CNAB Service | `test_cnab_service.py` | 29 |
-| Portal do Comprador — Auth | `test_auth.py` | 29 |
-| Core — CRUD Views | `test_crud_views.py` | 30 |
-| Notificações — Views | `test_views.py` | 26 |
-| Financeiro — REST API | `test_rest_api_views.py` | 26 |
-| **HU Fluxo Completo** | `test_hu_fluxo_completo.py` | **24** |
-| Contratos — Parcelas/Reajuste | `test_hu_parcelas_reajuste.py` | 24 |
-| **HU Portal E2E** | `test_hu_portal_e2e.py` | **23** |
-| Contratos — CRUD Views | `test_crud_views.py` | 23 |
-| Contratos — Models | `test_contrato_models.py` | 23 |
-| Accounts — Auth | `test_auth_views.py` | 23 |
-| Validators | `test_validators.py` | 23 |
-| Portal — Views | `test_views.py` | 21 |
-| Financeiro — Parcela/Reajuste | `test_parcela_reajuste.py` | 21 |
-| Financeiro — CNAB Views | `test_cnab_views.py` | 21 |
-| **HU CNAB Remessa→Retorno E2E** | `test_hu_cnab_e2e.py` | **13** |
-| **Relatórios BI — API + Dashboard** | `test_hu_relatorios_bi.py` | **27** |
-| **Webhook PIX — Dedup + Timing** | `test_hu_webhook_pix.py` | **32** |
-| **Portal Expandido — Comprovantes** | `test_hu_portal_expandido.py` | **24** |
-| **PWA — Manifest + SW + Push** | `test_hu_pwa.py` | **16** |
-| E2E / Integração | `test_fluxo_contrato_completo.py`, etc. | 14+ |
-| Demais testes unitários | (outros arquivos) | 200+ |
+---
 
-Ver documentação completa em [/tests/README.md](/tests/README.md)
+## 🐳 Docker / BRCobrança
 
-## 🐳 Docker e APIs Customizadas
-
-Este projeto utiliza versões **customizadas** do BRCobrança mantidas por Maxwell da Silva Oliveira:
-
-### Repositórios Oficiais
+Versões **customizadas** mantidas por Maxwell da Silva Oliveira:
 - **API REST:** https://github.com/Maxwbh/boleto_cnab_api
 - **Biblioteca Ruby:** https://github.com/Maxwbh/brcobranca
 
-⚠️ **IMPORTANTE:** Use APENAS estes repositórios. Não use os forks originais.
-
-### Docker Compose (Desenvolvimento)
+⚠️ Use **apenas** estes repositórios (não os forks originais).
 
 ```bash
-# Iniciar todos os serviços (PostgreSQL, BRCobrança API)
-docker-compose up -d
-
-# Aplicar migrações e criar templates
+docker-compose up -d          # PostgreSQL + BRCobrança API
 python manage.py migrate
-python manage.py criar_templates_relatorio
-
-# Criar superusuário
 python manage.py createsuperuser
-
-# Acessar o sistema
-# http://localhost:8000
 ```
 
-## 🔧 Ferramentas de Desenvolvimento
-
-- **black** - Formatação de código
-- **isort** - Ordenação de imports
-- **flake8** - Linting
-- **pylint** - Análise estática
-- **mypy** - Type checking
-- **pytest** - Framework de testes
-- **factory-boy** - Geração de dados de teste
-
-Configurado via `pyproject.toml`
+**Ferramentas de dev:** black · isort · flake8 · pylint · mypy · pytest · factory-boy (config em `pyproject.toml`).
 
 ---
 
 ## 🤝 Contato
 
-**Maxwell da Silva Oliveira**
-- E-mail: maxwbh@gmail.com
-- LinkedIn: https://www.linkedin.com/in/maxwbh/
-- GitHub: https://github.com/Maxwbh/
+**Maxwell da Silva Oliveira** — M&S do Brasil LTDA
+📧 maxwbh@gmail.com · 🔗 [LinkedIn](https://www.linkedin.com/in/maxwbh/) · 🐙 [GitHub](https://github.com/Maxwbh/) · 🌐 [msbrasil.inf.br](https://msbrasil.inf.br)
 
-**M&S do Brasil LTDA**
-- Site: https://msbrasil.inf.br
+**Licença:** Proprietary
 
 ---
 
-**Desenvolvido por:** Maxwell da Silva Oliveira (maxwbh@gmail.com)
-**Empresa:** M&S do Brasil LTDA
-**Website:** https://msbrasil.inf.br
-**Licença:** Proprietary
+<div align="center">
 
-**Última atualização:** 2026-05-25 — 1335 testes | CNPJ alfanumérico 2026 (IN RFB 2229/2024) | Importação de Contratos via IA (34.7) — upload PDF/imagens → Claude extrai → revisão → cadastro completo | PWA Portal do Comprador (34.6) | Relatórios BI + Dashboard Executivo (34.5)
+**Versão 3.1** · 1683 testes · Última atualização: 2026-07-03
+
+Cobrança Registrada C6/Sicoob (Boleto-API) · Hub Cobrança do Mês · Conciliação & Saúde · Índices com número-índice/acumulados
+
+</div>
