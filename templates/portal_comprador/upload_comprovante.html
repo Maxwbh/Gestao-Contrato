@@ -42,7 +42,7 @@
         <i class="fas fa-upload me-2"></i><strong>Dados do Pagamento</strong>
       </div>
       <div class="card-body">
-        <form method="post" enctype="multipart/form-data" novalidate>
+        <form method="post" enctype="multipart/form-data" novalidate id="formComprovante">
           {% csrf_token %}
 
           <div class="row g-3">
@@ -86,7 +86,7 @@
           </div>
 
           <div class="d-flex gap-2">
-            <button type="submit" class="btn btn-primary">
+            <button type="submit" class="btn btn-primary" id="btnEnviarComprovante">
               <i class="fas fa-paper-plane me-1"></i> Enviar Comprovante
             </button>
             <a href="{% url 'portal_comprador:meus_boletos' %}" class="btn btn-outline-secondary">
@@ -99,4 +99,15 @@
 
   </div>
 </div>
+
+<script>
+// Upload de até 10 MB demora — trava o botão para não criar comprovantes duplicados na fila
+document.getElementById('formComprovante').addEventListener('submit', function (e) {
+  var btn = document.getElementById('btnEnviarComprovante');
+  if (btn.dataset.enviando === '1') { e.preventDefault(); return; }
+  btn.dataset.enviando = '1';
+  btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Enviando comprovante...';
+  setTimeout(function () { btn.disabled = true; }, 0);
+});
+</script>
 {% endblock %}

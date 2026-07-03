@@ -243,9 +243,9 @@
           <a href="{% url 'contratos:wizard' step='intermediarias' %}" class="btn btn-outline-secondary">
             <i class="fas fa-arrow-left me-2"></i>Voltar
           </a>
-          <form method="post" action="{% url 'contratos:wizard' step='salvar' %}">
+          <form method="post" action="{% url 'contratos:wizard' step='salvar' %}" id="formCriarContrato">
             {% csrf_token %}
-            <button type="submit" class="btn btn-success btn-lg px-5">
+            <button type="submit" class="btn btn-success btn-lg px-5" id="btnCriarContrato">
               <i class="fas fa-save me-2"></i>Criar Contrato
             </button>
           </form>
@@ -316,6 +316,14 @@ function carregarPreviewParcelas() {
         container.innerHTML = '<p class="text-danger p-3">Erro de comunicação: ' + err + '</p>';
     });
 }
+
+// Trava anti duplo-submit: é o commit atômico do contrato — 2 cliques = 2 contratos
+document.getElementById('formCriarContrato').addEventListener('submit', function (e) {
+    var btn = document.getElementById('btnCriarContrato');
+    if (btn.disabled) { e.preventDefault(); return; }
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Criando contrato...';
+});
 </script>
 {% endblock %}
 {% endblock %}

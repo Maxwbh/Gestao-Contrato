@@ -673,12 +673,16 @@
                                     </div>
                                 </div>
                             </div>
-                            <p class="text-muted mt-3 mb-0"><small>Recarregando pagina em 3 segundos...</small></p>
+                            <p class="text-muted mt-3 mb-0"><small>Feche esta janela para atualizar a listagem.</small></p>
                         </div>
                     `;
 
-                    // Recarregar pagina apos 3 segundos
-                    setTimeout(() => { window.location.reload(); }, 3000);
+                    // Recarrega quando o usuário fechar o modal — os números
+                    // (novos/atualizados/total) ficam visíveis até ele conferir.
+                    window._indicesImportados = true;
+                    btnCancelar.disabled = false;
+                    btnFecharModal.disabled = false;
+                    btn.classList.add('d-none');
                 } else {
                     resultado.className = 'alert alert-danger';
                     resultado.innerHTML = `
@@ -730,12 +734,15 @@
         document.getElementById('progressoImportacao').classList.add('d-none');
         document.getElementById('resultadoImportacao').classList.add('d-none');
         document.getElementById('barraProgresso').style.width = '0%';
+        document.getElementById('btnImportar').classList.remove('d-none');
         document.getElementById('btnImportar').innerHTML = '<i class="fas fa-download me-1"></i> Importar';
         document.getElementById('btnImportar').onclick = importarIndices;
     }
 
     // Resetar modal quando fechar (Materialize usa onCloseEnd; também escuta evento Bootstrap para compatibilidade)
     function _onModalImportarClose() {
+        // Houve importação: recarrega a listagem agora que o usuário terminou de ler o resumo
+        if (window._indicesImportados) { window.location.reload(); return; }
         resetarModal();
         document.getElementById('btnImportar').disabled = false;
         document.getElementById('btnCancelar').disabled = false;

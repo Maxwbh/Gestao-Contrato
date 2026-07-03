@@ -20,9 +20,14 @@
                 &mdash; {{ contrato.comprador.nome }}
             </p>
         </div>
-        <a href="{% url 'contratos:detalhe' contrato.pk|hashid %}" class="btn btn-outline-secondary">
-            <i class="fas fa-arrow-left"></i> Voltar ao Contrato
-        </a>
+        <div class="d-flex gap-2">
+            <button class="btn btn-warning" id="btnNovaIntermediaria">
+                <i class="fas fa-plus me-1"></i> Nova Intermediária
+            </button>
+            <a href="{% url 'contratos:detalhe' contrato.pk|hashid %}" class="btn btn-outline-secondary">
+                <i class="fas fa-arrow-left"></i> Voltar ao Contrato
+            </a>
+        </div>
     </div>
 
     <!-- Resumo -->
@@ -118,13 +123,39 @@
                                 <span class="text-muted">—</span>
                             {% endif %}
                         </td>
-                        <td>
-                            {% if not inter.paga and not inter.parcela_vinculada %}
+                        <td class="text-end text-nowrap">
+                            {% if not inter.paga %}
+                            {% if not inter.parcela_vinculada %}
                             <button class="btn btn-sm btn-outline-primary btn-gerar-boleto-inter"
                                     data-inter-id="{{ inter.pk|hashid }}"
                                     title="Gerar boleto">
-                                <i class="fas fa-barcode"></i> Gerar Boleto
+                                <i class="fas fa-barcode"></i>
                             </button>
+                            {% endif %}
+                            <button class="btn btn-sm btn-outline-success btn-pagar-inter"
+                                    data-inter-id="{{ inter.pk|hashid }}"
+                                    data-seq="{{ inter.numero_sequencial }}"
+                                    data-valor="{{ inter.valor_atual|default:inter.valor|floatformat:2 }}"
+                                    title="Registrar pagamento">
+                                <i class="fas fa-dollar-sign"></i>
+                            </button>
+                            <button class="btn btn-sm btn-outline-secondary btn-editar-inter"
+                                    data-inter-id="{{ inter.pk|hashid }}"
+                                    data-seq="{{ inter.numero_sequencial }}"
+                                    data-mes="{{ inter.mes_vencimento }}"
+                                    data-valor="{{ inter.valor|floatformat:2 }}"
+                                    data-obs="{{ inter.observacoes|default:'' }}"
+                                    title="Editar">
+                                <i class="fas fa-pen"></i>
+                            </button>
+                            <button class="btn btn-sm btn-outline-danger btn-excluir-inter"
+                                    data-inter-id="{{ inter.pk|hashid }}"
+                                    data-seq="{{ inter.numero_sequencial }}"
+                                    title="Excluir">
+                                <i class="fas fa-trash"></i>
+                            </button>
+                            {% else %}
+                            <span class="text-muted small">—</span>
                             {% endif %}
                         </td>
                     </tr>
@@ -145,39 +176,234 @@
 
 </div>
 
+<!-- Modal: criar/editar intermediária -->
+<div class="modal fade" id="modalIntermediaria" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title fs-6" id="modalInterTitulo">Nova Intermediária</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div id="interAlert" class="alert alert-danger d-none mb-3"></div>
+                <input type="hidden" id="interId">
+                <div class="mb-3">
+                    <label class="form-label">Mês de vencimento <span class="text-danger">*</span></label>
+                    <input type="number" class="form-control" id="interMes" min="1" max="{{ contrato.numero_parcelas }}" placeholder="Ex: 12">
+                    <div class="form-text">Nº do mês do contrato em que a prestação vence (1 a {{ contrato.numero_parcelas }}).</div>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Valor (R$) <span class="text-danger">*</span></label>
+                    <input type="number" class="form-control" id="interValor" min="0.01" step="0.01" placeholder="Ex: 5000.00">
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Observações</label>
+                    <textarea class="form-control" id="interObs" rows="2"></textarea>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-warning btn-sm" id="btnSalvarInter">
+                    <i class="fas fa-save me-1"></i> Salvar
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal: registrar pagamento -->
+<div class="modal fade" id="modalPagarInter" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title fs-6">Registrar Pagamento — Intermediária <span id="pagarSeq"></span></h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div id="pagarAlert" class="alert alert-danger d-none mb-3"></div>
+                <input type="hidden" id="pagarId">
+                <div class="mb-3">
+                    <label class="form-label">Valor pago (R$) <span class="text-danger">*</span></label>
+                    <input type="number" class="form-control" id="pagarValor" min="0.01" step="0.01">
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Data do pagamento <span class="text-danger">*</span></label>
+                    <input type="date" class="form-control" id="pagarData">
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Observações</label>
+                    <textarea class="form-control" id="pagarObs" rows="2"></textarea>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-success btn-sm" id="btnConfirmarPagarInter">
+                    <i class="fas fa-check me-1"></i> Confirmar Pagamento
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <script>
-document.querySelectorAll('.btn-gerar-boleto-inter').forEach(btn => {
-    btn.addEventListener('click', function() {
-        const interId = this.dataset.interId;
-        if (!confirm('Gerar boleto para esta intermediária?')) return;
+(function () {
+    const CSRF = document.cookie.match(/csrftoken=([^;]+)/)?.[1] || '';
+    const URL_CRIAR = "{% url 'contratos:intermediarias_criar' contrato.pk|hashid %}";
 
-        this.disabled = true;
-        this.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
-
-        fetch(`/contratos/intermediarias/${interId}/gerar-boleto/`, {
+    function notify(msg, type, dur) {
+        if (window.showToast) window.showToast(msg, type || 'info', dur || 4000);
+        else if (type === 'error') alert(msg);
+    }
+    function postJSON(url, body) {
+        return fetch(url, {
             method: 'POST',
-            headers: {
-                'X-CSRFToken': document.cookie.match(/csrftoken=([^;]+)/)?.[1] || '',
-                'Content-Type': 'application/x-www-form-urlencoded',
-            }
-        })
-        .then(r => r.json())
-        .then(data => {
-            if (data.sucesso) {
-                alert('Boleto gerado com sucesso!');
-                location.reload();
-            } else {
-                alert('Erro: ' + (data.erro || 'Erro desconhecido'));
-                this.disabled = false;
-                this.innerHTML = '<i class="fas fa-barcode"></i> Gerar Boleto';
-            }
-        })
-        .catch(() => {
-            alert('Erro de comunicação com o servidor.');
-            this.disabled = false;
-            this.innerHTML = '<i class="fas fa-barcode"></i> Gerar Boleto';
+            headers: { 'Content-Type': 'application/json', 'X-CSRFToken': CSRF },
+            body: JSON.stringify(body || {}),
+        }).then(r => r.json());
+    }
+    function lock(btn, txt) {
+        btn.dataset._html = btn.innerHTML;
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>' + (txt || '');
+    }
+    function unlock(btn) {
+        btn.disabled = false;
+        if (btn.dataset._html) btn.innerHTML = btn.dataset._html;
+    }
+    function showAlert(id, msg) {
+        const el = document.getElementById(id);
+        el.textContent = msg;
+        el.classList.remove('d-none');
+    }
+
+    const modalInter = new bootstrap.Modal(document.getElementById('modalIntermediaria'));
+    const modalPagar = new bootstrap.Modal(document.getElementById('modalPagarInter'));
+
+    // ── Criar ─────────────────────────────────────────────────────────────
+    document.getElementById('btnNovaIntermediaria').addEventListener('click', () => {
+        document.getElementById('modalInterTitulo').textContent = 'Nova Intermediária';
+        document.getElementById('interId').value = '';
+        document.getElementById('interMes').value = '';
+        document.getElementById('interValor').value = '';
+        document.getElementById('interObs').value = '';
+        document.getElementById('interAlert').classList.add('d-none');
+        modalInter.show();
+    });
+
+    // ── Editar ────────────────────────────────────────────────────────────
+    document.querySelectorAll('.btn-editar-inter').forEach(btn => {
+        btn.addEventListener('click', () => {
+            document.getElementById('modalInterTitulo').textContent = 'Editar Intermediária #' + btn.dataset.seq;
+            document.getElementById('interId').value = btn.dataset.interId;
+            document.getElementById('interMes').value = btn.dataset.mes;
+            document.getElementById('interValor').value = btn.dataset.valor;
+            document.getElementById('interObs').value = btn.dataset.obs || '';
+            document.getElementById('interAlert').classList.add('d-none');
+            modalInter.show();
         });
     });
-});
+
+    // ── Salvar (criar ou editar) ──────────────────────────────────────────
+    document.getElementById('btnSalvarInter').addEventListener('click', function () {
+        const id = document.getElementById('interId').value;
+        const mes = parseInt(document.getElementById('interMes').value);
+        const valor = parseFloat(document.getElementById('interValor').value);
+        if (!mes || mes < 1) { showAlert('interAlert', 'Informe o mês de vencimento.'); return; }
+        if (!valor || valor <= 0) { showAlert('interAlert', 'Informe um valor maior que zero.'); return; }
+
+        lock(this, 'Salvando...');
+        const url = id ? `/contratos/intermediarias/${id}/atualizar/` : URL_CRIAR;
+        postJSON(url, { mes_vencimento: mes, valor: valor, observacoes: document.getElementById('interObs').value })
+            .then(data => {
+                if (data.sucesso) {
+                    notify(data.mensagem || 'Intermediária salva.', 'success');
+                    setTimeout(() => location.reload(), 900);
+                } else {
+                    unlock(this);
+                    showAlert('interAlert', data.erro || 'Erro ao salvar.');
+                }
+            })
+            .catch(() => { unlock(this); showAlert('interAlert', 'Erro de comunicação com o servidor.'); });
+    });
+
+    // ── Registrar pagamento ───────────────────────────────────────────────
+    document.querySelectorAll('.btn-pagar-inter').forEach(btn => {
+        btn.addEventListener('click', () => {
+            document.getElementById('pagarSeq').textContent = '#' + btn.dataset.seq;
+            document.getElementById('pagarId').value = btn.dataset.interId;
+            document.getElementById('pagarValor').value = btn.dataset.valor;
+            document.getElementById('pagarData').value = new Date().toISOString().slice(0, 10);
+            document.getElementById('pagarObs').value = '';
+            document.getElementById('pagarAlert').classList.add('d-none');
+            modalPagar.show();
+        });
+    });
+
+    document.getElementById('btnConfirmarPagarInter').addEventListener('click', function () {
+        const id = document.getElementById('pagarId').value;
+        const valor = parseFloat(document.getElementById('pagarValor').value);
+        const data = document.getElementById('pagarData').value;
+        if (!valor || valor <= 0) { showAlert('pagarAlert', 'Informe um valor pago maior que zero.'); return; }
+        if (!data) { showAlert('pagarAlert', 'Informe a data do pagamento.'); return; }
+
+        lock(this, 'Registrando...');
+        postJSON(`/contratos/intermediarias/${id}/pagar/`, {
+            valor_pago: valor, data_pagamento: data,
+            observacoes: document.getElementById('pagarObs').value,
+        })
+            .then(d => {
+                if (d.sucesso) {
+                    notify(d.mensagem || 'Pagamento registrado.', 'success');
+                    setTimeout(() => location.reload(), 900);
+                } else {
+                    unlock(this);
+                    showAlert('pagarAlert', d.erro || 'Erro ao registrar pagamento.');
+                }
+            })
+            .catch(() => { unlock(this); showAlert('pagarAlert', 'Erro de comunicação com o servidor.'); });
+    });
+
+    // ── Excluir ───────────────────────────────────────────────────────────
+    document.querySelectorAll('.btn-excluir-inter').forEach(btn => {
+        btn.addEventListener('click', () => {
+            if (!confirm('Excluir a intermediária #' + btn.dataset.seq + '? As parcelas do contrato serão recalculadas se necessário.')) return;
+            lock(btn, '');
+            postJSON(`/contratos/intermediarias/${btn.dataset.interId}/excluir/`)
+                .then(d => {
+                    if (d.sucesso) {
+                        notify(d.mensagem || 'Intermediária excluída.', 'success');
+                        setTimeout(() => location.reload(), 900);
+                    } else {
+                        unlock(btn);
+                        notify(d.erro || 'Erro ao excluir.', 'error', 8000);
+                    }
+                })
+                .catch(() => { unlock(btn); notify('Erro de comunicação com o servidor.', 'error', 8000); });
+        });
+    });
+
+    // ── Gerar boleto (existente, agora com toast) ─────────────────────────
+    document.querySelectorAll('.btn-gerar-boleto-inter').forEach(btn => {
+        btn.addEventListener('click', function () {
+            if (!confirm('Gerar boleto para esta intermediária?')) return;
+            lock(this, '');
+            fetch(`/contratos/intermediarias/${this.dataset.interId}/gerar-boleto/`, {
+                method: 'POST',
+                headers: { 'X-CSRFToken': CSRF, 'Content-Type': 'application/x-www-form-urlencoded' },
+            })
+            .then(r => r.json())
+            .then(data => {
+                if (data.sucesso) {
+                    notify('Boleto gerado com sucesso!', 'success');
+                    setTimeout(() => location.reload(), 900);
+                } else {
+                    unlock(this);
+                    notify('Erro ao gerar boleto: ' + (data.erro || 'desconhecido'), 'error', 8000);
+                }
+            })
+            .catch(() => { unlock(this); notify('Erro de comunicação com o servidor.', 'error', 8000); });
+        });
+    });
+})();
 </script>
 {% endblock %}

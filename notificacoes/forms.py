@@ -249,6 +249,7 @@ class ConfiguracaoWhatsAppForm(forms.ModelForm):
             '''),
 
             HTML('''
+                <div id="teste-conexao-resultado" class="mt-3"></div>
                 <div class="d-flex justify-content-between align-items-center mt-4 pt-3 border-top">
                     <a href="{% url 'notificacoes:listar_config_whatsapp' %}" class="btn btn-outline-secondary">
                         <i class="fas fa-arrow-left me-2"></i>Voltar

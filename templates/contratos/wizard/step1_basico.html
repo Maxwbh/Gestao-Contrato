@@ -434,6 +434,21 @@
     elDisplay.textContent = fin > 0
       ? 'R$ ' + fin.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})
       : 'R$ —';
+    // RN-02 no cliente: entrada deve ser menor que o total — avisa antes do submit
+    if (elEntrada) {
+      var invalido = total > 0 && entrada >= total;
+      elEntrada.classList.toggle('is-invalid', invalido);
+      var fb = document.getElementById('entrada_feedback');
+      if (!fb && invalido) {
+        fb = document.createElement('div');
+        fb.id = 'entrada_feedback';
+        fb.className = 'invalid-feedback d-block';
+        fb.textContent = 'A entrada deve ser menor que o valor total do contrato.';
+        elEntrada.parentNode.appendChild(fb);
+      } else if (fb) {
+        fb.classList.toggle('d-none', !invalido);
+      }
+    }
   }
   if (elTotal)   elTotal.addEventListener('input', calcularFinanciado);
   if (elEntrada) elEntrada.addEventListener('input', calcularFinanciado);

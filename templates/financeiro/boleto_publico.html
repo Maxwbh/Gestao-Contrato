@@ -240,8 +240,9 @@
 
 function copiar(id, btn) {
   const el = document.getElementById(id);
-  const text = el.tagName === 'TEXTAREA' ? el.value : el.value;
-  navigator.clipboard.writeText(text).then(() => {
+  const text = el.value;
+
+  function feedbackOk() {
     const orig = btn.innerHTML;
     btn.innerHTML = '<i class="fas fa-check"></i>';
     btn.classList.add('btn-success');
@@ -251,7 +252,29 @@ function copiar(id, btn) {
       btn.classList.remove('btn-success');
       btn.classList.add(id === 'pixCopiaECola' ? 'btn-outline-success' : 'btn-outline-primary');
     }, 2000);
-  });
+  }
+
+  // Fallback para http/navegadores antigos: seleciona o texto e usa execCommand
+  function copiarLegado() {
+    try {
+      el.focus();
+      el.select();
+      el.setSelectionRange(0, text.length);
+      const ok = document.execCommand('copy');
+      if (ok) { feedbackOk(); return; }
+    } catch (e) { /* segue para seleção manual */ }
+    // Última alternativa: deixa o texto selecionado para o usuário copiar (Ctrl+C)
+    el.focus(); el.select();
+    const orig = btn.innerHTML;
+    btn.innerHTML = 'Ctrl+C';
+    setTimeout(() => { btn.innerHTML = orig; }, 3000);
+  }
+
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(text).then(feedbackOk).catch(copiarLegado);
+  } else {
+    copiarLegado();
+  }
 }
 </script>
 </body>

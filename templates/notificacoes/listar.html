@@ -201,17 +201,21 @@ function reenviarNotif(evt, pk) {
     })
     .then(r => r.json())
     .then(data => {
+        const toast = (m, t) => window.showToast ? window.showToast(m, t, t === 'error' ? 8000 : 4000) : alert(m);
         if (data.sucesso) {
             const msg = data.status === 'ENVIADA'
                 ? 'Notificação enviada com sucesso!'
-                : `Reenvio processado (status: ${data.status})${data.erro_mensagem ? '\n' + data.erro_mensagem : ''}`;
-            alert(msg);
-            location.reload();
+                : `Reenvio processado (status: ${data.status})${data.erro_mensagem ? ' — ' + data.erro_mensagem : ''}`;
+            toast(msg, data.status === 'ENVIADA' ? 'success' : 'warning');
+            setTimeout(() => location.reload(), 1200);
         } else {
-            alert('Erro ao reenviar:\n' + (data.erro || 'desconhecido'));
+            toast('Erro ao reenviar: ' + (data.erro || 'desconhecido'), 'error');
         }
     })
-    .catch(() => alert('Falha na requisição de reenvio.'));
+    .catch(() => {
+        if (window.showToast) window.showToast('Falha na requisição de reenvio.', 'error', 8000);
+        else alert('Falha na requisição de reenvio.');
+    });
 }
 
 function parcelaRenderer(params) {

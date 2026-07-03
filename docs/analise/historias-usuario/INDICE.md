@@ -38,10 +38,10 @@
 | [HU-16](HU-16.md) | `HU-16.md` | CNAB — Remessa e Retorno Bancário | `financeiro` | ✅ |
 | [HU-17](HU-17.md) | `HU-17.md` | Renegociação de Parcelas | `financeiro` | ✅ |
 | [HU-18](HU-18.md) | `HU-18.md` | Relatórios Financeiros e Dashboard | `financeiro` | ✅ |
-| [HU-19](HU-19.md) | `HU-19.md` | Chatbot WhatsApp — Atendimento Automático | `notificacoes` | ✅ (parcial) |
+| [HU-19](HU-19.md) | `HU-19.md` | Chatbot WhatsApp — Atendimento Automático | `notificacoes` | ✅ |
 | [HU-20](HU-20.md) | `HU-20.md` | Notificações e Cobrança Automática | `notificacoes` | ✅ |
 | [HU-21](HU-21.md) | `HU-21.md` | Portal do Comprador — Acesso e Autoatendimento Digital | `portal_comprador` | ✅ |
-| [HU-22](HU-22.md) | `HU-22.md` | Mapa Interativo de Lotes | `core` | ✅ (parcial — M-13/M-14 pendentes) |
+| [HU-22](HU-22.md) | `HU-22.md` | Mapa Interativo de Lotes | `core` | ✅ |
 | [HU-23](HU-23.md) | `HU-23.md` | Ciclo Mensal de Cobrança CNAB — Remessa + Retorno (Fluxo da Contadora) | `financeiro` | ✅ |
 | [HU-24](HU-24.md) | `HU-24.md` | Geração Mensal de Boletos — tela dedicada por escopo (Fluxo da Contadora) | `financeiro` | ✅ |
 | [HU-25](HU-25.md) | `HU-25.md` | Hub "Cobrança do Mês" — assistente de ciclo mensal (passo a passo) | `financeiro` | ✅ |

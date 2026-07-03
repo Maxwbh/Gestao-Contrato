@@ -161,14 +161,23 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
-    // Botao Testar Conexao
+    // Botao Testar Conexao — resultado inline (mesmo padrão do webhook acima)
     const btnTestar = document.getElementById('btn-testar-conexao');
+    const testeResultado = document.getElementById('teste-conexao-resultado');
+    function mostrarTeste(cls, icone, msg) {
+        if (testeResultado) {
+            testeResultado.innerHTML = '<div class="alert alert-' + cls + ' py-2 mb-0 small"><i class="fas ' + icone + ' me-1"></i>' + msg + '</div>';
+        } else if (cls === 'danger') {
+            alert(msg);
+        }
+    }
     if (btnTestar) {
         btnTestar.addEventListener('click', function() {
             {% if object %}
             const url = '{% url "notificacoes:testar_config_whatsapp" object.pk %}';
             btnTestar.disabled = true;
             btnTestar.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Testando...';
+            if (testeResultado) testeResultado.innerHTML = '';
 
             fetch(url, { method: 'GET', headers: { 'X-Requested-With': 'XMLHttpRequest' } })
                 .then(r => r.json())
@@ -176,18 +185,18 @@ document.addEventListener('DOMContentLoaded', function() {
                     btnTestar.disabled = false;
                     btnTestar.innerHTML = '<i class="fab fa-whatsapp me-1"></i>Testar Conexao';
                     if (data.status === 'success') {
-                        alert('✅ ' + data.message);
+                        mostrarTeste('success', 'fa-check-circle', data.message);
                     } else {
-                        alert('❌ ' + data.message);
+                        mostrarTeste('danger', 'fa-times-circle', data.message);
                     }
                 })
                 .catch(err => {
                     btnTestar.disabled = false;
                     btnTestar.innerHTML = '<i class="fab fa-whatsapp me-1"></i>Testar Conexao';
-                    alert('Erro: ' + err.message);
+                    mostrarTeste('danger', 'fa-times-circle', 'Erro de conexão: ' + err.message);
                 });
             {% else %}
-            alert('Salve a configuração primeiro para poder testar.');
+            mostrarTeste('warning', 'fa-circle-info', 'Salve a configuração primeiro para poder testar.');
             {% endif %}
         });
     }

@@ -334,17 +334,20 @@ document.getElementById('btnReenviar').addEventListener('click', function() {
         if (data.sucesso) {
             btn.className = 'btn btn-success me-auto';
             btn.innerHTML = '<i class="fas fa-check me-1"></i>Reenviado!';
+            if (window.showToast) window.showToast('Mensagem reenviada com sucesso.', 'success', 4000);
             setTimeout(() => location.reload(), 1200);
         } else {
             btn.disabled = false;
             btn.innerHTML = '<i class="fas fa-redo me-1"></i>Reenviar';
-            alert('Erro ao reenviar: ' + (data.erro || 'desconhecido'));
+            if (window.showToast) window.showToast('Erro ao reenviar: ' + (data.erro || 'desconhecido'), 'error', 8000);
+            else alert('Erro ao reenviar: ' + (data.erro || 'desconhecido'));
         }
     })
     .catch(() => {
         btn.disabled = false;
         btn.innerHTML = '<i class="fas fa-redo me-1"></i>Reenviar';
-        alert('Erro de comunicação com o servidor.');
+        if (window.showToast) window.showToast('Erro de comunicação com o servidor.', 'error', 8000);
+        else alert('Erro de comunicação com o servidor.');
     });
 });
 

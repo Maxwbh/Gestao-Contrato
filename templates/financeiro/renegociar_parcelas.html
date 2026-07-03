@@ -153,36 +153,81 @@ function atualizarBotao() {
   document.getElementById('btn-confirmar').disabled = !algumSelecionado;
 }
 
+// Feedback estilizado (toast) com fallback
+function notify(msg, type) {
+  if (window.showToast) window.showToast(msg, type || 'warning', 5000);
+  else alert(msg);
+}
+
 // Aplicar data global a todas as linhas selecionadas
 function aplicarDataGlobal() {
-  const data = document.getElementById('data-global').value;
-  if (!data) { alert('Informe uma data.'); return; }
+  const campo = document.getElementById('data-global');
+  if (!campo.value) {
+    campo.classList.add('is-invalid');
+    campo.focus();
+    notify('Informe a data que será aplicada às parcelas selecionadas.', 'warning');
+    return;
+  }
+  campo.classList.remove('is-invalid');
   document.querySelectorAll('.parcela-check:checked').forEach(cb => {
     const pk = cb.value;
     const input = document.querySelector(`input[name="nova_data_${pk}"]`);
-    if (input) input.value = data;
+    if (input) input.value = campo.value;
   });
 }
 
-// Validação antes de submeter
+// Validação client-side antes de submeter — evita o round-trip que descarta o preenchimento
 document.getElementById('form-renegociacao')?.addEventListener('submit', function(e) {
+  const btn = document.getElementById('btn-confirmar');
   const selecionadas = document.querySelectorAll('.parcela-check:checked');
   if (selecionadas.length === 0) {
     e.preventDefault();
-    alert('Selecione ao menos uma parcela.');
+    notify('Selecione ao menos uma parcela.', 'warning');
     return;
   }
+
+  const hoje = '{{ hoje|date:"Y-m-d" }}';
   let algumCampo = false;
+  let erro = null;
   selecionadas.forEach(cb => {
+    if (erro) return;
     const pk = cb.value;
-    const data = document.querySelector(`input[name="nova_data_${pk}"]`)?.value;
-    const valor = document.querySelector(`input[name="novo_valor_${pk}"]`)?.value;
+    const dataEl = document.querySelector(`input[name="nova_data_${pk}"]`);
+    const valorEl = document.querySelector(`input[name="novo_valor_${pk}"]`);
+    const data = dataEl?.value;
+    const valor = valorEl?.value;
     if (data || valor) algumCampo = true;
+    // Valor: precisa ser positivo
+    if (valor !== '' && valor !== undefined && parseFloat(valor) <= 0) {
+      valorEl.classList.add('is-invalid');
+      valorEl.focus();
+      erro = 'O novo valor deve ser maior que zero.';
+    }
+    // Data: não pode ser no passado
+    if (!erro && data && hoje && data < hoje) {
+      dataEl.classList.add('is-invalid');
+      dataEl.focus();
+      erro = 'A nova data de vencimento não pode ser anterior a hoje.';
+    }
   });
+
+  if (erro) { e.preventDefault(); notify(erro, 'error'); return; }
   if (!algumCampo) {
     e.preventDefault();
-    alert('Informe nova data ou novo valor para ao menos uma parcela selecionada.');
+    notify('Informe nova data ou novo valor para ao menos uma parcela selecionada.', 'warning');
+    return;
   }
+
+  // Trava anti duplo-submit — renegociar 2x zeraria juros/multa novamente
+  if (btn.dataset.enviando === '1') { e.preventDefault(); return; }
+  btn.dataset.enviando = '1';
+  btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Aplicando renegociação...';
+  setTimeout(() => { btn.disabled = true; }, 0);
+});
+
+// Limpa o destaque de erro ao corrigir
+document.addEventListener('input', function (e) {
+  if (e.target.classList?.contains('is-invalid')) e.target.classList.remove('is-invalid');
 });
 </script>
 {% endblock %}

@@ -9,9 +9,20 @@
         <h4 class="mb-0">
             Prestação Intermediária #{{ intermediaria.numero_sequencial }}
         </h4>
-        <a href="{% url 'contratos:intermediarias_listar' contrato.pk|hashid %}" class="btn btn-secondary btn-sm">
-            <i class="fas fa-arrow-left"></i> Voltar
-        </a>
+        <div class="d-flex gap-2">
+            {% if not intermediaria.paga %}
+            <a href="{% url 'contratos:intermediarias_listar' contrato.pk|hashid %}" class="btn btn-warning btn-sm"
+               title="Editar, registrar pagamento, excluir ou gerar boleto na lista de intermediárias">
+                <i class="fas fa-pen me-1"></i> Gerenciar (editar / pagar / excluir)
+            </a>
+            {% endif %}
+            <a href="{% url 'contratos:detalhe' contrato.pk|hashid %}" class="btn btn-outline-secondary btn-sm">
+                <i class="fas fa-file-contract me-1"></i> Ver Contrato
+            </a>
+            <a href="{% url 'contratos:intermediarias_listar' contrato.pk|hashid %}" class="btn btn-secondary btn-sm">
+                <i class="fas fa-arrow-left"></i> Voltar
+            </a>
+        </div>
     </div>
 
     <div class="row">

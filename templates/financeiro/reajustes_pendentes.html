@@ -503,9 +503,9 @@ function confirmarLote() {
         resultado.innerHTML = html;
         resultado.classList.remove('d-none');
         btn.innerHTML = '<i class="fas fa-check me-1"></i>Concluído';
-        if (data.total_ok > 0) {
-            setTimeout(function() { location.reload(); }, 2500);
-        }
+        // Recarrega só quando o usuário fechar o modal — a tabela de
+        // resultados por contrato fica visível até ele terminar de ler.
+        if (data.total_ok > 0) { _reajusteAplicado = true; }
     })
     .catch(function(err) {
         document.getElementById('lote_resultado').innerHTML =
@@ -514,6 +514,13 @@ function confirmarLote() {
         btn.disabled = false;
         btn.innerHTML = '<i class="fas fa-bolt me-1"></i>Tentar Novamente';
     });
+}
+
+/* ---- helpers de feedback (toast estilizado; alert só como fallback de erro) ---- */
+var _reajusteAplicado = false;  // recarrega ao fechar o modal do lote
+function notify(msg, type, dur) {
+    if (window.showToast) window.showToast(msg, type || 'info', dur);
+    else if (type === 'error') alert(msg);
 }
 
 /* ---- aprovar único ---- */
@@ -532,13 +539,13 @@ function aprovarUnico(contratoId, numero, ciclo) {
     .then(function(data) {
         var r = data.resultados[0];
         if (r && r.sucesso) {
-            alert('Reajuste aplicado: ' + r.percentual.toFixed(4) + '% — ' + r.parcelas_reajustadas + ' parcelas.');
-            location.reload();
+            notify('Reajuste de ' + numero + ' aplicado: ' + r.percentual.toFixed(4) + '% em ' + r.parcelas_reajustadas + ' parcela(s).', 'success', 4000);
+            setTimeout(function() { location.reload(); }, 1200);
         } else {
-            alert('Erro: ' + (r ? r.erro : 'desconhecido'));
+            notify('Erro ao aplicar reajuste de ' + numero + ': ' + (r ? r.erro : 'desconhecido'), 'error', 8000);
         }
     })
-    .catch(function(err) { alert('Erro de conexão: ' + err); });
+    .catch(function(err) { notify('Erro de conexão ao aplicar o reajuste. Tente novamente.', 'error', 8000); });
 }
 
 /* ---- editar único ---- */
@@ -572,7 +579,14 @@ function editarUnico(contratoId, numero, ciclo, dados) {
 
 function confirmarEditar() {
     var pct = document.getElementById('editar_percentual').value;
-    if (!pct) { alert('Informe o percentual.'); return; }
+    if (!pct) {
+        var campo = document.getElementById('editar_percentual');
+        campo.classList.add('is-invalid');
+        campo.focus();
+        notify('Informe o percentual do reajuste.', 'error', 4000);
+        return;
+    }
+    document.getElementById('editar_percentual').classList.remove('is-invalid');
 
     var btn = document.getElementById('btnConfirmarEditar');
     btn.disabled = true;
@@ -598,7 +612,7 @@ function confirmarEditar() {
             div.innerHTML = '<div class="alert alert-success mt-2">Aplicado: ' + r.percentual.toFixed(4) + '% — ' + r.parcelas_reajustadas + ' parcelas.</div>';
             div.classList.remove('d-none');
             btn.innerHTML = '<i class="fas fa-check me-1"></i>Concluído';
-            setTimeout(function() { location.reload(); }, 2000);
+            _reajusteAplicado = true;  // recarrega quando o usuário fechar o modal
         } else {
             div.innerHTML = '<div class="alert alert-danger mt-2">Erro: ' + (r ? r.erro : 'desconhecido') + '</div>';
             div.classList.remove('d-none');
@@ -614,5 +628,14 @@ function confirmarEditar() {
         btn.innerHTML = '<i class="fas fa-check me-1"></i>Aplicar';
     });
 }
+
+// Reload adiado: KPIs/grid atualizam quando o usuário fecha o modal,
+// sem cortar a leitura da tabela de resultados.
+['modalLote', 'modalEditar'].forEach(function (id) {
+    var el = document.getElementById(id);
+    if (el) el.addEventListener('hidden.bs.modal', function () {
+        if (_reajusteAplicado) location.reload();
+    });
+});
 </script>
 {% endblock %}
