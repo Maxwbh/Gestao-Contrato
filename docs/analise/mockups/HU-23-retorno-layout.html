@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html class="light" lang="pt-BR"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Processamento de Retorno Bancário - ContractHub</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=Courier+Prime&display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+tailwind.config = {
+  darkMode: "class",
+  theme: {
+    extend: {
+      "colors": {
+        "surface-bright":"#f8f9ff","surface-container-highest":"#d3e4fe","on-error":"#ffffff",
+        "tertiary-container":"#35260c","surface-container-low":"#eff4ff","on-tertiary":"#ffffff",
+        "on-background":"#0b1c30","on-secondary-container":"#fefcff","surface-dim":"#cbdbf5",
+        "on-secondary-fixed-variant":"#004395","outline":"#75777d","background":"#f8f9ff",
+        "surface":"#f8f9ff","secondary-fixed-dim":"#adc6ff","tertiary-fixed":"#fadfb8",
+        "on-secondary-fixed":"#001a42","on-tertiary-fixed-variant":"#564427","warning":"#f59e0b",
+        "surface-container-high":"#dce9ff","success":"#22c55e","secondary":"#0058be",
+        "tertiary-fixed-dim":"#ddc39d","inverse-surface":"#213145","tertiary":"#1e1200",
+        "on-surface":"#0b1c30","on-primary-container":"#8590a6","error":"#ba1a1a",
+        "on-secondary":"#ffffff","on-error-container":"#93000a","primary-fixed":"#d8e3fb",
+        "surface-background":"#f8fafc","surface-tint":"#545f73","surface-container":"#e5eeff",
+        "on-primary-fixed-variant":"#3c475a","primary":"#091426","on-surface-variant":"#45474c",
+        "secondary-fixed":"#d8e2ff","surface-border":"#e2e8f0","primary-container":"#1e293b",
+        "error-container":"#ffdad6","surface-container-lowest":"#ffffff","on-tertiary-fixed":"#271902",
+        "on-primary":"#ffffff","inverse-on-surface":"#eaf1ff","danger":"#ef4444",
+        "primary-fixed-dim":"#bcc7de","surface-variant":"#d3e4fe","secondary-container":"#2170e4",
+        "outline-variant":"#c5c6cd","on-tertiary-container":"#a38c6a","on-primary-fixed":"#111c2d",
+        "inverse-primary":"#bcc7de"
+      },
+      "borderRadius":{"DEFAULT":"0.125rem","lg":"0.25rem","xl":"0.5rem","full":"0.75rem"},
+      "fontFamily":{
+        "headline-lg":["Inter"],"body-md":["Inter"],"headline-md":["Inter"],
+        "mono-sm":["Courier Prime"],"label-md":["Inter"],"headline-sm":["Inter"],"body-lg":["Inter"]
+      },
+      "fontSize":{
+        "headline-lg":["32px",{"lineHeight":"40px","letterSpacing":"-0.02em","fontWeight":"700"}],
+        "body-md":["14px",{"lineHeight":"20px","fontWeight":"400"}],
+        "headline-md":["24px",{"lineHeight":"32px","letterSpacing":"-0.01em","fontWeight":"600"}],
+        "mono-sm":["13px",{"lineHeight":"18px","fontWeight":"400"}],
+        "label-md":["12px",{"lineHeight":"16px","letterSpacing":"0.05em","fontWeight":"600"}],
+        "headline-sm":["20px",{"lineHeight":"28px","fontWeight":"600"}],
+        "body-lg":["16px",{"lineHeight":"24px","fontWeight":"400"}]
+      }
+    }
+  }
+}
+</script>
+<style>
+.glass-card{background:rgba(255,255,255,.8);backdrop-filter:blur(8px);border:1px solid rgba(226,232,240,.8)}
+.zebra-table tr:nth-child(even){background-color:#f8fafc}
+.material-symbols-outlined{font-variation-settings:'FILL' 0,'wght' 400,'GRAD' 0,'opsz' 24;vertical-align:middle}
+</style>
+</head>
+<body class="bg-surface-background text-on-surface font-body-md min-h-screen">
+<aside class="h-screen w-64 fixed left-0 top-0 bg-surface border-r border-outline-variant flex flex-col py-6 z-50">
+<div class="px-6 mb-10"><h1 class="text-headline-sm font-headline-sm text-primary">ContractHub</h1><p class="text-label-md font-label-md text-on-surface-variant opacity-70">Enterprise Legal</p></div>
+<nav class="flex-1 space-y-1">
+<a class="flex items-center px-6 py-3 text-on-surface-variant hover:bg-surface-container-high" href="#"><span class="material-symbols-outlined mr-3">dashboard</span><span>Dashboard</span></a>
+<a class="flex items-center px-6 py-3 text-on-surface-variant hover:bg-surface-container-high" href="#"><span class="material-symbols-outlined mr-3">description</span><span>Contracts</span></a>
+<a class="flex items-center px-6 py-3 text-secondary font-bold border-r-4 border-secondary bg-surface-container-low" href="#"><span class="material-symbols-outlined mr-3" style="font-variation-settings:'FILL' 1">payments</span><span>Financials</span></a>
+</nav>
+</aside>
+<main class="ml-64 min-h-screen">
+<header class="fixed top-0 right-0 w-[calc(100%-16rem)] h-16 bg-surface-container-lowest border-b border-outline-variant shadow-sm flex justify-between items-center px-8 z-40">
+<div class="flex items-center text-on-surface-variant font-label-md text-label-md">
+<span>Financeiro</span><span class="material-symbols-outlined text-[16px] mx-2">chevron_right</span><span class="text-primary font-semibold">Retorno Bancário</span>
+</div>
+</header>
+<div class="pt-24 px-8 pb-12 max-w-7xl mx-auto space-y-8">
+<div class="flex justify-between items-end">
+<div>
+<h2 class="text-headline-lg font-headline-lg text-primary">Processamento de Retorno Bancário</h2>
+<p class="text-body-lg text-on-surface-variant mt-1">Gerencie a liquidação de boletos e conciliação financeira automatizada.</p>
+</div>
+<button class="bg-primary text-on-primary px-6 py-2.5 rounded shadow-sm hover:opacity-90 flex items-center gap-2 font-semibold">
+<span class="material-symbols-outlined text-[20px]">upload_file</span>Processamento Lote
+</button>
+</div>
+<!-- KPIs -->
+<section class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+<div class="bg-surface-container-lowest p-6 border border-outline-variant shadow-sm flex flex-col justify-between">
+<div class="flex justify-between items-start"><span class="text-label-md text-on-surface-variant uppercase tracking-wider">Total Processado</span><span class="material-symbols-outlined text-secondary">folder_zip</span></div>
+<div class="mt-4"><p class="text-headline-md font-headline-md text-primary">42</p><p class="text-success text-[12px] flex items-center mt-1"><span class="material-symbols-outlined text-[14px] mr-1">trending_up</span>+12% vs mês anterior</p></div>
+</div>
+<div class="bg-surface-container-lowest p-6 border border-outline-variant shadow-sm flex flex-col justify-between">
+<div class="flex justify-between items-start"><span class="text-label-md text-on-surface-variant uppercase tracking-wider">Boletos Liquidados</span><span class="material-symbols-outlined text-success">check_circle</span></div>
+<div class="mt-4"><p class="text-headline-md font-headline-md text-primary">1,284</p><p class="text-on-surface-variant text-[12px] mt-1">94% taxa de sucesso</p></div>
+</div>
+<div class="bg-surface-container-lowest p-6 border border-outline-variant shadow-sm flex flex-col justify-between">
+<div class="flex justify-between items-start"><span class="text-label-md text-on-surface-variant uppercase tracking-wider">Valor Total Pago</span><span class="material-symbols-outlined text-secondary">payments</span></div>
+<div class="mt-4"><p class="text-headline-md font-headline-md text-primary">R$ 482.903,15</p><p class="text-on-surface-variant text-[12px] mt-1">Período: Junho 2024</p></div>
+</div>
+<div class="bg-error-container p-6 border border-error/20 shadow-sm flex flex-col justify-between">
+<div class="flex justify-between items-start"><span class="text-label-md text-error uppercase tracking-wider font-bold">Boletos Rejeitados</span><span class="material-symbols-outlined text-error">report_problem</span></div>
+<div class="mt-4"><p class="text-headline-md font-headline-md text-error">18</p><p class="text-error text-[12px] mt-1 font-semibold underline cursor-pointer">Requer revisão manual</p></div>
+</div>
+</section>
+<!-- Upload Cards -->
+<section class="space-y-4">
+<h3 class="text-headline-sm font-headline-sm text-primary flex items-center gap-2">Upload de Arquivos de Retorno<span class="text-body-md font-normal text-on-surface-variant">(Selecione o banco de origem)</span></h3>
+<div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+<div class="bg-surface-container-lowest border border-outline-variant p-6 hover:shadow-md group">
+<div class="flex items-center gap-4 mb-6"><div class="w-12 h-12 bg-[#FF7000] flex items-center justify-center text-white font-bold text-xl rounded">I</div><div><h4 class="font-bold text-primary">Banco Itaú</h4><p class="text-label-md text-on-surface-variant">Layout CNAB 400</p></div></div>
+<button class="w-full py-2 border-2 border-primary text-primary font-bold hover:bg-primary hover:text-on-primary flex items-center justify-center gap-2"><span class="material-symbols-outlined">cloud_upload</span>Upload Retorno (.ret)</button>
+</div>
+<div class="bg-surface-container-lowest border border-outline-variant p-6 hover:shadow-md group">
+<div class="flex items-center gap-4 mb-6"><div class="w-12 h-12 bg-[#CC092F] flex items-center justify-center text-white font-bold text-xl rounded">B</div><div><h4 class="font-bold text-primary">Bradesco</h4><p class="text-label-md text-on-surface-variant">Layout CNAB 240</p></div></div>
+<button class="w-full py-2 border-2 border-primary text-primary font-bold hover:bg-primary hover:text-on-primary flex items-center justify-center gap-2"><span class="material-symbols-outlined">cloud_upload</span>Upload Retorno (.ret)</button>
+</div>
+<div class="bg-surface-container-lowest border border-outline-variant p-6 hover:shadow-md group">
+<div class="flex items-center gap-4 mb-6"><div class="w-12 h-12 bg-[#EC0000] flex items-center justify-center text-white font-bold text-xl rounded">S</div><div><h4 class="font-bold text-primary">Santander</h4><p class="text-label-md text-on-surface-variant">Layout CNAB 240</p></div></div>
+<button class="w-full py-2 border-2 border-primary text-primary font-bold hover:bg-primary hover:text-on-primary flex items-center justify-center gap-2"><span class="material-symbols-outlined">cloud_upload</span>Upload Retorno (.ret)</button>
+</div>
+</div>
+</section>
+<!-- History Table -->
+<section class="bg-surface-container-lowest border border-outline-variant shadow-sm overflow-hidden">
+<div class="px-6 py-4 border-b border-outline-variant flex justify-between items-center bg-slate-50">
+<h3 class="font-bold text-primary">Histórico de Retornos Processados</h3>
+<div class="flex gap-2">
+<button class="text-label-md border border-outline p-2 hover:bg-surface-container" title="Exportar"><span class="material-symbols-outlined text-[18px]">download</span></button>
+<button class="text-label-md border border-outline p-2 hover:bg-surface-container" title="Filtrar"><span class="material-symbols-outlined text-[18px]">filter_list</span></button>
+</div>
+</div>
+<div class="overflow-x-auto">
+<table class="w-full text-left border-collapse zebra-table">
+<thead class="bg-primary text-on-primary text-[11px] uppercase tracking-[0.1em]">
+<tr><th class="px-6 py-3 font-semibold">Data Processamento</th><th class="px-6 py-3 font-semibold">Banco</th><th class="px-6 py-3 font-semibold">Nome do Arquivo</th><th class="px-6 py-3 font-semibold">Registros (S/E)</th><th class="px-6 py-3 font-semibold">Valor Liquidado</th><th class="px-6 py-3 font-semibold">Status</th><th class="px-6 py-3 font-semibold text-right">Ação</th></tr>
+</thead>
+<tbody class="text-body-md text-on-surface">
+<tr class="border-b border-outline-variant hover:bg-surface-container-low">
+<td class="px-6 py-4 font-mono-sm">18/06/2024 10:45</td><td class="px-6 py-4">Itaú Unibanco</td><td class="px-6 py-4">CB180601.ret</td>
+<td class="px-6 py-4"><span class="text-success font-bold">142</span> / <span class="text-error font-bold">0</span></td>
+<td class="px-6 py-4 font-semibold">R$ 42.150,00</td>
+<td class="px-6 py-4"><span class="px-2 py-1 rounded-full bg-success/10 text-success text-[10px] font-bold uppercase">Concluído</span></td>
+<td class="px-6 py-4 text-right"><button class="text-secondary hover:underline text-label-md font-bold">DETALHES</button></td>
+</tr>
+<tr class="border-b border-outline-variant hover:bg-surface-container-low">
+<td class="px-6 py-4 font-mono-sm">17/06/2024 16:20</td><td class="px-6 py-4">Bradesco</td><td class="px-6 py-4">RET_772193.ret</td>
+<td class="px-6 py-4"><span class="text-success font-bold">88</span> / <span class="text-error font-bold">12</span></td>
+<td class="px-6 py-4 font-semibold">R$ 15.902,44</td>
+<td class="px-6 py-4"><span class="px-2 py-1 rounded-full bg-warning/10 text-warning text-[10px] font-bold uppercase">Parcial</span></td>
+<td class="px-6 py-4 text-right"><button class="text-secondary hover:underline text-label-md font-bold">DETALHES</button></td>
+</tr>
+<tr class="border-b border-outline-variant hover:bg-surface-container-low">
+<td class="px-6 py-4 font-mono-sm">16/06/2024 14:05</td><td class="px-6 py-4">Santander</td><td class="px-6 py-4">SAN_220616.ret</td>
+<td class="px-6 py-4"><span class="text-success font-bold">0</span> / <span class="text-error font-bold">1</span></td>
+<td class="px-6 py-4 font-semibold">R$ 0,00</td>
+<td class="px-6 py-4"><span class="px-2 py-1 rounded-full bg-error/10 text-error text-[10px] font-bold uppercase">Erro Layout</span></td>
+<td class="px-6 py-4 text-right"><button class="text-secondary hover:underline text-label-md font-bold">DETALHES</button></td>
+</tr>
+</tbody>
+</table>
+</div>
+<div class="px-6 py-4 bg-surface border-t border-outline-variant flex justify-between items-center">
+<p class="text-label-md text-on-surface-variant">Exibindo 3 de 42 processamentos</p>
+</div>
+</section>
+</div>
+</main>
+</body></html>
