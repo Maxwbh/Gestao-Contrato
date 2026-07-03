@@ -148,6 +148,21 @@
     </div>
     {% endif %}
 
+    <!-- RN-01: boletos gerados com vencimento no passado ficam FORA da remessa.
+         Sem este aviso o corte é silencioso (gera N no Passo 1, vê 0 aqui). -->
+    {% if boletos_vencidos_fora %}
+    <div class="alert alert-warning d-flex align-items-start py-2" role="alert">
+        <i class="fas fa-calendar-xmark me-2 mt-1"></i>
+        <div class="small">
+            <strong>{{ boletos_vencidos_fora }} boleto{{ boletos_vencidos_fora|pluralize }} gerado{{ boletos_vencidos_fora|pluralize }}
+            est{{ boletos_vencidos_fora|pluralize:"á,ão" }} com vencimento no passado</strong> e por isso não
+            {{ boletos_vencidos_fora|pluralize:'entra,entram' }} na remessa (o banco rejeita o registro de título vencido).
+            Para cobrá-los: emita <strong>2ª via com novo vencimento</strong> ou acione a régua de inadimplência.
+            <a href="{% url 'financeiro:listar_parcelas' %}?status_boleto=GERADO" class="alert-link">Ver esses boletos →</a>
+        </div>
+    </div>
+    {% endif %}
+
     <!-- Boleto-API: cobrança registrada não entra no CNAB (informativo, não é erro) -->
     {% if boleto_api_count %}
     <div class="alert alert-info d-flex align-items-start py-2" role="alert">
@@ -195,10 +210,18 @@
     {% else %}
     <div class="alert alert-light border text-center py-4 mb-4">
         <i class="fas fa-inbox fa-2x text-muted mb-2 d-block"></i>
+        {% if boletos_vencidos_fora %}
+        <p class="mb-2">Nenhum boleto elegível — os {{ boletos_vencidos_fora }} gerado{{ boletos_vencidos_fora|pluralize }} do período
+            est{{ boletos_vencidos_fora|pluralize:"á,ão" }} com vencimento no passado (veja o aviso acima).</p>
+        <a href="{% url 'financeiro:listar_parcelas' %}?status_boleto=GERADO" class="btn btn-sm btn-outline-warning">
+            <i class="fas fa-calendar-xmark me-1"></i> Tratar boletos vencidos
+        </a>
+        {% else %}
         <p class="mb-2">Nenhum boleto pronto para remessa neste filtro.</p>
-        <a href="{% url 'financeiro:listar_parcelas' %}?status_boleto=NAO_GERADO" class="btn btn-sm btn-outline-primary">
+        <a href="{% url 'financeiro:boletos_painel' %}" class="btn btn-sm btn-outline-primary">
             <i class="fas fa-plus me-1"></i> Gerar Boletos do Mês
         </a>
+        {% endif %}
     </div>
     {% endif %}
 

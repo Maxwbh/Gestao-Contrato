@@ -52,7 +52,7 @@
         <input type="number" name="ano" value="{{ filtro_ano }}" class="form-control form-control-sm">
       </div>
       <button type="submit" class="btn btn-sm btn-outline-secondary"><i class="fas fa-filter me-1"></i>Filtrar</button>
-      <span class="small text-muted ms-auto align-self-center">Filtros aplicados aos 3 passos</span>
+      <span class="small text-muted ms-auto align-self-center">Filtros aplicados aos 4 passos</span>
     </div>
   </form>
 
@@ -106,12 +106,22 @@
         {% else %}<span class="badge bg-secondary badge-estado">PENDENTE</span>{% endif %}
         <div class="small text-muted mt-1">{{ estado.a_conciliar_boletos }} a conciliar</div>
       </a>
+      <div class="step-line {% if estado.passo3 == 'concluido' %}done{% endif %}"></div>
+      {% comment %}Passo 4 — fechamento do ciclo (HU-26){% endcomment %}
+      <a href="{% url 'financeiro:painel_conciliacao_saude' %}{{ q }}&mes={{ filtro_mes }}&ano={{ filtro_ano }}" class="text-center text-decoration-none text-reset" style="width:180px" title="Abrir Conciliação &amp; Saúde">
+        <div class="step-circle mx-auto {% if estado.passo3 == 'concluido' and not estado.a_conciliar_boletos %}bg-success text-white{% elif estado.passo3 == 'concluido' %}bg-primary text-white{% else %}bg-light text-muted border{% endif %}"><i class="fas fa-heart-pulse"></i></div>
+        <div class="mt-2 fw-bold small">4. Conciliar &amp; Fechar</div>
+        {% if estado.passo3 == 'concluido' and not estado.a_conciliar_boletos %}<span class="badge bg-success badge-estado">CONCLUÍDO</span>
+        {% elif estado.passo3 == 'concluido' %}<span class="badge bg-warning text-dark badge-estado">EM ANDAMENTO</span>
+        {% else %}<span class="badge bg-light text-dark border badge-estado">AGUARDANDO</span>{% endif %}
+        <div class="small text-muted mt-1">saúde da cobrança</div>
+      </a>
     </div>
   </div></div>
 
   <!-- Passos: cards de ação -->
   <div class="row g-3">
-    <div class="col-lg-4">
+    <div class="col-lg-3">
       <div class="card h-100 {% if estado.recomendado == 1 %}border-primary{% endif %}">
         <div class="card-body d-flex flex-column">
           <h6 class="fw-bold"><i class="fas fa-bolt text-primary me-1"></i> Passo 1 — Gerar Boletos</h6>
@@ -122,7 +132,7 @@
         </div>
       </div>
     </div>
-    <div class="col-lg-4">
+    <div class="col-lg-3">
       <div class="card h-100 {% if estado.recomendado == 2 %}border-primary{% endif %}">
         <div class="card-body d-flex flex-column">
           <h6 class="fw-bold"><i class="fas fa-paper-plane text-primary me-1"></i> Passo 2 — Gerar Remessa</h6>
@@ -131,7 +141,7 @@
         </div>
       </div>
     </div>
-    <div class="col-lg-4">
+    <div class="col-lg-3">
       <div class="card h-100 {% if estado.recomendado == 3 %}border-primary{% endif %}">
         <div class="card-body d-flex flex-column">
           <h6 class="fw-bold"><i class="fas fa-university text-primary me-1"></i> Passo 3 — Receber Retorno</h6>
@@ -140,14 +150,17 @@
         </div>
       </div>
     </div>
+    <div class="col-lg-3">
+      <div class="card h-100">
+        <div class="card-body d-flex flex-column">
+          <h6 class="fw-bold"><i class="fas fa-heart-pulse text-primary me-1"></i> Passo 4 — Conciliar &amp; Fechar</h6>
+          <p class="small text-muted flex-grow-1">Confira o que entrou (CNAB/PIX/OFX/manual), o aging do que falta e reinclua rejeitados.</p>
+          <a href="{% url 'financeiro:painel_conciliacao_saude' %}{{ q }}&mes={{ filtro_mes }}&ano={{ filtro_ano }}" class="btn btn-sm btn-outline-primary">Abrir Conciliação &amp; Saúde</a>
+        </div>
+      </div>
+    </div>
   </div>
   {% endwith %}
-
-  <div class="text-end mt-3">
-    <a href="{% url 'financeiro:painel_conciliacao_saude' %}?imobiliaria={{ filtro_imobiliaria }}&mes={{ filtro_mes }}&ano={{ filtro_ano }}" class="btn btn-sm btn-outline-secondary">
-      <i class="fas fa-heart-pulse me-1"></i> Ver Conciliação &amp; Saúde da Cobrança
-    </a>
-  </div>
 </div>
 
 <script>

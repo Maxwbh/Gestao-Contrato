@@ -2168,6 +2168,25 @@ def remessa_painel(request):
         hoje=hoje,
     )
 
+    # Boletos GERADO cortados da remessa por vencimento no passado (RN-01).
+    # Sem esta contagem o corte é silencioso: o operador gera N boletos no
+    # Passo 1, chega aqui e vê zero sem nenhuma explicação.
+    _ids_imobs = set(imobs.values_list('id', flat=True))
+    boletos_vencidos_fora = 0
+    for p in service.obter_boletos_sem_remessa(imobiliaria_id=imobiliaria_id):
+        cb = p.conta_bancaria
+        if not cb or cb.imobiliaria_id not in _ids_imobs:
+            continue
+        if not getattr(cb, 'cobranca_registrada', True):
+            continue
+        if p.data_vencimento >= hoje:
+            continue  # elegível — já contado
+        if mes and ano and not (
+            p.data_vencimento.month == int(mes) and p.data_vencimento.year == int(ano)
+        ):
+            continue
+        boletos_vencidos_fora += 1
+
     # Agrupar por conta bancária (invariante: 1 arquivo = 1 conta)
     grupos_map = defaultdict(list)
     for p in elegiveis:
@@ -2266,6 +2285,8 @@ def remessa_painel(request):
         'bancos_enviados': bancos_enviados,
         # Boleto-API: registrados via gateway, conciliação por webhook (fora do CNAB)
         'boleto_api_count': boleto_api_count,
+        # RN-01: gerados com vencimento no passado — fora da remessa (explicar!)
+        'boletos_vencidos_fora': boletos_vencidos_fora,
     }
     return render(request, 'financeiro/cnab/remessa_painel.html', context)
 
@@ -3081,13 +3102,14 @@ def painel_conciliacao_saude(request):
         ).order_by('data_vencimento')[:100]
     )
     for p in pendencias:
-        p.dias_atraso = max(0, (s['hoje'] - p.data_vencimento).days)
-        # Faixa de aging (para o filtro clicável da HU-26)
-        if p.dias_atraso <= 0:
+        # dias_atraso é property do model (sem setter) — atribuir quebra com
+        # AttributeError. Usa a property para derivar a faixa de aging.
+        _atraso = p.dias_atraso
+        if _atraso <= 0:
             p.bucket = 'a_vencer'
-        elif p.dias_atraso <= 30:
+        elif _atraso <= 30:
             p.bucket = 'd1_30'
-        elif p.dias_atraso <= 60:
+        elif _atraso <= 60:
             p.bucket = 'd31_60'
         else:
             p.bucket = 'd60_mais'
