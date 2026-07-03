@@ -1,0 +1,533 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Configuração de Tokens{% endblock %}
+
+{% block extra_css %}
+<style>
+/* ── Layout geral ────────────────────────────────────── */
+.model-card          { transition: box-shadow .2s; border-radius: .75rem; }
+.model-card:hover    { box-shadow: 0 6px 20px rgba(0,0,0,.12); }
+
+/* ── Gauge (half-circle) ─────────────────────────────── */
+.gauge-wrap          { position: relative; height: 100px; }
+.gauge-label         { position: absolute; bottom: 0; width: 100%;
+                       text-align: center; font-size: .78rem; color: #6c757d; }
+.gauge-pct           { position: absolute; bottom: 12px; width: 100%;
+                       text-align: center; font-size: 1.4rem; font-weight: 700; }
+
+/* ── Slider ──────────────────────────────────────────── */
+.range-wrap          { position: relative; }
+input[type=range]    { width: 100%; accent-color: #0d6efd; cursor: pointer; }
+.range-bubble        { display: inline-block; background: #0d6efd; color:#fff;
+                       padding: 1px 7px; border-radius: 4px; font-size: .78rem;
+                       margin-top: 2px; }
+.range-cost          { font-size: .82rem; color: #28a745; font-weight: 600; }
+.range-cost.over     { color: #dc3545; }
+
+/* ── Preset buttons ──────────────────────────────────── */
+.preset-btn          { font-size: .82rem; }
+
+/* ── Simulator ───────────────────────────────────────── */
+.sim-input-label     { font-size: .82rem; color:#6c757d; }
+.sim-result-box      { background: #f0fff4; border: 1px solid #b2f5c8;
+                       border-radius: .5rem; padding: .75rem 1rem; }
+.sim-result-usd      { font-size: 1.6rem; font-weight: 700; color: #155724; }
+.sim-result-brl      { font-size: 1.1rem; color: #198754; }
+
+/* ── Model color palette ─────────────────────────────── */
+.card-gemini  { border-top: 4px solid #4285f4; }
+.card-haiku   { border-top: 4px solid #28a745; }
+.card-sonnet  { border-top: 4px solid #ffc107; }
+.card-opus    { border-top: 4px solid #dc3545; }
+
+.badge-free   { background: #4285f4; color:#fff; }
+.badge-cheap  { background: #28a745; color:#fff; }
+.badge-mid    { background: #fd7e14; color:#fff; }
+.badge-prem   { background: #dc3545; color:#fff; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+
+  <!-- Cabeçalho -->
+  <div class="d-flex justify-content-between align-items-start mb-4">
+    <div>
+      <h2><i class="fas fa-sliders-h"></i> Configuração de Tokens</h2>
+      <p class="text-muted mb-0">
+        Configure cotas por modelo com visualização gráfica de uso e custo em tempo real.
+        USD 1 = R$ <strong id="cotacao-display">{{ cotacao_usd_brl|floatformat:2 }}</strong>
+      </p>
+    </div>
+    <div class="d-flex gap-2">
+      <a href="{% url 'core:ia_limites' %}" class="btn btn-outline-secondary btn-sm">
+        <i class="fas fa-table"></i> Todos os Limites
+      </a>
+      <a href="{% url 'core:ia_custos' %}" class="btn btn-outline-secondary btn-sm">
+        <i class="fas fa-chart-line"></i> Painel de Custos
+      </a>
+    </div>
+  </div>
+
+  {% if messages %}
+  {% for msg in messages %}
+  <div class="alert alert-{{ msg.tags|default:'info' }} alert-dismissible fade show">
+    {{ msg }}<button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+  </div>
+  {% endfor %}
+  {% endif %}
+
+  <!-- ═══ Simulador de Custo ═══════════════════════════════════════════════ -->
+  <div class="card mb-4">
+    <div class="card-header fw-semibold">
+      <i class="fas fa-calculator"></i> Simulador de Custo Mensal
+    </div>
+    <div class="card-body">
+      <div class="row g-4">
+        <!-- Inputs -->
+        <div class="col-md-5">
+          <div class="mb-4">
+            <div class="d-flex justify-content-between sim-input-label mb-1">
+              <span>Contratos PDF / mês</span>
+              <strong id="lbl-contratos">50</strong>
+            </div>
+            <input type="range" id="sl-contratos" min="0" max="500" value="50" step="5">
+          </div>
+          <div class="mb-4">
+            <div class="d-flex justify-content-between sim-input-label mb-1">
+              <span>Sessões chatbot / dia</span>
+              <strong id="lbl-sessoes">100</strong>
+            </div>
+            <input type="range" id="sl-sessoes" min="0" max="500" value="100" step="10">
+          </div>
+          <div class="row g-2">
+            <div class="col-6">
+              <label class="form-label sim-input-label">Modelo PDF</label>
+              <select class="form-select form-select-sm" id="sel-modelo-pdf">
+                {% for m in modelos_data %}
+                <option value="{{ m.modelo }}"
+                        data-in="{{ m.preco_in }}"
+                        data-out="{{ m.preco_out }}"
+                  {% if m.modelo == 'claude-haiku-4-5-20251001' %}selected{% endif %}>
+                  {{ m.modelo|truncatechars:22 }}
+                </option>
+                {% endfor %}
+              </select>
+            </div>
+            <div class="col-6">
+              <label class="form-label sim-input-label">Modelo Chatbot</label>
+              <select class="form-select form-select-sm" id="sel-modelo-chat">
+                {% for m in modelos_data %}
+                <option value="{{ m.modelo }}"
+                        data-in="{{ m.preco_in }}"
+                        data-out="{{ m.preco_out }}"
+                  {% if m.modelo == 'claude-haiku-4-5-20251001' %}selected{% endif %}>
+                  {{ m.modelo|truncatechars:22 }}
+                </option>
+                {% endfor %}
+              </select>
+            </div>
+          </div>
+        </div>
+        <!-- Resultado -->
+        <div class="col-md-3 d-flex align-items-center">
+          <div class="sim-result-box w-100 text-center">
+            <div class="text-muted small mb-1">Custo projetado / mês</div>
+            <div class="sim-result-usd" id="sim-usd">U$ 0,00</div>
+            <div class="sim-result-brl" id="sim-brl">≈ R$ 0,00</div>
+            <div class="text-muted mt-2 small" id="sim-detalhe"></div>
+          </div>
+        </div>
+        <!-- Chart comparativo -->
+        <div class="col-md-4">
+          <div class="text-muted small mb-1 text-center">Comparativo entre modelos (R$/mês)</div>
+          <div style="height:160px">
+            <canvas id="chartSimComparison"></canvas>
+          </div>
+        </div>
+      </div>
+
+      <!-- Presets rápidos -->
+      <div class="mt-3 pt-3 border-top d-flex gap-2 flex-wrap align-items-center">
+        <span class="text-muted small me-1"><i class="fas fa-magic"></i> Sugestões:</span>
+        <button class="btn btn-outline-primary btn-sm preset-btn"
+                data-contratos="10" data-sessoes="20">Pequeno porte</button>
+        <button class="btn btn-outline-primary btn-sm preset-btn"
+                data-contratos="50" data-sessoes="100">Médio porte</button>
+        <button class="btn btn-outline-primary btn-sm preset-btn"
+                data-contratos="200" data-sessoes="300">Grande porte</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ Cotas por Modelo ═════════════════════════════════════════════════ -->
+  <div class="row g-3">
+
+    {% for m in modelos_data %}
+    {% with card_class=m.card_class badge_class=m.badge_class badge_lbl=m.badge_lbl tier_icon=m.tier_icon %}
+
+    <div class="col-md-6 col-xl-3">
+      <div class="card model-card h-100 {{ card_class }}">
+        <div class="card-body">
+
+          <!-- Header do modelo -->
+          <div class="d-flex justify-content-between align-items-start mb-2">
+            <div>
+              <span class="badge {{ badge_class }} mb-1">
+                <i class="{{ tier_icon }}"></i> {{ badge_lbl }}
+              </span>
+              <div class="font-monospace small fw-semibold">{{ m.modelo }}</div>
+            </div>
+          </div>
+
+          <!-- Preço de referência -->
+          <div class="text-muted small mb-3">
+            {% if m.gratuito %}
+            <i class="fas fa-gift text-primary"></i> Gratuito (cota diária)
+            {% else %}
+            Input: R$ {{ m.preco_in_brl }}/MTok &nbsp;|&nbsp; Output: R$ {{ m.preco_out_brl }}/MTok
+            {% endif %}
+          </div>
+
+          <!-- Gauge de uso mensal -->
+          <div class="gauge-wrap mb-1">
+            <canvas id="gauge-{{ forloop.counter }}" height="80"></canvas>
+            <div class="gauge-pct" id="pct-lbl-{{ forloop.counter }}">
+              {% if m.limite_tokens %}{{ m.pct_tokens }}%{% else %}—{% endif %}
+            </div>
+            <div class="gauge-label">Uso mensal de tokens</div>
+          </div>
+
+          <!-- Consumo numérico -->
+          <div class="text-center small mb-3">
+            <strong>{{ m.consumo_tokens|floatformat:0 }}</strong> tokens
+            {% if m.limite_tokens %}
+            / <span class="text-muted">{{ m.limite_tokens|floatformat:0 }}</span>
+            {% endif %}
+            <br>
+            <span class="text-success">U$ {{ m.custo_usd }} &nbsp;≈&nbsp; R$ {{ m.custo_brl }}</span>
+            <span class="text-muted"> este mês</span>
+          </div>
+
+          <!-- Slider de cota mensal de tokens -->
+          <div class="mb-3">
+            <label class="form-label small fw-semibold mb-1">
+              Cota mensal de tokens
+            </label>
+            <div class="range-wrap">
+              <input type="range"
+                     id="slider-tokens-{{ forloop.counter }}"
+                     data-model="{{ m.modelo }}"
+                     data-preco-in="{{ m.preco_in }}"
+                     data-preco-out="{{ m.preco_out }}"
+                     data-cotacao="{{ cotacao_usd_brl }}"
+                     data-gauge="gauge-{{ forloop.counter }}"
+                     data-pct-lbl="pct-lbl-{{ forloop.counter }}"
+                     data-cost-lbl="cost-lbl-tokens-{{ forloop.counter }}"
+                     data-val-lbl="val-lbl-tokens-{{ forloop.counter }}"
+                     min="0"
+                     max="{% if m.gratuito %}5000{% elif m.modelo == 'claude-haiku-4-5-20251001' %}2000000{% elif m.modelo == 'claude-sonnet-4-6' %}500000{% else %}100000{% endif %}"
+                     step="{% if m.gratuito %}100{% elif m.modelo == 'claude-opus-4-8' %}1000{% else %}5000{% endif %}"
+                     value="{{ m.limite_tokens|default:0|floatformat:0 }}">
+              <div class="d-flex justify-content-between mt-1">
+                <span class="range-bubble" id="val-lbl-tokens-{{ forloop.counter }}">
+                  {% if m.limite_tokens %}{{ m.limite_tokens|floatformat:0 }}{% else %}Sem limite{% endif %}
+                </span>
+                <span class="range-cost" id="cost-lbl-tokens-{{ forloop.counter }}">
+                  {% if m.gratuito or not m.limite_tokens %}
+                  {% if m.gratuito %}— gratuito —{% else %}Sem limite{% endif %}
+                  {% else %}
+                  ≈ R$ 0,00/mês
+                  {% endif %}
+                </span>
+              </div>
+            </div>
+            <form method="post" action="{% url 'core:ia_limite_salvar' %}" class="mt-2 form-salvar-token"
+                  data-counter="{{ forloop.counter }}">
+              {% csrf_token %}
+              <input type="hidden" name="pk" value="{{ m.lim_token_pk }}">
+              <input type="hidden" name="tipo_escopo" value="MODELO">
+              <input type="hidden" name="escopo_valor" value="{{ m.modelo }}">
+              <input type="hidden" name="tipo_limite" value="TOKENS">
+              <input type="hidden" name="periodo" value="MENSAL">
+              <input type="hidden" name="valor_limite" id="hidden-tokens-{{ forloop.counter }}" value="{{ m.limite_tokens|default:0|floatformat:0 }}">
+              <div class="d-flex gap-2">
+                <button type="submit" class="btn btn-sm btn-outline-primary flex-grow-1">
+                  <i class="fas fa-save"></i> Salvar Tokens
+                </button>
+                {% if m.lim_token_pk %}
+                <form method="post" action="{% url 'core:ia_limite_excluir' m.lim_token_pk %}" class="d-inline" onsubmit="return confirm('Remover limite de tokens?')">
+                  {% csrf_token %}
+                  <button type="submit" class="btn btn-sm btn-outline-danger" title="Remover">
+                    <i class="fas fa-times"></i>
+                  </button>
+                </form>
+                {% endif %}
+              </div>
+            </form>
+          </div>
+
+          <!-- Slider de cota mensal em R$ -->
+          {% if not m.gratuito %}
+          <div class="mb-2 border-top pt-3">
+            <label class="form-label small fw-semibold mb-1">Cota mensal em R$</label>
+            <div class="range-wrap">
+              <input type="range"
+                     id="slider-reais-{{ forloop.counter }}"
+                     data-cost-lbl="cost-lbl-reais-{{ forloop.counter }}"
+                     data-val-lbl="val-lbl-reais-{{ forloop.counter }}"
+                     min="0" max="1000" step="5"
+                     value="{{ m.limite_reais|default:0|floatformat:0 }}">
+              <div class="d-flex justify-content-between mt-1">
+                <span class="range-bubble" id="val-lbl-reais-{{ forloop.counter }}">
+                  {% if m.limite_reais %}R$ {{ m.limite_reais|floatformat:2 }}{% else %}Sem limite{% endif %}
+                </span>
+                <span class="range-cost" id="cost-lbl-reais-{{ forloop.counter }}">
+                  {% if m.limite_reais %}
+                  ≈ R$ {{ m.limite_reais|floatformat:2 }}/mês
+                  {% endif %}
+                </span>
+              </div>
+            </div>
+            <form method="post" action="{% url 'core:ia_limite_salvar' %}" class="mt-2">
+              {% csrf_token %}
+              <input type="hidden" name="pk" value="{{ m.lim_reais_pk }}">
+              <input type="hidden" name="tipo_escopo" value="MODELO">
+              <input type="hidden" name="escopo_valor" value="{{ m.modelo }}">
+              <input type="hidden" name="tipo_limite" value="REAIS">
+              <input type="hidden" name="periodo" value="MENSAL">
+              <input type="hidden" name="valor_limite" id="hidden-reais-{{ forloop.counter }}" value="{{ m.limite_reais|default:0|floatformat:0 }}">
+              <div class="d-flex gap-2">
+                <button type="submit" class="btn btn-sm btn-outline-success flex-grow-1">
+                  <i class="fas fa-save"></i> Salvar R$
+                </button>
+                {% if m.lim_reais_pk %}
+                <form method="post" action="{% url 'core:ia_limite_excluir' m.lim_reais_pk %}" class="d-inline" onsubmit="return confirm('Remover limite em R$?')">
+                  {% csrf_token %}
+                  <button type="submit" class="btn btn-sm btn-outline-danger" title="Remover">
+                    <i class="fas fa-times"></i>
+                  </button>
+                </form>
+                {% endif %}
+              </div>
+            </form>
+          </div>
+          {% endif %}
+
+        </div>
+      </div>
+    </div>
+
+    {% endwith %}{% endfor %}
+  </div>
+
+  <div class="mt-3 text-muted small">
+    <i class="fas fa-info-circle"></i>
+    Estimativas de custo usam 30% input / 70% output de tokens como proporção média.
+    Para limites com outros períodos (diário, semanal, anual…), use a
+    <a href="{% url 'core:ia_limites' %}">tela de limites completa</a>.
+  </div>
+
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{% static 'vendor/chartjs/chart.umd.min.js' %}"></script>
+<script>
+(function () {
+  const COTACAO = {{ cotacao_usd_brl }};
+
+  /* ── Formatadores ─────────────────────────────────────────────── */
+  const fmtBRL = v => 'R$ ' + v.toFixed(2).replace('.', ',').replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+  const fmtUSD = v => 'U$ ' + v.toFixed(4);
+  const fmtTok = v => v >= 1000000 ? (v/1e6).toFixed(2)+'M' : v >= 1000 ? (v/1e3).toFixed(0)+'k' : String(Math.round(v));
+
+  /* ── Preços por modelo ────────────────────────────────────────── */
+  const PRECOS = {
+    {% for m in modelos_data %}
+    '{{ m.modelo }}': { in: {{ m.preco_in }}, out: {{ m.preco_out }}, gratuito: {{ m.gratuito|yesno:'true,false' }} },
+    {% endfor %}
+  };
+
+  /* ── Gauges (half-circle) ─────────────────────────────────────── */
+  const gauges = {};
+  {% for m in modelos_data %}
+  (function () {
+    const ctx = document.getElementById('gauge-{{ forloop.counter }}');
+    if (!ctx) return;
+    const pct = {{ m.pct_tokens }};
+    const colors = ['#0d6efd','#28a745','#ffc107','#dc3545'];
+    const color = colors[{{ forloop.counter0 }} % colors.length];
+    gauges['gauge-{{ forloop.counter }}'] = new Chart(ctx, {
+      type: 'doughnut',
+      data: {
+        datasets: [{
+          data: [pct, 100 - pct],
+          backgroundColor: [color, '#e9ecef'],
+          borderWidth: 0,
+        }]
+      },
+      options: {
+        rotation: -90,
+        circumference: 180,
+        cutout: '70%',
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: { legend: { display: false }, tooltip: { enabled: false } }
+      }
+    });
+  })();
+  {% endfor %}
+
+  /* ── Cálculo de custo (30% in / 70% out) ─────────────────────── */
+  function calcCusto(tokens, precoIn, precoOut) {
+    if (precoIn === 0 && precoOut === 0) return 0;
+    return (tokens * 0.30 * precoIn + tokens * 0.70 * precoOut) / 1e6;
+  }
+
+  /* ── Sliders de tokens ────────────────────────────────────────── */
+  document.querySelectorAll('input[type=range][data-model]').forEach(sl => {
+    const updateToken = () => {
+      const val  = parseFloat(sl.value);
+      const pIn  = parseFloat(sl.dataset.precoIn);
+      const pOut = parseFloat(sl.dataset.precoOut);
+      const isGratis = pIn === 0 && pOut === 0;
+
+      document.getElementById(sl.dataset.valLbl).textContent =
+        val === 0 ? 'Sem limite' : fmtTok(val) + ' tokens';
+
+      const costBRL = calcCusto(val, pIn, pOut) * COTACAO;
+      const costEl = document.getElementById(sl.dataset.costLbl);
+      if (isGratis) {
+        costEl.textContent = '— gratuito —';
+      } else if (val === 0) {
+        costEl.textContent = 'Sem limite';
+      } else {
+        costEl.textContent = '≈ ' + fmtBRL(costBRL) + '/mês';
+        costEl.className = 'range-cost' + (costBRL > 50 ? ' over' : '');
+      }
+
+      // Atualiza hidden input do form
+      const hiddenId = 'hidden-tokens-' + sl.closest('.card-body').querySelector('[id^=hidden-tokens]')?.id.split('-').pop();
+      const hidden = sl.parentElement.parentElement.querySelector('input[name=valor_limite]');
+      if (hidden) hidden.value = Math.round(val);
+
+      // Atualiza gauge
+      const gauge = gauges[sl.dataset.gauge];
+      if (gauge) {
+        const lim = parseFloat(sl.max) || 1;
+        const pct = Math.min(100, Math.round(val / lim * 100));
+        gauge.data.datasets[0].data = [pct, 100 - pct];
+        gauge.update('none');
+        const pctLbl = document.getElementById(sl.dataset.pctLbl);
+        if (pctLbl) pctLbl.textContent = val === 0 ? '—' : pct + '%';
+      }
+    };
+    sl.addEventListener('input', updateToken);
+    updateToken();
+  });
+
+  /* ── Sliders de R$ ───────────────────────────────────────────── */
+  document.querySelectorAll('input[type=range][id^=slider-reais]').forEach(sl => {
+    const update = () => {
+      const val = parseFloat(sl.value);
+      document.getElementById(sl.dataset.valLbl).textContent =
+        val === 0 ? 'Sem limite' : fmtBRL(val);
+      const costEl = document.getElementById(sl.dataset.costLbl);
+      costEl.textContent = val > 0 ? '≈ ' + fmtBRL(val) + '/mês' : '';
+      const hidden = sl.parentElement.parentElement.querySelector('input[name=valor_limite]');
+      if (hidden) hidden.value = val.toFixed(2);
+    };
+    sl.addEventListener('input', update);
+    update();
+  });
+
+  /* ── Simulador ───────────────────────────────────────────────── */
+  const TOK_PER_CONTRACT  = 4500;  // ~2000 in + 2500 out
+  const TOK_PER_CHAT_SESS = 600;   // intent + humanize
+
+  let simChart = null;
+  const MODELS = Object.keys(PRECOS);
+  const MODEL_LABELS = MODELS.map(m => m.replace('claude-','').replace('-4-5-20251001','').replace('-4-6','').replace('-4-7',''));
+  const COLORS_SIM = ['#4285f4','#28a745','#ffc107','#dc3545'];
+
+  function runSimulator() {
+    const contratos = parseFloat(document.getElementById('sl-contratos').value) || 0;
+    const sessoes   = parseFloat(document.getElementById('sl-sessoes').value)   || 0;
+    const mPdf  = document.getElementById('sel-modelo-pdf').value;
+    const mChat = document.getElementById('sel-modelo-chat').value;
+
+    document.getElementById('lbl-contratos').textContent = Math.round(contratos);
+    document.getElementById('lbl-sessoes').textContent   = Math.round(sessoes);
+
+    const tokPdf  = contratos * TOK_PER_CONTRACT;
+    const tokChat = sessoes * 30 * TOK_PER_CHAT_SESS;
+
+    const pp  = PRECOS[mPdf]  || { in: 0, out: 0 };
+    const pc  = PRECOS[mChat] || { in: 0, out: 0 };
+    const costUSD = calcCusto(tokPdf, pp.in, pp.out) + calcCusto(tokChat, pc.in, pc.out);
+    const costBRL = costUSD * COTACAO;
+
+    document.getElementById('sim-usd').textContent = 'U$ ' + costUSD.toFixed(4);
+    document.getElementById('sim-brl').textContent = '≈ ' + fmtBRL(costBRL);
+    document.getElementById('sim-detalhe').textContent =
+      fmtTok(tokPdf) + ' tok PDF + ' + fmtTok(tokChat) + ' tok chat/mês';
+
+    // Gráfico comparativo por modelo
+    const barData = MODELS.map(m => {
+      const p = PRECOS[m];
+      return (calcCusto(tokPdf, p.in, p.out) + calcCusto(tokChat, p.in, p.out)) * COTACAO;
+    });
+
+    const ctx = document.getElementById('chartSimComparison');
+    if (simChart) {
+      simChart.data.datasets[0].data = barData;
+      simChart.update();
+    } else {
+      simChart = new Chart(ctx, {
+        type: 'bar',
+        data: {
+          labels: MODEL_LABELS,
+          datasets: [{
+            label: 'R$/mês',
+            data: barData,
+            backgroundColor: COLORS_SIM,
+            borderRadius: 4,
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          indexAxis: 'y',
+          plugins: {
+            legend: { display: false },
+            tooltip: {
+              callbacks: { label: c => fmtBRL(c.raw) }
+            }
+          },
+          scales: {
+            x: { beginAtZero: true, ticks: { callback: v => fmtBRL(v) } }
+          }
+        }
+      });
+    }
+  }
+
+  ['sl-contratos','sl-sessoes','sel-modelo-pdf','sel-modelo-chat'].forEach(id =>
+    document.getElementById(id)?.addEventListener('input', runSimulator)
+  );
+  runSimulator();
+
+  /* ── Presets ─────────────────────────────────────────────────── */
+  document.querySelectorAll('.preset-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.getElementById('sl-contratos').value = btn.dataset.contratos;
+      document.getElementById('sl-sessoes').value   = btn.dataset.sessoes;
+      runSimulator();
+    });
+  });
+
+})();
+</script>
+{% endblock %}

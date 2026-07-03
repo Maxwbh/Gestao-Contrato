@@ -1,0 +1,243 @@
+{% extends 'base.html' %}
+{% load hashid_tags %}
+{% load format_filters %}
+
+{% block title %}Quadro-Resumo — Contrato {{ contrato.numero_contrato }}{% endblock %}
+
+{% block extra_css %}
+<style>
+  @media print {
+    .no-print { display: none !important; }
+    .card { border: 1px solid #000 !important; }
+    body { font-size: 12px; }
+  }
+  .quadro-table th { background-color: #f8f9fa; width: 40%; }
+  .quadro-table td { width: 60%; }
+  .section-title {
+    background-color: #343a40;
+    color: white;
+    padding: 6px 12px;
+    font-size: 0.85rem;
+    font-weight: 600;
+    letter-spacing: 0.5px;
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="row">
+  <div class="col-12 col-lg-9 mx-auto">
+
+    <!-- Cabeçalho -->
+    <div class="d-flex justify-content-between align-items-center mb-3 no-print">
+      <h4 class="mb-0">
+        <i class="fas fa-table me-2 text-primary"></i>
+        Quadro-Resumo do Contrato
+        <small class="text-muted fs-6 ms-2">Lei 6.766/79 art. 26</small>
+      </h4>
+      <div class="d-flex gap-2">
+        <button onclick="window.print()" class="btn btn-outline-secondary btn-sm">
+          <i class="fas fa-print me-1"></i> Imprimir
+        </button>
+        <a href="{% url 'contratos:detalhe' contrato.pk|hashid %}" class="btn btn-outline-secondary btn-sm">
+          <i class="fas fa-arrow-left me-1"></i> Voltar
+        </a>
+      </div>
+    </div>
+
+    <div class="card mb-3">
+      <div class="card-body text-center py-2 border-bottom">
+        <h5 class="mb-0">QUADRO-RESUMO DO CONTRATO DE COMPRA E VENDA</h5>
+        <small class="text-muted">Contrato nº {{ contrato.numero_contrato }} — {{ contrato.data_contrato|date:"d/m/Y" }}</small>
+      </div>
+
+      <!-- I. Identificação das Partes -->
+      <div class="section-title mt-0">I. IDENTIFICAÇÃO DAS PARTES</div>
+      <table class="table table-sm table-bordered mb-0 quadro-table">
+        <tr>
+          <th>Vendedor (Beneficiário)</th>
+          <td>{{ contrato.imobiliaria.nome }}</td>
+        </tr>
+        {% if contrato.imobiliaria.cnpj %}
+        <tr>
+          <th>CNPJ do Vendedor</th>
+          <td>{{ contrato.imobiliaria.cnpj }}</td>
+        </tr>
+        {% endif %}
+        {% if contrato.imobiliaria.endereco %}
+        <tr>
+          <th>Endereço do Vendedor</th>
+          <td>{{ contrato.imobiliaria.endereco }}</td>
+        </tr>
+        {% endif %}
+        <tr>
+          <th>Comprador (Adquirente)</th>
+          <td>{{ contrato.comprador.nome }}</td>
+        </tr>
+        {% if contrato.comprador.cpf %}
+        <tr>
+          <th>CPF do Comprador</th>
+          <td>{{ contrato.comprador.cpf }}</td>
+        </tr>
+        {% elif contrato.comprador.cnpj %}
+        <tr>
+          <th>CNPJ do Comprador</th>
+          <td>{{ contrato.comprador.cnpj }}</td>
+        </tr>
+        {% endif %}
+        {% if contrato.comprador.endereco %}
+        <tr>
+          <th>Endereço do Comprador</th>
+          <td>{{ contrato.comprador.endereco }}</td>
+        </tr>
+        {% endif %}
+      </table>
+
+      <!-- II. Identificação do Imóvel -->
+      <div class="section-title">II. IDENTIFICAÇÃO DO IMÓVEL</div>
+      <table class="table table-sm table-bordered mb-0 quadro-table">
+        <tr>
+          <th>Imóvel</th>
+          <td>{{ contrato.imovel.identificacao }}</td>
+        </tr>
+        {% if contrato.imovel.loteamento %}
+        <tr>
+          <th>Empreendimento / Loteamento</th>
+          <td>{{ contrato.imovel.loteamento }}</td>
+        </tr>
+        {% endif %}
+        {% if contrato.imovel.endereco %}
+        <tr>
+          <th>Endereço do Imóvel</th>
+          <td>{{ contrato.imovel.endereco }}</td>
+        </tr>
+        {% endif %}
+      </table>
+
+      <!-- III. Condições Financeiras -->
+      <div class="section-title">III. CONDIÇÕES FINANCEIRAS</div>
+      <table class="table table-sm table-bordered mb-0 quadro-table">
+        <tr>
+          <th>Valor Total do Contrato</th>
+          <td class="fw-bold">{{ contrato.valor_total|moeda }}</td>
+        </tr>
+        <tr>
+          <th>Valor de Entrada</th>
+          <td>{{ contrato.valor_entrada|moeda }}</td>
+        </tr>
+        <tr>
+          <th>Valor Financiado</th>
+          <td>{{ saldo_financiado|moeda }}</td>
+        </tr>
+        <tr>
+          <th>Número de Parcelas</th>
+          <td>{{ contrato.numero_parcelas }} parcelas mensais</td>
+        </tr>
+        <tr>
+          <th>Valor da Parcela Original</th>
+          <td>{{ contrato.valor_parcela_original|moeda }}</td>
+        </tr>
+        <tr>
+          <th>Dia de Vencimento</th>
+          <td>Dia {{ contrato.dia_vencimento }} de cada mês</td>
+        </tr>
+        <tr>
+          <th>Primeiro Vencimento</th>
+          <td>{{ contrato.data_primeiro_vencimento|date:"d/m/Y" }}</td>
+        </tr>
+        {% if contrato.quantidade_intermediarias > 0 %}
+        <tr>
+          <th>Prestações Intermediárias</th>
+          <td>{{ contrato.quantidade_intermediarias }} prestação(ões) intercalada(s)</td>
+        </tr>
+        {% endif %}
+      </table>
+
+      <!-- IV. Correção Monetária e Juros -->
+      <div class="section-title">IV. CORREÇÃO MONETÁRIA E ENCARGOS</div>
+      <table class="table table-sm table-bordered mb-0 quadro-table">
+        <tr>
+          <th>Índice de Correção Monetária</th>
+          <td>{{ contrato.get_tipo_correcao_display }}</td>
+        </tr>
+        <tr>
+          <th>Prazo de Reajuste</th>
+          <td>A cada {{ contrato.prazo_reajuste_meses }} meses</td>
+        </tr>
+        {% if contrato.reajuste_piso %}
+        <tr>
+          <th>Piso de Reajuste</th>
+          <td>{{ contrato.reajuste_piso|numero_br:4 }}% (mínimo aplicado)</td>
+        </tr>
+        {% endif %}
+        {% if contrato.reajuste_teto %}
+        <tr>
+          <th>Teto de Reajuste</th>
+          <td>{{ contrato.reajuste_teto|numero_br:4 }}% (máximo aplicado)</td>
+        </tr>
+        {% endif %}
+        <tr>
+          <th>Sistema de Amortização</th>
+          <td>{{ contrato.get_tipo_amortizacao_display }}</td>
+        </tr>
+        <tr>
+          <th>Juros de Mora por Atraso</th>
+          <td>{{ contrato.percentual_juros_mora }}% ao mês</td>
+        </tr>
+        <tr>
+          <th>Multa por Atraso</th>
+          <td>{{ contrato.percentual_multa }}% sobre o valor em atraso</td>
+        </tr>
+      </table>
+
+      <!-- V. Cláusulas de Rescisão -->
+      <div class="section-title">V. CLÁUSULAS DE RESCISÃO (Lei 13.786/2018)</div>
+      <table class="table table-sm table-bordered mb-0 quadro-table">
+        <tr>
+          <th>Taxa de Fruição</th>
+          <td>{{ contrato.percentual_fruicao|numero_br:4 }}% ao mês sobre o saldo devedor<br>
+            <small class="text-muted">(compensação pelo uso do imóvel durante o período contratual)</small>
+          </td>
+        </tr>
+        <tr>
+          <th>Multa Penal de Rescisão</th>
+          <td>{{ contrato.percentual_multa_rescisao_penal|numero_br:4 }}% sobre o saldo devedor<br>
+            <small class="text-muted">(cláusula penal contratual — limite legal: 25% do valor pago, art. 67-A §2°)</small>
+          </td>
+        </tr>
+        <tr>
+          <th>Despesas Administrativas</th>
+          <td>{{ contrato.percentual_multa_rescisao_adm|numero_br:4 }}% sobre o saldo devedor<br>
+            <small class="text-muted">(despesas adm. de rescisão — somam-se à multa penal para o limite legal)</small>
+          </td>
+        </tr>
+        <tr>
+          <th>Limite Legal (pena convencional)</th>
+          <td class="text-danger fw-bold">≤ 25% do total pago pelo adquirente<br>
+            <small class="text-muted">(Lei 13.786/2018 art. 67-A §2°)</small>
+          </td>
+        </tr>
+      </table>
+
+      <!-- VI. Cessão de Direitos -->
+      <div class="section-title">VI. CESSÃO DE DIREITOS</div>
+      <table class="table table-sm table-bordered mb-0 quadro-table">
+        <tr>
+          <th>Taxa de Cessão</th>
+          <td>{{ contrato.percentual_cessao|numero_br:4 }}% sobre o saldo devedor atualizado</td>
+        </tr>
+      </table>
+
+      <!-- Rodapé -->
+      <div class="card-footer text-muted small py-2">
+        <i class="fas fa-info-circle me-1"></i>
+        Documento gerado em {{ hoje|date:"d/m/Y" }} para fins informativos.
+        Os valores das parcelas estão sujeitos a correção monetária pelo
+        {{ contrato.get_tipo_correcao_display }} a cada {{ contrato.prazo_reajuste_meses }} meses.
+        Em caso de dúvidas, consulte o contrato original assinado.
+      </div>
+    </div>
+
+  </div>
+</div>
+{% endblock %}

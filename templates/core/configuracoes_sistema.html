@@ -1,0 +1,723 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Configurações do Sistema{% endblock %}
+
+{% block extra_css %}
+<style>
+/* ── layout ── */
+.cfg-layout     { display: flex; gap: 0; min-height: calc(100vh - 120px); }
+.cfg-sidebar    { width: 240px; flex-shrink: 0; border-right: 1px solid #dee2e6; background: #f8f9fa; }
+.cfg-content    { flex: 1; padding: 1.5rem; min-width: 0; }
+
+/* ── sidebar nav ── */
+.cfg-nav-item   { display: flex; align-items: center; gap: 10px; padding: 10px 16px;
+                  font-size: .85rem; color: #495057; cursor: pointer; border-left: 3px solid transparent;
+                  transition: background .15s, border-color .15s; text-decoration: none; }
+.cfg-nav-item:hover   { background: #e9ecef; color: #212529; }
+.cfg-nav-item.active  { background: #e8f0fe; border-left-color: #1a73e8; color: #1a73e8; font-weight: 600; }
+.cfg-nav-item .cfg-nav-icon { width: 20px; text-align: center; font-size: .95rem; }
+.cfg-nav-sep    { padding: 6px 16px; font-size: .68rem; text-transform: uppercase;
+                  letter-spacing: .06em; color: #adb5bd; font-weight: 600; margin-top: 6px; }
+
+/* ── status badges ── */
+.status-ok   { display:inline-block; width:8px; height:8px; border-radius:50%; background:#28a745; }
+.status-warn { display:inline-block; width:8px; height:8px; border-radius:50%; background:#ffc107; }
+.status-err  { display:inline-block; width:8px; height:8px; border-radius:50%; background:#dc3545; }
+
+/* ── panels ── */
+.cfg-panel  { display: none; }
+.cfg-panel.active { display: block; }
+.cfg-section-header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding-bottom: .75rem; margin-bottom: 1.25rem; border-bottom: 2px solid #e9ecef; }
+.cfg-section-header h4 { margin: 0; font-size: 1.05rem; font-weight: 600; display:flex; align-items:center; gap:8px; }
+
+/* ── cards de configuração ── */
+.cfg-card   { border: 1px solid #dee2e6; border-radius: 8px; padding: 1.1rem 1.25rem; margin-bottom: 1rem;
+              background: #fff; transition: box-shadow .15s; }
+.cfg-card:hover { box-shadow: 0 2px 8px rgba(0,0,0,.08); }
+.cfg-card-header { display:flex; justify-content:space-between; align-items:center; margin-bottom:.75rem; }
+.cfg-card-title  { font-weight: 600; font-size: .9rem; }
+.cfg-card-meta   { font-size: .78rem; color: #6c757d; }
+
+/* ── status pill ── */
+.pill-ok   { display:inline-flex; align-items:center; gap:4px; padding:2px 8px; border-radius:12px;
+             background:#d4edda; color:#155724; font-size:.72rem; font-weight:600; }
+.pill-warn { display:inline-flex; align-items:center; gap:4px; padding:2px 8px; border-radius:12px;
+             background:#fff3cd; color:#856404; font-size:.72rem; font-weight:600; }
+.pill-err  { display:inline-flex; align-items:center; gap:4px; padding:2px 8px; border-radius:12px;
+             background:#f8d7da; color:#721c24; font-size:.72rem; font-weight:600; }
+
+/* ── param table ── */
+.param-table td { vertical-align: middle; padding: .45rem .6rem; font-size:.82rem; }
+.param-table .key-col { font-family: monospace; font-size: .78rem; color: #495057; width:220px; }
+.param-table .val-col input { font-size: .82rem; }
+.param-input-secret { font-family: monospace; letter-spacing: .12em; }
+
+/* ── test result ── */
+.test-result { display:none; font-size:.78rem; padding:6px 10px; border-radius:6px; margin-top:8px; }
+
+/* ── empty state ── */
+.empty-cfg { text-align:center; padding:2rem; color:#adb5bd; }
+.empty-cfg i { font-size:2.2rem; margin-bottom:.5rem; }
+
+/* responsive */
+@media(max-width:768px) {
+    .cfg-sidebar { width: 100%; border-right:none; border-bottom:1px solid #dee2e6; }
+    .cfg-layout  { flex-direction: column; }
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-3 px-4">
+
+    {# ── Cabeçalho ── #}
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <div>
+            <h2 class="mb-0"><i class="fas fa-sliders-h text-secondary me-2"></i>Configurações do Sistema</h2>
+            <p class="text-muted mb-0 small">Parâmetros globais de integração e comportamento da plataforma</p>
+        </div>
+        <div class="d-flex gap-2">
+            <button class="btn btn-sm btn-outline-secondary" onclick="exportarConfig()">
+                <i class="fas fa-download me-1"></i>Exportar Config
+            </button>
+            <a href="{% url 'core:dashboard' %}" class="btn btn-sm btn-outline-secondary">
+                <i class="fas fa-arrow-left me-1"></i>Voltar
+            </a>
+        </div>
+    </div>
+
+    {# ── Layout principal ── #}
+    <div class="card p-0 overflow-hidden">
+        <div class="cfg-layout">
+
+            {# ════════════════════════ SIDEBAR ════════════════════════ #}
+            <nav class="cfg-sidebar py-2">
+
+                <div class="cfg-nav-sep">Comunicação</div>
+
+                <a class="cfg-nav-item active" data-panel="email" onclick="showPanel('email',this)">
+                    <span class="cfg-nav-icon"><i class="fas fa-envelope text-primary"></i></span>
+                    E-mail (SMTP)
+                    <span class="ms-auto {% if config_email %}status-ok{% else %}status-err{% endif %}"></span>
+                </a>
+                <a class="cfg-nav-item" data-panel="whatsapp" onclick="showPanel('whatsapp',this)">
+                    <span class="cfg-nav-icon"><i class="fab fa-whatsapp text-success"></i></span>
+                    WhatsApp
+                    <span class="ms-auto {% if config_whatsapp %}status-ok{% else %}status-warn{% endif %}"></span>
+                </a>
+                <a class="cfg-nav-item" data-panel="sms" onclick="showPanel('sms',this)">
+                    <span class="cfg-nav-icon"><i class="fas fa-sms text-info"></i></span>
+                    Twilio / SMS
+                    <span class="ms-auto {% if config_sms %}status-ok{% else %}status-warn{% endif %}"></span>
+                </a>
+
+                <div class="cfg-nav-sep mt-2">Financeiro</div>
+
+                <a class="cfg-nav-item" data-panel="brcobranca" onclick="showPanel('brcobranca',this)">
+                    <span class="cfg-nav-icon"><i class="fas fa-barcode text-dark"></i></span>
+                    BRCobrança
+                    <span class="ms-auto {% if status_brcobranca %}status-ok{% else %}status-warn{% endif %}"></span>
+                </a>
+
+                <div class="cfg-nav-sep mt-2">Portal / Sistema</div>
+
+                <a class="cfg-nav-item" data-panel="portal" onclick="showPanel('portal',this)">
+                    <span class="cfg-nav-icon"><i class="fas fa-globe text-warning"></i></span>
+                    Portal Comprador
+                    <span class="ms-auto status-ok"></span>
+                </a>
+                <a class="cfg-nav-item" data-panel="notificacoes" onclick="showPanel('notificacoes',this)">
+                    <span class="cfg-nav-icon"><i class="fas fa-bell text-danger"></i></span>
+                    Notificações
+                    <span class="ms-auto status-ok"></span>
+                </a>
+                <a class="cfg-nav-item" data-panel="avancado" onclick="showPanel('avancado',this)">
+                    <span class="cfg-nav-icon"><i class="fas fa-tools text-muted"></i></span>
+                    Parâmetros Avançados
+                </a>
+
+            </nav>
+
+            {# ════════════════════════ CONTEÚDO ════════════════════════ #}
+            <div class="cfg-content">
+
+                {# ──────────────── E-mail (SMTP) ──────────────── #}
+                <div id="panel-email" class="cfg-panel active">
+                    <div class="cfg-section-header">
+                        <h4><i class="fas fa-envelope text-primary"></i> E-mail SMTP</h4>
+                        <a href="{% url 'notificacoes:criar_config_email' %}" class="btn btn-sm btn-primary">
+                            <i class="fas fa-plus me-1"></i>Nova Configuração
+                        </a>
+                    </div>
+
+                    {% if configs_email %}
+                        {% for cfg in configs_email %}
+                        <div class="cfg-card">
+                            <div class="cfg-card-header">
+                                <div>
+                                    <div class="cfg-card-title">
+                                        {% if cfg.ativo %}<span class="pill-ok me-2"><i class="fas fa-check-circle"></i>Ativo</span>{% else %}<span class="pill-err me-2">Inativo</span>{% endif %}
+                                        {{ cfg.nome }}
+                                    </div>
+                                    <div class="cfg-card-meta mt-1">
+                                        <i class="fas fa-server me-1"></i>{{ cfg.host }}:{{ cfg.porta }}
+                                        &nbsp;·&nbsp;<i class="fas fa-user me-1"></i>{{ cfg.usuario }}
+                                        &nbsp;·&nbsp;<i class="fas fa-at me-1"></i>{{ cfg.email_remetente }}
+                                        {% if cfg.usar_tls %}&nbsp;<span class="badge bg-success" style="font-size:.65rem;">TLS</span>{% endif %}
+                                        {% if cfg.usar_ssl %}&nbsp;<span class="badge bg-info" style="font-size:.65rem;">SSL</span>{% endif %}
+                                    </div>
+                                </div>
+                                <div class="d-flex gap-2 flex-wrap">
+                                    <button class="btn btn-sm btn-outline-info" onclick="testarEmail({{ cfg.pk }}, this)">
+                                        <i class="fas fa-paper-plane me-1"></i>Testar
+                                    </button>
+                                    <a href="{% url 'notificacoes:editar_config_email' cfg.pk %}" class="btn btn-sm btn-outline-primary">
+                                        <i class="fas fa-edit me-1"></i>Editar
+                                    </a>
+                                    <button class="btn btn-sm btn-outline-danger" onclick="excluirConfig('{% url 'notificacoes:excluir_config_email' cfg.pk %}', '{{ cfg.nome }}')">
+                                        <i class="fas fa-trash"></i>
+                                    </button>
+                                </div>
+                            </div>
+                            <div id="test-result-email-{{ cfg.pk }}" class="test-result"></div>
+                        </div>
+                        {% endfor %}
+                    {% else %}
+                        <div class="empty-cfg">
+                            <i class="fas fa-envelope d-block"></i>
+                            <p class="mb-2">Nenhuma configuração de e-mail cadastrada</p>
+                            <a href="{% url 'notificacoes:criar_config_email' %}" class="btn btn-primary btn-sm">
+                                <i class="fas fa-plus me-1"></i>Configurar E-mail
+                            </a>
+                        </div>
+                    {% endif %}
+                </div>
+
+                {# ──────────────── WhatsApp ──────────────── #}
+                <div id="panel-whatsapp" class="cfg-panel">
+                    <div class="cfg-section-header">
+                        <h4><i class="fab fa-whatsapp text-success"></i> WhatsApp</h4>
+                        <a href="{% url 'notificacoes:criar_config_whatsapp' %}" class="btn btn-sm btn-success">
+                            <i class="fas fa-plus me-1"></i>Nova Configuração
+                        </a>
+                    </div>
+
+                    {% if configs_whatsapp %}
+                        {% for cfg in configs_whatsapp %}
+                        <div class="cfg-card">
+                            <div class="cfg-card-header">
+                                <div>
+                                    <div class="cfg-card-title">
+                                        {% if cfg.ativo %}<span class="pill-ok me-2"><i class="fas fa-check-circle"></i>Ativo</span>{% else %}<span class="pill-err me-2">Inativo</span>{% endif %}
+                                        {{ cfg.nome }}
+                                        <span class="badge bg-secondary ms-1" style="font-size:.7rem;">{{ cfg.get_provedor_display }}</span>
+                                    </div>
+                                    <div class="cfg-card-meta mt-1">
+                                        {% if cfg.instancia %}<i class="fas fa-plug me-1"></i>Instância: {{ cfg.instancia }}{% endif %}
+                                        {% if cfg.numero_remetente %}<i class="fas fa-phone me-1"></i>{{ cfg.numero_remetente }}{% endif %}
+                                    </div>
+                                </div>
+                                <div class="d-flex gap-2 flex-wrap">
+                                    <button class="btn btn-sm btn-outline-info" onclick="testarWhatsapp({{ cfg.pk }}, this)">
+                                        <i class="fas fa-vial me-1"></i>Testar
+                                    </button>
+                                    <a href="{% url 'notificacoes:editar_config_whatsapp' cfg.pk %}" class="btn btn-sm btn-outline-primary">
+                                        <i class="fas fa-edit me-1"></i>Editar
+                                    </a>
+                                </div>
+                            </div>
+                            <div id="test-result-wa-{{ cfg.pk }}" class="test-result"></div>
+                        </div>
+                        {% endfor %}
+                    {% else %}
+                        <div class="empty-cfg">
+                            <i class="fab fa-whatsapp d-block"></i>
+                            <p class="mb-2">Nenhuma configuração de WhatsApp cadastrada</p>
+                            <a href="{% url 'notificacoes:criar_config_whatsapp' %}" class="btn btn-success btn-sm">
+                                <i class="fas fa-plus me-1"></i>Configurar WhatsApp
+                            </a>
+                        </div>
+                    {% endif %}
+                </div>
+
+                {# ──────────────── Twilio / SMS ──────────────── #}
+                <div id="panel-sms" class="cfg-panel">
+                    <div class="cfg-section-header">
+                        <h4><i class="fas fa-sms text-info"></i> Twilio / SMS</h4>
+                        <span class="pill-warn"><i class="fas fa-clock"></i>Em desenvolvimento</span>
+                    </div>
+
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <label class="form-label form-label-sm fw-semibold">Account SID</label>
+                            <input type="text" class="form-control form-control-sm font-monospace"
+                                   value="{{ params_twilio.TWILIO_ACCOUNT_SID|default:'' }}"
+                                   placeholder="ACxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" data-param="TWILIO_ACCOUNT_SID">
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label form-label-sm fw-semibold">Auth Token</label>
+                            <div class="input-group input-group-sm">
+                                <input type="password" class="form-control form-control-sm font-monospace param-input-secret"
+                                       value="{{ params_twilio.TWILIO_AUTH_TOKEN|default:'' }}"
+                                       placeholder="••••••••••••••••••••••••••••••••" data-param="TWILIO_AUTH_TOKEN">
+                                <button class="btn btn-outline-secondary" type="button" onclick="toggleSecret(this)">
+                                    <i class="fas fa-eye"></i>
+                                </button>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label form-label-sm fw-semibold">Número SMS (E.164)</label>
+                            <input type="text" class="form-control form-control-sm"
+                                   value="{{ params_twilio.TWILIO_PHONE_NUMBER|default:'' }}"
+                                   placeholder="+15551234567" data-param="TWILIO_PHONE_NUMBER">
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label form-label-sm fw-semibold">Número WhatsApp</label>
+                            <input type="text" class="form-control form-control-sm"
+                                   value="{{ params_twilio.TWILIO_WHATSAPP_NUMBER|default:'' }}"
+                                   placeholder="whatsapp:+15551234567" data-param="TWILIO_WHATSAPP_NUMBER">
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label form-label-sm fw-semibold">Status Callback URL</label>
+                            <input type="url" class="form-control form-control-sm"
+                                   value="{{ params_twilio.TWILIO_STATUS_CALLBACK_URL|default:'' }}"
+                                   placeholder="https://seu-app.com/notificacoes/webhook/twilio/"
+                                   data-param="TWILIO_STATUS_CALLBACK_URL">
+                        </div>
+                        <div class="col-12 d-flex gap-2">
+                            <button class="btn btn-sm btn-primary" onclick="salvarParametros('twilio', this)">
+                                <i class="fas fa-save me-1"></i>Salvar
+                            </button>
+                            <button class="btn btn-sm btn-outline-info" onclick="testarTwilio(this)">
+                                <i class="fas fa-vial me-1"></i>Testar SMS
+                            </button>
+                        </div>
+                    </div>
+                    <div id="test-result-sms" class="test-result mt-2"></div>
+                </div>
+
+                {# ──────────────── BRCobrança ──────────────── #}
+                <div id="panel-brcobranca" class="cfg-panel">
+                    <div class="cfg-section-header">
+                        <h4><i class="fas fa-barcode text-dark"></i> BRCobrança — API de Boletos</h4>
+                        <button class="btn btn-sm btn-outline-dark" onclick="testarBrcobranca(this)">
+                            <i class="fas fa-heartbeat me-1"></i>Health Check
+                        </button>
+                    </div>
+
+                    <div class="row g-3">
+                        <div class="col-md-8">
+                            <label class="form-label form-label-sm fw-semibold">URL da API</label>
+                            <input type="url" class="form-control form-control-sm font-monospace"
+                                   value="{{ params_brcobranca.BRCOBRANCA_URL|default:'http://localhost:9292' }}"
+                                   placeholder="http://brcobranca:9292" data-param="BRCOBRANCA_URL">
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label form-label-sm fw-semibold">Timeout (s)</label>
+                            <input type="number" class="form-control form-control-sm" min="5" max="300"
+                                   value="{{ params_brcobranca.BRCOBRANCA_TIMEOUT|default:30 }}"
+                                   data-param="BRCOBRANCA_TIMEOUT">
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label form-label-sm fw-semibold">Máx. Tentativas</label>
+                            <input type="number" class="form-control form-control-sm" min="1" max="10"
+                                   value="{{ params_brcobranca.BRCOBRANCA_MAX_TENTATIVAS|default:3 }}"
+                                   data-param="BRCOBRANCA_MAX_TENTATIVAS">
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label form-label-sm fw-semibold">Delay inicial retry (s)</label>
+                            <input type="number" class="form-control form-control-sm" min="1" max="60"
+                                   value="{{ params_brcobranca.BRCOBRANCA_DELAY_INICIAL|default:2 }}"
+                                   data-param="BRCOBRANCA_DELAY_INICIAL">
+                        </div>
+                        <div class="col-12 d-flex gap-2">
+                            <button class="btn btn-sm btn-primary" onclick="salvarParametros('brcobranca', this)">
+                                <i class="fas fa-save me-1"></i>Salvar
+                            </button>
+                        </div>
+                    </div>
+                    <div id="test-result-brcobranca" class="test-result mt-2"></div>
+
+                    {# Status atual #}
+                    <div class="mt-3 p-3 rounded" style="background:#f8f9fa; border:1px solid #dee2e6; font-size:.82rem;">
+                        <div class="fw-semibold mb-2"><i class="fas fa-info-circle me-1 text-muted"></i>Status atual (runtime)</div>
+                        <div class="row g-2">
+                            <div class="col-6 col-md-3">
+                                <div class="text-muted" style="font-size:.72rem;">URL</div>
+                                <div class="font-monospace" style="font-size:.75rem; word-break:break-all;">{{ brcobranca_url|default:'não configurado' }}</div>
+                            </div>
+                            <div class="col-6 col-md-3">
+                                <div class="text-muted" style="font-size:.72rem;">Último status</div>
+                                <span id="brcobranca-status-badge">
+                                    {% if brcobranca_ok %}<span class="pill-ok"><i class="fas fa-check-circle"></i>Online</span>
+                                    {% else %}<span class="pill-warn"><i class="fas fa-question-circle"></i>Desconhecido</span>{% endif %}
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                {# ──────────────── Bancos / Contas ──────────────── #}
+                {# ──────────────── Portal do Comprador ──────────────── #}
+                <div id="panel-portal" class="cfg-panel">
+                    <div class="cfg-section-header">
+                        <h4><i class="fas fa-globe text-warning"></i> Portal do Comprador</h4>
+                        <button class="btn btn-sm btn-primary" onclick="salvarParametros('portal', this)">
+                            <i class="fas fa-save me-1"></i>Salvar
+                        </button>
+                    </div>
+
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <label class="form-label form-label-sm fw-semibold">Nome da plataforma</label>
+                            <input type="text" class="form-control form-control-sm"
+                                   value="{{ params_portal.PORTAL_NOME|default:'Portal do Comprador' }}"
+                                   data-param="PORTAL_NOME" placeholder="Portal do Comprador">
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label form-label-sm fw-semibold">URL base do portal</label>
+                            <input type="url" class="form-control form-control-sm"
+                                   value="{{ params_portal.PORTAL_URL_BASE|default:'' }}"
+                                   data-param="PORTAL_URL_BASE" placeholder="https://portal.suaempresa.com.br">
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label form-label-sm fw-semibold">Dias de validade do token de acesso</label>
+                            <input type="number" class="form-control form-control-sm" min="1" max="365"
+                                   value="{{ params_portal.PORTAL_TOKEN_DIAS|default:30 }}"
+                                   data-param="PORTAL_TOKEN_DIAS">
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label form-label-sm fw-semibold">Permitir auto-cadastro</label>
+                            <select class="form-select form-select-sm" data-param="PORTAL_AUTO_CADASTRO">
+                                <option value="1" {% if params_portal.PORTAL_AUTO_CADASTRO == '1' %}selected{% endif %}>Sim</option>
+                                <option value="0" {% if params_portal.PORTAL_AUTO_CADASTRO != '1' %}selected{% endif %}>Não</option>
+                            </select>
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label form-label-sm fw-semibold">Mensagem de boas-vindas</label>
+                            <textarea class="form-control form-control-sm" rows="3"
+                                      data-param="PORTAL_MSG_BOAS_VINDAS"
+                                      placeholder="Bem-vindo ao seu portal...">{{ params_portal.PORTAL_MSG_BOAS_VINDAS|default:'' }}</textarea>
+                        </div>
+                    </div>
+                </div>
+
+                {# ──────────────── Notificações ──────────────── #}
+                <div id="panel-notificacoes" class="cfg-panel">
+                    <div class="cfg-section-header">
+                        <h4><i class="fas fa-bell text-danger"></i> Notificações</h4>
+                        <a href="{% url 'notificacoes:configuracoes' %}" class="btn btn-sm btn-outline-secondary">
+                            <i class="fas fa-external-link-alt me-1"></i>Abrir Hub de Notificações
+                        </a>
+                    </div>
+
+                    <div class="row g-3 mb-3">
+                        <div class="col-md-4">
+                            <label class="form-label form-label-sm fw-semibold">Dias antecedência alerta vencimento</label>
+                            <input type="number" class="form-control form-control-sm" min="1" max="30"
+                                   value="{{ params_notif.NOTIFICACAO_DIAS_ANTECEDENCIA|default:5 }}"
+                                   data-param="NOTIFICACAO_DIAS_ANTECEDENCIA">
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label form-label-sm fw-semibold">Dias para alerta inadimplência</label>
+                            <input type="number" class="form-control form-control-sm" min="1" max="90"
+                                   value="{{ params_notif.NOTIFICACAO_DIAS_INADIMPLENCIA|default:3 }}"
+                                   data-param="NOTIFICACAO_DIAS_INADIMPLENCIA">
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label form-label-sm fw-semibold">Enviar boleto por e-mail ao gerar</label>
+                            <select class="form-select form-select-sm" data-param="NOTIFICACAO_EMAIL_AO_GERAR_BOLETO">
+                                <option value="1" {% if params_notif.NOTIFICACAO_EMAIL_AO_GERAR_BOLETO == '1' %}selected{% endif %}>Sim</option>
+                                <option value="0" {% if params_notif.NOTIFICACAO_EMAIL_AO_GERAR_BOLETO != '1' %}selected{% endif %}>Não</option>
+                            </select>
+                        </div>
+                        <div class="col-12 d-flex gap-2">
+                            <button class="btn btn-sm btn-primary" onclick="salvarParametros('notificacao', this)">
+                                <i class="fas fa-save me-1"></i>Salvar
+                            </button>
+                        </div>
+                    </div>
+
+                    <hr class="my-3">
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <div class="fw-semibold" style="font-size:.85rem;">
+                            <i class="fas fa-list-alt me-1 text-muted"></i>Regras de Notificação Ativas
+                        </div>
+                        <a href="{% url 'notificacoes:listar_regras' %}" class="btn btn-sm btn-outline-primary">
+                            <i class="fas fa-cog me-1"></i>Gerenciar Regras
+                        </a>
+                    </div>
+                    {% if regras_notificacao %}
+                    <div class="table-responsive">
+                        <table class="table table-sm" style="font-size:.8rem;">
+                            <thead class="table-light"><tr><th>Regra</th><th>Gatilho</th><th>Canal</th><th class="text-center">Status</th></tr></thead>
+                            <tbody>
+                                {% for regra in regras_notificacao %}
+                                <tr>
+                                    <td>{{ regra.nome }}</td>
+                                    <td>{{ regra.get_tipo_gatilho_display }} {{ regra.dias_offset }}d</td>
+                                    <td><span class="badge bg-info text-dark" style="font-size:.68rem;">{{ regra.get_tipo_notificacao_display }}</span></td>
+                                    <td class="text-center">
+                                        {% if regra.ativo %}<span class="pill-ok">Ativo</span>{% else %}<span class="pill-err">Inativo</span>{% endif %}
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    {% else %}
+                    <p class="text-muted small">Nenhuma regra cadastrada. <a href="{% url 'notificacoes:listar_regras' %}">Criar regras →</a></p>
+                    {% endif %}
+                </div>
+
+                {# ──────────────── Parâmetros Avançados ──────────────── #}
+                <div id="panel-avancado" class="cfg-panel">
+                    <div class="cfg-section-header">
+                        <h4><i class="fas fa-tools text-muted"></i> Parâmetros Avançados</h4>
+                        <span class="pill-warn"><i class="fas fa-exclamation-triangle"></i>Atenção: afeta toda a plataforma</span>
+                    </div>
+
+                    {% if parametros_por_grupo %}
+                        {% for grupo, params in parametros_por_grupo.items %}
+                        <div class="mb-3">
+                            <div class="fw-semibold mb-2" style="font-size:.8rem; color:#6c757d; text-transform:uppercase; letter-spacing:.04em;">
+                                <i class="fas fa-folder me-1"></i>{{ grupo }}
+                            </div>
+                            <table class="table table-sm param-table border" style="background:#fff;">
+                                <colgroup><col class="key-col"><col><col style="width:80px;"></colgroup>
+                                <tbody>
+                                    {% for p in params %}
+                                    <tr>
+                                        <td class="key-col">
+                                            <code>{{ p.chave }}</code>
+                                            {% if p.modificado_manualmente %}<span class="badge bg-warning text-dark ms-1" style="font-size:.6rem;" title="Alterado manualmente — não será sobrescrito pelo .env">M</span>{% endif %}
+                                        </td>
+                                        <td class="val-col">
+                                            {% if p.tipo == 'secret' %}
+                                            <div class="input-group input-group-sm">
+                                                <input type="password" class="form-control form-control-sm param-input-secret"
+                                                       value="{{ p.valor }}" data-param-id="{{ p.pk }}"
+                                                       title="{{ p.descricao }}">
+                                                <button class="btn btn-outline-secondary btn-sm" type="button" onclick="toggleSecret(this)"><i class="fas fa-eye"></i></button>
+                                            </div>
+                                            {% elif p.tipo == 'bool' %}
+                                            <select class="form-select form-select-sm" data-param-id="{{ p.pk }}" title="{{ p.descricao }}">
+                                                <option value="True" {% if p.valor == 'True' %}selected{% endif %}>Verdadeiro</option>
+                                                <option value="False" {% if p.valor != 'True' %}selected{% endif %}>Falso</option>
+                                            </select>
+                                            {% else %}
+                                            <input type="{% if p.tipo == 'int' %}number{% else %}text{% endif %}"
+                                                   class="form-control form-control-sm"
+                                                   value="{{ p.valor }}" data-param-id="{{ p.pk }}"
+                                                   title="{{ p.descricao }}">
+                                            {% endif %}
+                                        </td>
+                                        <td>
+                                            <button class="btn btn-xs btn-outline-primary py-0 px-1"
+                                                    style="font-size:.72rem;"
+                                                    onclick="salvarParametroUnico({{ p.pk }}, this)"
+                                                    title="Salvar este parâmetro">
+                                                <i class="fas fa-save"></i>
+                                            </button>
+                                        </td>
+                                    </tr>
+                                    <tr class="table-secondary" style="font-size:.72rem;">
+                                        <td colspan="3" class="py-0 text-muted ps-2" style="border-top:none;">{{ p.descricao }}</td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                        {% endfor %}
+                    {% else %}
+                        <p class="text-muted small">Nenhum parâmetro avançado cadastrado.</p>
+                    {% endif %}
+                </div>
+
+            </div>{# /cfg-content #}
+        </div>{# /cfg-layout #}
+    </div>{# /card #}
+
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+const CSRF = '{{ csrf_token }}';
+
+// ── Navegação entre painéis ──────────────────────────────────────────────
+function showPanel(id, link) {
+    document.querySelectorAll('.cfg-panel').forEach(p => p.classList.remove('active'));
+    document.querySelectorAll('.cfg-nav-item').forEach(a => a.classList.remove('active'));
+    document.getElementById('panel-' + id).classList.add('active');
+    if (link) link.classList.add('active');
+}
+
+// ── Mostrar/ocultar senha ────────────────────────────────────────────────
+function toggleSecret(btn) {
+    const inp = btn.previousElementSibling;
+    if (inp.type === 'password') {
+        inp.type = 'text';
+        btn.querySelector('i').className = 'fas fa-eye-slash';
+    } else {
+        inp.type = 'password';
+        btn.querySelector('i').className = 'fas fa-eye';
+    }
+}
+
+// ── Testar conexão Email ─────────────────────────────────────────────────
+function testarEmail(pk, btn) {
+    const res = document.getElementById('test-result-email-' + pk);
+    btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Testando...';
+    fetch('{% url "notificacoes:testar_config_email" 0 %}'.replace('/0/', '/' + pk + '/'), {
+        method: 'POST', headers: {'X-CSRFToken': CSRF}
+    })
+    .then(r => r.json()).then(data => {
+        res.style.display = 'block';
+        if (data.sucesso) {
+            res.className = 'test-result'; res.style.background = '#d4edda'; res.style.color = '#155724';
+            res.innerHTML = '<i class="fas fa-check-circle me-1"></i>' + (data.mensagem || 'Conexão OK');
+        } else {
+            res.className = 'test-result'; res.style.background = '#f8d7da'; res.style.color = '#721c24';
+            res.innerHTML = '<i class="fas fa-times-circle me-1"></i>' + (data.erro || 'Falha na conexão');
+        }
+    }).catch(e => {
+        res.style.display = 'block'; res.style.background = '#f8d7da'; res.style.color = '#721c24';
+        res.innerHTML = '<i class="fas fa-times-circle me-1"></i>Erro: ' + e.message;
+    }).finally(() => {
+        btn.disabled = false; btn.innerHTML = '<i class="fas fa-paper-plane me-1"></i>Testar';
+    });
+}
+
+// ── Testar WhatsApp ──────────────────────────────────────────────────────
+function testarWhatsapp(pk, btn) {
+    const res = document.getElementById('test-result-wa-' + pk);
+    btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Testando...';
+    fetch('{% url "notificacoes:testar_config_whatsapp" 0 %}'.replace('/0/', '/' + pk + '/'), {
+        method: 'POST', headers: {'X-CSRFToken': CSRF}
+    })
+    .then(r => r.json()).then(data => {
+        res.style.display = 'block';
+        res.style.background = data.sucesso ? '#d4edda' : '#f8d7da';
+        res.style.color = data.sucesso ? '#155724' : '#721c24';
+        res.innerHTML = (data.sucesso ? '<i class="fas fa-check-circle me-1"></i>' : '<i class="fas fa-times-circle me-1"></i>') +
+            (data.mensagem || data.erro || (data.sucesso ? 'OK' : 'Falhou'));
+    }).catch(e => {
+        res.style.display = 'block'; res.style.background = '#f8d7da'; res.style.color = '#721c24';
+        res.innerHTML = '<i class="fas fa-times-circle me-1"></i>' + e.message;
+    }).finally(() => {
+        btn.disabled = false; btn.innerHTML = '<i class="fas fa-vial me-1"></i>Testar';
+    });
+}
+
+// ── Health check BRCobrança ──────────────────────────────────────────────
+function testarBrcobranca(btn) {
+    const res = document.getElementById('test-result-brcobranca');
+    const badge = document.getElementById('brcobranca-status-badge');
+    btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Verificando...';
+    fetch('/financeiro/api/boletos/revalidar/', {
+        method: 'POST', headers: {'X-CSRFToken': CSRF, 'Content-Type':'application/json'},
+        body: JSON.stringify({ping: true})
+    })
+    .then(r => r.json()).then(data => {
+        const ok = data.sucesso !== false;
+        res.style.display = 'block';
+        res.style.background = ok ? '#d4edda' : '#f8d7da';
+        res.style.color = ok ? '#155724' : '#721c24';
+        res.innerHTML = (ok ? '<i class="fas fa-check-circle me-1"></i>BRCobrança acessível' : '<i class="fas fa-times-circle me-1"></i>BRCobrança inacessível — verifique se o serviço está rodando');
+        badge.innerHTML = ok ? '<span class="pill-ok"><i class="fas fa-check-circle"></i>Online</span>' : '<span class="pill-err"><i class="fas fa-times-circle"></i>Offline</span>';
+    }).catch(() => {
+        res.style.display = 'block'; res.style.background = '#f8d7da'; res.style.color = '#721c24';
+        res.innerHTML = '<i class="fas fa-times-circle me-1"></i>Erro de conexão com BRCobrança';
+        badge.innerHTML = '<span class="pill-err"><i class="fas fa-times-circle"></i>Offline</span>';
+    }).finally(() => {
+        btn.disabled = false; btn.innerHTML = '<i class="fas fa-heartbeat me-1"></i>Health Check';
+    });
+}
+
+// ── Salvar grupo de parâmetros ───────────────────────────────────────────
+function salvarParametros(grupo, btn) {
+    const panel = btn.closest('.cfg-panel');
+    const params = {};
+    panel.querySelectorAll('[data-param]').forEach(el => {
+        params[el.dataset.param] = el.value;
+    });
+    const orig = btn.innerHTML;
+    btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Salvando...';
+    fetch('{% url "core:api_parametros_salvar" %}', {
+        method: 'POST',
+        headers: {'X-CSRFToken': CSRF, 'Content-Type': 'application/json'},
+        body: JSON.stringify({grupo: grupo, parametros: params})
+    })
+    .then(r => r.json()).then(data => {
+        if (window.showToast) showToast(data.mensagem || 'Salvo com sucesso!', data.sucesso ? 'success' : 'error');
+    }).catch(() => {
+        if (window.showToast) showToast('Erro ao salvar parâmetros', 'error');
+    }).finally(() => {
+        btn.disabled = false; btn.innerHTML = orig;
+    });
+}
+
+// ── Salvar parâmetro único ───────────────────────────────────────────────
+function salvarParametroUnico(paramId, btn) {
+    const row = btn.closest('tr');
+    const input = row.querySelector('[data-param-id]');
+    if (!input) return;
+    const valor = input.value;
+    const orig = btn.innerHTML;
+    btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+    fetch('{% url "core:api_parametro_atualizar" 0 %}'.replace('/0/', '/' + paramId + '/'), {
+        method: 'PATCH',
+        headers: {'X-CSRFToken': CSRF, 'Content-Type': 'application/json'},
+        body: JSON.stringify({valor: valor})
+    })
+    .then(r => r.json()).then(data => {
+        if (window.showToast) showToast(data.mensagem || 'Salvo!', data.sucesso ? 'success' : 'error');
+    }).catch(() => {
+        if (window.showToast) showToast('Erro ao salvar', 'error');
+    }).finally(() => {
+        btn.disabled = false; btn.innerHTML = orig;
+    });
+}
+
+// ── Exportar configurações ───────────────────────────────────────────────
+function exportarConfig() {
+    fetch('{% url "core:api_parametros_exportar" %}', {headers: {'X-CSRFToken': CSRF}})
+    .then(r => r.blob()).then(blob => {
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a'); a.href = url;
+        a.download = 'config_sistema_' + new Date().toISOString().slice(0,10) + '.json';
+        document.body.appendChild(a); a.click();
+        document.body.removeChild(a); URL.revokeObjectURL(url);
+    }).catch(() => alert('Erro ao exportar configurações.'));
+}
+
+// ── Confirmar exclusão ───────────────────────────────────────────────────
+function excluirConfig(url, nome) {
+    if (!confirm('Excluir "' + nome + '"?')) return;
+    const form = document.createElement('form');
+    form.method = 'post'; form.action = url;
+    const csrf = document.createElement('input');
+    csrf.type = 'hidden'; csrf.name = 'csrfmiddlewaretoken'; csrf.value = CSRF;
+    form.appendChild(csrf); document.body.appendChild(form); form.submit();
+}
+
+// ── Restaurar seção ativa pela URL hash ──────────────────────────────────
+document.addEventListener('DOMContentLoaded', function() {
+    const hash = window.location.hash.replace('#', '');
+    if (hash) {
+        const link = document.querySelector('[data-panel="' + hash + '"]');
+        if (link) showPanel(hash, link);
+    }
+    // Atualiza hash ao clicar
+    document.querySelectorAll('.cfg-nav-item').forEach(a => {
+        a.addEventListener('click', function() {
+            window.location.hash = this.dataset.panel;
+        });
+    });
+});
+</script>
+{% endblock %}

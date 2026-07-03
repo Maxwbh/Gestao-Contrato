@@ -1,0 +1,356 @@
+{% extends 'base.html' %}
+{% load static %}
+{% load hashid_tags %}
+{% load financeiro_tags %}
+
+{% block title %}Parcela {{ parcela.numero_parcela }} - {{ parcela.contrato.numero_contrato }}{% endblock %}
+
+{% block extra_css %}
+<style>
+    .badge-pago { background-color: #28a745; }
+    .badge-pendente { background-color: #0d6efd; }
+    .badge-vencida { background-color: #dc3545; }
+    .info-label { font-weight: 600; color: #6c757d; }
+    .info-value { font-size: 1.1rem; }
+    .valor-total { font-size: 1.5rem; font-weight: bold; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <!-- Header -->
+    <div class="row mb-4">
+        <div class="col">
+            <h2>
+                <i class="fas fa-file-invoice-dollar me-2"></i>
+                Parcela {{ parcela.numero_parcela }}/{{ parcela.contrato.numero_parcelas }}
+                {% if parcela.pago %}
+                    <span class="badge badge-pago">Pago</span>
+                {% elif parcela.esta_vencida %}
+                    <span class="badge badge-vencida">Vencida</span>
+                {% else %}
+                    <span class="badge badge-pendente">A Vencer</span>
+                {% endif %}
+            </h2>
+        </div>
+    </div>
+
+    <div class="row">
+        <!-- Informações da Parcela -->
+        <div class="col-md-6 mb-4">
+            <div class="card h-100">
+                <div class="card-header">
+                    <strong><i class="fas fa-info-circle me-2"></i>Informações da Parcela</strong>
+                </div>
+                <div class="card-body">
+                    <div class="row mb-3">
+                        <div class="col-6">
+                            <span class="info-label">Contrato:</span><br>
+                            <span class="info-value">{{ parcela.contrato.numero_contrato }}</span>
+                        </div>
+                        <div class="col-6">
+                            <span class="info-label">Parcela:</span><br>
+                            <span class="info-value">{{ parcela.numero_parcela }} de {{ parcela.contrato.numero_parcelas }}</span>
+                        </div>
+                    </div>
+                    <div class="row mb-3">
+                        <div class="col-6">
+                            <span class="info-label">Data Vencimento:</span><br>
+                            <span class="info-value">{{ parcela.data_vencimento|date:"d/m/Y" }}</span>
+                        </div>
+                        <div class="col-6">
+                            <span class="info-label">Data Pagamento:</span><br>
+                            <span class="info-value">
+                                {% if parcela.data_pagamento %}
+                                    {{ parcela.data_pagamento|date:"d/m/Y" }}
+                                {% else %}
+                                    -
+                                {% endif %}
+                            </span>
+                        </div>
+                    </div>
+                    <hr>
+                    <div class="row mb-3">
+                        <div class="col-6">
+                            <span class="info-label">Valor Original:</span><br>
+                            <span class="info-value">{{ parcela.valor_original|moeda }}</span>
+                        </div>
+                        <div class="col-6">
+                            <span class="info-label">Valor Atual:</span><br>
+                            <span class="info-value">{{ parcela.valor_atual|moeda }}</span>
+                        </div>
+                    </div>
+                    <div class="row mb-3">
+                        <div class="col-6">
+                            <span class="info-label">Juros:</span><br>
+                            <span class="info-value text-warning">{{ parcela.valor_juros|default:0|moeda }}</span>
+                        </div>
+                        <div class="col-6">
+                            <span class="info-label">Multa:</span><br>
+                            <span class="info-value text-danger">{{ parcela.valor_multa|default:0|moeda }}</span>
+                        </div>
+                    </div>
+                    <hr>
+                    <div class="row">
+                        <div class="col-12 text-center">
+                            <span class="info-label">Valor Total a Pagar:</span><br>
+                            <span class="valor-total text-primary">{{ parcela.valor_total|moeda }}</span>
+                        </div>
+                    </div>
+                    {% if parcela.pago %}
+                    <hr>
+                    <div class="row">
+                        <div class="col-12 text-center">
+                            <span class="info-label">Valor Pago:</span><br>
+                            <span class="valor-total text-success">{{ parcela.valor_pago|moeda }}</span>
+                        </div>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <!-- Informações do Contrato/Comprador -->
+        <div class="col-md-6 mb-4">
+            <div class="card h-100">
+                <div class="card-header">
+                    <strong><i class="fas fa-user me-2"></i>Comprador / Contrato</strong>
+                </div>
+                <div class="card-body">
+                    <div class="row mb-3">
+                        <div class="col-12">
+                            <span class="info-label">Comprador:</span><br>
+                            <span class="info-value">{{ parcela.contrato.comprador.nome }}</span>
+                        </div>
+                    </div>
+                    <div class="row mb-3">
+                        <div class="col-6">
+                            <span class="info-label">CPF/CNPJ:</span><br>
+                            <span class="info-value">
+                                {% if parcela.contrato.comprador.tipo_pessoa == 'PF' %}
+                                    {{ parcela.contrato.comprador.cpf }}
+                                {% else %}
+                                    {{ parcela.contrato.comprador.cnpj }}
+                                {% endif %}
+                            </span>
+                        </div>
+                        <div class="col-6">
+                            <span class="info-label">Telefone:</span><br>
+                            <span class="info-value">{{ parcela.contrato.comprador.celular|default:parcela.contrato.comprador.telefone|default:"-" }}</span>
+                        </div>
+                    </div>
+                    <hr>
+                    <div class="row mb-3">
+                        <div class="col-12">
+                            <span class="info-label">Imóvel:</span><br>
+                            <span class="info-value">{{ parcela.contrato.imovel.identificacao }}</span>
+                        </div>
+                    </div>
+                    <div class="row mb-3">
+                        <div class="col-12">
+                            <span class="info-label">Loteamento:</span><br>
+                            <span class="info-value">{{ parcela.contrato.imovel.loteamento|default:"-" }}</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Observações -->
+    {% if parcela.observacoes %}
+    <div class="row">
+        <div class="col-12 mb-4">
+            <div class="card">
+                <div class="card-header">
+                    <strong><i class="fas fa-sticky-note me-2"></i>Observações</strong>
+                </div>
+                <div class="card-body">
+                    {{ parcela.observacoes }}
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Código de Barras e Linha Digitável -->
+    {% if parcela.codigo_barras or parcela.linha_digitavel %}
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">
+                    <strong><i class="fas fa-barcode me-2"></i>Dados do Boleto</strong>
+                </div>
+                <div class="card-body">
+                    {% if parcela.linha_digitavel %}
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold small text-muted">LINHA DIGITÁVEL</label>
+                        <div class="input-group">
+                            <input type="text" class="form-control font-monospace"
+                                   id="linhaDigitavelDetalhe"
+                                   value="{{ parcela.linha_digitavel }}" readonly>
+                            <button class="btn btn-outline-secondary" type="button"
+                                    onclick="copiarCampo('linhaDigitavelDetalhe', this)" title="Copiar">
+                                <i class="far fa-copy"></i>
+                            </button>
+                        </div>
+                    </div>
+                    {% endif %}
+                    {% if parcela.codigo_barras %}
+                    <div class="mb-2">
+                        <label class="form-label fw-semibold small text-muted">CÓDIGO DE BARRAS</label>
+                        <div class="input-group mb-2">
+                            <input type="text" class="form-control font-monospace"
+                                   id="codigoBarrasDetalhe"
+                                   value="{{ parcela.codigo_barras }}" readonly>
+                            <button class="btn btn-outline-secondary" type="button"
+                                    onclick="copiarCampo('codigoBarrasDetalhe', this)" title="Copiar">
+                                <i class="far fa-copy"></i>
+                            </button>
+                        </div>
+                        <!-- Barcode visual para leitura por scanner -->
+                        <div class="text-center py-3 bg-white border rounded" id="barcode-detalhe-wrap">
+                            <svg id="barcode-detalhe"></svg>
+                            <div class="text-muted small mt-1" style="font-family:monospace;letter-spacing:0.15em;">
+                                {{ parcela.codigo_barras }}
+                            </div>
+                        </div>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Ações -->
+    <div class="row">
+        <div class="col-12 d-flex flex-wrap gap-2">
+            <a href="{{ voltar_url }}" class="btn btn-secondary">
+                <i class="fas fa-arrow-left me-2"></i>Voltar
+            </a>
+            {% if not parcela.pago %}
+                {% if not parcela.tem_boleto %}
+                <button type="button" class="btn btn-outline-primary" id="btnGerarBoleto" onclick="gerarBoletoDetalhe()">
+                    <i class="fas fa-barcode me-2"></i>Gerar Boleto
+                </button>
+                {% else %}
+                <a href="{% url 'financeiro:download_boleto' parcela.pk|hashid %}" class="btn btn-outline-primary" target="_blank">
+                    <i class="fas fa-barcode me-2"></i>Ver Boleto
+                </a>
+                {% endif %}
+            {% if not parcela.pago %}
+            <a href="{% url 'financeiro:segunda_via_boleto' parcela.pk|hashid %}" class="btn btn-outline-warning">
+                <i class="fas fa-file-invoice me-2"></i>Segunda Via
+            </a>
+            {% endif %}
+            <a href="{% url 'financeiro:registrar_pagamento' parcela.pk|hashid %}" class="btn btn-success">
+                <i class="fas fa-dollar-sign me-2"></i>Registrar Pagamento
+            </a>
+            {% endif %}
+            <a href="{% url 'contratos:detalhe' parcela.contrato.pk|hashid %}" class="btn btn-outline-secondary">
+                <i class="fas fa-file-contract me-2"></i>Ver Contrato
+            </a>
+            {% if not parcela.pago and parcela.esta_vencida %}
+            <button type="button" class="btn btn-outline-danger" id="btnNotificar" onclick="notificarInadimplente()">
+                <i class="fas fa-bell me-2"></i>Notificar Comprador
+            </button>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+{% if not parcela.pago and not parcela.tem_boleto %}
+async function gerarBoletoDetalhe() {
+    const btn = document.getElementById('btnGerarBoleto');
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Verificando...';
+
+    try {
+        await GestaoContratos.BrcobrancaQueue.prepararApi(btn);
+
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Gerando...';
+        const fd = new FormData();
+        fd.append('csrfmiddlewaretoken', '{{ csrf_token }}');
+        const r = await fetch('{% url "financeiro:gerar_boleto" parcela.pk|hashid %}', {method: 'POST', body: fd});
+        const data = await r.json();
+
+        if (data.sucesso) {
+            btn.className = 'btn btn-success';
+            btn.innerHTML = '<i class="fas fa-check me-2"></i>Boleto Gerado';
+            setTimeout(() => location.reload(), 1000);
+        } else {
+            btn.disabled = false;
+            btn.innerHTML = '<i class="fas fa-barcode me-2"></i>Gerar Boleto';
+            alert('Erro: ' + (data.erro || 'Erro ao gerar boleto.'));
+        }
+    } catch (err) {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fas fa-barcode me-2"></i>Gerar Boleto';
+        alert('Erro: ' + err.message);
+    }
+}
+{% endif %}
+
+{% if not parcela.pago and parcela.esta_vencida %}
+function notificarInadimplente() {
+    const btn = document.getElementById('btnNotificar');
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Enviando...';
+
+    const fd = new FormData();
+    fd.append('csrfmiddlewaretoken', '{{ csrf_token }}');
+
+    fetch('{% url "financeiro:notificar_inadimplente" parcela.pk|hashid %}', {method: 'POST', body: fd})
+        .then(r => r.json())
+        .then(data => {
+            btn.disabled = false;
+            btn.innerHTML = '<i class="fas fa-bell me-2"></i>Notificar Comprador';
+            if (data.sucesso) {
+                if (window.showToast) window.showToast(data.mensagem, 'success');
+                else alert(data.mensagem);
+            } else {
+                if (window.showToast) window.showToast('Erro: ' + (data.erro || 'Falha ao enviar'), 'warning');
+                else alert('Erro: ' + (data.erro || 'Falha ao enviar notificação.'));
+            }
+        })
+        .catch(err => {
+            btn.disabled = false;
+            btn.innerHTML = '<i class="fas fa-bell me-2"></i>Notificar Comprador';
+            alert('Erro: ' + err.message);
+        });
+}
+{% endif %}
+
+function copiarCampo(id, btn) {
+    var el = document.getElementById(id);
+    if (!el) return;
+    navigator.clipboard.writeText(el.value).then(function () {
+        var orig = btn.innerHTML;
+        btn.innerHTML = '<i class="fas fa-check"></i>';
+        setTimeout(function () { btn.innerHTML = orig; }, 2000);
+    });
+}
+</script>
+<script src="{% static 'vendor/jsbarcode/JsBarcode.all.min.js' %}"></script>
+<script>
+(function () {
+    var el = document.getElementById('barcode-detalhe');
+    var wrap = document.getElementById('barcode-detalhe-wrap');
+    var input = document.getElementById('codigoBarrasDetalhe');
+    if (!el || !input || !input.value) return;
+    try {
+        JsBarcode(el, input.value, {
+            format: 'ITF',
+            width: 1.8,
+            height: 60,
+            displayValue: false,
+            margin: 10,
+        });
+    } catch (e) { if (wrap) wrap.style.display = 'none'; }
+})();
+</script>
+{% endblock %}

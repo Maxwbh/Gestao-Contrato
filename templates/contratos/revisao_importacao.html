@@ -1,0 +1,529 @@
+{% extends 'base.html' %}
+{% load format_filters %}
+
+{% block title %}Revisar Dados Extraídos{% endblock %}
+
+{% block extra_css %}
+<style>
+.secao-card { border-left: 4px solid #0d6efd; }
+.secao-card.verde { border-left-color: #198754; }
+.secao-card.amarelo { border-left-color: #ffc107; }
+.badge-match { background: #d1e7dd; color: #0a3622; font-size:.8rem; }
+.badge-novo  { background: #fff3cd; color: #664d03; font-size:.8rem; }
+.campo-incerto,
+input.form-control.campo-incerto,
+input.form-control[type="text"].campo-incerto,
+input.form-control[type="date"].campo-incerto,
+input.form-control[type="number"].campo-incerto,
+select.form-select.campo-incerto { border-color: #ffc107 !important; background: #fffbf0 !important; }
+.campo-incerto-label::after { content:" ⚠"; color:#ffc107; }
+.interm-row { background: #f8f9fa; border-radius: 8px; padding: 12px; margin-bottom: 8px; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container py-4" style="max-width: 900px;">
+
+  <div class="d-flex align-items-center gap-3 mb-4">
+    <a href="{% url 'contratos:upload_importacao' %}" class="btn btn-sm btn-outline-secondary">
+      <i class="fas fa-arrow-left"></i>
+    </a>
+    <div>
+      <h4 class="mb-0"><i class="fas fa-search text-warning me-2"></i>Revisar Dados Extraídos</h4>
+      <small class="text-muted">
+        Confira os dados extraídos pela IA. Edite o que for necessário e clique em <strong>Confirmar Importação</strong>.
+      </small>
+    </div>
+  </div>
+
+  {% if messages %}
+    {% for msg in messages %}
+      <div class="alert alert-{{ msg.tags }} alert-dismissible fade show">
+        {{ msg }} <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+      </div>
+    {% endfor %}
+  {% endif %}
+
+  <!-- Confiança da extração -->
+  {% with conf=dados.confianca %}
+  {% if conf %}
+  <div class="alert {% if conf.nivel == 'ALTO' %}alert-success{% elif conf.nivel == 'MEDIO' %}alert-warning{% else %}alert-danger{% endif %} mb-4">
+    <i class="fas {% if conf.nivel == 'ALTO' %}fa-check-circle{% else %}fa-exclamation-triangle{% endif %} me-2"></i>
+    <strong>Confiança da extração: {{ conf.nivel }}</strong>
+    {% if conf.campos_incertos %}
+      — campos com incerteza: <em>{{ conf.campos_incertos|join:", " }}</em>
+    {% endif %}
+  </div>
+  {% endif %}
+  {% endwith %}
+
+  <form method="post" action="{% url 'contratos:confirmar_importacao' pk=importacao.pk %}">
+    {% csrf_token %}
+    <input type="hidden" name="interm_count" id="interm_count" value="{{ dados.prestacoes_intermediarias|length }}">
+
+    <!-- ═══════════════════════════════════════════════════════════════════
+         DADOS DO CONTRATO
+    ═══════════════════════════════════════════════════════════════════ -->
+    <div class="card secao-card shadow-sm mb-4">
+      <div class="card-header bg-white fw-semibold">
+        <i class="fas fa-file-contract text-primary me-2"></i>Dados do Contrato
+      </div>
+      <div class="card-body">
+        <div class="row g-3">
+          {% with campos=dados %}
+
+          <div class="col-md-6">
+            <label class="form-label {% if 'numero_contrato' in campos_incertos %}campo-incerto-label{% endif %}">Número do Contrato</label>
+            <input type="text" name="numero_contrato" class="form-control {% if 'numero_contrato' in campos_incertos %}campo-incerto{% endif %}"
+                   value="{{ campos.numero_contrato|default:'' }}">
+          </div>
+
+          <div class="col-md-3">
+            <label class="form-label {% if 'data_contrato' in campos_incertos %}campo-incerto-label{% endif %}">Data do Contrato</label>
+            <input type="date" name="data_contrato" class="form-control {% if 'data_contrato' in campos_incertos %}campo-incerto{% endif %}"
+                   value="{{ campos.data_contrato|default:'' }}">
+          </div>
+
+          <div class="col-md-3">
+            <label class="form-label {% if 'data_primeiro_vencimento' in campos_incertos %}campo-incerto-label{% endif %}">1º Vencimento</label>
+            <input type="date" name="data_primeiro_vencimento" class="form-control {% if 'data_primeiro_vencimento' in campos_incertos %}campo-incerto{% endif %}"
+                   value="{{ campos.data_primeiro_vencimento|default:'' }}"
+                   title="Se vazio, será calculado automaticamente (30 dias após a data do contrato)">
+          </div>
+
+          <div class="col-md-4">
+            <label class="form-label {% if 'valor_total' in campos_incertos %}campo-incerto-label{% endif %}">Valor Total (R$)</label>
+            <input type="text" name="valor_total" class="form-control {% if 'valor_total' in campos_incertos %}campo-incerto{% endif %}"
+                   value="{{ campos.valor_total|default:'' }}">
+          </div>
+
+          <div class="col-md-4">
+            <label class="form-label {% if 'valor_entrada' in campos_incertos %}campo-incerto-label{% endif %}">Entrada (R$)</label>
+            <input type="text" name="valor_entrada" class="form-control {% if 'valor_entrada' in campos_incertos %}campo-incerto{% endif %}"
+                   value="{{ campos.valor_entrada|default:'0' }}">
+          </div>
+
+          <div class="col-md-2">
+            <label class="form-label {% if 'numero_parcelas' in campos_incertos %}campo-incerto-label{% endif %}">Parcelas</label>
+            <input type="number" name="numero_parcelas" min="1" max="360" class="form-control {% if 'numero_parcelas' in campos_incertos %}campo-incerto{% endif %}"
+                   value="{{ campos.numero_parcelas|default:'' }}">
+          </div>
+
+          <div class="col-md-2">
+            <label class="form-label {% if 'dia_vencimento' in campos_incertos %}campo-incerto-label{% endif %}">Dia Vencto</label>
+            <input type="number" name="dia_vencimento" min="1" max="31" class="form-control {% if 'dia_vencimento' in campos_incertos %}campo-incerto{% endif %}"
+                   value="{{ campos.dia_vencimento|default:'' }}">
+          </div>
+
+          <div class="col-md-4">
+            <label class="form-label {% if 'tipo_correcao' in campos_incertos %}campo-incerto-label{% endif %}">Índice de Correção</label>
+            <select name="tipo_correcao" class="form-select {% if 'tipo_correcao' in campos_incertos %}campo-incerto{% endif %}">
+              {% for val, label in tipo_correcao_choices %}
+                <option value="{{ val }}" {% if val == campos.tipo_correcao %}selected{% endif %}>{{ label }}</option>
+              {% endfor %}
+            </select>
+          </div>
+
+          <div class="col-md-2">
+            <label class="form-label {% if 'prazo_reajuste_meses' in campos_incertos %}campo-incerto-label{% endif %}">Reajuste (meses)</label>
+            <input type="number" name="prazo_reajuste_meses" min="1" max="120" class="form-control {% if 'prazo_reajuste_meses' in campos_incertos %}campo-incerto{% endif %}"
+                   value="{{ campos.prazo_reajuste_meses|default:'12' }}">
+          </div>
+
+          <div class="col-md-3">
+            <label class="form-label {% if 'percentual_juros_mora' in campos_incertos %}campo-incerto-label{% endif %}">Juros Mora (%/mês)</label>
+            <input type="text" name="percentual_juros_mora" class="form-control {% if 'percentual_juros_mora' in campos_incertos %}campo-incerto{% endif %}"
+                   value="{{ campos.percentual_juros_mora|default:'1.00' }}">
+          </div>
+
+          <div class="col-md-3">
+            <label class="form-label {% if 'percentual_multa' in campos_incertos %}campo-incerto-label{% endif %}">Multa (%)</label>
+            <input type="text" name="percentual_multa" class="form-control {% if 'percentual_multa' in campos_incertos %}campo-incerto{% endif %}"
+                   value="{{ campos.percentual_multa|default:'2.00' }}">
+          </div>
+
+          {% endwith %}
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══════════════════════════════════════════════════════════════════
+         IMOBILIÁRIA
+    ═══════════════════════════════════════════════════════════════════ -->
+    <div class="card secao-card {% if matches.imobiliaria_match %}verde{% else %}amarelo{% endif %} shadow-sm mb-4">
+      <div class="card-header bg-white d-flex align-items-center gap-2 fw-semibold">
+        <i class="fas fa-building text-primary"></i> Imobiliária
+        {% if matches.imobiliaria_match %}
+          <span class="badge badge-match ms-auto"><i class="fas fa-check me-1"></i>Encontrada no sistema</span>
+          <input type="hidden" name="imobiliaria_match_id" value="{{ matches.imobiliaria_match.pk }}">
+        {% else %}
+          <span class="badge badge-novo ms-auto"><i class="fas fa-plus me-1"></i>Será criada</span>
+        {% endif %}
+      </div>
+      <div class="card-body">
+        {% if matches.imobiliaria_match %}
+          <div class="alert alert-success py-2 mb-0">
+            <strong>{{ matches.imobiliaria_match.nome }}</strong>
+            {% if matches.imobiliaria_match.cnpj %} — {{ matches.imobiliaria_match.cnpj }}{% endif %}
+            <br><small class="text-muted">O contrato será vinculado a esta imobiliária existente.</small>
+          </div>
+        {% else %}
+          {% with d=dados.imobiliaria %}
+          <div class="row g-3">
+            <div class="col-md-6">
+              <label class="form-label">Nome / Razão Social *</label>
+              <input type="text" name="imob_nome" class="form-control" value="{{ d.nome|default:'' }}" required>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label">Nome Fantasia</label>
+              <input type="text" name="imob_razao_social" class="form-control" value="{{ d.razao_social|default:'' }}">
+            </div>
+            <div class="col-md-3">
+              <label class="form-label">Tipo de Pessoa</label>
+              <select name="imob_tipo_pessoa" id="imob_tipo_pessoa" class="form-select"
+                      onchange="toggleImobTipo(this.value)">
+                <option value="PJ" {% if d.tipo_pessoa != 'PF' %}selected{% endif %}>Pessoa Jurídica</option>
+                <option value="PF" {% if d.tipo_pessoa == 'PF' %}selected{% endif %}>Pessoa Física</option>
+              </select>
+            </div>
+            <div class="col-md-5" id="imob_cnpj_wrap">
+              <label class="form-label" id="imob_cnpj_label">CNPJ *</label>
+              <input type="text" name="imob_cnpj" id="imob_cnpj" class="form-control"
+                     value="{{ d.cnpj|default:'' }}"
+                     {% if d.tipo_pessoa != 'PF' %}required{% endif %}>
+            </div>
+            <div class="col-md-4" id="imob_cpf_wrap">
+              <label class="form-label" id="imob_cpf_label">CPF *</label>
+              <input type="text" name="imob_cpf" id="imob_cpf" class="form-control"
+                     value="{{ d.cpf|default:'' }}"
+                     {% if d.tipo_pessoa == 'PF' %}required{% endif %}>
+            </div>
+          </div>
+          {% endwith %}
+        {% endif %}
+      </div>
+    </div>
+
+    <!-- ═══════════════════════════════════════════════════════════════════
+         COMPRADOR
+    ═══════════════════════════════════════════════════════════════════ -->
+    <div class="card secao-card {% if matches.comprador_match %}verde{% else %}amarelo{% endif %} shadow-sm mb-4">
+      <div class="card-header bg-white d-flex align-items-center gap-2 fw-semibold">
+        <i class="fas fa-user text-primary"></i> Comprador
+        {% if matches.comprador_match %}
+          <span class="badge badge-match ms-auto"><i class="fas fa-check me-1"></i>Encontrado no sistema</span>
+          <input type="hidden" name="comprador_match_id" value="{{ matches.comprador_match.pk }}">
+        {% else %}
+          <span class="badge badge-novo ms-auto"><i class="fas fa-plus me-1"></i>Será criado</span>
+        {% endif %}
+      </div>
+      <div class="card-body">
+        {% if matches.comprador_match %}
+          <div class="alert alert-success py-2 mb-0">
+            <strong>{{ matches.comprador_match.nome }}</strong>
+            {% if matches.comprador_match.cpf %} — CPF {{ matches.comprador_match.cpf }}{% endif %}
+            {% if matches.comprador_match.cnpj %} — CNPJ {{ matches.comprador_match.cnpj }}{% endif %}
+            <br><small class="text-muted">O contrato será vinculado a este comprador existente.</small>
+          </div>
+        {% else %}
+          {% with d=dados.comprador %}
+          <div class="row g-3">
+            <div class="col-md-8">
+              <label class="form-label">Nome Completo / Razão Social *</label>
+              <input type="text" name="comp_nome" class="form-control" value="{{ d.nome|default:'' }}" required>
+            </div>
+            <div class="col-md-4">
+              <label class="form-label">Tipo de Pessoa</label>
+              <select name="comp_tipo_pessoa" class="form-select">
+                <option value="PF" {% if d.tipo_pessoa != 'PJ' %}selected{% endif %}>Pessoa Física</option>
+                <option value="PJ" {% if d.tipo_pessoa == 'PJ' %}selected{% endif %}>Pessoa Jurídica</option>
+              </select>
+            </div>
+            <div class="col-md-4">
+              <label class="form-label">CPF</label>
+              <input type="text" name="comp_cpf" class="form-control" value="{{ d.cpf|default:'' }}">
+            </div>
+            <div class="col-md-4">
+              <label class="form-label">RG</label>
+              <input type="text" name="comp_rg" class="form-control" value="{{ d.rg|default:'' }}">
+            </div>
+            <div class="col-md-4">
+              <label class="form-label">CNPJ</label>
+              <input type="text" name="comp_cnpj" class="form-control" value="{{ d.cnpj|default:'' }}">
+            </div>
+            <div class="col-md-6">
+              <label class="form-label">E-mail</label>
+              <input type="email" name="comp_email" class="form-control" value="{{ d.email|default:'' }}">
+            </div>
+            <div class="col-md-3">
+              <label class="form-label">Telefone</label>
+              <input type="text" name="comp_telefone" class="form-control" value="{{ d.telefone|default:'' }}">
+            </div>
+            <div class="col-md-3">
+              <label class="form-label">Celular</label>
+              <input type="text" name="comp_celular" class="form-control" value="{{ d.celular|default:'' }}">
+            </div>
+            <div class="col-md-6">
+              <label class="form-label">Logradouro</label>
+              <input type="text" name="comp_logradouro" class="form-control" value="{{ d.logradouro|default:'' }}">
+            </div>
+            <div class="col-md-2">
+              <label class="form-label">Número</label>
+              <input type="text" name="comp_numero" class="form-control" value="{{ d.numero|default:'' }}">
+            </div>
+            <div class="col-md-4">
+              <label class="form-label">Complemento</label>
+              <input type="text" name="comp_complemento" class="form-control" value="{{ d.complemento|default:'' }}">
+            </div>
+            <div class="col-md-4">
+              <label class="form-label">Bairro</label>
+              <input type="text" name="comp_bairro" class="form-control" value="{{ d.bairro|default:'' }}">
+            </div>
+            <div class="col-md-4">
+              <label class="form-label">Cidade</label>
+              <input type="text" name="comp_cidade" class="form-control" value="{{ d.cidade|default:'' }}">
+            </div>
+            <div class="col-md-2">
+              <label class="form-label">Estado</label>
+              <input type="text" name="comp_estado" class="form-control" maxlength="2" value="{{ d.estado|default:'' }}">
+            </div>
+            <div class="col-md-2">
+              <label class="form-label">CEP</label>
+              <input type="text" name="comp_cep" class="form-control" value="{{ d.cep|default:'' }}">
+            </div>
+          </div>
+          {% endwith %}
+        {% endif %}
+      </div>
+    </div>
+
+    <!-- ═══════════════════════════════════════════════════════════════════
+         IMÓVEL
+    ═══════════════════════════════════════════════════════════════════ -->
+    <div class="card secao-card {% if matches.imovel_match %}verde{% else %}amarelo{% endif %} shadow-sm mb-4">
+      <div class="card-header bg-white d-flex align-items-center gap-2 fw-semibold">
+        <i class="fas fa-home text-primary"></i> Imóvel
+        {% if matches.imovel_match %}
+          <span class="badge badge-match ms-auto"><i class="fas fa-check me-1"></i>Encontrado no sistema</span>
+          <input type="hidden" name="imovel_match_id" value="{{ matches.imovel_match.pk }}">
+        {% else %}
+          <span class="badge badge-novo ms-auto"><i class="fas fa-plus me-1"></i>Será criado</span>
+        {% endif %}
+      </div>
+      <div class="card-body">
+        {% if matches.imovel_match %}
+          <div class="alert alert-success py-2 mb-0">
+            <strong>{{ matches.imovel_match.identificacao }}</strong>
+            {% if matches.imovel_match.loteamento %} — {{ matches.imovel_match.loteamento }}{% endif %}
+            {% if matches.imovel_match.matricula %} — Matrícula {{ matches.imovel_match.matricula }}{% endif %}
+            <br><small class="text-muted">O contrato será vinculado a este imóvel existente.</small>
+          </div>
+        {% else %}
+          {% with d=dados.imovel %}
+          <div class="row g-3">
+            <div class="col-md-3">
+              <label class="form-label">Tipo *</label>
+              <select name="imov_tipo" class="form-select">
+                {% for val, label in tipo_imovel_choices %}
+                  <option value="{{ val }}" {% if val == d.tipo %}selected{% endif %}>{{ label }}</option>
+                {% endfor %}
+              </select>
+            </div>
+            <div class="col-md-5">
+              <label class="form-label">Identificação *</label>
+              <input type="text" name="imov_identificacao" class="form-control" value="{{ d.identificacao|default:'' }}" required
+                     placeholder="Ex: Quadra A Lote 5, Apt 301">
+            </div>
+            <div class="col-md-4">
+              <label class="form-label">Loteamento / Empreendimento</label>
+              <input type="text" name="imov_loteamento" class="form-control" value="{{ d.loteamento|default:'' }}">
+            </div>
+            <div class="col-md-4">
+              <label class="form-label">Matrícula</label>
+              <input type="text" name="imov_matricula" class="form-control" value="{{ d.matricula|default:'' }}">
+            </div>
+            <div class="col-md-2">
+              <label class="form-label">Área (m²)</label>
+              <input type="text" name="imov_area" class="form-control" value="{{ d.area|default:'' }}">
+            </div>
+            <div class="col-md-6">
+              <label class="form-label">Logradouro</label>
+              <input type="text" name="imov_logradouro" class="form-control" value="{{ d.logradouro|default:'' }}">
+            </div>
+            <div class="col-md-2">
+              <label class="form-label">Número</label>
+              <input type="text" name="imov_numero" class="form-control" value="{{ d.numero|default:'' }}">
+            </div>
+            <div class="col-md-4">
+              <label class="form-label">Complemento</label>
+              <input type="text" name="imov_complemento" class="form-control" value="{{ d.complemento|default:'' }}">
+            </div>
+            <div class="col-md-4">
+              <label class="form-label">Bairro</label>
+              <input type="text" name="imov_bairro" class="form-control" value="{{ d.bairro|default:'' }}">
+            </div>
+            <div class="col-md-4">
+              <label class="form-label">Cidade</label>
+              <input type="text" name="imov_cidade" class="form-control" value="{{ d.cidade|default:'' }}">
+            </div>
+            <div class="col-md-2">
+              <label class="form-label">Estado</label>
+              <input type="text" name="imov_estado" class="form-control" maxlength="2" value="{{ d.estado|default:'' }}">
+            </div>
+            <div class="col-md-2">
+              <label class="form-label">CEP</label>
+              <input type="text" name="imov_cep" class="form-control" value="{{ d.cep|default:'' }}">
+            </div>
+          </div>
+          {% endwith %}
+        {% endif %}
+      </div>
+    </div>
+
+    <!-- ═══════════════════════════════════════════════════════════════════
+         PRESTAÇÕES INTERMEDIÁRIAS
+    ═══════════════════════════════════════════════════════════════════ -->
+    {% if dados.prestacoes_intermediarias %}
+    <div class="card secao-card shadow-sm mb-4">
+      <div class="card-header bg-white fw-semibold">
+        <i class="fas fa-calendar-alt text-primary me-2"></i>
+        Prestações Intermediárias ({{ dados.prestacoes_intermediarias|length }})
+      </div>
+      <div class="card-body" id="interm-container">
+        {% for interm in dados.prestacoes_intermediarias %}
+        <div class="interm-row" id="interm-row-{{ forloop.counter0 }}">
+          <div class="row g-2 align-items-end">
+            <div class="col-md-5">
+              <label class="form-label small">Descrição</label>
+              <input type="text" name="interm_{{ forloop.counter0 }}_descricao" class="form-control form-control-sm"
+                     value="{{ interm.descricao|default:'' }}">
+            </div>
+            <div class="col-md-3">
+              <label class="form-label small">Mês de Vencimento</label>
+              <input type="number" name="interm_{{ forloop.counter0 }}_mes_vencimento" min="1" max="360"
+                     class="form-control form-control-sm" value="{{ interm.mes_vencimento|default:'' }}">
+            </div>
+            <div class="col-md-3">
+              <label class="form-label small">Valor (R$)</label>
+              <input type="text" name="interm_{{ forloop.counter0 }}_valor" class="form-control form-control-sm"
+                     value="{{ interm.valor|default:'' }}">
+            </div>
+            <div class="col-md-1 text-end">
+              <button type="button" class="btn btn-sm btn-outline-danger" onclick="removerInterm({{ forloop.counter0 }})">
+                <i class="fas fa-times"></i>
+              </button>
+            </div>
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+      <div class="card-footer bg-white">
+        <button type="button" class="btn btn-sm btn-outline-primary" onclick="adicionarInterm()">
+          <i class="fas fa-plus me-1"></i>Adicionar intermediária
+        </button>
+      </div>
+    </div>
+    {% endif %}
+
+    <!-- Observações -->
+    {% if dados.observacoes %}
+    <div class="alert alert-secondary mb-4">
+      <strong><i class="fas fa-sticky-note me-2"></i>Observações extraídas:</strong>
+      <br>{{ dados.observacoes }}
+    </div>
+    {% endif %}
+
+    <!-- Botões -->
+    <div class="d-flex gap-3 justify-content-end">
+      <a href="{% url 'contratos:upload_importacao' %}" class="btn btn-outline-secondary">
+        <i class="fas fa-redo me-2"></i>Novo Upload
+      </a>
+      <button type="submit" class="btn btn-success btn-lg px-5">
+        <i class="fas fa-check me-2"></i>Confirmar Importação
+      </button>
+    </div>
+  </form>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+// ── Imobiliária PF/PJ toggle ──────────────────────────────────────────────────
+function toggleImobTipo(tipo) {
+    const cnpjWrap = document.getElementById('imob_cnpj_wrap');
+    const cpfWrap  = document.getElementById('imob_cpf_wrap');
+    const cnpjInp  = document.getElementById('imob_cnpj');
+    const cpfInp   = document.getElementById('imob_cpf');
+    if (!cnpjWrap) return;  // imobiliária já matched — campos não existem
+
+    if (tipo === 'PF') {
+        cnpjWrap.style.display = 'none';
+        cpfWrap.style.display  = '';
+        cnpjInp.required = false;
+        cpfInp.required  = true;
+        cnpjInp.value    = '';
+    } else {
+        cpfWrap.style.display  = 'none';
+        cnpjWrap.style.display = '';
+        cpfInp.required  = false;
+        cnpjInp.required = true;
+        cpfInp.value     = '';
+    }
+}
+// Inicializa conforme valor já selecionado
+(function() {
+    const sel = document.getElementById('imob_tipo_pessoa');
+    if (sel) toggleImobTipo(sel.value);
+})();
+
+// ── Prestações intermediárias ─────────────────────────────────────────────────
+let intermCount = parseInt(document.getElementById('interm_count').value);
+
+function removerInterm(idx) {
+    const row = document.getElementById('interm-row-' + idx);
+    if (row) row.remove();
+    // Renumbera os campos restantes
+    const rows = document.querySelectorAll('[id^="interm-row-"]');
+    intermCount = rows.length;
+    document.getElementById('interm_count').value = intermCount;
+    rows.forEach((r, i) => {
+        r.id = 'interm-row-' + i;
+        r.querySelectorAll('input').forEach(inp => {
+            inp.name = inp.name.replace(/interm_\d+_/, 'interm_' + i + '_');
+        });
+    });
+}
+
+function adicionarInterm() {
+    const container = document.getElementById('interm-container');
+    if (!container) return;
+    const i = intermCount;
+    const div = document.createElement('div');
+    div.className = 'interm-row';
+    div.id = 'interm-row-' + i;
+    div.innerHTML = `
+      <div class="row g-2 align-items-end">
+        <div class="col-md-5">
+          <label class="form-label small">Descrição</label>
+          <input type="text" name="interm_${i}_descricao" class="form-control form-control-sm">
+        </div>
+        <div class="col-md-3">
+          <label class="form-label small">Mês de Vencimento</label>
+          <input type="number" name="interm_${i}_mes_vencimento" min="1" max="360" class="form-control form-control-sm">
+        </div>
+        <div class="col-md-3">
+          <label class="form-label small">Valor (R$)</label>
+          <input type="text" name="interm_${i}_valor" class="form-control form-control-sm">
+        </div>
+        <div class="col-md-1 text-end">
+          <button type="button" class="btn btn-sm btn-outline-danger" onclick="removerInterm(${i})">
+            <i class="fas fa-times"></i>
+          </button>
+        </div>
+      </div>`;
+    container.appendChild(div);
+    intermCount++;
+    document.getElementById('interm_count').value = intermCount;
+}
+</script>
+{% endblock %}

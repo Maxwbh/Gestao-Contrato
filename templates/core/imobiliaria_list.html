@@ -53,6 +53,12 @@
                                         </h5>
                                     </div>
                                     <div class="card-body">
+                                        {% if imobiliaria.logo %}
+                                        <div class="text-center mb-3">
+                                            <img src="{{ imobiliaria.logo.url }}" alt="Logo {{ imobiliaria.nome }}"
+                                                 style="max-width:140px; max-height:80px; object-fit:contain;">
+                                        </div>
+                                        {% endif %}
                                         <h6 class="card-subtitle mb-3 text-muted">
                                             {{ imobiliaria.razao_social }}
                                         </h6>
@@ -88,10 +94,24 @@
                                             {% endif %}
                                         </p>
 
-                                        {% if imobiliaria.banco or imobiliaria.pix %}
+                                        {% if imobiliaria.conta_principal %}
                                             <hr>
                                             <p class="card-text">
-                                                <strong><i class="fas fa-university"></i> Dados Bancários:</strong><br>
+                                                <strong><i class="fas fa-university"></i> Conta Principal:</strong>
+                                                <span class="badge bg-success ms-1">Principal</span><br>
+                                                <small>
+                                                    <strong>{{ imobiliaria.conta_principal.banco_nome }}</strong><br>
+                                                    Ag: {{ imobiliaria.conta_principal.agencia }} -
+                                                    Conta: {{ imobiliaria.conta_principal.conta }}<br>
+                                                    {% if imobiliaria.conta_principal.chave_pix %}
+                                                        <i class="fas fa-qrcode"></i> PIX: {{ imobiliaria.conta_principal.chave_pix }}
+                                                    {% endif %}
+                                                </small>
+                                            </p>
+                                        {% elif imobiliaria.banco or imobiliaria.pix %}
+                                            <hr>
+                                            <p class="card-text">
+                                                <strong><i class="fas fa-university"></i> Dados Bancários (legado):</strong><br>
                                                 {% if imobiliaria.banco %}
                                                     <small>
                                                         {{ imobiliaria.banco }}
@@ -133,44 +153,7 @@
                         {% endfor %}
                     </div>
 
-                    <!-- Paginação -->
-                    {% if is_paginated %}
-                        <nav aria-label="Navegação de páginas">
-                            <ul class="pagination justify-content-center">
-                                {% if page_obj.has_previous %}
-                                    <li class="page-item">
-                                        <a class="page-link" href="?page=1{% if search %}&search={{ search }}{% endif %}">
-                                            Primeira
-                                        </a>
-                                    </li>
-                                    <li class="page-item">
-                                        <a class="page-link" href="?page={{ page_obj.previous_page_number }}{% if search %}&search={{ search }}{% endif %}">
-                                            Anterior
-                                        </a>
-                                    </li>
-                                {% endif %}
-
-                                <li class="page-item active">
-                                    <span class="page-link">
-                                        Página {{ page_obj.number }} de {{ page_obj.paginator.num_pages }}
-                                    </span>
-                                </li>
-
-                                {% if page_obj.has_next %}
-                                    <li class="page-item">
-                                        <a class="page-link" href="?page={{ page_obj.next_page_number }}{% if search %}&search={{ search }}{% endif %}">
-                                            Próxima
-                                        </a>
-                                    </li>
-                                    <li class="page-item">
-                                        <a class="page-link" href="?page={{ page_obj.paginator.num_pages }}{% if search %}&search={{ search }}{% endif %}">
-                                            Última
-                                        </a>
-                                    </li>
-                                {% endif %}
-                            </ul>
-                        </nav>
-                    {% endif %}
+                    {% include "includes/pagination_perpage.html" %}
                 {% else %}
                     <div class="alert alert-info text-center">
                         <i class="fas fa-info-circle fa-3x mb-3"></i>

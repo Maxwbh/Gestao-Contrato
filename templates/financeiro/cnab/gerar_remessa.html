@@ -1,0 +1,341 @@
+{% extends 'base.html' %}
+{% load static %}
+{% load hashid_tags %}
+{% load format_filters %}
+
+{% block title %}Gerar Arquivo de Remessa{% endblock %}
+
+{% block extra_css %}
+<style>
+  /* Override Materialize: checkboxes nesta página devem ser nativos (Bootstrap) */
+  #form-remessa input[type=checkbox],
+  #form-filtro input[type=checkbox] {
+    opacity: 1 !important;
+    position: static !important;
+    pointer-events: auto !important;
+  }
+  /* Linhas clicáveis */
+  #form-remessa tbody tr { cursor: pointer; }
+  #form-remessa tbody tr:hover { background-color: #f0f7ff; }
+  #form-remessa tbody tr.row-selecionada { background-color: #dbeafe; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2><i class="fas fa-file-export"></i> Gerar Arquivo de Remessa</h2>
+        <a href="{% url 'financeiro:listar_remessas' %}" class="btn btn-secondary">
+            <i class="fas fa-arrow-left"></i> Voltar
+        </a>
+    </div>
+
+    <!-- Filtro + Config em card único -->
+    <div class="card mb-4">
+        <div class="card-body">
+            <div class="row g-3 align-items-end">
+                <!-- Filtro de escopo -->
+                <div class="col-md-2">
+                    <label class="form-label mb-1">Escopo</label>
+                    <form method="get" id="form-filtro" class="d-contents">
+                        <select name="escopo" class="form-select form-select-sm" id="sel-escopo" onchange="atualizarEscopo()">
+                            <option value="tudo" {% if escopo == 'tudo' %}selected{% endif %}>Todos</option>
+                            <option value="imobiliaria" {% if escopo == 'imobiliaria' %}selected{% endif %}>Por Imobiliária</option>
+                            <option value="contrato" {% if escopo == 'contrato' %}selected{% endif %}>Por Contrato</option>
+                            <option value="conta" {% if escopo == 'conta' %}selected{% endif %}>Por Conta Bancária</option>
+                        </select>
+
+                        <div class="filtro-campo mt-2" id="campo-imobiliaria" style="display:none;">
+                            <select name="imobiliaria" class="form-select form-select-sm">
+                                <option value="">Todas</option>
+                                {% for imob in imobiliarias %}
+                                <option value="{{ imob.pk }}" {% if filtro_imobiliaria == imob.pk|stringformat:"s" %}selected{% endif %}>{{ imob.nome }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="filtro-campo mt-2" id="campo-contrato" style="display:none;">
+                            <select name="contrato" class="form-select form-select-sm">
+                                <option value="">Selecione...</option>
+                                {% for c in contratos %}
+                                <option value="{{ c.pk }}" {% if filtro_contrato == c.pk|stringformat:"s" %}selected{% endif %}>{{ c.numero_contrato }} — {{ c.comprador.nome }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="filtro-campo mt-2" id="campo-conta" style="display:none;">
+                            <select name="conta" class="form-select form-select-sm">
+                                <option value="">Todas</option>
+                                {% for conta in contas_bancarias %}
+                                <option value="{{ conta.pk }}" {% if filtro_conta == conta.pk|stringformat:"s" %}selected{% endif %}>{{ conta.descricao }} ({{ conta.imobiliaria.nome }})</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <button type="submit" class="btn btn-outline-secondary btn-sm mt-2 w-100"><i class="fas fa-search me-1"></i>Filtrar</button>
+                    </form>
+                </div>
+
+                {% if boletos_pendentes %}
+                <div class="col-md-4">
+                    <div class="alert alert-warning py-2 mb-0 small">
+                        <i class="fas fa-exclamation-triangle me-1"></i>
+                        <strong>{{ boletos_pendentes|length }} boleto(s)</strong> já em remessa com status <em>Gerado</em>.
+                        <a href="{% url 'financeiro:listar_remessas' %}?status=GERADO" class="alert-link">Ver</a>
+                    </div>
+                </div>
+                {% endif %}
+
+                {% if grupos_conta %}
+                <!-- Layout CNAB + Select All + Gerar (inline no mesmo card) -->
+                <div class="col-md-2">
+                    <label class="form-label mb-1">Layout CNAB</label>
+                    <select name="layout" id="sel-layout" class="form-select form-select-sm" form="form-remessa" onchange="atualizarContador()">
+                        <option value="CNAB_240">CNAB 240</option>
+                        <option value="CNAB_400">CNAB 400</option>
+                    </select>
+                </div>
+                <div class="col-md-2 d-flex align-items-end">
+                    <div class="form-check mb-1">
+                        <input type="checkbox" class="form-check-input" id="selectAllGlobal" onchange="toggleTodos(this)">
+                        <label class="form-check-label small" for="selectAllGlobal">
+                            Todos ({{ total_disponivel }})
+                        </label>
+                    </div>
+                </div>
+                <div class="col-md-2 d-flex align-items-end justify-content-end">
+                    <div class="text-end">
+                        <div class="text-muted small mb-1" id="contador-selecionados">0 selecionados</div>
+                        <button type="submit" class="btn btn-primary btn-sm" id="btn-gerar" disabled form="form-remessa">
+                            <i class="fas fa-file-export me-1"></i>Gerar Remessa(s)
+                        </button>
+                    </div>
+                </div>
+                {% endif %}
+            </div>
+
+            {% if grupos_conta %}
+            <div id="alerta-conflito-cnab" class="alert alert-danger mt-3 mb-0 py-2 d-none" role="alert">
+                <i class="fas fa-exclamation-triangle me-1"></i>
+                <span id="msg-conflito-cnab"></span>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    {% if grupos_conta %}
+    <!-- Formulário de Geração -->
+    <form method="post" id="form-remessa">
+        {% csrf_token %}
+
+        {% for conta, parcelas in grupos_conta.items %}
+        <!-- Grupo por Conta Bancária -->
+        <div class="card mb-4">
+            <div class="card-header bg-light d-flex justify-content-between align-items-center">
+                <div>
+                    <i class="fas fa-university text-primary me-2"></i>
+                    <strong>{{ conta.descricao }}</strong>
+                    <span class="text-muted ms-2">— {{ conta.imobiliaria.nome }}</span>
+                    <span class="badge bg-secondary ms-2">Banco {{ conta.banco }}</span>
+                    <span class="badge bg-info ms-1" title="Layout configurado nesta conta">{{ conta.get_layout_cnab_display }}</span>
+                </div>
+                <div class="d-flex align-items-center gap-3">
+                    <span class="badge bg-primary">{{ parcelas|length }} boleto(s)</span>
+                    <div class="form-check mb-0">
+                        <input type="checkbox" class="form-check-input check-grupo" id="checkGrupo_{{ conta.pk }}"
+                               data-grupo="{{ conta.pk }}" onchange="toggleGrupo('{{ conta.pk }}', this)">
+                        <label class="form-check-label" for="checkGrupo_{{ conta.pk }}">Todos desta conta</label>
+                    </div>
+                </div>
+            </div>
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-hover mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th width="40"></th>
+                                <th>Nosso Número</th>
+                                <th>Contrato</th>
+                                <th>Comprador</th>
+                                <th>Imobiliária</th>
+                                <th>Parcela</th>
+                                <th>Vencimento</th>
+                                <th class="text-end">Valor</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for parcela in parcelas %}
+                            <tr onclick="toggleLinhaParcela(this)">
+                                <td onclick="event.stopPropagation()">
+                                    <input type="checkbox" class="form-check-input parcela-check grupo-{{ conta.pk }}"
+                                           name="parcelas" value="{{ parcela.pk }}"
+                                           data-layout="{{ conta.layout_cnab }}"
+                                           data-banco="{{ conta.get_banco_display }}"
+                                           data-banco-cod="{{ conta.banco }}"
+                                           onchange="this.closest('tr').classList.toggle('row-selecionada',this.checked);atualizarContador()">
+                                </td>
+                                <td><code>{{ parcela.nosso_numero }}</code></td>
+                                <td>
+                                    <a href="{% url 'contratos:detalhe' parcela.contrato.pk|hashid %}" target="_blank">
+                                        {{ parcela.contrato.numero_contrato }}
+                                    </a>
+                                </td>
+                                <td>{{ parcela.contrato.comprador.nome|truncatechars:30 }}</td>
+                                <td><small>{{ parcela.contrato.imobiliaria.nome }}</small></td>
+                                <td>{{ parcela.numero_parcela }}/{{ parcela.contrato.numero_parcelas }}</td>
+                                <td>
+                                    {% if parcela.data_vencimento < today %}
+                                        <span class="text-danger">{{ parcela.data_vencimento|date:"d/m/Y" }}</span>
+                                    {% else %}
+                                        {{ parcela.data_vencimento|date:"d/m/Y" }}
+                                    {% endif %}
+                                </td>
+                                <td class="text-end">
+                                    <strong>{{ parcela.valor_boleto|default:parcela.valor_atual|moeda }}</strong>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                        <tfoot class="table-light">
+                            <tr>
+                                <td colspan="8" class="text-end text-muted"><strong>{{ parcelas|length }} boleto(s)</strong></td>
+                            </tr>
+                        </tfoot>
+                    </table>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+
+    </form>
+
+    {% else %}
+    <div class="alert alert-info">
+        <i class="fas fa-info-circle"></i>
+        {% if escopo == 'tudo' %}
+            Nenhum boleto disponível para remessa.
+            <a href="{% url 'financeiro:listar_parcelas' %}" class="alert-link">Gere boletos para as parcelas primeiro.</a>
+        {% else %}
+            Nenhum boleto disponível para os filtros selecionados.
+        {% endif %}
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+const escopo = '{{ escopo }}';
+
+// Mapa banco_cod → layouts suportados pela BRCobrança (gerado pelo backend)
+const BANCOS_CNAB = {{ bancos_cnab_js|safe }};
+
+function toggleLinhaParcela(tr) {
+    const cb = tr.querySelector('.parcela-check');
+    if (!cb) return;
+    cb.checked = !cb.checked;
+    tr.classList.toggle('row-selecionada', cb.checked);
+    atualizarContador();
+}
+
+function atualizarEscopo() {
+    const sel = document.getElementById('sel-escopo').value;
+    document.getElementById('campo-imobiliaria').style.display = (sel === 'imobiliaria') ? '' : 'none';
+    document.getElementById('campo-contrato').style.display = (sel === 'contrato') ? '' : 'none';
+    document.getElementById('campo-conta').style.display = (sel === 'conta') ? '' : 'none';
+}
+
+function toggleTodos(source) {
+    document.querySelectorAll('.parcela-check').forEach(cb => {
+        cb.checked = source.checked;
+        const tr = cb.closest('tr');
+        if (tr) tr.classList.toggle('row-selecionada', source.checked);
+    });
+    document.querySelectorAll('.check-grupo').forEach(cb => cb.checked = source.checked);
+    atualizarContador();
+}
+
+function toggleGrupo(grupoId, source) {
+    document.querySelectorAll(`.grupo-${grupoId}`).forEach(cb => {
+        cb.checked = source.checked;
+        const tr = cb.closest('tr');
+        if (tr) tr.classList.toggle('row-selecionada', source.checked);
+    });
+    atualizarContador();
+}
+
+function atualizarContador() {
+    const marcadas = document.querySelectorAll('.parcela-check:checked');
+    const total = marcadas.length;
+    document.getElementById('contador-selecionados').textContent = total + ' selecionados';
+
+    const layoutSel = (document.getElementById('sel-layout') || {}).value || 'CNAB_240';
+    const alerta = document.getElementById('alerta-conflito-cnab');
+    const msgEl  = document.getElementById('msg-conflito-cnab');
+    const erros   = [];
+
+    if (total > 0) {
+        // Coletar bancos únicos selecionados
+        const bancosCod  = new Set();
+        const bancosNome = {};
+        const layoutsConta = {};  // { layout_configurado: Set(nomeDisplay) }
+        marcadas.forEach(cb => {
+            const cod   = cb.dataset.bancoCod;
+            const nome  = cb.dataset.banco;
+            const lay   = cb.dataset.layout;
+            bancosCod.add(cod);
+            bancosNome[cod] = nome;
+            if (!layoutsConta[lay]) layoutsConta[lay] = new Set();
+            layoutsConta[lay].add(nome);
+        });
+
+        // 1. Verificar se o layout escolhido é suportado pelo BRCobrança para cada banco
+        bancosCod.forEach(cod => {
+            const suportados = BANCOS_CNAB[cod] || [];
+            if (suportados.length === 0) {
+                erros.push(`<strong>${bancosNome[cod]}</strong> não possui remessa CNAB no BRCobrança`);
+            } else if (!suportados.includes(layoutSel)) {
+                const labs = suportados.map(l => l.replace('_', ' ')).join(' / ');
+                erros.push(`<strong>${bancosNome[cod]}</strong> só aceita ${labs} (selecionado: ${layoutSel.replace('_', ' ')})`);
+            }
+        });
+
+        // 2. Verificar conflito de layout entre as contas configuradas
+        const layoutsUnicos = Object.keys(layoutsConta);
+        if (layoutsUnicos.length > 1) {
+            const partes = layoutsUnicos.map(l => {
+                const nomes = Array.from(layoutsConta[l]).join(', ');
+                return `<strong>${nomes}</strong> (${l.replace('_', ' ')})`;
+            });
+            erros.push(`${partes.join(' e ')} não usam o mesmo padrão — Gere os CNAB's separadamente`);
+        }
+    }
+
+    if (alerta && msgEl) {
+        if (erros.length) {
+            msgEl.innerHTML = erros.join('<br>');
+            alerta.classList.remove('d-none');
+        } else {
+            alerta.classList.add('d-none');
+        }
+    }
+
+    document.getElementById('btn-gerar').disabled = !(total > 0 && erros.length === 0);
+
+    // Atualizar estado dos checkboxes de grupo
+    document.querySelectorAll('.check-grupo').forEach(grupoCb => {
+        const grupoId = grupoCb.dataset.grupo;
+        const todos   = document.querySelectorAll(`.grupo-${grupoId}`);
+        const marcados = document.querySelectorAll(`.grupo-${grupoId}:checked`);
+        grupoCb.checked       = todos.length > 0 && marcados.length === todos.length;
+        grupoCb.indeterminate = marcados.length > 0 && marcados.length < todos.length;
+    });
+}
+
+// Inicializar visibilidade dos campos de escopo
+document.addEventListener('DOMContentLoaded', function() {
+    atualizarEscopo();
+
+    const sel = document.getElementById('sel-escopo');
+    if (sel.value === 'imobiliaria') sel.value = 'imobiliaria';
+    atualizarEscopo();
+});
+</script>
+{% endblock %}

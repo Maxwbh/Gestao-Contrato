@@ -52,6 +52,7 @@
 {% block extra_js %}
 <script>
 document.addEventListener('DOMContentLoaded', function() {
+    // ── Valores calculados ──────────────────────────────────────────────────
     const valorTotalInput = document.getElementById('id_valor_total');
     const valorEntradaInput = document.getElementById('id_valor_entrada');
     const numeroParcelasInput = document.getElementById('id_numero_parcelas');
@@ -64,30 +65,43 @@ document.addEventListener('DOMContentLoaded', function() {
         const valorFinanciado = valorTotal - valorEntrada;
         const valorParcela = numeroParcelas > 0 ? valorFinanciado / numeroParcelas : 0;
 
-        // Atualizar displays se existirem
         const divFinanciado = document.getElementById('valor-financiado');
         const divParcela = document.getElementById('valor-parcela');
 
         if (divFinanciado) {
             divFinanciado.textContent = 'R$ ' + valorFinanciado.toLocaleString('pt-BR', {
-                minimumFractionDigits: 2,
-                maximumFractionDigits: 2
+                minimumFractionDigits: 2, maximumFractionDigits: 2
             });
         }
-
         if (divParcela) {
             divParcela.textContent = 'R$ ' + valorParcela.toLocaleString('pt-BR', {
-                minimumFractionDigits: 2,
-                maximumFractionDigits: 2
+                minimumFractionDigits: 2, maximumFractionDigits: 2
             });
         }
     }
 
-    // Calcular ao carregar e ao alterar campos
     if (valorTotalInput) valorTotalInput.addEventListener('input', calcularValores);
     if (valorEntradaInput) valorEntradaInput.addEventListener('input', calcularValores);
     if (numeroParcelasInput) numeroParcelasInput.addEventListener('input', calcularValores);
     calcularValores();
+
+    // ── Toggle configuração personalizada de boleto ─────────────────────────
+    const usarConfigImobCheckbox = document.getElementById('id_usar_config_boleto_imobiliaria');
+    const boletoConfigDiv = document.getElementById('boleto-config-personalizada');
+
+    function toggleBoletoConfig() {
+        if (!usarConfigImobCheckbox || !boletoConfigDiv) return;
+        if (usarConfigImobCheckbox.checked) {
+            boletoConfigDiv.style.display = 'none';
+        } else {
+            boletoConfigDiv.style.display = '';
+        }
+    }
+
+    if (usarConfigImobCheckbox) {
+        usarConfigImobCheckbox.addEventListener('change', toggleBoletoConfig);
+    }
+    toggleBoletoConfig();
 });
 </script>
 {% endblock %}

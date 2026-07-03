@@ -1,0 +1,466 @@
+{% extends 'base.html' %}
+{% load static hashid_tags %}
+
+{% block title %}Geração de Boletos do Mês{% endblock %}
+
+{% block extra_css %}
+<style>
+    .kpi-card { border: 1px solid #e2e8f0; border-radius: .5rem; box-shadow: 0 4px 12px rgba(30,41,59,.05); }
+    .kpi-value { font-size: 1.6rem; font-weight: 700; line-height: 1.1; }
+    .kpi-label { font-size: .72rem; letter-spacing: .05em; text-transform: uppercase; color:#64748b; font-weight:600; }
+    .kpi-grid { display:flex; flex-wrap:wrap; gap:.75rem; }
+    .kpi-grid > .kpi-col { flex:1 1 170px; }
+    .kpi-card-warning { background: rgba(245,158,11,.07); border-color: rgba(245,158,11,.30); }
+    .imob-card { border:1px solid #e2e8f0; border-radius:.5rem; box-shadow:0 4px 12px rgba(30,41,59,.05); }
+    .imob-card .card-head { background:#eff4ff; border-bottom:1px solid #e2e8f0; }
+    .mono { font-family: 'Courier New', monospace; font-size:.82rem; }
+    .row-bloqueado { background: rgba(245,158,11,.07); border-left: 3px solid #f59e0b; }
+    .imob-avatar { width:32px; height:32px; border-radius:.375rem; background:#091426; color:#fff;
+                   display:inline-flex; align-items:center; justify-content:center; font-weight:700; font-size:.78rem; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4" id="boletosApp">
+
+    <!-- Cabeçalho -->
+    <div class="d-flex flex-wrap justify-content-between align-items-end mb-4 gap-2">
+        <div>
+            <div class="small text-muted mb-1">Financeiro / <a href="{% url 'financeiro:cobranca_hub' %}">Cobrança do Mês</a> / <span class="fw-bold text-dark">Geração de Boletos</span></div>
+            <h2 class="h4 fw-bold mb-0"><i class="fas fa-file-invoice-dollar me-2"></i>Geração de Boletos do Mês</h2>
+            <p class="text-muted small mb-0 mt-1">Gere os boletos do período por escopo — parcelas e intermediárias.</p>
+        </div>
+        <div class="d-flex gap-2">
+            <a href="{% url 'financeiro:remessa_painel' %}" class="btn btn-outline-secondary">
+                <i class="fas fa-paper-plane me-1"></i> Gerar Remessa
+            </a>
+            <button class="btn btn-primary" id="btnAbrirModal" {% if not kpis.a_gerar and not kpis.intermediarias %}disabled{% endif %}>
+                <i class="fas fa-bolt me-1"></i> Gerar Boletos
+            </button>
+        </div>
+    </div>
+
+    <!-- Filtros -->
+    <form method="get" class="card card-body mb-4">
+        <div class="d-flex flex-wrap gap-3 align-items-end">
+            <div style="min-width:220px" class="flex-grow-1">
+                <label class="form-label small fw-bold text-muted">IMOBILIÁRIA</label>
+                <select name="imobiliaria" class="form-select form-select-sm" onchange="this.form.submit()">
+                    <option value="">Todas as Imobiliárias</option>
+                    {% for im in imobiliarias %}
+                    <option value="{{ im.pk }}" {% if filtro_imobiliaria == im.pk|stringformat:'s' %}selected{% endif %}>{{ im.nome }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div style="width:120px">
+                <label class="form-label small fw-bold text-muted">MÊS</label>
+                <input type="number" name="mes" min="1" max="12" value="{{ filtro_mes }}" class="form-control form-control-sm">
+            </div>
+            <div style="width:110px">
+                <label class="form-label small fw-bold text-muted">ANO</label>
+                <input type="number" name="ano" value="{{ filtro_ano }}" class="form-control form-control-sm">
+            </div>
+            <div style="width:160px">
+                <label class="form-label small fw-bold text-muted">QTDE. POR CONTRATO</label>
+                <input type="number" name="quantidade" min="1" value="{{ filtro_quantidade }}" class="form-control form-control-sm">
+            </div>
+            <button type="submit" class="btn btn-sm btn-outline-secondary"><i class="fas fa-filter me-1"></i>Filtrar</button>
+        </div>
+    </form>
+
+    <!-- KPIs -->
+    <div class="kpi-grid mb-4">
+        <div class="kpi-col"><div class="kpi-card p-3 h-100">
+            <span class="kpi-label">A Gerar</span>
+            <div class="kpi-value">{{ kpis.a_gerar }}</div>
+            <div class="small text-muted">boletos elegíveis</div>
+        </div></div>
+        <div class="kpi-col"><div class="kpi-card p-3 h-100">
+            <span class="kpi-label">Valor Total</span>
+            <div class="kpi-value">R$ {{ kpis.valor_total|floatformat:2 }}</div>
+            <div class="small text-muted">no período</div>
+        </div></div>
+        <div class="kpi-col"><div class="kpi-card p-3 h-100">
+            <span class="kpi-label">Contratos</span>
+            <div class="kpi-value">{{ kpis.contratos }}</div>
+            <div class="small text-muted">com pendência</div>
+        </div></div>
+        <div class="kpi-col"><div class="kpi-card kpi-card-warning p-3 h-100">
+            <span class="kpi-label text-warning fw-bold">Bloqueados</span>
+            <div class="kpi-value">{{ kpis.bloqueados }}</div>
+            {% if kpis.bloqueados %}
+            <a href="{% url 'financeiro:reajustes_pendentes' %}" class="small fw-semibold text-decoration-none">Ver pendentes →</a>
+            {% else %}<div class="small text-muted">sem bloqueios</div>{% endif %}
+        </div></div>
+        <div class="kpi-col"><div class="kpi-card p-3 h-100">
+            <span class="kpi-label">Intermediárias</span>
+            <div class="kpi-value">{{ kpis.intermediarias }}</div>
+            <div class="small text-muted">prestações elegíveis</div>
+        </div></div>
+    </div>
+
+    <!-- Boleto-API: contas com cobrança registrada (registro online, sem remessa CNAB) -->
+    {% if contas_boleto_api %}
+    <div class="alert alert-info d-flex align-items-start py-2" role="alert">
+        <i class="fas fa-cloud-arrow-up me-2 mt-1"></i>
+        <div class="small">
+            <strong>Cobrança registrada via Boleto-API:</strong>
+            {% for cb in contas_boleto_api %}{{ cb.get_banco_display }} ({{ cb.imobiliaria.nome }}){% if not forloop.last %}, {% endif %}{% endfor %}.
+            Boletos dessas contas são registrados online no banco no momento da geração e
+            <strong>não passam pelo Passo 2 (remessa CNAB)</strong> — a baixa chega automaticamente por evento do banco.
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Conferência por imobiliária → contrato -->
+    {% for grupo in grupos %}
+    <div class="imob-card mb-3">
+        <div class="card-head px-3 py-2 d-flex justify-content-between align-items-center">
+            <div class="d-flex align-items-center gap-2">
+                <span class="imob-avatar">{{ grupo.imobiliaria.nome|slice:":2"|upper }}</span>
+                <strong>{{ grupo.imobiliaria.nome }}</strong>
+                <span class="badge bg-primary text-white ms-1">{{ grupo.total_ativos }} contratos ativos</span>
+            </div>
+            <button class="btn btn-sm btn-outline-primary btn-gerar-imob" data-imob="{{ grupo.imobiliaria.pk }}">
+                <i class="fas fa-bolt me-1"></i> Gerar desta imobiliária
+            </button>
+        </div>
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th>Contrato</th><th>Comprador</th>
+                        <th class="text-end">Elegíveis</th><th class="text-end">Bloqueados</th>
+                        <th class="text-end">Interm.</th><th>Status</th>
+                        <th class="text-end">Valor</th><th class="text-end">Ações</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for row in grupo.contratos %}
+                    <tr class="ctr-row {% if row.status == 'BLOQUEADO' %}row-bloqueado{% endif %}"
+                        data-imob="{{ grupo.imobiliaria.pk }}"
+                        data-contrato="{{ row.contrato.pk }}"
+                        data-elegiveis="{{ row.elegiveis }}"
+                        data-intermediarias="{{ row.intermediarias }}">
+                        <td class="mono">{{ row.contrato.numero_contrato }}</td>
+                        <td class="fw-semibold">{{ row.comprador }}</td>
+                        <td class="text-end">{{ row.elegiveis }}</td>
+                        <td class="text-end {% if row.bloqueados %}text-warning fw-bold{% endif %}">{{ row.bloqueados }}</td>
+                        <td class="text-end">{{ row.intermediarias }}</td>
+                        <td>
+                            {% if row.status == 'BLOQUEADO' %}<span class="badge bg-warning text-dark">Bloqueado Reajuste</span>
+                            {% elif row.status == 'PARCIAL' %}<span class="badge bg-success text-white">Gerado ({{ row.ja_gerados }})</span>
+                            {% elif row.status == 'GERADO' %}<span class="badge bg-success text-white">Gerado ({{ row.ja_gerados }})</span>
+                            {% else %}<span class="badge bg-secondary text-white">Não Gerado</span>
+                            {% endif %}
+                        </td>
+                        <td class="text-end fw-semibold">R$ {{ row.valor|floatformat:2 }}</td>
+                        <td class="text-end text-nowrap">
+                            <a href="{% url 'contratos:detalhe' hid=row.contrato.pk|hashid %}" class="btn btn-sm btn-outline-secondary" title="Ver detalhes"><i class="fas fa-eye"></i></a>
+                            {% if row.elegiveis or row.intermediarias %}
+                            <button class="btn btn-sm btn-primary btn-gerar-contrato" data-contrato="{{ row.contrato.pk }}">
+                                {% if row.status == 'PARCIAL' %}Gerar Pendente{% else %}Gerar{% endif %}
+                            </button>
+                            {% else %}
+                            <button class="btn btn-sm btn-secondary" disabled>Bloqueado</button>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    {% empty %}
+    <div class="card card-body text-center text-muted py-5">
+        <i class="fas fa-check-circle fa-2x mb-2 text-success" style="line-height:1.5"></i>
+        Nenhum boleto pendente de geração para o período/filtro selecionado.
+    </div>
+    {% endfor %}
+</div>
+
+<!-- Modal: Configurar Geração de Lote -->
+<div class="modal fade" id="modalGerar" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title fs-6"><i class="fas fa-bolt me-2 text-primary"></i>Configurar Geração de Lote</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div id="resultadoGerar" class="d-none">
+                    <div class="alert" id="alertResultado"><strong id="resultadoTitulo">Geração concluída!</strong>
+                        <ul class="mb-0 mt-2 small" id="listaResultado"></ul>
+                    </div>
+                </div>
+
+                <!-- Painel de progresso (geração em andamento) -->
+                <div id="progressoGerar" class="d-none text-center py-2">
+                    <div class="mb-2">
+                        <i class="fas fa-file-invoice-dollar fa-2x text-primary"></i>
+                    </div>
+                    <h6 class="fw-bold mb-1" id="progTitulo">Gerando boletos…</h6>
+                    <p class="text-muted small mb-3" id="progSub">
+                        Não feche esta janela. Os boletos são gerados um a um na operadora.
+                    </p>
+                    <div class="progress" style="height:1.1rem;">
+                        <div id="progBar" class="progress-bar progress-bar-striped progress-bar-animated"
+                             role="progressbar" style="width:0%;">0%</div>
+                    </div>
+                    <div class="d-flex justify-content-between small text-muted mt-2">
+                        <span>Decorrido: <strong id="progElapsed">0s</strong></span>
+                        <span>Restante (estim.): <strong id="progRemaining">—</strong></span>
+                    </div>
+                    <div class="small text-muted mt-1" id="progContagem"></div>
+                </div>
+
+                <div id="formGerar">
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Quantidade de boletos por contrato</label>
+                        <input type="number" id="gQuantidade" min="1" value="{{ filtro_quantidade }}" class="form-control">
+                        <div class="form-text">Gerar só a do mês (1) ou adiantar as próximas X.</div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Tipo de Boleto</label>
+                        <select id="gTipo" class="form-select">
+                            <option value="folha">Folha (A4)</option>
+                            <option value="carne">Carnê (consolidado por contrato)</option>
+                        </select>
+                    </div>
+                    <div class="form-check form-switch">
+                        <input class="form-check-input" type="checkbox" id="gIntermediarias" checked>
+                        <label class="form-check-label" for="gIntermediarias">Incluir Intermediárias (prestações de reforço/anuais)</label>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-primary btn-sm" id="btnConfirmarGerar">
+                    <i class="fas fa-check me-1"></i> Confirmar Geração
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function () {
+    const CSRF = '{{ csrf_token }}';
+    const URL_GERAR = "{% url 'financeiro:boletos_painel_gerar' %}";
+    const TEMPO_POR_BOLETO = {{ tempo_por_boleto_s|default:2 }};   // s/boleto (pacing + API)
+    const TOTAL_A_GERAR = {{ kpis.a_gerar|default:0 }};
+    const TOTAL_INTERM = {{ kpis.intermediarias|default:0 }};
+    const modalEl = document.getElementById('modalGerar');
+    const bsModal = modalEl ? new bootstrap.Modal(modalEl) : null;
+    let aguardandoReload = false;  // geração concluída — recarregar KPIs ao fechar o modal
+    if (modalEl) {
+        modalEl.addEventListener('hidden.bs.modal', () => {
+            if (aguardandoReload) window.location.reload();
+        });
+    }
+
+    // escopo escolhido antes de abrir o modal
+    let escopoAtual = 'todos';
+    let extraAtual = {};
+
+    // Estima quantos boletos a operação vai gerar (para o tempo previsto).
+    function estimarQtdBoletos(escopo, extra, incluirInter) {
+        let eleg = 0, inter = 0;
+        if (escopo === 'todos') {
+            eleg = TOTAL_A_GERAR; inter = TOTAL_INTERM;
+        } else if (escopo === 'imobiliaria') {
+            document.querySelectorAll(`.ctr-row[data-imob="${extra.imobiliaria_id}"]`).forEach(tr => {
+                eleg += parseInt(tr.dataset.elegiveis, 10) || 0;
+                inter += parseInt(tr.dataset.intermediarias, 10) || 0;
+            });
+        } else if (escopo === 'contratos') {
+            (extra.contrato_ids || []).forEach(id => {
+                const tr = document.querySelector(`.ctr-row[data-contrato="${id}"]`);
+                if (tr) {
+                    eleg += parseInt(tr.dataset.elegiveis, 10) || 0;
+                    inter += parseInt(tr.dataset.intermediarias, 10) || 0;
+                }
+            });
+        }
+        return eleg + (incluirInter ? inter : 0);
+    }
+
+    function fmtDur(seg) {
+        seg = Math.max(0, Math.round(seg));
+        if (seg < 60) return seg + 's';
+        const m = Math.floor(seg / 60), s = seg % 60;
+        return m + 'min' + (s ? ' ' + s + 's' : '');
+    }
+
+    function abrirModal(escopo, extra) {
+        escopoAtual = escopo;
+        extraAtual = extra || {};
+        document.getElementById('resultadoGerar').classList.add('d-none');
+        document.getElementById('progressoGerar').classList.add('d-none');
+        document.getElementById('formGerar').classList.remove('d-none');
+        document.getElementById('btnConfirmarGerar').classList.remove('d-none');
+        if (bsModal) bsModal.show();
+    }
+
+    // Botão global → escopo todos/imobiliaria conforme filtro
+    const btnAbrir = document.getElementById('btnAbrirModal');
+    if (btnAbrir) btnAbrir.addEventListener('click', () => {
+        const params = new URLSearchParams(window.location.search);
+        const imob = params.get('imobiliaria');
+        if (imob) abrirModal('imobiliaria', { imobiliaria_id: imob });
+        else abrirModal('todos', {});
+    });
+
+    document.querySelectorAll('.btn-gerar-imob').forEach(b =>
+        b.addEventListener('click', () => abrirModal('imobiliaria', { imobiliaria_id: b.dataset.imob })));
+    document.querySelectorAll('.btn-gerar-contrato').forEach(b =>
+        b.addEventListener('click', () => abrirModal('contratos', { contrato_ids: [parseInt(b.dataset.contrato, 10)] })));
+
+    function lock(btn, txt) { btn.dataset._h = btn.innerHTML; btn.disabled = true;
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>' + (txt || '...'); }
+    function unlock(btn) { btn.disabled = false; if (btn.dataset._h) btn.innerHTML = btn.dataset._h; }
+
+    // Notificações visuais — usa o showToast/showErrorModal globais (base.html)
+    function notify(msg, type, duration) {
+        if (window.showToast) { window.showToast(msg, type, duration); return; }
+        // Fallback mínimo caso o helper global não esteja disponível
+        if (type === 'error') alert(msg);
+    }
+
+    // ---- Barra de progresso (estimativa baseada em tempo decorrido) ----
+    // A geração é um único POST síncrono que só retorna no fim; por isso a barra
+    // avança pela estimativa de tempo (real = cronômetro) e é finalizada na resposta.
+    let progTimer = null;
+    function iniciarProgresso(qtd) {
+        const elPanel = document.getElementById('progressoGerar');
+        const elBar = document.getElementById('progBar');
+        const elEl = document.getElementById('progElapsed');
+        const elRem = document.getElementById('progRemaining');
+        const elCont = document.getElementById('progContagem');
+        const elSub = document.getElementById('progSub');
+        const estTotal = Math.max(2, qtd * TEMPO_POR_BOLETO);   // s
+        const t0 = Date.now();
+
+        document.getElementById('formGerar').classList.add('d-none');
+        elPanel.classList.remove('d-none');
+        elBar.classList.remove('bg-success', 'bg-danger');
+        elBar.style.width = '0%'; elBar.textContent = '0%';
+        elCont.textContent = qtd ? `${qtd} boleto(s) na fila` : '';
+        elSub.textContent = qtd
+            ? `Tempo estimado: ~${fmtDur(estTotal)}. Não feche esta janela.`
+            : 'Não feche esta janela.';
+
+        progTimer = setInterval(() => {
+            const elapsed = (Date.now() - t0) / 1000;
+            // Avança assintótico até 95% — nunca "completa" antes da resposta real.
+            const frac = Math.min(0.95, elapsed / estTotal);
+            const pct = Math.round(frac * 100);
+            elBar.style.width = pct + '%'; elBar.textContent = pct + '%';
+            elEl.textContent = fmtDur(elapsed);
+            elRem.textContent = fmtDur(Math.max(0, estTotal - elapsed));
+        }, 250);
+    }
+    function finalizarProgresso(ok) {
+        if (progTimer) { clearInterval(progTimer); progTimer = null; }
+        const elBar = document.getElementById('progBar');
+        elBar.classList.remove('progress-bar-animated');
+        elBar.classList.add(ok ? 'bg-success' : 'bg-danger');
+        elBar.style.width = '100%'; elBar.textContent = ok ? 'Concluído' : 'Interrompido';
+    }
+
+    const btnConf = document.getElementById('btnConfirmarGerar');
+    btnConf.addEventListener('click', async () => {
+        const incluirInter = document.getElementById('gIntermediarias').checked;
+        const body = Object.assign({
+            escopo: escopoAtual,
+            quantidade: parseInt(document.getElementById('gQuantidade').value, 10) || 1,
+            tipo: document.getElementById('gTipo').value,
+            incluir_intermediarias: incluirInter,
+        }, extraAtual);
+
+        // Verificar e aguardar API de boletos antes de gerar (cold start)
+        try {
+            lock(btnConf, 'Verificando API...');
+            if (window.GestaoContratos && GestaoContratos.BrcobrancaQueue) {
+                await GestaoContratos.BrcobrancaQueue.prepararApi(btnConf);
+            }
+        } catch (apiErr) {
+            unlock(btnConf);
+            notify(apiErr.message || 'Serviço de boletos indisponível. Tente novamente em instantes.', 'error');
+            return;
+        }
+
+        // Inicia a barra de progresso e esconde o botão de confirmar
+        btnConf.classList.add('d-none');
+        const qtdEst = estimarQtdBoletos(escopoAtual, extraAtual, incluirInter);
+        iniciarProgresso(qtdEst);
+
+        try {
+            const r = await fetch(URL_GERAR, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'X-CSRFToken': CSRF },
+                body: JSON.stringify(body),
+            });
+            const data = await r.json();
+
+            if (!data.sucesso) {
+                finalizarProgresso(false);
+                unlock(btnConf); btnConf.classList.remove('d-none');
+                document.getElementById('progressoGerar').classList.add('d-none');
+                document.getElementById('formGerar').classList.remove('d-none');
+                notify(data.erro || 'Falha na geração.', 'error');
+                return;
+            }
+
+            finalizarProgresso(!data.rate_limit_abort);
+            document.getElementById('progressoGerar').classList.add('d-none');
+
+            // Resumo visual dentro do modal
+            const alertBox = document.getElementById('alertResultado');
+            const titulo = document.getElementById('resultadoTitulo');
+            alertBox.className = 'alert ' + (data.rate_limit_abort ? 'alert-warning' : 'alert-success');
+            titulo.textContent = data.rate_limit_abort
+                ? 'Geração interrompida (limite da operadora)' : 'Geração concluída!';
+
+            const itens = [
+                `<li><strong>${data.total_gerados}</strong> boleto(s) gerado(s)</li>`,
+                data.rate_limit_abort ? `<li class="text-warning fw-semibold">A operadora atingiu o limite de requisições — a geração parou para não falhar. Aguarde alguns instantes e gere o restante novamente.</li>` : '',
+                data.total_bloqueados ? `<li>${data.total_bloqueados} bloqueado(s) por reajuste — <a href="{% url 'financeiro:reajustes_pendentes' %}">ver pendentes</a></li>` : '',
+                data.total_erros ? `<li class="text-danger">${data.total_erros} erro(s)</li>` : '',
+            ];
+            (data.erros || []).forEach(e => itens.push(
+                `<li class="text-danger small">Contrato ${e.contrato}: ${e.erro}</li>`
+            ));
+            (data.carnes || []).forEach(c => itens.push(`<li>Carnê ${c.contrato}: <a href="${c.carne_url}">baixar PDF</a></li>`));
+            document.getElementById('listaResultado').innerHTML = itens.filter(Boolean).join('');
+            document.getElementById('resultadoGerar').classList.remove('d-none');
+
+            // Toast de resumo (sucesso / parcial / rate limit / sem geração)
+            if (data.rate_limit_abort) {
+                notify(`${data.total_gerados} gerado(s). Limite da operadora atingido — gere o restante em instantes.`, 'warning', 7000);
+            } else if (data.total_gerados > 0 && !data.total_erros) {
+                notify(`${data.total_gerados} boleto(s) gerado(s) com sucesso!`, 'success', 4000);
+            } else if (data.total_gerados > 0 && data.total_erros) {
+                notify(`${data.total_gerados} gerado(s), ${data.total_erros} com erro. Veja o detalhe.`, 'warning', 6000);
+            } else if (data.total_erros) {
+                notify(`Nenhum boleto gerado — ${data.total_erros} erro(s). Veja o detalhe.`, 'error');
+            } else {
+                notify('Nenhum boleto elegível para geração.', 'info', 4000);
+            }
+
+            // Recarrega os KPIs quando o usuário fechar o modal — o resumo
+            // (erros, links de carnê, bloqueados) fica na tela até ele terminar de ler.
+            aguardandoReload = true;
+        } catch (err) {
+            finalizarProgresso(false);
+            unlock(btnConf); btnConf.classList.remove('d-none');
+            document.getElementById('progressoGerar').classList.add('d-none');
+            document.getElementById('formGerar').classList.remove('d-none');
+            notify('Erro de conexão. Verifique sua internet e tente novamente.', 'error');
+        }
+    });
+})();
+</script>
+{% endblock %}

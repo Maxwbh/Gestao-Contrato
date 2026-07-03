@@ -80,7 +80,7 @@
             </div>
 
             <!-- Formulário Principal -->
-            <form method="post" novalidate class="imobiliaria-form">
+            <form method="post" enctype="multipart/form-data" novalidate class="imobiliaria-form">
                 {% csrf_token %}
 
                 <!-- Erros Gerais do Formulário -->
@@ -123,6 +123,36 @@
                             <label class="form-label">Razão Social <span class="text-danger">*</span></label>
                             {{ form.razao_social }}
                             {% if form.razao_social.errors %}<div class="text-danger small mt-1">{% for e in form.razao_social.errors %}{{ e }}{% endfor %}</div>{% endif %}
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Card: Logo -->
+                <div class="card mb-3">
+                    <div class="card-header py-2">
+                        <i class="fas fa-image me-2"></i><strong>Logo da Imobiliária</strong>
+                        <small class="ms-2">PNG ou JPG, máx. 2 MB</small>
+                    </div>
+                    <div class="card-body py-3">
+                        <div class="row align-items-center">
+                            {% if object and object.logo %}
+                            <div class="col-md-3 mb-3 mb-md-0 text-center">
+                                <img src="{{ object.logo.url }}" alt="Logo atual"
+                                     class="img-thumbnail" style="max-width:180px; max-height:120px; object-fit:contain;">
+                                <div class="form-check mt-2 justify-content-center d-flex">
+                                    <input type="checkbox" name="logo-clear" id="id_logo_clear" class="form-check-input me-2">
+                                    <label class="form-check-label text-danger small" for="id_logo_clear">Remover logo</label>
+                                </div>
+                            </div>
+                            <div class="col-md-9">
+                            {% else %}
+                            <div class="col-12">
+                            {% endif %}
+                                <label class="form-label">{% if object and object.logo %}Substituir logo{% else %}Upload de logo{% endif %}</label>
+                                {{ form.logo }}
+                                {% if form.logo.errors %}<div class="text-danger small mt-1">{% for e in form.logo.errors %}{{ e }}{% endfor %}</div>{% endif %}
+                                <div class="text-muted small mt-1">Recomendado: fundo transparente (PNG). Será exibida na lista de imobiliárias.</div>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -192,12 +222,15 @@
                     </div>
                 </div>
 
-                <!-- Card: Configurações Padrão de Boleto -->
+                <!-- Card: Configurações Padrão de Boleto (accordion) -->
                 <div class="card mb-3" style="border-color: #17a2b8;">
-                    <div class="card-header py-2" style="background: linear-gradient(135deg, #17a2b8, #138496); color: white;">
-                        <i class="fas fa-barcode me-2"></i><strong>Configurações Padrão de Boleto</strong>
+                    <div class="card-header py-2 d-flex justify-content-between align-items-center"
+                         style="background: linear-gradient(135deg, #17a2b8, #138496); color: white; cursor: pointer;"
+                         id="acc-boleto-header" onclick="toggleAccordion('acc-boleto')">
+                        <span><i class="fas fa-barcode me-2"></i><strong>Configurações Padrão de Boleto</strong></span>
+                        <i class="fas fa-chevron-down" id="acc-boleto-icon" style="transition: transform .25s;"></i>
                     </div>
-                    <div class="card-body py-3">
+                    <div id="acc-boleto" class="card-body py-3">
                         <!-- Multa -->
                         <h6 class="text-muted mb-3"><i class="fas fa-exclamation-circle me-1"></i>Multa</h6>
                         <div class="row">
@@ -413,21 +446,59 @@
                                placeholder="Ex: Conta Principal, Conta Boletos" required maxlength="150">
                     </div>
 
+                    <!-- Alerta de campos obrigatórios por banco -->
+                    <div id="banco-info-alert" class="alert alert-info py-2 mb-3 d-none" role="alert">
+                        <small id="banco-info-text"></small>
+                    </div>
+
                     <div class="row">
                         <div class="col-md-4 mb-3">
                             <label class="form-label">Agência *</label>
                             <input type="text" class="form-control" id="agencia" name="agencia"
                                    placeholder="0000-0" required maxlength="10">
+                            <small id="agencia-help" class="text-muted d-none"></small>
                         </div>
                         <div class="col-md-4 mb-3">
                             <label class="form-label">Conta *</label>
                             <input type="text" class="form-control" id="conta" name="conta"
                                    placeholder="00000-0" required maxlength="20">
+                            <small id="conta-help" class="text-muted d-none"></small>
                         </div>
-                        <div class="col-md-4 mb-3">
-                            <label class="form-label">Convênio</label>
+                        <div class="col-md-4 mb-3" id="campo-convenio">
+                            <label class="form-label" id="label-convenio">Convênio</label>
                             <input type="text" class="form-control" id="convenio" name="convenio"
                                    placeholder="Código do cliente" maxlength="20">
+                            <small id="convenio-help" class="text-muted d-none"></small>
+                        </div>
+                    </div>
+
+                    <!-- Campos específicos por banco -->
+                    <div class="row d-none" id="campos-banco-especificos">
+                        <!-- Sicredi: posto + byte_idt -->
+                        <div class="col-md-4 mb-3 campo-sicredi d-none">
+                            <label class="form-label">Posto * <span class="badge bg-warning text-dark">Sicredi</span></label>
+                            <input type="text" class="form-control" id="posto" name="posto"
+                                   placeholder="Ex: 01" maxlength="2">
+                            <small class="text-muted">2 dígitos obrigatórios</small>
+                        </div>
+                        <div class="col-md-4 mb-3 campo-sicredi d-none">
+                            <label class="form-label">Byte IDT * <span class="badge bg-warning text-dark">Sicredi</span></label>
+                            <input type="text" class="form-control" id="byte_idt" name="byte_idt"
+                                   placeholder="Ex: 2" maxlength="1">
+                            <small class="text-muted">1 dígito — use "2" para beneficiário</small>
+                        </div>
+                        <!-- Caixa: emissao + codigo_beneficiario -->
+                        <div class="col-md-4 mb-3 campo-caixa d-none">
+                            <label class="form-label">Tipo Emissão * <span class="badge bg-warning text-dark">Caixa</span></label>
+                            <input type="text" class="form-control" id="emissao" name="emissao"
+                                   placeholder="Ex: 4" maxlength="1">
+                            <small class="text-muted">1 dígito — "4" = Beneficiário</small>
+                        </div>
+                        <div class="col-md-8 mb-3 campo-caixa d-none">
+                            <label class="form-label">Código Beneficiário * <span class="badge bg-warning text-dark">Caixa</span></label>
+                            <input type="text" class="form-control" id="codigo_beneficiario" name="codigo_beneficiario"
+                                   placeholder="Geralmente igual ao convênio" maxlength="20">
+                            <small class="text-muted">Obrigatório para Caixa Econômica</small>
                         </div>
                     </div>
 
@@ -455,6 +526,27 @@
 
                     <hr class="my-3">
                     <h6 class="text-muted mb-3"><i class="fas fa-barcode me-2"></i>Configurações de Boleto (opcional)</h6>
+
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Provedor de Cobrança</label>
+                            <select id="provider" name="provider" class="form-select">
+                                <option value="brcobranca" selected>BRCobrança (CNAB padrão)</option>
+                                <option value="c6">C6 Bank (cobrança registrada)</option>
+                                <option value="sicoob">Sicoob (cobrança registrada)</option>
+                            </select>
+                            <small class="text-muted">
+                                Vazio = BRCobrança (fluxo CNAB). C6/Sicoob usam o Boleto-API
+                                (integração ainda em validação).
+                            </small>
+                        </div>
+                        <div class="col-md-6 mb-3" id="tenant_id_wrap" style="display:none;">
+                            <label class="form-label">Tenant ID (Boleto-API)</label>
+                            <input type="text" class="form-control" id="tenant_id" name="tenant_id"
+                                   placeholder="Ex: imob1-756" maxlength="100">
+                            <small class="text-muted">Obrigatório para C6/Sicoob.</small>
+                        </div>
+                    </div>
 
                     <div class="row">
                         <div class="col-md-3 mb-3">
@@ -520,13 +612,42 @@
 
 {% block extra_js %}
 <script>
+// F2-02: Accordion collapsível com persistência no localStorage
+function toggleAccordion(id) {
+    var body = document.getElementById(id);
+    var icon = document.getElementById(id + '-icon');
+    if (!body) return;
+    var hidden = body.style.display === 'none';
+    body.style.display = hidden ? '' : 'none';
+    if (icon) icon.style.transform = hidden ? 'rotate(0deg)' : 'rotate(-90deg)';
+    try { localStorage.setItem('imob_acc_' + id, hidden ? 'open' : 'closed'); } catch(e) {}
+}
+
+document.addEventListener('DOMContentLoaded', function () {
+    ['acc-boleto'].forEach(function (id) {
+        var state = localStorage.getItem('imob_acc_' + id);
+        if (state === 'closed') {
+            var body = document.getElementById(id);
+            var icon = document.getElementById(id + '-icon');
+            if (body) body.style.display = 'none';
+            if (icon) icon.style.transform = 'rotate(-90deg)';
+        }
+    });
+});
+
 const IMOBILIARIA_ID = {{ object.pk|default:'null' }};
-let modalContaBancaria;
 let contasLocais = []; // Para armazenar contas no modo criação
-let bancosLista = {}; // Cache dos bancos para exibir nome
+let bancosLista = {};      // Cache dos bancos para exibir nome
+let bancosLayouts = {};    // Cache banco_cod → layouts_cnab suportados
+
+function _getModalContaBancaria() {
+    const el = document.getElementById('modalContaBancaria');
+    return el ? (M.Modal.getInstance(el) || M.Modal.init(el)) : null;
+}
 
 document.addEventListener('DOMContentLoaded', function() {
-    modalContaBancaria = new bootstrap.Modal(document.getElementById('modalContaBancaria'));
+    // Modal é inicializado pelo base.html via M.Modal.init(querySelectorAll('.modal'))
+    // Apenas garantimos que está disponível aqui.
 
     // Carregar lista de bancos
     carregarBancos();
@@ -538,6 +659,122 @@ document.addEventListener('DOMContentLoaded', function() {
         atualizarTabelaLocal();
     }
 });
+
+// Configuração de campos obrigatórios por banco (espelha CAMPOS_BANCO do forms.py)
+const CAMPOS_BANCO = {
+    '001': { nome: 'Banco do Brasil', convenio: 'obrigatorio', convenio_hint: '4 a 8 dígitos', agencia_max: 4, conta_max: 8, campos_extras: [] },
+    '033': { nome: 'Santander',       convenio: 'obrigatorio', convenio_hint: '7 dígitos exatos', agencia_max: 4, conta_max: 9, campos_extras: [] },
+    '104': { nome: 'Caixa Econômica', convenio: 'obrigatorio', convenio_hint: '6 dígitos exatos (código cedente)', agencia_max: 4, campos_extras: ['caixa'] },
+    '237': { nome: 'Bradesco',        convenio: 'opcional',    agencia_max: 4, conta_max: 7, campos_extras: [] },
+    '341': { nome: 'Itaú',            convenio: 'opcional',    convenio_hint: 'máx 5 dígitos', agencia_max: 4, conta_max: 5, campos_extras: [] },
+    '748': { nome: 'Sicredi',         convenio: 'obrigatorio', convenio_hint: 'máx 5 dígitos', agencia_max: 4, conta_max: 5, campos_extras: ['sicredi'] },
+    '756': { nome: 'Sicoob',          convenio: 'obrigatorio', convenio_hint: 'máx 7 dígitos', agencia_max: 4, conta_max: 8, campos_extras: [] },
+};
+
+function atualizarCamposBanco(bancoCodigo) {
+    const config = CAMPOS_BANCO[bancoCodigo] || null;
+    const alertEl = document.getElementById('banco-info-alert');
+    const alertText = document.getElementById('banco-info-text');
+    const labelConvenio = document.getElementById('label-convenio');
+    const campoConvenio = document.getElementById('campo-convenio');
+    const convenioHelp = document.getElementById('convenio-help');
+    const agenciaHelp = document.getElementById('agencia-help');
+    const contaHelp = document.getElementById('conta-help');
+    const camposEspecificos = document.getElementById('campos-banco-especificos');
+
+    // Null-guard: modal pode não estar no DOM ainda
+    if (!camposEspecificos || !alertEl || !convenioHelp || !agenciaHelp || !contaHelp || !labelConvenio) return;
+
+    // Ocultar tudo primeiro
+    document.querySelectorAll('.campo-sicredi, .campo-caixa').forEach(el => el.classList.add('d-none'));
+    camposEspecificos.classList.add('d-none');
+    alertEl.classList.add('d-none');
+    convenioHelp.classList.add('d-none');
+    agenciaHelp.classList.add('d-none');
+    contaHelp.classList.add('d-none');
+
+    // Filtrar dropdown de layout para qualquer banco (inclusive os sem config detalhada)
+    const layoutSel = document.getElementById('layout_cnab');
+    const layoutsSuportados = bancosLayouts[bancoCodigo] || [];
+    if (layoutSel) {
+        Array.from(layoutSel.options).forEach(opt => {
+            opt.hidden = layoutsSuportados.length > 0 && !layoutsSuportados.includes(opt.value);
+        });
+        if (layoutsSuportados.length === 1) {
+            layoutSel.value = layoutsSuportados[0];
+        } else if (layoutsSuportados.length > 0 && !layoutsSuportados.includes(layoutSel.value)) {
+            layoutSel.value = layoutsSuportados[0];
+        }
+    }
+
+    if (!config) {
+        labelConvenio.textContent = 'Convênio';
+        // Mostrar alerta de layout mesmo sem config de campos
+        if (layoutsSuportados.length > 0) {
+            const labels = layoutsSuportados.map(l => l.replace('_', ' ')).join(' / ');
+            alertText.innerHTML = `<strong>${bancosLista[bancoCodigo] || bancoCodigo}:</strong> CNAB suportado: <strong>${labels}</strong>`;
+            alertEl.classList.remove('d-none');
+        }
+        return;
+    }
+
+    const infos = [];
+
+    // Convênio
+    if (config.convenio === 'obrigatorio') {
+        labelConvenio.innerHTML = 'Convênio <span class="text-danger">*</span>';
+        document.getElementById('convenio').setAttribute('required', 'required');
+        const hint = config.convenio_hint ? ` (${config.convenio_hint})` : '';
+        convenioHelp.textContent = `Obrigatório para ${config.nome}${hint}`;
+        convenioHelp.classList.remove('d-none');
+        infos.push(`Convênio obrigatório${hint}`);
+    } else {
+        labelConvenio.textContent = 'Convênio';
+        document.getElementById('convenio').removeAttribute('required');
+        if (config.convenio_hint) {
+            convenioHelp.textContent = config.convenio_hint;
+            convenioHelp.classList.remove('d-none');
+        }
+    }
+
+    // Agência
+    if (config.agencia_max) {
+        agenciaHelp.textContent = `Máx ${config.agencia_max} dígitos`;
+        agenciaHelp.classList.remove('d-none');
+    }
+
+    // Conta
+    if (config.conta_max) {
+        contaHelp.textContent = `Máx ${config.conta_max} dígitos`;
+        contaHelp.classList.remove('d-none');
+    }
+
+    // Campos extras por banco
+    if (config.campos_extras && config.campos_extras.length > 0) {
+        camposEspecificos.classList.remove('d-none');
+
+        if (config.campos_extras.includes('sicredi')) {
+            document.querySelectorAll('.campo-sicredi').forEach(el => el.classList.remove('d-none'));
+            infos.push('Posto (2 dígitos) e Byte IDT (1 dígito) são obrigatórios');
+        }
+        if (config.campos_extras.includes('caixa')) {
+            document.querySelectorAll('.campo-caixa').forEach(el => el.classList.remove('d-none'));
+            infos.push('Tipo Emissão e Código Beneficiário são obrigatórios');
+        }
+    }
+
+    // Adicionar info de CNAB no alerta
+    if (layoutsSuportados.length > 0) {
+        const labels = layoutsSuportados.map(l => l.replace('_', ' ')).join(' / ');
+        infos.push(`CNAB suportado: <strong>${labels}</strong>`);
+    }
+
+    // Mostrar resumo
+    if (infos.length > 0) {
+        alertText.innerHTML = `<strong>${config.nome}:</strong> ` + infos.join(' · ');
+        alertEl.classList.remove('d-none');
+    }
+}
 
 async function carregarBancos() {
     try {
@@ -552,6 +789,12 @@ async function carregarBancos() {
                 option.textContent = banco.nome;
                 select.appendChild(option);
                 bancosLista[banco.codigo] = banco.nome;
+                bancosLayouts[banco.codigo] = banco.layouts_cnab || [];
+            });
+
+            // Listener para mudança de banco
+            select.addEventListener('change', function() {
+                atualizarCamposBanco(this.value);
             });
         }
     } catch (error) {
@@ -651,9 +894,25 @@ function abrirModalConta() {
     document.getElementById('imobiliaria_id').value = IMOBILIARIA_ID || '';
     document.getElementById('modalContaTitle').innerHTML = '<i class="fas fa-university me-2"></i>Nova Conta Bancária';
     document.getElementById('cobranca_registrada').checked = true;
+    document.getElementById('provider').value = 'brcobranca';
+    document.getElementById('tenant_id').value = '';
+    atualizarVisibilidadeProvider();
     editandoIndex = -1;
-    modalContaBancaria.show();
+    atualizarCamposBanco('');
+    _getModalContaBancaria()?.open();
 }
+
+// Mostra o campo Tenant ID apenas quando o provedor é Boleto-API (C6/Sicoob)
+function atualizarVisibilidadeProvider() {
+    const prov = document.getElementById('provider').value || 'brcobranca';
+    const wrap = document.getElementById('tenant_id_wrap');
+    if (wrap) wrap.style.display = (prov === 'c6' || prov === 'sicoob') ? '' : 'none';
+}
+
+document.addEventListener('DOMContentLoaded', function () {
+    const provSel = document.getElementById('provider');
+    if (provSel) provSel.addEventListener('change', atualizarVisibilidadeProvider);
+});
 
 function editarContaLocal(index) {
     const conta = contasLocais[index];
@@ -662,14 +921,22 @@ function editarContaLocal(index) {
     document.getElementById('conta_id').value = '';
     document.getElementById('banco').value = conta.banco;
     document.getElementById('descricao').value = conta.descricao;
+    document.getElementById('provider').value = conta.provider || 'brcobranca';
+    document.getElementById('tenant_id').value = conta.tenant_id || '';
+    atualizarVisibilidadeProvider();
     document.getElementById('agencia').value = conta.agencia;
     document.getElementById('conta').value = conta.conta;
     document.getElementById('convenio').value = conta.convenio || '';
     document.getElementById('carteira').value = conta.carteira || '';
     document.getElementById('principal').checked = conta.principal;
+    document.getElementById('posto').value = conta.posto || '';
+    document.getElementById('byte_idt').value = conta.byte_idt || '';
+    document.getElementById('emissao').value = conta.emissao || '';
+    document.getElementById('codigo_beneficiario').value = conta.codigo_beneficiario || '';
+    atualizarCamposBanco(conta.banco);
 
     document.getElementById('modalContaTitle').innerHTML = '<i class="fas fa-edit me-2"></i>Editar Conta Bancária';
-    modalContaBancaria.show();
+    _getModalContaBancaria()?.open();
 }
 
 function excluirContaLocal(index) {
@@ -680,32 +947,71 @@ function excluirContaLocal(index) {
 }
 
 function salvarContaLocal() {
+    const banco = document.getElementById('banco').value;
     const contaData = {
-        banco: document.getElementById('banco').value,
+        banco: banco,
         descricao: document.getElementById('descricao').value,
+        provider: document.getElementById('provider').value || 'brcobranca',
+        tenant_id: document.getElementById('tenant_id').value,
         agencia: document.getElementById('agencia').value,
         conta: document.getElementById('conta').value,
         convenio: document.getElementById('convenio').value,
         carteira: document.getElementById('carteira').value,
         principal: document.getElementById('principal').checked,
+        posto: document.getElementById('posto').value,
+        byte_idt: document.getElementById('byte_idt').value,
+        emissao: document.getElementById('emissao').value,
+        codigo_beneficiario: document.getElementById('codigo_beneficiario').value,
     };
 
-    // Validação
+    // Validação básica
     if (!contaData.banco || !contaData.descricao || !contaData.agencia || !contaData.conta) {
-        alert('Preencha os campos obrigatórios: Banco, Descrição, Agência e Conta');
+        window.showErrorModal('Preencha os campos obrigatórios: Banco, Descrição, Agência e Conta');
+        return;
+    }
+
+    // Validação por banco
+    const erros = validarCamposBanco(contaData);
+    if (erros.length > 0) {
+        window.showErrorModal(erros.join('\n'));
         return;
     }
 
     if (editandoIndex >= 0) {
-        // Editando
         contasLocais[editandoIndex] = contaData;
     } else {
-        // Nova conta
         contasLocais.push(contaData);
     }
 
-    modalContaBancaria.hide();
+    _getModalContaBancaria()?.close();
     atualizarTabelaLocal();
+}
+
+function validarCamposBanco(dados) {
+    const erros = [];
+    const config = CAMPOS_BANCO[dados.banco];
+    if (!config) return erros;
+
+    const bancoNome = config.nome;
+
+    if (config.convenio === 'obrigatorio' && !dados.convenio) {
+        erros.push(`Convênio é obrigatório para ${bancoNome}`);
+    }
+
+    if (config.campos_extras && config.campos_extras.includes('sicredi')) {
+        if (!dados.posto) erros.push(`Posto é obrigatório para ${bancoNome}`);
+        else if (!/^\d{2}$/.test(dados.posto)) erros.push(`Posto deve ter exatamente 2 dígitos para ${bancoNome}`);
+        if (!dados.byte_idt) erros.push(`Byte IDT é obrigatório para ${bancoNome}`);
+        else if (dados.byte_idt.length !== 1) erros.push(`Byte IDT deve ter exatamente 1 caractere para ${bancoNome}`);
+    }
+
+    if (config.campos_extras && config.campos_extras.includes('caixa')) {
+        if (!dados.emissao) erros.push(`Tipo de Emissão é obrigatório para ${bancoNome}`);
+        else if (dados.emissao.length !== 1) erros.push(`Tipo de Emissão deve ter 1 dígito para ${bancoNome}`);
+        if (!dados.codigo_beneficiario) erros.push(`Código do Beneficiário é obrigatório para ${bancoNome}`);
+    }
+
+    return erros;
 }
 
 async function editarConta(contaId) {
@@ -718,6 +1024,9 @@ async function editarConta(contaId) {
             document.getElementById('conta_id').value = conta.id;
             document.getElementById('banco').value = conta.banco;
             document.getElementById('descricao').value = conta.descricao;
+            document.getElementById('provider').value = conta.provider || 'brcobranca';
+            document.getElementById('tenant_id').value = conta.tenant_id || '';
+            atualizarVisibilidadeProvider();
             document.getElementById('agencia').value = conta.agencia;
             document.getElementById('conta').value = conta.conta;
             document.getElementById('convenio').value = conta.convenio || '';
@@ -731,12 +1040,17 @@ async function editarConta(contaId) {
             document.getElementById('prazo_protesto').value = conta.prazo_protesto || 0;
             document.getElementById('layout_cnab').value = conta.layout_cnab || 'CNAB_240';
             document.getElementById('numero_remessa_cnab_atual').value = conta.numero_remessa_cnab_atual || 0;
+            document.getElementById('posto').value = conta.posto || '';
+            document.getElementById('byte_idt').value = conta.byte_idt || '';
+            document.getElementById('emissao').value = conta.emissao || '';
+            document.getElementById('codigo_beneficiario').value = conta.codigo_beneficiario || '';
+            atualizarCamposBanco(conta.banco);
 
             document.getElementById('modalContaTitle').innerHTML = '<i class="fas fa-edit me-2"></i>Editar Conta Bancária';
-            modalContaBancaria.show();
+            _getModalContaBancaria()?.open();
         }
     } catch (error) {
-        alert('Erro ao carregar dados da conta');
+        window.showErrorModal('Erro ao carregar dados da conta');
         console.error(error);
     }
 }
@@ -753,6 +1067,8 @@ async function salvarConta() {
         imobiliaria_id: IMOBILIARIA_ID,
         banco: document.getElementById('banco').value,
         descricao: document.getElementById('descricao').value,
+        provider: document.getElementById('provider').value || 'brcobranca',
+        tenant_id: document.getElementById('tenant_id').value,
         agencia: document.getElementById('agencia').value,
         conta: document.getElementById('conta').value,
         convenio: document.getElementById('convenio').value,
@@ -766,11 +1082,22 @@ async function salvarConta() {
         prazo_protesto: parseInt(document.getElementById('prazo_protesto').value) || 0,
         layout_cnab: document.getElementById('layout_cnab').value,
         numero_remessa_cnab_atual: parseInt(document.getElementById('numero_remessa_cnab_atual').value) || 0,
+        posto: document.getElementById('posto').value,
+        byte_idt: document.getElementById('byte_idt').value,
+        emissao: document.getElementById('emissao').value,
+        codigo_beneficiario: document.getElementById('codigo_beneficiario').value,
     };
 
     // Validação básica
     if (!formData.banco || !formData.descricao || !formData.agencia || !formData.conta) {
-        alert('Preencha os campos obrigatórios: Banco, Descrição, Agência e Conta');
+        window.showErrorModal('Preencha os campos obrigatórios: Banco, Descrição, Agência e Conta');
+        return;
+    }
+
+    // Validação por banco
+    const erros = validarCamposBanco(formData);
+    if (erros.length > 0) {
+        window.showErrorModal(erros.join('\n'));
         return;
     }
 
@@ -788,20 +1115,14 @@ async function salvarConta() {
         const data = await response.json();
 
         if (data.status === 'success') {
-            modalContaBancaria.hide();
+            _getModalContaBancaria()?.close();
             carregarContas();
-
-            // Toast de sucesso
-            if (window.GestaoContratos && window.GestaoContratos.showToast) {
-                window.GestaoContratos.showToast(data.message, 'success');
-            } else {
-                alert(data.message);
-            }
+            window.showToast(data.message, 'success');
         } else {
-            alert('Erro: ' + data.message);
+            window.showErrorModal(data.message);
         }
     } catch (error) {
-        alert('Erro ao salvar conta bancária');
+        window.showErrorModal('Erro ao salvar conta bancária');
         console.error(error);
     }
 }
@@ -824,14 +1145,12 @@ async function excluirConta(contaId) {
 
         if (data.status === 'success') {
             carregarContas();
-            if (window.GestaoContratos && window.GestaoContratos.showToast) {
-                window.GestaoContratos.showToast(data.message, 'success');
-            }
+            window.showToast(data.message, 'success');
         } else {
-            alert('Erro: ' + data.message);
+            window.showErrorModal(data.message);
         }
     } catch (error) {
-        alert('Erro ao excluir conta bancária');
+        window.showErrorModal('Erro ao excluir conta bancária');
         console.error(error);
     }
 }

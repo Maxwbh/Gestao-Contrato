@@ -1,0 +1,57 @@
+{% extends 'base.html' %}
+
+{% block title %}Meu Perfil - Gestao de Contratos{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2><i class="fas fa-user-circle"></i> Meu Perfil</h2>
+    </div>
+
+    <div class="row justify-content-center">
+        <div class="col-md-8">
+            <div class="card">
+                <div class="card-header bg-primary text-white">
+                    <h5 class="mb-0"><i class="fas fa-user-edit"></i> Informacoes do Perfil</h5>
+                </div>
+                <div class="card-body">
+                    <form method="post">
+                        {% csrf_token %}
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">Nome</label>
+                                {{ form.first_name }}
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">Sobrenome</label>
+                                {{ form.last_name }}
+                            </div>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">E-mail</label>
+                            {{ form.email }}
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Nome de Usuario</label>
+                            <input type="text" class="form-control" value="{{ user.username }}" readonly disabled>
+                            <small class="text-muted">O nome de usuario nao pode ser alterado.</small>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Membro desde</label>
+                            <input type="text" class="form-control" value="{{ user.date_joined|date:'d/m/Y H:i' }}" readonly disabled>
+                        </div>
+                        <div class="d-flex justify-content-between">
+                            <a href="{% url 'accounts:alterar_senha' %}" class="btn btn-outline-warning">
+                                <i class="fas fa-key"></i> Alterar Senha
+                            </a>
+                            <button type="submit" class="btn btn-primary">
+                                <i class="fas fa-save"></i> Salvar Alteracoes
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

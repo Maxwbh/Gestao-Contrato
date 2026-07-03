@@ -1,0 +1,122 @@
+{% comment %}
+3.32 — Modal de confirmação reutilizável
+
+Inclua uma vez no template (geralmente antes de </body> ou dentro do bloco content):
+  {% include 'components/confirm_modal.html' %}
+
+Acione via JavaScript:
+  window.confirmarAcao({
+    titulo: 'Excluir Contrato',
+    mensagem: 'Tem certeza que deseja excluir este contrato? Esta ação não pode ser desfeita.',
+    url: '/contratos/1/excluir/',
+    metodo: 'POST',           // ou 'DELETE' — usa form hidden (default: POST)
+    varianteBotao: 'danger',  // primary|success|warning|danger (default: danger)
+    textoBotao: 'Excluir',    // (default: Confirmar)
+  });
+
+Ou use o atalho para exclusão:
+  window.confirmarExclusao('Nome do Item', '/url/excluir/');
+{% endcomment %}
+
+<div class="modal fade" id="confirmModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="confirmModalTitle">Confirmar Ação</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fechar"></button>
+      </div>
+      <div class="modal-body" id="confirmModalBody">
+        Tem certeza que deseja realizar esta ação?
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+          <i class="fas fa-times me-1"></i>Cancelar
+        </button>
+        <button type="button" class="btn btn-danger" id="confirmModalBtn">
+          <i class="fas fa-check me-1"></i><span id="confirmModalBtnText">Confirmar</span>
+        </button>
+      </div>
+      <!-- Form oculto para submissão POST -->
+      <form id="confirmModalForm" method="post" style="display:none;">
+        {% csrf_token %}
+      </form>
+    </div>
+  </div>
+</div>
+
+<script>
+(function() {
+  /**
+   * Abre modal de confirmação genérico.
+   * @param {Object} opcoes
+   *   titulo, mensagem, url, metodo, varianteBotao, textoBotao
+   */
+  window.confirmarAcao = function(opcoes) {
+    var opts = opcoes || {};
+    document.getElementById('confirmModalTitle').textContent = opts.titulo || 'Confirmar Ação';
+    document.getElementById('confirmModalBody').textContent = opts.mensagem || 'Tem certeza?';
+
+    var btn = document.getElementById('confirmModalBtn');
+    var variante = opts.varianteBotao || 'danger';
+    btn.className = 'btn btn-' + variante;
+    document.getElementById('confirmModalBtnText').textContent = opts.textoBotao || 'Confirmar';
+
+    btn.onclick = function() {
+      if (opts.metodo === 'GET') {
+        window.location.href = opts.url;
+      } else {
+        var form = document.getElementById('confirmModalForm');
+        form.action = opts.url;
+        form.method = 'post';
+        form.submit();
+      }
+    };
+
+    var modal = new bootstrap.Modal(document.getElementById('confirmModal'));
+    modal.show();
+  };
+
+  /**
+   * Atalho para confirmar exclusão.
+   * @param {string} nomeItem - Nome do item a excluir
+   * @param {string} url - URL de exclusão
+   */
+  window.confirmarExclusao = function(nomeItem, url) {
+    window.confirmarAcao({
+      titulo: 'Excluir Item',
+      mensagem: 'Tem certeza que deseja excluir "' + nomeItem + '"? Esta ação não pode ser desfeita.',
+      url: url,
+      metodo: 'POST',
+      varianteBotao: 'danger',
+      textoBotao: 'Excluir',
+    });
+  };
+
+  // Fallback Materialize (se bootstrap.Modal não disponível)
+  if (typeof bootstrap === 'undefined') {
+    window.confirmarAcao = function(opcoes) {
+      var opts = opcoes || {};
+      var msg = (opts.titulo || 'Confirmar') + '\n\n' + (opts.mensagem || 'Tem certeza?');
+      if (confirm(msg)) {
+        if (opts.metodo === 'GET') {
+          window.location.href = opts.url;
+        } else {
+          var form = document.createElement('form');
+          form.method = 'post';
+          form.action = opts.url;
+          var csrf = document.querySelector('[name=csrfmiddlewaretoken]');
+          if (csrf) {
+            var inp = csrf.cloneNode();
+            form.appendChild(inp);
+          }
+          document.body.appendChild(form);
+          form.submit();
+        }
+      }
+    };
+    window.confirmarExclusao = function(nome, url) {
+      window.confirmarAcao({titulo: 'Excluir', mensagem: 'Excluir "' + nome + '"?', url: url});
+    };
+  }
+})();
+</script>
