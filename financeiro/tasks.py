@@ -8,12 +8,10 @@ Empresa: M&S do Brasil LTDA
 from celery import shared_task
 from django.utils import timezone
 from django.conf import settings
-from decimal import Decimal
-import requests
-from datetime import datetime, timedelta
+from datetime import timedelta
 import logging
 
-from contratos.models import Contrato, TipoCorrecao
+from contratos.models import Contrato, TipoCorrecao, StatusContrato
 from .models import Reajuste
 
 logger = logging.getLogger(__name__)
@@ -22,159 +20,130 @@ logger = logging.getLogger(__name__)
 @shared_task
 def processar_reajustes_pendentes():
     """
-    Tarefa agendada para processar reajustes pendentes de todos os contratos
-    Executa diariamente verificando contratos que precisam de reajuste
+    Tarefa agendada para processar reajustes automáticos de todos os contratos ativos.
+
+    Identifica contratos com ciclo pendente usando Reajuste.calcular_ciclo_pendente()
+    e aplica cada ciclo usando Reajuste.preview_reajuste() + aplicar_reajuste().
+
+    Recomendado: executar mensalmente no primeiro dia do mês.
     """
-    logger.info("Iniciando processamento de reajustes pendentes...")
+    logger.info("Iniciando processamento automático de reajustes pendentes...")
 
-    contratos_processados = 0
-    contratos_reajustados = 0
-
-    # Buscar contratos ativos que precisam de reajuste
-    contratos = Contrato.objects.filter(status='ATIVO')
+    contratos = Contrato.objects.filter(status=StatusContrato.ATIVO).select_related('comprador', 'imobiliaria')
+    processados = 0
+    reajustados = 0
+    erros = 0
 
     for contrato in contratos:
-        contratos_processados += 1
+        processados += 1
+        ciclo = Reajuste.calcular_ciclo_pendente(contrato)
+        if ciclo is None:
+            continue
+        try:
+            resultado = aplicar_reajuste_automatico(contrato.id, ciclo)
+            if resultado:
+                reajustados += 1
+        except Exception as e:
+            erros += 1
+            logger.exception("Erro no reajuste automático do contrato %s: %s", contrato.numero_contrato, e)
 
-        if contrato.verificar_reajuste_necessario():
-            try:
-                aplicar_reajuste_automatico(contrato.id)
-                contratos_reajustados += 1
-            except Exception as e:
-                logger.error(f"Erro ao processar reajuste do contrato {contrato.numero_contrato}: {str(e)}")
-
-    logger.info(f"Processamento concluído. {contratos_processados} contratos processados, {contratos_reajustados} reajustados.")
-
-    return {
-        'processados': contratos_processados,
-        'reajustados': contratos_reajustados
-    }
+    logger.info(
+        f"Reajustes automáticos: {processados} contratos verificados, "
+        f"{reajustados} reajustados, {erros} erros."
+    )
+    return {'processados': processados, 'reajustados': reajustados, 'erros': erros}
 
 
 @shared_task
-def aplicar_reajuste_automatico(contrato_id):
+def aplicar_reajuste_automatico(contrato_id, ciclo=None):
     """
-    Aplica reajuste automático em um contrato específico
-    Busca o índice econômico correspondente e aplica nas parcelas não pagas
+    Aplica reajuste automático no ciclo correto de um contrato específico.
+
+    Usa Reajuste.calcular_ciclo_pendente() para determinar o ciclo e
+    Reajuste.preview_reajuste() para calcular o percentual acumulado do índice.
+
+    Args:
+        contrato_id: ID do contrato.
+        ciclo: Número do ciclo a aplicar; se None, usa o ciclo pendente calculado.
+
+    Returns:
+        dict com resultado ou False em caso de erro/não aplicável.
     """
     try:
-        contrato = Contrato.objects.get(id=contrato_id)
-
-        if contrato.tipo_correcao == TipoCorrecao.FIXO:
-            logger.info(f"Contrato {contrato.numero_contrato} com correção fixa. Ignorando reajuste.")
-            return False
-
-        # Obter o percentual do índice
-        percentual = obter_percentual_indice(contrato.tipo_correcao)
-
-        if percentual is None:
-            logger.error(f"Não foi possível obter o índice {contrato.tipo_correcao} para o contrato {contrato.numero_contrato}")
-            return False
-
-        # Determinar quais parcelas devem ser reajustadas
-        # Reajusta apenas parcelas não pagas
-        parcelas_nao_pagas = contrato.parcelas.filter(pago=False).order_by('numero_parcela')
-
-        if not parcelas_nao_pagas.exists():
-            logger.info(f"Contrato {contrato.numero_contrato} não possui parcelas pendentes para reajustar.")
-            return False
-
-        parcela_inicial = parcelas_nao_pagas.first().numero_parcela
-        parcela_final = parcelas_nao_pagas.last().numero_parcela
-
-        # Criar registro de reajuste
-        reajuste = Reajuste.objects.create(
-            contrato=contrato,
-            data_reajuste=timezone.now().date(),
-            indice_tipo=contrato.tipo_correcao,
-            percentual=percentual,
-            parcela_inicial=parcela_inicial,
-            parcela_final=parcela_final,
-            aplicado_manual=False,
-            observacoes=f'Reajuste automático aplicado em {timezone.now().date()}'
-        )
-
-        # Aplicar o reajuste
-        reajuste.aplicar_reajuste()
-
-        logger.info(f"Reajuste de {percentual}% aplicado ao contrato {contrato.numero_contrato}")
-
-        return True
-
+        contrato = Contrato.objects.select_related('comprador', 'imobiliaria').get(id=contrato_id)
     except Contrato.DoesNotExist:
-        logger.error(f"Contrato {contrato_id} não encontrado.")
-        return False
-    except Exception as e:
-        logger.error(f"Erro ao aplicar reajuste automático no contrato {contrato_id}: {str(e)}")
+        logger.exception(f"Contrato {contrato_id} não encontrado para reajuste automático.")
         return False
 
+    if contrato.tipo_correcao == TipoCorrecao.FIXO:
+        logger.info(f"Contrato {contrato.numero_contrato}: tipo FIXO, sem reajuste.")
+        return False
 
-def obter_percentual_indice(tipo_indice):
-    """
-    Busca o percentual do índice econômico nos últimos 12 meses
-    Utiliza a API do Banco Central do Brasil
-    """
+    if ciclo is None:
+        ciclo = Reajuste.calcular_ciclo_pendente(contrato)
+
+    if ciclo is None:
+        logger.info(f"Contrato {contrato.numero_contrato}: nenhum ciclo pendente.")
+        return False
+
     try:
-        # Mapear tipo de índice para código da série do BCB
-        series_bcb = {
-            TipoCorrecao.IPCA: settings.IPCA_SERIE_ID,
-            TipoCorrecao.IGPM: settings.IGPM_SERIE_ID,
-            TipoCorrecao.SELIC: settings.SELIC_SERIE_ID,
-        }
-
-        serie_id = series_bcb.get(tipo_indice)
-        if not serie_id:
-            logger.error(f"Tipo de índice não reconhecido: {tipo_indice}")
-            return None
-
-        # Calcular datas (últimos 12 meses)
-        data_fim = timezone.now().date()
-        data_inicio = data_fim - timedelta(days=365)
-
-        # Formatar datas para a API do BCB (dd/MM/yyyy)
-        data_inicio_fmt = data_inicio.strftime('%d/%m/%Y')
-        data_fim_fmt = data_fim.strftime('%d/%m/%Y')
-
-        # Fazer requisição à API do BCB
-        url = settings.BCBAPI_URL.format(serie_id)
-        params = {
-            'formato': 'json',
-            'dataInicial': data_inicio_fmt,
-            'dataFinal': data_fim_fmt
-        }
-
-        response = requests.get(url, params=params, timeout=10)
-        response.raise_for_status()
-
-        dados = response.json()
-
-        if not dados:
-            logger.warning(f"Nenhum dado retornado para o índice {tipo_indice}")
-            return None
-
-        # Calcular o acumulado dos últimos 12 meses
-        # Para IPCA e IGP-M, somar os valores mensais
-        # Para SELIC, calcular o composto
-        if tipo_indice in [TipoCorrecao.IPCA, TipoCorrecao.IGPM]:
-            # Somar os últimos 12 valores
-            valores = [Decimal(str(item['valor'])) for item in dados[-12:]]
-            percentual_acumulado = sum(valores)
-        else:  # SELIC
-            # Calcular juros compostos
-            valores = [Decimal(str(item['valor'])) for item in dados[-12:]]
-            fator = Decimal('1.0')
-            for valor in valores:
-                fator *= (1 + valor / 100)
-            percentual_acumulado = (fator - 1) * 100
-
-        return percentual_acumulado
-
-    except requests.exceptions.RequestException as e:
-        logger.error(f"Erro ao buscar dados do índice {tipo_indice}: {str(e)}")
-        return None
+        preview = Reajuste.preview_reajuste(contrato, ciclo)
     except Exception as e:
-        logger.error(f"Erro inesperado ao processar índice {tipo_indice}: {str(e)}")
-        return None
+        logger.exception("Contrato %s: erro ao calcular preview ciclo %s: %s", contrato.numero_contrato, ciclo, e)
+        return False
+
+    if 'erro' in preview:
+        logger.warning(
+            f"Contrato {contrato.numero_contrato} ciclo {ciclo}: índice não disponível — {preview['erro']}"
+        )
+        return False
+
+    if not contrato.parcelas.filter(
+        numero_parcela__gte=preview['parcela_inicial'],
+        numero_parcela__lte=preview['parcela_final'],
+        pago=False,
+    ).exists():
+        logger.info(f"Contrato {contrato.numero_contrato} ciclo {ciclo}: sem parcelas pendentes no intervalo.")
+        return False
+
+    reajuste = Reajuste.objects.create(
+        contrato=contrato,
+        data_reajuste=timezone.now().date(),
+        indice_tipo=preview['indice_tipo'],
+        percentual=preview['percentual_final'],
+        percentual_bruto=preview['percentual_bruto'],
+        spread_aplicado=preview['spread'] if preview['spread'] else None,
+        piso_aplicado=preview['piso'],
+        teto_aplicado=preview['teto'],
+        parcela_inicial=preview['parcela_inicial'],
+        parcela_final=preview['parcela_final'],
+        ciclo=ciclo,
+        periodo_referencia_inicio=preview['periodo_referencia_inicio'],
+        periodo_referencia_fim=preview['periodo_referencia_fim'],
+        aplicado_manual=False,
+        observacoes=f'Reajuste automático (Celery) — ciclo {ciclo}, {preview["indice_tipo"]} {preview["percentual_final"]:.4f}%',
+    )
+
+    resultado = reajuste.aplicar_reajuste()
+
+    logger.info(
+        f"Contrato {contrato.numero_contrato}: reajuste automático ciclo {ciclo} "
+        f"({preview['percentual_final']:.4f}%) aplicado em "
+        f"{resultado.get('parcelas_reajustadas', 0)} parcelas."
+    )
+
+    # Notificar gestor da imobiliária
+    try:
+        enviar_alerta_reajuste.delay(
+            contrato_id=contrato.id,
+            dias_restantes=0,
+            urgente=False,
+            bloqueado=False,
+        )
+    except Exception:
+        pass
+
+    return resultado
 
 
 @shared_task
@@ -186,16 +155,682 @@ def atualizar_juros_multa_parcelas_vencidas():
 
     logger.info("Iniciando atualização de juros e multa de parcelas vencidas...")
 
-    parcelas_vencidas = Parcela.objects.filter(
-        pago=False,
-        data_vencimento__lt=timezone.now().date()
+    hoje = timezone.now().date()
+    parcelas_vencidas = list(
+        Parcela.objects.filter(pago=False, data_vencimento__lt=hoje)
+        .select_related('contrato')
     )
 
-    count = 0
+    to_update = []
     for parcela in parcelas_vencidas:
-        parcela.atualizar_juros_multa()
-        count += 1
+        juros, multa = parcela.calcular_juros_multa(hoje)
+        parcela.valor_juros = juros
+        parcela.valor_multa = multa
+        to_update.append(parcela)
 
+    if to_update:
+        Parcela.objects.bulk_update(to_update, ['valor_juros', 'valor_multa'])
+
+    count = len(to_update)
     logger.info(f"Atualização concluída. {count} parcelas atualizadas.")
 
     return count
+
+
+# =============================================================================
+# NOVAS TASKS - AUTOMAÇÃO COMPLETA
+# =============================================================================
+
+@shared_task
+def buscar_indices_economicos():
+    """
+    Busca índices econômicos das APIs oficiais e armazena no banco.
+    Executar diariamente.
+
+    Fontes:
+    - BCB (Banco Central): TR, SELIC
+    - IBGE: IPCA, INPC
+    - FGV: IGPM, IGPDI, INCC
+    """
+    from .services.reajuste_service import IndiceEconomicoService
+
+    logger.info("Iniciando busca de índices econômicos...")
+
+    service = IndiceEconomicoService()
+    resultados = {
+        'sucesso': [],
+        'erro': []
+    }
+
+    # Período: últimos 3 meses (para garantir dados recentes)
+    hoje = timezone.now().date()
+    data_inicio = hoje - timedelta(days=90)
+
+    # Séries do BCB
+    series_bcb = {
+        'TR': 226,      # Taxa Referencial
+        'SELIC': 4189,  # Meta SELIC
+    }
+
+    for tipo, codigo in series_bcb.items():
+        try:
+            dados = service.buscar_indice_bcb(codigo, data_inicio, hoje)
+            if dados:
+                resultado = service.importar_indices_periodo(tipo, dados)
+                resultados['sucesso'].append({
+                    'tipo': tipo,
+                    'importados': resultado['criados'] + resultado['atualizados']
+                })
+                logger.info(f"Índice {tipo}: {resultado['criados']} novos, {resultado['atualizados']} atualizados")
+            else:
+                resultados['erro'].append({'tipo': tipo, 'erro': 'Nenhum dado retornado'})
+        except Exception as e:
+            logger.exception("Erro ao buscar índice %s: %s", tipo, e)
+            resultados['erro'].append({'tipo': tipo, 'erro': str(e)})
+
+    logger.info(f"Busca de índices concluída. Sucesso: {len(resultados['sucesso'])}, Erros: {len(resultados['erro'])}")
+
+    return resultados
+
+
+@shared_task
+def verificar_alertas_reajuste():
+    """
+    Verifica contratos com reajuste pendente e envia alertas.
+    Executar diariamente.
+
+    Envia alertas quando:
+    - Faltam 30 dias para o reajuste
+    - Faltam 7 dias para o reajuste (urgente)
+    - Boletos estão bloqueados por reajuste pendente
+    """
+    from .services.reajuste_service import ReajusteService
+
+    logger.info("Verificando alertas de reajuste...")
+
+    service = ReajusteService()
+    contratos_pendentes = service.listar_contratos_reajuste_pendente(dias_antecedencia=30)
+
+    alertas_enviados = 0
+    contratos_urgentes = []
+    contratos_bloqueados = []
+
+    for item in contratos_pendentes:
+        contrato = item['contrato']
+
+        # Classificar por urgência
+        if item['urgente']:
+            contratos_urgentes.append(contrato)
+        if item['bloqueado']:
+            contratos_bloqueados.append(contrato)
+
+        # Enviar notificação
+        try:
+            enviar_alerta_reajuste.delay(
+                contrato_id=contrato.id,
+                dias_restantes=item['dias_restantes'],
+                urgente=item['urgente'],
+                bloqueado=item['bloqueado']
+            )
+            alertas_enviados += 1
+        except Exception as e:
+            logger.exception("Erro ao enviar alerta para contrato %s: %s", contrato.numero_contrato, e)
+
+    resultado = {
+        'total_pendentes': len(contratos_pendentes),
+        'urgentes': len(contratos_urgentes),
+        'bloqueados': len(contratos_bloqueados),
+        'alertas_enviados': alertas_enviados
+    }
+
+    logger.info(f"Alertas de reajuste: {resultado}")
+
+    return resultado
+
+
+@shared_task
+def enviar_alerta_reajuste(contrato_id, dias_restantes, urgente=False, bloqueado=False):
+    """
+    Envia alerta de reajuste pendente para administradores.
+    """
+    from django.core.mail import send_mail
+
+    try:
+        contrato = Contrato.objects.select_related('imobiliaria').get(id=contrato_id)
+
+        assunto = f"{'[URGENTE] ' if urgente else ''}Reajuste Pendente - Contrato {contrato.numero_contrato}"
+
+        if bloqueado:
+            assunto = f"[BLOQUEADO] {assunto}"
+
+        mensagem = f"""
+Contrato: {contrato.numero_contrato}
+Imobiliária: {contrato.imobiliaria.nome}
+Comprador: {contrato.comprador.nome}
+
+Status: {'URGENTE - ' if urgente else ''}{dias_restantes} dias para o reajuste
+Boletos: {'BLOQUEADOS - Reajuste necessário para liberar' if bloqueado else 'Liberados'}
+
+Índice configurado: {contrato.tipo_correcao}
+Próximo reajuste: {contrato.data_proximo_reajuste}
+
+Por favor, aplique o reajuste para liberar a geração de boletos.
+        """
+
+        # Buscar emails dos administradores da imobiliária
+        emails_destino = []
+        if hasattr(contrato.imobiliaria, 'email') and contrato.imobiliaria.email:
+            emails_destino.append(contrato.imobiliaria.email)
+
+        if emails_destino and hasattr(settings, 'DEFAULT_FROM_EMAIL'):
+            send_mail(
+                assunto,
+                mensagem,
+                settings.DEFAULT_FROM_EMAIL,
+                emails_destino,
+                fail_silently=True
+            )
+            logger.info(f"Alerta de reajuste enviado para contrato {contrato.numero_contrato}")
+            return True
+
+    except Exception as e:
+        logger.exception("Erro ao enviar alerta de reajuste: %s", e)
+        return False
+
+
+@shared_task
+def gerar_boletos_automaticos():
+    """
+    Gera boletos automaticamente para parcelas do próximo mês.
+    Executar mensalmente (ex: dia 25 de cada mês).
+
+    Respeita a regra de bloqueio por reajuste.
+    """
+    from .models import Parcela, StatusBoleto
+    from contratos.models import StatusContrato
+
+    logger.info("Iniciando geração automática de boletos...")
+
+    # Calcular período: parcelas com vencimento no próximo mês
+    hoje = timezone.now().date()
+    primeiro_dia_proximo_mes = (hoje.replace(day=1) + timedelta(days=32)).replace(day=1)
+    ultimo_dia_proximo_mes = (primeiro_dia_proximo_mes + timedelta(days=32)).replace(day=1) - timedelta(days=1)
+
+    # Buscar parcelas elegíveis
+    parcelas = list(Parcela.objects.filter(
+        contrato__status=StatusContrato.ATIVO,
+        data_vencimento__gte=primeiro_dia_proximo_mes,
+        data_vencimento__lte=ultimo_dia_proximo_mes,
+        pago=False,
+        status_boleto=StatusBoleto.NAO_GERADO
+    ).select_related(
+        'contrato',
+        'contrato__comprador',
+        'contrato__imovel__imobiliaria',
+        'contrato__imobiliaria',
+        'conta_bancaria',
+    ))
+
+    resultados = {
+        'total': len(parcelas),
+        'gerados': 0,
+        'bloqueados': 0,
+        'erros': 0,
+        'detalhes': []
+    }
+
+    for parcela in parcelas:
+        contrato = parcela.contrato
+
+        # Verificar bloqueio de reajuste
+        pode_gerar, motivo = contrato.pode_gerar_boleto(parcela.numero_parcela)
+
+        if not pode_gerar:
+            resultados['bloqueados'] += 1
+            resultados['detalhes'].append({
+                'parcela': f"{contrato.numero_contrato}/{parcela.numero_parcela}",
+                'status': 'bloqueado',
+                'motivo': motivo
+            })
+            continue
+
+        # Gerar boleto
+        try:
+            resultado = parcela.gerar_boleto(enviar_email=True)
+            if resultado and resultado.get('sucesso'):
+                resultados['gerados'] += 1
+                resultados['detalhes'].append({
+                    'parcela': f"{contrato.numero_contrato}/{parcela.numero_parcela}",
+                    'status': 'gerado',
+                    'nosso_numero': resultado.get('nosso_numero')
+                })
+            else:
+                resultados['erros'] += 1
+                resultados['detalhes'].append({
+                    'parcela': f"{contrato.numero_contrato}/{parcela.numero_parcela}",
+                    'status': 'erro',
+                    'motivo': resultado.get('erro', 'Erro desconhecido') if resultado else 'Sem resposta'
+                })
+        except Exception as e:
+            resultados['erros'] += 1
+            resultados['detalhes'].append({
+                'parcela': f"{contrato.numero_contrato}/{parcela.numero_parcela}",
+                'status': 'erro',
+                'motivo': str(e)
+            })
+            logger.exception(f"Erro ao gerar boleto da parcela {parcela.id}: {e}")
+
+    logger.info(
+        f"Geração automática concluída: {resultados['gerados']} gerados, "
+        f"{resultados['bloqueados']} bloqueados, {resultados['erros']} erros"
+    )
+
+    return resultados
+
+
+@shared_task
+def enviar_lembretes_vencimento():
+    """
+    Envia lembretes de vencimento para compradores.
+    Executar diariamente.
+
+    Envia lembretes para parcelas vencendo em:
+    - 7 dias
+    - 3 dias
+    - 1 dia (amanhã)
+    """
+    from .models import Parcela
+
+    logger.info("Enviando lembretes de vencimento...")
+
+    hoje = timezone.now().date()
+    lembretes_enviados = 0
+
+    dias_lembrete = [7, 3, 1]
+    datas_lembrete = [hoje + timedelta(days=d) for d in dias_lembrete]
+
+    parcelas = Parcela.objects.filter(
+        pago=False,
+        data_vencimento__in=datas_lembrete
+    ).select_related('contrato', 'contrato__comprador')
+
+    for parcela in parcelas:
+        dias = (parcela.data_vencimento - hoje).days
+        try:
+            enviar_lembrete_parcela.delay(parcela.id, dias)
+            lembretes_enviados += 1
+        except Exception as e:
+            logger.exception("Erro ao agendar lembrete para parcela %s: %s", parcela.id, e)
+
+    logger.info(f"Lembretes agendados: {lembretes_enviados}")
+
+    return lembretes_enviados
+
+
+@shared_task
+def enviar_lembrete_parcela(parcela_id, dias_para_vencimento):
+    """
+    Envia lembrete de vencimento para uma parcela específica.
+    """
+    from .models import Parcela
+    from django.core.mail import send_mail
+
+    try:
+        parcela = Parcela.objects.select_related(
+            'contrato', 'contrato__comprador'
+        ).get(id=parcela_id)
+
+        comprador = parcela.contrato.comprador
+
+        if not comprador.email:
+            logger.warning(f"Comprador {comprador.nome} sem email cadastrado")
+            return False
+
+        if dias_para_vencimento == 1:
+            titulo = "AMANHÃ"
+        else:
+            titulo = f"em {dias_para_vencimento} dias"
+
+        assunto = f"Lembrete: Parcela vence {titulo} - Contrato {parcela.contrato.numero_contrato}"
+
+        mensagem = f"""
+Olá {comprador.nome},
+
+Este é um lembrete de que a parcela {parcela.numero_parcela}/{parcela.contrato.numero_parcelas}
+do contrato {parcela.contrato.numero_contrato} vence {titulo}.
+
+Detalhes:
+- Valor: R$ {parcela.valor_atual:,.2f}
+- Vencimento: {parcela.data_vencimento.strftime('%d/%m/%Y')}
+
+{'Seu boleto já está disponível no portal.' if parcela.tem_boleto else 'Acesse o portal para gerar seu boleto.'}
+
+Atenciosamente,
+{parcela.contrato.imobiliaria.nome}
+        """
+
+        if hasattr(settings, 'DEFAULT_FROM_EMAIL'):
+            send_mail(
+                assunto,
+                mensagem,
+                settings.DEFAULT_FROM_EMAIL,
+                [comprador.email],
+                fail_silently=True
+            )
+            logger.info(f"Lembrete enviado para parcela {parcela_id}")
+            return True
+
+    except Parcela.DoesNotExist:
+        logger.exception(f"Parcela {parcela_id} não encontrada")
+    except Exception as e:
+        logger.exception("Erro ao enviar lembrete: %s", e)
+
+    return False
+
+
+@shared_task
+def processar_arquivos_retorno_pendentes():
+    """
+    Processa arquivos de retorno CNAB pendentes.
+    Executar diariamente.
+    """
+    from .models import ArquivoRetorno, StatusArquivoRetorno
+    from .services.cnab_service import CNABService
+
+    logger.info("Processando arquivos de retorno pendentes...")
+
+    arquivos = ArquivoRetorno.objects.filter(
+        status=StatusArquivoRetorno.PENDENTE
+    )
+
+    processados = 0
+    erros = 0
+
+    service = CNABService()
+    for arquivo in arquivos:
+        try:
+            resultado = service.processar_retorno(arquivo)
+
+            if resultado.get('sucesso'):
+                processados += 1
+            else:
+                erros += 1
+                logger.error(f"Erro ao processar retorno {arquivo.id}: {resultado.get('erro')}")
+
+        except Exception as e:
+            erros += 1
+            logger.exception(f"Erro ao processar arquivo de retorno {arquivo.id}: {e}")
+
+    logger.info(f"Retornos processados: {processados}, Erros: {erros}")
+
+    return {'processados': processados, 'erros': erros}
+
+
+@shared_task
+def limpar_boletos_vencidos():
+    """
+    Atualiza status de boletos vencidos.
+    Executar diariamente.
+    """
+    from .models import Parcela, StatusBoleto
+
+    hoje = timezone.now().date()
+
+    # Atualizar boletos vencidos
+    parcelas_vencidas = Parcela.objects.filter(
+        pago=False,
+        data_vencimento__lt=hoje,
+        status_boleto__in=[StatusBoleto.GERADO, StatusBoleto.REGISTRADO]
+    )
+
+    count = parcelas_vencidas.update(status_boleto=StatusBoleto.VENCIDO)
+
+    logger.info(f"Status de {count} boletos atualizados para VENCIDO")
+
+    return count
+
+
+@shared_task
+def gerar_relatorio_diario():
+    """
+    Gera relatório diário consolidado.
+    Executar diariamente (final do dia).
+    """
+    from django.db.models import Sum, Count, Q
+    from .models import Parcela
+    from contratos.models import Contrato, StatusContrato
+
+    hoje = timezone.now().date()
+    ontem = hoje - timedelta(days=1)
+
+    agg = Parcela.objects.aggregate(
+        pag_total=Count('id', filter=Q(pago=True, data_pagamento=ontem)),
+        pag_valor=Sum('valor_pago', filter=Q(pago=True, data_pagamento=ontem)),
+        boletos_dia=Count('id', filter=Q(data_geracao_boleto__date=ontem)),
+        venc_hoje_total=Count('id', filter=Q(pago=False, data_vencimento=hoje)),
+        venc_hoje_valor=Sum('valor_atual', filter=Q(pago=False, data_vencimento=hoje)),
+        vencidas_total=Count('id', filter=Q(pago=False, data_vencimento__lt=hoje)),
+        vencidas_valor=Sum('valor_atual', filter=Q(pago=False, data_vencimento__lt=hoje)),
+    )
+
+    contratos_ativos = Contrato.objects.filter(status=StatusContrato.ATIVO).count()
+
+    relatorio = {
+        'data': str(ontem),
+        'pagamentos': {
+            'quantidade': agg['pag_total'] or 0,
+            'valor': float(agg['pag_valor'] or 0)
+        },
+        'boletos_gerados': agg['boletos_dia'] or 0,
+        'vencendo_hoje': {
+            'quantidade': agg['venc_hoje_total'] or 0,
+            'valor': float(agg['venc_hoje_valor'] or 0)
+        },
+        'vencidas': {
+            'quantidade': agg['vencidas_total'] or 0,
+            'valor': float(agg['vencidas_valor'] or 0)
+        },
+        'contratos_ativos': contratos_ativos
+    }
+
+    logger.info(f"Relatório diário gerado: {relatorio}")
+
+    return relatorio
+
+
+# =============================================================================
+# 34.5 P3 — Relatórios Agendados e Exportação para BI
+# =============================================================================
+
+@shared_task
+def enviar_relatorio_inadimplencia(frequencia='diario'):
+    """
+    34.5.1 — Envia relatório de inadimplência por e-mail.
+
+    frequencia: 'diario' (padrão) ou 'semanal'
+    Destinatários: settings.RELATORIO_INADIMPLENCIA_EMAILS
+    """
+    from django.core.mail import EmailMultiAlternatives
+    from django.db.models import Sum, Count, Q
+    from django.template.loader import render_to_string
+    from .models import Parcela
+    from contratos.models import StatusContrato
+
+    emails_destino = getattr(settings, 'RELATORIO_INADIMPLENCIA_EMAILS', [])
+    if not emails_destino:
+        logger.info('enviar_relatorio_inadimplencia: nenhum destinatário configurado (RELATORIO_INADIMPLENCIA_EMAILS).')
+        return {'enviado': False, 'motivo': 'sem_destinatarios'}
+
+    hoje = timezone.now().date()
+    limiar_dias = 1 if frequencia == 'diario' else 7
+
+    # Parcelas vencidas (>0 dias) e não pagas
+    vencidas_qs = Parcela.objects.filter(
+        pago=False,
+        data_vencimento__lt=hoje,
+        contrato__status=StatusContrato.ATIVO,
+    ).select_related('contrato', 'contrato__comprador', 'contrato__imobiliaria')
+
+    agg = vencidas_qs.aggregate(
+        total=Count('id'),
+        valor_total=Sum('valor_atual'),
+        vencidas_30d=Count('id', filter=Q(data_vencimento__lte=hoje - timedelta(days=30))),
+        vencidas_60d=Count('id', filter=Q(data_vencimento__lte=hoje - timedelta(days=60))),
+        vencidas_90d=Count('id', filter=Q(data_vencimento__lte=hoje - timedelta(days=90))),
+    )
+
+    # Top 20 parcelas mais antigas
+    top_inadimplentes = list(
+        vencidas_qs.order_by('data_vencimento')[:20].values(
+            'contrato__numero_contrato',
+            'contrato__comprador__nome',
+            'contrato__imobiliaria__nome',
+            'numero_parcela',
+            'data_vencimento',
+            'valor_atual',
+        )
+    )
+
+    contexto = {
+        'data_referencia': hoje,
+        'frequencia': frequencia,
+        'agg': agg,
+        'top_inadimplentes': top_inadimplentes,
+        'valor_total': agg['valor_total'] or 0,
+    }
+
+    titulo = f"[{'Diário' if frequencia == 'diario' else 'Semanal'}] Relatório de Inadimplência — {hoje.strftime('%d/%m/%Y')}"
+
+    html_body = _render_relatorio_inadimplencia_html(contexto)
+    text_body = _render_relatorio_inadimplencia_text(contexto)
+
+    msg = EmailMultiAlternatives(
+        subject=titulo,
+        body=text_body,
+        from_email=getattr(settings, 'DEFAULT_FROM_EMAIL', 'noreply@example.com'),
+        to=list(emails_destino),
+    )
+    msg.attach_alternative(html_body, 'text/html')
+
+    try:
+        msg.send()
+        logger.info('Relatório de inadimplência enviado para %s destinatários.', len(emails_destino))
+        return {'enviado': True, 'destinatarios': len(emails_destino), 'total_vencidas': agg['total']}
+    except Exception as exc:
+        logger.exception('Erro ao enviar relatório de inadimplência: %s', exc)
+        return {'enviado': False, 'erro': str(exc)}
+
+
+def _render_relatorio_inadimplencia_html(ctx):
+    hoje = ctx['data_referencia']
+    agg = ctx['agg']
+    top = ctx['top_inadimplentes']
+    linhas = ''
+    for row in top:
+        linhas += (
+            f'<tr>'
+            f'<td>{row["contrato__numero_contrato"]}</td>'
+            f'<td>{row["contrato__comprador__nome"]}</td>'
+            f'<td>{(row["contrato__imobiliaria__nome"] or "")[:25]}</td>'
+            f'<td>{row["numero_parcela"]}</td>'
+            f'<td>{row["data_vencimento"].strftime("%d/%m/%Y")}</td>'
+            f'<td>R$ {float(row["valor_atual"]):,.2f}</td>'
+            f'</tr>'
+        )
+    return f"""
+<html><body style="font-family:Arial,sans-serif;font-size:14px;">
+<h2 style="color:#c62828;">Relatório de Inadimplência — {hoje.strftime('%d/%m/%Y')}</h2>
+<table cellspacing="4" style="border-collapse:collapse;">
+  <tr><td style="padding:4px 12px;"><strong>Total vencidas:</strong></td><td>{agg['total'] or 0}</td></tr>
+  <tr><td style="padding:4px 12px;"><strong>Valor total:</strong></td><td>R$ {float(agg['valor_total'] or 0):,.2f}</td></tr>
+  <tr><td style="padding:4px 12px;"><strong>Venc. >30 dias:</strong></td><td>{agg['vencidas_30d'] or 0}</td></tr>
+  <tr><td style="padding:4px 12px;"><strong>Venc. >60 dias:</strong></td><td>{agg['vencidas_60d'] or 0}</td></tr>
+  <tr><td style="padding:4px 12px;"><strong>Venc. >90 dias:</strong></td><td>{agg['vencidas_90d'] or 0}</td></tr>
+</table>
+<br>
+<h3>Top inadimplentes (mais antigas)</h3>
+<table border="1" cellspacing="0" cellpadding="6" style="border-collapse:collapse;font-size:13px;">
+<thead style="background:#ffebee;">
+  <tr><th>Contrato</th><th>Comprador</th><th>Imobiliária</th><th>Parcela</th><th>Vencimento</th><th>Valor</th></tr>
+</thead>
+<tbody>{linhas}</tbody>
+</table>
+</body></html>"""
+
+
+def _render_relatorio_inadimplencia_text(ctx):
+    agg = ctx['agg']
+    hoje = ctx['data_referencia']
+    linhas = [f"Relatório de Inadimplência — {hoje.strftime('%d/%m/%Y')}",
+              f"Total vencidas: {agg['total'] or 0}",
+              f"Valor total: R$ {float(agg['valor_total'] or 0):,.2f}",
+              f"Venc. >30 dias: {agg['vencidas_30d'] or 0}",
+              f"Venc. >60 dias: {agg['vencidas_60d'] or 0}",
+              f"Venc. >90 dias: {agg['vencidas_90d'] or 0}", '']
+    for row in ctx['top_inadimplentes']:
+        linhas.append(
+            f"{row['contrato__numero_contrato']} | {row['contrato__comprador__nome'][:30]} | "
+            f"Parc.{row['numero_parcela']} | {row['data_vencimento'].strftime('%d/%m/%Y')} | "
+            f"R$ {float(row['valor_atual'] or 0):,.2f}"
+        )
+    return '\n'.join(linhas)
+
+
+@shared_task
+def enviar_relatorio_posicao_contratos(formato='excel'):
+    """
+    34.5.2 — Gera e envia por e-mail o relatório de posição de contratos.
+
+    formato: 'excel' (padrão) ou 'pdf'
+    Destinatários: settings.RELATORIO_POSICAO_EMAILS
+    """
+    from django.core.mail import EmailMessage
+    from .services import RelatorioService, FiltroRelatorio
+
+    emails_destino = getattr(settings, 'RELATORIO_POSICAO_EMAILS', [])
+    if not emails_destino:
+        logger.info('enviar_relatorio_posicao_contratos: nenhum destinatário configurado.')
+        return {'enviado': False, 'motivo': 'sem_destinatarios'}
+
+    hoje = timezone.now().date()
+    service = RelatorioService()
+    filtro = FiltroRelatorio()
+    relatorio = service.gerar_relatorio_posicao_contratos(filtro)
+
+    if formato == 'pdf':
+        try:
+            conteudo = service.exportar_para_pdf(relatorio)
+            mime = 'application/pdf'
+            ext = 'pdf'
+        except Exception:
+            conteudo = service.exportar_para_excel(relatorio)
+            mime = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+            ext = 'xlsx'
+    else:
+        conteudo = service.exportar_para_excel(relatorio)
+        mime = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+        ext = 'xlsx'
+
+    total = relatorio['totalizadores']['total_contratos']
+    titulo = f"Posição de Contratos — {hoje.strftime('%d/%m/%Y')} ({total} contratos)"
+
+    msg = EmailMessage(
+        subject=titulo,
+        body=(
+            f"Relatório de posição de contratos em anexo.\n\n"
+            f"Total de contratos ativos: {total}\n"
+            f"Saldo devedor total: R$ {float(relatorio['totalizadores']['total_saldo_devedor'] or 0):,.2f}\n"
+            f"Total pago: R$ {float(relatorio['totalizadores']['total_pago'] or 0):,.2f}\n"
+        ),
+        from_email=getattr(settings, 'DEFAULT_FROM_EMAIL', 'noreply@example.com'),
+        to=list(emails_destino),
+    )
+    msg.attach(f'posicao_contratos_{hoje.isoformat()}.{ext}', conteudo, mime)
+
+    try:
+        msg.send()
+        logger.info('Relatório de posição enviado para %s destinatários.', len(emails_destino))
+        return {'enviado': True, 'destinatarios': len(emails_destino), 'total_contratos': total}
+    except Exception as exc:
+        logger.exception('Erro ao enviar relatório de posição: %s', exc)
+        return {'enviado': False, 'erro': str(exc)}
