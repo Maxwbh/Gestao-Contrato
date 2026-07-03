@@ -4,6 +4,10 @@ Testes de segurança — CSRF, autenticação obrigatória, input injection.
 Verifica que views sensíveis exigem autenticação e que inputs maliciosos
 não causam erros inesperados nem exposição de dados.
 """
+import re
+import subprocess
+from pathlib import Path
+
 import pytest
 from django.urls import reverse
 from core.hashids_utils import encode_id
@@ -123,3 +127,97 @@ class TestIsolamentoDadosPortal:
         url = reverse('portal_comprador:meus_boletos')
         resp = client.get(url)
         assert resp.status_code == 302
+
+
+# =============================================================================
+# SEM SEGREDOS HARDCODED — proteção contra vazamento de credenciais
+# =============================================================================
+
+# Chaves sensíveis que nunca devem receber um valor literal real no código.
+_SECRET_KEYS = (
+    'EMAIL_HOST_PASSWORD', 'EMAIL_PASSWORD', 'SMTP_PASSWORD',
+    'BOUNCE_IMAP_PASSWORD', 'TWILIO_AUTH_TOKEN', 'SECRET_KEY',
+    'TASK_TOKEN', 'GEMINI_API_KEY', 'AWS_SECRET_ACCESS_KEY',
+)
+
+# Valores de exemplo aceitos (não são segredos reais).
+_PLACEHOLDER = re.compile(
+    r'sua-senha|sua_senha|your-|your_|change|placeholder|example|'
+    r'exemplo|xxxx|senha-de-app|senha-de-apl|senha-imap|token-secreto|min-[0-9]|'
+    r'seu-email|test|teste|fake|dummy|redacted|senha_teste|dev-secret|dev-key|'
+    r'localhost|local-|<[^>]+>|\{\{',
+    re.IGNORECASE,
+)
+
+# Atribuição de credencial conhecida a um literal de 8+ caracteres.
+_ASSIGN = re.compile(
+    r'(' + '|'.join(_SECRET_KEYS) + r')\s*[:=]\s*[\'"]?([A-Za-z0-9/+=_.:@-]{8,})[\'"]?'
+)
+
+# Trechos que indicam leitura dinâmica (não um segredo embutido).
+_DYNAMIC = re.compile(
+    r'config\(|os\.|getenv|env\(|getattr|environ|=\s*(config|env|os|self|request|settings)\b'
+)
+
+_PRIVATE_KEY = re.compile(r'BEGIN (?:RSA |EC |OPENSSH |DSA |PGP )?PRIVATE KEY')
+_AWS_KEY = re.compile(r'AKIA[0-9A-Z]{16}')
+
+
+def _tracked_source_files():
+    """Arquivos versionados que devem estar livres de segredos.
+
+    Exclui tests/ e docs/ (contêm placeholders e exemplos propositais) e
+    arquivos de template de ambiente (.env.example)."""
+    root = Path(__file__).resolve().parents[2]
+    try:
+        out = subprocess.run(
+            ['git', 'ls-files', '-z'],
+            cwd=root, capture_output=True, text=True, check=True,
+        ).stdout
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        pytest.skip('git indisponível — varredura de segredos ignorada')
+
+    exts = {'.py', '.yaml', '.yml', '.sh', '.cfg', '.ini', '.toml', '.json'}
+    for rel in filter(None, out.split('\0')):
+        p = Path(rel)
+        if p.parts and p.parts[0] in {'tests', 'docs'}:
+            continue
+        if p.name.endswith('.example') or p.name in {'.env.example'}:
+            continue
+        # A própria varredura (este arquivo) contém os padrões literais.
+        if p.name == 'test_security.py':
+            continue
+        if p.suffix.lower() in exts:
+            yield root / p
+
+
+def test_nenhum_segredo_hardcoded_no_codigo():
+    """Nenhum arquivo versionado deve conter credenciais SMTP/tokens embutidos.
+
+    Barreira em CI contra vazamentos como o detectado pelo GitGuardian.
+    O hook scripts/hooks/pre-commit aplica a mesma regra localmente.
+    """
+    ofensores = []
+    for path in _tracked_source_files():
+        try:
+            texto = path.read_text(encoding='utf-8', errors='ignore')
+        except OSError:
+            continue
+        for num, linha in enumerate(texto.splitlines(), start=1):
+            if _PRIVATE_KEY.search(linha) or _AWS_KEY.search(linha):
+                ofensores.append(f'{path.name}:{num}: {linha.strip()[:80]}')
+                continue
+            m = _ASSIGN.search(linha)
+            if not m:
+                continue
+            valor = m.group(2)
+            if _PLACEHOLDER.search(linha) or _PLACEHOLDER.search(valor):
+                continue
+            if _DYNAMIC.search(linha) or valor in ('', 'None'):
+                continue
+            ofensores.append(f'{path.name}:{num}: {linha.strip()[:80]}')
+
+    assert not ofensores, (
+        'Credenciais aparentemente hardcoded encontradas:\n  '
+        + '\n  '.join(ofensores)
+    )
