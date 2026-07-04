@@ -1,0 +1,1742 @@
+"""
+Modelos principais do sistema de Gestão de Contratos
+
+Desenvolvedor: Maxwell da Silva Oliveira
+Email: maxwbh@gmail.com
+Empresa: M&S do Brasil LTDA
+"""
+from django.db import models
+from django.core.validators import EmailValidator, RegexValidator
+
+
+class TimeStampedModel(models.Model):
+    """Modelo abstrato para adicionar timestamps a outros modelos"""
+    criado_em = models.DateTimeField(auto_now_add=True, verbose_name='Criado em')
+    atualizado_em = models.DateTimeField(auto_now=True, verbose_name='Atualizado em')
+
+    class Meta:
+        abstract = True
+
+
+class Contabilidade(TimeStampedModel):
+    """Modelo para representar a Contabilidade que gerencia os loteamentos"""
+    nome = models.CharField(max_length=200, verbose_name='Nome da Contabilidade')
+    razao_social = models.CharField(max_length=200, verbose_name='Razão Social')
+    cnpj = models.CharField(
+        max_length=20,
+        unique=True,
+        blank=True,
+        null=True,
+        verbose_name='CNPJ',
+        help_text='Opcional. Suporta formato numérico atual e alfanumérico (preparado para 2026)'
+    )
+    endereco = models.TextField(verbose_name='Endereço')
+    telefone = models.CharField(max_length=20, verbose_name='Telefone')
+    email = models.EmailField(validators=[EmailValidator()], verbose_name='E-mail')
+    responsavel = models.CharField(max_length=200, verbose_name='Responsável')
+    ativo = models.BooleanField(default=True, verbose_name='Ativo')
+
+    class Meta:
+        verbose_name = 'Contabilidade'
+        verbose_name_plural = 'Contabilidades'
+        ordering = ['nome']
+
+    def __str__(self):
+        return self.nome
+
+
+# ============================================================
+# Choices para Configurações de Boleto
+# ============================================================
+
+class TipoValor(models.TextChoices):
+    """Tipos de valor para multa, juros e desconto"""
+    PERCENTUAL = 'PERCENTUAL', 'Percentual (%)'
+    REAL = 'REAL', 'Valor em Reais (R$)'
+
+
+class TipoTitulo(models.TextChoices):
+    """Tipos de título para boleto bancário"""
+    AP = 'AP', 'AP - Apólice de Seguro'
+    BDP = 'BDP', 'BDP - Boleto de Proposta'
+    CC = 'CC', 'CC - Cartão de Crédito'
+    CH = 'CH', 'CH - Cheque'
+    CPR = 'CPR', 'CPR - Cédula de Produto Rural'
+    DAE = 'DAE', 'DAE - Dívida Ativa de Estado'
+    DAM = 'DAM', 'DAM - Dívida Ativa de Município'
+    DAU = 'DAU', 'DAU - Dívida Ativa da União'
+    DD = 'DD', 'DD - Documento de Dívida'
+    DM = 'DM', 'DM - Duplicata Mercantil'
+    DMI = 'DMI', 'DMI - Duplicata Mercantil para Indicação'
+    DR = 'DR', 'DR - Duplicata Rural'
+    DS = 'DS', 'DS - Duplicata de Serviço'
+    DSI = 'DSI', 'DSI - Duplicata de Serviço para Indicação'
+    EC = 'EC', 'EC - Encargos Condominiais'
+    FAT = 'FAT', 'FAT - Fatura'
+    LC = 'LC', 'LC - Letra de Câmbio'
+    ME = 'ME', 'ME - Mensalidade Escolar'
+    NCC = 'NCC', 'NCC - Nota de Crédito Comercial'
+    NCE = 'NCE', 'NCE - Nota de Crédito à Exportação'
+    NCI = 'NCI', 'NCI - Nota de Crédito Industrial'
+    NCR = 'NCR', 'NCR - Nota de Crédito Rural'
+    ND = 'ND', 'ND - Nota de Débito'
+    NF = 'NF', 'NF - Nota Fiscal'
+    NP = 'NP', 'NP - Nota Promissória'
+    NPR = 'NPR', 'NPR - Nota Promissória Rural'
+    NS = 'NS', 'NS - Nota de Seguro'
+    OUTROS = 'O', 'O - Outros'
+    PC = 'PC', 'PC - Parcela de Consórcio'
+    RC = 'RC', 'RC - Recibo'
+    TM = 'TM', 'TM - Triplicata Mercantil'
+    TS = 'TS', 'TS - Triplicata de Serviço'
+    W = 'W', 'W - Warrant'
+
+
+class LayoutCNAB(models.TextChoices):
+    """Layouts de arquivo CNAB"""
+    CNAB_240 = 'CNAB_240', 'Layout 240'
+    CNAB_400 = 'CNAB_400', 'Layout 400'
+    CNAB_444 = 'CNAB_444', 'Layout 444 (CNAB 400 + Chave NFE)'
+
+
+class ProviderBoleto(models.TextChoices):
+    """Provedor de emissão de boletos / cobrança registrada."""
+    BRCOBRANCA = 'brcobranca', 'BRCobrança (CNAB local/Docker)'
+    C6 = 'c6', 'C6 Bank (cobrança registrada)'
+    SICOOB = 'sicoob', 'Sicoob (cobrança registrada)'
+
+
+class Imobiliaria(TimeStampedModel):
+    """Modelo para representar a Imobiliária/Beneficiário do contrato (PF ou PJ)"""
+
+    TIPO_PESSOA_CHOICES = [
+        ('PJ', 'Pessoa Jurídica'),
+        ('PF', 'Pessoa Física'),
+    ]
+
+    contabilidade = models.ForeignKey(
+        Contabilidade,
+        on_delete=models.PROTECT,
+        related_name='imobiliarias',
+        verbose_name='Contabilidade'
+    )
+    tipo_pessoa = models.CharField(
+        max_length=2,
+        choices=TIPO_PESSOA_CHOICES,
+        default='PJ',
+        verbose_name='Tipo de Pessoa',
+        help_text='PJ = Empresa/Imobiliária · PF = Vendedor Pessoa Física'
+    )
+    nome = models.CharField(
+        max_length=200,
+        verbose_name='Nome / Nome Completo',
+        help_text='Razão Social para PJ ou Nome Completo para PF'
+    )
+    razao_social = models.CharField(
+        max_length=200,
+        blank=True,
+        verbose_name='Razão Social / Nome Fantasia',
+        help_text='Razão social ou nome fantasia (opcional para PF)'
+    )
+    cnpj = models.CharField(
+        max_length=20,
+        unique=True,
+        blank=True,
+        null=True,
+        verbose_name='CNPJ',
+        help_text='Obrigatório para PJ. Suporta formato alfanumérico (preparado para 2026)'
+    )
+    cpf = models.CharField(
+        max_length=14,
+        blank=True,
+        null=True,
+        verbose_name='CPF',
+        help_text='Obrigatório para vendedor Pessoa Física (formato XXX.XXX.XXX-XX)'
+    )
+
+    # Dados de Endereço (estruturado)
+    cep = models.CharField(
+        max_length=9,
+        blank=True,
+        verbose_name='CEP',
+        help_text='Formato: 99999-999'
+    )
+    logradouro = models.CharField(
+        max_length=200,
+        blank=True,
+        verbose_name='Logradouro'
+    )
+    numero = models.CharField(
+        max_length=10,
+        blank=True,
+        verbose_name='Número'
+    )
+    complemento = models.CharField(
+        max_length=100,
+        blank=True,
+        verbose_name='Complemento'
+    )
+    bairro = models.CharField(
+        max_length=100,
+        blank=True,
+        verbose_name='Bairro'
+    )
+    cidade = models.CharField(
+        max_length=100,
+        blank=True,
+        verbose_name='Cidade'
+    )
+    estado = models.CharField(
+        max_length=2,
+        blank=True,
+        verbose_name='UF',
+        choices=[
+            ('AC', 'Acre'), ('AL', 'Alagoas'), ('AP', 'Amapá'), ('AM', 'Amazonas'),
+            ('BA', 'Bahia'), ('CE', 'Ceará'), ('DF', 'Distrito Federal'), ('ES', 'Espírito Santo'),
+            ('GO', 'Goiás'), ('MA', 'Maranhão'), ('MT', 'Mato Grosso'), ('MS', 'Mato Grosso do Sul'),
+            ('MG', 'Minas Gerais'), ('PA', 'Pará'), ('PB', 'Paraíba'), ('PR', 'Paraná'),
+            ('PE', 'Pernambuco'), ('PI', 'Piauí'), ('RJ', 'Rio de Janeiro'), ('RN', 'Rio Grande do Norte'),
+            ('RS', 'Rio Grande do Sul'), ('RO', 'Rondônia'), ('RR', 'Roraima'), ('SC', 'Santa Catarina'),
+            ('SP', 'São Paulo'), ('SE', 'Sergipe'), ('TO', 'Tocantins'),
+        ]
+    )
+
+    logo = models.ImageField(
+        upload_to='imobiliarias/logos/',
+        blank=True,
+        null=True,
+        verbose_name='Logo',
+        help_text='PNG ou JPG, máx. 2 MB. Recomendado: fundo transparente.'
+    )
+    cor_marca = models.CharField(
+        max_length=6,
+        blank=True,
+        verbose_name='Cor de Marca',
+        help_text='Hex RRGGBB sem # (ex: 1A4E8C). Cor de destaque nos boletos Prawn.'
+    )
+    rodape_contato = models.CharField(
+        max_length=120,
+        blank=True,
+        verbose_name='Rodapé de Contato',
+        help_text='Linha de contato no rodapé do boleto. Ex: Tel: (31) 3773-1234 | contato@empresa.com.br'
+    )
+    marca_dagua = models.CharField(
+        max_length=60,
+        blank=True,
+        verbose_name="Marca d'Água",
+        help_text='Texto antifraude diagonal no boleto (opcional, máx. 60 chars).'
+    )
+
+    # Dados de Contato (mantido para compatibilidade)
+    endereco = models.TextField(
+        blank=True,
+        verbose_name='Endereço Completo (legacy)',
+        help_text='Campo legado - use os campos separados acima'
+    )
+    telefone = models.CharField(max_length=20, verbose_name='Telefone')
+    email = models.EmailField(validators=[EmailValidator()], verbose_name='E-mail')
+    responsavel_financeiro = models.CharField(
+        max_length=200,
+        verbose_name='Responsável Financeiro'
+    )
+    banco = models.CharField(max_length=100, blank=True, verbose_name='Banco')
+    agencia = models.CharField(max_length=20, blank=True, verbose_name='Agência')
+    conta = models.CharField(max_length=20, blank=True, verbose_name='Conta')
+    pix = models.CharField(max_length=100, blank=True, verbose_name='Chave PIX')
+
+    # ============================================================
+    # Configurações Padrão para Geração de Boletos
+    # ============================================================
+
+    # Multa
+    tipo_valor_multa = models.CharField(
+        max_length=10,
+        choices=TipoValor.choices,
+        default=TipoValor.PERCENTUAL,
+        verbose_name='Tipo de Multa'
+    )
+    percentual_multa_padrao = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        default=0,
+        verbose_name='Multa Padrão',
+        help_text='Valor em percentual ou reais conforme tipo'
+    )
+
+    # Juros
+    tipo_valor_juros = models.CharField(
+        max_length=10,
+        choices=TipoValor.choices,
+        default=TipoValor.PERCENTUAL,
+        verbose_name='Tipo de Juros'
+    )
+    percentual_juros_padrao = models.DecimalField(
+        max_digits=10,
+        decimal_places=4,
+        default=0,
+        verbose_name='Juros ao Dia Padrão',
+        help_text='Valor em percentual (0,0333 = 1% ao mês) ou reais'
+    )
+
+    # Dias sem encargos
+    dias_para_encargos_padrao = models.IntegerField(
+        default=0,
+        verbose_name='Dias sem Encargos',
+        help_text='Dias sem cobrar multa/juros após vencimento'
+    )
+
+    # Opções de Boleto
+    boleto_sem_valor = models.BooleanField(
+        default=False,
+        verbose_name='Permite Boleto sem Valor'
+    )
+    parcela_no_documento = models.BooleanField(
+        default=False,
+        verbose_name='Parcela no Documento',
+        help_text='Incluir número da parcela no campo Documento'
+    )
+    campo_desconto_abatimento_pdf = models.BooleanField(
+        default=False,
+        verbose_name='Desconto no PDF',
+        help_text='Mostrar desconto no campo "Desconto/Abatimento" do boleto'
+    )
+
+    # Desconto 1
+    tipo_valor_desconto = models.CharField(
+        max_length=10,
+        choices=TipoValor.choices,
+        default=TipoValor.PERCENTUAL,
+        verbose_name='Tipo de Desconto'
+    )
+    percentual_desconto_padrao = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        default=0,
+        verbose_name='Desconto Padrão',
+        help_text='Valor em percentual ou reais conforme tipo'
+    )
+    dias_para_desconto_padrao = models.IntegerField(
+        default=0,
+        verbose_name='Dias para Desconto',
+        help_text='Dias para conceder desconto até vencimento'
+    )
+
+    # Desconto 2
+    tipo_valor_desconto2 = models.CharField(
+        max_length=10,
+        choices=TipoValor.choices,
+        default=TipoValor.PERCENTUAL,
+        verbose_name='Tipo de 2º Desconto'
+    )
+    desconto2_padrao = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        default=0,
+        verbose_name='2º Desconto Padrão'
+    )
+    dias_para_desconto2_padrao = models.IntegerField(
+        default=0,
+        verbose_name='Dias para 2º Desconto'
+    )
+
+    # Desconto 3
+    tipo_valor_desconto3 = models.CharField(
+        max_length=10,
+        choices=TipoValor.choices,
+        default=TipoValor.PERCENTUAL,
+        verbose_name='Tipo de 3º Desconto'
+    )
+    desconto3_padrao = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        default=0,
+        verbose_name='3º Desconto Padrão'
+    )
+    dias_para_desconto3_padrao = models.IntegerField(
+        default=0,
+        verbose_name='Dias para 3º Desconto'
+    )
+
+    # Instrução e Tipo de Título
+    instrucao_padrao = models.CharField(
+        max_length=255,
+        blank=True,
+        verbose_name='Instrução Padrão',
+        help_text='Uma linha no espaço instrução ao caixa'
+    )
+    tipo_titulo = models.CharField(
+        max_length=5,
+        choices=TipoTitulo.choices,
+        default=TipoTitulo.RC,
+        verbose_name='Tipo do Título',
+        help_text='Tipo de título para emissão de boletos'
+    )
+    aceite = models.BooleanField(
+        default=False,
+        verbose_name='Aceite'
+    )
+
+    ativo = models.BooleanField(default=True, verbose_name='Ativo')
+
+    class Meta:
+        verbose_name = 'Imobiliária'
+        verbose_name_plural = 'Imobiliárias'
+        ordering = ['nome']
+
+    def __str__(self):
+        return self.nome
+
+    @property
+    def nome_fantasia(self):
+        """Compatibilidade: retorna razao_social como nome_fantasia"""
+        return self.razao_social or ''
+
+    def clean(self):
+        from django.core.exceptions import ValidationError
+        errors = {}
+        if self.tipo_pessoa == 'PJ':
+            if not self.cnpj:
+                errors['cnpj'] = 'CNPJ é obrigatório para Pessoa Jurídica.'
+        else:  # PF
+            if not self.cpf:
+                errors['cpf'] = 'CPF é obrigatório para Pessoa Física.'
+        if errors:
+            raise ValidationError(errors)
+
+    @property
+    def documento(self):
+        """Retorna CNPJ para PJ ou CPF para PF."""
+        return self.cnpj if self.tipo_pessoa == 'PJ' else self.cpf
+
+    @property
+    def is_pf(self):
+        return self.tipo_pessoa == 'PF'
+
+
+class BancoBrasil(models.TextChoices):
+    """Lista de bancos brasileiros para contas bancárias"""
+    BANCO_DO_BRASIL = '001', '001 - Banco do Brasil'
+    BANCO_DO_NORDESTE = '004', '004 - Banco do Nordeste - BNB'
+    BANESTES = '021', '021 - Banestes'
+    SANTANDER = '033', '033 - Santander'
+    BANRISUL = '041', '041 - Banrisul'
+    BRB = '070', '070 - BRB - Banco de Brasília'
+    BANCO_INTER = '077', '077 - Banco Inter'
+    SISPRIME = '084', '084 - Sisprime'
+    CECRED = '085', '085 - Cecred / Ailos'
+    CREDISAN = '089', '089 - Credisan'
+    CAIXA = '104', '104 - Caixa Econômica Federal'
+    CRESOL = '133', '133 - Cresol'
+    UNICRED = '136', '136 - Unicred'
+    BTG_PACTUAL = '208', '208 - BTG Pactual'
+    BANCO_ARBI = '213', '213 - Banco Arbi'
+    BRADESCO = '237', '237 - Bradesco'
+    ABC_BRASIL = '246', '246 - ABC Brasil'
+    BMP = '274', '274 - BMP'
+    C6_BANK = '336', '336 - C6 Bank'
+    ITAU = '341', '341 - Itaú'
+    MERCANTIL = '389', '389 - Mercantil do Brasil'
+    HSBC = '399', '399 - HSBC'
+    SAFRA = '422', '422 - Safra'
+    BANCOOB = '756', '756 - Sicoob / Bancoob'
+    SICREDI = '748', '748 - Sicredi'
+    SOFISA = '637', '637 - Sofisa'
+    DAYCOVAL = '707', '707 - Daycoval'
+    NUBANK = '260', '260 - Nubank'
+    PAGBANK = '290', '290 - PagBank / PagSeguro'
+    MERCADO_PAGO = '323', '323 - Mercado Pago'
+    STONE = '197', '197 - Stone'
+    ASAAS = '461', '461 - Asaas'
+    OUTROS = '000', '000 - Outros'
+
+
+class ContaBancaria(TimeStampedModel):
+    """Modelo para representar Contas Bancárias das Imobiliárias"""
+    imobiliaria = models.ForeignKey(
+        'Imobiliaria',
+        on_delete=models.CASCADE,
+        related_name='contas_bancarias',
+        verbose_name='Imobiliária'
+    )
+
+    # Dados do Banco
+    banco = models.CharField(
+        max_length=3,
+        choices=BancoBrasil.choices,
+        verbose_name='Banco'
+    )
+    descricao = models.CharField(
+        max_length=150,
+        verbose_name='Descrição',
+        help_text='Identificação da conta (ex: Conta Principal, Conta Boletos)'
+    )
+    principal = models.BooleanField(
+        default=False,
+        verbose_name='Conta Principal',
+        help_text='Marque se esta é a conta principal'
+    )
+
+    # Dados da Conta
+    agencia = models.CharField(
+        max_length=10,
+        verbose_name='Agência',
+        help_text='Número da agência com dígito'
+    )
+    conta = models.CharField(
+        max_length=20,
+        verbose_name='Conta',
+        help_text='Número da conta com dígito'
+    )
+
+    # Dados para Boleto (opcionais)
+    convenio = models.CharField(
+        max_length=20,
+        blank=True,
+        verbose_name='Convênio / Código do Cliente',
+        help_text='Código do convênio para emissão de boletos'
+    )
+    carteira = models.CharField(
+        max_length=5,
+        blank=True,
+        verbose_name='Carteira',
+        help_text='Número da carteira de cobrança'
+    )
+    nosso_numero_atual = models.IntegerField(
+        default=0,
+        verbose_name='Nosso Número Atual',
+        help_text='Sequencial atual do nosso número'
+    )
+    modalidade = models.CharField(
+        max_length=5,
+        blank=True,
+        verbose_name='Modalidade'
+    )
+
+    # PIX
+    tipo_pix = models.CharField(
+        max_length=20,
+        blank=True,
+        choices=[
+            ('CPF', 'CPF'),
+            ('CNPJ', 'CNPJ'),
+            ('EMAIL', 'E-mail'),
+            ('TELEFONE', 'Telefone'),
+            ('ALEATORIA', 'Chave Aleatória'),
+        ],
+        verbose_name='Tipo de Chave PIX'
+    )
+    chave_pix = models.CharField(
+        max_length=100,
+        blank=True,
+        verbose_name='Chave PIX'
+    )
+
+    # Configurações de Cobrança
+    cobranca_registrada = models.BooleanField(
+        default=True,
+        verbose_name='Cobrança Registrada'
+    )
+
+    # Boleto-API: provedor de cobrança registrada (flag de feature por conta)
+    # 'brcobranca' (padrão) mantém o fluxo CNAB atual; 'c6'/'sicoob' ativam
+    # o fluxo de cobrança registrada via gateway Boleto-API.
+    provider = models.CharField(
+        max_length=20,
+        choices=ProviderBoleto.choices,
+        default=ProviderBoleto.BRCOBRANCA,
+        verbose_name='Provedor de Cobrança',
+        help_text='BRCobrança = fluxo CNAB atual; C6/Sicoob = cobrança registrada via Boleto-API.',
+    )
+    account_config = models.JSONField(
+        null=True,
+        blank=True,
+        verbose_name='Config. da Conta (Boleto-API)',
+        help_text=(
+            'Parâmetros bancários sem segredos para o Boleto-API. '
+            'C6: {"agencia","conta","convenio"}. '
+            'Sicoob: {"cooperativa","conta","numeroCliente","codigoModalidade"}. '
+            'Credenciais (client_id/secret/.pfx) ficam no cofre do Boleto-API.'
+        ),
+    )
+    tenant_id = models.CharField(
+        max_length=100,
+        blank=True,
+        verbose_name='Tenant ID (Boleto-API)',
+        help_text='Identificador do tenant no Boleto-API. Obrigatório para provedores registrados.',
+    )
+
+    prazo_baixa = models.IntegerField(
+        default=0,
+        verbose_name='Prazo para Baixa (dias)',
+        help_text='Prazo em dias para baixa/devolução do título após vencimento'
+    )
+    prazo_protesto = models.IntegerField(
+        default=0,
+        verbose_name='Prazo para Protesto (dias)',
+        help_text='Prazo em dias para protesto. 0 = não protestar'
+    )
+
+    # Campos específicos por banco
+    # Sicredi (748): posto e byte_idt são OBRIGATÓRIOS
+    posto = models.CharField(
+        max_length=2,
+        blank=True,
+        verbose_name='Posto (Sicredi)',
+        help_text='Código do posto. Obrigatório para Sicredi (2 dígitos)'
+    )
+    byte_idt = models.CharField(
+        max_length=1,
+        blank=True,
+        verbose_name='Byte IDT (Sicredi)',
+        help_text='Byte de identificação. Obrigatório para Sicredi (1 dígito, geralmente "2")'
+    )
+    # Caixa Econômica (104): emissao e codigo_beneficiario são OBRIGATÓRIOS
+    emissao = models.CharField(
+        max_length=1,
+        blank=True,
+        verbose_name='Emissão (Caixa)',
+        help_text='Tipo de emissão. Obrigatório para Caixa Econômica (1 dígito, geralmente "4")'
+    )
+    codigo_beneficiario = models.CharField(
+        max_length=20,
+        blank=True,
+        verbose_name='Código Beneficiário (Caixa)',
+        help_text='Código do beneficiário. Obrigatório para Caixa Econômica (geralmente igual ao convênio)'
+    )
+
+    # Configurações CNAB
+    layout_cnab = models.CharField(
+        max_length=10,
+        choices=LayoutCNAB.choices,
+        default=LayoutCNAB.CNAB_240,
+        verbose_name='Layout CNAB',
+        help_text='Layout dos arquivos CNAB'
+    )
+    numero_remessa_cnab_atual = models.IntegerField(
+        default=0,
+        verbose_name='Sequencial Remessa',
+        help_text='Número sequencial da remessa CNAB'
+    )
+
+    ativo = models.BooleanField(default=True, verbose_name='Ativo')
+
+    class Meta:
+        verbose_name = 'Conta Bancária'
+        verbose_name_plural = 'Contas Bancárias'
+        ordering = ['-principal', 'banco', 'descricao']
+
+    def __str__(self):
+        banco_nome = self.get_banco_display() if self.banco else 'Sem banco'
+        return f"{banco_nome} - Ag: {self.agencia} Cc: {self.conta}"
+
+    def save(self, *args, **kwargs):
+        # Se marcada como principal, desmarcar outras
+        if self.principal:
+            ContaBancaria.objects.filter(
+                imobiliaria=self.imobiliaria,
+                principal=True
+            ).exclude(pk=self.pk).update(principal=False)
+        super().save(*args, **kwargs)
+
+    @property
+    def banco_nome(self):
+        """Retorna o nome completo do banco"""
+        return self.get_banco_display() if self.banco else ''
+
+
+class TipoImovel(models.TextChoices):
+    """Tipos de imóveis disponíveis"""
+    LOTE = 'LOTE', 'Lote'
+    TERRENO = 'TERRENO', 'Terreno'
+    CASA = 'CASA', 'Casa'
+    APARTAMENTO = 'APARTAMENTO', 'Apartamento'
+    COMERCIAL = 'COMERCIAL', 'Comercial'
+
+
+class Imovel(TimeStampedModel):
+    """Modelo para representar o Imóvel (Lote, Terreno, Casa, etc)"""
+    imobiliaria = models.ForeignKey(
+        Imobiliaria,
+        on_delete=models.PROTECT,
+        related_name='imoveis',
+        verbose_name='Imobiliária'
+    )
+    tipo = models.CharField(
+        max_length=20,
+        choices=TipoImovel.choices,
+        default=TipoImovel.LOTE,
+        verbose_name='Tipo de Imóvel'
+    )
+    identificacao = models.CharField(
+        max_length=100,
+        verbose_name='Identificação',
+        help_text='Identificação do imóvel (ex: Apt 301, Quadra A Lote 13, Sala 5, Quarto 214)'
+    )
+    loteamento = models.CharField(
+        max_length=200,
+        blank=True,
+        verbose_name='Loteamento/Empreendimento',
+        help_text='Opcional. Nome do loteamento ou empreendimento'
+    )
+
+    # Endereço estruturado
+    cep = models.CharField(
+        max_length=9,
+        blank=True,
+        verbose_name='CEP',
+        help_text='Formato: 99999-999'
+    )
+    logradouro = models.CharField(
+        max_length=200,
+        blank=True,
+        verbose_name='Logradouro'
+    )
+    numero = models.CharField(
+        max_length=10,
+        blank=True,
+        verbose_name='Número'
+    )
+    complemento = models.CharField(
+        max_length=100,
+        blank=True,
+        verbose_name='Complemento'
+    )
+    bairro = models.CharField(
+        max_length=100,
+        blank=True,
+        verbose_name='Bairro'
+    )
+    cidade = models.CharField(
+        max_length=100,
+        blank=True,
+        verbose_name='Cidade'
+    )
+    estado = models.CharField(
+        max_length=2,
+        blank=True,
+        verbose_name='UF',
+        choices=[
+            ('AC', 'Acre'), ('AL', 'Alagoas'), ('AP', 'Amapá'), ('AM', 'Amazonas'),
+            ('BA', 'Bahia'), ('CE', 'Ceará'), ('DF', 'Distrito Federal'), ('ES', 'Espírito Santo'),
+            ('GO', 'Goiás'), ('MA', 'Maranhão'), ('MT', 'Mato Grosso'), ('MS', 'Mato Grosso do Sul'),
+            ('MG', 'Minas Gerais'), ('PA', 'Pará'), ('PB', 'Paraíba'), ('PR', 'Paraná'),
+            ('PE', 'Pernambuco'), ('PI', 'Piauí'), ('RJ', 'Rio de Janeiro'), ('RN', 'Rio Grande do Norte'),
+            ('RS', 'Rio Grande do Sul'), ('RO', 'Rondônia'), ('RR', 'Roraima'), ('SC', 'Santa Catarina'),
+            ('SP', 'São Paulo'), ('SE', 'Sergipe'), ('TO', 'Tocantins'),
+        ]
+    )
+
+    # Endereço completo (legacy/compatibilidade)
+    endereco = models.TextField(
+        blank=True,
+        verbose_name='Endereço Completo',
+        help_text='Campo legado - use os campos estruturados acima'
+    )
+
+    # Georreferenciamento
+    latitude = models.DecimalField(
+        max_digits=10,
+        decimal_places=7,
+        null=True,
+        blank=True,
+        verbose_name='Latitude',
+        help_text='Coordenada de latitude (ex: -23.5505199)'
+    )
+    longitude = models.DecimalField(
+        max_digits=10,
+        decimal_places=7,
+        null=True,
+        blank=True,
+        verbose_name='Longitude',
+        help_text='Coordenada de longitude (ex: -46.6333094)'
+    )
+
+    # Dados do imóvel
+    area = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        verbose_name='Área (m²)',
+        help_text='Área em metros quadrados'
+    )
+    valor = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        verbose_name='Valor (R$)',
+        help_text='Valor do imóvel'
+    )
+
+    # Documentação
+    matricula = models.CharField(
+        max_length=100,
+        blank=True,
+        verbose_name='Matrícula',
+        help_text='Número da matrícula do imóvel'
+    )
+    inscricao_municipal = models.CharField(
+        max_length=100,
+        blank=True,
+        verbose_name='Inscrição Municipal'
+    )
+
+    observacoes = models.TextField(blank=True, verbose_name='Observações')
+    disponivel = models.BooleanField(default=True, verbose_name='Disponível para Venda')
+    ativo = models.BooleanField(default=True, verbose_name='Ativo')
+
+    class Meta:
+        verbose_name = 'Imóvel'
+        verbose_name_plural = 'Imóveis'
+        ordering = ['loteamento', 'identificacao']
+        indexes = [
+            models.Index(fields=['disponivel', 'ativo']),
+            models.Index(fields=['loteamento']),
+        ]
+
+    def __str__(self):
+        if self.loteamento:
+            return f"{self.loteamento} - {self.identificacao}"
+        return self.identificacao
+
+    @property
+    def tem_coordenadas(self):
+        """Verifica se o imóvel tem coordenadas de geolocalização"""
+        return self.latitude is not None and self.longitude is not None
+
+    @property
+    def endereco_formatado(self):
+        """Retorna o endereço formatado"""
+        partes = []
+        if self.logradouro:
+            partes.append(self.logradouro)
+        if self.numero:
+            partes.append(self.numero)
+        if self.complemento:
+            partes.append(f"- {self.complemento}")
+        if self.bairro:
+            partes.append(f", {self.bairro}")
+        if self.cidade:
+            partes.append(f", {self.cidade}")
+        if self.estado:
+            partes.append(f"/{self.estado}")
+        if self.cep:
+            partes.append(f" - CEP: {self.cep}")
+        return ' '.join(partes) if partes else self.endereco
+
+
+class VerticePoligono(models.Model):
+    """Vértice de polígono de lote — define o contorno georreferenciado do imóvel no mapa."""
+    imovel = models.ForeignKey(
+        Imovel,
+        on_delete=models.CASCADE,
+        related_name='vertices',
+        verbose_name='Imóvel'
+    )
+    ordem = models.PositiveSmallIntegerField(verbose_name='Ordem')
+    latitude = models.DecimalField(
+        max_digits=10,
+        decimal_places=7,
+        verbose_name='Latitude'
+    )
+    longitude = models.DecimalField(
+        max_digits=10,
+        decimal_places=7,
+        verbose_name='Longitude'
+    )
+
+    class Meta:
+        verbose_name = 'Vértice de Polígono'
+        verbose_name_plural = 'Vértices de Polígonos'
+        ordering = ['imovel', 'ordem']
+        unique_together = [['imovel', 'ordem']]
+
+    def __str__(self):
+        return f"{self.imovel} — V{self.ordem} ({self.latitude}, {self.longitude})"
+
+
+class LoteamentoOverlay(TimeStampedModel):
+    """Planta baixa (imagem) georreferenciada para exibir como overlay no mapa de um loteamento.
+    Os 4 campos lat/lng_sw/ne definem o retângulo de sobreposição (SW = sudoeste, NE = nordeste).
+    """
+    nome_loteamento = models.CharField(
+        max_length=200,
+        verbose_name='Nome do Loteamento',
+        help_text='Deve corresponder exatamente ao campo loteamento dos imóveis.',
+        db_index=True,
+    )
+    imagem = models.ImageField(
+        upload_to='loteamento/overlays/',
+        verbose_name='Planta Baixa',
+        help_text='Imagem da planta baixa (PNG/JPG). Recomendado: fundo transparente (PNG).',
+    )
+    lat_sw = models.DecimalField(max_digits=10, decimal_places=7, verbose_name='Latitude SW')
+    lng_sw = models.DecimalField(max_digits=10, decimal_places=7, verbose_name='Longitude SW')
+    lat_ne = models.DecimalField(max_digits=10, decimal_places=7, verbose_name='Latitude NE')
+    lng_ne = models.DecimalField(max_digits=10, decimal_places=7, verbose_name='Longitude NE')
+    opacidade = models.FloatField(
+        default=0.7,
+        verbose_name='Opacidade (0–1)',
+        help_text='0 = invisível, 1 = opaco. Padrão: 0.7',
+    )
+    ativo = models.BooleanField(default=True, verbose_name='Ativo')
+
+    class Meta:
+        verbose_name = 'Overlay de Loteamento'
+        verbose_name_plural = 'Overlays de Loteamento'
+        ordering = ['nome_loteamento']
+
+    def __str__(self):
+        return f"Overlay — {self.nome_loteamento}"
+
+    def bounds(self):
+        return [[float(self.lat_sw), float(self.lng_sw)], [float(self.lat_ne), float(self.lng_ne)]]
+
+
+class Comprador(TimeStampedModel):
+    """Modelo para representar o Comprador do imóvel (Pessoa Física ou Jurídica)"""
+
+    # Tipo de Pessoa
+    TIPO_PESSOA_CHOICES = [
+        ('PF', 'Pessoa Física'),
+        ('PJ', 'Pessoa Jurídica'),
+    ]
+    tipo_pessoa = models.CharField(
+        max_length=2,
+        choices=TIPO_PESSOA_CHOICES,
+        default='PF',
+        verbose_name='Tipo de Pessoa',
+        help_text='Pessoa Física ou Pessoa Jurídica'
+    )
+
+    # Dados Gerais (para ambos PF e PJ)
+    nome = models.CharField(
+        max_length=200,
+        verbose_name='Nome Completo / Razão Social',
+        help_text='Nome completo para PF ou Razão Social para PJ'
+    )
+
+    # Dados Pessoa Física
+    cpf = models.CharField(
+        max_length=14,
+        blank=True,
+        null=True,
+        validators=[RegexValidator(
+            regex=r'^\d{3}\.\d{3}\.\d{3}-\d{2}$',
+            message='CPF deve estar no formato XXX.XXX.XXX-XX'
+        )],
+        verbose_name='CPF',
+        help_text='Obrigatório para Pessoa Física'
+    )
+    rg = models.CharField(
+        max_length=20,
+        blank=True,
+        verbose_name='RG',
+        help_text='Apenas para Pessoa Física'
+    )
+    data_nascimento = models.DateField(
+        blank=True,
+        null=True,
+        verbose_name='Data de Nascimento',
+        help_text='Apenas para Pessoa Física'
+    )
+    estado_civil = models.CharField(
+        max_length=50,
+        blank=True,
+        choices=[
+            ('SOLTEIRO', 'Solteiro(a)'),
+            ('CASADO', 'Casado(a)'),
+            ('DIVORCIADO', 'Divorciado(a)'),
+            ('VIUVO', 'Viúvo(a)'),
+            ('UNIAO_ESTAVEL', 'União Estável'),
+        ],
+        verbose_name='Estado Civil',
+        help_text='Apenas para Pessoa Física'
+    )
+    profissao = models.CharField(
+        max_length=100,
+        blank=True,
+        verbose_name='Profissão',
+        help_text='Apenas para Pessoa Física'
+    )
+
+    # Dados Pessoa Jurídica
+    cnpj = models.CharField(
+        max_length=20,
+        blank=True,
+        null=True,
+        verbose_name='CNPJ',
+        help_text='Obrigatório para PJ. Suporta formato alfanumérico (preparado para 2026)'
+    )
+    nome_fantasia = models.CharField(
+        max_length=200,
+        blank=True,
+        verbose_name='Nome Fantasia',
+        help_text='Apenas para Pessoa Jurídica'
+    )
+    inscricao_estadual = models.CharField(
+        max_length=20,
+        blank=True,
+        verbose_name='Inscrição Estadual',
+        help_text='Apenas para Pessoa Jurídica'
+    )
+    inscricao_municipal = models.CharField(
+        max_length=20,
+        blank=True,
+        verbose_name='Inscrição Municipal',
+        help_text='Apenas para Pessoa Jurídica'
+    )
+    responsavel_legal = models.CharField(
+        max_length=200,
+        blank=True,
+        verbose_name='Responsável Legal',
+        help_text='Nome do representante legal da empresa (apenas PJ)'
+    )
+    responsavel_cpf = models.CharField(
+        max_length=14,
+        blank=True,
+        verbose_name='CPF do Responsável',
+        help_text='CPF do representante legal (apenas PJ)'
+    )
+
+    # Dados de Endereço (estruturado)
+    cep = models.CharField(
+        max_length=9,
+        blank=True,
+        verbose_name='CEP',
+        help_text='Formato: 99999-999'
+    )
+    logradouro = models.CharField(
+        max_length=200,
+        blank=True,
+        verbose_name='Logradouro'
+    )
+    numero = models.CharField(
+        max_length=10,
+        blank=True,
+        verbose_name='Número'
+    )
+    complemento = models.CharField(
+        max_length=100,
+        blank=True,
+        verbose_name='Complemento'
+    )
+    bairro = models.CharField(
+        max_length=100,
+        blank=True,
+        verbose_name='Bairro'
+    )
+    cidade = models.CharField(
+        max_length=100,
+        blank=True,
+        verbose_name='Cidade'
+    )
+    estado = models.CharField(
+        max_length=2,
+        blank=True,
+        verbose_name='UF',
+        choices=[
+            ('AC', 'Acre'), ('AL', 'Alagoas'), ('AP', 'Amapá'), ('AM', 'Amazonas'),
+            ('BA', 'Bahia'), ('CE', 'Ceará'), ('DF', 'Distrito Federal'), ('ES', 'Espírito Santo'),
+            ('GO', 'Goiás'), ('MA', 'Maranhão'), ('MT', 'Mato Grosso'), ('MS', 'Mato Grosso do Sul'),
+            ('MG', 'Minas Gerais'), ('PA', 'Pará'), ('PB', 'Paraíba'), ('PR', 'Paraná'),
+            ('PE', 'Pernambuco'), ('PI', 'Piauí'), ('RJ', 'Rio de Janeiro'), ('RN', 'Rio Grande do Norte'),
+            ('RS', 'Rio Grande do Sul'), ('RO', 'Rondônia'), ('RR', 'Roraima'), ('SC', 'Santa Catarina'),
+            ('SP', 'São Paulo'), ('SE', 'Sergipe'), ('TO', 'Tocantins'),
+        ]
+    )
+
+    # Dados de Contato (mantido para compatibilidade)
+    endereco = models.TextField(
+        blank=True,
+        verbose_name='Endereço Completo (legacy)',
+        help_text='Campo legado - use os campos separados acima'
+    )
+    telefone = models.CharField(max_length=20, blank=True, verbose_name='Telefone')
+    celular = models.CharField(max_length=20, blank=True, verbose_name='Celular')
+    email = models.EmailField(
+        blank=True,
+        validators=[EmailValidator()],
+        verbose_name='E-mail',
+        help_text='E-mail para envio de notificações'
+    )
+
+    # Preferências de Notificação
+    notificar_email = models.BooleanField(
+        default=True,
+        verbose_name='Notificar por E-mail'
+    )
+    notificar_sms = models.BooleanField(
+        default=False,
+        verbose_name='Notificar por SMS'
+    )
+    notificar_whatsapp = models.BooleanField(
+        default=False,
+        verbose_name='Notificar por WhatsApp'
+    )
+
+    # Cônjuge (se casado ou união estável)
+    conjuge_nome = models.CharField(
+        max_length=200,
+        blank=True,
+        verbose_name='Nome do Cônjuge'
+    )
+    conjuge_cpf = models.CharField(
+        max_length=14,
+        blank=True,
+        validators=[RegexValidator(
+            regex=r'^\d{3}\.\d{3}\.\d{3}-\d{2}$',
+            message='CPF deve estar no formato XXX.XXX.XXX-XX'
+        )],
+        verbose_name='CPF do Cônjuge'
+    )
+    conjuge_rg = models.CharField(max_length=20, blank=True, verbose_name='RG do Cônjuge')
+
+    observacoes = models.TextField(blank=True, verbose_name='Observações')
+    ativo = models.BooleanField(default=True, verbose_name='Ativo')
+
+    # Bloqueio de Crédito por Inadimplência (35.2)
+    bloqueio_credito = models.BooleanField(
+        default=False,
+        verbose_name='Bloqueio de Crédito',
+        help_text='Comprador está bloqueado por inadimplência'
+    )
+    bloqueio_credito_motivo = models.TextField(
+        blank=True,
+        verbose_name='Motivo do Bloqueio',
+    )
+    bloqueio_credito_em = models.DateTimeField(
+        null=True,
+        blank=True,
+        verbose_name='Bloqueado em',
+    )
+
+    class Meta:
+        verbose_name = 'Comprador'
+        verbose_name_plural = 'Compradores'
+        ordering = ['nome']
+        indexes = [
+            models.Index(fields=['tipo_pessoa']),
+            models.Index(fields=['cpf']),
+            models.Index(fields=['cnpj']),
+            models.Index(fields=['bloqueio_credito']),
+        ]
+
+    def __str__(self):
+        if self.tipo_pessoa == 'PF':
+            return f"{self.nome} - CPF: {self.cpf}" if self.cpf else self.nome
+        else:
+            return f"{self.nome} - CNPJ: {self.cnpj}" if self.cnpj else self.nome
+
+    def clean(self):
+        """Validação customizada para garantir dados obrigatórios por tipo"""
+        from django.core.exceptions import ValidationError
+
+        if self.tipo_pessoa == 'PF':
+            # Para Pessoa Física, CPF é obrigatório
+            if not self.cpf:
+                raise ValidationError({'cpf': 'CPF é obrigatório para Pessoa Física'})
+        elif self.tipo_pessoa == 'PJ':
+            # Para Pessoa Jurídica, CNPJ é obrigatório
+            if not self.cnpj:
+                raise ValidationError({'cnpj': 'CNPJ é obrigatório para Pessoa Jurídica'})
+
+    def save(self, *args, **kwargs):
+        self.full_clean()
+        super().save(*args, **kwargs)
+
+    @property
+    def documento(self):
+        """Retorna o documento principal (CPF ou CNPJ)"""
+        return self.cpf if self.tipo_pessoa == 'PF' else self.cnpj
+
+    @property
+    def nome_exibicao(self):
+        """Retorna o nome de exibição apropriado"""
+        if self.tipo_pessoa == 'PF':
+            return self.nome
+        else:
+            return self.nome_fantasia if self.nome_fantasia else self.nome
+
+
+# =============================================================================
+# CONTROLE DE ACESSO
+# =============================================================================
+
+class AcessoUsuario(TimeStampedModel):
+    """
+    Registro de acesso do usuário a uma imobiliária específica.
+
+    Modelo flexível que permite:
+    - Um usuário pode ter acesso a múltiplas contabilidades
+    - Dentro de cada contabilidade, o usuário pode ter acesso a imobiliárias específicas
+
+    Exemplo:
+    - Usuário A → Contabilidade A → Imobiliária A
+    - Usuário A → Contabilidade A → Imobiliária B
+    - Usuário A → Contabilidade B → Imobiliária E
+    """
+    usuario = models.ForeignKey(
+        'auth.User',
+        on_delete=models.CASCADE,
+        related_name='acessos',
+        verbose_name='Usuário'
+    )
+    contabilidade = models.ForeignKey(
+        'Contabilidade',
+        on_delete=models.CASCADE,
+        related_name='acessos_usuarios',
+        verbose_name='Contabilidade'
+    )
+    imobiliaria = models.ForeignKey(
+        'Imobiliaria',
+        on_delete=models.CASCADE,
+        related_name='acessos_usuarios',
+        verbose_name='Imobiliária'
+    )
+
+    # Permissões específicas (opcional para granularidade futura)
+    pode_editar = models.BooleanField(
+        default=True,
+        verbose_name='Pode Editar',
+        help_text='Permite criar/editar registros'
+    )
+    pode_excluir = models.BooleanField(
+        default=False,
+        verbose_name='Pode Excluir',
+        help_text='Permite excluir registros'
+    )
+
+    ativo = models.BooleanField(default=True, verbose_name='Ativo')
+
+    class Meta:
+        verbose_name = 'Acesso de Usuário'
+        verbose_name_plural = 'Acessos de Usuários'
+        ordering = ['usuario__username', 'contabilidade__nome', 'imobiliaria__nome']
+        unique_together = [['usuario', 'contabilidade', 'imobiliaria']]
+        indexes = [
+            models.Index(fields=['usuario', 'ativo']),
+            models.Index(fields=['contabilidade', 'ativo']),
+            models.Index(fields=['imobiliaria', 'ativo']),
+        ]
+
+    def __str__(self):
+        return f"{self.usuario.username} → {self.contabilidade.nome} → {self.imobiliaria.nome}"
+
+    def clean(self):
+        """Valida que a imobiliária pertence à contabilidade"""
+        from django.core.exceptions import ValidationError
+
+        if self.imobiliaria and self.contabilidade:
+            if self.imobiliaria.contabilidade_id != self.contabilidade_id:
+                raise ValidationError({
+                    'imobiliaria': 'A imobiliária deve pertencer à contabilidade selecionada'
+                })
+
+    def save(self, *args, **kwargs):
+        self.full_clean()
+        super().save(*args, **kwargs)
+
+
+# =============================================================================
+# FUNÇÕES DE ACESSO (helpers)
+# =============================================================================
+
+def usuario_tem_permissao_total(user):
+    """
+    Verifica se o usuário tem permissão total no sistema.
+    Usuários com permissão total: superuser ou staff (admin)
+    """
+    if not user.is_authenticated:
+        return False
+    return user.is_superuser or user.is_staff
+
+
+def get_contabilidades_usuario(user):
+    """Retorna as contabilidades que o usuário pode acessar"""
+    if not user.is_authenticated:
+        return Contabilidade.objects.none()
+
+    # Superuser ou admin tem acesso total
+    if usuario_tem_permissao_total(user):
+        return Contabilidade.objects.filter(ativo=True)
+
+    return Contabilidade.objects.filter(
+        acessos_usuarios__usuario=user,
+        acessos_usuarios__ativo=True,
+        ativo=True
+    ).distinct()
+
+
+def get_imobiliarias_usuario(user, contabilidade=None):
+    """
+    Retorna as imobiliárias que o usuário pode acessar.
+    Opcionalmente filtra por contabilidade.
+    """
+    if not user.is_authenticated:
+        return Imobiliaria.objects.none()
+
+    # Superuser ou admin tem acesso total
+    if usuario_tem_permissao_total(user):
+        qs = Imobiliaria.objects.filter(ativo=True)
+        if contabilidade:
+            qs = qs.filter(contabilidade=contabilidade)
+        return qs
+
+    qs = Imobiliaria.objects.filter(
+        acessos_usuarios__usuario=user,
+        acessos_usuarios__ativo=True,
+        ativo=True
+    )
+    if contabilidade:
+        qs = qs.filter(contabilidade=contabilidade)
+
+    return qs.distinct()
+
+
+def usuario_tem_acesso_imobiliaria(user, imobiliaria):
+    """Verifica se o usuário tem acesso a uma imobiliária específica"""
+    if not user.is_authenticated:
+        return False
+
+    # Superuser ou admin tem acesso total
+    if usuario_tem_permissao_total(user):
+        return True
+
+    return AcessoUsuario.objects.filter(
+        usuario=user,
+        imobiliaria=imobiliaria,
+        ativo=True
+    ).exists()
+
+
+def usuario_tem_acesso_contabilidade(user, contabilidade):
+    """Verifica se o usuário tem acesso a uma contabilidade específica"""
+    if not user.is_authenticated:
+        return False
+
+    # Superuser ou admin tem acesso total
+    if usuario_tem_permissao_total(user):
+        return True
+
+    return AcessoUsuario.objects.filter(
+        usuario=user,
+        contabilidade=contabilidade,
+        ativo=True
+    ).exists()
+
+
+# =============================================================================
+# HELPERS DE PAPEL / ROLE — Section 6 P3
+# =============================================================================
+
+def usuario_pode_editar(user, imobiliaria):
+    """
+    Verifica se o usuário pode criar/editar registros na imobiliária.
+    Superuser/staff sempre podem. Demais precisam de AcessoUsuario com pode_editar=True.
+    """
+    if not user.is_authenticated:
+        return False
+    if usuario_tem_permissao_total(user):
+        return True
+    return AcessoUsuario.objects.filter(
+        usuario=user,
+        imobiliaria=imobiliaria,
+        ativo=True,
+        pode_editar=True,
+    ).exists()
+
+
+def usuario_pode_excluir(user, imobiliaria):
+    """
+    Verifica se o usuário pode excluir registros na imobiliária.
+    Superuser/staff sempre podem. Demais precisam de AcessoUsuario com pode_excluir=True.
+    """
+    if not user.is_authenticated:
+        return False
+    if usuario_tem_permissao_total(user):
+        return True
+    return AcessoUsuario.objects.filter(
+        usuario=user,
+        imobiliaria=imobiliaria,
+        ativo=True,
+        pode_excluir=True,
+    ).exists()
+
+
+def usuario_eh_apenas_leitura(user, imobiliaria):
+    """
+    Verifica se o usuário é somente-leitura para a imobiliária
+    (tem acesso mas pode_editar=False e pode_excluir=False).
+    Perfil: Operador de Relatórios / Visualizador.
+    """
+    if not user.is_authenticated:
+        return False
+    if usuario_tem_permissao_total(user):
+        return False  # admin sempre tem permissão total
+    return AcessoUsuario.objects.filter(
+        usuario=user,
+        imobiliaria=imobiliaria,
+        ativo=True,
+        pode_editar=False,
+        pode_excluir=False,
+    ).exists()
+
+
+def get_acesso_usuario(user, imobiliaria):
+    """
+    Retorna o registro AcessoUsuario para (user, imobiliaria) ou None.
+    Útil para verificar permissões granulares.
+    """
+    if not user.is_authenticated:
+        return None
+    try:
+        return AcessoUsuario.objects.get(
+            usuario=user,
+            imobiliaria=imobiliaria,
+            ativo=True,
+        )
+    except AcessoUsuario.DoesNotExist:
+        return None
+
+
+# =============================================================================
+# Parâmetros do Sistema
+# =============================================================================
+
+class ParametroSistema(models.Model):
+    TIPO_STR = 'str'
+    TIPO_INT = 'int'
+    TIPO_BOOL = 'bool'
+    TIPO_SECRET = 'secret'
+    TIPO_CHOICES = [
+        (TIPO_STR, 'Texto'),
+        (TIPO_INT, 'Inteiro'),
+        (TIPO_BOOL, 'Booleano'),
+        (TIPO_SECRET, 'Senha / Token'),
+    ]
+
+    GRUPO_EMAIL = 'email'
+    GRUPO_TWILIO = 'twilio'
+    GRUPO_IMAP = 'imap'
+    GRUPO_TESTE = 'teste'
+    GRUPO_NOTIFICACAO = 'notificacao'
+    GRUPO_TAREFA = 'tarefa'
+    GRUPO_BRCOBRANCA = 'brcobranca'
+    GRUPO_PORTAL = 'portal'
+    GRUPO_APLICACAO = 'aplicacao'
+    GRUPO_BCB = 'bcb'
+    GRUPO_CHOICES = [
+        (GRUPO_EMAIL, 'E-mail SMTP'),
+        (GRUPO_TWILIO, 'Twilio (SMS / WhatsApp)'),
+        (GRUPO_IMAP, 'Bounce / IMAP'),
+        (GRUPO_TESTE, 'Modo de Teste'),
+        (GRUPO_NOTIFICACAO, 'Notificações'),
+        (GRUPO_TAREFA, 'Tarefas Agendadas'),
+        (GRUPO_BRCOBRANCA, 'BRCobrança'),
+        (GRUPO_PORTAL, 'Portal do Comprador'),
+        (GRUPO_APLICACAO, 'Aplicação'),
+        (GRUPO_BCB, 'APIs BCB'),
+    ]
+
+    chave = models.CharField(max_length=100, unique=True, verbose_name='Chave')
+    valor = models.TextField(blank=True, default='', verbose_name='Valor')
+    tipo = models.CharField(
+        max_length=10, choices=TIPO_CHOICES, default=TIPO_STR, verbose_name='Tipo'
+    )
+    grupo = models.CharField(
+        max_length=20, choices=GRUPO_CHOICES, default=GRUPO_APLICACAO, verbose_name='Grupo'
+    )
+    descricao = models.CharField(max_length=300, blank=True, verbose_name='Descrição')
+    atualizado_em = models.DateTimeField(auto_now=True, verbose_name='Atualizado em')
+    modificado_manualmente = models.BooleanField(
+        default=False,
+        verbose_name='Alterado manualmente',
+        help_text='Marcado automaticamente ao salvar pelo admin. '
+                  'Protege o valor de ser sobrescrito pelo sync do .env.',
+    )
+
+    class Meta:
+        ordering = ['grupo', 'chave']
+        verbose_name = 'Parâmetro do Sistema'
+        verbose_name_plural = 'Parâmetros do Sistema'
+
+    def __str__(self):
+        return f'{self.chave} = {self.valor_exibicao}'
+
+    @property
+    def valor_exibicao(self):
+        if self.tipo == self.TIPO_SECRET and self.valor:
+            return '••••••••'
+        return self.valor
+
+    def get_valor_tipado(self):
+        if self.tipo == self.TIPO_INT:
+            try:
+                return int(self.valor)
+            except (ValueError, TypeError):
+                return 0
+        if self.tipo == self.TIPO_BOOL:
+            return self.valor.strip().lower() in ('true', '1', 'yes', 'on')
+        return self.valor
+
+
+class AcessoNegado(models.Model):
+    """
+    D-02: Registra tentativas de acesso negado (403/404 em rotas protegidas).
+    Usado pelo AntiEnumeracaoMiddleware para detectar varredura de IDs.
+    """
+    ip = models.GenericIPAddressField(verbose_name='IP')
+    usuario = models.ForeignKey(
+        'auth.User', null=True, blank=True, on_delete=models.SET_NULL,
+        verbose_name='Usuário'
+    )
+    url = models.CharField(max_length=500, verbose_name='URL')
+    status_code = models.PositiveSmallIntegerField(verbose_name='Status HTTP')
+    timestamp = models.DateTimeField(auto_now_add=True, verbose_name='Data/Hora')
+
+    class Meta:
+        ordering = ['-timestamp']
+        verbose_name = 'Acesso Negado'
+        verbose_name_plural = 'Acessos Negados'
+        indexes = [
+            models.Index(fields=['ip', 'timestamp']),
+            models.Index(fields=['timestamp']),
+        ]
+
+    def __str__(self):
+        return f'{self.ip} → {self.url} ({self.status_code}) em {self.timestamp:%d/%m/%Y %H:%M}'
+
+
+# =============================================================================
+# LOG DE AUDITORIA (35.1)
+# =============================================================================
+
+class LogAuditoria(models.Model):
+    """Registra eventos críticos do sistema para fins de auditoria."""
+
+    ACOES = [
+        ('PAGAMENTO',           'Pagamento registrado'),
+        ('BOLETO_GERADO',       'Boleto gerado'),
+        ('REAJUSTE_APLICADO',   'Reajuste aplicado'),
+        ('REAJUSTE_DESFEITO',   'Reajuste desfeito'),
+        ('CNAB_RETORNO',        'CNAB retorno processado'),
+        ('IMPORTACAO_IA',       'Importação via IA'),
+        ('EXPORTACAO',          'Exportação de relatório'),
+        ('BLOQUEIO_CREDITO',    'Bloqueio de crédito ativado'),
+        ('DESBLOQUEIO_CREDITO', 'Bloqueio de crédito removido'),
+    ]
+
+    usuario = models.ForeignKey(
+        'auth.User', null=True, blank=True, on_delete=models.SET_NULL,
+        verbose_name='Usuário'
+    )
+    acao = models.CharField(max_length=50, choices=ACOES, verbose_name='Ação')
+    entidade = models.CharField(max_length=50, blank=True, verbose_name='Entidade')
+    entidade_pk = models.PositiveIntegerField(null=True, blank=True, verbose_name='PK da Entidade')
+    descricao = models.TextField(blank=True, verbose_name='Descrição')
+    ip_address = models.GenericIPAddressField(null=True, blank=True, verbose_name='IP')
+    timestamp = models.DateTimeField(auto_now_add=True, verbose_name='Data/Hora')
+
+    class Meta:
+        ordering = ['-timestamp']
+        verbose_name = 'Log de Auditoria'
+        verbose_name_plural = 'Logs de Auditoria'
+        indexes = [
+            models.Index(fields=['usuario', 'timestamp']),
+            models.Index(fields=['entidade', 'entidade_pk']),
+            models.Index(fields=['acao', 'timestamp']),
+        ]
+
+    def __str__(self):
+        usuario_str = self.usuario.username if self.usuario else 'Sistema'
+        return f'{self.timestamp:%d/%m/%Y %H:%M} — {self.get_acao_display()} por {usuario_str}'
+
+
+def registrar_auditoria(request_or_user, acao, entidade='', entidade_pk=None, descricao=''):
+    """Registra evento de auditoria. Falha silenciosa para não interromper a operação."""
+    try:
+        usuario = None
+        ip = None
+        if hasattr(request_or_user, 'user'):  # é um request
+            req = request_or_user
+            u = req.user
+            usuario = u if u.is_authenticated else None
+            ip = req.META.get('HTTP_X_FORWARDED_FOR', req.META.get('REMOTE_ADDR', ''))
+            if ip and ',' in ip:
+                ip = ip.split(',')[0].strip()
+        elif hasattr(request_or_user, 'pk'):  # é um User
+            usuario = request_or_user
+        LogAuditoria.objects.create(
+            usuario=usuario, acao=acao, entidade=entidade,
+            entidade_pk=entidade_pk, descricao=descricao, ip_address=ip or None
+        )
+    except Exception:
+        pass
+
+
+# ─── Monitor de Uso de IA ──────────────────────────────────────────────────────
+
+class RegistroUsoIA(models.Model):
+    """Registra cada chamada a APIs de IA com tokens consumidos e custo estimado."""
+
+    PROVIDER_ANTHROPIC = 'ANTHROPIC'
+    PROVIDER_GOOGLE    = 'GOOGLE'
+    PROVIDER_CHOICES   = [
+        (PROVIDER_ANTHROPIC, 'Anthropic Claude'),
+        (PROVIDER_GOOGLE,    'Google Gemini'),
+    ]
+
+    OP_IMPORTACAO_PDF   = 'IMPORTACAO_PDF'
+    OP_CHATBOT_INTENT   = 'CHATBOT_INTENT'
+    OP_CHATBOT_HUMANIZE = 'CHATBOT_HUMANIZE'
+    OP_CHOICES = [
+        (OP_IMPORTACAO_PDF,   'Importação de Contrato PDF'),
+        (OP_CHATBOT_INTENT,   'Chatbot — Classificação de Intent'),
+        (OP_CHATBOT_HUMANIZE, 'Chatbot — Humanização de Resposta'),
+    ]
+
+    provider   = models.CharField(max_length=20, choices=PROVIDER_CHOICES, verbose_name='Provedor')
+    modelo     = models.CharField(max_length=60, verbose_name='Modelo')
+    operacao   = models.CharField(max_length=30, choices=OP_CHOICES, verbose_name='Operação')
+    tokens_input  = models.PositiveIntegerField(default=0, verbose_name='Tokens entrada')
+    tokens_output = models.PositiveIntegerField(default=0, verbose_name='Tokens saída')
+    custo_usd  = models.DecimalField(max_digits=10, decimal_places=6, default=0, verbose_name='Custo (USD)')
+    usuario    = models.ForeignKey(
+        'auth.User', null=True, blank=True, on_delete=models.SET_NULL,
+        related_name='registros_uso_ia', verbose_name='Usuário',
+    )
+    contrato_importacao = models.ForeignKey(
+        'contratos.ContratoImportacao', null=True, blank=True, on_delete=models.SET_NULL,
+        related_name='registros_uso_ia', verbose_name='Importação',
+    )
+    criado_em  = models.DateTimeField(auto_now_add=True, verbose_name='Data/Hora')
+
+    class Meta:
+        ordering = ['-criado_em']
+        verbose_name = 'Registro de Uso de IA'
+        verbose_name_plural = 'Registros de Uso de IA'
+        indexes = [
+            models.Index(fields=['criado_em']),
+            models.Index(fields=['operacao', 'criado_em']),
+            models.Index(fields=['usuario', 'criado_em']),
+        ]
+
+    def __str__(self):
+        return f'{self.modelo} | {self.get_operacao_display()} | ${self.custo_usd:.4f}'
+
+
+class LimiteUsoIA(models.Model):
+    """Limite de uso das APIs de IA — por modelo ou por operação, com período configurável."""
+
+    ESCOPO_MODELO   = 'MODELO'
+    ESCOPO_OPERACAO = 'OPERACAO'
+    TIPO_TOKENS = 'TOKENS'
+    TIPO_REAIS  = 'REAIS'
+
+    PERIODO_DIARIO     = 'DIARIO'
+    PERIODO_SEMANAL    = 'SEMANAL'
+    PERIODO_QUINZENAL  = 'QUINZENAL'
+    PERIODO_MENSAL     = 'MENSAL'
+    PERIODO_BIMESTRAL  = 'BIMESTRAL'
+    PERIODO_SEMESTRAL  = 'SEMESTRAL'
+    PERIODO_ANUAL      = 'ANUAL'
+
+    ESCOPO_CHOICES = [
+        (ESCOPO_MODELO,   'Modelo de IA'),
+        (ESCOPO_OPERACAO, 'Operação'),
+    ]
+    TIPO_CHOICES = [
+        (TIPO_TOKENS, 'Tokens'),
+        (TIPO_REAIS,  'R$ (Reais)'),
+    ]
+    PERIODO_CHOICES = [
+        (PERIODO_DIARIO,    'Diário'),
+        (PERIODO_SEMANAL,   'Semanal'),
+        (PERIODO_QUINZENAL, 'Quinzenal (15 dias)'),
+        (PERIODO_MENSAL,    'Mensal'),
+        (PERIODO_BIMESTRAL, 'Bimestral (2 meses)'),
+        (PERIODO_SEMESTRAL, 'Semestral (6 meses)'),
+        (PERIODO_ANUAL,     'Anual'),
+    ]
+
+    tipo_escopo  = models.CharField(max_length=10, choices=ESCOPO_CHOICES, verbose_name='Escopo')
+    escopo_valor = models.CharField(max_length=60, verbose_name='Modelo / Operação')
+    tipo_limite  = models.CharField(max_length=10, choices=TIPO_CHOICES, verbose_name='Tipo de limite')
+    periodo      = models.CharField(
+        max_length=12, choices=PERIODO_CHOICES, default=PERIODO_MENSAL, verbose_name='Período de reset',
+    )
+    valor_limite = models.DecimalField(max_digits=14, decimal_places=2, verbose_name='Limite')
+    ativo        = models.BooleanField(default=True, verbose_name='Ativo')
+    criado_em    = models.DateTimeField(auto_now_add=True)
+    modificado_em = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        unique_together = [('tipo_escopo', 'escopo_valor', 'tipo_limite', 'periodo')]
+        ordering = ['tipo_escopo', 'escopo_valor', 'periodo']
+        verbose_name = 'Limite de Uso de IA'
+        verbose_name_plural = 'Limites de Uso de IA'
+
+    def __str__(self):
+        return (
+            f'{self.get_tipo_escopo_display()} {self.escopo_valor} — '
+            f'{self.valor_limite} {self.tipo_limite}/{self.get_periodo_display()}'
+        )
+
+
+# =============================================================================
+# WORKFLOW DE IA (CASCADE DE MODELOS)
+# =============================================================================
+
+class WorkflowIA(TimeStampedModel):
+    """Configuração nomeada de cascade de modelos de IA. Apenas um pode estar ativo."""
+
+    nome = models.CharField(max_length=100, verbose_name='Nome do Workflow')
+    descricao = models.TextField(blank=True, verbose_name='Descrição')
+    ativo = models.BooleanField(
+        default=False,
+        verbose_name='Ativo',
+        help_text='Apenas um workflow pode estar ativo. Se nenhum, usa a cascade padrão.',
+    )
+
+    class Meta:
+        verbose_name = 'Workflow de IA'
+        verbose_name_plural = 'Workflows de IA'
+        ordering = ['-ativo', 'nome']
+
+    def __str__(self):
+        return f'{self.nome} [ATIVO]' if self.ativo else self.nome
+
+    def ativar(self):
+        from django.db import transaction
+        with transaction.atomic():
+            WorkflowIA.objects.select_for_update().filter(ativo=True).exclude(pk=self.pk).update(ativo=False)
+            self.ativo = True
+            self.save(update_fields=['ativo'])
+
+    def desativar(self):
+        self.ativo = False
+        self.save(update_fields=['ativo'])
+
+
+class WorkflowIATier(models.Model):
+    """Um tier (nível) dentro de um WorkflowIA — modelo Claude e sua ordem na cascade."""
+
+    MODELO_CHOICES = [
+        ('claude-haiku-4-5-20251001', 'Claude Haiku 4.5'),
+        ('claude-sonnet-4-6',         'Claude Sonnet 4.6'),
+        ('claude-opus-4-8',           'Claude Opus 4.8'),
+    ]
+
+    workflow   = models.ForeignKey(WorkflowIA, on_delete=models.CASCADE, related_name='tiers')
+    modelo     = models.CharField(max_length=60, choices=MODELO_CHOICES, verbose_name='Modelo')
+    ordem      = models.PositiveSmallIntegerField(verbose_name='Ordem')
+    habilitado = models.BooleanField(default=True, verbose_name='Habilitado')
+
+    class Meta:
+        verbose_name = 'Tier do Workflow de IA'
+        verbose_name_plural = 'Tiers do Workflow de IA'
+        ordering = ['workflow', 'ordem']
+        unique_together = [['workflow', 'ordem']]
+
+    def __str__(self):
+        return f'{self.workflow.nome} — Tier {self.ordem}: {self.modelo}'

@@ -1,0 +1,106 @@
+name: CI
+
+on:
+  push:
+    branches: ["claude/**"]        # feature branches: roda tudo
+  pull_request:
+    branches: ["V3.1", "master"]  # PRs para main: roda tudo
+  # push para V3.1/master (merge) NÃO roda CI — já foi validado no PR
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+  # ── Lint + Testes em um único runner ─────────────────────────────────────
+  ci:
+    name: Lint + Testes
+    runs-on: ubuntu-latest
+    env:
+      SECRET_KEY: ci-test-secret-key-not-for-production-use
+      DEBUG: "True"
+      ALLOWED_HOSTS: "localhost,127.0.0.1"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Instalar uv
+        uses: astral-sh/setup-uv@v3
+        with:
+          enable-cache: true
+          cache-dependency-glob: requirements.txt
+
+      - name: Instalar dependências
+        run: uv pip install --system -r requirements.txt
+
+      - name: Testes unitários (paralelo)
+        run: |
+          python -m pytest tests/unit/ \
+            -n auto --tb=short -q --no-header -p no:cacheprovider
+
+  # ── Bloqueia referências a IA ─────────────────────────────────────────────
+  no-ai-refs:
+    name: Sem referências a IA
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 50
+
+      - name: Verificar commits
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            BASE="${{ github.event.pull_request.base.sha }}"
+            HEAD="${{ github.event.pull_request.head.sha }}"
+          else
+            BEFORE="${{ github.event.before }}"
+            HEAD="${{ github.sha }}"
+            if [ "$BEFORE" = "0000000000000000000000000000000000000000" ] \
+               || ! git cat-file -e "$BEFORE" 2>/dev/null; then
+              BASE=$(git merge-base HEAD origin/V3.1 2>/dev/null \
+                     || git merge-base HEAD origin/master 2>/dev/null \
+                     || echo "")
+            else
+              BASE="$BEFORE"
+            fi
+          fi
+
+          if [ -z "$BASE" ] || [ -z "$HEAD" ]; then
+            echo "✅ Sem base — nada a verificar."; exit 0
+          fi
+          if ! git cat-file -e "$BASE" 2>/dev/null || ! git cat-file -e "$HEAD" 2>/dev/null; then
+            echo "✅ SHA não resolvível — nada a verificar."; exit 0
+          fi
+
+          MERGE_BASE=$(git merge-base "$BASE" "$HEAD" 2>/dev/null || echo "$BASE")
+          COMMITS=$(git log "$MERGE_BASE".."$HEAD" --format="%H")
+          [ -z "$COMMITS" ] && echo "✅ Nenhum commit novo." && exit 0
+
+          AI='claude\.ai|anthropic\.com|openai\.com|chatgpt\.com|gemini\.google\.com|bard\.google\.com|copilot\.microsoft\.com|grok\.x\.com|mistral\.ai|perplexity\.ai|Co-Authored-By:.*(opilot|laude|hatGPT|emini)|[Gg]enerated by (AI|Claude|ChatGPT|Copilot|Gemini|GPT)|[Pp]owered by (AI|Claude|OpenAI|ChatGPT)'
+          FOUND=0
+          for sha in $COMMITS; do
+            MSG=$(git log -1 --format="%B" "$sha")
+            if echo "$MSG" | grep -qiE "$AI"; then
+              echo "❌ $sha contém referência a IA:"
+              echo "$MSG" | grep -iE "$AI"
+              FOUND=1
+            fi
+          done
+          [ "$FOUND" -eq 1 ] && exit 1
+          echo "✅ Commits sem referências a IA."
+
+      - name: Verificar corpo do PR
+        if: github.event_name == 'pull_request'
+        env:
+          PR_BODY: ${{ github.event.pull_request.body }}
+        run: |
+          AI='claude\.ai|anthropic\.com|openai\.com|chatgpt\.com|gemini\.google\.com|grok\.x\.com|mistral\.ai|perplexity\.ai|[Gg]enerated by (AI|Claude|ChatGPT|Copilot|Gemini|GPT)|[Pp]owered by (AI|Claude|OpenAI|ChatGPT)'
+          if echo "$PR_BODY" | grep -qiE "$AI"; then
+            echo "❌ Descrição do PR contém referência a IA:"
+            echo "$PR_BODY" | grep -iE "$AI"
+            exit 1
+          fi
+          echo "✅ PR sem referências a IA."

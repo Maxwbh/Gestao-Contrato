@@ -1,0 +1,512 @@
+<!DOCTYPE html>
+
+<html class="light" lang="pt-BR"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Geração de Boletos do Mês | ContractHub</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&amp;family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@100..900&amp;display=swap" rel="stylesheet"/>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        .sidebar-active {
+            border-right: 4px solid #0058be;
+            font-weight: 700;
+            color: #0058be;
+        }
+        /* Custom scrollbar for data density */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #f1f5f9;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #cbd5e1;
+            border-radius: 10px;
+        }
+    </style>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "surface-container-highest": "#d3e4fe",
+                        "on-secondary-fixed": "#001a42",
+                        "tertiary-fixed-dim": "#ddc39d",
+                        "surface-variant": "#d3e4fe",
+                        "on-error": "#ffffff",
+                        "tertiary-fixed": "#fadfb8",
+                        "inverse-surface": "#213145",
+                        "surface-container-lowest": "#ffffff",
+                        "warning": "#f59e0b",
+                        "surface-dim": "#cbdbf5",
+                        "on-tertiary-fixed-variant": "#564427",
+                        "danger": "#ef4444",
+                        "surface-border": "#e2e8f0",
+                        "primary-fixed": "#d8e3fb",
+                        "on-primary": "#ffffff",
+                        "secondary-fixed-dim": "#adc6ff",
+                        "outline-variant": "#c5c6cd",
+                        "tertiary-container": "#35260c",
+                        "background": "#f8f9ff",
+                        "success": "#22c55e",
+                        "on-tertiary-fixed": "#271902",
+                        "primary-container": "#1e293b",
+                        "on-secondary-container": "#fefcff",
+                        "on-surface-variant": "#45474c",
+                        "on-tertiary-container": "#a38c6a",
+                        "surface-tint": "#545f73",
+                        "surface-bright": "#f8f9ff",
+                        "on-primary-container": "#8590a6",
+                        "error-container": "#ffdad6",
+                        "on-error-container": "#93000a",
+                        "error": "#ba1a1a",
+                        "primary": "#091426",
+                        "on-secondary": "#ffffff",
+                        "tertiary": "#1e1200",
+                        "surface-container-high": "#dce9ff",
+                        "on-tertiary": "#ffffff",
+                        "secondary-fixed": "#d8e2ff",
+                        "surface-container-low": "#eff4ff",
+                        "inverse-primary": "#bcc7de",
+                        "on-surface": "#0b1c30",
+                        "on-secondary-fixed-variant": "#004395",
+                        "on-background": "#0b1c30",
+                        "secondary": "#0058be",
+                        "surface": "#f8f9ff",
+                        "on-primary-fixed-variant": "#3c475a",
+                        "on-primary-fixed": "#111c2d",
+                        "outline": "#75777d",
+                        "primary-fixed-dim": "#bcc7de",
+                        "secondary-container": "#2170e4",
+                        "surface-container": "#e5eeff",
+                        "surface-background": "#f8fafc",
+                        "inverse-on-surface": "#eaf1ff"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.125rem",
+                        "lg": "0.25rem",
+                        "xl": "0.5rem",
+                        "full": "0.75rem"
+                    },
+                    "spacing": {
+                        "stack-lg": "24px",
+                        "gutter": "24px",
+                        "margin-mobile": "16px",
+                        "margin-desktop": "32px",
+                        "stack-sm": "4px",
+                        "container-max-width": "1280px",
+                        "base": "8px",
+                        "stack-md": "12px"
+                    },
+                    "fontFamily": {
+                        "body-lg": ["Inter"],
+                        "headline-lg-mobile": ["Inter"],
+                        "headline-sm": ["Inter"],
+                        "headline-md": ["Inter"],
+                        "label-md": ["Inter"],
+                        "headline-lg": ["Inter"],
+                        "mono-sm": ["Courier Prime"],
+                        "body-md": ["Inter"]
+                    },
+                    "fontSize": {
+                        "body-lg": ["16px", { "lineHeight": "24px", "fontWeight": "400" }],
+                        "headline-lg-mobile": ["24px", { "lineHeight": "32px", "fontWeight": "700" }],
+                        "headline-sm": ["20px", { "lineHeight": "28px", "fontWeight": "600" }],
+                        "headline-md": ["24px", { "lineHeight": "32px", "letterSpacing": "-0.01em", "fontWeight": "600" }],
+                        "label-md": ["12px", { "lineHeight": "16px", "letterSpacing": "0.05em", "fontWeight": "600" }],
+                        "headline-lg": ["32px", { "lineHeight": "40px", "letterSpacing": "-0.02em", "fontWeight": "700" }],
+                        "mono-sm": ["13px", { "lineHeight": "18px", "fontWeight": "400" }],
+                        "body-md": ["14px", { "lineHeight": "20px", "fontWeight": "400" }]
+                    }
+                },
+            },
+        }
+    </script>
+</head>
+<body class="bg-surface-background text-on-surface font-body-md">
+<!-- Side Navigation Shell -->
+<aside class="h-screen w-64 fixed left-0 top-0 bg-surface dark:bg-surface-dim border-r border-outline-variant dark:border-outline flex flex-col py-6 z-50">
+<div class="px-6 mb-10">
+<h1 class="text-headline-sm font-headline-sm text-primary dark:text-inverse-primary">ContractHub</h1>
+<p class="text-xs text-on-surface-variant">Enterprise Legal</p>
+</div>
+<nav class="flex-1">
+<a class="flex items-center px-6 py-3 text-on-surface-variant hover:bg-surface-container-high transition-colors" href="#">
+<span class="material-symbols-outlined mr-3">dashboard</span>
+                Dashboard
+            </a>
+<a class="flex items-center px-6 py-3 text-on-surface-variant hover:bg-surface-container-high transition-colors" href="#">
+<span class="material-symbols-outlined mr-3">description</span>
+                Contracts
+            </a>
+<a class="flex items-center px-6 py-3 sidebar-active hover:bg-surface-container-high transition-colors" href="#">
+<span class="material-symbols-outlined mr-3">payments</span>
+                Financials
+            </a>
+<a class="flex items-center px-6 py-3 text-on-surface-variant hover:bg-surface-container-high transition-colors" href="#">
+<span class="material-symbols-outlined mr-3">corporate_fare</span>
+                Entities
+            </a>
+<a class="flex items-center px-6 py-3 text-on-surface-variant hover:bg-surface-container-high transition-colors" href="#">
+<span class="material-symbols-outlined mr-3">assessment</span>
+                Reports
+            </a>
+</nav>
+<div class="px-6 pt-6 border-t border-outline-variant">
+<div class="flex items-center gap-3">
+<div class="w-10 h-10 rounded-full bg-primary-fixed flex items-center justify-center text-primary font-bold">JD</div>
+<div class="overflow-hidden">
+<p class="text-sm font-bold truncate">João Da Silva</p>
+<p class="text-xs text-on-surface-variant truncate">Gestor Financeiro</p>
+</div>
+</div>
+</div>
+</aside>
+<!-- Top App Bar -->
+<header class="fixed top-0 right-0 w-[calc(100%-16rem)] h-16 bg-surface-container-lowest dark:bg-inverse-surface border-b border-outline-variant dark:border-outline shadow-sm z-40 flex justify-between items-center px-gutter">
+<div class="flex items-center gap-4">
+<div class="relative">
+<span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant">search</span>
+<input class="pl-10 pr-4 py-2 bg-surface-container-low border border-outline-variant rounded-lg text-sm w-80 focus:ring-2 focus:ring-secondary/20 focus:border-secondary outline-none transition-all" placeholder="Buscar contratos ou clientes..." type="text"/>
+</div>
+</div>
+<div class="flex items-center gap-6">
+<button class="text-on-surface-variant hover:text-secondary transition-colors relative">
+<span class="material-symbols-outlined">notifications</span>
+<span class="absolute top-0 right-0 w-2 h-2 bg-danger rounded-full border border-white"></span>
+</button>
+<button class="text-on-surface-variant hover:text-secondary transition-colors">
+<span class="material-symbols-outlined">settings</span>
+</button>
+<button class="text-on-surface-variant hover:text-secondary transition-colors">
+<span class="material-symbols-outlined">help</span>
+</button>
+</div>
+</header>
+<!-- Main Content Area -->
+<main class="ml-64 pt-16 min-h-screen">
+<div class="p-gutter max-w-screen-container-max-width mx-auto">
+<!-- Breadcrumb & Title Section -->
+<div class="mb-8">
+<nav class="flex text-label-md font-label-md text-on-surface-variant mb-2">
+<span class="hover:text-primary cursor-pointer">Financeiro</span>
+<span class="mx-2">/</span>
+<span class="text-primary font-bold">Geração de Boletos</span>
+</nav>
+<div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
+<h2 class="text-headline-md font-headline-md text-primary">Geração de Boletos do Mês</h2>
+<div class="flex items-center gap-3">
+<button class="flex items-center gap-2 px-4 py-2 border border-secondary text-secondary font-semibold rounded hover:bg-secondary/5 transition-all text-sm active:scale-95">
+                            Gerar Remessa
+                            <span class="material-symbols-outlined text-sm">link</span>
+</button>
+<button class="flex items-center gap-2 px-6 py-2 bg-primary text-white font-semibold rounded shadow-lg hover:bg-primary/90 transition-all text-sm active:scale-95" onclick="document.getElementById('modal-gerar-boletos').classList.remove('hidden')">
+<span class="material-symbols-outlined text-sm">bolt</span>
+                            Gerar Boletos
+                        </button>
+</div>
+</div>
+</div>
+<!-- Controls / Filters -->
+<div class="bg-white p-4 border border-surface-border rounded-xl shadow-sm mb-8 flex flex-wrap items-end gap-6">
+<div class="flex-1 min-w-[200px]">
+<label class="block text-xs font-bold text-on-surface-variant mb-2 uppercase tracking-wider">IMOBILIÁRIA</label>
+<select class="w-full bg-surface-container-low border border-outline-variant rounded px-3 py-2 text-sm focus:border-secondary outline-none">
+<option>Todas as Imobiliárias</option>
+<option>Imobiliária Central (Imob A)</option>
+<option>Imobiliária Prime (Imob B)</option>
+</select>
+</div>
+<div class="w-48">
+<label class="block text-xs font-bold text-on-surface-variant mb-2 uppercase tracking-wider">COMPETÊNCIA</label>
+<select class="w-full bg-surface-container-low border border-outline-variant rounded px-3 py-2 text-sm focus:border-secondary outline-none">
+<option selected="">Junho 2026</option>
+<option>Maio 2026</option>
+<option>Abril 2026</option>
+</select>
+</div>
+<div class="w-56">
+<label class="block text-xs font-bold text-on-surface-variant mb-2 uppercase tracking-wider">QTDE. POR CONTRATO</label>
+<select class="w-full bg-surface-container-low border border-outline-variant rounded px-3 py-2 text-sm focus:border-secondary outline-none">
+<option>1 boleto</option>
+<option>2 boletos</option>
+<option>3 boletos</option>
+<option>6 boletos</option>
+<option>12 boletos</option>
+</select>
+</div>
+<button class="p-2 border border-outline-variant rounded hover:bg-surface-container-low transition-colors">
+<span class="material-symbols-outlined">filter_list</span>
+</button>
+</div>
+<!-- KPI Cards -->
+<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6 mb-8">
+<!-- KPI A Gerar -->
+<div class="bg-white p-5 border border-surface-border rounded-xl shadow-sm">
+<p class="text-xs font-bold text-on-surface-variant uppercase tracking-wider mb-2">A Gerar</p>
+<div class="flex items-end justify-between">
+<div>
+<h3 class="text-headline-sm font-bold text-primary">142</h3>
+<p class="text-xs text-on-surface-variant">boletos elegíveis</p>
+</div>
+<span class="flex items-center text-success text-xs font-bold bg-success/10 px-1 rounded">
+<span class="material-symbols-outlined text-xs">trending_up</span>
+                            +12%
+                        </span>
+</div>
+</div>
+<!-- KPI Valor -->
+<div class="bg-white p-5 border border-surface-border rounded-xl shadow-sm">
+<p class="text-xs font-bold text-on-surface-variant uppercase tracking-wider mb-2">Valor Total</p>
+<h3 class="text-headline-sm font-bold text-primary">R$ 245.800,00</h3>
+<p class="text-xs text-on-surface-variant">referente ao período</p>
+</div>
+<!-- KPI Contratos -->
+<div class="bg-white p-5 border border-surface-border rounded-xl shadow-sm">
+<p class="text-xs font-bold text-on-surface-variant uppercase tracking-wider mb-2">Contratos</p>
+<h3 class="text-headline-sm font-bold text-primary">85</h3>
+<p class="text-xs text-on-surface-variant">com pendência</p>
+</div>
+<!-- KPI Bloqueados -->
+<div class="bg-warning/5 border border-warning/30 p-5 rounded-xl shadow-sm">
+<div class="flex justify-between items-start mb-2">
+<p class="text-xs font-bold text-warning uppercase tracking-wider">Bloqueados</p>
+<span class="material-symbols-outlined text-warning text-sm">lock</span>
+</div>
+<h3 class="text-headline-sm font-bold text-on-surface">6 boletos</h3>
+<a class="text-xs text-secondary font-bold hover:underline" href="#">Ver pendentes</a>
+</div>
+<!-- KPI Intermediárias -->
+<div class="bg-white p-5 border border-surface-border rounded-xl shadow-sm">
+<p class="text-xs font-bold text-on-surface-variant uppercase tracking-wider mb-2">Intermediárias</p>
+<h3 class="text-headline-sm font-bold text-primary">12</h3>
+<p class="text-xs text-on-surface-variant">prestações elegíveis</p>
+</div>
+</div>
+<!-- Main Conferência Section -->
+<div class="space-y-8 mb-12">
+<!-- Group 1 -->
+<div class="bg-white border border-surface-border rounded-xl shadow-sm overflow-hidden">
+<div class="bg-surface-container-low px-6 py-4 flex items-center justify-between border-b border-surface-border">
+<div class="flex items-center gap-3">
+<div class="w-8 h-8 rounded bg-primary text-white flex items-center justify-center font-bold text-xs">IA</div>
+<h4 class="font-bold text-primary">Imobiliária Central (Imob A)</h4>
+</div>
+<span class="text-xs bg-primary-fixed text-on-primary-fixed px-3 py-1 rounded-full font-bold">52 Contratos Ativos</span>
+</div>
+<div class="overflow-x-auto">
+<table class="w-full text-sm text-left">
+<thead class="bg-slate-50 border-b border-surface-border text-on-surface-variant uppercase text-[10px] font-bold">
+<tr>
+<th class="px-6 py-3">Contrato</th>
+<th class="px-6 py-3">Comprador</th>
+<th class="px-6 py-3">Elegíveis</th>
+<th class="px-6 py-3">Bloqueados</th>
+<th class="px-6 py-3">Já Gerados</th>
+<th class="px-6 py-3">Valor Total</th>
+<th class="px-6 py-3 text-right">Ações</th>
+</tr>
+</thead>
+<tbody class="divide-y divide-surface-border">
+<tr class="hover:bg-slate-50 transition-colors">
+<td class="px-6 py-4 font-mono-sm text-primary">#CTR-2024-089</td>
+<td class="px-6 py-4 font-semibold text-on-surface">Ricardo Mendonça de Alencar</td>
+<td class="px-6 py-4">01</td>
+<td class="px-6 py-4">00</td>
+<td class="px-6 py-4"><span class="bg-slate-100 text-on-surface-variant px-2 py-0.5 rounded text-[10px] font-bold">NÃO GERADO</span></td>
+<td class="px-6 py-4 font-bold">R$ 2.450,00</td>
+<td class="px-6 py-4 text-right flex justify-end gap-2">
+<button class="p-1.5 text-on-surface-variant hover:bg-slate-200 rounded transition-colors" title="Ver detalhes">
+<span class="material-symbols-outlined text-sm">visibility</span>
+</button>
+<button class="bg-primary text-white px-3 py-1 text-xs rounded font-bold hover:bg-primary/90 transition-all">Gerar</button>
+</td>
+</tr>
+<tr class="bg-warning/5 hover:bg-warning/10 transition-colors border-l-4 border-l-warning">
+<td class="px-6 py-4 font-mono-sm text-primary">#CTR-2024-112</td>
+<td class="px-6 py-4 font-semibold text-on-surface">Mariana Luzia Ferreira</td>
+<td class="px-6 py-4">00</td>
+<td class="px-6 py-4 font-bold text-warning">01</td>
+<td class="px-6 py-4"><span class="bg-warning/10 text-warning px-2 py-0.5 rounded text-[10px] font-bold uppercase">Bloqueado Reajuste</span></td>
+<td class="px-6 py-4 font-bold">R$ 1.890,50</td>
+<td class="px-6 py-4 text-right flex justify-end gap-2">
+<button class="p-1.5 text-on-surface-variant hover:bg-slate-200 rounded transition-colors" title="Ver detalhes">
+<span class="material-symbols-outlined text-sm">visibility</span>
+</button>
+<button class="bg-slate-200 text-slate-500 px-3 py-1 text-xs rounded font-bold cursor-not-allowed">Bloqueado</button>
+</td>
+</tr>
+<tr class="hover:bg-slate-50 transition-colors">
+<td class="px-6 py-4 font-mono-sm text-primary">#CTR-2023-445</td>
+<td class="px-6 py-4 font-semibold text-on-surface">Condomínio Solar das Águas</td>
+<td class="px-6 py-4">02</td>
+<td class="px-6 py-4">00</td>
+<td class="px-6 py-4"><span class="bg-success/10 text-success px-2 py-0.5 rounded text-[10px] font-bold">GERADO (1/2)</span></td>
+<td class="px-6 py-4 font-bold">R$ 12.000,00</td>
+<td class="px-6 py-4 text-right flex justify-end gap-2">
+<button class="p-1.5 text-on-surface-variant hover:bg-slate-200 rounded transition-colors" title="Ver detalhes">
+<span class="material-symbols-outlined text-sm">visibility</span>
+</button>
+<button class="bg-primary text-white px-3 py-1 text-xs rounded font-bold hover:bg-primary/90 transition-all">Gerar Pendente</button>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+<div class="px-6 py-3 bg-slate-50 border-t border-surface-border text-center">
+<button class="text-xs font-bold text-secondary hover:underline flex items-center justify-center gap-1 mx-auto">
+                            Ver todos os contratos desta imobiliária
+                            <span class="material-symbols-outlined text-sm">keyboard_arrow_down</span>
+</button>
+</div>
+</div>
+<!-- Group 2 -->
+<div class="bg-white border border-surface-border rounded-xl shadow-sm overflow-hidden">
+<div class="bg-surface-container-low px-6 py-4 flex items-center justify-between border-b border-surface-border">
+<div class="flex items-center gap-3">
+<div class="w-8 h-8 rounded bg-secondary text-white flex items-center justify-center font-bold text-xs">IP</div>
+<h4 class="font-bold text-primary">Imobiliária Prime (Imob B)</h4>
+</div>
+<span class="text-xs bg-primary-fixed text-on-primary-fixed px-3 py-1 rounded-full font-bold">33 Contratos Ativos</span>
+</div>
+<div class="p-12 text-center">
+<span class="material-symbols-outlined text-4xl text-slate-200 mb-2">pending_actions</span>
+<p class="text-sm text-on-surface-variant">Carregando dados da imobiliária...</p>
+</div>
+</div>
+</div>
+<!-- Post-Generation Summary -->
+<div class="bg-primary-container text-on-primary-container p-gutter rounded-xl shadow-xl border border-white/10 mb-12">
+<div class="flex items-start justify-between mb-8">
+<div>
+<h4 class="text-headline-sm font-bold text-white mb-2">Resumo da Última Geração</h4>
+<p class="text-on-primary-container">Processamento concluído em 22/05/2026 às 14:35</p>
+</div>
+<div class="flex gap-4">
+<div class="text-center bg-white/10 px-4 py-2 rounded-lg backdrop-blur-md border border-white/5">
+<p class="text-[10px] font-bold uppercase opacity-60 mb-1">Sucesso</p>
+<p class="text-xl font-bold text-success">128</p>
+</div>
+<div class="text-center bg-white/10 px-4 py-2 rounded-lg backdrop-blur-md border border-white/5">
+<p class="text-[10px] font-bold uppercase opacity-60 mb-1">Bloqueados</p>
+<p class="text-xl font-bold text-warning">06</p>
+</div>
+<div class="text-center bg-white/10 px-4 py-2 rounded-lg backdrop-blur-md border border-white/5">
+<p class="text-[10px] font-bold uppercase opacity-60 mb-1">Erros</p>
+<p class="text-xl font-bold text-danger">02</p>
+</div>
+</div>
+</div>
+<div class="space-y-4">
+<p class="text-xs font-bold uppercase tracking-widest text-white/50">Detalhes de Erros de Processamento</p>
+<div class="bg-black/20 rounded-lg overflow-hidden border border-white/5">
+<div class="grid grid-cols-12 bg-black/30 px-4 py-2 text-[10px] font-bold uppercase text-white/40">
+<div class="col-span-2">Parcela ID</div>
+<div class="col-span-3">Contrato</div>
+<div class="col-span-7">Motivo do Erro</div>
+</div>
+<div class="divide-y divide-white/5">
+<div class="grid grid-cols-12 px-4 py-3 text-xs items-center hover:bg-white/5 transition-colors">
+<div class="col-span-2 font-mono-sm">#PARC-99812</div>
+<div class="col-span-3 text-white/80">#CTR-2024-001</div>
+<div class="col-span-7 flex items-center gap-2">
+<span class="w-1.5 h-1.5 rounded-full bg-danger"></span>
+                                    Configuração de conta bancária inválida ou inexistente.
+                                </div>
+</div>
+<div class="grid grid-cols-12 px-4 py-3 text-xs items-center hover:bg-white/5 transition-colors">
+<div class="col-span-2 font-mono-sm">#PARC-99815</div>
+<div class="col-span-3 text-white/80">#CTR-2024-055</div>
+<div class="col-span-7 flex items-center gap-2">
+<span class="w-1.5 h-1.5 rounded-full bg-danger"></span>
+                                    Erro de comunicação com o gateway de boletos (Timeout).
+                                </div>
+</div>
+</div>
+</div>
+</div>
+<div class="mt-8 pt-6 border-t border-white/10 flex justify-end">
+<button class="text-white hover:text-success flex items-center gap-2 text-sm font-bold transition-all">
+<span class="material-symbols-outlined text-sm">download</span>
+                        Baixar relatório completo de logs (.csv)
+                    </button>
+</div>
+</div>
+</div>
+</main>
+<!-- Footer -->
+<footer class="ml-64 py-6 border-t border-surface-border text-center text-on-surface-variant text-xs">
+        © 2026 ContractHub - Enterprise Legal Management v4.2.1 | Suporte: 0800 555 1234
+    </footer>
+<!-- Modal: Configurar Geração de Lote -->
+<div class="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-sm hidden" id="modal-gerar-boletos">
+<div class="bg-white w-full max-w-md rounded-xl shadow-xl overflow-hidden border border-surface-border animate-in fade-in zoom-in duration-200">
+<div class="px-6 py-4 border-b border-surface-border flex justify-between items-center bg-surface-container-lowest">
+<h3 class="text-headline-sm font-bold text-primary">Configurar Geração de Lote</h3>
+<button class="text-on-surface-variant hover:text-danger transition-colors p-1" onclick="document.getElementById('modal-gerar-boletos').classList.add('hidden')">
+<span class="material-symbols-outlined">close</span>
+</button>
+</div>
+<div class="p-6 space-y-6">
+<div>
+<label class="block text-xs font-bold text-on-surface-variant mb-2 uppercase tracking-wider">Quantidade de boletos por contrato</label>
+<input class="w-full bg-surface-container-low border border-outline-variant rounded px-3 py-2 text-sm focus:ring-2 focus:ring-secondary/20 focus:border-secondary outline-none transition-all" min="1" type="number" value="1"/>
+</div>
+<div>
+<label class="block text-xs font-bold text-on-surface-variant mb-2 uppercase tracking-wider">Tipo de Boleto</label>
+<select class="w-full bg-surface-container-low border border-outline-variant rounded px-3 py-2 text-sm focus:ring-2 focus:ring-secondary/20 focus:border-secondary outline-none transition-all">
+<option value="folha">Folha (A4)</option>
+<option value="carne">Carnê (3 por folha)</option>
+</select>
+</div>
+<div class="flex items-center justify-between p-3 bg-surface-container-low rounded-lg border border-outline-variant/30">
+<div class="flex flex-col">
+<span class="text-sm font-bold text-on-surface">Incluir Intermediárias?</span>
+<span class="text-[10px] text-on-surface-variant uppercase font-medium">Gera prestações de reforço/anuais</span>
+</div>
+<label class="relative inline-flex items-center cursor-pointer">
+<input checked="" class="sr-only peer" type="checkbox"/>
+<div class="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-secondary"></div>
+</label>
+</div>
+</div>
+<div class="px-6 py-4 bg-slate-50 border-t border-surface-border flex justify-end gap-3">
+<button class="px-4 py-2 text-sm font-bold text-on-surface-variant hover:bg-slate-200 rounded transition-colors active:scale-95" onclick="document.getElementById('modal-gerar-boletos').classList.add('hidden')">Cancelar</button>
+<button class="px-6 py-2 bg-primary text-white text-sm font-bold rounded shadow-lg hover:bg-primary/90 transition-all active:scale-95 flex items-center gap-2">
+<span class="material-symbols-outlined text-sm">check</span>
+                Confirmar Geração
+            </button>
+</div>
+</div>
+</div>
+<script>
+    // Micro-interactions and UI logic
+    document.querySelectorAll('button').forEach(btn => {
+        btn.addEventListener('click', function(e) {
+            if(!this.classList.contains('cursor-not-allowed')) {
+                const ripple = document.createElement('div');
+                ripple.className = 'absolute bg-white/20 rounded-full w-2 h-2 animate-ping pointer-events-none';
+                ripple.style.left = e.offsetX + 'px';
+                ripple.style.top = e.offsetY + 'px';
+                this.appendChild(ripple);
+                setTimeout(() => ripple.remove(), 500);
+            }
+        });
+    });
+
+    // Close modal on background click
+    const modal = document.getElementById('modal-gerar-boletos');
+    modal.addEventListener('click', function(e) {
+        if (e.target === modal) {
+            modal.classList.add('hidden');
+        }
+    });
+</script>
+</body></html>

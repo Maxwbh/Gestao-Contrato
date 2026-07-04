@@ -1,0 +1,48 @@
+#!/bin/bash
+#
+# Git Hook: post-commit
+# Exibe informacoes do commit apos sua criacao
+#
+# Desenvolvedor: Maxwell da Silva Oliveira (@maxwbh)
+# Email: maxwbh@gmail.com
+# LinkedIn: /maxwbh
+# Empresa: M&S do Brasil LTDA - www.msbrasil.inf.br
+#
+
+# Obter diretorio raiz do projeto
+GIT_DIR=$(git rev-parse --git-dir 2>/dev/null)
+PROJECT_ROOT=$(dirname "$GIT_DIR")
+
+# Arquivo de versao
+VERSION_FILE="$PROJECT_ROOT/VERSION"
+
+# Ler versao
+VERSION="N/A"
+if [ -f "$VERSION_FILE" ]; then
+    VERSION=$(cat "$VERSION_FILE" | tr -d '[:space:]')
+fi
+
+# Obter informacoes do commit
+COMMIT_HASH=$(git rev-parse --short HEAD)
+COMMIT_MSG=$(git log -1 --pretty=%s)
+COMMIT_AUTHOR=$(git log -1 --pretty="%an <%ae>")
+COMMIT_DATE=$(git log -1 --pretty=%ci)
+
+echo ""
+echo "=========================================="
+echo "  COMMIT REGISTRADO COM SUCESSO"
+echo "=========================================="
+echo ""
+echo "  Versao: $VERSION"
+echo "  Hash: $COMMIT_HASH"
+echo "  Autor: $COMMIT_AUTHOR"
+echo "  Data: $COMMIT_DATE"
+echo ""
+echo "  Mensagem: $COMMIT_MSG"
+echo ""
+echo "=========================================="
+echo "  @maxwbh - M&S do Brasil LTDA"
+echo "=========================================="
+echo ""
+
+exit 0

@@ -1,0 +1,647 @@
+{% extends 'base.html' %}
+{% load crispy_forms_tags %}
+
+{% block title %}
+    {% if object %}Editar Imóvel{% else %}Novo Imóvel{% endif %} - Gestão de Contratos
+{% endblock %}
+
+{% block extra_css %}
+<style>
+    /* Cards com bom contraste */
+    .imovel-form .card {
+        border: 1px solid #dee2e6;
+        border-radius: 8px;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.06);
+        margin-bottom: 1rem;
+    }
+    .imovel-form .card:hover {
+        box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+    }
+
+    /* Card headers com bom contraste */
+    .imovel-form .card-header {
+        background: linear-gradient(135deg, #2c3e50, #34495e);
+        color: #ffffff;
+        font-weight: 600;
+        padding: 0.75rem 1rem;
+        border-radius: 7px 7px 0 0 !important;
+    }
+    .imovel-form .card-header i {
+        color: #27ae60;
+    }
+    .imovel-form .card-header strong {
+        color: #ffffff;
+    }
+    .imovel-form .card-header small {
+        color: #bdc3c7;
+    }
+
+    /* Header claro para secoes secundarias (opcionais) */
+    .imovel-form .card-header.bg-light,
+    .imovel-form .card.card-opcional .card-header {
+        background: linear-gradient(135deg, #7f8c8d, #95a5a6) !important;
+        color: #ffffff !important;
+    }
+    .imovel-form .card-header.bg-light strong,
+    .imovel-form .card.card-opcional .card-header strong {
+        color: #ffffff !important;
+    }
+
+    /* Campos de formulario */
+    .imovel-form .form-control,
+    .imovel-form .form-select {
+        font-size: 0.9rem;
+        padding: 0.5rem 0.75rem;
+        border-radius: 6px;
+    }
+    .imovel-form .form-label {
+        font-size: 0.85rem;
+        font-weight: 600;
+        color: #2c3e50;
+        margin-bottom: 0.25rem;
+    }
+
+    /* === CAMPOS OBRIGATORIOS === */
+    /* Indicador de campo obrigatorio */
+    .campo-obrigatorio .form-label::after {
+        content: " *";
+        color: #e74c3c;
+        font-weight: bold;
+    }
+
+    /* Borda dos campos obrigatorios */
+    .campo-obrigatorio .form-control,
+    .campo-obrigatorio .form-select {
+        border-left: 3px solid #e74c3c;
+    }
+
+    /* Card de campos obrigatorios */
+    .card-obrigatorio {
+        border-left: 4px solid #e74c3c !important;
+    }
+    .card-obrigatorio .card-header::after {
+        content: " (Obrigatorio)";
+        font-size: 0.75rem;
+        opacity: 0.8;
+    }
+
+    /* Card de campos opcionais */
+    .card-opcional {
+        border-left: 4px solid #95a5a6 !important;
+    }
+    .card-opcional .card-header::after {
+        content: " (Opcional)";
+        font-size: 0.75rem;
+        opacity: 0.8;
+    }
+
+    /* Card de ajuda */
+    .help-card .card-header {
+        background: linear-gradient(135deg, #17a2b8, #138496) !important;
+    }
+
+    /* Validacao */
+    .is-valid { border-color: #27ae60 !important; }
+    .is-invalid { border-color: #e74c3c !important; }
+
+    /* Mapa */
+    #map {
+        width: 100%;
+        height: 350px;
+        border-radius: 8px;
+        border: 2px solid #27ae60;
+    }
+
+    /* Responsivo */
+    @media (max-width: 768px) {
+        .imovel-form .card-body { padding: 1rem; }
+        #map { height: 250px; }
+    }
+
+    /* Legenda de campos */
+    .legenda-campos {
+        background: #f8f9fa;
+        border-radius: 6px;
+        padding: 0.5rem 1rem;
+        margin-bottom: 1rem;
+        font-size: 0.85rem;
+    }
+    .legenda-campos .obrigatorio {
+        color: #e74c3c;
+        font-weight: bold;
+    }
+    .legenda-campos .opcional {
+        color: #95a5a6;
+    }
+</style>
+<!-- Leaflet CSS (alternativa gratuita ao Google Maps) -->
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid px-lg-4">
+    <div class="row justify-content-center">
+        <div class="col-xl-10">
+            <!-- Header -->
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <div>
+                    <h4 class="mb-0 text-dark">
+                        <i class="fas fa-home text-success me-2"></i>
+                        {% if object %}Editar: {{ object.identificacao }}{% else %}Novo Imóvel{% endif %}
+                    </h4>
+                    <small class="text-muted">
+                        {% if object %}Atualize os dados do imóvel{% else %}Preencha os dados para cadastrar{% endif %}
+                    </small>
+                </div>
+                <a href="{% url 'core:listar_imoveis' %}" class="btn btn-outline-secondary btn-sm">
+                    <i class="fas fa-list me-1"></i>Ver Lista
+                </a>
+            </div>
+
+            <!-- Formulário -->
+            <form method="post" novalidate class="imovel-form">
+                {% csrf_token %}
+                {% crispy form %}
+            </form>
+
+            <!-- Card de Ajuda -->
+            <div class="card help-card mt-3">
+                <div class="card-header">
+                    <i class="fas fa-info-circle me-2"></i><strong>Dicas de Preenchimento</strong>
+                </div>
+                <div class="card-body py-3">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <ul class="mb-0 small">
+                                <li><strong>Identificação:</strong> Código único (Ex: Lote 25, Casa 10)</li>
+                                <li><strong>Loteamento:</strong> Nome do loteamento ou condomínio</li>
+                                <li><strong>Área:</strong> Informe em metros quadrados (m²)</li>
+                            </ul>
+                        </div>
+                        <div class="col-md-6">
+                            <ul class="mb-0 small">
+                                <li><strong>Matrícula:</strong> Número no Cartório de Registro</li>
+                                <li><strong>Inscrição Municipal:</strong> Cadastro da prefeitura</li>
+                                <li><strong>Disponível:</strong> Marque se está à venda</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<!-- Leaflet JS (alternativa gratuita ao Google Maps) -->
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // =====================================================
+    // MAPA - Leaflet (OpenStreetMap)
+    // =====================================================
+
+    let map, marker;
+    const latInput = document.getElementById('id_latitude');
+    const lngInput = document.getElementById('id_longitude');
+    const buscaInput = document.getElementById('busca-endereco');
+    const btnBuscar = document.getElementById('btn-buscar-endereco');
+    const btnUsarEndereco = document.getElementById('btn-usar-endereco');
+    const btnPreencherEndereco = document.getElementById('btn-preencher-endereco');
+    const btnMinhaLocalizacao = document.getElementById('btn-minha-localizacao');
+    const btnAbrirGoogleMaps = document.getElementById('btn-abrir-google-maps');
+    const colarCoordenadasInput = document.getElementById('colar-coordenadas');
+
+    // Coordenadas iniciais (Brasil central ou valor existente)
+    let initialLat = latInput && latInput.value ? parseFloat(latInput.value) : -15.7801;
+    let initialLng = lngInput && lngInput.value ? parseFloat(lngInput.value) : -47.9292;
+    let initialZoom = (latInput && latInput.value) ? 15 : 4;
+
+    // Inicializar mapa
+    const mapElement = document.getElementById('map');
+    if (mapElement) {
+        map = L.map('map').setView([initialLat, initialLng], initialZoom);
+
+        // Camada do OpenStreetMap
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+        }).addTo(map);
+
+        // Adicionar marcador se já tiver coordenadas
+        if (latInput && latInput.value && lngInput && lngInput.value) {
+            marker = L.marker([initialLat, initialLng], {draggable: true}).addTo(map);
+            marker.on('dragend', atualizarCoordenadasDoMarcador);
+        }
+
+        // Clique no mapa para adicionar/mover marcador
+        map.on('click', function(e) {
+            const lat = e.latlng.lat.toFixed(7);
+            const lng = e.latlng.lng.toFixed(7);
+
+            if (marker) {
+                marker.setLatLng(e.latlng);
+            } else {
+                marker = L.marker(e.latlng, {draggable: true}).addTo(map);
+                marker.on('dragend', atualizarCoordenadasDoMarcador);
+            }
+
+            latInput.value = lat;
+            lngInput.value = lng;
+        });
+    }
+
+    // Atualizar coordenadas quando arrastar o marcador
+    function atualizarCoordenadasDoMarcador(e) {
+        const pos = e.target.getLatLng();
+        latInput.value = pos.lat.toFixed(7);
+        lngInput.value = pos.lng.toFixed(7);
+    }
+
+    // Buscar endereço usando Nominatim (OpenStreetMap)
+    function buscarEndereco(endereco) {
+        if (!endereco) return;
+
+        fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(endereco)}&limit=1`)
+            .then(response => response.json())
+            .then(data => {
+                if (data && data.length > 0) {
+                    const lat = parseFloat(data[0].lat);
+                    const lng = parseFloat(data[0].lon);
+
+                    map.setView([lat, lng], 17);
+
+                    if (marker) {
+                        marker.setLatLng([lat, lng]);
+                    } else {
+                        marker = L.marker([lat, lng], {draggable: true}).addTo(map);
+                        marker.on('dragend', atualizarCoordenadasDoMarcador);
+                    }
+
+                    latInput.value = lat.toFixed(7);
+                    lngInput.value = lng.toFixed(7);
+                } else {
+                    alert('Endereço não encontrado. Tente ser mais específico ou clique diretamente no mapa.');
+                }
+            })
+            .catch(error => {
+                console.error('Erro ao buscar endereço:', error);
+                alert('Erro ao buscar endereço. Tente novamente.');
+            });
+    }
+
+    // Botão de busca
+    if (btnBuscar) {
+        btnBuscar.addEventListener('click', function() {
+            buscarEndereco(buscaInput.value);
+        });
+    }
+
+    // Enter no campo de busca
+    if (buscaInput) {
+        buscaInput.addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                buscarEndereco(this.value);
+            }
+        });
+    }
+
+    // Botão "Usar Endereço do Formulário"
+    if (btnUsarEndereco) {
+        btnUsarEndereco.addEventListener('click', function() {
+            const logradouro = document.querySelector('input[name="logradouro"]')?.value || '';
+            const numero = document.querySelector('input[name="numero"]')?.value || '';
+            const bairro = document.querySelector('input[name="bairro"]')?.value || '';
+            const cidade = document.querySelector('input[name="cidade"]')?.value || '';
+            const estado = document.querySelector('select[name="estado"]')?.value || '';
+            const cep = document.querySelector('input[name="cep"]')?.value || '';
+
+            let endereco = [logradouro, numero, bairro, cidade, estado, cep]
+                .filter(p => p)
+                .join(', ');
+
+            if (endereco) {
+                buscaInput.value = endereco;
+                buscarEndereco(endereco);
+            } else {
+                alert('Preencha pelo menos alguns campos do endereço.');
+            }
+        });
+    }
+
+    // Atualizar mapa quando coordenadas são digitadas manualmente
+    if (latInput) {
+        latInput.addEventListener('change', atualizarMapaPelasCoord);
+    }
+    if (lngInput) {
+        lngInput.addEventListener('change', atualizarMapaPelasCoord);
+    }
+
+    function atualizarMapaPelasCoord() {
+        const lat = parseFloat(latInput.value);
+        const lng = parseFloat(lngInput.value);
+
+        if (!isNaN(lat) && !isNaN(lng)) {
+            map.setView([lat, lng], 17);
+            if (marker) {
+                marker.setLatLng([lat, lng]);
+            } else {
+                marker = L.marker([lat, lng], {draggable: true}).addTo(map);
+                marker.on('dragend', atualizarCoordenadasDoMarcador);
+            }
+        }
+    }
+
+    // =====================================================
+    // FUNCIONALIDADES PARA ZONA RURAL
+    // =====================================================
+
+    // Função auxiliar para definir coordenadas no mapa
+    function definirCoordenadas(lat, lng) {
+        if (map) {
+            map.setView([lat, lng], 17);
+            if (marker) {
+                marker.setLatLng([lat, lng]);
+            } else {
+                marker = L.marker([lat, lng], {draggable: true}).addTo(map);
+                marker.on('dragend', atualizarCoordenadasDoMarcador);
+            }
+        }
+        latInput.value = lat.toFixed(7);
+        lngInput.value = lng.toFixed(7);
+    }
+
+    // Botão "GPS" - Usar localização atual do dispositivo
+    if (btnMinhaLocalizacao) {
+        btnMinhaLocalizacao.addEventListener('click', function() {
+            if (!navigator.geolocation) {
+                alert('Geolocalização não é suportada pelo seu navegador.');
+                return;
+            }
+
+            this.disabled = true;
+            this.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+
+            navigator.geolocation.getCurrentPosition(
+                function(position) {
+                    const lat = position.coords.latitude;
+                    const lng = position.coords.longitude;
+                    definirCoordenadas(lat, lng);
+                    btnMinhaLocalizacao.disabled = false;
+                    btnMinhaLocalizacao.innerHTML = '<i class="fas fa-crosshairs"></i> GPS';
+                    alert('Localização obtida com sucesso!');
+                },
+                function(error) {
+                    btnMinhaLocalizacao.disabled = false;
+                    btnMinhaLocalizacao.innerHTML = '<i class="fas fa-crosshairs"></i> GPS';
+                    let mensagem = 'Erro ao obter localização: ';
+                    switch(error.code) {
+                        case error.PERMISSION_DENIED:
+                            mensagem += 'Permissão negada. Habilite a localização no navegador.';
+                            break;
+                        case error.POSITION_UNAVAILABLE:
+                            mensagem += 'Localização indisponível.';
+                            break;
+                        case error.TIMEOUT:
+                            mensagem += 'Tempo esgotado.';
+                            break;
+                        default:
+                            mensagem += 'Erro desconhecido.';
+                    }
+                    alert(mensagem);
+                },
+                {
+                    enableHighAccuracy: true,
+                    timeout: 10000,
+                    maximumAge: 0
+                }
+            );
+        });
+    }
+
+    // Botão "Preencher Endereço" - Geocodificação reversa
+    if (btnPreencherEndereco) {
+        btnPreencherEndereco.addEventListener('click', function() {
+            const lat = parseFloat(latInput.value);
+            const lng = parseFloat(lngInput.value);
+
+            if (isNaN(lat) || isNaN(lng)) {
+                alert('Primeiro defina as coordenadas no mapa ou preencha latitude/longitude.');
+                return;
+            }
+
+            this.disabled = true;
+            this.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+
+            // Usar Nominatim para geocodificação reversa
+            fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&addressdetails=1`)
+                .then(response => response.json())
+                .then(data => {
+                    btnPreencherEndereco.disabled = false;
+                    btnPreencherEndereco.innerHTML = '<i class="fas fa-map-signs"></i> Preencher Endereco';
+
+                    if (data && data.address) {
+                        const addr = data.address;
+
+                        // Preencher campos do formulário
+                        const logradouro = document.querySelector('input[name="logradouro"]');
+                        const numero = document.querySelector('input[name="numero"]');
+                        const bairro = document.querySelector('input[name="bairro"]');
+                        const cidade = document.querySelector('input[name="cidade"]');
+                        const estado = document.querySelector('select[name="estado"]');
+                        const cep = document.querySelector('input[name="cep"]');
+
+                        // Logradouro pode vir de diferentes campos
+                        if (logradouro) {
+                            logradouro.value = addr.road || addr.street || addr.pedestrian || '';
+                        }
+
+                        // Número da casa (se disponível)
+                        if (numero && addr.house_number) {
+                            numero.value = addr.house_number;
+                        }
+
+                        // Bairro
+                        if (bairro) {
+                            bairro.value = addr.suburb || addr.neighbourhood || addr.quarter || '';
+                        }
+
+                        // Cidade
+                        if (cidade) {
+                            cidade.value = addr.city || addr.town || addr.village || addr.municipality || '';
+                        }
+
+                        // Estado (sigla)
+                        if (estado && addr.state) {
+                            // Mapear nome do estado para sigla
+                            const estadoMap = {
+                                'Acre': 'AC', 'Alagoas': 'AL', 'Amapá': 'AP', 'Amazonas': 'AM',
+                                'Bahia': 'BA', 'Ceará': 'CE', 'Distrito Federal': 'DF', 'Espírito Santo': 'ES',
+                                'Goiás': 'GO', 'Maranhão': 'MA', 'Mato Grosso': 'MT', 'Mato Grosso do Sul': 'MS',
+                                'Minas Gerais': 'MG', 'Pará': 'PA', 'Paraíba': 'PB', 'Paraná': 'PR',
+                                'Pernambuco': 'PE', 'Piauí': 'PI', 'Rio de Janeiro': 'RJ', 'Rio Grande do Norte': 'RN',
+                                'Rio Grande do Sul': 'RS', 'Rondônia': 'RO', 'Roraima': 'RR', 'Santa Catarina': 'SC',
+                                'São Paulo': 'SP', 'Sergipe': 'SE', 'Tocantins': 'TO'
+                            };
+                            const sigla = estadoMap[addr.state] || addr['ISO3166-2-lvl4']?.replace('BR-', '') || '';
+                            if (sigla) estado.value = sigla;
+                        }
+
+                        // CEP
+                        if (cep && addr.postcode) {
+                            let cepVal = addr.postcode.replace(/\D/g, '');
+                            if (cepVal.length === 8) {
+                                cepVal = cepVal.substring(0,5) + '-' + cepVal.substring(5);
+                            }
+                            cep.value = cepVal;
+                        }
+
+                        alert('Endereço preenchido com base nas coordenadas. Verifique e ajuste se necessário.');
+                    } else {
+                        alert('Não foi possível obter o endereço para estas coordenadas.');
+                    }
+                })
+                .catch(error => {
+                    btnPreencherEndereco.disabled = false;
+                    btnPreencherEndereco.innerHTML = '<i class="fas fa-map-signs"></i> Preencher Endereco';
+                    console.error('Erro na geocodificação reversa:', error);
+                    alert('Erro ao buscar endereço. Tente novamente.');
+                });
+        });
+    }
+
+    // Botão "Maps" - Abrir Google Maps para buscar local
+    if (btnAbrirGoogleMaps) {
+        btnAbrirGoogleMaps.addEventListener('click', function() {
+            // Se já tem coordenadas, abrir nessa localização
+            let url = 'https://www.google.com/maps';
+            const lat = parseFloat(latInput.value);
+            const lng = parseFloat(lngInput.value);
+
+            if (!isNaN(lat) && !isNaN(lng)) {
+                url = `https://www.google.com/maps?q=${lat},${lng}`;
+            } else {
+                // Tentar usar endereço preenchido
+                const cidade = document.querySelector('input[name="cidade"]')?.value || '';
+                const estado = document.querySelector('select[name="estado"]')?.value || '';
+                if (cidade || estado) {
+                    const local = [cidade, estado].filter(p => p).join(', ');
+                    url = `https://www.google.com/maps/search/${encodeURIComponent(local)}`;
+                }
+            }
+
+            window.open(url, '_blank');
+        });
+    }
+
+    // Campo "Colar coordenadas" - Aceita formato do Google Maps
+    if (colarCoordenadasInput) {
+        colarCoordenadasInput.addEventListener('paste', function(e) {
+            setTimeout(() => {
+                processarCoordenadas(this.value);
+            }, 100);
+        });
+
+        colarCoordenadasInput.addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                processarCoordenadas(this.value);
+            }
+        });
+
+        colarCoordenadasInput.addEventListener('blur', function() {
+            if (this.value.trim()) {
+                processarCoordenadas(this.value);
+            }
+        });
+    }
+
+    function processarCoordenadas(texto) {
+        if (!texto) return;
+
+        // Limpar o texto
+        texto = texto.trim();
+
+        // Tentar extrair coordenadas de diferentes formatos
+        // Formato 1: "-15.7801, -47.9292" (Google Maps)
+        // Formato 2: "-15.7801 -47.9292"
+        // Formato 3: "lat: -15.7801, lng: -47.9292"
+
+        let lat, lng;
+
+        // Tentar formato com vírgula
+        const partes = texto.split(/[,\s]+/).filter(p => p && !isNaN(parseFloat(p)));
+
+        if (partes.length >= 2) {
+            lat = parseFloat(partes[0]);
+            lng = parseFloat(partes[1]);
+        }
+
+        if (!isNaN(lat) && !isNaN(lng) && lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180) {
+            definirCoordenadas(lat, lng);
+            colarCoordenadasInput.value = '';
+            colarCoordenadasInput.placeholder = 'Coordenadas aplicadas!';
+            setTimeout(() => {
+                colarCoordenadasInput.placeholder = 'Cole as coordenadas aqui (ex: -15.7801, -47.9292)';
+            }, 2000);
+        } else {
+            alert('Formato inválido. Use: -15.7801, -47.9292');
+        }
+    }
+
+    // =====================================================
+    // OUTROS SCRIPTS
+    // =====================================================
+
+    // Validação de área
+    const areaInput = document.querySelector('input[name="area"]');
+    if (areaInput) {
+        areaInput.addEventListener('input', function() {
+            let valor = this.value.replace(/[^\d.,]/g, '').replace(',', '.');
+            this.value = valor;
+        });
+    }
+
+    // Auto-capitalização
+    const identificacaoInput = document.querySelector('input[name="identificacao"]');
+    if (identificacaoInput) {
+        identificacaoInput.addEventListener('blur', function() {
+            this.value = this.value.replace(/\b\w/g, l => l.toUpperCase());
+        });
+    }
+
+    // Marcar disponível para novos
+    const disponivelCheckbox = document.querySelector('input[name="disponivel"]');
+    if (disponivelCheckbox && !disponivelCheckbox.checked && window.location.pathname.includes('/novo/')) {
+        disponivelCheckbox.checked = true;
+    }
+
+    // ViaCEP - Preencher endereço automaticamente
+    const cepInput = document.querySelector('input[name="cep"]');
+    if (cepInput) {
+        cepInput.addEventListener('blur', function() {
+            const cep = this.value.replace(/\D/g, '');
+            if (cep.length === 8) {
+                fetch(`https://viacep.com.br/ws/${cep}/json/`)
+                    .then(response => response.json())
+                    .then(data => {
+                        if (!data.erro) {
+                            const logradouro = document.querySelector('input[name="logradouro"]');
+                            const bairro = document.querySelector('input[name="bairro"]');
+                            const cidade = document.querySelector('input[name="cidade"]');
+                            const estado = document.querySelector('select[name="estado"]');
+
+                            if (logradouro) logradouro.value = data.logradouro || '';
+                            if (bairro) bairro.value = data.bairro || '';
+                            if (cidade) cidade.value = data.localidade || '';
+                            if (estado) estado.value = data.uf || '';
+                        }
+                    })
+                    .catch(error => console.error('Erro ao buscar CEP:', error));
+            }
+        });
+    }
+});
+</script>
+{% endblock %}

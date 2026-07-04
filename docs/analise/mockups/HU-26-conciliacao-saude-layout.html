@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html class="light" lang="pt-BR"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Conciliação & Saúde da Cobrança | ContractHub</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&amp;family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<style>
+  .material-symbols-outlined { font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24; }
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
+</style>
+<script id="tailwind-config">
+  tailwind.config = {
+    theme: { extend: { colors: {
+      "primary": "#091426", "secondary": "#0058be", "success": "#22c55e",
+      "warning": "#f59e0b", "danger": "#ef4444", "error": "#ba1a1a",
+      "surface-border": "#e2e8f0", "background": "#f8f9ff",
+      "surface-container-low": "#eff4ff", "surface-container-high": "#dce9ff",
+      "on-surface-variant": "#45474c", "outline-variant": "#c5c6cd",
+      "primary-fixed": "#d8e3fb"
+    }, borderRadius: { "xl": "0.5rem", "full": "0.75rem" }, fontFamily: { sans: ["Inter"] } } }
+  };
+</script>
+</head>
+<body class="bg-background font-sans text-primary">
+
+<!-- Sidebar -->
+<aside class="fixed top-0 left-0 w-64 h-screen bg-white border-r border-surface-border flex flex-col py-6 z-50">
+  <div class="px-6 mb-8 flex items-center gap-2"><span class="material-symbols-outlined text-secondary">apartment</span><span class="font-bold text-lg">ContractHub</span></div>
+  <nav class="flex-1 flex flex-col">
+    <a class="flex items-center px-6 py-3 text-on-surface-variant hover:bg-surface-container-high" href="#"><span class="material-symbols-outlined mr-3">dashboard</span>Dashboard</a>
+    <a class="flex items-center px-6 py-3 text-on-surface-variant hover:bg-surface-container-high" href="#"><span class="material-symbols-outlined mr-3">description</span>Contratos</a>
+    <a class="flex items-center px-6 py-3 text-on-surface-variant hover:bg-surface-container-high" href="#"><span class="material-symbols-outlined mr-3">payments</span>Cobrança do Mês</a>
+    <a class="flex items-center px-6 py-3 bg-surface-container-low text-secondary font-bold border-r-4 border-secondary" href="#"><span class="material-symbols-outlined mr-3">account_balance</span>Conciliação</a>
+    <a class="flex items-center px-6 py-3 text-on-surface-variant hover:bg-surface-container-high" href="#"><span class="material-symbols-outlined mr-3">assessment</span>Relatórios</a>
+  </nav>
+  <div class="px-6 pt-6 border-t border-outline-variant flex items-center gap-3"><div class="w-10 h-10 rounded-full bg-primary-fixed flex items-center justify-center text-primary font-bold">MC</div><div><p class="text-sm font-bold">Maria Contadora</p><p class="text-xs text-on-surface-variant">Cobrança</p></div></div>
+</aside>
+
+<!-- Top bar -->
+<header class="fixed top-0 right-0 w-[calc(100%-16rem)] h-16 bg-white border-b border-surface-border z-40 flex justify-between items-center px-6">
+  <div class="relative"><span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant">search</span><input class="pl-10 pr-4 py-2 bg-surface-container-low border border-outline-variant rounded-lg text-sm w-80 outline-none" placeholder="Buscar..." type="text"/></div>
+  <div class="flex items-center gap-5 text-on-surface-variant"><span class="material-symbols-outlined relative">notifications<span class="absolute top-0 right-0 w-2 h-2 bg-danger rounded-full"></span></span><span class="material-symbols-outlined">settings</span><span class="material-symbols-outlined">help</span></div>
+</header>
+
+<main class="ml-64 pt-16 min-h-screen">
+<div class="p-6 max-w-[1280px] mx-auto">
+
+  <!-- Breadcrumb + title -->
+  <div class="mb-6">
+    <nav class="flex text-xs text-on-surface-variant mb-2"><span>Financeiro</span><span class="mx-2">/</span><span>Cobrança</span><span class="mx-2">/</span><span class="text-primary font-bold">Conciliação & Saúde</span></nav>
+    <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
+      <div><h2 class="text-2xl font-bold">Conciliação &amp; Saúde da Cobrança</h2><p class="text-sm text-on-surface-variant mt-1">O que entrou, o que falta e o que está vencido — por período e imobiliária.</p></div>
+      <div class="flex gap-2 items-end">
+        <select class="bg-surface-container-low border border-outline-variant rounded px-3 py-2 text-sm outline-none"><option>Todas as Imobiliárias</option></select>
+        <select class="bg-surface-container-low border border-outline-variant rounded px-3 py-2 text-sm outline-none"><option selected>Junho 2026</option></select>
+        <button class="flex items-center gap-2 px-4 py-2 border border-secondary text-secondary font-semibold rounded text-sm hover:bg-secondary/5"><span class="material-symbols-outlined text-sm">download</span>Exportar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- KPIs de saúde -->
+  <div class="grid grid-cols-2 lg:grid-cols-5 gap-6 mb-8">
+    <div class="bg-secondary/5 border border-secondary/30 p-5 rounded-xl shadow-sm"><p class="text-xs font-bold text-secondary uppercase mb-2">% Conciliado</p><h3 class="text-2xl font-bold text-secondary">80%</h3><div class="w-full h-2 bg-secondary/15 rounded-full mt-2"><div class="h-2 bg-secondary rounded-full" style="width:80%"></div></div></div>
+    <div class="bg-white p-5 border border-surface-border rounded-xl shadow-sm"><p class="text-xs font-bold text-on-surface-variant uppercase mb-2">Recebido</p><h3 class="text-2xl font-bold text-success">R$ 80.000</h3><p class="text-xs text-on-surface-variant">112 baixas</p></div>
+    <div class="bg-white p-5 border border-surface-border rounded-xl shadow-sm"><p class="text-xs font-bold text-on-surface-variant uppercase mb-2">Pendente</p><h3 class="text-2xl font-bold">R$ 20.000</h3><p class="text-xs text-on-surface-variant">30 boletos</p></div>
+    <div class="bg-danger/5 border border-danger/30 p-5 rounded-xl shadow-sm"><p class="text-xs font-bold text-danger uppercase mb-2">Vencido</p><h3 class="text-2xl font-bold text-danger">R$ 8.400</h3><p class="text-xs text-on-surface-variant">11 parcelas</p></div>
+    <div class="bg-warning/5 border border-warning/30 p-5 rounded-xl shadow-sm"><p class="text-xs font-bold text-warning uppercase mb-2">Rejeitados</p><h3 class="text-2xl font-bold text-warning">4</h3><a class="text-xs text-warning font-semibold" href="#">reincluir →</a></div>
+  </div>
+
+  <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+    <!-- Recebido por origem -->
+    <div class="bg-white p-5 border border-surface-border rounded-xl shadow-sm">
+      <h3 class="font-bold mb-4">Recebido por origem</h3>
+      <div class="space-y-3 text-sm">
+        <div><div class="flex justify-between mb-1"><span class="flex items-center gap-2"><span class="w-2.5 h-2.5 rounded-full bg-secondary"></span>CNAB (retorno)</span><span class="font-semibold">R$ 50.000</span></div><div class="w-full h-2 bg-surface-container-high rounded-full"><div class="h-2 bg-secondary rounded-full" style="width:62%"></div></div></div>
+        <div><div class="flex justify-between mb-1"><span class="flex items-center gap-2"><span class="w-2.5 h-2.5 rounded-full bg-success"></span>PIX (webhook)</span><span class="font-semibold">R$ 20.000</span></div><div class="w-full h-2 bg-surface-container-high rounded-full"><div class="h-2 bg-success rounded-full" style="width:25%"></div></div></div>
+        <div><div class="flex justify-between mb-1"><span class="flex items-center gap-2"><span class="w-2.5 h-2.5 rounded-full bg-warning"></span>OFX (extrato)</span><span class="font-semibold">R$ 8.000</span></div><div class="w-full h-2 bg-surface-container-high rounded-full"><div class="h-2 bg-warning rounded-full" style="width:10%"></div></div></div>
+        <div><div class="flex justify-between mb-1"><span class="flex items-center gap-2"><span class="w-2.5 h-2.5 rounded-full bg-primary"></span>Manual</span><span class="font-semibold">R$ 2.000</span></div><div class="w-full h-2 bg-surface-container-high rounded-full"><div class="h-2 bg-primary rounded-full" style="width:3%"></div></div></div>
+      </div>
+    </div>
+    <!-- Aging -->
+    <div class="bg-white p-5 border border-surface-border rounded-xl shadow-sm">
+      <h3 class="font-bold mb-4">Aging de inadimplência <span class="text-xs font-normal text-on-surface-variant">(clique para filtrar)</span></h3>
+      <div class="grid grid-cols-4 gap-3 text-center">
+        <button class="p-3 rounded-xl border border-surface-border hover:border-secondary"><p class="text-lg font-bold">R$ 11.600</p><p class="text-xs text-on-surface-variant mt-1">A vencer (19)</p></button>
+        <button class="p-3 rounded-xl border border-warning/40 bg-warning/5"><p class="text-lg font-bold text-warning">R$ 4.200</p><p class="text-xs text-on-surface-variant mt-1">1–30 (6)</p></button>
+        <button class="p-3 rounded-xl border border-surface-border hover:border-secondary"><p class="text-lg font-bold">R$ 2.800</p><p class="text-xs text-on-surface-variant mt-1">31–60 (3)</p></button>
+        <button class="p-3 rounded-xl border border-danger/40 bg-danger/5"><p class="text-lg font-bold text-danger">R$ 1.400</p><p class="text-xs text-on-surface-variant mt-1">60+ (2)</p></button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Tabela de pendências -->
+  <div class="bg-white border border-surface-border rounded-xl shadow-sm mb-8">
+    <div class="px-6 py-4 border-b border-surface-border bg-surface-container-low rounded-t-xl flex justify-between items-center">
+      <h3 class="font-bold">Pendências do período</h3><span class="text-xs text-on-surface-variant">30 boletos não pagos</span>
+    </div>
+    <table class="w-full text-sm">
+      <thead class="text-xs uppercase text-on-surface-variant bg-surface-container-low/50"><tr>
+        <th class="text-left px-6 py-3">Contrato / Comprador</th><th class="text-left px-4 py-3">Vencimento</th>
+        <th class="text-center px-4 py-3">Atraso</th><th class="text-right px-4 py-3">Valor atualizado</th>
+        <th class="text-center px-4 py-3">Estado</th><th class="text-right px-6 py-3">Ações</th></tr></thead>
+      <tbody class="divide-y divide-surface-border">
+        <tr><td class="px-6 py-3"><span class="font-bold">CTR-2026-018</span> · João Souza</td><td class="px-4">10/06/2026</td><td class="text-center text-warning font-bold">6 d</td><td class="text-right font-semibold">R$ 1.832,40</td><td class="text-center"><span class="text-[11px] font-bold px-2 py-0.5 rounded-full bg-warning/15 text-warning">VENCIDO</span></td><td class="text-right px-6 whitespace-nowrap"><button class="text-secondary text-xs font-semibold mr-2">Baixa</button><button class="text-secondary text-xs font-semibold mr-2">2ª via</button><button class="text-secondary text-xs font-semibold">Notificar</button></td></tr>
+        <tr><td class="px-6 py-3"><span class="font-bold">CTR-2026-031</span> · Ana Lima</td><td class="px-4">20/06/2026</td><td class="text-center text-on-surface-variant">—</td><td class="text-right font-semibold">R$ 1.800,00</td><td class="text-center"><span class="text-[11px] font-bold px-2 py-0.5 rounded-full bg-secondary/15 text-secondary">REGISTRADO</span></td><td class="text-right px-6 whitespace-nowrap"><button class="text-secondary text-xs font-semibold mr-2">Baixa</button><button class="text-on-surface-variant text-xs">Notificar</button></td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+    <!-- Rejeitados -->
+    <div class="bg-white p-5 border border-warning/30 rounded-xl shadow-sm">
+      <h3 class="font-bold mb-3 flex items-center gap-2"><span class="material-symbols-outlined text-warning">report</span>Boletos rejeitados (4)</h3>
+      <div class="space-y-2 text-sm">
+        <div class="flex justify-between items-center p-3 rounded-xl bg-warning/5"><div><p class="font-semibold">CTR-2026-009 · Carlos M.</p><p class="text-xs text-on-surface-variant">Motivo: CEP do sacado inválido (cód. 03)</p></div><button class="px-3 py-1.5 bg-primary text-white text-xs font-semibold rounded">Reincluir na remessa</button></div>
+        <div class="flex justify-between items-center p-3 rounded-xl bg-warning/5"><div><p class="font-semibold">CTR-2026-014 · Beatriz R.</p><p class="text-xs text-on-surface-variant">Motivo: agência/conta divergente (cód. 24)</p></div><button class="px-3 py-1.5 bg-primary text-white text-xs font-semibold rounded">Reincluir na remessa</button></div>
+      </div>
+    </div>
+    <!-- Recém-conciliados -->
+    <div class="bg-white p-5 border border-surface-border rounded-xl shadow-sm">
+      <h3 class="font-bold mb-3 flex items-center gap-2"><span class="material-symbols-outlined text-success">task_alt</span>Recém-conciliados</h3>
+      <table class="w-full text-sm"><tbody class="divide-y divide-surface-border">
+        <tr><td class="py-2">16/06 · CTR-2026-002</td><td class="text-right font-semibold">R$ 1.800,00</td><td class="text-right pl-3"><span class="text-[11px] font-bold px-2 py-0.5 rounded-full bg-success/15 text-success">PIX</span></td></tr>
+        <tr><td class="py-2">16/06 · CTR-2026-007</td><td class="text-right font-semibold">R$ 2.400,00</td><td class="text-right pl-3"><span class="text-[11px] font-bold px-2 py-0.5 rounded-full bg-secondary/15 text-secondary">CNAB</span></td></tr>
+        <tr><td class="py-2">15/06 · CTR-2026-011</td><td class="text-right font-semibold">R$ 1.200,00</td><td class="text-right pl-3"><span class="text-[11px] font-bold px-2 py-0.5 rounded-full bg-warning/15 text-warning">OFX</span></td></tr>
+      </tbody></table>
+    </div>
+  </div>
+
+</div>
+</main>
+</body></html>

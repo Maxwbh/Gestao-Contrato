@@ -1,0 +1,409 @@
+{% extends 'base.html' %}
+{% load humanize %}
+{% load hashid_tags %}
+{% load financeiro_tags %}
+
+{% block title %}Intermediárias — {{ contrato.numero_contrato }}{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+
+    <!-- Header -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h4 class="mb-1">
+                <i class="fas fa-hand-holding-usd text-warning"></i>
+                Prestações Intermediárias
+            </h4>
+            <p class="text-muted mb-0">
+                Contrato <strong>{{ contrato.numero_contrato }}</strong>
+                &mdash; {{ contrato.comprador.nome }}
+            </p>
+        </div>
+        <div class="d-flex gap-2">
+            <button class="btn btn-warning" id="btnNovaIntermediaria">
+                <i class="fas fa-plus me-1"></i> Nova Intermediária
+            </button>
+            <a href="{% url 'contratos:detalhe' contrato.pk|hashid %}" class="btn btn-outline-secondary">
+                <i class="fas fa-arrow-left"></i> Voltar ao Contrato
+            </a>
+        </div>
+    </div>
+
+    <!-- Resumo -->
+    <div class="row mb-4">
+        <div class="col-md-3">
+            <div class="card text-center border-primary">
+                <div class="card-body py-3">
+                    <div class="fs-4 fw-bold text-primary">{{ total_intermediarias }}</div>
+                    <div class="text-muted small">Total</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card text-center border-success">
+                <div class="card-body py-3">
+                    <div class="fs-4 fw-bold text-success">{{ intermediarias_pagas }}</div>
+                    <div class="text-muted small">Pagas</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card text-center border-secondary">
+                <div class="card-body py-3">
+                    <div class="fs-4 fw-bold text-secondary">{{ intermediarias_pendentes }}</div>
+                    <div class="text-muted small">Pendentes</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card text-center border-warning">
+                <div class="card-body py-3">
+                    <div class="fs-4 fw-bold text-warning">{{ valor_pendente|moeda }}</div>
+                    <div class="text-muted small">Valor Pendente</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Tabela -->
+    <div class="card">
+        <div class="card-header bg-warning text-dark">
+            <i class="fas fa-list"></i> Lista de Intermediárias
+        </div>
+        <div class="table-responsive" style="overflow-x: auto;">
+            <table class="table table-sm table-hover mb-0" style="font-size: 0.875rem;">
+                <thead class="table-light">
+                    <tr>
+                        <th>#</th>
+                        <th>Mês</th>
+                        <th>Valor Original</th>
+                        <th>Valor Reajustado</th>
+                        <th>Situação</th>
+                        <th>Boleto</th>
+                        <th>Pago em</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for inter in intermediarias %}
+                    <tr>
+                        <td>{{ inter.numero_sequencial }}</td>
+                        <td>Mês {{ inter.mes_vencimento }}</td>
+                        <td>{{ inter.valor|moeda }}</td>
+                        <td>
+                            {% if inter.valor_reajustado %}
+                                {{ inter.valor_reajustado|moeda }}
+                            {% else %}
+                                <span class="text-muted">—</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if inter.paga %}
+                                <span class="badge bg-success">Paga</span>
+                            {% elif inter.parcela_vinculada %}
+                                <span class="badge bg-info">Boleto gerado</span>
+                            {% else %}
+                                <span class="badge bg-secondary">Pendente</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if inter.parcela_vinculada %}
+                                <a href="{% url 'contratos:detalhe' contrato.pk|hashid %}" class="text-muted small">
+                                    Parcela #{{ inter.parcela_vinculada.numero_parcela }}
+                                </a>
+                            {% else %}
+                                <span class="text-muted">—</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if inter.data_pagamento %}
+                                {{ inter.data_pagamento|date:"d/m/Y" }}
+                            {% else %}
+                                <span class="text-muted">—</span>
+                            {% endif %}
+                        </td>
+                        <td class="text-end text-nowrap">
+                            {% if not inter.paga %}
+                            {% if not inter.parcela_vinculada %}
+                            <button class="btn btn-sm btn-outline-primary btn-gerar-boleto-inter"
+                                    data-inter-id="{{ inter.pk|hashid }}"
+                                    title="Gerar boleto">
+                                <i class="fas fa-barcode"></i>
+                            </button>
+                            {% endif %}
+                            <button class="btn btn-sm btn-outline-success btn-pagar-inter"
+                                    data-inter-id="{{ inter.pk|hashid }}"
+                                    data-seq="{{ inter.numero_sequencial }}"
+                                    data-valor="{{ inter.valor_atual|default:inter.valor|floatformat:2 }}"
+                                    title="Registrar pagamento">
+                                <i class="fas fa-dollar-sign"></i>
+                            </button>
+                            <button class="btn btn-sm btn-outline-secondary btn-editar-inter"
+                                    data-inter-id="{{ inter.pk|hashid }}"
+                                    data-seq="{{ inter.numero_sequencial }}"
+                                    data-mes="{{ inter.mes_vencimento }}"
+                                    data-valor="{{ inter.valor|floatformat:2 }}"
+                                    data-obs="{{ inter.observacoes|default:'' }}"
+                                    title="Editar">
+                                <i class="fas fa-pen"></i>
+                            </button>
+                            <button class="btn btn-sm btn-outline-danger btn-excluir-inter"
+                                    data-inter-id="{{ inter.pk|hashid }}"
+                                    data-seq="{{ inter.numero_sequencial }}"
+                                    title="Excluir">
+                                <i class="fas fa-trash"></i>
+                            </button>
+                            {% else %}
+                            <span class="text-muted small">—</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="8" class="text-center text-muted py-4">
+                            <i class="fas fa-info-circle"></i> Nenhuma prestação intermediária cadastrada.
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        <div class="card-footer">
+            {% include "includes/pagination_perpage.html" %}
+        </div>
+    </div>
+
+</div>
+
+<!-- Modal: criar/editar intermediária -->
+<div class="modal fade" id="modalIntermediaria" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title fs-6" id="modalInterTitulo">Nova Intermediária</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div id="interAlert" class="alert alert-danger d-none mb-3"></div>
+                <input type="hidden" id="interId">
+                <div class="mb-3">
+                    <label class="form-label">Mês de vencimento <span class="text-danger">*</span></label>
+                    <input type="number" class="form-control" id="interMes" min="1" max="{{ contrato.numero_parcelas }}" placeholder="Ex: 12">
+                    <div class="form-text">Nº do mês do contrato em que a prestação vence (1 a {{ contrato.numero_parcelas }}).</div>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Valor (R$) <span class="text-danger">*</span></label>
+                    <input type="number" class="form-control" id="interValor" min="0.01" step="0.01" placeholder="Ex: 5000.00">
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Observações</label>
+                    <textarea class="form-control" id="interObs" rows="2"></textarea>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-warning btn-sm" id="btnSalvarInter">
+                    <i class="fas fa-save me-1"></i> Salvar
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal: registrar pagamento -->
+<div class="modal fade" id="modalPagarInter" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title fs-6">Registrar Pagamento — Intermediária <span id="pagarSeq"></span></h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div id="pagarAlert" class="alert alert-danger d-none mb-3"></div>
+                <input type="hidden" id="pagarId">
+                <div class="mb-3">
+                    <label class="form-label">Valor pago (R$) <span class="text-danger">*</span></label>
+                    <input type="number" class="form-control" id="pagarValor" min="0.01" step="0.01">
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Data do pagamento <span class="text-danger">*</span></label>
+                    <input type="date" class="form-control" id="pagarData">
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Observações</label>
+                    <textarea class="form-control" id="pagarObs" rows="2"></textarea>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-success btn-sm" id="btnConfirmarPagarInter">
+                    <i class="fas fa-check me-1"></i> Confirmar Pagamento
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+(function () {
+    const CSRF = document.cookie.match(/csrftoken=([^;]+)/)?.[1] || '';
+    const URL_CRIAR = "{% url 'contratos:intermediarias_criar' contrato.pk|hashid %}";
+
+    function notify(msg, type, dur) {
+        if (window.showToast) window.showToast(msg, type || 'info', dur || 4000);
+        else if (type === 'error') alert(msg);
+    }
+    function postJSON(url, body) {
+        return fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-CSRFToken': CSRF },
+            body: JSON.stringify(body || {}),
+        }).then(r => r.json());
+    }
+    function lock(btn, txt) {
+        btn.dataset._html = btn.innerHTML;
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>' + (txt || '');
+    }
+    function unlock(btn) {
+        btn.disabled = false;
+        if (btn.dataset._html) btn.innerHTML = btn.dataset._html;
+    }
+    function showAlert(id, msg) {
+        const el = document.getElementById(id);
+        el.textContent = msg;
+        el.classList.remove('d-none');
+    }
+
+    const modalInter = new bootstrap.Modal(document.getElementById('modalIntermediaria'));
+    const modalPagar = new bootstrap.Modal(document.getElementById('modalPagarInter'));
+
+    // ── Criar ─────────────────────────────────────────────────────────────
+    document.getElementById('btnNovaIntermediaria').addEventListener('click', () => {
+        document.getElementById('modalInterTitulo').textContent = 'Nova Intermediária';
+        document.getElementById('interId').value = '';
+        document.getElementById('interMes').value = '';
+        document.getElementById('interValor').value = '';
+        document.getElementById('interObs').value = '';
+        document.getElementById('interAlert').classList.add('d-none');
+        modalInter.show();
+    });
+
+    // ── Editar ────────────────────────────────────────────────────────────
+    document.querySelectorAll('.btn-editar-inter').forEach(btn => {
+        btn.addEventListener('click', () => {
+            document.getElementById('modalInterTitulo').textContent = 'Editar Intermediária #' + btn.dataset.seq;
+            document.getElementById('interId').value = btn.dataset.interId;
+            document.getElementById('interMes').value = btn.dataset.mes;
+            document.getElementById('interValor').value = btn.dataset.valor;
+            document.getElementById('interObs').value = btn.dataset.obs || '';
+            document.getElementById('interAlert').classList.add('d-none');
+            modalInter.show();
+        });
+    });
+
+    // ── Salvar (criar ou editar) ──────────────────────────────────────────
+    document.getElementById('btnSalvarInter').addEventListener('click', function () {
+        const id = document.getElementById('interId').value;
+        const mes = parseInt(document.getElementById('interMes').value);
+        const valor = parseFloat(document.getElementById('interValor').value);
+        if (!mes || mes < 1) { showAlert('interAlert', 'Informe o mês de vencimento.'); return; }
+        if (!valor || valor <= 0) { showAlert('interAlert', 'Informe um valor maior que zero.'); return; }
+
+        lock(this, 'Salvando...');
+        const url = id ? `/contratos/intermediarias/${id}/atualizar/` : URL_CRIAR;
+        postJSON(url, { mes_vencimento: mes, valor: valor, observacoes: document.getElementById('interObs').value })
+            .then(data => {
+                if (data.sucesso) {
+                    notify(data.mensagem || 'Intermediária salva.', 'success');
+                    setTimeout(() => location.reload(), 900);
+                } else {
+                    unlock(this);
+                    showAlert('interAlert', data.erro || 'Erro ao salvar.');
+                }
+            })
+            .catch(() => { unlock(this); showAlert('interAlert', 'Erro de comunicação com o servidor.'); });
+    });
+
+    // ── Registrar pagamento ───────────────────────────────────────────────
+    document.querySelectorAll('.btn-pagar-inter').forEach(btn => {
+        btn.addEventListener('click', () => {
+            document.getElementById('pagarSeq').textContent = '#' + btn.dataset.seq;
+            document.getElementById('pagarId').value = btn.dataset.interId;
+            document.getElementById('pagarValor').value = btn.dataset.valor;
+            document.getElementById('pagarData').value = new Date().toISOString().slice(0, 10);
+            document.getElementById('pagarObs').value = '';
+            document.getElementById('pagarAlert').classList.add('d-none');
+            modalPagar.show();
+        });
+    });
+
+    document.getElementById('btnConfirmarPagarInter').addEventListener('click', function () {
+        const id = document.getElementById('pagarId').value;
+        const valor = parseFloat(document.getElementById('pagarValor').value);
+        const data = document.getElementById('pagarData').value;
+        if (!valor || valor <= 0) { showAlert('pagarAlert', 'Informe um valor pago maior que zero.'); return; }
+        if (!data) { showAlert('pagarAlert', 'Informe a data do pagamento.'); return; }
+
+        lock(this, 'Registrando...');
+        postJSON(`/contratos/intermediarias/${id}/pagar/`, {
+            valor_pago: valor, data_pagamento: data,
+            observacoes: document.getElementById('pagarObs').value,
+        })
+            .then(d => {
+                if (d.sucesso) {
+                    notify(d.mensagem || 'Pagamento registrado.', 'success');
+                    setTimeout(() => location.reload(), 900);
+                } else {
+                    unlock(this);
+                    showAlert('pagarAlert', d.erro || 'Erro ao registrar pagamento.');
+                }
+            })
+            .catch(() => { unlock(this); showAlert('pagarAlert', 'Erro de comunicação com o servidor.'); });
+    });
+
+    // ── Excluir ───────────────────────────────────────────────────────────
+    document.querySelectorAll('.btn-excluir-inter').forEach(btn => {
+        btn.addEventListener('click', () => {
+            if (!confirm('Excluir a intermediária #' + btn.dataset.seq + '? As parcelas do contrato serão recalculadas se necessário.')) return;
+            lock(btn, '');
+            postJSON(`/contratos/intermediarias/${btn.dataset.interId}/excluir/`)
+                .then(d => {
+                    if (d.sucesso) {
+                        notify(d.mensagem || 'Intermediária excluída.', 'success');
+                        setTimeout(() => location.reload(), 900);
+                    } else {
+                        unlock(btn);
+                        notify(d.erro || 'Erro ao excluir.', 'error', 8000);
+                    }
+                })
+                .catch(() => { unlock(btn); notify('Erro de comunicação com o servidor.', 'error', 8000); });
+        });
+    });
+
+    // ── Gerar boleto (existente, agora com toast) ─────────────────────────
+    document.querySelectorAll('.btn-gerar-boleto-inter').forEach(btn => {
+        btn.addEventListener('click', function () {
+            if (!confirm('Gerar boleto para esta intermediária?')) return;
+            lock(this, '');
+            fetch(`/contratos/intermediarias/${this.dataset.interId}/gerar-boleto/`, {
+                method: 'POST',
+                headers: { 'X-CSRFToken': CSRF, 'Content-Type': 'application/x-www-form-urlencoded' },
+            })
+            .then(r => r.json())
+            .then(data => {
+                if (data.sucesso) {
+                    notify('Boleto gerado com sucesso!', 'success');
+                    setTimeout(() => location.reload(), 900);
+                } else {
+                    unlock(this);
+                    notify('Erro ao gerar boleto: ' + (data.erro || 'desconhecido'), 'error', 8000);
+                }
+            })
+            .catch(() => { unlock(this); notify('Erro de comunicação com o servidor.', 'error', 8000); });
+        });
+    });
+})();
+</script>
+{% endblock %}

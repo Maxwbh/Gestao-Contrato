@@ -1,0 +1,41 @@
+<!-- Partial: campos do formulário de RegraNotificacao -->
+<div class="mb-3">
+    <label class="form-label fw-semibold">Nome da Regra <span class="text-danger">*</span></label>
+    <input type="text" name="nome" class="form-control" required placeholder="Ex: Lembrete 3 dias antes">
+</div>
+<div class="row g-3 mb-3">
+    <div class="col-6">
+        <label class="form-label fw-semibold">Gatilho <span class="text-danger">*</span></label>
+        <select name="tipo_gatilho" class="form-select" required>
+            {% for valor, label in tipos_gatilho %}
+            <option value="{{ valor }}">{{ label }}</option>
+            {% endfor %}
+        </select>
+    </div>
+    <div class="col-6">
+        <label class="form-label fw-semibold">Dias <span class="text-danger">*</span></label>
+        <input type="number" name="dias_offset" class="form-control" min="0" max="365" required value="3">
+        <div class="form-text">Dias antes/após o vencimento</div>
+    </div>
+</div>
+<div class="mb-3">
+    <label class="form-label fw-semibold">Canal <span class="text-danger">*</span></label>
+    <select name="tipo_notificacao" class="form-select" required>
+        {% for valor, label in tipos_notificacao %}
+        <option value="{{ valor }}">{{ label }}</option>
+        {% endfor %}
+    </select>
+</div>
+<div class="mb-3">
+    <label class="form-label fw-semibold">Template de Mensagem</label>
+    <select name="template" class="form-select">
+        <option value="">— Usar mensagem padrão do sistema —</option>
+        {% for tpl in templates %}
+        <option value="{{ tpl.pk }}">{{ tpl.nome }}</option>
+        {% endfor %}
+    </select>
+</div>
+<div class="form-check mb-2">
+    <input type="checkbox" name="ativo" class="form-check-input" id="regraAtivo" checked>
+    <label class="form-check-label" for="regraAtivo">Ativa</label>
+</div>

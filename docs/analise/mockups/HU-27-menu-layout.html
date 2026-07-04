@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html class="light" lang="pt-BR"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Menu — Cobrança (HU-27) | ContractHub</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&amp;family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<style>
+  .material-symbols-outlined { font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24; vertical-align: middle; }
+  body { font-family: Inter, sans-serif; }
+</style>
+<script>
+  tailwind.config = { theme: { extend: { colors: {
+    "primary": "#091426", "primary-2": "#0b1c30", "secondary": "#0058be", "success": "#22c55e",
+    "warning": "#f59e0b", "danger": "#ef4444", "ink": "#0b1c30",
+    "surface-border": "#e2e8f0", "background": "#f8f9ff", "muted": "#64748b",
+    "hover": "#eff4ff"
+  }, borderRadius: { "xl": "0.5rem", "full": "0.75rem" } } } };
+</script>
+</head>
+<body class="bg-background text-ink">
+
+<!-- ===== NAVBAR (topo, escuro — ContractHub) ===== -->
+<header class="bg-primary text-white">
+  <div class="max-w-[1280px] mx-auto px-4 h-14 flex items-center gap-1">
+    <div class="flex items-center gap-2 font-bold text-[1.05rem] mr-4">
+      <span class="material-symbols-outlined">contract</span> Gestão de Contratos
+    </div>
+    <nav class="flex items-center gap-1 text-sm">
+      <a class="px-3 py-2 rounded hover:bg-white/10 flex items-center gap-1" href="#"><span class="material-symbols-outlined text-[18px]">dashboard</span> Dashboard</a>
+      <!-- Cobrança (ATIVO + aberto) -->
+      <a class="px-3 py-2 rounded bg-white/10 font-semibold flex items-center gap-1 relative" href="#" style="box-shadow: inset 0 -3px 0 #2170e4">
+        <span class="material-symbols-outlined text-[18px]">payments</span> Cobrança
+        <span class="material-symbols-outlined text-[18px]">arrow_drop_down</span>
+      </a>
+      <a class="px-3 py-2 rounded hover:bg-white/10 flex items-center gap-1" href="#"><span class="material-symbols-outlined text-[18px]">attach_money</span> Financeiro <span class="material-symbols-outlined text-[18px]">arrow_drop_down</span></a>
+      <a class="px-3 py-2 rounded hover:bg-white/10 flex items-center gap-1" href="#"><span class="material-symbols-outlined text-[18px]">description</span> Contratos <span class="material-symbols-outlined text-[18px]">arrow_drop_down</span></a>
+      <a class="px-3 py-2 rounded hover:bg-white/10 flex items-center gap-1" href="#"><span class="material-symbols-outlined text-[18px]">database</span> Cadastros <span class="material-symbols-outlined text-[18px]">arrow_drop_down</span></a>
+      <a class="px-3 py-2 rounded hover:bg-white/10 flex items-center gap-1" href="#"><span class="material-symbols-outlined text-[18px]">notifications</span> Notificações <span class="material-symbols-outlined text-[18px]">arrow_drop_down</span></a>
+    </nav>
+    <div class="ml-auto flex items-center gap-3 text-white/85">
+      <span class="material-symbols-outlined">dark_mode</span>
+      <span class="material-symbols-outlined">search</span>
+      <kbd class="text-[.66rem] font-semibold bg-white/10 border border-white/20 rounded px-1.5 py-0.5">Ctrl K</kbd>
+      <span class="flex items-center gap-1 text-sm"><span class="material-symbols-outlined">account_circle</span> maxwbh</span>
+    </div>
+  </div>
+</header>
+
+<!-- ===== Dropdown "Cobrança" aberto ===== -->
+<div class="relative">
+  <div class="max-w-[1280px] mx-auto px-4">
+    <div class="absolute left-[8.5rem] top-1 w-[320px] bg-white rounded-xl border border-surface-border shadow-2xl overflow-hidden">
+      <!-- Item-âncora: hub -->
+      <a href="#" class="flex items-start gap-3 px-4 py-3 bg-secondary/5 hover:bg-secondary/10 border-l-4 border-secondary">
+        <span class="material-symbols-outlined text-secondary">route</span>
+        <span>
+          <span class="block font-bold text-secondary">Cobrança do Mês</span>
+          <span class="block text-xs text-muted">Assistente passo a passo do ciclo mensal</span>
+        </span>
+        <span class="material-symbols-outlined text-secondary ml-auto text-[18px]">bolt</span>
+      </a>
+
+      <div class="px-4 pt-3 pb-1 text-[.68rem] font-bold uppercase tracking-wider text-muted">Passo a passo</div>
+      <a href="#" class="flex items-center gap-3 px-4 py-2.5 hover:bg-hover">
+        <span class="material-symbols-outlined text-ink text-[20px]">request_quote</span> Gerar Boletos do Mês
+        <span class="ml-auto text-[.6rem] font-bold text-white bg-secondary rounded-full w-5 h-5 flex items-center justify-center">1</span>
+      </a>
+      <a href="#" class="flex items-center gap-3 px-4 py-2.5 hover:bg-hover">
+        <span class="material-symbols-outlined text-ink text-[20px]">send</span> Gerar Arquivo Remessa
+        <span class="ml-auto text-[.6rem] font-bold text-white bg-secondary/70 rounded-full w-5 h-5 flex items-center justify-center">2</span>
+      </a>
+      <a href="#" class="flex items-center gap-3 px-4 py-2.5 hover:bg-hover">
+        <span class="material-symbols-outlined text-ink text-[20px]">account_balance</span> Receber Arquivo Retorno
+        <span class="ml-auto text-[.6rem] font-bold text-white bg-secondary/40 rounded-full w-5 h-5 flex items-center justify-center">3</span>
+      </a>
+
+      <div class="px-4 pt-3 pb-1 text-[.68rem] font-bold uppercase tracking-wider text-muted">Acompanhamento</div>
+      <a href="#" class="flex items-center gap-3 px-4 py-2.5 hover:bg-hover">
+        <span class="material-symbols-outlined text-ink text-[20px]">monitor_heart</span> Conciliação &amp; Saúde
+      </a>
+      <a href="#" class="flex items-center gap-3 px-4 py-2.5 hover:bg-hover">
+        <span class="material-symbols-outlined text-ink text-[20px]">tune</span> Régua de Cobrança
+      </a>
+      <div class="h-2"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ===== Painel comparativo (didático) ===== -->
+<main class="max-w-[1280px] mx-auto px-4 pt-[26rem] pb-10">
+  <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+    <div class="bg-white rounded-xl border border-surface-border p-5">
+      <h3 class="font-bold mb-1 flex items-center gap-2"><span class="material-symbols-outlined text-secondary">payments</span> Cobrança <span class="text-xs font-normal text-muted">(rotina da contadora — linguagem de negócio)</span></h3>
+      <ul class="text-sm mt-3 space-y-1.5">
+        <li class="font-semibold text-secondary">★ Cobrança do Mês <span class="font-normal text-muted">(hub)</span></li>
+        <li class="text-[.7rem] uppercase tracking-wider text-muted pt-1">Passo a passo</li>
+        <li>· Gerar Boletos do Mês</li>
+        <li>· Gerar Arquivo Remessa</li>
+        <li>· Receber Arquivo Retorno</li>
+        <li class="text-[.7rem] uppercase tracking-wider text-muted pt-1">Acompanhamento</li>
+        <li>· Conciliação &amp; Saúde</li>
+        <li>· Régua de Cobrança</li>
+      </ul>
+      <p class="text-xs text-success mt-3 flex items-center gap-1"><span class="material-symbols-outlined text-[16px]">check_circle</span> Sem jargão "CNAB" · rotina em destaque</p>
+    </div>
+    <div class="bg-white rounded-xl border border-surface-border p-5">
+      <h3 class="font-bold mb-1 flex items-center gap-2"><span class="material-symbols-outlined">attach_money</span> Financeiro <span class="text-xs font-normal text-muted">(análise &amp; gestão — enxuto)</span></h3>
+      <ul class="text-sm mt-3 space-y-1.5">
+        <li>· Dashboard Financeiro</li>
+        <li>· Todas as Parcelas</li>
+        <li>· Parcelas do Mês</li>
+        <li class="text-[.7rem] uppercase tracking-wider text-muted pt-1">Boletos</li>
+        <li>· Pendentes de Geração · Boletos Gerados</li>
+        <li class="text-[.7rem] uppercase tracking-wider text-muted pt-1">Reajustes</li>
+        <li>· Pendentes · Histórico</li>
+        <li class="text-[.7rem] uppercase tracking-wider text-muted pt-1">Relatórios &amp; Conciliação</li>
+        <li>· <span class="text-secondary font-semibold">Relatórios Financeiros</span> <span class="text-xs text-muted">(novo no menu)</span></li>
+        <li>· Conciliação Bancária <span class="text-xs text-muted">(técnica)</span></li>
+      </ul>
+    </div>
+  </div>
+  <p class="text-center text-xs text-muted mt-6">HU-27 — reorganização do menu orientada à rotina da Contadora. Protótipo ContractHub (Tailwind + Material Symbols).</p>
+</main>
+
+</body></html>

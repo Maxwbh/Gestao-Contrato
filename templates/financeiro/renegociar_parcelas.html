@@ -1,0 +1,233 @@
+
+{% extends 'base.html' %}
+{% load hashid_tags %}
+{% load format_filters %}
+{% block title %}Renegociação — {{ contrato.numero_contrato }}{% endblock %}
+
+{% block content %}
+<div class="container" style="max-width:900px; padding:16px">
+
+  <!-- Cabeçalho -->
+  <div class="d-flex align-items-center gap-2 mb-3">
+    <a href="{% url 'contratos:detalhe' contrato.pk|hashid %}" class="btn btn-sm btn-outline-secondary">
+      <i class="fas fa-arrow-left"></i>
+    </a>
+    <div>
+      <h4 class="mb-0"><i class="fas fa-handshake me-2 text-warning"></i>Renegociação de Parcelas</h4>
+      <small class="text-muted">Contrato {{ contrato.numero_contrato }} — {{ contrato.comprador.nome }}</small>
+    </div>
+  </div>
+
+  <!-- Aviso -->
+  <div class="alert alert-warning d-flex align-items-start gap-2 mb-3">
+    <i class="fas fa-exclamation-triangle mt-1"></i>
+    <div>
+      <strong>Como funciona:</strong> Selecione as parcelas em atraso que deseja renegociar,
+      informe nova data de vencimento e/ou novo valor. Ao confirmar, os juros e multas acumulados
+      serão zerados e o novo prazo passa a valer.
+    </div>
+  </div>
+
+  {% if parcelas %}
+  <form method="post" id="form-renegociacao">
+    {% csrf_token %}
+
+    <div class="card">
+      <div class="card-header d-flex justify-content-between align-items-center">
+        <span><strong>{{ parcelas.count }}</strong> parcela(s) em atraso</span>
+        <div class="form-check mb-0">
+          <input class="form-check-input" type="checkbox" id="select-all">
+          <label class="form-check-label" for="select-all">Selecionar todas</label>
+        </div>
+      </div>
+      <div class="card-body p-0">
+        <div class="table-responsive">
+          <table class="table table-sm table-hover mb-0 align-middle">
+            <thead class="table-dark">
+              <tr>
+                <th style="width:40px"></th>
+                <th class="text-center">Parc.</th>
+                <th>Vencimento atual</th>
+                <th class="text-end">Valor atual</th>
+                <th class="text-end">Juros + Multa</th>
+                <th class="text-center" style="width:140px">Nova data</th>
+                <th class="text-end" style="width:130px">Novo valor (R$)</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for p in parcelas %}
+              {% with dias=p.dias_atraso %}
+              <tr>
+                <td class="text-center">
+                  <input class="form-check-input parcela-check" type="checkbox"
+                         name="parcela_ids" value="{{ p.pk }}">
+                </td>
+                <td class="text-center fw-bold">{{ p.numero_parcela }}</td>
+                <td>
+                  {{ p.data_vencimento|date:"d/m/Y" }}
+                  <br><small class="text-danger"><i class="fas fa-clock"></i> {{ dias }} dia(s) atrás</small>
+                </td>
+                <td class="text-end">{{ p.valor_atual|moeda }}</td>
+                <td class="text-end text-danger">
+                  {{ p.valor_juros|moeda }}
+                  + {{ p.valor_multa|moeda }}
+                </td>
+                <td>
+                  <input type="date" name="nova_data_{{ p.pk }}"
+                         class="form-control form-control-sm nova-data-input"
+                         min="{{ hoje|date:'Y-m-d' }}"
+                         placeholder="Manter">
+                </td>
+                <td>
+                  <div class="input-group input-group-sm">
+                    <span class="input-group-text">R$</span>
+                    <input type="text" name="novo_valor_{{ p.pk }}"
+                           class="form-control form-control-sm text-end"
+                           placeholder="{{ p.valor_atual|floatformat:2 }}">
+                  </div>
+                </td>
+              </tr>
+              {% endwith %}
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- Ações rápidas: definir nova data para todas selecionadas -->
+    <div class="card mt-3">
+      <div class="card-body py-2">
+        <div class="row g-2 align-items-end">
+          <div class="col-auto">
+            <label class="form-label form-label-sm mb-0">Aplicar mesma data a todas selecionadas</label>
+            <input type="date" id="data-global" class="form-control form-control-sm" min="{{ hoje|date:'Y-m-d' }}">
+          </div>
+          <div class="col-auto">
+            <button type="button" class="btn btn-sm btn-outline-primary" onclick="aplicarDataGlobal()">
+              <i class="fas fa-calendar-check me-1"></i>Aplicar
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="d-flex gap-2 mt-3">
+      <button type="submit" class="btn btn-warning" id="btn-confirmar" disabled>
+        <i class="fas fa-handshake me-1"></i>Confirmar Renegociação
+      </button>
+      <a href="{% url 'contratos:detalhe' contrato.pk|hashid %}" class="btn btn-outline-secondary">
+        Cancelar
+      </a>
+    </div>
+  </form>
+
+  {% else %}
+  <div class="card">
+    <div class="card-body text-center py-5 text-muted">
+      <i class="fas fa-check-circle fa-3x mb-3 text-success"></i>
+      <p class="mb-0">Nenhuma parcela em atraso encontrada para este contrato.</p>
+    </div>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+// Selecionar todas
+document.getElementById('select-all')?.addEventListener('change', function() {
+  document.querySelectorAll('.parcela-check').forEach(cb => {
+    cb.checked = this.checked;
+  });
+  atualizarBotao();
+});
+
+// Habilitar botão quando há seleção
+document.querySelectorAll('.parcela-check').forEach(cb => {
+  cb.addEventListener('change', atualizarBotao);
+});
+
+function atualizarBotao() {
+  const algumSelecionado = document.querySelectorAll('.parcela-check:checked').length > 0;
+  document.getElementById('btn-confirmar').disabled = !algumSelecionado;
+}
+
+// Feedback estilizado (toast) com fallback
+function notify(msg, type) {
+  if (window.showToast) window.showToast(msg, type || 'warning', 5000);
+  else alert(msg);
+}
+
+// Aplicar data global a todas as linhas selecionadas
+function aplicarDataGlobal() {
+  const campo = document.getElementById('data-global');
+  if (!campo.value) {
+    campo.classList.add('is-invalid');
+    campo.focus();
+    notify('Informe a data que será aplicada às parcelas selecionadas.', 'warning');
+    return;
+  }
+  campo.classList.remove('is-invalid');
+  document.querySelectorAll('.parcela-check:checked').forEach(cb => {
+    const pk = cb.value;
+    const input = document.querySelector(`input[name="nova_data_${pk}"]`);
+    if (input) input.value = campo.value;
+  });
+}
+
+// Validação client-side antes de submeter — evita o round-trip que descarta o preenchimento
+document.getElementById('form-renegociacao')?.addEventListener('submit', function(e) {
+  const btn = document.getElementById('btn-confirmar');
+  const selecionadas = document.querySelectorAll('.parcela-check:checked');
+  if (selecionadas.length === 0) {
+    e.preventDefault();
+    notify('Selecione ao menos uma parcela.', 'warning');
+    return;
+  }
+
+  const hoje = '{{ hoje|date:"Y-m-d" }}';
+  let algumCampo = false;
+  let erro = null;
+  selecionadas.forEach(cb => {
+    if (erro) return;
+    const pk = cb.value;
+    const dataEl = document.querySelector(`input[name="nova_data_${pk}"]`);
+    const valorEl = document.querySelector(`input[name="novo_valor_${pk}"]`);
+    const data = dataEl?.value;
+    const valor = valorEl?.value;
+    if (data || valor) algumCampo = true;
+    // Valor: precisa ser positivo
+    if (valor !== '' && valor !== undefined && parseFloat(valor) <= 0) {
+      valorEl.classList.add('is-invalid');
+      valorEl.focus();
+      erro = 'O novo valor deve ser maior que zero.';
+    }
+    // Data: não pode ser no passado
+    if (!erro && data && hoje && data < hoje) {
+      dataEl.classList.add('is-invalid');
+      dataEl.focus();
+      erro = 'A nova data de vencimento não pode ser anterior a hoje.';
+    }
+  });
+
+  if (erro) { e.preventDefault(); notify(erro, 'error'); return; }
+  if (!algumCampo) {
+    e.preventDefault();
+    notify('Informe nova data ou novo valor para ao menos uma parcela selecionada.', 'warning');
+    return;
+  }
+
+  // Trava anti duplo-submit — renegociar 2x zeraria juros/multa novamente
+  if (btn.dataset.enviando === '1') { e.preventDefault(); return; }
+  btn.dataset.enviando = '1';
+  btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Aplicando renegociação...';
+  setTimeout(() => { btn.disabled = true; }, 0);
+});
+
+// Limpa o destaque de erro ao corrigir
+document.addEventListener('input', function (e) {
+  if (e.target.classList?.contains('is-invalid')) e.target.classList.remove('is-invalid');
+});
+</script>
+{% endblock %}

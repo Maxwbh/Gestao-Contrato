@@ -1,0 +1,97 @@
+{% extends 'base.html' %}
+{% load hashid_tags %}
+
+{% block title %}{% if minuta %}Editar Minuta{% else %}Nova Minuta{% endif %} — {{ contrato.numero_contrato }}{% endblock %}
+
+{% block content %}
+<div class="row">
+  <div class="col-12 col-lg-7 mx-auto">
+
+    <div class="d-flex justify-content-between align-items-center mb-3">
+      <h4 class="mb-0">
+        <i class="fas fa-file-alt me-2 text-secondary"></i>
+        {% if minuta %}Editar Minuta{% else %}Nova Minuta{% endif %}
+        <small class="text-muted fs-6 ms-2">Contrato {{ contrato.numero_contrato }}</small>
+      </h4>
+      <a href="{% url 'contratos:minutas_listar' contrato.pk|hashid %}" class="btn btn-outline-secondary btn-sm">
+        <i class="fas fa-arrow-left me-1"></i> Voltar
+      </a>
+    </div>
+
+    <div class="card">
+      <div class="card-body">
+        <form method="post" novalidate>
+          {% csrf_token %}
+
+          <div class="mb-3">
+            <label class="form-label fw-semibold">Versão <span class="text-danger">*</span></label>
+            <input type="text"
+                   name="versao"
+                   class="form-control {% if errors.versao %}is-invalid{% endif %}"
+                   value="{{ form_data.versao|default:'' }}"
+                   placeholder="Ex: v1, v2, 2024-01"
+                   maxlength="20"
+                   required>
+            {% if errors.versao %}
+            <div class="invalid-feedback">{{ errors.versao }}</div>
+            {% endif %}
+            <div class="form-text">Identificador único da versão dentro deste contrato.</div>
+          </div>
+
+          <div class="mb-3">
+            <label class="form-label fw-semibold">Título <span class="text-danger">*</span></label>
+            <input type="text"
+                   name="titulo"
+                   class="form-control {% if errors.titulo %}is-invalid{% endif %}"
+                   value="{{ form_data.titulo|default:'' }}"
+                   placeholder="Ex: Minuta Original, Adendo Cláusula 5ª"
+                   maxlength="200"
+                   required>
+            {% if errors.titulo %}
+            <div class="invalid-feedback">{{ errors.titulo }}</div>
+            {% endif %}
+          </div>
+
+          <div class="mb-3">
+            <label class="form-label fw-semibold">Conteúdo / Descrição das Alterações <span class="text-danger">*</span></label>
+            <textarea name="conteudo"
+                      class="form-control {% if errors.conteudo %}is-invalid{% endif %}"
+                      rows="10"
+                      placeholder="Texto completo da minuta ou descrição detalhada das alterações realizadas nesta versão..."
+                      required>{{ form_data.conteudo|default:'' }}</textarea>
+            {% if errors.conteudo %}
+            <div class="invalid-feedback">{{ errors.conteudo }}</div>
+            {% endif %}
+            <div class="form-text">Registre o texto da minuta ou as alterações em relação à versão anterior.</div>
+          </div>
+
+          <div class="mb-3">
+            <div class="form-check">
+              <input class="form-check-input"
+                     type="checkbox"
+                     name="ativa"
+                     id="id_ativa"
+                     {% if form_data.ativa != False %}checked{% endif %}>
+              <label class="form-check-label" for="id_ativa">
+                Definir como versão ativa
+              </label>
+              <div class="form-text">Ao marcar, todas as outras versões deste contrato serão desativadas.</div>
+            </div>
+          </div>
+
+          <div class="d-flex gap-2">
+            <button type="submit" class="btn btn-primary">
+              <i class="fas fa-save me-1"></i>
+              {% if minuta %}Salvar Alterações{% else %}Registrar Minuta{% endif %}
+            </button>
+            <a href="{% url 'contratos:minutas_listar' contrato.pk|hashid %}" class="btn btn-outline-secondary">
+              Cancelar
+            </a>
+          </div>
+        </form>
+      </div>
+    </div>
+
+  </div>
+</div>
+{% endblock %}

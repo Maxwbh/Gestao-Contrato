@@ -1,0 +1,127 @@
+# Dockerfile para BRCobranca API (Render Free Tier + Gestao-Contrato)
+#
+# Clona o repositório boleto_cnab_api e builda a imagem de runtime.
+# O Gemfile desse repo já aponta para: github.com/maxwbh/brcobranca branch master
+#
+# Repos usados:
+#   API REST : https://github.com/Maxwbh/boleto_cnab_api
+#   Gem      : https://github.com/maxwbh/brcobranca  (dependência via Gemfile)
+#
+# Para forçar re-clone no build:
+#   docker build --build-arg CACHE_BUST=$(date +%s) -f Dockerfile.brcobranca .
+
+# =============================================================================
+# Stage 1: Builder
+# =============================================================================
+FROM ruby:3.3-slim AS builder
+
+RUN apt-get update && apt-get upgrade -y && apt-get install -y --no-install-recommends \
+    build-essential \
+    git \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+# Garantir que o builder usa o mesmo BUNDLE_PATH que o runtime para consistência
+# nas gems de git (ex: brcobranca). Sem isso, o COPY pode não restaurar os caminhos
+# corretamente e o puma falha com "not yet checked out".
+ENV BUNDLE_PATH=/usr/local/bundle \
+    GEM_HOME=/usr/local/bundle \
+    PATH="/usr/local/bundle/bin:$PATH"
+
+# ARG antes do git clone para invalidar o cache Docker quando o repo for atualizado.
+# Render: incremente CACHE_BUST para forçar novo clone + bundle install do zero.
+# CACHE_BUST=8 → boleto_cnab_api atualizado (2026-06-14)
+ARG CACHE_BUST=8
+
+# Clonar repositório da API (shallow clone da branch master)
+RUN git clone --depth 1 --branch master \
+    https://github.com/Maxwbh/boleto_cnab_api.git .
+
+# bundle install resolve gems do Gemfile.lock (incluindo brcobranca via git).
+# NÃO usar "bundle clean --force" pois pode remover checkouts de gems git
+# causando erro "not yet checked out" no runtime.
+# Limpeza pós-install (reduz a imagem final):
+#   - cache/*.gem            → pacotes baixados, inúteis no runtime
+#   - cache/bundler/git      → mirrors bare usados só para clonar (checkouts ficam intactos)
+#   - *.c/*.o                → fontes de extensões já compiladas
+#   - spec/test das gems     → não executados em produção
+RUN bundle config set --local without 'development test' && \
+    bundle install --jobs $(nproc) --retry 3 && \
+    rm -rf /usr/local/bundle/cache/*.gem /usr/local/bundle/cache/bundler/git && \
+    find /usr/local/bundle/gems/ -name "*.c" -delete 2>/dev/null || true && \
+    find /usr/local/bundle/gems/ -name "*.o" -delete 2>/dev/null || true && \
+    find /usr/local/bundle/gems/ -maxdepth 2 -type d \( -name spec -o -name test \) \
+        -exec rm -rf {} + 2>/dev/null || true
+
+# =============================================================================
+# Stage 2: Runtime
+# =============================================================================
+FROM ruby:3.3-slim
+
+# jemalloc: alocador com menos fragmentação — reduz RSS do Ruby em 20-40%,
+# essencial nos 512MB do Free Tier (ghostscript spika ~50-100MB por PDF).
+# fonts-urw-base35: fontes PostScript (Helvetica etc.) usadas pelo RGhost
+# na renderização dos boletos — com --no-install-recommends não é garantido
+# que venham junto do ghostscript (o upstream Alpine instala ghostscript-fonts)
+RUN apt-get update && apt-get upgrade -y && apt-get install -y --no-install-recommends \
+    ghostscript \
+    fonts-urw-base35 \
+    libjemalloc2 \
+    tini \
+    wget \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+# Copiar gems compiladas do builder
+COPY --from=builder /usr/local/bundle /usr/local/bundle
+
+# Copiar aplicação clonada
+COPY --from=builder /app /app
+
+# Remover artefatos desnecessários
+RUN rm -rf .git spec test tmp/* log/* \
+    && find . -name "*.md" -not -name "README.md" -delete 2>/dev/null || true
+
+# Criar diretórios e usuário não-root
+RUN mkdir -p tmp log \
+    && useradd -m -u 1000 app \
+    && chown -R app:app /app /usr/local/bundle
+
+USER app
+
+# LD_PRELOAD=jemalloc       → malloc com menos fragmentação (RSS menor)
+# MALLOC_CONF               → jemalloc devolve memória ociosa ao SO agressivamente
+# PUMA_WORKERS=0            → single mode: 1 processo Ruby em vez de master+worker
+#                             (~metade da RAM, boot mais rápido no cold start)
+# PUMA_WORKER_TIMEOUT=60    → não matar worker durante cold start (puma.rb 1.3.1)
+# RUBY_YJIT_ENABLE=1        → JIT do Ruby 3.3: acelera geração de boleto/CNAB
+#                             (custo de ~+30MB RAM, coberto pela economia acima)
+# RUBY_GC_*MALLOC_LIMIT     → GC dispara mais cedo sob pressão de malloc (16MB)
+# MALLOC_ARENA_MAX          → fallback glibc caso jemalloc não carregue
+ENV RACK_ENV=production \
+    PORT=9292 \
+    LD_PRELOAD=/usr/lib/x86_64-linux-gnu/libjemalloc.so.2 \
+    MALLOC_CONF="background_thread:true,narenas:2,dirty_decay_ms:1000,muzzy_decay_ms:0" \
+    PUMA_WORKERS=0 \
+    PUMA_WORKER_TIMEOUT=60 \
+    RUBY_YJIT_ENABLE=1 \
+    MALLOC_ARENA_MAX=2 \
+    RUBY_GC_HEAP_GROWTH_FACTOR=1.1 \
+    RUBY_GC_MALLOC_LIMIT=16777216 \
+    RUBY_GC_OLDMALLOC_LIMIT=16777216 \
+    BUNDLE_PATH=/usr/local/bundle \
+    BUNDLE_WITHOUT=development:test \
+    GEM_HOME=/usr/local/bundle \
+    PATH="/usr/local/bundle/bin:$PATH"
+
+EXPOSE 9292
+
+# Health check via wget (instalado na imagem)
+HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
+    CMD wget --quiet --tries=1 --spider http://localhost:9292/api/health || exit 1
+
+# tini como PID 1 → propaga SIGTERM ao Puma (shutdown gracioso nos deploys)
+ENTRYPOINT ["/usr/bin/tini", "--"]
+CMD ["bundle", "exec", "puma", "-C", "config/puma.rb", "config.ru"]
