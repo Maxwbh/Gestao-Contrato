@@ -93,16 +93,23 @@ class TenantMixin(AcessoMixin):
         return val
 
     def get_object(self, queryset=None):
-        # Fetcha sem filtro de tenant para poder retornar 403 (não 404)
-        # quando o objeto existe mas pertence a outra imobiliária.
-        if queryset is None:
-            queryset = self.model._default_manager.all()
-        obj = super().get_object(queryset)
-        if not usuario_tem_permissao_total(self.request.user):
-            imob = self._resolve_tenant_imobiliaria(obj)
-            if not usuario_tem_acesso_imobiliaria(self.request.user, imob):
-                raise PermissionDenied
-        return obj
+        from django.http import Http404
+        # Caminho feliz: usa o queryset da VIEW — com o filtro de tenant e,
+        # crucialmente, os select_related/prefetch_related que a view definiu.
+        # (Substituir por _default_manager.all() descartava as otimizações:
+        # to_attr de Prefetch nunca chegava ao template e cada acesso a
+        # relacionamento virava query extra.)
+        try:
+            return super().get_object(queryset)
+        except Http404:
+            # Fora do queryset filtrado: distinguir 403 de 404 — se o objeto
+            # existe mas pertence a outra imobiliária, retorna 403.
+            obj = super().get_object(self.model._default_manager.all())
+            if not usuario_tem_permissao_total(self.request.user):
+                imob = self._resolve_tenant_imobiliaria(obj)
+                if not usuario_tem_acesso_imobiliaria(self.request.user, imob):
+                    raise PermissionDenied
+            return obj
 
     def get_queryset(self):
         qs = super().get_queryset()

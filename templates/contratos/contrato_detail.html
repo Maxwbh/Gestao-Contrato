@@ -54,7 +54,7 @@
 
     .stat-card {
         text-align: center;
-        padding: 1rem;
+        padding: .55rem .75rem;
     }
     .stat-value {
         font-size: 1.5rem;
@@ -196,31 +196,64 @@
 
 <div class="row">
     <div class="col-12">
-        <!-- Cabecalho -->
-        <div class="card mb-4">
-            <div class="card-body">
-                <div class="d-flex justify-content-between align-items-center">
-                    <div>
-                        <h3 class="mb-1">
+        <!-- Cabecalho compacto: título + status + toolbar de ações -->
+        <div class="card mb-3">
+            <div class="card-body py-3">
+                <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2">
+                    <div class="d-flex align-items-center gap-2 flex-wrap">
+                        <h4 class="mb-0">
                             <i class="fas fa-file-contract text-primary"></i>
                             Contrato {{ contrato.numero_contrato }}
-                        </h3>
-                        <p class="text-muted mb-0">
-                            {{ contrato.comprador.nome }} | {{ contrato.imovel.identificacao }}
-                        </p>
-                    </div>
-                    <div>
-                        <span class="badge fs-5 {% if contrato.status == 'ATIVO' %}bg-success{% elif contrato.status == 'QUITADO' %}bg-primary{% elif contrato.status == 'CANCELADO' %}bg-danger{% else %}bg-warning text-dark{% endif %}">
+                        </h4>
+                        <span class="badge {% if contrato.status == 'ATIVO' %}bg-success{% elif contrato.status == 'QUITADO' %}bg-primary{% elif contrato.status == 'CANCELADO' %}bg-danger{% else %}bg-warning text-dark{% endif %}">
                             {{ contrato.get_status_display }}
                         </span>
+                        <span class="text-muted small">{{ contrato.comprador.nome }} · {{ contrato.imovel.identificacao }}</span>
                     </div>
+                </div>
+                <!-- Toolbar de ações (antes vivia no rodapé de ~5.000px) -->
+                <div class="d-flex flex-wrap gap-2 align-items-center border-top pt-2">
+                    <a href="{{ voltar_url }}" class="btn btn-sm btn-secondary">
+                        <i class="fas fa-arrow-left"></i> Voltar
+                    </a>
+                    <a href="{% url 'contratos:editar' contrato.pk|hashid %}" class="btn btn-sm btn-primary">
+                        <i class="fas fa-edit"></i> Editar Contrato
+                    </a>
+                    {% if contrato.status != 'CANCELADO' %}
+                    <a href="{% url 'financeiro:simulador_antecipacao' contrato.pk %}" class="btn btn-sm btn-outline-success">
+                        <i class="fas fa-forward me-1"></i> Simular Antecipação
+                    </a>
+                    <a href="{% url 'financeiro:recibo_antecipacao' contrato.pk %}" class="btn btn-sm btn-outline-info"
+                       title="Baixar recibo das últimas antecipações">
+                        <i class="fas fa-file-pdf me-1"></i> Recibo
+                    </a>
+                    <a href="{% url 'financeiro:renegociar_parcelas' contrato.pk %}" class="btn btn-sm btn-outline-warning"
+                       title="Renegociar parcelas em atraso">
+                        <i class="fas fa-handshake me-1"></i> Renegociar
+                    </a>
+                    <a href="{% url 'contratos:quadro_resumo' contrato.pk|hashid %}" class="btn btn-sm btn-outline-info">
+                        <i class="fas fa-table me-1"></i> Quadro-Resumo
+                    </a>
+                    <a href="{% url 'contratos:minutas_listar' contrato.pk|hashid %}" class="btn btn-sm btn-outline-secondary">
+                        <i class="fas fa-file-alt me-1"></i> Minutas
+                    </a>
+                    <a href="{% url 'contratos:calcular_rescisao' contrato.pk|hashid %}" class="btn btn-sm btn-outline-danger">
+                        <i class="fas fa-file-contract me-1"></i> Rescisão
+                    </a>
+                    <a href="{% url 'contratos:calcular_cessao' contrato.pk|hashid %}" class="btn btn-sm btn-outline-warning">
+                        <i class="fas fa-exchange-alt me-1"></i> Cessão
+                    </a>
+                    <button type="button" class="btn btn-sm btn-danger" onclick="confirmarCancelamento()">
+                        <i class="fas fa-ban"></i> Cancelar Contrato
+                    </button>
+                    {% endif %}
                 </div>
             </div>
         </div>
 
         <!-- Alerta: Intermediárias Vencidas sem Boleto (HU-13) -->
         {% if intermediarias_vencidas_sem_boleto %}
-        <div class="alert alert-warning d-flex align-items-center mb-3" role="alert">
+        <div class="alert alert-warning d-flex align-items-center py-2 mb-2" role="alert">
             <i class="fas fa-exclamation-triangle me-2 fs-5"></i>
             <div>
                 <strong>{{ intermediarias_vencidas_sem_boleto|length }} prestação(ões) intermediária(s) vencida(s)</strong> sem boleto gerado.
@@ -231,39 +264,39 @@
         </div>
         {% endif %}
 
-        <!-- Estatisticas Rapidas -->
-        <div class="row mb-4">
-            <div class="col-md-3">
-                <div class="card stat-card border-primary">
+        <!-- Estatisticas Rapidas + Progresso (bloco único e compacto) -->
+        <div class="row g-2 mb-2">
+            <div class="col-md-3 col-6">
+                <div class="card stat-card border-primary h-100">
                     <div class="stat-value text-primary">{{ contrato.valor_total|moeda }}</div>
                     <div class="stat-label">Valor Total</div>
                 </div>
             </div>
-            <div class="col-md-3">
-                <div class="card stat-card border-success">
+            <div class="col-md-3 col-6">
+                <div class="card stat-card border-success h-100">
                     <div class="stat-value text-success">{{ valor_pago|moeda }}</div>
                     <div class="stat-label">Valor Pago</div>
                 </div>
             </div>
-            <div class="col-md-3">
-                <div class="card stat-card border-warning">
+            <div class="col-md-3 col-6">
+                <div class="card stat-card border-warning h-100">
                     <div class="stat-value text-warning">{{ saldo_devedor|moeda }}</div>
                     <div class="stat-label">Saldo Devedor</div>
                 </div>
             </div>
-            <div class="col-md-3">
-                <div class="card stat-card border-info">
+            <div class="col-md-3 col-6">
+                <div class="card stat-card border-info h-100">
                     <div class="stat-value text-info">{{ parcelas_pagas }}/{{ contrato.numero_parcelas }}</div>
                     <div class="stat-label">Parcelas Pagas</div>
                 </div>
             </div>
         </div>
 
-        <!-- Barra de Progresso -->
-        <div class="card mb-4">
-            <div class="card-body">
-                <h6 class="mb-3">Progresso do Pagamento</h6>
-                <div class="progress progress-lg">
+        <!-- Progresso em linha única -->
+        <div class="card mb-3">
+            <div class="card-body py-2 d-flex flex-wrap align-items-center gap-3">
+                <span class="small fw-semibold text-muted text-nowrap">Progresso do Pagamento</span>
+                <div class="progress flex-grow-1" style="height:1.05rem; min-width:200px;">
                     <div class="progress-bar {% if progresso >= 100 %}bg-success{% elif progresso >= 50 %}bg-info{% else %}bg-warning{% endif %}"
                          role="progressbar"
                          style="width: {{ progresso|stringformat:'f' }}%"
@@ -273,13 +306,9 @@
                         {{ progresso|floatformat:1 }}%
                     </div>
                 </div>
-                <div class="d-flex justify-content-between mt-2 small text-muted">
-                    <span>{{ parcelas_pagas }} parcelas pagas</span>
-                    <span>{{ parcelas_pendentes }} parcelas pendentes</span>
-                    {% if parcelas_atrasadas > 0 %}
-                    <span class="text-danger fw-bold">{{ parcelas_atrasadas }} em atraso!</span>
-                    {% endif %}
-                </div>
+                <span class="small text-muted text-nowrap">{{ parcelas_pagas }} pagas · {{ parcelas_pendentes }} pendentes
+                    {% if parcelas_atrasadas > 0 %}· <span class="text-danger fw-bold">{{ parcelas_atrasadas }} em atraso!</span>{% endif %}
+                </span>
             </div>
         </div>
 
@@ -1275,46 +1304,14 @@
             </div>
         </div>
 
-        <!-- Botoes de Acao -->
-        <div class="card mt-4">
-            <div class="card-body d-flex justify-content-between">
-                <a href="{{ voltar_url }}" class="btn btn-secondary">
-                    <i class="fas fa-arrow-left"></i> Voltar
-                </a>
-                <div class="d-flex flex-wrap gap-2">
-                    <a href="{% url 'contratos:editar' contrato.pk|hashid %}" class="btn btn-primary">
-                        <i class="fas fa-edit"></i> Editar Contrato
-                    </a>
-                    {% if contrato.status != 'CANCELADO' %}
-                    <a href="{% url 'financeiro:simulador_antecipacao' contrato.pk %}" class="btn btn-outline-success">
-                        <i class="fas fa-forward me-1"></i> Simular Antecipação
-                    </a>
-                    <a href="{% url 'financeiro:recibo_antecipacao' contrato.pk %}" class="btn btn-outline-info"
-                       title="Baixar recibo das últimas antecipações">
-                        <i class="fas fa-file-pdf me-1"></i> Recibo Antecipação
-                    </a>
-                    <a href="{% url 'financeiro:renegociar_parcelas' contrato.pk %}" class="btn btn-outline-warning"
-                       title="Renegociar parcelas em atraso">
-                        <i class="fas fa-handshake me-1"></i> Renegociar
-                    </a>
-                    <a href="{% url 'contratos:quadro_resumo' contrato.pk|hashid %}" class="btn btn-outline-info">
-                        <i class="fas fa-table me-1"></i> Quadro-Resumo
-                    </a>
-                    <a href="{% url 'contratos:minutas_listar' contrato.pk|hashid %}" class="btn btn-outline-secondary">
-                        <i class="fas fa-file-alt me-1"></i> Minutas
-                    </a>
-                    <a href="{% url 'contratos:calcular_rescisao' contrato.pk|hashid %}" class="btn btn-outline-danger">
-                        <i class="fas fa-file-contract me-1"></i> Calcular Rescisão
-                    </a>
-                    <a href="{% url 'contratos:calcular_cessao' contrato.pk|hashid %}" class="btn btn-outline-warning">
-                        <i class="fas fa-exchange-alt me-1"></i> Calcular Cessão
-                    </a>
-                    <button type="button" class="btn btn-danger" onclick="confirmarCancelamento()">
-                        <i class="fas fa-ban"></i> Cancelar Contrato
-                    </button>
-                    {% endif %}
-                </div>
-            </div>
+        <!-- Rodapé: só a volta (as ações do contrato ficam na toolbar do topo) -->
+        <div class="d-flex justify-content-between align-items-center mt-4">
+            <a href="{{ voltar_url }}" class="btn btn-secondary">
+                <i class="fas fa-arrow-left"></i> Voltar
+            </a>
+            <a href="#" class="btn btn-outline-secondary btn-sm" onclick="window.scrollTo({top:0,behavior:'smooth'});return false;">
+                <i class="fas fa-arrow-up me-1"></i> Topo (ações do contrato)
+            </a>
         </div>
     </div>
 </div>
