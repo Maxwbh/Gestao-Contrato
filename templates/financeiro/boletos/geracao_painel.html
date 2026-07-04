@@ -234,9 +234,16 @@
                 </div>
             </div>
             <div class="modal-footer">
-                <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-secondary btn-sm" id="btnCancelarGerar" data-bs-dismiss="modal">Cancelar</button>
                 <button type="button" class="btn btn-primary btn-sm" id="btnConfirmarGerar">
                     <i class="fas fa-check me-1"></i> Confirmar Geração
+                </button>
+                <!-- Mostrados só após a geração concluir -->
+                <a href="{% url 'financeiro:remessa_painel' %}" class="btn btn-outline-primary btn-sm d-none" id="btnIrRemessa">
+                    <i class="fas fa-paper-plane me-1"></i> Gerar Remessa
+                </a>
+                <button type="button" class="btn btn-success btn-sm d-none" id="btnConcluirGerar" data-bs-dismiss="modal">
+                    <i class="fas fa-check me-1"></i> Concluir
                 </button>
             </div>
         </div>
@@ -301,6 +308,10 @@
         document.getElementById('progressoGerar').classList.add('d-none');
         document.getElementById('formGerar').classList.remove('d-none');
         document.getElementById('btnConfirmarGerar').classList.remove('d-none');
+        // Restaura o rodapé inicial (caso o modal já tenha sido usado antes)
+        document.getElementById('btnCancelarGerar').classList.remove('d-none');
+        document.getElementById('btnConcluirGerar').classList.add('d-none');
+        document.getElementById('btnIrRemessa').classList.add('d-none');
         if (bsModal) bsModal.show();
     }
 
@@ -436,6 +447,14 @@
             (data.carnes || []).forEach(c => itens.push(`<li>Carnê ${c.contrato}: <a href="${c.carne_url}">baixar PDF</a></li>`));
             document.getElementById('listaResultado').innerHTML = itens.filter(Boolean).join('');
             document.getElementById('resultadoGerar').classList.remove('d-none');
+
+            // Rodapé pós-geração: troca "Cancelar" por "Concluir" (fecha e
+            // atualiza a tela) e oferece o atalho para o próximo passo.
+            document.getElementById('btnCancelarGerar').classList.add('d-none');
+            document.getElementById('btnConcluirGerar').classList.remove('d-none');
+            if (data.total_gerados > 0) {
+                document.getElementById('btnIrRemessa').classList.remove('d-none');
+            }
 
             // Toast de resumo (sucesso / parcial / rate limit / sem geração)
             if (data.rate_limit_abort) {
