@@ -41,3 +41,7 @@ python manage.py gerar_dados_teste --so-retorno    # baixas simuladas (alimenta 
   Use `{% load l10n %}` + `|unlocalize`. `page.on('pageerror')` pega isso.
 - API BRCobrança (localhost:9292) fica OFF — botões "Gerar" aguardam cold-start
   (~105s) antes de falhar; dê timeout generoso ou verifique o caminho bloqueado.
+- Dropdowns Materialize fecham via listener em **capture no body** —
+  para impedir fechamento num item, intercepte em capture no `document`
+  (stopPropagation no bubble do li chega tarde; pointer-events:none no li
+  faz o clique "atravessar" e virar click-outside, fechando igual).

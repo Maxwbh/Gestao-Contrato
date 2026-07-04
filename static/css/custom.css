@@ -657,6 +657,26 @@ ul.dropdown-content.app-dropdown li > a:hover {
 .app-dropdown li + li:has(.dropdown-header-item) {
     margin-top: 0;
 }
+/* O LI que contém um header de seção NÃO é item de menu: sem cursor
+   pointer nem highlight de hover. O clique é engolido via JS no
+   base.html (stopPropagation) — pointer-events:none aqui NÃO serve,
+   pois o clique atravessaria para o documento e o Materialize
+   fecharia o dropdown como "clique fora". */
+.app-dropdown li:has(> .dropdown-header-item) {
+    cursor: default;
+    min-height: 0;
+}
+.app-dropdown li:has(> .dropdown-header-item):hover {
+    background: transparent !important;
+}
+/* Subheaders do menu mobile (sidenav): rótulos de seção, não links */
+.sidenav li:has(> .menu-section-label) {
+    pointer-events: none;
+}
+.sidenav .menu-section-label {
+    display: block;
+    cursor: default;
+}
 .app-dropdown .divider {
     background: #e8edf0;
     height: 1px;
