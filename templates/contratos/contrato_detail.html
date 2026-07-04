@@ -7,6 +7,15 @@
 
 {% block extra_css %}
 <style>
+    /* Grade de informações: os cards fluem preenchendo toda a largura
+       (auto-fill), em vez de empilhar numa coluna fixa deixando metade vazia. */
+    .info-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+        gap: 1rem;
+        align-items: start;
+    }
+    .info-grid > .card { margin-bottom: 0 !important; }
     .info-card {
         border-left: 4px solid;
     }
@@ -134,57 +143,6 @@
         0% { background-color: #d4edda; }
         100% { background-color: transparent; }
     }
-
-    /* ── Drag & Resize dos cards ─────────────────────────────────── */
-    .sc-wrap {
-        position: relative;
-        margin-bottom: 0.75rem;
-    }
-    .sc-drag-handle {
-        position: absolute;
-        top: 0; left: 0; right: 0;
-        height: 18px;
-        cursor: grab;
-        z-index: 10;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        opacity: 0;
-        transition: opacity .15s;
-    }
-    .sc-wrap:hover .sc-drag-handle { opacity: 1; }
-    .sc-drag-handle:active { cursor: grabbing; }
-    .sc-drag-handle::before {
-        content: '⠿ ⠿ ⠿';
-        font-size: .6rem;
-        letter-spacing: 3px;
-        color: #6c757d;
-        pointer-events: none;
-    }
-    .sc-resize-bar {
-        height: 8px;
-        cursor: ns-resize;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        opacity: 0;
-        transition: opacity .15s;
-        user-select: none;
-    }
-    .sc-wrap:hover .sc-resize-bar { opacity: 1; }
-    .sc-resize-bar::before {
-        content: '— — —';
-        font-size: .6rem;
-        letter-spacing: 4px;
-        color: #adb5bd;
-        pointer-events: none;
-    }
-    .sc-card-inner {
-        overflow: hidden;
-    }
-    .sc-ghost { opacity: .35; }
-    .sc-chosen { box-shadow: 0 0 0 2px #0d6efd66; border-radius: .375rem; }
-    .sc-dragging { opacity: .9; }
     /* sticky thead deve ficar abaixo do modal (modal z-index ~1050) */
     .table-responsive thead.sticky-top { z-index: 1; }
 </style>
@@ -270,7 +228,7 @@
         {% endif %}
 
         <!-- Estatisticas Rapidas + Progresso (bloco único e compacto) -->
-        <div class="row g-2 mb-2">
+        <div class="row g-3 mb-3">
             <div class="col-md-3 col-6">
                 <div class="card stat-card border-primary h-100">
                     <div class="stat-value text-primary">{{ contrato.valor_total|moeda }}</div>
@@ -333,566 +291,564 @@
         </div>
         {% endif %}
 
-        <div class="row">
-            <!-- Coluna Esquerda: Informacoes -->
-            <div class="col-lg-5" id="sort-left">
-                <!-- Comprador -->
-                <div class="card info-card primary mb-3">
-                    <div class="card-header bg-primary text-white">
-                        <i class="fas fa-user"></i> Comprador
-                    </div>
-                    <div class="card-body">
-                        <div class="info-item">
-                            <div class="info-label">Nome</div>
-                            <div class="info-value">{{ contrato.comprador.nome }}</div>
-                        </div>
-                        <div class="info-item">
-                            <div class="info-label">CPF/CNPJ</div>
-                            <div class="info-value">{{ contrato.comprador.cpf_cnpj }}</div>
-                        </div>
-                        {% if contrato.comprador.telefone %}
-                        <div class="info-item">
-                            <div class="info-label">Telefone</div>
-                            <div class="info-value">{{ contrato.comprador.telefone }}</div>
-                        </div>
-                        {% endif %}
-                        {% if contrato.comprador.email %}
-                        <div class="info-item">
-                            <div class="info-label">E-mail</div>
-                            <div class="info-value">{{ contrato.comprador.email }}</div>
-                        </div>
-                        {% endif %}
-                    </div>
-                </div>
+        <!-- Informações do contrato — grade responsiva (preenche a largura
+             toda; antes ficava numa coluna fixa deixando metade vazia) -->
+        <div class="info-grid mb-3">
 
-                <!-- Imovel -->
-                <div class="card info-card success mb-3">
-                    <div class="card-header bg-success text-white">
-                        <i class="fas fa-home"></i> Imovel
-                    </div>
-                    <div class="card-body">
-                        <div class="info-item">
-                            <div class="info-label">Identificacao</div>
-                            <div class="info-value">{{ contrato.imovel.identificacao }}</div>
-                        </div>
-                        {% if contrato.imovel.loteamento %}
-                        <div class="info-item">
-                            <div class="info-label">Loteamento</div>
-                            <div class="info-value">{{ contrato.imovel.loteamento }}</div>
-                        </div>
-                        {% endif %}
-                        <div class="info-item">
-                            <div class="info-label">Tipo</div>
-                            <div class="info-value">{{ contrato.imovel.get_tipo_display }}</div>
-                        </div>
-                        {% if contrato.imovel.area %}
-                        <div class="info-item">
-                            <div class="info-label">Area</div>
-                            <div class="info-value">{{ contrato.imovel.area }} m2</div>
-                        </div>
-                        {% endif %}
-                    </div>
-                </div>
-
-                <!-- Valores -->
-                <div class="card info-card warning mb-3">
-                    <div class="card-header bg-warning text-dark">
-                        <i class="fas fa-dollar-sign"></i> Valores
-                    </div>
-                    <div class="card-body">
-                        <div class="info-item">
-                            <div class="info-label">Valor Total</div>
-                            <div class="info-value">{{ contrato.valor_total|moeda }}</div>
-                        </div>
-                        <div class="info-item">
-                            <div class="info-label">Entrada</div>
-                            <div class="info-value">{{ contrato.valor_entrada|moeda }}</div>
-                        </div>
-                        <div class="info-item">
-                            <div class="info-label">Valor Financiado</div>
-                            <div class="info-value">{{ contrato.valor_financiado|moeda }}</div>
-                        </div>
-                        <div class="info-item">
-                            <div class="info-label">Valor Original Parcela</div>
-                            <div class="info-value">{{ contrato.valor_parcela_original|moeda }}</div>
-                        </div>
-                        <div class="info-item">
-                            <div class="info-label">Sistema de Amortização</div>
-                            <div class="info-value">
-                                {% if contrato.tipo_amortizacao == 'SAC' %}
-                                <span class="badge bg-warning text-dark">SAC — Amortização Constante</span>
-                                {% else %}
-                                <span class="badge bg-info text-dark">Tabela Price</span>
-                                {% endif %}
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Configuracoes -->
-                <div class="card info-card info mb-3">
-                    <div class="card-header bg-info text-white">
-                        <i class="fas fa-cog"></i> Configuracoes
-                    </div>
-                    <div class="card-body">
-                        <div class="info-item">
-                            <div class="info-label">Juros de Mora</div>
-                            <div class="info-value">{{ contrato.percentual_juros_mora|numero_br:2 }}% a.m.</div>
-                        </div>
-                        <div class="info-item">
-                            <div class="info-label">Multa</div>
-                            <div class="info-value">{{ contrato.percentual_multa|numero_br:2 }}%</div>
-                        </div>
-                        <div class="info-item">
-                            <div class="info-label">Correcao Monetaria</div>
-                            <div class="info-value">{{ contrato.get_tipo_correcao_display }}</div>
-                        </div>
-                        <div class="info-item">
-                            <div class="info-label">Prazo Reajuste</div>
-                            <div class="info-value">{{ contrato.prazo_reajuste_meses }} meses</div>
-                        </div>
-                        {% if contrato.tipo_correcao != 'FIXO' %}
-                        <div class="info-item">
-                            <div class="info-label">Proximo Reajuste</div>
-                            {% if contrato.data_proximo_reajuste %}
-                            <div class="info-value text-warning">{{ contrato.data_proximo_reajuste|date:"d/m/Y" }}</div>
-                            {% elif contrato.numero_parcelas <= contrato.prazo_reajuste_meses %}
-                            <div class="info-value text-muted"><small>N/A — contrato no ciclo 1</small></div>
-                            {% else %}
-                            <div class="info-value text-muted">—</div>
-                            {% endif %}
-                        </div>
-                        {% endif %}
-                        {% if contrato.spread_reajuste %}
-                        <div class="info-item">
-                            <div class="info-label">Spread</div>
-                            <div class="info-value text-info">+{{ contrato.spread_reajuste|numero_br:4 }} p.p.</div>
-                        </div>
-                        {% endif %}
-                        {% if contrato.reajuste_piso is not None %}
-                        <div class="info-item">
-                            <div class="info-label">Piso Reajuste</div>
-                            <div class="info-value text-info">{{ contrato.reajuste_piso|numero_br:4 }}%</div>
-                        </div>
-                        {% endif %}
-                        {% if contrato.reajuste_teto is not None %}
-                        <div class="info-item">
-                            <div class="info-label">Teto Reajuste</div>
-                            <div class="info-value text-warning">{{ contrato.reajuste_teto|numero_br:4 }}%</div>
-                        </div>
-                        {% endif %}
-                        {% if contrato.tipo_correcao_fallback %}
-                        <div class="info-item">
-                            <div class="info-label">Índice Fallback</div>
-                            <div class="info-value text-muted">{{ contrato.get_tipo_correcao_fallback_display }}</div>
-                        </div>
-                        {% endif %}
-                    </div>
-                </div>
-
-                <!-- Cláusulas Contratuais -->
-                <div class="card info-card mb-3" style="border-left:4px solid #6f42c1;">
-                    <div class="card-header text-white" style="background-color:#6f42c1;">
-                        <i class="fas fa-file-alt"></i> Cláusulas Contratuais
-                    </div>
-                    <div class="card-body">
-                        <div class="info-item">
-                            <div class="info-label">% Fruição</div>
-                            <div class="info-value">{{ contrato.percentual_fruicao|numero_br:4 }}% a.m.</div>
-                        </div>
-                        <div class="info-item">
-                            <div class="info-label">Multa Rescisão Penal</div>
-                            <div class="info-value">{{ contrato.percentual_multa_rescisao_penal|numero_br:4 }}%</div>
-                        </div>
-                        <div class="info-item">
-                            <div class="info-label">Desp. Adm. Rescisão</div>
-                            <div class="info-value">{{ contrato.percentual_multa_rescisao_adm|numero_br:4 }}%</div>
-                        </div>
-                        <div class="info-item">
-                            <div class="info-label">% Cessão de Direitos</div>
-                            <div class="info-value">{{ contrato.percentual_cessao|numero_br:4 }}%</div>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Parâmetros de Intermediárias -->
-                <div class="card info-card mb-3" style="border-left:4px solid #fd7e14;">
-                    <div class="card-header text-white" style="background-color:#fd7e14;">
-                        <i class="fas fa-sliders-h"></i> Parâmetros de Intermediárias
-                    </div>
-                    <div class="card-body">
-                        <div class="info-item">
-                            <div class="info-label">Reduzem PMT</div>
-                            <div class="info-value">
-                                {% if contrato.intermediarias_reduzem_pmt %}
-                                <span class="badge bg-success">Sim</span>
-                                {% else %}
-                                <span class="badge bg-secondary">Não</span>
-                                {% endif %}
-                            </div>
-                        </div>
-                        <div class="info-item">
-                            <div class="info-label">Reajustadas</div>
-                            <div class="info-value">
-                                {% if contrato.intermediarias_reajustadas %}
-                                <span class="badge bg-success">Sim</span>
-                                {% else %}
-                                <span class="badge bg-secondary">Não</span>
-                                {% endif %}
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Configuração de Boleto -->
-                <div class="card info-card mb-3" style="border-left:4px solid #20c997;">
-                    <div class="card-header text-white" style="background-color:#20c997;">
-                        <i class="fas fa-barcode"></i> Configuração de Boleto
-                    </div>
-                    <div class="card-body">
-                        <div class="info-item">
-                            <div class="info-label">Config. Boleto</div>
-                            <div class="info-value">
-                                {% if contrato.usar_config_boleto_imobiliaria %}
-                                <span class="badge bg-info">Padrão da Imobiliária</span>
-                                {% else %}
-                                <span class="badge bg-warning text-dark">Personalizada</span>
-                                {% endif %}
-                            </div>
-                        </div>
-                        {% if not contrato.usar_config_boleto_imobiliaria %}
-                        {% if contrato.tipo_valor_multa %}
-                        <div class="info-item">
-                            <div class="info-label">Multa (boleto)</div>
-                            <div class="info-value">
-                                {{ contrato.valor_multa_boleto|default:"0.00" }}
-                                {% if contrato.tipo_valor_multa == 'PERCENTUAL' %}%{% else %}R${% endif %}
-                            </div>
-                        </div>
-                        {% endif %}
-                        {% if contrato.tipo_valor_juros %}
-                        <div class="info-item">
-                            <div class="info-label">Juros (boleto)</div>
-                            <div class="info-value">
-                                {{ contrato.valor_juros_boleto|default:"0.00" }}
-                                {% if contrato.tipo_valor_juros == 'PERCENTUAL' %}% a.m.{% else %}R$ a.m.{% endif %}
-                            </div>
-                        </div>
-                        {% endif %}
-                        {% if contrato.dias_carencia_boleto %}
-                        <div class="info-item">
-                            <div class="info-label">Carência</div>
-                            <div class="info-value">{{ contrato.dias_carencia_boleto }} dias</div>
-                        </div>
-                        {% endif %}
-                        {% if contrato.tipo_valor_desconto %}
-                        <div class="info-item">
-                            <div class="info-label">Desconto (boleto)</div>
-                            <div class="info-value">
-                                {{ contrato.valor_desconto_boleto|default:"0.00" }}
-                                {% if contrato.tipo_valor_desconto == 'PERCENTUAL' %}%{% else %}R${% endif %}
-                                {% if contrato.dias_desconto_boleto %} — {{ contrato.dias_desconto_boleto }}d antes{% endif %}
-                            </div>
-                        </div>
-                        {% endif %}
-                        {% if contrato.instrucao_boleto_1 %}
-                        <div class="info-item">
-                            <div class="info-label">Instrução 1</div>
-                            <div class="info-value small">{{ contrato.instrucao_boleto_1 }}</div>
-                        </div>
-                        {% endif %}
-                        {% if contrato.instrucao_boleto_2 %}
-                        <div class="info-item">
-                            <div class="info-label">Instrução 2</div>
-                            <div class="info-value small">{{ contrato.instrucao_boleto_2 }}</div>
-                        </div>
-                        {% endif %}
-                        {% if contrato.instrucao_boleto_3 %}
-                        <div class="info-item">
-                            <div class="info-label">Instrução 3</div>
-                            <div class="info-value small">{{ contrato.instrucao_boleto_3 }}</div>
-                        </div>
-                        {% endif %}
-                        {% endif %}
-                    </div>
-                </div>
-
-                <!-- Conta Bancaria da Imobiliaria -->
-                <div class="card info-card success mb-3">
-                    <div class="card-header bg-success text-white">
-                        <i class="fas fa-university"></i> Conta Bancaria
-                    </div>
-                    <div class="card-body">
-                        {% if conta_bancaria %}
-                        <div class="info-item">
-                            <div class="info-label">Banco</div>
-                            <div class="info-value">{{ conta_bancaria.get_banco_display }}</div>
-                        </div>
-                        <div class="info-item">
-                            <div class="info-label">Agencia</div>
-                            <div class="info-value">{{ conta_bancaria.agencia }}{% if conta_bancaria.agencia_dv %}-{{ conta_bancaria.agencia_dv }}{% endif %}</div>
-                        </div>
-                        <div class="info-item">
-                            <div class="info-label">Conta</div>
-                            <div class="info-value">{{ conta_bancaria.conta }}{% if conta_bancaria.conta_dv %}-{{ conta_bancaria.conta_dv }}{% endif %}</div>
-                        </div>
-                        {% if conta_bancaria.convenio %}
-                        <div class="info-item">
-                            <div class="info-label">Convenio</div>
-                            <div class="info-value">{{ conta_bancaria.convenio }}</div>
-                        </div>
-                        {% endif %}
-                        <div class="info-item">
-                            <div class="info-label">Carteira</div>
-                            <div class="info-value">{{ conta_bancaria.carteira }}</div>
-                        </div>
-                        {% else %}
-                        <div class="text-muted text-center py-2">
-                            <i class="fas fa-exclamation-circle"></i> Nenhuma conta bancaria configurada
-                        </div>
-                        {% endif %}
-                    </div>
-                </div>
-
+        <!-- Comprador -->
+        <div class="card info-card primary mb-3">
+            <div class="card-header bg-primary text-white">
+                <i class="fas fa-user"></i> Comprador
             </div>
-
-            <!-- Coluna Direita: Parcelas -->
-            <div class="col-lg-7" id="sort-right">
-                <div class="card">
-                    <div class="card-header bg-dark text-white d-flex justify-content-between align-items-center">
-                        <span><i class="fas fa-list"></i> Parcelas</span>
-                        <div class="d-flex align-items-center gap-2">
-                            {% if proxima_parcela %}
-                            <span class="badge bg-warning text-dark">
-                                Proxima: {{ proxima_parcela.data_vencimento|date:"d/m/Y" }}
-                            </span>
-                            {% endif %}
-                            {% if tabela_juros %}
-                            <button type="button" class="btn btn-sm btn-outline-light"
-                                    id="btn-toggle-amort"
-                                    onclick="toggleColunaAmort()"
-                                    title="Exibir/ocultar breakdown de amortização e juros">
-                                <i class="fas fa-calculator"></i> Amort/Juros
-                            </button>
-                            {% endif %}
-                            <button type="button" class="btn btn-sm btn-success" onclick="abrirModalCarne()">
-                                <i class="fas fa-file-invoice-dollar"></i> Gerar Carne
-                            </button>
-                            <form method="post" action="{% url 'financeiro:download_zip_boletos' contrato.pk %}" style="display:inline;">
-                                {% csrf_token %}
-                                <button type="submit" class="btn btn-sm btn-outline-secondary" title="Baixar todos os boletos em ZIP">
-                                    <i class="fas fa-file-archive"></i> ZIP
-                                </button>
-                            </form>
-                        </div>
-                    </div>
-                    <div class="card-body p-0">
-                        <div class="table-responsive" style="max-height: 600px; overflow-y: auto;">
-                            <table class="table table-sm table-hover mb-0">
-                                <thead class="table-light sticky-top">
-                                    <tr>
-                                        <th class="text-center">#</th>
-                                        <th>Vencimento</th>
-                                        <th class="text-end">Valor</th>
-                                        <th class="text-end col-amort d-none" title="Amortização do principal">Amort.</th>
-                                        <th class="text-end col-amort d-none" title="Juros embutidos na parcela">Juros</th>
-                                        <th class="text-center">Boleto</th>
-                                        <th class="text-center">Status</th>
-                                        <th class="text-center">Acoes</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {% for parcela in parcelas %}
-                                    <tr class="parcela-row {% if parcela.pago %}paga{% elif parcela.esta_vencida %}atrasada{% elif parcela == proxima_parcela %}proxima{% endif %}">
-                                        <td class="text-center">
-                                            <strong>{{ parcela.numero_parcela }}</strong>
-                                        </td>
-                                        <td>{{ parcela.data_vencimento|date:"d/m/Y" }}</td>
-                                        <td class="text-end">
-                                            {{ parcela.valor_atual|moeda }}
-                                            {% if parcela.pago %}
-                                            <br><small class="text-muted">Pago: {{ parcela.valor_pago|moeda }}</small>
-                                            {% endif %}
-                                        </td>
-                                        <td class="text-end font-monospace col-amort d-none" style="font-size:0.8rem;">
-                                            {% if parcela.amortizacao %}{{ parcela.amortizacao|moeda }}{% else %}—{% endif %}
-                                        </td>
-                                        <td class="text-end font-monospace col-amort d-none" style="font-size:0.8rem;color:#6c757d;">
-                                            {% if parcela.juros_embutido %}{{ parcela.juros_embutido|moeda }}{% else %}—{% endif %}
-                                        </td>
-                                        <td class="text-center">
-                                            {% if parcela.tem_boleto %}
-                                                <span class="badge bg-success" title="Boleto gerado"><i class="fas fa-barcode"></i></span>
-                                                {% if parcela.linha_digitavel %}
-                                                <div class="mt-1 d-flex align-items-center justify-content-center gap-1">
-                                                    <span class="font-monospace text-muted" style="font-size:0.65rem;max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="{{ parcela.linha_digitavel }}">{{ parcela.linha_digitavel }}</span>
-                                                    <button type="button" class="btn btn-link btn-sm p-0 text-secondary"
-                                                            onclick="copiarLinhaDigitavel('{{ parcela.linha_digitavel|escapejs }}')"
-                                                            title="Copiar linha digitável">
-                                                        <i class="fas fa-copy" style="font-size:0.75rem;"></i>
-                                                    </button>
-                                                </div>
-                                                {% endif %}
-                                            {% else %}
-                                                <span class="badge bg-secondary" title="Sem boleto">
-                                                    <i class="fas fa-minus"></i>
-                                                </span>
-                                            {% endif %}
-                                        </td>
-                                        <td class="text-center">
-                                            {% if parcela.pago %}
-                                                <span class="badge bg-success">
-                                                    <i class="fas fa-check"></i> Pago
-                                                </span>
-                                                <br><small>{{ parcela.data_pagamento|date:"d/m/Y" }}</small>
-                                            {% elif parcela.esta_vencida %}
-                                                <span class="badge bg-danger">
-                                                    <i class="fas fa-exclamation-triangle"></i> Vencida {{ parcela.dias_atraso }}d
-                                                </span>
-                                            {% elif parcela == proxima_parcela %}
-                                                <span class="badge bg-warning text-dark">
-                                                    <i class="fas fa-clock"></i> Próxima
-                                                </span>
-                                            {% elif reajuste_pendente_desde_parcela and parcela.numero_parcela >= reajuste_pendente_desde_parcela %}
-                                                <span class="badge bg-secondary">
-                                                    <i class="fas fa-sync-alt"></i> Ag. Reajuste
-                                                </span>
-                                            {% else %}
-                                                <span class="badge bg-primary">
-                                                    <i class="fas fa-calendar"></i> A Vencer
-                                                </span>
-                                            {% endif %}
-                                        </td>
-                                        <td class="text-center">
-                                            <div class="btn-group btn-group-sm">
-                                                {% if not parcela.pago %}
-                                                    {% if parcela.tem_boleto %}
-                                                        <button type="button" class="btn btn-outline-primary"
-                                                                onclick="abrirModalBoleto('{{ parcela.pk|hashid }}')" title="Ver Boleto">
-                                                            <i class="fas fa-eye"></i>
-                                                        </button>
-                                                        <button type="button" class="btn btn-outline-info"
-                                                                onclick="abrirModalCompartilhar('{{ parcela.pk|hashid }}', '{{ parcela.linha_digitavel|escapejs }}', {{ parcela.numero_parcela }}, '{{ parcela.data_vencimento|date:"d/m/Y" }}', '{{ parcela.valor_atual|stringformat:"f" }}', '{{ parcela.token_publico }}')"
-                                                                title="Compartilhar Boleto">
-                                                            <i class="fas fa-share-alt"></i>
-                                                        </button>
-                                                        <button type="button" class="btn btn-outline-warning"
-                                                                onclick="regenerarBoleto('{{ parcela.pk|hashid }}', this)" title="Atualizar Boleto">
-                                                            <i class="fas fa-sync"></i>
-                                                        </button>
-                                                    {% else %}
-                                                        <button type="button" class="btn btn-outline-success"
-                                                                onclick="gerarBoleto('{{ parcela.pk|hashid }}', this)" title="Gerar Boleto">
-                                                            <i class="fas fa-barcode"></i>
-                                                        </button>
-                                                    {% endif %}
-                                                    <button type="button" class="btn btn-outline-success"
-                                                            onclick="abrirModalPagamento('{{ parcela.pk|hashid }}', '{{ parcela.data_vencimento|date:"Y-m-d" }}', '{{ parcela.valor_atual|stringformat:"f" }}', '{{ contrato.percentual_juros_mora|stringformat:"f" }}', '{{ contrato.percentual_multa|stringformat:"f" }}')"
-                                                            title="Registrar Pagamento">
-                                                        <i class="fas fa-dollar-sign"></i>
-                                                    </button>
-                                                {% else %}
-                                                    <span class="text-success" title="Parcela quitada">
-                                                        <i class="fas fa-check-circle"></i>
-                                                    </span>
-                                                {% endif %}
-                                            </div>
-                                        </td>
-                                    </tr>
-                                    {% empty %}
-                                    <tr>
-                                        <td colspan="8" class="text-center text-muted py-4">
-                                            <i class="fas fa-info-circle"></i> Nenhuma parcela gerada
-                                        </td>
-                                    </tr>
-                                    {% endfor %}
-                                </tbody>
-                            </table>
-                        </div>
-                    </div>
+            <div class="card-body">
+                <div class="info-item">
+                    <div class="info-label">Nome</div>
+                    <div class="info-value">{{ contrato.comprador.nome }}</div>
                 </div>
-
-                <!-- Prestações Intermediárias (HU-13) -->
-                {% if total_intermediarias > 0 %}
-                <div class="card mt-3">
-                    <div class="card-header bg-warning text-dark d-flex justify-content-between align-items-center">
-                        <span><i class="fas fa-hand-holding-usd"></i> Prestações Intermediárias</span>
-                        <div>
-                            <span class="badge bg-success me-1">{{ intermediarias_pagas }} pagas</span>
-                            <span class="badge bg-secondary me-1">{{ intermediarias_pendentes }} pendentes</span>
-                            {% if intermediarias_vencidas_sem_boleto %}
-                            <span class="badge bg-danger">{{ intermediarias_vencidas_sem_boleto|length }} vencidas</span>
-                            {% endif %}
-                            <a href="{% url 'contratos:intermediarias_listar' contrato.pk|hashid %}" class="btn btn-sm btn-outline-dark ms-2">
-                                <i class="fas fa-list"></i> Ver todas
-                            </a>
-                        </div>
-                    </div>
-                    <div class="table-responsive">
-                        <table class="table table-sm mb-0">
-                            <thead class="table-light">
-                                <tr>
-                                    <th>#</th>
-                                    <th>Mês</th>
-                                    <th>Valor</th>
-                                    <th>Situação</th>
-                                    <th></th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {% for inter in intermediarias|slice:":10" %}
-                                <tr class="{% if not inter.paga and intermediarias_vencidas_sem_boleto and inter in intermediarias_vencidas_sem_boleto %}table-danger{% endif %}">
-                                    <td>{{ inter.numero_sequencial }}</td>
-                                    <td>Mês {{ inter.mes_vencimento }}</td>
-                                    <td>{{ inter.valor|moeda }}</td>
-                                    <td>
-                                        {% if inter.paga %}
-                                        <span class="badge bg-success">Paga</span>
-                                        {% elif inter.parcela_vinculada %}
-                                        <span class="badge bg-info">Boleto gerado</span>
-                                        {% else %}
-                                        <span class="badge bg-secondary">Pendente</span>
-                                        {% endif %}
-                                    </td>
-                                    <td>
-                                        {% if not inter.paga and not inter.parcela_vinculada %}
-                                        <button class="btn btn-xs btn-outline-primary btn-gerar-boleto-inter"
-                                                data-inter-id="{{ inter.pk|hashid }}"
-                                                title="Gerar boleto">
-                                            <i class="fas fa-barcode"></i>
-                                        </button>
-                                        {% endif %}
-                                    </td>
-                                </tr>
-                                {% endfor %}
-                                {% if total_intermediarias > 10 %}
-                                <tr>
-                                    <td colspan="5" class="text-center text-muted small py-2">
-                                        <a href="{% url 'contratos:intermediarias_listar' contrato.pk|hashid %}">
-                                            + {{ total_intermediarias|add:"-10" }} mais &rarr;
-                                        </a>
-                                    </td>
-                                </tr>
-                                {% endif %}
-                            </tbody>
-                        </table>
-                    </div>
+                <div class="info-item">
+                    <div class="info-label">CPF/CNPJ</div>
+                    <div class="info-value">{{ contrato.comprador.cpf_cnpj }}</div>
+                </div>
+                {% if contrato.comprador.telefone %}
+                <div class="info-item">
+                    <div class="info-label">Telefone</div>
+                    <div class="info-value">{{ contrato.comprador.telefone }}</div>
                 </div>
                 {% endif %}
-
-                <!-- Observacoes -->
-                {% if contrato.observacoes %}
-                <div class="card mt-3">
-                    <div class="card-header bg-light">
-                        <i class="fas fa-sticky-note"></i> Observacoes
-                    </div>
-                    <div class="card-body">
-                        <p class="mb-0">{{ contrato.observacoes|linebreaks }}</p>
-                    </div>
+                {% if contrato.comprador.email %}
+                <div class="info-item">
+                    <div class="info-label">E-mail</div>
+                    <div class="info-value">{{ contrato.comprador.email }}</div>
                 </div>
                 {% endif %}
             </div>
         </div>
+
+        <!-- Imovel -->
+        <div class="card info-card success mb-3">
+            <div class="card-header bg-success text-white">
+                <i class="fas fa-home"></i> Imovel
+            </div>
+            <div class="card-body">
+                <div class="info-item">
+                    <div class="info-label">Identificacao</div>
+                    <div class="info-value">{{ contrato.imovel.identificacao }}</div>
+                </div>
+                {% if contrato.imovel.loteamento %}
+                <div class="info-item">
+                    <div class="info-label">Loteamento</div>
+                    <div class="info-value">{{ contrato.imovel.loteamento }}</div>
+                </div>
+                {% endif %}
+                <div class="info-item">
+                    <div class="info-label">Tipo</div>
+                    <div class="info-value">{{ contrato.imovel.get_tipo_display }}</div>
+                </div>
+                {% if contrato.imovel.area %}
+                <div class="info-item">
+                    <div class="info-label">Area</div>
+                    <div class="info-value">{{ contrato.imovel.area }} m2</div>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Valores -->
+        <div class="card info-card warning mb-3">
+            <div class="card-header bg-warning text-white">
+                <i class="fas fa-dollar-sign"></i> Valores
+            </div>
+            <div class="card-body">
+                <div class="info-item">
+                    <div class="info-label">Valor Total</div>
+                    <div class="info-value">{{ contrato.valor_total|moeda }}</div>
+                </div>
+                <div class="info-item">
+                    <div class="info-label">Entrada</div>
+                    <div class="info-value">{{ contrato.valor_entrada|moeda }}</div>
+                </div>
+                <div class="info-item">
+                    <div class="info-label">Valor Financiado</div>
+                    <div class="info-value">{{ contrato.valor_financiado|moeda }}</div>
+                </div>
+                <div class="info-item">
+                    <div class="info-label">Valor Original Parcela</div>
+                    <div class="info-value">{{ contrato.valor_parcela_original|moeda }}</div>
+                </div>
+                <div class="info-item">
+                    <div class="info-label">Sistema de Amortização</div>
+                    <div class="info-value">
+                        {% if contrato.tipo_amortizacao == 'SAC' %}
+                        <span class="badge bg-warning text-dark">SAC — Amortização Constante</span>
+                        {% else %}
+                        <span class="badge bg-info text-dark">Tabela Price</span>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Configuracoes -->
+        <div class="card info-card info mb-3">
+            <div class="card-header bg-info text-white">
+                <i class="fas fa-cog"></i> Configuracoes
+            </div>
+            <div class="card-body">
+                <div class="info-item">
+                    <div class="info-label">Juros de Mora</div>
+                    <div class="info-value">{{ contrato.percentual_juros_mora|numero_br:2 }}% a.m.</div>
+                </div>
+                <div class="info-item">
+                    <div class="info-label">Multa</div>
+                    <div class="info-value">{{ contrato.percentual_multa|numero_br:2 }}%</div>
+                </div>
+                <div class="info-item">
+                    <div class="info-label">Correcao Monetaria</div>
+                    <div class="info-value">{{ contrato.get_tipo_correcao_display }}</div>
+                </div>
+                <div class="info-item">
+                    <div class="info-label">Prazo Reajuste</div>
+                    <div class="info-value">{{ contrato.prazo_reajuste_meses }} meses</div>
+                </div>
+                {% if contrato.tipo_correcao != 'FIXO' %}
+                <div class="info-item">
+                    <div class="info-label">Proximo Reajuste</div>
+                    {% if contrato.data_proximo_reajuste %}
+                    <div class="info-value text-warning">{{ contrato.data_proximo_reajuste|date:"d/m/Y" }}</div>
+                    {% elif contrato.numero_parcelas <= contrato.prazo_reajuste_meses %}
+                    <div class="info-value text-muted"><small>N/A — contrato no ciclo 1</small></div>
+                    {% else %}
+                    <div class="info-value text-muted">—</div>
+                    {% endif %}
+                </div>
+                {% endif %}
+                {% if contrato.spread_reajuste %}
+                <div class="info-item">
+                    <div class="info-label">Spread</div>
+                    <div class="info-value text-info">+{{ contrato.spread_reajuste|numero_br:4 }} p.p.</div>
+                </div>
+                {% endif %}
+                {% if contrato.reajuste_piso is not None %}
+                <div class="info-item">
+                    <div class="info-label">Piso Reajuste</div>
+                    <div class="info-value text-info">{{ contrato.reajuste_piso|numero_br:4 }}%</div>
+                </div>
+                {% endif %}
+                {% if contrato.reajuste_teto is not None %}
+                <div class="info-item">
+                    <div class="info-label">Teto Reajuste</div>
+                    <div class="info-value text-warning">{{ contrato.reajuste_teto|numero_br:4 }}%</div>
+                </div>
+                {% endif %}
+                {% if contrato.tipo_correcao_fallback %}
+                <div class="info-item">
+                    <div class="info-label">Índice Fallback</div>
+                    <div class="info-value text-muted">{{ contrato.get_tipo_correcao_fallback_display }}</div>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Cláusulas Contratuais -->
+        <div class="card info-card mb-3" style="border-left:4px solid #6f42c1;">
+            <div class="card-header text-white" style="background-color:#6f42c1;">
+                <i class="fas fa-file-alt"></i> Cláusulas Contratuais
+            </div>
+            <div class="card-body">
+                <div class="info-item">
+                    <div class="info-label">% Fruição</div>
+                    <div class="info-value">{{ contrato.percentual_fruicao|numero_br:4 }}% a.m.</div>
+                </div>
+                <div class="info-item">
+                    <div class="info-label">Multa Rescisão Penal</div>
+                    <div class="info-value">{{ contrato.percentual_multa_rescisao_penal|numero_br:4 }}%</div>
+                </div>
+                <div class="info-item">
+                    <div class="info-label">Desp. Adm. Rescisão</div>
+                    <div class="info-value">{{ contrato.percentual_multa_rescisao_adm|numero_br:4 }}%</div>
+                </div>
+                <div class="info-item">
+                    <div class="info-label">% Cessão de Direitos</div>
+                    <div class="info-value">{{ contrato.percentual_cessao|numero_br:4 }}%</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Parâmetros de Intermediárias -->
+        <div class="card info-card mb-3" style="border-left:4px solid #fd7e14;">
+            <div class="card-header text-white" style="background-color:#fd7e14;">
+                <i class="fas fa-sliders-h"></i> Parâmetros de Intermediárias
+            </div>
+            <div class="card-body">
+                <div class="info-item">
+                    <div class="info-label">Reduzem PMT</div>
+                    <div class="info-value">
+                        {% if contrato.intermediarias_reduzem_pmt %}
+                        <span class="badge bg-success">Sim</span>
+                        {% else %}
+                        <span class="badge bg-secondary">Não</span>
+                        {% endif %}
+                    </div>
+                </div>
+                <div class="info-item">
+                    <div class="info-label">Reajustadas</div>
+                    <div class="info-value">
+                        {% if contrato.intermediarias_reajustadas %}
+                        <span class="badge bg-success">Sim</span>
+                        {% else %}
+                        <span class="badge bg-secondary">Não</span>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Configuração de Boleto -->
+        <div class="card info-card mb-3" style="border-left:4px solid #20c997;">
+            <div class="card-header text-white" style="background-color:#20c997;">
+                <i class="fas fa-barcode"></i> Configuração de Boleto
+            </div>
+            <div class="card-body">
+                <div class="info-item">
+                    <div class="info-label">Config. Boleto</div>
+                    <div class="info-value">
+                        {% if contrato.usar_config_boleto_imobiliaria %}
+                        <span class="badge bg-info">Padrão da Imobiliária</span>
+                        {% else %}
+                        <span class="badge bg-warning text-dark">Personalizada</span>
+                        {% endif %}
+                    </div>
+                </div>
+                {% if not contrato.usar_config_boleto_imobiliaria %}
+                {% if contrato.tipo_valor_multa %}
+                <div class="info-item">
+                    <div class="info-label">Multa (boleto)</div>
+                    <div class="info-value">
+                        {{ contrato.valor_multa_boleto|default:"0.00" }}
+                        {% if contrato.tipo_valor_multa == 'PERCENTUAL' %}%{% else %}R${% endif %}
+                    </div>
+                </div>
+                {% endif %}
+                {% if contrato.tipo_valor_juros %}
+                <div class="info-item">
+                    <div class="info-label">Juros (boleto)</div>
+                    <div class="info-value">
+                        {{ contrato.valor_juros_boleto|default:"0.00" }}
+                        {% if contrato.tipo_valor_juros == 'PERCENTUAL' %}% a.m.{% else %}R$ a.m.{% endif %}
+                    </div>
+                </div>
+                {% endif %}
+                {% if contrato.dias_carencia_boleto %}
+                <div class="info-item">
+                    <div class="info-label">Carência</div>
+                    <div class="info-value">{{ contrato.dias_carencia_boleto }} dias</div>
+                </div>
+                {% endif %}
+                {% if contrato.tipo_valor_desconto %}
+                <div class="info-item">
+                    <div class="info-label">Desconto (boleto)</div>
+                    <div class="info-value">
+                        {{ contrato.valor_desconto_boleto|default:"0.00" }}
+                        {% if contrato.tipo_valor_desconto == 'PERCENTUAL' %}%{% else %}R${% endif %}
+                        {% if contrato.dias_desconto_boleto %} — {{ contrato.dias_desconto_boleto }}d antes{% endif %}
+                    </div>
+                </div>
+                {% endif %}
+                {% if contrato.instrucao_boleto_1 %}
+                <div class="info-item">
+                    <div class="info-label">Instrução 1</div>
+                    <div class="info-value small">{{ contrato.instrucao_boleto_1 }}</div>
+                </div>
+                {% endif %}
+                {% if contrato.instrucao_boleto_2 %}
+                <div class="info-item">
+                    <div class="info-label">Instrução 2</div>
+                    <div class="info-value small">{{ contrato.instrucao_boleto_2 }}</div>
+                </div>
+                {% endif %}
+                {% if contrato.instrucao_boleto_3 %}
+                <div class="info-item">
+                    <div class="info-label">Instrução 3</div>
+                    <div class="info-value small">{{ contrato.instrucao_boleto_3 }}</div>
+                </div>
+                {% endif %}
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Conta Bancaria da Imobiliaria -->
+        <div class="card info-card success mb-3">
+            <div class="card-header bg-success text-white">
+                <i class="fas fa-university"></i> Conta Bancaria
+            </div>
+            <div class="card-body">
+                {% if conta_bancaria %}
+                <div class="info-item">
+                    <div class="info-label">Banco</div>
+                    <div class="info-value">{{ conta_bancaria.get_banco_display }}</div>
+                </div>
+                <div class="info-item">
+                    <div class="info-label">Agencia</div>
+                    <div class="info-value">{{ conta_bancaria.agencia }}{% if conta_bancaria.agencia_dv %}-{{ conta_bancaria.agencia_dv }}{% endif %}</div>
+                </div>
+                <div class="info-item">
+                    <div class="info-label">Conta</div>
+                    <div class="info-value">{{ conta_bancaria.conta }}{% if conta_bancaria.conta_dv %}-{{ conta_bancaria.conta_dv }}{% endif %}</div>
+                </div>
+                {% if conta_bancaria.convenio %}
+                <div class="info-item">
+                    <div class="info-label">Convenio</div>
+                    <div class="info-value">{{ conta_bancaria.convenio }}</div>
+                </div>
+                {% endif %}
+                <div class="info-item">
+                    <div class="info-label">Carteira</div>
+                    <div class="info-value">{{ conta_bancaria.carteira }}</div>
+                </div>
+                {% else %}
+                <div class="text-muted text-center py-2">
+                    <i class="fas fa-exclamation-circle"></i> Nenhuma conta bancaria configurada
+                </div>
+                {% endif %}
+            </div>
+        </div>
+        </div>
+
+        <!-- Parcelas / Intermediárias / Observações em largura total -->
+
+        <div class="card">
+            <div class="card-header bg-dark text-white d-flex justify-content-between align-items-center">
+                <span><i class="fas fa-list"></i> Parcelas</span>
+                <div class="d-flex align-items-center gap-2">
+                    {% if proxima_parcela %}
+                    <span class="badge bg-warning text-dark">
+                        Proxima: {{ proxima_parcela.data_vencimento|date:"d/m/Y" }}
+                    </span>
+                    {% endif %}
+                    {% if tabela_juros %}
+                    <button type="button" class="btn btn-sm btn-outline-light"
+                            id="btn-toggle-amort"
+                            onclick="toggleColunaAmort()"
+                            title="Exibir/ocultar breakdown de amortização e juros">
+                        <i class="fas fa-calculator"></i> Amort/Juros
+                    </button>
+                    {% endif %}
+                    <button type="button" class="btn btn-sm btn-success" onclick="abrirModalCarne()">
+                        <i class="fas fa-file-invoice-dollar"></i> Gerar Carne
+                    </button>
+                    <form method="post" action="{% url 'financeiro:download_zip_boletos' contrato.pk %}" style="display:inline;">
+                        {% csrf_token %}
+                        <button type="submit" class="btn btn-sm btn-outline-secondary" title="Baixar todos os boletos em ZIP">
+                            <i class="fas fa-file-archive"></i> ZIP
+                        </button>
+                    </form>
+                </div>
+            </div>
+            <div class="card-body p-0">
+                <div class="table-responsive" style="max-height: 600px; overflow-y: auto;">
+                    <table class="table table-sm table-hover mb-0">
+                        <thead class="table-light sticky-top">
+                            <tr>
+                                <th class="text-center">#</th>
+                                <th>Vencimento</th>
+                                <th class="text-end">Valor</th>
+                                <th class="text-end col-amort d-none" title="Amortização do principal">Amort.</th>
+                                <th class="text-end col-amort d-none" title="Juros embutidos na parcela">Juros</th>
+                                <th class="text-center">Boleto</th>
+                                <th class="text-center">Status</th>
+                                <th class="text-center">Acoes</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for parcela in parcelas %}
+                            <tr class="parcela-row {% if parcela.pago %}paga{% elif parcela.esta_vencida %}atrasada{% elif parcela == proxima_parcela %}proxima{% endif %}">
+                                <td class="text-center">
+                                    <strong>{{ parcela.numero_parcela }}</strong>
+                                </td>
+                                <td>{{ parcela.data_vencimento|date:"d/m/Y" }}</td>
+                                <td class="text-end">
+                                    {{ parcela.valor_atual|moeda }}
+                                    {% if parcela.pago %}
+                                    <br><small class="text-muted">Pago: {{ parcela.valor_pago|moeda }}</small>
+                                    {% endif %}
+                                </td>
+                                <td class="text-end font-monospace col-amort d-none" style="font-size:0.8rem;">
+                                    {% if parcela.amortizacao %}{{ parcela.amortizacao|moeda }}{% else %}—{% endif %}
+                                </td>
+                                <td class="text-end font-monospace col-amort d-none" style="font-size:0.8rem;color:#6c757d;">
+                                    {% if parcela.juros_embutido %}{{ parcela.juros_embutido|moeda }}{% else %}—{% endif %}
+                                </td>
+                                <td class="text-center">
+                                    {% if parcela.tem_boleto %}
+                                        <span class="badge bg-success" title="Boleto gerado"><i class="fas fa-barcode"></i></span>
+                                        {% if parcela.linha_digitavel %}
+                                        <div class="mt-1 d-flex align-items-center justify-content-center gap-1">
+                                            <span class="font-monospace text-muted" style="font-size:0.65rem;max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="{{ parcela.linha_digitavel }}">{{ parcela.linha_digitavel }}</span>
+                                            <button type="button" class="btn btn-link btn-sm p-0 text-secondary"
+                                                    onclick="copiarLinhaDigitavel('{{ parcela.linha_digitavel|escapejs }}')"
+                                                    title="Copiar linha digitável">
+                                                <i class="fas fa-copy" style="font-size:0.75rem;"></i>
+                                            </button>
+                                        </div>
+                                        {% endif %}
+                                    {% else %}
+                                        <span class="badge bg-secondary" title="Sem boleto">
+                                            <i class="fas fa-minus"></i>
+                                        </span>
+                                    {% endif %}
+                                </td>
+                                <td class="text-center">
+                                    {% if parcela.pago %}
+                                        <span class="badge bg-success">
+                                            <i class="fas fa-check"></i> Pago
+                                        </span>
+                                        <br><small>{{ parcela.data_pagamento|date:"d/m/Y" }}</small>
+                                    {% elif parcela.esta_vencida %}
+                                        <span class="badge bg-danger">
+                                            <i class="fas fa-exclamation-triangle"></i> Vencida {{ parcela.dias_atraso }}d
+                                        </span>
+                                    {% elif parcela == proxima_parcela %}
+                                        <span class="badge bg-warning text-dark">
+                                            <i class="fas fa-clock"></i> Próxima
+                                        </span>
+                                    {% elif reajuste_pendente_desde_parcela and parcela.numero_parcela >= reajuste_pendente_desde_parcela %}
+                                        <span class="badge bg-secondary">
+                                            <i class="fas fa-sync-alt"></i> Ag. Reajuste
+                                        </span>
+                                    {% else %}
+                                        <span class="badge bg-primary">
+                                            <i class="fas fa-calendar"></i> A Vencer
+                                        </span>
+                                    {% endif %}
+                                </td>
+                                <td class="text-center">
+                                    <div class="btn-group btn-group-sm">
+                                        {% if not parcela.pago %}
+                                            {% if parcela.tem_boleto %}
+                                                <button type="button" class="btn btn-outline-primary"
+                                                        onclick="abrirModalBoleto('{{ parcela.pk|hashid }}')" title="Ver Boleto">
+                                                    <i class="fas fa-eye"></i>
+                                                </button>
+                                                <button type="button" class="btn btn-outline-info"
+                                                        onclick="abrirModalCompartilhar('{{ parcela.pk|hashid }}', '{{ parcela.linha_digitavel|escapejs }}', {{ parcela.numero_parcela }}, '{{ parcela.data_vencimento|date:"d/m/Y" }}', '{{ parcela.valor_atual|stringformat:"f" }}', '{{ parcela.token_publico }}')"
+                                                        title="Compartilhar Boleto">
+                                                    <i class="fas fa-share-alt"></i>
+                                                </button>
+                                                <button type="button" class="btn btn-outline-warning"
+                                                        onclick="regenerarBoleto('{{ parcela.pk|hashid }}', this)" title="Atualizar Boleto">
+                                                    <i class="fas fa-sync"></i>
+                                                </button>
+                                            {% else %}
+                                                <button type="button" class="btn btn-outline-success"
+                                                        onclick="gerarBoleto('{{ parcela.pk|hashid }}', this)" title="Gerar Boleto">
+                                                    <i class="fas fa-barcode"></i>
+                                                </button>
+                                            {% endif %}
+                                            <button type="button" class="btn btn-outline-success"
+                                                    onclick="abrirModalPagamento('{{ parcela.pk|hashid }}', '{{ parcela.data_vencimento|date:"Y-m-d" }}', '{{ parcela.valor_atual|stringformat:"f" }}', '{{ contrato.percentual_juros_mora|stringformat:"f" }}', '{{ contrato.percentual_multa|stringformat:"f" }}')"
+                                                    title="Registrar Pagamento">
+                                                <i class="fas fa-dollar-sign"></i>
+                                            </button>
+                                        {% else %}
+                                            <span class="text-success" title="Parcela quitada">
+                                                <i class="fas fa-check-circle"></i>
+                                            </span>
+                                        {% endif %}
+                                    </div>
+                                </td>
+                            </tr>
+                            {% empty %}
+                            <tr>
+                                <td colspan="8" class="text-center text-muted py-4">
+                                    <i class="fas fa-info-circle"></i> Nenhuma parcela gerada
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- Prestações Intermediárias (HU-13) -->
+        {% if total_intermediarias > 0 %}
+        <div class="card mt-3">
+            <div class="card-header bg-warning text-white d-flex justify-content-between align-items-center">
+                <span><i class="fas fa-hand-holding-usd"></i> Prestações Intermediárias</span>
+                <div>
+                    <span class="badge bg-success me-1">{{ intermediarias_pagas }} pagas</span>
+                    <span class="badge bg-secondary me-1">{{ intermediarias_pendentes }} pendentes</span>
+                    {% if intermediarias_vencidas_sem_boleto %}
+                    <span class="badge bg-danger">{{ intermediarias_vencidas_sem_boleto|length }} vencidas</span>
+                    {% endif %}
+                    <a href="{% url 'contratos:intermediarias_listar' contrato.pk|hashid %}" class="btn btn-sm btn-outline-dark ms-2">
+                        <i class="fas fa-list"></i> Ver todas
+                    </a>
+                </div>
+            </div>
+            <div class="table-responsive">
+                <table class="table table-sm mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th>#</th>
+                            <th>Mês</th>
+                            <th>Valor</th>
+                            <th>Situação</th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for inter in intermediarias|slice:":10" %}
+                        <tr class="{% if not inter.paga and intermediarias_vencidas_sem_boleto and inter in intermediarias_vencidas_sem_boleto %}table-danger{% endif %}">
+                            <td>{{ inter.numero_sequencial }}</td>
+                            <td>Mês {{ inter.mes_vencimento }}</td>
+                            <td>{{ inter.valor|moeda }}</td>
+                            <td>
+                                {% if inter.paga %}
+                                <span class="badge bg-success">Paga</span>
+                                {% elif inter.parcela_vinculada %}
+                                <span class="badge bg-info">Boleto gerado</span>
+                                {% else %}
+                                <span class="badge bg-secondary">Pendente</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if not inter.paga and not inter.parcela_vinculada %}
+                                <button class="btn btn-xs btn-outline-primary btn-gerar-boleto-inter"
+                                        data-inter-id="{{ inter.pk|hashid }}"
+                                        title="Gerar boleto">
+                                    <i class="fas fa-barcode"></i>
+                                </button>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                        {% if total_intermediarias > 10 %}
+                        <tr>
+                            <td colspan="5" class="text-center text-muted small py-2">
+                                <a href="{% url 'contratos:intermediarias_listar' contrato.pk|hashid %}">
+                                    + {{ total_intermediarias|add:"-10" }} mais &rarr;
+                                </a>
+                            </td>
+                        </tr>
+                        {% endif %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- Observacoes -->
+        {% if contrato.observacoes %}
+        <div class="card mt-3">
+            <div class="card-header bg-light">
+                <i class="fas fa-sticky-note"></i> Observacoes
+            </div>
+            <div class="card-body">
+                <p class="mb-0">{{ contrato.observacoes|linebreaks }}</p>
+            </div>
+        </div>
+        {% endif %}
 
         <!-- Reajustes + Juros Escalantes lado a lado (largura total) — antes
              ficavam espremidos na coluna esquerda, deixando a direita vazia -->
@@ -2880,153 +2836,4 @@ function _bindReajusteModal(contratoId) {
 </script>
 
 <!-- ── Drag & Resize de Cards ─────────────────────────────────── -->
-<script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
-<script>
-(function () {
-    var STORAGE_KEY = 'detail_layout_{{ contrato.pk }}';
-
-    /* ── Wraps cada .card direto filho de sort-left / sort-right ── */
-    function wrapCards(colId) {
-        var col = document.getElementById(colId);
-        if (!col) return;
-        var cards = Array.from(col.children).filter(function (el) {
-            return el.classList.contains('card');
-        });
-        cards.forEach(function (card, i) {
-            var wrap = document.createElement('div');
-            wrap.className = 'sc-wrap';
-            wrap.dataset.cardId = colId + '-' + i;
-
-            /* drag handle (topo invisível — aparece no hover) */
-            var drag = document.createElement('div');
-            drag.className = 'sc-drag-handle';
-            drag.title = 'Arrastar para reposicionar';
-
-            /* inner: mantém overflow do card */
-            var inner = document.createElement('div');
-            inner.className = 'sc-card-inner';
-
-            /* resize bar (base do card) */
-            var resizeBar = document.createElement('div');
-            resizeBar.className = 'sc-resize-bar';
-            resizeBar.title = 'Arrastar para redimensionar';
-
-            col.insertBefore(wrap, card);
-            wrap.appendChild(drag);
-            inner.appendChild(card);
-            wrap.appendChild(inner);
-            wrap.appendChild(resizeBar);
-        });
-    }
-
-    wrapCards('sort-left');
-    wrapCards('sort-right');
-
-    /* ── SortableJS ─────────────────────────────────────────────── */
-    function makeSortable(colId) {
-        var el = document.getElementById(colId);
-        if (!el || typeof Sortable === 'undefined') return;
-        return Sortable.create(el, {
-            group: 'detail-cards',
-            handle: '.sc-drag-handle',
-            animation: 180,
-            ghostClass: 'sc-ghost',
-            chosenClass: 'sc-chosen',
-            dragClass: 'sc-dragging',
-            onEnd: saveLayout
-        });
-    }
-
-    makeSortable('sort-left');
-    makeSortable('sort-right');
-
-    /* ── Resize vertical ─────────────────────────────────────────── */
-    document.addEventListener('mousedown', function (e) {
-        var bar = e.target.closest('.sc-resize-bar');
-        if (!bar) return;
-        e.preventDefault();
-
-        var inner = bar.previousElementSibling; /* .sc-card-inner */
-        var startY = e.clientY;
-        var startH = inner.offsetHeight;
-
-        function onMove(ev) {
-            var newH = Math.max(80, startH + ev.clientY - startY);
-            inner.style.height = newH + 'px';
-            inner.style.overflowY = 'auto';
-        }
-        function onUp() {
-            document.removeEventListener('mousemove', onMove);
-            document.removeEventListener('mouseup', onUp);
-            saveLayout();
-        }
-        document.addEventListener('mousemove', onMove);
-        document.addEventListener('mouseup', onUp);
-    });
-
-    /* ── Persist layout ──────────────────────────────────────────── */
-    function getColState(colId) {
-        var col = document.getElementById(colId);
-        if (!col) return [];
-        return Array.from(col.querySelectorAll(':scope > .sc-wrap')).map(function (w) {
-            var inner = w.querySelector('.sc-card-inner');
-            return {
-                id: w.dataset.cardId,
-                h: inner && inner.style.height ? inner.style.height : null
-            };
-        });
-    }
-
-    function saveLayout() {
-        try {
-            localStorage.setItem(STORAGE_KEY, JSON.stringify({
-                left: getColState('sort-left'),
-                right: getColState('sort-right')
-            }));
-        } catch (e) {}
-    }
-
-    function restoreLayout() {
-        var raw;
-        try { raw = JSON.parse(localStorage.getItem(STORAGE_KEY)); } catch (e) {}
-        if (!raw) return;
-
-        ['left', 'right'].forEach(function (side) {
-            var colId = 'sort-' + side;
-            var col = document.getElementById(colId);
-            var items = raw[side];
-            if (!col || !items) return;
-
-            /* Reorder nodes to match saved order */
-            items.forEach(function (item) {
-                var wrap = col.querySelector('[data-card-id="' + item.id + '"]');
-                if (wrap) {
-                    col.appendChild(wrap);
-                    if (item.h) {
-                        var inner = wrap.querySelector('.sc-card-inner');
-                        if (inner) { inner.style.height = item.h; inner.style.overflowY = 'auto'; }
-                    }
-                }
-            });
-        });
-    }
-
-    restoreLayout();
-
-    /* Botão reset layout */
-    var resetBtn = document.createElement('button');
-    resetBtn.type = 'button';
-    resetBtn.className = 'btn btn-sm btn-outline-secondary';
-    resetBtn.title = 'Resetar disposição dos cards';
-    resetBtn.innerHTML = '<i class="fas fa-undo"></i>';
-    resetBtn.style.cssText = 'position:fixed;bottom:1.5rem;right:1.5rem;z-index:1050;opacity:.7;';
-    resetBtn.addEventListener('click', function () {
-        localStorage.removeItem(STORAGE_KEY);
-        location.reload();
-    });
-    resetBtn.addEventListener('mouseenter', function () { this.style.opacity = '1'; });
-    resetBtn.addEventListener('mouseleave', function () { this.style.opacity = '.7'; });
-    document.body.appendChild(resetBtn);
-})();
-</script>
 {% endblock %}
