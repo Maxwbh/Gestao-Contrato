@@ -7,6 +7,49 @@
 
 {% block extra_css %}
 <style>
+    /* ═══════════════════════════════════════════════════════════════════
+       Linguagem visual "ContractPro" (modelo Stitch) — escopada nesta tela.
+       Material 3: cards brancos, borda suave, sombra leve, headers CLAROS
+       com título/ícone em navy (o header navy escuro global do app deixava
+       títulos ilegíveis, ex.: "Valores"). Paleta do modelo:
+         primary #162839 · secondary #006397 · success #27AE60
+         warning #F39C12 · danger #E74C3C · outline #c4c6cd
+         surface #f6fafb · surface-container-high #e5e9ea
+       ═══════════════════════════════════════════════════════════════════ */
+    .contrato-detail-v2 {
+        --cp-primary: #162839;
+        --cp-secondary: #006397;
+        --cp-outline: #c4c6cd;
+        --cp-surface-hi: #e5e9ea;
+        --cp-surface-lo: #f0f4f5;
+    }
+    /* Cards: branco, borda fina, sombra sutil, cantos arredondados */
+    .contrato-detail-v2 .card {
+        border: 1px solid var(--cp-outline);
+        border-radius: .5rem;
+        box-shadow: 0 1px 3px rgba(0,0,0,.05), 0 1px 2px rgba(0,0,0,.04);
+    }
+    /* Headers dos cards de INFORMAÇÃO → claros com título navy (modelo Stitch).
+       O header navy escuro global deixava o "Valores" (text-dark) ilegível.
+       As seções pesadas (Timeline, Parcelas) mantêm o header navy — hierarquia
+       do próprio modelo. */
+    .info-grid .card > .card-header {
+        background: var(--cp-surface-hi) !important;
+        color: var(--cp-primary) !important;
+        border-bottom: 1px solid var(--cp-outline) !important;
+        font-weight: 700;
+        font-size: .82rem;
+        padding: .5rem .8rem;
+        justify-content: flex-start;
+        gap: .4rem;
+    }
+    /* Vence o .text-white!important do Bootstrap nos headers claros */
+    .info-grid .card > .card-header,
+    .info-grid .card > .card-header i,
+    .info-grid .card > .card-header .badge { color: var(--cp-primary) !important; }
+    /* remove o gradiente/realce que o tema aplica só quando escuro */
+    .info-grid .card > .card-header .float-end,
+    .info-grid .card > .card-header .badge.bg-light { background: transparent !important; }
     /* Grade de informações: os cards fluem preenchendo toda a largura
        (auto-fill), em vez de empilhar numa coluna fixa deixando metade vazia. */
     .info-grid {
@@ -152,7 +195,7 @@
 <!-- Toast Container -->
 <div id="toastContainer" class="toast-container"></div>
 
-<div class="row">
+<div class="row contrato-detail-v2">
     <div class="col-12">
         <!-- Cabecalho: título grande + badge à direita (estilo preferido)
              com a toolbar de ações logo abaixo -->
